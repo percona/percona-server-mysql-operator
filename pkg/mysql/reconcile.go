@@ -3,7 +3,7 @@ package mysql
 import (
 	"context"
 
-	v2 "github.com/percona/percona-xtradb-cluster-operator/api/v2"
+	v2 "github.com/percona/percona-mysql/api/v2"
 	"github.com/pkg/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"

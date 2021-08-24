@@ -33,7 +33,7 @@ type PerconaServerForMySQLSpec struct {
 	SecretsName           string    `json:"secretsName,omitempty"`
 	SSLSecretName         string    `json:"sslSecretName,omitempty"`
 	SSLInternalSecretName string    `json:"sslInternalSecretName,omitempty"`
-	MySQL                 MySQLSpec
+	MySQL                 MySQLSpec `json:"mysql,omitempty"`
 }
 
 type ClusterType string
@@ -48,7 +48,7 @@ type MySQLSpec struct {
 	SizeSemiSync int32         `json:"sizeSemiSync,omitempty"`
 	SemiSyncType string        `json:"semiSyncType,omitempty"`
 	Expose       ServiceExpose `json:"expose,omitempty"`
-	PodSpec
+	PodSpec      `json:",inline"`
 }
 
 type PodSpec struct {

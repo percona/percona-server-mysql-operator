@@ -1,4 +1,4 @@
-module github.com/percona/percona-xtradb-cluster-operator
+module github.com/percona/percona-mysql
 
 go 1.16
 
