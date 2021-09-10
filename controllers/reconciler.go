@@ -14,7 +14,7 @@ type Reconciler interface {
 const fiveSeconds = 5 * time.Second
 
 var (
-	MysqlReconciler        Reconciler
-	MysqlBackupReconciler  Reconciler
-	MysqlRestoreReconciler Reconciler
+	MySQLReconciler        Reconciler
+	MySQLBackupReconciler  Reconciler
+	MySQLRestoreReconciler Reconciler
 )

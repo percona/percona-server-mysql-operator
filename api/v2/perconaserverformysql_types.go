@@ -166,8 +166,8 @@ type PerconaServerForMySQLList struct {
 	Items           []PerconaServerForMySQL `json:"items"`
 }
 
-func (cr *PerconaServerForMySQL) CheckNSetDefaults(log logr.Logger) {
-
+func (cr *PerconaServerForMySQL) CheckNSetDefaults(log logr.Logger) error {
+	return nil
 }
 
 func init() {

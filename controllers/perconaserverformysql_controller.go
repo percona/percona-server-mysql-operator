@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	psv2 "github.com/percona/percona-mysql/api/v2"
-	"github.com/percona/percona-mysql/pkg/mysql"
+	cluster "github.com/percona/percona-mysql/pkg/cluster"
 )
 
 // PerconaServerForMYSQLReconciler reconciles a PerconaServerForMYSQL object
@@ -51,7 +51,7 @@ type PerconaServerForMySQLReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.9.2/pkg/reconcile
 func (r *PerconaServerForMySQLReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	err := MysqlReconciler.Reconcile(ctx, req.NamespacedName)
+	err := MySQLReconciler.Reconcile(ctx, req.NamespacedName)
 
 	return ctrl.Result{
 		RequeueAfter: fiveSeconds,
@@ -60,7 +60,7 @@ func (r *PerconaServerForMySQLReconciler) Reconcile(ctx context.Context, req ctr
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PerconaServerForMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	MysqlReconciler = &mysql.MysqlReconciler{
+	MySQLReconciler = &cluster.MySQLReconciler{
 		Client: r.Client,
 	}
 	return ctrl.NewControllerManagedBy(mgr).

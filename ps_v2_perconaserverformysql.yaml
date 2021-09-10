@@ -1,0 +1,6 @@
+apiVersion: ps.percona.com/v2
+kind: PerconaServerForMySQL
+metadata:
+  name: cluster1
+spec:
+  crVersion: 2.0.0
