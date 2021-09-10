@@ -45,7 +45,6 @@ func (m *MySQL) MatchLabels() map[string]string {
 }
 
 func (m *MySQL) StatefulSet() *appsv1.StatefulSet {
-
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -87,31 +86,31 @@ func (m *MySQL) env() []corev1.EnvVar {
 		{
 			Name: "MONITOR_PASSWORD",
 			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: k8s.SecretKeySelector(m.secretsName, "monitor"),
+				SecretKeyRef: k8s.SecretKeySelector(m.secretsName, v2.USERS_SECRET_KEY_MONITOR),
 			},
 		},
 		{
 			Name: "XTRABACKUP_PASSWORD",
 			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: k8s.SecretKeySelector(m.secretsName, "xtrabackup"),
+				SecretKeyRef: k8s.SecretKeySelector(m.secretsName, v2.USERS_SECRET_KEY_XTRABACKUP),
 			},
 		},
 		{
 			Name: "MYSQL_ROOT_PASSWORD",
 			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: k8s.SecretKeySelector(m.secretsName, "root"),
+				SecretKeyRef: k8s.SecretKeySelector(m.secretsName, v2.USERS_SECRET_KEY_ROOT),
 			},
 		},
 		{
 			Name: "OPERATOR_ADMIN_PASSWORD",
 			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: k8s.SecretKeySelector(m.secretsName, "operator"),
+				SecretKeyRef: k8s.SecretKeySelector(m.secretsName, v2.USERS_SECRET_KEY_OPERATOR),
 			},
 		},
 		{
 			Name: "ORC_TOPOLOGY_PASSWORD",
 			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: k8s.SecretKeySelector(m.secretsName, "orchestrator"),
+				SecretKeyRef: k8s.SecretKeySelector(m.secretsName, v2.USERS_SECRET_KEY_ORCHESTRATOR),
 			},
 		},
 		{
@@ -158,7 +157,7 @@ func (m *MySQL) Container() corev1.Container {
 		ImagePullPolicy:          m.ImagePullPolicy,
 		Env:                      m.env(),
 		Ports:                    m.ports(),
-		VolumeMounts:             m.volumeMounts(),
+		// VolumeMounts:             m.volumeMounts(),
 		Command:                  []string{"/var/lib/mysql/ps-entrypoint.sh"},
 		Args:                     []string{"mysqld"},
 		TerminationMessagePath:   "/dev/termination-log",
@@ -182,7 +181,7 @@ func (m *MySQL) InitContainers() []corev1.Container {
 			Name:                     Name + "-init",
 			Image:                    m.Image,
 			ImagePullPolicy:          m.ImagePullPolicy,
-			VolumeMounts:             m.volumeMounts(),
+			// VolumeMounts:             m.volumeMounts(),
 			Command:                  []string{"/var/lib/mysql/ps-init-entrypoint.sh"},
 			TerminationMessagePath:   "/dev/termination-log",
 			TerminationMessagePolicy: corev1.TerminationMessageReadFile,

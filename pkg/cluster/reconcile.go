@@ -1,4 +1,4 @@
-package mysql
+package cluster
 
 import (
 	"context"
@@ -34,6 +34,10 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, t types.NamespacedName)
 	if err := cr.CheckNSetDefaults(log); err != nil {
 		return errors.Wrap(err, "wrong PS options")
 	}
+
+        if err := r.reconcileUsersSecret(cr); err != nil {
+		return errors.Wrap(err, "reconcile users secret")
+        }
 
 	mysql := database.New(cr)
 	sfs := mysql.StatefulSet()

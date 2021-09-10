@@ -166,6 +166,17 @@ type PerconaServerForMySQLList struct {
 	Items           []PerconaServerForMySQL `json:"items"`
 }
 
+const (
+	USERS_SECRET_KEY_ROOT         string = "root"
+	USERS_SECRET_KEY_XTRABACKUP   string = "xtrabackup"
+	USERS_SECRET_KEY_MONITOR      string = "monitor"
+	USERS_SECRET_KEY_CLUSTERCHECK string = "clustercheck"
+	USERS_SECRET_KEY_PROXYADMIN   string = "proxyadmin"
+	USERS_SECRET_KEY_OPERATOR     string = "operator"
+	USERS_SECRET_KEY_REPLICATION  string = "replication"
+	USERS_SECRET_KEY_ORCHESTRATOR string = "orchestrator"
+)
+
 func (cr *PerconaServerForMySQL) CheckNSetDefaults(log logr.Logger) error {
 	return nil
 }

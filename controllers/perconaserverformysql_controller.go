@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	psv2 "github.com/percona/percona-mysql/api/v2"
-	cluster "github.com/percona/percona-mysql/pkg/cluster"
+	"github.com/percona/percona-mysql/pkg/cluster"
 )
 
 // PerconaServerForMYSQLReconciler reconciles a PerconaServerForMYSQL object
