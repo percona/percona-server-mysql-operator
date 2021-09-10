@@ -17,21 +17,35 @@ const (
 type MySQL struct {
 	v2.MySQLSpec
 
-	Name        string
-	Namespace   string
-	secretsName string
+	Name          string
+	Namespace     string
+	secretsName   string
+	clusterLabels map[string]string
 }
 
 func New(cr *v2.PerconaServerForMySQL) *MySQL {
 	return &MySQL{
-		MySQLSpec:   cr.Spec.MySQL,
-		Name:        cr.Name + "-" + Name,
-		Namespace:   cr.Namespace,
-		secretsName: cr.Spec.SecretsName,
+		MySQLSpec:     cr.Spec.MySQL,
+		Name:          cr.Name + "-" + Name,
+		Namespace:     cr.Namespace,
+		secretsName:   cr.Spec.SecretsName,
+		clusterLabels: cr.Labels(),
 	}
 }
 
+func (m *MySQL) MatchLabels() map[string]string {
+	labels := m.clusterLabels
+	for k, v := range m.Labels {
+		if _, ok := labels[k]; !ok {
+			labels[k] = v
+		}
+	}
+
+	return labels
+}
+
 func (m *MySQL) StatefulSet() *appsv1.StatefulSet {
+
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -40,9 +54,16 @@ func (m *MySQL) StatefulSet() *appsv1.StatefulSet {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      m.Name,
 			Namespace: m.Namespace,
+			Labels:    m.MatchLabels(),
 		},
 		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: m.MatchLabels(),
+			},
 			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: m.MatchLabels(),
+				},
 				Spec: corev1.PodSpec{
 					InitContainers: m.InitContainers(),
 					Containers:     m.Containers(),
@@ -157,7 +178,7 @@ func (m *MySQL) Containers() []corev1.Container {
 
 func (m *MySQL) InitContainers() []corev1.Container {
 	return []corev1.Container{
-		corev1.Container{
+		{
 			Name:                     Name + "-init",
 			Image:                    m.Image,
 			ImagePullPolicy:          m.ImagePullPolicy,

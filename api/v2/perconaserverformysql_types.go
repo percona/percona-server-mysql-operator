@@ -170,6 +170,15 @@ func (cr *PerconaServerForMySQL) CheckNSetDefaults(log logr.Logger) error {
 	return nil
 }
 
+func (cr *PerconaServerForMySQL) Labels() map[string]string {
+	return map[string]string{
+		"app.kubernetes.io/name":       "percona-server",
+		"app.kubernetes.io/instance":   cr.Name,
+		"app.kubernetes.io/managed-by": "percona-server-operator",
+		"app.kubernetes.io/part-of":    "percona-server",
+	}
+}
+
 func init() {
 	SchemeBuilder.Register(&PerconaServerForMySQL{}, &PerconaServerForMySQLList{})
 }
