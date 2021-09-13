@@ -62,7 +62,7 @@ func (r *PerconaServerForMySQLReconciler) Reconcile(ctx context.Context, req ctr
 func (r *PerconaServerForMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	MySQLReconciler = &cluster.MySQLReconciler{
 		Client: r.Client,
-                Scheme: r.Scheme,
+		Scheme: r.Scheme,
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&psv2.PerconaServerForMySQL{}).

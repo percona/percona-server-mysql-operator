@@ -24,9 +24,9 @@ func (r *MySQLReconciler) reconcileMySQL(log logr.Logger, cr *v2.PerconaServerFo
 	sfs.Spec.Template.Spec.InitContainers = []corev1.Container{mysql.InitContainer(initImage)}
 	log.Info("mysql init image", "image", initImage)
 
-        if err := k8s.SetControllerReference(cr, sfs, r.Scheme); err != nil {
+	if err := k8s.SetControllerReference(cr, sfs, r.Scheme); err != nil {
 		return errors.Wrap(err, "get init image")
-        }
+	}
 
 	if err := r.Client.Create(context.TODO(), sfs); err != nil {
 		if k8serrors.IsAlreadyExists(err) {

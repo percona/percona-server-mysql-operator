@@ -46,5 +46,5 @@ func InitImage(cl client.Client, cr *v2.PerconaServerForMySQL) (string, error) {
 		}
 	}
 
-        return "", errors.New("manager container not found")
+	return "", errors.New("manager container not found")
 }
