@@ -22,6 +22,7 @@ func (m *MySQL) Container() corev1.Container {
 		Args:                     []string{"mysqld"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+		SecurityContext:          m.ContainerSecurityContext,
 	}
 }
 
@@ -38,5 +39,6 @@ func (m *MySQL) InitContainer(initImage string) corev1.Container {
 		Command:                  []string{"/ps-init-entrypoint.sh"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+		SecurityContext:          m.ContainerSecurityContext,
 	}
 }

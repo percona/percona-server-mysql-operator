@@ -178,6 +178,14 @@ const (
 )
 
 func (cr *PerconaServerForMySQL) CheckNSetDefaults(log logr.Logger) error {
+	if cr.Spec.MySQL.PodSecurityContext == nil {
+		var tp int64 = 1001
+		cr.Spec.MySQL.PodSecurityContext = &corev1.PodSecurityContext{
+			SupplementalGroups: []int64{tp},
+			FSGroup:            &tp,
+		}
+	}
+
 	cr.Spec.MySQL.VolumeSpec.reconcile()
 
 	return nil
