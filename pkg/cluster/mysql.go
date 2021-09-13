@@ -9,19 +9,19 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/percona/percona-mysql/api/v2"
-	"github.com/percona/percona-mysql/pkg/database"
+	"github.com/percona/percona-mysql/pkg/database/mysql"
 	"github.com/percona/percona-mysql/pkg/k8s"
 )
 
 func (r *MySQLReconciler) reconcileMySQL(log logr.Logger, cr *v2.PerconaServerForMySQL) error {
-	mysql := database.New(cr)
-	sfs := mysql.StatefulSet()
+	m := mysql.New(cr)
+	sfs := m.StatefulSet()
 
 	initImage, err := k8s.InitImage(r.Client, cr)
 	if err != nil {
 		return errors.Wrap(err, "get init image")
 	}
-	sfs.Spec.Template.Spec.InitContainers = []corev1.Container{mysql.InitContainer(initImage)}
+	sfs.Spec.Template.Spec.InitContainers = []corev1.Container{m.InitContainer(initImage)}
 	log.Info("mysql init image", "image", initImage)
 
 	if err := k8s.SetControllerReference(cr, sfs, r.Scheme); err != nil {

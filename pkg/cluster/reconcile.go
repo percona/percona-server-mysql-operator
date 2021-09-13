@@ -32,8 +32,6 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, t types.NamespacedName)
 		return errors.Wrapf(err, "get cluster with name %s in namespace %s", t.Name, t.Namespace)
 	}
 
-	log.Info("build 2")
-
 	if err := cr.CheckNSetDefaults(log); err != nil {
 		return errors.Wrap(err, "wrong PS options")
 	}
