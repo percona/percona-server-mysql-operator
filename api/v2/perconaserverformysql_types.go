@@ -188,6 +188,7 @@ func (cr *PerconaServerForMySQL) CheckNSetDefaults(log logr.Logger) error {
 	}
 
 	cr.Spec.MySQL.VolumeSpec.reconcile()
+	cr.Spec.Orchestrator.VolumeSpec.reconcile()
 
 	return nil
 }
