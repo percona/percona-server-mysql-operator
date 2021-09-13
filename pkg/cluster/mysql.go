@@ -18,10 +18,10 @@ func (r *MySQLReconciler) reconcileMySQL(log logr.Logger, cr *v2.PerconaServerFo
 	if err != nil {
 		return errors.Wrap(err, "get init image")
 	}
-	sfs.Spec.Template.Spec.InitContainers = []corev1.Container{m.InitContainer(initImage)}
+	sfs.Spec.Template.Spec.InitContainers = []corev1.Container{*m.InitContainer(initImage)}
 
 	if err := k8s.SetControllerReference(cr, sfs, r.Scheme); err != nil {
-		return errors.Wrap(err, "get init image")
+		return errors.Wrap(err, "set controller reference")
 	}
 
 	if err := r.createOrUpdate(sfs); err != nil {

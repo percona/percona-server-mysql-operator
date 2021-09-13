@@ -1,4 +1,4 @@
-package mysql
+package orchestrator
 
 import (
 	appsv1 "k8s.io/api/apps/v1"
@@ -6,35 +6,35 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (m *MySQL) StatefulSet() *appsv1.StatefulSet {
+func (o *Orchestrator) StatefulSet() *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name,
-			Namespace: m.Namespace,
-			Labels:    m.MatchLabels(),
+			Name:      o.Name,
+			Namespace: o.Namespace,
+			Labels:    o.MatchLabels(),
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas: &m.Size,
+			Replicas: &o.Size,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: m.MatchLabels(),
+				MatchLabels: o.MatchLabels(),
 			},
-			VolumeClaimTemplates: m.persistentVolumeClaims(),
+			VolumeClaimTemplates: o.persistentVolumeClaims(),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: m.MatchLabels(),
+					Labels: o.MatchLabels(),
 				},
 				Spec: corev1.PodSpec{
-					Containers: m.Containers(),
+					Containers: o.Containers(),
 					// TerminationGracePeriodSeconds: 30,
 					RestartPolicy:   corev1.RestartPolicyAlways,
 					SchedulerName:   "default-scheduler",
 					DNSPolicy:       corev1.DNSClusterFirst,
-					Volumes:         m.volumes(),
-					SecurityContext: m.PodSecurityContext,
+					Volumes:         o.volumes(),
+					SecurityContext: o.PodSecurityContext,
 				},
 			},
 		},

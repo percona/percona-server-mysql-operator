@@ -34,6 +34,7 @@ type PerconaServerForMySQLSpec struct {
 	SSLSecretName         string    `json:"sslSecretName,omitempty"`
 	SSLInternalSecretName string    `json:"sslInternalSecretName,omitempty"`
 	MySQL                 MySQLSpec `json:"mysql,omitempty"`
+	Orchestrator          PodSpec   `json:"orchestrator,omitempty"`
 }
 
 type ClusterType string

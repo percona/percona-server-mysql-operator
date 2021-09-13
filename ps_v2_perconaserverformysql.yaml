@@ -5,10 +5,20 @@ metadata:
 spec:
   secretsName: cluster1-secrets
   mysql:
-    size: 1
+    size: 3
+    imagePullPolicy: Always
     image: percona/percona-server:8.0.25
     volumeSpec:
       persistentVolumeClaim:
         resources:
           requests:
-            storage: 6G
+            storage: 2G
+  orchestrator:
+    size: 3
+    imagePullPolicy: Always
+    image: quay.io/presslabs/mysql-operator-orchestrator:0.4.0
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 2G

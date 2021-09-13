@@ -30,8 +30,8 @@ func (m *MySQL) SidecarContainers() []corev1.Container {
 	return nil
 }
 
-func (m *MySQL) InitContainer(initImage string) corev1.Container {
-	return corev1.Container{
+func (m *MySQL) InitContainer(initImage string) *corev1.Container {
+	return &corev1.Container{
 		Name:                     Name + "-init",
 		Image:                    initImage,
 		ImagePullPolicy:          m.ImagePullPolicy,
