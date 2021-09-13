@@ -18,6 +18,7 @@ func (m *MySQL) StatefulSet() *appsv1.StatefulSet {
 			Labels:    m.MatchLabels(),
 		},
 		Spec: appsv1.StatefulSetSpec{
+                        Replicas: &m.Size,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: m.MatchLabels(),
 			},
