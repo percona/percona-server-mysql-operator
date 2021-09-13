@@ -1,5 +1,11 @@
 # Percona Server Operator
 
+## Build
+
+```
+$ make docker-build IMG=perconalab/percona-server-operator:latest
+```
+
 ## Deploy operator
 
 ```

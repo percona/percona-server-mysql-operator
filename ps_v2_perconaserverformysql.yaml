@@ -3,6 +3,12 @@ kind: PerconaServerForMySQL
 metadata:
   name: cluster1
 spec:
+  secretsName: cluster1-secrets
   mysql:
     size: 1
     image: percona/percona-server:8.0.25
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 6G

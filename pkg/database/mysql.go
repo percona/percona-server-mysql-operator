@@ -59,18 +59,19 @@ func (m *MySQL) StatefulSet() *appsv1.StatefulSet {
 			Selector: &metav1.LabelSelector{
 				MatchLabels: m.MatchLabels(),
 			},
+			VolumeClaimTemplates: m.persistentVolumeClaims(),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: m.MatchLabels(),
 				},
 				Spec: corev1.PodSpec{
-					InitContainers: m.InitContainers(),
-					Containers:     m.Containers(),
+					Containers: m.Containers(),
 					// TerminationGracePeriodSeconds: 30,
 					RestartPolicy:   corev1.RestartPolicyAlways,
 					SchedulerName:   "default-scheduler",
 					DNSPolicy:       corev1.DNSClusterFirst,
 					SecurityContext: m.PodSecurityContext,
+					Volumes:         m.volumes(),
 				},
 			},
 		},
@@ -143,23 +144,21 @@ func (m *MySQL) volumeMounts() []corev1.VolumeMount {
 			Name:      DataVolumeName,
 			MountPath: "/var/lib/mysql",
 		},
-		{
-			Name:      "config",
-			MountPath: "/etc/mysql",
-		},
 	}
 }
 
 func (m *MySQL) Container() corev1.Container {
 	return corev1.Container{
-		Name:                     Name,
-		Image:                    m.Image,
-		ImagePullPolicy:          m.ImagePullPolicy,
-		Env:                      m.env(),
-		Ports:                    m.ports(),
-		// VolumeMounts:             m.volumeMounts(),
-		Command:                  []string{"/var/lib/mysql/ps-entrypoint.sh"},
-		Args:                     []string{"mysqld"},
+		Name:            Name,
+		Image:           m.Image,
+		ImagePullPolicy: m.ImagePullPolicy,
+		Env:             m.env(),
+		Ports:           m.ports(),
+		VolumeMounts:    m.volumeMounts(),
+		// Command:                  []string{"/var/lib/mysql/ps-entrypoint.sh"},
+		// Args:                     []string{"mysqld"},
+		Command:                  []string{"/bin/sh"},
+		Args:                     []string{"-c", "sleep", "3600"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 	}
@@ -175,16 +174,25 @@ func (m *MySQL) Containers() []corev1.Container {
 	return containers
 }
 
-func (m *MySQL) InitContainers() []corev1.Container {
-	return []corev1.Container{
-		{
-			Name:                     Name + "-init",
-			Image:                    m.Image,
-			ImagePullPolicy:          m.ImagePullPolicy,
-			// VolumeMounts:             m.volumeMounts(),
-			Command:                  []string{"/var/lib/mysql/ps-init-entrypoint.sh"},
-			TerminationMessagePath:   "/dev/termination-log",
-			TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		},
+func (m *MySQL) InitContainer(initImage string) corev1.Container {
+	return corev1.Container{
+		Name: Name + "-init",
+		// Image:           initImage,
+		Image:           m.Image,
+		ImagePullPolicy: m.ImagePullPolicy,
+		VolumeMounts:    m.volumeMounts(),
+		// Command:                  []string{"/ps-init-entrypoint.sh"},
+		Command:                  []string{"/bin/sh"},
+		Args:                     []string{"-c", "sleep", "3600"},
+		TerminationMessagePath:   "/dev/termination-log",
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 	}
+}
+
+func (m *MySQL) volumes() (volumes []corev1.Volume) {
+	return nil
+}
+
+func (m *MySQL) persistentVolumeClaims() (volumes []corev1.PersistentVolumeClaim) {
+	return []corev1.PersistentVolumeClaim{k8s.PVC(DataVolumeName, m.VolumeSpec)}
 }

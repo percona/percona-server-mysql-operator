@@ -37,6 +37,8 @@ BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
 
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
+GIT_COMMIT=$(shell git rev-parse HEAD)
+BUILD_TIME=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
@@ -99,7 +101,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
 docker-build: test ## Build docker image with the manager.
-	docker build -t ${IMG} .
+	docker build --build-arg GIT_COMMIT=${GIT_COMMIT} --build-arg BUILD_TIME=${BUILD_TIME} -t ${IMG} .
 
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}

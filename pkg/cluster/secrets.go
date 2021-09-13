@@ -63,7 +63,7 @@ func (r *MySQLReconciler) reconcileUsersSecret(cr *v2.PerconaServerForMySQL) err
 		v2.USERS_SECRET_KEY_PROXYADMIN,
 		v2.USERS_SECRET_KEY_OPERATOR,
 		v2.USERS_SECRET_KEY_REPLICATION,
-                v2.USERS_SECRET_KEY_ORCHESTRATOR,
+		v2.USERS_SECRET_KEY_ORCHESTRATOR,
 	}
 	data := make(map[string][]byte)
 	for _, user := range users {
@@ -82,5 +82,5 @@ func (r *MySQLReconciler) reconcileUsersSecret(cr *v2.PerconaServerForMySQL) err
 		Type: corev1.SecretTypeOpaque,
 	}
 	err = r.Client.Create(context.TODO(), &secretObj)
-        return errors.Wrapf(err, "create users secret '%s'", cr.Spec.SecretsName)
+	return errors.Wrapf(err, "create users secret '%s'", cr.Spec.SecretsName)
 }

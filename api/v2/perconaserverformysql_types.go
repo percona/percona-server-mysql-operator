@@ -178,7 +178,25 @@ const (
 )
 
 func (cr *PerconaServerForMySQL) CheckNSetDefaults(log logr.Logger) error {
+	cr.Spec.MySQL.VolumeSpec.reconcile()
+
 	return nil
+}
+
+func (v *VolumeSpec) reconcile() {
+	if v == nil {
+		v = &VolumeSpec{}
+	}
+
+	if v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil {
+		v.PersistentVolumeClaim = &corev1.PersistentVolumeClaimSpec{}
+	}
+
+	if v.PersistentVolumeClaim != nil {
+		if len(v.PersistentVolumeClaim.AccessModes) == 0 {
+			v.PersistentVolumeClaim.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+		}
+	}
 }
 
 func (cr *PerconaServerForMySQL) Labels() map[string]string {
