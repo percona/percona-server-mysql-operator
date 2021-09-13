@@ -57,4 +57,3 @@ func (m *MySQL) env() []corev1.EnvVar {
 		},
 	}
 }
-

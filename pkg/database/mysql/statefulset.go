@@ -39,4 +39,3 @@ func (m *MySQL) StatefulSet() *appsv1.StatefulSet {
 		},
 	}
 }
-

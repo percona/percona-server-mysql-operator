@@ -2,9 +2,15 @@ package cluster
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"reflect"
 
 	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -44,5 +50,112 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, t types.NamespacedName)
 		return errors.Wrap(err, "reconcile mysql")
 	}
 
+	if err := r.reconcileOrchestrator(log, cr); err != nil {
+		return errors.Wrap(err, "reconcile orchestrator")
+	}
+
 	return nil
+}
+
+func (r *MySQLReconciler) createOrUpdate(obj client.Object) error {
+	metaAccessor, ok := obj.(metav1.ObjectMetaAccessor)
+	if !ok {
+		return errors.New("can't convert object to ObjectMetaAccessor")
+	}
+
+	objectMeta := metaAccessor.GetObjectMeta()
+
+	if objectMeta.GetAnnotations() == nil {
+		objectMeta.SetAnnotations(make(map[string]string))
+	}
+
+	objAnnotations := objectMeta.GetAnnotations()
+	delete(objAnnotations, "percona.com/last-config-hash")
+	objectMeta.SetAnnotations(objAnnotations)
+
+	hash, err := getObjectHash(obj)
+	if err != nil {
+		return errors.Wrap(err, "calculate object hash")
+	}
+
+	objAnnotations = objectMeta.GetAnnotations()
+	objAnnotations["percona.com/last-config-hash"] = hash
+	objectMeta.SetAnnotations(objAnnotations)
+
+	val := reflect.ValueOf(obj)
+	if val.Kind() == reflect.Ptr {
+		val = reflect.Indirect(val)
+	}
+	oldObject := reflect.New(val.Type()).Interface().(client.Object)
+
+	err = r.Client.Get(context.Background(), types.NamespacedName{
+		Name:      objectMeta.GetName(),
+		Namespace: objectMeta.GetNamespace(),
+	}, oldObject)
+
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "get object")
+	}
+
+	if k8serrors.IsNotFound(err) {
+		return r.Client.Create(context.TODO(), obj)
+	}
+
+	oldObjectMeta := oldObject.(metav1.ObjectMetaAccessor).GetObjectMeta()
+
+	if oldObjectMeta.GetAnnotations()["percona.com/last-config-hash"] != hash ||
+		!isObjectMetaEqual(objectMeta, oldObjectMeta) {
+
+		objectMeta.SetResourceVersion(oldObjectMeta.GetResourceVersion())
+		switch object := obj.(type) {
+		case *corev1.Service:
+			object.Spec.ClusterIP = oldObject.(*corev1.Service).Spec.ClusterIP
+			if object.Spec.Type == corev1.ServiceTypeLoadBalancer {
+				object.Spec.HealthCheckNodePort = oldObject.(*corev1.Service).Spec.HealthCheckNodePort
+			}
+		}
+
+		return r.Client.Update(context.TODO(), obj)
+	}
+
+	return nil
+}
+
+func getObjectHash(obj runtime.Object) (string, error) {
+	var dataToMarshall interface{}
+	switch object := obj.(type) {
+	case *appsv1.StatefulSet:
+		dataToMarshall = object.Spec
+	case *appsv1.Deployment:
+		dataToMarshall = object.Spec
+	case *corev1.Service:
+		dataToMarshall = object.Spec
+	default:
+		dataToMarshall = obj
+	}
+	data, err := json.Marshal(dataToMarshall)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(data), nil
+}
+
+func isObjectMetaEqual(old, new metav1.Object) bool {
+	return compareMaps(old.GetAnnotations(), new.GetAnnotations()) &&
+		compareMaps(old.GetLabels(), new.GetLabels())
+}
+
+func compareMaps(x, y map[string]string) bool {
+	if len(x) != len(y) {
+		return false
+	}
+
+	for k, v := range x {
+		yVal, ok := y[k]
+		if !ok || yVal != v {
+			return false
+		}
+	}
+
+	return true
 }
