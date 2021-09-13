@@ -16,7 +16,7 @@ func (m *MySQL) Container() corev1.Container {
 		Image:                    m.Image,
 		ImagePullPolicy:          m.ImagePullPolicy,
 		Env:                      m.env(),
-		Ports:                    m.ports(),
+		Ports:                    m.containerPorts(),
 		VolumeMounts:             m.volumeMounts(),
 		Command:                  []string{"/var/lib/mysql/ps-entrypoint.sh"},
 		Args:                     []string{"mysqld"},

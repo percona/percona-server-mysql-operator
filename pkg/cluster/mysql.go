@@ -21,11 +21,20 @@ func (r *MySQLReconciler) reconcileMySQL(log logr.Logger, cr *v2.PerconaServerFo
 	sfs.Spec.Template.Spec.InitContainers = []corev1.Container{*m.InitContainer(initImage)}
 
 	if err := k8s.SetControllerReference(cr, sfs, r.Scheme); err != nil {
-		return errors.Wrap(err, "set controller reference")
+		return errors.Wrapf(err, "set controller reference to %s/%s", sfs.Kind, sfs.Name)
 	}
 
 	if err := r.createOrUpdate(sfs); err != nil {
-		return errors.Wrap(err, "create or update mysql statefulset")
+		return errors.Wrapf(err, "create or update %s/%s", sfs.Kind, sfs.Name)
+	}
+
+	svc := m.Service(cr)
+	if err := k8s.SetControllerReference(cr, svc, r.Scheme); err != nil {
+		return errors.Wrapf(err, "set controller reference to %s/%s", svc.Kind, svc.Name)
+	}
+
+	if err := r.createOrUpdate(svc); err != nil {
+		return errors.Wrapf(err, "create or update %s/%s", svc.Kind, svc.Name)
 	}
 
 	return nil
