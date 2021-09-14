@@ -24,9 +24,20 @@ func (o *Orchestrator) volumes() (volumes []corev1.Volume) {
 		{
 			Name: ConfigVolumeName,
 			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: o.Name,
+				Projected: &corev1.ProjectedVolumeSource{
+					Sources: []corev1.VolumeProjection{
+						{
+							ConfigMap: &corev1.ConfigMapProjection{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: o.Name,
+								},
+							},
+							Secret: &corev1.SecretProjection{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: o.Name,
+								},
+							},
+						},
 					},
 				},
 			},
