@@ -5,8 +5,11 @@ import (
 )
 
 const (
-	Name           = "orchestrator"
-	DataVolumeName = "datadir"
+	Name             = "orchestrator"
+	DataVolumeName   = "datadir"
+	DataMountPath    = "/var/lib/orchestrator"
+	ConfigVolumeName = "config"
+	ConfigMountPath  = "/etc/orchestrator"
 )
 
 type Orchestrator struct {
