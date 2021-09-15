@@ -24,7 +24,7 @@ func (r *MySQLReconciler) reconcileMySQL(log logr.Logger, cr *v2.PerconaServerFo
 		return errors.Wrapf(err, "set controller reference to %s/%s", sfs.Kind, sfs.Name)
 	}
 
-	if err := r.createOrUpdate(sfs); err != nil {
+	if err := r.createOrUpdate(log, sfs); err != nil {
 		return errors.Wrapf(err, "create or update %s/%s", sfs.Kind, sfs.Name)
 	}
 
@@ -33,7 +33,7 @@ func (r *MySQLReconciler) reconcileMySQL(log logr.Logger, cr *v2.PerconaServerFo
 		return errors.Wrapf(err, "set controller reference to %s/%s", svc.Kind, svc.Name)
 	}
 
-	if err := r.createOrUpdate(svc); err != nil {
+	if err := r.createOrUpdate(log, svc); err != nil {
 		return errors.Wrapf(err, "create or update %s/%s", svc.Kind, svc.Name)
 	}
 

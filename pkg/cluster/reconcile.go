@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"reflect"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -57,7 +58,9 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, t types.NamespacedName)
 	return nil
 }
 
-func (r *MySQLReconciler) createOrUpdate(obj client.Object) error {
+func (r *MySQLReconciler) createOrUpdate(log logr.Logger, obj client.Object) error {
+        log = log.WithValues("object", obj)
+
 	metaAccessor, ok := obj.(metav1.ObjectMetaAccessor)
 	if !ok {
 		return errors.New("can't convert object to ObjectMetaAccessor")
@@ -98,6 +101,7 @@ func (r *MySQLReconciler) createOrUpdate(obj client.Object) error {
 	}
 
 	if k8serrors.IsNotFound(err) {
+                log.Info("object not found. creating")
 		return r.Client.Create(context.TODO(), obj)
 	}
 
@@ -115,6 +119,7 @@ func (r *MySQLReconciler) createOrUpdate(obj client.Object) error {
 			}
 		}
 
+                log.Info("updating")
 		return r.Client.Update(context.TODO(), obj)
 	}
 

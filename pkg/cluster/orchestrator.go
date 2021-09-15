@@ -26,7 +26,7 @@ func (r *MySQLReconciler) reconcileOrchestrator(log logr.Logger, cr *v2.PerconaS
 		return errors.Wrapf(err, "set controller reference to %s/%s", cm.Kind, cm.Name)
 	}
 
-	if err := r.createOrUpdate(cm); err != nil {
+	if err := r.createOrUpdate(log, cm); err != nil {
 		return errors.Wrapf(err, "create or update %s/%s", cm.Kind, cm.Name)
 	}
 
@@ -45,17 +45,17 @@ func (r *MySQLReconciler) reconcileOrchestrator(log logr.Logger, cr *v2.PerconaS
 		return errors.Wrapf(err, "set controller reference to %s/%s", secret.Kind, secret.Name)
 	}
 
-	if err := r.createOrUpdate(secret); err != nil {
+	if err := r.createOrUpdate(log, secret); err != nil {
 		return errors.Wrapf(err, "create or update %s/%s", secret.Kind, secret.Name)
 	}
 
-        svc := o.Service(cr)
+	svc := o.Service(cr)
 
 	if err := k8s.SetControllerReference(cr, svc, r.Scheme); err != nil {
 		return errors.Wrapf(err, "set controller reference to %s/%s", svc.Kind, svc.Name)
 	}
 
-	if err := r.createOrUpdate(svc); err != nil {
+	if err := r.createOrUpdate(log, svc); err != nil {
 		return errors.Wrapf(err, "create or update %s/%s", svc.Kind, svc.Name)
 	}
 
@@ -65,7 +65,7 @@ func (r *MySQLReconciler) reconcileOrchestrator(log logr.Logger, cr *v2.PerconaS
 		return errors.Wrapf(err, "set controller reference to %s/%s", sfs.Kind, sfs.Name)
 	}
 
-	if err := r.createOrUpdate(sfs); err != nil {
+	if err := r.createOrUpdate(log, sfs); err != nil {
 		return errors.Wrapf(err, "create or update %s/%s", sfs.Kind, sfs.Name)
 	}
 
