@@ -21,6 +21,8 @@ func (o *Orchestrator) Container() corev1.Container {
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          o.ContainerSecurityContext,
+		Command:                  []string{"sh"},
+		Args:                     []string{"-c", "/usr/local/bin/orchestrator -config /etc/orchestrator/orchestrator.conf.json http"},
 	}
 }
 

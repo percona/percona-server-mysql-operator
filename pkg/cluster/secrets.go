@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	v2 "github.com/percona/percona-mysql/api/v2"
+	"github.com/percona/percona-mysql/pkg/k8s"
 )
 
 const (
@@ -81,6 +82,11 @@ func (r *MySQLReconciler) reconcileUsersSecret(cr *v2.PerconaServerForMySQL) err
 		Data: data,
 		Type: corev1.SecretTypeOpaque,
 	}
+
+	if err := k8s.SetControllerReference(cr, &secretObj, r.Scheme); err != nil {
+		return errors.Wrapf(err, "set controller reference to %s/%s", secretObj.Kind, secretObj.Name)
+	}
+
 	err = r.Client.Create(context.TODO(), &secretObj)
 	return errors.Wrapf(err, "create users secret '%s'", cr.Spec.SecretsName)
 }

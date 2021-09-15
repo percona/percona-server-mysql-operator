@@ -22,6 +22,10 @@ func (r *MySQLReconciler) reconcileOrchestrator(log logr.Logger, cr *v2.PerconaS
 		return errors.Wrap(err, "get orchestrator configmap")
 	}
 
+	if err := k8s.SetControllerReference(cr, cm, r.Scheme); err != nil {
+		return errors.Wrapf(err, "set controller reference to %s/%s", cm.Kind, cm.Name)
+	}
+
 	if err := r.createOrUpdate(cm); err != nil {
 		return errors.Wrapf(err, "create or update %s/%s", cm.Kind, cm.Name)
 	}
@@ -36,6 +40,10 @@ func (r *MySQLReconciler) reconcileOrchestrator(log logr.Logger, cr *v2.PerconaS
 
 	orcPass := string(usersSecret.Data[v2.USERS_SECRET_KEY_ORCHESTRATOR])
 	secret := o.Secret(v2.USERS_SECRET_KEY_ORCHESTRATOR, orcPass)
+
+	if err := k8s.SetControllerReference(cr, secret, r.Scheme); err != nil {
+		return errors.Wrapf(err, "set controller reference to %s/%s", secret.Kind, secret.Name)
+	}
 
 	if err := r.createOrUpdate(secret); err != nil {
 		return errors.Wrapf(err, "create or update %s/%s", secret.Kind, secret.Name)

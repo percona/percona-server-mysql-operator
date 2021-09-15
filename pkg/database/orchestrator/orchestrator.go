@@ -10,6 +10,8 @@ const (
 	DataMountPath    = "/var/lib/orchestrator"
 	ConfigVolumeName = "config"
 	ConfigMountPath  = "/etc/orchestrator"
+	CredsVolumeName  = "credentials"
+	CredsMountPath   = "/etc/orc-topology"
 )
 
 type Orchestrator struct {
