@@ -16,7 +16,7 @@ func (o *Orchestrator) Container() corev1.Container {
 		Image:                    o.Image,
 		ImagePullPolicy:          o.ImagePullPolicy,
 		Env:                      o.env(),
-		Ports:                    o.ports(),
+		Ports:                    o.containerPorts(),
 		VolumeMounts:             o.volumeMounts(),
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,

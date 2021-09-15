@@ -49,6 +49,16 @@ func (r *MySQLReconciler) reconcileOrchestrator(log logr.Logger, cr *v2.PerconaS
 		return errors.Wrapf(err, "create or update %s/%s", secret.Kind, secret.Name)
 	}
 
+        svc := o.Service(cr)
+
+	if err := k8s.SetControllerReference(cr, svc, r.Scheme); err != nil {
+		return errors.Wrapf(err, "set controller reference to %s/%s", svc.Kind, svc.Name)
+	}
+
+	if err := r.createOrUpdate(svc); err != nil {
+		return errors.Wrapf(err, "create or update %s/%s", svc.Kind, svc.Name)
+	}
+
 	sfs := o.StatefulSet()
 
 	if err := k8s.SetControllerReference(cr, sfs, r.Scheme); err != nil {

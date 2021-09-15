@@ -1,4 +1,4 @@
-package mysql
+package orchestrator
 
 import (
 	corev1 "k8s.io/api/core/v1"
@@ -7,25 +7,25 @@ import (
 	v2 "github.com/percona/percona-mysql/api/v2"
 )
 
-func (m *MySQL) ServiceName(cr *v2.PerconaServerForMySQL) string {
-	return m.Name
+func (o *Orchestrator) ServiceName(cr *v2.PerconaServerForMySQL) string {
+	return o.Name
 }
 
-func (m *MySQL) Service(cr *v2.PerconaServerForMySQL) *corev1.Service {
+func (o *Orchestrator) Service(cr *v2.PerconaServerForMySQL) *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.ServiceName(cr),
+			Name:      o.ServiceName(cr),
 			Namespace: cr.Namespace,
-			Labels:    m.MatchLabels(),
+			Labels:    o.MatchLabels(),
 		},
 		Spec: corev1.ServiceSpec{
 			ClusterIP: "None",
-			Ports:     m.servicePorts(),
-			Selector:  m.MatchLabels(),
+			Ports:     o.servicePorts(),
+			Selector:  o.MatchLabels(),
 		},
 	}
 }

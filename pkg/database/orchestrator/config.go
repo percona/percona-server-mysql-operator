@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/openark/orchestrator/go/config"
 	"github.com/percona/percona-mysql/pkg/k8s"
@@ -20,7 +21,7 @@ func (o *Orchestrator) Configuration() *config.Configuration {
 		DetectInstanceAliasQuery:                  "SELECT @@hostname",
 		DiscoverByShowSlaveHosts:                  false,
 		FailMasterPromotionIfSQLThreadNotUpToDate: true,
-		HTTPAdvertise:                             "http://orchestrator-svc:80",
+		HTTPAdvertise:                             fmt.Sprintf("http://%s-0.%[1]s.%s.svc.cluster.local:3000", o.Name, o.Namespace),
 		HostnameResolveMethod:                     "none",
 		InstancePollSeconds:                       5,
 		ListenAddress:                             ":3000",
@@ -43,16 +44,12 @@ func (o *Orchestrator) Configuration() *config.Configuration {
 		PreFailoverProcesses: []string{
 			"/usr/local/bin/orc-helper failover-in-progress '{failureClusterAlias}' '{failureDescription}' || true",
 		},
-		ProcessesShellCommand: "sh",
-		RaftAdvertise:         "orchestrator-svc",
-		RaftBind:              "orchestrator",
-		RaftDataDir:           DataMountPath,
-		RaftEnabled:           true,
-		RaftNodes: []string{
-			"orchestrator-0-svc",
-			"orchestrator-1-svc",
-			"orchestrator-2-svc",
-		},
+		ProcessesShellCommand:                   "sh",
+		DefaultRaftPort:                         10008,
+		RaftBind:                                "127.0.0.1",
+		RaftDataDir:                             DataMountPath,
+		RaftEnabled:                             true,
+		RaftNodes:                               []string{"127.0.0.1"},
 		RecoverIntermediateMasterClusterFilters: []string{".*"},
 		RecoverMasterClusterFilters:             []string{".*"},
 		RecoveryIgnoreHostnameFilters:           []string{},
