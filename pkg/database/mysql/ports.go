@@ -11,21 +11,19 @@ func (m *MySQL) ports() map[string]int32 {
 }
 
 func (m *MySQL) containerPorts() []corev1.ContainerPort {
-	containerPorts := make([]corev1.ContainerPort, 0, len(m.ports()))
-
-	for name, port := range m.ports() {
-		containerPorts = append(containerPorts, corev1.ContainerPort{Name: name, ContainerPort: port})
+	return []corev1.ContainerPort{
+		{
+			Name:          "mysql",
+			ContainerPort: int32(3306),
+		},
 	}
-
-	return containerPorts
 }
 
 func (m *MySQL) servicePorts() []corev1.ServicePort {
-	servicePorts := make([]corev1.ServicePort, 0, len(m.ports()))
-
-	for name, port := range m.ports() {
-		servicePorts = append(servicePorts, corev1.ServicePort{Name: name, Port: port})
+	return []corev1.ServicePort{
+		{
+			Name: "mysql",
+			Port: int32(3306),
+		},
 	}
-
-	return servicePorts
 }

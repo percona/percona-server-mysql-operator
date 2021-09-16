@@ -12,21 +12,27 @@ func (o *Orchestrator) ports() map[string]int32 {
 }
 
 func (o *Orchestrator) containerPorts() []corev1.ContainerPort {
-	containerPorts := make([]corev1.ContainerPort, 0, len(o.ports()))
-
-	for name, port := range o.ports() {
-		containerPorts = append(containerPorts, corev1.ContainerPort{Name: name, ContainerPort: port})
+	return []corev1.ContainerPort{
+		{
+			Name:          "web",
+			ContainerPort: int32(3000),
+		},
+		{
+			Name:          "raft",
+			ContainerPort: int32(10008),
+		},
 	}
-
-	return containerPorts
 }
 
 func (o *Orchestrator) servicePorts() []corev1.ServicePort {
-	servicePorts := make([]corev1.ServicePort, 0, len(o.ports()))
-
-	for name, port := range o.ports() {
-		servicePorts = append(servicePorts, corev1.ServicePort{Name: name, Port: port})
+	return []corev1.ServicePort{
+		{
+			Name: "web",
+			Port: int32(3000),
+		},
+		{
+			Name: "raft",
+			Port: int32(10008),
+		},
 	}
-
-	return servicePorts
 }

@@ -59,7 +59,7 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, t types.NamespacedName)
 }
 
 func (r *MySQLReconciler) createOrUpdate(log logr.Logger, obj client.Object) error {
-        log = log.WithValues("object", obj)
+	log = log.WithValues("object", obj)
 
 	metaAccessor, ok := obj.(metav1.ObjectMetaAccessor)
 	if !ok {
@@ -101,7 +101,7 @@ func (r *MySQLReconciler) createOrUpdate(log logr.Logger, obj client.Object) err
 	}
 
 	if k8serrors.IsNotFound(err) {
-                log.Info("object not found. creating")
+		log.Info("object not found. creating")
 		return r.Client.Create(context.TODO(), obj)
 	}
 
@@ -119,7 +119,7 @@ func (r *MySQLReconciler) createOrUpdate(log logr.Logger, obj client.Object) err
 			}
 		}
 
-                log.Info("updating")
+		log.Info("updating")
 		return r.Client.Update(context.TODO(), obj)
 	}
 
