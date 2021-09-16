@@ -270,8 +270,9 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			GRANT REPLICATION SLAVE ON *.* to 'replication'@'%';
 
 			CREATE USER 'orchestrator'@'%' IDENTIFIED BY '${ORC_TOPOLOGY_PASSWORD}';
-			GRANT SUPER, PROCESS, REPLICATION SLAVE, RELOAD ON *.* TO 'orchestrator'@'%';
+			GRANT SUPER, PROCESS, REPLICATION SLAVE, REPLICATION_CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';
 			GRANT SELECT ON mysql.slave_master_info TO 'orchestrator'@'%';
+			GRANT SELECT ON meta.* TO 'orchestrator'@'%';
 
 			DROP DATABASE IF EXISTS test;
 			FLUSH PRIVILEGES ;
