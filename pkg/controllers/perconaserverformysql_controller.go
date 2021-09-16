@@ -23,7 +23,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	psv2 "github.com/percona/percona-mysql/api/v2"
+	psv2 "github.com/percona/percona-mysql/pkg/api/v2"
 	"github.com/percona/percona-mysql/pkg/cluster"
 )
 

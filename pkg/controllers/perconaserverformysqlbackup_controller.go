@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	psv2 "github.com/percona/percona-mysql/api/v2"
+	psv2 "github.com/percona/percona-mysql/pkg/api/v2"
 )
 
 // PerconaServerForMYSQLBackupReconciler reconciles a PerconaServerForMYSQLBackup object

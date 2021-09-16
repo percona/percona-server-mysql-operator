@@ -5,7 +5,7 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 
-	v2 "github.com/percona/percona-mysql/api/v2"
+	v2 "github.com/percona/percona-mysql/pkg/api/v2"
 	"github.com/percona/percona-mysql/pkg/database/mysql"
 	"github.com/percona/percona-mysql/pkg/k8s"
 )

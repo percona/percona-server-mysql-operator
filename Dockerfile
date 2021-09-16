@@ -13,14 +13,12 @@ COPY go.sum go.sum
 RUN go mod download
 
 # Copy the go source
-COPY main.go main.go
-COPY api/ api/
-COPY controllers/ controllers/
+COPY cmd/ cmd/
 COPY pkg/ pkg/
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.BuildTime=$BUILD_TIME" -a -o manager main.go
+    go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.BuildTime=$BUILD_TIME" -a -o manager cmd/manager/main.go
 
 FROM registry.access.redhat.com/ubi7/ubi-minimal AS ubi7
 WORKDIR /
