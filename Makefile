@@ -36,7 +36,8 @@ IMAGE_TAG_BASE ?= percona.com/percona-mysql
 BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
 
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+GIT_BRANCH=$(shell git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')
+IMG ?= perconalab/percona-server-mysql-operator:$(GIT_BRANCH)
 GIT_COMMIT=$(shell git rev-parse HEAD)
 BUILD_TIME=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
