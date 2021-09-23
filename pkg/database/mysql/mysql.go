@@ -1,7 +1,7 @@
 package mysql
 
 import (
-	v2 "github.com/percona/percona-mysql/pkg/api/v2"
+	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
 )
 
 const (

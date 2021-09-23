@@ -8,9 +8,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	v2 "github.com/percona/percona-mysql/pkg/api/v2"
-	"github.com/percona/percona-mysql/pkg/database/orchestrator"
-	"github.com/percona/percona-mysql/pkg/k8s"
+	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
+	"github.com/percona/percona-server-mysql-operator/pkg/database/orchestrator"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 )
 
 func (r *MySQLReconciler) reconcileOrchestrator(log logr.Logger, cr *v2.PerconaServerForMySQL) error {

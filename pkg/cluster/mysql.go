@@ -5,9 +5,9 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 
-	v2 "github.com/percona/percona-mysql/pkg/api/v2"
-	"github.com/percona/percona-mysql/pkg/database/mysql"
-	"github.com/percona/percona-mysql/pkg/k8s"
+	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
+	"github.com/percona/percona-server-mysql-operator/pkg/database/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 )
 
 func (r *MySQLReconciler) reconcileMySQL(log logr.Logger, cr *v2.PerconaServerForMySQL) error {

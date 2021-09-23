@@ -28,8 +28,8 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 # This variable is used to construct full image tags for bundle and catalog images.
 #
 # For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
-# percona.com/percona-mysql-bundle:$VERSION and percona.com/percona-mysql-catalog:$VERSION.
-IMAGE_TAG_BASE ?= percona.com/percona-mysql
+# percona.com/percona-server-mysql-operator-bundle:$VERSION and percona.com/percona-server-mysql-operator-catalog:$VERSION.
+IMAGE_TAG_BASE ?= percona.com/percona-server-mysql-operator
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
@@ -96,7 +96,7 @@ test: manifests generate fmt vet envtest ## Run tests.
 ##@ Build
 
 build: generate fmt vet ## Build manager binary.
-	go build -o bin/manager main.go
+	go build -o bin/manager cmd/manager/main.go
 
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go

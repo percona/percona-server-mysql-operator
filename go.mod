@@ -1,4 +1,4 @@
-module github.com/percona/percona-mysql
+module github.com/percona/percona-server-mysql-operator
 
 go 1.16
 

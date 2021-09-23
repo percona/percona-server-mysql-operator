@@ -4,7 +4,7 @@ layout:
 plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
-projectName: percona-mysql
+projectName: percona-server-mysql-operator
 repo: github.com/percona/percona-xtradb-cluster-operator
 resources:
 - api:

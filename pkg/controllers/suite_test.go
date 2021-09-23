@@ -30,7 +30,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	psv2 "github.com/percona/percona-mysql/pkg/api/v2"
+	psv2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
 	//+kubebuilder:scaffold:imports
 )
 

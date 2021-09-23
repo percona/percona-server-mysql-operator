@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/percona/percona-mysql/pkg/api/v2"
+	"github.com/percona/percona-server-mysql-operator/pkg/api/v2"
 )
 
 func operatorPod(cl client.Client) (corev1.Pod, error) {

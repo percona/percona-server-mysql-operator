@@ -13,8 +13,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	v2 "github.com/percona/percona-mysql/pkg/api/v2"
-	"github.com/percona/percona-mysql/pkg/k8s"
+	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 )
 
 const (

@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	v2 "github.com/percona/percona-mysql/pkg/api/v2"
+	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
 )
 
 type MySQLReconciler struct {

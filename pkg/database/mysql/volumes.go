@@ -3,7 +3,7 @@ package mysql
 import (
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/percona/percona-mysql/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 )
 
 func (m *MySQL) volumeMounts() []corev1.VolumeMount {
