@@ -236,6 +236,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		file_env 'MONITOR_HOST' 'localhost'
 		file_env 'MONITOR_PASSWORD' 'monitor' 'monitor'
 		file_env 'REPLICATION_PASSWORD' '' 'replication'
+		file_env 'ORC_TOPOLOGY_PASSWORD' '' 'orchestrator'
 		if [ "$MYSQL_VERSION" == '8.0' ]; then
 			read -r -d '' monitorConnectGrant <<-EOSQL || true
 				GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
@@ -270,7 +271,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			GRANT REPLICATION SLAVE ON *.* to 'replication'@'%';
 
 			CREATE USER 'orchestrator'@'%' IDENTIFIED BY '${ORC_TOPOLOGY_PASSWORD}';
-			GRANT SUPER, PROCESS, REPLICATION SLAVE, REPLICATION_CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';
+			GRANT SUPER, PROCESS, REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';
 			GRANT SELECT ON mysql.slave_master_info TO 'orchestrator'@'%';
 			GRANT SELECT ON meta.* TO 'orchestrator'@'%';
 

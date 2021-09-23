@@ -12,11 +12,24 @@ func (m *MySQL) volumeMounts() []corev1.VolumeMount {
 			Name:      DataVolumeName,
 			MountPath: "/var/lib/mysql",
 		},
+		{
+			Name:      "users-secret",
+			MountPath: "/etc/mysql/mysql-users-secret",
+		},
 	}
 }
 
 func (m *MySQL) volumes() (volumes []corev1.Volume) {
-	return nil
+	return []corev1.Volume{
+		{
+			Name: "users-secret",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: m.secretsName,
+				},
+			},
+		},
+	}
 }
 
 func (m *MySQL) persistentVolumeClaims() (volumes []corev1.PersistentVolumeClaim) {
