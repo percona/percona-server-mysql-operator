@@ -36,7 +36,7 @@ file_env() {
 	if [ "${!var:-}" ]; then
 		val="${!var}"
 	elif [ "${!fileVar:-}" ]; then
-		val="$(< "${!fileVar}")"
+		val="$(<"${!fileVar}")"
 	elif [ "${3:-}" ] && [ -f "/etc/mysql/mysql-users-secret/$3" ]; then
 		val="$(</etc/mysql/mysql-users-secret/$3)"
 	fi
@@ -76,7 +76,7 @@ process_init_file() {
 }
 
 _check_config() {
-	toRun=( "$@" --verbose --help )
+	toRun=("$@" --verbose --help)
 	if ! errors="$("${toRun[@]}" 2>&1 >/dev/null)"; then
 		cat >&2 <<-EOM
 
@@ -156,9 +156,11 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 
 	rm -rfv "$TMPDIR"
 
-#	it is temporary solution
-	echo '[mysqld]' > /etc/my.cnf.d/node.cnf 
+	# it is temporary solution
+	echo '[mysqld]' >/etc/my.cnf.d/node.cnf
 	sed -i "/\[mysqld\]/a report_host=${MY_FQDN}" /etc/my.cnf.d/node.cnf
+	SERVER_ID="$(echo ${MY_POD_NAME} | awk -F '-' '{print $NF}')"
+	echo "server_id = $((SERVER_ID + 1))" >>/etc/my.cnf.d/node.cnf
 	if [ ! -d "$DATADIR/mysql" ]; then
 		file_env 'MYSQL_ROOT_PASSWORD' '' 'root'
 		{ set +x; } 2>/dev/null
@@ -170,7 +172,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		set -x
 
 		mkdir -p "$DATADIR"
-#		find "$DATADIR" -mindepth 1 -prune -o -exec rm -rfv {} \+ 1>/dev/null
+		#find "$DATADIR" -mindepth 1 -prune -o -exec rm -rfv {} \+ 1>/dev/null
 
 		echo 'Initializing database'
 		# we initialize database into $TMPDIR because "--initialize-insecure" option does not work if directory is not empty
@@ -187,7 +189,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		mysql=(mysql --protocol=socket -uroot -hlocalhost --socket="${SOCKET}" --password="")
 
 		for i in {120..0}; do
-			if echo 'SELECT 1' | "${mysql[@]}" &> /dev/null; then
+			if echo 'SELECT 1' | "${mysql[@]}" &>/dev/null; then
 				break
 			fi
 			echo 'MySQL init process in progress...'
