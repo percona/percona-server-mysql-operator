@@ -3,13 +3,11 @@
 ## Build
 
 ```
-$ make docker-build IMG=perconalab/percona-server-operator:latest
+$ make docker-build docker-push
 ```
 
 ## Deploy operator
 
 ```
-$ kubectl apply -k config/crd
-$ kubectl apply -k config/rbac
-$ kubectl apply -k config/manager
+$ make deploy
 ```
