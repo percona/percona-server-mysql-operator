@@ -22,6 +22,7 @@ func (m *MySQL) StatefulSet() *appsv1.StatefulSet {
 			Selector: &metav1.LabelSelector{
 				MatchLabels: m.MatchLabels(),
 			},
+			ServiceName:          m.Name,
 			VolumeClaimTemplates: m.persistentVolumeClaims(),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{

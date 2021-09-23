@@ -18,7 +18,8 @@ func (o *Orchestrator) StatefulSet() *appsv1.StatefulSet {
 			Labels:    o.MatchLabels(),
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas: &o.Size,
+			Replicas:    &o.Size,
+			ServiceName: o.Name,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: o.MatchLabels(),
 			},

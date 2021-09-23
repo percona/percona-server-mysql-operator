@@ -2,7 +2,6 @@ package orchestrator
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/openark/orchestrator/go/config"
 	"github.com/percona/percona-mysql/pkg/k8s"
@@ -21,7 +20,6 @@ func (o *Orchestrator) Configuration() *config.Configuration {
 		DetectInstanceAliasQuery:                  "SELECT @@hostname",
 		DiscoverByShowSlaveHosts:                  false,
 		FailMasterPromotionIfSQLThreadNotUpToDate: true,
-		HTTPAdvertise:                             fmt.Sprintf("http://%s-0.%[1]s.%s.svc.cluster.local:3000", o.Name, o.Namespace),
 		HostnameResolveMethod:                     "none",
 		InstancePollSeconds:                       5,
 		ListenAddress:                             ":3000",
@@ -57,6 +55,7 @@ func (o *Orchestrator) Configuration() *config.Configuration {
 		RemoveTextFromHostnameDisplay:           ":3306",
 		SQLite3DataFile:                         DataMountPath + "/orc.db",
 		SlaveLagQuery:                           "SELECT TIMESTAMPDIFF(SECOND,ts,NOW()) as drift FROM sys_operator.heartbeat ORDER BY drift ASC LIMIT 1",
+		StatusEndpoint:                          "/api/status",
 		UnseenInstanceForgetHours:               1,
 	}
 }
