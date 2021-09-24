@@ -12,13 +12,13 @@ import (
 
 func (o *Orchestrator) Configuration() *config.Configuration {
 	return &config.Configuration{
-		ApplyMySQLPromotionAfterMasterFailover:    false,
+		ApplyMySQLPromotionAfterMasterFailover:    true,
 		BackendDB:                                 "sqlite",
 		Debug:                                     true,
 		DetachLostReplicasAfterMasterFailover:     true,
 		DetectClusterAliasQuery:                   "SELECT CONCAT(SUBSTRING(@@hostname, 1, LENGTH(@@hostname) - 1 - LENGTH(SUBSTRING_INDEX(@@hostname,'-',-2))),'.',SUBSTRING_INDEX(@@report_host,'.',-1))",
 		DetectInstanceAliasQuery:                  "SELECT @@hostname",
-		DiscoverByShowSlaveHosts:                  false,
+		DiscoverByShowSlaveHosts:                  true,
 		FailMasterPromotionIfSQLThreadNotUpToDate: true,
 		HostnameResolveMethod:                     "none",
 		InstancePollSeconds:                       5,

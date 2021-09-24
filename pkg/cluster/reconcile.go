@@ -40,15 +40,19 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, t types.NamespacedName)
 	}
 
 	if err := cr.CheckNSetDefaults(log); err != nil {
-		return errors.Wrap(err, "wrong PS options")
+		return errors.Wrap(err, "check CR options")
 	}
 
 	if err := r.reconcileUsersSecret(cr); err != nil {
 		return errors.Wrap(err, "reconcile users secret")
 	}
 
+	if err := r.reconcileSSL(log, cr); err != nil {
+		return errors.Wrap(err, "reconcile TLS secret")
+	}
+
 	if err := r.reconcileMySQL(log, cr); err != nil {
-		return errors.Wrap(err, "reconcile mysql")
+		return errors.Wrap(err, "reconcile MySQL")
 	}
 
 	if err := r.reconcileOrchestrator(log, cr); err != nil {

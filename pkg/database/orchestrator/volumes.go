@@ -20,6 +20,10 @@ func (o *Orchestrator) volumeMounts() []corev1.VolumeMount {
 			Name:      CredsVolumeName,
 			MountPath: CredsMountPath,
 		},
+		{
+			Name:      TLSVolumeName,
+			MountPath: TLSMountPath,
+		},
 	}
 }
 
@@ -40,6 +44,14 @@ func (o *Orchestrator) volumes() (volumes []corev1.Volume) {
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: o.Name,
+				},
+			},
+		},
+		{
+			Name: TLSVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: o.sslSecretName,
 				},
 			},
 		},

@@ -156,11 +156,10 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 
 	rm -rfv "$TMPDIR"
 
-	# it is temporary solution
-	echo '[mysqld]' >/etc/my.cnf.d/node.cnf
-	sed -i "/\[mysqld\]/a report_host=${MY_FQDN}" /etc/my.cnf.d/node.cnf
+	cp /etc/mysql/config/node.cnf /etc/my.cnf.d/node.cnf
 	SERVER_ID="$(echo ${MY_POD_NAME} | awk -F '-' '{print $NF}')"
-	echo "server_id = $((SERVER_ID + 1))" >>/etc/my.cnf.d/node.cnf
+	sed -i "s/server_id = 0/server_id = $((SERVER_ID + 1))/g" /etc/my.cnf.d/node.cnf
+	sed -i "s/report_host = MY_FQDN/report_host = ${MY_FQDN}/g" /etc/my.cnf.d/node.cnf
 	if [ ! -d "$DATADIR/mysql" ]; then
 		file_env 'MYSQL_ROOT_PASSWORD' '' 'root'
 		{ set +x; } 2>/dev/null

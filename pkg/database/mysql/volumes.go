@@ -10,11 +10,19 @@ func (m *MySQL) volumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{
 			Name:      DataVolumeName,
-			MountPath: "/var/lib/mysql",
+			MountPath: DataMountPath,
 		},
 		{
-			Name:      "users-secret",
-			MountPath: "/etc/mysql/mysql-users-secret",
+			Name:      ConfigVolumeName,
+			MountPath: ConfigMountPath,
+		},
+		{
+			Name:      CredsVolumeName,
+			MountPath: CredsMountPath,
+		},
+		{
+			Name:      TLSVolumeName,
+			MountPath: TLSMountPath,
 		},
 	}
 }
@@ -22,10 +30,28 @@ func (m *MySQL) volumeMounts() []corev1.VolumeMount {
 func (m *MySQL) volumes() (volumes []corev1.Volume) {
 	return []corev1.Volume{
 		{
-			Name: "users-secret",
+			Name: CredsVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: m.secretsName,
+				},
+			},
+		},
+		{
+			Name: TLSVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: m.sslSecretName,
+				},
+			},
+		},
+		{
+			Name: ConfigVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: m.Name,
+					},
 				},
 			},
 		},

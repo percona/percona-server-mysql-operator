@@ -12,6 +12,8 @@ const (
 	ConfigMountPath  = "/etc/orchestrator"
 	CredsVolumeName  = "credentials"
 	CredsMountPath   = "/etc/orc-topology"
+	TLSVolumeName    = "tls"
+	TLSMountPath     = "/etc/orchestrator-tls"
 )
 
 type Orchestrator struct {
@@ -20,6 +22,7 @@ type Orchestrator struct {
 	Name          string
 	Namespace     string
 	secretsName   string
+	sslSecretName string
 	clusterLabels map[string]string
 }
 
@@ -29,6 +32,7 @@ func New(cr *v2.PerconaServerForMySQL) *Orchestrator {
 		Name:          cr.Name + "-" + Name,
 		Namespace:     cr.Namespace,
 		secretsName:   cr.Spec.SecretsName,
+		sslSecretName: cr.Spec.SSLSecretName,
 		clusterLabels: cr.Labels(),
 	}
 }

@@ -12,6 +12,18 @@ import (
 
 func (r *MySQLReconciler) reconcileMySQL(log logr.Logger, cr *v2.PerconaServerForMySQL) error {
 	m := mysql.New(cr)
+
+	cfg := m.Configuration()
+	cm := m.ConfigMap(cfg)
+
+	if err := k8s.SetControllerReference(cr, cm, r.Scheme); err != nil {
+		return errors.Wrapf(err, "set controller reference to %s/%s", cm.Kind, cm.Name)
+	}
+
+	if err := r.createOrUpdate(log, cm); err != nil {
+		return errors.Wrapf(err, "create or update %s/%s", cm.Kind, cm.Name)
+	}
+
 	sfs := m.StatefulSet()
 
 	initImage, err := k8s.InitImage(r.Client, cr)
