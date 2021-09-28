@@ -13,10 +13,6 @@ func (o *Orchestrator) volumeMounts() []corev1.VolumeMount {
 			MountPath: DataMountPath,
 		},
 		{
-			Name:      ConfigVolumeName,
-			MountPath: ConfigMountPath,
-		},
-		{
 			Name:      CredsVolumeName,
 			MountPath: CredsMountPath,
 		},
@@ -29,16 +25,6 @@ func (o *Orchestrator) volumeMounts() []corev1.VolumeMount {
 
 func (o *Orchestrator) volumes() (volumes []corev1.Volume) {
 	return []corev1.Volume{
-		{
-			Name: ConfigVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: o.Name,
-					},
-				},
-			},
-		},
 		{
 			Name: CredsVolumeName,
 			VolumeSource: corev1.VolumeSource{

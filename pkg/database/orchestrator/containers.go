@@ -22,7 +22,7 @@ func (o *Orchestrator) Container() corev1.Container {
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          o.ContainerSecurityContext,
 		Command:                  []string{"sh"},
-		Args:                     []string{"-c", "/usr/local/bin/orchestrator -config /etc/orchestrator/orchestrator.conf.json http"},
+		Args:                     []string{"-c", "/usr/local/orchestrator/orchestrator -config /etc/orchestrator/orchestrator.conf.json http"},
 	}
 }
 

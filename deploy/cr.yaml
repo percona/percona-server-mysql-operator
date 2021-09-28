@@ -17,9 +17,9 @@ spec:
   orchestrator:
     size: 1
     imagePullPolicy: Always
-    image: quay.io/presslabs/mysql-operator-orchestrator:0.4.0
+    image: perconalab/percona-server-mysql-operator:main-orchestrator
     volumeSpec:
       persistentVolumeClaim:
         resources:
           requests:
-            storage: 2G
+            storage: 1G

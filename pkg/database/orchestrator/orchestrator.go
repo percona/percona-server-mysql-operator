@@ -11,9 +11,9 @@ const (
 	ConfigVolumeName = "config"
 	ConfigMountPath  = "/etc/orchestrator"
 	CredsVolumeName  = "credentials"
-	CredsMountPath   = "/etc/orc-topology"
+	CredsMountPath   = "/etc/orchestrator/credentials"
 	TLSVolumeName    = "tls"
-	TLSMountPath     = "/etc/orchestrator-tls"
+	TLSMountPath     = "/etc/orchestrator/ssl"
 )
 
 type Orchestrator struct {
