@@ -2,6 +2,7 @@ package mysql
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func (m *MySQL) Containers() []corev1.Container {
@@ -23,6 +24,27 @@ func (m *MySQL) Container() corev1.Container {
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          m.ContainerSecurityContext,
+		StartupProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/var/lib/mysql/bootstrap"},
+				},
+			},
+			TimeoutSeconds: int32(300),
+			PeriodSeconds:  int32(10),
+		},
+		ReadinessProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				TCPSocket: &corev1.TCPSocketAction{
+					Port: intstr.FromInt(3306),
+				},
+			},
+			InitialDelaySeconds: int32(30),
+			TimeoutSeconds:      int32(3),
+			PeriodSeconds:       int32(5),
+			FailureThreshold:    int32(3),
+			SuccessThreshold:    int32(1),
+		},
 	}
 }
 

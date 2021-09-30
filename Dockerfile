@@ -19,10 +19,13 @@ COPY pkg/ pkg/
 # Build
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.BuildTime=$BUILD_TIME" -a -o manager cmd/manager/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.BuildTime=$BUILD_TIME" -a -o bootstrap cmd/bootstrap/main.go
 
 FROM registry.access.redhat.com/ubi7/ubi-minimal AS ubi7
 WORKDIR /
 COPY --from=builder /workspace/manager .
+COPY --from=builder /workspace/bootstrap .
 COPY build/ps-entrypoint.sh /ps-entrypoint.sh
 COPY build/ps-init-entrypoint.sh /ps-init-entrypoint.sh
 USER 65532:65532

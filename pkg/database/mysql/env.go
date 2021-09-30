@@ -44,6 +44,16 @@ func (m *MySQL) env() []corev1.EnvVar {
 			},
 		},
 		{
+			Name: "REPLICATION_PASSWORD",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: k8s.SecretKeySelector(m.secretsName, v2.USERS_SECRET_KEY_REPLICATION),
+			},
+		},
+		{
+			Name:  "MY_DATA_DIR",
+			Value: DataMountPath,
+		},
+		{
 			Name:  "MY_NAMESPACE",
 			Value: m.Namespace,
 		},

@@ -23,9 +23,10 @@ func (m *MySQL) Service(cr *v2.PerconaServerForMySQL) *corev1.Service {
 			Labels:    m.MatchLabels(),
 		},
 		Spec: corev1.ServiceSpec{
-			ClusterIP: "None",
-			Ports:     m.servicePorts(),
-			Selector:  m.MatchLabels(),
+			ClusterIP:                "None",
+			Ports:                    m.servicePorts(),
+			Selector:                 m.MatchLabels(),
+			PublishNotReadyAddresses: true,
 		},
 	}
 }
