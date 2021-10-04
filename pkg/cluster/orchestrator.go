@@ -16,25 +16,6 @@ import (
 func (r *MySQLReconciler) reconcileOrchestrator(log logr.Logger, cr *v2.PerconaServerForMySQL) error {
 	o := orchestrator.New(cr)
 
-	usersSecret := &corev1.Secret{}
-	if err := r.Client.Get(context.TODO(),
-		types.NamespacedName{Name: cr.Spec.SecretsName, Namespace: cr.Namespace},
-		usersSecret,
-	); err != nil {
-		return errors.Wrapf(err, "get %s/%s", usersSecret.Kind, cr.Spec.SecretsName)
-	}
-
-	orcPass := string(usersSecret.Data[v2.USERS_SECRET_KEY_ORCHESTRATOR])
-	secret := o.Secret(v2.USERS_SECRET_KEY_ORCHESTRATOR, orcPass)
-
-	if err := k8s.SetControllerReference(cr, secret, r.Scheme); err != nil {
-		return errors.Wrapf(err, "set controller reference to %s/%s", secret.Kind, secret.Name)
-	}
-
-	if err := r.createOrUpdate(log, secret); err != nil {
-		return errors.Wrapf(err, "create or update %s/%s", secret.Kind, secret.Name)
-	}
-
 	svc := o.Service(cr)
 
 	if err := k8s.SetControllerReference(cr, svc, r.Scheme); err != nil {
