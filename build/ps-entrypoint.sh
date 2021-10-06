@@ -312,8 +312,10 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			process_init_file "$f" "${mysql[@]}"
 		done
 
-                echo "INSTALL PLUGIN clone SONAME 'mysql_clone.so';" | "${mysql[@]}"
-                echo "Clone plugin loaded."
+		if test $(echo "SELECT PLUGIN_NAME, PLUGIN_STATUS FROM INFORMATION_SCHEMA.PLUGINS where PLUGIN_NAME='clone';" | "${mysql[@]}" | wc -l) -lt 2; then
+			echo "INSTALL PLUGIN clone SONAME 'mysql_clone.so';" | "${mysql[@]}"
+			echo "Clone plugin installed."
+		fi
 
 		{ set +x; } 2>/dev/null
 		if [ ! -z "$MYSQL_ONETIME_PASSWORD" ]; then

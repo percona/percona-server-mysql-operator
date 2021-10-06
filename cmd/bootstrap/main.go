@@ -169,12 +169,13 @@ func selectDonor(fqdn, primary string, replicas []string) string {
 	for _, replica := range replicas {
 		db, err := mysql.NewConnection("operator", operatorPass, replica, int32(3306))
 		if err != nil {
-			db.Close()
 			continue
 		}
+		defer db.Close()
 
 		if fqdn != replica {
 			donor = replica
+			break
 		}
 	}
 

@@ -111,45 +111,12 @@ func (d *Database) Close() error {
 	return d.db.Close()
 }
 
-func (d *Database) EnsureClonePlugin() error {
-	rows, err := d.db.Query("SHOW PLUGINS")
-	if err != nil {
-		return errors.Wrap(err, "show plugins")
-	}
-	defer rows.Close()
-
-	type plugin struct {
-		name    sql.RawBytes
-		status  sql.RawBytes
-		ptype   sql.RawBytes
-		library sql.RawBytes
-		license sql.RawBytes
-	}
-	cloneInstalled := false
-	for rows.Next() {
-		p := plugin{}
-		if err := rows.Scan(&p.name, &p.status, &p.ptype, &p.library, &p.license); err != nil {
-			return errors.Wrap(err, "scan rows")
-		}
-
-		if string(p.name) == "clone" && string(p.status) == "ACTIVE" {
-			cloneInstalled = true
-		}
-	}
-
-	if cloneInstalled {
-		return nil
-	}
-
-	_, err = d.db.Exec("INSTALL PLUGIN clone SONAME 'mysql_clone.so'")
-	return errors.Wrap(err, "install clone plugin")
-}
-
 func (d *Database) CloneInProgress() (bool, error) {
 	rows, err := d.db.Query("SELECT STATE FROM performance_schema.clone_status")
 	if err != nil {
 		return false, errors.Wrap(err, "fetch clone status")
 	}
+	defer rows.Close()
 
 	type status struct {
 		state sql.RawBytes
@@ -175,6 +142,7 @@ func (d *Database) NeedsClone(donor string, port int32) (bool, error) {
 	if err != nil {
 		return false, errors.Wrap(err, "fetch clone status")
 	}
+	defer rows.Close()
 
 	type status struct {
 		source sql.RawBytes
@@ -207,9 +175,4 @@ func (d *Database) Clone(donor, user, pass string, port int32) error {
 	}
 
 	return nil
-}
-
-func (d *Database) CheckReadiness() error {
-	_, err := d.db.Query("SELECT 1")
-	return errors.Wrap(err, "run query")
 }

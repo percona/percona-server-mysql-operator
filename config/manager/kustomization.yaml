@@ -13,4 +13,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: perconalab/percona-server-mysql-operator
-  newTag: bootstrap
+  newTag: main
