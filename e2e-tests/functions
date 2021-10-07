@@ -1,0 +1,15 @@
+#!/bin/bash
+
+exec 5>&2
+BASH_XTRACEFD="5"
+
+GIT_COMMIT=$(git rev-parse HEAD)
+BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')}
+IMAGE=${IMAGE:-"perconalab/percona-server-mysql-operator:${GIT_BRANCH}"}
+IMAGE_MYSQL=${IMAGE_PXC:-"perconalab/percona-server-mysql-operator:main-pxc8.0"}
+IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
+SKIP_BACKUPS_TO_AWS_GCP=${SKIP_BACKUPS_TO_AWS_GCP:-1}
+tmp_dir=$(mktemp -d)
+sed=$(which gsed || which sed)
+date=$(which gdate || which date)
