@@ -30,6 +30,9 @@ github.com/fsnotify/fsnotify
 github.com/go-logr/logr
 # github.com/go-logr/zapr v0.4.0
 github.com/go-logr/zapr
+# github.com/go-sql-driver/mysql v1.6.0
+## explicit
+github.com/go-sql-driver/mysql
 # github.com/gogo/protobuf v1.3.2
 github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/sortkeys
@@ -136,6 +139,9 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
+# github.com/sjmudd/stopwatch v0.0.0-20170613150411-f380bf8a9be1
+## explicit
+github.com/sjmudd/stopwatch
 # github.com/spf13/pflag v1.0.5
 github.com/spf13/pflag
 # go.uber.org/atomic v1.7.0
