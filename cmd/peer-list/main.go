@@ -44,7 +44,7 @@ var (
 	onStart   = flag.String("on-start", "", "Script to run on start, must accept a new line separated list of peers via stdin.")
 	svc       = flag.String("service", "", "Governing service responsible for the DNS records of the domain this pod is in.")
 	namespace = flag.String("ns", "", "The namespace this pod is running in. If unspecified, the POD_NAMESPACE env var is used.")
-	domain    = flag.String("domain", "", "The Cluster Domain which is used by the Cluster, if not set tries to determine it from /etc/resolv.conf file.")
+	domain    = flag.String("domain", "", "The Cluster Domain which is used by the Cluster, if not set it tries to determine it from /etc/resolv.conf file.")
 )
 
 func lookup(svcName string) (sets.String, error) {
@@ -72,9 +72,6 @@ func shellOut(sendStdin, script string) {
 }
 
 func main() {
-	// Custom signal handler for SIGUSR1. This is needed because the
-	// Docker image (percona/percona-xtradb-cluster-operator:$version-haproxy)
-	// sets the STOPSIGNAL to SIGUSR1 to shutdown HAProxy gracefully.
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGUSR1)
 	go func() {

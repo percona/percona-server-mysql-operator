@@ -171,7 +171,7 @@ func selectDonor(fqdn, primary string, replicas []string) string {
 		if err != nil {
 			continue
 		}
-		defer db.Close()
+		db.Close()
 
 		if fqdn != replica {
 			donor = replica
