@@ -80,10 +80,9 @@ type PodSpec struct {
 	LoadBalancerSourceRanges      []string                                `json:"loadBalancerSourceRanges,omitempty"`
 	ServiceAnnotations            map[string]string                       `json:"serviceAnnotations,omitempty"`
 	SchedulerName                 string                                  `json:"schedulerName,omitempty"`
-	ReadinessInitialDelaySeconds  *int32                                  `json:"readinessDelaySec,omitempty"`
-	ReadinessProbes               corev1.Probe                            `json:"readinessProbes,omitempty"`
-	LivenessInitialDelaySeconds   *int32                                  `json:"livenessDelaySec,omitempty"`
-	LivenessProbes                corev1.Probe                            `json:"livenessProbes,omitempty"`
+	StartupProbe                  corev1.Probe                            `json:"startupProbe,omitempty"`
+	ReadinessProbe                corev1.Probe                            `json:"readinessProbe,omitempty"`
+	LivenessProbe                 corev1.Probe                            `json:"livenessProbe,omitempty"`
 	PodSecurityContext            *corev1.PodSecurityContext              `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext      *corev1.SecurityContext                 `json:"containerSecurityContext,omitempty"`
 	ServiceAccountName            string                                  `json:"serviceAccountName,omitempty"`
@@ -179,6 +178,54 @@ const (
 )
 
 func (cr *PerconaServerForMySQL) CheckNSetDefaults(log logr.Logger) error {
+	if cr.Spec.MySQL.StartupProbe.InitialDelaySeconds == 0 {
+		cr.Spec.MySQL.StartupProbe.InitialDelaySeconds = 15
+	}
+	if cr.Spec.MySQL.StartupProbe.PeriodSeconds == 0 {
+		cr.Spec.MySQL.StartupProbe.PeriodSeconds = 10
+	}
+	if cr.Spec.MySQL.StartupProbe.FailureThreshold == 0 {
+		cr.Spec.MySQL.StartupProbe.FailureThreshold = 1
+	}
+	if cr.Spec.MySQL.StartupProbe.SuccessThreshold == 0 {
+		cr.Spec.MySQL.StartupProbe.SuccessThreshold = 1
+	}
+	if cr.Spec.MySQL.StartupProbe.TimeoutSeconds == 0 {
+		cr.Spec.MySQL.StartupProbe.TimeoutSeconds = 300
+	}
+
+	if cr.Spec.MySQL.LivenessProbe.InitialDelaySeconds == 0 {
+		cr.Spec.MySQL.LivenessProbe.InitialDelaySeconds = 15
+	}
+	if cr.Spec.MySQL.LivenessProbe.PeriodSeconds == 0 {
+		cr.Spec.MySQL.LivenessProbe.PeriodSeconds = 10
+	}
+	if cr.Spec.MySQL.LivenessProbe.FailureThreshold == 0 {
+		cr.Spec.MySQL.LivenessProbe.FailureThreshold = 3
+	}
+	if cr.Spec.MySQL.LivenessProbe.SuccessThreshold == 0 {
+		cr.Spec.MySQL.LivenessProbe.SuccessThreshold = 1
+	}
+	if cr.Spec.MySQL.LivenessProbe.TimeoutSeconds == 0 {
+		cr.Spec.MySQL.LivenessProbe.TimeoutSeconds = 30
+	}
+
+	if cr.Spec.MySQL.ReadinessProbe.InitialDelaySeconds == 0 {
+		cr.Spec.MySQL.ReadinessProbe.InitialDelaySeconds = 30
+	}
+	if cr.Spec.MySQL.ReadinessProbe.PeriodSeconds == 0 {
+		cr.Spec.MySQL.ReadinessProbe.PeriodSeconds = 5
+	}
+	if cr.Spec.MySQL.ReadinessProbe.FailureThreshold == 0 {
+		cr.Spec.MySQL.ReadinessProbe.FailureThreshold = 3
+	}
+	if cr.Spec.MySQL.ReadinessProbe.SuccessThreshold == 0 {
+		cr.Spec.MySQL.ReadinessProbe.SuccessThreshold = 1
+	}
+	if cr.Spec.MySQL.ReadinessProbe.TimeoutSeconds == 0 {
+		cr.Spec.MySQL.ReadinessProbe.TimeoutSeconds = 3
+	}
+
 	if cr.Spec.MySQL.PodSecurityContext == nil {
 		var tp int64 = 1001
 		cr.Spec.MySQL.PodSecurityContext = &corev1.PodSecurityContext{

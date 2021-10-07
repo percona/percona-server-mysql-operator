@@ -30,8 +30,12 @@ func (m *MySQL) Container() corev1.Container {
 					Command: []string{"/var/lib/mysql/bootstrap"},
 				},
 			},
-			TimeoutSeconds: int32(300),
-			PeriodSeconds:  int32(10),
+			InitialDelaySeconds:           m.StartupProbe.InitialDelaySeconds,
+			TimeoutSeconds:                m.StartupProbe.TimeoutSeconds,
+			PeriodSeconds:                 m.StartupProbe.PeriodSeconds,
+			FailureThreshold:              m.StartupProbe.FailureThreshold,
+			SuccessThreshold:              m.StartupProbe.SuccessThreshold,
+			TerminationGracePeriodSeconds: m.StartupProbe.TerminationGracePeriodSeconds,
 		},
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
@@ -39,11 +43,12 @@ func (m *MySQL) Container() corev1.Container {
 					Port: intstr.FromInt(3306),
 				},
 			},
-			InitialDelaySeconds: int32(30),
-			TimeoutSeconds:      int32(3),
-			PeriodSeconds:       int32(5),
-			FailureThreshold:    int32(3),
-			SuccessThreshold:    int32(1),
+			InitialDelaySeconds:           m.ReadinessProbe.InitialDelaySeconds,
+			TimeoutSeconds:                m.ReadinessProbe.TimeoutSeconds,
+			PeriodSeconds:                 m.ReadinessProbe.PeriodSeconds,
+			FailureThreshold:              m.ReadinessProbe.FailureThreshold,
+			SuccessThreshold:              m.ReadinessProbe.SuccessThreshold,
+			TerminationGracePeriodSeconds: m.ReadinessProbe.TerminationGracePeriodSeconds,
 		},
 	}
 }
