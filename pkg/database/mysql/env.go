@@ -52,7 +52,7 @@ func (m *MySQL) env() []corev1.EnvVar {
 			Value: m.Name,
 		},
 		{
-			Name: "MY_POD_NAME",
+			Name: "POD_NAME",
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
 					APIVersion: "v1",
@@ -61,8 +61,8 @@ func (m *MySQL) env() []corev1.EnvVar {
 			},
 		},
 		{
-			Name:  "MY_FQDN",
-			Value: "$(MY_POD_NAME).$(MY_SERVICE_NAME).$(MY_NAMESPACE)",
+			Name:  "FQDN",
+			Value: "$(POD_NAME).$(MY_SERVICE_NAME).$(MY_NAMESPACE)",
 		},
 	}
 }

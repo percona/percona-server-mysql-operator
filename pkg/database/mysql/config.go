@@ -15,7 +15,7 @@ func (m *MySQL) Configuration() map[string]string {
 		"enforce-gtid-consistency": "",
 		"gtid_mode":                "ON",
 		"server_id":                "0",
-		"report_host":              "MY_FQDN",
+		"report_host":              "FQDN",
 		"report_port":              "3306",
 	}
 }

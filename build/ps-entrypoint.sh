@@ -135,21 +135,18 @@ _get_tmpdir() {
 }
 
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
-MYSQL_PATCH_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $3}' | awk -F'-' '{print $1}')
 
-file_env 'XTRABACKUP_PASSWORD' 'xtrabackup' 'xtrabackup'
+if [ "$MYSQL_VERSION" != '8.0' ]; then
+    echo "Percona Distribution for MySQL Operator does not support $MYSQL_VERSION"
+    exit 1
+fi
+
 file_env 'CLUSTERCHECK_PASSWORD' '' 'clustercheck'
-
-NODE_NAME=$(hostname -f)
-NODE_PORT=3306
 
 if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 	# still need to check config, container may have started with --user
 	_check_config "$@"
 
-	if [ -n "$INIT_TOKUDB" ]; then
-		export LD_PRELOAD=/usr/lib64/libjemalloc.so.1
-	fi
 	# Get config
 	DATADIR="$(_get_config 'datadir' "$@")"
 	TMPDIR=$(_get_tmpdir "$DATADIR/mysql-tmpdir")
@@ -157,9 +154,9 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 	rm -rfv "$TMPDIR"
 
 	cp /etc/mysql/config/node.cnf /etc/my.cnf.d/node.cnf
-	SERVER_ID="$(echo ${MY_POD_NAME} | awk -F '-' '{print $NF}')"
+	SERVER_ID="$(echo ${POD_NAME} | awk -F '-' '{print $NF}')"
 	sed -i "s/server_id = 0/server_id = $((SERVER_ID + 1))/g" /etc/my.cnf.d/node.cnf
-	sed -i "s/report_host = MY_FQDN/report_host = ${MY_FQDN}/g" /etc/my.cnf.d/node.cnf
+	sed -i "s/report_host = FQDN/report_host = ${FQDN}/g" /etc/my.cnf.d/node.cnf
 	if [ ! -d "$DATADIR/mysql" ]; then
 		file_env 'MYSQL_ROOT_PASSWORD' '' 'root'
 		{ set +x; } 2>/dev/null
@@ -171,7 +168,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		set -x
 
 		mkdir -p "$DATADIR"
-		#find "$DATADIR" -mindepth 1 -prune -o -exec rm -rfv {} \+ 1>/dev/null
+		find "$DATADIR" -mindepth 1 -prune -o -exec rm -rfv {} \+ 1>/dev/null
 
 		echo 'Initializing database'
 		# we initialize database into $TMPDIR because "--initialize-insecure" option does not work if directory is not empty
@@ -207,10 +204,6 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			) | "${mysql[@]}" mysql
 		fi
 
-		# install TokuDB engine
-		if [ -n "$INIT_TOKUDB" ]; then
-			ps-admin --docker --enable-tokudb -u root -p $MYSQL_ROOT_PASSWORD
-		fi
 		if [ -n "$INIT_ROCKSDB" ]; then
 			ps-admin --docker --enable-rocksdb -u root -p $MYSQL_ROOT_PASSWORD
 		fi
@@ -238,11 +231,9 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		file_env 'MONITOR_PASSWORD' 'monitor' 'monitor'
 		file_env 'REPLICATION_PASSWORD' '' 'replication'
 		file_env 'ORC_TOPOLOGY_PASSWORD' '' 'orchestrator'
-		if [ "$MYSQL_VERSION" == '8.0' ]; then
-			read -r -d '' monitorConnectGrant <<-EOSQL || true
-				GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
-			EOSQL
-		fi
+		read -r -d '' monitorConnectGrant <<-EOSQL || true
+			GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
+		EOSQL
 		"${mysql[@]}" <<-EOSQL
 			-- What's done in this file shouldn't be replicated
 			--  or products like mysql-fabric won't work
