@@ -154,7 +154,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 	rm -rfv "$TMPDIR"
 
 	cp /etc/mysql/config/node.cnf /etc/my.cnf.d/node.cnf
-	SERVER_ID="$(echo ${POD_NAME} | awk -F '-' '{print $NF}')"
+	SERVER_ID="$(echo "${POD_NAME}" | awk -F '-' '{print $NF}')"
 	sed -i "s/server_id = 0/server_id = $((SERVER_ID + 1))/g" /etc/my.cnf.d/node.cnf
 	sed -i "s/report_host = FQDN/report_host = ${FQDN}/g" /etc/my.cnf.d/node.cnf
 	if [ ! -d "$DATADIR/mysql" ]; then
