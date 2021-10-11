@@ -26,7 +26,7 @@ spec:
         runAsNonRoot: true
       containers:
       - command:
-        - /manager
+        - /usr/local/bin/percona-server-mysql-operator
         args:
         - --leader-elect
         image: controller:latest
