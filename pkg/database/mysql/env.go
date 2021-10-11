@@ -50,19 +50,19 @@ func (m *MySQL) env() []corev1.EnvVar {
 			},
 		},
 		{
-			Name:  "MY_DATA_DIR",
+			Name:  "MYSQL_DATA_DIR",
 			Value: DataMountPath,
 		},
 		{
-			Name:  "MY_NAMESPACE",
+			Name:  "NAMESPACE",
 			Value: m.Namespace,
 		},
 		{
-			Name:  "MY_SERVICE_NAME",
+			Name:  "SERVICE_NAME",
 			Value: m.Name,
 		},
 		{
-			Name: "MY_POD_NAME",
+			Name: "POD_NAME",
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
 					APIVersion: "v1",
@@ -71,8 +71,8 @@ func (m *MySQL) env() []corev1.EnvVar {
 			},
 		},
 		{
-			Name:  "MY_FQDN",
-			Value: "$(MY_POD_NAME).$(MY_SERVICE_NAME).$(MY_NAMESPACE)",
+			Name:  "FQDN",
+			Value: "$(POD_NAME).$(SERVICE_NAME).$(NAMESPACE)",
 		},
 	}
 }

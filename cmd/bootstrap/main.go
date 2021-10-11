@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/sjmudd/stopwatch"
@@ -15,7 +16,7 @@ import (
 )
 
 func main() {
-	datadir := os.Getenv("MY_DATA_DIR")
+	datadir := os.Getenv("MYSQL_DATA_DIR")
 	f, err := os.OpenFile(filepath.Join(datadir, "bootstrap.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf("error opening file: %v", err)
@@ -38,7 +39,7 @@ func bootstrap() error {
 		log.Printf("bootstrap finished in %f seconds", timer.ElapsedSeconds("total"))
 	}()
 
-	svc := os.Getenv("MY_SERVICE_NAME")
+	svc := os.Getenv("SERVICE_NAME")
 	peers, err := lookup(svc)
 	if err != nil {
 		return errors.Wrap(err, "lookup")
@@ -51,9 +52,8 @@ func bootstrap() error {
 	}
 	log.Printf("Primary: %s Replicas: %v", primary, replicas)
 
-	// TODO: Don't hardcode cluster dns suffix
-	fqdn := fmt.Sprintf("%s.svc.cluster.local", os.Getenv("MY_FQDN"))
-	log.Printf("MY_FQDN: %s", fqdn)
+	fqdn := os.Getenv("FQDN")
+	log.Printf("FQDN: %s", fqdn)
 
 	donor := selectDonor(fqdn, primary, replicas)
 	log.Printf("Donor: %s", donor)
@@ -125,8 +125,10 @@ func lookup(svcName string) (sets.String, error) {
 		return endpoints, err
 	}
 	for _, srvRecord := range srvRecords {
-		// The SRV records ends in a "." for the root domain
-		ep := fmt.Sprintf("%v", srvRecord.Target[:len(srvRecord.Target)-1])
+		// The SRV records have the pattern $HOSTNAME.$SERVICE.$.NAMESPACE.svc.$CLUSTER_DNS_SUFFIX
+		// We only want $HOSTNAME.$SERVICE.$NAMESPACE
+		srv := strings.Split(srvRecord.Target, ".")
+		ep := fmt.Sprintf("%s", strings.Join(srv[:3], "."))
 		endpoints.Insert(ep)
 	}
 	return endpoints, nil
