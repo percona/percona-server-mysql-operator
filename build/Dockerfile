@@ -23,8 +23,8 @@ RUN microdnf update && microdnf clean all
 
 LABEL name="Percona Distribution for MySQL Operator" \
       vendor="Percona" \
-      summary="Percona Distribution for MySQL Operator" \
-      description="Percona Distribution for MySQL Operator" \
+      summary="Percona Distribution for MySQL Operator v2 contains everything you need to quickly and consistently deploy and scale Percona Server for MySQL instances" \
+      description="Percona Distribution for MySQL Operator v2 contains everything you need to quickly and consistently deploy and scale Percona Server for MySQL instances in a Kubernetes-based environment, both on-premises or in the cloud" \
       maintainer="Percona Development <info@percona.com>"
 
 COPY LICENSE /licenses/
