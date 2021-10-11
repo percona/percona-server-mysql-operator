@@ -20,11 +20,20 @@ const (
 	ReplicationStatusNotInitiated
 )
 
-type Database struct {
-	db *sql.DB
+type Replicator interface {
+	StartReplication(host, replicaPass string, port int32) error
+	ReplicationStatus() (ReplicationStatus, string, error)
+	EnableReadonly() error
+	IsReadonly() (bool, error)
+	Close() error
+	CloneInProgress() (bool, error)
+	NeedsClone(donor string, port int32) (bool, error)
+	Clone(donor, user, pass string, port int32) error
 }
 
-func NewConnection(user, pass, host string, port int32) (*Database, error) {
+type dbImpl sql.DB
+
+func NewReplicator(user, pass, host string, port int32) (Replicator, error) {
 	connStr := fmt.Sprintf("%s:%s@tcp(%s:%d)/mysql?interpolateParams=true", user, pass, host, port)
 	db, err := sql.Open("mysql", connStr)
 	if err != nil {
@@ -35,12 +44,12 @@ func NewConnection(user, pass, host string, port int32) (*Database, error) {
 		return nil, errors.Wrap(err, "ping database")
 	}
 
-	return &Database{db: db}, nil
+	return (*dbImpl)(db), nil
 }
 
-func (d *Database) StartReplication(host, replicaPass string, port int32) error {
+func (d *dbImpl) StartReplication(host, replicaPass string, port int32) error {
 	// TODO: Make retries configurable
-	_, err := d.db.Exec(`
+	_, err := (*sql.DB)(d).Exec(`
             CHANGE REPLICATION SOURCE TO
                 SOURCE_USER=?,
                 SOURCE_PASSWORD=?,
@@ -56,12 +65,12 @@ func (d *Database) StartReplication(host, replicaPass string, port int32) error 
 		return errors.Wrap(err, "change replication source to")
 	}
 
-	_, err = d.db.Exec("START REPLICA")
+	_, err = (*sql.DB)(d).Exec("START REPLICA")
 	return errors.Wrap(err, "start replication")
 }
 
-func (d *Database) ReplicationStatus() (ReplicationStatus, string, error) {
-	rows, err := d.db.Query("SHOW REPLICA STATUS")
+func (d *dbImpl) ReplicationStatus() (ReplicationStatus, string, error) {
+	rows, err := (*sql.DB)(d).Query("SHOW REPLICA STATUS")
 	if err != nil {
 		if strings.HasSuffix(err.Error(), "does not exist.") || errors.Is(err, sql.ErrNoRows) {
 			return ReplicationStatusNotInitiated, "", nil
@@ -96,23 +105,23 @@ func (d *Database) ReplicationStatus() (ReplicationStatus, string, error) {
 	return ReplicationStatusNotInitiated, "", nil
 }
 
-func (p *Database) EnableReadonly() error {
-	_, err := p.db.Exec("SET GLOBAL READ_ONLY=1")
+func (d *dbImpl) EnableReadonly() error {
+	_, err := (*sql.DB)(d).Exec("SET GLOBAL READ_ONLY=1")
 	return errors.Wrap(err, "set global read_only param to 1")
 }
 
-func (d *Database) IsReadonly() (bool, error) {
+func (d *dbImpl) IsReadonly() (bool, error) {
 	var readonly int
-	err := d.db.QueryRow("select @@read_only").Scan(&readonly)
+	err := (*sql.DB)(d).QueryRow("select @@read_only").Scan(&readonly)
 	return readonly == 1, errors.Wrap(err, "select global read_only param")
 }
 
-func (d *Database) Close() error {
-	return d.db.Close()
+func (d *dbImpl) Close() error {
+	return (*sql.DB)(d).Close()
 }
 
-func (d *Database) CloneInProgress() (bool, error) {
-	rows, err := d.db.Query("SELECT STATE FROM performance_schema.clone_status")
+func (d *dbImpl) CloneInProgress() (bool, error) {
+	rows, err := (*sql.DB)(d).Query("SELECT STATE FROM performance_schema.clone_status")
 	if err != nil {
 		return false, errors.Wrap(err, "fetch clone status")
 	}
@@ -132,8 +141,8 @@ func (d *Database) CloneInProgress() (bool, error) {
 	return false, nil
 }
 
-func (d *Database) NeedsClone(donor string, port int32) (bool, error) {
-	rows, err := d.db.Query("SELECT SOURCE, STATE FROM performance_schema.clone_status")
+func (d *dbImpl) NeedsClone(donor string, port int32) (bool, error) {
+	rows, err := (*sql.DB)(d).Query("SELECT SOURCE, STATE FROM performance_schema.clone_status")
 	if err != nil {
 		return false, errors.Wrap(err, "fetch clone status")
 	}
@@ -152,13 +161,13 @@ func (d *Database) NeedsClone(donor string, port int32) (bool, error) {
 	return true, nil
 }
 
-func (d *Database) Clone(donor, user, pass string, port int32) error {
-	_, err := d.db.Exec("SET GLOBAL clone_valid_donor_list=?", fmt.Sprintf("%s:%d", donor, port))
+func (d *dbImpl) Clone(donor, user, pass string, port int32) error {
+	_, err := (*sql.DB)(d).Exec("SET GLOBAL clone_valid_donor_list=?", fmt.Sprintf("%s:%d", donor, port))
 	if err != nil {
 		return errors.Wrap(err, "set clone_valid_donor_list")
 	}
 
-	_, err = d.db.Exec("CLONE INSTANCE FROM ?@?:? IDENTIFIED BY ?", user, donor, port, pass)
+	_, err = (*sql.DB)(d).Exec("CLONE INSTANCE FROM ?@?:? IDENTIFIED BY ?", user, donor, port, pass)
 	if err != nil {
 		return errors.Wrap(err, "clone instance")
 	}

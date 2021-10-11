@@ -72,7 +72,7 @@ func bootstrap() error {
 	podIP := os.Getenv("POD_IP")
 	log.Printf("Opening connection to %s", podIP)
 	operatorPass := os.Getenv("OPERATOR_ADMIN_PASSWORD")
-	db, err := mysql.NewConnection("operator", operatorPass, podIP, mysqlAdminPort)
+	db, err := mysql.NewReplicator("operator", operatorPass, podIP, mysqlAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
@@ -148,7 +148,7 @@ func getTopology(peers sets.String) (string, []string, error) {
 
 	operatorPass := os.Getenv("OPERATOR_ADMIN_PASSWORD")
 	for _, peer := range peers.List() {
-		db, err := mysql.NewConnection("operator", operatorPass, peer, mysqlAdminPort)
+		db, err := mysql.NewReplicator("operator", operatorPass, peer, mysqlAdminPort)
 		if err != nil {
 			return "", nil, errors.Wrapf(err, "connect to %s", peer)
 		}
@@ -177,7 +177,7 @@ func selectDonor(fqdn, primary string, replicas []string) string {
 	donor := ""
 
 	for _, replica := range replicas {
-		db, err := mysql.NewConnection("operator", operatorPass, replica, mysqlAdminPort)
+		db, err := mysql.NewReplicator("operator", operatorPass, replica, mysqlAdminPort)
 		if err != nil {
 			continue
 		}
