@@ -61,6 +61,8 @@ jobs:
           github_token: ${{ secrets.github_token }}
           locale: "US"
           reporter: github-pr-check
+          exclude: |
+            "vendor"
 
   alex:
     name: runner / alex
@@ -72,4 +74,3 @@ jobs:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-review
           level: info
-

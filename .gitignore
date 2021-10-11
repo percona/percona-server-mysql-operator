@@ -84,5 +84,3 @@ e2e-tests/init-deploy/smallrun
 
 # Kubernetes Generated files - skip generated files, except for vendored files
 !vendor/**/zz_generated.*
-
-.editorconfig
