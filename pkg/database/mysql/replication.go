@@ -24,18 +24,18 @@ type Database struct {
 	db *sql.DB
 }
 
-func NewConnection(user, pass, host string, port int32) (Database, error) {
+func NewConnection(user, pass, host string, port int32) (*Database, error) {
 	connStr := fmt.Sprintf("%s:%s@tcp(%s:%d)/mysql?interpolateParams=true", user, pass, host, port)
 	db, err := sql.Open("mysql", connStr)
 	if err != nil {
-		return Database{}, errors.Wrap(err, "connect to MySQL")
+		return nil, errors.Wrap(err, "connect to MySQL")
 	}
 
 	if err := db.Ping(); err != nil {
-		return Database{}, errors.Wrap(err, "ping database")
+		return nil, errors.Wrap(err, "ping database")
 	}
 
-	return Database{db: db}, nil
+	return &Database{db: db}, nil
 }
 
 func (d *Database) StartReplication(host, replicaPass string, port int32) error {
@@ -60,8 +60,8 @@ func (d *Database) StartReplication(host, replicaPass string, port int32) error 
 	return errors.Wrap(err, "start replication")
 }
 
-func (p *Database) ReplicationStatus() (ReplicationStatus, string, error) {
-	rows, err := p.db.Query("SHOW REPLICA STATUS")
+func (d *Database) ReplicationStatus() (ReplicationStatus, string, error) {
+	rows, err := d.db.Query("SHOW REPLICA STATUS")
 	if err != nil {
 		if strings.HasSuffix(err.Error(), "does not exist.") || errors.Is(err, sql.ErrNoRows) {
 			return ReplicationStatusNotInitiated, "", nil
@@ -102,7 +102,7 @@ func (p *Database) EnableReadonly() error {
 }
 
 func (d *Database) IsReadonly() (bool, error) {
-	readonly := 0
+	var readonly int
 	err := d.db.QueryRow("select @@read_only").Scan(&readonly)
 	return readonly == 1, errors.Wrap(err, "select global read_only param")
 }
@@ -118,17 +118,12 @@ func (d *Database) CloneInProgress() (bool, error) {
 	}
 	defer rows.Close()
 
-	type status struct {
-		state sql.RawBytes
-	}
-
 	for rows.Next() {
-		s := status{}
-		if err := rows.Scan(&s.state); err != nil {
+		var state string
+		if err := rows.Scan(&state); err != nil {
 			return false, errors.Wrap(err, "scan rows")
 		}
 
-		state := string(s.state)
 		if state != "Completed" && state != "Failed" {
 			return true, nil
 		}
@@ -144,18 +139,12 @@ func (d *Database) NeedsClone(donor string, port int32) (bool, error) {
 	}
 	defer rows.Close()
 
-	type status struct {
-		source sql.RawBytes
-		state  sql.RawBytes
-	}
-
 	for rows.Next() {
-		s := status{}
-		if err := rows.Scan(&s.source, &s.state); err != nil {
+		var source, state string
+		if err := rows.Scan(&source, &state); err != nil {
 			return false, errors.Wrap(err, "scan rows")
 		}
-
-		if string(s.source) == fmt.Sprintf("%s:%d", donor, port) && string(s.state) == "Completed" {
+		if source == fmt.Sprintf("%s:%d", donor, port) && state == "Completed" {
 			return false, nil
 		}
 	}
