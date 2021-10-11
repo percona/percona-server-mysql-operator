@@ -136,10 +136,9 @@ func main() {
 		script = *onChange
 		log.Printf("No on-start supplied, on-change %v will be applied on start.", script)
 	}
-	newPeers := sets.NewString()
-	var err error
+
 	for peers := sets.NewString(); script != ""; time.Sleep(pollPeriod) {
-		newPeers, err = lookup(*svc)
+		newPeers, err := lookup(*svc)
 		if err != nil {
 			log.Printf("%v", err)
 
@@ -149,8 +148,10 @@ func main() {
 				continue
 			}
 		}
+
 		peerList := newPeers.List()
 		sort.Strings(peerList)
+
 		if strings.Join(peers.List(), ":") != strings.Join(newPeers.List(), ":") {
 			log.Printf("Peer list updated\nwas %v\nnow %v", peers.List(), newPeers.List())
 			shellOut(strings.Join(peerList, "\n"), script)
