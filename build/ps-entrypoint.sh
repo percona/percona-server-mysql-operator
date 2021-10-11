@@ -160,6 +160,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 	SERVER_ID="$(echo ${POD_NAME} | awk -F '-' '{print $NF}')"
 	sed -i "s/server_id = 0/server_id = $((SERVER_ID + 1))/g" /etc/my.cnf.d/node.cnf
 	sed -i "s/report_host = FQDN/report_host = ${FQDN}/g" /etc/my.cnf.d/node.cnf
+	sed -i "s/admin-address = IP/admin-address = ${POD_IP}/g" /etc/my.cnf.d/node.cnf
 	if [ ! -d "$DATADIR/mysql" ]; then
 		file_env 'MYSQL_ROOT_PASSWORD' '' 'root'
 		{ set +x; } 2>/dev/null

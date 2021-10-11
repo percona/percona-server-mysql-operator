@@ -74,5 +74,14 @@ func (m *MySQL) env() []corev1.EnvVar {
 			Name:  "FQDN",
 			Value: "$(POD_NAME).$(SERVICE_NAME).$(NAMESPACE)",
 		},
+		{
+			Name: "POD_IP",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					APIVersion: "v1",
+					FieldPath:  "status.podIP",
+				},
+			},
+		},
 	}
 }

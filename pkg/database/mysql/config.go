@@ -17,6 +17,7 @@ func (m *MySQL) Configuration() map[string]string {
 		"server_id":                "0",
 		"report_host":              "FQDN",
 		"report_port":              "3306",
+		"admin-address":            "IP",
 	}
 }
 

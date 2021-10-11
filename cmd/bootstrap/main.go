@@ -15,6 +15,11 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/database/mysql"
 )
 
+const (
+	mysqlPort      = int32(3306)
+	mysqlAdminPort = int32(33062)
+)
+
 func main() {
 	datadir := os.Getenv("MYSQL_DATA_DIR")
 	f, err := os.OpenFile(filepath.Join(datadir, "bootstrap.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
@@ -62,15 +67,16 @@ func bootstrap() error {
 		return nil
 	}
 
-	log.Println("Opening connection to 127.0.0.1")
+	podIP := os.Getenv("POD_IP")
+	log.Printf("Opening connection to %s", podIP)
 	operatorPass := os.Getenv("OPERATOR_ADMIN_PASSWORD")
-	db, err := mysql.NewConnection("operator", operatorPass, "127.0.0.1", int32(3306))
+	db, err := mysql.NewConnection("operator", operatorPass, podIP, mysqlAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
 	defer db.Close()
 
-	needsClone, err := db.NeedsClone(donor, int32(3306))
+	needsClone, err := db.NeedsClone(donor, mysqlAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "check if a clone is needed")
 	}
@@ -90,7 +96,7 @@ func bootstrap() error {
 
 		timer.Start("clone")
 		log.Printf("Cloning from %s", donor)
-		err = db.Clone(donor, "operator", operatorPass, int32(3306))
+		err = db.Clone(donor, "operator", operatorPass, mysqlAdminPort)
 		timer.Stop("clone")
 		log.Printf("Clone finished in %f seconds", timer.ElapsedSeconds("clone"))
 		if err != nil {
@@ -110,7 +116,7 @@ func bootstrap() error {
 	if rStatus == mysql.ReplicationStatusNotInitiated {
 		log.Println("configuring replication")
 		replicaPass := os.Getenv("REPLICATION_PASSWORD")
-		if err := db.StartReplication(primary, replicaPass, int32(3306)); err != nil {
+		if err := db.StartReplication(primary, replicaPass, mysqlPort); err != nil {
 			return errors.Wrap(err, "start replication")
 		}
 	}
@@ -140,7 +146,7 @@ func getTopology(peers sets.String) (string, []string, error) {
 
 	operatorPass := os.Getenv("OPERATOR_ADMIN_PASSWORD")
 	for _, peer := range peers.List() {
-		db, err := mysql.NewConnection("operator", operatorPass, peer, int32(3306))
+		db, err := mysql.NewConnection("operator", operatorPass, peer, mysqlAdminPort)
 		if err != nil {
 			return "", nil, errors.Wrapf(err, "connect to %s", peer)
 		}
@@ -169,7 +175,7 @@ func selectDonor(fqdn, primary string, replicas []string) string {
 	donor := ""
 
 	for _, replica := range replicas {
-		db, err := mysql.NewConnection("operator", operatorPass, replica, int32(3306))
+		db, err := mysql.NewConnection("operator", operatorPass, replica, mysqlAdminPort)
 		if err != nil {
 			continue
 		}
