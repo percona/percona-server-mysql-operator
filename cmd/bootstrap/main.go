@@ -36,7 +36,10 @@ func main() {
 
 func bootstrap() error {
 	timer := stopwatch.NewNamedStopwatch()
-	timer.AddMany([]string{"clone", "total"})
+	err := timer.AddMany([]string{"clone", "total"})
+	if err != nil {
+		return errors.Wrap(err, "add timers")
+	}
 	timer.Start("total")
 
 	defer func() {
@@ -134,7 +137,7 @@ func lookup(svcName string) (sets.String, error) {
 		// The SRV records have the pattern $HOSTNAME.$SERVICE.$.NAMESPACE.svc.$CLUSTER_DNS_SUFFIX
 		// We only want $HOSTNAME.$SERVICE.$NAMESPACE
 		srv := strings.Split(srvRecord.Target, ".")
-		ep := fmt.Sprintf("%s", strings.Join(srv[:3], "."))
+		ep := strings.Join(srv[:3], ".")
 		endpoints.Insert(ep)
 	}
 	return endpoints, nil
