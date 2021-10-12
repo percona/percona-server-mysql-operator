@@ -3,7 +3,6 @@ package mysql
 import (
 	"database/sql"
 	"fmt"
-	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
 	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
@@ -22,7 +21,7 @@ const (
 
 type Replicator interface {
 	StartReplication(host, replicaPass string, port int32) error
-	ReplicationStatus() (ReplicationStatus, string, error)
+	GetReplicationStatus() (ReplicationStatus, string, error)
 	EnableReadonly() error
 	IsReadonly() (bool, error)
 	Close() error
@@ -34,7 +33,7 @@ type Replicator interface {
 type dbImpl sql.DB
 
 func NewReplicator(user, pass, host string, port int32) (Replicator, error) {
-	connStr := fmt.Sprintf("%s:%s@tcp(%s:%d)/mysql?interpolateParams=true", user, pass, host, port)
+	connStr := fmt.Sprintf("%s:%s@tcp(%s:%d)/performance_schema?interpolateParams=true", user, pass, host, port)
 	db, err := sql.Open("mysql", connStr)
 	if err != nil {
 		return nil, errors.Wrap(err, "connect to MySQL")
@@ -69,37 +68,35 @@ func (d *dbImpl) StartReplication(host, replicaPass string, port int32) error {
 	return errors.Wrap(err, "start replication")
 }
 
-func (d *dbImpl) ReplicationStatus() (ReplicationStatus, string, error) {
-	rows, err := (*sql.DB)(d).Query("SHOW REPLICA STATUS")
+func (d *dbImpl) GetReplicationStatus() (ReplicationStatus, string, error) {
+	rows, err := (*sql.DB)(d).Query(`
+        SELECT
+            SERVICE_STATE,
+            LAST_ERROR_NUMBER,
+            HOST
+        FROM replication_connection_status
+        JOIN replication_connection_configuration
+            ON replication_connection_status.channel_name = replication_connection_configuration.channel_name
+        WHERE replication_connection_status.channel_name = ?
+        `, DefaultChannelName)
 	if err != nil {
-		if strings.HasSuffix(err.Error(), "does not exist.") || errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return ReplicationStatusNotInitiated, "", nil
 		}
 		return ReplicationStatusError, "", errors.Wrap(err, "get current replica status")
 	}
 
 	defer rows.Close()
-	cols, err := rows.Columns()
-	if err != nil {
-		return ReplicationStatusError, "", errors.Wrap(err, "get columns")
-	}
-	vals := make([]interface{}, len(cols))
-	for i := range cols {
-		vals[i] = new(sql.RawBytes)
-	}
 
+	var state, errNo, host string
 	for rows.Next() {
-		err = rows.Scan(vals...)
-		if err != nil {
+		if err := rows.Scan(&state, &errNo, &host); err != nil {
 			return ReplicationStatusError, "", errors.Wrap(err, "scan replication status")
 		}
 	}
 
-	SourceHost := string(*vals[1].(*sql.RawBytes))
-	IORunning := string(*vals[10].(*sql.RawBytes))
-	SQLRunning := string(*vals[11].(*sql.RawBytes))
-	if IORunning == "Yes" && SQLRunning == "Yes" {
-		return ReplicationStatusActive, SourceHost, nil
+	if state == "ON" && errNo == "0" {
+		return ReplicationStatusActive, host, nil
 	}
 
 	return ReplicationStatusNotInitiated, "", nil
@@ -121,7 +118,7 @@ func (d *dbImpl) Close() error {
 }
 
 func (d *dbImpl) CloneInProgress() (bool, error) {
-	rows, err := (*sql.DB)(d).Query("SELECT STATE FROM performance_schema.clone_status")
+	rows, err := (*sql.DB)(d).Query("SELECT STATE FROM clone_status")
 	if err != nil {
 		return false, errors.Wrap(err, "fetch clone status")
 	}
@@ -142,7 +139,7 @@ func (d *dbImpl) CloneInProgress() (bool, error) {
 }
 
 func (d *dbImpl) NeedsClone(donor string, port int32) (bool, error) {
-	rows, err := (*sql.DB)(d).Query("SELECT SOURCE, STATE FROM performance_schema.clone_status")
+	rows, err := (*sql.DB)(d).Query("SELECT SOURCE, STATE FROM clone_status")
 	if err != nil {
 		return false, errors.Wrap(err, "fetch clone status")
 	}
