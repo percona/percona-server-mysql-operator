@@ -7,6 +7,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+func (m *MySQL) ConfigMapName() string {
+	return m.Name
+}
+
 func (m *MySQL) Configuration() map[string]string {
 	return map[string]string{
 		"ssl_ca":                   TLSMountPath + "/ca.crt",
@@ -37,5 +41,5 @@ func (m *MySQL) ConfigMap(cfg map[string]string) *corev1.ConfigMap {
 		"node.cnf": mysqld,
 	}
 
-	return k8s.ConfigMap(m.Namespace, m.Name, data)
+	return k8s.ConfigMap(m.Namespace, m.ConfigMapName(), data)
 }

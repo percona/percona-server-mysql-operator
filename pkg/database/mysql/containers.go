@@ -57,15 +57,17 @@ func (m *MySQL) SidecarContainers() []corev1.Container {
 	return nil
 }
 
-func (m *MySQL) InitContainer(initImage string) *corev1.Container {
-	return &corev1.Container{
-		Name:                     Name + "-init",
-		Image:                    initImage,
-		ImagePullPolicy:          m.ImagePullPolicy,
-		VolumeMounts:             m.volumeMounts(),
-		Command:                  []string{"/ps-init-entrypoint.sh"},
-		TerminationMessagePath:   "/dev/termination-log",
-		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		SecurityContext:          m.ContainerSecurityContext,
+func (m *MySQL) InitContainers(initImage string) []corev1.Container {
+	return []corev1.Container{
+		{
+			Name:                     Name + "-init",
+			Image:                    initImage,
+			ImagePullPolicy:          m.ImagePullPolicy,
+			VolumeMounts:             m.volumeMounts(),
+			Command:                  []string{"/ps-init-entrypoint.sh"},
+			TerminationMessagePath:   "/dev/termination-log",
+			TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+			SecurityContext:          m.ContainerSecurityContext,
+		},
 	}
 }
