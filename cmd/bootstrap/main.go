@@ -106,7 +106,7 @@ func bootstrap() error {
 		}
 	}
 
-	rStatus, _, err := db.GetReplicationStatus()
+	rStatus, _, err := db.ReplicationStatus()
 	if err != nil {
 		return errors.Wrap(err, "check replication status")
 	}
@@ -154,7 +154,7 @@ func getTopology(peers sets.String) (string, []string, error) {
 		}
 		defer db.Close()
 
-		status, source, err := db.GetReplicationStatus()
+		status, source, err := db.ReplicationStatus()
 		if err != nil {
 			return "", nil, errors.Wrap(err, "check replication status")
 		}

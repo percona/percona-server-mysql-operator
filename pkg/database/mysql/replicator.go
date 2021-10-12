@@ -21,7 +21,7 @@ const (
 
 type Replicator interface {
 	StartReplication(host, replicaPass string, port int32) error
-	GetReplicationStatus() (ReplicationStatus, string, error)
+	ReplicationStatus() (ReplicationStatus, string, error)
 	EnableReadonly() error
 	IsReadonly() (bool, error)
 	Close() error
@@ -68,7 +68,7 @@ func (d *dbImpl) StartReplication(host, replicaPass string, port int32) error {
 	return errors.Wrap(err, "start replication")
 }
 
-func (d *dbImpl) GetReplicationStatus() (ReplicationStatus, string, error) {
+func (d *dbImpl) ReplicationStatus() (ReplicationStatus, string, error) {
 	rows, err := (*sql.DB)(d).Query(`
         SELECT
             SERVICE_STATE,
