@@ -2,7 +2,8 @@ package cluster
 
 import (
 	"context"
-	"encoding/base64"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"reflect"
 
@@ -84,6 +85,7 @@ func (r *MySQLReconciler) createOrUpdate(log logr.Logger, obj client.Object) err
 	if err != nil {
 		return errors.Wrap(err, "calculate object hash")
 	}
+	log = log.WithValues("hash", hash)
 
 	objAnnotations = objectMeta.GetAnnotations()
 	objAnnotations["percona.com/last-config-hash"] = hash
@@ -146,7 +148,8 @@ func getObjectHash(obj runtime.Object) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return base64.StdEncoding.EncodeToString(data), nil
+	hash := md5.Sum(data)
+	return hex.EncodeToString(hash[:]), nil
 }
 
 func isObjectMetaEqual(old, new metav1.Object) bool {
