@@ -18,6 +18,7 @@ func (m *MySQL) Configuration() map[string]string {
 		"report_host":              "FQDN",
 		"report_port":              "3306",
 		"admin-address":            "IP",
+		"plugin-load-add":          "clone=mysql_clone.so",
 	}
 }
 
