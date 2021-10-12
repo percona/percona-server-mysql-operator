@@ -25,7 +25,7 @@ func (o *Orchestrator) volumes() (volumes []corev1.Volume) {
 			Name: TLSVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: o.sslSecretName,
+					SecretName: o.SSLSecretsName(),
 				},
 			},
 		},

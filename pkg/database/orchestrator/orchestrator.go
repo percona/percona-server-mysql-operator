@@ -19,20 +19,17 @@ const (
 type Orchestrator struct {
 	v2.PodSpec
 
-	Name          string
-	Namespace     string
-	secretsName   string
-	sslSecretName string
-	clusterLabels map[string]string
+	Name      string
+	Namespace string
+
+	cluster *v2.PerconaServerForMySQL
 }
 
 func New(cr *v2.PerconaServerForMySQL) *Orchestrator {
 	return &Orchestrator{
-		PodSpec:       cr.Spec.Orchestrator,
-		Name:          cr.Name + "-" + Name,
-		Namespace:     cr.Namespace,
-		secretsName:   cr.Spec.SecretsName,
-		sslSecretName: cr.Spec.SSLSecretName,
-		clusterLabels: cr.Labels(),
+		PodSpec:   cr.Spec.Orchestrator,
+		Name:      cr.Name + "-" + Name,
+		Namespace: cr.Namespace,
+		cluster:   cr,
 	}
 }
