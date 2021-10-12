@@ -154,10 +154,16 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 	rm -rfv "$TMPDIR"
 
 	cp /etc/mysql/config/node.cnf /etc/my.cnf.d/node.cnf
-	SERVER_ID="$(echo "${POD_NAME}" | awk -F '-' '{print $NF}')"
+
+	SERVER_ID="$(echo "${HOSTNAME}" | awk -F '-' '{print $NF}')"
 	sed -i "s/server_id = 0/server_id = $((SERVER_ID + 1))/g" /etc/my.cnf.d/node.cnf
+
+	FQDN="${HOSTNAME}.${SERVICE_NAME}.$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)"
 	sed -i "s/report_host = FQDN/report_host = ${FQDN}/g" /etc/my.cnf.d/node.cnf
+
+	POD_IP=$(hostname -I | awk '{print $1}')
 	sed -i "s/admin-address = IP/admin-address = ${POD_IP}/g" /etc/my.cnf.d/node.cnf
+
 	if [ ! -d "$DATADIR/mysql" ]; then
 		file_env 'MYSQL_ROOT_PASSWORD' '' 'root'
 		{ set +x; } 2>/dev/null
@@ -232,6 +238,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		file_env 'MONITOR_PASSWORD' 'monitor' 'monitor'
 		file_env 'REPLICATION_PASSWORD' '' 'replication'
 		file_env 'ORC_TOPOLOGY_PASSWORD' '' 'orchestrator'
+		file_env 'OPERATOR_ADMIN_PASSWORD' '' 'operator'
 		read -r -d '' monitorConnectGrant <<-EOSQL || true
 			GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
 		EOSQL
