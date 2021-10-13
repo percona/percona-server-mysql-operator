@@ -143,6 +143,7 @@ ensure_default_cnf() {
 	FQDN="${HOSTNAME}.${SERVICE_NAME}.$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)"
 
 	echo '[mysqld]' >$CFG
+	sed -i "/\[mysqld\]/a read_only=ON" $CFG
 	sed -i "/\[mysqld\]/a server_id=$((POD_INDEX + 1))" $CFG
 	sed -i "/\[mysqld\]/a admin-address=${POD_IP}" $CFG
 	sed -i "/\[mysqld\]/a report_host=${FQDN}" $CFG

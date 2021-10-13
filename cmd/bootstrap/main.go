@@ -128,10 +128,6 @@ func bootstrap() error {
 		return errors.Wrap(err, "check replication status")
 	}
 
-	if err := db.EnableReadonly(); err != nil {
-		return errors.Wrap(err, "set read only")
-	}
-
 	if rStatus == mysql.ReplicationStatusNotInitiated {
 		log.Println("configuring replication")
 
