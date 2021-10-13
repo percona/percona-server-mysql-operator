@@ -1,9 +1,12 @@
 package cluster
 
 import (
+	"context"
+
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 
 	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
 	"github.com/percona/percona-server-mysql-operator/pkg/database/mysql"
@@ -20,8 +23,8 @@ func (r *MySQLReconciler) reconcileMySQL(log logr.Logger, cr *v2.PerconaServerFo
 		return errors.Wrapf(err, "set controller reference to %s/%s", cm.Kind, cm.Name)
 	}
 
-	if err := r.createOrUpdate(log, cm); err != nil {
-		return errors.Wrapf(err, "create or update %s/%s", cm.Kind, cm.Name)
+	if err := r.Client.Create(context.TODO(), cm); err != nil && !k8serrors.IsAlreadyExists(err) {
+		return errors.Wrapf(err, "create %s/%s", cm.Kind, cm.Name)
 	}
 
 	sfs := m.StatefulSet()

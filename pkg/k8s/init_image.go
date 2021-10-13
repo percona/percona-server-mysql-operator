@@ -11,18 +11,25 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/percona/percona-server-mysql-operator/pkg/api/v2"
+	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
 )
+
+func Namespace() (string, error) {
+	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(nsBytes)), nil
+}
 
 func operatorPod(cl client.Client) (corev1.Pod, error) {
 	operatorPod := corev1.Pod{}
 
-	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	ns, err := Namespace()
 	if err != nil {
-		return operatorPod, err
+		return operatorPod, errors.Wrap(err, "get namespace")
 	}
-
-	ns := strings.TrimSpace(string(nsBytes))
 
 	if err := cl.Get(context.TODO(), types.NamespacedName{
 		Namespace: ns,

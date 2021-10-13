@@ -50,6 +50,7 @@ jobs:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-check
           shellcheck_flags: -e SC2155
+          exclude: "./vendor/*"
 
   misspell:
     name: runner / misspell
@@ -61,8 +62,7 @@ jobs:
           github_token: ${{ secrets.github_token }}
           locale: "US"
           reporter: github-pr-check
-          exclude: |
-            "vendor"
+          exclude: "./vendor/*"
 
   alex:
     name: runner / alex

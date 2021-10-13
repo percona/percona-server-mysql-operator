@@ -2,6 +2,7 @@ package mysql
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func (m *MySQL) Containers() []corev1.Container {
@@ -23,6 +24,32 @@ func (m *MySQL) Container() corev1.Container {
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          m.ContainerSecurityContext,
+		StartupProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/var/lib/mysql/bootstrap"},
+				},
+			},
+			InitialDelaySeconds:           m.StartupProbe.InitialDelaySeconds,
+			TimeoutSeconds:                m.StartupProbe.TimeoutSeconds,
+			PeriodSeconds:                 m.StartupProbe.PeriodSeconds,
+			FailureThreshold:              m.StartupProbe.FailureThreshold,
+			SuccessThreshold:              m.StartupProbe.SuccessThreshold,
+			TerminationGracePeriodSeconds: m.StartupProbe.TerminationGracePeriodSeconds,
+		},
+		ReadinessProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				TCPSocket: &corev1.TCPSocketAction{
+					Port: intstr.FromInt(3306),
+				},
+			},
+			InitialDelaySeconds:           m.ReadinessProbe.InitialDelaySeconds,
+			TimeoutSeconds:                m.ReadinessProbe.TimeoutSeconds,
+			PeriodSeconds:                 m.ReadinessProbe.PeriodSeconds,
+			FailureThreshold:              m.ReadinessProbe.FailureThreshold,
+			SuccessThreshold:              m.ReadinessProbe.SuccessThreshold,
+			TerminationGracePeriodSeconds: m.ReadinessProbe.TerminationGracePeriodSeconds,
+		},
 	}
 }
 

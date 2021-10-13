@@ -466,18 +466,9 @@ func (in *PodSpec) DeepCopyInto(out *PodSpec) {
 			(*out)[key] = val
 		}
 	}
-	if in.ReadinessInitialDelaySeconds != nil {
-		in, out := &in.ReadinessInitialDelaySeconds, &out.ReadinessInitialDelaySeconds
-		*out = new(int32)
-		**out = **in
-	}
-	in.ReadinessProbes.DeepCopyInto(&out.ReadinessProbes)
-	if in.LivenessInitialDelaySeconds != nil {
-		in, out := &in.LivenessInitialDelaySeconds, &out.LivenessInitialDelaySeconds
-		*out = new(int32)
-		**out = **in
-	}
-	in.LivenessProbes.DeepCopyInto(&out.LivenessProbes)
+	in.StartupProbe.DeepCopyInto(&out.StartupProbe)
+	in.ReadinessProbe.DeepCopyInto(&out.ReadinessProbe)
+	in.LivenessProbe.DeepCopyInto(&out.LivenessProbe)
 	if in.PodSecurityContext != nil {
 		in, out := &in.PodSecurityContext, &out.PodSecurityContext
 		*out = new(v1.PodSecurityContext)
