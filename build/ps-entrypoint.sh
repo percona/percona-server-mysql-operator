@@ -134,6 +134,30 @@ _get_tmpdir() {
 	echo "$tmpdir_path"
 }
 
+CFG=/etc/my.cnf.d/node.cnf
+TLS_DIR=/etc/mysql/mysql-tls-secret
+
+ensure_default_cnf() {
+	POD_INDEX="$(echo "${HOSTNAME}" | awk -F '-' '{print $NF}')"
+	POD_IP=$(hostname -I | awk '{print $1}')
+	FQDN="${HOSTNAME}.${SERVICE_NAME}.$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)"
+
+	echo '[mysqld]' >$CFG
+	sed -i "/\[mysqld\]/a server_id=$((POD_INDEX + 1))" $CFG
+	sed -i "/\[mysqld\]/a admin-address=${POD_IP}" $CFG
+	sed -i "/\[mysqld\]/a report_host=${FQDN}" $CFG
+	sed -i "/\[mysqld\]/a report_port=3306" $CFG
+	sed -i "/\[mysqld\]/a gtid-mode=ON" $CFG
+	sed -i "/\[mysqld\]/a enforce-gtid-consistency" $CFG
+	sed -i "/\[mysqld\]/a plugin-load-add=clone=mysql_clone.so" $CFG
+
+	if [[ -d ${TLS_DIR} ]]; then
+		sed -i "/\[mysqld\]/a ssl_ca=${TLS_DIR}/ca.crt" $CFG
+		sed -i "/\[mysqld\]/a ssl_cert=${TLS_DIR}/tls.crt" $CFG
+		sed -i "/\[mysqld\]/a ssl_key=${TLS_DIR}/tls.key" $CFG
+	fi
+}
+
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
 
 if [ "$MYSQL_VERSION" != '8.0' ]; then
@@ -153,16 +177,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 
 	rm -rfv "$TMPDIR"
 
-	cp /etc/mysql/config/node.cnf /etc/my.cnf.d/node.cnf
-
-	SERVER_ID="$(echo "${HOSTNAME}" | awk -F '-' '{print $NF}')"
-	sed -i "s/server_id = 0/server_id = $((SERVER_ID + 1))/g" /etc/my.cnf.d/node.cnf
-
-	FQDN="${HOSTNAME}.${SERVICE_NAME}.$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)"
-	sed -i "s/report_host = FQDN/report_host = ${FQDN}/g" /etc/my.cnf.d/node.cnf
-
-	POD_IP=$(hostname -I | awk '{print $1}')
-	sed -i "s/admin-address = IP/admin-address = ${POD_IP}/g" /etc/my.cnf.d/node.cnf
+	ensure_default_cnf
 
 	if [ ! -d "$DATADIR/mysql" ]; then
 		file_env 'MYSQL_ROOT_PASSWORD' '' 'root'
