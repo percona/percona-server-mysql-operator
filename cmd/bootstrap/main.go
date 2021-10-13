@@ -195,7 +195,8 @@ func lookup(svcName string) (sets.String, error) {
 	}
 	for _, srvRecord := range srvRecords {
 		// The SRV records have the pattern $HOSTNAME.$SERVICE.$.NAMESPACE.svc.$CLUSTER_DNS_SUFFIX
-		// We only want $HOSTNAME.$SERVICE.$NAMESPACE
+		// We only want $HOSTNAME.$SERVICE.$NAMESPACE because in the `selectDonor` function we
+		// compare the list generated here with the output of the `getFQDN` function
 		srv := strings.Split(srvRecord.Target, ".")
 		ep := strings.Join(srv[:3], ".")
 		endpoints.Insert(ep)
