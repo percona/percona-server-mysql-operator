@@ -69,33 +69,28 @@ func (d *dbImpl) StartReplication(host, replicaPass string, port int32) error {
 }
 
 func (d *dbImpl) ReplicationStatus() (ReplicationStatus, string, error) {
-	rows, err := (*sql.DB)(d).Query(`
+	row := (*sql.DB)(d).QueryRow(`
         SELECT
-            SERVICE_STATE,
-            LAST_ERROR_NUMBER,
+            replication_connection_status.SERVICE_STATE,
+            replication_applier_status.SERVICE_STATE,
             HOST
         FROM replication_connection_status
         JOIN replication_connection_configuration
             ON replication_connection_status.channel_name = replication_connection_configuration.channel_name
+        JOIN replication_applier_status
+            ON replication_connection_status.channel_name = replication_applier_status.channel_name
         WHERE replication_connection_status.channel_name = ?
         `, DefaultChannelName)
-	if err != nil {
+
+	var ioState, sqlState, host string
+	if err := row.Scan(&ioState, &sqlState, &host); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ReplicationStatusNotInitiated, "", nil
 		}
-		return ReplicationStatusError, "", errors.Wrap(err, "get current replica status")
+		return ReplicationStatusError, "", errors.Wrap(err, "scan replication status")
 	}
 
-	defer rows.Close()
-
-	var state, errNo, host string
-	for rows.Next() {
-		if err := rows.Scan(&state, &errNo, &host); err != nil {
-			return ReplicationStatusError, "", errors.Wrap(err, "scan replication status")
-		}
-	}
-
-	if state == "ON" && errNo == "0" {
+	if ioState == "ON" && sqlState == "ON" {
 		return ReplicationStatusActive, host, nil
 	}
 
