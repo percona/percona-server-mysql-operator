@@ -17,6 +17,8 @@ limitations under the License.
 package v2
 
 import (
+	"fmt"
+
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -271,6 +273,10 @@ func (cr *PerconaServerForMySQL) Labels() map[string]string {
 		"app.kubernetes.io/managed-by": "percona-server-operator",
 		"app.kubernetes.io/part-of":    "percona-server",
 	}
+}
+
+func (cr *PerconaServerForMySQL) ClusterHint() string {
+	return fmt.Sprintf("%s.%s", cr.Name, cr.Namespace)
 }
 
 func init() {

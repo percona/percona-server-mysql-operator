@@ -1,12 +1,18 @@
 package orchestrator
 
 import (
+	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func (o *Orchestrator) ServiceName() string {
 	return o.Name()
+}
+
+func (o *Orchestrator) APIHost() string {
+	return fmt.Sprintf("http://%s:%d", o.ServiceName(), DefaultWebPort)
 }
 
 func (o *Orchestrator) Service() *corev1.Service {

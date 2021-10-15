@@ -5,6 +5,7 @@ import (
 	"os"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const WatchNamespaceEnvVar = "WATCH_NAMESPACE"
@@ -33,4 +34,37 @@ func GetWatchNamespace() (string, error) {
 		return "", fmt.Errorf("%s must be set", WatchNamespaceEnvVar)
 	}
 	return ns, nil
+}
+
+func compareMaps(x, y map[string]string) bool {
+	if len(x) != len(y) {
+		return false
+	}
+
+	for k, v := range x {
+		yVal, ok := y[k]
+		if !ok || yVal != v {
+			return false
+		}
+	}
+
+	return true
+}
+
+func IsObjectMetaEqual(old, new metav1.Object) bool {
+	return compareMaps(old.GetAnnotations(), new.GetAnnotations()) &&
+		compareMaps(old.GetLabels(), new.GetLabels())
+}
+
+func IsLabelsEqual(old, new map[string]string) bool {
+	return compareMaps(old, new)
+}
+
+// CloneLabels returns clone of the provided labels.
+func CloneLabels(src map[string]string) map[string]string {
+	clone := make(map[string]string)
+	for k, v := range src {
+		clone[k] = v
+	}
+	return clone
 }
