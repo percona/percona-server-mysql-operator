@@ -20,9 +20,11 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -266,17 +268,35 @@ func (v *VolumeSpec) reconcile() {
 	}
 }
 
+const (
+	NameLabel         = "app.kubernetes.io/name"
+	InstanceLabel     = "app.kubernetes.io/instance"
+	ManagedByLabel    = "app.kubernetes.io/managed-by"
+	PartOfLabel       = "app.kubernetes.io/part-of"
+	ComponentLabel    = "app.kubernetes.io/component"
+	MySQLPrimaryLabel = "mysql.percona.com/primary"
+)
+
 func (cr *PerconaServerForMySQL) Labels() map[string]string {
 	return map[string]string{
-		"app.kubernetes.io/name":       "percona-server",
-		"app.kubernetes.io/instance":   cr.Name,
-		"app.kubernetes.io/managed-by": "percona-server-operator",
-		"app.kubernetes.io/part-of":    "percona-server",
+		NameLabel:      "percona-server",
+		InstanceLabel:  cr.Name,
+		ManagedByLabel: "percona-server-operator",
+		PartOfLabel:    "percona-server",
 	}
 }
 
 func (cr *PerconaServerForMySQL) ClusterHint() string {
 	return fmt.Sprintf("%s.%s", cr.Name, cr.Namespace)
+}
+
+func GetClusterNameFromObject(obj client.Object) (string, error) {
+	labels := obj.GetLabels()
+	instance, ok := labels[InstanceLabel]
+	if !ok {
+		return "", errors.Errorf("label %s doesn't exist", InstanceLabel)
+	}
+	return instance, nil
 }
 
 func init() {

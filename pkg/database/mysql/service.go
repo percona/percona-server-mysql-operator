@@ -9,6 +9,10 @@ func (m *MySQL) ServiceName() string {
 	return m.Name()
 }
 
+func (m *MySQL) PrimaryServiceName() string {
+	return m.Name() + "-primary"
+}
+
 func (m *MySQL) Service() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -25,6 +29,27 @@ func (m *MySQL) Service() *corev1.Service {
 			Ports:                    m.servicePorts(),
 			Selector:                 m.MatchLabels(),
 			PublishNotReadyAddresses: true,
+		},
+	}
+}
+
+func (m *MySQL) PrimaryService() *corev1.Service {
+	selector := m.MatchLabels()
+	selector["mysql.percona.com/primary"] = "true"
+
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Service",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      m.PrimaryServiceName(),
+			Namespace: m.Namespace(),
+			Labels:    m.MatchLabels(),
+		},
+		Spec: corev1.ServiceSpec{
+			Ports:    m.servicePorts(),
+			Selector: selector,
 		},
 	}
 }
