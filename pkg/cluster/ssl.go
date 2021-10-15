@@ -25,8 +25,6 @@ import (
 var validityNotAfter = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
 
 func (r *MySQLReconciler) reconcileSSL(log logr.Logger, cr *v2.PerconaServerForMySQL) error {
-	log.Info("Creating SSL certificates")
-
 	if err := r.createSSLCerts(cr); err != nil {
 		return errors.Wrapf(err, "create SSL certificates")
 	}

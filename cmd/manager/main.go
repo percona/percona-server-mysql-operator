@@ -33,6 +33,7 @@ import (
 
 	psv2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
 	"github.com/percona/percona-server-mysql-operator/pkg/controllers"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -67,6 +68,12 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	ns, err := k8s.GetWatchNamespace()
+	if err != nil {
+		setupLog.Error(err, "unable to get watch namespace")
+		os.Exit(1)
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
@@ -74,6 +81,7 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "08db0feb.percona.com",
+		Namespace:              ns,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
