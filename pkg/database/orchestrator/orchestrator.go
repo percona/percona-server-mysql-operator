@@ -10,8 +10,8 @@ const (
 	DataMountPath    = "/var/lib/orchestrator"
 	ConfigVolumeName = "config"
 	ConfigMountPath  = "/etc/orchestrator"
-	CredsVolumeName  = "credentials"
-	CredsMountPath   = "/etc/orchestrator/credentials"
+	CredsVolumeName  = "users"
+	CredsMountPath   = "/etc/orchestrator/orchestrator-users-secret"
 	TLSVolumeName    = "tls"
 	TLSMountPath     = "/etc/orchestrator/ssl"
 )
