@@ -8,7 +8,7 @@ import (
 )
 
 func (m *MySQL) ConfigMapName() string {
-	return m.Name
+	return m.Name()
 }
 
 func (m *MySQL) Configuration() map[string]string {
@@ -41,5 +41,5 @@ func (m *MySQL) ConfigMap(cfg map[string]string) *corev1.ConfigMap {
 		"node.cnf": mysqld,
 	}
 
-	return k8s.ConfigMap(m.Namespace, m.ConfigMapName(), data)
+	return k8s.ConfigMap(m.Namespace(), m.ConfigMapName(), data)
 }

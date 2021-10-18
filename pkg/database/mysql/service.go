@@ -6,7 +6,7 @@ import (
 )
 
 func (m *MySQL) ServiceName() string {
-	return m.Name
+	return m.Name()
 }
 
 func (m *MySQL) Service() *corev1.Service {
@@ -17,7 +17,7 @@ func (m *MySQL) Service() *corev1.Service {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      m.ServiceName(),
-			Namespace: m.Namespace,
+			Namespace: m.Namespace(),
 			Labels:    m.MatchLabels(),
 		},
 		Spec: corev1.ServiceSpec{

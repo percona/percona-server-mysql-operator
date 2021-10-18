@@ -6,7 +6,7 @@ import (
 )
 
 func (o *Orchestrator) ServiceName() string {
-	return o.Name
+	return o.Name()
 }
 
 func (o *Orchestrator) Service() *corev1.Service {
@@ -17,7 +17,7 @@ func (o *Orchestrator) Service() *corev1.Service {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      o.ServiceName(),
-			Namespace: o.Namespace,
+			Namespace: o.Namespace(),
 			Labels:    o.MatchLabels(),
 		},
 		Spec: corev1.ServiceSpec{

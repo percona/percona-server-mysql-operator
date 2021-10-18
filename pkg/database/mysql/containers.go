@@ -13,7 +13,7 @@ func (m *MySQL) Containers() []corev1.Container {
 
 func (m *MySQL) Container() corev1.Container {
 	return corev1.Container{
-		Name:                     Name,
+		Name:                     ComponentName,
 		Image:                    m.Image,
 		ImagePullPolicy:          m.ImagePullPolicy,
 		Env:                      m.env(),
@@ -60,7 +60,7 @@ func (m *MySQL) SidecarContainers() []corev1.Container {
 func (m *MySQL) InitContainers(initImage string) []corev1.Container {
 	return []corev1.Container{
 		{
-			Name:                     Name + "-init",
+			Name:                     ComponentName + "-init",
 			Image:                    initImage,
 			ImagePullPolicy:          m.ImagePullPolicy,
 			VolumeMounts:             m.volumeMounts(),

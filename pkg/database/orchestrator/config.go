@@ -70,7 +70,7 @@ func (o *Orchestrator) ConfigMap(c *config.Configuration) (*corev1.ConfigMap, er
 		"orchestrator.conf.json": string(cBytes),
 	}
 
-	return k8s.ConfigMap(o.Namespace, o.Name, data), nil
+	return k8s.ConfigMap(o.Namespace(), o.Name(), data), nil
 }
 
 func (o *Orchestrator) Secret(username, password string) *corev1.Secret {
@@ -84,8 +84,8 @@ func (o *Orchestrator) Secret(username, password string) *corev1.Secret {
 
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      o.Name,
-			Namespace: o.Namespace,
+			Name:      o.Name(),
+			Namespace: o.Namespace(),
 		},
 		StringData: data,
 	}

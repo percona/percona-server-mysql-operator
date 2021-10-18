@@ -13,7 +13,7 @@ func (o *Orchestrator) Containers() []corev1.Container {
 
 func (o *Orchestrator) Container() corev1.Container {
 	return corev1.Container{
-		Name:                     Name,
+		Name:                     ComponentName,
 		Image:                    o.Image,
 		ImagePullPolicy:          o.ImagePullPolicy,
 		Env:                      o.env(),
