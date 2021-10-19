@@ -3,6 +3,8 @@ package mysql
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
 )
 
 func (m *MySQL) ServiceName() string {
@@ -35,7 +37,7 @@ func (m *MySQL) Service() *corev1.Service {
 
 func (m *MySQL) PrimaryService() *corev1.Service {
 	selector := m.MatchLabels()
-	selector["mysql.percona.com/primary"] = "true"
+	selector[v2.MySQLPrimaryLabel] = "true"
 
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
