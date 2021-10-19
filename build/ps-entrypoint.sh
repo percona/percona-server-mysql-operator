@@ -138,13 +138,15 @@ CFG=/etc/my.cnf.d/node.cnf
 TLS_DIR=/etc/mysql/mysql-tls-secret
 
 ensure_default_cnf() {
-	POD_INDEX="$(echo "${HOSTNAME}" | awk -F '-' '{print $NF}')"
 	POD_IP=$(hostname -I | awk '{print $1}')
+	CLUSTER_NAME="$(hostname -f | cut -d'.' -f2)"
+	SERVER_NUM=${HOSTNAME/$CLUSTER_NAME-/}
+	SERVER_ID=${CLUSTER_HASH}${SERVER_NUM}
 	FQDN="${HOSTNAME}.${SERVICE_NAME}.$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)"
 
 	echo '[mysqld]' >$CFG
 	sed -i "/\[mysqld\]/a read_only=ON" $CFG
-	sed -i "/\[mysqld\]/a server_id=$((POD_INDEX + 1))" $CFG
+	sed -i "/\[mysqld\]/a server_id=${SERVER_ID}" $CFG
 	sed -i "/\[mysqld\]/a admin-address=${POD_IP}" $CFG
 	sed -i "/\[mysqld\]/a report_host=${FQDN}" $CFG
 	sed -i "/\[mysqld\]/a report_port=3306" $CFG
