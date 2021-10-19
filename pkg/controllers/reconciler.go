@@ -17,5 +17,5 @@ var (
 	MySQLReconciler        Reconciler
 	MySQLBackupReconciler  Reconciler
 	MySQLRestoreReconciler Reconciler
-	NodeReconciler         Reconciler
+	MySQLPodReconciler     Reconciler
 )

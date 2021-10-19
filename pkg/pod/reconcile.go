@@ -1,4 +1,4 @@
-package node
+package pod
 
 import (
 	"context"
@@ -18,12 +18,12 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 )
 
-type NodeReconciler struct {
+type MySQLPodReconciler struct {
 	Client client.Client
 	Scheme *runtime.Scheme
 }
 
-func (r *NodeReconciler) Reconcile(ctx context.Context, t types.NamespacedName) error {
+func (r *MySQLPodReconciler) Reconcile(ctx context.Context, t types.NamespacedName) error {
 	log := log.FromContext(ctx).WithName("Pod").WithValues("name", t.Name, "namespace", t.Namespace)
 
 	pod := &corev1.Pod{}

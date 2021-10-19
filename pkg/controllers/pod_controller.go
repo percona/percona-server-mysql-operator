@@ -19,7 +19,7 @@ package controllers
 import (
 	"context"
 
-	"github.com/percona/percona-server-mysql-operator/pkg/node"
+	"github.com/percona/percona-server-mysql-operator/pkg/pod"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -47,7 +47,7 @@ type PodReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.9.2/pkg/reconcile
 func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	err := NodeReconciler.Reconcile(ctx, req.NamespacedName)
+	err := MySQLPodReconciler.Reconcile(ctx, req.NamespacedName)
 
 	return ctrl.Result{
 		RequeueAfter: fiveSeconds,
@@ -56,7 +56,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	NodeReconciler = &node.NodeReconciler{
+	MySQLPodReconciler = &pod.MySQLPodReconciler{
 		Client: r.Client,
 		Scheme: r.Scheme,
 	}
