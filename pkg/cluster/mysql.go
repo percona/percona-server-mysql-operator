@@ -5,7 +5,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 
 	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
@@ -18,11 +17,9 @@ func (r *MySQLReconciler) reconcileMySQL(log logr.Logger, cr *v2.PerconaServerFo
 
 	cfg := m.Configuration()
 	cm := m.ConfigMap(cfg)
-
 	if err := k8s.SetControllerReference(cr, cm, r.Scheme); err != nil {
 		return errors.Wrapf(err, "set controller reference to %s/%s", cm.Kind, cm.Name)
 	}
-
 	if err := r.Client.Create(context.TODO(), cm); err != nil && !k8serrors.IsAlreadyExists(err) {
 		return errors.Wrapf(err, "create %s/%s", cm.Kind, cm.Name)
 	}
@@ -33,21 +30,19 @@ func (r *MySQLReconciler) reconcileMySQL(log logr.Logger, cr *v2.PerconaServerFo
 	if err != nil {
 		return errors.Wrap(err, "get init image")
 	}
-	sfs.Spec.Template.Spec.InitContainers = []corev1.Container{*m.InitContainer(initImage)}
+	sfs.Spec.Template.Spec.InitContainers = m.InitContainers(initImage)
 
 	if err := k8s.SetControllerReference(cr, sfs, r.Scheme); err != nil {
 		return errors.Wrapf(err, "set controller reference to %s/%s", sfs.Kind, sfs.Name)
 	}
-
 	if err := r.createOrUpdate(log, sfs); err != nil {
 		return errors.Wrapf(err, "create or update %s/%s", sfs.Kind, sfs.Name)
 	}
 
-	svc := m.Service(cr)
+	svc := m.Service()
 	if err := k8s.SetControllerReference(cr, svc, r.Scheme); err != nil {
 		return errors.Wrapf(err, "set controller reference to %s/%s", svc.Kind, svc.Name)
 	}
-
 	if err := r.createOrUpdate(log, svc); err != nil {
 		return errors.Wrapf(err, "create or update %s/%s", svc.Kind, svc.Name)
 	}

@@ -33,7 +33,7 @@ func (m *MySQL) volumes() (volumes []corev1.Volume) {
 			Name: CredsVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: m.secretsName,
+					SecretName: m.SecretsName(),
 				},
 			},
 		},
@@ -41,7 +41,7 @@ func (m *MySQL) volumes() (volumes []corev1.Volume) {
 			Name: TLSVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: m.sslSecretName,
+					SecretName: m.SSLSecretsName(),
 				},
 			},
 		},
@@ -50,7 +50,7 @@ func (m *MySQL) volumes() (volumes []corev1.Volume) {
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: m.Name,
+						Name: m.ConfigMapName(),
 					},
 				},
 			},

@@ -13,13 +13,13 @@ func (o *Orchestrator) StatefulSet() *appsv1.StatefulSet {
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      o.Name,
-			Namespace: o.Namespace,
+			Name:      o.Name(),
+			Namespace: o.Namespace(),
 			Labels:    o.MatchLabels(),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &o.Size,
-			ServiceName: o.Name,
+			ServiceName: o.Name(),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: o.MatchLabels(),
 			},

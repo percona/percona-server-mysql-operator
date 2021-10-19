@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	Name             = "mysql"
+	ComponentName    = "mysql"
 	DataVolumeName   = "datadir"
 	DataMountPath    = "/var/lib/mysql"
 	ConfigVolumeName = "config"
@@ -19,20 +19,20 @@ const (
 type MySQL struct {
 	v2.MySQLSpec
 
-	Name          string
-	Namespace     string
-	secretsName   string
-	sslSecretName string
-	clusterLabels map[string]string
+	cluster *v2.PerconaServerForMySQL
 }
 
 func New(cr *v2.PerconaServerForMySQL) *MySQL {
 	return &MySQL{
-		MySQLSpec:     cr.Spec.MySQL,
-		Name:          cr.Name + "-" + Name,
-		Namespace:     cr.Namespace,
-		secretsName:   cr.Spec.SecretsName,
-		sslSecretName: cr.Spec.SSLSecretName,
-		clusterLabels: cr.Labels(),
+		MySQLSpec: cr.Spec.MySQL,
+		cluster:   cr,
 	}
+}
+
+func (m *MySQL) Name() string {
+	return m.cluster.Name + "-" + ComponentName
+}
+
+func (m *MySQL) Namespace() string {
+	return m.cluster.Namespace
 }

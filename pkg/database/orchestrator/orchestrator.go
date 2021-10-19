@@ -5,13 +5,13 @@ import (
 )
 
 const (
-	Name             = "orchestrator"
+	ComponentName    = "orc"
 	DataVolumeName   = "datadir"
 	DataMountPath    = "/var/lib/orchestrator"
 	ConfigVolumeName = "config"
 	ConfigMountPath  = "/etc/orchestrator"
-	CredsVolumeName  = "credentials"
-	CredsMountPath   = "/etc/orchestrator/credentials"
+	CredsVolumeName  = "users"
+	CredsMountPath   = "/etc/orchestrator/orchestrator-users-secret"
 	TLSVolumeName    = "tls"
 	TLSMountPath     = "/etc/orchestrator/ssl"
 )
@@ -19,20 +19,20 @@ const (
 type Orchestrator struct {
 	v2.PodSpec
 
-	Name          string
-	Namespace     string
-	secretsName   string
-	sslSecretName string
-	clusterLabels map[string]string
+	cluster *v2.PerconaServerForMySQL
 }
 
 func New(cr *v2.PerconaServerForMySQL) *Orchestrator {
 	return &Orchestrator{
-		PodSpec:       cr.Spec.Orchestrator,
-		Name:          cr.Name + "-" + Name,
-		Namespace:     cr.Namespace,
-		secretsName:   cr.Spec.SecretsName,
-		sslSecretName: cr.Spec.SSLSecretName,
-		clusterLabels: cr.Labels(),
+		PodSpec: cr.Spec.Orchestrator,
+		cluster: cr,
 	}
+}
+
+func (o *Orchestrator) Name() string {
+	return o.cluster.Name + "-" + ComponentName
+}
+
+func (o *Orchestrator) Namespace() string {
+	return o.cluster.Namespace
 }

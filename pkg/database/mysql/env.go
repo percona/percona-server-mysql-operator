@@ -8,7 +8,7 @@ func (m *MySQL) env() []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
 			Name:  "SERVICE_NAME",
-			Value: m.Name,
+			Value: m.ServiceName(),
 		},
 	}
 }
