@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	ComponentName    = "orchestrator"
+	ComponentName    = "orc"
 	DataVolumeName   = "datadir"
 	DataMountPath    = "/var/lib/orchestrator"
 	ConfigVolumeName = "config"
