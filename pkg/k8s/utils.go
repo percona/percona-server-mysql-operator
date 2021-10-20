@@ -6,6 +6,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const WatchNamespaceEnvVar = "WATCH_NAMESPACE"
@@ -67,4 +68,14 @@ func CloneLabels(src map[string]string) map[string]string {
 		clone[k] = v
 	}
 	return clone
+}
+
+func RemoveLabel(obj client.Object, key string) {
+	delete(obj.GetLabels(), key)
+}
+
+func AddLabel(obj client.Object, key, value string) {
+	labels := obj.GetLabels()
+	labels[key] = value
+	obj.SetLabels(labels)
 }

@@ -157,3 +157,12 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - ps.percona.com
+  resources:
+  - perconaserverformysqls
+  - perconaserverformysqls/status
+  verbs:
+  - get
+  - list
+  - watch

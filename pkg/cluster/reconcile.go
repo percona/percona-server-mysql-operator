@@ -61,6 +61,10 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, t types.NamespacedName)
 		return errors.Wrap(err, "reconcile orchestrator")
 	}
 
+	if err := r.reconcileReplication(log, cr); err != nil {
+		return errors.Wrap(err, "reconcile replication")
+	}
+
 	return nil
 }
 
