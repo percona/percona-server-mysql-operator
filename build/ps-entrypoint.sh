@@ -137,7 +137,7 @@ _get_tmpdir() {
 CFG=/etc/my.cnf.d/node.cnf
 TLS_DIR=/etc/mysql/mysql-tls-secret
 
-ensure_default_cnf() {
+create_default_cnf() {
 	POD_IP=$(hostname -I | awk '{print $1}')
 	CLUSTER_NAME="$(hostname -f | cut -d'.' -f2)"
 	SERVER_NUM=${HOSTNAME/$CLUSTER_NAME-/}
@@ -180,7 +180,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 
 	rm -rfv "$TMPDIR"
 
-	ensure_default_cnf
+	create_default_cnf
 
 	if [ ! -d "$DATADIR/mysql" ]; then
 		file_env 'MYSQL_ROOT_PASSWORD' '' 'root'
