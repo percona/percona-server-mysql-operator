@@ -10,5 +10,9 @@ func (m *MySQL) env() []corev1.EnvVar {
 			Name:  "SERVICE_NAME",
 			Value: m.ServiceName(),
 		},
+		{
+			Name:  "CLUSTER_HASH",
+			Value: m.cluster.ClusterHash(),
+		},
 	}
 }
