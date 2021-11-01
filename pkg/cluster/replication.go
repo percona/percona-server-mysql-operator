@@ -29,20 +29,15 @@ func (r *MySQLReconciler) reconcilePrimaryPod(log logr.Logger, cr *v2.PerconaSer
 	orc := orclient.New(o.APIHost())
 	clusterHint := cr.ClusterHint()
 
-	cluster, err := orc.Cluster(clusterHint)
-	if err != nil {
-		return errors.Wrap(err, "get cluster from orchestrator")
-	}
-
 	m := mysql.New(cr)
 	podList, err := r.podListByLabel(m.MatchLabels())
 	if err != nil {
 		return errors.Wrap(err, "get MySQL pod list")
 	}
 
-	primary, err := cluster.Master()
+	primary, err := orc.ClusterPrimary(clusterHint)
 	if err != nil {
-		return errors.Wrap(err, "get current primary")
+		return errors.Wrap(err, "get cluster from orchestrator")
 	}
 
 	for _, pod := range podList.Items {

@@ -3,5 +3,4 @@ resources:
 - ps_v2_perconaserverformysql.yaml
 - ps_v2_perconaserverformysqlbackup.yaml
 - ps_v2_perconaserverformysqlrestore.yaml
-- core_v1_pod.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

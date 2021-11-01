@@ -13,10 +13,6 @@ type orcClient struct {
 	client *http.Client
 }
 
-type clusterMasterResp struct {
-	InstanceAlias string
-}
-
 type instanceKey struct {
 	Hostname string
 	Port     int32
@@ -33,14 +29,14 @@ type instance struct {
 // TODO: Multiple clusters?
 type cluster []instance
 
-func (c *cluster) Master() (*instance, error) {
+func (c *cluster) Primary() (*instance, error) {
 	for _, inst := range *c {
 		if inst.MasterKey.Hostname == "" {
 			return &inst, nil
 		}
 	}
 
-	return nil, errors.New("no master")
+	return nil, errors.New("no primary")
 }
 
 func (c *cluster) Replicas() ([]instanceKey, error) {
@@ -52,7 +48,7 @@ func (c *cluster) Replicas() ([]instanceKey, error) {
 		return inst.Replicas, nil
 	}
 
-	return nil, errors.New("no master")
+	return nil, errors.New("no primary")
 }
 
 func New(host string) *orcClient {
@@ -66,7 +62,7 @@ func New(host string) *orcClient {
 	}
 }
 
-func (o *orcClient) ClusterMaster(clusterHint string) (*clusterMasterResp, error) {
+func (o *orcClient) ClusterPrimary(clusterHint string) (*instance, error) {
 	req, err := http.NewRequest(http.MethodGet, o.host+"/api/master/"+clusterHint, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "build request")
@@ -78,12 +74,12 @@ func (o *orcClient) ClusterMaster(clusterHint string) (*clusterMasterResp, error
 	}
 	defer resp.Body.Close()
 
-	cmr := &clusterMasterResp{}
-	if err := json.NewDecoder(resp.Body).Decode(cmr); err != nil {
+	primary := &instance{}
+	if err := json.NewDecoder(resp.Body).Decode(primary); err != nil {
 		return nil, errors.Wrap(err, "json decode")
 	}
 
-	return cmr, nil
+	return primary, nil
 }
 
 func (o *orcClient) Cluster(clusterHint string) (cluster, error) {
