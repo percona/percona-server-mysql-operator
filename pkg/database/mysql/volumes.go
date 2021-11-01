@@ -13,10 +13,6 @@ func (m *MySQL) volumeMounts() []corev1.VolumeMount {
 			MountPath: DataMountPath,
 		},
 		{
-			Name:      ConfigVolumeName,
-			MountPath: ConfigMountPath,
-		},
-		{
 			Name:      CredsVolumeName,
 			MountPath: CredsMountPath,
 		},
@@ -42,16 +38,6 @@ func (m *MySQL) volumes() (volumes []corev1.Volume) {
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: m.SSLSecretsName(),
-				},
-			},
-		},
-		{
-			Name: ConfigVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: m.ConfigMapName(),
-					},
 				},
 			},
 		},

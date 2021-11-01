@@ -18,6 +18,7 @@ package v2
 
 import (
 	"fmt"
+	"hash/fnv"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
@@ -297,6 +298,24 @@ func GetClusterNameFromObject(obj client.Object) (string, error) {
 		return "", errors.Errorf("label %s doesn't exist", InstanceLabel)
 	}
 	return instance, nil
+}
+
+// ClusterHash returns FNV hash of the CustomResource UID
+func (cr *PerconaServerForMySQL) ClusterHash() string {
+	serverIDHash := fnv.New32()
+	serverIDHash.Write([]byte(string(cr.UID)))
+
+	// We use only first 7 digits to give a space for pod number which is
+	// appended to all server ids. If we don't do this, it can cause a
+	// int32 overflow.
+	// P.S max value is 4294967295
+	serverIDHashStr := fmt.Sprint(serverIDHash.Sum32())
+
+	if len(serverIDHashStr) > 7 {
+		serverIDHashStr = serverIDHashStr[:7]
+	}
+
+	return serverIDHashStr
 }
 
 func init() {
