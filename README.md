@@ -1,12 +1,18 @@
-# Percona Server Operator
+# Percona Server for MySQL Operator
 
 ## Build
 
 ```
-$ make docker-build docker-push
+$ make build
 ```
 
-## Deploy operator
+## Install CRDs
+
+```
+$ make install
+```
+
+## Deploy the operator
 
 ```
 $ make deploy

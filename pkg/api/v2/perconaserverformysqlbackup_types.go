@@ -40,6 +40,7 @@ type PerconaServerForMySQLBackupStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:resource:scope=Namespace
 
 // PerconaServerForMySQLBackup is the Schema for the perconaserverformysqlbackups API
 type PerconaServerForMySQLBackup struct {

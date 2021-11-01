@@ -40,6 +40,7 @@ type PerconaServerForMySQLRestoreStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:resource:scope=Namespace
 
 // PerconaServerForMySQLRestore is the Schema for the perconaserverformysqlrestores API
 type PerconaServerForMySQLRestore struct {

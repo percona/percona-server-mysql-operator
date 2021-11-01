@@ -3,7 +3,7 @@
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 0.0.1
+VERSION ?= main
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -36,10 +36,8 @@ IMAGE_TAG_BASE ?= percona.com/percona-server-mysql-operator
 BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
 
 # Image URL to use all building/pushing image targets
-GIT_BRANCH=$(shell git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')
-IMG ?= perconalab/percona-server-mysql-operator:$(GIT_BRANCH)
-GIT_COMMIT=$(shell git rev-parse HEAD)
-BUILD_TIME=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+IMG ?= perconalab/percona-server-mysql-operator:$(VERSION)
+
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
@@ -57,6 +55,8 @@ endif
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
+
+DEPLOYDIR = ./deploy
 
 all: build
 
@@ -78,11 +78,9 @@ help: ## Display this help.
 
 ##@ Development
 
-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
-
-generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+generate: controller-gen
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases  ## Generate WebhookConfiguration, Role and CustomResourceDefinition objects.
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..." ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 
 fmt: ## Run go fmt against code.
 	go fmt ./...
@@ -93,34 +91,32 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
 
+manifests: kustomize
+	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml
+	$(KUSTOMIZE) build config/rbac/ > $(DEPLOYDIR)/rbac.yaml
+	cd config/manager && $(KUSTOMIZE) edit set image perconalab/percona-server-mysql-operator=$(IMG)
+	$(KUSTOMIZE) build config/manager/ > $(DEPLOYDIR)/operator.yaml
+
 ##@ Build
 
-build: generate fmt vet ## Build manager binary.
-	go build -o bin/manager cmd/manager/main.go
-
-run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./main.go
-
-docker-build: test ## Build docker image with the manager.
-	docker build --build-arg GIT_COMMIT=${GIT_COMMIT} --build-arg BUILD_TIME=${BUILD_TIME} -t ${IMG} .
-
-docker-push: ## Push docker image with the manager.
-	docker push ${IMG}
+build: test ## Build docker image with the manager.
+	./e2e-tests/build
 
 ##@ Deployment
 
-install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/crd | kubectl apply -f -
+install: manifests ## Install CRDs, rbac
+	kubectl apply -f $(DEPLOYDIR)/crd.yaml
+	kubectl apply -f $(DEPLOYDIR)/rbac.yaml
 
-uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/crd | kubectl delete -f -
+uninstall: manifests ## Uninstall CRDs, rbac
+	kubectl delete -f $(DEPLOYDIR)/crd.yaml
+	kubectl delete -f $(DEPLOYDIR)/rbac.yaml
 
-deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default | kubectl apply -f -
+deploy: manifests ## Deploy operator
+	kubectl apply -f $(DEPLOYDIR)/operator.yaml
 
-undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/default | kubectl delete -f -
+undeploy: ## Undeploy operator
+	kubectl delete -f $(DEPLOYDIR)/operator.yaml
 
 
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
