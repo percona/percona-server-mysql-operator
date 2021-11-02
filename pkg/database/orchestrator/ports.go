@@ -4,22 +4,15 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func (o *Orchestrator) ports() map[string]int32 {
-	return map[string]int32{
-		"web":  int32(3000),
-		"raft": int32(10008),
-	}
-}
-
 func (o *Orchestrator) containerPorts() []corev1.ContainerPort {
 	return []corev1.ContainerPort{
 		{
 			Name:          "web",
-			ContainerPort: int32(3000),
+			ContainerPort: int32(DefaultWebPort),
 		},
 		{
 			Name:          "raft",
-			ContainerPort: int32(10008),
+			ContainerPort: int32(DefaultRaftPort),
 		},
 	}
 }
@@ -28,11 +21,11 @@ func (o *Orchestrator) servicePorts() []corev1.ServicePort {
 	return []corev1.ServicePort{
 		{
 			Name: "web",
-			Port: int32(3000),
+			Port: int32(DefaultWebPort),
 		},
 		{
 			Name: "raft",
-			Port: int32(10008),
+			Port: int32(DefaultRaftPort),
 		},
 	}
 }

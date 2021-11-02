@@ -2,6 +2,7 @@ package mysql
 
 import (
 	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -35,4 +36,10 @@ func (m *MySQL) Name() string {
 
 func (m *MySQL) Namespace() string {
 	return m.cluster.Namespace
+}
+
+func IsMySQL(obj client.Object) bool {
+	labels := obj.GetLabels()
+	comp, ok := labels[v2.ComponentLabel]
+	return ok && comp == ComponentName
 }

@@ -6,6 +6,8 @@ import (
 
 const (
 	ComponentName    = "orc"
+	DefaultWebPort   = 3000
+	DefaultRaftPort  = 10008
 	DataVolumeName   = "datadir"
 	DataMountPath    = "/var/lib/orchestrator"
 	ConfigVolumeName = "config"

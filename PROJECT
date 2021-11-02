@@ -5,7 +5,7 @@ plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
 projectName: percona-server-mysql-operator
-repo: github.com/percona/percona-xtradb-cluster-operator
+repo: github.com/percona/percona-server-mysql-operator
 resources:
 - api:
     crdVersion: v1
@@ -14,7 +14,7 @@ resources:
   domain: percona.com
   group: ps
   kind: PerconaServerForMySQL
-  path: github.com/percona/percona-xtradb-cluster-operator/api/v2
+  path: github.com/percona/percona-server-mysql-operator/api/v2
   version: v2
 - api:
     crdVersion: v1
@@ -23,7 +23,7 @@ resources:
   domain: percona.com
   group: ps
   kind: PerconaServerForMySQLBackup
-  path: github.com/percona/percona-xtradb-cluster-operator/api/v2
+  path: github.com/percona/percona-server-mysql-operator/api/v2
   version: v2
 - api:
     crdVersion: v1
@@ -32,6 +32,11 @@ resources:
   domain: percona.com
   group: ps
   kind: PerconaServerForMySQLRestore
-  path: github.com/percona/percona-xtradb-cluster-operator/api/v2
+  path: github.com/percona/percona-server-mysql-operator/api/v2
   version: v2
+- controller: true
+  group: core
+  kind: Pod
+  path: k8s.io/api/core/v1
+  version: v1
 version: "3"

@@ -29,6 +29,12 @@ spec:
         - /usr/local/bin/percona-server-mysql-operator
         args:
         - --leader-elect
+        env:
+        - name: WATCH_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
         image: controller:latest
         imagePullPolicy: Always
         name: manager

@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 )
 
 type MySQLReconciler struct {
@@ -58,6 +59,10 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, t types.NamespacedName)
 
 	if err := r.reconcileOrchestrator(log, cr); err != nil {
 		return errors.Wrap(err, "reconcile orchestrator")
+	}
+
+	if err := r.reconcileReplication(log, cr); err != nil {
+		return errors.Wrap(err, "reconcile replication")
 	}
 
 	return nil
@@ -114,7 +119,7 @@ func (r *MySQLReconciler) createOrUpdate(log logr.Logger, obj client.Object) err
 	oldObjectMeta := oldObject.(metav1.ObjectMetaAccessor).GetObjectMeta()
 
 	if oldObjectMeta.GetAnnotations()["percona.com/last-config-hash"] != hash ||
-		!isObjectMetaEqual(objectMeta, oldObjectMeta) {
+		!k8s.IsObjectMetaEqual(objectMeta, oldObjectMeta) {
 
 		objectMeta.SetResourceVersion(oldObjectMeta.GetResourceVersion())
 		switch object := obj.(type) {
@@ -150,24 +155,4 @@ func getObjectHash(obj runtime.Object) (string, error) {
 	}
 	hash := md5.Sum(data)
 	return hex.EncodeToString(hash[:]), nil
-}
-
-func isObjectMetaEqual(old, new metav1.Object) bool {
-	return compareMaps(old.GetAnnotations(), new.GetAnnotations()) &&
-		compareMaps(old.GetLabels(), new.GetLabels())
-}
-
-func compareMaps(x, y map[string]string) bool {
-	if len(x) != len(y) {
-		return false
-	}
-
-	for k, v := range x {
-		yVal, ok := y[k]
-		if !ok || yVal != v {
-			return false
-		}
-	}
-
-	return true
 }
