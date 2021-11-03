@@ -4,7 +4,7 @@ metadata:
   name: percona-server-for-mysql-operator-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
+  kind: ClusterRole
   name: percona-server-for-mysql-operator-role
 subjects:
 - kind: ServiceAccount

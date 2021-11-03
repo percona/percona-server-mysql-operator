@@ -14,9 +14,9 @@ ARG CGO_ENABLED=0
 RUN mkdir -p build/_output/bin \
     && GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -mod=vendor -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
-        -o build/_output/bin/percona-server-mysql-operator \
+        -o build/_output/bin/percona-server-for-mysql-operator \
             cmd/manager/main.go \
-    && cp -r build/_output/bin/percona-server-mysql-operator /usr/local/bin/percona-server-mysql-operator
+    && cp -r build/_output/bin/percona-server-for-mysql-operator /usr/local/bin/percona-server-for-mysql-operator
 RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -mod=vendor -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
         -o build/_output/bin/bootstrap \
@@ -33,7 +33,7 @@ LABEL name="Percona Distribution for MySQL Operator" \
       maintainer="Percona Development <info@percona.com>"
 
 COPY LICENSE /licenses/
-COPY --from=go_builder /usr/local/bin/percona-server-mysql-operator /usr/local/bin/percona-server-mysql-operator
+COPY --from=go_builder /usr/local/bin/percona-server-for-mysql-operator /usr/local/bin/percona-server-for-mysql-operator
 COPY --from=go_builder /usr/local/bin/bootstrap /bootstrap
 COPY build/ps-entrypoint.sh /ps-entrypoint.sh
 COPY build/ps-init-entrypoint.sh /ps-init-entrypoint.sh

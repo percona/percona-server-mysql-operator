@@ -13,10 +13,9 @@ spec:
     kind: PerconaServerForMySQLBackup
     listKind: PerconaServerForMySQLBackupList
     plural: perconaserverformysqlbackups
-    singular: perconaserverformysqlbackup
     shortNames:
     - ps-backup
-    - ps-backups
+    singular: perconaserverformysqlbackup
   scope: Namespaced
   versions:
   - name: v2

@@ -152,7 +152,8 @@ type PerconaServerForMySQLStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
-//+kubebuilder:resource:scope=Namespace
+//+kubebuilder:resource:scope=Namespaced
+//+kubebuilder:resource:shortName=ps
 
 // PerconaServerForMySQL is the Schema for the perconaserverformysqls API
 type PerconaServerForMySQL struct {

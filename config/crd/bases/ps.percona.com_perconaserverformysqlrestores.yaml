@@ -13,10 +13,9 @@ spec:
     kind: PerconaServerForMySQLRestore
     listKind: PerconaServerForMySQLRestoreList
     plural: perconaserverformysqlrestores
-    singular: perconaserverformysqlrestore
     shortNames:
     - ps-restore
-    - ps-restores
+    singular: perconaserverformysqlrestore
   scope: Namespaced
   versions:
   - name: v2

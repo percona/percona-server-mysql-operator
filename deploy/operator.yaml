@@ -34,7 +34,7 @@ spec:
       - args:
         - --leader-elect
         command:
-        - /usr/local/bin/percona-server-mysql-operator
+        - /usr/local/bin/percona-server-for-mysql-operator
         env:
         - name: WATCH_NAMESPACE
           valueFrom:

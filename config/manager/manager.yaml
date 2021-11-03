@@ -17,7 +17,7 @@ spec:
         runAsNonRoot: true
       containers:
       - command:
-        - /usr/local/bin/percona-server-mysql-operator
+        - /usr/local/bin/percona-server-for-mysql-operator
         args:
         - --leader-elect
         env:
