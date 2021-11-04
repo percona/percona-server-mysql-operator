@@ -68,6 +68,14 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, t types.NamespacedName)
 		return errors.Wrap(err, "reconcile orchestrator")
 	}
 
+	if cr.Status.MySQL.State != v2.StateReady || cr.Status.Orchestrator.State != v2.StateReady {
+		return nil
+	}
+
+	if err := r.discoverMySQL(log, cr); err != nil {
+		return errors.Wrap(err, "discover MySQL pods")
+	}
+
 	if err := r.reconcileReplication(log, cr); err != nil {
 		return errors.Wrap(err, "reconcile replication")
 	}

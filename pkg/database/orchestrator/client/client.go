@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -60,6 +61,26 @@ func New(host string) *orcClient {
 		host:   host,
 		client: c,
 	}
+}
+
+func (o *orcClient) Discover(host string, port int32) (*instance, error) {
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/discover/%s/%d", o.host, host, port), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "build request")
+	}
+
+	resp, err := o.client.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "make request")
+	}
+	defer resp.Body.Close()
+
+	inst := &instance{}
+	if err := json.NewDecoder(resp.Body).Decode(inst); err != nil {
+		return nil, errors.Wrap(err, "json decode")
+	}
+
+	return inst, nil
 }
 
 func (o *orcClient) ClusterPrimary(clusterHint string) (*instance, error) {

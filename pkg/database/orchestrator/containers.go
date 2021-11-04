@@ -25,7 +25,7 @@ func (o *Orchestrator) Container() corev1.Container {
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/api/lb-check",
+					Path: "/api/health",
 					Port: intstr.FromString("web"),
 				},
 			},
@@ -38,7 +38,7 @@ func (o *Orchestrator) Container() corev1.Container {
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/api/health",
+					Path: "/api/raft-health",
 					Port: intstr.FromString("web"),
 				},
 			},
@@ -52,23 +52,7 @@ func (o *Orchestrator) Container() corev1.Container {
 }
 
 func (o *Orchestrator) SidecarContainers() []corev1.Container {
-	return []corev1.Container{
-		{
-			Name:            "mysql-monit",
-			Image:           o.Image,
-			ImagePullPolicy: o.ImagePullPolicy,
-			Env:             o.env(),
-			VolumeMounts:    o.volumeMounts(),
-			Args: []string{
-				"/usr/bin/peer-list",
-				"-on-change=/usr/bin/add_mysql_nodes.sh",
-				"-service=$(MYSQL_SERVICE)",
-			},
-			TerminationMessagePath:   "/dev/termination-log",
-			TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-			SecurityContext:          o.ContainerSecurityContext,
-		},
-	}
+	return nil
 }
 
 func (o *Orchestrator) InitContainers(initImage string) []corev1.Container {
