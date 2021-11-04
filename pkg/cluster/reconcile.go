@@ -41,6 +41,13 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, t types.NamespacedName)
 		return errors.Wrapf(err, "get cluster with name %s in namespace %s", t.Name, t.Namespace)
 	}
 
+	defer func() {
+		err := r.updateStatus(cr)
+		if err != nil {
+			log.Error(err, "failed to update status")
+		}
+	}()
+
 	if err := cr.CheckNSetDefaults(log); err != nil {
 		return errors.Wrap(err, "check CR options")
 	}

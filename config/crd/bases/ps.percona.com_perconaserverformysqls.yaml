@@ -16,7 +16,17 @@ spec:
     singular: perconaserverformysql
   scope: Namespaced
   versions:
-  - name: v2
+  - additionalPrinterColumns:
+    - jsonPath: .status.mysql.state
+      name: MySQL
+      type: string
+    - jsonPath: .status.orchestrator.state
+      name: Orchestrator
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v2
     schema:
       openAPIV3Schema:
         description: PerconaServerForMySQL is the Schema for the perconaserverformysqls
@@ -6282,6 +6292,32 @@ spec:
           status:
             description: PerconaServerForMySQLStatus defines the observed state of
               PerconaServerForMySQL
+            properties:
+              mysql:
+                description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                  of cluster Important: Run "make" to regenerate code after modifying
+                  this file'
+                properties:
+                  ready:
+                    format: int32
+                    type: integer
+                  size:
+                    format: int32
+                    type: integer
+                  state:
+                    type: string
+                type: object
+              orchestrator:
+                properties:
+                  ready:
+                    format: int32
+                    type: integer
+                  size:
+                    format: int32
+                    type: integer
+                  state:
+                    type: string
+                type: object
             type: object
         type: object
     served: true
