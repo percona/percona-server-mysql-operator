@@ -79,3 +79,13 @@ func AddLabel(obj client.Object, key, value string) {
 	labels[key] = value
 	obj.SetLabels(labels)
 }
+
+func IsPodReady(pod corev1.Pod) bool {
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == corev1.ContainersReady && cond.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+
+	return false
+}

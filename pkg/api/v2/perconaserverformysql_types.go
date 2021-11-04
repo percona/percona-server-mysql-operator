@@ -144,18 +144,35 @@ type ServiceExpose struct {
 	TrafficPolicy            corev1.ServiceExternalTrafficPolicyType `json:"trafficPolicy,omitempty"`
 }
 
+type StatefulAppState string
+
+const (
+	StateInitializing StatefulAppState = "initializing"
+	StateReady        StatefulAppState = "ready"
+)
+
+type StatefulAppStatus struct {
+	Size  int32            `json:"size,omitempty"`
+	Ready int32            `json:"ready,omitempty"`
+	State StatefulAppState `json:"state,omitempty"`
+}
+
 // PerconaServerForMySQLStatus defines the observed state of PerconaServerForMySQL
 type PerconaServerForMySQLStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	MySQL        StatefulAppStatus `json:"mysql,omitempty"`
+	Orchestrator StatefulAppStatus `json:"orchestrator,omitempty"`
 }
 
+// PerconaServerForMySQL is the Schema for the perconaserverformysqls API
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="MySQL",type=string,JSONPath=".status.mysql.state"
+//+kubebuilder:printcolumn:name="Orchestrator",type=string,JSONPath=".status.orchestrator.state"
+//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 //+kubebuilder:resource:scope=Namespaced
 //+kubebuilder:resource:shortName=ps
-
-// PerconaServerForMySQL is the Schema for the perconaserverformysqls API
 type PerconaServerForMySQL struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -38,3 +38,7 @@ func (o *Orchestrator) Name() string {
 func (o *Orchestrator) Namespace() string {
 	return o.cluster.Namespace
 }
+
+func (o *Orchestrator) GetSize() int32 {
+	return o.Size
+}

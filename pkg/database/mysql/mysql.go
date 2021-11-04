@@ -40,6 +40,10 @@ func (m *MySQL) Namespace() string {
 	return m.cluster.Namespace
 }
 
+func (m *MySQL) GetSize() int32 {
+	return m.Size
+}
+
 func IsMySQL(obj client.Object) bool {
 	labels := obj.GetLabels()
 	comp, ok := labels[v2.ComponentLabel]
