@@ -80,12 +80,13 @@ func (r *MySQLReconciler) reconcileSemiSync(log logr.Logger, cr *v2.PerconaServe
 		return errors.Wrap(err, "get operator password")
 	}
 
-	m, err := mysql.NewReplicator(v2.USERS_SECRET_KEY_OPERATOR, operatorPass, primary.Key.Hostname, int32(33062))
+	db, err := mysql.NewReplicator(v2.USERS_SECRET_KEY_OPERATOR, operatorPass, primary.Key.Hostname, int32(33062))
 	if err != nil {
 		return errors.Wrapf(err, "connect to %s", primary.Key.Hostname)
 	}
+	defer db.Close()
 
-	if err := m.SetSemiSyncSource(cr.Spec.MySQL.SizeSemiSync > 0); err != nil {
+	if err := db.SetSemiSyncSource(cr.Spec.MySQL.SizeSemiSync > 0); err != nil {
 		return errors.Wrapf(err, "set semi-sync on %s", primary.Key.Hostname)
 	}
 
@@ -93,7 +94,7 @@ func (r *MySQLReconciler) reconcileSemiSync(log logr.Logger, cr *v2.PerconaServe
 		return nil
 	}
 
-	if err := m.SetSemiSyncSize(cr.Spec.MySQL.SizeSemiSync); err != nil {
+	if err := db.SetSemiSyncSize(cr.Spec.MySQL.SizeSemiSync); err != nil {
 		return errors.Wrapf(err, "set semi-sync size on %s", primary.Key.Hostname)
 	}
 
