@@ -28,6 +28,8 @@ type Replicator interface {
 	CloneInProgress() (bool, error)
 	NeedsClone(donor string, port int32) (bool, error)
 	Clone(donor, user, pass string, port int32) error
+	IsReplica() (bool, error)
+	DumbQuery() error
 }
 
 type dbImpl sql.DB
@@ -95,6 +97,11 @@ func (d *dbImpl) ReplicationStatus() (ReplicationStatus, string, error) {
 	}
 
 	return ReplicationStatusNotInitiated, "", nil
+}
+
+func (d *dbImpl) IsReplica() (bool, error) {
+	status, _, err := d.ReplicationStatus()
+	return status == ReplicationStatusActive, errors.Wrap(err, "get replication status")
 }
 
 func (d *dbImpl) EnableReadonly() error {
@@ -165,4 +172,9 @@ func (d *dbImpl) Clone(donor, user, pass string, port int32) error {
 	}
 
 	return nil
+}
+
+func (d *dbImpl) DumbQuery() error {
+	_, err := (*sql.DB)(d).Query("SELECT 1")
+	return errors.Wrap(err, "SELECT 1")
 }

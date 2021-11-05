@@ -18,11 +18,6 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 )
 
-const (
-	mysqlPort      = int32(3306)
-	mysqlAdminPort = int32(33062)
-)
-
 func main() {
 	f, err := os.OpenFile(filepath.Join(mysql.DataMountPath, "bootstrap.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
@@ -89,13 +84,13 @@ func bootstrap() error {
 		return errors.Wrapf(err, "get %s password", v2.USERS_SECRET_KEY_OPERATOR)
 	}
 
-	db, err := mysql.NewReplicator("operator", operatorPass, podIP, mysqlAdminPort)
+	db, err := mysql.NewReplicator("operator", operatorPass, podIP, mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
 	defer db.Close()
 
-	needsClone, err := db.NeedsClone(donor, mysqlAdminPort)
+	needsClone, err := db.NeedsClone(donor, mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "check if a clone is needed")
 	}
@@ -115,7 +110,7 @@ func bootstrap() error {
 
 		timer.Start("clone")
 		log.Printf("Cloning from %s", donor)
-		err = db.Clone(donor, "operator", operatorPass, mysqlAdminPort)
+		err = db.Clone(donor, "operator", operatorPass, mysql.DefaultAdminPort)
 		timer.Stop("clone")
 		log.Printf("Clone finished in %f seconds", timer.ElapsedSeconds("clone"))
 		if err != nil {
@@ -136,7 +131,7 @@ func bootstrap() error {
 			return errors.Wrapf(err, "get %s password", v2.USERS_SECRET_KEY_REPLICATION)
 		}
 
-		if err := db.StartReplication(primary, replicaPass, mysqlPort); err != nil {
+		if err := db.StartReplication(primary, replicaPass, mysql.DefaultPort); err != nil {
 			return errors.Wrap(err, "start replication")
 		}
 	}
@@ -210,7 +205,7 @@ func getTopology(peers sets.String) (string, []string, error) {
 	}
 
 	for _, peer := range peers.List() {
-		db, err := mysql.NewReplicator("operator", operatorPass, peer, mysqlAdminPort)
+		db, err := mysql.NewReplicator("operator", operatorPass, peer, mysql.DefaultAdminPort)
 		if err != nil {
 			return "", nil, errors.Wrapf(err, "connect to %s", peer)
 		}
@@ -243,7 +238,7 @@ func selectDonor(fqdn, primary string, replicas []string) (string, error) {
 	}
 
 	for _, replica := range replicas {
-		db, err := mysql.NewReplicator("operator", operatorPass, replica, mysqlAdminPort)
+		db, err := mysql.NewReplicator("operator", operatorPass, replica, mysql.DefaultAdminPort)
 		if err != nil {
 			continue
 		}
