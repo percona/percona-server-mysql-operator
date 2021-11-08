@@ -7,9 +7,52 @@ GIT_COMMIT=$(git rev-parse HEAD)
 BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')}
 IMAGE=${IMAGE:-"perconalab/percona-server-mysql-operator:${GIT_BRANCH}"}
-IMAGE_MYSQL=${IMAGE_PXC:-"perconalab/percona-server-mysql-operator:main-pxc8.0"}
+IMAGE_MYSQL=${IMAGE_MYSQL:-"percona/percona-server:8.0.25"}
+IMAGE_ORCHESTRATOR=${IMAGE_ORCHESTRATOR:-"perconalab/percona-server-mysql-operator:main-orchestrator"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
 SKIP_BACKUPS_TO_AWS_GCP=${SKIP_BACKUPS_TO_AWS_GCP:-1}
-tmp_dir=$(mktemp -d)
+API=ps.percona.com/v2
 sed=$(which gsed || which sed)
 date=$(which gdate || which date)
+tmp_dir=$(mktemp -d)
+src_dir=$(realpath ../../)
+
+
+run_mysql() {
+        local command="$1"
+        local uri="$2"
+
+        kubectl -n ${NAMESPACE} exec mysql-client -- \
+                bash -c "printf '%s\n' \"${command}\" | mysql -sN $uri" 2>&1 \
+                | sed -e 's/mysql: //' \
+                | (grep -v 'Using a password on the command line interface can be insecure.' || :)
+}
+
+run_curl() {
+        local uri="$1"
+        kubectl -n ${NAMESPACE} exec mysql-client -- bash -c "curl ${uri}"
+}
+
+get_cluster_name() {
+        kubectl -n ${NAMESPACE} get ps -o jsonpath='{.items[0].metadata.name}'
+}
+
+get_mysql_primary_service() {
+        local cluster=$1
+
+        echo "${cluster}-mysql-primary"
+}
+
+get_mysql_headless_fqdn() {
+        local cluster=$1
+        local index=$2
+
+        echo "${cluster}-mysql-${index}.${cluster}-mysql"
+}
+
+get_orc_headless_fqdn() {
+        local cluster=$1
+        local index=$2
+
+        echo "${cluster}-orc-${index}.${cluster}-orc"
+}

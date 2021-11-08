@@ -1,0 +1,14 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+- script: |
+    . ../functions
+    set -o errexit
+    set -o xtrace
+
+    yq w ${src_dir}/deploy/cr.yaml 'metadata.name' "$(basename $(pwd))" \
+    | yq w - 'apiVersion' "${API}" \
+    | yq w - 'spec.crVersion' "2.0.0" \
+    | yq w - 'spec.mysql.image' "${IMAGE_MYSQL}" \
+    | yq w - 'spec.orchestrator.image' "${IMAGE_ORCHESTRATOR}" \
+    | kubectl -n ${NAMESPACE} apply -f -

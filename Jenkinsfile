@@ -79,8 +79,9 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                         echo Skip $TEST_NAME test
                     else
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
+                        export PATH="$HOME/.krew/bin:$PATH"
                         source $HOME/google-cloud-sdk/path.bash.inc
-                        time bash ./e2e-tests/$TEST_NAME/run
+                        time kubectl kuttl test e2e-tests/ --test "${TEST_NAME}"
                     fi
                 """
             }
@@ -168,6 +169,18 @@ pipeline {
 
                     sudo sh -c "curl -s -L https://github.com/mikefarah/yq/releases/download/3.3.2/yq_linux_amd64 > /usr/local/bin/yq"
                     sudo chmod +x /usr/local/bin/yq
+
+                    cd "$(mktemp -d)"
+                    OS="$(uname | tr '[:upper:]' '[:lower:]')"
+                    ARCH="$(uname -m | sed -e 's/x86_64/amd64/')"
+                    KREW="krew-${OS}_${ARCH}"
+                    curl -fsSLO "https://github.com/kubernetes-sigs/krew/releases/latest/download/${KREW}.tar.gz"
+                    tar zxvf "${KREW}.tar.gz"
+                    ./"${KREW}" install krew
+
+                    export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
+
+                    kubectl krew install kuttl
                 '''
                 withCredentials([file(credentialsId: 'cloud-secret-file', variable: 'CLOUD_SECRET_FILE')]) {
                     sh '''
@@ -278,6 +291,7 @@ pipeline {
                 stage('E2E Basic Tests') {
                     steps {
                         CreateCluster('basic')
+                        runTest('init-deploy', 'basic')
                         ShutdownCluster('basic')
                     }
                 }
