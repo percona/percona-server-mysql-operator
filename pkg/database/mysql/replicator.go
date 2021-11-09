@@ -28,6 +28,8 @@ type Replicator interface {
 	CloneInProgress() (bool, error)
 	NeedsClone(donor string, port int32) (bool, error)
 	Clone(donor, user, pass string, port int32) error
+	SetSemiSyncSource(enabled bool) error
+	SetSemiSyncSize(size int32) error
 }
 
 type dbImpl sql.DB
@@ -165,4 +167,14 @@ func (d *dbImpl) Clone(donor, user, pass string, port int32) error {
 	}
 
 	return nil
+}
+
+func (d *dbImpl) SetSemiSyncSource(enabled bool) error {
+	_, err := (*sql.DB)(d).Exec("SET GLOBAL rpl_semi_sync_master_enabled=?", enabled)
+	return errors.Wrap(err, "set rpl_semi_sync_master_enabled")
+}
+
+func (d *dbImpl) SetSemiSyncSize(size int32) error {
+	_, err := (*sql.DB)(d).Exec("SET GLOBAL rpl_semi_sync_master_wait_for_slave_count=?", size)
+	return errors.Wrap(err, "set rpl_semi_sync_master_wait_for_slave_count")
 }
