@@ -27,8 +27,17 @@ func (o *Orchestrator) Service() *corev1.Service {
 			Labels:    o.MatchLabels(),
 		},
 		Spec: corev1.ServiceSpec{
-			ClusterIP:                "None",
-			Ports:                    o.servicePorts(),
+			ClusterIP: "None",
+			Ports: []corev1.ServicePort{
+				{
+					Name: "web",
+					Port: int32(DefaultWebPort),
+				},
+				{
+					Name: "raft",
+					Port: int32(DefaultRaftPort),
+				},
+			},
 			Selector:                 o.MatchLabels(),
 			PublishNotReadyAddresses: true,
 		},

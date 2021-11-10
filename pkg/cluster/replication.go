@@ -13,22 +13,11 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/database/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/database/orchestrator"
 	orclient "github.com/percona/percona-server-mysql-operator/pkg/database/orchestrator/client"
+	"github.com/percona/percona-server-mysql-operator/pkg/database/replicator"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 )
 
-func (r *MySQLReconciler) reconcileReplication(log logr.Logger, cr *v2.PerconaServerForMySQL) error {
-	if err := r.reconcilePrimaryPod(log, cr); err != nil {
-		return errors.Wrap(err, "reconcile primary pod")
-	}
-
-	if err := r.reconcileSemiSync(log, cr); err != nil {
-		return errors.Wrap(err, "reconcile semi-sync")
-	}
-
-	return nil
-}
-
-func (r *MySQLReconciler) reconcilePrimaryPod(log logr.Logger, cr *v2.PerconaServerForMySQL) error {
+func reconcilePrimaryPod(log logr.Logger, r *MySQLReconciler, cr *v2.PerconaServerForMySQL) error {
 	o := orchestrator.New(cr)
 	orc := orclient.New(o.APIHost())
 	clusterHint := cr.ClusterHint()
@@ -65,7 +54,7 @@ func (r *MySQLReconciler) reconcilePrimaryPod(log logr.Logger, cr *v2.PerconaSer
 	return nil
 }
 
-func (r *MySQLReconciler) reconcileSemiSync(log logr.Logger, cr *v2.PerconaServerForMySQL) error {
+func reconcileSemiSync(log logr.Logger, r *MySQLReconciler, cr *v2.PerconaServerForMySQL) error {
 	o := orchestrator.New(cr)
 	orc := orclient.New(o.APIHost())
 	clusterHint := cr.ClusterHint()
@@ -80,7 +69,7 @@ func (r *MySQLReconciler) reconcileSemiSync(log logr.Logger, cr *v2.PerconaServe
 		return errors.Wrap(err, "get operator password")
 	}
 
-	db, err := mysql.NewReplicator(v2.USERS_SECRET_KEY_OPERATOR, operatorPass, primary.Key.Hostname, int32(33062))
+	db, err := replicator.NewReplicator(v2.USERS_SECRET_KEY_OPERATOR, operatorPass, primary.Key.Hostname, int32(33062))
 	if err != nil {
 		return errors.Wrapf(err, "connect to %s", primary.Key.Hostname)
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -19,6 +20,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
+	"github.com/percona/percona-server-mysql-operator/pkg/database/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/database/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 )
 
@@ -27,25 +30,37 @@ type MySQLReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-func (r *MySQLReconciler) Reconcile(ctx context.Context, t types.NamespacedName) error {
-	log := log.FromContext(ctx).WithName("PerconaServerForMySQL").WithValues("name", t.Name, "namespace", t.Namespace)
-
+func LoadCR(ctx context.Context, log logr.Logger, t types.NamespacedName, cl client.Client) (*v2.PerconaServerForMySQL, error) {
 	cr := &v2.PerconaServerForMySQL{}
-	err := r.Client.Get(ctx, t, cr)
-	if err != nil {
+
+	if err := cl.Get(ctx, t, cr); err != nil {
 		if k8serrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
-			return nil
+			return nil, nil
 		}
-		return errors.Wrapf(err, "get cluster with name %s in namespace %s", t.Name, t.Namespace)
+
+		return nil, errors.Wrapf(err, "get cluster with name %s in namespace %s", t.Name, t.Namespace)
 	}
 
 	if err := cr.CheckNSetDefaults(log); err != nil {
-		return errors.Wrap(err, "check CR options")
+		return nil, errors.Wrap(err, "check CR options")
 	}
 
-	if err := r.reconcileUsersSecret(cr); err != nil {
+	return cr, nil
+}
+
+func (r *MySQLReconciler) Reconcile(ctx context.Context, t types.NamespacedName) error {
+	log := log.FromContext(ctx).
+		WithName("PerconaServerForMySQL").
+		WithValues("name", t.Name, "ns", t.Namespace)
+
+	cr, err := LoadCR(ctx, log, t, r.Client)
+	if err != nil {
+		return errors.Wrap(err, "load CR")
+	}
+
+	if err := r.reconcileSecrets(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile users secret")
 	}
 
@@ -63,6 +78,96 @@ func (r *MySQLReconciler) Reconcile(ctx context.Context, t types.NamespacedName)
 
 	if err := r.reconcileReplication(log, cr); err != nil {
 		return errors.Wrap(err, "reconcile replication")
+	}
+
+	return nil
+}
+
+func (r *MySQLReconciler) reconcileSecrets(ctx context.Context, cr *v2.PerconaServerForMySQL) error {
+	secretObj := corev1.Secret{}
+	err := r.Client.Get(context.TODO(),
+		types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      cr.Spec.SecretsName,
+		},
+		&secretObj,
+	)
+	if err == nil {
+		return nil
+	} else if !k8serror.IsNotFound(err) {
+		return errors.Wrap(err, "get secret")
+	}
+
+	users := []string{
+		v2.USERS_SECRET_KEY_ROOT,
+		v2.USERS_SECRET_KEY_XTRABACKUP,
+		v2.USERS_SECRET_KEY_MONITOR,
+		v2.USERS_SECRET_KEY_CLUSTERCHECK,
+		v2.USERS_SECRET_KEY_PROXYADMIN,
+		v2.USERS_SECRET_KEY_OPERATOR,
+		v2.USERS_SECRET_KEY_REPLICATION,
+		v2.USERS_SECRET_KEY_ORCHESTRATOR,
+	}
+	data := make(map[string][]byte)
+	for _, user := range users {
+		data[user], err = generatePass()
+		if err != nil {
+			return errors.Wrapf(err, "create %s user password", user)
+		}
+	}
+
+	secretObj = corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Spec.SecretsName,
+			Namespace: cr.Namespace,
+		},
+		Data: data,
+		Type: corev1.SecretTypeOpaque,
+	}
+
+	if err := k8s.SetControllerReference(cr, &secretObj, r.Scheme); err != nil {
+		return errors.Wrapf(err, "set controller reference to %s/%s", secretObj.Kind, secretObj.Name)
+	}
+
+	err = r.Client.Create(context.TODO(), &secretObj)
+	return errors.Wrapf(err, "create users secret '%s'", cr.Spec.SecretsName)
+}
+
+func (r *MySQLReconciler) reconcileMySQL(log logr.Logger, cr *v2.PerconaServerForMySQL) error {
+	m := mysql.New(cr)
+
+	if err := reconcileStatefulSet(log, r, cr, m); err != nil {
+		return errors.Wrap(err, "recincile StatefulSet")
+	}
+	if err := reconcileService(log, r, cr, m); err != nil {
+		return errors.Wrap(err, "recincile StatefulSet")
+	}
+	if err := reconcilePrimaryService(log, r, cr, m); err != nil {
+		return errors.Wrap(err, "recincile StatefulSet")
+	}
+
+	return nil
+}
+
+func (r *MySQLReconciler) reconcileOrchestrator(log logr.Logger, cr *v2.PerconaServerForMySQL) error {
+	o := orchestrator.New(cr)
+
+	if err := ensureObject(log, r, cr, o.StatefulSet()); err != nil {
+		return errors.Wrap(err, "reconcile StatefulSet")
+	}
+	if err := ensureObject(log, r, cr, o.Service()); err != nil {
+		return errors.Wrap(err, "reconcile Service")
+	}
+
+	return nil
+}
+
+func (r *MySQLReconciler) reconcileReplication(log logr.Logger, cr *v2.PerconaServerForMySQL) error {
+	if err := reconcilePrimaryPod(log, r, cr); err != nil {
+		return errors.Wrap(err, "reconcile primary pod")
+	}
+	if err := reconcileSemiSync(log, r, cr); err != nil {
+		return errors.Wrap(err, "reconcile semi-sync")
 	}
 
 	return nil

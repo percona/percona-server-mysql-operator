@@ -16,16 +16,3 @@ func (o *Orchestrator) containerPorts() []corev1.ContainerPort {
 		},
 	}
 }
-
-func (o *Orchestrator) servicePorts() []corev1.ServicePort {
-	return []corev1.ServicePort{
-		{
-			Name: "web",
-			Port: int32(DefaultWebPort),
-		},
-		{
-			Name: "raft",
-			Port: int32(DefaultRaftPort),
-		},
-	}
-}

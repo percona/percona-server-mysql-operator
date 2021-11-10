@@ -15,6 +15,7 @@ import (
 
 	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
 	"github.com/percona/percona-server-mysql-operator/pkg/database/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/database/replicator"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 )
 
@@ -89,7 +90,7 @@ func bootstrap() error {
 		return errors.Wrapf(err, "get %s password", v2.USERS_SECRET_KEY_OPERATOR)
 	}
 
-	db, err := mysql.NewReplicator("operator", operatorPass, podIP, mysqlAdminPort)
+	db, err := replicator.NewReplicator("operator", operatorPass, podIP, mysqlAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
@@ -128,7 +129,7 @@ func bootstrap() error {
 		return errors.Wrap(err, "check replication status")
 	}
 
-	if rStatus == mysql.ReplicationStatusNotInitiated {
+	if rStatus == replicator.ReplicationStatusNotInitiated {
 		log.Println("configuring replication")
 
 		replicaPass, err := getSecret(v2.USERS_SECRET_KEY_REPLICATION)
@@ -210,7 +211,7 @@ func getTopology(peers sets.String) (string, []string, error) {
 	}
 
 	for _, peer := range peers.List() {
-		db, err := mysql.NewReplicator("operator", operatorPass, peer, mysqlAdminPort)
+		db, err := replicator.NewReplicator("operator", operatorPass, peer, mysqlAdminPort)
 		if err != nil {
 			return "", nil, errors.Wrapf(err, "connect to %s", peer)
 		}
@@ -221,7 +222,7 @@ func getTopology(peers sets.String) (string, []string, error) {
 			return "", nil, errors.Wrap(err, "check replication status")
 		}
 
-		if status == mysql.ReplicationStatusActive {
+		if status == replicator.ReplicationStatusActive {
 			replicas.Insert(peer)
 			primary = source
 		}
@@ -243,7 +244,7 @@ func selectDonor(fqdn, primary string, replicas []string) (string, error) {
 	}
 
 	for _, replica := range replicas {
-		db, err := mysql.NewReplicator("operator", operatorPass, replica, mysqlAdminPort)
+		db, err := replicator.NewReplicator("operator", operatorPass, replica, mysqlAdminPort)
 		if err != nil {
 			continue
 		}
