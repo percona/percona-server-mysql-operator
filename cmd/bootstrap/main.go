@@ -49,7 +49,8 @@ func bootstrap() error {
 		log.Printf("bootstrap finished in %f seconds", timer.ElapsedSeconds("total"))
 	}()
 
-	svc := os.Getenv("SERVICE_NAME")
+	svc := os.Getenv("SERVICE_NAME_UNREADY")
+	mysqlSvc := os.Getenv("SERVICE_NAME")
 	peers, err := lookup(svc)
 	if err != nil {
 		return errors.Wrap(err, "lookup")
@@ -62,11 +63,28 @@ func bootstrap() error {
 	}
 	log.Printf("Primary: %s Replicas: %v", primary, replicas)
 
-	fqdn, err := getFQDN(svc)
+	fqdn, err := getFQDN(mysqlSvc)
 	if err != nil {
 		return errors.Wrap(err, "get FQDN")
 	}
 	log.Printf("FQDN: %s", fqdn)
+
+	podHostname, err := os.Hostname()
+	if err != nil {
+		return errors.Wrap(err, "get hostname")
+	}
+
+	podIp, err := getPodIP(podHostname)
+	if err != nil {
+		return errors.Wrap(err, "get pod IP")
+	}
+	log.Printf("PodIP: %s", podIp)
+
+	primaryIp, err := getPodIP(primary)
+	if err != nil {
+		return errors.Wrap(err, "get primary IP")
+	}
+	log.Printf("PrimaryIP: %s", primaryIp)
 
 	donor, err := selectDonor(fqdn, primary, replicas)
 	if err != nil {
@@ -74,22 +92,17 @@ func bootstrap() error {
 	}
 	log.Printf("Donor: %s", donor)
 
-	if donor == "" || donor == fqdn || primary == fqdn {
+	if donor == "" || donor == fqdn || primary == fqdn || primaryIp == podIp {
 		return nil
 	}
 
-	podIP, err := getPodIP()
-	if err != nil {
-		return errors.Wrap(err, "get pod IP")
-	}
-
-	log.Printf("Opening connection to %s", podIP)
+	log.Printf("Opening connection to %s", podIp)
 	operatorPass, err := getSecret(v2.USERS_SECRET_KEY_OPERATOR)
 	if err != nil {
 		return errors.Wrapf(err, "get %s password", v2.USERS_SECRET_KEY_OPERATOR)
 	}
 
-	db, err := mysql.NewReplicator("operator", operatorPass, podIP, mysqlAdminPort)
+	db, err := mysql.NewReplicator("operator", operatorPass, podIp, mysqlAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
@@ -168,11 +181,7 @@ func getSecret(username string) (string, error) {
 	return strings.TrimSpace(string(sBytes)), nil
 }
 
-func getPodIP() (string, error) {
-	hostname, err := os.Hostname()
-	if err != nil {
-		return "", errors.Wrap(err, "get hostname")
-	}
+func getPodIP(hostname string) (string, error) {
 
 	addrs, err := net.LookupHost(hostname)
 	if err != nil {
@@ -221,14 +230,28 @@ func getTopology(peers sets.String) (string, []string, error) {
 			return "", nil, errors.Wrap(err, "check replication status")
 		}
 
-		if status == mysql.ReplicationStatusActive {
-			replicas.Insert(peer)
+		replicaHost, err := db.ReportHost()
+		if err != nil {
+			return "", nil, errors.Wrap(err, "get report_host")
+		}
+
+		if replicaHost != "" && peers.Len() > 1 {
+			replicas.Insert(replicaHost)
+		}
+
+		if status == mysql.ReplicationStatusActive && replicaHost != "" {
 			primary = source
 		}
 	}
 
-	if primary == "" {
+	if primary == "" && replicas.Len() == 0 {
 		primary = peers.List()[0]
+	} else if primary == "" {
+		primary = replicas.List()[0]
+	}
+
+	if replicas.Len() > 0 {
+		replicas.Delete(primary)
 	}
 
 	return primary, replicas.List(), nil

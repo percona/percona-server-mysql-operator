@@ -126,7 +126,7 @@ _get_tmpdir() {
 
 	tmpdir_path=$(_get_cnf_config mysqld tmpdir "")
 	if [[ -z ${tmpdir_path} ]]; then
-		tmpdir_path=$(_get_cnf_config xtrabackup tmpdir "")
+		tmpdir_path=$(_get_cnf_config mysqld tmpdir "")
 	fi
 	if [[ -z ${tmpdir_path} ]]; then
 		tmpdir_path="$defaul_value"

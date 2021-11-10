@@ -24,6 +24,7 @@ type Replicator interface {
 	ReplicationStatus() (ReplicationStatus, string, error)
 	EnableReadonly() error
 	IsReadonly() (bool, error)
+	ReportHost() (string, error)
 	Close() error
 	CloneInProgress() (bool, error)
 	NeedsClone(donor string, port int32) (bool, error)
@@ -106,6 +107,12 @@ func (d *dbImpl) IsReadonly() (bool, error) {
 	var readonly int
 	err := (*sql.DB)(d).QueryRow("select @@read_only").Scan(&readonly)
 	return readonly == 1, errors.Wrap(err, "select global read_only param")
+}
+
+func (d *dbImpl) ReportHost() (string, error) {
+	var reportHost string
+	err := (*sql.DB)(d).QueryRow("select @@report_host").Scan(&reportHost)
+	return reportHost, errors.Wrap(err, "select report_host param")
 }
 
 func (d *dbImpl) Close() error {
