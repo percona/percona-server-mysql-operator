@@ -95,8 +95,6 @@ test: manifests generate fmt vet envtest ## Run tests.
 manifests: kustomize generate
 	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml
 	echo "---" >> $(DEPLOYDIR)/crd.yaml
-	$(KUSTOMIZE) build config/rbac/ > $(DEPLOYDIR)/rbac.yaml
-	echo "---" >> $(DEPLOYDIR)/rbac.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image perconalab/percona-server-mysql-operator=$(IMG)
 	$(KUSTOMIZE) build config/manager/ > $(DEPLOYDIR)/operator.yaml
 	echo "---" >> $(DEPLOYDIR)/operator.yaml
