@@ -4,7 +4,7 @@
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
 NAME ?= percona-server-for-mysql-operator
-VERSION ?= main
+VERSION ?= $(shell git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -94,9 +94,12 @@ test: manifests generate fmt vet envtest ## Run tests.
 
 manifests: kustomize generate
 	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml
+	echo "---" >> $(DEPLOYDIR)/crd.yaml
 	$(KUSTOMIZE) build config/rbac/ > $(DEPLOYDIR)/rbac.yaml
+	echo "---" >> $(DEPLOYDIR)/rbac.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image perconalab/percona-server-mysql-operator=$(IMG)
 	$(KUSTOMIZE) build config/manager/ > $(DEPLOYDIR)/operator.yaml
+	echo "---" >> $(DEPLOYDIR)/operator.yaml
 	cat $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/rbac.yaml $(DEPLOYDIR)/operator.yaml > $(DEPLOYDIR)/bundle.yaml
 
 ##@ Build
@@ -117,7 +120,7 @@ uninstall: manifests ## Uninstall CRDs, rbac
 deploy: manifests ## Deploy operator
 	kubectl apply -f $(DEPLOYDIR)/operator.yaml
 
-undeploy: ## Undeploy operator
+undeploy: manifests ## Undeploy operator
 	kubectl delete -f $(DEPLOYDIR)/operator.yaml
 
 

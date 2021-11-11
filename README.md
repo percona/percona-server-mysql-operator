@@ -1,4 +1,4 @@
-# Percona Server for MySQL Operator
+# Percona Distribution for MySQL Operator
 
 ## Build
 

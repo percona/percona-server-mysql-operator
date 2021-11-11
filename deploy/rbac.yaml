@@ -4,7 +4,7 @@ metadata:
   name: percona-server-for-mysql-operator
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
   name: percona-server-for-mysql-operator-leader-election-role
 rules:
@@ -173,19 +173,20 @@ rules:
   - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
   name: percona-server-for-mysql-operator-leader-election-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
+  kind: ClusterRole
   name: percona-server-for-mysql-operator-leader-election-role
 subjects:
 - kind: ServiceAccount
   name: percona-server-for-mysql-operator
+  namespace: default
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
   name: percona-server-for-mysql-operator-rolebinding
 roleRef:
@@ -195,3 +196,5 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: percona-server-for-mysql-operator
+  namespace: default
+---

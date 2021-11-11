@@ -69,3 +69,4 @@ spec:
         runAsNonRoot: true
       serviceAccountName: percona-server-for-mysql-operator
       terminationGracePeriodSeconds: 10
+---
