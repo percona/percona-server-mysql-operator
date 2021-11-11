@@ -234,12 +234,15 @@ func getTopology(peers sets.String) (string, []string, error) {
 		if err != nil {
 			return "", nil, errors.Wrap(err, "get report_host")
 		}
+		if replicaHost == "" {
+			continue
+		}
 
-		if replicaHost != "" && peers.Len() > 1 {
+		if peers.Len() > 1 {
 			replicas.Insert(replicaHost)
 		}
 
-		if status == mysql.ReplicationStatusActive && replicaHost != "" {
+		if status == mysql.ReplicationStatusActive {
 			primary = source
 		}
 	}
