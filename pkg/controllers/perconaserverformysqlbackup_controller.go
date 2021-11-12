@@ -33,8 +33,6 @@ type PerconaServerForMySQLBackupReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=ps.percona.com,resources=perconaserverformysqlbackups;perconaserverformysqlbackups/status;perconaserverformysqlbackups/finalizers,verbs=get;list;watch;create;update;patch;delete
-
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by

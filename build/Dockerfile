@@ -23,7 +23,7 @@ RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
             cmd/bootstrap/main.go \
     && cp -r build/_output/bin/bootstrap /usr/local/bin/bootstrap
 
-FROM registry.access.redhat.com/ubi7/ubi-minimal AS ubi7
+FROM redhat/ubi8-minimal AS ubi8
 RUN microdnf update && microdnf clean all
 
 LABEL name="Percona Distribution for MySQL Operator" \
