@@ -15,6 +15,30 @@ func (m *MySQL) PrimaryServiceName() string {
 	return m.Name() + "-primary"
 }
 
+func (m *MySQL) UnreadyServiceName() string {
+	return m.Name() + "-unready"
+}
+
+func (m *MySQL) UnreadyService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Service",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      m.UnreadyServiceName(),
+			Namespace: m.Namespace(),
+			Labels:    m.MatchLabels(),
+		},
+		Spec: corev1.ServiceSpec{
+			ClusterIP:                "None",
+			Ports:                    m.servicePorts(),
+			Selector:                 m.MatchLabels(),
+			PublishNotReadyAddresses: true,
+		},
+	}
+}
+
 func (m *MySQL) Service() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -27,10 +51,9 @@ func (m *MySQL) Service() *corev1.Service {
 			Labels:    m.MatchLabels(),
 		},
 		Spec: corev1.ServiceSpec{
-			ClusterIP:                "None",
-			Ports:                    m.servicePorts(),
-			Selector:                 m.MatchLabels(),
-			PublishNotReadyAddresses: true,
+			ClusterIP: "None",
+			Ports:     m.servicePorts(),
+			Selector:  m.MatchLabels(),
 		},
 	}
 }
