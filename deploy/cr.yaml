@@ -7,6 +7,7 @@ spec:
   sslSecretName: cluster1-ssl
   mysql:
     size: 3
+    sizeSemiSync: 0
     imagePullPolicy: Always
     image: percona/percona-server:8.0.25
     volumeSpec:
