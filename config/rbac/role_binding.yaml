@@ -9,4 +9,3 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: percona-server-for-mysql-operator
-  namespace: default
