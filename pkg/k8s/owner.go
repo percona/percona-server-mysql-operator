@@ -31,11 +31,13 @@ func OwnerRef(ro runtime.Object, scheme *runtime.Scheme) (metav1.OwnerReference,
 		return metav1.OwnerReference{}, err
 	}
 
-	return metav1.OwnerReference{
+	ref := metav1.OwnerReference{
 		APIVersion: gvk.GroupVersion().String(),
 		Kind:       gvk.Kind,
 		Name:       ca.GetName(),
 		UID:        ca.GetUID(),
 		Controller: &trueVar,
-	}, nil
+	}
+
+	return ref, nil
 }

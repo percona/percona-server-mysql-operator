@@ -1,11 +1,14 @@
 package k8s
 
 import (
+	"context"
 	"fmt"
 	"os"
 
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -78,4 +81,22 @@ func AddLabel(obj client.Object, key, value string) {
 	labels := obj.GetLabels()
 	labels[key] = value
 	obj.SetLabels(labels)
+}
+
+type Checker interface {
+	CheckNSetDefaults() error
+}
+
+func GetObject(ctx context.Context, cl client.Reader, nn types.NamespacedName, o client.Object) (client.Object, error) {
+	if err := cl.Get(ctx, nn, o); err != nil {
+		return nil, err
+	}
+
+	if v, ok := o.(Checker); !ok {
+		if err := v.CheckNSetDefaults(); err != nil {
+			return o, errors.Wrap(err, "object defaults")
+		}
+	}
+
+	return o, nil
 }

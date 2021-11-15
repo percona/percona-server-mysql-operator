@@ -10,8 +10,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
 )
 
 func Namespace() (string, error) {
@@ -23,26 +21,24 @@ func Namespace() (string, error) {
 	return strings.TrimSpace(string(nsBytes)), nil
 }
 
-func operatorPod(cl client.Client) (corev1.Pod, error) {
-	operatorPod := corev1.Pod{}
+func operatorPod(ctx context.Context, rdr client.Reader) (*corev1.Pod, error) {
+	pod := &corev1.Pod{}
 
 	ns, err := Namespace()
 	if err != nil {
-		return operatorPod, errors.Wrap(err, "get namespace")
+		return nil, errors.Wrap(err, "get namespace")
 	}
 
-	if err := cl.Get(context.TODO(), types.NamespacedName{
-		Namespace: ns,
-		Name:      os.Getenv("HOSTNAME"),
-	}, &operatorPod); err != nil {
-		return operatorPod, err
+	nn := types.NamespacedName{Namespace: ns, Name: os.Getenv("HOSTNAME")}
+	if err := rdr.Get(ctx, nn, pod); err != nil {
+		return nil, err
 	}
 
-	return operatorPod, nil
+	return pod, nil
 }
 
-func InitImage(cl client.Client, cr *v2.PerconaServerForMySQL) (string, error) {
-	pod, err := operatorPod(cl)
+func InitImage(ctx context.Context, rdr client.Reader) (string, error) {
+	pod, err := operatorPod(ctx, rdr)
 	if err != nil {
 		return "", errors.Wrap(err, "get operator pod")
 	}

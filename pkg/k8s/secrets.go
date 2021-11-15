@@ -8,13 +8,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
+	v2 "github.com/percona/percona-server-mysql-operator/api/v2"
 )
 
-func UserPassword(cl client.Client, cr *v2.PerconaServerForMySQL, username string) (string, error) {
+func UserPassword(ctx context.Context, rdr client.Reader, cr *v2.PerconaServerForMySQL, username string) (string, error) {
+	nn := types.NamespacedName{Name: cr.Spec.SecretsName, Namespace: cr.Namespace}
 	secret := &corev1.Secret{}
-	err := cl.Get(context.TODO(), types.NamespacedName{Name: cr.Spec.SecretsName, Namespace: cr.Namespace}, secret)
-	if err != nil {
+	if err := rdr.Get(ctx, nn, secret); err != nil {
 		return "", errors.Wrapf(err, "get secret %s", cr.Spec.SecretsName)
 	}
 

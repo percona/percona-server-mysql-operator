@@ -13,10 +13,10 @@ import (
 	"github.com/sjmudd/stopwatch"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
-	"github.com/percona/percona-server-mysql-operator/pkg/database/mysql"
-	"github.com/percona/percona-server-mysql-operator/pkg/database/replicator"
+	v2 "github.com/percona/percona-server-mysql-operator/api/v2"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
 const (
