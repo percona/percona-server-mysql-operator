@@ -7,6 +7,10 @@ import (
 func (m *MySQL) env() []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{
+			Name:  "MONITOR_HOST",
+			Value: "%",
+		},
+		{
 			Name:  "SERVICE_NAME",
 			Value: m.ServiceName(),
 		},
