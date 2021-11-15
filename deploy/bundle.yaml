@@ -4084,21 +4084,7 @@ rules:
   - apps
   resources:
   - deployments
-  - replicasets
   - statefulsets
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - batch
-  resources:
-  - cronjobs
-  - jobs
   verbs:
   - create
   - delete
