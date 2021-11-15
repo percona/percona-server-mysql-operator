@@ -232,17 +232,14 @@ func getTopology(peers sets.String) (string, []string, error) {
 		if replicaHost == "" {
 			continue
 		}
-
-		if peers.Len() > 1 {
-			replicas.Insert(replicaHost)
-		}
+		replicas.Insert(replicaHost)
 
 		if status == mysql.ReplicationStatusActive {
 			primary = source
 		}
 	}
 
-	if primary == "" && replicas.Len() == 0 {
+	if primary == "" && peers.Len() == 1 {
 		primary = peers.List()[0]
 	} else if primary == "" {
 		primary = replicas.List()[0]
