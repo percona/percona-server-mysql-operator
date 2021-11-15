@@ -28,6 +28,8 @@ type Replicator interface {
 	CloneInProgress() (bool, error)
 	NeedsClone(donor string, port int32) (bool, error)
 	Clone(donor, user, pass string, port int32) error
+	IsReplica() (bool, error)
+	DumbQuery() error
 	SetSemiSyncSource(enabled bool) error
 	SetSemiSyncSize(size int32) error
 }
@@ -99,6 +101,11 @@ func (d *dbImpl) ReplicationStatus() (ReplicationStatus, string, error) {
 	return ReplicationStatusNotInitiated, "", nil
 }
 
+func (d *dbImpl) IsReplica() (bool, error) {
+	status, _, err := d.ReplicationStatus()
+	return status == ReplicationStatusActive, errors.Wrap(err, "get replication status")
+}
+
 func (d *dbImpl) EnableReadonly() error {
 	_, err := (*sql.DB)(d).Exec("SET GLOBAL READ_ONLY=1")
 	return errors.Wrap(err, "set global read_only param to 1")
@@ -167,6 +174,11 @@ func (d *dbImpl) Clone(donor, user, pass string, port int32) error {
 	}
 
 	return nil
+}
+
+func (d *dbImpl) DumbQuery() error {
+	_, err := (*sql.DB)(d).Query("SELECT 1")
+	return errors.Wrap(err, "SELECT 1")
 }
 
 func (d *dbImpl) SetSemiSyncSource(enabled bool) error {

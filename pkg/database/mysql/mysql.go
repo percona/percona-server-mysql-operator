@@ -15,6 +15,8 @@ const (
 	CredsMountPath   = "/etc/mysql/mysql-users-secret"
 	TLSVolumeName    = "tls"
 	TLSMountPath     = "/etc/mysql/mysql-tls-secret"
+	DefaultPort      = int32(3306)
+	DefaultAdminPort = int32(33062)
 )
 
 type MySQL struct {

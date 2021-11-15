@@ -2,7 +2,6 @@ package mysql
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func (m *MySQL) Containers() []corev1.Container {
@@ -37,10 +36,23 @@ func (m *MySQL) Container() corev1.Container {
 			SuccessThreshold:              m.StartupProbe.SuccessThreshold,
 			TerminationGracePeriodSeconds: m.StartupProbe.TerminationGracePeriodSeconds,
 		},
+		LivenessProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/var/lib/mysql/healthcheck", "liveness"},
+				},
+			},
+			InitialDelaySeconds:           m.LivenessProbe.InitialDelaySeconds,
+			TimeoutSeconds:                m.LivenessProbe.TimeoutSeconds,
+			PeriodSeconds:                 m.LivenessProbe.PeriodSeconds,
+			FailureThreshold:              m.LivenessProbe.FailureThreshold,
+			SuccessThreshold:              m.LivenessProbe.SuccessThreshold,
+			TerminationGracePeriodSeconds: m.LivenessProbe.TerminationGracePeriodSeconds,
+		},
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
-				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt(3306),
+				Exec: &corev1.ExecAction{
+					Command: []string{"/var/lib/mysql/healthcheck", "readiness"},
 				},
 			},
 			InitialDelaySeconds:           m.ReadinessProbe.InitialDelaySeconds,
