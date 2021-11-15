@@ -42,6 +42,12 @@ func (r *MySQLReconciler) reconcileMySQL(log logr.Logger, cr *v2.PerconaServerFo
 	if err := r.createOrUpdate(log, primarySvc); err != nil {
 		return errors.Wrapf(err, "create or update %s/%s", svc.Kind, svc.Name)
 	}
-
+	unreadySvc := m.UnreadyService()
+	if err := k8s.SetControllerReference(cr, unreadySvc, r.Scheme); err != nil {
+		return errors.Wrapf(err, "set controller reference to %s/%s", svc.Kind, svc.Name)
+	}
+	if err := r.createOrUpdate(log, unreadySvc); err != nil {
+		return errors.Wrapf(err, "create or update %s/%s", svc.Kind, svc.Name)
+	}
 	return nil
 }

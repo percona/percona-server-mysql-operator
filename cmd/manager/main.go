@@ -28,6 +28,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -88,22 +89,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	nsClient := client.NewNamespacedClient(mgr.GetClient(), ns)
+
 	if err = (&controllers.PerconaServerForMySQLReconciler{
-		Client: mgr.GetClient(),
+		Client: nsClient,
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerForMySQL")
 		os.Exit(1)
 	}
 	if err = (&controllers.PerconaServerForMySQLBackupReconciler{
-		Client: mgr.GetClient(),
+		Client: nsClient,
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerForMySQLBackup")
 		os.Exit(1)
 	}
 	if err = (&controllers.PerconaServerForMySQLRestoreReconciler{
-		Client: mgr.GetClient(),
+		Client: nsClient,
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerForMySQLRestore")
