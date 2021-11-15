@@ -22,6 +22,11 @@ RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
         -o build/_output/bin/bootstrap \
             cmd/bootstrap/main.go \
     && cp -r build/_output/bin/bootstrap /usr/local/bin/bootstrap
+RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
+    go build -mod=vendor -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
+        -o build/_output/bin/healthcheck \
+            cmd/healthcheck/main.go \
+    && cp -r build/_output/bin/healthcheck /usr/local/bin/healthcheck
 
 FROM redhat/ubi8-minimal AS ubi8
 RUN microdnf update && microdnf clean all
@@ -35,6 +40,7 @@ LABEL name="Percona Distribution for MySQL Operator" \
 COPY LICENSE /licenses/
 COPY --from=go_builder /usr/local/bin/percona-server-for-mysql-operator /usr/local/bin/percona-server-for-mysql-operator
 COPY --from=go_builder /usr/local/bin/bootstrap /bootstrap
+COPY --from=go_builder /usr/local/bin/healthcheck /healthcheck
 COPY build/ps-entrypoint.sh /ps-entrypoint.sh
 COPY build/ps-init-entrypoint.sh /ps-init-entrypoint.sh
 
