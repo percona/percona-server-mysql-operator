@@ -1,0 +1,12 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+- script: |
+    . ../functions
+    set -o errexit
+    set -o xtrace
+
+    helm install monitoring \
+      -n "${NAMESPACE}" \
+      --set platform=kubernetes \
+      https://percona-charts.storage.googleapis.com/pmm-server-2.18.0.tgz

@@ -292,19 +292,8 @@ pipeline {
                     steps {
                         CreateCluster('basic')
                         runTest('init-deploy', 'basic')
+                        runTest('monitoring', 'basic')
                         ShutdownCluster('basic')
-                    }
-                }
-                stage('E2E Scaling') {
-                    steps {
-                        CreateCluster('scaling')
-                        ShutdownCluster('scaling')
-                    }
-                }
-                stage('E2E SelfHealing') {
-                    steps {
-                        CreateCluster('selfhealing')
-                        ShutdownCluster('selfhealing')
                     }
                 }
             }

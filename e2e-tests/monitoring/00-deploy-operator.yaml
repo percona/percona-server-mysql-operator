@@ -1,0 +1,14 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+- script: |
+    . ../functions
+    set -o errexit
+    set -o xtrace
+
+    kubectl -n ${NAMESPACE} apply -f ${src_dir}/deploy/crd.yaml
+    kubectl -n ${NAMESPACE} apply -f ${src_dir}/deploy/rbac.yaml
+    yq --doc 1 w ${src_dir}/deploy/operator.yaml 'spec.template.spec.containers[0].image' "${IMAGE}" | kubectl -n ${NAMESPACE} apply -f -
+    kubectl -n ${NAMESPACE} apply -f ${src_dir}/e2e-tests/conf/secrets.yaml
+    kubectl -n ${NAMESPACE} apply -f ${src_dir}/e2e-tests/conf/client.yaml
+  timeout: 300

@@ -30,7 +30,7 @@ run_mysql() {
 
 run_curl() {
         local uri="$1"
-        kubectl -n ${NAMESPACE} exec mysql-client -- bash -c "curl ${uri}"
+        kubectl -n ${NAMESPACE} exec mysql-client -- bash -c "curl -s -k ${uri}"
 }
 
 get_cluster_name() {
@@ -55,4 +55,16 @@ get_orc_headless_fqdn() {
         local index=$2
 
         echo "${cluster}-orc-${index}.${cluster}-orc"
+}
+
+get_metric_values() {
+        local metric=$1
+        local instance=$2
+        local user_pass=$3
+        local start=$($date -u "+%s" -d "-1 minute")
+        local end=$($date -u "+%s")
+
+        run_curl "https://${user_pass}@monitoring-service/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28$metric%7Bnode_name%3D%7E%22$instance%22%7d%20or%20$metric%7Bnode_name%3D%7E%22$instance%22%7D%29&start=$start&end=$end&step=60" \
+                | jq '.data.result[0].values[][1]' \
+                | grep '^"[0-9]'
 }
