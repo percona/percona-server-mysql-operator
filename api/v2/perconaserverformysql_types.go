@@ -32,13 +32,13 @@ import (
 
 // PerconaServerForMySQLSpec defines the desired state of PerconaServerForMySQL
 type PerconaServerForMySQLSpec struct {
-	CRVersion             string    `json:"crVersion,omitempty"`
-	Pause                 bool      `json:"pause,omitempty"`
-	SecretsName           string    `json:"secretsName,omitempty"`
-	SSLSecretName         string    `json:"sslSecretName,omitempty"`
-	SSLInternalSecretName string    `json:"sslInternalSecretName,omitempty"`
-	MySQL                 MySQLSpec `json:"mysql,omitempty"`
-	Orchestrator          PodSpec   `json:"orchestrator,omitempty"`
+	CRVersion             string           `json:"crVersion,omitempty"`
+	Pause                 bool             `json:"pause,omitempty"`
+	SecretsName           string           `json:"secretsName,omitempty"`
+	SSLSecretName         string           `json:"sslSecretName,omitempty"`
+	SSLInternalSecretName string           `json:"sslInternalSecretName,omitempty"`
+	MySQL                 MySQLSpec        `json:"mysql,omitempty"`
+	Orchestrator          OrchestratorSpec `json:"orchestrator,omitempty"`
 }
 
 type ClusterType string
@@ -54,6 +54,10 @@ type MySQLSpec struct {
 	SemiSyncType string        `json:"semiSyncType,omitempty"`
 	Expose       ServiceExpose `json:"expose,omitempty"`
 	PodSpec      `json:",inline"`
+}
+
+type OrchestratorSpec struct {
+	PodSpec `json:",inline"`
 }
 
 type PodSpec struct {
@@ -169,16 +173,26 @@ type PerconaServerForMySQLList struct {
 	Items           []PerconaServerForMySQL `json:"items"`
 }
 
+type SystemUser string
+
 const (
-	USERS_SECRET_KEY_ROOT         string = "root"
-	USERS_SECRET_KEY_XTRABACKUP   string = "xtrabackup"
-	USERS_SECRET_KEY_MONITOR      string = "monitor"
-	USERS_SECRET_KEY_CLUSTERCHECK string = "clustercheck"
-	USERS_SECRET_KEY_PROXYADMIN   string = "proxyadmin"
-	USERS_SECRET_KEY_OPERATOR     string = "operator"
-	USERS_SECRET_KEY_REPLICATION  string = "replication"
-	USERS_SECRET_KEY_ORCHESTRATOR string = "orchestrator"
+	UserRoot         SystemUser = "root"
+	UserXtraBackup   SystemUser = "xtrabackup"
+	UserMonitor      SystemUser = "monitor"
+	UserClusterCheck SystemUser = "clustercheck"
+	UserProxyAdmin   SystemUser = "proxyadmin"
+	UserOperator     SystemUser = "operator"
+	UserReplication  SystemUser = "replication"
+	UserOrchestrator SystemUser = "orchestrator"
 )
+
+func (cr *PerconaServerForMySQL) MySQLSpec() *MySQLSpec {
+	return &cr.Spec.MySQL
+}
+
+func (cr *PerconaServerForMySQL) OrchestratorSpec() *OrchestratorSpec {
+	return &cr.Spec.Orchestrator
+}
 
 func (cr *PerconaServerForMySQL) CheckNSetDefaults() error {
 	if cr.Spec.MySQL.StartupProbe.InitialDelaySeconds == 0 {

@@ -13,15 +13,10 @@ import (
 	"github.com/sjmudd/stopwatch"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	v2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
-)
-
-const (
-	mysqlPort      = int32(3306)
-	mysqlAdminPort = int32(33062)
 )
 
 func main() {
@@ -85,18 +80,21 @@ func bootstrap() error {
 	}
 
 	log.Printf("Opening connection to %s", podIP)
-	operatorPass, err := getSecret(v2.USERS_SECRET_KEY_OPERATOR)
+	operatorPass, err := getSecret(apiv2.UserOperator)
 	if err != nil {
-		return errors.Wrapf(err, "get %s password", v2.USERS_SECRET_KEY_OPERATOR)
+		return errors.Wrapf(err, "get %s password", apiv2.UserOperator)
 	}
 
-	db, err := replicator.NewReplicator("operator", operatorPass, podIP, mysqlAdminPort)
+	db, err := replicator.NewReplicator(apiv2.UserOperator,
+		operatorPass,
+		podIP,
+		mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
 	defer db.Close()
 
-	needsClone, err := db.NeedsClone(donor, mysqlAdminPort)
+	needsClone, err := db.NeedsClone(donor, mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "check if a clone is needed")
 	}
@@ -116,7 +114,7 @@ func bootstrap() error {
 
 		timer.Start("clone")
 		log.Printf("Cloning from %s", donor)
-		err = db.Clone(donor, "operator", operatorPass, mysqlAdminPort)
+		err = db.Clone(donor, "operator", operatorPass, mysql.DefaultAdminPort)
 		timer.Stop("clone")
 		log.Printf("Clone finished in %f seconds", timer.ElapsedSeconds("clone"))
 		if err != nil {
@@ -132,12 +130,12 @@ func bootstrap() error {
 	if rStatus == replicator.ReplicationStatusNotInitiated {
 		log.Println("configuring replication")
 
-		replicaPass, err := getSecret(v2.USERS_SECRET_KEY_REPLICATION)
+		replicaPass, err := getSecret(apiv2.UserReplication)
 		if err != nil {
-			return errors.Wrapf(err, "get %s password", v2.USERS_SECRET_KEY_REPLICATION)
+			return errors.Wrapf(err, "get %s password", apiv2.UserReplication)
 		}
 
-		if err := db.StartReplication(primary, replicaPass, mysqlPort); err != nil {
+		if err := db.StartReplication(primary, replicaPass, mysql.DefaultPort); err != nil {
 			return errors.Wrap(err, "start replication")
 		}
 	}
@@ -159,8 +157,8 @@ func getFQDN(svcName string) (string, error) {
 	return fmt.Sprintf("%s.%s.%s", hostname, svcName, namespace), nil
 }
 
-func getSecret(username string) (string, error) {
-	path := filepath.Join(mysql.CredsMountPath, username)
+func getSecret(username apiv2.SystemUser) (string, error) {
+	path := filepath.Join(mysql.CredsMountPath, string(username))
 	sBytes, err := ioutil.ReadFile(path)
 	if err != nil {
 		return "", errors.Wrapf(err, "read %s", path)
@@ -205,13 +203,13 @@ func getTopology(peers sets.String) (string, []string, error) {
 	replicas := sets.NewString()
 	primary := ""
 
-	operatorPass, err := getSecret(v2.USERS_SECRET_KEY_OPERATOR)
+	operatorPass, err := getSecret(apiv2.UserOperator)
 	if err != nil {
-		return "", nil, errors.Wrapf(err, "get %s password", v2.USERS_SECRET_KEY_OPERATOR)
+		return "", nil, errors.Wrapf(err, "get %s password", apiv2.UserOperator)
 	}
 
 	for _, peer := range peers.List() {
-		db, err := replicator.NewReplicator("operator", operatorPass, peer, mysqlAdminPort)
+		db, err := replicator.NewReplicator("operator", operatorPass, peer, mysql.DefaultAdminPort)
 		if err != nil {
 			return "", nil, errors.Wrapf(err, "connect to %s", peer)
 		}
@@ -238,13 +236,16 @@ func getTopology(peers sets.String) (string, []string, error) {
 func selectDonor(fqdn, primary string, replicas []string) (string, error) {
 	donor := ""
 
-	operatorPass, err := getSecret(v2.USERS_SECRET_KEY_OPERATOR)
+	operatorPass, err := getSecret(apiv2.UserOperator)
 	if err != nil {
-		return "", errors.Wrapf(err, "get %s password", v2.USERS_SECRET_KEY_OPERATOR)
+		return "", errors.Wrapf(err, "get %s password", apiv2.UserOperator)
 	}
 
 	for _, replica := range replicas {
-		db, err := replicator.NewReplicator("operator", operatorPass, replica, mysqlAdminPort)
+		db, err := replicator.NewReplicator(apiv2.UserOperator,
+			operatorPass,
+			replica,
+			mysql.DefaultAdminPort)
 		if err != nil {
 			continue
 		}

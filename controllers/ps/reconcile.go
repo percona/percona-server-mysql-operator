@@ -1,4 +1,4 @@
-package psmdb
+package ps
 
 import (
 	"context"
@@ -9,19 +9,23 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
+	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 )
 
@@ -66,7 +70,7 @@ func (c *ctrl) Reconcile(ctx context.Context, nn types.NamespacedName) error {
 }
 
 func (c *ctrl) loadCR(ctx context.Context, nn types.NamespacedName) (*apiv2.PerconaServerForMySQL, error) {
-	o, err := k8s.GetObject(ctx, c.client, nn, &apiv2.PerconaServerForMySQL{})
+	o, err := k8s.GetObjectWithDefaults(ctx, c.client, nn, &apiv2.PerconaServerForMySQL{})
 	return o.(*apiv2.PerconaServerForMySQL), err
 }
 
@@ -94,15 +98,15 @@ func (c *ctrl) reconcileUserSecrets(ctx context.Context, cr *apiv2.PerconaServer
 	return nil
 }
 
-var secretUsers = [...]string{
-	apiv2.USERS_SECRET_KEY_ROOT,
-	apiv2.USERS_SECRET_KEY_XTRABACKUP,
-	apiv2.USERS_SECRET_KEY_MONITOR,
-	apiv2.USERS_SECRET_KEY_CLUSTERCHECK,
-	apiv2.USERS_SECRET_KEY_PROXYADMIN,
-	apiv2.USERS_SECRET_KEY_OPERATOR,
-	apiv2.USERS_SECRET_KEY_REPLICATION,
-	apiv2.USERS_SECRET_KEY_ORCHESTRATOR,
+var secretUsers = [...]apiv2.SystemUser{
+	apiv2.UserRoot,
+	apiv2.UserXtraBackup,
+	apiv2.UserMonitor,
+	apiv2.UserClusterCheck,
+	apiv2.UserProxyAdmin,
+	apiv2.UserOperator,
+	apiv2.UserReplication,
+	apiv2.UserOrchestrator,
 }
 
 func generatePasswordsSecret(name, namespace string) (*corev1.Secret, error) {
@@ -112,7 +116,7 @@ func generatePasswordsSecret(name, namespace string) (*corev1.Secret, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "create %s user password", user)
 		}
-		data[user] = pass
+		data[string(user)] = pass
 	}
 
 	secret := &corev1.Secret{
@@ -200,7 +204,7 @@ func ensureObject(
 	s *runtime.Scheme,
 	create createObjectFn,
 ) error {
-	if err := k8s.SetControllerReference(cr, o, s); err != nil {
+	if err := controllerutil.SetControllerReference(cr, o, s); err != nil {
 		return errors.Wrapf(err, "set controller reference to %s/%s",
 			o.GetObjectKind().GroupVersionKind().Kind,
 			o.GetName())
@@ -260,10 +264,6 @@ func makeCreateWithAnnotation(cl k8s.APIGetCreateUpdater, log logr.Logger) creat
 		}
 		log = log.WithValues("hash", hash)
 
-		objAnnotations = objectMeta.GetAnnotations()
-		objAnnotations["percona.com/last-config-hash"] = hash
-		objectMeta.SetAnnotations(objAnnotations)
-
 		val := reflect.ValueOf(obj)
 		if val.Kind() == reflect.Ptr {
 			val = reflect.Indirect(val)
@@ -304,4 +304,93 @@ func makeCreateWithAnnotation(cl k8s.APIGetCreateUpdater, log logr.Logger) creat
 
 		return nil
 	}
+}
+
+func reconcileReplicationPrimaryPod(ctx context.Context, cl k8s.APIListUpdater, cr *apiv2.PerconaServerForMySQL) error {
+	pods, err := podsByLabels(ctx, cl, mysql.MatchLabels(cr))
+	if err != nil {
+		return errors.Wrap(err, "get MySQL pod list")
+	}
+
+	host := orchestrator.APIHost(orchestrator.ServiceName(cr))
+	primary, err := orchestrator.ClusterPrimary(ctx, host, cr.ClusterHint())
+	if err != nil {
+		return errors.Wrap(err, "get cluster from orchestrator")
+	}
+	primaryAlias := primary.Alias()
+
+	// TODO: handle error during pods update
+	grp, ctx := errgroup.WithContext(ctx)
+
+	for i := range pods {
+		pod := &pods[i]
+		grp.Go(func() error {
+			labels := pod.GetLabels()
+
+			if pod.Name == primaryAlias {
+				if labels[apiv2.MySQLPrimaryLabel] == "true" {
+					return nil
+				}
+
+				k8s.AddLabel(pod, apiv2.MySQLPrimaryLabel, "true")
+			} else {
+				if _, ok := labels[apiv2.MySQLPrimaryLabel]; !ok {
+					return nil
+				}
+
+				k8s.RemoveLabel(pod, apiv2.MySQLPrimaryLabel)
+			}
+
+			return errors.Wrap(cl.Update(ctx, pod), "update primary pod")
+		})
+	}
+
+	return grp.Wait()
+}
+
+func reconcileReplicationSemiSync(ctx context.Context, rdr client.Reader, cr *apiv2.PerconaServerForMySQL) error {
+	host := orchestrator.APIHost(orchestrator.ServiceName(cr))
+	primary, err := orchestrator.ClusterPrimary(ctx, host, cr.ClusterHint())
+	if err != nil {
+		return errors.Wrap(err, "get primary from orchestrator")
+	}
+
+	operatorPass, err := k8s.UserPassword(ctx, rdr, cr, apiv2.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+
+	db, err := replicator.NewReplicator(apiv2.UserOperator,
+		operatorPass,
+		primary.Hostname(),
+		mysql.DefaultAdminPort)
+	if err != nil {
+		return errors.Wrapf(err, "connect to %s", primary.Hostname())
+	}
+	defer db.Close()
+
+	if err := db.SetSemiSyncSource(cr.MySQLSpec().SizeSemiSync > 0); err != nil {
+		return errors.Wrapf(err, "set semi-sync on %s", primary.Hostname())
+	}
+
+	if cr.Spec.MySQL.SizeSemiSync < 1 {
+		return nil
+	}
+
+	if err := db.SetSemiSyncSize(cr.MySQLSpec().SizeSemiSync); err != nil {
+		return errors.Wrapf(err, "set semi-sync size on %s", primary.Hostname())
+	}
+
+	return nil
+}
+
+func podsByLabels(ctx context.Context, cl k8s.APIList, l map[string]string) ([]corev1.Pod, error) {
+	podList := &corev1.PodList{}
+
+	opts := &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)}
+	if err := cl.List(ctx, podList, opts); err != nil {
+		return nil, err
+	}
+
+	return podList.Items, nil
 }

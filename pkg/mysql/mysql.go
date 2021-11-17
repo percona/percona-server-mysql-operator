@@ -22,7 +22,10 @@ const (
 	tlsMountPath    = "/etc/mysql/mysql-tls-secret"
 )
 
-const mysqlPort = 3306
+const (
+	DefaultPort      = 3306
+	DefaultAdminPort = 33062
+)
 
 func Name(cr *v2.PerconaServerForMySQL) string {
 	return cr.Name + "-" + componentName
@@ -41,14 +44,14 @@ func podSpec(cr *v2.PerconaServerForMySQL) *v2.MySQLSpec {
 }
 
 func MatchLabels(cr *v2.PerconaServerForMySQL) map[string]string {
-	return util.SSMapMerge(podSpec(cr).Labels,
+	return util.SSMapMerge(cr.MySQLSpec().Labels,
 		map[string]string{v2.ComponentLabel: componentName},
 		cr.Labels())
 }
 
 func StatefulSet(cr *v2.PerconaServerForMySQL, initImage string) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
-	spec := podSpec(cr)
+	spec := cr.MySQLSpec()
 	Replicas := spec.Size
 
 	return &appsv1.StatefulSet{
@@ -148,7 +151,7 @@ func Service(cr *v2.PerconaServerForMySQL) *corev1.Service {
 			Ports: []corev1.ServicePort{
 				{
 					Name: "mysql",
-					Port: int32(mysqlPort),
+					Port: DefaultPort,
 				},
 			},
 			Selector:                 labels,
@@ -176,7 +179,7 @@ func PrimaryService(cr *v2.PerconaServerForMySQL) *corev1.Service {
 			Ports: []corev1.ServicePort{
 				{
 					Name: "mysql",
-					Port: int32(mysqlPort),
+					Port: DefaultPort,
 				},
 			},
 			Selector: selector,
@@ -185,7 +188,7 @@ func PrimaryService(cr *v2.PerconaServerForMySQL) *corev1.Service {
 }
 
 func mysqldContainer(cr *v2.PerconaServerForMySQL) corev1.Container {
-	spec := podSpec(cr)
+	spec := cr.MySQLSpec()
 
 	return corev1.Container{
 		Name:            componentName,
@@ -204,7 +207,7 @@ func mysqldContainer(cr *v2.PerconaServerForMySQL) corev1.Container {
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "mysql",
-				ContainerPort: int32(mysqlPort),
+				ContainerPort: DefaultPort,
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
@@ -242,7 +245,7 @@ func mysqldContainer(cr *v2.PerconaServerForMySQL) corev1.Container {
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt(3306),
+					Port: intstr.FromInt(DefaultPort),
 				},
 			},
 			InitialDelaySeconds:           spec.ReadinessProbe.InitialDelaySeconds,

@@ -7,7 +7,6 @@ import (
 
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 	"github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -17,24 +16,6 @@ import (
 
 const WatchNamespaceEnvVar = "WATCH_NAMESPACE"
 
-// Probe is a k8s helper to create Probe object
-func Probe(pb *corev1.Probe, cmd ...string) *corev1.Probe {
-	pb.Exec = &corev1.ExecAction{
-		Command: cmd,
-	}
-	return pb
-}
-
-// SecretKeySelector is a k8s helper to create SecretKeySelector object
-func SecretKeySelector(name, key string) *corev1.SecretKeySelector {
-	return &corev1.SecretKeySelector{
-		LocalObjectReference: corev1.LocalObjectReference{
-			Name: name,
-		},
-		Key: key,
-	}
-}
-
 // GetWatchNamespace returns the namespace the operator should be watching for changes
 func GetWatchNamespace() (string, error) {
 	ns, found := os.LookupEnv(WatchNamespaceEnvVar)
@@ -42,21 +23,6 @@ func GetWatchNamespace() (string, error) {
 		return "", fmt.Errorf("%s must be set", WatchNamespaceEnvVar)
 	}
 	return ns, nil
-}
-
-func compareMaps(x, y map[string]string) bool {
-	if len(x) != len(y) {
-		return false
-	}
-
-	for k, v := range x {
-		yVal, ok := y[k]
-		if !ok || yVal != v {
-			return false
-		}
-	}
-
-	return true
 }
 
 func IsObjectMetaEqual(old, new metav1.Object) bool {
@@ -80,7 +46,7 @@ type Checker interface {
 	CheckNSetDefaults() error
 }
 
-func GetObject(ctx context.Context, get APIGetter, nn types.NamespacedName, o client.Object) (client.Object, error) {
+func GetObjectWithDefaults(ctx context.Context, get APIGetter, nn types.NamespacedName, o client.Object) (client.Object, error) {
 	if err := get.Get(ctx, nn, o); err != nil {
 		return nil, err
 	}
@@ -95,8 +61,7 @@ func GetObject(ctx context.Context, get APIGetter, nn types.NamespacedName, o cl
 }
 
 func ObjectExists(ctx context.Context, get APIGetter, nn types.NamespacedName, o client.Object) (bool, error) {
-	err := get.Get(ctx, nn, o)
-	if err != nil {
+	if err := get.Get(ctx, nn, o); err != nil {
 		if k8serrors.IsNotFound(err) {
 			return false, nil
 		}
@@ -104,5 +69,5 @@ func ObjectExists(ctx context.Context, get APIGetter, nn types.NamespacedName, o
 		return false, err
 	}
 
-	return true, err
+	return true, nil
 }

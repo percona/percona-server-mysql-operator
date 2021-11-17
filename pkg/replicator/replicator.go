@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	_ "github.com/go-sql-driver/mysql"
-	v2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
 	"github.com/pkg/errors"
 )
 
@@ -34,8 +34,9 @@ type Replicator interface {
 
 type dbImpl struct{ db *sql.DB }
 
-func NewReplicator(user, pass, host string, port int32) (Replicator, error) {
-	connStr := fmt.Sprintf("%s:%s@tcp(%s:%d)/performance_schema?interpolateParams=true", user, pass, host, port)
+func NewReplicator(user apiv2.SystemUser, pass, host string, port int32) (Replicator, error) {
+	connStr := fmt.Sprintf("%s:%s@tcp(%s:%d)/performance_schema?interpolateParams=true",
+		user, pass, host, port)
 	db, err := sql.Open("mysql", connStr)
 	if err != nil {
 		return nil, errors.Wrap(err, "connect to MySQL")
@@ -61,7 +62,7 @@ func (d *dbImpl) StartReplication(host, replicaPass string, port int32) error {
                 SOURCE_AUTO_POSITION=1,
                 SOURCE_RETRY_COUNT=3,
                 SOURCE_CONNECT_RETRY=60
-        `, v2.USERS_SECRET_KEY_REPLICATION, replicaPass, host, port)
+        `, apiv2.UserReplication, replicaPass, host, port)
 	if err != nil {
 		return errors.Wrap(err, "change replication source to")
 	}

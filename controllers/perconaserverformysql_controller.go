@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	psv2 "github.com/percona/percona-server-mysql-operator/api/v2"
-	rec "github.com/percona/percona-server-mysql-operator/controllers/psmdb"
+	rec "github.com/percona/percona-server-mysql-operator/controllers/ps"
 )
 
 // PerconaServerForMYSQLReconciler reconciles a PerconaServerForMYSQL object

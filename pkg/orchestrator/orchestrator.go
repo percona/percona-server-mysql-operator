@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 
 	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
-	v2 "github.com/percona/percona-server-mysql-operator/api/v2"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
@@ -42,13 +41,9 @@ func APIHost(serviceName string) string {
 	return fmt.Sprintf("http://%s:%d", serviceName, defaultWebPort)
 }
 
-func podSpec(cr *apiv2.PerconaServerForMySQL) *v2.PodSpec {
-	return &cr.Spec.Orchestrator
-}
-
 // Labels returns labels of orchestrator
 func Labels(cr *apiv2.PerconaServerForMySQL) map[string]string {
-	return podSpec(cr).Labels
+	return cr.OrchestratorSpec().Labels
 }
 
 func MatchLabels(cr *apiv2.PerconaServerForMySQL) map[string]string {
@@ -137,11 +132,11 @@ func container(cr *apiv2.PerconaServerForMySQL) corev1.Container {
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "web",
-				ContainerPort: int32(defaultWebPort),
+				ContainerPort: defaultWebPort,
 			},
 			{
 				Name:          "raft",
-				ContainerPort: int32(defaultRaftPort),
+				ContainerPort: defaultRaftPort,
 			},
 		},
 		VolumeMounts:             containerMounts(),
@@ -155,11 +150,11 @@ func container(cr *apiv2.PerconaServerForMySQL) corev1.Container {
 					Port: intstr.FromString("web"),
 				},
 			},
-			InitialDelaySeconds: int32(10),
-			TimeoutSeconds:      int32(3),
-			PeriodSeconds:       int32(5),
-			FailureThreshold:    int32(3),
-			SuccessThreshold:    int32(1),
+			InitialDelaySeconds: 10,
+			TimeoutSeconds:      3,
+			PeriodSeconds:       5,
+			FailureThreshold:    3,
+			SuccessThreshold:    1,
 		},
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
@@ -168,11 +163,11 @@ func container(cr *apiv2.PerconaServerForMySQL) corev1.Container {
 					Port: intstr.FromString("web"),
 				},
 			},
-			InitialDelaySeconds: int32(30),
-			TimeoutSeconds:      int32(3),
-			PeriodSeconds:       int32(5),
-			FailureThreshold:    int32(3),
-			SuccessThreshold:    int32(1),
+			InitialDelaySeconds: 30,
+			TimeoutSeconds:      3,
+			PeriodSeconds:       5,
+			FailureThreshold:    3,
+			SuccessThreshold:    1,
 		},
 	}
 }
@@ -220,8 +215,8 @@ func containerMounts() []corev1.VolumeMount {
 		},
 		{
 			Name:      credsVolumeName,
-			MountPath: filepath.Join(CredsMountPath, apiv2.USERS_SECRET_KEY_ORCHESTRATOR),
-			SubPath:   apiv2.USERS_SECRET_KEY_ORCHESTRATOR,
+			MountPath: filepath.Join(CredsMountPath, string(apiv2.UserOrchestrator)),
+			SubPath:   string(apiv2.UserOrchestrator),
 		},
 	}
 }
@@ -242,11 +237,11 @@ func Service(cr *apiv2.PerconaServerForMySQL) *corev1.Service {
 			Ports: []corev1.ServicePort{
 				{
 					Name: "web",
-					Port: int32(defaultWebPort),
+					Port: defaultWebPort,
 				},
 				{
 					Name: "raft",
-					Port: int32(defaultRaftPort),
+					Port: defaultRaftPort,
 				},
 			},
 			Selector:                 MatchLabels(cr),
