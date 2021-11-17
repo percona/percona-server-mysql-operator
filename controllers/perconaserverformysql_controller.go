@@ -23,9 +23,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	psv2 "github.com/percona/percona-server-mysql-operator/api/v2"
-	rec "github.com/percona/percona-server-mysql-operator/pkg/reconcile"
+	rec "github.com/percona/percona-server-mysql-operator/controllers/psmdb"
 )
 
 // PerconaServerForMYSQLReconciler reconciles a PerconaServerForMYSQL object
@@ -52,7 +53,12 @@ type PerconaServerForMySQLReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.9.2/pkg/reconcile
 func (r *PerconaServerForMySQLReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	err := rec.NewReconciler(r.Client, nil).Reconcile(ctx, req.NamespacedName)
+	nn := req.NamespacedName
+	l := log.FromContext(ctx).
+		WithName("PerconaServerForMySQL").
+		WithValues("name", nn.Name, "namespace", nn.Namespace)
+
+	err := rec.NewReconciler(r.Client, l).Reconcile(ctx, nn)
 	if err != nil {
 	}
 

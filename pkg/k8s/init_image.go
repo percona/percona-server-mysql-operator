@@ -9,36 +9,10 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func Namespace() (string, error) {
-	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-	if err != nil {
-		return "", err
-	}
-
-	return strings.TrimSpace(string(nsBytes)), nil
-}
-
-func operatorPod(ctx context.Context, rdr client.Reader) (*corev1.Pod, error) {
-	pod := &corev1.Pod{}
-
-	ns, err := Namespace()
-	if err != nil {
-		return nil, errors.Wrap(err, "get namespace")
-	}
-
-	nn := types.NamespacedName{Namespace: ns, Name: os.Getenv("HOSTNAME")}
-	if err := rdr.Get(ctx, nn, pod); err != nil {
-		return nil, err
-	}
-
-	return pod, nil
-}
-
-func InitImage(ctx context.Context, rdr client.Reader) (string, error) {
-	pod, err := operatorPod(ctx, rdr)
+func InitImage(ctx context.Context, get APIGetter) (string, error) {
+	pod, err := operatorPod(ctx, get)
 	if err != nil {
 		return "", errors.Wrap(err, "get operator pod")
 	}
@@ -50,4 +24,31 @@ func InitImage(ctx context.Context, rdr client.Reader) (string, error) {
 	}
 
 	return "", errors.New("manager container not found")
+}
+
+func operatorPod(ctx context.Context, get APIGetter) (*corev1.Pod, error) {
+	ns, err := DefaultAPINamespace()
+	if err != nil {
+		return nil, errors.Wrap(err, "get namespace")
+	}
+
+	pod := &corev1.Pod{}
+	nn := types.NamespacedName{
+		Namespace: ns,
+		Name:      os.Getenv("HOSTNAME"),
+	}
+	if err := get.Get(ctx, nn, pod); err != nil {
+		return nil, err
+	}
+
+	return pod, nil
+}
+
+func DefaultAPINamespace() (string, error) {
+	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(nsBytes)), nil
 }

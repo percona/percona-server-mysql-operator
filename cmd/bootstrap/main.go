@@ -151,7 +151,7 @@ func getFQDN(svcName string) (string, error) {
 		return "", errors.Wrap(err, "get hostname")
 	}
 
-	namespace, err := k8s.Namespace()
+	namespace, err := k8s.DefaultAPINamespace()
 	if err != nil {
 		return "", errors.Wrap(err, "get namespace")
 	}

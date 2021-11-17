@@ -7,15 +7,15 @@ import (
 	v2 "github.com/percona/percona-server-mysql-operator/api/v2"
 )
 
-func PVC(name string, vspec *v2.VolumeSpec) corev1.PersistentVolumeClaim {
+func PVC(name string, spec *v2.VolumeSpec) corev1.PersistentVolumeClaim {
 	return corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
-			StorageClassName: vspec.PersistentVolumeClaim.StorageClassName,
-			AccessModes:      vspec.PersistentVolumeClaim.AccessModes,
-			Resources:        vspec.PersistentVolumeClaim.Resources,
+			StorageClassName: spec.PersistentVolumeClaim.StorageClassName,
+			AccessModes:      spec.PersistentVolumeClaim.AccessModes,
+			Resources:        spec.PersistentVolumeClaim.Resources,
 		},
 	}
 }

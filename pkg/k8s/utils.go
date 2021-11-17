@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const WatchNamespaceEnvVar = "WATCH_NAMESPACE"
@@ -24,11 +27,12 @@ func Probe(pb *corev1.Probe, cmd ...string) *corev1.Probe {
 
 // SecretKeySelector is a k8s helper to create SecretKeySelector object
 func SecretKeySelector(name, key string) *corev1.SecretKeySelector {
-	evs := &corev1.SecretKeySelector{}
-	evs.Name = name
-	evs.Key = key
-
-	return evs
+	return &corev1.SecretKeySelector{
+		LocalObjectReference: corev1.LocalObjectReference{
+			Name: name,
+		},
+		Key: key,
+	}
 }
 
 // GetWatchNamespace returns the namespace the operator should be watching for changes
@@ -56,25 +60,14 @@ func compareMaps(x, y map[string]string) bool {
 }
 
 func IsObjectMetaEqual(old, new metav1.Object) bool {
-	return compareMaps(old.GetAnnotations(), new.GetAnnotations()) &&
-		compareMaps(old.GetLabels(), new.GetLabels())
-}
-
-func IsLabelsEqual(old, new map[string]string) bool {
-	return compareMaps(old, new)
-}
-
-// CloneLabels returns clone of the provided labels.
-func CloneLabels(src map[string]string) map[string]string {
-	clone := make(map[string]string)
-	for k, v := range src {
-		clone[k] = v
-	}
-	return clone
+	return util.SSMapEqual(old.GetAnnotations(), new.GetAnnotations()) &&
+		util.SSMapEqual(old.GetLabels(), new.GetLabels())
 }
 
 func RemoveLabel(obj client.Object, key string) {
+	labels := obj.GetLabels()
 	delete(obj.GetLabels(), key)
+	obj.SetLabels(labels)
 }
 
 func AddLabel(obj client.Object, key, value string) {
@@ -87,8 +80,8 @@ type Checker interface {
 	CheckNSetDefaults() error
 }
 
-func GetObject(ctx context.Context, cl client.Reader, nn types.NamespacedName, o client.Object) (client.Object, error) {
-	if err := cl.Get(ctx, nn, o); err != nil {
+func GetObject(ctx context.Context, get APIGetter, nn types.NamespacedName, o client.Object) (client.Object, error) {
+	if err := get.Get(ctx, nn, o); err != nil {
 		return nil, err
 	}
 
@@ -99,4 +92,17 @@ func GetObject(ctx context.Context, cl client.Reader, nn types.NamespacedName, o
 	}
 
 	return o, nil
+}
+
+func ObjectExists(ctx context.Context, get APIGetter, nn types.NamespacedName, o client.Object) (bool, error) {
+	err := get.Get(ctx, nn, o)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	return true, err
 }

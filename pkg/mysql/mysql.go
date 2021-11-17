@@ -28,10 +28,6 @@ func Name(cr *v2.PerconaServerForMySQL) string {
 	return cr.Name + "-" + componentName
 }
 
-func Namespace(cr *v2.PerconaServerForMySQL) string {
-	return cr.Namespace
-}
-
 func ServiceName(cr *v2.PerconaServerForMySQL) string {
 	return Name(cr)
 }
@@ -40,20 +36,20 @@ func PrimaryServiceName(cr *v2.PerconaServerForMySQL) string {
 	return Name(cr) + "-primary"
 }
 
-// func IsMySQL(obj client.Object) bool {
-// 	labels := obj.GetLabels()
-// 	return labels[v2.ComponentLabel] == componentName
-// }
+func podSpec(cr *v2.PerconaServerForMySQL) *v2.MySQLSpec {
+	return &cr.Spec.MySQL
+}
 
 func MatchLabels(cr *v2.PerconaServerForMySQL) map[string]string {
-	return util.MergeSSMap(cr.Spec.MySQL.Labels,
+	return util.SSMapMerge(podSpec(cr).Labels,
 		map[string]string{v2.ComponentLabel: componentName},
 		cr.Labels())
 }
 
 func StatefulSet(cr *v2.PerconaServerForMySQL, initImage string) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
-	Replicas := cr.Spec.MySQL.Size
+	spec := podSpec(cr)
+	Replicas := spec.Size
 
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
@@ -62,7 +58,7 @@ func StatefulSet(cr *v2.PerconaServerForMySQL, initImage string) *appsv1.Statefu
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      Name(cr),
-			Namespace: Namespace(cr),
+			Namespace: k8s.Namespace(cr),
 			Labels:    labels,
 		},
 		Spec: appsv1.StatefulSetSpec{
@@ -72,7 +68,7 @@ func StatefulSet(cr *v2.PerconaServerForMySQL, initImage string) *appsv1.Statefu
 			},
 			ServiceName: ServiceName(cr),
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				k8s.PVC(dataVolumeName, cr.Spec.MySQL.VolumeSpec),
+				k8s.PVC(dataVolumeName, spec.VolumeSpec),
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
@@ -83,7 +79,7 @@ func StatefulSet(cr *v2.PerconaServerForMySQL, initImage string) *appsv1.Statefu
 						{
 							Name:            componentName + "-init",
 							Image:           initImage,
-							ImagePullPolicy: cr.Spec.MySQL.ImagePullPolicy,
+							ImagePullPolicy: spec.ImagePullPolicy,
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      dataVolumeName,
@@ -101,7 +97,7 @@ func StatefulSet(cr *v2.PerconaServerForMySQL, initImage string) *appsv1.Statefu
 							Command:                  []string{"/ps-init-entrypoint.sh"},
 							TerminationMessagePath:   "/dev/termination-log",
 							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-							SecurityContext:          cr.Spec.MySQL.ContainerSecurityContext,
+							SecurityContext:          spec.ContainerSecurityContext,
 						},
 					},
 					Containers: []corev1.Container{mysqldContainer(cr)},
@@ -122,12 +118,12 @@ func StatefulSet(cr *v2.PerconaServerForMySQL, initImage string) *appsv1.Statefu
 							Name: tlsVolumeName,
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: cr.Spec.MySQL.SSLSecretName,
+									SecretName: spec.SSLSecretName,
 								},
 							},
 						},
 					},
-					SecurityContext: cr.Spec.MySQL.PodSecurityContext,
+					SecurityContext: spec.PodSecurityContext,
 				},
 			},
 		},
@@ -144,7 +140,7 @@ func Service(cr *v2.PerconaServerForMySQL) *corev1.Service {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ServiceName(cr),
-			Namespace: Namespace(cr),
+			Namespace: k8s.Namespace(cr),
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
@@ -163,7 +159,7 @@ func Service(cr *v2.PerconaServerForMySQL) *corev1.Service {
 
 func PrimaryService(cr *v2.PerconaServerForMySQL) *corev1.Service {
 	labels := MatchLabels(cr)
-	selector := util.CopySSMap(labels)
+	selector := util.SSMapCopy(labels)
 	selector[v2.MySQLPrimaryLabel] = "true"
 
 	return &corev1.Service{
@@ -173,7 +169,7 @@ func PrimaryService(cr *v2.PerconaServerForMySQL) *corev1.Service {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PrimaryServiceName(cr),
-			Namespace: Namespace(cr),
+			Namespace: k8s.Namespace(cr),
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
@@ -189,10 +185,12 @@ func PrimaryService(cr *v2.PerconaServerForMySQL) *corev1.Service {
 }
 
 func mysqldContainer(cr *v2.PerconaServerForMySQL) corev1.Container {
+	spec := podSpec(cr)
+
 	return corev1.Container{
 		Name:            componentName,
-		Image:           cr.Spec.MySQL.Image,
-		ImagePullPolicy: cr.Spec.MySQL.ImagePullPolicy,
+		Image:           spec.Image,
+		ImagePullPolicy: spec.ImagePullPolicy,
 		Env: []corev1.EnvVar{
 			{
 				Name:  "SERVICE_NAME",
@@ -227,19 +225,19 @@ func mysqldContainer(cr *v2.PerconaServerForMySQL) corev1.Container {
 		Args:                     []string{"mysqld"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		SecurityContext:          cr.Spec.MySQL.ContainerSecurityContext,
+		SecurityContext:          spec.ContainerSecurityContext,
 		StartupProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				Exec: &corev1.ExecAction{
 					Command: []string{"/var/lib/mysql/bootstrap"},
 				},
 			},
-			InitialDelaySeconds:           cr.Spec.MySQL.StartupProbe.InitialDelaySeconds,
-			TimeoutSeconds:                cr.Spec.MySQL.StartupProbe.TimeoutSeconds,
-			PeriodSeconds:                 cr.Spec.MySQL.StartupProbe.PeriodSeconds,
-			FailureThreshold:              cr.Spec.MySQL.StartupProbe.FailureThreshold,
-			SuccessThreshold:              cr.Spec.MySQL.StartupProbe.SuccessThreshold,
-			TerminationGracePeriodSeconds: cr.Spec.MySQL.StartupProbe.TerminationGracePeriodSeconds,
+			InitialDelaySeconds:           spec.StartupProbe.InitialDelaySeconds,
+			TimeoutSeconds:                spec.StartupProbe.TimeoutSeconds,
+			PeriodSeconds:                 spec.StartupProbe.PeriodSeconds,
+			FailureThreshold:              spec.StartupProbe.FailureThreshold,
+			SuccessThreshold:              spec.StartupProbe.SuccessThreshold,
+			TerminationGracePeriodSeconds: spec.StartupProbe.TerminationGracePeriodSeconds,
 		},
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
@@ -247,12 +245,12 @@ func mysqldContainer(cr *v2.PerconaServerForMySQL) corev1.Container {
 					Port: intstr.FromInt(3306),
 				},
 			},
-			InitialDelaySeconds:           cr.Spec.MySQL.ReadinessProbe.InitialDelaySeconds,
-			TimeoutSeconds:                cr.Spec.MySQL.ReadinessProbe.TimeoutSeconds,
-			PeriodSeconds:                 cr.Spec.MySQL.ReadinessProbe.PeriodSeconds,
-			FailureThreshold:              cr.Spec.MySQL.ReadinessProbe.FailureThreshold,
-			SuccessThreshold:              cr.Spec.MySQL.ReadinessProbe.SuccessThreshold,
-			TerminationGracePeriodSeconds: cr.Spec.MySQL.ReadinessProbe.TerminationGracePeriodSeconds,
+			InitialDelaySeconds:           spec.ReadinessProbe.InitialDelaySeconds,
+			TimeoutSeconds:                spec.ReadinessProbe.TimeoutSeconds,
+			PeriodSeconds:                 spec.ReadinessProbe.PeriodSeconds,
+			FailureThreshold:              spec.ReadinessProbe.FailureThreshold,
+			SuccessThreshold:              spec.ReadinessProbe.SuccessThreshold,
+			TerminationGracePeriodSeconds: spec.ReadinessProbe.TerminationGracePeriodSeconds,
 		},
 	}
 }

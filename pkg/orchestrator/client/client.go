@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -18,7 +19,7 @@ type instanceKey struct {
 	Port     int32
 }
 
-type instance struct {
+type clusterImpl struct {
 	Key           instanceKey
 	InstanceAlias string
 
@@ -26,64 +27,61 @@ type instance struct {
 	Replicas  []instanceKey
 }
 
-// TODO: Multiple clusters?
-type clusters []instance
+type Cluster interface {
+	Hostname() string
+	Alias() string
+}
 
-func (c *clusters) Primary() (*instance, error) {
-	for _, inst := range *c {
-		if inst.MasterKey.Hostname == "" {
-			return &inst, nil
+func (i clusterImpl) Hostname() string {
+	return i.Key.Hostname
+}
+
+func (i clusterImpl) Alias() string {
+	return i.InstanceAlias
+}
+
+func Primary(clusters []Cluster) Cluster {
+	for _, c := range clusters {
+		if impl, ok := c.(*clusterImpl); ok && impl.MasterKey.Hostname == "" {
+			return impl
 		}
 	}
 
-	return nil, errors.New("no primary")
+	return nil
 }
 
-func (c *clusters) Replicas() ([]instanceKey, error) {
-	for _, inst := range *c {
-		if inst.MasterKey.Hostname == "" {
-			continue
-		}
-
-		return inst.Replicas, nil
+func Replicas(clusters []Cluster) []instanceKey {
+	c, ok := Primary(clusters).(*clusterImpl)
+	if !ok {
+		return nil
 	}
 
-	return nil, errors.New("no primary")
+	return c.Replicas
 }
 
-func New(host string) *orcClient {
-	return &orcClient{
-		host:   host,
-		client: &http.Client{Timeout: 5 * time.Second},
-	}
+func ClusterPrimary(ctx context.Context, host, clusterHint string) (Cluster, error) {
+	var primary *clusterImpl
+	return primary, doRequest(ctx, host+"/api/master/"+clusterHint, primary)
 }
 
-func (o *orcClient) ClusterPrimary(clusterHint string) (*instance, error) {
-	resp, err := o.client.Get(o.host + "/api/master/" + clusterHint)
+func ClusterReplicas(ctx context.Context, host, clusterHint string) ([]Cluster, error) {
+	var c []Cluster
+	return c, doRequest(ctx, host+"/api/cluster/"+clusterHint, c)
+}
+
+func doRequest(ctx context.Context, url string, o interface{}) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	res, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "make request")
+		return errors.Wrap(err, "request")
 	}
-	defer resp.Body.Close()
+	res.Body.Close()
 
-	var primary instance
-	if err := json.NewDecoder(resp.Body).Decode(&primary); err != nil {
-		return nil, errors.Wrap(err, "json decode")
-	}
-
-	return &primary, nil
-}
-
-func (o *orcClient) Cluster(clusterHint string) (clusters, error) {
-	res, err := o.client.Get(o.host + "/api/cluster/" + clusterHint)
-	if err != nil {
-		return nil, errors.Wrap(err, "request")
-	}
-	defer res.Body.Close()
-
-	var c clusters
-	if err := json.NewDecoder(res.Body).Decode(&c); err != nil {
-		return nil, errors.Wrap(err, "decode")
+	if err := json.NewDecoder(res.Body).Decode(o); err != nil {
+		return errors.Wrap(err, "json decode")
 	}
 
-	return c, nil
+	return nil
 }

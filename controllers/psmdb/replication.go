@@ -1,4 +1,4 @@
-package reconcile
+package psmdb
 
 import (
 	"context"
@@ -14,41 +14,36 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	orclient "github.com/percona/percona-server-mysql-operator/pkg/orchestrator/client"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
-type clientReadWriter interface {
-	client.Reader
-	client.Writer
-}
-
-func reconcileReplicationPrimaryPod(ctx context.Context, rw clientReadWriter, cr *v2.PerconaServerForMySQL) error {
-	orc := orclient.New(orchestrator.APIHost(cr))
-	clusterHint := cr.ClusterHint()
-
-	podList, err := podListByLabel(ctx, rw, mysql.MatchLabels(cr))
+func reconcileReplicationPrimaryPod(ctx context.Context, cl k8s.APIListUpdater, cr *v2.PerconaServerForMySQL) error {
+	podList, err := podListByLabel(ctx, cl, mysql.MatchLabels(cr))
 	if err != nil {
 		return errors.Wrap(err, "get MySQL pod list")
 	}
 
-	primary, err := orc.ClusterPrimary(clusterHint)
+	host := orchestrator.APIHost(orchestrator.ServiceName(cr))
+	primary, err := orclient.ClusterPrimary(ctx, host, cr.ClusterHint())
 	if err != nil {
 		return errors.Wrap(err, "get cluster from orchestrator")
 	}
 
 	for _, pod := range podList.Items {
-		oldLabels := k8s.CloneLabels(pod.GetLabels())
+		labels := pod.GetLabels()
+		oldLabels := util.SSMapCopy(labels)
 
-		if pod.Name == primary.InstanceAlias {
+		if pod.Name == primary.Alias() {
 			k8s.AddLabel(&pod, v2.MySQLPrimaryLabel, "true")
 		} else {
 			k8s.RemoveLabel(&pod, v2.MySQLPrimaryLabel)
 		}
 
-		if k8s.IsLabelsEqual(oldLabels, pod.GetLabels()) {
+		if util.SSMapEqual(oldLabels, labels) {
 			continue
 		}
 
-		if err := rw.Update(ctx, &pod); err != nil {
+		if err := cl.Update(ctx, &pod); err != nil {
 			return errors.Wrap(err, "update primary pod")
 		}
 	}
@@ -57,10 +52,8 @@ func reconcileReplicationPrimaryPod(ctx context.Context, rw clientReadWriter, cr
 }
 
 func reconcileReplicationSemiSync(ctx context.Context, rdr client.Reader, cr *v2.PerconaServerForMySQL) error {
-	orc := orclient.New(orchestrator.APIHost(cr))
-	clusterHint := cr.ClusterHint()
-
-	primary, err := orc.ClusterPrimary(clusterHint)
+	host := orchestrator.APIHost(orchestrator.ServiceName(cr))
+	primary, err := orclient.ClusterPrimary(ctx, host, cr.ClusterHint())
 	if err != nil {
 		return errors.Wrap(err, "get primary from orchestrator")
 	}
@@ -72,15 +65,15 @@ func reconcileReplicationSemiSync(ctx context.Context, rdr client.Reader, cr *v2
 
 	db, err := replicator.NewReplicator(v2.USERS_SECRET_KEY_OPERATOR,
 		operatorPass,
-		primary.Key.Hostname,
+		primary.Hostname(),
 		int32(33062))
 	if err != nil {
-		return errors.Wrapf(err, "connect to %s", primary.Key.Hostname)
+		return errors.Wrapf(err, "connect to %s", primary.Hostname())
 	}
 	defer db.Close()
 
 	if err := db.SetSemiSyncSource(cr.Spec.MySQL.SizeSemiSync > 0); err != nil {
-		return errors.Wrapf(err, "set semi-sync on %s", primary.Key.Hostname)
+		return errors.Wrapf(err, "set semi-sync on %s", primary.Hostname())
 	}
 
 	if cr.Spec.MySQL.SizeSemiSync < 1 {
@@ -88,14 +81,14 @@ func reconcileReplicationSemiSync(ctx context.Context, rdr client.Reader, cr *v2
 	}
 
 	if err := db.SetSemiSyncSize(cr.Spec.MySQL.SizeSemiSync); err != nil {
-		return errors.Wrapf(err, "set semi-sync size on %s", primary.Key.Hostname)
+		return errors.Wrapf(err, "set semi-sync size on %s", primary.Hostname())
 	}
 
 	return nil
 }
 
-func podListByLabel(ctx context.Context, rdr client.Reader, l map[string]string) (*corev1.PodList, error) {
+func podListByLabel(ctx context.Context, cl k8s.APIList, l map[string]string) (*corev1.PodList, error) {
 	podList := &corev1.PodList{}
-	err := rdr.List(ctx, podList, &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)})
+	err := cl.List(ctx, podList, &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)})
 	return podList, err
 }

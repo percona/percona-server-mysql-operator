@@ -12,7 +12,10 @@ import (
 )
 
 func UserPassword(ctx context.Context, rdr client.Reader, cr *v2.PerconaServerForMySQL, username string) (string, error) {
-	nn := types.NamespacedName{Name: cr.Spec.SecretsName, Namespace: cr.Namespace}
+	nn := types.NamespacedName{
+		Name:      cr.Spec.SecretsName,
+		Namespace: cr.Namespace,
+	}
 	secret := &corev1.Secret{}
 	if err := rdr.Get(ctx, nn, secret); err != nil {
 		return "", errors.Wrapf(err, "get secret %s", cr.Spec.SecretsName)
