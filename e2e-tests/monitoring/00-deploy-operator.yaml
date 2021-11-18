@@ -8,4 +8,4 @@ commands:
 
     deploy_operator
 
-  timeout: 300
+  timeout: 30

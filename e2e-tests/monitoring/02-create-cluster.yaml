@@ -7,3 +7,5 @@ commands:
     set -o xtrace
 
     create_cluster
+
+  timeout: 30
