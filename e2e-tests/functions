@@ -3,6 +3,7 @@
 exec 5>&2
 BASH_XTRACEFD="5"
 
+TEST_NAME=$(basename $(pwd))
 GIT_COMMIT=$(git rev-parse HEAD)
 BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')}
@@ -17,6 +18,27 @@ date=$(which gdate || which date)
 tmp_dir=$(mktemp -d)
 src_dir=$(realpath ../../)
 
+deploy_operator() {
+    kubectl -n ${NAMESPACE} apply -f ${src_dir}/deploy/crd.yaml
+    kubectl -n ${NAMESPACE} apply -f ${src_dir}/deploy/rbac.yaml
+
+    yq eval \
+        $(printf 'select(documentIndex==1).spec.template.spec.containers[0].image="%s"' "${IMAGE}") \
+        ${src_dir}/deploy/operator.yaml \
+    | kubectl -n ${NAMESPACE} apply -f -
+
+    kubectl -n ${NAMESPACE} apply -f ${src_dir}/e2e-tests/conf/secrets.yaml
+    kubectl -n ${NAMESPACE} apply -f ${src_dir}/e2e-tests/conf/client.yaml
+}
+
+create_cluster() {
+    yq eval $(printf '.metadata.name="%s"' "${TEST_NAME}") ${src_dir}/deploy/cr.yaml \
+    | yq eval $(printf '.apiVersion="%s"' "${API}") - \
+    | yq eval $(printf '.spec.mysql.image="%s"' "${IMAGE_MYSQL}") - \
+    | yq eval $(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}") - \
+    | yq eval '.spec.crVersion="2.0.0"' - \
+    | kubectl -n ${NAMESPACE} apply -f -
+}
 
 run_mysql() {
         local command="$1"
