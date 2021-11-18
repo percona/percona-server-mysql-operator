@@ -19,74 +19,74 @@ tmp_dir=$(mktemp -d)
 src_dir=$(realpath ../../)
 
 deploy_operator() {
-    kubectl -n ${NAMESPACE} apply -f ${src_dir}/deploy/crd.yaml
-    kubectl -n ${NAMESPACE} apply -f ${src_dir}/deploy/rbac.yaml
+	kubectl -n ${NAMESPACE} apply -f ${src_dir}/deploy/crd.yaml
+	kubectl -n ${NAMESPACE} apply -f ${src_dir}/deploy/rbac.yaml
 
-    yq eval \
-        $(printf 'select(documentIndex==1).spec.template.spec.containers[0].image="%s"' "${IMAGE}") \
-        ${src_dir}/deploy/operator.yaml \
-    | kubectl -n ${NAMESPACE} apply -f -
+	yq eval \
+		$(printf 'select(documentIndex==1).spec.template.spec.containers[0].image="%s"' "${IMAGE}") \
+		${src_dir}/deploy/operator.yaml \
+		| kubectl -n ${NAMESPACE} apply -f -
 
-    kubectl -n ${NAMESPACE} apply -f ${src_dir}/e2e-tests/conf/secrets.yaml
-    kubectl -n ${NAMESPACE} apply -f ${src_dir}/e2e-tests/conf/client.yaml
+	kubectl -n ${NAMESPACE} apply -f ${src_dir}/e2e-tests/conf/secrets.yaml
+	kubectl -n ${NAMESPACE} apply -f ${src_dir}/e2e-tests/conf/client.yaml
 }
 
 create_cluster() {
-    yq eval $(printf '.metadata.name="%s"' "${TEST_NAME}") ${src_dir}/deploy/cr.yaml \
-    | yq eval $(printf '.apiVersion="%s"' "${API}") - \
-    | yq eval $(printf '.spec.mysql.image="%s"' "${IMAGE_MYSQL}") - \
-    | yq eval $(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}") - \
-    | yq eval '.spec.crVersion="2.0.0"' - \
-    | kubectl -n ${NAMESPACE} apply -f -
+	yq eval $(printf '.metadata.name="%s"' "${TEST_NAME}") ${src_dir}/deploy/cr.yaml \
+		| yq eval $(printf '.apiVersion="%s"' "${API}") - \
+		| yq eval $(printf '.spec.mysql.image="%s"' "${IMAGE_MYSQL}") - \
+		| yq eval $(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}") - \
+		| yq eval '.spec.crVersion="2.0.0"' - \
+		| kubectl -n ${NAMESPACE} apply -f -
 }
 
 run_mysql() {
-        local command="$1"
-        local uri="$2"
+	local command="$1"
+	local uri="$2"
 
-        kubectl -n ${NAMESPACE} exec mysql-client -- \
-                bash -c "printf '%s\n' \"${command}\" | mysql -sN $uri" 2>&1 \
-                | sed -e 's/mysql: //' \
-                | (grep -v 'Using a password on the command line interface can be insecure.' || :)
+	kubectl -n ${NAMESPACE} exec mysql-client -- \
+		bash -c "printf '%s\n' \"${command}\" | mysql -sN $uri" 2>&1 \
+		| sed -e 's/mysql: //' \
+		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
 }
 
 run_curl() {
-        local uri="$1"
-        kubectl -n ${NAMESPACE} exec mysql-client -- bash -c "curl -s -k ${uri}"
+	local uri="$1"
+	kubectl -n ${NAMESPACE} exec mysql-client -- bash -c "curl -s -k ${uri}"
 }
 
 get_cluster_name() {
-        kubectl -n ${NAMESPACE} get ps -o jsonpath='{.items[0].metadata.name}'
+	kubectl -n ${NAMESPACE} get ps -o jsonpath='{.items[0].metadata.name}'
 }
 
 get_mysql_primary_service() {
-        local cluster=$1
+	local cluster=$1
 
-        echo "${cluster}-mysql-primary"
+	echo "${cluster}-mysql-primary"
 }
 
 get_mysql_headless_fqdn() {
-        local cluster=$1
-        local index=$2
+	local cluster=$1
+	local index=$2
 
-        echo "${cluster}-mysql-${index}.${cluster}-mysql"
+	echo "${cluster}-mysql-${index}.${cluster}-mysql"
 }
 
 get_orc_headless_fqdn() {
-        local cluster=$1
-        local index=$2
+	local cluster=$1
+	local index=$2
 
-        echo "${cluster}-orc-${index}.${cluster}-orc"
+	echo "${cluster}-orc-${index}.${cluster}-orc"
 }
 
 get_metric_values() {
-        local metric=$1
-        local instance=$2
-        local user_pass=$3
-        local start=$($date -u "+%s" -d "-1 minute")
-        local end=$($date -u "+%s")
+	local metric=$1
+	local instance=$2
+	local user_pass=$3
+	local start=$($date -u "+%s" -d "-1 minute")
+	local end=$($date -u "+%s")
 
-        run_curl "https://${user_pass}@monitoring-service/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28$metric%7Bnode_name%3D%7E%22$instance%22%7d%20or%20$metric%7Bnode_name%3D%7E%22$instance%22%7D%29&start=$start&end=$end&step=60" \
-                | jq '.data.result[0].values[][1]' \
-                | grep '^"[0-9]'
+	run_curl "https://${user_pass}@monitoring-service/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28$metric%7Bnode_name%3D%7E%22$instance%22%7d%20or%20$metric%7Bnode_name%3D%7E%22$instance%22%7D%29&start=$start&end=$end&step=60" \
+		| jq '.data.result[0].values[][1]' \
+		| grep '^"[0-9]'
 }
