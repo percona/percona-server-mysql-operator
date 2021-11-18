@@ -7,7 +7,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -37,6 +36,10 @@ func ServiceName(cr *v2.PerconaServerForMySQL) string {
 
 func PrimaryServiceName(cr *v2.PerconaServerForMySQL) string {
 	return Name(cr) + "-primary"
+}
+
+func UnreadyServiceName(cr *v2.PerconaServerForMySQL) string {
+	return Name(cr) + "-unready"
 }
 
 func podSpec(cr *v2.PerconaServerForMySQL) *v2.MySQLSpec {
@@ -133,6 +136,33 @@ func StatefulSet(cr *v2.PerconaServerForMySQL, initImage string) *appsv1.Statefu
 	}
 }
 
+func UnreadyService(cr *v2.PerconaServerForMySQL) *corev1.Service {
+	labels := MatchLabels(cr)
+
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Service",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      UnreadyServiceName(cr),
+			Namespace: k8s.Namespace(cr),
+			Labels:    labels,
+		},
+		Spec: corev1.ServiceSpec{
+			ClusterIP: "None",
+			Ports: []corev1.ServicePort{
+				{
+					Name: "mysql",
+					Port: DefaultPort,
+				},
+			},
+			Selector:                 labels,
+			PublishNotReadyAddresses: true,
+		},
+	}
+}
+
 func Service(cr *v2.PerconaServerForMySQL) *corev1.Service {
 	labels := MatchLabels(cr)
 
@@ -200,6 +230,10 @@ func mysqldContainer(cr *v2.PerconaServerForMySQL) corev1.Container {
 				Value: ServiceName(cr),
 			},
 			{
+				Name:  "SERVICE_NAME_UNREADY",
+				Value: UnreadyServiceName(cr),
+			},
+			{
 				Name:  "CLUSTER_HASH",
 				Value: cr.ClusterHash(),
 			},
@@ -242,10 +276,23 @@ func mysqldContainer(cr *v2.PerconaServerForMySQL) corev1.Container {
 			SuccessThreshold:              spec.StartupProbe.SuccessThreshold,
 			TerminationGracePeriodSeconds: spec.StartupProbe.TerminationGracePeriodSeconds,
 		},
+		LivenessProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/var/lib/mysql/healthcheck", "liveness"},
+				},
+			},
+			InitialDelaySeconds:           spec.LivenessProbe.InitialDelaySeconds,
+			TimeoutSeconds:                spec.LivenessProbe.TimeoutSeconds,
+			PeriodSeconds:                 spec.LivenessProbe.PeriodSeconds,
+			FailureThreshold:              spec.LivenessProbe.FailureThreshold,
+			SuccessThreshold:              spec.LivenessProbe.SuccessThreshold,
+			TerminationGracePeriodSeconds: spec.LivenessProbe.TerminationGracePeriodSeconds,
+		},
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
-				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt(DefaultPort),
+				Exec: &corev1.ExecAction{
+					Command: []string{"/var/lib/mysql/healthcheck", "readiness"},
 				},
 			},
 			InitialDelaySeconds:           spec.ReadinessProbe.InitialDelaySeconds,

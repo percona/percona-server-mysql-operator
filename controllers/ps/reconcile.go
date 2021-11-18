@@ -170,6 +170,9 @@ func (c *ctrl) reconcileDatabase(ctx context.Context, cr *apiv2.PerconaServerFor
 	if err := ensureObject(ctx, cr, mysql.PrimaryService(cr), c.client.Scheme(), createFn); err != nil {
 		return errors.Wrap(err, "reconcile primary svc")
 	}
+	if err := ensureObject(ctx, cr, mysql.UnreadyService(cr), c.client.Scheme(), createFn); err != nil {
+		return errors.Wrap(err, "reconcile unready svc")
+	}
 
 	return nil
 }

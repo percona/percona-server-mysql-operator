@@ -13,6 +13,8 @@ spec:
     kind: PerconaServerForMySQL
     listKind: PerconaServerForMySQLList
     plural: perconaserverformysqls
+    shortNames:
+    - ps
     singular: perconaserverformysql
   scope: Namespaced
   versions:
