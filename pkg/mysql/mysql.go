@@ -60,7 +60,7 @@ func StatefulSet(cr *v2.PerconaServerForMySQL, initImage string) *appsv1.Statefu
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      Name(cr),
-			Namespace: k8s.Namespace(cr),
+			Namespace: cr.Namespace,
 			Labels:    labels,
 		},
 		Spec: appsv1.StatefulSetSpec{
@@ -142,7 +142,7 @@ func UnreadyService(cr *v2.PerconaServerForMySQL) *corev1.Service {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      UnreadyServiceName(cr),
-			Namespace: k8s.Namespace(cr),
+			Namespace: cr.Namespace,
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
@@ -169,7 +169,7 @@ func Service(cr *v2.PerconaServerForMySQL) *corev1.Service {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ServiceName(cr),
-			Namespace: k8s.Namespace(cr),
+			Namespace: cr.Namespace,
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
@@ -198,7 +198,7 @@ func PrimaryService(cr *v2.PerconaServerForMySQL) *corev1.Service {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PrimaryServiceName(cr),
-			Namespace: k8s.Namespace(cr),
+			Namespace: cr.Namespace,
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{

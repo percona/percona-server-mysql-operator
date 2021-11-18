@@ -60,7 +60,7 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL) *appsv1.StatefulSet {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      Name(cr),
-			Namespace: k8s.Namespace(cr),
+			Namespace: cr.Namespace,
 			Labels:    MatchLabels(cr),
 		},
 		Spec: appsv1.StatefulSetSpec{
@@ -87,7 +87,7 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL) *appsv1.StatefulSet {
 							Name: credsVolumeName,
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: k8s.SecretsName(cr),
+									SecretName: cr.Spec.SecretsName,
 								},
 							},
 						},
@@ -95,7 +95,7 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL) *appsv1.StatefulSet {
 							Name: tlsVolumeName,
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: k8s.SSLSecretName(cr),
+									SecretName: cr.Spec.SSLSecretName,
 								},
 							},
 						},
@@ -229,7 +229,7 @@ func Service(cr *apiv2.PerconaServerForMySQL) *corev1.Service {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ServiceName(cr),
-			Namespace: k8s.Namespace(cr),
+			Namespace: cr.Namespace,
 			Labels:    MatchLabels(cr),
 		},
 		Spec: corev1.ServiceSpec{

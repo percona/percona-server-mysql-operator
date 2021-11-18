@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -86,13 +85,13 @@ func (c *ctrl) reconcileUserSecrets(ctx context.Context, cr *apiv2.PerconaServer
 		return nil
 	}
 
-	secret, err := generatePasswordsSecret(k8s.SecretsName(cr), k8s.Namespace(cr))
+	secret, err := generatePasswordsSecret(cr.Spec.SecretsName, cr.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "generate passwords")
 	}
 
 	if err := ensureObject(ctx, cr, secret, c.client.Scheme(), c.client.Create); err != nil {
-		return errors.Wrapf(err, "create secret %s", k8s.SecretsName(cr))
+		return errors.Wrapf(err, "create secret %s", cr.Spec.SecretsName)
 	}
 
 	return nil
@@ -242,6 +241,7 @@ func getObjectHash(obj runtime.Object) (string, error) {
 	return hex.EncodeToString(hash[:]), nil
 }
 
+// TODO make plain function
 func makeCreateWithAnnotation(cl k8s.APIGetCreateUpdater, log logr.Logger) createObjectFn {
 	return func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 		log = log.WithValues("object", obj)
@@ -290,7 +290,7 @@ func makeCreateWithAnnotation(cl k8s.APIGetCreateUpdater, log logr.Logger) creat
 		oldObjectMeta := oldObject.(metav1.ObjectMetaAccessor).GetObjectMeta()
 
 		if oldObjectMeta.GetAnnotations()["percona.com/last-config-hash"] != hash ||
-			!k8s.IsObjectMetaEqual(objectMeta, oldObjectMeta) {
+			!k8s.LabelsEqual(objectMeta, oldObjectMeta) {
 
 			objectMeta.SetResourceVersion(oldObjectMeta.GetResourceVersion())
 			switch object := obj.(type) {
@@ -322,33 +322,36 @@ func reconcileReplicationPrimaryPod(ctx context.Context, cl k8s.APIListUpdater, 
 	}
 	primaryAlias := primary.Alias()
 
-	// TODO: handle error during pods update
-	grp, ctx := errgroup.WithContext(ctx)
+	for i := range pods {
+		pod := &pods[i]
+		if pod.GetLabels()[apiv2.MySQLPrimaryLabel] == "true" {
+			if pod.Name == primaryAlias {
+				// primary is not changed
+				return nil
+			}
+
+			k8s.RemoveLabel(pod, apiv2.MySQLPrimaryLabel)
+			if err := cl.Update(ctx, pod); err != nil {
+				return errors.Wrap(err, "remove label from old primary pod")
+			}
+
+			break
+		}
+	}
 
 	for i := range pods {
 		pod := &pods[i]
-		grp.Go(func() error {
-			labels := pod.GetLabels()
-
-			if pod.Name == primaryAlias {
-				if labels[apiv2.MySQLPrimaryLabel] == "true" {
-					return nil
-				}
-
-				k8s.AddLabel(pod, apiv2.MySQLPrimaryLabel, "true")
-			} else {
-				if _, ok := labels[apiv2.MySQLPrimaryLabel]; !ok {
-					return nil
-				}
-
-				k8s.RemoveLabel(pod, apiv2.MySQLPrimaryLabel)
+		if pods[i].Name == primaryAlias {
+			k8s.AddLabel(pod, apiv2.MySQLPrimaryLabel, "true")
+			if err := cl.Update(ctx, pod); err != nil {
+				return errors.Wrap(err, "add label to new primary pod")
 			}
 
-			return errors.Wrap(cl.Update(ctx, pod), "update primary pod")
-		})
+			break
+		}
 	}
 
-	return grp.Wait()
+	return nil
 }
 
 func reconcileReplicationSemiSync(ctx context.Context, rdr client.Reader, cr *apiv2.PerconaServerForMySQL) error {

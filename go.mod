@@ -9,7 +9,6 @@ require (
 	github.com/onsi/gomega v1.13.0
 	github.com/pkg/errors v0.9.1
 	github.com/sjmudd/stopwatch v0.0.0-20170613150411-f380bf8a9be1
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	k8s.io/api v0.21.2
 	k8s.io/apimachinery v0.21.2
 	k8s.io/client-go v0.21.2

@@ -25,9 +25,8 @@ func GetWatchNamespace() (string, error) {
 	return ns, nil
 }
 
-func IsObjectMetaEqual(old, new metav1.Object) bool {
-	return util.SSMapEqual(old.GetAnnotations(), new.GetAnnotations()) &&
-		util.SSMapEqual(old.GetLabels(), new.GetLabels())
+func LabelsEqual(old, new metav1.Object) bool {
+	return util.SSMapEqual(old.GetLabels(), new.GetLabels())
 }
 
 func RemoveLabel(obj client.Object, key string) {
