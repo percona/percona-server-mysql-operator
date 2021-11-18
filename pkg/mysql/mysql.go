@@ -42,10 +42,6 @@ func UnreadyServiceName(cr *v2.PerconaServerForMySQL) string {
 	return Name(cr) + "-unready"
 }
 
-func podSpec(cr *v2.PerconaServerForMySQL) *v2.MySQLSpec {
-	return &cr.Spec.MySQL
-}
-
 func MatchLabels(cr *v2.PerconaServerForMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
 		map[string]string{v2.ComponentLabel: componentName},

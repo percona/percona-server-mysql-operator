@@ -56,9 +56,10 @@ func (r *PerconaServerForMySQLReconciler) Reconcile(ctx context.Context, req ctr
 
 	err := rec.NewReconciler(r.Client, l).Reconcile(ctx, nn)
 	if err != nil {
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, err
 	}
 
-	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

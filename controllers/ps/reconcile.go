@@ -81,7 +81,7 @@ func (c *ctrl) reconcileUserSecrets(ctx context.Context, cr *apiv2.PerconaServer
 	}
 
 	if ok, err := k8s.ObjectExists(ctx, c.client, nn, &corev1.Secret{}); err != nil {
-		return errors.Wrap(err, "check existance")
+		return errors.Wrap(err, "check existence")
 	} else if ok {
 		return nil
 	}
@@ -137,7 +137,7 @@ func (c *ctrl) createTLSSecret(ctx context.Context, cr *apiv2.PerconaServerForMy
 	}
 
 	if ok, err := k8s.ObjectExists(ctx, c.client, nn, &corev1.Secret{}); err != nil {
-		return errors.Wrap(err, "check existance")
+		return errors.Wrap(err, "check existence")
 	} else if ok {
 		return nil
 	}
