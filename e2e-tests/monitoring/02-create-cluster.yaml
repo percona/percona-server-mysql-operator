@@ -6,6 +6,6 @@ commands:
     set -o errexit
     set -o xtrace
 
-    create_cluster
+    get_cr | kubectl apply -n "${NAMESPACE}" -f -
 
   timeout: 30

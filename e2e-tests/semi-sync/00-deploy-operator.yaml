@@ -6,6 +6,6 @@ commands:
     set -o errexit
     set -o xtrace
 
-    get_cr | kubectl apply -n "${NAMESPACE}" -f -
+    deploy_operator
 
   timeout: 30

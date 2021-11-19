@@ -9,7 +9,7 @@ BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')}
 IMAGE=${IMAGE:-"perconalab/percona-server-mysql-operator:${GIT_BRANCH}"}
 IMAGE_MYSQL=${IMAGE_MYSQL:-"percona/percona-server:8.0.25"}
-IMAGE_ORCHESTRATOR=${IMAGE_ORCHESTRATOR:-"perconalab/percona-server-mysql-operator:main-orchestrator"}
+IMAGE_ORCHESTRATOR=${IMAGE_ORCHESTRATOR:-"perconalab/percona-server-mysql-operator:3.2.6-orchestrator"}
 IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
 SKIP_BACKUPS_TO_AWS_GCP=${SKIP_BACKUPS_TO_AWS_GCP:-1}
 API=ps.percona.com/v2
@@ -31,13 +31,12 @@ deploy_operator() {
 	kubectl -n ${NAMESPACE} apply -f ${src_dir}/e2e-tests/conf/client.yaml
 }
 
-create_cluster() {
+get_cr() {
 	yq eval $(printf '.metadata.name="%s"' "${TEST_NAME}") ${src_dir}/deploy/cr.yaml \
 		| yq eval $(printf '.apiVersion="%s"' "${API}") - \
 		| yq eval $(printf '.spec.mysql.image="%s"' "${IMAGE_MYSQL}") - \
 		| yq eval $(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}") - \
-		| yq eval '.spec.crVersion="2.0.0"' - \
-		| kubectl -n ${NAMESPACE} apply -f -
+		| yq eval '.spec.crVersion="2.0.0"' -
 }
 
 run_mysql() {

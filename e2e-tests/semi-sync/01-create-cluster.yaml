@@ -6,6 +6,8 @@ commands:
     set -o errexit
     set -o xtrace
 
-    get_cr | kubectl apply -n "${NAMESPACE}" -f -
+    get_cr \
+      | yq eval '.spec.mysql.sizeSemiSync="1"' - \
+      | kubectl apply -n "${NAMESPACE}" -f -
 
   timeout: 30

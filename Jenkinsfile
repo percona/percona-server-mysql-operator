@@ -293,6 +293,7 @@ pipeline {
                         CreateCluster('basic')
                         runTest('init-deploy', 'basic')
                         runTest('monitoring', 'basic')
+                        runTest('semi-sync', 'basic')
                         ShutdownCluster('basic')
                     }
                 }
