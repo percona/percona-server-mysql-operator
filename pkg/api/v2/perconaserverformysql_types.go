@@ -50,10 +50,10 @@ const (
 )
 
 type MySQLSpec struct {
-	ClusterType  ClusterType   `json:"clusterType,omitempty"`
-	SizeSemiSync int32         `json:"sizeSemiSync,omitempty"`
-	SemiSyncType string        `json:"semiSyncType,omitempty"`
-	Expose       ServiceExpose `json:"expose,omitempty"`
+	ClusterType  ClusterType        `json:"clusterType,omitempty"`
+	SizeSemiSync intstr.IntOrString `json:"sizeSemiSync,omitempty"`
+	SemiSyncType string             `json:"semiSyncType,omitempty"`
+	Expose       ServiceExpose      `json:"expose,omitempty"`
 	PodSpec      `json:",inline"`
 }
 

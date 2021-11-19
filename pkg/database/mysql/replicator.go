@@ -5,8 +5,10 @@ import (
 	"fmt"
 
 	_ "github.com/go-sql-driver/mysql"
-	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/util/intstr"
+
+	v2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
 )
 
 const DefaultChannelName = ""
@@ -32,7 +34,7 @@ type Replicator interface {
 	IsReplica() (bool, error)
 	DumbQuery() error
 	SetSemiSyncSource(enabled bool) error
-	SetSemiSyncSize(size int32) error
+	SetSemiSyncSize(size intstr.IntOrString) error
 }
 
 type dbImpl sql.DB
@@ -193,7 +195,7 @@ func (d *dbImpl) SetSemiSyncSource(enabled bool) error {
 	return errors.Wrap(err, "set rpl_semi_sync_master_enabled")
 }
 
-func (d *dbImpl) SetSemiSyncSize(size int32) error {
+func (d *dbImpl) SetSemiSyncSize(size intstr.IntOrString) error {
 	_, err := (*sql.DB)(d).Exec("SET GLOBAL rpl_semi_sync_master_wait_for_slave_count=?", size)
 	return errors.Wrap(err, "set rpl_semi_sync_master_wait_for_slave_count")
 }

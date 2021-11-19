@@ -86,11 +86,11 @@ func (r *MySQLReconciler) reconcileSemiSync(log logr.Logger, cr *v2.PerconaServe
 	}
 	defer db.Close()
 
-	if err := db.SetSemiSyncSource(cr.Spec.MySQL.SizeSemiSync > 0); err != nil {
+	if err := db.SetSemiSyncSource(cr.Spec.MySQL.SizeSemiSync.IntValue() > 0); err != nil {
 		return errors.Wrapf(err, "set semi-sync on %s", primary.Key.Hostname)
 	}
 
-	if cr.Spec.MySQL.SizeSemiSync < 1 {
+	if cr.Spec.MySQL.SizeSemiSync.IntValue() < 1 {
 		return nil
 	}
 
