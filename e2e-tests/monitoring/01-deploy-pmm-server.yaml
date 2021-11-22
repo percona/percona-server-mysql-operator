@@ -9,6 +9,6 @@ commands:
     helm install monitoring \
       -n "${NAMESPACE}" \
       --set platform=kubernetes \
-      https://percona-charts.storage.googleapis.com/pmm-server-2.18.0.tgz
+      https://percona-charts.storage.googleapis.com/pmm-server-2.23.0.tgz
 
   timeout: 30
