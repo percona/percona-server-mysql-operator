@@ -20,13 +20,14 @@ import (
 	"context"
 	"time"
 
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	psv2 "github.com/percona/percona-server-mysql-operator/api/v2"
-	rec "github.com/percona/percona-server-mysql-operator/controllers/ps"
+	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	"github.com/percona/percona-server-mysql-operator/controllers/ps"
 )
 
 // PerconaServerForMYSQLReconciler reconciles a PerconaServerForMYSQL object
@@ -54,8 +55,11 @@ func (r *PerconaServerForMySQLReconciler) Reconcile(ctx context.Context, req ctr
 		WithName("PerconaServerForMySQL").
 		WithValues("name", nn.Name, "namespace", nn.Namespace)
 
-	err := rec.NewReconciler(r.Client, l).Reconcile(ctx, nn)
-	if err != nil {
+	if err := ps.NewReconciler(r.Client, l).Reconcile(ctx, nn); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, err
 	}
 
@@ -65,6 +69,6 @@ func (r *PerconaServerForMySQLReconciler) Reconcile(ctx context.Context, req ctr
 // SetupWithManager sets up the controller with the Manager.
 func (r *PerconaServerForMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&psv2.PerconaServerForMySQL{}).
+		For(&apiv2.PerconaServerForMySQL{}).
 		Complete(r)
 }

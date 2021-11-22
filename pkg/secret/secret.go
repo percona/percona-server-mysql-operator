@@ -54,7 +54,7 @@ func GenerateCertsSecret(ctx context.Context, cr *apiv2.PerconaServerForMySQL) (
 }
 
 // issueCerts returns CA certificate, TLS certificate and TLS private key
-func issueCerts(hosts []string) (caCert []byte, tlsCert []byte, tlsKey []byte, err error) {
+func issueCerts(hosts []string) (caCert, tlsCert, tlsKey []byte, err error) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "generate rsa key")

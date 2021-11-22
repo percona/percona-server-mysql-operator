@@ -126,7 +126,7 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage string) *appsv1.Stat
 							Name: tlsVolumeName,
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: spec.SSLSecretName,
+									SecretName: cr.Spec.SSLSecretName,
 								},
 							},
 						},
