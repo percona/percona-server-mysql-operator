@@ -50,7 +50,7 @@ func GetObjectWithDefaults(ctx context.Context, get APIGetter, nn types.Namespac
 		return nil, err
 	}
 
-	if v, ok := o.(Checker); !ok {
+	if v, ok := o.(Checker); ok {
 		if err := v.CheckNSetDefaults(); err != nil {
 			return o, errors.Wrap(err, "object defaults")
 		}

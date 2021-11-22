@@ -277,13 +277,13 @@ func (cr *PerconaServerForMySQL) CheckNSetDefaults() error {
 		}
 	}
 
-	cr.Spec.MySQL.VolumeSpec.reconcile()
-	cr.Spec.Orchestrator.VolumeSpec.reconcile()
+	cr.Spec.MySQL.VolumeSpec = reconcileVol(cr.Spec.MySQL.VolumeSpec)
+	cr.Spec.Orchestrator.VolumeSpec = reconcileVol(cr.Spec.Orchestrator.VolumeSpec)
 
 	return nil
 }
 
-func (v *VolumeSpec) reconcile() {
+func reconcileVol(v *VolumeSpec) *VolumeSpec {
 	if v == nil {
 		v = &VolumeSpec{}
 	}
@@ -297,6 +297,8 @@ func (v *VolumeSpec) reconcile() {
 			v.PersistentVolumeClaim.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
 		}
 	}
+
+	return v
 }
 
 const (

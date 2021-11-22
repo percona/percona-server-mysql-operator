@@ -44,11 +44,15 @@ func doRequest(ctx context.Context, url string, o interface{}) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	res, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return errors.Wrap(err, "request")
+		return errors.Wrap(err, "make request")
 	}
-	res.Body.Close()
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "do request")
+	}
+	defer res.Body.Close()
 
 	if err := json.NewDecoder(res.Body).Decode(o); err != nil {
 		return errors.Wrap(err, "json decode")

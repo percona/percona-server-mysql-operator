@@ -70,7 +70,11 @@ func (c *ctrl) Reconcile(ctx context.Context, nn types.NamespacedName) error {
 
 func (c *ctrl) loadCR(ctx context.Context, nn types.NamespacedName) (*apiv2.PerconaServerForMySQL, error) {
 	o, err := k8s.GetObjectWithDefaults(ctx, c.client, nn, &apiv2.PerconaServerForMySQL{})
-	return o.(*apiv2.PerconaServerForMySQL), err
+	if err != nil {
+		return nil, err
+	}
+
+	return o.(*apiv2.PerconaServerForMySQL), nil
 }
 
 func (c *ctrl) reconcileUserSecrets(ctx context.Context, cr *apiv2.PerconaServerForMySQL) error {

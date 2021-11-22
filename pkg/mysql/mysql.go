@@ -53,6 +53,12 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage string) *appsv1.Stat
 	spec := cr.MySQLSpec()
 	Replicas := spec.Size
 
+	containers := []corev1.Container{mysqldContainer(cr)}
+	if pmm := cr.PMMSpec(); pmm != nil && pmm.Enabled {
+		c := PMMContainer(cr.Name, cr.Spec.SecretsName, pmm)
+		containers = append(containers, c)
+	}
+
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -102,10 +108,7 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage string) *appsv1.Stat
 							SecurityContext:          spec.ContainerSecurityContext,
 						},
 					},
-					Containers: []corev1.Container{
-						*PMMContainer(cr),
-						mysqldContainer(cr),
-					},
+					Containers: containers,
 					// TerminationGracePeriodSeconds: 30,
 					RestartPolicy: corev1.RestartPolicyAlways,
 					SchedulerName: "default-scheduler",
@@ -308,19 +311,14 @@ func mysqldContainer(cr *apiv2.PerconaServerForMySQL) corev1.Container {
 	}
 }
 
-func PMMContainer(cr *apiv2.PerconaServerForMySQL) *corev1.Container {
-	pmmSpec := cr.PMMSpec()
-	if pmmSpec == nil || !pmmSpec.Enabled {
-		return nil
-	}
-
+func PMMContainer(clusterName, secretsName string, pmmSpec *apiv2.PMMSpec) corev1.Container {
 	ports := []corev1.ContainerPort{{ContainerPort: 7777}}
 	for port := 30100; port <= 30105; port++ {
 		ports = append(ports, corev1.ContainerPort{ContainerPort: int32(port)})
 	}
 
 	// TODO: resources
-	return &corev1.Container{
+	return corev1.Container{
 		Name:            "pmm-client",
 		Image:           pmmSpec.Image,
 		ImagePullPolicy: pmmSpec.ImagePullPolicy,
@@ -345,7 +343,7 @@ func PMMContainer(cr *apiv2.PerconaServerForMySQL) *corev1.Container {
 			},
 			{
 				Name:  "CLUSTER_NAME",
-				Value: cr.Name,
+				Value: clusterName,
 			},
 			{
 				Name:  "CLIENT_PORT_LISTEN",
@@ -370,7 +368,7 @@ func PMMContainer(cr *apiv2.PerconaServerForMySQL) *corev1.Container {
 			{
 				Name: "PMM_AGENT_SERVER_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: k8s.SecretKeySelector(cr.Spec.SecretsName, "pmmserver"),
+					SecretKeyRef: k8s.SecretKeySelector(secretsName, "pmmserver"),
 				},
 			},
 			{
@@ -384,7 +382,7 @@ func PMMContainer(cr *apiv2.PerconaServerForMySQL) *corev1.Container {
 			{
 				Name: "PMM_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: k8s.SecretKeySelector(cr.Spec.SecretsName, "pmmserver"),
+					SecretKeyRef: k8s.SecretKeySelector(secretsName, "pmmserver"),
 				},
 			},
 			{
@@ -445,7 +443,7 @@ func PMMContainer(cr *apiv2.PerconaServerForMySQL) *corev1.Container {
 			},
 			{
 				Name:  "DB_CLUSTER",
-				Value: cr.Name,
+				Value: clusterName,
 			},
 			{
 				Name:  "DB_TYPE",
@@ -466,7 +464,7 @@ func PMMContainer(cr *apiv2.PerconaServerForMySQL) *corev1.Container {
 			{
 				Name: "DB_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: k8s.SecretKeySelector(cr.Spec.SecretsName, string(apiv2.UserMonitor)),
+					SecretKeyRef: k8s.SecretKeySelector(secretsName, string(apiv2.UserMonitor)),
 				},
 			},
 			{
