@@ -10,6 +10,14 @@ import (
 	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
 )
 
+// SecretKeySelector is a k8s helper to create SecretKeySelector object
+func SecretKeySelector(name, key string) *corev1.SecretKeySelector {
+	return &corev1.SecretKeySelector{
+		LocalObjectReference: corev1.LocalObjectReference{Name: name},
+		Key:                  key,
+	}
+}
+
 func UserPassword(ctx context.Context, get APIGetter, cr *apiv2.PerconaServerForMySQL, username apiv2.SystemUser) (string, error) {
 	nn := types.NamespacedName{
 		Name:      cr.Spec.SecretsName,

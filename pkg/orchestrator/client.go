@@ -35,8 +35,9 @@ func (i clusterImpl) Alias() string {
 }
 
 func ClusterPrimary(ctx context.Context, host, clusterHint string) (Cluster, error) {
-	var primary *clusterImpl
-	return primary, doRequest(ctx, host+"/api/master/"+clusterHint, primary)
+	primary := &clusterImpl{}
+	err := doRequest(ctx, host+"/api/master/"+clusterHint, primary)
+	return primary, err
 }
 
 func doRequest(ctx context.Context, url string, o interface{}) error {

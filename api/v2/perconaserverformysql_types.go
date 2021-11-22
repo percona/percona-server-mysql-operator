@@ -39,6 +39,7 @@ type PerconaServerForMySQLSpec struct {
 	SSLInternalSecretName string           `json:"sslInternalSecretName,omitempty"`
 	MySQL                 MySQLSpec        `json:"mysql,omitempty"`
 	Orchestrator          OrchestratorSpec `json:"orchestrator,omitempty"`
+	PMM                   *PMMSpec         `json:"pmm,omitempty"`
 }
 
 type ClusterType string
@@ -97,6 +98,17 @@ type PodSpec struct {
 	ImagePullPolicy               corev1.PullPolicy                       `json:"imagePullPolicy,omitempty"`
 	Sidecars                      []corev1.Container                      `json:"sidecars,omitempty"`
 	RuntimeClassName              *string                                 `json:"runtimeClassName,omitempty"`
+}
+
+type PMMSpec struct {
+	Enabled                  bool                    `json:"enabled,omitempty"`
+	Image                    string                  `json:"image,omitempty"`
+	ServerHost               string                  `json:"serverHost,omitempty"`
+	ServerUser               string                  `json:"serverUser,omitempty"`
+	Resources                *PodResources           `json:"resources,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
+	ImagePullPolicy          corev1.PullPolicy       `json:"imagePullPolicy,omitempty"`
+	RuntimeClassName         *string                 `json:"runtimeClassName,omitempty"`
 }
 
 type PodDisruptionBudgetSpec struct {
@@ -190,6 +202,10 @@ const (
 
 func (cr *PerconaServerForMySQL) MySQLSpec() *MySQLSpec {
 	return &cr.Spec.MySQL
+}
+
+func (cr *PerconaServerForMySQL) PMMSpec() *PMMSpec {
+	return cr.Spec.PMM
 }
 
 func (cr *PerconaServerForMySQL) OrchestratorSpec() *OrchestratorSpec {
