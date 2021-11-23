@@ -53,12 +53,6 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage string) *appsv1.Stat
 	spec := cr.MySQLSpec()
 	Replicas := spec.Size
 
-	containers := []corev1.Container{mysqldContainer(cr)}
-	if pmm := cr.PMMSpec(); pmm != nil && pmm.Enabled {
-		c := PMMContainer(cr.Name, cr.Spec.SecretsName, pmm)
-		containers = append(containers, c)
-	}
-
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -108,7 +102,7 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage string) *appsv1.Stat
 							SecurityContext:          spec.ContainerSecurityContext,
 						},
 					},
-					Containers: containers,
+					Containers: containers(cr),
 					// TerminationGracePeriodSeconds: 30,
 					RestartPolicy: corev1.RestartPolicyAlways,
 					SchedulerName: "default-scheduler",
@@ -217,6 +211,16 @@ func PrimaryService(cr *apiv2.PerconaServerForMySQL) *corev1.Service {
 			Selector: selector,
 		},
 	}
+}
+
+func containers(cr *apiv2.PerconaServerForMySQL) []corev1.Container {
+	containers := []corev1.Container{mysqldContainer(cr)}
+	if pmm := cr.PMMSpec(); pmm != nil && pmm.Enabled {
+		c := PMMContainer(cr.Name, cr.Spec.SecretsName, pmm)
+		containers = append(containers, c)
+	}
+
+	return containers
 }
 
 func mysqldContainer(cr *apiv2.PerconaServerForMySQL) corev1.Container {

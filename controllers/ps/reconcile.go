@@ -94,7 +94,7 @@ func (c *ctrl) reconcileUserSecrets(ctx context.Context, cr *apiv2.PerconaServer
 		return errors.Wrap(err, "generate passwords")
 	}
 
-	if err := ensureObject(ctx, cr, secret, c.client.Scheme(), c.client.Create); err != nil {
+	if err := ensureObject(ctx, c.client, cr, secret, c.client.Scheme()); err != nil {
 		return errors.Wrapf(err, "create secret %s", cr.Spec.SecretsName)
 	}
 
@@ -150,7 +150,7 @@ func (c *ctrl) createTLSSecret(ctx context.Context, cr *apiv2.PerconaServerForMy
 		return errors.Wrap(err, "create SSL manually")
 	}
 
-	if err := ensureObject(ctx, cr, secret, c.client.Scheme(), c.client.Create); err != nil {
+	if err := ensureObject(ctx, c.client, cr, secret, c.client.Scheme()); err != nil {
 		return errors.Wrap(err, "create secret")
 	}
 
@@ -163,17 +163,20 @@ func (c *ctrl) reconcileDatabase(ctx context.Context, cr *apiv2.PerconaServerFor
 		return errors.Wrap(err, "get init image")
 	}
 
-	createFn := makeCreateWithAnnotation(c.client, c.log)
-	if err := ensureObject(ctx, cr, mysql.StatefulSet(cr, initImage), c.client.Scheme(), createFn); err != nil {
+	err = ensureObjectWithHash(ctx, c.client, cr, mysql.StatefulSet(cr, initImage), c.client.Scheme())
+	if err != nil {
 		return errors.Wrap(err, "reconcile sts")
 	}
-	if err := ensureObject(ctx, cr, mysql.Service(cr), c.client.Scheme(), createFn); err != nil {
+	err = ensureObjectWithHash(ctx, c.client, cr, mysql.Service(cr), c.client.Scheme())
+	if err != nil {
 		return errors.Wrap(err, "reconcile svc")
 	}
-	if err := ensureObject(ctx, cr, mysql.PrimaryService(cr), c.client.Scheme(), createFn); err != nil {
+	err = ensureObjectWithHash(ctx, c.client, cr, mysql.PrimaryService(cr), c.client.Scheme())
+	if err != nil {
 		return errors.Wrap(err, "reconcile primary svc")
 	}
-	if err := ensureObject(ctx, cr, mysql.UnreadyService(cr), c.client.Scheme(), createFn); err != nil {
+	err = ensureObjectWithHash(ctx, c.client, cr, mysql.UnreadyService(cr), c.client.Scheme())
+	if err != nil {
 		return errors.Wrap(err, "reconcile unready svc")
 	}
 
@@ -181,11 +184,12 @@ func (c *ctrl) reconcileDatabase(ctx context.Context, cr *apiv2.PerconaServerFor
 }
 
 func (c *ctrl) reconcileOrchestrator(ctx context.Context, cr *apiv2.PerconaServerForMySQL) error {
-	createFn := makeCreateWithAnnotation(c.client, c.log)
-	if err := ensureObject(ctx, cr, orchestrator.StatefulSet(cr), c.client.Scheme(), createFn); err != nil {
+	err := ensureObjectWithHash(ctx, c.client, cr, orchestrator.StatefulSet(cr), c.client.Scheme())
+	if err != nil {
 		return errors.Wrap(err, "reconcile StatefulSet")
 	}
-	if err := ensureObject(ctx, cr, orchestrator.Service(cr), c.client.Scheme(), createFn); err != nil {
+	err = ensureObjectWithHash(ctx, c.client, cr, orchestrator.Service(cr), c.client.Scheme())
+	if err != nil {
 		return errors.Wrap(err, "reconcile Service")
 	}
 
@@ -205,10 +209,10 @@ func (c *ctrl) reconcileReplication(ctx context.Context, cr *apiv2.PerconaServer
 
 func ensureObject(
 	ctx context.Context,
+	cl k8s.APICreater,
 	cr *apiv2.PerconaServerForMySQL,
 	o client.Object,
 	s *runtime.Scheme,
-	create createObjectFn,
 ) error {
 	if err := controllerutil.SetControllerReference(cr, o, s); err != nil {
 		return errors.Wrapf(err, "set controller reference to %s/%s",
@@ -216,10 +220,88 @@ func ensureObject(
 			o.GetName())
 	}
 
-	if err := create(ctx, o); err != nil {
+	if err := cl.Create(ctx, o); err != nil {
 		return errors.Wrapf(err, "create %s/%s",
 			o.GetObjectKind().GroupVersionKind().Kind,
 			o.GetName())
+	}
+
+	return nil
+}
+
+func ensureObjectWithHash(
+	ctx context.Context,
+	cl k8s.APIGetCreatePatcher,
+	cr *apiv2.PerconaServerForMySQL,
+	obj client.Object,
+	s *runtime.Scheme,
+) error {
+	if err := controllerutil.SetControllerReference(cr, obj, s); err != nil {
+		return errors.Wrapf(err, "set controller reference to %s/%s",
+			obj.GetObjectKind().GroupVersionKind().Kind,
+			obj.GetName())
+	}
+
+	metaAccessor, ok := obj.(metav1.ObjectMetaAccessor)
+	if !ok {
+		return errors.New("can't convert object to ObjectMetaAccessor")
+	}
+
+	objectMeta := metaAccessor.GetObjectMeta()
+
+	if objectMeta.GetAnnotations() == nil {
+		objectMeta.SetAnnotations(make(map[string]string))
+	}
+
+	objAnnotations := objectMeta.GetAnnotations()
+	delete(objAnnotations, "percona.com/last-config-hash")
+	objectMeta.SetAnnotations(objAnnotations)
+
+	hash, err := getObjectHash(obj)
+	if err != nil {
+		return errors.Wrap(err, "calculate object hash")
+	}
+
+	val := reflect.ValueOf(obj)
+	if val.Kind() == reflect.Ptr {
+		val = reflect.Indirect(val)
+	}
+	oldObject := reflect.New(val.Type()).Interface().(client.Object)
+
+	nn := types.NamespacedName{
+		Name:      objectMeta.GetName(),
+		Namespace: objectMeta.GetNamespace(),
+	}
+	if err = cl.Get(ctx, nn, oldObject); err != nil {
+		if !k8serrors.IsNotFound(err) {
+			return errors.Wrapf(err, "get %v", nn.String())
+		}
+
+		if err := cl.Create(ctx, obj); err != nil {
+			return errors.Wrapf(err, "create %v", nn.String())
+		}
+
+		return nil
+	}
+
+	oldObjectMeta := oldObject.(metav1.ObjectMetaAccessor).GetObjectMeta()
+
+	if oldObjectMeta.GetAnnotations()["percona.com/last-config-hash"] != hash ||
+		!k8s.LabelsEqual(objectMeta, oldObjectMeta) {
+
+		objectMeta.SetResourceVersion(oldObjectMeta.GetResourceVersion())
+		switch object := obj.(type) {
+		case *corev1.Service:
+			object.Spec.ClusterIP = oldObject.(*corev1.Service).Spec.ClusterIP
+			if object.Spec.Type == corev1.ServiceTypeLoadBalancer {
+				object.Spec.HealthCheckNodePort = oldObject.(*corev1.Service).Spec.HealthCheckNodePort
+			}
+		}
+
+		patch := client.StrategicMergeFrom(oldObject)
+		if err := cl.Patch(ctx, obj, patch); err != nil {
+			return errors.Wrapf(err, "patch %v", nn.String())
+		}
 	}
 
 	return nil
@@ -245,75 +327,11 @@ func getObjectHash(obj runtime.Object) (string, error) {
 	return hex.EncodeToString(hash[:]), nil
 }
 
-// TODO make plain function
-func makeCreateWithAnnotation(cl k8s.APIGetCreateUpdater, log logr.Logger) createObjectFn {
-	return func(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
-		log = log.WithValues("object", obj)
-
-		metaAccessor, ok := obj.(metav1.ObjectMetaAccessor)
-		if !ok {
-			return errors.New("can't convert object to ObjectMetaAccessor")
-		}
-
-		objectMeta := metaAccessor.GetObjectMeta()
-
-		if objectMeta.GetAnnotations() == nil {
-			objectMeta.SetAnnotations(make(map[string]string))
-		}
-
-		objAnnotations := objectMeta.GetAnnotations()
-		delete(objAnnotations, "percona.com/last-config-hash")
-		objectMeta.SetAnnotations(objAnnotations)
-
-		hash, err := getObjectHash(obj)
-		if err != nil {
-			return errors.Wrap(err, "calculate object hash")
-		}
-		log = log.WithValues("hash", hash)
-
-		val := reflect.ValueOf(obj)
-		if val.Kind() == reflect.Ptr {
-			val = reflect.Indirect(val)
-		}
-		oldObject := reflect.New(val.Type()).Interface().(client.Object)
-
-		err = cl.Get(ctx, types.NamespacedName{
-			Name:      objectMeta.GetName(),
-			Namespace: objectMeta.GetNamespace(),
-		}, oldObject)
-
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return errors.Wrap(err, "get object")
-		}
-
-		if k8serrors.IsNotFound(err) {
-			log.Info("object not found. creating")
-			return cl.Create(ctx, obj, opts...)
-		}
-
-		oldObjectMeta := oldObject.(metav1.ObjectMetaAccessor).GetObjectMeta()
-
-		if oldObjectMeta.GetAnnotations()["percona.com/last-config-hash"] != hash ||
-			!k8s.LabelsEqual(objectMeta, oldObjectMeta) {
-
-			objectMeta.SetResourceVersion(oldObjectMeta.GetResourceVersion())
-			switch object := obj.(type) {
-			case *corev1.Service:
-				object.Spec.ClusterIP = oldObject.(*corev1.Service).Spec.ClusterIP
-				if object.Spec.Type == corev1.ServiceTypeLoadBalancer {
-					object.Spec.HealthCheckNodePort = oldObject.(*corev1.Service).Spec.HealthCheckNodePort
-				}
-			}
-
-			log.Info("updating")
-			return cl.Update(ctx, obj)
-		}
-
-		return nil
-	}
-}
-
-func reconcileReplicationPrimaryPod(ctx context.Context, cl k8s.APIListUpdater, cr *apiv2.PerconaServerForMySQL) error {
+func reconcileReplicationPrimaryPod(
+	ctx context.Context,
+	cl k8s.APIListPatcher,
+	cr *apiv2.PerconaServerForMySQL,
+) error {
 	pods, err := podsByLabels(ctx, cl, mysql.MatchLabels(cr))
 	if err != nil {
 		return errors.Wrap(err, "get MySQL pod list")
@@ -334,8 +352,9 @@ func reconcileReplicationPrimaryPod(ctx context.Context, cl k8s.APIListUpdater, 
 				return nil
 			}
 
+			patch := client.StrategicMergeFrom(pod)
 			k8s.RemoveLabel(pod, apiv2.MySQLPrimaryLabel)
-			if err := cl.Update(ctx, pod); err != nil {
+			if err := cl.Patch(ctx, pod, patch); err != nil {
 				return errors.Wrap(err, "remove label from old primary pod")
 			}
 
@@ -346,8 +365,9 @@ func reconcileReplicationPrimaryPod(ctx context.Context, cl k8s.APIListUpdater, 
 	for i := range pods {
 		pod := &pods[i]
 		if pods[i].Name == primaryAlias {
+			patch := client.StrategicMergeFrom(pod)
 			k8s.AddLabel(pod, apiv2.MySQLPrimaryLabel, "true")
-			if err := cl.Update(ctx, pod); err != nil {
+			if err := cl.Patch(ctx, pod, patch); err != nil {
 				return errors.Wrap(err, "add label to new primary pod")
 			}
 

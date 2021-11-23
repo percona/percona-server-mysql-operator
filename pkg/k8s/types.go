@@ -14,21 +14,21 @@ type APICreater interface {
 	Create(context.Context, client.Object, ...client.CreateOption) error
 }
 
-type APIUpdater interface {
-	Update(context.Context, client.Object, ...client.UpdateOption) error
+type APIPatcher interface {
+	Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error
 }
 
 type APIList interface {
 	List(context.Context, client.ObjectList, ...client.ListOption) error
 }
 
-type APIGetCreateUpdater interface {
+type APIGetCreatePatcher interface {
 	APIGetter
 	APICreater
-	APIUpdater
+	APIPatcher
 }
 
-type APIListUpdater interface {
-	APIUpdater
+type APIListPatcher interface {
+	APIPatcher
 	APIList
 }
