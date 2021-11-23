@@ -5,8 +5,9 @@ import (
 	"fmt"
 
 	_ "github.com/go-sql-driver/mysql"
-	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
 	"github.com/pkg/errors"
+
+	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
 )
 
 const DefaultChannelName = ""

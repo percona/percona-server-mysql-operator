@@ -4,14 +4,15 @@ import (
 	"fmt"
 	"path/filepath"
 
-	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
-	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
-	"github.com/percona/percona-server-mysql-operator/pkg/util"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
 const (

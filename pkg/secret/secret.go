@@ -166,8 +166,40 @@ const (
 		"0123456789"
 )
 
-// GeneratePass generates a random password
-func GeneratePass() ([]byte, error) {
+var secretUsers = [...]apiv2.SystemUser{
+	apiv2.UserRoot,
+	apiv2.UserXtraBackup,
+	apiv2.UserMonitor,
+	apiv2.UserClusterCheck,
+	apiv2.UserProxyAdmin,
+	apiv2.UserOperator,
+	apiv2.UserReplication,
+	apiv2.UserOrchestrator,
+}
+
+func GeneratePasswordsSecret(name, namespace string) (*corev1.Secret, error) {
+	data := make(map[string][]byte)
+	for _, user := range secretUsers {
+		pass, err := generatePass()
+		if err != nil {
+			return nil, errors.Wrapf(err, "create %s user password", user)
+		}
+		data[string(user)] = pass
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Data: data,
+		Type: corev1.SecretTypeOpaque,
+	}
+	return secret, nil
+}
+
+// generatePass generates a random password
+func generatePass() ([]byte, error) {
 	mrand.Seed(time.Now().UnixNano())
 	ln := mrand.Intn(passwordMaxLen-passwordMinLen) + passwordMinLen
 	b := make([]byte, ln)

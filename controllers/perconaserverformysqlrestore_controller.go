@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	psv2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
 )
 
 // PerconaServerForMYSQLRestoreReconciler reconciles a PerconaServerForMYSQLRestore object
@@ -55,6 +55,6 @@ func (r *PerconaServerForMySQLRestoreReconciler) Reconcile(ctx context.Context, 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PerconaServerForMySQLRestoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&psv2.PerconaServerForMySQLRestore{}).
+		For(&apiv2.PerconaServerForMySQLRestore{}).
 		Complete(r)
 }
