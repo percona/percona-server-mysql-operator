@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"reflect"
+	"strings"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -195,4 +197,15 @@ func PodsByLabels(ctx context.Context, cl APIList, l map[string]string) ([]corev
 	}
 
 	return podList.Items, nil
+}
+
+// DefaultAPINamespace returns namespace for direct api access from a pod
+// https://v1-21.docs.kubernetes.io/docs/tasks/run-application/access-api-from-pod/#directly-accessing-the-rest-api
+func DefaultAPINamespace() (string, error) {
+	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(nsBytes)), nil
 }
