@@ -78,15 +78,15 @@ func (d *dbImpl) StartReplication(host, replicaPass string, port int32) error {
 func (d *dbImpl) ReplicationStatus() (ReplicationStatus, string, error) {
 	row := d.db.QueryRow(`
         SELECT
-            replication_connection_status.SERVICE_STATE,
-            replication_applier_status.SERVICE_STATE,
+			connection_status.SERVICE_STATE,
+			applier_status.SERVICE_STATE,
             HOST
-        FROM replication_connection_status
-        JOIN replication_connection_configuration
-            ON replication_connection_status.channel_name = replication_connection_configuration.channel_name
-        JOIN replication_applier_status
-            ON replication_connection_status.channel_name = replication_applier_status.channel_name
-        WHERE replication_connection_status.channel_name = ?
+        FROM replication_connection_status connection_status
+        JOIN replication_connection_configuration connection_configuration
+            ON connection_status.channel_name = connection_configuration.channel_name
+        JOIN replication_applier_status applier_status
+            ON connection_status.channel_name = applier_status.channel_name
+        WHERE connection_status.channel_name = ?
         `, DefaultChannelName)
 
 	var ioState, sqlState, host string

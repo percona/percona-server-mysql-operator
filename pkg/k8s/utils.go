@@ -51,24 +51,6 @@ func AddLabel(obj client.Object, key, value string) {
 	obj.SetLabels(labels)
 }
 
-type Checker interface {
-	CheckNSetDefaults() error
-}
-
-func GetObjectWithDefaults(ctx context.Context, get APIGetter, nn types.NamespacedName, o client.Object) (client.Object, error) {
-	if err := get.Get(ctx, nn, o); err != nil {
-		return nil, err
-	}
-
-	if v, ok := o.(Checker); ok {
-		if err := v.CheckNSetDefaults(); err != nil {
-			return o, errors.Wrap(err, "object defaults")
-		}
-	}
-
-	return o, nil
-}
-
 func ObjectExists(ctx context.Context, get APIGetter, nn types.NamespacedName, o client.Object) (bool, error) {
 	if err := get.Get(ctx, nn, o); err != nil {
 		if k8serrors.IsNotFound(err) {

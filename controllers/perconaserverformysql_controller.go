@@ -64,19 +64,22 @@ func (r *PerconaServerForMySQLReconciler) SetupWithManager(mgr ctrl.Manager) err
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.9.2/pkg/reconcile
-func (r *PerconaServerForMySQLReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *PerconaServerForMySQLReconciler) Reconcile(
+	ctx context.Context,
+	req ctrl.Request,
+) (ctrl.Result, error) {
 	nn := req.NamespacedName
 	l := log.FromContext(ctx).
 		WithName("PerconaServerForMySQL").
 		WithValues("name", nn.Name, "namespace", nn.Namespace)
 
-	cr, err := r.loadCR(ctx, nn)
+	cr, err := r.getCRWithDefaults(ctx, nn)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
 
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, errors.Wrap(err, "load CR")
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, errors.Wrap(err, "get CR")
 	}
 
 	if err := r.doReconcile(ctx, l, cr); err != nil {
@@ -110,16 +113,25 @@ func (r *PerconaServerForMySQLReconciler) doReconcile(
 	return nil
 }
 
-func (r *PerconaServerForMySQLReconciler) loadCR(ctx context.Context, nn types.NamespacedName) (*apiv2.PerconaServerForMySQL, error) {
-	o, err := k8s.GetObjectWithDefaults(ctx, r.Client, nn, &apiv2.PerconaServerForMySQL{})
-	if err != nil {
+func (r *PerconaServerForMySQLReconciler) getCRWithDefaults(
+	ctx context.Context,
+	nn types.NamespacedName,
+) (*apiv2.PerconaServerForMySQL, error) {
+	cr := &apiv2.PerconaServerForMySQL{}
+	if err := r.Client.Get(ctx, nn, cr); err != nil {
+		return nil, err
+	}
+	if err := cr.CheckNSetDefaults(); err != nil {
 		return nil, err
 	}
 
-	return o.(*apiv2.PerconaServerForMySQL), nil
+	return cr, nil
 }
 
-func (r *PerconaServerForMySQLReconciler) reconcileUserSecrets(ctx context.Context, cr *apiv2.PerconaServerForMySQL) error {
+func (r *PerconaServerForMySQLReconciler) reconcileUserSecrets(
+	ctx context.Context,
+	cr *apiv2.PerconaServerForMySQL,
+) error {
 	nn := types.NamespacedName{
 		Namespace: cr.Namespace,
 		Name:      cr.Spec.SecretsName,
@@ -143,7 +155,10 @@ func (r *PerconaServerForMySQLReconciler) reconcileUserSecrets(ctx context.Conte
 	return nil
 }
 
-func (r *PerconaServerForMySQLReconciler) createTLSSecret(ctx context.Context, cr *apiv2.PerconaServerForMySQL) error {
+func (r *PerconaServerForMySQLReconciler) createTLSSecret(
+	ctx context.Context,
+	cr *apiv2.PerconaServerForMySQL,
+) error {
 	nn := types.NamespacedName{
 		Name:      cr.Spec.SSLSecretName,
 		Namespace: cr.Namespace,
@@ -167,7 +182,10 @@ func (r *PerconaServerForMySQLReconciler) createTLSSecret(ctx context.Context, c
 	return nil
 }
 
-func (r *PerconaServerForMySQLReconciler) reconcileDatabase(ctx context.Context, cr *apiv2.PerconaServerForMySQL) error {
+func (r *PerconaServerForMySQLReconciler) reconcileDatabase(
+	ctx context.Context,
+	cr *apiv2.PerconaServerForMySQL,
+) error {
 	initImage, err := k8s.InitImage(ctx, r.Client)
 	if err != nil {
 		return errors.Wrap(err, "get init image")
@@ -193,7 +211,10 @@ func (r *PerconaServerForMySQLReconciler) reconcileDatabase(ctx context.Context,
 	return nil
 }
 
-func (r *PerconaServerForMySQLReconciler) reconcileOrchestrator(ctx context.Context, cr *apiv2.PerconaServerForMySQL) error {
+func (r *PerconaServerForMySQLReconciler) reconcileOrchestrator(
+	ctx context.Context,
+	cr *apiv2.PerconaServerForMySQL,
+) error {
 	err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.StatefulSet(cr), r.Scheme)
 	if err != nil {
 		return errors.Wrap(err, "reconcile StatefulSet")
@@ -206,7 +227,10 @@ func (r *PerconaServerForMySQLReconciler) reconcileOrchestrator(ctx context.Cont
 	return nil
 }
 
-func (r *PerconaServerForMySQLReconciler) reconcileReplication(ctx context.Context, cr *apiv2.PerconaServerForMySQL) error {
+func (r *PerconaServerForMySQLReconciler) reconcileReplication(
+	ctx context.Context,
+	cr *apiv2.PerconaServerForMySQL,
+) error {
 	if err := reconcileReplicationPrimaryPod(ctx, r.Client, cr); err != nil {
 		return errors.Wrap(err, "reconcile primary pod")
 	}
@@ -268,7 +292,11 @@ func reconcileReplicationPrimaryPod(
 	return nil
 }
 
-func reconcileReplicationSemiSync(ctx context.Context, rdr client.Reader, cr *apiv2.PerconaServerForMySQL) error {
+func reconcileReplicationSemiSync(
+	ctx context.Context,
+	rdr client.Reader,
+	cr *apiv2.PerconaServerForMySQL,
+) error {
 	host := orchestrator.APIHost(orchestrator.ServiceName(cr))
 	primary, err := orchestrator.ClusterPrimary(ctx, host, cr.ClusterHint())
 	if err != nil {

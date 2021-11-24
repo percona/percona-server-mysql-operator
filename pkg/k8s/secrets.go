@@ -18,7 +18,12 @@ func SecretKeySelector(name, key string) *corev1.SecretKeySelector {
 	}
 }
 
-func UserPassword(ctx context.Context, get APIGetter, cr *apiv2.PerconaServerForMySQL, username apiv2.SystemUser) (string, error) {
+func UserPassword(
+	ctx context.Context,
+	get APIGetter,
+	cr *apiv2.PerconaServerForMySQL,
+	username apiv2.SystemUser,
+) (string, error) {
 	nn := types.NamespacedName{
 		Name:      cr.Spec.SecretsName,
 		Namespace: cr.Namespace,
