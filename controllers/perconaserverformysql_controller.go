@@ -91,7 +91,7 @@ func (r *PerconaServerForMySQLReconciler) Reconcile(
 	}()
 
 	if err := r.doReconcile(ctx, l, cr); err != nil {
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, err
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, errors.Wrap(err, "reconcile")
 	}
 
 	return ctrl.Result{}, nil
@@ -127,10 +127,10 @@ func (r *PerconaServerForMySQLReconciler) getCRWithDefaults(
 ) (*apiv2.PerconaServerForMySQL, error) {
 	cr := &apiv2.PerconaServerForMySQL{}
 	if err := r.Client.Get(ctx, nn, cr); err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "get %v", nn.String())
 	}
 	if err := cr.CheckNSetDefaults(); err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "check and set defaults for %v", nn.String())
 	}
 
 	return cr, nil
