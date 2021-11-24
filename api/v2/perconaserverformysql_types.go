@@ -308,6 +308,7 @@ const (
 	PartOfLabel       = "app.kubernetes.io/part-of"
 	ComponentLabel    = "app.kubernetes.io/component"
 	MySQLPrimaryLabel = "mysql.percona.com/primary"
+	ExposedLabel      = "percona.com/exposed"
 )
 
 func (cr *PerconaServerForMySQL) Labels() map[string]string {

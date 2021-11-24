@@ -8,6 +8,9 @@ spec:
   mysql:
     size: 3
     sizeSemiSync: 0
+    expose:
+      enabled: false
+      type: ClusterIP
     imagePullPolicy: Always
     image: percona/percona-server:8.0.25
     volumeSpec:
