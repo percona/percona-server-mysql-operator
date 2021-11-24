@@ -84,11 +84,17 @@ func (r *PerconaServerForMySQLReconciler) Reconcile(
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, errors.Wrap(err, "get CR")
 	}
 
+	defer func() {
+		if err := r.updateStatus(ctx, cr); err != nil {
+			l.Error(err, "failed to update status")
+		}
+	}()
+
 	if err := r.doReconcile(ctx, l, cr); err != nil {
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, err
 	}
 
-	return ctrl.Result{}, r.updateStatus(ctx, cr)
+	return ctrl.Result{}, nil
 }
 
 func (r *PerconaServerForMySQLReconciler) doReconcile(
