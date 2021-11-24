@@ -84,5 +84,7 @@ e2e-tests/conf/cloud-secret.yml
 .idea/**
 e2e-tests/init-deploy/smallrun
 
+.DS_Store
+
 # Kubernetes Generated files - skip generated files, except for vendored files
 !vendor/**/zz_generated.*
