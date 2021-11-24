@@ -32,7 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
-	v2 "github.com/percona/percona-server-mysql-operator/api/v2"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
@@ -342,7 +341,7 @@ func reconcileReplicationSemiSync(
 
 func (r *PerconaServerForMySQLReconciler) updateStatus(
 	ctx context.Context,
-	cr *v2.PerconaServerForMySQL,
+	cr *apiv2.PerconaServerForMySQL,
 ) error {
 	mysqlStatus, err := appStatus(ctx, r.Client, cr.MySQLSpec().Size, mysql.MatchLabels(cr))
 	if err != nil {
@@ -365,10 +364,10 @@ func appStatus(
 	cl k8s.APIList,
 	size int32,
 	labels map[string]string,
-) (v2.StatefulAppStatus, error) {
-	status := v2.StatefulAppStatus{
+) (apiv2.StatefulAppStatus, error) {
+	status := apiv2.StatefulAppStatus{
 		Size:  size,
-		State: v2.StateInitializing,
+		State: apiv2.StateInitializing,
 	}
 
 	pods, err := k8s.PodsByLabels(ctx, cl, labels)
