@@ -13,4 +13,4 @@ kind: Kustomization
 images:
 - name: perconalab/percona-server-mysql-operator
   newName: perconalab/percona-server-mysql-operator
-  newTag: defbin-refactor
+  newTag: main
