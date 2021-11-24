@@ -334,11 +334,6 @@ func reconcileReplicationSemiSync(
 	return nil
 }
 
-type component interface {
-	GetSize() int32
-	MatchLabels() map[string]string
-}
-
 func (r *PerconaServerForMySQLReconciler) updateStatus(
 	ctx context.Context,
 	cr *v2.PerconaServerForMySQL,
