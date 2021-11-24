@@ -2,9 +2,7 @@ package k8s
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
-	"strings"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -42,13 +40,4 @@ func operatorPod(ctx context.Context, get APIGetter) (*corev1.Pod, error) {
 	}
 
 	return pod, nil
-}
-
-func DefaultAPINamespace() (string, error) {
-	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-	if err != nil {
-		return "", err
-	}
-
-	return strings.TrimSpace(string(nsBytes)), nil
 }
