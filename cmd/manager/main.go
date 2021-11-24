@@ -32,8 +32,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	psv2 "github.com/percona/percona-server-mysql-operator/pkg/api/v2"
-	"github.com/percona/percona-server-mysql-operator/pkg/controllers"
+	psv2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	"github.com/percona/percona-server-mysql-operator/controllers"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	//+kubebuilder:scaffold:imports
 )
