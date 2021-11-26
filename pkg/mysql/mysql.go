@@ -70,9 +70,12 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage string) *appsv1.Stat
 				MatchLabels: labels,
 			},
 			ServiceName: ServiceName(cr),
-			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				k8s.PVC(dataVolumeName, spec.VolumeSpec),
-			},
+			VolumeClaimTemplates: append(
+				[]corev1.PersistentVolumeClaim{
+					k8s.PVC(dataVolumeName, spec.VolumeSpec),
+				},
+				spec.SidecarPVCs...,
+			),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
@@ -108,24 +111,27 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage string) *appsv1.Stat
 					RestartPolicy: corev1.RestartPolicyAlways,
 					SchedulerName: "default-scheduler",
 					DNSPolicy:     corev1.DNSClusterFirst,
-					Volumes: []corev1.Volume{
-						{
-							Name: credsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cr.Spec.SecretsName,
+					Volumes: append(
+						[]corev1.Volume{
+							{
+								Name: credsVolumeName,
+								VolumeSource: corev1.VolumeSource{
+									Secret: &corev1.SecretVolumeSource{
+										SecretName: cr.Spec.SecretsName,
+									},
+								},
+							},
+							{
+								Name: tlsVolumeName,
+								VolumeSource: corev1.VolumeSource{
+									Secret: &corev1.SecretVolumeSource{
+										SecretName: cr.Spec.SSLSecretName,
+									},
 								},
 							},
 						},
-						{
-							Name: tlsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cr.Spec.SSLSecretName,
-								},
-							},
-						},
-					},
+						spec.SidecarVolumes...,
+					),
 					SecurityContext: spec.PodSecurityContext,
 				},
 			},

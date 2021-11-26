@@ -54,7 +54,12 @@ type MySQLSpec struct {
 	SizeSemiSync intstr.IntOrString `json:"sizeSemiSync,omitempty"`
 	SemiSyncType string             `json:"semiSyncType,omitempty"`
 	Expose       ServiceExpose      `json:"expose,omitempty"`
-	PodSpec      `json:",inline"`
+
+	Sidecars       []corev1.Container             `json:"sidecars,omitempty"`
+	SidecarVolumes []corev1.Volume                `json:"sidecarVolumes,omitempty"`
+	SidecarPVCs    []corev1.PersistentVolumeClaim `json:"sidecarPVCs,omitempty"`
+
+	PodSpec `json:",inline"`
 }
 
 type OrchestratorSpec struct {
@@ -96,7 +101,6 @@ type PodSpec struct {
 	ContainerSecurityContext      *corev1.SecurityContext                 `json:"containerSecurityContext,omitempty"`
 	ServiceAccountName            string                                  `json:"serviceAccountName,omitempty"`
 	ImagePullPolicy               corev1.PullPolicy                       `json:"imagePullPolicy,omitempty"`
-	Sidecars                      []corev1.Container                      `json:"sidecars,omitempty"`
 	RuntimeClassName              *string                                 `json:"runtimeClassName,omitempty"`
 }
 

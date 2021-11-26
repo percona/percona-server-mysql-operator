@@ -32,6 +32,27 @@ func (in *MySQLSpec) DeepCopyInto(out *MySQLSpec) {
 	*out = *in
 	out.SizeSemiSync = in.SizeSemiSync
 	in.Expose.DeepCopyInto(&out.Expose)
+	if in.Sidecars != nil {
+		in, out := &in.Sidecars, &out.Sidecars
+		*out = make([]v1.Container, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.SidecarVolumes != nil {
+		in, out := &in.SidecarVolumes, &out.SidecarVolumes
+		*out = make([]v1.Volume, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.SidecarPVCs != nil {
+		in, out := &in.SidecarPVCs, &out.SidecarPVCs
+		*out = make([]v1.PersistentVolumeClaim, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	in.PodSpec.DeepCopyInto(&out.PodSpec)
 }
 
@@ -532,13 +553,6 @@ func (in *PodSpec) DeepCopyInto(out *PodSpec) {
 		in, out := &in.ContainerSecurityContext, &out.ContainerSecurityContext
 		*out = new(v1.SecurityContext)
 		(*in).DeepCopyInto(*out)
-	}
-	if in.Sidecars != nil {
-		in, out := &in.Sidecars, &out.Sidecars
-		*out = make([]v1.Container, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
-		}
 	}
 	if in.RuntimeClassName != nil {
 		in, out := &in.RuntimeClassName, &out.RuntimeClassName
