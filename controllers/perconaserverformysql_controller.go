@@ -23,7 +23,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -72,21 +71,15 @@ func (r *PerconaServerForMySQLReconciler) Reconcile(
 	l := log.FromContext(ctx).
 		WithName("PerconaServerForMySQL").
 		WithValues("name", nn.Name, "namespace", nn.Namespace)
+	rr := ctrl.Result{RequeueAfter: 5 * time.Second}
 
 	cr, err := r.getCRWithDefaults(ctx, nn)
 	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return ctrl.Result{}, err
-		}
-
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, errors.Wrap(err, "get CR")
+		return rr, errors.Wrap(err, "get CR")
 	}
 
-	if err := r.doReconcile(ctx, l, cr); err != nil {
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, errors.Wrap(err, "reconcile")
-	}
-
-	return ctrl.Result{}, nil
+	err = r.doReconcile(ctx, l, cr)
+	return rr, errors.Wrap(err, "reconcile")
 }
 
 func (r *PerconaServerForMySQLReconciler) doReconcile(
