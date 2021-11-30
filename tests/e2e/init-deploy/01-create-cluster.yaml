@@ -1,0 +1,12 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 300
+commands:
+- script: |
+    set -o errexit
+    set -o xtrace
+
+    REPO_ROOT=$(realpath ../../..)
+    source "${REPO_ROOT}/hack/functions"
+
+    get_cr | kubectl apply -n "${NAMESPACE}" -f -

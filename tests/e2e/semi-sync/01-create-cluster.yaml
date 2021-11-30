@@ -1,13 +1,14 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
+timeout: 30
 commands:
 - script: |
-    . ../functions
     set -o errexit
     set -o xtrace
+
+    REPO_ROOT=$(realpath ../../..)
+    source "${REPO_ROOT}/hack/functions"
 
     get_cr \
       | yq eval '.spec.mysql.sizeSemiSync="1"' - \
       | kubectl apply -n "${NAMESPACE}" -f -
-
-  timeout: 30

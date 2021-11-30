@@ -6,7 +6,6 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
-	"k8s.io/apimachinery/pkg/util/intstr"
 
 	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
 )
@@ -34,7 +33,7 @@ type Replicator interface {
 	IsReplica() (bool, error)
 	DumbQuery() error
 	SetSemiSyncSource(enabled bool) error
-	SetSemiSyncSize(size intstr.IntOrString) error
+	SetSemiSyncSize(size int) error
 }
 
 type dbImpl struct{ db *sql.DB }
@@ -196,7 +195,7 @@ func (d *dbImpl) SetSemiSyncSource(enabled bool) error {
 	return errors.Wrap(err, "set rpl_semi_sync_master_enabled")
 }
 
-func (d *dbImpl) SetSemiSyncSize(size intstr.IntOrString) error {
+func (d *dbImpl) SetSemiSyncSize(size int) error {
 	_, err := d.db.Exec("SET GLOBAL rpl_semi_sync_master_wait_for_slave_count=?", size)
 	return errors.Wrap(err, "set rpl_semi_sync_master_wait_for_slave_count")
 }

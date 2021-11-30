@@ -18,10 +18,11 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -69,42 +70,40 @@ func (r *PerconaServerForMySQLReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
 ) (ctrl.Result, error) {
-	nn := req.NamespacedName
-	l := log.FromContext(ctx).
-		WithName("PerconaServerForMySQL").
-		WithValues("name", nn.Name, "namespace", nn.Namespace)
+	l := log.FromContext(ctx).WithName("PerconaServerForMySQL")
 
-	cr, err := r.getCRWithDefaults(ctx, nn)
+	rr := ctrl.Result{RequeueAfter: 5 * time.Second}
+
+	cr, err := r.getCRWithDefaults(ctx, req.NamespacedName)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
 
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, errors.Wrap(err, "get CR")
+		return rr, errors.Wrap(err, "get CR")
 	}
 
 	defer func() {
-		if err := r.updateStatus(ctx, cr); err != nil {
+		if err := r.reconcileCRStatus(ctx, cr); err != nil {
 			l.Error(err, "failed to update status")
 		}
 	}()
 
-	if err := r.doReconcile(ctx, l, cr); err != nil {
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, errors.Wrap(err, "reconcile")
+	if err := r.doReconcile(ctx, cr); err != nil {
+		return rr, errors.Wrap(err, "reconcile")
 	}
 
-	return ctrl.Result{}, nil
+	return rr, nil
 }
 
 func (r *PerconaServerForMySQLReconciler) doReconcile(
 	ctx context.Context,
-	log logr.Logger,
 	cr *apiv2.PerconaServerForMySQL,
 ) error {
-	if err := r.reconcileUserSecrets(ctx, cr); err != nil {
+	if err := r.ensureUserSecrets(ctx, cr); err != nil {
 		return errors.Wrap(err, "users secret")
 	}
-	if err := r.createTLSSecret(ctx, cr); err != nil {
+	if err := r.ensureTLSSecret(ctx, cr); err != nil {
 		return errors.Wrap(err, "TLS secret")
 	}
 	if err := r.reconcileDatabase(ctx, cr); err != nil {
@@ -135,7 +134,7 @@ func (r *PerconaServerForMySQLReconciler) getCRWithDefaults(
 	return cr, nil
 }
 
-func (r *PerconaServerForMySQLReconciler) reconcileUserSecrets(
+func (r *PerconaServerForMySQLReconciler) ensureUserSecrets(
 	ctx context.Context,
 	cr *apiv2.PerconaServerForMySQL,
 ) error {
@@ -162,7 +161,7 @@ func (r *PerconaServerForMySQLReconciler) reconcileUserSecrets(
 	return nil
 }
 
-func (r *PerconaServerForMySQLReconciler) createTLSSecret(
+func (r *PerconaServerForMySQLReconciler) ensureTLSSecret(
 	ctx context.Context,
 	cr *apiv2.PerconaServerForMySQL,
 ) error {
@@ -202,14 +201,17 @@ func (r *PerconaServerForMySQLReconciler) reconcileDatabase(
 	if err != nil {
 		return errors.Wrap(err, "reconcile sts")
 	}
+
 	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.Service(cr), r.Scheme)
 	if err != nil {
 		return errors.Wrap(err, "reconcile svc")
 	}
+
 	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.PrimaryService(cr), r.Scheme)
 	if err != nil {
 		return errors.Wrap(err, "reconcile primary svc")
 	}
+
 	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.UnreadyService(cr), r.Scheme)
 	if err != nil {
 		return errors.Wrap(err, "reconcile unready svc")
@@ -222,12 +224,18 @@ func (r *PerconaServerForMySQLReconciler) reconcileOrchestrator(
 	ctx context.Context,
 	cr *apiv2.PerconaServerForMySQL,
 ) error {
-	err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.StatefulSet(cr), r.Scheme)
-	if err != nil {
+	l := log.FromContext(ctx).WithName("reconcileOrchestrator")
+
+	if cr.MySQLSpec().Size < 2 {
+		l.Info("no enough mysql replicas. skip", "size", cr.MySQLSpec().Size)
+		return nil
+	}
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.StatefulSet(cr), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile StatefulSet")
 	}
-	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.Service(cr), r.Scheme)
-	if err != nil {
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.Service(cr), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile Service")
 	}
 
@@ -238,6 +246,18 @@ func (r *PerconaServerForMySQLReconciler) reconcileReplication(
 	ctx context.Context,
 	cr *apiv2.PerconaServerForMySQL,
 ) error {
+	l := log.FromContext(ctx).WithName("reconcileReplication")
+
+	sts := &appsv1.StatefulSet{}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(orchestrator.StatefulSet(cr)), sts); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+
+	if sts.Status.ReadyReplicas == 0 {
+		l.Info("orchestrator is not ready. skip", "ready", sts.Status.ReadyReplicas)
+		return nil
+	}
+
 	if err := reconcileReplicationPrimaryPod(ctx, r.Client, cr); err != nil {
 		return errors.Wrap(err, "reconcile primary pod")
 	}
@@ -250,19 +270,23 @@ func (r *PerconaServerForMySQLReconciler) reconcileReplication(
 
 func reconcileReplicationPrimaryPod(
 	ctx context.Context,
-	cl k8s.APIListPatcher,
+	cl k8s.APIListUpdater,
 	cr *apiv2.PerconaServerForMySQL,
 ) error {
+	l := log.FromContext(ctx).WithName("reconcileReplicationPrimaryPod")
+
 	pods, err := k8s.PodsByLabels(ctx, cl, mysql.MatchLabels(cr))
 	if err != nil {
 		return errors.Wrap(err, "get MySQL pod list")
 	}
+	l.Info(fmt.Sprintf("get %v pods", len(pods)))
 
 	host := orchestrator.APIHost(orchestrator.ServiceName(cr))
 	primary, err := orchestrator.ClusterPrimary(ctx, host, cr.ClusterHint())
 	if err != nil {
-		return errors.Wrap(err, "get cluster from orchestrator")
+		return errors.Wrap(err, "get cluster primary")
 	}
+	l.Info("got cluster primary", "data", primary)
 	primaryAlias := primary.Alias()
 
 	for i := range pods {
@@ -270,15 +294,18 @@ func reconcileReplicationPrimaryPod(
 		if pod.GetLabels()[apiv2.MySQLPrimaryLabel] == "true" {
 			if pod.Name == primaryAlias {
 				// primary is not changed
+				l.Info(fmt.Sprintf("primary %v is not changed", primaryAlias))
 				return nil
 			}
 
-			patch := client.StrategicMergeFrom(pod)
 			k8s.RemoveLabel(pod, apiv2.MySQLPrimaryLabel)
-			if err := cl.Patch(ctx, pod, patch); err != nil {
-				return errors.Wrap(err, "remove label from old primary pod")
+			if err := cl.Update(ctx, pod); err != nil {
+				return errors.Wrapf(err, "remove label from old primary pod: %v/%v",
+					pod.GetNamespace(), pod.GetName())
 			}
 
+			l.Info(fmt.Sprintf("removed label from old primary pod: %v/%v",
+				pod.GetNamespace(), pod.GetName()))
 			break
 		}
 	}
@@ -286,11 +313,14 @@ func reconcileReplicationPrimaryPod(
 	for i := range pods {
 		pod := &pods[i]
 		if pods[i].Name == primaryAlias {
-			patch := client.StrategicMergeFrom(pod)
 			k8s.AddLabel(pod, apiv2.MySQLPrimaryLabel, "true")
-			if err := cl.Patch(ctx, pod, patch); err != nil {
-				return errors.Wrap(err, "add label to new primary pod")
+			if err := cl.Update(ctx, pod); err != nil {
+				return errors.Wrapf(err, "add label to new primary pod %v/%v",
+					pod.GetNamespace(), pod.GetName())
 			}
+
+			l.Info(fmt.Sprintf("added label to new primary pod: %v/%v",
+				pod.GetNamespace(), pod.GetName()))
 
 			break
 		}
@@ -304,10 +334,18 @@ func reconcileReplicationSemiSync(
 	rdr client.Reader,
 	cr *apiv2.PerconaServerForMySQL,
 ) error {
+	l := log.FromContext(ctx).WithName("reconcileReplicationPrimaryPod")
+
 	host := orchestrator.APIHost(orchestrator.ServiceName(cr))
 	primary, err := orchestrator.ClusterPrimary(ctx, host, cr.ClusterHint())
 	if err != nil {
 		return errors.Wrap(err, "get primary from orchestrator")
+	}
+	if primary.Hostname() == "" {
+		l.Info("primary hostname is empty. skip")
+		return nil
+	} else {
+		l.Info(fmt.Sprintf("got primary host: %v", primary.Hostname()))
 	}
 
 	operatorPass, err := k8s.UserPassword(ctx, rdr, cr, apiv2.UserOperator)
@@ -320,26 +358,29 @@ func reconcileReplicationSemiSync(
 		primary.Hostname(),
 		mysql.DefaultAdminPort)
 	if err != nil {
-		return errors.Wrapf(err, "connect to %s", primary.Hostname())
+		return errors.Wrapf(err, "connect to %v", primary.Hostname())
 	}
 	defer db.Close()
 
 	if err := db.SetSemiSyncSource(cr.MySQLSpec().SizeSemiSync.IntValue() > 0); err != nil {
-		return errors.Wrapf(err, "set semi-sync on %s", primary.Hostname())
+		return errors.Wrapf(err, "set semi-sync source on %v", primary.Hostname())
 	}
+	l.Info(fmt.Sprintf("set semi-sync source on %v", primary.Hostname()))
 
 	if cr.Spec.MySQL.SizeSemiSync.IntValue() < 1 {
+		l.Info(fmt.Sprintf("semi-sync size is %v. skip", cr.Spec.MySQL.SizeSemiSync.IntValue()))
 		return nil
 	}
 
-	if err := db.SetSemiSyncSize(cr.MySQLSpec().SizeSemiSync); err != nil {
-		return errors.Wrapf(err, "set semi-sync size on %s", primary.Hostname())
+	if err := db.SetSemiSyncSize(cr.MySQLSpec().SizeSemiSync.IntValue()); err != nil {
+		return errors.Wrapf(err, "set semi-sync size on %v", primary.Hostname())
 	}
+	l.Info(fmt.Sprintf("set semi-sync size on %v", primary.Hostname()))
 
 	return nil
 }
 
-func (r *PerconaServerForMySQLReconciler) updateStatus(
+func (r *PerconaServerForMySQLReconciler) reconcileCRStatus(
 	ctx context.Context,
 	cr *apiv2.PerconaServerForMySQL,
 ) error {

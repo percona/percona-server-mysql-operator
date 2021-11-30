@@ -2,16 +2,16 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
 - script: |
-    . ../functions
     set -o errexit
     set -o xtrace
 
+    REPO_ROOT=$(realpath ../../..)
+    source "${REPO_ROOT}/hack/functions"
+
     run_mysql \
-      "CREATE DATABASE IF NOT EXISTS myApp; use myApp; CREATE TABLE IF NOT EXISTS myApp (id int PRIMARY KEY)" \
+      "CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable (id int PRIMARY KEY)" \
       "-h $(get_mysql_primary_service $(get_cluster_name)) -uroot -proot_password"
 
     run_mysql \
-      "INSERT myApp.myApp (id) VALUES (100500)" \
+      "INSERT myDB.myTable (id) VALUES (100500)" \
       "-h $(get_mysql_primary_service $(get_cluster_name)) -uroot -proot_password"
-
-  timeout: 30

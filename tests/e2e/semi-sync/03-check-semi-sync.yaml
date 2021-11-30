@@ -1,10 +1,13 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
+timeout: 30
 commands:
 - script: |
-    . ../functions
     set -o errexit
     set -o xtrace
+
+    REPO_ROOT=$(realpath ../../..)
+    source "${REPO_ROOT}/hack/functions"
 
     mysql_args="-h $(get_mysql_primary_service $(get_cluster_name)) -uroot -proot_password"
     enabled=$(run_mysql "SELECT @@rpl_semi_sync_master_enabled" "${mysql_args}")
@@ -14,5 +17,4 @@ commands:
       --from-literal=enabled="${enabled}" \
       --from-literal=wait_count="${wait_count}"
 
-  timeout: 30
 

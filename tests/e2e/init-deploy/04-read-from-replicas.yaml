@@ -3,15 +3,17 @@ kind: TestStep
 timeout: 30
 commands:
 - script: |
-    . ../functions
     set -o errexit
     set -o xtrace
+
+    REPO_ROOT=$(realpath ../../..)
+    source "${REPO_ROOT}/hack/functions"
 
     args=''
     size=$(kubectl -n ${NAMESPACE} get ps $(get_cluster_name) -o jsonpath='{.spec.mysql.size}')
     for i in $(seq 0 $((size - 1))); do
       host=$(get_mysql_headless_fqdn $(get_cluster_name) $i)
-      data=$(run_mysql "SELECT * FROM myApp.myApp" "-h ${host} -uroot -proot_password")
+      data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${host} -uroot -proot_password")
       args="${args} --from-literal=${host}=${data}"
     done
 

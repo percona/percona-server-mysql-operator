@@ -10,8 +10,12 @@ type APIGetter interface {
 	Get(context.Context, client.ObjectKey, client.Object) error
 }
 
-type APICreater interface {
+type APICreator interface {
 	Create(context.Context, client.Object, ...client.CreateOption) error
+}
+
+type APIUpdater interface {
+	Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error
 }
 
 type APIPatcher interface {
@@ -24,11 +28,11 @@ type APIList interface {
 
 type APIGetCreatePatcher interface {
 	APIGetter
-	APICreater
+	APICreator
 	APIPatcher
 }
 
-type APIListPatcher interface {
-	APIPatcher
+type APIListUpdater interface {
+	APIUpdater
 	APIList
 }

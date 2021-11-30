@@ -77,7 +77,7 @@ func ObjectExists(ctx context.Context, get APIGetter, nn types.NamespacedName, o
 
 func EnsureObject(
 	ctx context.Context,
-	cl APICreater,
+	cl APICreator,
 	cr *apiv2.PerconaServerForMySQL,
 	o client.Object,
 	s *runtime.Scheme,

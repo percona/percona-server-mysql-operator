@@ -1,12 +1,13 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
+timeout: 30
 commands:
 - script: |
-    . ../functions
     set -o errexit
     set -o xtrace
 
+    REPO_ROOT=$(realpath ../../..)
+    source "${REPO_ROOT}/hack/functions"
+
     get_metric_values node_boot_time_seconds ${NAMESPACE}-$(get_cluster_name)-mysql-0 admin:admin
     get_metric_values mysql_global_status_uptime ${NAMESPACE}-$(get_cluster_name)-mysql-0 admin:admin
-
-  timeout: 30

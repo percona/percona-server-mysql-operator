@@ -3,10 +3,12 @@ kind: TestStep
 timeout: 30
 commands:
 - script: |
-    . ../functions
     set -o errexit
     set -o xtrace
 
-    data=$(run_mysql "SELECT * FROM myApp.myApp" "-h $(get_mysql_primary_service $(get_cluster_name)) -uroot -proot_password")
+    REPO_ROOT=$(realpath ../../..)
+    source "${REPO_ROOT}/hack/functions"
+
+    data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_mysql_primary_service $(get_cluster_name)) -uroot -proot_password")
 
     kubectl create configmap -n "${NAMESPACE}" 03-read-from-primary --from-literal=data="${data}"

@@ -5,6 +5,7 @@
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
 NAME ?= percona-server-for-mysql-operator
 VERSION ?= $(shell git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')
+ROOT_REPO ?= ${PWD}
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -93,7 +94,7 @@ test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
 
 e2e-test:
-	cd e2e-tests/ && kubectl kuttl test
+	kubectl kuttl test --config tests/kuttl.yaml
 
 manifests: kustomize generate
 	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml
@@ -107,8 +108,9 @@ manifests: kustomize generate
 
 ##@ Build
 
-build: test ## Build docker image with the manager.
-	./e2e-tests/build
+.PHONY: build
+build: #test ## Build docker image with the manager.
+	ROOT_REPO=$(ROOT_REPO) VERSION=$(VERSION) bash $(ROOT_REPO)/hack/build
 
 ##@ Deployment
 

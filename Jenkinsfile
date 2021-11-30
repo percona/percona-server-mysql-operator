@@ -81,7 +81,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         export PATH="$HOME/.krew/bin:$PATH"
                         source $HOME/google-cloud-sdk/path.bash.inc
-                        time kubectl kuttl test e2e-tests/ --test "${TEST_NAME}"
+                        time kubectl kuttl test --config tests/kuttl.yaml --test "${TEST_NAME}"
                     fi
                 """
             }
@@ -183,9 +183,7 @@ pipeline {
                     kubectl krew install kuttl
                 '''
                 withCredentials([file(credentialsId: 'cloud-secret-file', variable: 'CLOUD_SECRET_FILE')]) {
-                    sh '''
-                        cp $CLOUD_SECRET_FILE ./e2e-tests/conf/cloud-secret.yml
-                    '''
+                    sh 'cp $CLOUD_SECRET_FILE tests/conf/cloud-secret.yml'
                 }
             }
         }
@@ -206,7 +204,7 @@ pipeline {
                                 docker login -u '${USER}' -p '${PASS}'
                                 export RELEASE=0
                                 export IMAGE=\$DOCKER_TAG
-                                ./e2e-tests/build
+                                hack/build
                                 docker logout
                             "
                         sudo rm -rf ./build
@@ -240,7 +238,7 @@ pipeline {
                                     > go-licenses-new || :
                             '
                     "
-                    diff -u e2e-tests/license/compare/go-licenses go-licenses-new
+                    diff -u tests/license/compare/go-licenses go-licenses-new
                 """
             }
         }
@@ -272,7 +270,7 @@ pipeline {
                             | sort \
                             | uniq \
                             > golicense-new || true
-                        diff -u e2e-tests/license/compare/golicense golicense-new
+                        diff -u tests/license/compare/golicense golicense-new
                     """
                 }
                 unstash 'vendorFILES'

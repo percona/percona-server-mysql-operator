@@ -54,6 +54,8 @@ func MatchLabels(cr *apiv2.PerconaServerForMySQL) map[string]string {
 }
 
 func StatefulSet(cr *apiv2.PerconaServerForMySQL) *appsv1.StatefulSet {
+	var Replicas int32 = 1
+
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -65,7 +67,7 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL) *appsv1.StatefulSet {
 			Labels:    MatchLabels(cr),
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas:    &cr.Spec.Orchestrator.Size,
+			Replicas:    &Replicas,
 			ServiceName: Name(cr),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: MatchLabels(cr),
@@ -128,6 +130,10 @@ func container(cr *apiv2.PerconaServerForMySQL) corev1.Container {
 			{
 				Name:  "MYSQL_SERVICE",
 				Value: mysql.ServiceName(cr),
+			},
+			{
+				Name:  "RAFT_ENABLED",
+				Value: "false",
 			},
 		},
 		Ports: []corev1.ContainerPort{
