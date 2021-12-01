@@ -54,7 +54,9 @@ func MatchLabels(cr *apiv2.PerconaServerForMySQL) map[string]string {
 }
 
 func StatefulSet(cr *apiv2.PerconaServerForMySQL) *appsv1.StatefulSet {
-	Replicas := cr.OrchestratorSpec().Size
+	labels := MatchLabels(cr)
+	spec := cr.OrchestratorSpec()
+	Replicas := spec.Size
 
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
@@ -64,23 +66,24 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL) *appsv1.StatefulSet {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      Name(cr),
 			Namespace: cr.Namespace,
-			Labels:    MatchLabels(cr),
+			Labels:    labels,
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &Replicas,
 			ServiceName: Name(cr),
 			Selector: &metav1.LabelSelector{
-				MatchLabels: MatchLabels(cr),
+				MatchLabels: labels,
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				k8s.PVC(dataVolumeName, cr.Spec.Orchestrator.VolumeSpec),
+				k8s.PVC(dataVolumeName, spec.VolumeSpec),
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: MatchLabels(cr),
+					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					Containers: containers(cr),
+					Containers:       containers(cr),
+					ImagePullSecrets: spec.ImagePullSecrets,
 					// TerminationGracePeriodSeconds: 30,
 					RestartPolicy: corev1.RestartPolicyAlways,
 					SchedulerName: "default-scheduler",
@@ -103,7 +106,7 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL) *appsv1.StatefulSet {
 							},
 						},
 					},
-					SecurityContext: cr.Spec.Orchestrator.PodSecurityContext,
+					SecurityContext: spec.PodSecurityContext,
 				},
 			},
 		},
