@@ -227,7 +227,7 @@ func (r *PerconaServerForMySQLReconciler) reconcileOrchestrator(
 	l := log.FromContext(ctx).WithName("reconcileOrchestrator")
 
 	if cr.MySQLSpec().Size < 2 {
-		l.Info("no enough mysql replicas. skip", "size", cr.MySQLSpec().Size)
+		l.Info("not enough mysql replicas. skip", "size", cr.MySQLSpec().Size)
 		return nil
 	}
 
@@ -279,22 +279,21 @@ func reconcileReplicationPrimaryPod(
 	if err != nil {
 		return errors.Wrap(err, "get MySQL pod list")
 	}
-	l.Info(fmt.Sprintf("get %v pods", len(pods)))
+	l.Info(fmt.Sprintf("got %v pods", len(pods)))
 
 	host := orchestrator.APIHost(orchestrator.ServiceName(cr))
 	primary, err := orchestrator.ClusterPrimary(ctx, host, cr.ClusterHint())
 	if err != nil {
 		return errors.Wrap(err, "get cluster primary")
 	}
-	l.Info("got cluster primary", "data", primary)
 	primaryAlias := primary.Alias()
+	l.Info(fmt.Sprintf("got cluster primary alias: %v", primaryAlias), "data", primary)
 
 	for i := range pods {
 		pod := &pods[i]
 		if pod.GetLabels()[apiv2.MySQLPrimaryLabel] == "true" {
 			if pod.Name == primaryAlias {
-				// primary is not changed
-				l.Info(fmt.Sprintf("primary %v is not changed", primaryAlias))
+				l.Info(fmt.Sprintf("primary %v is not changed. skip", primaryAlias))
 				return nil
 			}
 
@@ -331,7 +330,7 @@ func reconcileReplicationPrimaryPod(
 
 func reconcileReplicationSemiSync(
 	ctx context.Context,
-	rdr client.Reader,
+	rdr k8s.APIGetter,
 	cr *apiv2.PerconaServerForMySQL,
 ) error {
 	l := log.FromContext(ctx).WithName("reconcileReplicationPrimaryPod")
@@ -339,14 +338,14 @@ func reconcileReplicationSemiSync(
 	host := orchestrator.APIHost(orchestrator.ServiceName(cr))
 	primary, err := orchestrator.ClusterPrimary(ctx, host, cr.ClusterHint())
 	if err != nil {
-		return errors.Wrap(err, "get primary from orchestrator")
+		return errors.Wrap(err, "get cluster primary")
 	}
-	if primary.Hostname() == "" {
-		l.Info("primary hostname is empty. skip")
-		return nil
-	} else {
-		l.Info(fmt.Sprintf("got primary host: %v", primary.Hostname()))
+
+	primaryHost := primary.Hostname()
+	if primaryHost == "" {
+		primaryHost = fmt.Sprintf("%v.%v.%v", primary.Alias(), mysql.ServiceName(cr), cr.GetNamespace())
 	}
+	l.Info(fmt.Sprintf("use primary host: %v", primaryHost))
 
 	operatorPass, err := k8s.UserPassword(ctx, rdr, cr, apiv2.UserOperator)
 	if err != nil {
@@ -358,14 +357,14 @@ func reconcileReplicationSemiSync(
 		primary.Hostname(),
 		mysql.DefaultAdminPort)
 	if err != nil {
-		return errors.Wrapf(err, "connect to %v", primary.Hostname())
+		return errors.Wrapf(err, "connect to %v", primaryHost)
 	}
 	defer db.Close()
 
 	if err := db.SetSemiSyncSource(cr.MySQLSpec().SizeSemiSync.IntValue() > 0); err != nil {
-		return errors.Wrapf(err, "set semi-sync source on %v", primary.Hostname())
+		return errors.Wrapf(err, "set semi-sync source on %#v", primaryHost)
 	}
-	l.Info(fmt.Sprintf("set semi-sync source on %v", primary.Hostname()))
+	l.Info(fmt.Sprintf("set semi-sync source on %v", primaryHost))
 
 	if cr.Spec.MySQL.SizeSemiSync.IntValue() < 1 {
 		l.Info(fmt.Sprintf("semi-sync size is %v. skip", cr.Spec.MySQL.SizeSemiSync.IntValue()))
@@ -373,9 +372,9 @@ func reconcileReplicationSemiSync(
 	}
 
 	if err := db.SetSemiSyncSize(cr.MySQLSpec().SizeSemiSync.IntValue()); err != nil {
-		return errors.Wrapf(err, "set semi-sync size on %v", primary.Hostname())
+		return errors.Wrapf(err, "set semi-sync size on %v", primaryHost)
 	}
-	l.Info(fmt.Sprintf("set semi-sync size on %v", primary.Hostname()))
+	l.Info(fmt.Sprintf("set semi-sync size on %v", primaryHost))
 
 	return nil
 }
