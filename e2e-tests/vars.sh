@@ -3,7 +3,7 @@
 export ROOT_REPO=${ROOT_REPO:-${PWD}}
 
 export DEPLOY_DIR="${DEPLOY_DIR:-${ROOT_REPO}/deploy}"
-export TESTS_DIR="${TESTS_DIR:-${ROOT_REPO}/tests}"
+export TESTS_DIR="${TESTS_DIR:-${ROOT_REPO}/e2e-tests}"
 export TESTS_CONFIG_DIR="${TESTS_CONFIG_DIR:-${TESTS_DIR}/conf}"
 export TEMP_DIR=$(mktemp -d)
 

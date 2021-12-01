@@ -73,7 +73,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
             testsReportMap[TEST_NAME] = 'failed'
             popArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME")
 
-            timeout(time: 90, unit: 'MINUTES') {
+            timeout(time: 15, unit: 'MINUTES') {
                 sh """
                     if [ -f "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME" ]; then
                         echo Skip $TEST_NAME test
@@ -81,7 +81,8 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         export PATH="$HOME/.krew/bin:$PATH"
                         source $HOME/google-cloud-sdk/path.bash.inc
-                        time kubectl kuttl test --config tests/kuttl.yaml --test "${TEST_NAME}"
+                        source e2e-tests/vars.sh
+                        time kubectl kuttl test --config "${TESTS_DIR}/kuttl.yaml" --test "${TEST_NAME}"
                     fi
                 """
             }
@@ -196,15 +197,14 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'hub.docker.com', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
                     sh '''
-                        DOCKER_TAG=perconalab/percona-server-mysql-operator:$VERSION
+                        source e2e-tests/vars.sh
                         docker_tag_file='./results/docker/TAG'
                         mkdir -p $(dirname ${docker_tag_file})
-                        echo ${DOCKER_TAG} > "${docker_tag_file}"
+                        echo ${IMAGE} > "${docker_tag_file}"
                             sg docker -c "
                                 docker login -u '${USER}' -p '${PASS}'
                                 export RELEASE=0
-                                export IMAGE=\$DOCKER_TAG
-                                hack/build
+                                ${TESTS_DIR}/build
                                 docker logout
                             "
                         sudo rm -rf ./build

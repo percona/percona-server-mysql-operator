@@ -4,7 +4,7 @@ exec 5>&2
 export BASH_XTRACEFD="5"
 
 ROOT_REPO=${ROOT_REPO:-${PWD}}
-source "${ROOT_REPO}/hack/vars.sh"
+source "${ROOT_REPO}/e2e-tests/vars.sh"
 
 BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 GIT_COMMIT=$(git rev-parse HEAD)

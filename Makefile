@@ -82,7 +82,7 @@ help: ## Display this help.
 
 generate: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=$(NAME)-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases  ## Generate WebhookConfiguration, Role and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..." ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+	$(CONTROLLER_GEN) object:headerFile="LICENSE-HEADER" paths="./..." ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 
 fmt: ## Run go fmt against code.
 	go fmt ./...
@@ -110,7 +110,7 @@ manifests: kustomize generate
 
 .PHONY: build
 build: #test ## Build docker image with the manager.
-	ROOT_REPO=$(ROOT_REPO) VERSION=$(VERSION) bash $(ROOT_REPO)/hack/build
+	ROOT_REPO=$(ROOT_REPO) VERSION=$(VERSION) $(ROOT_REPO)/e2e-tests/build
 
 ##@ Deployment
 

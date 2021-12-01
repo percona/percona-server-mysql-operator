@@ -7,7 +7,7 @@ commands:
     set -o xtrace
 
     REPO_ROOT=$(realpath ../../..)
-    source "${REPO_ROOT}/hack/functions"
+    source "${REPO_ROOT}/e2e-tests/functions"
 
     helm install monitoring \
       -n "${NAMESPACE}" \

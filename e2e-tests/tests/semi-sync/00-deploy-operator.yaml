@@ -7,6 +7,6 @@ commands:
     set -o xtrace
 
     REPO_ROOT=$(realpath ../../..)
-    source "${REPO_ROOT}/hack/functions"
+    source "${REPO_ROOT}/e2e-tests/functions"
 
     deploy_operator
