@@ -5,8 +5,7 @@ commands:
     set -o errexit
     set -o xtrace
 
-    REPO_ROOT=$(realpath ../../..)
-    source "${REPO_ROOT}/e2e-tests/functions"
+    source ../../functions
 
     run_mysql \
       "CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable (id int PRIMARY KEY)" \

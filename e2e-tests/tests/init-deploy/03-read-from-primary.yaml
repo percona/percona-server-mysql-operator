@@ -6,8 +6,7 @@ commands:
     set -o errexit
     set -o xtrace
 
-    REPO_ROOT=$(realpath ../../..)
-    source "${REPO_ROOT}/e2e-tests/functions"
+    source ../../functions
 
     data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_mysql_primary_service $(get_cluster_name)) -uroot -proot_password")
 

@@ -1,6 +1,6 @@
 GKERegion='us-central1-a'
 
-void CreateCluster(String CLUSTER_PREFIX) {
+void CreateCluster(String CLUSTER_PREFIX, String SUBNETWORK = CLUSTER_PREFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
             NODES_NUM=3
@@ -9,7 +9,7 @@ void CreateCluster(String CLUSTER_PREFIX) {
             gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
             gcloud config set project $GCP_PROJECT
             gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_PREFIX} --zone $GKERegion --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $GKERegion --quiet || true
-            gcloud container clusters create --zone $GKERegion $CLUSTER_NAME-${CLUSTER_PREFIX} --cluster-version=1.21 --machine-type=n1-standard-4 --preemptible --num-nodes=\$NODES_NUM --network=jenkins-ps-vpc --subnetwork=jenkins-ps-${CLUSTER_PREFIX} --no-enable-autoupgrade
+            gcloud container clusters create --zone $GKERegion $CLUSTER_NAME-${CLUSTER_PREFIX} --cluster-version=1.21 --machine-type=n1-standard-4 --preemptible --num-nodes=\$NODES_NUM --network=jenkins-ps-vpc --subnetwork=jenkins-ps-${SUBNETWORK} --no-enable-autoupgrade
             kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"$GCP_PROJECT".iam.gserviceaccount.com
         """
    }
@@ -73,7 +73,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
             testsReportMap[TEST_NAME] = 'failed'
             popArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME")
 
-            timeout(time: 15, unit: 'MINUTES') {
+            timeout(time: 30, unit: 'MINUTES') {
                 sh """
                     if [ -f "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME" ]; then
                         echo Skip $TEST_NAME test
@@ -81,8 +81,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         export PATH="$HOME/.krew/bin:$PATH"
                         source $HOME/google-cloud-sdk/path.bash.inc
-                        source e2e-tests/vars.sh
-                        time kubectl kuttl test --config "${TESTS_DIR}/kuttl.yaml" --test "${TEST_NAME}"
+                        time kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "${TEST_NAME}"
                     fi
                 """
             }
@@ -91,6 +90,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
             return true
         }
         catch (exc) {
+            echo "The $TEST_NAME test was failed!"
             if (retryCount >= 2) {
                 currentBuild.result = 'FAILURE'
                 return true
@@ -184,7 +184,7 @@ pipeline {
                     kubectl krew install kuttl
                 '''
                 withCredentials([file(credentialsId: 'cloud-secret-file', variable: 'CLOUD_SECRET_FILE')]) {
-                    sh 'cp $CLOUD_SECRET_FILE tests/conf/cloud-secret.yml'
+                    sh 'cp $CLOUD_SECRET_FILE e2e-tests/conf/cloud-secret.yml'
                 }
             }
         }
@@ -197,14 +197,15 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'hub.docker.com', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
                     sh '''
-                        source e2e-tests/vars.sh
+                        DOCKER_TAG=perconalab/percona-server-mysql-operator:$VERSION
                         docker_tag_file='./results/docker/TAG'
                         mkdir -p $(dirname ${docker_tag_file})
-                        echo ${IMAGE} > "${docker_tag_file}"
+                        echo ${DOCKER_TAG} > "${docker_tag_file}"
                             sg docker -c "
                                 docker login -u '${USER}' -p '${PASS}'
                                 export RELEASE=0
-                                ${TESTS_DIR}/build
+                                export IMAGE=\$DOCKER_TAG
+                                ./e2e-tests/build
                                 docker logout
                             "
                         sudo rm -rf ./build
@@ -214,87 +215,79 @@ pipeline {
                 archiveArtifacts 'results/docker/TAG'
             }
         }
-        stage('GoLicenseDetector test') {
+        stage('Check licenses') {
             when {
                 expression {
                     !skipBranchBulds
                 }
-            }
-            steps {
-                sh """
-                    mkdir -p $WORKSPACE/src/github.com/percona
-                    ln -s $WORKSPACE $WORKSPACE/src/github.com/percona/percona-server-mysql-operator
-                    sg docker -c "
-                        docker run \
-                            --rm \
-                            -v $WORKSPACE/src/github.com/percona/percona-server-mysql-operator:/go/src/github.com/percona/percona-server-mysql-operator \
-                            -w /go/src/github.com/percona/percona-server-mysql-operator \
-                            -e GO111MODULE=on \
-                            golang:1.17 sh -c '
-                                go install github.com/google/go-licenses@latest;
-                                /go/bin/go-licenses csv github.com/percona/percona-server-mysql-operator/cmd/manager \
-                                    | cut -d , -f 3 \
-                                    | sort -u \
-                                    > go-licenses-new || :
-                            '
-                    "
-                    diff -u tests/license/compare/go-licenses go-licenses-new
-                """
-            }
-        }
-        stage('GoLicense test') {
-            when {
-                expression {
-                    !skipBranchBulds
-                }
-            }
-            steps {
-                sh '''
-                    mkdir -p $WORKSPACE/src/github.com/percona
-                    ln -s $WORKSPACE $WORKSPACE/src/github.com/percona/percona-server-mysql-operator
-                    sg docker -c "
-                        docker run \
-                            --rm \
-                            -v $WORKSPACE/src/github.com/percona/percona-server-mysql-operator:/go/src/github.com/percona/percona-server-mysql-operator \
-                            -w /go/src/github.com/percona/percona-server-mysql-operator \
-                            -e GO111MODULE=on \
-                            golang:1.17 sh -c 'go build -v -mod=vendor -o percona-server-for-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
-                    "
-                '''
-
-                withCredentials([string(credentialsId: 'GITHUB_API_TOKEN', variable: 'GITHUB_TOKEN')]) {
-                    sh """
-                        golicense -plain ./percona-server-for-mysql-operator \
-                            | grep -v 'license not found' \
-                            | sed -r 's/^[^ ]+[ ]+//' \
-                            | sort \
-                            | uniq \
-                            > golicense-new || true
-                        diff -u tests/license/compare/golicense golicense-new
-                    """
-                }
-                unstash 'vendorFILES'
-            }
-        }
-        stage('Run tests for operator') {
-            when {
-                expression {
-                    !skipBranchBulds
-                }
-            }
-            options {
-                timeout(time: 3, unit: 'HOURS')
             }
             parallel {
-                stage('E2E Basic Tests') {
+                stage('GoLicenseDetector test') {
                     steps {
-                        CreateCluster('basic')
-                        runTest('init-deploy', 'basic')
-                        runTest('monitoring', 'basic')
-                        runTest('semi-sync', 'basic')
-                        ShutdownCluster('basic')
+                        sh """
+                            mkdir -p $WORKSPACE/src/github.com/percona
+                            ln -s $WORKSPACE $WORKSPACE/src/github.com/percona/percona-server-mysql-operator
+                            sg docker -c "
+                                docker run \
+                                    --rm \
+                                    -v $WORKSPACE/src/github.com/percona/percona-server-mysql-operator:/go/src/github.com/percona/percona-server-mysql-operator \
+                                    -w /go/src/github.com/percona/percona-server-mysql-operator \
+                                    -e GO111MODULE=on \
+                                    golang:1.17 sh -c '
+                                        go install github.com/google/go-licenses@latest;
+                                        /go/bin/go-licenses csv github.com/percona/percona-server-mysql-operator/cmd/manager \
+                                            | cut -d , -f 3 \
+                                            | sort -u \
+                                            > go-licenses-new || :
+                                    '
+                            "
+                            diff -u ./e2e-tests/license/compare/go-licenses go-licenses-new
+                        """
                     }
                 }
+                stage('GoLicense test') {
+                    steps {
+                        sh '''
+                            mkdir -p $WORKSPACE/src/github.com/percona
+                            ln -s $WORKSPACE $WORKSPACE/src/github.com/percona/percona-server-mysql-operator
+                            sg docker -c "
+                                docker run \
+                                    --rm \
+                                    -v $WORKSPACE/src/github.com/percona/percona-server-mysql-operator:/go/src/github.com/percona/percona-server-mysql-operator \
+                                    -w /go/src/github.com/percona/percona-server-mysql-operator \
+                                    -e GO111MODULE=on \
+                                    golang:1.17 sh -c 'go build -v -mod=vendor -o percona-server-for-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
+                            "
+                        '''
+
+                        withCredentials([string(credentialsId: 'GITHUB_API_TOKEN', variable: 'GITHUB_TOKEN')]) {
+                            sh """
+                                golicense -plain ./percona-server-for-mysql-operator \
+                                    | grep -v 'license not found' \
+                                    | sed -r 's/^[^ ]+[ ]+//' \
+                                    | sort \
+                                    | uniq \
+                                    > golicense-new || true
+                                diff -u ./e2e-tests/license/compare/golicense golicense-new
+                            """
+                        }
+                        unstash 'vendorFILES'
+                    }
+                }
+            }
+        }
+        stage('E2E Basic Tests') {
+            when {
+                expression {
+                    !skipBranchBulds
+                }
+            }
+            steps {
+                CreateCluster('basic')
+                runTest('init-deploy', 'basic')
+                runTest('semi-sync', 'basic')
+                runTest('monitoring', 'basic')
+                ShutdownCluster('basic')
             }
         }
     }

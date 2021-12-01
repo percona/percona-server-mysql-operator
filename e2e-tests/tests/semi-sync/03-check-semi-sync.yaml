@@ -6,8 +6,7 @@ commands:
     set -o errexit
     set -o xtrace
 
-    REPO_ROOT=$(realpath ../../..)
-    source "${REPO_ROOT}/e2e-tests/functions"
+    source ../../functions
 
     mysql_args="-h $(get_mysql_primary_service $(get_cluster_name)) -uroot -proot_password"
     enabled=$(run_mysql "SELECT @@rpl_semi_sync_master_enabled" "${mysql_args}")

@@ -3,7 +3,8 @@
 exec 5>&2
 export BASH_XTRACEFD="5"
 
-ROOT_REPO=${ROOT_REPO:-${PWD}}
+# set root repo relatively to a test dir
+ROOT_REPO=${ROOT_REPO:-$(realpath ../../..)}
 source "${ROOT_REPO}/e2e-tests/vars.sh"
 
 deploy_operator() {

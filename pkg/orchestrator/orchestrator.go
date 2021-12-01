@@ -54,7 +54,7 @@ func MatchLabels(cr *apiv2.PerconaServerForMySQL) map[string]string {
 }
 
 func StatefulSet(cr *apiv2.PerconaServerForMySQL) *appsv1.StatefulSet {
-	var Replicas int32 = 1
+	Replicas := cr.OrchestratorSpec().Size
 
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
@@ -80,6 +80,13 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL) *appsv1.StatefulSet {
 					Labels: MatchLabels(cr),
 				},
 				Spec: corev1.PodSpec{
+					InitContainers: []corev1.Container{
+						{
+							Name:    "init",
+							Image:   "busybox",
+							Command: []string{"sleep", "1s"},
+						},
+					},
 					Containers: containers(cr),
 					// TerminationGracePeriodSeconds: 30,
 					RestartPolicy: corev1.RestartPolicyAlways,

@@ -6,8 +6,7 @@ commands:
     set -o errexit
     set -o xtrace
 
-    REPO_ROOT=$(realpath ../../..)
-    source "${REPO_ROOT}/e2e-tests/functions"
+    source ../../functions
 
     sleep 15 # wait for MySQL nodes to be discovered
 

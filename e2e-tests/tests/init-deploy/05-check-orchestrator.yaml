@@ -6,8 +6,7 @@ commands:
     set -o errexit
     set -o xtrace
 
-    REPO_ROOT=$(realpath ../../..)
-    source "${REPO_ROOT}/e2e-tests/functions"
+    source ../../functions
 
     orc_host=$(get_orc_headless_fqdn $(get_cluster_name) 0)
     cluster=$(run_curl "http://${orc_host}:3000/api/clusters/" | jq -r .[0] | sed "s/.${NAMESPACE}//g")

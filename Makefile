@@ -94,7 +94,7 @@ test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
 
 e2e-test:
-	kubectl kuttl test --config tests/kuttl.yaml
+	kubectl kuttl test --config e2e-tests/kuttl.yaml
 
 manifests: kustomize generate
 	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml

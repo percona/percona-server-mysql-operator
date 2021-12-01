@@ -6,8 +6,7 @@ commands:
     set -o errexit
     set -o xtrace
 
-    REPO_ROOT=$(realpath ../../..)
-    source "${REPO_ROOT}/e2e-tests/functions"
+    source ../../functions
 
     # let orc to update cluster info
     # SemiSyncReplicaEnabled is updated after some time

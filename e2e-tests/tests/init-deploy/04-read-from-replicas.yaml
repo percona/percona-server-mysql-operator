@@ -6,8 +6,7 @@ commands:
     set -o errexit
     set -o xtrace
 
-    REPO_ROOT=$(realpath ../../..)
-    source "${REPO_ROOT}/e2e-tests/functions"
+    source ../../functions
 
     args=''
     size=$(kubectl -n ${NAMESPACE} get ps $(get_cluster_name) -o jsonpath='{.spec.mysql.size}')

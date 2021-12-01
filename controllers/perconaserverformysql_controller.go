@@ -77,7 +77,7 @@ func (r *PerconaServerForMySQLReconciler) Reconcile(
 	cr, err := r.getCRWithDefaults(ctx, req.NamespacedName)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, nil
 		}
 
 		return rr, errors.Wrap(err, "get CR")
