@@ -62,7 +62,6 @@ jobs:
           github_token: ${{ secrets.github_token }}
           locale: "US"
           reporter: github-pr-check
-          ignore: Fibre,behaviour
           exclude: "./vendor/*"
 
   alex:
