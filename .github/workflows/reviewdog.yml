@@ -50,7 +50,11 @@ jobs:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-check
           shellcheck_flags: -e SC2155
-          exclude: "./vendor/*"
+          exclude: |
+            ./vendor/*
+            ./config/crd/bases/*
+            ./deploy/bundle.yaml
+            ./deploy/crd.yaml
 
   misspell:
     name: runner / misspell
@@ -62,8 +66,11 @@ jobs:
           github_token: ${{ secrets.github_token }}
           locale: "US"
           reporter: github-pr-check
-          ignore: Fibre,behaviour
-          exclude: "./vendor/*"
+          exclude: |
+            ./vendor/*
+            ./config/crd/bases/*
+            ./deploy/bundle.yaml
+            ./deploy/crd.yaml
 
   alex:
     name: runner / alex
