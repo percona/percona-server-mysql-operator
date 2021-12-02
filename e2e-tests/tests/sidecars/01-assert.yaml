@@ -1,0 +1,79 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 60
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  name: sidecar-test-mysql
+spec:
+  replicas: 1
+  serviceName: sidecar-test-mysql
+  template:
+    spec:
+      containers:
+      - name: mysql
+        volumeMounts:
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
+        - mountPath: /etc/mysql/mysql-tls-secret
+          name: tls
+      - image: busybox
+        imagePullPolicy: Always
+        name: noop-memory
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/log/app/memory
+          name: memory-vol
+      - command:
+        - sleep
+        - 30d
+        image: busybox
+        imagePullPolicy: Always
+        name: noop-pvc
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/log/app/pvc
+          name: pvc-vol
+      volumes:
+      - name: users
+        secret:
+          defaultMode: 420
+          secretName: sidecar-test-users
+      - name: tls
+        secret:
+          defaultMode: 420
+          secretName: sidecar-test-ssl
+      - emptyDir:
+          medium: Memory
+        name: memory-vol
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: datadir
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1G
+      volumeMode: Filesystem
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: pvc-vol
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1G
+      volumeMode: Filesystem
