@@ -7,10 +7,11 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func InitImage(ctx context.Context, get APIGetter) (string, error) {
-	pod, err := operatorPod(ctx, get)
+func InitImage(ctx context.Context, cl client.Reader) (string, error) {
+	pod, err := operatorPod(ctx, cl)
 	if err != nil {
 		return "", errors.Wrap(err, "get operator pod")
 	}
@@ -24,7 +25,7 @@ func InitImage(ctx context.Context, get APIGetter) (string, error) {
 	return "", errors.New("manager container not found")
 }
 
-func operatorPod(ctx context.Context, get APIGetter) (*corev1.Pod, error) {
+func operatorPod(ctx context.Context, cl client.Reader) (*corev1.Pod, error) {
 	ns, err := DefaultAPINamespace()
 	if err != nil {
 		return nil, errors.Wrap(err, "get namespace")
@@ -35,7 +36,7 @@ func operatorPod(ctx context.Context, get APIGetter) (*corev1.Pod, error) {
 		Namespace: ns,
 		Name:      os.Getenv("HOSTNAME"),
 	}
-	if err := get.Get(ctx, nn, pod); err != nil {
+	if err := cl.Get(ctx, nn, pod); err != nil {
 		return nil, err
 	}
 

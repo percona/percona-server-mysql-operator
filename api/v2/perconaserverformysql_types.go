@@ -55,11 +55,17 @@ type MySQLSpec struct {
 	SemiSyncType string             `json:"semiSyncType,omitempty"`
 	Expose       ServiceExpose      `json:"expose,omitempty"`
 
-	Sidecars       []corev1.Container             `json:"sidecars,omitempty"`
-	SidecarVolumes []corev1.Volume                `json:"sidecarVolumes,omitempty"`
-	SidecarPVCs    []corev1.PersistentVolumeClaim `json:"sidecarPVCs,omitempty"`
+	Sidecars       []corev1.Container `json:"sidecars,omitempty"`
+	SidecarVolumes []corev1.Volume    `json:"sidecarVolumes,omitempty"`
+	SidecarPVCs    []SidecarPVC       `json:"sidecarPVCs,omitempty"`
 
 	PodSpec `json:",inline"`
+}
+
+type SidecarPVC struct {
+	Name string `json:"name"`
+
+	Spec corev1.PersistentVolumeClaimSpec `json:"spec"`
 }
 
 type OrchestratorSpec struct {
@@ -301,6 +307,10 @@ func (cr *PerconaServerForMySQL) CheckNSetDefaults() error {
 	cr.Spec.MySQL.VolumeSpec = reconcileVol(cr.Spec.MySQL.VolumeSpec)
 	cr.Spec.Orchestrator.VolumeSpec = reconcileVol(cr.Spec.Orchestrator.VolumeSpec)
 
+	for i := range cr.Spec.MySQL.SidecarPVCs {
+		defaultPVCSpec(&cr.Spec.MySQL.SidecarPVCs[i].Spec)
+	}
+
 	return nil
 }
 
@@ -313,13 +323,19 @@ func reconcileVol(v *VolumeSpec) *VolumeSpec {
 		v.PersistentVolumeClaim = &corev1.PersistentVolumeClaimSpec{}
 	}
 
-	if v.PersistentVolumeClaim != nil {
-		if len(v.PersistentVolumeClaim.AccessModes) == 0 {
-			v.PersistentVolumeClaim.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
-		}
-	}
+	defaultPVCSpec(v.PersistentVolumeClaim)
 
 	return v
+}
+
+func defaultPVCSpec(pvc *corev1.PersistentVolumeClaimSpec) {
+	if pvc == nil {
+		return
+	}
+
+	if len(pvc.AccessModes) == 0 {
+		pvc.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+	}
 }
 
 const (

@@ -270,7 +270,7 @@ func (r *PerconaServerForMySQLReconciler) reconcileReplication(
 
 func reconcileReplicationPrimaryPod(
 	ctx context.Context,
-	cl k8s.APIListUpdater,
+	cl client.Client,
 	cr *apiv2.PerconaServerForMySQL,
 ) error {
 	l := log.FromContext(ctx).WithName("reconcileReplicationPrimaryPod")
@@ -290,7 +290,7 @@ func reconcileReplicationPrimaryPod(
 	l.Info(fmt.Sprintf("got cluster primary alias: %v", primaryAlias), "data", primary)
 
 	for i := range pods {
-		pod := &pods[i]
+		pod := pods[i].DeepCopy()
 		if pod.GetLabels()[apiv2.MySQLPrimaryLabel] == "true" {
 			if pod.Name == primaryAlias {
 				l.Info(fmt.Sprintf("primary %v is not changed. skip", primaryAlias))
@@ -298,7 +298,7 @@ func reconcileReplicationPrimaryPod(
 			}
 
 			k8s.RemoveLabel(pod, apiv2.MySQLPrimaryLabel)
-			if err := cl.Update(ctx, pod); err != nil {
+			if err := cl.Patch(ctx, pod, client.StrategicMergeFrom(&pods[i])); err != nil {
 				return errors.Wrapf(err, "remove label from old primary pod: %v/%v",
 					pod.GetNamespace(), pod.GetName())
 			}
@@ -310,10 +310,10 @@ func reconcileReplicationPrimaryPod(
 	}
 
 	for i := range pods {
-		pod := &pods[i]
+		pod := pods[i].DeepCopy()
 		if pods[i].Name == primaryAlias {
 			k8s.AddLabel(pod, apiv2.MySQLPrimaryLabel, "true")
-			if err := cl.Update(ctx, pod); err != nil {
+			if err := cl.Patch(ctx, pod, client.StrategicMergeFrom(&pods[i])); err != nil {
 				return errors.Wrapf(err, "add label to new primary pod %v/%v",
 					pod.GetNamespace(), pod.GetName())
 			}
@@ -330,7 +330,7 @@ func reconcileReplicationPrimaryPod(
 
 func reconcileReplicationSemiSync(
 	ctx context.Context,
-	rdr k8s.APIGetter,
+	cl client.Reader,
 	cr *apiv2.PerconaServerForMySQL,
 ) error {
 	l := log.FromContext(ctx).WithName("reconcileReplicationPrimaryPod")
@@ -342,12 +342,19 @@ func reconcileReplicationSemiSync(
 	}
 
 	primaryHost := primary.Hostname()
-	if primaryHost == "" {
-		primaryHost = fmt.Sprintf("%v.%v.%v", primary.Alias(), mysql.ServiceName(cr), cr.GetNamespace())
+	if host == "" {
+		primaryHost = primary.Alias()
 	}
-	l.Info(fmt.Sprintf("use primary host: %v", primaryHost))
+	if primaryHost == "" {
+		l.Info("no primary host provided. skip", "clusterPrimary", primary)
+		return nil
+	}
 
-	operatorPass, err := k8s.UserPassword(ctx, rdr, cr, apiv2.UserOperator)
+	primaryHost = fmt.Sprintf("%v.%v.%v", host, mysql.ServiceName(cr), cr.GetNamespace())
+
+	l.Info(fmt.Sprintf("use primary host: %v", primaryHost), "clusterPrimary", primary)
+
+	operatorPass, err := k8s.UserPassword(ctx, cl, cr, apiv2.UserOperator)
 	if err != nil {
 		return errors.Wrap(err, "get operator password")
 	}
@@ -401,7 +408,7 @@ func (r *PerconaServerForMySQLReconciler) reconcileCRStatus(
 
 func appStatus(
 	ctx context.Context,
-	cl k8s.APIList,
+	cl client.Reader,
 	size int32,
 	labels map[string]string,
 ) (apiv2.StatefulAppStatus, error) {

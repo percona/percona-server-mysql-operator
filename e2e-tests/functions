@@ -17,6 +17,9 @@ deploy_operator() {
 		| kubectl -n "${NAMESPACE}" apply -f -
 
 	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/secrets.yaml"
+}
+
+deploy_client() {
 	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/client.yaml"
 }
 

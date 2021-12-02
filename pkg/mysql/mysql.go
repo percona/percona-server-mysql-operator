@@ -69,13 +69,8 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage string) *appsv1.Stat
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
-			ServiceName: ServiceName(cr),
-			VolumeClaimTemplates: append(
-				[]corev1.PersistentVolumeClaim{
-					k8s.PVC(dataVolumeName, spec.VolumeSpec),
-				},
-				spec.SidecarPVCs...,
-			),
+			ServiceName:          ServiceName(cr),
+			VolumeClaimTemplates: volumeClaimTemplates(spec),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
@@ -138,6 +133,20 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage string) *appsv1.Stat
 			},
 		},
 	}
+}
+
+func volumeClaimTemplates(spec *apiv2.MySQLSpec) []corev1.PersistentVolumeClaim {
+	pvcs := []corev1.PersistentVolumeClaim{
+		k8s.PVC(dataVolumeName, spec.VolumeSpec),
+	}
+	for _, p := range spec.SidecarPVCs {
+		pvcs = append(pvcs, corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: p.Name},
+			Spec:       p.Spec,
+		})
+	}
+
+	return pvcs
 }
 
 func UnreadyService(cr *apiv2.PerconaServerForMySQL) *corev1.Service {
