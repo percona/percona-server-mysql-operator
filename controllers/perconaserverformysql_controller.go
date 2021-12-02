@@ -311,7 +311,7 @@ func reconcileReplicationPrimaryPod(
 
 	for i := range pods {
 		pod := pods[i].DeepCopy()
-		if pods[i].Name == primaryAlias {
+		if pod.Name == primaryAlias {
 			k8s.AddLabel(pod, apiv2.MySQLPrimaryLabel, "true")
 			if err := cl.Patch(ctx, pod, client.StrategicMergeFrom(&pods[i])); err != nil {
 				return errors.Wrapf(err, "add label to new primary pod %v/%v",
