@@ -270,7 +270,7 @@ func (r *PerconaServerForMySQLReconciler) reconcileReplication(
 
 func reconcileReplicationPrimaryPod(
 	ctx context.Context,
-	cl k8s.APIListUpdater,
+	cl client.Client,
 	cr *apiv2.PerconaServerForMySQL,
 ) error {
 	l := log.FromContext(ctx).WithName("reconcileReplicationPrimaryPod")
@@ -290,7 +290,7 @@ func reconcileReplicationPrimaryPod(
 	l.Info(fmt.Sprintf("got cluster primary alias: %v", primaryAlias), "data", primary)
 
 	for i := range pods {
-		pod := &pods[i]
+		pod := pods[i].DeepCopy()
 		if pod.GetLabels()[apiv2.MySQLPrimaryLabel] == "true" {
 			if pod.Name == primaryAlias {
 				l.Info(fmt.Sprintf("primary %v is not changed. skip", primaryAlias))
@@ -298,7 +298,7 @@ func reconcileReplicationPrimaryPod(
 			}
 
 			k8s.RemoveLabel(pod, apiv2.MySQLPrimaryLabel)
-			if err := cl.Update(ctx, pod); err != nil {
+			if err := cl.Patch(ctx, pod, client.StrategicMergeFrom(&pods[i])); err != nil {
 				return errors.Wrapf(err, "remove label from old primary pod: %v/%v",
 					pod.GetNamespace(), pod.GetName())
 			}
@@ -310,10 +310,10 @@ func reconcileReplicationPrimaryPod(
 	}
 
 	for i := range pods {
-		pod := &pods[i]
-		if pods[i].Name == primaryAlias {
+		pod := pods[i].DeepCopy()
+		if pod.Name == primaryAlias {
 			k8s.AddLabel(pod, apiv2.MySQLPrimaryLabel, "true")
-			if err := cl.Update(ctx, pod); err != nil {
+			if err := cl.Patch(ctx, pod, client.StrategicMergeFrom(&pods[i])); err != nil {
 				return errors.Wrapf(err, "add label to new primary pod %v/%v",
 					pod.GetNamespace(), pod.GetName())
 			}
