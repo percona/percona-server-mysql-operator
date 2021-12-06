@@ -183,6 +183,12 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 	rm -rfv "$TMPDIR"
 
 	create_default_cnf
+        if [ -f "/etc/mysql/config/my-config.cnf" ]; then
+            cat "/etc/mysql/config/my-config.cnf" >> $CFG
+        fi
+        if [ -f "/etc/mysql/config/my-secret.cnf" ]; then
+            cat "/etc/mysql/config/my-secret.cnf" >> $CFG
+        fi
 
 	if [ ! -d "$DATADIR/mysql" ]; then
 		file_env 'MYSQL_ROOT_PASSWORD' '' 'root'
