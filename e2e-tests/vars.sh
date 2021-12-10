@@ -16,3 +16,5 @@ export IMAGE_ORCHESTRATOR=${IMAGE_ORCHESTRATOR:-"perconalab/percona-server-mysql
 export IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
 
 export CR_VERSION=${CR_VERSION:-"2.0.0"}
+
+date=$(which gdate || which date)
