@@ -79,13 +79,14 @@ get_metric_values() {
 }
 
 get_qan20_values() {
-        local instance=$1
-        local user_pass=$2
-        local start=$($date -u "+%Y-%m-%dT%H:%M:%S" -d "-30 minute")
-        local end=$($date -u "+%Y-%m-%dT%H:%M:%S")
-        local endpoint=monitoring-service
+	local instance=$1
+	local user_pass=$2
+	local start=$($date -u "+%Y-%m-%dT%H:%M:%S" -d "-30 minute")
+	local end=$($date -u "+%Y-%m-%dT%H:%M:%S")
+	local endpoint=monitoring-service
 
-        local payload=$(cat <<EOF
+	local payload=$(
+		cat <<EOF
 {
    "columns":[
       "load",
@@ -109,8 +110,8 @@ get_qan20_values() {
    "period_start_to": "$($date -u '+%Y-%m-%dT%H:%M:%S%:z')"
 }
 EOF
-)
+	)
 
 	run_curl -XPOST -d "'$(echo ${payload} | sed 's/\n//g')'" "https://${user_pass}@${endpoint}/v0/qan/GetReport" \
-            | jq '.rows[].fingerprint'
+		| jq '.rows[].fingerprint'
 }
