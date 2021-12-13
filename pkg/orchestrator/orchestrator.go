@@ -134,10 +134,6 @@ func container(cr *apiv2.PerconaServerForMySQL) corev1.Container {
 				Name:  "MYSQL_SERVICE",
 				Value: mysql.ServiceName(cr),
 			},
-			{
-				Name:  "RAFT_ENABLED",
-				Value: "false",
-			},
 		},
 		Ports: []corev1.ContainerPort{
 			{
