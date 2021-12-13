@@ -42,8 +42,7 @@ run_mysql() {
 }
 
 run_curl() {
-	local uri="$1"
-	kubectl -n "${NAMESPACE}" exec mysql-client -- bash -c "curl -s -k ${uri}"
+	kubectl -n "${NAMESPACE}" exec mysql-client -- bash -c "curl -s -k $*"
 }
 
 get_cluster_name() {
@@ -80,4 +79,42 @@ get_metric_values() {
 	run_curl "https://${user_pass}@monitoring-service/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28$metric%7Bnode_name%3D%7E%22$instance%22%7d%20or%20$metric%7Bnode_name%3D%7E%22$instance%22%7D%29&start=$start&end=$end&step=60" \
 		| jq '.data.result[0].values[][1]' \
 		| grep '^"[0-9]'
+}
+
+get_qan20_values() {
+	local instance=$1
+	local user_pass=$2
+	local start=$($date -u "+%Y-%m-%dT%H:%M:%S" -d "-30 minute")
+	local end=$($date -u "+%Y-%m-%dT%H:%M:%S")
+	local endpoint=monitoring-service
+
+	local payload=$(
+		cat <<EOF
+{
+   "columns":[
+      "load",
+      "num_queries",
+      "query_time"
+   ],
+   "first_seen": false,
+   "group_by": "queryid",
+   "include_only_fields": [],
+   "keyword": "",
+   "labels": [
+       {
+           "key": "cluster",
+           "value": ["monitoring"]
+   }],
+   "limit": 10,
+   "offset": 0,
+   "order_by": "-load",
+   "main_metric": "load",
+   "period_start_from": "$($date -u -d '-12 hour' '+%Y-%m-%dT%H:%M:%S%:z')",
+   "period_start_to": "$($date -u '+%Y-%m-%dT%H:%M:%S%:z')"
+}
+EOF
+	)
+
+	run_curl -XPOST -d "'$(echo ${payload} | sed 's/\n//g')'" "https://${user_pass}@${endpoint}/v0/qan/GetReport" \
+		| jq '.rows[].fingerprint'
 }

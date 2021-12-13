@@ -224,13 +224,6 @@ func (r *PerconaServerForMySQLReconciler) reconcileOrchestrator(
 	ctx context.Context,
 	cr *apiv2.PerconaServerForMySQL,
 ) error {
-	l := log.FromContext(ctx).WithName("reconcileOrchestrator")
-
-	if cr.MySQLSpec().Size < 2 {
-		l.Info("not enough mysql replicas. skip", "size", cr.MySQLSpec().Size)
-		return nil
-	}
-
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.StatefulSet(cr), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile StatefulSet")
 	}
