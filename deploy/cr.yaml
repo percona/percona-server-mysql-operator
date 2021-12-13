@@ -7,7 +7,7 @@ spec:
   sslSecretName: cluster1-ssl
   mysql:
     image: percona/percona-server:8.0.25
-#   imagePullPolicy: Always
+    imagePullPolicy: Always
 
     size: 3
     sizeSemiSync: 0
@@ -43,8 +43,8 @@ spec:
 #           storage: 1G
 
   orchestrator:
-    image: perconalab/percona-server-mysql-operator:3.2.6-orchestrator
-#   imagePullPolicy: Always
+    image: perconalab/percona-server-mysql-operator:main-orchestrator
+    imagePullPolicy: Always
 
     size: 1
 
@@ -58,7 +58,7 @@ spec:
     enabled: false
 
     image: percona/pmm-client:2.18.0
-#   imagePullPolicy: Always
+    imagePullPolicy: Always
 
     serverHost: monitoring-service
     serverUser: admin
