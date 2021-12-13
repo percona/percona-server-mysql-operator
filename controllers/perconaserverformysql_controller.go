@@ -272,7 +272,7 @@ func reconcileReplicationPrimaryPod(
 	if err != nil {
 		return errors.Wrap(err, "get MySQL pod list")
 	}
-	l.Info(fmt.Sprintf("got %v pods", len(pods)))
+	l.V(1).Info(fmt.Sprintf("got %v pods", len(pods)))
 
 	host := orchestrator.APIHost(orchestrator.ServiceName(cr))
 	primary, err := orchestrator.ClusterPrimary(ctx, host, cr.ClusterHint())
@@ -280,7 +280,7 @@ func reconcileReplicationPrimaryPod(
 		return errors.Wrap(err, "get cluster primary")
 	}
 	primaryAlias := primary.Alias()
-	l.Info(fmt.Sprintf("got cluster primary alias: %v", primaryAlias), "data", primary)
+	l.V(1).Info(fmt.Sprintf("got cluster primary alias: %v", primaryAlias), "data", primary)
 
 	for i := range pods {
 		pod := pods[i].DeepCopy()
@@ -339,13 +339,13 @@ func reconcileReplicationSemiSync(
 		primaryHost = primary.Alias()
 	}
 	if primaryHost == "" {
-		l.Info("no primary host provided. skip", "clusterPrimary", primary)
+		l.V(1).Info("no primary host provided. skip", "clusterPrimary", primary)
 		return nil
 	}
 
 	primaryHost = fmt.Sprintf("%v.%v.%v", host, mysql.ServiceName(cr), cr.GetNamespace())
 
-	l.Info(fmt.Sprintf("use primary host: %v", primaryHost), "clusterPrimary", primary)
+	l.V(1).Info(fmt.Sprintf("use primary host: %v", primaryHost), "clusterPrimary", primary)
 
 	operatorPass, err := k8s.UserPassword(ctx, cl, cr, apiv2.UserOperator)
 	if err != nil {
@@ -367,7 +367,7 @@ func reconcileReplicationSemiSync(
 	l.Info(fmt.Sprintf("set semi-sync source on %v", primaryHost))
 
 	if cr.Spec.MySQL.SizeSemiSync.IntValue() < 1 {
-		l.Info(fmt.Sprintf("semi-sync size is %v. skip", cr.Spec.MySQL.SizeSemiSync.IntValue()))
+		l.V(1).Info(fmt.Sprintf("semi-sync size is %v. skip", cr.Spec.MySQL.SizeSemiSync.IntValue()))
 		return nil
 	}
 
