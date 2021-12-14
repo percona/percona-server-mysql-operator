@@ -2,3 +2,7 @@
 # Ignore build and test binaries.
 bin/
 testbin/
+
+!bin/bootstrap
+!bin/healthcheck
+!bin/percona-server-for-mysql-operator

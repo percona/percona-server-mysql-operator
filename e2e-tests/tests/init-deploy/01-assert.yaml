@@ -1,0 +1,41 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: init-deploy-mysql
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: init-deploy-orc
+status:
+  observedGeneration: 1
+  replicas: 1
+  readyReplicas: 1
+  currentReplicas: 1
+  updatedReplicas: 1
+  collisionCount: 0
+---
+apiVersion: ps.percona.com/v2
+kind: PerconaServerForMySQL
+metadata:
+  name: init-deploy
+status:
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  orchestrator:
+    ready: 1
+    size: 1
+    state: ready

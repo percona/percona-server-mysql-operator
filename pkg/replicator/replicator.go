@@ -33,7 +33,7 @@ type Replicator interface {
 	IsReplica() (bool, error)
 	DumbQuery() error
 	SetSemiSyncSource(enabled bool) error
-	SetSemiSyncSize(size int32) error
+	SetSemiSyncSize(size int) error
 }
 
 type dbImpl struct{ db *sql.DB }
@@ -195,7 +195,7 @@ func (d *dbImpl) SetSemiSyncSource(enabled bool) error {
 	return errors.Wrap(err, "set rpl_semi_sync_master_enabled")
 }
 
-func (d *dbImpl) SetSemiSyncSize(size int32) error {
+func (d *dbImpl) SetSemiSyncSize(size int) error {
 	_, err := d.db.Exec("SET GLOBAL rpl_semi_sync_master_wait_for_slave_count=?", size)
 	return errors.Wrap(err, "set rpl_semi_sync_master_wait_for_slave_count")
 }

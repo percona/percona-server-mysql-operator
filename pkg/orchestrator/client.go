@@ -10,15 +10,15 @@ import (
 )
 
 type CKey struct {
-	Hostname string
-	Port     int32
+	Hostname string `json:"Hostname"`
+	Port     int32  `json:"Port"`
 }
 
 type clusterImpl struct {
-	Key           CKey
-	InstanceAlias string
-	MasterKey     CKey
-	Replicas      []CKey
+	Key           CKey   `json:"Key"`
+	InstanceAlias string `json:"InstanceAlias"`
+	MasterKey     CKey   `json:"MasterKey"`
+	Replicas      []CKey `json:"Replicas"`
 }
 
 type Cluster interface {
@@ -36,8 +36,7 @@ func (i clusterImpl) Alias() string {
 
 func ClusterPrimary(ctx context.Context, host, clusterHint string) (Cluster, error) {
 	primary := &clusterImpl{}
-	err := doRequest(ctx, host+"/api/master/"+clusterHint, primary)
-	return primary, err
+	return primary, doRequest(ctx, host+"/api/master/"+clusterHint, primary)
 }
 
 func doRequest(ctx context.Context, url string, o interface{}) error {

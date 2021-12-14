@@ -3,7 +3,6 @@ module github.com/percona/percona-server-mysql-operator
 go 1.17
 
 require (
-	github.com/go-logr/logr v0.4.0
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.15.0
@@ -29,6 +28,7 @@ require (
 	github.com/evanphx/json-patch v4.11.0+incompatible // indirect
 	github.com/form3tech-oss/jwt-go v3.2.3+incompatible // indirect
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
+	github.com/go-logr/logr v0.4.0 // indirect
 	github.com/go-logr/zapr v0.4.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect

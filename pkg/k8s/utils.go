@@ -53,8 +53,18 @@ func AddLabel(obj client.Object, key, value string) {
 	obj.SetLabels(labels)
 }
 
-func ObjectExists(ctx context.Context, get APIGetter, nn types.NamespacedName, o client.Object) (bool, error) {
-	if err := get.Get(ctx, nn, o); err != nil {
+func IsPodReady(pod corev1.Pod) bool {
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == corev1.ContainersReady && cond.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+
+	return false
+}
+
+func ObjectExists(ctx context.Context, cl client.Reader, nn types.NamespacedName, o client.Object) (bool, error) {
+	if err := cl.Get(ctx, nn, o); err != nil {
 		if k8serrors.IsNotFound(err) {
 			return false, nil
 		}
@@ -67,7 +77,7 @@ func ObjectExists(ctx context.Context, get APIGetter, nn types.NamespacedName, o
 
 func EnsureObject(
 	ctx context.Context,
-	cl APICreater,
+	cl client.Writer,
 	cr *apiv2.PerconaServerForMySQL,
 	o client.Object,
 	s *runtime.Scheme,
@@ -89,7 +99,7 @@ func EnsureObject(
 
 func EnsureObjectWithHash(
 	ctx context.Context,
-	cl APIGetCreatePatcher,
+	cl client.Client,
 	cr *apiv2.PerconaServerForMySQL,
 	obj client.Object,
 	s *runtime.Scheme,
@@ -156,8 +166,7 @@ func EnsureObjectWithHash(
 			}
 		}
 
-		patch := client.StrategicMergeFrom(oldObject)
-		if err := cl.Patch(ctx, obj, patch); err != nil {
+		if err := cl.Patch(ctx, obj, client.StrategicMergeFrom(oldObject)); err != nil {
 			return errors.Wrapf(err, "patch %v", nn.String())
 		}
 	}
@@ -188,7 +197,7 @@ func getObjectHash(obj runtime.Object) (string, error) {
 	return hex.EncodeToString(hash[:]), nil
 }
 
-func PodsByLabels(ctx context.Context, cl APIList, l map[string]string) ([]corev1.Pod, error) {
+func PodsByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([]corev1.Pod, error) {
 	podList := &corev1.PodList{}
 
 	opts := &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)}

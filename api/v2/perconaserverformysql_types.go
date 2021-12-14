@@ -50,11 +50,22 @@ const (
 )
 
 type MySQLSpec struct {
-	ClusterType  ClusterType   `json:"clusterType,omitempty"`
-	SizeSemiSync int32         `json:"sizeSemiSync,omitempty"`
-	SemiSyncType string        `json:"semiSyncType,omitempty"`
-	Expose       ServiceExpose `json:"expose,omitempty"`
-	PodSpec      `json:",inline"`
+	ClusterType  ClusterType        `json:"clusterType,omitempty"`
+	SizeSemiSync intstr.IntOrString `json:"sizeSemiSync,omitempty"`
+	SemiSyncType string             `json:"semiSyncType,omitempty"`
+	Expose       ServiceExpose      `json:"expose,omitempty"`
+
+	Sidecars       []corev1.Container `json:"sidecars,omitempty"`
+	SidecarVolumes []corev1.Volume    `json:"sidecarVolumes,omitempty"`
+	SidecarPVCs    []SidecarPVC       `json:"sidecarPVCs,omitempty"`
+
+	PodSpec `json:",inline"`
+}
+
+type SidecarPVC struct {
+	Name string `json:"name"`
+
+	Spec corev1.PersistentVolumeClaimSpec `json:"spec"`
 }
 
 type OrchestratorSpec struct {
@@ -96,7 +107,6 @@ type PodSpec struct {
 	ContainerSecurityContext      *corev1.SecurityContext                 `json:"containerSecurityContext,omitempty"`
 	ServiceAccountName            string                                  `json:"serviceAccountName,omitempty"`
 	ImagePullPolicy               corev1.PullPolicy                       `json:"imagePullPolicy,omitempty"`
-	Sidecars                      []corev1.Container                      `json:"sidecars,omitempty"`
 	RuntimeClassName              *string                                 `json:"runtimeClassName,omitempty"`
 }
 
@@ -159,17 +169,34 @@ type ServiceExpose struct {
 	TrafficPolicy            corev1.ServiceExternalTrafficPolicyType `json:"trafficPolicy,omitempty"`
 }
 
+type StatefulAppState string
+
+const (
+	StateInitializing StatefulAppState = "initializing"
+	StateReady        StatefulAppState = "ready"
+)
+
+type StatefulAppStatus struct {
+	Size  int32            `json:"size,omitempty"`
+	Ready int32            `json:"ready,omitempty"`
+	State StatefulAppState `json:"state,omitempty"`
+}
+
 // PerconaServerForMySQLStatus defines the observed state of PerconaServerForMySQL
 type PerconaServerForMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	MySQL        StatefulAppStatus `json:"mysql,omitempty"`
+	Orchestrator StatefulAppStatus `json:"orchestrator,omitempty"`
 }
 
+// PerconaServerForMySQL is the Schema for the perconaserverformysqls API
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="MySQL",type=string,JSONPath=".status.mysql.state"
+//+kubebuilder:printcolumn:name="Orchestrator",type=string,JSONPath=".status.orchestrator.state"
+//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 //+kubebuilder:resource:scope=Namespaced
 //+kubebuilder:resource:shortName=ps
-
-// PerconaServerForMySQL is the Schema for the perconaserverformysqls API
 type PerconaServerForMySQL struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -280,6 +307,10 @@ func (cr *PerconaServerForMySQL) CheckNSetDefaults() error {
 	cr.Spec.MySQL.VolumeSpec = reconcileVol(cr.Spec.MySQL.VolumeSpec)
 	cr.Spec.Orchestrator.VolumeSpec = reconcileVol(cr.Spec.Orchestrator.VolumeSpec)
 
+	for i := range cr.Spec.MySQL.SidecarPVCs {
+		defaultPVCSpec(&cr.Spec.MySQL.SidecarPVCs[i].Spec)
+	}
+
 	return nil
 }
 
@@ -292,13 +323,19 @@ func reconcileVol(v *VolumeSpec) *VolumeSpec {
 		v.PersistentVolumeClaim = &corev1.PersistentVolumeClaimSpec{}
 	}
 
-	if v.PersistentVolumeClaim != nil {
-		if len(v.PersistentVolumeClaim.AccessModes) == 0 {
-			v.PersistentVolumeClaim.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
-		}
-	}
+	defaultPVCSpec(v.PersistentVolumeClaim)
 
 	return v
+}
+
+func defaultPVCSpec(pvc *corev1.PersistentVolumeClaimSpec) {
+	if pvc == nil {
+		return
+	}
+
+	if len(pvc.AccessModes) == 0 {
+		pvc.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+	}
 }
 
 const (
