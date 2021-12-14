@@ -1,0 +1,12 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 60
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 04-check-semi-sync-orchestrator
+data:
+  available: "3"
+  primary: "1"
+  replicas: "1"

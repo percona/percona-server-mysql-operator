@@ -1,0 +1,18 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 30
+commands:
+- script: |
+    set -o errexit
+    set -o xtrace
+
+    source ../../functions
+
+    sleep 15 # wait for MySQL nodes to be discovered
+
+    orc_host=$(get_orc_headless_fqdn $(get_cluster_name) 0)
+    cluster=$(run_curl "http://${orc_host}:3000/api/clusters/" | jq -r .[0])
+
+    run_curl "http://${orc_host}:3000/api/cluster/${cluster}/" | jq -r .[].Key.Hostname | sed "s/.${NAMESPACE}//g" > "${TEMP_DIR}/instances"
+
+    kubectl create configmap -n "${NAMESPACE}" 02-check-orchestrator --from-file=instances="${TEMP_DIR}/instances"

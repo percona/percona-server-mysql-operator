@@ -6,6 +6,7 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
 )
@@ -20,7 +21,7 @@ func SecretKeySelector(name, key string) *corev1.SecretKeySelector {
 
 func UserPassword(
 	ctx context.Context,
-	get APIGetter,
+	cl client.Reader,
 	cr *apiv2.PerconaServerForMySQL,
 	username apiv2.SystemUser,
 ) (string, error) {
@@ -30,7 +31,7 @@ func UserPassword(
 	}
 
 	secret := &corev1.Secret{}
-	if err := get.Get(ctx, nn, secret); err != nil {
+	if err := cl.Get(ctx, nn, secret); err != nil {
 		return "", errors.Wrapf(err, "get secret %s", cr.Spec.SecretsName)
 	}
 

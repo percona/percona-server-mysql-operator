@@ -6,30 +6,63 @@ spec:
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
   mysql:
+    image: percona/percona-server:8.0.25
+    imagePullPolicy: Always
+
     size: 3
     sizeSemiSync: 0
+
     expose:
       enabled: false
       type: ClusterIP
-    imagePullPolicy: Always
-    image: percona/percona-server:8.0.25
+
     volumeSpec:
       persistentVolumeClaim:
         resources:
           requests:
             storage: 2G
+
+#   sidecars:
+#   - name: noop-memory
+#     image: busybox
+#     command: ["sleep", "30d"]
+#     volumeMounts:
+#     - name: "memory-vol"
+#       mountPath: "/var/log/app/memory"
+#   - name: noop-pvc
+#     image: busybox
+#     command: ["sleep", "30d"]
+#     volumeMounts:
+#     - name: "pvc-vol"
+#       mountPath: "/var/log/app/pvc"
+#   sidecarVolumes:
+#   - name: "memory-vol"
+#     emptyDir:
+#       medium: "Memory"
+#   sidecarPVCs:
+#   - name: pvc-vol
+#     spec:
+#       resources:
+#         requests:
+#           storage: 1G
+
   orchestrator:
-    size: 1
-    imagePullPolicy: Always
     image: perconalab/percona-server-mysql-operator:main-orchestrator
+    imagePullPolicy: Always
+
+    size: 1
+
     volumeSpec:
       persistentVolumeClaim:
         resources:
           requests:
             storage: 1G
+
   pmm:
     enabled: false
+
     image: percona/pmm-client:2.18.0
+    imagePullPolicy: Always
+
     serverHost: monitoring-service
     serverUser: admin
-    imagePullPolicy: Always

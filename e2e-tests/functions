@@ -1,15 +1,120 @@
 #!/bin/bash
 
 exec 5>&2
-BASH_XTRACEFD="5"
+export BASH_XTRACEFD="5"
 
-GIT_COMMIT=$(git rev-parse HEAD)
-BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')}
-IMAGE=${IMAGE:-"perconalab/percona-server-mysql-operator:${GIT_BRANCH}"}
-IMAGE_MYSQL=${IMAGE_PXC:-"perconalab/percona-server-mysql-operator:main-pxc8.0"}
-IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
-SKIP_BACKUPS_TO_AWS_GCP=${SKIP_BACKUPS_TO_AWS_GCP:-1}
-tmp_dir=$(mktemp -d)
-sed=$(which gsed || which sed)
-date=$(which gdate || which date)
+# set root repo relatively to a test dir
+ROOT_REPO=${ROOT_REPO:-$(realpath ../../..)}
+source "${ROOT_REPO}/e2e-tests/vars.sh"
+
+deploy_operator() {
+	kubectl -n "${NAMESPACE}" apply -f "${DEPLOY_DIR}/crd.yaml"
+	kubectl -n "${NAMESPACE}" apply -f "${DEPLOY_DIR}/rbac.yaml"
+
+	yq eval \
+		"$(printf 'select(documentIndex==1).spec.template.spec.containers[0].image="%s"' "${IMAGE}")" \
+		"${DEPLOY_DIR}/operator.yaml" \
+		| kubectl -n "${NAMESPACE}" apply -f -
+
+	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/secrets.yaml"
+}
+
+deploy_client() {
+	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/client.yaml"
+}
+
+get_cr() {
+	local test_name=$(basename "$(pwd)")
+	yq eval "$(printf '.metadata.name="%s"' "${test_name}")" "${DEPLOY_DIR}/cr.yaml" \
+		| yq eval "$(printf '.spec.crVersion="%s"' "${CR_VERSION}")" - \
+		| yq eval "$(printf '.spec.mysql.image="%s"' "${IMAGE_MYSQL}")" - \
+		| yq eval "$(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}")" -
+}
+
+run_mysql() {
+	local command="$1"
+	local uri="$2"
+
+	kubectl -n "${NAMESPACE}" exec mysql-client -- \
+		bash -c "printf '%s\n' \"${command}\" | mysql -sN $uri" 2>&1 \
+		| sed -e 's/mysql: //' \
+		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
+}
+
+run_curl() {
+	kubectl -n "${NAMESPACE}" exec mysql-client -- bash -c "curl -s -k $*"
+}
+
+get_cluster_name() {
+	kubectl -n "${NAMESPACE}" get ps -o jsonpath='{.items[0].metadata.name}'
+}
+
+get_mysql_primary_service() {
+	local cluster=$1
+
+	echo "${cluster}-mysql-primary"
+}
+
+get_mysql_headless_fqdn() {
+	local cluster=$1
+	local index=$2
+
+	echo "${cluster}-mysql-${index}.${cluster}-mysql"
+}
+
+get_orc_headless_fqdn() {
+	local cluster=$1
+	local index=$2
+
+	echo "${cluster}-orc-${index}.${cluster}-orc"
+}
+
+get_metric_values() {
+	local metric=$1
+	local instance=$2
+	local user_pass=$3
+	local start=$($date -u "+%s" -d "-1 minute")
+	local end=$($date -u "+%s")
+
+	run_curl "https://${user_pass}@monitoring-service/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28$metric%7Bnode_name%3D%7E%22$instance%22%7d%20or%20$metric%7Bnode_name%3D%7E%22$instance%22%7D%29&start=$start&end=$end&step=60" \
+		| jq '.data.result[0].values[][1]' \
+		| grep '^"[0-9]'
+}
+
+get_qan20_values() {
+	local instance=$1
+	local user_pass=$2
+	local start=$($date -u "+%Y-%m-%dT%H:%M:%S" -d "-30 minute")
+	local end=$($date -u "+%Y-%m-%dT%H:%M:%S")
+	local endpoint=monitoring-service
+
+	local payload=$(
+		cat <<EOF
+{
+   "columns":[
+      "load",
+      "num_queries",
+      "query_time"
+   ],
+   "first_seen": false,
+   "group_by": "queryid",
+   "include_only_fields": [],
+   "keyword": "",
+   "labels": [
+       {
+           "key": "cluster",
+           "value": ["monitoring"]
+   }],
+   "limit": 10,
+   "offset": 0,
+   "order_by": "-load",
+   "main_metric": "load",
+   "period_start_from": "$($date -u -d '-12 hour' '+%Y-%m-%dT%H:%M:%S%:z')",
+   "period_start_to": "$($date -u '+%Y-%m-%dT%H:%M:%S%:z')"
+}
+EOF
+	)
+
+	run_curl -XPOST -d "'$(echo ${payload} | sed 's/\n//g')'" "https://${user_pass}@${endpoint}/v0/qan/GetReport" \
+		| jq '.rows[].fingerprint'
+}

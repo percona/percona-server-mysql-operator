@@ -1,13 +1,6 @@
 apiVersion: ps.percona.com/v2
 kind: PerconaServerForMySQL
 metadata:
-  name: perconaserverformysql-sample
-spec:
-  # Add fields here
-  foo: bar
-apiVersion: 
-kind: PerconaServerForMySQL
-metadata:
   name: cluster1
 spec:
   crVersion:
@@ -20,7 +13,7 @@ spec:
     size: 2
     sizeSemiSync: 1
     semiSyncType: after-sync
-    image: 
+    image:
    expose:
      enabled: true
      type: LoadBalancer

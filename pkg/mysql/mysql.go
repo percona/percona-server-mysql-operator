@@ -69,10 +69,8 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage string) *appsv1.Stat
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
-			ServiceName: ServiceName(cr),
-			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				k8s.PVC(dataVolumeName, spec.VolumeSpec),
-			},
+			ServiceName:          ServiceName(cr),
+			VolumeClaimTemplates: volumeClaimTemplates(spec),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
@@ -103,34 +101,52 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage string) *appsv1.Stat
 							SecurityContext:          spec.ContainerSecurityContext,
 						},
 					},
-					Containers: containers(cr),
+					Containers:       containers(cr),
+					ImagePullSecrets: spec.ImagePullSecrets,
 					// TerminationGracePeriodSeconds: 30,
 					RestartPolicy: corev1.RestartPolicyAlways,
 					SchedulerName: "default-scheduler",
 					DNSPolicy:     corev1.DNSClusterFirst,
-					Volumes: []corev1.Volume{
-						{
-							Name: credsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cr.Spec.SecretsName,
+					Volumes: append(
+						[]corev1.Volume{
+							{
+								Name: credsVolumeName,
+								VolumeSource: corev1.VolumeSource{
+									Secret: &corev1.SecretVolumeSource{
+										SecretName: cr.Spec.SecretsName,
+									},
+								},
+							},
+							{
+								Name: tlsVolumeName,
+								VolumeSource: corev1.VolumeSource{
+									Secret: &corev1.SecretVolumeSource{
+										SecretName: cr.Spec.SSLSecretName,
+									},
 								},
 							},
 						},
-						{
-							Name: tlsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cr.Spec.SSLSecretName,
-								},
-							},
-						},
-					},
+						spec.SidecarVolumes...,
+					),
 					SecurityContext: spec.PodSecurityContext,
 				},
 			},
 		},
 	}
+}
+
+func volumeClaimTemplates(spec *apiv2.MySQLSpec) []corev1.PersistentVolumeClaim {
+	pvcs := []corev1.PersistentVolumeClaim{
+		k8s.PVC(dataVolumeName, spec.VolumeSpec),
+	}
+	for _, p := range spec.SidecarPVCs {
+		pvcs = append(pvcs, corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: p.Name},
+			Spec:       p.Spec,
+		})
+	}
+
+	return pvcs
 }
 
 func UnreadyService(cr *apiv2.PerconaServerForMySQL) *corev1.Service {
@@ -245,11 +261,11 @@ func PrimaryService(cr *apiv2.PerconaServerForMySQL) *corev1.Service {
 func containers(cr *apiv2.PerconaServerForMySQL) []corev1.Container {
 	containers := []corev1.Container{mysqldContainer(cr)}
 	if pmm := cr.PMMSpec(); pmm != nil && pmm.Enabled {
-		c := PMMContainer(cr.Name, cr.Spec.SecretsName, pmm)
+		c := pmmContainer(cr.Name, cr.Spec.SecretsName, pmm)
 		containers = append(containers, c)
 	}
 
-	return containers
+	return appendUniqueContainers(containers, cr.MySQLSpec().Sidecars...)
 }
 
 func mysqldContainer(cr *apiv2.PerconaServerForMySQL) corev1.Container {
@@ -344,7 +360,7 @@ func mysqldContainer(cr *apiv2.PerconaServerForMySQL) corev1.Container {
 	}
 }
 
-func PMMContainer(clusterName, secretsName string, pmmSpec *apiv2.PMMSpec) corev1.Container {
+func pmmContainer(clusterName, secretsName string, pmmSpec *apiv2.PMMSpec) corev1.Container {
 	ports := []corev1.ContainerPort{{ContainerPort: 7777}}
 	for port := 30100; port <= 30105; port++ {
 		ports = append(ports, corev1.ContainerPort{ContainerPort: int32(port)})
@@ -512,4 +528,27 @@ func PMMContainer(clusterName, secretsName string, pmmSpec *apiv2.PMMSpec) corev
 			},
 		},
 	}
+}
+
+func appendUniqueContainers(containers []corev1.Container, more ...corev1.Container) []corev1.Container {
+	if len(more) == 0 {
+		return containers
+	}
+
+	exists := make(map[string]bool)
+	for i := range containers {
+		exists[containers[i].Name] = true
+	}
+
+	for i := range more {
+		name := more[i].Name
+		if exists[name] {
+			continue
+		}
+
+		containers = append(containers, more[i])
+		exists[name] = true
+	}
+
+	return containers
 }

@@ -82,9 +82,12 @@ client-secret.json
 e2e-tests/conf/cloud-secret.yml
 .DS_Store
 .idea/**
-e2e-tests/init-deploy/smallrun
 
-.DS_Store
+/dev/
 
 # Kubernetes Generated files - skip generated files, except for vendored files
 !vendor/**/zz_generated.*
+
+# Kuttl
+kubeconfig
+kind-logs-*/

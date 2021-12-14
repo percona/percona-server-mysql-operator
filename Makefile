@@ -5,6 +5,7 @@
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
 NAME ?= percona-server-for-mysql-operator
 VERSION ?= $(shell git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')
+ROOT_REPO ?= ${PWD}
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -81,7 +82,7 @@ help: ## Display this help.
 
 generate: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=$(NAME)-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases  ## Generate WebhookConfiguration, Role and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..." ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+	$(CONTROLLER_GEN) object:headerFile="LICENSE-HEADER" paths="./..." ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 
 fmt: ## Run go fmt against code.
 	go fmt ./...
@@ -91,6 +92,9 @@ vet: ## Run go vet against code.
 
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
+
+e2e-test:
+	kubectl kuttl test --config e2e-tests/kuttl.yaml
 
 manifests: kustomize generate
 	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml
@@ -104,8 +108,9 @@ manifests: kustomize generate
 
 ##@ Build
 
-build: test ## Build docker image with the manager.
-	./e2e-tests/build
+.PHONY: build
+build: #test ## Build docker image with the manager.
+	ROOT_REPO=$(ROOT_REPO) VERSION=$(VERSION) $(ROOT_REPO)/e2e-tests/build
 
 ##@ Deployment
 
