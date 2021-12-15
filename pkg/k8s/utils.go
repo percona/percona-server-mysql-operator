@@ -212,7 +212,7 @@ func PodsByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([
 	return podList.Items, nil
 }
 
-func ServicesByLabels(ctx context.Context, cl APIList, l map[string]string) ([]corev1.Service, error) {
+func ServicesByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([]corev1.Service, error) {
 	svcList := &corev1.ServiceList{}
 
 	opts := &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)}
