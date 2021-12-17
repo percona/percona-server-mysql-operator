@@ -1,10 +1,10 @@
 apiVersion: ps.percona.com/v2
 kind: PerconaServerForMySQL
 metadata:
-  name: sidecar-test
+  name: sidecars
 spec:
-  secretsName: sidecar-test-users
-  sslSecretName: sidecar-test-ssl
+  secretsName: test-users
+  sslSecretName: test-ssl
 
   mysql:
     image: percona/percona-server:8.0

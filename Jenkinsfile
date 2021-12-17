@@ -288,6 +288,7 @@ pipeline {
                 runTest('semi-sync', 'basic')
                 runTest('monitoring', 'basic')
                 runTest('sidecars', 'basic')
+                runTest('config', 'basic')
                 ShutdownCluster('basic')
             }
         }

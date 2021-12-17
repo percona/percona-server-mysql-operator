@@ -136,6 +136,7 @@ _get_tmpdir() {
 
 CFG=/etc/my.cnf.d/node.cnf
 TLS_DIR=/etc/mysql/mysql-tls-secret
+CUSTOM_CONFIG_FILES=("/etc/mysql/config/my-config.cnf" "/etc/mysql/config/my-secret.cnf")
 
 create_default_cnf() {
 	POD_IP=$(hostname -I | awk '{print $1}')
@@ -161,6 +162,16 @@ create_default_cnf() {
 		sed -i "/\[mysqld\]/a ssl_cert=${TLS_DIR}/tls.crt" $CFG
 		sed -i "/\[mysqld\]/a ssl_key=${TLS_DIR}/tls.key" $CFG
 	fi
+
+	for f in "${CUSTOM_CONFIG_FILES[@]}"; do
+		echo "${f}"
+		if [ -f "${f}" ]; then
+			(
+				cat "${f}"
+				echo
+			) >>$CFG
+		fi
+	done
 }
 
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
@@ -183,12 +194,6 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 	rm -rfv "$TMPDIR"
 
 	create_default_cnf
-	if [ -f "/etc/mysql/config/my-config.cnf" ]; then
-		cat "/etc/mysql/config/my-config.cnf" >>$CFG
-	fi
-	if [ -f "/etc/mysql/config/my-secret.cnf" ]; then
-		cat "/etc/mysql/config/my-secret.cnf" >>$CFG
-	fi
 
 	if [ ! -d "$DATADIR/mysql" ]; then
 		file_env 'MYSQL_ROOT_PASSWORD' '' 'root'
