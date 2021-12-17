@@ -10,6 +10,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -249,4 +250,24 @@ func DefaultAPINamespace() (string, error) {
 	}
 
 	return strings.TrimSpace(string(nsBytes)), nil
+}
+
+func RolloutRestart(ctx context.Context, cl client.Client, obj runtime.Object) error {
+	switch obj := obj.(type) {
+	case *appsv1.StatefulSet:
+		orig := obj.DeepCopy()
+
+		if obj.Spec.Template.ObjectMeta.Annotations == nil {
+			obj.Spec.Template.ObjectMeta.Annotations = make(map[string]string)
+		}
+		obj.Spec.Template.ObjectMeta.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+
+		if err := cl.Patch(ctx, obj, client.StrategicMergeFrom(orig)); err != nil {
+			return errors.Wrap(err, "patch object")
+		}
+
+		return nil
+	default:
+		return errors.New("not supported")
+	}
 }

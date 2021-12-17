@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/json"
@@ -26,6 +27,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -43,6 +45,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
+	"github.com/percona/percona-server-mysql-operator/pkg/users"
 )
 
 // PerconaServerForMYSQLReconciler reconciles a PerconaServerForMYSQL object
@@ -108,6 +111,9 @@ func (r *PerconaServerForMySQLReconciler) doReconcile(
 	if err := r.ensureUserSecrets(ctx, cr); err != nil {
 		return errors.Wrap(err, "users secret")
 	}
+	if err := r.reconcileUsers(ctx, cr); err != nil {
+		return errors.Wrap(err, "users")
+	}
 	if err := r.ensureTLSSecret(ctx, cr); err != nil {
 		return errors.Wrap(err, "TLS secret")
 	}
@@ -148,9 +154,10 @@ func (r *PerconaServerForMySQLReconciler) ensureUserSecrets(
 		Name:      cr.Spec.SecretsName,
 	}
 
-	if ok, err := k8s.ObjectExists(ctx, r.Client, nn, &corev1.Secret{}); err != nil {
-		return errors.Wrap(err, "check existence")
-	} else if ok {
+	exists, err := k8s.ObjectExists(ctx, r.Client, nn, &corev1.Secret{})
+	if err != nil {
+		return errors.Wrap(err, "check if secret exists")
+	} else if exists {
 		return nil
 	}
 
@@ -161,6 +168,193 @@ func (r *PerconaServerForMySQLReconciler) ensureUserSecrets(
 
 	if err := k8s.EnsureObject(ctx, r.Client, cr, secret, r.Scheme); err != nil {
 		return errors.Wrapf(err, "create secret %s", cr.Spec.SecretsName)
+	}
+
+	return nil
+}
+
+func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr *apiv2.PerconaServerForMySQL) error {
+	l := log.FromContext(ctx).WithName("reconcileUsers")
+
+	if cr.Status.MySQL.State != apiv2.StateReady {
+		l.Info("MySQL is not ready")
+		return nil
+	}
+
+	secret := &corev1.Secret{}
+	nn := types.NamespacedName{Name: cr.Spec.SecretsName, Namespace: cr.Namespace}
+	if err := r.Client.Get(ctx, nn, secret); err != nil {
+		return errors.Wrapf(err, "get Secret/%s", nn.Name)
+	}
+
+	internalSecret := &corev1.Secret{}
+	nn.Name = cr.InternalSecretName()
+	err := r.Client.Get(ctx, nn, internalSecret)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrapf(err, "get Secret/%s", nn.Name)
+	}
+
+	// Internal secret is not found
+	if k8serrors.IsNotFound(err) {
+		secret.DeepCopyInto(internalSecret)
+		internalSecret.ObjectMeta = metav1.ObjectMeta{
+			Name:      cr.InternalSecretName(),
+			Namespace: cr.Namespace,
+		}
+
+		if err := r.Client.Create(ctx, internalSecret); err != nil {
+			return errors.Wrapf(err, "create Secret/%s", internalSecret.Name)
+		}
+
+		return nil
+	}
+
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv2.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+
+	orcHost := orchestrator.APIHost(orchestrator.ServiceName(cr))
+	primary, err := orchestrator.ClusterPrimary(ctx, orcHost, cr.ClusterHint())
+	if err != nil {
+		return errors.Wrap(err, "get cluster primary")
+	}
+	l.V(1).Info("Got cluster primary", "primary", primary)
+	primaryHost := getPrimaryHostname(primary, cr)
+
+	um, err := users.NewManager(apiv2.UserOperator, operatorPass, primaryHost, mysql.DefaultAdminPort)
+	if err != nil {
+		return errors.Wrap(err, "init user manager")
+	}
+	defer um.Close()
+
+	for user, pass := range secret.Data {
+		if bytes.Equal(pass, internalSecret.Data[user]) {
+			l.Info("User password is up to date", "user", user)
+			continue
+		}
+
+		switch apiv2.SystemUser(user) {
+		case apiv2.UserOrchestrator:
+			err := um.UpdateUserPass(apiv2.UserOrchestrator, []string{"%"}, string(pass))
+			if err != nil {
+				return errors.Wrapf(err, "update orchestrator password")
+			}
+
+			l.Info("Orchestrator password updated. Restarting orchestrator.")
+
+			if err := k8s.RolloutRestart(ctx, r.Client, orchestrator.StatefulSet(cr)); err != nil {
+				return errors.Wrap(err, "restart orchestrator")
+			}
+		case apiv2.UserMonitor:
+			err := um.UpdateUserPass(apiv2.UserMonitor, []string{"%"}, string(pass))
+			if err != nil {
+				return errors.Wrapf(err, "update monitor password")
+			}
+
+			if !cr.PMMEnabled() {
+				l.Info("Monitor user password updated.")
+				break
+			}
+
+			l.Info("Monitor user password updated. Restarting MySQL.")
+
+			sts := &appsv1.StatefulSet{}
+			err = r.Client.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts)
+			if err != nil {
+				return errors.Wrapf(err, "get StatefulSet/%s", mysql.Name(cr))
+			}
+			if err := k8s.RolloutRestart(ctx, r.Client, sts); err != nil {
+				return errors.Wrap(err, "restart MySQL")
+			}
+		case apiv2.UserReplication:
+			l.Info("Replication user password updated. Restarting replication.")
+
+			orcHost := orchestrator.APIHost(orchestrator.ServiceName(cr))
+			primary, err := orchestrator.ClusterPrimary(ctx, orcHost, cr.ClusterHint())
+			if err != nil {
+				return errors.Wrap(err, "get cluster primary")
+			}
+
+			l.V(1).Info("Connecting to primary", "primary", primary)
+
+			g, gCtx := errgroup.WithContext(context.Background())
+			for _, replica := range primary.Replicas {
+				hostname := replica.Hostname
+				port := replica.Port
+				g.Go(func() error {
+					if err := orchestrator.StopReplication(gCtx, orcHost, hostname, port); err != nil {
+						return errors.Wrap(err, "stop replica")
+					}
+
+					l.V(1).Info("Stopped replication on replica", "hostname", hostname, "port", port)
+
+					return nil
+				})
+			}
+
+			if err := g.Wait(); err != nil {
+				return errors.Wrap(err, "stop replication on replicas")
+			}
+
+			err = um.UpdateUserPass(apiv2.UserReplication, []string{"%"}, string(pass))
+			if err != nil {
+				return errors.Wrap(err, "update replication password")
+			}
+
+			g, gCtx = errgroup.WithContext(context.Background())
+			for _, replica := range primary.Replicas {
+				hostname := replica.Hostname
+				port := replica.Port
+				g.Go(func() error {
+					db, err := replicator.NewReplicator(
+						apiv2.UserOperator,
+						operatorPass,
+						hostname,
+						mysql.DefaultAdminPort,
+					)
+					if err != nil {
+						return errors.Wrap(err, "get db connection")
+					}
+					defer db.Close()
+
+					pHost := getPrimaryHostname(primary, cr)
+					l.V(1).Info("Change replication source", "primary", pHost, "replica", hostname)
+					if err := db.ChangeReplicationSource(pHost, string(pass), primary.Key.Port); err != nil {
+						return errors.Wrap(err, "change replication source")
+					}
+
+					if err := orchestrator.StartReplication(gCtx, orcHost, hostname, port); err != nil {
+						return errors.Wrap(err, "start replica")
+					}
+
+					l.V(1).Info("Started replication on replica", "hostname", hostname, "port", port)
+
+					return nil
+				})
+			}
+			if err := g.Wait(); err != nil {
+				return errors.Wrap(err, "start replication on replicas")
+			}
+		case apiv2.UserRoot:
+			err := um.UpdateUserPass(apiv2.UserRoot, []string{"%", "localhost"}, string(pass))
+			if err != nil {
+				return errors.Wrap(err, "update root password")
+			}
+			l.Info("Updated root password")
+		default:
+			err := um.UpdateUserPass(apiv2.SystemUser(user), []string{"%"}, string(pass))
+			if err != nil {
+				return errors.Wrapf(err, "update %s password", user)
+			}
+			l.Info("Updated user password", "user", user)
+		}
+
+		internalSecret.Data[user] = pass
+	}
+
+	if err := r.Client.Update(ctx, internalSecret); err != nil {
+		return errors.Wrapf(err, "update Secret/%s", internalSecret.Name)
 	}
 
 	return nil
@@ -387,7 +581,7 @@ func reconcileReplicationPrimaryPod(
 	if err != nil {
 		return errors.Wrap(err, "get cluster primary")
 	}
-	primaryAlias := primary.Alias()
+	primaryAlias := primary.Alias
 	l.V(1).Info(fmt.Sprintf("got cluster primary alias: %v", primaryAlias), "data", primary)
 
 	for i := range pods {
@@ -442,17 +636,7 @@ func reconcileReplicationSemiSync(
 		return errors.Wrap(err, "get cluster primary")
 	}
 
-	primaryHost := primary.Hostname()
-	if host == "" {
-		primaryHost = primary.Alias()
-	}
-	if primaryHost == "" {
-		l.V(1).Info("no primary host provided. skip", "clusterPrimary", primary)
-		return nil
-	}
-	l.Info("Got primary from orchestrator", "primary", primary)
-
-	primaryHost = fmt.Sprintf("%v.%v.%v", host, mysql.ServiceName(cr), cr.GetNamespace())
+	primaryHost := getPrimaryHostname(primary, cr)
 
 	l.V(1).Info(fmt.Sprintf("use primary host: %v", primaryHost), "clusterPrimary", primary)
 
@@ -463,7 +647,7 @@ func reconcileReplicationSemiSync(
 
 	db, err := replicator.NewReplicator(apiv2.UserOperator,
 		operatorPass,
-		primary.Hostname(),
+		primaryHost,
 		mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrapf(err, "connect to %v", primaryHost)
@@ -551,4 +735,12 @@ func writeStatus(
 
 		return nil
 	})
+}
+
+func getPrimaryHostname(primary *orchestrator.Instance, cr *apiv2.PerconaServerForMySQL) string {
+	if primary.Key.Hostname != "" {
+		return primary.Key.Hostname
+	}
+
+	return fmt.Sprintf("%s.%s.%s", primary.Alias, mysql.ServiceName(cr), cr.Namespace)
 }

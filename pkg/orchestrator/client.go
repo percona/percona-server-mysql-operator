@@ -3,40 +3,64 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/pkg/errors"
 )
 
-type CKey struct {
+type orcResponse struct {
+	Code    string      `json:"Code"`
+	Message string      `json:"Message"`
+	Details interface{} `json:"Details,omitempty"`
+}
+
+type InstanceKey struct {
 	Hostname string `json:"Hostname"`
 	Port     int32  `json:"Port"`
 }
 
-type clusterImpl struct {
-	Key           CKey   `json:"Key"`
-	InstanceAlias string `json:"InstanceAlias"`
-	MasterKey     CKey   `json:"MasterKey"`
-	Replicas      []CKey `json:"Replicas"`
+type Instance struct {
+	Key       InstanceKey   `json:"Key"`
+	Alias     string        `json:"InstanceAlias"`
+	MasterKey InstanceKey   `json:"MasterKey"`
+	Replicas  []InstanceKey `json:"Replicas"`
 }
 
-type Cluster interface {
-	Hostname() string
-	Alias() string
+func ClusterPrimary(ctx context.Context, apiHost, clusterHint string) (*Instance, error) {
+	primary := &Instance{}
+	return primary, doRequest(ctx, apiHost+"/api/master/"+clusterHint, primary)
 }
 
-func (i clusterImpl) Hostname() string {
-	return i.Key.Hostname
+func StopReplication(ctx context.Context, apiHost, host string, port int32) error {
+	resp := &orcResponse{}
+
+	url := fmt.Sprintf("%s/api/stop-replica/%s/%d", apiHost, host, port)
+	if err := doRequest(ctx, url, resp); err != nil {
+		return errors.Wrapf(err, "do request to %s", url)
+	}
+
+	if resp.Code != "OK" {
+		return errors.New(resp.Message)
+	}
+
+	return nil
 }
 
-func (i clusterImpl) Alias() string {
-	return i.InstanceAlias
-}
+func StartReplication(ctx context.Context, apiHost, host string, port int32) error {
+	resp := &orcResponse{}
 
-func ClusterPrimary(ctx context.Context, host, clusterHint string) (Cluster, error) {
-	primary := &clusterImpl{}
-	return primary, doRequest(ctx, host+"/api/master/"+clusterHint, primary)
+	url := fmt.Sprintf("%s/api/start-replica/%s/%d", apiHost, host, port)
+	if err := doRequest(ctx, url, resp); err != nil {
+		return errors.Wrapf(err, "do request to %s", url)
+	}
+
+	if resp.Code != "OK" {
+		return errors.New(resp.Message)
+	}
+
+	return nil
 }
 
 func doRequest(ctx context.Context, url string, o interface{}) error {

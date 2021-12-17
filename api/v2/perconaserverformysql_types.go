@@ -390,6 +390,14 @@ func (cr *PerconaServerForMySQL) ClusterHash() string {
 	return serverIDHashStr
 }
 
+func (cr *PerconaServerForMySQL) InternalSecretName() string {
+	return "internal-" + cr.Name
+}
+
+func (cr *PerconaServerForMySQL) PMMEnabled() bool {
+	return cr.Spec.PMM != nil && cr.Spec.PMM.Enabled
+}
+
 func init() {
 	SchemeBuilder.Register(&PerconaServerForMySQL{}, &PerconaServerForMySQLList{})
 }

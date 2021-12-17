@@ -21,6 +21,7 @@ const (
 )
 
 type Replicator interface {
+	ChangeReplicationSource(host, replicaPass string, port int32) error
 	StartReplication(host, replicaPass string, port int32) error
 	ReplicationStatus() (ReplicationStatus, string, error)
 	EnableReadonly() error
@@ -53,7 +54,7 @@ func NewReplicator(user apiv2.SystemUser, pass, host string, port int32) (Replic
 	return &dbImpl{db}, nil
 }
 
-func (d *dbImpl) StartReplication(host, replicaPass string, port int32) error {
+func (d *dbImpl) ChangeReplicationSource(host, replicaPass string, port int32) error {
 	// TODO: Make retries configurable
 	_, err := d.db.Exec(`
             CHANGE REPLICATION SOURCE TO
@@ -68,18 +69,26 @@ func (d *dbImpl) StartReplication(host, replicaPass string, port int32) error {
                 SOURCE_CONNECT_RETRY=60
         `, apiv2.UserReplication, replicaPass, host, port)
 	if err != nil {
-		return errors.Wrap(err, "change replication source to")
+		return errors.Wrap(err, "exec CHANGE REPLICATION SOURCE TO")
 	}
 
-	_, err = d.db.Exec("START REPLICA")
+	return nil
+}
+
+func (d *dbImpl) StartReplication(host, replicaPass string, port int32) error {
+	if err := d.ChangeReplicationSource(host, replicaPass, port); err != nil {
+		return errors.Wrap(err, "change replication source")
+	}
+
+	_, err := d.db.Exec("START REPLICA")
 	return errors.Wrap(err, "start replication")
 }
 
 func (d *dbImpl) ReplicationStatus() (ReplicationStatus, string, error) {
 	row := d.db.QueryRow(`
         SELECT
-			connection_status.SERVICE_STATE,
-			applier_status.SERVICE_STATE,
+	    connection_status.SERVICE_STATE,
+	    applier_status.SERVICE_STATE,
             HOST
         FROM replication_connection_status connection_status
         JOIN replication_connection_configuration connection_configuration
