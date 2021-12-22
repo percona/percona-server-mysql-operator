@@ -8,10 +8,11 @@ import (
 	"github.com/pkg/errors"
 
 	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
 type Manager interface {
-	UpdateUserPass(user apiv2.SystemUser, hosts []string, pass string) error
+	UpdateUserPasswords(users []mysql.User) error
 	Close() error
 }
 
@@ -32,22 +33,24 @@ func NewManager(user apiv2.SystemUser, pass, host string, port int32) (Manager, 
 	return &dbImpl{db}, nil
 }
 
-func (d *dbImpl) UpdateUserPass(user apiv2.SystemUser, hosts []string, pass string) error {
+func (d *dbImpl) UpdateUserPasswords(users []mysql.User) error {
 	tx, err := d.db.Begin()
 	if err != nil {
 		return errors.Wrap(err, "begin transaction")
 	}
 
-	for _, host := range hosts {
-		_, err = tx.Exec("ALTER USER ?@? IDENTIFIED BY ?", user, host, pass)
-		if err != nil {
-			err = errors.Wrap(err, "alter user")
+	for _, user := range users {
+		for _, host := range user.Hosts {
+			_, err = tx.Exec("ALTER USER ?@? IDENTIFIED BY ?", user.Username, host, user.Password)
+			if err != nil {
+				err = errors.Wrap(err, "alter user")
 
-			if errT := tx.Rollback(); errT != nil {
-				return errors.Wrap(errors.Wrap(errT, "rollback"), err.Error())
+				if errT := tx.Rollback(); errT != nil {
+					return errors.Wrap(errors.Wrap(errT, "rollback"), err.Error())
+				}
+
+				return err
 			}
-
-			return err
 		}
 	}
 

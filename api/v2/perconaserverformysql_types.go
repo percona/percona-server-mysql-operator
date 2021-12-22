@@ -340,6 +340,14 @@ func defaultPVCSpec(pvc *corev1.PersistentVolumeClaimSpec) {
 	}
 }
 
+type AnnotationKey string
+
+const (
+	AnnotationSpecHash   AnnotationKey = "percona.com/last-applied-spec"
+	AnnotationSecretHash AnnotationKey = "percona.com/last-applied-secret"
+	AnnotationConfigHash AnnotationKey = "percona.com/last-applied-config"
+)
+
 const (
 	NameLabel         = "app.kubernetes.io/name"
 	InstanceLabel     = "app.kubernetes.io/instance"

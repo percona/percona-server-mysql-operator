@@ -4,6 +4,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -28,8 +29,18 @@ const (
 	DefaultAdminPort = 33062
 )
 
+type User struct {
+	Username apiv2.SystemUser
+	Password string
+	Hosts    []string
+}
+
 func Name(cr *apiv2.PerconaServerForMySQL) string {
 	return cr.Name + "-" + componentName
+}
+
+func NamespacedName(cr *apiv2.PerconaServerForMySQL) types.NamespacedName {
+	return types.NamespacedName{Name: Name(cr), Namespace: cr.Namespace}
 }
 
 func ServiceName(cr *apiv2.PerconaServerForMySQL) string {

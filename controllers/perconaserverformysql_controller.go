@@ -209,6 +209,57 @@ func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr
 		return nil
 	}
 
+	hash, err := k8s.ObjectHash(secret)
+	if err != nil {
+		return errors.Wrapf(err, "get secret/%s hash", secret.Name)
+	}
+
+	internalHash, err := k8s.ObjectHash(internalSecret)
+	if err != nil {
+		return errors.Wrapf(err, "get secret/%s hash", internalSecret.Name)
+	}
+
+	if hash == internalHash {
+		l.V(1).Info("Secret data is up to date")
+		return nil
+	}
+
+	var (
+		restartMySQL        bool
+		restartReplication  bool
+		restartOrchestrator bool
+	)
+	updatedUsers := make([]mysql.User, 0)
+	for user, pass := range secret.Data {
+		if bytes.Equal(pass, internalSecret.Data[user]) {
+			l.V(1).Info("User password is up to date", "user", user)
+			continue
+		}
+
+		mysqlUser := mysql.User{
+			Username: apiv2.SystemUser(user),
+			Password: string(pass),
+			Hosts:    []string{"%"},
+		}
+
+		switch mysqlUser.Username {
+		case apiv2.UserMonitor:
+			if cr.PMMEnabled() {
+				restartMySQL = true
+			}
+		case apiv2.UserReplication:
+			restartReplication = true
+		case apiv2.UserOrchestrator:
+			restartOrchestrator = true
+		case apiv2.UserRoot:
+			mysqlUser.Hosts = append(mysqlUser.Hosts, "localhost")
+		}
+
+		l.V(1).Info("User password changed", "user", user)
+
+		updatedUsers = append(updatedUsers, mysqlUser)
+	}
+
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv2.UserOperator)
 	if err != nil {
 		return errors.Wrap(err, "get operator password")
@@ -228,131 +279,100 @@ func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr
 	}
 	defer um.Close()
 
-	for user, pass := range secret.Data {
-		if bytes.Equal(pass, internalSecret.Data[user]) {
-			l.Info("User password is up to date", "user", user)
-			continue
+	if restartReplication {
+		g, gCtx := errgroup.WithContext(context.Background())
+		for _, replica := range primary.Replicas {
+			hostname := replica.Hostname
+			port := replica.Port
+			g.Go(func() error {
+				if err := orchestrator.StopReplication(gCtx, orcHost, hostname, port); err != nil {
+					return errors.Wrap(err, "stop replica")
+				}
+
+				l.V(1).Info("Stopped replication on replica", "hostname", hostname, "port", port)
+
+				return nil
+			})
 		}
 
-		switch apiv2.SystemUser(user) {
-		case apiv2.UserOrchestrator:
-			err := um.UpdateUserPass(apiv2.UserOrchestrator, []string{"%"}, string(pass))
-			if err != nil {
-				return errors.Wrapf(err, "update orchestrator password")
-			}
-
-			l.Info("Orchestrator password updated. Restarting orchestrator.")
-
-			if err := k8s.RolloutRestart(ctx, r.Client, orchestrator.StatefulSet(cr)); err != nil {
-				return errors.Wrap(err, "restart orchestrator")
-			}
-		case apiv2.UserMonitor:
-			err := um.UpdateUserPass(apiv2.UserMonitor, []string{"%"}, string(pass))
-			if err != nil {
-				return errors.Wrapf(err, "update monitor password")
-			}
-
-			if !cr.PMMEnabled() {
-				l.Info("Monitor user password updated.")
-				break
-			}
-
-			l.Info("Monitor user password updated. Restarting MySQL.")
-
-			sts := &appsv1.StatefulSet{}
-			err = r.Client.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts)
-			if err != nil {
-				return errors.Wrapf(err, "get StatefulSet/%s", mysql.Name(cr))
-			}
-			if err := k8s.RolloutRestart(ctx, r.Client, sts); err != nil {
-				return errors.Wrap(err, "restart MySQL")
-			}
-		case apiv2.UserReplication:
-			l.Info("Replication user password updated. Restarting replication.")
-
-			orcHost := orchestrator.APIHost(orchestrator.ServiceName(cr))
-			primary, err := orchestrator.ClusterPrimary(ctx, orcHost, cr.ClusterHint())
-			if err != nil {
-				return errors.Wrap(err, "get cluster primary")
-			}
-
-			l.V(1).Info("Connecting to primary", "primary", primary)
-
-			g, gCtx := errgroup.WithContext(context.Background())
-			for _, replica := range primary.Replicas {
-				hostname := replica.Hostname
-				port := replica.Port
-				g.Go(func() error {
-					if err := orchestrator.StopReplication(gCtx, orcHost, hostname, port); err != nil {
-						return errors.Wrap(err, "stop replica")
-					}
-
-					l.V(1).Info("Stopped replication on replica", "hostname", hostname, "port", port)
-
-					return nil
-				})
-			}
-
-			if err := g.Wait(); err != nil {
-				return errors.Wrap(err, "stop replication on replicas")
-			}
-
-			err = um.UpdateUserPass(apiv2.UserReplication, []string{"%"}, string(pass))
-			if err != nil {
-				return errors.Wrap(err, "update replication password")
-			}
-
-			g, gCtx = errgroup.WithContext(context.Background())
-			for _, replica := range primary.Replicas {
-				hostname := replica.Hostname
-				port := replica.Port
-				g.Go(func() error {
-					db, err := replicator.NewReplicator(
-						apiv2.UserOperator,
-						operatorPass,
-						hostname,
-						mysql.DefaultAdminPort,
-					)
-					if err != nil {
-						return errors.Wrap(err, "get db connection")
-					}
-					defer db.Close()
-
-					pHost := getPrimaryHostname(primary, cr)
-					l.V(1).Info("Change replication source", "primary", pHost, "replica", hostname)
-					if err := db.ChangeReplicationSource(pHost, string(pass), primary.Key.Port); err != nil {
-						return errors.Wrap(err, "change replication source")
-					}
-
-					if err := orchestrator.StartReplication(gCtx, orcHost, hostname, port); err != nil {
-						return errors.Wrap(err, "start replica")
-					}
-
-					l.V(1).Info("Started replication on replica", "hostname", hostname, "port", port)
-
-					return nil
-				})
-			}
-			if err := g.Wait(); err != nil {
-				return errors.Wrap(err, "start replication on replicas")
-			}
-		case apiv2.UserRoot:
-			err := um.UpdateUserPass(apiv2.UserRoot, []string{"%", "localhost"}, string(pass))
-			if err != nil {
-				return errors.Wrap(err, "update root password")
-			}
-			l.Info("Updated root password")
-		default:
-			err := um.UpdateUserPass(apiv2.SystemUser(user), []string{"%"}, string(pass))
-			if err != nil {
-				return errors.Wrapf(err, "update %s password", user)
-			}
-			l.Info("Updated user password", "user", user)
+		if err := g.Wait(); err != nil {
+			return errors.Wrap(err, "stop replication on replicas")
 		}
-
-		internalSecret.Data[user] = pass
 	}
 
+	if err := um.UpdateUserPasswords(updatedUsers); err != nil {
+		return errors.Wrapf(err, "update orchestrator password")
+	}
+
+	if restartReplication {
+		var replicationPass string
+		for _, user := range updatedUsers {
+			if user.Username == apiv2.UserReplication {
+				replicationPass = user.Password
+				break
+			}
+		}
+		g, gCtx := errgroup.WithContext(context.Background())
+		for _, replica := range primary.Replicas {
+			hostname := replica.Hostname
+			port := replica.Port
+			g.Go(func() error {
+				db, err := replicator.NewReplicator(
+					apiv2.UserOperator,
+					operatorPass,
+					hostname,
+					mysql.DefaultAdminPort,
+				)
+				if err != nil {
+					return errors.Wrap(err, "get db connection")
+				}
+				defer db.Close()
+
+				pHost := getPrimaryHostname(primary, cr)
+				l.V(1).Info("Change replication source", "primary", pHost, "replica", hostname)
+				if err := db.ChangeReplicationSource(pHost, replicationPass, primary.Key.Port); err != nil {
+					return errors.Wrap(err, "change replication source")
+				}
+
+				if err := orchestrator.StartReplication(gCtx, orcHost, hostname, port); err != nil {
+					return errors.Wrap(err, "start replica")
+				}
+
+				l.V(1).Info("Started replication on replica", "hostname", hostname, "port", port)
+
+				return nil
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return errors.Wrap(err, "start replication on replicas")
+		}
+	}
+
+	if restartOrchestrator {
+		l.Info("Orchestrator password updated. Restarting orchestrator.")
+
+		sts := &appsv1.StatefulSet{}
+		if err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), sts); err != nil {
+			return errors.Wrap(err, "get Orchestrator statefulset")
+		}
+		if err := k8s.RolloutRestart(ctx, r.Client, sts, apiv2.AnnotationSecretHash, hash); err != nil {
+			return errors.Wrap(err, "restart orchestrator")
+		}
+	}
+
+	if restartMySQL {
+		l.Info("Monitor user password updated. Restarting MySQL.")
+
+		sts := &appsv1.StatefulSet{}
+		if err := r.Client.Get(ctx, mysql.NamespacedName(cr), sts); err != nil {
+			return errors.Wrap(err, "get MySQL statefulset")
+		}
+		if err := k8s.RolloutRestart(ctx, r.Client, sts, apiv2.AnnotationSecretHash, hash); err != nil {
+			return errors.Wrap(err, "restart MySQL")
+		}
+	}
+
+	internalSecret.Data = secret.Data
 	if err := r.Client.Update(ctx, internalSecret); err != nil {
 		return errors.Wrapf(err, "update Secret/%s", internalSecret.Name)
 	}
