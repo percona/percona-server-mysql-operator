@@ -253,7 +253,7 @@ func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr
 			restartOrchestrator = true
 		case apiv2.UserRoot:
 			mysqlUser.Hosts = append(mysqlUser.Hosts, "localhost")
-		case apiv2.UserClusterCheck:
+		case apiv2.UserClusterCheck, apiv2.UserXtraBackup:
 			mysqlUser.Hosts = []string{"localhost"}
 		}
 
