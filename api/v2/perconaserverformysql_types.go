@@ -59,6 +59,8 @@ type MySQLSpec struct {
 	SidecarVolumes []corev1.Volume    `json:"sidecarVolumes,omitempty"`
 	SidecarPVCs    []SidecarPVC       `json:"sidecarPVCs,omitempty"`
 
+	Configuration string `json:"configuration,omitempty"`
+
 	PodSpec `json:",inline"`
 }
 

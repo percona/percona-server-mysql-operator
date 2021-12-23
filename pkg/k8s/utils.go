@@ -77,7 +77,7 @@ func ObjectExists(ctx context.Context, cl client.Reader, nn types.NamespacedName
 
 func EnsureObject(
 	ctx context.Context,
-	cl client.Writer,
+	cl client.Client,
 	cr *apiv2.PerconaServerForMySQL,
 	o client.Object,
 	s *runtime.Scheme,
@@ -88,10 +88,27 @@ func EnsureObject(
 			o.GetName())
 	}
 
-	if err := cl.Create(ctx, o); err != nil {
-		return errors.Wrapf(err, "create %s/%s",
-			o.GetObjectKind().GroupVersionKind().Kind,
-			o.GetName())
+	val := reflect.ValueOf(o)
+	if val.Kind() == reflect.Ptr {
+		val = reflect.Indirect(val)
+	}
+	oldObject := reflect.New(val.Type()).Interface().(client.Object)
+
+	nn := types.NamespacedName{Namespace: o.GetNamespace(), Name: o.GetName()}
+	if err := cl.Get(ctx, nn, oldObject); err != nil {
+		if !k8serrors.IsNotFound(err) {
+			return errors.Wrapf(err, "get %s/%s", o.GetObjectKind().GroupVersionKind().Kind, o.GetName())
+		}
+
+		if err := cl.Create(ctx, o); err != nil {
+			return errors.Wrapf(err, "create %s/%s", o.GetObjectKind().GroupVersionKind().Kind, o.GetName())
+		}
+
+		return nil
+	}
+
+	if err := cl.Update(ctx, o); err != nil {
+		return errors.Wrapf(err, "update %s/%s", o.GetObjectKind().GroupVersionKind().Kind, o.GetName())
 	}
 
 	return nil

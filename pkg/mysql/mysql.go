@@ -11,15 +11,16 @@ import (
 )
 
 const (
-	componentName  = "mysql"
-	dataVolumeName = "datadir"
-	DataMountPath  = "/var/lib/mysql"
-	// configVolumeName = "config"
-	// configMountPath  = "/etc/mysql/config"
-	credsVolumeName = "users"
-	CredsMountPath  = "/etc/mysql/mysql-users-secret"
-	tlsVolumeName   = "tls"
-	tlsMountPath    = "/etc/mysql/mysql-tls-secret"
+	componentName    = "mysql"
+	dataVolumeName   = "datadir"
+	DataMountPath    = "/var/lib/mysql"
+	CustomConfigKey  = "my.cnf"
+	configVolumeName = "config"
+	configMountPath  = "/etc/mysql/config"
+	credsVolumeName  = "users"
+	CredsMountPath   = "/etc/mysql/mysql-users-secret"
+	tlsVolumeName    = "tls"
+	tlsMountPath     = "/etc/mysql/mysql-tls-secret"
 )
 
 const (
@@ -43,16 +44,24 @@ func UnreadyServiceName(cr *apiv2.PerconaServerForMySQL) string {
 	return Name(cr) + "-unready"
 }
 
+func ConfigMapName(cr *apiv2.PerconaServerForMySQL) string {
+	return Name(cr)
+}
+
 func MatchLabels(cr *apiv2.PerconaServerForMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
 		map[string]string{apiv2.ComponentLabel: componentName},
 		cr.Labels())
 }
 
-func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage string) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage, configHash string) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 	spec := cr.MySQLSpec()
-	Replicas := spec.Size
+	replicas := spec.Size
+	t := true
+
+	annotations := make(map[string]string)
+	annotations["percona.com/configuration-hash"] = configHash
 
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
@@ -65,7 +74,7 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage string) *appsv1.Stat
 			Labels:    labels,
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas: &Replicas,
+			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
@@ -73,7 +82,8 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage string) *appsv1.Stat
 			VolumeClaimTemplates: volumeClaimTemplates(spec),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
@@ -122,6 +132,43 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage string) *appsv1.Stat
 								VolumeSource: corev1.VolumeSource{
 									Secret: &corev1.SecretVolumeSource{
 										SecretName: cr.Spec.SSLSecretName,
+									},
+								},
+							},
+							{
+								Name: configVolumeName,
+								VolumeSource: corev1.VolumeSource{
+									Projected: &corev1.ProjectedVolumeSource{
+										Sources: []corev1.VolumeProjection{
+											{
+												ConfigMap: &corev1.ConfigMapProjection{
+													LocalObjectReference: corev1.LocalObjectReference{
+														Name: ConfigMapName(cr),
+													},
+													Items: []corev1.KeyToPath{
+														{
+															Key:  CustomConfigKey,
+															Path: "my-config.cnf",
+														},
+													},
+													Optional: &t,
+												},
+											},
+											{
+												Secret: &corev1.SecretProjection{
+													LocalObjectReference: corev1.LocalObjectReference{
+														Name: ConfigMapName(cr),
+													},
+													Items: []corev1.KeyToPath{
+														{
+															Key:  CustomConfigKey,
+															Path: "my-secret.cnf",
+														},
+													},
+													Optional: &t,
+												},
+											},
+										},
 									},
 								},
 							},
@@ -311,6 +358,10 @@ func mysqldContainer(cr *apiv2.PerconaServerForMySQL) corev1.Container {
 			{
 				Name:      tlsVolumeName,
 				MountPath: tlsMountPath,
+			},
+			{
+				Name:      configVolumeName,
+				MountPath: configMountPath,
 			},
 		},
 		Command:                  []string{"/var/lib/mysql/ps-entrypoint.sh"},

@@ -21,6 +21,8 @@ spec:
           name: users
         - mountPath: /etc/mysql/mysql-tls-secret
           name: tls
+        - mountPath: /etc/mysql/config
+          name: config
       - image: busybox
         imagePullPolicy: Always
         name: noop-memory
@@ -51,6 +53,22 @@ spec:
         secret:
           defaultMode: 420
           secretName: sidecar-test-ssl
+      - name: config
+        projected:
+          defaultMode: 420
+          sources:
+          - configMap:
+              items:
+              - key: my.cnf
+                path: my-config.cnf
+              name: sidecar-test-mysql
+              optional: true
+          - secret:
+              items:
+              - key: my.cnf
+                path: my-secret.cnf
+              name: sidecar-test-mysql
+              optional: true
       - emptyDir:
           medium: Memory
         name: memory-vol
