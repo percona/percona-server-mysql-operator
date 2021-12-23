@@ -77,6 +77,10 @@ func doRequest(ctx context.Context, url string, o interface{}) error {
 	}
 	defer res.Body.Close()
 
+	if res.StatusCode >= 400 && res.StatusCode <= 599 {
+		return errors.Errorf("request failed with %s", res.Status)
+	}
+
 	if err := json.NewDecoder(res.Body).Decode(o); err != nil {
 		return errors.Wrap(err, "json decode")
 	}
