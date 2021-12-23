@@ -147,6 +147,10 @@ func EnsureObjectWithHash(
 		return errors.Wrap(err, "calculate object hash")
 	}
 
+	objAnnotations = objectMeta.GetAnnotations()
+	objAnnotations["percona.com/last-config-hash"] = hash
+	objectMeta.SetAnnotations(objAnnotations)
+
 	val := reflect.ValueOf(obj)
 	if val.Kind() == reflect.Ptr {
 		val = reflect.Indirect(val)
@@ -223,6 +227,17 @@ func PodsByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([
 	}
 
 	return podList.Items, nil
+}
+
+func ServicesByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([]corev1.Service, error) {
+	svcList := &corev1.ServiceList{}
+
+	opts := &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)}
+	if err := cl.List(ctx, svcList, opts); err != nil {
+		return nil, err
+	}
+
+	return svcList.Items, nil
 }
 
 // DefaultAPINamespace returns namespace for direct api access from a pod

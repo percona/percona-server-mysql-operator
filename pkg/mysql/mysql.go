@@ -223,7 +223,7 @@ func UnreadyService(cr *apiv2.PerconaServerForMySQL) *corev1.Service {
 	}
 }
 
-func Service(cr *apiv2.PerconaServerForMySQL) *corev1.Service {
+func HeadlessService(cr *apiv2.PerconaServerForMySQL) *corev1.Service {
 	labels := MatchLabels(cr)
 
 	return &corev1.Service{
@@ -246,6 +246,34 @@ func Service(cr *apiv2.PerconaServerForMySQL) *corev1.Service {
 			},
 			Selector:                 labels,
 			PublishNotReadyAddresses: true,
+		},
+	}
+}
+
+func PodService(cr *apiv2.PerconaServerForMySQL, t corev1.ServiceType, podName string) *corev1.Service {
+	labels := MatchLabels(cr)
+	labels["statefulset.kubernetes.io/pod-name"] = podName
+	labels[apiv2.ExposedLabel] = "true"
+
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Service",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      podName,
+			Namespace: cr.Namespace,
+			Labels:    labels,
+		},
+		Spec: corev1.ServiceSpec{
+			Type: t,
+			Ports: []corev1.ServicePort{
+				{
+					Name: componentName,
+					Port: DefaultPort,
+				},
+			},
+			Selector: labels,
 		},
 	}
 }
