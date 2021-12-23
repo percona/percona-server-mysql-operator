@@ -176,11 +176,6 @@ func (r *PerconaServerForMySQLReconciler) ensureUserSecrets(
 func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr *apiv2.PerconaServerForMySQL) error {
 	l := log.FromContext(ctx).WithName("reconcileUsers")
 
-	if cr.Status.MySQL.State != apiv2.StateReady {
-		l.Info("MySQL is not ready")
-		return nil
-	}
-
 	secret := &corev1.Secret{}
 	nn := types.NamespacedName{Name: cr.Spec.SecretsName, Namespace: cr.Namespace}
 	if err := r.Client.Get(ctx, nn, secret); err != nil {
@@ -224,6 +219,11 @@ func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr
 		return nil
 	}
 
+	if cr.Status.MySQL.State != apiv2.StateReady {
+		l.Info("MySQL is not ready")
+		return nil
+	}
+
 	var (
 		restartMySQL        bool
 		restartReplication  bool
@@ -253,6 +253,8 @@ func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr
 			restartOrchestrator = true
 		case apiv2.UserRoot:
 			mysqlUser.Hosts = append(mysqlUser.Hosts, "localhost")
+		case apiv2.UserClusterCheck:
+			mysqlUser.Hosts = []string{"localhost"}
 		}
 
 		l.V(1).Info("User password changed", "user", user)
