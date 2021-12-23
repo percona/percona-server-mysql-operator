@@ -171,7 +171,6 @@ var secretUsers = [...]apiv2.SystemUser{
 	apiv2.UserXtraBackup,
 	apiv2.UserMonitor,
 	apiv2.UserClusterCheck,
-	apiv2.UserProxyAdmin,
 	apiv2.UserOperator,
 	apiv2.UserReplication,
 	apiv2.UserOrchestrator,
