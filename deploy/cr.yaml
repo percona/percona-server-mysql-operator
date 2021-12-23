@@ -12,6 +12,10 @@ spec:
     size: 3
     sizeSemiSync: 0
 
+    expose:
+      enabled: false
+      type: ClusterIP
+
     volumeSpec:
       persistentVolumeClaim:
         resources:

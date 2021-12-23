@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/pkg/errors"
@@ -197,24 +198,70 @@ func (r *PerconaServerForMySQLReconciler) reconcileDatabase(
 		return errors.Wrap(err, "get init image")
 	}
 
-	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.StatefulSet(cr, initImage), r.Scheme)
-	if err != nil {
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.StatefulSet(cr, initImage), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile sts")
 	}
 
-	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.Service(cr), r.Scheme)
-	if err != nil {
-		return errors.Wrap(err, "reconcile svc")
+	if err := r.reconcileMySQLServices(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile services")
 	}
 
-	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.PrimaryService(cr), r.Scheme)
-	if err != nil {
+	return nil
+}
+
+func (r *PerconaServerForMySQLReconciler) reconcileMySQLServices(
+	ctx context.Context,
+	cr *apiv2.PerconaServerForMySQL,
+) error {
+	l := log.FromContext(ctx).WithName("reconcileMySQLServices")
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.PrimaryService(cr), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile primary svc")
 	}
 
-	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.UnreadyService(cr), r.Scheme)
-	if err != nil {
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.UnreadyService(cr), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile unready svc")
+	}
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.HeadlessService(cr), r.Scheme); err != nil {
+		return errors.Wrap(err, "reconcile headless svc")
+	}
+
+	mysqlSize := int(cr.Spec.MySQL.Size)
+	svcNames := make(map[string]struct{}, mysqlSize)
+	for i := 0; i < mysqlSize; i++ {
+		svcName := mysql.Name(cr) + "-" + strconv.Itoa(i)
+		svcNames[svcName] = struct{}{}
+		svc := mysql.PodService(cr, cr.Spec.MySQL.Expose.Type, svcName)
+
+		if cr.Spec.MySQL.Expose.Enabled {
+			if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, svc, r.Scheme); err != nil {
+				return errors.Wrapf(err, "reconcile svc for pod %s", svcName)
+			}
+		} else {
+			if err := r.Client.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
+				return errors.Wrapf(err, "delete svc for pod %s", svcName)
+			}
+		}
+	}
+
+	// Clean up outdated services
+	svcLabels := mysql.MatchLabels(cr)
+	svcLabels[apiv2.ExposedLabel] = "true"
+	services, err := k8s.ServicesByLabels(ctx, r.Client, svcLabels)
+	if err != nil {
+		return errors.Wrap(err, "get MySQL services")
+	}
+
+	for _, svc := range services {
+		if _, ok := svcNames[svc.Name]; ok {
+			continue
+		}
+
+		l.Info("Deleting outdated service", "service", svc.Name)
+		if err := r.Client.Delete(ctx, &svc); err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrapf(err, "delete Service/%s", svc.Name)
+		}
 	}
 
 	return nil
@@ -326,7 +373,7 @@ func reconcileReplicationSemiSync(
 	cl client.Reader,
 	cr *apiv2.PerconaServerForMySQL,
 ) error {
-	l := log.FromContext(ctx).WithName("reconcileReplicationPrimaryPod")
+	l := log.FromContext(ctx).WithName("reconcileReplicationSemiSync")
 
 	host := orchestrator.APIHost(orchestrator.ServiceName(cr))
 	primary, err := orchestrator.ClusterPrimary(ctx, host, cr.ClusterHint())
@@ -342,6 +389,7 @@ func reconcileReplicationSemiSync(
 		l.V(1).Info("no primary host provided. skip", "clusterPrimary", primary)
 		return nil
 	}
+	l.Info("Got primary from orchestrator", "primary", primary)
 
 	primaryHost = fmt.Sprintf("%v.%v.%v", host, mysql.ServiceName(cr), cr.GetNamespace())
 
@@ -365,11 +413,6 @@ func reconcileReplicationSemiSync(
 		return errors.Wrapf(err, "set semi-sync source on %#v", primaryHost)
 	}
 	l.Info(fmt.Sprintf("set semi-sync source on %v", primaryHost))
-
-	if cr.Spec.MySQL.SizeSemiSync.IntValue() < 1 {
-		l.V(1).Info(fmt.Sprintf("semi-sync size is %v. skip", cr.Spec.MySQL.SizeSemiSync.IntValue()))
-		return nil
-	}
 
 	if err := db.SetSemiSyncSize(cr.MySQLSpec().SizeSemiSync.IntValue()); err != nil {
 		return errors.Wrapf(err, "set semi-sync size on %v", primaryHost)
