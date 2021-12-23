@@ -60,7 +60,7 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage, configHash string) 
 	replicas := spec.Size
 	t := true
 
-	annotations := make(map[string]string, 0)
+	annotations := make(map[string]string)
 	annotations["percona.com/configuration-hash"] = configHash
 
 	return &appsv1.StatefulSet{
