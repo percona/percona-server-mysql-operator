@@ -340,6 +340,14 @@ func defaultPVCSpec(pvc *corev1.PersistentVolumeClaimSpec) {
 	}
 }
 
+type AnnotationKey string
+
+const (
+	AnnotationSpecHash   AnnotationKey = "percona.com/last-applied-spec"
+	AnnotationSecretHash AnnotationKey = "percona.com/last-applied-secret"
+	AnnotationConfigHash AnnotationKey = "percona.com/last-applied-config"
+)
+
 const (
 	NameLabel         = "app.kubernetes.io/name"
 	InstanceLabel     = "app.kubernetes.io/instance"
@@ -388,6 +396,14 @@ func (cr *PerconaServerForMySQL) ClusterHash() string {
 	}
 
 	return serverIDHashStr
+}
+
+func (cr *PerconaServerForMySQL) InternalSecretName() string {
+	return "internal-" + cr.Name
+}
+
+func (cr *PerconaServerForMySQL) PMMEnabled() bool {
+	return cr.Spec.PMM != nil && cr.Spec.PMM.Enabled
 }
 
 func init() {

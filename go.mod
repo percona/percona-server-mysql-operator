@@ -14,6 +14,8 @@ require (
 	sigs.k8s.io/controller-runtime v0.10.3
 )
 
+require golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+
 require (
 	cloud.google.com/go v0.54.0 // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect

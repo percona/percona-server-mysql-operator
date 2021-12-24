@@ -142,7 +142,7 @@ func EnsureObjectWithHash(
 	delete(objAnnotations, "percona.com/last-config-hash")
 	objectMeta.SetAnnotations(objAnnotations)
 
-	hash, err := getObjectHash(obj)
+	hash, err := ObjectHash(obj)
 	if err != nil {
 		return errors.Wrap(err, "calculate object hash")
 	}
@@ -195,21 +195,23 @@ func EnsureObjectWithHash(
 	return nil
 }
 
-func getObjectHash(obj runtime.Object) (string, error) {
-	var dataToMarshall interface{}
+func ObjectHash(obj runtime.Object) (string, error) {
+	var dataToMarshal interface{}
 
 	switch object := obj.(type) {
 	case *appsv1.StatefulSet:
-		dataToMarshall = object.Spec
+		dataToMarshal = object.Spec
 	case *appsv1.Deployment:
-		dataToMarshall = object.Spec
+		dataToMarshal = object.Spec
 	case *corev1.Service:
-		dataToMarshall = object.Spec
+		dataToMarshal = object.Spec
+	case *corev1.Secret:
+		dataToMarshal = object.Data
 	default:
-		dataToMarshall = obj
+		dataToMarshal = obj
 	}
 
-	data, err := json.Marshal(dataToMarshall)
+	data, err := json.Marshal(dataToMarshal)
 	if err != nil {
 		return "", err
 	}
@@ -249,4 +251,25 @@ func DefaultAPINamespace() (string, error) {
 	}
 
 	return strings.TrimSpace(string(nsBytes)), nil
+}
+
+// RolloutRestart restarts pods owned by object by updating the pod template with passed annotation key-value.
+func RolloutRestart(ctx context.Context, cl client.Client, obj runtime.Object, key apiv2.AnnotationKey, value string) error {
+	switch obj := obj.(type) {
+	case *appsv1.StatefulSet:
+		orig := obj.DeepCopy()
+
+		if obj.Spec.Template.ObjectMeta.Annotations == nil {
+			obj.Spec.Template.ObjectMeta.Annotations = make(map[string]string)
+		}
+		obj.Spec.Template.ObjectMeta.Annotations[string(key)] = value
+
+		if err := cl.Patch(ctx, obj, client.StrategicMergeFrom(orig)); err != nil {
+			return errors.Wrap(err, "patch object")
+		}
+
+		return nil
+	default:
+		return errors.New("not supported")
+	}
 }

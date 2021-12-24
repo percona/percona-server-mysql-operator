@@ -171,7 +171,6 @@ var secretUsers = [...]apiv2.SystemUser{
 	apiv2.UserXtraBackup,
 	apiv2.UserMonitor,
 	apiv2.UserClusterCheck,
-	apiv2.UserProxyAdmin,
 	apiv2.UserOperator,
 	apiv2.UserReplication,
 	apiv2.UserOrchestrator,
@@ -187,15 +186,14 @@ func GeneratePasswordsSecret(name, namespace string) (*corev1.Secret, error) {
 		data[string(user)] = pass
 	}
 
-	secret := &corev1.Secret{
+	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
 		Data: data,
 		Type: corev1.SecretTypeOpaque,
-	}
-	return secret, nil
+	}, nil
 }
 
 // generatePass generates a random password
