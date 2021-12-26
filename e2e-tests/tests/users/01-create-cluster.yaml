@@ -1,0 +1,31 @@
+apiVersion: ps.percona.com/v2
+kind: PerconaServerForMySQL
+metadata:
+  name: users
+spec:
+  secretsName: test-secrets
+  sslSecretName: test-ssl
+
+  mysql:
+    image: percona/percona-server:8.0
+    imagePullPolicy: Always
+
+    size: 3
+
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1G
+
+  orchestrator:
+    image: perconalab/percona-server-mysql-operator:main-orchestrator
+    imagePullPolicy: Always
+
+    size: 1
+
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1G
