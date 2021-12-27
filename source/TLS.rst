@@ -6,7 +6,7 @@ Transport Layer Security (TLS)
 The Percona Distribution for MySQL Operator uses Transport Layer
 Security (TLS) cryptographic protocol for the following types of communication:
 
-* Internal - communication between Percona XtraDB Cluster instances,
+* Internal - communication between Percona Server for MySQL instances,
 * External - communication between the client application and ProxySQL.
 
 The internal certificate is also used as an authorization method.
@@ -44,7 +44,7 @@ When you have already installed *cert-manager* and deploy the operator, the
 operator requests a certificate from the *cert-manager*. The *cert-manager* acts
 as a self-signed issuer and generates certificates. The Percona Operator
 self-signed issuer is local to the operator namespace. This self-signed issuer
-is created because Percona XtraDB Cluster requires all certificates issued
+is created because Percona Server for MySQL requires all certificates issued
 by the same :abbr:`CA (Certificate authority)`.
 
 Self-signed issuer allows you to deploy and use the Percona
@@ -324,8 +324,8 @@ Operator version prior to 1.9.0), you should move through the
 
 .. _tls.no.tls:
 
-Run Percona XtraDB Cluster without TLS
-======================================
+Run Percona Server for MySQL without TLS
+========================================
 
 Omitting TLS is also possible, but we recommend that you run your cluster with
 the TLS protocol enabled. 

@@ -4,17 +4,17 @@
 ===============================================================================
 
 Percona Server for MySQL managed by the Operator configured via the spec section
-of the `deploy/cr.yaml <https://github.com/percona/percona-xtradb-cluster-operator/blob/main/deploy/cr.yaml>`__
+of the `deploy/cr.yaml <https://github.com/percona/percona-server-mysql-operator/blob/main/deploy/cr.yaml>`__
 file.
 
 The metadata part of this file contains the following keys:
 
-* ``name`` (``my-cluster-name`` by default) sets the name of your Percona
-  XtraDB Cluster; it should include only `URL-compatible characters <https://datatracker.ietf.org/doc/html/rfc3986#section-2.3>`_,
+* ``name`` (``cluster1`` by default) sets the name of your Percona Server for
+  MySQL Cluster; it should include only `URL-compatible characters <https://datatracker.ietf.org/doc/html/rfc3986#section-2.3>`_,
   not exceed 22 characters, start with an alphabetic character, and end with an
   alphanumeric character;
 
-The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-mongodb-operator/blob/main/deploy/cr.yaml>`__ file contains the following sections:
+The spec part of the `deploy/cr.yaml <https://github.com/percona/percona-server-mysql-operator/blob/main/deploy/cr.yaml>`__ file contains the following sections:
 
 .. tabularcolumns:: |p{40mm}|p{10mm}|p{49mm}|p{47mm}|
 
@@ -71,9 +71,7 @@ configuration options for the Percona Server for MySQL.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Example**     | ``3``                                                                                     |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Description** | The size of the Percona Server for MySQL must be 3 or 5 for                               |
-|                 | `High Availability <https://www.percona.com/doc/percona-xtradb-cluster/5.7/intro.html>`_. |
-|                 | other values are allowed if the ``spec.allowUnsafeConfigurations`` key is set to true.    |
+| **Description** | The number of the Percona Server for MySQL instances                                      |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
@@ -85,8 +83,8 @@ configuration options for the Percona Server for MySQL.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Example**     | ``percona/percona-server:{{{ps80recommended}}}``                                                         |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Description** | The Docker image of the Percona cluster used (actual image names for Percona XtraDB       |
-|                 | Cluster 8.0 and Percona Server for MySQL 5.7 can be found                                 |
+| **Description** | The Docker image of the Percona cluster used (actual image names for Percona Server       |
+|                 | for MySQL 8.0 and Percona Server for MySQL 5.7 can be found                               |
 |                 | :ref:`in the list of certified images<custom-registry-images>`)                           |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
@@ -209,7 +207,7 @@ configuration options for the Percona Server for MySQL.
 `Orchestrator Section <operator.html#operator-orchestrator-section>`_
 --------------------------------------------------------------------------------
 
-The ``orchestrator`` section in the `deploy/cr.yaml <https://github.com/percona/percona-xtradb-cluster-operator/blob/main/deploy/cr.yaml>`__ file contains
+The ``orchestrator`` section in the `deploy/cr.yaml <https://github.com/percona/percona-server-mysql-operator/blob/main/deploy/cr.yaml>`__ file contains
 configuration options for the HAProxy service.
 
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
@@ -224,7 +222,7 @@ configuration options for the HAProxy service.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Example**     | ``1``                                                                                     |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Description** | The number of the HAProxy Pods `to provide load balancing                                 |
+| **Description** | The number of the Orchestrator Pods `to provide load balancing                            |
 |                 | <https://www.percona.com/doc/percona-xtradb-cluster/8.0/howtos/haproxy.html>`__.          |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
@@ -273,7 +271,7 @@ configuration options for the HAProxy service.
 `PMM Section <operator.html#operator-pmm-section>`_
 --------------------------------------------------------------------------------
 
-The ``pmm`` section in the `deploy/cr.yaml <https://github.com/percona/percona-xtradb-cluster-operator/blob/main/deploy/cr.yaml>`__ file contains configuration
+The ``pmm`` section in the `deploy/cr.yaml <https://github.com/percona/percona-server-mysql-operator/blob/main/deploy/cr.yaml>`__ file contains configuration
 options for Percona Monitoring and Management.
 
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
