@@ -64,7 +64,9 @@ Server for MySQL on Minikube:
    default Secrets object you are interested in has ``cluster1-secrets`` name).
    Then ``kubectl get secret cluster1-secrets -o yaml`` will return the YAML
    file with generated secrets, including the root password which should look as
-   follows::
+   follows:
+
+   .. code:: yaml
 
      ...
      data:
@@ -82,14 +84,14 @@ Server for MySQL on Minikube:
    
    .. code:: bash
 
-      kubectl run -i --rm --tty percona-client --image=percona:8.0 --restart=Never -- bash -il
+      $ kubectl run -i --rm --tty percona-client --image=percona:8.0 --restart=Never -- bash -il
    
    Now run ``mysql`` tool in the percona-client command shell using the password
    obtained from the secret:
    
    .. code:: bash
 
-      mysql -h minimal-cluster-haproxy -uroot -proot_password
+      $ mysql -h cluster1-mysql-primary -uroot -proot_password
 
    This command will connect you to the MySQL monitor.
 
