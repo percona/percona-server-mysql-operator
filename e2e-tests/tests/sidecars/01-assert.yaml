@@ -6,10 +6,10 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 1
-  name: sidecar-test-mysql
+  name: sidecars-mysql
 spec:
   replicas: 1
-  serviceName: sidecar-test-mysql
+  serviceName: sidecars-mysql
   template:
     spec:
       containers:
@@ -48,11 +48,11 @@ spec:
       - name: users
         secret:
           defaultMode: 420
-          secretName: sidecar-test-users
+          secretName: test-users
       - name: tls
         secret:
           defaultMode: 420
-          secretName: sidecar-test-ssl
+          secretName: test-ssl
       - name: config
         projected:
           defaultMode: 420
@@ -61,13 +61,13 @@ spec:
               items:
               - key: my.cnf
                 path: my-config.cnf
-              name: sidecar-test-mysql
+              name: sidecars-mysql
               optional: true
           - secret:
               items:
               - key: my.cnf
                 path: my-secret.cnf
-              name: sidecar-test-mysql
+              name: sidecars-mysql
               optional: true
       - emptyDir:
           medium: Memory
