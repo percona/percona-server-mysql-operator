@@ -2,10 +2,10 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 timeout: 10
 commands:
-- script: |
-    set -o errexit
-    set -o xtrace
+  - script: |-
+      set -o errexit
+      set -o xtrace
 
-    source ../../functions
+      source ../../functions
 
-    deploy_operator
+      deploy_operator

@@ -2,17 +2,17 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 timeout: 30
 commands:
-- script: |
-    set -o errexit
-    set -o xtrace
+  - script: |-
+      set -o errexit
+      set -o xtrace
 
-    source ../../functions
+      source ../../functions
 
-    orc_host=$(get_orc_headless_fqdn $(get_cluster_name) 0)
-    cluster=$(run_curl "http://${orc_host}:3000/api/clusters/" | jq -r .[0] | sed "s/.${NAMESPACE}//g")
-    args="--from-literal=cluster=${cluster}"
+      orc_host=$(get_orc_headless_fqdn $(get_cluster_name) 0)
+      cluster=$(run_curl "http://${orc_host}:3000/api/clusters/" | jq -r .[0] | sed "s/.${NAMESPACE}//g")
+      args="--from-literal=cluster=${cluster}"
 
-    run_curl "http://${orc_host}:3000/api/cluster/${cluster}/" | jq -r .[].Key.Hostname | sed "s/.${NAMESPACE}//g" > "${TEMP_DIR}/instances"
-    args="${args} --from-file=instances=${TEMP_DIR}/instances"
+      run_curl "http://${orc_host}:3000/api/cluster/${cluster}/" | jq -r .[].Key.Hostname | sed "s/.${NAMESPACE}//g" >"${TEMP_DIR}/instances"
+      args="${args} --from-file=instances=${TEMP_DIR}/instances"
 
-    kubectl create configmap -n "${NAMESPACE}" 05-check-orchestrator ${args}
+      kubectl create configmap -n "${NAMESPACE}" 05-check-orchestrator ${args}

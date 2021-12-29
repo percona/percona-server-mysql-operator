@@ -1,0 +1,13 @@
+#!/bin/bash
+
+TMP=$(mktemp)
+
+for f in "${@}"; do
+    yq -e eval 'has("commands")' "${f}" 2>/dev/null 1>&2 || continue
+    echo "Formatting ${f}"
+
+    yq eval '.commands[0].script' "${f}" > "${TMP}"
+    shfmt -bn -ci -s -w $TMP
+
+    SHFILE=$(cat ${TMP}) yq eval '.commands[0].script=strenv(SHFILE)' --inplace "${f}"
+done

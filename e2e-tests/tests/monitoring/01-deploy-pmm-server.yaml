@@ -2,13 +2,13 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 timeout: 30
 commands:
-- script: |
-    set -o errexit
-    set -o xtrace
+  - script: |-
+      set -o errexit
+      set -o xtrace
 
-    source ../../functions
+      source ../../functions
 
-    helm install monitoring \
-      -n "${NAMESPACE}" \
-      --set platform=kubernetes \
-      https://percona-charts.storage.googleapis.com/pmm-server-2.23.0.tgz
+      helm install monitoring \
+      	-n "${NAMESPACE}" \
+      	--set platform=kubernetes \
+      	https://percona-charts.storage.googleapis.com/pmm-server-2.23.0.tgz

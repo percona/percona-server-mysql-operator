@@ -93,7 +93,10 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
 
-e2e-test:
+kuttl-shfmt:
+	find e2e-tests/tests/ -type f -not -name '*-assert.yaml' -name '*.yaml' | xargs ./e2e-tests/format
+
+e2e-test: kuttl-shfmt
 	kubectl kuttl test --config e2e-tests/kuttl.yaml
 
 manifests: kustomize generate

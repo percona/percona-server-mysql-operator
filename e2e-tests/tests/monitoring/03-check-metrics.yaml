@@ -1,16 +1,16 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-- script: |
-    set -o errexit
-    set -o xtrace
+  - script: |-
+      set -o errexit
+      set -o xtrace
 
-    source ../../functions
+      source ../../functions
 
-    get_metric_values node_boot_time_seconds ${NAMESPACE}-$(get_cluster_name)-mysql-0 admin:admin
-    get_metric_values mysql_global_status_uptime ${NAMESPACE}-$(get_cluster_name)-mysql-0 admin:admin
+      get_metric_values node_boot_time_seconds ${NAMESPACE}-$(get_cluster_name)-mysql-0 admin:admin
+      get_metric_values mysql_global_status_uptime ${NAMESPACE}-$(get_cluster_name)-mysql-0 admin:admin
 
-    sleep 90 # wait for QAN
+      sleep 90 # wait for QAN
 
-    get_qan20_values monitoring-mysql-0 admin:admin
-  timeout: 120
+      get_qan20_values monitoring-mysql-0 admin:admin
+    timeout: 120
