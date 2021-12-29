@@ -43,6 +43,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
+	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/users"
@@ -51,7 +52,8 @@ import (
 // PerconaServerForMYSQLReconciler reconciles a PerconaServerForMYSQL object
 type PerconaServerForMySQLReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme        *runtime.Scheme
+	ServerVersion *platform.ServerVersion
 }
 
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaserverformysqls;perconaserverformysqls/status;perconaserverformysqls/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -138,7 +140,7 @@ func (r *PerconaServerForMySQLReconciler) getCRWithDefaults(
 	if err := r.Client.Get(ctx, nn, cr); err != nil {
 		return nil, errors.Wrapf(err, "get %v", nn.String())
 	}
-	if err := cr.CheckNSetDefaults(); err != nil {
+	if err := cr.CheckNSetDefaults(r.ServerVersion); err != nil {
 		return nil, errors.Wrapf(err, "check and set defaults for %v", nn.String())
 	}
 
