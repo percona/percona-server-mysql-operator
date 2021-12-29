@@ -7,10 +7,6 @@ commands:
 
     source ../../functions
 
-    kubectl get pod -n "${NAMESPACE}" --show-labels
-    sleep 20 # give time to stabilize
-    kubectl get pod -n "${NAMESPACE}" --show-labels
-
     mysql_args="-h $(get_mysql_primary_service $(get_cluster_name)) -uroot -proot_password"
     max_connections=$(run_mysql "SELECT @@max_connections" "${mysql_args}")
 

@@ -121,11 +121,7 @@ EOF
 }
 
 get_mysql_pods() {
-    kubectl get pod \
-        -n "${NAMESPACE}" \
-        --no-headers \
-        --selector=label=app.kubernetes.io/component=mysql \
-    | awk '{print $1}'
+    kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/component=mysql | awk '{print $1}'
 }
 
 get_mysql_users() {

@@ -7,8 +7,8 @@ commands:
 
     source ../../functions
 
-    mysql_pods=($(get_mysql_pods))
-    for pod in "${mysql_pods[@]}; do
+    pods=($(get_mysql_pods))
+    for pod in "${pods[@]}"; do
         kubectl -n "${NAMESPACE}" delete pod "${pod}"
         kubectl -n "${NAMESPACE}" wait --for=condition=Ready "pod/${pod}" --timeout=120s
     done
