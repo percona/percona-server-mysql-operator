@@ -7,8 +7,7 @@ MySQL user accounts within the Cluster can be divided into two different groups:
 
 * *application-level users*: the unprivileged user accounts,
 * *system-level users*: the accounts needed to automate the cluster deployment
-  and management tasks, such as Percona Server for MySQL Health checks or ProxySQL
-  integration.
+  and management tasks, such as Percona Server for MySQL Health checks.
 
 As these two groups of user accounts serve different purposes, they are
 considered separately in the following sections.
@@ -25,7 +24,7 @@ default. If you need general purpose users, please run commands below:
 
 .. code-block:: bash
 
-   $ kubectl run -it --rm percona-client --image=percona:8.0 --restart=Never -- mysql -hcluster1-pxc -uroot -proot_password
+   $ kubectl run -it --rm percona-client --image=percona:8.0 --restart=Never -- mysql -hcluster1-mysql -uroot -proot_password
    mysql> GRANT ALL PRIVILEGES ON database1.* TO 'user1'@'%' IDENTIFIED BY 'password1';
 
 .. note:: MySQL password here should not exceed 32 characters due to the `replication-specific limit introduced in MySQL 5.7.5 <https://dev.mysql.com/doc/relnotes/mysql/5.7/en/news-5-7-5.html>`_.
@@ -37,7 +36,7 @@ ProxySQL:
 .. code:: bash
 
    $ kubectl run -it --rm percona-client --image=percona:8.0 --restart=Never -- bash -il
-   percona-client:/$ mysql -h cluster1-proxysql -uuser1 -ppassword1
+   percona-client:/$ mysql -h cluster1-mysql-primary -uuser1 -ppassword1
    mysql> SELECT * FROM database1.table1 LIMIT 1;
 
 You may also try executing any simple SQL statement to ensure the
@@ -194,5 +193,4 @@ replication  ``replication_password``
 orchestrator ``orchestrator_password``
 ============ =========================
 
-.. warning:: Do not use the default Percona XtraDB Cluster user passwords in
-   production!
+.. warning:: Do not use the default user passwords in production!

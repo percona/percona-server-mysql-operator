@@ -5,9 +5,9 @@ Design overview
 with the XtraDB storage engine, and *Percona XtraBackup* with the
 *Galera library* to enable synchronous multi-primary replication.
 
-The design of the Percona Operator for Percona Server for MySQL is highly bound
-to the Percona Server for MySQL high availability implementation, which in its
-turn can be briefly described with the following diagram.
+The design of the Percona Distribution for MySQL Operator 2 is highly bound
+to the Percona Server for MySQL and the high availability implementation based on it,
+which in its turn can be briefly described with the following diagram.
 
 .. image:: ./assets/images/replication.svg
    :align: center
@@ -41,10 +41,10 @@ a different node. The PVC StorageClass must support this feature
 respectively).
 
 The Operator functionality extends the Kubernetes API with
-*PerconaXtraDBCluster* object, and it is implemented as a golang
-application. Each *PerconaXtraDBCluster* object maps to one separate Percona
-XtraDB Cluster setup. The Operator listens to all events on the created objects.
-When a new PerconaXtraDBCluster object is created, or an existing one undergoes
-some changes or deletion, the operator automatically
+*PerconaServerForMySQL* object, and it is implemented as a golang
+application. Each *PerconaServerForMySQL* object maps to one separate MySQL setup.
+The Operator listens to all events on the created objects.
+When a new PerconaServerForMySQL object is created, or an existing one undergoes
+some changes or deletion, the Operator automatically
 creates/changes/deletes all needed Kubernetes objects with the
 appropriate settings to provide a proper Percona Server for MySQL operation.

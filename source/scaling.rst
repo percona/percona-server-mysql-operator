@@ -1,25 +1,25 @@
 .. _operator-scale:
 
-Scale Percona XtraDB Cluster on Kubernetes and OpenShift
+Scale Percona Distribution for MySQL on Kubernetes
 ========================================================
 
-One of the great advantages brought by Kubernetes and the OpenShift
+One of the great advantages brought by Kubernetes 
 platform is the ease of an application scaling. Scaling an application
 results in adding or removing the Pods and scheduling them to available 
 Kubernetes nodes.
 
-Size of the cluster is controlled by a :ref:`size key<pxc-size>` in the :ref:`operator.custom-resource-options` configuration. That’s why scaling the cluster needs
+Size of the cluster is controlled by a :ref:`size key<mysql-size>` in the :ref:`operator.custom-resource-options` configuration. That’s why scaling the cluster needs
 nothing more but changing this option and applying the updated
 configuration file. This may be done in a specifically saved config, or
 on the fly, using the following command:
 
 .. code:: bash
 
-   $ kubectl scale --replicas=5 pxc/cluster1
+   $ kubectl scale --replicas=5 mysql/cluster1
 
 
-In this example we have changed the size of the Percona XtraDB Cluster
-to ``5`` instances.
+In this example we have changed the size of the Percona Server for MySQL
+Cluster to ``5`` instances.
 
 Increase the Persistent Volume Claim size
 -----------------------------------------
@@ -39,11 +39,13 @@ The following are the steps to increase the size:
 
    .. code:: bash
 
-      kubectl get pxc cluster1 -o yaml --export > CR_backup.yaml
+      kubectl get mysql cluster1 -o yaml --export > CR_backup.yaml
 
 #. Now you should delete the cluster.
 
-   .. warning:: Make sure that :ref:`delete-pxc-pvc<finalizers-pxc>` finalizer
+   ..
+      UNCOMMENT THIS WHEN FINALIZERS GET WORKING
+      warining Make sure that :ref:`delete-pxc-pvc<finalizers-pxc>` finalizer
       is not set in your custom resource, **otherwise
       all cluster data will be lost!**
 
@@ -57,7 +59,7 @@ The following are the steps to increase the size:
 
    .. code:: bash
 
-      kubectl edit pvc datadir-cluster1-pxc-0
+      kubectl edit pvc datadir-cluster1-mysql-0
 
    In the yaml, edit the spec.resources.requests.storage value.
 
@@ -74,8 +76,8 @@ The following are the steps to increase the size:
 
    .. code:: bash
 
-      kubectl edit pvc datadir-cluster1-pxc-1
-      kubectl edit pvc datadir-cluster1-pxc-2
+      kubectl edit pvc datadir-cluster1-mysql-1
+      kubectl edit pvc datadir-cluster1-mysql-2
 
 #. In the CR configuration file, use vim or another text editor to edit
    the PVC size.

@@ -33,6 +33,8 @@ Install Percona Server for MySQL on Kubernetes
       $ kubectl create namespace mysql
       $ kubectl config set-context $(kubectl config current-context) --namespace=mysql
 
+   .. note:: You can use different namespace name or even stay with the *Default* one.
+
 #. Now RBAC (role-based access control) for Percona Server for MySQL should be set
    up from the ``deploy/rbac.yaml`` file. Briefly speaking, role-based access is
    based on specifically defined roles and actions corresponding to

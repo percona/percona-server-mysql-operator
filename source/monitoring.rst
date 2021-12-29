@@ -5,7 +5,7 @@ Monitoring
 
 Percona Monitoring and Management (PMM) `provides an excellent
 solution <https://www.percona.com/doc/percona-xtradb-cluster/LATEST/manual/monitoring.html#using-pmm>`_
-to monitor Percona XtraDB Cluster.
+to monitor Percona Distribution for MySQL.
 
 .. note:: Only PMM 2.x versions are supported by the Operator.
 
@@ -31,7 +31,7 @@ Kubernetes-based environment:
 
 #. The PMM client installation is initiated by updating the ``pmm``
    section in the
-   `deploy/cr.yaml <https://github.com/percona/percona-xtradb-cluster-operator/blob/master/deploy/cr.yaml>`_
+   `deploy/cr.yaml <https://github.com/percona/percona-server-mysql-operator/blob/main/deploy/cr.yaml>`_
    file.
 
    -  set ``pmm.enabled=true``
@@ -50,24 +50,12 @@ Kubernetes-based environment:
          you'll need to encode the value into base64 format. To do this, you can
          run ``echo -n "password" | base64`` in your local shell to get valid
          values. For example, setting the PMM Server user's password to 
-         `new_password`` in the ``my-cluster-name-secrets`` object can be done
+         `new_password`` in the ``cluster1-secrets`` object can be done
          with the following command:
 
          .. code:: bash
 
-            kubectl patch secret/my-cluster-name-secrets -p '{"data":{"pmmserver": '$(echo -n new_password | base64)'}}'
-
-   -  you can also use ``pmm.pxcParams`` and ``pmm.proxysqlParams`` keys to
-      specify additional parameters for `pmm-admin add mysql <https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/mysql.html#adding-mysql-service-monitoring>`__ and
-      `pmm-admin add mysql <https://www.percona.com/doc/percona-monitoring-and-management/2.x/setting-up/client/proxysql.html>`__
-      commands respectively, if needed.
-
-      .. note:: Please take into account that Operator automatically manages
-         common Percona XtraDB Cluster Service Monitoring parameters mentioned
-         in the officiall PMM documentation, such like username, password,
-         service-name, host, etc. Assigning values to these parameters is not
-         recommended and can negatively affect the functionality of the PMM
-         setup carried out by the Operator.
+            kubectl patch secret/cluster1-secrets -p '{"data":{"pmmserver": '$(echo -n new_password | base64)'}}'
 
    Apply changes with the ``kubectl apply -f deploy/secrets.yaml`` command.
 
@@ -83,7 +71,7 @@ Kubernetes-based environment:
    .. code:: bash
    
       $ kubectl get pods
-      $ kubectl logs cluster1-pxc-node-0 -c pmm-client
+      $ kubectl logs cluster1-mysql-node-0 -c pmm-client
 
 #. Now you can access PMM via *https* in a web browser, with the
    login/password authentication, and the browser is configured to show

@@ -3,7 +3,7 @@
 `Custom Resource options <operator.html#operator-custom-resource-options>`_
 ===============================================================================
 
-Percona Server for MySQL managed by the Operator configured via the spec section
+Percona Server for MySQL managed by the Operator is configured via the spec section
 of the `deploy/cr.yaml <https://github.com/percona/percona-server-mysql-operator/blob/main/deploy/cr.yaml>`__
 file.
 
@@ -83,8 +83,8 @@ configuration options for the Percona Server for MySQL.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Example**     | ``percona/percona-server:{{{ps80recommended}}}``                                                         |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Description** | The Docker image of the Percona cluster used (actual image names for Percona Server       |
-|                 | for MySQL 8.0 and Percona Server for MySQL 5.7 can be found                               |
+| **Description** | The Docker image of the Percona Server for MySQL used (actual image names for Percona     |
+|                 | Server for MySQL 8.0 and Percona Server for MySQL 5.7 can be found                        |
 |                 | :ref:`in the list of certified images<custom-registry-images>`)                           |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
@@ -145,60 +145,52 @@ configuration options for the Percona Server for MySQL.
 +-----------------+-------------------------------------------------------------------------------------------+
 |                 | .. _mysql-sidecars-image:                                                                 |
 |                 |                                                                                           |
-| **Key**         | `mysql.sidecars.image                                                                     |
-|                 | <operator.html#mysql-sidecars-image>`_                                                    |
+| **Key**         | `mysql.sidecars.image <operator.html#mysql-sidecars-image>`_                              |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Value Type**  | string                                                                                    |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Example**     | ``busybox``                                                                               |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Description** | Image for the                                                                             |
-|                 | :ref:`custom sidecar container<faq-sidecar>`                                              |
+| **Description** | Image for the :ref:`custom sidecar container<faq-sidecar>`                                |
 |                 | for Percona Server for MySQL Pods                                                         |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                 | .. _mysql-sidecars-command:                                                               |
 |                 |                                                                                           |
-| **Key**         | `mysql.sidecars.command                                                                   |
-|                 | <operator.html#mysql-sidecars-command>`_                                                  |
+| **Key**         | `mysql.sidecars.command <operator.html#mysql-sidecars-command>`_                          |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Value Type**  | array                                                                                     |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Example**     | ``["/bin/sh"]``                                                                           |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Description** | Command for the                                                                           |
-|                 | :ref:`custom sidecar container<faq-sidecar>`                                              |
+| **Description** | Command for the :ref:`custom sidecar container<faq-sidecar>`                              |
 |                 | for Percona Server for MySQL Pods                                                         |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                 | .. _mysql-sidecars-args:                                                                  |
 |                 |                                                                                           |
-| **Key**         | `mysql.sidecars.args                                                                      |
-|                 | <operator.html#mysql-sidecars-args>`_                                                     |
+| **Key**         | `mysql.sidecars.args <operator.html#mysql-sidecars-args>`_                                |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Value Type**  | array                                                                                     |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Example**     | ``["-c", "while true; do trap 'exit 0' SIGINT SIGTERM SIGQUIT SIGKILL; done;"]``          |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Description** | Command arguments for the                                                                 |
-|                 | :ref:`custom sidecar container<faq-sidecar>`                                              |
+| **Description** | Command arguments for the :ref:`custom sidecar container<faq-sidecar>`                    |
 |                 | for Percona Server for MySQL Pods                                                         |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                 | .. _mysql-sidecars-name:                                                                  |
 |                 |                                                                                           |
-| **Key**         | `mysql.sidecars.name                                                                      |
-|                 | <operator.html#mysql-sidecars-name>`_                                                     |
+| **Key**         | `mysql.sidecars.name <operator.html#mysql-sidecars-name>`_                                |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Value Type**  | string                                                                                    |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Example**     | ``my-sidecar-1``                                                                          |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Description** | Name of the                                                                               |
-|                 | :ref:`custom sidecar container<faq-sidecar>`                                              |
+| **Description** | Name of the :ref:`custom sidecar container<faq-sidecar>`                                  |
 |                 | for Percona Server for MySQL Pods                                                         |
 +-----------------+-------------------------------------------------------------------------------------------+
 
@@ -235,7 +227,7 @@ configuration options for the HAProxy service.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Example**     | ``perconalab/percona-server-mysql-operator:main-orchestrator``                            |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Description** | HAProxy Docker image to use                                                               |
+| **Description** | Orchestrator Docker image to use                                                          |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+

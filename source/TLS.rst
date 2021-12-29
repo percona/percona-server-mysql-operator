@@ -191,8 +191,8 @@ Check your certificates for expiration
 
    .. code:: text
 
-      NAME              READY   AGE
-      cluster1-pxc-ca   True    49m
+      NAME                READY   AGE
+      cluster1-mysql-ca   True    49m
 
 #. Now use the following command to find out the certificates validity dates,
    substituting Secrets names if necessary:

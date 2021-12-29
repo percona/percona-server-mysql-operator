@@ -4,7 +4,7 @@ Percona certified images
 ------------------------
 
 Following table presents Percona’s certified docker images to be used with the
-Percona Distribution for MySQL Operator:
+Percona Distribution for MySQL Operator 2:
 
 .. tabularcolumns:: |p{4.5cm}|p{11cm}|
 
