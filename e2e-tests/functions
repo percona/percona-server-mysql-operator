@@ -34,7 +34,7 @@ get_cr() {
 run_mysql() {
 	local command="$1"
 	local uri="$2"
-        local pod="$3"
+	local pod="$3"
 
 	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
 		bash -c "printf '%s\n' \"${command}\" | mysql -sN $uri" 2>&1 \
@@ -121,11 +121,11 @@ EOF
 }
 
 get_mysql_pods() {
-    kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/component=mysql | awk '{print $1}'
+	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/component=mysql | awk '{print $1}'
 }
 
 get_mysql_users() {
-    local args=$1
+	local args=$1
 
-    run_mysql "SELECT user FROM mysql.user" "${args}" | grep -vE "mysql|root"
+	run_mysql "SELECT user FROM mysql.user" "${args}" | grep -vE "mysql|root"
 }
