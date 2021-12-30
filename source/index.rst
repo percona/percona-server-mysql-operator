@@ -1,4 +1,4 @@
-Percona Distribution for MySQL Operator 2
+Percona Distribution for MySQL Operator
 ========================================================
 
 Kubernetes have added a way to
