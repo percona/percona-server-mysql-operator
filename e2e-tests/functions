@@ -26,9 +26,12 @@ deploy_client() {
 get_cr() {
 	local test_name=$(basename "$(pwd)")
 	yq eval "$(printf '.metadata.name="%s"' "${test_name}")" "${DEPLOY_DIR}/cr.yaml" \
+		| yq eval '.spec.secretsName="test-secrets"' - \
+		| yq eval '.spec.sslSecretName="test-ssl"' - \
 		| yq eval "$(printf '.spec.crVersion="%s"' "${CR_VERSION}")" - \
 		| yq eval "$(printf '.spec.mysql.image="%s"' "${IMAGE_MYSQL}")" - \
-		| yq eval "$(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}")" -
+		| yq eval "$(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}")" - \
+		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_MYSQL}")" -
 }
 
 run_mysql() {

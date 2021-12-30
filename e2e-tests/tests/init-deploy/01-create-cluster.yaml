@@ -1,31 +1,11 @@
-apiVersion: ps.percona.com/v2
-kind: PerconaServerForMySQL
-metadata:
-  name: init-deploy
-spec:
-  secretsName: test-secrets
-  sslSecretName: test-ssl
-  mysql:
-    image: percona/percona-server:8.0
-    imagePullPolicy: Always
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
 
-    size: 3
-    sizeSemiSync: 0
+      source ../../functions
 
-    volumeSpec:
-      persistentVolumeClaim:
-        resources:
-          requests:
-            storage: 2G
-
-  orchestrator:
-    image: perconalab/percona-server-mysql-operator:main-orchestrator
-    imagePullPolicy: Always
-
-    size: 1
-
-    volumeSpec:
-      persistentVolumeClaim:
-        resources:
-          requests:
-            storage: 1G
+      get_cr | kubectl -n "${NAMESPACE}" apply -f -
