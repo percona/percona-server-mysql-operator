@@ -23,6 +23,18 @@ deploy_client() {
 	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/client.yaml"
 }
 
+deploy_pmm_server() {
+	local platform=kubernetes
+	if [ -n "${OPENSHIFT}" ]; then
+		platform=openshift
+	fi
+
+	helm install monitoring \
+		-n "${NAMESPACE}" \
+		--set platform="${platform}" \
+		"https://percona-charts.storage.googleapis.com/pmm-server-${PMM_SERVER_VERSION}.tgz"
+}
+
 get_cr() {
 	local test_name=$(basename "$(pwd)")
 	yq eval "$(printf '.metadata.name="%s"' "${test_name}")" "${DEPLOY_DIR}/cr.yaml" \

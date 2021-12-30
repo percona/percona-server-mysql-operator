@@ -8,7 +8,4 @@ commands:
 
       source ../../functions
 
-      helm install monitoring \
-      	-n "${NAMESPACE}" \
-      	--set platform=kubernetes \
-      	https://percona-charts.storage.googleapis.com/pmm-server-2.23.0.tgz
+      deploy_pmm_server
