@@ -35,6 +35,7 @@ import (
 	psv2 "github.com/percona/percona-server-mysql-operator/api/v2"
 	"github.com/percona/percona-server-mysql-operator/controllers"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -91,9 +92,16 @@ func main() {
 
 	nsClient := client.NewNamespacedClient(mgr.GetClient(), ns)
 
+	serverVersion, err := platform.GetServerVersion()
+	if err != nil {
+		setupLog.Error(err, "unable to get server version")
+		os.Exit(1)
+	}
+
 	if err = (&controllers.PerconaServerForMySQLReconciler{
-		Client: nsClient,
-		Scheme: mgr.GetScheme(),
+		Client:        nsClient,
+		Scheme:        mgr.GetScheme(),
+		ServerVersion: serverVersion,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerForMySQL")
 		os.Exit(1)
@@ -123,7 +131,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager", "GitCommit", GitCommit, "BuildTime", BuildTime)
+	setupLog.Info(
+		"starting manager",
+		"GitCommit", GitCommit,
+		"BuildTime", BuildTime,
+		"Platform", serverVersion.Platform,
+		"Version", serverVersion.Info,
+	)
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)

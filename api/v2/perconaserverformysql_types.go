@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"hash/fnv"
 
+	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -241,7 +242,7 @@ func (cr *PerconaServerForMySQL) OrchestratorSpec() *OrchestratorSpec {
 	return &cr.Spec.Orchestrator
 }
 
-func (cr *PerconaServerForMySQL) CheckNSetDefaults() error {
+func (cr *PerconaServerForMySQL) CheckNSetDefaults(serverVersion *platform.ServerVersion) error {
 	if cr.Spec.MySQL.StartupProbe.InitialDelaySeconds == 0 {
 		cr.Spec.MySQL.StartupProbe.InitialDelaySeconds = 15
 	}
@@ -290,20 +291,22 @@ func (cr *PerconaServerForMySQL) CheckNSetDefaults() error {
 		cr.Spec.MySQL.ReadinessProbe.TimeoutSeconds = 3
 	}
 
-	if cr.Spec.MySQL.PodSecurityContext == nil {
+	var fsgroup *int64
+	if serverVersion.Platform != platform.PlatformOpenshift {
 		var tp int64 = 1001
-		cr.Spec.MySQL.PodSecurityContext = &corev1.PodSecurityContext{
-			SupplementalGroups: []int64{tp},
-			FSGroup:            &tp,
-		}
+		fsgroup = &tp
+	}
+	sc := &corev1.PodSecurityContext{
+		SupplementalGroups: []int64{1001},
+		FSGroup:            fsgroup,
+	}
+
+	if cr.Spec.MySQL.PodSecurityContext == nil {
+		cr.Spec.MySQL.PodSecurityContext = sc
 	}
 
 	if cr.Spec.Orchestrator.PodSecurityContext == nil {
-		var tp int64 = 1001
-		cr.Spec.Orchestrator.PodSecurityContext = &corev1.PodSecurityContext{
-			SupplementalGroups: []int64{tp},
-			FSGroup:            &tp,
-		}
+		cr.Spec.Orchestrator.PodSecurityContext = sc
 	}
 
 	cr.Spec.MySQL.VolumeSpec = reconcileVol(cr.Spec.MySQL.VolumeSpec)
