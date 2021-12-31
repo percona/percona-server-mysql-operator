@@ -10,7 +10,7 @@ commands:
       # let orc to update cluster info
       # SemiSyncReplicaEnabled is updated after some time
       # todo(make it as loop with 5s sleep before next iteration)
-      sleep 60
+      sleep 180
 
       orc_host=$(get_orc_headless_fqdn $(get_cluster_name) 0)
       cluster=$(run_curl "http://${orc_host}:3000/api/clusters/" | jq -r .[0])
@@ -24,4 +24,4 @@ commands:
       	--from-literal=available=${available} \
       	--from-literal=primary=${primary} \
       	--from-literal=replicas=${replicas}
-    timeout: 80
+    timeout: 200
