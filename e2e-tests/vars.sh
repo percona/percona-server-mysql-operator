@@ -14,7 +14,12 @@ export IMAGE=${IMAGE:-"perconalab/percona-server-mysql-operator:${VERSION}"}
 export IMAGE_MYSQL=${IMAGE_MYSQL:-"perconalab/percona-server-mysql-operator:main-ps8.0"}
 export IMAGE_ORCHESTRATOR=${IMAGE_ORCHESTRATOR:-"perconalab/percona-server-mysql-operator:main-orchestrator"}
 export IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
+export PMM_SERVER_VERSION=${PMM_SERVER_VERSION:-"2.24.0"}
 
 export CR_VERSION=${CR_VERSION:-"2.0.0"}
 
 date=$(which gdate || which date)
+
+if oc get projects; then
+	export OPENSHIFT=4
+fi

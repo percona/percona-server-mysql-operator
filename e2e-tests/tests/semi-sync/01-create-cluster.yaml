@@ -1,13 +1,13 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 30
+timeout: 10
 commands:
-- script: |
-    set -o errexit
-    set -o xtrace
+  - script: |-
+      set -o errexit
+      set -o xtrace
 
-    source ../../functions
+      source ../../functions
 
-    get_cr \
-      | yq eval '.spec.mysql.sizeSemiSync="1"' - \
-      | kubectl apply -n "${NAMESPACE}" -f -
+      get_cr \
+      	| yq eval '.spec.mysql.sizeSemiSync="1"' - \
+      	| kubectl -n "${NAMESPACE}" apply -f -

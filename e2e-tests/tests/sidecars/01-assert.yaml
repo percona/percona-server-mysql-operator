@@ -6,10 +6,10 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 1
-  name: sidecar-test-mysql
+  name: sidecars-mysql
 spec:
-  replicas: 1
-  serviceName: sidecar-test-mysql
+  replicas: 3
+  serviceName: sidecars-mysql
   template:
     spec:
       containers:
@@ -25,34 +25,34 @@ spec:
           name: config
       - image: busybox
         imagePullPolicy: Always
-        name: noop-memory
+        name: sidecar1
         resources: {}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
-        - mountPath: /var/log/app/memory
-          name: memory-vol
+        - mountPath: /var/app/empty
+          name: empty-vol
       - command:
         - sleep
         - 30d
         image: busybox
         imagePullPolicy: Always
-        name: noop-pvc
+        name: sidecar2
         resources: {}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
-        - mountPath: /var/log/app/pvc
+        - mountPath: /var/app/pvc
           name: pvc-vol
       volumes:
       - name: users
         secret:
           defaultMode: 420
-          secretName: sidecar-test-users
+          secretName: test-secrets
       - name: tls
         secret:
           defaultMode: 420
-          secretName: sidecar-test-ssl
+          secretName: test-ssl
       - name: config
         projected:
           defaultMode: 420
@@ -61,17 +61,17 @@ spec:
               items:
               - key: my.cnf
                 path: my-config.cnf
-              name: sidecar-test-mysql
+              name: sidecars-mysql
               optional: true
           - secret:
               items:
               - key: my.cnf
                 path: my-secret.cnf
-              name: sidecar-test-mysql
+              name: sidecars-mysql
               optional: true
       - emptyDir:
           medium: Memory
-        name: memory-vol
+        name: empty-vol
   volumeClaimTemplates:
   - apiVersion: v1
     kind: PersistentVolumeClaim
@@ -82,7 +82,7 @@ spec:
       - ReadWriteOnce
       resources:
         requests:
-          storage: 1G
+          storage: 2G
       volumeMode: Filesystem
   - apiVersion: v1
     kind: PersistentVolumeClaim

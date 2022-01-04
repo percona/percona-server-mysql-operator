@@ -1,0 +1,13 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 60
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-mysql
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: config-mysql

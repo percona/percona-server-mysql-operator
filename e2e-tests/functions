@@ -23,19 +23,35 @@ deploy_client() {
 	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/client.yaml"
 }
 
+deploy_pmm_server() {
+	local platform=kubernetes
+	if [ -n "${OPENSHIFT}" ]; then
+		platform=openshift
+	fi
+
+	helm install monitoring \
+		-n "${NAMESPACE}" \
+		--set platform="${platform}" \
+		"https://percona-charts.storage.googleapis.com/pmm-server-${PMM_SERVER_VERSION}.tgz"
+}
+
 get_cr() {
 	local test_name=$(basename "$(pwd)")
 	yq eval "$(printf '.metadata.name="%s"' "${test_name}")" "${DEPLOY_DIR}/cr.yaml" \
+		| yq eval '.spec.secretsName="test-secrets"' - \
+		| yq eval '.spec.sslSecretName="test-ssl"' - \
 		| yq eval "$(printf '.spec.crVersion="%s"' "${CR_VERSION}")" - \
 		| yq eval "$(printf '.spec.mysql.image="%s"' "${IMAGE_MYSQL}")" - \
-		| yq eval "$(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}")" -
+		| yq eval "$(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}")" - \
+		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_MYSQL}")" -
 }
 
 run_mysql() {
 	local command="$1"
 	local uri="$2"
+	local pod="$3"
 
-	kubectl -n "${NAMESPACE}" exec mysql-client -- \
+	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
 		bash -c "printf '%s\n' \"${command}\" | mysql -sN $uri" 2>&1 \
 		| sed -e 's/mysql: //' \
 		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
@@ -117,4 +133,14 @@ EOF
 
 	run_curl -XPOST -d "'$(echo ${payload} | sed 's/\n//g')'" "https://${user_pass}@${endpoint}/v0/qan/GetReport" \
 		| jq '.rows[].fingerprint'
+}
+
+get_mysql_pods() {
+	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/component=mysql | awk '{print $1}'
+}
+
+get_mysql_users() {
+	local args=$1
+
+	run_mysql "SELECT user FROM mysql.user" "${args}" | grep -vE "mysql|root"
 }

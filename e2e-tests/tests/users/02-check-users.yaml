@@ -1,0 +1,31 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      mysql_args="-h $(get_mysql_primary_service $(get_cluster_name)) -uroot -proot_password"
+      users=($(get_mysql_users "${mysql_args}"))
+
+      args=''
+      for user in "${users[@]}"; do
+      	host="%"
+      	case $user in
+      		clustercheck | xtrabackup)
+      			host="localhost"
+      			;;
+      	esac
+      	query="SHOW GRANTS FOR '${user}'@'${host}';"
+
+      	run_mysql "${query}" "${mysql_args}" \
+      		| sed -E "s/'(10|192)[.][0-9][^']*'//; s/'[^']*[.]internal'//" \
+      			>"${TEMP_DIR}/${user}.sql"
+
+      	args="${args} --from-file=${user}=${TEMP_DIR}/${user}.sql"
+      done
+
+      kubectl create configmap -n "${NAMESPACE}" 02-check-users $args
+      kubectl get configmap -n "${NAMESPACE}" 02-check-users -o yaml

@@ -1,43 +1,16 @@
-apiVersion: ps.percona.com/v2
-kind: PerconaServerForMySQL
-metadata:
-  name: sidecar-test
-spec:
-  secretsName: sidecar-test-users
-  sslSecretName: sidecar-test-ssl
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
 
-  mysql:
-    image: percona/percona-server:8.0
-    imagePullPolicy: IfNotPresent
+      source ../../functions
 
-    size: 1
-
-    volumeSpec:
-      persistentVolumeClaim:
-        resources:
-          requests:
-            storage: 1G
-
-    sidecars:
-    - name: noop-memory
-      image: busybox
-      command: ["sleep", "30d"]
-      volumeMounts:
-      - name: "memory-vol"
-        mountPath: "/var/log/app/memory"
-    - name: noop-pvc
-      image: busybox
-      command: ["sleep", "30d"]
-      volumeMounts:
-      - name: "pvc-vol"
-        mountPath: "/var/log/app/pvc"
-    sidecarVolumes:
-    - name: "memory-vol"
-      emptyDir:
-        medium: "Memory"
-    sidecarPVCs:
-    - name: pvc-vol
-      spec:
-        resources:
-          requests:
-            storage: 1G
+      get_cr \
+      	| yq eval '.spec.mysql.sidecars = [{"name": "sidecar1", "image": "busybox", "command": ["sleep", "30d"], "volumeMounts": [{"name": "empty-vol", "mountPath": "/var/app/empty"}]}]' - \
+      	| yq eval '.spec.mysql.sidecars += [{"name": "sidecar2", "image": "busybox", "command": ["sleep", "30d"], "volumeMounts": [{"name": "pvc-vol", "mountPath": "/var/app/pvc"}]}]' - \
+      	| yq eval '.spec.mysql.sidecarVolumes = [{"name": "empty-vol", "emptyDir": {"medium": "Memory"}}]' - \
+      	| yq eval '.spec.mysql.sidecarPVCs = [{"name": "pvc-vol", "spec": {"resources": {"requests": {"storage": "1G"}}}}]' - \
+      	| kubectl -n "${NAMESPACE}" apply -f -
