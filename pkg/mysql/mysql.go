@@ -126,6 +126,7 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL, initImage, configHash string) 
 						},
 					},
 					Containers:       containers(cr),
+					Affinity:         spec.GetAffinity(labels),
 					ImagePullSecrets: spec.ImagePullSecrets,
 					// TerminationGracePeriodSeconds: 30,
 					RestartPolicy: corev1.RestartPolicyAlways,

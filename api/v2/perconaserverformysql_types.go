@@ -19,6 +19,7 @@ package v2
 import (
 	"fmt"
 	"hash/fnv"
+	"strings"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/pkg/errors"
@@ -324,6 +325,9 @@ func (cr *PerconaServerForMySQL) CheckNSetDefaults(serverVersion *platform.Serve
 		defaultPVCSpec(&cr.Spec.MySQL.SidecarPVCs[i].Spec)
 	}
 
+	cr.Spec.MySQL.reconcileAffinityOpts()
+	cr.Spec.Orchestrator.reconcileAffinityOpts()
+
 	return nil
 }
 
@@ -349,6 +353,71 @@ func defaultPVCSpec(pvc *corev1.PersistentVolumeClaimSpec) {
 	if len(pvc.AccessModes) == 0 {
 		pvc.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
 	}
+}
+
+const AffinityTopologyKeyNone = "none"
+
+var affinityValidTopologyKeys = map[string]struct{}{
+	AffinityTopologyKeyNone:         {},
+	"kubernetes.io/hostname":        {},
+	"topology.kubernetes.io/zone":   {},
+	"topology.kubernetes.io/region": {},
+}
+
+var defaultAffinityTopologyKey = "kubernetes.io/hostname"
+
+// reconcileAffinityOpts ensures that the affinity is set to the valid values.
+// - if the affinity doesn't set at all - set topology key to `defaultAffinityTopologyKey`
+// - if topology key is set and the value not the one of `affinityValidTopologyKeys` - set to `defaultAffinityTopologyKey`
+// - if topology key set to value of `AffinityTopologyKeyNone` - disable the affinity at all
+// - if `Advanced` affinity is set - leave everything as it is and set topology key to nil (Advanced options has a higher priority)
+func (p *PodSpec) reconcileAffinityOpts() {
+	switch {
+	case p.Affinity == nil:
+		p.Affinity = &PodAffinity{
+			TopologyKey: &defaultAffinityTopologyKey,
+		}
+
+	case p.Affinity.TopologyKey == nil:
+		p.Affinity.TopologyKey = &defaultAffinityTopologyKey
+
+	case p.Affinity.Advanced != nil:
+		p.Affinity.TopologyKey = nil
+
+	case p.Affinity != nil && p.Affinity.TopologyKey != nil:
+		if _, ok := affinityValidTopologyKeys[*p.Affinity.TopologyKey]; !ok {
+			p.Affinity.TopologyKey = &defaultAffinityTopologyKey
+		}
+	}
+}
+
+func (p *PodSpec) GetAffinity(labels map[string]string) *corev1.Affinity {
+	if p.Affinity == nil {
+		return nil
+	}
+
+	switch {
+	case p.Affinity.Advanced != nil:
+		return p.Affinity.Advanced
+	case p.Affinity.TopologyKey != nil:
+		if strings.ToLower(*p.Affinity.TopologyKey) == AffinityTopologyKeyNone {
+			return nil
+		}
+		return &corev1.Affinity{
+			PodAntiAffinity: &corev1.PodAntiAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+					{
+						LabelSelector: &metav1.LabelSelector{
+							MatchLabels: labels,
+						},
+						TopologyKey: *p.Affinity.TopologyKey,
+					},
+				},
+			},
+		}
+	}
+
+	return nil
 }
 
 type AnnotationKey string
