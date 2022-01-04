@@ -131,6 +131,7 @@ func container(cr *apiv2.PerconaServerForMySQL) corev1.Container {
 		Name:            componentName,
 		Image:           cr.Spec.Orchestrator.Image,
 		ImagePullPolicy: cr.Spec.Orchestrator.ImagePullPolicy,
+		Resources:       cr.Spec.Orchestrator.Resources,
 		Env: []corev1.EnvVar{
 			{
 				Name:  "ORC_SERVICE",

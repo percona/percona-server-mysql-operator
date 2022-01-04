@@ -1637,24 +1637,30 @@ spec:
                       a service
                     type: string
                   resources:
+                    description: ResourceRequirements describes the compute resource
+                      requirements.
                     properties:
                       limits:
-                        properties:
-                          cpu:
-                            type: string
-                          ephemeral-storage:
-                            type: string
-                          memory:
-                            type: string
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: 'Limits describes the maximum amount of compute
+                          resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                         type: object
                       requests:
-                        properties:
-                          cpu:
-                            type: string
-                          ephemeral-storage:
-                            type: string
-                          memory:
-                            type: string
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: 'Requests describes the minimum amount of compute
+                          resources required. If Requests is omitted for a container,
+                          it defaults to Limits if that is explicitly specified, otherwise
+                          to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                         type: object
                     type: object
                   runtimeClassName:
@@ -1854,27 +1860,6 @@ spec:
                       - spec
                       type: object
                     type: array
-                  sidecarResources:
-                    properties:
-                      limits:
-                        properties:
-                          cpu:
-                            type: string
-                          ephemeral-storage:
-                            type: string
-                          memory:
-                            type: string
-                        type: object
-                      requests:
-                        properties:
-                          cpu:
-                            type: string
-                          ephemeral-storage:
-                            type: string
-                          memory:
-                            type: string
-                        type: object
-                    type: object
                   sidecarVolumes:
                     items:
                       description: Volume represents a named volume in a pod that
@@ -6547,24 +6532,30 @@ spec:
                       a service
                     type: string
                   resources:
+                    description: ResourceRequirements describes the compute resource
+                      requirements.
                     properties:
                       limits:
-                        properties:
-                          cpu:
-                            type: string
-                          ephemeral-storage:
-                            type: string
-                          memory:
-                            type: string
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: 'Limits describes the maximum amount of compute
+                          resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                         type: object
                       requests:
-                        properties:
-                          cpu:
-                            type: string
-                          ephemeral-storage:
-                            type: string
-                          memory:
-                            type: string
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: 'Requests describes the minimum amount of compute
+                          resources required. If Requests is omitted for a container,
+                          it defaults to Limits if that is explicitly specified, otherwise
+                          to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                         type: object
                     type: object
                   runtimeClassName:
@@ -6581,27 +6572,6 @@ spec:
                     description: Service Type string describes ingress methods for
                       a service
                     type: string
-                  sidecarResources:
-                    properties:
-                      limits:
-                        properties:
-                          cpu:
-                            type: string
-                          ephemeral-storage:
-                            type: string
-                          memory:
-                            type: string
-                        type: object
-                      requests:
-                        properties:
-                          cpu:
-                            type: string
-                          ephemeral-storage:
-                            type: string
-                          memory:
-                            type: string
-                        type: object
-                    type: object
                   size:
                     format: int32
                     type: integer
@@ -7167,24 +7137,30 @@ spec:
                       a container image
                     type: string
                   resources:
+                    description: ResourceRequirements describes the compute resource
+                      requirements.
                     properties:
                       limits:
-                        properties:
-                          cpu:
-                            type: string
-                          ephemeral-storage:
-                            type: string
-                          memory:
-                            type: string
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: 'Limits describes the maximum amount of compute
+                          resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                         type: object
                       requests:
-                        properties:
-                          cpu:
-                            type: string
-                          ephemeral-storage:
-                            type: string
-                          memory:
-                            type: string
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        description: 'Requests describes the minimum amount of compute
+                          resources required. If Requests is omitted for a container,
+                          it defaults to Limits if that is explicitly specified, otherwise
+                          to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                         type: object
                     type: object
                   runtimeClassName:

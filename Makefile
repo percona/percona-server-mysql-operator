@@ -113,7 +113,7 @@ manifests: kustomize generate
 ##@ Build
 
 .PHONY: build
-build: #test ## Build docker image with the manager.
+build: generate ## Build docker image with the manager.
 	ROOT_REPO=$(ROOT_REPO) VERSION=$(VERSION) $(ROOT_REPO)/e2e-tests/build
 
 ##@ Deployment
