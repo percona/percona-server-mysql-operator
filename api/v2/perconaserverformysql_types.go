@@ -247,6 +247,10 @@ func (cr *PerconaServerForMySQL) CheckNSetDefaults(serverVersion *platform.Serve
 		return errors.New("mysql.sizeSemiSync can't be greater than or equal to mysql.size")
 	}
 
+	if cr.Spec.Orchestrator.Size > 1 {
+		return errors.New("orchestrator size must be 1")
+	}
+
 	if cr.Spec.MySQL.StartupProbe.InitialDelaySeconds == 0 {
 		cr.Spec.MySQL.StartupProbe.InitialDelaySeconds = 15
 	}
