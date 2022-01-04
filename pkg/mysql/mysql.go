@@ -259,8 +259,7 @@ func HeadlessService(cr *apiv2.PerconaServerForMySQL) *corev1.Service {
 					Port: DefaultPort,
 				},
 			},
-			Selector:                 labels,
-			PublishNotReadyAddresses: true,
+			Selector: labels,
 		},
 	}
 }
