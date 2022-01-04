@@ -79,8 +79,7 @@ type OrchestratorSpec struct {
 type PodSpec struct {
 	Size                          int32                                   `json:"size,omitempty"`
 	Image                         string                                  `json:"image,omitempty"`
-	Resources                     *PodResources                           `json:"resources,omitempty"`
-	SidecarResources              *PodResources                           `json:"sidecarResources,omitempty"`
+	Resources                     corev1.ResourceRequirements             `json:"resources,omitempty"`
 	VolumeSpec                    *VolumeSpec                             `json:"volumeSpec,omitempty"`
 	Affinity                      *PodAffinity                            `json:"affinity,omitempty"`
 	NodeSelector                  map[string]string                       `json:"nodeSelector,omitempty"`
@@ -115,14 +114,14 @@ type PodSpec struct {
 }
 
 type PMMSpec struct {
-	Enabled                  bool                    `json:"enabled,omitempty"`
-	Image                    string                  `json:"image,omitempty"`
-	ServerHost               string                  `json:"serverHost,omitempty"`
-	ServerUser               string                  `json:"serverUser,omitempty"`
-	Resources                *PodResources           `json:"resources,omitempty"`
-	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
-	ImagePullPolicy          corev1.PullPolicy       `json:"imagePullPolicy,omitempty"`
-	RuntimeClassName         *string                 `json:"runtimeClassName,omitempty"`
+	Enabled                  bool                        `json:"enabled,omitempty"`
+	Image                    string                      `json:"image,omitempty"`
+	ServerHost               string                      `json:"serverHost,omitempty"`
+	ServerUser               string                      `json:"serverUser,omitempty"`
+	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
+	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
+	RuntimeClassName         *string                     `json:"runtimeClassName,omitempty"`
 }
 
 type PodDisruptionBudgetSpec struct {
@@ -152,17 +151,6 @@ type VolumeSpec struct {
 	// EmptyDir. And represents the PVC specification.
 	// +optional
 	PersistentVolumeClaim *corev1.PersistentVolumeClaimSpec `json:"persistentVolumeClaim,omitempty"`
-}
-
-type PodResources struct {
-	Requests *ResourcesList `json:"requests,omitempty"`
-	Limits   *ResourcesList `json:"limits,omitempty"`
-}
-
-type ResourcesList struct {
-	Memory           string `json:"memory,omitempty"`
-	CPU              string `json:"cpu,omitempty"`
-	EphemeralStorage string `json:"ephemeral-storage,omitempty"`
 }
 
 type ServiceExpose struct {

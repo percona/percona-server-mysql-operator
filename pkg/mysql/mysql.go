@@ -337,6 +337,7 @@ func mysqldContainer(cr *apiv2.PerconaServerForMySQL) corev1.Container {
 		Name:            componentName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
+		Resources:       spec.Resources,
 		Env: []corev1.EnvVar{
 			{
 				Name:  "MONITOR_HOST",
@@ -432,13 +433,13 @@ func pmmContainer(clusterName, secretsName string, pmmSpec *apiv2.PMMSpec) corev
 		ports = append(ports, corev1.ContainerPort{ContainerPort: int32(port)})
 	}
 
-	// TODO: resources
 	return corev1.Container{
 		Name:            "pmm-client",
 		Image:           pmmSpec.Image,
 		ImagePullPolicy: pmmSpec.ImagePullPolicy,
 		SecurityContext: pmmSpec.ContainerSecurityContext,
 		Ports:           ports,
+		Resources:       pmmSpec.Resources,
 		Env: []corev1.EnvVar{
 			{
 				Name: "POD_NAME",
