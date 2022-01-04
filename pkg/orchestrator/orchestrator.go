@@ -88,6 +88,7 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL) *appsv1.StatefulSet {
 				},
 				Spec: corev1.PodSpec{
 					Containers:       containers(cr),
+					Affinity:         spec.GetAffinity(labels),
 					ImagePullSecrets: spec.ImagePullSecrets,
 					// TerminationGracePeriodSeconds: 30,
 					RestartPolicy: corev1.RestartPolicyAlways,
