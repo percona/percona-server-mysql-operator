@@ -22,29 +22,32 @@ spec:
           requests:
             storage: 2G
 
-#   sidecars:
-#   - name: noop-memory
-#     image: busybox
-#     command: ["sleep", "30d"]
-#     volumeMounts:
-#     - name: "memory-vol"
-#       mountPath: "/var/log/app/memory"
-#   - name: noop-pvc
-#     image: busybox
-#     command: ["sleep", "30d"]
-#     volumeMounts:
-#     - name: "pvc-vol"
-#       mountPath: "/var/log/app/pvc"
-#   sidecarVolumes:
-#   - name: "memory-vol"
-#     emptyDir:
-#       medium: "Memory"
-#   sidecarPVCs:
-#   - name: pvc-vol
-#     spec:
-#       resources:
-#         requests:
-#           storage: 1G
+#    configuration: |
+#      max_connections=250
+
+#    sidecars:
+#    - name: noop-memory
+#      image: busybox
+#      command: ["sleep", "30d"]
+#      volumeMounts:
+#      - name: "memory-vol"
+#        mountPath: "/var/log/app/memory"
+#    - name: noop-pvc
+#      image: busybox
+#      command: ["sleep", "30d"]
+#      volumeMounts:
+#      - name: "pvc-vol"
+#        mountPath: "/var/log/app/pvc"
+#    sidecarVolumes:
+#    - name: "memory-vol"
+#      emptyDir:
+#        medium: "Memory"
+#    sidecarPVCs:
+#    - name: pvc-vol
+#      spec:
+#        resources:
+#          requests:
+#            storage: 1G
 
   orchestrator:
     image: perconalab/percona-server-mysql-operator:main-orchestrator
