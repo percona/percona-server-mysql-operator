@@ -246,9 +246,10 @@ func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr
 
 		switch mysqlUser.Username {
 		case apiv2.UserMonitor:
-			if cr.PMMEnabled() {
-				restartMySQL = true
-			}
+			restartMySQL = cr.PMMEnabled()
+		case apiv2.UserPMMServer:
+			restartMySQL = cr.PMMEnabled()
+			continue
 		case apiv2.UserReplication:
 			restartReplication = true
 		case apiv2.UserOrchestrator:
