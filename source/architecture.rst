@@ -1,12 +1,17 @@
 Design overview
 ===============
 
-*Percona Server for MySQL* integrates *Percona Server for MySQL* running
-with the XtraDB storage engine, and *Percona XtraBackup* with the
-*Galera library* to enable synchronous multi-primary replication.
+The Percona Distribution for MySQL Operator automates and simplifies deploying
+and managing open source MySQL clusters on Kubernetes.
+
+Containers deployed with the Operator include the following components:
+
+* `Percona Server for MySQL <https://www.percona.com/doc/percona-server/LATEST/index.html>`_ (a free, fully compatible, enhanced, and open source drop-in replacement for any MySQL database),
+* `Percona XtraBackup <https://www.percona.com/doc/percona-xtrabackup/8.0/index.html>`_ (a hot backup utility for MySQL based servers that doesn’t lock your database during the backup),
+* `Orchestrator <https://github.com/openark/orchestrator>`_ (a replication topology manager for MySQL).
 
 The design of the Percona Distribution for MySQL Operator 2 is highly bound
-to the Percona Server for MySQL and the high availability implementation based on it,
+to the Percona Server for MySQL and the high availability implementation based on Orchestrator,
 which in its turn can be briefly described with the following diagram.
 
 .. image:: ./assets/images/replication.svg
@@ -16,14 +21,7 @@ Being a regular MySQL Server instance, each node contains the same set
 of data synchronized accross nodes. The recommended configuration is to
 have at least 3 nodes. In a basic setup with this amount of nodes,
 Percona Server for MySQL provides high availability, continuing to
-function if you take any of the nodes down. Additionally load balancing
-can be achieved with the ProxySQL daemon, which accepts incoming traffic
-from MySQL clients and forwards it to backend MySQL servers.
-
-.. note:: Using ProxySQL results in `more efficient database workload
-   management <https://proxysql.com/compare>`_ in comparison with other
-   load balancers which are not SQL-aware, including built-in ones of the
-   cloud providers, or the Kubernetes NGINX Ingress Controller.
+function if you take any of the nodes down. 
 
 To provide high availability operator uses `node affinity <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity>`_
 to run Percona Server for MySQL instances on separate worker nodes if possible. If

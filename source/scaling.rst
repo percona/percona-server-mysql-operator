@@ -15,7 +15,7 @@ on the fly, using the following command:
 
 .. code:: bash
 
-   $ kubectl scale --replicas=5 mysql/cluster1
+   $ kubectl scale --replicas=5 ps/cluster1
 
 
 In this example we have changed the size of the Percona Server for MySQL
@@ -39,7 +39,7 @@ The following are the steps to increase the size:
 
    .. code:: bash
 
-      kubectl get mysql cluster1 -o yaml --export > CR_backup.yaml
+      kubectl get ps cluster1 -o yaml --export > CR_backup.yaml
 
 #. Now you should delete the cluster.
 

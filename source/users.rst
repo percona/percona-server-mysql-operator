@@ -100,7 +100,7 @@ The following table shows system users' names and purposes.
     * - Replication
       - replication
       - replication
-      - Administrative user needed for `cross-site Percona XtraDB Cluster <operator-replication>`_
+      - Administrative user needed for replication
 
 YAML Object Format
 ******************
@@ -127,13 +127,6 @@ it should match the following simple format:
      operator: operator_password
      replication: replication_password
      orchestrator: orchestrator_password
-
-
-The example above matches
-:ref:`what is shipped in deploy/secrets.yaml<users.development-mode>` which
-contains default passwords. You should NOT use these in production, but they are
-present to assist in automated testing or simple use in a development
-environment.
 
 As you can see, because we use the ``stringData`` type when creating the Secrets
 object, all values for each key/value pair are stated in plain text format
@@ -167,30 +160,3 @@ Starting with MySQL 8.0.16, a new feature called Account Categories has been
 implemented, which allows us to mark our system users as such.
 See `the official documentation on this feature <https://dev.mysql.com/doc/refman/8.0/en/account-categories.html>`_
 for more details.
-
-.. _users.development-mode:
-
-`Development Mode <users.html#development-mode>`_
---------------------------------------------------
-
-To make development and testing easier, ``deploy/secrets.yaml`` secrets
-file contains default passwords for Percona Server for MySQL system users.
-
-These development mode credentials from ``deploy/secrets.yaml`` are:
-
-============ =========================
-Secret Key   Secret Value
-============ =========================
-root         ``root_password``
-xtrabackup   ``backup_password``
-monitor      ``monitor``
-clustercheck ``clustercheckpassword``
-proxyuser    ``s3cret``
-proxyadmin   ``admin_password``
-pmmserver    ``admin``
-operator     ``operator_password``
-replication  ``replication_password``
-orchestrator ``orchestrator_password``
-============ =========================
-
-.. warning:: Do not use the default user passwords in production!
