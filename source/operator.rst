@@ -200,8 +200,6 @@ configuration options for the Percona Server for MySQL.
 |                 | <https://kubernetes.io/docs/concepts/storage/persistent-volumes/#                         |
 |                 | persistentvolumeclaims>`_ size for the Percona Server for MySQL                           |
 +-----------------+-------------------------------------------------------------------------------------------+
-
-
 |                                                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                 | .. _mysql-configuration:                                                                  |
@@ -407,13 +405,12 @@ configuration options for the HAProxy service.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Value**       | string                                                                                    |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Example**     | ``256M``                                                                                    |
+| **Example**     | ``256M``                                                                                  |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | `Kubernetes memory limits                                                                 |
 |                 | <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/    |
 |                 | #resource-requests-and-limits-of-pod-and-container>`_ for an Orchestrator container       |
 +-----------------+-------------------------------------------------------------------------------------------+
-
 |                                                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                 | .. _orchestrator-volumespec-persistentvolumeclaim-resources-requests-storage:             |
