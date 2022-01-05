@@ -12,6 +12,25 @@ spec:
     size: 3
     sizeSemiSync: 0
 
+    resources:
+      requests:
+        memory: 512M
+      limits:
+        memory: 1G
+
+    affinity:
+      antiAffinityTopologyKey: "kubernetes.io/hostname"
+#      advanced:
+#        nodeAffinity:
+#          requiredDuringSchedulingIgnoredDuringExecution:
+#            nodeSelectorTerms:
+#            - matchExpressions:
+#              - key: kubernetes.io/e2e-az-name
+#                operator: In
+#                values:
+#                - e2e-az1
+#                - e2e-az2
+
     expose:
       enabled: false
       type: ClusterIP
@@ -32,6 +51,9 @@ spec:
 #      volumeMounts:
 #      - name: "memory-vol"
 #        mountPath: "/var/log/app/memory"
+#      resources:
+#        requests:
+#          memory: 16M
 #    - name: noop-pvc
 #      image: busybox
 #      command: ["sleep", "30d"]
@@ -54,6 +76,12 @@ spec:
     imagePullPolicy: Always
 
     size: 1
+
+    resources:
+      requests:
+        memory: 128M
+      limits:
+        memory: 256M
 
     volumeSpec:
       persistentVolumeClaim:
