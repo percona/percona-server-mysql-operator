@@ -37,9 +37,9 @@ project = u'Percona Distribution for MySQL Operator'
 copyright = u'Percona LLC and/or its affiliates 2009 - 2022'
 
 # the short X.Y version
-version = '0.1.0'
+version = '2.0.0-alpha'
 # the full version including alpha/beta/rc tags.
-release = '0.1.0'
+release = '2.0.0-alpha'
 # the PS 5.7 and PS 8.0 recommended versions to be used in docs
 ps57recommended = '5.7.35'
 ps80recommended = '8.0.25'
