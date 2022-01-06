@@ -59,7 +59,7 @@ After [installing Sphinx](https://www.sphinx-doc.org/en/master/usage/installatio
 
 ### 1. Automated code review
 
-Your pull request will go through an automated build and testing process, and you will have a comment with the report once all tests are over (usually, it takes about 3 hours).
+Your pull request will go through an automated build and testing process, and you will have a comment with the report once all tests are over (usually, it takes about 1 hour).
 
 ### 2. Code review by the Operator developers
 
