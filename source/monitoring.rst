@@ -71,8 +71,8 @@ Kubernetes-based environment:
    .. code:: bash
    
       $ kubectl get pods
-      $ kubectl logs cluster1-mysql-node-0 -c pmm-client
+      $ kubectl logs cluster1-mysql-0 -c pmm-client
 
 #. Now you can access PMM via *https* in a web browser, with the
    login/password authentication, and the browser is configured to show
-   Percona XtraDB Cluster metrics.
+   Percona Server for MySQL metrics.
