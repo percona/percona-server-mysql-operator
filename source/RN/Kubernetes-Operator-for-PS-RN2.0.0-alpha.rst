@@ -19,7 +19,7 @@ The new *Percona Distribution for MySQL Operator 2* is going to run Percona Serv
 
 You can install *Percona Distribution for MySQL Operator* on Kubernetes,
 `Google Kubernetes Engine (GKE) <https://cloud.google.com/kubernetes-engine>`_,
-`Amazon Elastic Container Service for Kubernetes (EKS) <https://aws.amazon.com>`_,
+`Amazon Elastic Container Service for Kubernetes (EKS) <https://aws.amazon.com/eks/>`_,
 and `Minikube <https://minikube.sigs.k8s.io/docs/>`_.
 
 The features available in this release are the following:
