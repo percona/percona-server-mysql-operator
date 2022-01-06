@@ -149,4 +149,9 @@ When ready, apply it with the following command:
    $ kubectl create -f deploy/mysql-secret.yaml
 
 .. note:: Do not forget to restart Percona Server for MySQL pods to ensure the
-   cluster has updated the configuration.
+   cluster has updated the configuration. You can do it with the following
+   command: 
+   
+   .. code:: bash
+
+      $ kubectl rollout restart statefulset cluster1-mysql
