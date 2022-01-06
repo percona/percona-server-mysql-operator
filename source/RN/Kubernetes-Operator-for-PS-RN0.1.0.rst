@@ -1,30 +1,35 @@
-.. rn:: 1.0.0
+.. rn:: 0.1.0
 
-*Percona Kubernetes Operator for Percona XtraDB Cluster* 1.0.0
+*Percona Distribution for MySQL Operator v2* 0.1.0
 ==============================================================
 
-Percona announces the general availability of *Percona Kubernetes Operator for Percona XtraDB Cluster* 1.0.0 on May 29, 2019. This release is now the current GA release in the 1.0 series. `Install the Kubernetes Operator for Percona XtraDB Cluster by following the instructions <https://www.percona.com/doc/kubernetes-operator-for-pxc/kubernetes.html>`__. Please see the `GA release announcement <https://www.percona.com/blog/2019/05/29/percona-kubernetes-operators/>`__. All of Percona's software is open-source and free.
+Kubernetes provides users with a distributed orchestration system that automates
+the deployment, management, and scaling of containerized applications. The
+Operator extends the Kubernetes API with a new custom resource for deploying,
+configuring, and managing the application through the whole life cycle.
+You can compare the Kubernetes Operator to a System Administrator who deploys
+the application and watches the Kubernetes events related to it, taking
+administrative/operational actions when needed.
 
-The Percona Kubernetes Operator for Percona XtraDB Cluster automates the lifecycle and provides a consistent Percona XtraDB Cluster instance. The Operator can be used to create a Percona XtraDB Cluster, or scale an existing Cluster and contains the necessary Kubernetes settings.
+The already existing `Percona Distribution for MySQL Operator <https://www.percona.com/doc/kubernetes-operator-for-pxc/index.html>`_ is based on Percona XtraDB Cluster. It is feature rich and provides virtually-synchronous replication by utilizing Galera Write-Sets. Sync replication ensures data consistency and proved itself useful for critical applications, especially on Kubernetes.
 
-The Percona Kubernetes Operators are based on best practices for configuration and setup of the Percona XtraDB Cluster. The Operator provides a consistent way to package, deploy, manage, and perform a backup and a restore for a Kubernetes application. Operators deliver automation advantages in cloud-native applications.
+The new *Percona Distribution for MySQL Operator v2* is going to run Percona Server for MySQL and provide both regular asynchronous (with `semi-sync <https://dev.mysql.com/doc/refman/5.7/en/replication-semisync.html>`_ support) and virtually-synchronous replication based on `Group Replication <https://dev.mysql.com/doc/refman/8.0/en/group-replication.html>`_.
 
-The advantages are the following:
-  * Deploy a Percona XtraDB Cluster environment with no single point of failure and environment can span multiple availability zones (AZs).
-  * Deployment takes about six minutes with the default configuration.
-  * Modify the Percona XtraDB Cluster size parameter to add or remove Percona XtraDB Cluster members
-  * Integrate with Percona Monitoring and Management (PMM) to seamlessly monitor your Percona XtraDB Cluster
-  * Automate backups or perform on-demand backups as needed with support for performing an automatic restore
-  * Supports using Cloud storage with S3-compatible APIs for backups
-  * Automate the recovery from failure of a single Percona XtraDB Cluster node
-  * TLS is enabled by default for replication and client traffic using Cert-Manager
-  * Access private registries to enhance security
-  * Supports advanced Kubernetes features such as pod disruption budgets, node selector, constraints, tolerations, priority classes, and affinity/anti-affinity
-  * You can use either PersistentVolumeClaims or local storage with hostPath to store your database
-  * Customize your MySQL configuration using ConfigMap.
+**Version 0.1.0 of the Percona Distribution for MySQL Operator v2 is a tech preview release and it is not recommended for production environments.**
 
+You can install *Percona Distribution for MySQL Operator* on Kubernetes,
+`Google Kubernetes Engine (GKE) <https://cloud.google.com/kubernetes-engine>`_,
+and `Minikube <https://minikube.sigs.k8s.io/docs/>`_.
+
+The features available in this release are the following:
+* Deploy asynchronous and semi-sync replication MySQL clusters with Orchestrator on top of it,
+* Expose the cluster with regular Kubernetes Services,
+* Monitor the cluster with Percona Monitoring and Management,
+* Customize MySQL configuration,
+* Rotate system user passwords,
+* Customize MySQL Pods with sidecar containers.
 
 Installation
 ------------
 
-Installation is performed by following the documentation installation instructions for `Kubernetes <https://www.percona.com/doc/kubernetes-operator-for-pxc/kubernetes.html>`__ and `OpenShift <https://www.percona.com/doc/kubernetes-operator-for-pxc/openshift.html>`__.
+Installation is performed by following the documentation installation instructions for :ref:`Kubernetes<install-kubernetes>` and :ref:`Minikube<install-minikube>`.
