@@ -1,10 +1,10 @@
-# Percona Kubernetes Operator for Percona Server for MySQL
+# Percona Distribution for MySQL Operator
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 [Percona Server for MySQL](https://www.percona.com/software/mysql-database/percona-server) is a free, fully compatible, enhanced, and open source drop-in replacement for any MySQL database. It provides superior performance, scalability, and instrumentation.
 
-Based on our best practices for deployment and configuration, [Percona Kubernetes Operator for Percona Server for MySQL](https://www.percona.com/doc/kubernetes-operator-for-pxc/index.html) contains everything you need to quickly and consistently deploy and scale Percona Server for MySQL instances in a Kubernetes-based environment on-premises or in the cloud. It provides the following capabilities:
+Based on our best practices for deployment and configuration, [Percona Distribution for MySQL Operator](https://www.percona.com/doc/kubernetes-operator-for-mysql/index.html) contains everything you need to quickly and consistently deploy and scale Percona Server for MySQL instances in a Kubernetes-based environment on-premises or in the cloud. It provides the following capabilities:
 
 * Deploy asynchronous and semi-sync replication MySQL clusters with Orchestrator on top of it
 * Expose clusters with regular Kubernetes Services
@@ -36,11 +36,11 @@ It usually takes two steps to deploy Percona Server for MySQL on Kubernetes:
 * Deploy the operator from `deploy/bundle.yaml`
 * Deploy the database cluster itself from `deploy/cr.yaml`
 
-See full documentation with examples and various advanced cases on [percona.com](https://www.percona.com/doc/kubernetes-operator-for-pxc/index.html).
+See full documentation with examples and various advanced cases on [percona.com](https://www.percona.com/doc/kubernetes-operator-for-mysql/index.html).
 
 ## Contributing
 
-Percona welcomes and encourages community contributions to help improve Percona Kubernetes Operator for Percona Server for MySQL.
+Percona welcomes and encourages community contributions to help improve Percona Distribution for MySQL Operator.
 
 See the [Contribution Guide](CONTRIBUTING.md) and [Building and Testing Guide](e2e-tests/README.md) for more information.
 
