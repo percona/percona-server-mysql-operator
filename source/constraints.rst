@@ -37,9 +37,9 @@ option, which may have one of the following values:
 
 -  ``kubernetes.io/hostname`` - Pods will avoid residing within the same
    host,
--  ``failure-domain.beta.kubernetes.io/zone`` - Pods will avoid residing
+-  ``topology.kubernetes.io/zone`` - Pods will avoid residing
    within the same zone,
--  ``failure-domain.beta.kubernetes.io/region`` - Pods will avoid
+-  ``topology.kubernetes.io/region`` - Pods will avoid
    residing within the same region,
 -  ``none`` - no constraints are applied.
 
@@ -73,7 +73,7 @@ standard Kubernetes affinity constraints of any complexity:
                 operator: In
                 values:
                 - S1
-            topologyKey: failure-domain.beta.kubernetes.io/zone
+            topologyKey: topology.kubernetes.io/zone
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 100

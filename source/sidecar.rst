@@ -94,7 +94,7 @@ PersistentVolumeClaim, and mounts the correspondent Persistent Volume to the
 .. code:: yaml
 
    ...
-   sidecars:
+     sidecars:
      - image: busybox
        command: ["sleep", "30d"]
        name: my-sidecar-1
@@ -127,7 +127,7 @@ You can mount a secret volume as follows:
 .. code:: yaml
 
    ...
-   sidecars:
+     sidecars:
      - image: busybox
        command: ["sleep", "30d"]
        name: my-sidecar-1
@@ -157,7 +157,7 @@ You can mount a configMap volume as follows:
 .. code:: yaml
 
    ...
-   sidecars:
+     sidecars:
      - image: busybox
        command: ["sleep", "30d"]
        name: my-sidecar-1
