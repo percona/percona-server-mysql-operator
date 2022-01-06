@@ -22,6 +22,7 @@ You can install *Percona Distribution for MySQL Operator* on Kubernetes,
 and `Minikube <https://minikube.sigs.k8s.io/docs/>`_.
 
 The features available in this release are the following:
+
 * Deploy asynchronous and semi-sync replication MySQL clusters with Orchestrator on top of it,
 * Expose the cluster with regular Kubernetes Services,
 * Monitor the cluster with Percona Monitoring and Management,
