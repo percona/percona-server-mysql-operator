@@ -92,7 +92,7 @@ Install the Operator
 
    At success, you will see the message that namespace/<namespace name> was created, and the context was modified.
 
-#. Use the following ``git clone`` command to download the correct branch of the percona-xtradb-cluster-operator repository:
+#. Use the following ``git clone`` command to download the correct branch of the percona-server-mysql-operator repository:
 
    .. code:: bash
 
