@@ -15,7 +15,7 @@ on the fly, using the following command:
 
 .. code:: bash
 
-   $ kubectl patch mysql cluster1 --type='json' -p='[{"op": "replace", "path": "/spec/mysql/size", "value": 5 }]'
+   $ kubectl patch ps cluster1 --type='json' -p='[{"op": "replace", "path": "/spec/mysql/size", "value": 5 }]'
 
 
 In this example we have changed the size of the Percona Server for MySQL
