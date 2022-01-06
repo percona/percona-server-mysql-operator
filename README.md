@@ -1,4 +1,4 @@
-# Percona Distribution for MySQL Operator
+# Percona Distribution for MySQL Operator v2
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
@@ -40,7 +40,7 @@ See full documentation with examples and various advanced cases on [percona.com]
 
 ## Contributing
 
-Percona welcomes and encourages community contributions to help improve Percona Distribution for MySQL Operator.
+Percona welcomes and encourages community contributions to help improve open source software.
 
 See the [Contribution Guide](CONTRIBUTING.md) for more information.
 
