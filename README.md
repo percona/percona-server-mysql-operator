@@ -42,7 +42,7 @@ See full documentation with examples and various advanced cases on [percona.com]
 
 Percona welcomes and encourages community contributions to help improve Percona Distribution for MySQL Operator.
 
-See the [Contribution Guide](CONTRIBUTING.md) and [Building and Testing Guide](e2e-tests/README.md) for more information.
+See the [Contribution Guide](CONTRIBUTING.md) for more information.
 
 ## Submitting Bug Reports
 
