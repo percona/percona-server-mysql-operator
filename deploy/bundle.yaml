@@ -4645,7 +4645,7 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.namespace
-        image: perconalab/percona-server-mysql-operator:main
+        image: perconalab/percona-server-mysql-operator:2.0.0-alpha
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
