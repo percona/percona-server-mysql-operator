@@ -38,6 +38,7 @@ Installation guides
 
    minikube
    kubernetes
+   eks
 
 Configuration and Management
 ============================
