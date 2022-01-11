@@ -121,7 +121,7 @@ pipeline {
         CLOUDSDK_CORE_DISABLE_PROMPTS = 1
         CLEAN_NAMESPACE = 1
         OPERATOR_NS = 'ps-operator'
-        GIT_SHORT_COMMIT = sh(script: 'git describe --always --dirty', , returnStdout: true).trim()
+        GIT_SHORT_COMMIT = sh(script: 'git rev-parse --short HEAD', , returnStdout: true).trim()
         VERSION = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}"
         CLUSTER_NAME = sh(script: "echo jenkins-pso-${GIT_SHORT_COMMIT} | tr '[:upper:]' '[:lower:]'", , returnStdout: true).trim()
         AUTHOR_NAME  = sh(script: "echo ${CHANGE_AUTHOR_EMAIL} | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
