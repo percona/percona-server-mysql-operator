@@ -266,8 +266,10 @@ func HeadlessService(cr *apiv2.PerconaServerForMySQL) *corev1.Service {
 
 func PodService(cr *apiv2.PerconaServerForMySQL, t corev1.ServiceType, podName string) *corev1.Service {
 	labels := MatchLabels(cr)
-	labels["statefulset.kubernetes.io/pod-name"] = podName
 	labels[apiv2.ExposedLabel] = "true"
+
+	selector := MatchLabels(cr)
+	selector["statefulset.kubernetes.io/pod-name"] = podName
 
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -280,14 +282,14 @@ func PodService(cr *apiv2.PerconaServerForMySQL, t corev1.ServiceType, podName s
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
-			Type: t,
+			Type:     t,
+			Selector: selector,
 			Ports: []corev1.ServicePort{
 				{
 					Name: componentName,
 					Port: DefaultPort,
 				},
 			},
-			Selector: labels,
 		},
 	}
 }
