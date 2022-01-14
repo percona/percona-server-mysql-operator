@@ -43,8 +43,8 @@ func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
-func APIHost(serviceName string) string {
-	return fmt.Sprintf("http://%s:%d", serviceName, defaultWebPort)
+func APIHost(cr *apiv1alpha1.PerconaServerMySQL) string {
+	return fmt.Sprintf("http://%s:%d", ServiceName(cr), defaultWebPort)
 }
 
 // Labels returns labels of orchestrator
@@ -61,7 +61,8 @@ func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 	spec := cr.OrchestratorSpec()
-	Replicas := spec.Size
+	replicas := spec.Size
+	t := true
 
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
@@ -74,7 +75,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.StatefulSet {
 			Labels:    labels,
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas:    &Replicas,
+			Replicas:    &replicas,
 			ServiceName: Name(cr),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
@@ -87,15 +88,15 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.StatefulSet {
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector:     cr.Spec.Orchestrator.NodeSelector,
-					Tolerations:      cr.Spec.Orchestrator.Tolerations,
-					Containers:       containers(cr),
-					Affinity:         spec.GetAffinity(labels),
-					ImagePullSecrets: spec.ImagePullSecrets,
-					// TerminationGracePeriodSeconds: 30,
-					RestartPolicy: corev1.RestartPolicyAlways,
-					SchedulerName: "default-scheduler",
-					DNSPolicy:     corev1.DNSClusterFirst,
+					NodeSelector:          cr.Spec.Orchestrator.NodeSelector,
+					Tolerations:           cr.Spec.Orchestrator.Tolerations,
+					Containers:            containers(cr),
+					Affinity:              spec.GetAffinity(labels),
+					ImagePullSecrets:      spec.ImagePullSecrets,
+					RestartPolicy:         corev1.RestartPolicyAlways,
+					SchedulerName:         "default-scheduler",
+					DNSPolicy:             corev1.DNSClusterFirst,
+					ShareProcessNamespace: &t,
 					Volumes: []corev1.Volume{
 						{
 							Name: credsVolumeName,
@@ -145,7 +146,7 @@ func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			},
 			{
 				Name:  "RAFT_ENABLED",
-				Value: "false",
+				Value: "true",
 			},
 		},
 		Ports: []corev1.ContainerPort{
@@ -171,7 +172,7 @@ func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			},
 			InitialDelaySeconds: 10,
 			TimeoutSeconds:      3,
-			PeriodSeconds:       5,
+			PeriodSeconds:       2,
 			FailureThreshold:    3,
 			SuccessThreshold:    1,
 		},
@@ -182,9 +183,9 @@ func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 					Port: intstr.FromString("web"),
 				},
 			},
-			InitialDelaySeconds: 30,
+			InitialDelaySeconds: 10,
 			TimeoutSeconds:      3,
-			PeriodSeconds:       5,
+			PeriodSeconds:       2,
 			FailureThreshold:    3,
 			SuccessThreshold:    1,
 		},
@@ -192,8 +193,6 @@ func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 }
 
 func sidecarContainers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
-	serviceName := mysql.ServiceName(cr)
-
 	return []corev1.Container{
 		{
 			Name:            "mysql-monit",
@@ -202,11 +201,11 @@ func sidecarContainers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 			Env: []corev1.EnvVar{
 				{
 					Name:  "ORC_SERVICE",
-					Value: serviceName,
+					Value: ServiceName(cr),
 				},
 				{
 					Name:  "MYSQL_SERVICE",
-					Value: serviceName,
+					Value: mysql.ServiceName(cr),
 				},
 			},
 			VolumeMounts: containerMounts(),
@@ -214,6 +213,26 @@ func sidecarContainers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 				"/usr/bin/peer-list",
 				"-on-change=/usr/bin/add_mysql_nodes.sh",
 				"-service=$(MYSQL_SERVICE)",
+			},
+			TerminationMessagePath:   "/dev/termination-log",
+			TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+			SecurityContext:          cr.Spec.Orchestrator.ContainerSecurityContext,
+		},
+		{
+			Name:            "orc-monit",
+			Image:           cr.Spec.Orchestrator.Image,
+			ImagePullPolicy: cr.Spec.Orchestrator.ImagePullPolicy,
+			Env: []corev1.EnvVar{
+				{
+					Name:  "ORC_SERVICE",
+					Value: ServiceName(cr),
+				},
+			},
+			VolumeMounts: containerMounts(),
+			Args: []string{
+				"/usr/bin/peer-list",
+				"-on-change=/usr/bin/add_orc_peers.sh",
+				"-service=$(ORC_SERVICE)",
 			},
 			TerminationMessagePath:   "/dev/termination-log",
 			TerminationMessagePolicy: corev1.TerminationMessageReadFile,

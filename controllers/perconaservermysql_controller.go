@@ -270,7 +270,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return errors.Wrap(err, "get operator password")
 	}
 
-	orcHost := orchestrator.APIHost(orchestrator.ServiceName(cr))
+	orcHost := orchestrator.APIHost(cr)
 	primary, err := orchestrator.ClusterPrimary(ctx, orcHost, cr.ClusterHint())
 	if err != nil {
 		return errors.Wrap(err, "get cluster primary")
@@ -642,7 +642,7 @@ func reconcileReplicationPrimaryPod(
 	}
 	l.V(1).Info(fmt.Sprintf("got %v pods", len(pods)))
 
-	host := orchestrator.APIHost(orchestrator.ServiceName(cr))
+	host := orchestrator.APIHost(cr)
 	primary, err := orchestrator.ClusterPrimary(ctx, host, cr.ClusterHint())
 	if err != nil {
 		return errors.Wrap(err, "get cluster primary")
@@ -696,7 +696,7 @@ func reconcileReplicationSemiSync(
 ) error {
 	l := log.FromContext(ctx).WithName("reconcileReplicationSemiSync")
 
-	host := orchestrator.APIHost(orchestrator.ServiceName(cr))
+	host := orchestrator.APIHost(cr)
 	primary, err := orchestrator.ClusterPrimary(ctx, host, cr.ClusterHint())
 	if err != nil {
 		return errors.Wrap(err, "get cluster primary")
