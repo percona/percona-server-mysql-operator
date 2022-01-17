@@ -33,13 +33,13 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'Percona Distribution for MySQL Operator'
+project = u'Percona Distribution for MySQL Operator based on Percona Server for MySQL'
 copyright = u'Percona LLC and/or its affiliates 2009 - 2022'
 
 # the short X.Y version
-version = '2.0.0-alpha'
+version = '0.1.0-alpha'
 # the full version including alpha/beta/rc tags.
-release = '2.0.0-alpha'
+release = '0.1.0-alpha'
 # the PS 5.7 and PS 8.0 recommended versions to be used in docs
 ps57recommended = '5.7.35'
 ps80recommended = '8.0.25'
@@ -150,10 +150,10 @@ html_theme_path = ['.', './percona-theme']
 
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
-html_title = 'Percona Distribution for MySQL Operator Documentation'
+html_title = 'Percona Distribution for MySQL Operator based on Percona Server for MySQL - Documentation'
 
 # A shorter title for the navigation bar.  Default is the same as html_title.
-html_short_title = 'Percona Distribution for MySQL Operator Documentation'
+html_short_title = 'Percona Distribution for MySQL Operator based on Percona Server for MySQL - Documentation'
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
@@ -226,7 +226,7 @@ htmlhelp_basename = 'psoperatorps'
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
-  ('index', 'percona-kubernetes-operator-for-ps.tex', u'Percona Distribution for MySQL Operator',
+  ('index', 'percona-kubernetes-operator-for-mysql-ps.tex', u'Percona Distribution for MySQL Operator based on Percona Server for MySQL',
      u'Percona LLC and/or its affiliates 2009-2022', 'manual'),
 ]
 
@@ -263,7 +263,7 @@ latex_elements = {
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'percona-kubernetes-operator-for-ps', u'Percona Distribution for MySQL Operator',
+    ('index', 'percona-kubernetes-operator-for-mysql-ps', u'Percona Distribution for MySQL Operator based on Percona Server for MySQL',
      [u'Percona LLC and/or its affiliates 2009-2022'], 1)
 ]
 

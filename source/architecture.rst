@@ -10,8 +10,8 @@ Containers deployed with the Operator include the following components:
 * `Percona XtraBackup <https://www.percona.com/doc/percona-xtrabackup/8.0/index.html>`_ (a hot backup utility for MySQL based servers that doesn’t lock your database during the backup),
 * `Orchestrator <https://github.com/openark/orchestrator>`_ (a replication topology manager for MySQL).
 
-The design of the Percona Distribution for MySQL Operator 2 is highly bound
-to the Percona Server for MySQL and the high availability implementation based on Orchestrator,
+The design of the Operator is highly bound
+to Percona Server for MySQL and the high availability implementation based on Orchestrator,
 which in its turn can be briefly described with the following diagram.
 
 .. image:: ./assets/images/replication.svg

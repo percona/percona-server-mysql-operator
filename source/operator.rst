@@ -10,7 +10,7 @@ file.
 The metadata part of this file contains the following keys:
 
 * ``name`` (``cluster1`` by default) sets the name of your Percona Server for
-  MySQL Cluster; it should include only `URL-compatible characters <https://datatracker.ietf.org/doc/html/rfc3986#section-2.3>`_,
+  MySQL cluster; it should include only `URL-compatible characters <https://datatracker.ietf.org/doc/html/rfc3986#section-2.3>`_,
   not exceed 22 characters, start with an alphabetic character, and end with an
   alphanumeric character;
 
