@@ -299,6 +299,11 @@ func PrimaryService(cr *apiv2.PerconaServerForMySQL) *corev1.Service {
 	selector := util.SSMapCopy(labels)
 	selector[apiv2.MySQLPrimaryLabel] = "true"
 
+	serviceType := corev1.ServiceTypeClusterIP
+	if cr.Spec.MySQL.Expose.Enabled {
+		serviceType = cr.Spec.MySQL.Expose.Type
+	}
+
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -310,6 +315,7 @@ func PrimaryService(cr *apiv2.PerconaServerForMySQL) *corev1.Service {
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
+			Type: serviceType,
 			Ports: []corev1.ServicePort{
 				{
 					Name: "mysql",
