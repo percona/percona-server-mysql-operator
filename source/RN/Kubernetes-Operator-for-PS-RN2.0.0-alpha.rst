@@ -13,7 +13,7 @@ administrative/operational actions when needed.
 
 The already existing `Percona Distribution for MySQL Operator <https://www.percona.com/doc/kubernetes-operator-for-pxc/index.html>`_ is based on Percona XtraDB Cluster. It is feature rich and provides virtually-synchronous replication by utilizing Galera Write-Sets. Sync replication ensures data consistency and proved itself useful for critical applications, especially on Kubernetes.
 
-The new *Percona Distribution for MySQL Operator* variant is going to run Percona Server for MySQL and provide both regular asynchronous (with `semi-sync <https://dev.mysql.com/doc/refman/8.0/en/replication-semisync.html>`_ support) and virtually-synchronous replication based on `Group Replication <https://dev.mysql.com/doc/refman/8.0/en/group-replication.html>`_.
+The new *Percona Distribution for MySQL Operator* is going to run Percona Server for MySQL and provide both regular asynchronous (with `semi-sync <https://dev.mysql.com/doc/refman/8.0/en/replication-semisync.html>`_ support) and virtually-synchronous replication based on `Group Replication <https://dev.mysql.com/doc/refman/8.0/en/group-replication.html>`_.
 
 **Version 0.1.0-alpha of the Percona Distribution for MySQL Operator based on Percona Server for MySQL is a tech preview release and it is not recommended for production environments.**
 
