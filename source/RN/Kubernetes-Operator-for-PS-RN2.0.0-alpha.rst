@@ -1,6 +1,6 @@
 .. rn:: 2.0.0-alpha
 
-*Percona Distribution for MySQL Operator based on Percona Server for MySQL* 0.1.0-alpha
+*Percona Distribution for MySQL Operator based on Percona Server for MySQL* 0.1.0
 =======================================================================================
 
 Kubernetes provides users with a distributed orchestration system that automates
