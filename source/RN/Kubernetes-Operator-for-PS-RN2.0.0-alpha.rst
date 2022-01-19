@@ -15,7 +15,7 @@ The already existing `Percona Distribution for MySQL Operator <https://www.perco
 
 The new *Percona Distribution for MySQL Operator* is going to run Percona Server for MySQL and provide both regular asynchronous (with `semi-sync <https://dev.mysql.com/doc/refman/8.0/en/replication-semisync.html>`_ support) and virtually-synchronous replication based on `Group Replication <https://dev.mysql.com/doc/refman/8.0/en/group-replication.html>`_.
 
-**Version 0.1.0-alpha of the Percona Distribution for MySQL Operator based on Percona Server for MySQL is a tech preview release and it is not recommended for production environments.**
+**Version 0.1.0 of the Percona Distribution for MySQL Operator based on Percona Server for MySQL is a tech preview release and it is not recommended for production environments.**
 
 You can install *Percona Distribution for MySQL Operator* on Kubernetes,
 `Google Kubernetes Engine (GKE) <https://cloud.google.com/kubernetes-engine>`_,
