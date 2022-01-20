@@ -6,22 +6,22 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.6.1
   creationTimestamp: null
-  name: perconaserverformysqlrestores.ps.percona.com
+  name: perconaservermysqlrestores.ps.percona.com
 spec:
   group: ps.percona.com
   names:
-    kind: PerconaServerForMySQLRestore
-    listKind: PerconaServerForMySQLRestoreList
-    plural: perconaserverformysqlrestores
+    kind: PerconaServerMySQLRestore
+    listKind: PerconaServerMySQLRestoreList
+    plural: perconaservermysqlrestores
     shortNames:
     - ps-restore
-    singular: perconaserverformysqlrestore
+    singular: perconaservermysqlrestore
   scope: Namespaced
   versions:
-  - name: v2
+  - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: PerconaServerForMySQLRestore is the Schema for the perconaserverformysqlrestores
+        description: PerconaServerMySQLRestore is the Schema for the perconaservermysqlrestores
           API
         properties:
           apiVersion:
@@ -37,17 +37,17 @@ spec:
           metadata:
             type: object
           spec:
-            description: PerconaServerForMySQLRestoreSpec defines the desired state
-              of PerconaServerForMySQLRestore
+            description: PerconaServerMySQLRestoreSpec defines the desired state of
+              PerconaServerMySQLRestore
             properties:
               foo:
-                description: Foo is an example field of PerconaServerForMySQLRestore.
-                  Edit perconaserverformysqlrestore_types.go to remove/update
+                description: Foo is an example field of PerconaServerMySQLRestore.
+                  Edit perconaservermysqlrestore_types.go to remove/update
                 type: string
             type: object
           status:
-            description: PerconaServerForMySQLRestoreStatus defines the observed state
-              of PerconaServerForMySQLRestore
+            description: PerconaServerMySQLRestoreStatus defines the observed state
+              of PerconaServerMySQLRestore
             type: object
         type: object
     served: true

@@ -7,7 +7,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
 
-	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 )
 
 const DefaultChannelName = ""
@@ -39,7 +39,7 @@ type Replicator interface {
 
 type dbImpl struct{ db *sql.DB }
 
-func NewReplicator(user apiv2.SystemUser, pass, host string, port int32) (Replicator, error) {
+func NewReplicator(user apiv1alpha1.SystemUser, pass, host string, port int32) (Replicator, error) {
 	connStr := fmt.Sprintf("%s:%s@tcp(%s:%d)/performance_schema?interpolateParams=true",
 		user, pass, host, port)
 	db, err := sql.Open("mysql", connStr)
@@ -67,7 +67,7 @@ func (d *dbImpl) ChangeReplicationSource(host, replicaPass string, port int32) e
                 SOURCE_AUTO_POSITION=1,
                 SOURCE_RETRY_COUNT=3,
                 SOURCE_CONNECT_RETRY=60
-        `, apiv2.UserReplication, replicaPass, host, port)
+        `, apiv1alpha1.UserReplication, replicaPass, host, port)
 	if err != nil {
 		return errors.Wrap(err, "exec CHANGE REPLICATION SOURCE TO")
 	}

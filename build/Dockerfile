@@ -14,9 +14,9 @@ ARG CGO_ENABLED=0
 RUN mkdir -p build/_output/bin \
     && GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -mod=vendor -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
-        -o build/_output/bin/percona-server-for-mysql-operator \
+        -o build/_output/bin/percona-server-mysql-operator \
             cmd/manager/main.go \
-    && cp -r build/_output/bin/percona-server-for-mysql-operator /usr/local/bin/percona-server-for-mysql-operator
+    && cp -r build/_output/bin/percona-server-mysql-operator /usr/local/bin/percona-server-mysql-operator
 RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -mod=vendor -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
         -o build/_output/bin/bootstrap \
@@ -33,12 +33,12 @@ RUN microdnf update && microdnf clean all
 
 LABEL name="Percona Distribution for MySQL Operator" \
       vendor="Percona" \
-      summary="Percona Distribution for MySQL Operator v2 contains everything you need to quickly and consistently deploy and scale Percona Server for MySQL instances" \
-      description="Percona Distribution for MySQL Operator v2 contains everything you need to quickly and consistently deploy and scale Percona Server for MySQL instances in a Kubernetes-based environment, both on-premises or in the cloud" \
+      summary="Percona Distribution for MySQL Operator v1alpha1 contains everything you need to quickly and consistently deploy and scale Percona Server for MySQL instances" \
+      description="Percona Distribution for MySQL Operator v1alpha1 contains everything you need to quickly and consistently deploy and scale Percona Server for MySQL instances in a Kubernetes-based environment, both on-premises or in the cloud" \
       maintainer="Percona Development <info@percona.com>"
 
 COPY LICENSE /licenses/
-COPY --from=go_builder /usr/local/bin/percona-server-for-mysql-operator /usr/local/bin/percona-server-for-mysql-operator
+COPY --from=go_builder /usr/local/bin/percona-server-mysql-operator /usr/local/bin/percona-server-mysql-operator
 COPY --from=go_builder /usr/local/bin/bootstrap /bootstrap
 COPY --from=go_builder /usr/local/bin/healthcheck /healthcheck
 COPY build/ps-entrypoint.sh /ps-entrypoint.sh

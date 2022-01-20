@@ -24,27 +24,27 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 )
 
-// PerconaServerForMYSQLRestoreReconciler reconciles a PerconaServerForMYSQLRestore object
-type PerconaServerForMySQLRestoreReconciler struct {
+// PerconaServerMySQLBackupReconciler reconciles a PerconaServerMySQLBackup object
+type PerconaServerMySQLBackupReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=ps.percona.com,resources=perconaserverformysqlrestores;perconaserverformysqlrestores/status;perconaserverformysqlrestores/finalizers,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqlbackups;perconaservermysqlbackups/status;perconaservermysqlbackups/finalizers,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
-// the PerconaServerForMYSQLRestore object against the actual cluster state, and then
+// the PerconaServerMySQLBackup object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.9.2/pkg/reconcile
-func (r *PerconaServerForMySQLRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 
 	// your logic here
@@ -53,8 +53,8 @@ func (r *PerconaServerForMySQLRestoreReconciler) Reconcile(ctx context.Context, 
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *PerconaServerForMySQLRestoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *PerconaServerMySQLBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&apiv2.PerconaServerForMySQLRestore{}).
+		For(&apiv1alpha1.PerconaServerMySQLBackup{}).
 		Complete(r)
 }

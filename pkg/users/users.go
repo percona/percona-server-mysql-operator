@@ -7,7 +7,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
 
-	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
@@ -18,7 +18,7 @@ type Manager interface {
 
 type dbImpl struct{ db *sql.DB }
 
-func NewManager(user apiv2.SystemUser, pass, host string, port int32) (Manager, error) {
+func NewManager(user apiv1alpha1.SystemUser, pass, host string, port int32) (Manager, error) {
 	connStr := fmt.Sprintf("%s:%s@tcp(%s:%d)/performance_schema?interpolateParams=true",
 		user, pass, host, port)
 	db, err := sql.Open("mysql", connStr)

@@ -6,16 +6,16 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.6.1
   creationTimestamp: null
-  name: perconaserverformysqls.ps.percona.com
+  name: perconaservermysqls.ps.percona.com
 spec:
   group: ps.percona.com
   names:
-    kind: PerconaServerForMySQL
-    listKind: PerconaServerForMySQLList
-    plural: perconaserverformysqls
+    kind: PerconaServerMySQL
+    listKind: PerconaServerMySQLList
+    plural: perconaservermysqls
     shortNames:
     - ps
-    singular: perconaserverformysql
+    singular: perconaservermysql
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -28,10 +28,10 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v2
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: PerconaServerForMySQL is the Schema for the perconaserverformysqls
+        description: PerconaServerMySQL is the Schema for the perconaservermysqls
           API
         properties:
           apiVersion:
@@ -47,7 +47,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: PerconaServerForMySQLSpec defines the desired state of PerconaServerForMySQL
+            description: PerconaServerMySQLSpec defines the desired state of PerconaServerMySQL
             properties:
               crVersion:
                 type: string
@@ -7178,8 +7178,7 @@ spec:
                 type: string
             type: object
           status:
-            description: PerconaServerForMySQLStatus defines the observed state of
-              PerconaServerForMySQL
+            description: PerconaServerMySQLStatus defines the observed state of PerconaServerMySQL
             properties:
               mysql:
                 description: 'Important: Run "make" to regenerate code after modifying

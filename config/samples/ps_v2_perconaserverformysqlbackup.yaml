@@ -1,7 +1,7 @@
-apiVersion: ps.percona.com/v2
-kind: PerconaServerForMySQLBackup
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQLBackup
 metadata:
-  name: perconaserverformysqlbackup-sample
+  name: perconaservermysqlbackup-sample
 spec:
   # Add fields here
   foo: bar

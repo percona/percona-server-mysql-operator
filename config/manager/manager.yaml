@@ -2,22 +2,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: percona-server-for-mysql-operator
+  name: percona-server-mysql-operator
 spec:
   selector:
     matchLabels:
-      control-plane: percona-server-for-mysql-operator
+      app.kubernetes.io/name: percona-server-mysql-operator
   replicas: 1
   template:
     metadata:
       labels:
-        control-plane: percona-server-for-mysql-operator
+        app.kubernetes.io/name: percona-server-mysql-operator
     spec:
       securityContext:
         runAsNonRoot: true
       containers:
       - command:
-        - /usr/local/bin/percona-server-for-mysql-operator
+        - /usr/local/bin/percona-server-mysql-operator
         args:
         - --leader-elect
         env:
@@ -50,5 +50,5 @@ spec:
           requests:
             cpu: 100m
             memory: 20Mi
-      serviceAccountName: percona-server-for-mysql-operator
+      serviceAccountName: percona-server-mysql-operator
       terminationGracePeriodSeconds: 10

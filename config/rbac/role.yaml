@@ -4,7 +4,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   creationTimestamp: null
-  name: percona-server-for-mysql-operator-role
+  name: percona-server-mysql-operator-role
 rules:
 - apiGroups:
   - ""
@@ -36,9 +36,9 @@ rules:
 - apiGroups:
   - ps.percona.com
   resources:
-  - perconaserverformysqlbackups
-  - perconaserverformysqlbackups/finalizers
-  - perconaserverformysqlbackups/status
+  - perconaservermysqlbackups
+  - perconaservermysqlbackups/finalizers
+  - perconaservermysqlbackups/status
   verbs:
   - create
   - delete
@@ -50,9 +50,9 @@ rules:
 - apiGroups:
   - ps.percona.com
   resources:
-  - perconaserverformysqlrestores
-  - perconaserverformysqlrestores/finalizers
-  - perconaserverformysqlrestores/status
+  - perconaservermysqlrestores
+  - perconaservermysqlrestores/finalizers
+  - perconaservermysqlrestores/status
   verbs:
   - create
   - delete
@@ -64,9 +64,9 @@ rules:
 - apiGroups:
   - ps.percona.com
   resources:
-  - perconaserverformysqls
-  - perconaserverformysqls/finalizers
-  - perconaserverformysqls/status
+  - perconaservermysqls
+  - perconaservermysqls/finalizers
+  - perconaservermysqls/status
   verbs:
   - create
   - delete

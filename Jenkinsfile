@@ -256,13 +256,13 @@ pipeline {
                                     -v $WORKSPACE/src/github.com/percona/percona-server-mysql-operator:/go/src/github.com/percona/percona-server-mysql-operator \
                                     -w /go/src/github.com/percona/percona-server-mysql-operator \
                                     -e GO111MODULE=on \
-                                    golang:1.17 sh -c 'go build -v -mod=vendor -o percona-server-for-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
+                                    golang:1.17 sh -c 'go build -v -mod=vendor -o percona-server-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
                             "
                         '''
 
                         withCredentials([string(credentialsId: 'GITHUB_API_TOKEN', variable: 'GITHUB_TOKEN')]) {
                             sh """
-                                golicense -plain ./percona-server-for-mysql-operator \
+                                golicense -plain ./percona-server-mysql-operator \
                                     | grep -v 'license not found' \
                                     | sed -r 's/^[^ ]+[ ]+//' \
                                     | sort \

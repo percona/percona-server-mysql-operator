@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v2
+package v1alpha1
 
 import (
 	"fmt"
@@ -32,8 +32,8 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// PerconaServerForMySQLSpec defines the desired state of PerconaServerForMySQL
-type PerconaServerForMySQLSpec struct {
+// PerconaServerMySQLSpec defines the desired state of PerconaServerMySQL
+type PerconaServerMySQLSpec struct {
 	CRVersion             string           `json:"crVersion,omitempty"`
 	Pause                 bool             `json:"pause,omitempty"`
 	SecretsName           string           `json:"secretsName,omitempty"`
@@ -174,14 +174,14 @@ type StatefulAppStatus struct {
 	State StatefulAppState `json:"state,omitempty"`
 }
 
-// PerconaServerForMySQLStatus defines the observed state of PerconaServerForMySQL
-type PerconaServerForMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
+// PerconaServerMySQLStatus defines the observed state of PerconaServerMySQL
+type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	MySQL        StatefulAppStatus `json:"mysql,omitempty"`
 	Orchestrator StatefulAppStatus `json:"orchestrator,omitempty"`
 }
 
-// PerconaServerForMySQL is the Schema for the perconaserverformysqls API
+// PerconaServerMySQL is the Schema for the perconaservermysqls API
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 //+kubebuilder:printcolumn:name="MySQL",type=string,JSONPath=".status.mysql.state"
@@ -189,21 +189,21 @@ type PerconaServerForMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - de
 //+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 //+kubebuilder:resource:scope=Namespaced
 //+kubebuilder:resource:shortName=ps
-type PerconaServerForMySQL struct {
+type PerconaServerMySQL struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   PerconaServerForMySQLSpec   `json:"spec,omitempty"`
-	Status PerconaServerForMySQLStatus `json:"status,omitempty"`
+	Spec   PerconaServerMySQLSpec   `json:"spec,omitempty"`
+	Status PerconaServerMySQLStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// PerconaServerForMySQLList contains a list of PerconaServerForMySQL
-type PerconaServerForMySQLList struct {
+// PerconaServerMySQLList contains a list of PerconaServerMySQL
+type PerconaServerMySQLList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []PerconaServerForMySQL `json:"items"`
+	Items           []PerconaServerMySQL `json:"items"`
 }
 
 type SystemUser string
@@ -220,19 +220,19 @@ const (
 	UserPMMServer    SystemUser = "pmmserver"
 )
 
-func (cr *PerconaServerForMySQL) MySQLSpec() *MySQLSpec {
+func (cr *PerconaServerMySQL) MySQLSpec() *MySQLSpec {
 	return &cr.Spec.MySQL
 }
 
-func (cr *PerconaServerForMySQL) PMMSpec() *PMMSpec {
+func (cr *PerconaServerMySQL) PMMSpec() *PMMSpec {
 	return cr.Spec.PMM
 }
 
-func (cr *PerconaServerForMySQL) OrchestratorSpec() *OrchestratorSpec {
+func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 	return &cr.Spec.Orchestrator
 }
 
-func (cr *PerconaServerForMySQL) CheckNSetDefaults(serverVersion *platform.ServerVersion) error {
+func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVersion) error {
 	if cr.Spec.MySQL.SizeSemiSync.IntVal >= cr.Spec.MySQL.Size {
 		return errors.New("mysql.sizeSemiSync can't be greater than or equal to mysql.size")
 	}
@@ -427,7 +427,7 @@ const (
 	ExposedLabel      = "percona.com/exposed"
 )
 
-func (cr *PerconaServerForMySQL) Labels() map[string]string {
+func (cr *PerconaServerMySQL) Labels() map[string]string {
 	return map[string]string{
 		NameLabel:      "percona-server",
 		InstanceLabel:  cr.Name,
@@ -436,7 +436,7 @@ func (cr *PerconaServerForMySQL) Labels() map[string]string {
 	}
 }
 
-func (cr *PerconaServerForMySQL) ClusterHint() string {
+func (cr *PerconaServerMySQL) ClusterHint() string {
 	return fmt.Sprintf("%s.%s", cr.Name, cr.Namespace)
 }
 
@@ -450,7 +450,7 @@ func GetClusterNameFromObject(obj client.Object) (string, error) {
 }
 
 // ClusterHash returns FNV hash of the CustomResource UID
-func (cr *PerconaServerForMySQL) ClusterHash() string {
+func (cr *PerconaServerMySQL) ClusterHash() string {
 	serverIDHash := fnv.New32()
 	serverIDHash.Write([]byte(string(cr.UID)))
 
@@ -467,14 +467,14 @@ func (cr *PerconaServerForMySQL) ClusterHash() string {
 	return serverIDHashStr
 }
 
-func (cr *PerconaServerForMySQL) InternalSecretName() string {
+func (cr *PerconaServerMySQL) InternalSecretName() string {
 	return "internal-" + cr.Name
 }
 
-func (cr *PerconaServerForMySQL) PMMEnabled() bool {
+func (cr *PerconaServerMySQL) PMMEnabled() bool {
 	return cr.Spec.PMM != nil && cr.Spec.PMM.Enabled
 }
 
 func init() {
-	SchemeBuilder.Register(&PerconaServerForMySQL{}, &PerconaServerForMySQLList{})
+	SchemeBuilder.Register(&PerconaServerMySQL{}, &PerconaServerMySQLList{})
 }

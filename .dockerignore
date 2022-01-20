@@ -5,4 +5,4 @@ testbin/
 
 !bin/bootstrap
 !bin/healthcheck
-!bin/percona-server-for-mysql-operator
+!bin/percona-server-mysql-operator

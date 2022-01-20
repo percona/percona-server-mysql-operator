@@ -14,34 +14,34 @@ data:
       resourceName: 08db0feb.percona.com
 kind: ConfigMap
 metadata:
-  name: percona-server-for-mysql-operator-config
+  name: percona-server-mysql-operator-config
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: percona-server-for-mysql-operator
+  name: percona-server-mysql-operator
 spec:
   replicas: 1
   selector:
     matchLabels:
-      control-plane: percona-server-for-mysql-operator
+      app.kubernetes.io/name: percona-server-mysql-operator
   template:
     metadata:
       labels:
-        control-plane: percona-server-for-mysql-operator
+        app.kubernetes.io/name: percona-server-mysql-operator
     spec:
       containers:
       - args:
         - --leader-elect
         command:
-        - /usr/local/bin/percona-server-for-mysql-operator
+        - /usr/local/bin/percona-server-mysql-operator
         env:
         - name: WATCH_NAMESPACE
           valueFrom:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.namespace
-        image: perconalab/percona-server-mysql-operator:main
+        image: perconalab/percona-server-mysql-operator:k8sps-61
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
@@ -67,6 +67,6 @@ spec:
           allowPrivilegeEscalation: false
       securityContext:
         runAsNonRoot: true
-      serviceAccountName: percona-server-for-mysql-operator
+      serviceAccountName: percona-server-mysql-operator
       terminationGracePeriodSeconds: 10
 ---
