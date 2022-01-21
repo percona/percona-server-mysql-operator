@@ -10,7 +10,7 @@ spec:
     imagePullPolicy: Always
 
     size: 3
-    sizeSemiSync: 0
+    sizeSemiSync: 2
 
     resources:
       requests:
