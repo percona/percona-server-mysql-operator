@@ -14,7 +14,7 @@ Based on our best practices for deployment and configuration, [Percona Distribut
 
 ## Status
 
-**This project is in is a tech preview state right now. Don't use it on production.**
+**This project is in the tech preview state right now. Don't use it on production.**
 
 ## Roadmap
 
