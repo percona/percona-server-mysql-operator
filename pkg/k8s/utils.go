@@ -22,7 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
@@ -78,7 +78,7 @@ func ObjectExists(ctx context.Context, cl client.Reader, nn types.NamespacedName
 func EnsureObject(
 	ctx context.Context,
 	cl client.Client,
-	cr *apiv2.PerconaServerForMySQL,
+	cr *apiv1alpha1.PerconaServerMySQL,
 	o client.Object,
 	s *runtime.Scheme,
 ) error {
@@ -117,7 +117,7 @@ func EnsureObject(
 func EnsureObjectWithHash(
 	ctx context.Context,
 	cl client.Client,
-	cr *apiv2.PerconaServerForMySQL,
+	cr *apiv1alpha1.PerconaServerMySQL,
 	obj client.Object,
 	s *runtime.Scheme,
 ) error {
@@ -254,7 +254,7 @@ func DefaultAPINamespace() (string, error) {
 }
 
 // RolloutRestart restarts pods owned by object by updating the pod template with passed annotation key-value.
-func RolloutRestart(ctx context.Context, cl client.Client, obj runtime.Object, key apiv2.AnnotationKey, value string) error {
+func RolloutRestart(ctx context.Context, cl client.Client, obj runtime.Object, key apiv1alpha1.AnnotationKey, value string) error {
 	switch obj := obj.(type) {
 	case *appsv1.StatefulSet:
 		orig := obj.DeepCopy()

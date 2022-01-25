@@ -1,7 +1,7 @@
-apiVersion: ps.percona.com/v2
-kind: PerconaServerForMySQLRestore
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQLRestore
 metadata:
-  name: perconaserverformysqlrestore-sample
+  name: perconaservermysqlrestore-sample
 spec:
   # Add fields here
   foo: bar

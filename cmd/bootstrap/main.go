@@ -13,7 +13,7 @@ import (
 	"github.com/sjmudd/stopwatch"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
@@ -93,9 +93,9 @@ func bootstrap() error {
 	}
 
 	log.Printf("Opening connection to %s", podIp)
-	operatorPass, err := getSecret(apiv2.UserOperator)
+	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
 	if err != nil {
-		return errors.Wrapf(err, "get %s password", apiv2.UserOperator)
+		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
 
 	db, err := replicator.NewReplicator("operator", operatorPass, podIp, mysql.DefaultAdminPort)
@@ -140,9 +140,9 @@ func bootstrap() error {
 	if rStatus == replicator.ReplicationStatusNotInitiated {
 		log.Println("configuring replication")
 
-		replicaPass, err := getSecret(apiv2.UserReplication)
+		replicaPass, err := getSecret(apiv1alpha1.UserReplication)
 		if err != nil {
-			return errors.Wrapf(err, "get %s password", apiv2.UserReplication)
+			return errors.Wrapf(err, "get %s password", apiv1alpha1.UserReplication)
 		}
 
 		if err := db.StartReplication(primary, replicaPass, mysql.DefaultPort); err != nil {
@@ -167,7 +167,7 @@ func getFQDN(svcName string) (string, error) {
 	return fmt.Sprintf("%s.%s.%s", hostname, svcName, namespace), nil
 }
 
-func getSecret(username apiv2.SystemUser) (string, error) {
+func getSecret(username apiv1alpha1.SystemUser) (string, error) {
 	path := filepath.Join(mysql.CredsMountPath, string(username))
 	sBytes, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -208,9 +208,9 @@ func getTopology(peers sets.String) (string, []string, error) {
 	replicas := sets.NewString()
 	primary := ""
 
-	operatorPass, err := getSecret(apiv2.UserOperator)
+	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
 	if err != nil {
-		return "", nil, errors.Wrapf(err, "get %s password", apiv2.UserOperator)
+		return "", nil, errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
 
 	for _, peer := range peers.List() {
@@ -255,9 +255,9 @@ func getTopology(peers sets.String) (string, []string, error) {
 func selectDonor(fqdn, primary string, replicas []string) (string, error) {
 	donor := ""
 
-	operatorPass, err := getSecret(apiv2.UserOperator)
+	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
 	if err != nil {
-		return "", errors.Wrapf(err, "get %s password", apiv2.UserOperator)
+		return "", errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
 
 	for _, replica := range replicas {

@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	psv2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/controllers"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
@@ -49,7 +49,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(psv2.AddToScheme(scheme))
+	utilruntime.Must(apiv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -98,26 +98,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.PerconaServerForMySQLReconciler{
+	if err = (&controllers.PerconaServerMySQLReconciler{
 		Client:        nsClient,
 		Scheme:        mgr.GetScheme(),
 		ServerVersion: serverVersion,
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerForMySQL")
+		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQL")
 		os.Exit(1)
 	}
-	if err = (&controllers.PerconaServerForMySQLBackupReconciler{
+	if err = (&controllers.PerconaServerMySQLBackupReconciler{
 		Client: nsClient,
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerForMySQLBackup")
+		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLBackup")
 		os.Exit(1)
 	}
-	if err = (&controllers.PerconaServerForMySQLRestoreReconciler{
+	if err = (&controllers.PerconaServerMySQLRestoreReconciler{
 		Client: nsClient,
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerForMySQLRestore")
+		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLRestore")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

@@ -39,7 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
@@ -49,38 +49,38 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/users"
 )
 
-// PerconaServerForMYSQLReconciler reconciles a PerconaServerForMYSQL object
-type PerconaServerForMySQLReconciler struct {
+// PerconaServerMySQLReconciler reconciles a PerconaServerMySQL object
+type PerconaServerMySQLReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	ServerVersion *platform.ServerVersion
 }
 
-//+kubebuilder:rbac:groups=ps.percona.com,resources=perconaserverformysqls;perconaserverformysqls/status;perconaserverformysqls/finalizers,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqls;perconaservermysqls/status;perconaservermysqls/finalizers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=pods;configmaps;services;secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *PerconaServerForMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *PerconaServerMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&apiv2.PerconaServerForMySQL{}).
+		For(&apiv1alpha1.PerconaServerMySQL{}).
 		Complete(r)
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
-// the PerconaServerForMYSQL object against the actual cluster state, and then
+// the PerconaServerMySQL object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.9.2/pkg/reconcile
-func (r *PerconaServerForMySQLReconciler) Reconcile(
+func (r *PerconaServerMySQLReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
 ) (ctrl.Result, error) {
-	l := log.FromContext(ctx).WithName("PerconaServerForMySQL")
+	l := log.FromContext(ctx).WithName("PerconaServerMySQL")
 
 	rr := ctrl.Result{RequeueAfter: 5 * time.Second}
 
@@ -106,9 +106,9 @@ func (r *PerconaServerForMySQLReconciler) Reconcile(
 	return rr, nil
 }
 
-func (r *PerconaServerForMySQLReconciler) doReconcile(
+func (r *PerconaServerMySQLReconciler) doReconcile(
 	ctx context.Context,
-	cr *apiv2.PerconaServerForMySQL,
+	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
 	if err := r.ensureUserSecrets(ctx, cr); err != nil {
 		return errors.Wrap(err, "users secret")
@@ -132,11 +132,11 @@ func (r *PerconaServerForMySQLReconciler) doReconcile(
 	return nil
 }
 
-func (r *PerconaServerForMySQLReconciler) getCRWithDefaults(
+func (r *PerconaServerMySQLReconciler) getCRWithDefaults(
 	ctx context.Context,
 	nn types.NamespacedName,
-) (*apiv2.PerconaServerForMySQL, error) {
-	cr := &apiv2.PerconaServerForMySQL{}
+) (*apiv1alpha1.PerconaServerMySQL, error) {
+	cr := &apiv1alpha1.PerconaServerMySQL{}
 	if err := r.Client.Get(ctx, nn, cr); err != nil {
 		return nil, errors.Wrapf(err, "get %v", nn.String())
 	}
@@ -147,9 +147,9 @@ func (r *PerconaServerForMySQLReconciler) getCRWithDefaults(
 	return cr, nil
 }
 
-func (r *PerconaServerForMySQLReconciler) ensureUserSecrets(
+func (r *PerconaServerMySQLReconciler) ensureUserSecrets(
 	ctx context.Context,
-	cr *apiv2.PerconaServerForMySQL,
+	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
 	nn := types.NamespacedName{
 		Namespace: cr.Namespace,
@@ -175,7 +175,7 @@ func (r *PerconaServerForMySQLReconciler) ensureUserSecrets(
 	return nil
 }
 
-func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr *apiv2.PerconaServerForMySQL) error {
+func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("reconcileUsers")
 
 	secret := &corev1.Secret{}
@@ -221,7 +221,7 @@ func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr
 		return nil
 	}
 
-	if cr.Status.MySQL.State != apiv2.StateReady {
+	if cr.Status.MySQL.State != apiv1alpha1.StateReady {
 		l.Info("MySQL is not ready")
 		return nil
 	}
@@ -239,24 +239,24 @@ func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr
 		}
 
 		mysqlUser := mysql.User{
-			Username: apiv2.SystemUser(user),
+			Username: apiv1alpha1.SystemUser(user),
 			Password: string(pass),
 			Hosts:    []string{"%"},
 		}
 
 		switch mysqlUser.Username {
-		case apiv2.UserMonitor:
+		case apiv1alpha1.UserMonitor:
 			restartMySQL = cr.PMMEnabled()
-		case apiv2.UserPMMServer:
+		case apiv1alpha1.UserPMMServer:
 			restartMySQL = cr.PMMEnabled()
 			continue
-		case apiv2.UserReplication:
+		case apiv1alpha1.UserReplication:
 			restartReplication = true
-		case apiv2.UserOrchestrator:
+		case apiv1alpha1.UserOrchestrator:
 			restartOrchestrator = true
-		case apiv2.UserRoot:
+		case apiv1alpha1.UserRoot:
 			mysqlUser.Hosts = append(mysqlUser.Hosts, "localhost")
-		case apiv2.UserClusterCheck, apiv2.UserXtraBackup:
+		case apiv1alpha1.UserClusterCheck, apiv1alpha1.UserXtraBackup:
 			mysqlUser.Hosts = []string{"localhost"}
 		}
 
@@ -265,7 +265,7 @@ func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr
 		updatedUsers = append(updatedUsers, mysqlUser)
 	}
 
-	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv2.UserOperator)
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 	if err != nil {
 		return errors.Wrap(err, "get operator password")
 	}
@@ -278,7 +278,7 @@ func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr
 	l.V(1).Info("Got cluster primary", "primary", primary)
 	primaryHost := getPrimaryHostname(primary, cr)
 
-	um, err := users.NewManager(apiv2.UserOperator, operatorPass, primaryHost, mysql.DefaultAdminPort)
+	um, err := users.NewManager(apiv1alpha1.UserOperator, operatorPass, primaryHost, mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "init user manager")
 	}
@@ -312,7 +312,7 @@ func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr
 	if restartReplication {
 		var replicationPass string
 		for _, user := range updatedUsers {
-			if user.Username == apiv2.UserReplication {
+			if user.Username == apiv1alpha1.UserReplication {
 				replicationPass = user.Password
 				break
 			}
@@ -323,7 +323,7 @@ func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr
 			port := replica.Port
 			g.Go(func() error {
 				db, err := replicator.NewReplicator(
-					apiv2.UserOperator,
+					apiv1alpha1.UserOperator,
 					operatorPass,
 					hostname,
 					mysql.DefaultAdminPort,
@@ -360,7 +360,7 @@ func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr
 		if err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), sts); err != nil {
 			return errors.Wrap(err, "get Orchestrator statefulset")
 		}
-		if err := k8s.RolloutRestart(ctx, r.Client, sts, apiv2.AnnotationSecretHash, hash); err != nil {
+		if err := k8s.RolloutRestart(ctx, r.Client, sts, apiv1alpha1.AnnotationSecretHash, hash); err != nil {
 			return errors.Wrap(err, "restart orchestrator")
 		}
 	}
@@ -372,7 +372,7 @@ func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr
 		if err := r.Client.Get(ctx, mysql.NamespacedName(cr), sts); err != nil {
 			return errors.Wrap(err, "get MySQL statefulset")
 		}
-		if err := k8s.RolloutRestart(ctx, r.Client, sts, apiv2.AnnotationSecretHash, hash); err != nil {
+		if err := k8s.RolloutRestart(ctx, r.Client, sts, apiv1alpha1.AnnotationSecretHash, hash); err != nil {
 			return errors.Wrap(err, "restart MySQL")
 		}
 	}
@@ -385,9 +385,9 @@ func (r *PerconaServerForMySQLReconciler) reconcileUsers(ctx context.Context, cr
 	return nil
 }
 
-func (r *PerconaServerForMySQLReconciler) ensureTLSSecret(
+func (r *PerconaServerMySQLReconciler) ensureTLSSecret(
 	ctx context.Context,
-	cr *apiv2.PerconaServerForMySQL,
+	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
 	nn := types.NamespacedName{
 		Name:      cr.Spec.SSLSecretName,
@@ -412,9 +412,9 @@ func (r *PerconaServerForMySQLReconciler) ensureTLSSecret(
 	return nil
 }
 
-func (r *PerconaServerForMySQLReconciler) reconcileDatabase(
+func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 	ctx context.Context,
-	cr *apiv2.PerconaServerForMySQL,
+	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
 	configHash, err := r.reconcileMySQLConfiguration(ctx, cr)
 	if err != nil {
@@ -437,9 +437,9 @@ func (r *PerconaServerForMySQLReconciler) reconcileDatabase(
 	return nil
 }
 
-func (r *PerconaServerForMySQLReconciler) reconcileMySQLServices(
+func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(
 	ctx context.Context,
-	cr *apiv2.PerconaServerForMySQL,
+	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
 	l := log.FromContext(ctx).WithName("reconcileMySQLServices")
 
@@ -475,7 +475,7 @@ func (r *PerconaServerForMySQLReconciler) reconcileMySQLServices(
 
 	// Clean up outdated services
 	svcLabels := mysql.MatchLabels(cr)
-	svcLabels[apiv2.ExposedLabel] = "true"
+	svcLabels[apiv1alpha1.ExposedLabel] = "true"
 	services, err := k8s.ServicesByLabels(ctx, r.Client, svcLabels)
 	if err != nil {
 		return errors.Wrap(err, "get MySQL services")
@@ -495,9 +495,9 @@ func (r *PerconaServerForMySQLReconciler) reconcileMySQLServices(
 	return nil
 }
 
-func (r *PerconaServerForMySQLReconciler) reconcileMySQLConfiguration(
+func (r *PerconaServerMySQLReconciler) reconcileMySQLConfiguration(
 	ctx context.Context,
-	cr *apiv2.PerconaServerForMySQL,
+	cr *apiv1alpha1.PerconaServerMySQL,
 ) (string, error) {
 	l := log.FromContext(ctx).WithName("reconcileMySQLConfiguration")
 
@@ -547,9 +547,9 @@ func (r *PerconaServerForMySQLReconciler) reconcileMySQLConfiguration(
 	return fmt.Sprintf("%x", md5.Sum(data)), nil
 }
 
-func (r *PerconaServerForMySQLReconciler) reconcileOrchestrator(
+func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(
 	ctx context.Context,
-	cr *apiv2.PerconaServerForMySQL,
+	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.StatefulSet(cr), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile StatefulSet")
@@ -562,9 +562,9 @@ func (r *PerconaServerForMySQLReconciler) reconcileOrchestrator(
 	return nil
 }
 
-func (r *PerconaServerForMySQLReconciler) reconcileReplication(
+func (r *PerconaServerMySQLReconciler) reconcileReplication(
 	ctx context.Context,
-	cr *apiv2.PerconaServerForMySQL,
+	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
 	l := log.FromContext(ctx).WithName("reconcileReplication")
 
@@ -591,7 +591,7 @@ func (r *PerconaServerForMySQLReconciler) reconcileReplication(
 func reconcileReplicationPrimaryPod(
 	ctx context.Context,
 	cl client.Client,
-	cr *apiv2.PerconaServerForMySQL,
+	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
 	l := log.FromContext(ctx).WithName("reconcileReplicationPrimaryPod")
 
@@ -611,13 +611,13 @@ func reconcileReplicationPrimaryPod(
 
 	for i := range pods {
 		pod := pods[i].DeepCopy()
-		if pod.GetLabels()[apiv2.MySQLPrimaryLabel] == "true" {
+		if pod.GetLabels()[apiv1alpha1.MySQLPrimaryLabel] == "true" {
 			if pod.Name == primaryAlias {
 				l.Info(fmt.Sprintf("primary %v is not changed. skip", primaryAlias))
 				return nil
 			}
 
-			k8s.RemoveLabel(pod, apiv2.MySQLPrimaryLabel)
+			k8s.RemoveLabel(pod, apiv1alpha1.MySQLPrimaryLabel)
 			if err := cl.Patch(ctx, pod, client.StrategicMergeFrom(&pods[i])); err != nil {
 				return errors.Wrapf(err, "remove label from old primary pod: %v/%v",
 					pod.GetNamespace(), pod.GetName())
@@ -632,7 +632,7 @@ func reconcileReplicationPrimaryPod(
 	for i := range pods {
 		pod := pods[i].DeepCopy()
 		if pod.Name == primaryAlias {
-			k8s.AddLabel(pod, apiv2.MySQLPrimaryLabel, "true")
+			k8s.AddLabel(pod, apiv1alpha1.MySQLPrimaryLabel, "true")
 			if err := cl.Patch(ctx, pod, client.StrategicMergeFrom(&pods[i])); err != nil {
 				return errors.Wrapf(err, "add label to new primary pod %v/%v",
 					pod.GetNamespace(), pod.GetName())
@@ -651,7 +651,7 @@ func reconcileReplicationPrimaryPod(
 func reconcileReplicationSemiSync(
 	ctx context.Context,
 	cl client.Reader,
-	cr *apiv2.PerconaServerForMySQL,
+	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
 	l := log.FromContext(ctx).WithName("reconcileReplicationSemiSync")
 
@@ -665,12 +665,12 @@ func reconcileReplicationSemiSync(
 
 	l.V(1).Info(fmt.Sprintf("use primary host: %v", primaryHost), "clusterPrimary", primary)
 
-	operatorPass, err := k8s.UserPassword(ctx, cl, cr, apiv2.UserOperator)
+	operatorPass, err := k8s.UserPassword(ctx, cl, cr, apiv1alpha1.UserOperator)
 	if err != nil {
 		return errors.Wrap(err, "get operator password")
 	}
 
-	db, err := replicator.NewReplicator(apiv2.UserOperator,
+	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator,
 		operatorPass,
 		primaryHost,
 		mysql.DefaultAdminPort)
@@ -692,9 +692,9 @@ func reconcileReplicationSemiSync(
 	return nil
 }
 
-func (r *PerconaServerForMySQLReconciler) reconcileCRStatus(
+func (r *PerconaServerMySQLReconciler) reconcileCRStatus(
 	ctx context.Context,
-	cr *apiv2.PerconaServerForMySQL,
+	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
 	mysqlStatus, err := appStatus(ctx, r.Client, cr.MySQLSpec().Size, mysql.MatchLabels(cr))
 	if err != nil {
@@ -717,10 +717,10 @@ func appStatus(
 	cl client.Reader,
 	size int32,
 	labels map[string]string,
-) (apiv2.StatefulAppStatus, error) {
-	status := apiv2.StatefulAppStatus{
+) (apiv1alpha1.StatefulAppStatus, error) {
+	status := apiv1alpha1.StatefulAppStatus{
 		Size:  size,
-		State: apiv2.StateInitializing,
+		State: apiv1alpha1.StateInitializing,
 	}
 
 	pods, err := k8s.PodsByLabels(ctx, cl, labels)
@@ -735,7 +735,7 @@ func appStatus(
 	}
 
 	if status.Ready == status.Size {
-		status.State = apiv2.StateReady
+		status.State = apiv1alpha1.StateReady
 	}
 
 	return status, nil
@@ -745,10 +745,10 @@ func writeStatus(
 	ctx context.Context,
 	cl client.Client,
 	nn types.NamespacedName,
-	status apiv2.PerconaServerForMySQLStatus,
+	status apiv1alpha1.PerconaServerMySQLStatus,
 ) error {
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
-		cr := &apiv2.PerconaServerForMySQL{}
+		cr := &apiv1alpha1.PerconaServerMySQL{}
 		if err := cl.Get(ctx, nn, cr); err != nil {
 			return errors.Wrapf(err, "get %v", nn.String())
 		}
@@ -762,7 +762,7 @@ func writeStatus(
 	})
 }
 
-func getPrimaryHostname(primary *orchestrator.Instance, cr *apiv2.PerconaServerForMySQL) string {
+func getPrimaryHostname(primary *orchestrator.Instance, cr *apiv1alpha1.PerconaServerMySQL) string {
 	if primary.Key.Hostname != "" {
 		return primary.Key.Hostname
 	}

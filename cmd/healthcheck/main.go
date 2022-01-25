@@ -10,7 +10,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
@@ -36,9 +36,9 @@ func checkReadiness() error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	operatorPass, err := getSecret(string(apiv2.UserOperator))
+	operatorPass, err := getSecret(string(apiv1alpha1.UserOperator))
 	if err != nil {
-		return errors.Wrapf(err, "get %s password", apiv2.UserOperator)
+		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
 
 	db, err := replicator.NewReplicator("operator", operatorPass, podIP, mysql.DefaultAdminPort)
@@ -71,9 +71,9 @@ func checkLiveness() error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	operatorPass, err := getSecret(string(apiv2.UserOperator))
+	operatorPass, err := getSecret(string(apiv1alpha1.UserOperator))
 	if err != nil {
-		return errors.Wrapf(err, "get %s password", apiv2.UserOperator)
+		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
 
 	db, err := replicator.NewReplicator("operator", operatorPass, podIP, mysql.DefaultAdminPort)

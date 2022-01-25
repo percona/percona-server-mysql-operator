@@ -4,10 +4,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 )
 
-func PVC(name string, spec *apiv2.VolumeSpec) corev1.PersistentVolumeClaim {
+func PVC(name string, spec *apiv1alpha1.VolumeSpec) corev1.PersistentVolumeClaim {
 	return corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,

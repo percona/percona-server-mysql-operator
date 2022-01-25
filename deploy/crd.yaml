@@ -4,22 +4,22 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.6.1
   creationTimestamp: null
-  name: perconaserverformysqlbackups.ps.percona.com
+  name: perconaservermysqlbackups.ps.percona.com
 spec:
   group: ps.percona.com
   names:
-    kind: PerconaServerForMySQLBackup
-    listKind: PerconaServerForMySQLBackupList
-    plural: perconaserverformysqlbackups
+    kind: PerconaServerMySQLBackup
+    listKind: PerconaServerMySQLBackupList
+    plural: perconaservermysqlbackups
     shortNames:
     - ps-backup
-    singular: perconaserverformysqlbackup
+    singular: perconaservermysqlbackup
   scope: Namespaced
   versions:
-  - name: v2
+  - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: PerconaServerForMySQLBackup is the Schema for the perconaserverformysqlbackups API
+        description: PerconaServerMySQLBackup is the Schema for the perconaservermysqlbackups API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
@@ -30,14 +30,14 @@ spec:
           metadata:
             type: object
           spec:
-            description: PerconaServerForMySQLBackupSpec defines the desired state of PerconaServerForMySQLBackup
+            description: PerconaServerMySQLBackupSpec defines the desired state of PerconaServerMySQLBackup
             properties:
               foo:
-                description: Foo is an example field of PerconaServerForMySQLBackup. Edit perconaserverformysqlbackup_types.go to remove/update
+                description: Foo is an example field of PerconaServerMySQLBackup. Edit perconaservermysqlbackup_types.go to remove/update
                 type: string
             type: object
           status:
-            description: PerconaServerForMySQLBackupStatus defines the observed state of PerconaServerForMySQLBackup
+            description: PerconaServerMySQLBackupStatus defines the observed state of PerconaServerMySQLBackup
             type: object
         type: object
     served: true
@@ -57,22 +57,22 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.6.1
   creationTimestamp: null
-  name: perconaserverformysqlrestores.ps.percona.com
+  name: perconaservermysqlrestores.ps.percona.com
 spec:
   group: ps.percona.com
   names:
-    kind: PerconaServerForMySQLRestore
-    listKind: PerconaServerForMySQLRestoreList
-    plural: perconaserverformysqlrestores
+    kind: PerconaServerMySQLRestore
+    listKind: PerconaServerMySQLRestoreList
+    plural: perconaservermysqlrestores
     shortNames:
     - ps-restore
-    singular: perconaserverformysqlrestore
+    singular: perconaservermysqlrestore
   scope: Namespaced
   versions:
-  - name: v2
+  - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: PerconaServerForMySQLRestore is the Schema for the perconaserverformysqlrestores API
+        description: PerconaServerMySQLRestore is the Schema for the perconaservermysqlrestores API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
@@ -83,14 +83,14 @@ spec:
           metadata:
             type: object
           spec:
-            description: PerconaServerForMySQLRestoreSpec defines the desired state of PerconaServerForMySQLRestore
+            description: PerconaServerMySQLRestoreSpec defines the desired state of PerconaServerMySQLRestore
             properties:
               foo:
-                description: Foo is an example field of PerconaServerForMySQLRestore. Edit perconaserverformysqlrestore_types.go to remove/update
+                description: Foo is an example field of PerconaServerMySQLRestore. Edit perconaservermysqlrestore_types.go to remove/update
                 type: string
             type: object
           status:
-            description: PerconaServerForMySQLRestoreStatus defines the observed state of PerconaServerForMySQLRestore
+            description: PerconaServerMySQLRestoreStatus defines the observed state of PerconaServerMySQLRestore
             type: object
         type: object
     served: true
@@ -110,16 +110,16 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.6.1
   creationTimestamp: null
-  name: perconaserverformysqls.ps.percona.com
+  name: perconaservermysqls.ps.percona.com
 spec:
   group: ps.percona.com
   names:
-    kind: PerconaServerForMySQL
-    listKind: PerconaServerForMySQLList
-    plural: perconaserverformysqls
+    kind: PerconaServerMySQL
+    listKind: PerconaServerMySQLList
+    plural: perconaservermysqls
     shortNames:
     - ps
-    singular: perconaserverformysql
+    singular: perconaservermysql
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -132,10 +132,10 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v2
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: PerconaServerForMySQL is the Schema for the perconaserverformysqls API
+        description: PerconaServerMySQL is the Schema for the perconaservermysqls API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
@@ -146,7 +146,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: PerconaServerForMySQLSpec defines the desired state of PerconaServerForMySQL
+            description: PerconaServerMySQLSpec defines the desired state of PerconaServerMySQL
             properties:
               crVersion:
                 type: string
@@ -4422,7 +4422,7 @@ spec:
                 type: string
             type: object
           status:
-            description: PerconaServerForMySQLStatus defines the observed state of PerconaServerForMySQL
+            description: PerconaServerMySQLStatus defines the observed state of PerconaServerMySQL
             properties:
               mysql:
                 description: 'Important: Run "make" to regenerate code after modifying this file'

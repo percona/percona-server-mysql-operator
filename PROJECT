@@ -8,35 +8,30 @@ projectName: percona-server-mysql-operator
 repo: github.com/percona/percona-server-mysql-operator
 resources:
 - api:
-    crdVersion: v1
+    crdVersion: v1alpha1
     namespaced: true
   controller: true
   domain: percona.com
   group: ps
-  kind: PerconaServerForMySQL
-  path: github.com/percona/percona-server-mysql-operator/api/v2
-  version: v2
+  kind: PerconaServerMySQL
+  path: github.com/percona/percona-server-mysql-operator/api/v1alpha1
+  version: v1alpha1
 - api:
-    crdVersion: v1
+    crdVersion: v1alpha1
     namespaced: true
   controller: true
   domain: percona.com
   group: ps
-  kind: PerconaServerForMySQLBackup
-  path: github.com/percona/percona-server-mysql-operator/api/v2
-  version: v2
+  kind: PerconaServerMySQLBackup
+  path: github.com/percona/percona-server-mysql-operator/api/v1alpha1
+  version: v1alpha1
 - api:
-    crdVersion: v1
+    crdVersion: v1alpha1
     namespaced: true
   controller: true
   domain: percona.com
   group: ps
-  kind: PerconaServerForMySQLRestore
-  path: github.com/percona/percona-server-mysql-operator/api/v2
-  version: v2
-- controller: true
-  group: core
-  kind: Pod
-  path: k8s.io/api/core/v1
-  version: v1
+  kind: PerconaServerMySQLRestore
+  path: github.com/percona/percona-server-mysql-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"

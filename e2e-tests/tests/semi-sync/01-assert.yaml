@@ -26,8 +26,8 @@ status:
   updatedReplicas: 1
   collisionCount: 0
 ---
-apiVersion: ps.percona.com/v2
-kind: PerconaServerForMySQL
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
 metadata:
   name: semi-sync
 status:

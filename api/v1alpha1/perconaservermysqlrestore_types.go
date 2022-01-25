@@ -14,50 +14,52 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v2
+package v1alpha1
 
-import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// PerconaServerForMySQLBackupSpec defines the desired state of PerconaServerForMySQLBackup
-type PerconaServerForMySQLBackupSpec struct {
+// PerconaServerMySQLRestoreSpec defines the desired state of PerconaServerMySQLRestore
+type PerconaServerMySQLRestoreSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of PerconaServerForMySQLBackup. Edit perconaserverformysqlbackup_types.go to remove/update
+	// Foo is an example field of PerconaServerMySQLRestore. Edit perconaservermysqlrestore_types.go to remove/update
 	Foo string `json:"foo,omitempty"`
 }
 
-// PerconaServerForMySQLBackupStatus defines the observed state of PerconaServerForMySQLBackup
-type PerconaServerForMySQLBackupStatus struct { // INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
+// PerconaServerMySQLRestoreStatus defines the observed state of PerconaServerMySQLRestore
+type PerconaServerMySQLRestoreStatus struct { // INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 //+kubebuilder:resource:scope=Namespaced
-//+kubebuilder:resource:shortName=ps-backup
+//+kubebuilder:resource:shortName=ps-restore
 
-// PerconaServerForMySQLBackup is the Schema for the perconaserverformysqlbackups API
-type PerconaServerForMySQLBackup struct {
+// PerconaServerMySQLRestore is the Schema for the perconaservermysqlrestores API
+type PerconaServerMySQLRestore struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   PerconaServerForMySQLBackupSpec   `json:"spec,omitempty"`
-	Status PerconaServerForMySQLBackupStatus `json:"status,omitempty"`
+	Spec   PerconaServerMySQLRestoreSpec   `json:"spec,omitempty"`
+	Status PerconaServerMySQLRestoreStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// PerconaServerForMySQLBackupList contains a list of PerconaServerForMySQLBackup
-type PerconaServerForMySQLBackupList struct {
+// PerconaServerMySQLRestoreList contains a list of PerconaServerMySQLRestore
+type PerconaServerMySQLRestoreList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []PerconaServerForMySQLBackup `json:"items"`
+	Items           []PerconaServerMySQLRestore `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&PerconaServerForMySQLBackup{}, &PerconaServerForMySQLBackupList{})
+	SchemeBuilder.Register(&PerconaServerMySQLRestore{}, &PerconaServerMySQLRestoreList{})
 }

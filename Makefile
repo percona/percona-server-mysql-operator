@@ -3,7 +3,7 @@
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-NAME ?= percona-server-for-mysql-operator
+NAME ?= percona-server-mysql-operator
 VERSION ?= $(shell git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')
 ROOT_REPO ?= ${PWD}
 
@@ -81,7 +81,7 @@ help: ## Display this help.
 ##@ Development
 
 generate: controller-gen
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=$(NAME)-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases  ## Generate WebhookConfiguration, Role and CustomResourceDefinition objects.
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=$(NAME) webhook paths="./..." output:crd:artifacts:config=config/crd/bases  ## Generate WebhookConfiguration, Role and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) object:headerFile="LICENSE-HEADER" paths="./..." ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 
 fmt: ## Run go fmt against code.
@@ -98,7 +98,7 @@ kuttl-shfmt:
 	find e2e-tests/tests/ -type f -not -name '*-assert.yaml' -name '*.yaml' | xargs ./e2e-tests/format
 
 e2e-test: kuttl-shfmt
-	kubectl kuttl test --config e2e-tests/kuttl.yaml
+	ROOT_REPO=$(ROOT_REPO) kubectl kuttl test --config e2e-tests/kuttl.yaml
 
 manifests: kustomize generate
 	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml

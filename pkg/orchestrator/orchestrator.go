@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
@@ -31,15 +31,15 @@ const (
 )
 
 // Name returns component name
-func Name(cr *apiv2.PerconaServerForMySQL) string {
+func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return cr.Name + "-" + componentName
 }
 
-func NamespacedName(cr *apiv2.PerconaServerForMySQL) types.NamespacedName {
+func NamespacedName(cr *apiv1alpha1.PerconaServerMySQL) types.NamespacedName {
 	return types.NamespacedName{Name: Name(cr), Namespace: cr.Namespace}
 }
 
-func ServiceName(cr *apiv2.PerconaServerForMySQL) string {
+func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
@@ -48,17 +48,17 @@ func APIHost(serviceName string) string {
 }
 
 // Labels returns labels of orchestrator
-func Labels(cr *apiv2.PerconaServerForMySQL) map[string]string {
+func Labels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return cr.OrchestratorSpec().Labels
 }
 
-func MatchLabels(cr *apiv2.PerconaServerForMySQL) map[string]string {
+func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(Labels(cr),
-		map[string]string{apiv2.ComponentLabel: componentName},
+		map[string]string{apiv1alpha1.ComponentLabel: componentName},
 		cr.Labels())
 }
 
-func StatefulSet(cr *apiv2.PerconaServerForMySQL) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 	spec := cr.OrchestratorSpec()
 	Replicas := spec.Size
@@ -119,14 +119,14 @@ func StatefulSet(cr *apiv2.PerconaServerForMySQL) *appsv1.StatefulSet {
 	}
 }
 
-func containers(cr *apiv2.PerconaServerForMySQL) []corev1.Container {
+func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 	sidecars := sidecarContainers(cr)
 	containers := make([]corev1.Container, 1, len(sidecars)+1)
 	containers[0] = container(cr)
 	return append(containers, sidecars...)
 }
 
-func container(cr *apiv2.PerconaServerForMySQL) corev1.Container {
+func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	return corev1.Container{
 		Name:            componentName,
 		Image:           cr.Spec.Orchestrator.Image,
@@ -189,7 +189,7 @@ func container(cr *apiv2.PerconaServerForMySQL) corev1.Container {
 	}
 }
 
-func sidecarContainers(cr *apiv2.PerconaServerForMySQL) []corev1.Container {
+func sidecarContainers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 	serviceName := mysql.ServiceName(cr)
 
 	return []corev1.Container{
@@ -232,13 +232,13 @@ func containerMounts() []corev1.VolumeMount {
 		},
 		{
 			Name:      credsVolumeName,
-			MountPath: filepath.Join(CredsMountPath, string(apiv2.UserOrchestrator)),
-			SubPath:   string(apiv2.UserOrchestrator),
+			MountPath: filepath.Join(CredsMountPath, string(apiv1alpha1.UserOrchestrator)),
+			SubPath:   string(apiv1alpha1.UserOrchestrator),
 		},
 	}
 }
 
-func Service(cr *apiv2.PerconaServerForMySQL) *corev1.Service {
+func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",

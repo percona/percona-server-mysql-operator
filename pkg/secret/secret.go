@@ -17,12 +17,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 )
 
 var validityNotAfter = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
 
-func GenerateCertsSecret(ctx context.Context, cr *apiv2.PerconaServerForMySQL) (*corev1.Secret, error) {
+func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Secret, error) {
 	// TODO: DNS suffix
 	hosts := []string{
 		fmt.Sprintf("*.%s-mysql", cr.Name),
@@ -166,14 +166,14 @@ const (
 		"0123456789"
 )
 
-var secretUsers = [...]apiv2.SystemUser{
-	apiv2.UserRoot,
-	apiv2.UserXtraBackup,
-	apiv2.UserMonitor,
-	apiv2.UserClusterCheck,
-	apiv2.UserOperator,
-	apiv2.UserReplication,
-	apiv2.UserOrchestrator,
+var secretUsers = [...]apiv1alpha1.SystemUser{
+	apiv1alpha1.UserRoot,
+	apiv1alpha1.UserXtraBackup,
+	apiv1alpha1.UserMonitor,
+	apiv1alpha1.UserClusterCheck,
+	apiv1alpha1.UserOperator,
+	apiv1alpha1.UserReplication,
+	apiv1alpha1.UserOrchestrator,
 }
 
 func GeneratePasswordsSecret(name, namespace string) (*corev1.Secret, error) {

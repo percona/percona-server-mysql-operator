@@ -1,12 +1,12 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: percona-server-for-mysql-operator
+  name: percona-server-mysql-operator
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: percona-server-for-mysql-operator-leader-election-role
+  name: percona-server-mysql-operator-leaderelection
 rules:
 - apiGroups:
   - ""
@@ -44,7 +44,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   creationTimestamp: null
-  name: percona-server-for-mysql-operator-role
+  name: percona-server-mysql-operator
 rules:
 - apiGroups:
   - ""
@@ -76,9 +76,9 @@ rules:
 - apiGroups:
   - ps.percona.com
   resources:
-  - perconaserverformysqlbackups
-  - perconaserverformysqlbackups/finalizers
-  - perconaserverformysqlbackups/status
+  - perconaservermysqlbackups
+  - perconaservermysqlbackups/finalizers
+  - perconaservermysqlbackups/status
   verbs:
   - create
   - delete
@@ -90,9 +90,9 @@ rules:
 - apiGroups:
   - ps.percona.com
   resources:
-  - perconaserverformysqlrestores
-  - perconaserverformysqlrestores/finalizers
-  - perconaserverformysqlrestores/status
+  - perconaservermysqlrestores
+  - perconaservermysqlrestores/finalizers
+  - perconaservermysqlrestores/status
   verbs:
   - create
   - delete
@@ -104,9 +104,9 @@ rules:
 - apiGroups:
   - ps.percona.com
   resources:
-  - perconaserverformysqls
-  - perconaserverformysqls/finalizers
-  - perconaserverformysqls/status
+  - perconaservermysqls
+  - perconaservermysqls/finalizers
+  - perconaservermysqls/status
   verbs:
   - create
   - delete
@@ -119,24 +119,24 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: percona-server-for-mysql-operator-leader-election-rolebinding
+  name: percona-server-mysql-operator-leaderelection
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: percona-server-for-mysql-operator-leader-election-role
+  name: percona-server-mysql-operator-leaderelection
 subjects:
 - kind: ServiceAccount
-  name: percona-server-for-mysql-operator
+  name: percona-server-mysql-operator
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: percona-server-for-mysql-operator-rolebinding
+  name: percona-server-mysql-operator
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: percona-server-for-mysql-operator-role
+  name: percona-server-mysql-operator
 subjects:
 - kind: ServiceAccount
-  name: percona-server-for-mysql-operator
+  name: percona-server-mysql-operator
 ---

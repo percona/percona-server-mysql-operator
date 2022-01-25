@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apiv2 "github.com/percona/percona-server-mysql-operator/api/v2"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 )
 
 // SecretKeySelector is a k8s helper to create SecretKeySelector object
@@ -19,7 +19,7 @@ func SecretKeySelector(name, key string) *corev1.SecretKeySelector {
 	}
 }
 
-func UserPassword(ctx context.Context, cl client.Reader, cr *apiv2.PerconaServerForMySQL, username apiv2.SystemUser) (string, error) {
+func UserPassword(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, username apiv1alpha1.SystemUser) (string, error) {
 	nn := types.NamespacedName{
 		Name:      cr.InternalSecretName(),
 		Namespace: cr.Namespace,
