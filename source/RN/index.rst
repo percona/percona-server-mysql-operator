@@ -7,4 +7,4 @@ Percona Distribution for MySQL Operator based on Percona Server for MySQL |versi
 .. toctree::
    :maxdepth: 1
 
-   Kubernetes-Operator-for-PS-RN2.0.0-alpha
+   Kubernetes-Operator-for-PS-RN0.1.0
