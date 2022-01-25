@@ -1,7 +1,5 @@
 {% extends "layout.html" %}
-{% set css_files = css_files + [ "_static/css/pmmselector.css" ] %}
 {% block body %}
-    {{ body }}
     <script type="text/javascript">
 	const styleDomEl = document.createElement('style');
 	styleDomEl.innerHTML =
@@ -177,4 +175,5 @@
 	  });
 	}
     </script>
+    {{ body }}
 {% endblock %}
