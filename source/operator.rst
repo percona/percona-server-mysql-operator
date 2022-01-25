@@ -239,7 +239,7 @@ configuration options for the Percona Server for MySQL.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Example**     | ``busybox``                                                                               |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Description** | Image for the :ref:`custom sidecar container<faq-sidecar>`                                |
+| **Description** | Image for the :ref:`custom sidecar container<operator-sidecar>`                           |
 |                 | for Percona Server for MySQL Pods                                                         |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
@@ -252,7 +252,7 @@ configuration options for the Percona Server for MySQL.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Example**     | ``["sleep", "30d"]``                                                                      |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Description** | Command for the :ref:`custom sidecar container<faq-sidecar>`                              |
+| **Description** | Command for the :ref:`custom sidecar container<operator-sidecar>`                         |
 |                 | for Percona Server for MySQL Pods                                                         |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
@@ -265,7 +265,7 @@ configuration options for the Percona Server for MySQL.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Example**     | ``my-sidecar-1``                                                                          |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Description** | Name of the :ref:`custom sidecar container<faq-sidecar>`                                  |
+| **Description** | Name of the :ref:`custom sidecar container<operator-sidecar>`                             |
 |                 | for Percona Server for MySQL Pods                                                         |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
@@ -280,7 +280,7 @@ configuration options for the Percona Server for MySQL.
 | **Example**     | ``/volume1``                                                                              |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | Mount path of the                                                                         |
-|                 | :ref:`custom sidecar container<faq-sidecar>` volume                                       |
+|                 | :ref:`custom sidecar container<operator-sidecar>` volume                                  |
 |                 | for Replica Set Pods                                                                      |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
@@ -311,7 +311,7 @@ configuration options for the Percona Server for MySQL.
 | **Example**     | ``sidecar-volume-claim``                                                                  |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | Name of the                                                                               |
-|                 | :ref:`custom sidecar container<faq-sidecar>` volume                                       |
+|                 | :ref:`custom sidecar container<operator-sidecar>` volume                                  |
 |                 | for Replica Set Pods                                                                      |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
@@ -326,7 +326,7 @@ configuration options for the Percona Server for MySQL.
 | **Example**     |                                                                                           |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | `Volume specification <https://kubernetes.io/docs/concepts/storage/volumes/>`__ for the   |
-|                 | :ref:`custom sidecar container<faq-sidecar>` volume                                       |
+|                 | :ref:`custom sidecar container<operator-sidecar>` volume                                  |
 |                 | for Percona Server for MySQL Pods                                                         |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
@@ -342,7 +342,7 @@ configuration options for the Percona Server for MySQL.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | `Persistent Volume Claim                                                                  |
 |                 | <https://v1-20.docs.kubernetes.io/docs/concepts/storage/persistent-volumes/>`__ for the   |
-|                 | :ref:`custom sidecar container<faq-sidecar>` volume                                       |
+|                 | :ref:`custom sidecar container<operator-sidecar>` volume                                  |
 |                 | for Replica Set Pods                                                                      |
 +-----------------+-------------------------------------------------------------------------------------------+
 

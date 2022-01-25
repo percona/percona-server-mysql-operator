@@ -49,7 +49,7 @@ The following steps are needed to run Percona Distribution for MySQL Operator on
    operator and replica set pod have reached their Running status.
    ``kubectl get pods`` output should look like this:
    
-   .. include:: ./assets/code/kubectl-get-minimal-response.txt
+   .. include:: ./assets/code/kubectl-get-pods-response.txt
    
    You can clone the repository with all manifests and source code by executing the following command:
 
