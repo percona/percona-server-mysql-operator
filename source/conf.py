@@ -37,13 +37,13 @@ project = u'Percona Distribution for MySQL Operator based on Percona Server for 
 copyright = u'Percona LLC and/or its affiliates 2009 - 2022'
 
 # the short X.Y version
-version = '0.1.0-alpha'
+version = '0.1.0'
 # the full version including alpha/beta/rc tags.
-release = '0.1.0-alpha'
+release = '0.1.0'
 # the PS 5.7 and PS 8.0 recommended versions to be used in docs
 ps57recommended = '5.7.35'
 ps80recommended = '8.0.25'
-pmm2recommended = '2.18.0'
+pmm2recommended = '2.25.0'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
