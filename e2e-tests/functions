@@ -149,3 +149,18 @@ get_mysql_users() {
 
 	run_mysql "SELECT user FROM mysql.user" "${args}" | grep -vE "mysql|root"
 }
+
+get_service_ip() {
+	local service=$1
+	while (kubectl get service/$service -n "${NAMESPACE}" -o 'jsonpath={.spec.type}' 2>&1 || :) | grep -q NotFound; do
+		sleep 1
+	done
+	if [ "$(kubectl get service/$service -n "${NAMESPACE}" -o 'jsonpath={.spec.type}')" = "ClusterIP" ]; then
+		kubectl get service/$service -n "${NAMESPACE}" -o 'jsonpath={.spec.clusterIP}'
+		return
+	fi
+	until kubectl get service/$service -n "${NAMESPACE}" -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | egrep -q "hostname|ip"; do
+		sleep 1
+	done
+	kubectl get service/$service -n "${NAMESPACE}" -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
+}

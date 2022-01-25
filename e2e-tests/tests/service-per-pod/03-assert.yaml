@@ -1,0 +1,12 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 30
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 04-read-from-clusterip
+data:
+  service-per-pod-mysql-0.service-per-pod-mysql: "100500"
+  service-per-pod-mysql-1.service-per-pod-mysql: "100500"
+  service-per-pod-mysql-2.service-per-pod-mysql: "100500"

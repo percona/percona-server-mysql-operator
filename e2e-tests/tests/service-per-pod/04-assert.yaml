@@ -1,0 +1,259 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: service-per-pod-mysql
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: service-per-pod-orc
+status:
+  observedGeneration: 1
+  replicas: 1
+  readyReplicas: 1
+  currentReplicas: 1
+  updatedReplicas: 1
+  collisionCount: 0
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: service-per-pod
+status:
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  orchestrator:
+    ready: 1
+    size: 1
+    state: ready
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: service-per-pod
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: service-per-pod-mysql
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: service-per-pod
+spec:
+  clusterIP: None
+  clusterIPs:
+  - None
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  selector:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: service-per-pod
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: service-per-pod
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: service-per-pod-mysql-primary
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: service-per-pod
+spec:
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  selector:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: service-per-pod
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    mysql.percona.com/primary: "true"
+  sessionAffinity: None
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: service-per-pod
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: service-per-pod-mysql-unready
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: service-per-pod
+spec:
+  clusterIP: None
+  clusterIPs:
+  - None
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: service-per-pod
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: service-per-pod
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    percona.com/exposed: "true"
+  name: service-per-pod-mysql-0
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: service-per-pod
+spec:
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  selector:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: service-per-pod
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    statefulset.kubernetes.io/pod-name: service-per-pod-mysql-0
+  sessionAffinity: None
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: service-per-pod
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    percona.com/exposed: "true"
+  name: service-per-pod-mysql-1
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: service-per-pod
+spec:
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  selector:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: service-per-pod
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    statefulset.kubernetes.io/pod-name: service-per-pod-mysql-1
+  sessionAffinity: None
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: service-per-pod
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    percona.com/exposed: "true"
+  name: service-per-pod-mysql-2
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: service-per-pod
+spec:
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  selector:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: service-per-pod
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    statefulset.kubernetes.io/pod-name: service-per-pod-mysql-2
+  sessionAffinity: None
+  type: LoadBalancer
