@@ -285,13 +285,41 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	defer um.Close()
 
 	if restartReplication {
+		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, primaryHost, mysql.DefaultAdminPort)
+		if err != nil {
+			return errors.Wrap(err, "open connection to primary")
+		}
+
+		// We're disabling semi-sync replication on primary to avoid LockedSemiSyncMaster.
+		if err := db.SetSemiSyncSource(false); err != nil {
+			return errors.Wrap(err, "set semi_sync wait count")
+		}
+
 		g, gCtx := errgroup.WithContext(context.Background())
 		for _, replica := range primary.Replicas {
 			hostname := replica.Hostname
 			port := replica.Port
 			g.Go(func() error {
+				repDb, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, hostname, port)
+				if err != nil {
+					return errors.Wrapf(err, "connect to replica %s", hostname)
+				}
+
 				if err := orchestrator.StopReplication(gCtx, orcHost, hostname, port); err != nil {
-					return errors.Wrap(err, "stop replica")
+					return errors.Wrapf(err, "stop replica %s", hostname)
+				}
+
+				status, _, err := repDb.ReplicationStatus()
+				if err != nil {
+					return errors.Wrapf(err, "get replication status of %s", hostname)
+				}
+
+				for status == replicator.ReplicationStatusActive {
+					time.Sleep(250 * time.Millisecond)
+					status, _, err = repDb.ReplicationStatus()
+					if err != nil {
+						return errors.Wrapf(err, "get replication status of %s", hostname)
+					}
 				}
 
 				l.V(1).Info("Stopped replication on replica", "hostname", hostname, "port", port)
@@ -329,18 +357,18 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 					mysql.DefaultAdminPort,
 				)
 				if err != nil {
-					return errors.Wrap(err, "get db connection")
+					return errors.Wrapf(err, "get db connection to %s", hostname)
 				}
 				defer db.Close()
 
 				pHost := getPrimaryHostname(primary, cr)
 				l.V(1).Info("Change replication source", "primary", pHost, "replica", hostname)
 				if err := db.ChangeReplicationSource(pHost, replicationPass, primary.Key.Port); err != nil {
-					return errors.Wrap(err, "change replication source")
+					return errors.Wrapf(err, "change replication source on %s", hostname)
 				}
 
 				if err := orchestrator.StartReplication(gCtx, orcHost, hostname, port); err != nil {
-					return errors.Wrap(err, "start replica")
+					return errors.Wrapf(err, "start replication on %s", hostname)
 				}
 
 				l.V(1).Info("Started replication on replica", "hostname", hostname, "port", port)
