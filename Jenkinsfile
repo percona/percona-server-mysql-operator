@@ -71,12 +71,14 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
         try {
             echo "The $TEST_NAME test was started!"
             testsReportMap[TEST_NAME] = 'failed'
-            popArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME")
+
+            FILE_NAME = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME-gke-${env.PLATFORM_VER}"
+            popArtifactFile("$FILE_NAME")
 
             timeout(time: 30, unit: 'MINUTES') {
                 sh """
-                    if [ -f "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME" ]; then
-                        echo Skip $TEST_NAME test
+                    if [ -f "$FILE_NAME" ]; then
+                        echo "Skipping $TEST_NAME test because it passed in previous run."
                     else
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         export PATH="$HOME/.krew/bin:$PATH"
@@ -85,6 +87,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                     fi
                 """
             }
+            pushArtifactFile("$FILE_NAME")
             testsReportMap[TEST_NAME] = 'passed'
             testsResultsMap["${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"] = 'passed'
             return true
