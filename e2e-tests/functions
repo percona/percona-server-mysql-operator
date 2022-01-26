@@ -6,6 +6,7 @@ export BASH_XTRACEFD="5"
 # set root repo relatively to a test dir
 ROOT_REPO=${ROOT_REPO:-$(realpath ../../..)}
 source "${ROOT_REPO}/e2e-tests/vars.sh"
+test_name=$(basename "$(pwd)")
 
 deploy_operator() {
 	kubectl -n "${NAMESPACE}" apply -f "${DEPLOY_DIR}/crd.yaml"
@@ -40,12 +41,16 @@ deploy_pmm_server() {
 	fi
 }
 
+get_operator_pod() {
+	kubectl get pods -n "${NAMESPACE}" \
+		--selector=app.kubernetes.io/name=percona-server-mysql-operator \
+		-o 'jsonpath={.items[].metadata.name}'
+}
+
 get_cr() {
-	local test_name=$(basename "$(pwd)")
 	yq eval "$(printf '.metadata.name="%s"' "${test_name}")" "${DEPLOY_DIR}/cr.yaml" \
 		| yq eval '.spec.secretsName="test-secrets"' - \
 		| yq eval '.spec.sslSecretName="test-ssl"' - \
-		| yq eval "$(printf '.spec.crVersion="%s"' "${CR_VERSION}")" - \
 		| yq eval "$(printf '.spec.mysql.image="%s"' "${IMAGE_MYSQL}")" - \
 		| yq eval "$(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}")" - \
 		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_MYSQL}")" -
@@ -163,4 +168,48 @@ get_service_ip() {
 		sleep 1
 	done
 	kubectl get service/$service -n "${NAMESPACE}" -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
+}
+
+wait_cluster_consistency() {
+	local cluster_name=${1}
+	local cluster_size=${2}
+	local orc_size=${3}
+
+	if [ -z "${orc_size}" ]; then
+		orc_size=1
+	fi
+
+	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
+	until [[ "$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.mysql.state}')" == "ready" &&
+	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.mysql.ready}')" == "${cluster_size}" &&
+	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.orchestrator.state}')" == "ready" ]]; do
+		echo 'waiting for cluster readyness'
+		sleep 15
+	done
+}
+
+wait_pod() {
+	local pod=$1
+
+	set +o xtrace
+	retry=0
+	echo -n $pod
+	until kubectl get pod/$pod -n "${NAMESPACE}" -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null | grep 'true'; do
+		sleep 1
+		echo -n .
+		let retry+=1
+		if [ $retry -ge 360 ]; then
+			kubectl describe pod/$pod -n "${NAMESPACE}"
+			kubectl logs $pod -n "${NAMESPACE}"
+			kubectl logs $(get_operator_pod) -n "${NAMESPACE}" \
+				| grep -v 'level=info' \
+				| grep -v 'level=debug' \
+				| grep -v 'Getting tasks for pod' \
+				| grep -v 'Getting pods from source' \
+				| tail -100
+			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+			exit 1
+		fi
+	done
+	set -o xtrace
 }
