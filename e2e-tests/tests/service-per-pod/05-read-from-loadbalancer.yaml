@@ -8,7 +8,7 @@ commands:
       source ../../functions
 
       args=''
-      size=$(kubectl -n ${NAMESPACE} get ps $(get_cluster_name) -o jsonpath='{.spec.mysql.size}')
+      size=$(kubectl -n ${NAMESPACE} get ps ${test_name} -o jsonpath='{.spec.mysql.size}')
       for i in $(seq 0 $((size - 1))); do
         ip=$(get_service_ip service-per-pod-mysql-$i)
       	host=$(get_mysql_headless_fqdn $(get_cluster_name) $i)
