@@ -4,7 +4,7 @@
 
 [Percona Server for MySQL](https://www.percona.com/software/mysql-database/percona-server) is a free, fully compatible, enhanced, and open source drop-in replacement for any MySQL database. It provides superior performance, scalability, and instrumentation.
 
-Based on our best practices for deployment and configuration, [Percona Distribution for MySQL Operator based on Percona Server for MySQL](https://www.percona.com/doc/kubernetes-operator-for-mysql/index.html) contains everything you need to quickly and consistently deploy and scale MySQL instances in a Kubernetes-based environment on-premises or in the cloud. It provides the following capabilities:
+Based on our best practices for deployment and configuration, [Percona Distribution for MySQL Operator based on Percona Server for MySQL](https://www.percona.com/doc/kubernetes-operator-for-mysql/ps/index.html) contains everything you need to quickly and consistently deploy and scale MySQL instances in a Kubernetes-based environment on-premises or in the cloud. It provides the following capabilities:
 
 * Deploy asynchronous and semi-sync replication MySQL clusters with Orchestrator on top of it
 * Expose clusters with regular Kubernetes Services
@@ -36,7 +36,7 @@ It usually takes two steps to deploy Percona Server for MySQL on Kubernetes:
 * Deploy the operator from `deploy/bundle.yaml`
 * Deploy the database cluster itself from `deploy/cr.yaml`
 
-See full documentation with examples and various advanced cases on [percona.com](https://www.percona.com/doc/kubernetes-operator-for-mysql/index.html).
+See full documentation with examples and various advanced cases on [percona.com](https://www.percona.com/doc/kubernetes-operator-for-mysql/ps/index.html).
 
 ## Contributing
 
