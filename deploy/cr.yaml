@@ -72,7 +72,7 @@ spec:
 #            storage: 1G
 
   orchestrator:
-    image: percona/percona-server-mysql-operator:0.1.0-orchestrator
+    image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 
     size: 1
