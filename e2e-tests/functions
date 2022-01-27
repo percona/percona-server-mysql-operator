@@ -168,6 +168,7 @@ get_service_ip() {
 		sleep 1
 	done
 	kubectl get service/$service -n "${NAMESPACE}" -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
+	kubectl get service/$service -n "${NAMESPACE}" -o 'jsonpath={.status.loadBalancer.ingress[].hostname}'
 }
 
 wait_cluster_consistency() {
