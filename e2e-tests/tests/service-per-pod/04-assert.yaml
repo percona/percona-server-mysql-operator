@@ -60,9 +60,6 @@ spec:
   clusterIP: None
   clusterIPs:
   - None
-  ipFamilies:
-  - IPv4
-  ipFamilyPolicy: SingleStack
   ports:
   - name: mysql
     port: 3306
@@ -94,9 +91,6 @@ metadata:
     kind: PerconaServerMySQL
     name: service-per-pod
 spec:
-  ipFamilies:
-  - IPv4
-  ipFamilyPolicy: SingleStack
   ports:
   - name: mysql
     port: 3306
@@ -132,9 +126,6 @@ spec:
   clusterIP: None
   clusterIPs:
   - None
-  ipFamilies:
-  - IPv4
-  ipFamilyPolicy: SingleStack
   ports:
   - name: mysql
     port: 3306
@@ -168,9 +159,6 @@ metadata:
     kind: PerconaServerMySQL
     name: service-per-pod
 spec:
-  ipFamilies:
-  - IPv4
-  ipFamilyPolicy: SingleStack
   ports:
   - name: mysql
     port: 3306
@@ -204,9 +192,6 @@ metadata:
     kind: PerconaServerMySQL
     name: service-per-pod
 spec:
-  ipFamilies:
-  - IPv4
-  ipFamilyPolicy: SingleStack
   ports:
   - name: mysql
     port: 3306
@@ -240,9 +225,6 @@ metadata:
     kind: PerconaServerMySQL
     name: service-per-pod
 spec:
-  ipFamilies:
-  - IPv4
-  ipFamilyPolicy: SingleStack
   ports:
   - name: mysql
     port: 3306
