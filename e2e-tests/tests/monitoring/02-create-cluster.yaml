@@ -1,40 +1,12 @@
-apiVersion: ps.percona.com/v1alpha1
-kind: PerconaServerMySQL
-metadata:
-  name: monitoring
-spec:
-  secretsName: test-secrets
-  sslSecretName: test-ssl
-  mysql:
-    image: percona/percona-server:8.0.25
-    imagePullPolicy: Always
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
 
-    size: 3
-    sizeSemiSync: 0
+      source ../../functions
 
-    volumeSpec:
-      persistentVolumeClaim:
-        resources:
-          requests:
-            storage: 2G
-
-  orchestrator:
-    image: perconalab/percona-server-mysql-operator:main-orchestrator
-    imagePullPolicy: Always
-
-    size: 1
-
-    volumeSpec:
-      persistentVolumeClaim:
-        resources:
-          requests:
-            storage: 1G
-
-  pmm:
-    enabled: true
-
-    image: percona/pmm-client:2.18.0
-    imagePullPolicy: Always
-
-    serverHost: monitoring-service
-    serverUser: admin
+      get_cr \
+      	| yq eval '.spec.pmm.enabled=true' - \
+      	| kubectl -n "${NAMESPACE}" apply -f -
