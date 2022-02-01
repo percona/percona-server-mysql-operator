@@ -94,10 +94,13 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                     if [ -f "$FILE_NAME" ]; then
                         echo "Skipping $TEST_NAME test because it passed in previous run."
                     else
+                        if [ ! -d "e2e-tests/logs" ]; then
+                       		mkdir "e2e-tests/logs"
+                        fi
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         export PATH="$HOME/.krew/bin:$PATH"
                         source $HOME/google-cloud-sdk/path.bash.inc
-                        time kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "${TEST_NAME}"
+                        time kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "${TEST_NAME}" >> e2e-tests/logs/${TEST_NAME}.log
                     fi
                 """
             }
