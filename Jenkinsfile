@@ -319,9 +319,9 @@ pipeline {
         always {
             script {
                 setTestsresults()
-//                 if (currentBuild.result != null && currentBuild.result != 'SUCCESS') {
-//                     slackSend channel: '#cloud-dev-ci', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
-//                 }
+                if (currentBuild.result != null && currentBuild.result != 'SUCCESS') {
+                    slackSend channel: '#cloud-dev-ci', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
+                }
                 if (env.CHANGE_URL) {
                     for (comment in pullRequest.comments) {
                         println("Author: ${comment.user}, Comment: ${comment.body}")
