@@ -26,7 +26,7 @@ void ShutdownCluster(String CLUSTER_PREFIX) {
    }
 }
 void pushLogFile(String FILE_NAME) {
-    LOG_FILE_PATH="/logs/${FILE_NAME}.log"
+    LOG_FILE_PATH="e2e-tests/logs/${FILE_NAME}.log"
     LOG_FILE_NAME="${FILE_NAME}.log"
     echo "Push logfile $LOG_FILE_NAME file to S3!"
     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
