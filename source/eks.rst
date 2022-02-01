@@ -4,7 +4,7 @@
 Install Percona Distribution for MySQL on Amazon Elastic Kubernetes Service (EKS)
 ==========================================================================================
 
-This quickstart shows you how to deploy Percona Distribution for MySQL Operator on Amazon Elastic Kubernetes Service (EKS). The document assumes some experience with Amazon EKS. For more information on the EKS, see the `Amazon EKS official documentation <https://aws.amazon.com/eks/>`_.
+This guide shows you how to deploy Percona Distribution for MySQL Operator based on Percona Server for MySQL on Amazon Elastic Kubernetes Service (EKS). The document assumes some experience with Amazon EKS. For more information on the EKS, see the `Amazon EKS official documentation <https://aws.amazon.com/eks/>`_.
 
 Prerequisites
 =============
