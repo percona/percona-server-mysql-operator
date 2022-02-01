@@ -7,11 +7,11 @@ test_name=$(basename "$(pwd)")
 logs_dir=$(realpath $test_dir/../logs)
 
 if [[ ${ENABLE_LOGGING} == "true" ]]; then
-	if [ ! -d "${logs_dir}" ]; then
-		mkdir "${logs_dir}"
-	fi
-	exec &> >(tee ${logs_dir}/${test_name}.log)
-	echo "Log: ${logs_dir}/${test_name}.log"
+  if [ ! -d "${logs_dir}" ]; then
+      mkdir "${logs_dir}"
+  fi
+  exec &> >(tee ${logs_dir}/${test_name}.log)
+  echo "Log: ${logs_dir}/${test_name}.log"
 fi
 
 deploy_operator() {
