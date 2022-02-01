@@ -100,7 +100,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         export PATH="$HOME/.krew/bin:$PATH"
                         source $HOME/google-cloud-sdk/path.bash.inc
-                        time kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "${TEST_NAME}" >> e2e-tests/logs/${TEST_NAME}.log
+                        time kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "${TEST_NAME}" |& tee e2e-tests/logs/${TEST_NAME}.log
                     fi
                 """
             }
@@ -319,9 +319,9 @@ pipeline {
         always {
             script {
                 setTestsresults()
-                if (currentBuild.result != null && currentBuild.result != 'SUCCESS') {
-                    slackSend channel: '#cloud-dev-ci', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
-                }
+//                 if (currentBuild.result != null && currentBuild.result != 'SUCCESS') {
+//                     slackSend channel: '#cloud-dev-ci', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
+//                 }
                 if (env.CHANGE_URL) {
                     for (comment in pullRequest.comments) {
                         println("Author: ${comment.user}, Comment: ${comment.body}")
