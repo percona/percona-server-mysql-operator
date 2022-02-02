@@ -25,6 +25,19 @@ void ShutdownCluster(String CLUSTER_PREFIX) {
         """
    }
 }
+void pushLogFile(String FILE_NAME) {
+    LOG_FILE_PATH="e2e-tests/logs/${FILE_NAME}.log"
+    LOG_FILE_NAME="${FILE_NAME}.log"
+    echo "Push logfile $LOG_FILE_NAME file to S3!"
+    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+        sh """
+            S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
+            aws s3 ls \$S3_PATH/${LOG_FILE_NAME} || :
+            aws s3 cp --quiet ${LOG_FILE_PATH} \$S3_PATH/${LOG_FILE_NAME} || :
+        """
+    }
+}
+
 void pushArtifactFile(String FILE_NAME) {
     echo "Push $FILE_NAME file to S3!"
 
@@ -68,9 +81,10 @@ void setTestsresults() {
 void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     def retryCount = 0
     waitUntil {
+        def testUrl = "https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-ps-operator/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${TEST_NAME}.log"
         try {
             echo "The $TEST_NAME test was started!"
-            testsReportMap[TEST_NAME] = 'failed'
+            testsReportMap[TEST_NAME] = "[failed]($testUrl)"
 
             FILE_NAME = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME-gke-${env.PLATFORM_VER}"
             popArtifactFile("$FILE_NAME")
@@ -80,15 +94,18 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                     if [ -f "$FILE_NAME" ]; then
                         echo "Skipping $TEST_NAME test because it passed in previous run."
                     else
+                        if [ ! -d "e2e-tests/logs" ]; then
+                       		mkdir "e2e-tests/logs"
+                        fi
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         export PATH="$HOME/.krew/bin:$PATH"
                         source $HOME/google-cloud-sdk/path.bash.inc
-                        time kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "${TEST_NAME}"
+                        time kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "${TEST_NAME}" |& tee e2e-tests/logs/${TEST_NAME}.log
                     fi
                 """
             }
             pushArtifactFile("$FILE_NAME")
-            testsReportMap[TEST_NAME] = 'passed'
+            testsReportMap[TEST_NAME] = "[passed]($testUrl)"
             testsResultsMap["${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"] = 'passed'
             return true
         }
@@ -102,7 +119,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
             return false
         }
     }
-
+    pushLogFile(TEST_NAME)
     echo "The $TEST_NAME test was finished!"
 }
 
