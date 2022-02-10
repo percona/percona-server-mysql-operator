@@ -25,6 +25,9 @@ spec:
     - jsonPath: .status.orchestrator.state
       name: Orchestrator
       type: string
+    - jsonPath: .status.state
+      name: State
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -7204,6 +7207,8 @@ spec:
                   state:
                     type: string
                 type: object
+              state:
+                type: string
             type: object
         type: object
     served: true
