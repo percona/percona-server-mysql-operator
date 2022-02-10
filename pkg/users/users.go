@@ -13,6 +13,7 @@ import (
 
 type Manager interface {
 	UpdateUserPasswords(users []mysql.User) error
+	DiscardOldPasswords(users []mysql.User) error
 	Close() error
 }
 
@@ -33,6 +34,7 @@ func NewManager(user apiv1alpha1.SystemUser, pass, host string, port int32) (Man
 	return &dbImpl{db}, nil
 }
 
+// UpdateUserPasswords updates user passwords but retains the current password using Dual Password feature of MySQL 8
 func (d *dbImpl) UpdateUserPasswords(users []mysql.User) error {
 	tx, err := d.db.Begin()
 	if err != nil {
@@ -41,7 +43,47 @@ func (d *dbImpl) UpdateUserPasswords(users []mysql.User) error {
 
 	for _, user := range users {
 		for _, host := range user.Hosts {
-			_, err = tx.Exec("ALTER USER ?@? IDENTIFIED BY ?", user.Username, host, user.Password)
+			_, err = tx.Exec("ALTER USER ?@? IDENTIFIED BY ? RETAIN CURRENT PASSWORD", user.Username, host, user.Password)
+			if err != nil {
+				err = errors.Wrap(err, "alter user")
+
+				if errT := tx.Rollback(); errT != nil {
+					return errors.Wrap(errors.Wrap(errT, "rollback"), err.Error())
+				}
+
+				return err
+			}
+		}
+	}
+
+	_, err = tx.Exec("FLUSH PRIVILEGES")
+	if err != nil {
+		err = errors.Wrap(err, "flush privileges")
+
+		if errT := tx.Rollback(); errT != nil {
+			return errors.Wrap(errors.Wrap(errT, "rollback"), err.Error())
+		}
+
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return errors.Wrap(err, "commit transaction")
+	}
+
+	return nil
+}
+
+// DiscardOldPasswords discards old passwords of givens users
+func (d *dbImpl) DiscardOldPasswords(users []mysql.User) error {
+	tx, err := d.db.Begin()
+	if err != nil {
+		return errors.Wrap(err, "begin transaction")
+	}
+
+	for _, user := range users {
+		for _, host := range user.Hosts {
+			_, err = tx.Exec("ALTER USER ?@? DISCARD OLD PASSWORD", user.Username, host)
 			if err != nil {
 				err = errors.Wrap(err, "alter user")
 

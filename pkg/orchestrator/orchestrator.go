@@ -99,7 +99,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.StatefulSet {
 							Name: credsVolumeName,
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: cr.Spec.SecretsName,
+									SecretName: cr.InternalSecretName(),
 								},
 							},
 						},
