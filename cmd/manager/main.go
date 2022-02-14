@@ -36,6 +36,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/controllers"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/schedule"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -102,20 +103,23 @@ func main() {
 		Client:        nsClient,
 		Scheme:        mgr.GetScheme(),
 		ServerVersion: serverVersion,
+		CronRegistry:  schedule.NewCronRegistry(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQL")
 		os.Exit(1)
 	}
 	if err = (&controllers.PerconaServerMySQLBackupReconciler{
-		Client: nsClient,
-		Scheme: mgr.GetScheme(),
+		Client:        nsClient,
+		Scheme:        mgr.GetScheme(),
+		ServerVersion: serverVersion,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLBackup")
 		os.Exit(1)
 	}
 	if err = (&controllers.PerconaServerMySQLRestoreReconciler{
-		Client: nsClient,
-		Scheme: mgr.GetScheme(),
+		Client:        nsClient,
+		Scheme:        mgr.GetScheme(),
+		ServerVersion: serverVersion,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLRestore")
 		os.Exit(1)

@@ -18,25 +18,33 @@ package v1alpha1
 
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // PerconaServerMySQLBackupSpec defines the desired state of PerconaServerMySQLBackup
 type PerconaServerMySQLBackupSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of PerconaServerMySQLBackup. Edit perconaservermysqlbackup_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	ClusterName string `json:"clusterName"`
+	StorageName string `json:"storageName"`
 }
 
+type BackupState string
+
+const (
+	BackupNew       BackupState = ""
+	BackupStarting  BackupState = "Starting"
+	BackupRunning   BackupState = "Running"
+	BackupFailed    BackupState = "Failed"
+	BackupSucceeded BackupState = "Succeeded"
+)
+
 // PerconaServerMySQLBackupStatus defines the observed state of PerconaServerMySQLBackup
-type PerconaServerMySQLBackupStatus struct { // INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+type PerconaServerMySQLBackupStatus struct {
+	State       BackupState  `json:"state,omitempty"`
+	CompletedAt *metav1.Time `json:"completed,omitempty"`
+	StorageName string       `json:"storageName,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
+//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 //+kubebuilder:resource:scope=Namespaced
 //+kubebuilder:resource:shortName=ps-backup
 
@@ -60,4 +68,19 @@ type PerconaServerMySQLBackupList struct {
 
 func init() {
 	SchemeBuilder.Register(&PerconaServerMySQLBackup{}, &PerconaServerMySQLBackupList{})
+}
+
+// Hash returns FNV hash of the PerconaServerMySQLBackup UID
+func (cr *PerconaServerMySQLBackup) Hash() string {
+	hash := FNVHash([]byte(string(cr.UID)))
+
+	// We use only first 7 digits to give a space for pod number which is
+	// appended to all server ids. If we don't do this, it can cause a
+	// int32 overflow.
+	// P.S max value is 4294967295
+	if len(hash) > 7 {
+		hash = hash[:7]
+	}
+
+	return hash
 }

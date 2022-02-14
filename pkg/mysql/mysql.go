@@ -392,45 +392,9 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          spec.ContainerSecurityContext,
-		StartupProbe: &corev1.Probe{
-			Handler: corev1.Handler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"/var/lib/mysql/bootstrap"},
-				},
-			},
-			InitialDelaySeconds:           spec.StartupProbe.InitialDelaySeconds,
-			TimeoutSeconds:                spec.StartupProbe.TimeoutSeconds,
-			PeriodSeconds:                 spec.StartupProbe.PeriodSeconds,
-			FailureThreshold:              spec.StartupProbe.FailureThreshold,
-			SuccessThreshold:              spec.StartupProbe.SuccessThreshold,
-			TerminationGracePeriodSeconds: spec.StartupProbe.TerminationGracePeriodSeconds,
-		},
-		LivenessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"/var/lib/mysql/healthcheck", "liveness"},
-				},
-			},
-			InitialDelaySeconds:           spec.LivenessProbe.InitialDelaySeconds,
-			TimeoutSeconds:                spec.LivenessProbe.TimeoutSeconds,
-			PeriodSeconds:                 spec.LivenessProbe.PeriodSeconds,
-			FailureThreshold:              spec.LivenessProbe.FailureThreshold,
-			SuccessThreshold:              spec.LivenessProbe.SuccessThreshold,
-			TerminationGracePeriodSeconds: spec.LivenessProbe.TerminationGracePeriodSeconds,
-		},
-		ReadinessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"/var/lib/mysql/healthcheck", "readiness"},
-				},
-			},
-			InitialDelaySeconds:           spec.ReadinessProbe.InitialDelaySeconds,
-			TimeoutSeconds:                spec.ReadinessProbe.TimeoutSeconds,
-			PeriodSeconds:                 spec.ReadinessProbe.PeriodSeconds,
-			FailureThreshold:              spec.ReadinessProbe.FailureThreshold,
-			SuccessThreshold:              spec.ReadinessProbe.SuccessThreshold,
-			TerminationGracePeriodSeconds: spec.ReadinessProbe.TerminationGracePeriodSeconds,
-		},
+		StartupProbe:             k8s.ExecProbe(spec.StartupProbe, []string{"/var/lib/mysql/bootstrap"}),
+		LivenessProbe:            k8s.ExecProbe(spec.LivenessProbe, []string{"/var/lib/mysql/healthcheck", "liveness"}),
+		ReadinessProbe:           k8s.ExecProbe(spec.ReadinessProbe, []string{"/var/lib/mysql/healthcheck", "readiness"}),
 	}
 }
 

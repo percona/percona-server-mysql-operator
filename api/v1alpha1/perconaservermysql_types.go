@@ -42,6 +42,7 @@ type PerconaServerMySQLSpec struct {
 	MySQL                 MySQLSpec        `json:"mysql,omitempty"`
 	Orchestrator          OrchestratorSpec `json:"orchestrator,omitempty"`
 	PMM                   *PMMSpec         `json:"pmm,omitempty"`
+	Backup                *BackupSpec      `json:"backup,omitempty"`
 }
 
 type ClusterType string
@@ -122,6 +123,53 @@ type PMMSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
 	RuntimeClassName         *string                     `json:"runtimeClassName,omitempty"`
+}
+
+type BackupSpec struct {
+	Image                    string                        `json:"image,omitempty"`
+	ImagePullSecrets         []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	ImagePullPolicy          corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
+	ServiceAccountName       string                        `json:"serviceAccountName,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext       `json:"containerSecurityContext,omitempty"`
+	Resources                corev1.ResourceRequirements   `json:"resources,omitempty"`
+	Storages                 map[string]*BackupStorageSpec `json:"storages,omitempty"`
+	Schedule                 []BackupScheduleSpec          `json:"schedule,omitempty"`
+}
+
+type BackupStorageType string
+
+const (
+	BackupStorageFilesystem BackupStorageType = "filesystem"
+	BackupStorageS3         BackupStorageType = "s3"
+	BackupStorageGCS        BackupStorageType = "gcs"
+	BackupStorageAzure      BackupStorageType = "azure"
+)
+
+type BackupStorageSpec struct {
+	Type   BackupStorageType   `json:"type"`
+	S3     BackupStorageS3Spec `json:"s3,omitempty"`
+	Volume *VolumeSpec         `json:"volumeSpec,omitempty"`
+}
+
+type BackupStorageS3Spec struct {
+	Bucket            string `json:"bucket"`
+	CredentialsSecret string `json:"credentialsSecret"`
+	Region            string `json:"region,omitempty"`
+	EndpointURL       string `json:"endpointUrl,omitempty"`
+}
+
+type BackupScheduleSpec struct {
+	// Name of the schedule, i.e "hourly"
+	Name string `json:"name,omitempty"`
+
+	// Cron spec for backup, i.e "0 * * * *"
+	Schedule string `json:"schedule,omitempty"`
+
+	// Specify how many backups should be stored. The operator will start to delete from the oldest backup.
+	Keep int `json:"keep,omitempty"`
+
+	// Name of the storage to take backup. It MUST be defined in spec.backup.storages.
+	StorageName string `json:"storageName,omitempty"`
 }
 
 type PodDisruptionBudgetSpec struct {
@@ -233,7 +281,7 @@ func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 }
 
 func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVersion) error {
-	if cr.Spec.MySQL.SizeSemiSync.IntVal >= cr.Spec.MySQL.Size {
+	if cr.Spec.MySQL.Size != 0 && cr.Spec.MySQL.SizeSemiSync.IntVal >= cr.Spec.MySQL.Size {
 		return errors.New("mysql.sizeSemiSync can't be greater than or equal to mysql.size")
 	}
 
@@ -449,22 +497,25 @@ func GetClusterNameFromObject(obj client.Object) (string, error) {
 	return instance, nil
 }
 
+func FNVHash(p []byte) string {
+	hash := fnv.New32()
+	hash.Write(p)
+	return fmt.Sprint(hash.Sum32())
+}
+
 // ClusterHash returns FNV hash of the CustomResource UID
 func (cr *PerconaServerMySQL) ClusterHash() string {
-	serverIDHash := fnv.New32()
-	serverIDHash.Write([]byte(string(cr.UID)))
+	serverIDHash := FNVHash([]byte(string(cr.UID)))
 
 	// We use only first 7 digits to give a space for pod number which is
 	// appended to all server ids. If we don't do this, it can cause a
 	// int32 overflow.
 	// P.S max value is 4294967295
-	serverIDHashStr := fmt.Sprint(serverIDHash.Sum32())
-
-	if len(serverIDHashStr) > 7 {
-		serverIDHashStr = serverIDHashStr[:7]
+	if len(serverIDHash) > 7 {
+		serverIDHash = serverIDHash[:7]
 	}
 
-	return serverIDHashStr
+	return serverIDHash
 }
 
 func (cr *PerconaServerMySQL) InternalSecretName() string {
