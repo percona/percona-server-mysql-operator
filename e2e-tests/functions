@@ -29,10 +29,12 @@ deploy_pmm_server() {
 		oc adm policy add-scc-to-user privileged -z pmm-server -n "${NAMESPACE}" || :
 		oc create rolebinding pmm-ps-operator-namespace-only --role percona-server-for-mysql-operator-role --serviceaccount=${NAMESPACE}:pmm-server -n "${NAMESPACE}" || :
 		oc patch role/percona-server-for-mysql-operator-role --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]' -n "${NAMESPACE}" || :
-		helm install monitoring --set platform=$platform --set sa=pmm-server --set supresshttp2=false https://percona-charts.storage.googleapis.com/pmm-server-${PMM_SERVER_VERSION}.tgz -n "${NAMESPACE}"
+		helm install monitoring --set imageTag=$IMAGE_PMM_SERVER_TAG --set imageRepo=$IMAGE_PMM_SERVER_REPO --set platform=$platform --set sa=pmm-server --set supresshttp2=false https://percona-charts.storage.googleapis.com/pmm-server-${PMM_SERVER_VERSION}.tgz -n "${NAMESPACE}"
 	else
 		helm install monitoring \
 			-n "${NAMESPACE}" \
+			--set imageTag=$IMAGE_PMM_SERVER_TAG \
+			--set imageRepo=$IMAGE_PMM_SERVER_REPO \
 			--set platform="${platform}" \
 			"https://percona-charts.storage.googleapis.com/pmm-server-${PMM_SERVER_VERSION}.tgz"
 	fi
