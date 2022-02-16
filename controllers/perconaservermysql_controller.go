@@ -249,7 +249,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 			restartMySQL = cr.PMMEnabled()
 		case apiv1alpha1.UserPMMServer:
 			restartMySQL = cr.PMMEnabled()
-			continue  // PMM server user credentials are not stored in db
+			continue // PMM server user credentials are not stored in db
 		case apiv1alpha1.UserReplication:
 			restartReplication = true
 		case apiv1alpha1.UserOrchestrator:
