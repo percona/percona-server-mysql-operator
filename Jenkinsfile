@@ -320,6 +320,18 @@ pipeline {
                 ShutdownCluster('basic')
             }
         }
+        stage('E2E Backup Tests') {
+            when {
+                expression {
+                    !skipBranchBuilds
+                }
+            }
+            steps {
+                CreateCluster('backup')
+                runTest('demand-backup', 'backup')
+                ShutdownCluster('backup')
+            }
+        }
     }
     post {
         always {
