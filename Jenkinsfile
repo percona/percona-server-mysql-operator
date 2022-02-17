@@ -314,6 +314,18 @@ pipeline {
                 ShutdownCluster('basic')
             }
         }
+        stage('E2E Backup Tests') {
+            when {
+                expression {
+                    !skipBranchBulds
+                }
+            }
+            steps {
+                CreateCluster('backup')
+                runTest('scheduled-backup', 'backup')
+                ShutdownCluster('backup')
+            }
+        }
     }
     post {
         always {

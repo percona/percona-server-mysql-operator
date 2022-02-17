@@ -1,0 +1,13 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      get_cr \
+        | yq eval '.spec.backup.schedule[0]={"name": "every-min", "schedule": "*/1 * * * *", "keep": 3, "storageName": "fs-pvc"}' - \
+        | kubectl -n "${NAMESPACE}" apply -f -
