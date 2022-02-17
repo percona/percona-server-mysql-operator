@@ -100,6 +100,8 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
+					NodeSelector: cr.Spec.MySQL.NodeSelector,
+					Tolerations:  cr.Spec.MySQL.Tolerations,
 					InitContainers: []corev1.Container{
 						{
 							Name:            componentName + "-init",

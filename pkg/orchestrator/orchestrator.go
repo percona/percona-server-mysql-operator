@@ -87,6 +87,8 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.StatefulSet {
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
+					NodeSelector:     cr.Spec.Orchestrator.NodeSelector,
+					Tolerations:      cr.Spec.Orchestrator.Tolerations,
 					Containers:       containers(cr),
 					Affinity:         spec.GetAffinity(labels),
 					ImagePullSecrets: spec.ImagePullSecrets,
