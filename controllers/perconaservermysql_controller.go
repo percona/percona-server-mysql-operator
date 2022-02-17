@@ -249,7 +249,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 			restartMySQL = cr.PMMEnabled()
 		case apiv1alpha1.UserPMMServer:
 			restartMySQL = cr.PMMEnabled()
-			continue
+			continue // PMM server user credentials are not stored in db
 		case apiv1alpha1.UserReplication:
 			restartReplication = true
 		case apiv1alpha1.UserOrchestrator:
@@ -334,7 +334,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	if err := um.UpdateUserPasswords(updatedUsers); err != nil {
-		return errors.Wrapf(err, "update orchestrator password")
+		return errors.Wrapf(err, "update passwords")
 	}
 
 	if restartReplication {
@@ -405,10 +405,23 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		}
 	}
 
+	if cr.Status.State != apiv1alpha1.StateReady {
+		l.Info("Waiting cluster to be ready")
+		return nil
+	}
+
+	if err := um.DiscardOldPasswords(updatedUsers); err != nil {
+		return errors.Wrap(err, "discard old passwords")
+	}
+
+	l.Info("Discarded old user passwords")
+
 	internalSecret.Data = secret.Data
 	if err := r.Client.Update(ctx, internalSecret); err != nil {
 		return errors.Wrapf(err, "update Secret/%s", internalSecret.Name)
 	}
+
+	l.Info("Updated internal secret", "secretName", cr.InternalSecretName())
 
 	return nil
 }
@@ -724,6 +737,8 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
+	l := log.FromContext(ctx).WithName("reconcileCRStatus")
+
 	mysqlStatus, err := appStatus(ctx, r.Client, cr.MySQLSpec().Size, mysql.MatchLabels(cr))
 	if err != nil {
 		return errors.Wrap(err, "get MySQL status")
@@ -735,6 +750,14 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(
 		return errors.Wrap(err, "get Orchestrator status")
 	}
 	cr.Status.Orchestrator = orcStatus
+
+	if cr.Status.MySQL.State == cr.Status.Orchestrator.State {
+		cr.Status.State = cr.Status.MySQL.State
+	} else {
+		cr.Status.State = apiv1alpha1.StateInitializing
+	}
+
+	l.V(1).Info("Writing CR status", "state", cr.Status.State, "orchestrator", cr.Status.Orchestrator, "mysql", cr.Status.MySQL)
 
 	nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
 	return writeStatus(ctx, r.Client, nn, cr.Status)

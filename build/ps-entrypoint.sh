@@ -270,6 +270,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		file_env 'REPLICATION_PASSWORD' '' 'replication'
 		file_env 'ORC_TOPOLOGY_PASSWORD' '' 'orchestrator'
 		file_env 'OPERATOR_ADMIN_PASSWORD' '' 'operator'
+		file_env 'XTRABACKUP_PASSWORD' '' 'xtrabackup'
 		read -r -d '' monitorConnectGrant <<-EOSQL || true
 			GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
 		EOSQL

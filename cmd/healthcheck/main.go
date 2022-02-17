@@ -41,7 +41,7 @@ func checkReadiness() error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
 
-	db, err := replicator.NewReplicator("operator", operatorPass, podIP, mysql.DefaultAdminPort)
+	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, podIP, mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
