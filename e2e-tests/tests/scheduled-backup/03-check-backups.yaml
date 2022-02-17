@@ -1,0 +1,17 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # wait for backups
+      sleep 260
+
+      kubectl get -n ${NAMESPACE} ps-backup
+      succeeded=$(kubectl get -n ${NAMESPACE} ps-backup | grep Succeeded | wc -l)
+      kubectl create configmap -n "${NAMESPACE}" 03-check-backups --from-literal=succeeded=${succeeded}
+
+    timeout: 300
