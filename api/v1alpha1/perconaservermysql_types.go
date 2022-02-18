@@ -138,15 +138,52 @@ type BackupSpec struct {
 type BackupStorageType string
 
 const (
-	BackupStorageFilesystem BackupStorageType = "filesystem"
 	BackupStorageS3         BackupStorageType = "s3"
 	BackupStorageGCS        BackupStorageType = "gcs"
 	BackupStorageAzure      BackupStorageType = "azure"
+	BackupStorageFilesystem BackupStorageType = "filesystem"
 )
 
 type BackupStorageSpec struct {
-	Type   BackupStorageType `json:"type"`
-	Volume *VolumeSpec       `json:"volumeSpec,omitempty"`
+	Type   BackupStorageType       `json:"type"`
+	S3     *BackupStorageS3Spec    `json:"s3,omitempty"`
+	GCS    *BackupStorageGCSSpec   `json:"gcs,omitempty"`
+	Azure  *BackupStorageAzureSpec `json:"azure,omitempty"`
+	Volume *VolumeSpec             `json:"volumeSpec,omitempty"`
+}
+
+type BackupStorageS3Spec struct {
+	Bucket            string `json:"bucket"`
+	CredentialsSecret string `json:"credentialsSecret"`
+	Region            string `json:"region,omitempty"`
+	EndpointURL       string `json:"endpointUrl,omitempty"`
+	StorageClass      string `json:"storageClass,omitempty"`
+}
+
+type BackupStorageGCSSpec struct {
+	Bucket            string `json:"bucket"`
+	CredentialsSecret string `json:"credentialsSecret"`
+	EndpointURL       string `json:"endpointUrl,omitempty"`
+
+	// STANDARD, NEARLINE, COLDLINE, ARCHIVE
+	StorageClass string `json:"storageClass,omitempty"`
+}
+
+type BackupStorageAzureSpec struct {
+	// An Azure storage account is a unique namespace to access and store your Azure data objects.
+	AccountName string `json:"accountName"`
+
+	// A container name is a valid DNS name that conforms to the Azure naming rules.
+	ContainerName string `json:"containerName"`
+
+	// A generated key that can be used to authorize access to data in your account using the Shared Key authorization.
+	CredentialsSecret string `json:"credentialsSecret"`
+
+	// The endpoint allows clients to securely access data
+	EndpointURL string `json:"endpointUrl,omitempty"`
+
+	// Hot (Frequently accessed or modified data), Cool (Infrequently accessed or modified data), Archive (Rarely accessed or modified data)
+	StorageClass string `json:"storageClass,omitempty"`
 }
 
 type PodDisruptionBudgetSpec struct {

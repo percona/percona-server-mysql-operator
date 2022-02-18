@@ -244,11 +244,152 @@ func SetStoragePVC(job *batchv1.Job, pvc *corev1.PersistentVolumeClaim) error {
 
 	for i := range spec.Containers {
 		container := &spec.Containers[i]
+
 		if container.Name == componentName {
 			container.VolumeMounts = append(
 				container.VolumeMounts,
 				corev1.VolumeMount{Name: backupVolumeName, MountPath: backupMountPath},
 			)
+			return nil
+		}
+	}
+
+	return errors.Errorf("no container named %s in Job spec", componentName)
+}
+
+func SetStorageS3(job *batchv1.Job, s3 *apiv1alpha1.BackupStorageS3Spec) error {
+	spec := &job.Spec.Template.Spec
+
+	env := []corev1.EnvVar{
+		{
+			Name:  "STORAGE_TYPE",
+			Value: string(apiv1alpha1.BackupStorageS3),
+		},
+		{
+			Name: "AWS_ACCESS_KEY_ID",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: k8s.SecretKeySelector(s3.CredentialsSecret, "AWS_ACCESS_KEY_ID"),
+			},
+		},
+		{
+			Name: "AWS_SECRET_ACCESS_KEY",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: k8s.SecretKeySelector(s3.CredentialsSecret, "AWS_SECRET_ACCESS_KEY"),
+			},
+		},
+		{
+			Name:  "AWS_DEFAULT_REGION",
+			Value: s3.Region,
+		},
+		{
+			Name:  "AWS_ENDPOINT",
+			Value: s3.EndpointURL,
+		},
+		{
+			Name:  "S3_BUCKET",
+			Value: s3.Bucket,
+		},
+		{
+			Name:  "S3_STORAGE_CLASS",
+			Value: s3.StorageClass,
+		},
+	}
+
+	for i := range spec.Containers {
+		container := &spec.Containers[i]
+
+		if container.Name == componentName {
+			container.Env = append(container.Env, env...)
+			return nil
+		}
+	}
+
+	return errors.Errorf("no container named %s in Job spec", componentName)
+}
+
+func SetStorageGCS(job *batchv1.Job, gcs *apiv1alpha1.BackupStorageGCSSpec) error {
+	spec := &job.Spec.Template.Spec
+
+	env := []corev1.EnvVar{
+		{
+			Name:  "STORAGE_TYPE",
+			Value: string(apiv1alpha1.BackupStorageGCS),
+		},
+		{
+			Name: "ACCESS_KEY_ID",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: k8s.SecretKeySelector(gcs.CredentialsSecret, "ACCESS_KEY_ID"),
+			},
+		},
+		{
+			Name: "SECRET_ACCESS_KEY",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: k8s.SecretKeySelector(gcs.CredentialsSecret, "SECRET_ACCESS_KEY"),
+			},
+		},
+		{
+			Name:  "GCS_ENDPOINT",
+			Value: gcs.EndpointURL,
+		},
+		{
+			Name:  "GCS_BUCKET",
+			Value: gcs.Bucket,
+		},
+		{
+			Name:  "GCS_STORAGE_CLASS§",
+			Value: gcs.StorageClass,
+		},
+	}
+
+	for i := range spec.Containers {
+		container := &spec.Containers[i]
+
+		if container.Name == componentName {
+			container.Env = append(container.Env, env...)
+			return nil
+		}
+	}
+
+	return errors.Errorf("no container named %s in Job spec", componentName)
+}
+
+func SetStorageAzure(job *batchv1.Job, azure *apiv1alpha1.BackupStorageAzureSpec) error {
+	spec := &job.Spec.Template.Spec
+
+	env := []corev1.EnvVar{
+		{
+			Name:  "STORAGE_TYPE",
+			Value: string(apiv1alpha1.BackupStorageAzure),
+		},
+		{
+			Name:  "AZURE_STORAGE_ACCOUNT",
+			Value: azure.AccountName,
+		},
+		{
+			Name:  "AZURE_CONTAINER_NAME",
+			Value: azure.ContainerName,
+		},
+		{
+			Name: "AZURE_ACCESS_KEY",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: k8s.SecretKeySelector(azure.CredentialsSecret, "AZURE_ACCESS_KEY"),
+			},
+		},
+		{
+			Name:  "AZURE_ENDPOINT",
+			Value: azure.EndpointURL,
+		},
+		{
+			Name:  "AZURE_STORAGE_CLASS",
+			Value: azure.StorageClass,
+		},
+	}
+
+	for i := range spec.Containers {
+		container := &spec.Containers[i]
+
+		if container.Name == componentName {
+			container.Env = append(container.Env, env...)
 			return nil
 		}
 	}

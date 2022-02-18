@@ -168,7 +168,61 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			if err := r.Client.Create(ctx, pvc); err != nil {
 				return rr, errors.Wrapf(err, "create PVC %s/%s", pvc.Namespace, pvc.Name)
 			}
-		case apiv1alpha1.BackupStorageS3, apiv1alpha1.BackupStorageGCS, apiv1alpha1.BackupStorageAzure:
+		case apiv1alpha1.BackupStorageS3:
+			if storage.S3 == nil {
+				return rr, errors.New("s3 stanza is required in storage")
+			}
+
+			nn := types.NamespacedName{Name: storage.S3.CredentialsSecret, Namespace: cr.Namespace}
+			exists, err := k8s.ObjectExists(ctx, r.Client, nn, &corev1.Secret{})
+			if err != nil {
+				return rr, errors.Wrapf(err, "check %s exists", nn)
+			}
+
+			if !exists {
+				return rr, errors.Wrapf(err, "secret %s not found", nn)
+			}
+
+			if err := xtrabackup.SetStorageS3(job, storage.S3); err != nil {
+				return rr, errors.Wrap(err, "set storage S3")
+			}
+		case apiv1alpha1.BackupStorageGCS:
+			if storage.GCS == nil {
+				return rr, errors.New("gcs stanza is required in storage")
+			}
+
+			nn := types.NamespacedName{Name: storage.GCS.CredentialsSecret, Namespace: cr.Namespace}
+			exists, err := k8s.ObjectExists(ctx, r.Client, nn, &corev1.Secret{})
+			if err != nil {
+				return rr, errors.Wrapf(err, "check %s exists", nn)
+			}
+
+			if !exists {
+				return rr, errors.Wrapf(err, "secret %s not found", nn)
+			}
+
+			if err := xtrabackup.SetStorageGCS(job, storage.GCS); err != nil {
+				return rr, errors.Wrap(err, "set storage GCS")
+			}
+		case apiv1alpha1.BackupStorageAzure:
+			if storage.Azure == nil {
+				return rr, errors.New("azure stanza is required in storage")
+			}
+
+			nn := types.NamespacedName{Name: storage.Azure.CredentialsSecret, Namespace: cr.Namespace}
+			exists, err := k8s.ObjectExists(ctx, r.Client, nn, &corev1.Secret{})
+			if err != nil {
+				return rr, errors.Wrapf(err, "check %s exists", nn)
+			}
+
+			if !exists {
+				return rr, errors.Wrapf(err, "secret %s not found", nn)
+			}
+
+			if err := xtrabackup.SetStorageAzure(job, storage.Azure); err != nil {
+				return rr, errors.Wrap(err, "set storage Azure")
+			}
+		default:
 			return rr, errors.Errorf("Storage type %s is not supported", storage.Type)
 		}
 

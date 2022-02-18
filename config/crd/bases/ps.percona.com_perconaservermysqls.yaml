@@ -263,6 +263,66 @@ spec:
                   storages:
                     additionalProperties:
                       properties:
+                        azure:
+                          properties:
+                            accountName:
+                              description: An Azure storage account is a unique namespace
+                                to access and store your Azure data objects.
+                              type: string
+                            containerName:
+                              description: A container name is a valid DNS name that
+                                conforms to the Azure naming rules.
+                              type: string
+                            credentialsSecret:
+                              description: A generated key that can be used to authorize
+                                access to data in your account using the Shared Key
+                                authorization.
+                              type: string
+                            endpointUrl:
+                              description: The endpoint allows clients to securely
+                                access data
+                              type: string
+                            storageClass:
+                              description: Hot (Frequently accessed or modified data),
+                                Cool (Infrequently accessed or modified data), Archive
+                                (Rarely accessed or modified data)
+                              type: string
+                          required:
+                          - accountName
+                          - containerName
+                          - credentialsSecret
+                          type: object
+                        gcs:
+                          properties:
+                            bucket:
+                              type: string
+                            credentialsSecret:
+                              type: string
+                            endpointUrl:
+                              type: string
+                            storageClass:
+                              description: STANDARD, NEARLINE, COLDLINE, ARCHIVE
+                              type: string
+                          required:
+                          - bucket
+                          - credentialsSecret
+                          type: object
+                        s3:
+                          properties:
+                            bucket:
+                              type: string
+                            credentialsSecret:
+                              type: string
+                            endpointUrl:
+                              type: string
+                            region:
+                              type: string
+                            storageClass:
+                              type: string
+                          required:
+                          - bucket
+                          - credentialsSecret
+                          type: object
                         type:
                           type: string
                         volumeSpec:

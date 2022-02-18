@@ -4,4 +4,4 @@ metadata:
   name: backup1
 spec:
   clusterName: cluster1
-  storageName: fs-pvc
+  storageName: us-east-1
