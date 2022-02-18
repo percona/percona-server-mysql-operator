@@ -17,11 +17,12 @@ import (
 )
 
 const (
-	componentName   = "orc"
-	defaultWebPort  = 3000
-	defaultRaftPort = 10008
-	dataVolumeName  = "datadir"
-	DataMountPath   = "/var/lib/orchestrator"
+	componentName      = "orchestrator"
+	componentShortName = "orc"
+	defaultWebPort     = 3000
+	defaultRaftPort    = 10008
+	dataVolumeName     = "datadir"
+	DataMountPath      = "/var/lib/orchestrator"
 	// configVolumeName = "config"
 	// configMountPath  = "/etc/orchestrator"
 	credsVolumeName = "users"
@@ -32,7 +33,7 @@ const (
 
 // Name returns component name
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
-	return cr.Name + "-" + componentName
+	return cr.Name + "-" + componentShortName
 }
 
 func NamespacedName(cr *apiv1alpha1.PerconaServerMySQL) types.NamespacedName {
