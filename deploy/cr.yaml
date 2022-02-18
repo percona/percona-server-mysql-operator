@@ -110,3 +110,9 @@ spec:
             resources:
               requests:
                 storage: 1G
+
+#    schedule:
+#    - name: "hourly"
+#      schedule: "0 * * * *"
+#      keep: 3
+#      storageName: fs-pvc

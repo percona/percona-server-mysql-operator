@@ -157,6 +157,9 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
+# github.com/robfig/cron/v3 v3.0.1
+## explicit; go 1.12
+github.com/robfig/cron/v3
 # github.com/sjmudd/stopwatch v0.0.0-20170613150411-f380bf8a9be1
 ## explicit
 github.com/sjmudd/stopwatch

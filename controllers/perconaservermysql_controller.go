@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"bytes"
+	"container/heap"
 	"context"
 	"crypto/md5"
 	"encoding/json"
@@ -32,6 +33,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	k8sretry "k8s.io/client-go/util/retry"
@@ -45,8 +47,10 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
+	"github.com/percona/percona-server-mysql-operator/pkg/schedule"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/users"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
 // PerconaServerMySQLReconciler reconciles a PerconaServerMySQL object
@@ -54,6 +58,7 @@ type PerconaServerMySQLReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	ServerVersion *platform.ServerVersion
+	CronRegistry  schedule.CronRegistry
 }
 
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqls;perconaservermysqls/status;perconaservermysqls/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -127,6 +132,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	}
 	if err := r.reconcileReplication(ctx, cr); err != nil {
 		return errors.Wrap(err, "replication")
+	}
+	if err := r.reconcileBackups(ctx, cr); err != nil {
+		return errors.Wrap(err, "backup")
 	}
 
 	return nil
@@ -733,10 +741,203 @@ func reconcileReplicationSemiSync(
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) reconcileCRStatus(
+func findSchedule(schedules []apiv1alpha1.BackupScheduleSpec, name string) (apiv1alpha1.BackupScheduleSpec, error) {
+	for _, sch := range schedules {
+		if sch.Name == name {
+			return sch, nil
+		}
+	}
+
+	return apiv1alpha1.BackupScheduleSpec{}, errors.New("not found")
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileBackups(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	l := log.FromContext(ctx).WithName("reconcileBackups")
+
+	r.CronRegistry.BackupJobs.Range(func(k, v interface{}) bool {
+		job := v.(schedule.BackupJob)
+
+		if cr.Spec.Backup == nil {
+			l.Info("Backup stanza not found. Deleting job", "job", job.Name)
+			r.deleteBackupJob(job.Name)
+			return true
+		}
+
+		sch, err := findSchedule(cr.Spec.Backup.Schedule, job.Name)
+		if err != nil {
+			l.Info("Schedule not found. Deleting job", "job", job.Name)
+			r.deleteBackupJob(job.Name)
+			return true
+		}
+
+		if sch.Keep < 1 {
+			return true
+		}
+
+		old, err := r.oldScheduledBackups(ctx, cr, sch.Name, sch.Keep)
+		if err != nil {
+			l.Error(err, "failed to list old backups", "job", job.Name)
+			return true
+		}
+
+		for _, bcp := range old {
+			if err := r.Client.Delete(ctx, &bcp); err != nil {
+				l.Error(err, "failed to delete backup", "backup", bcp.Name)
+			}
+		}
+
+		return true
+	})
+
+	if cr.Spec.Backup == nil {
+		return nil
+	}
+
+	for _, sch := range cr.Spec.Backup.Schedule {
+		_, ok := cr.Spec.Backup.Storages[sch.StorageName]
+		if !ok {
+			l.Error(errors.New("invalid storage"), "backup", sch.Name, "storage", sch.StorageName)
+			continue
+		}
+
+		job := schedule.BackupJob{}
+		raw, ok := r.CronRegistry.BackupJobs.Load(sch.Name)
+		if ok {
+			job = raw.(schedule.BackupJob)
+		}
+
+		if !ok || sch.Schedule != job.Schedule || sch.StorageName != job.StorageName {
+			l.Info("Creating or updating backup job",
+				"backup", sch.Name, "schedule", sch.Schedule, "storage", sch.StorageName)
+
+			r.deleteBackupJob(sch.Name)
+
+			jobID, err := r.CronRegistry.Crons.AddFunc(sch.Schedule, func() {
+				nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
+				_, err := r.getCRWithDefaults(ctx, nn)
+				if err != nil {
+					if k8serrors.IsNotFound(err) {
+						l.Info("Cluster not found. Deleting backup job.")
+						r.deleteBackupJob(sch.Name)
+						return
+					}
+
+					l.Error(err, "Failed to run backup")
+					return
+				}
+
+				jobName := sch.Name + "-" + time.Now().Format("20060102150405")
+				l.Info("Running backup job",
+					"backup", jobName, "schedule", sch.Schedule, "storage", sch.StorageName)
+
+				bcp := &apiv1alpha1.PerconaServerMySQLBackup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      jobName,
+						Namespace: cr.Namespace,
+						Labels: util.SSMapMerge(cr.Labels(), map[string]string{
+							"type":     "cron",
+							"ancestor": sch.Name,
+						}),
+					},
+					Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
+						ClusterName: cr.Name,
+						StorageName: sch.StorageName,
+					},
+				}
+
+				if err := r.Client.Create(context.TODO(), bcp); err != nil {
+					l.Error(err, "Failed to run backup")
+				}
+			})
+			if err != nil {
+				l.Error(err, "failed to add func to CronRegistry")
+				continue
+			}
+
+			r.CronRegistry.BackupJobs.Store(sch.Name, schedule.BackupJob{
+				BackupScheduleSpec: sch,
+				JobID:              jobID,
+			})
+		}
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) deleteBackupJob(name string) {
+	job, ok := r.CronRegistry.BackupJobs.LoadAndDelete(name)
+	if !ok {
+		return
+	}
+	r.CronRegistry.Crons.Remove(job.(schedule.BackupJob).JobID)
+}
+
+type minHeap []apiv1alpha1.PerconaServerMySQLBackup
+
+func (h minHeap) Len() int { return len(h) }
+func (h minHeap) Less(i, j int) bool {
+	return h[i].CreationTimestamp.Before(&h[j].CreationTimestamp)
+}
+func (h minHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+
+func (h *minHeap) Push(x interface{}) {
+	*h = append(*h, x.(apiv1alpha1.PerconaServerMySQLBackup))
+}
+func (h *minHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
+}
+
+func (r *PerconaServerMySQLReconciler) oldScheduledBackups(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQL,
-) error {
+	ancestor string,
+	keep int,
+) ([]apiv1alpha1.PerconaServerMySQLBackup, error) {
+	backupList := apiv1alpha1.PerconaServerMySQLBackupList{}
+	err := r.Client.List(ctx, &backupList, &client.ListOptions{
+		Namespace: cr.Namespace,
+		LabelSelector: labels.SelectorFromSet(
+			util.SSMapMerge(cr.Labels(), map[string]string{
+				"type":     "cron",
+				"ancestor": ancestor,
+			}),
+		),
+	})
+	if err != nil {
+		return []apiv1alpha1.PerconaServerMySQLBackup{}, errors.Wrap(err, "list backups")
+	}
+
+	// nothing to delete
+	if len(backupList.Items) <= keep {
+		return []apiv1alpha1.PerconaServerMySQLBackup{}, nil
+	}
+
+	h := &minHeap{}
+	heap.Init(h)
+	for _, bcp := range backupList.Items {
+		if bcp.Status.State == apiv1alpha1.BackupSucceeded {
+			heap.Push(h, bcp)
+		}
+	}
+
+	if h.Len() <= keep {
+		return []apiv1alpha1.PerconaServerMySQLBackup{}, nil
+	}
+
+	old := make([]apiv1alpha1.PerconaServerMySQLBackup, 0, h.Len()-keep)
+	for i := h.Len() - keep; i > 0; i-- {
+		o := heap.Pop(h).(apiv1alpha1.PerconaServerMySQLBackup)
+		old = append(old, o)
+	}
+
+	return old, nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("reconcileCRStatus")
 
 	mysqlStatus, err := appStatus(ctx, r.Client, cr.MySQLSpec().Size, mysql.MatchLabels(cr))

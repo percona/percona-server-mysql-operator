@@ -258,6 +258,25 @@ spec:
                           to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                         type: object
                     type: object
+                  schedule:
+                    items:
+                      properties:
+                        keep:
+                          description: Specify how many backups should be stored.
+                            The operator will start to delete from the oldest backup.
+                          type: integer
+                        name:
+                          description: Name of the schedule, i.e "hourly"
+                          type: string
+                        schedule:
+                          description: Cron spec for backup, i.e "0 * * * *"
+                          type: string
+                        storageName:
+                          description: Name of the storage to take backup. It MUST
+                            be defined in spec.backup.storages.
+                          type: string
+                      type: object
+                    type: array
                   serviceAccountName:
                     type: string
                   storages:

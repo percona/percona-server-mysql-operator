@@ -133,6 +133,7 @@ type BackupSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext       `json:"containerSecurityContext,omitempty"`
 	Resources                corev1.ResourceRequirements   `json:"resources,omitempty"`
 	Storages                 map[string]*BackupStorageSpec `json:"storages,omitempty"`
+	Schedule                 []BackupScheduleSpec          `json:"schedule,omitempty"`
 }
 
 type BackupStorageType string
@@ -147,6 +148,20 @@ const (
 type BackupStorageSpec struct {
 	Type   BackupStorageType   `json:"type"`
 	Volume *VolumeSpec         `json:"volumeSpec,omitempty"`
+}
+
+type BackupScheduleSpec struct {
+	// Name of the schedule, i.e "hourly"
+	Name string `json:"name,omitempty"`
+
+	// Cron spec for backup, i.e "0 * * * *"
+	Schedule string `json:"schedule,omitempty"`
+
+	// Specify how many backups should be stored. The operator will start to delete from the oldest backup.
+	Keep int `json:"keep,omitempty"`
+
+	// Name of the storage to take backup. It MUST be defined in spec.backup.storages.
+	StorageName string `json:"storageName,omitempty"`
 }
 
 type PodDisruptionBudgetSpec struct {
