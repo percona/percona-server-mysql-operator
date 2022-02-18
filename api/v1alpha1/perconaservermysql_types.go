@@ -145,8 +145,8 @@ const (
 )
 
 type BackupStorageSpec struct {
-	Type   BackupStorageType   `json:"type"`
-	Volume *VolumeSpec         `json:"volumeSpec,omitempty"`
+	Type   BackupStorageType `json:"type"`
+	Volume *VolumeSpec       `json:"volumeSpec,omitempty"`
 }
 
 type PodDisruptionBudgetSpec struct {
