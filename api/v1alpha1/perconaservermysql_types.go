@@ -43,6 +43,7 @@ type PerconaServerMySQLSpec struct {
 	MySQL                 MySQLSpec        `json:"mysql,omitempty"`
 	Orchestrator          OrchestratorSpec `json:"orchestrator,omitempty"`
 	PMM                   *PMMSpec         `json:"pmm,omitempty"`
+	Backup                *BackupSpec      `json:"backup,omitempty"`
 }
 
 type ClusterType string
@@ -125,6 +126,78 @@ type PMMSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
 	RuntimeClassName         *string                     `json:"runtimeClassName,omitempty"`
+}
+
+type BackupSpec struct {
+	Image                    string                        `json:"image,omitempty"`
+	ImagePullSecrets         []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	ImagePullPolicy          corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
+	ServiceAccountName       string                        `json:"serviceAccountName,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext       `json:"containerSecurityContext,omitempty"`
+	Resources                corev1.ResourceRequirements   `json:"resources,omitempty"`
+	Storages                 map[string]*BackupStorageSpec `json:"storages,omitempty"`
+}
+
+type BackupStorageType string
+
+const (
+	BackupStorageFilesystem BackupStorageType = "filesystem"
+	BackupStorageS3         BackupStorageType = "s3"
+	BackupStorageGCS        BackupStorageType = "gcs"
+	BackupStorageAzure      BackupStorageType = "azure"
+)
+
+type BackupStorageSpec struct {
+	Type                     BackupStorageType           `json:"type"`
+	Volume                   *VolumeSpec                 `json:"volumeSpec,omitempty"`
+	S3                       *BackupStorageS3Spec        `json:"s3,omitempty"`
+	GCS                      *BackupStorageGCSSpec       `json:"gcs,omitempty"`
+	Azure                    *BackupStorageAzureSpec     `json:"azure,omitempty"`
+	NodeSelector             map[string]string           `json:"nodeSelector,omitempty"`
+	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
+	Affinity                 *corev1.Affinity            `json:"affinity,omitempty"`
+	Tolerations              []corev1.Toleration         `json:"tolerations,omitempty"`
+	Annotations              map[string]string           `json:"annotations,omitempty"`
+	Labels                   map[string]string           `json:"labels,omitempty"`
+	SchedulerName            string                      `json:"schedulerName,omitempty"`
+	PriorityClassName        string                      `json:"priorityClassName,omitempty"`
+	PodSecurityContext       *corev1.PodSecurityContext  `json:"podSecurityContext,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
+	RuntimeClassName         *string                     `json:"runtimeClassName,omitempty"`
+}
+
+type BackupStorageS3Spec struct {
+	Bucket            string `json:"bucket"`
+	CredentialsSecret string `json:"credentialsSecret"`
+	Region            string `json:"region,omitempty"`
+	EndpointURL       string `json:"endpointUrl,omitempty"`
+	StorageClass      string `json:"storageClass,omitempty"`
+}
+
+type BackupStorageGCSSpec struct {
+	Bucket            string `json:"bucket"`
+	CredentialsSecret string `json:"credentialsSecret"`
+	EndpointURL       string `json:"endpointUrl,omitempty"`
+
+	// STANDARD, NEARLINE, COLDLINE, ARCHIVE
+	StorageClass string `json:"storageClass,omitempty"`
+}
+
+type BackupStorageAzureSpec struct {
+	// An Azure storage account is a unique namespace to access and store your Azure data objects.
+	AccountName string `json:"accountName"`
+
+	// A container name is a valid DNS name that conforms to the Azure naming rules.
+	ContainerName string `json:"containerName"`
+
+	// A generated key that can be used to authorize access to data in your account using the Shared Key authorization.
+	CredentialsSecret string `json:"credentialsSecret"`
+
+	// The endpoint allows clients to securely access data
+	EndpointURL string `json:"endpointUrl,omitempty"`
+
+	// Hot (Frequently accessed or modified data), Cool (Infrequently accessed or modified data), Archive (Rarely accessed or modified data)
+	StorageClass string `json:"storageClass,omitempty"`
 }
 
 type PodDisruptionBudgetSpec struct {
@@ -243,7 +316,11 @@ func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 }
 
 func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVersion) error {
-	if cr.Spec.MySQL.SizeSemiSync.IntVal >= cr.Spec.MySQL.Size {
+	if len(cr.Spec.Backup.Image) == 0 {
+		return errors.New("backup.image can't be empty")
+	}
+
+	if cr.Spec.MySQL.Size != 0 && cr.Spec.MySQL.SizeSemiSync.IntVal >= cr.Spec.MySQL.Size {
 		return errors.New("mysql.sizeSemiSync can't be greater than or equal to mysql.size")
 	}
 
@@ -459,22 +536,25 @@ func GetClusterNameFromObject(obj client.Object) (string, error) {
 	return instance, nil
 }
 
+func FNVHash(p []byte) string {
+	hash := fnv.New32()
+	hash.Write(p)
+	return fmt.Sprint(hash.Sum32())
+}
+
 // ClusterHash returns FNV hash of the CustomResource UID
 func (cr *PerconaServerMySQL) ClusterHash() string {
-	serverIDHash := fnv.New32()
-	serverIDHash.Write([]byte(string(cr.UID)))
+	serverIDHash := FNVHash([]byte(string(cr.UID)))
 
 	// We use only first 7 digits to give a space for pod number which is
 	// appended to all server ids. If we don't do this, it can cause a
 	// int32 overflow.
 	// P.S max value is 4294967295
-	serverIDHashStr := fmt.Sprint(serverIDHash.Sum32())
-
-	if len(serverIDHashStr) > 7 {
-		serverIDHashStr = serverIDHashStr[:7]
+	if len(serverIDHash) > 7 {
+		serverIDHash = serverIDHash[:7]
 	}
 
-	return serverIDHashStr
+	return serverIDHash
 }
 
 func (cr *PerconaServerMySQL) InternalSecretName() string {

@@ -11,6 +11,10 @@ import (
 )
 
 func InitImage(ctx context.Context, cl client.Reader) (string, error) {
+	return OperatorImage(ctx, cl)
+}
+
+func OperatorImage(ctx context.Context, cl client.Reader) (string, error) {
 	pod, err := operatorPod(ctx, cl)
 	if err != nil {
 		return "", errors.Wrap(err, "get operator pod")

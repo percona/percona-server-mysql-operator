@@ -18,16 +18,17 @@ import (
 )
 
 const (
-	componentName    = "orc"
-	defaultWebPort   = 3000
-	defaultRaftPort  = 10008
-	configVolumeName = "config"
-	configMountPath  = "/etc/orchestrator/config"
-	ConfigFileName   = "orchestrator.conf.json"
-	credsVolumeName  = "users"
-	CredsMountPath   = "/etc/orchestrator/orchestrator-users-secret"
-	tlsVolumeName    = "tls"
-	tlsMountPath     = "/etc/orchestrator/ssl"
+	componentName      = "orc"
+	componentShortName = "orc"
+	defaultWebPort     = 3000
+	defaultRaftPort    = 10008
+	configVolumeName   = "config"
+	configMountPath    = "/etc/orchestrator/config"
+	ConfigFileName     = "orchestrator.conf.json"
+	credsVolumeName    = "users"
+	CredsMountPath     = "/etc/orchestrator/orchestrator-users-secret"
+	tlsVolumeName      = "tls"
+	tlsMountPath       = "/etc/orchestrator/ssl"
 )
 
 type Exposer apiv1alpha1.PerconaServerMySQL
@@ -57,7 +58,7 @@ func (e *Exposer) Service(name string) *corev1.Service {
 
 // Name returns component name
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
-	return cr.Name + "-" + componentName
+	return cr.Name + "-" + componentShortName
 }
 
 func NamespacedName(cr *apiv1alpha1.PerconaServerMySQL) types.NamespacedName {
