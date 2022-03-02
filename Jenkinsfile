@@ -22,6 +22,7 @@ void ShutdownCluster(String CLUSTER_PREFIX) {
             gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
             gcloud config set project $GCP_PROJECT
             gcloud container clusters delete --zone $GKERegion $CLUSTER_NAME-${CLUSTER_PREFIX}
+            firewall-cleanup.sh delete $CLUSTER_NAME-${CLUSTER_PREFIX}
         """
    }
 }
@@ -191,6 +192,9 @@ pipeline {
                     sudo sh -c "curl -s -L https://github.com/mikefarah/yq/releases/download/v4.14.2/yq_linux_amd64 > /usr/local/bin/yq"
                     sudo chmod +x /usr/local/bin/yq
 
+                    sudo sh -c "curl -s -L https://raw.githubusercontent.com/Percona-QA/cloud-qa/main/firewall-cleanup.sh > /usr/local/bin/firewall-cleanup.sh"
+                    sudo chmod +x /usr/local/bin/firewall-cleanup.sh
+
                     cd "$(mktemp -d)"
                     OS="$(uname | tr '[:upper:]' '[:lower:]')"
                     ARCH="$(uname -m | sed -e 's/x86_64/amd64/')"
@@ -348,6 +352,7 @@ pipeline {
                         source $HOME/google-cloud-sdk/path.bash.inc
                         gcloud auth activate-service-account --key-file \$CLIENT_SECRET_FILE
                         gcloud config set project \$GCP_PROJECT
+                        gcloud container clusters list --format='csv[no-heading](name)' --filter $CLUSTER_NAME | xargs firewall-cleanup.sh delete || true
                         gcloud container clusters list --format='csv[no-heading](name)' --filter $CLUSTER_NAME | xargs gcloud container clusters delete --zone $GKERegion --quiet || true
                     fi
                     sudo docker system prune -fa
