@@ -1,0 +1,17 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      get_cr \
+      | yq eval '.spec.mysql.size=3' - \
+      | yq eval '.spec.mysql.sizeSemiSync=1' - \
+      | yq eval '.spec.orchestrator.size=1' - \
+      | kubectl -n "${NAMESPACE}" apply -f -
+
+      wait_cluster_consistency "${test_name}" "3" "1"
+    timeout: 60
