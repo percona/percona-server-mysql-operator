@@ -1,0 +1,333 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 10
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  labels:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: limits-no-limits
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: limits-no-limits-mysql
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: limits-no-limits
+spec:
+  podManagementPolicy: OrderedReady
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: mysql
+      app.kubernetes.io/instance: limits-no-limits
+      app.kubernetes.io/managed-by: percona-server-operator
+      app.kubernetes.io/name: percona-server
+      app.kubernetes.io/part-of: percona-server
+  serviceName: limits-no-limits-mysql
+  template:
+    metadata:
+      annotations:
+        percona.com/configuration-hash: ""
+      labels:
+        app.kubernetes.io/component: mysql
+        app.kubernetes.io/instance: limits-no-limits
+        app.kubernetes.io/managed-by: percona-server-operator
+        app.kubernetes.io/name: percona-server
+        app.kubernetes.io/part-of: percona-server
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: mysql
+                app.kubernetes.io/instance: limits-no-limits
+                app.kubernetes.io/managed-by: percona-server-operator
+                app.kubernetes.io/name: percona-server
+                app.kubernetes.io/part-of: percona-server
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - args:
+        - mysqld
+        command:
+        - /var/lib/mysql/ps-entrypoint.sh
+        env:
+        - name: MONITOR_HOST
+          value: '%'
+        - name: SERVICE_NAME
+          value: limits-no-limits-mysql
+        - name: SERVICE_NAME_UNREADY
+          value: limits-no-limits-mysql-unready
+        - name: CLUSTER_HASH
+        imagePullPolicy: Always
+        livenessProbe:
+          exec:
+            command:
+            - /var/lib/mysql/healthcheck
+            - liveness
+          failureThreshold: 3
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 30
+        name: mysql
+        ports:
+        - containerPort: 3306
+          name: mysql
+          protocol: TCP
+        - containerPort: 33062
+          name: mysql-admin
+          protocol: TCP
+        - containerPort: 33060
+          name: mysqlx
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - /var/lib/mysql/healthcheck
+            - readiness
+          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 3
+        resources:
+          requests:
+            memory: 512M
+        startupProbe:
+          exec:
+            command:
+            - /var/lib/mysql/bootstrap
+          failureThreshold: 1
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 300
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
+        - mountPath: /etc/mysql/mysql-tls-secret
+          name: tls
+        - mountPath: /etc/mysql/config
+          name: config
+      dnsPolicy: ClusterFirst
+      initContainers:
+      - command:
+        - /ps-init-entrypoint.sh
+        imagePullPolicy: Always
+        name: mysql-init
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
+        - mountPath: /etc/mysql/mysql-tls-secret
+          name: tls
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 1001
+        supplementalGroups:
+        - 1001
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: users
+        secret:
+          defaultMode: 420
+          secretName: internal-limits-no-limits
+      - name: tls
+        secret:
+          defaultMode: 420
+          secretName: test-ssl
+      - name: config
+        projected:
+          defaultMode: 420
+          sources:
+          - configMap:
+              items:
+              - key: my.cnf
+                path: my-config.cnf
+              name: limits-no-limits-mysql
+              optional: true
+          - secret:
+              items:
+              - key: my.cnf
+                path: my-secret.cnf
+              name: limits-no-limits-mysql
+              optional: true
+  updateStrategy:
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: datadir
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 2G
+      volumeMode: Filesystem
+    status:
+      phase: Pending
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  labels:
+    app.kubernetes.io/component: orc
+    app.kubernetes.io/instance: limits-no-limits
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: limits-no-limits-orc
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: limits-no-limits
+spec:
+  podManagementPolicy: OrderedReady
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: orc
+      app.kubernetes.io/instance: limits-no-limits
+      app.kubernetes.io/managed-by: percona-server-operator
+      app.kubernetes.io/name: percona-server
+      app.kubernetes.io/part-of: percona-server
+  serviceName: limits-no-limits-orc
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: orc
+        app.kubernetes.io/instance: limits-no-limits
+        app.kubernetes.io/managed-by: percona-server-operator
+        app.kubernetes.io/name: percona-server
+        app.kubernetes.io/part-of: percona-server
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: orc
+                app.kubernetes.io/instance: limits-no-limits
+                app.kubernetes.io/managed-by: percona-server-operator
+                app.kubernetes.io/name: percona-server
+                app.kubernetes.io/part-of: percona-server
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - env:
+        - name: ORC_SERVICE
+          value: limits-no-limits-orc
+        - name: MYSQL_SERVICE
+          value: limits-no-limits-mysql
+        - name: RAFT_ENABLED
+          value: "true"
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/lb-check
+            port: web
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 3
+        name: orc
+        ports:
+        - containerPort: 3000
+          name: web
+          protocol: TCP
+        - containerPort: 10008
+          name: raft
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/health
+            port: web
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 3
+        resources:
+          requests:
+            memory: 128M
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/orchestrator/ssl
+          name: tls
+        - mountPath: /etc/orchestrator/config
+          name: config
+        - mountPath: /etc/orchestrator/orchestrator-users-secret/orchestrator
+          name: users
+          subPath: orchestrator
+      - args:
+        - /usr/bin/peer-list
+        - -on-change=/usr/bin/add_mysql_nodes.sh
+        - -service=$(MYSQL_SERVICE)
+        env:
+        - name: ORC_SERVICE
+          value: limits-no-limits-mysql
+        - name: MYSQL_SERVICE
+          value: limits-no-limits-mysql
+        imagePullPolicy: Always
+        name: mysql-monit
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/orchestrator/ssl
+          name: tls
+        - mountPath: /etc/orchestrator/config
+          name: config
+        - mountPath: /etc/orchestrator/orchestrator-users-secret/orchestrator
+          name: users
+          subPath: orchestrator
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 1001
+        supplementalGroups:
+        - 1001
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: users
+        secret:
+          defaultMode: 420
+          secretName: internal-limits-no-limits
+      - name: tls
+        secret:
+          defaultMode: 420
+          secretName: test-ssl
+      - configMap:
+          defaultMode: 420
+          name: limits-no-limits-orc
+  updateStrategy:
+    rollingUpdate:
+      partition: 0
+    type: RollingUpdate
