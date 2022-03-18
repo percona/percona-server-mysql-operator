@@ -395,7 +395,7 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          spec.ContainerSecurityContext,
 		StartupProbe: &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{"/var/lib/mysql/bootstrap"},
 				},
@@ -408,7 +408,7 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			TerminationGracePeriodSeconds: spec.StartupProbe.TerminationGracePeriodSeconds,
 		},
 		LivenessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{"/var/lib/mysql/healthcheck", "liveness"},
 				},
@@ -421,7 +421,7 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			TerminationGracePeriodSeconds: spec.LivenessProbe.TerminationGracePeriodSeconds,
 		},
 		ReadinessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{"/var/lib/mysql/healthcheck", "readiness"},
 				},
