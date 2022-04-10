@@ -67,9 +67,12 @@ testsReportMap  = [:]
 testsResultsMap = [:]
 
 void makeReport() {
+    def wholeTestAmount=sh(script: 'ls e2e-tests/| wc -l', , returnStdout: true).trim()
+    def startedTestAmount = testsReportMap.size()
     for ( test in testsReportMap ) {
         TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value} |"
     }
+    TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
 }
 
 void setTestsresults() {
@@ -118,9 +121,11 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
             retryCount++
             return false
         }
+        finally {
+            pushLogFile(TEST_NAME)
+            echo "The $TEST_NAME test was finished!"
+        }
     }
-    pushLogFile(TEST_NAME)
-    echo "The $TEST_NAME test was finished!"
 }
 
 void installRpms() {
@@ -131,9 +136,9 @@ void installRpms() {
     '''
 }
 
-def skipBranchBulds = true
+def skipBranchBuilds = true
 if ( env.CHANGE_URL ) {
-    skipBranchBulds = false
+    skipBranchBuilds = false
 }
 
 pipeline {
@@ -153,7 +158,7 @@ pipeline {
         stage('Prepare') {
             when {
                 expression {
-                    !skipBranchBulds
+                    !skipBranchBuilds
                 }
             }
             steps {
@@ -211,7 +216,7 @@ pipeline {
         stage('Build docker image') {
             when {
                 expression {
-                    !skipBranchBulds
+                    !skipBranchBuilds
                 }
             }
             steps {
@@ -238,7 +243,7 @@ pipeline {
         stage('Check licenses') {
             when {
                 expression {
-                    !skipBranchBulds
+                    !skipBranchBuilds
                 }
             }
             parallel {
@@ -299,7 +304,7 @@ pipeline {
         stage('E2E Basic Tests') {
             when {
                 expression {
-                    !skipBranchBulds
+                    !skipBranchBuilds
                 }
             }
             steps {
