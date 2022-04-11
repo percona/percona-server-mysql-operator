@@ -67,7 +67,7 @@ testsReportMap  = [:]
 testsResultsMap = [:]
 
 void makeReport() {
-    def wholeTestAmount=sh(script: 'ls e2e-tests/| wc -l', , returnStdout: true).trim()
+    def wholeTestAmount=sh(script: 'ls e2e-tests/tests| wc -l', , returnStdout: true).trim()
     def startedTestAmount = testsReportMap.size()
     for ( test in testsReportMap ) {
         TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value} |"
