@@ -35,6 +35,31 @@ type User struct {
 	Hosts    []string
 }
 
+type Exposer apiv1alpha1.PerconaServerMySQL
+
+func (e *Exposer) Exposed() bool {
+	return e.Spec.MySQL.Expose.Enabled
+}
+
+func (e *Exposer) Name(index string) string {
+	cr := apiv1alpha1.PerconaServerMySQL(*e)
+	return Name(&cr) + "-" + index
+}
+
+func (e *Exposer) Size() int32 {
+	return e.Spec.MySQL.Size
+}
+
+func (e *Exposer) Labels() map[string]string {
+	cr := apiv1alpha1.PerconaServerMySQL(*e)
+	return MatchLabels(&cr)
+}
+
+func (e *Exposer) Service(name string) *corev1.Service {
+	cr := apiv1alpha1.PerconaServerMySQL(*e)
+	return PodService(&cr, cr.Spec.MySQL.ServiceType, name)
+}
+
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return cr.Name + "-" + componentName
 }

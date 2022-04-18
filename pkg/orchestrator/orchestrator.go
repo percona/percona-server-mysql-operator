@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 
@@ -11,24 +12,48 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
+	"github.com/pkg/errors"
 )
 
 const (
-	componentName   = "orc"
-	defaultWebPort  = 3000
-	defaultRaftPort = 10008
-	dataVolumeName  = "datadir"
-	DataMountPath   = "/var/lib/orchestrator"
-	// configVolumeName = "config"
-	// configMountPath  = "/etc/orchestrator"
-	credsVolumeName = "users"
-	CredsMountPath  = "/etc/orchestrator/orchestrator-users-secret"
-	tlsVolumeName   = "tls"
-	tlsMountPath    = "/etc/orchestrator/ssl"
+	componentName    = "orc"
+	defaultWebPort   = 3000
+	defaultRaftPort  = 10008
+	configVolumeName = "config"
+	configMountPath  = "/etc/orchestrator/config"
+	ConfigFileName   = "orchestrator.conf.json"
+	credsVolumeName  = "users"
+	CredsMountPath   = "/etc/orchestrator/orchestrator-users-secret"
+	tlsVolumeName    = "tls"
+	tlsMountPath     = "/etc/orchestrator/ssl"
 )
+
+type Exposer apiv1alpha1.PerconaServerMySQL
+
+func (e *Exposer) Exposed() bool {
+	return true
+}
+
+func (e *Exposer) Name(index string) string {
+	cr := apiv1alpha1.PerconaServerMySQL(*e)
+	return Name(&cr) + "-" + index
+}
+
+func (e *Exposer) Size() int32 {
+	return e.Spec.Orchestrator.Size
+}
+
+func (e *Exposer) Labels() map[string]string {
+	cr := apiv1alpha1.PerconaServerMySQL(*e)
+	return MatchLabels(&cr)
+}
+
+func (e *Exposer) Service(name string) *corev1.Service {
+	cr := apiv1alpha1.PerconaServerMySQL(*e)
+	return PodService(&cr, cr.Spec.Orchestrator.ServiceType, name)
+}
 
 // Name returns component name
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
@@ -43,8 +68,21 @@ func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
-func APIHost(serviceName string) string {
-	return fmt.Sprintf("http://%s:%d", serviceName, defaultWebPort)
+func ConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
+	return Name(cr)
+}
+
+func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
+	return fmt.Sprintf("%s-%d", Name(cr), idx)
+}
+
+func FQDN(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
+	// TODO: DNS suffix
+	return fmt.Sprintf("%s.%s.svc.cluster.local", PodName(cr, idx), cr.Namespace)
+}
+
+func APIHost(cr *apiv1alpha1.PerconaServerMySQL) string {
+	return fmt.Sprintf("http://%s:%d", FQDN(cr, 0), defaultWebPort)
 }
 
 // Labels returns labels of orchestrator
@@ -79,9 +117,6 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.StatefulSet {
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
-			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				k8s.PVC(dataVolumeName, spec.VolumeSpec),
-			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
@@ -110,6 +145,16 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.StatefulSet {
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
 									SecretName: cr.Spec.SSLSecretName,
+								},
+							},
+						},
+						{
+							Name: configVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: ConfigMapName(cr),
+									},
 								},
 							},
 						},
@@ -145,7 +190,7 @@ func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			},
 			{
 				Name:  "RAFT_ENABLED",
-				Value: "false",
+				Value: "true",
 			},
 		},
 		Ports: []corev1.ContainerPort{
@@ -225,12 +270,12 @@ func sidecarContainers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 func containerMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{
-			Name:      dataVolumeName,
-			MountPath: DataMountPath,
-		},
-		{
 			Name:      tlsVolumeName,
 			MountPath: tlsMountPath,
+		},
+		{
+			Name:      configVolumeName,
+			MountPath: configMountPath,
 		},
 		{
 			Name:      credsVolumeName,
@@ -267,4 +312,87 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			PublishNotReadyAddresses: true,
 		},
 	}
+}
+
+func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podName string) *corev1.Service {
+	labels := MatchLabels(cr)
+	labels[apiv1alpha1.ExposedLabel] = "true"
+
+	selector := MatchLabels(cr)
+	selector["statefulset.kubernetes.io/pod-name"] = podName
+
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Service",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      podName,
+			Namespace: cr.Namespace,
+			Labels:    labels,
+		},
+		Spec: corev1.ServiceSpec{
+			Type:     t,
+			Selector: selector,
+			Ports: []corev1.ServicePort{
+				{
+					Name: "web",
+					Port: defaultWebPort,
+				},
+				{
+					Name: "raft",
+					Port: defaultRaftPort,
+				},
+			},
+		},
+	}
+}
+
+func ConfigMap(cr *apiv1alpha1.PerconaServerMySQL, data map[string]string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ConfigMapName(cr),
+			Namespace: cr.Namespace,
+		},
+		Data: data,
+	}
+}
+
+func RaftNodes(cr *apiv1alpha1.PerconaServerMySQL) []string {
+	nodes := make([]string, cr.Spec.Orchestrator.Size)
+
+	for i := 0; i < int(cr.Spec.Orchestrator.Size); i++ {
+		nodes[i] = fmt.Sprintf("%s:%d", FQDN(cr, i), 10008)
+	}
+
+	return nodes
+}
+
+func orcConfig(cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
+	config := make(map[string]interface{}, 0)
+
+	config["RaftNodes"] = RaftNodes(cr)
+	configJson, err := json.Marshal(config)
+	if err != nil {
+		return "", errors.Wrap(err, "marshal orchestrator raft nodes to json")
+	}
+
+	return string(configJson), nil
+}
+
+func ConfigMapData(cr *apiv1alpha1.PerconaServerMySQL) (map[string]string, error) {
+	cmData := make(map[string]string, 0)
+
+	config, err := orcConfig(cr)
+	if err != nil {
+		return cmData, errors.Wrap(err, "get raft nodes")
+	}
+
+	cmData[ConfigFileName] = config
+
+	return cmData, nil
 }

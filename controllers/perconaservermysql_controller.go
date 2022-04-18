@@ -47,6 +47,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/users"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
 // PerconaServerMySQLReconciler reconciles a PerconaServerMySQL object
@@ -119,6 +120,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.ensureTLSSecret(ctx, cr); err != nil {
 		return errors.Wrap(err, "TLS secret")
 	}
+	if err := r.reconcileServices(ctx, cr); err != nil {
+		return errors.Wrap(err, "services")
+	}
 	if err := r.reconcileDatabase(ctx, cr); err != nil {
 		return errors.Wrap(err, "database")
 	}
@@ -127,6 +131,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	}
 	if err := r.reconcileReplication(ctx, cr); err != nil {
 		return errors.Wrap(err, "replication")
+	}
+	if err := r.cleanupOutdated(ctx, cr); err != nil {
+		return errors.Wrap(err, "cleanup outdated")
 	}
 
 	return nil
@@ -270,7 +277,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return errors.Wrap(err, "get operator password")
 	}
 
-	orcHost := orchestrator.APIHost(orchestrator.ServiceName(cr))
+	orcHost := orchestrator.APIHost(cr)
 	primary, err := orchestrator.ClusterPrimary(ctx, orcHost, cr.ClusterHint())
 	if err != nil {
 		return errors.Wrap(err, "get cluster primary")
@@ -471,18 +478,41 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 		return errors.Wrap(err, "reconcile sts")
 	}
 
-	if err := r.reconcileMySQLServices(ctx, cr); err != nil {
-		return errors.Wrap(err, "reconcile services")
+	return nil
+}
+
+type Exposer interface {
+	Exposed() bool
+	Name(index string) string
+	Size() int32
+	Labels() map[string]string
+	Service(name string) *corev1.Service
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileServicePerPod(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, exposer Exposer) error {
+	_ = log.FromContext(ctx).WithName("reconcileServicePerPod")
+
+	if !exposer.Exposed() {
+		return nil
+	}
+
+	size := int(exposer.Size())
+	svcNames := make(map[string]struct{}, size)
+	for i := 0; i < size; i++ {
+		svcName := exposer.Name(strconv.Itoa(i))
+		svc := exposer.Service(svcName)
+		svcNames[svc.Name] = struct{}{}
+
+		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, svc, r.Scheme); err != nil {
+			return errors.Wrapf(err, "reconcile svc for pod %s", svc.Name)
+		}
 	}
 
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(
-	ctx context.Context,
-	cr *apiv1alpha1.PerconaServerMySQL,
-) error {
-	l := log.FromContext(ctx).WithName("reconcileMySQLServices")
+func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	_ = log.FromContext(ctx).WithName("reconcileMySQLServices")
 
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.PrimaryService(cr), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile primary svc")
@@ -496,41 +526,9 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(
 		return errors.Wrap(err, "reconcile headless svc")
 	}
 
-	mysqlSize := int(cr.Spec.MySQL.Size)
-	svcNames := make(map[string]struct{}, mysqlSize)
-	for i := 0; i < mysqlSize; i++ {
-		svcName := mysql.Name(cr) + "-" + strconv.Itoa(i)
-		svcNames[svcName] = struct{}{}
-		svc := mysql.PodService(cr, cr.Spec.MySQL.Expose.Type, svcName)
-
-		if cr.Spec.MySQL.Expose.Enabled {
-			if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, svc, r.Scheme); err != nil {
-				return errors.Wrapf(err, "reconcile svc for pod %s", svcName)
-			}
-		} else {
-			if err := r.Client.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
-				return errors.Wrapf(err, "delete svc for pod %s", svcName)
-			}
-		}
-	}
-
-	// Clean up outdated services
-	svcLabels := mysql.MatchLabels(cr)
-	svcLabels[apiv1alpha1.ExposedLabel] = "true"
-	services, err := k8s.ServicesByLabels(ctx, r.Client, svcLabels)
-	if err != nil {
-		return errors.Wrap(err, "get MySQL services")
-	}
-
-	for _, svc := range services {
-		if _, ok := svcNames[svc.Name]; ok {
-			continue
-		}
-
-		l.Info("Deleting outdated service", "service", svc.Name)
-		if err := r.Client.Delete(ctx, &svc); err != nil && !k8serrors.IsNotFound(err) {
-			return errors.Wrapf(err, "delete Service/%s", svc.Name)
-		}
+	exposer := mysql.Exposer(*cr)
+	if err := r.reconcileServicePerPod(ctx, cr, &exposer); err != nil {
+		return errors.Wrap(err, "reconcile service per pod")
 	}
 
 	return nil
@@ -588,25 +586,111 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfiguration(
 	return fmt.Sprintf("%x", md5.Sum(data)), nil
 }
 
-func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(
-	ctx context.Context,
-	cr *apiv1alpha1.PerconaServerMySQL,
-) error {
+func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	l := log.FromContext(ctx).WithName("reconcileOrchestrator")
+
+	cm := &corev1.ConfigMap{}
+	err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), cm)
+	if client.IgnoreNotFound(err) != nil {
+		return errors.Wrap(err, "get config map")
+	}
+
+	existingNodes := make([]string, 0)
+	if !k8serrors.IsNotFound(err) {
+		cfg, ok := cm.Data[orchestrator.ConfigFileName]
+		if !ok {
+			return errors.Errorf("key %s not found in ConfigMap", orchestrator.ConfigFileName)
+		}
+
+		config := make(map[string]interface{}, 0)
+		if err := json.Unmarshal([]byte(cfg), &config); err != nil {
+			return errors.Wrap(err, "unmarshal ConfigMap data to json")
+		}
+
+		nodes, ok := config["RaftNodes"].([]interface{})
+		if !ok {
+			return errors.New("key RaftNodes not found in ConfigMap")
+		}
+
+		for _, v := range nodes {
+			existingNodes = append(existingNodes, v.(string))
+		}
+	}
+
+	cmData, err := orchestrator.ConfigMapData(cr)
+	if err != nil {
+		return errors.Wrap(err, "get ConfigMap data")
+	}
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.ConfigMap(cr, cmData), r.Scheme); err != nil {
+		return errors.Wrap(err, "reconcile ConfigMap")
+	}
+
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.StatefulSet(cr), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile StatefulSet")
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.Service(cr), r.Scheme); err != nil {
-		return errors.Wrap(err, "reconcile Service")
+	raftNodes := orchestrator.RaftNodes(cr)
+	if len(existingNodes) == 0 || len(existingNodes) == len(raftNodes) {
+		return nil
+	}
+
+	orcHost := orchestrator.APIHost(cr)
+	g, gCtx := errgroup.WithContext(context.Background())
+
+	if len(raftNodes) > len(existingNodes) {
+		newPeers := util.Difference(raftNodes, existingNodes)
+
+		for _, peer := range newPeers {
+			p := peer
+			g.Go(func() error {
+				return orchestrator.AddPeer(gCtx, orcHost, p)
+			})
+		}
+
+		l.Error(g.Wait(), "Orchestrator add peers", "peers", newPeers)
+	} else {
+		oldPeers := util.Difference(existingNodes, raftNodes)
+
+		for _, peer := range oldPeers {
+			p := peer
+			g.Go(func() error {
+				return orchestrator.RemovePeer(gCtx, orcHost, p)
+			})
+		}
+
+		l.Error(g.Wait(), "Orchestrator remove peers", "peers", oldPeers)
 	}
 
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) reconcileReplication(
-	ctx context.Context,
-	cr *apiv1alpha1.PerconaServerMySQL,
-) error {
+func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.Service(cr), r.Scheme); err != nil {
+		return errors.Wrap(err, "reconcile Service")
+	}
+
+	exposer := orchestrator.Exposer(*cr)
+	if err := r.reconcileServicePerPod(ctx, cr, &exposer); err != nil {
+		return errors.Wrap(err, "reconcile service per pod")
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if err := r.reconcileMySQLServices(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile MySQL services")
+	}
+
+	if err := r.reconcileOrchestratorServices(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile Orchestrator services")
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("reconcileReplication")
 
 	sts := &appsv1.StatefulSet{}
@@ -642,7 +726,7 @@ func reconcileReplicationPrimaryPod(
 	}
 	l.V(1).Info(fmt.Sprintf("got %v pods", len(pods)))
 
-	host := orchestrator.APIHost(orchestrator.ServiceName(cr))
+	host := orchestrator.APIHost(cr)
 	primary, err := orchestrator.ClusterPrimary(ctx, host, cr.ClusterHint())
 	if err != nil {
 		return errors.Wrap(err, "get cluster primary")
@@ -696,7 +780,7 @@ func reconcileReplicationSemiSync(
 ) error {
 	l := log.FromContext(ctx).WithName("reconcileReplicationSemiSync")
 
-	host := orchestrator.APIHost(orchestrator.ServiceName(cr))
+	host := orchestrator.APIHost(cr)
 	primary, err := orchestrator.ClusterPrimary(ctx, host, cr.ClusterHint())
 	if err != nil {
 		return errors.Wrap(err, "get cluster primary")
@@ -729,6 +813,58 @@ func reconcileReplicationSemiSync(
 		return errors.Wrapf(err, "set semi-sync size on %v", primaryHost)
 	}
 	l.Info(fmt.Sprintf("set semi-sync size on %v", primaryHost))
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, exposer Exposer) error {
+	l := log.FromContext(ctx).WithName("cleanupOutdatedServices")
+
+	size := int(exposer.Size())
+	svcNames := make(map[string]struct{}, size)
+	for i := 0; i < size; i++ {
+		svcName := exposer.Name(strconv.Itoa(i))
+		svc := exposer.Service(svcName)
+		svcNames[svc.Name] = struct{}{}
+
+		if !exposer.Exposed() {
+			if err := r.Client.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
+				return errors.Wrapf(err, "delete svc for pod %s", svc.Name)
+			}
+		}
+	}
+
+	svcLabels := exposer.Labels()
+	svcLabels[apiv1alpha1.ExposedLabel] = "true"
+	services, err := k8s.ServicesByLabels(ctx, r.Client, svcLabels)
+	if err != nil {
+		return errors.Wrap(err, "get exposed services")
+	}
+
+	for _, svc := range services {
+		if _, ok := svcNames[svc.Name]; ok {
+			continue
+		}
+
+		l.Info("Deleting outdated service", "service", svc.Name)
+		if err := r.Client.Delete(ctx, &svc); err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrapf(err, "delete Service/%s", svc.Name)
+		}
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	mysqlExposer := mysql.Exposer(*cr)
+	if err := r.cleanupOutdatedServices(ctx, cr, &mysqlExposer); err != nil {
+		return errors.Wrap(err, "cleanup MySQL services")
+	}
+
+	orcExposer := orchestrator.Exposer(*cr)
+	if err := r.cleanupOutdatedServices(ctx, cr, &orcExposer); err != nil {
+		return errors.Wrap(err, "cleanup Orchestrator services")
+	}
 
 	return nil
 }

@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
-	"time"
 
 	"github.com/pkg/errors"
 )
@@ -29,61 +29,151 @@ type Instance struct {
 }
 
 func ClusterPrimary(ctx context.Context, apiHost, clusterHint string) (*Instance, error) {
+	url := fmt.Sprintf("%s/api/master/%s", apiHost, clusterHint)
+
+	resp, err := doRequest(ctx, url)
+	if err != nil {
+		return nil, errors.Wrapf(err, "do request to %s", url)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "read response body")
+	}
+
 	primary := &Instance{}
-	return primary, doRequest(ctx, apiHost+"/api/master/"+clusterHint, primary)
+	if err := json.Unmarshal(body, primary); err == nil {
+		return primary, nil
+	}
+
+	orcResp := &orcResponse{}
+	if err := json.Unmarshal(body, orcResp); err != nil {
+		return nil, errors.Wrap(err, "json decode")
+	}
+
+	if orcResp.Code == "ERROR" {
+		return nil, errors.New(orcResp.Message)
+	}
+
+	return primary, nil
 }
 
 func StopReplication(ctx context.Context, apiHost, host string, port int32) error {
-	resp := &orcResponse{}
-
 	url := fmt.Sprintf("%s/api/stop-replica/%s/%d", apiHost, host, port)
-	if err := doRequest(ctx, url, resp); err != nil {
+
+	resp, err := doRequest(ctx, url)
+	if err != nil {
 		return errors.Wrapf(err, "do request to %s", url)
 	}
+	defer resp.Body.Close()
 
-	if resp.Code != "OK" {
-		return errors.New(resp.Message)
+	orcResp := &orcResponse{}
+	if err := json.NewDecoder(resp.Body).Decode(orcResp); err != nil {
+		return errors.Wrap(err, "json decode")
+	}
+
+	if orcResp.Code == "ERROR" {
+		return errors.New(orcResp.Message)
 	}
 
 	return nil
 }
 
 func StartReplication(ctx context.Context, apiHost, host string, port int32) error {
-	resp := &orcResponse{}
-
 	url := fmt.Sprintf("%s/api/start-replica/%s/%d", apiHost, host, port)
-	if err := doRequest(ctx, url, resp); err != nil {
+
+	resp, err := doRequest(ctx, url)
+	if err != nil {
 		return errors.Wrapf(err, "do request to %s", url)
 	}
+	defer resp.Body.Close()
 
-	if resp.Code != "OK" {
-		return errors.New(resp.Message)
+	orcResp := &orcResponse{}
+	if err := json.NewDecoder(resp.Body).Decode(orcResp); err != nil {
+		return errors.Wrap(err, "json decode")
+	}
+
+	if orcResp.Code == "ERROR" {
+		return errors.New(orcResp.Message)
 	}
 
 	return nil
 }
 
-func doRequest(ctx context.Context, url string, o interface{}) error {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
+func AddPeer(ctx context.Context, apiHost string, peer string) error {
+	url := fmt.Sprintf("%s/api/raft-add-peer/%s", apiHost, peer)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	resp, err := doRequest(ctx, url)
 	if err != nil {
-		return errors.Wrap(err, "make request")
+		return errors.Wrapf(err, "do request to %s", url)
 	}
-	res, err := http.DefaultClient.Do(req)
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return errors.Wrap(err, "do request")
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode >= 400 && res.StatusCode <= 599 {
-		return errors.Errorf("request failed with %s", res.Status)
+		return errors.Wrap(err, "read response body")
 	}
 
-	if err := json.NewDecoder(res.Body).Decode(o); err != nil {
+	// Orchestrator returns peer IP as string on success
+	o := ""
+	if err := json.Unmarshal(body, &o); err == nil {
+		return nil
+	}
+
+	orcResp := &orcResponse{}
+	if err := json.Unmarshal(body, &orcResp); err != nil {
 		return errors.Wrap(err, "json decode")
 	}
 
+	if orcResp.Code == "ERROR" {
+		return errors.New(orcResp.Message)
+	}
+
 	return nil
+}
+
+func RemovePeer(ctx context.Context, apiHost string, peer string) error {
+	url := fmt.Sprintf("%s/api/raft-remove-peer/%s", apiHost, peer)
+
+	resp, err := doRequest(ctx, url)
+	if err != nil {
+		return errors.Wrapf(err, "do request to %s", url)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return errors.Wrap(err, "read response body")
+	}
+
+	// Orchestrator returns peer IP as string on success
+	o := ""
+	if err := json.Unmarshal(body, &o); err == nil {
+		return nil
+	}
+
+	orcResp := &orcResponse{}
+	if err := json.Unmarshal(body, &orcResp); err != nil {
+		return errors.Wrap(err, "json decode")
+	}
+
+	if orcResp.Code == "ERROR" {
+		return errors.New(orcResp.Message)
+	}
+
+	return nil
+}
+
+func doRequest(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "make request")
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "do request")
+	}
+
+	return resp, nil
 }

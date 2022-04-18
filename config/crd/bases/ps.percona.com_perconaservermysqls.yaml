@@ -51,6 +51,8 @@ spec:
           spec:
             description: PerconaServerMySQLSpec defines the desired state of PerconaServerMySQL
             properties:
+              allowUnsafeConfigurations:
+                type: boolean
               crVersion:
                 type: string
               mysql:

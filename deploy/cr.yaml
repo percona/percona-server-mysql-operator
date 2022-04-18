@@ -72,10 +72,23 @@ spec:
 #            storage: 1G
 
   orchestrator:
-    image: perconalab/percona-server-mysql-operator:main-orchestrator
+    image: perconalab/percona-server-mysql-operator:k8sps-32-orchestrator
     imagePullPolicy: Always
 
-    size: 1
+    size: 3
+
+    affinity:
+      antiAffinityTopologyKey: "kubernetes.io/hostname"
+#      advanced:
+#        nodeAffinity:
+#          requiredDuringSchedulingIgnoredDuringExecution:
+#            nodeSelectorTerms:
+#            - matchExpressions:
+#              - key: kubernetes.io/e2e-az-name
+#                operator: In
+#                values:
+#                - e2e-az1
+#                - e2e-az2
 
     resources:
       requests:
