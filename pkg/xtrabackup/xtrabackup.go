@@ -99,32 +99,30 @@ func Job(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerM
 						xtrabackupContainer(cluster),
 					},
 					DNSPolicy: corev1.DNSClusterFirst,
-					Volumes: append(
-						[]corev1.Volume{
-							{
-								Name: dataVolumeName,
-								VolumeSource: corev1.VolumeSource{
-									EmptyDir: &corev1.EmptyDirVolumeSource{},
-								},
+					Volumes: []corev1.Volume{
+						{
+							Name: dataVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
 							},
-							{
-								Name: credsVolumeName,
-								VolumeSource: corev1.VolumeSource{
-									Secret: &corev1.SecretVolumeSource{
-										SecretName: cluster.Spec.SecretsName,
-									},
-								},
-							},
-							{
-								Name: tlsVolumeName,
-								VolumeSource: corev1.VolumeSource{
-									Secret: &corev1.SecretVolumeSource{
-										SecretName: cluster.Spec.SSLSecretName,
-									},
+						},
+						{
+							Name: credsVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: cluster.Spec.SecretsName,
 								},
 							},
 						},
-					),
+						{
+							Name: tlsVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: cluster.Spec.SSLSecretName,
+								},
+							},
+						},
+					},
 				},
 			},
 		},
