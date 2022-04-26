@@ -314,6 +314,7 @@ pipeline {
                 runTest('monitoring', 'basic')
                 runTest('semi-sync', 'basic')
                 runTest('service-per-pod', 'basic')
+                runTest('scaling', 'basic')
                 runTest('sidecars', 'basic')
                 runTest('users', 'basic')
                 ShutdownCluster('basic')
