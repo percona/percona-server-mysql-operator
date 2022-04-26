@@ -40,8 +40,6 @@ BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
 # Image URL to use all building/pushing image targets
 IMG ?= perconalab/percona-server-mysql-operator:$(VERSION)
 
-# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
-CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.21
 
@@ -81,7 +79,7 @@ help: ## Display this help.
 ##@ Development
 
 generate: controller-gen
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=$(NAME) webhook paths="./..." output:crd:artifacts:config=config/crd/bases  ## Generate WebhookConfiguration, Role and CustomResourceDefinition objects.
+	$(CONTROLLER_GEN) crd rbac:roleName=$(NAME) webhook paths="./..." output:crd:artifacts:config=config/crd/bases  ## Generate WebhookConfiguration, Role and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) object:headerFile="LICENSE-HEADER" paths="./..." ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 
 fmt: ## Run go fmt against code.
@@ -119,7 +117,7 @@ build: generate ## Build docker image with the manager.
 ##@ Deployment
 
 install: manifests ## Install CRDs, rbac
-	kubectl apply -f $(DEPLOYDIR)/crd.yaml
+	kubectl apply --server-side -f $(DEPLOYDIR)/crd.yaml
 	kubectl apply -f $(DEPLOYDIR)/rbac.yaml
 
 uninstall: manifests ## Uninstall CRDs, rbac

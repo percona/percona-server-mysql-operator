@@ -42,11 +42,11 @@ func MatchLabels(cluster *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(map[string]string{apiv1alpha1.ComponentLabel: componentName}, cluster.Labels())
 }
 
-func Job(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerMySQLBackup, initImage string) *batchv1.Job {
+func Job(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerMySQLBackup, initImage string, storage *apiv1alpha1.BackupStorageSpec) *batchv1.Job {
 	var one int32 = 1
 	t := true
 
-	labels := MatchLabels(cluster)
+	labels := util.SSMapMerge(storage.Labels, MatchLabels(cluster))
 
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -54,9 +54,10 @@ func Job(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerM
 			Kind:       "Job",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      JobName(cluster, cr),
-			Namespace: cluster.Namespace,
-			Labels:    labels,
+			Name:        JobName(cluster, cr),
+			Namespace:   cluster.Namespace,
+			Labels:      labels,
+			Annotations: storage.Annotations,
 		},
 		Spec: batchv1.JobSpec{
 			Parallelism: &one,
@@ -96,9 +97,15 @@ func Job(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerM
 					},
 					Containers: []corev1.Container{
 						mysqldContainer(cluster, cr),
-						xtrabackupContainer(cluster),
+						xtrabackupContainer(cluster, storage),
 					},
-					DNSPolicy: corev1.DNSClusterFirst,
+					Affinity:          storage.Affinity,
+					Tolerations:       storage.Tolerations,
+					NodeSelector:      storage.NodeSelector,
+					SchedulerName:     storage.SchedulerName,
+					PriorityClassName: storage.PriorityClassName,
+					RuntimeClassName:  storage.RuntimeClassName,
+					DNSPolicy:         corev1.DNSClusterFirst,
 					Volumes: []corev1.Volume{
 						{
 							Name: dataVolumeName,
@@ -177,7 +184,7 @@ func mysqldContainer(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.Pe
 	}
 }
 
-func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL) corev1.Container {
+func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
 	spec := cluster.Spec.Backup
 
 	return corev1.Container{
@@ -208,7 +215,8 @@ func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL) corev1.Contain
 		Command:                  []string{"/var/lib/mysql/run-backup.sh"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		SecurityContext:          spec.ContainerSecurityContext,
+		SecurityContext:          storage.ContainerSecurityContext,
+		Resources:                storage.Resources,
 	}
 }
 

@@ -151,7 +151,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return rr, errors.Wrap(err, "get operator image")
 		}
 
-		job := xtrabackup.Job(cluster, cr, initImage)
+		job := xtrabackup.Job(cluster, cr, initImage, storage)
 
 		switch storage.Type {
 		case apiv1alpha1.BackupStorageFilesystem:
