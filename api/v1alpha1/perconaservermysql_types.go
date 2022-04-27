@@ -149,7 +149,7 @@ type BackupStorageSpec struct {
 	Volume                   *VolumeSpec                 `json:"volumeSpec,omitempty"`
 	NodeSelector             map[string]string           `json:"nodeSelector,omitempty"`
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
-	Affinity                 *corev1.Affinity             `json:"affinity,omitempty"`
+	Affinity                 *corev1.Affinity            `json:"affinity,omitempty"`
 	Tolerations              []corev1.Toleration         `json:"tolerations,omitempty"`
 	Annotations              map[string]string           `json:"annotations,omitempty"`
 	Labels                   map[string]string           `json:"labels,omitempty"`
