@@ -324,7 +324,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 	cr.Spec.Orchestrator.reconcileAffinityOpts()
 
 	if oSize := int(cr.Spec.Orchestrator.Size); (oSize < 3 || oSize%2 == 0) && !cr.Spec.AllowUnsafeConfig {
-		return errors.New("Orchestrator size must be greater than 3 and an odd number for raft setup")
+		return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup")
 	}
 
 	return nil
