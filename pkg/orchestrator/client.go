@@ -166,7 +166,7 @@ func RemovePeer(ctx context.Context, apiHost string, peer string) error {
 }
 
 func doRequest(ctx context.Context, url string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "make request")
 	}
