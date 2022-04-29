@@ -757,10 +757,38 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(
 		cr.Status.State = apiv1alpha1.StateInitializing
 	}
 
-	l.V(1).Info("Writing CR status", "state", cr.Status.State, "orchestrator", cr.Status.Orchestrator, "mysql", cr.Status.MySQL)
+	cr.Status.Host, err = appHost(ctx, r.Client, cr)
+	if err != nil {
+		return errors.Wrap(err, "get app host")
+	}
+
+	l.V(1).Info("Writing CR status", "state", cr.Status.State, "orchestrator", cr.Status.Orchestrator, "mysql", cr.Status.MySQL, "host", cr.Status.Host)
 
 	nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
 	return writeStatus(ctx, r.Client, nn, cr.Status)
+}
+
+func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
+	serviceName := mysql.PrimaryServiceName(cr)
+	if cr.MySQLSpec().Expose.Enabled && cr.MySQLSpec().Expose.Type != corev1.ServiceTypeLoadBalancer {
+		return serviceName + "." + cr.GetNamespace(), nil
+	}
+
+	svc := &corev1.Service{}
+	err := cl.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: serviceName}, svc)
+	if err != nil {
+		return "", errors.Wrapf(err, "get %s service", serviceName)
+	}
+
+	var host string
+	for _, i := range svc.Status.LoadBalancer.Ingress {
+		host = i.IP
+		if len(i.Hostname) > 0 {
+			host = i.Hostname
+		}
+	}
+
+	return host, nil
 }
 
 func appStatus(
