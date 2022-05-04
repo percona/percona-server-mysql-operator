@@ -51,7 +51,14 @@ spec:
           bucket: S3-BACKUP-BUCKET-NAME-HERE
           credentialsSecret: cluster1-s3-credentials
           region: us-west-2
+
+  router:
+    image: perconalab/percona-server-mysql-operator:router
+    imagePullPolicy: Always
+    size: 3
+
   mysql:
+    clusterType: async
     image: percona/percona-server:8.0.28
     imagePullPolicy: Always
 
@@ -60,9 +67,9 @@ spec:
 
     resources:
       requests:
-        memory: 512M
-      limits:
         memory: 1G
+      limits:
+        memory: 2G
 
     affinity:
       antiAffinityTopologyKey: "kubernetes.io/hostname"
@@ -121,7 +128,7 @@ spec:
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 
-    size: 3
+    size: 0
 
     affinity:
       antiAffinityTopologyKey: "kubernetes.io/hostname"

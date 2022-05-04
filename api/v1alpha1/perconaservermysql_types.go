@@ -44,12 +44,13 @@ type PerconaServerMySQLSpec struct {
 	Orchestrator          OrchestratorSpec `json:"orchestrator,omitempty"`
 	PMM                   *PMMSpec         `json:"pmm,omitempty"`
 	Backup                *BackupSpec      `json:"backup,omitempty"`
+	Router                *MySQLRouterSpec `json:"router,omitempty"`
 }
 
 type ClusterType string
 
 const (
-	ClusterTypeGr    ClusterType = "gr"
+	ClusterTypeGR    ClusterType = "group-replication"
 	ClusterTypeAsync ClusterType = "async"
 )
 
@@ -198,6 +199,12 @@ type BackupStorageAzureSpec struct {
 
 	// Hot (Frequently accessed or modified data), Cool (Infrequently accessed or modified data), Archive (Rarely accessed or modified data)
 	StorageClass string `json:"storageClass,omitempty"`
+}
+
+type MySQLRouterSpec struct {
+	Expose ServiceExpose `json:"expose,omitempty"`
+
+	PodSpec `json:",inline"`
 }
 
 type PodDisruptionBudgetSpec struct {
@@ -406,13 +413,18 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 	cr.Spec.MySQL.reconcileAffinityOpts()
 	cr.Spec.Orchestrator.reconcileAffinityOpts()
 
-	if oSize := int(cr.Spec.Orchestrator.Size); (oSize < 3 || oSize%2 == 0) && !cr.Spec.AllowUnsafeConfig {
+	if oSize := int(cr.Spec.Orchestrator.Size); (oSize < 3 || oSize%2 == 0) && oSize != 0 && !cr.Spec.AllowUnsafeConfig {
 		return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup")
+	}
+
+	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Router == nil {
+		return errors.New("router section is needed for group replication")
 	}
 
 	if cr.Spec.Pause {
 		cr.Spec.MySQL.Size = 0
 		cr.Spec.Orchestrator.Size = 0
+		cr.Spec.Router.Size = 0
 	}
 
 	return nil
