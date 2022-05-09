@@ -27,6 +27,7 @@ const (
 const (
 	DefaultPort      = 3306
 	DefaultAdminPort = 33062
+	DefaultXPort     = 33060
 )
 
 type User struct {
@@ -258,6 +259,14 @@ func UnreadyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 					Name: "mysql",
 					Port: DefaultPort,
 				},
+				{
+					Name: "mysql-admin",
+					Port: DefaultAdminPort,
+				},
+				{
+					Name: "mysqlx",
+					Port: DefaultXPort,
+				},
 			},
 			Selector:                 labels,
 			PublishNotReadyAddresses: true,
@@ -284,6 +293,14 @@ func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 				{
 					Name: "mysql",
 					Port: DefaultPort,
+				},
+				{
+					Name: "mysql-admin",
+					Port: DefaultAdminPort,
+				},
+				{
+					Name: "mysqlx",
+					Port: DefaultXPort,
 				},
 			},
 			Selector: labels,
@@ -316,6 +333,14 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 					Name: componentName,
 					Port: DefaultPort,
 				},
+				{
+					Name: componentName + "-admin",
+					Port: DefaultAdminPort,
+				},
+				{
+					Name: componentName + "x",
+					Port: DefaultXPort,
+				},
 			},
 		},
 	}
@@ -347,6 +372,14 @@ func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 				{
 					Name: "mysql",
 					Port: DefaultPort,
+				},
+				{
+					Name: "mysql-admin",
+					Port: DefaultAdminPort,
+				},
+				{
+					Name: "mysqlx",
+					Port: DefaultXPort,
 				},
 			},
 			Selector: selector,
@@ -394,6 +427,14 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			{
 				Name:          "mysql",
 				ContainerPort: DefaultPort,
+			},
+			{
+				Name:          "mysql-admin",
+				ContainerPort: DefaultAdminPort,
+			},
+			{
+				Name:          "mysqlx",
+				ContainerPort: DefaultXPort,
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
