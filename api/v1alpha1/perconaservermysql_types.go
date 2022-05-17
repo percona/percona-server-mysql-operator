@@ -39,6 +39,7 @@ type PerconaServerMySQLSpec struct {
 	SecretsName           string           `json:"secretsName,omitempty"`
 	SSLSecretName         string           `json:"sslSecretName,omitempty"`
 	SSLInternalSecretName string           `json:"sslInternalSecretName,omitempty"`
+	AllowUnsafeConfig     bool             `json:"allowUnsafeConfigurations,omitempty"`
 	MySQL                 MySQLSpec        `json:"mysql,omitempty"`
 	Orchestrator          OrchestratorSpec `json:"orchestrator,omitempty"`
 	PMM                   *PMMSpec         `json:"pmm,omitempty"`
@@ -52,10 +53,10 @@ const (
 )
 
 type MySQLSpec struct {
-	ClusterType  ClusterType        `json:"clusterType,omitempty"`
-	SizeSemiSync intstr.IntOrString `json:"sizeSemiSync,omitempty"`
-	SemiSyncType string             `json:"semiSyncType,omitempty"`
-	Expose       ServiceExpose      `json:"expose,omitempty"`
+	ClusterType  ClusterType            `json:"clusterType,omitempty"`
+	SizeSemiSync intstr.IntOrString     `json:"sizeSemiSync,omitempty"`
+	SemiSyncType string                 `json:"semiSyncType,omitempty"`
+	Expose       ServiceExposeTogglable `json:"expose,omitempty"`
 
 	Sidecars       []corev1.Container `json:"sidecars,omitempty"`
 	SidecarVolumes []corev1.Volume    `json:"sidecarVolumes,omitempty"`
@@ -73,6 +74,8 @@ type SidecarPVC struct {
 }
 
 type OrchestratorSpec struct {
+	Expose ServiceExpose `json:"expose,omitempty"`
+
 	PodSpec `json:",inline"`
 }
 
@@ -154,11 +157,16 @@ type VolumeSpec struct {
 }
 
 type ServiceExpose struct {
-	Enabled                  bool                                    `json:"enabled,omitempty"`
 	Type                     corev1.ServiceType                      `json:"type,omitempty"`
 	LoadBalancerSourceRanges []string                                `json:"loadBalancerSourceRanges,omitempty"`
 	Annotations              map[string]string                       `json:"annotations,omitempty"`
 	TrafficPolicy            corev1.ServiceExternalTrafficPolicyType `json:"trafficPolicy,omitempty"`
+}
+
+type ServiceExposeTogglable struct {
+	Enabled bool `json:"enabled,omitempty"`
+
+	ServiceExpose `json:",inline"`
 }
 
 type StatefulAppState string
@@ -242,10 +250,6 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 		return errors.New("mysql.sizeSemiSync can't be greater than or equal to mysql.size")
 	}
 
-	if cr.Spec.Orchestrator.Size > 1 {
-		return errors.New("orchestrator size must be 1")
-	}
-
 	if cr.Spec.MySQL.StartupProbe.InitialDelaySeconds == 0 {
 		cr.Spec.MySQL.StartupProbe.InitialDelaySeconds = 15
 	}
@@ -321,6 +325,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 
 	cr.Spec.MySQL.reconcileAffinityOpts()
 	cr.Spec.Orchestrator.reconcileAffinityOpts()
+
+	if oSize := int(cr.Spec.Orchestrator.Size); (oSize < 3 || oSize%2 == 0) && !cr.Spec.AllowUnsafeConfig {
+		return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup")
+	}
 
 	return nil
 }
