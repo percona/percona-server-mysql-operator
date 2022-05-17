@@ -136,7 +136,7 @@ _get_tmpdir() {
 
 CFG=/etc/my.cnf.d/node.cnf
 TLS_DIR=/etc/mysql/mysql-tls-secret
-CUSTOM_CONFIG_FILES=("/etc/mysql/config/my-config.cnf" "/etc/mysql/config/my-secret.cnf")
+CUSTOM_CONFIG_FILES=("/etc/mysql/config/auto-config.cnf" "/etc/mysql/config/my-config.cnf" "/etc/mysql/config/my-secret.cnf")
 
 create_default_cnf() {
 	POD_IP=$(hostname -I | awk '{print $1}')

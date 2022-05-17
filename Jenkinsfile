@@ -309,6 +309,7 @@ pipeline {
             }
             steps {
                 CreateCluster('basic')
+                runTest('auto-config', 'basic')
                 runTest('config', 'basic')
                 runTest('init-deploy', 'basic')
                 runTest('monitoring', 'basic')

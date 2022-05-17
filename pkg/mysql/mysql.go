@@ -85,13 +85,17 @@ func ConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
+func AutoConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
+	return "auto-" + Name(cr)
+}
+
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
 		map[string]string{apiv1alpha1.ComponentLabel: componentName},
 		cr.Labels())
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, autoConfigHash string) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 	spec := cr.MySQLSpec()
 	replicas := spec.Size
@@ -99,6 +103,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 
 	annotations := make(map[string]string)
 	annotations["percona.com/configuration-hash"] = configHash
+	annotations["percona.com/auto-configuration-hash"] = autoConfigHash
 
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
@@ -192,6 +197,20 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 														{
 															Key:  CustomConfigKey,
 															Path: "my-config.cnf",
+														},
+													},
+													Optional: &t,
+												},
+											},
+											{
+												ConfigMap: &corev1.ConfigMapProjection{
+													LocalObjectReference: corev1.LocalObjectReference{
+														Name: AutoConfigMapName(cr),
+													},
+													Items: []corev1.KeyToPath{
+														{
+															Key:  CustomConfigKey,
+															Path: "auto-config.cnf",
 														},
 													},
 													Optional: &t,

@@ -226,3 +226,49 @@ wait_pod() {
 	done
 	set -o xtrace
 }
+
+check_auto_tuning() {
+    RAM_SIZE=$1
+    RDS_MEM_INSTANCE=12582880
+    CUSTOM_INNODB_SIZE=$2
+    CUSTOM_CONNECTIONS=$3
+
+    INNODB_SIZE=$(run_mysql \
+      'SELECT @@innodb_buffer_pool_size;' \
+      "-h $(get_mysql_primary_service "$(get_cluster_name)") -uroot -proot_password")
+    CONNECTIONS=$(run_mysql \
+      'SELECT @@max_connections;' \
+      "-h $(get_mysql_primary_service "$(get_cluster_name)") -uroot -proot_password")
+
+    if [[ -n ${CUSTOM_INNODB_SIZE} ]]; then
+        if [[ ${INNODB_SIZE} != ${CUSTOM_INNODB_SIZE} ]]; then
+          echo "innodb_buffer_pool_size is set to ${INNODB_SIZE}, which does not correlate with ${CUSTOM_INNODB_SIZE} from custom config"
+          exit 1
+        fi
+    else
+        if [[ 1000000000 -lt $((RAM_SIZE - $((RAM_SIZE * 75 / 100)))) ]]; then
+            if [[ ${INNODB_SIZE} != $((RAM_SIZE * 75 / 100)) ]]; then
+                echo "innodb_buffer_pool_size is set to ${INNODB_SIZE}, which does not correlate with cr.pxc.limits.memory * 0.75"
+                exit 1
+            fi
+        else
+            if [[ ${INNODB_SIZE} != $((RAM_SIZE * 50 / 100)) ]]; then
+                echo "innodb_buffer_pool_size is set to ${INNODB_SIZE}, which does not correlate with cr.pxc.limits.memory * 0.5"
+                exit 1
+            fi
+        fi
+    fi
+
+
+    if [[ -n ${CUSTOM_CONNECTIONS} ]]; then
+        if [[ ${CONNECTIONS} != ${CUSTOM_CONNECTIONS} ]]; then
+          echo "max_connections is set to ${AUTO_CONNECTIONS}, which does not correlate with ${CUSTOM_CONNECTIONS} from custom config"
+          exit 1
+        fi
+    else
+        if [[ ${CONNECTIONS} != $((RAM_SIZE / RDS_MEM_INSTANCE)) ]]; then
+            echo "max_connections is set to ${CONNECTIONS}, which does not correlate with cr.pxc.limits.memory / ${RDS_MEM_INSTANCE}"
+            exit 1
+        fi
+    fi
+}
