@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 30
 commands:
   - script: |-
       set -o errexit
@@ -8,4 +7,6 @@ commands:
 
       source ../../functions
 
+      sleep 10
       deploy_pmm_server
+    timeout: 120

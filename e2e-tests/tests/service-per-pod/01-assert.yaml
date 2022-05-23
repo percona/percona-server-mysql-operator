@@ -65,6 +65,14 @@ spec:
     port: 3306
     protocol: TCP
     targetPort: 3306
+  - name: mysql-admin
+    port: 33062
+    protocol: TCP
+    targetPort: 33062
+  - name: mysqlx
+    port: 33060
+    protocol: TCP
+    targetPort: 33060
   selector:
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: service-per-pod
@@ -96,6 +104,14 @@ spec:
     port: 3306
     protocol: TCP
     targetPort: 3306
+  - name: mysql-admin
+    port: 33062
+    protocol: TCP
+    targetPort: 33062
+  - name: mysqlx
+    port: 33060
+    protocol: TCP
+    targetPort: 33060
   selector:
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: service-per-pod
@@ -131,6 +147,14 @@ spec:
     port: 3306
     protocol: TCP
     targetPort: 3306
+  - name: mysql-admin
+    port: 33062
+    protocol: TCP
+    targetPort: 33062
+  - name: mysqlx
+    port: 33060
+    protocol: TCP
+    targetPort: 33060
   publishNotReadyAddresses: true
   selector:
     app.kubernetes.io/component: mysql
@@ -164,6 +188,14 @@ spec:
     port: 3306
     protocol: TCP
     targetPort: 3306
+  - name: mysql-admin
+    port: 33062
+    protocol: TCP
+    targetPort: 33062
+  - name: mysqlx
+    port: 33060
+    protocol: TCP
+    targetPort: 33060
   selector:
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: service-per-pod
@@ -197,6 +229,14 @@ spec:
     port: 3306
     protocol: TCP
     targetPort: 3306
+  - name: mysql-admin
+    port: 33062
+    protocol: TCP
+    targetPort: 33062
+  - name: mysqlx
+    port: 33060
+    protocol: TCP
+    targetPort: 33060
   selector:
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: service-per-pod
@@ -230,6 +270,14 @@ spec:
     port: 3306
     protocol: TCP
     targetPort: 3306
+  - name: mysql-admin
+    port: 33062
+    protocol: TCP
+    targetPort: 33062
+  - name: mysqlx
+    port: 33060
+    protocol: TCP
+    targetPort: 33060
   selector:
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: service-per-pod
