@@ -22,7 +22,7 @@ spec:
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 
-    size: 1
+    size: 3
 
     volumeSpec:
       persistentVolumeClaim:
@@ -33,7 +33,7 @@ spec:
   pmm:
     enabled: true
 
-    image: percona/pmm-client:2.18.0
+    image: percona/pmm-client:2.26.0
     imagePullPolicy: Always
 
     serverHost: monitoring-service
