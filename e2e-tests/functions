@@ -65,7 +65,7 @@ get_cr() {
 		| yq eval '.spec.sslSecretName="test-ssl"' - \
 		| yq eval "$(printf '.spec.mysql.image="%s"' "${IMAGE_MYSQL}")" - \
 		| yq eval "$(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}")" - \
-		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_MYSQL}")" -
+		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_PMM}")" -
 }
 
 run_mysql() {
