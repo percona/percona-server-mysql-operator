@@ -7,6 +7,5 @@ commands:
 
       source ../../functions
 
-      sleep 10
       deploy_pmm_server
     timeout: 120

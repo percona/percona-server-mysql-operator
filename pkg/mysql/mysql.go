@@ -58,7 +58,7 @@ func (e *Exposer) Labels() map[string]string {
 
 func (e *Exposer) Service(name string) *corev1.Service {
 	cr := apiv1alpha1.PerconaServerMySQL(*e)
-	return PodService(&cr, cr.Spec.MySQL.ServiceType, name)
+	return PodService(&cr, cr.Spec.MySQL.Expose.Type, name)
 }
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
