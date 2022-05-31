@@ -17,6 +17,8 @@ import (
 const (
 	componentName      = "xtrabackup"
 	componentShortName = "xb"
+	binVolumeName      = "bin"
+	binMountPath       = "/opt/percona"
 	dataVolumeName     = "datadir"
 	dataMountPath      = "/var/lib/mysql"
 	credsVolumeName    = "users"
@@ -31,12 +33,20 @@ func Name(cr *apiv1alpha1.PerconaServerMySQLBackup) string {
 	return componentShortName + "-" + cr.Name + "-" + cr.Spec.StorageName
 }
 
+func RestoreName(cr *apiv1alpha1.PerconaServerMySQLRestore) string {
+	return componentShortName + "-restore-" + cr.Name
+}
+
 func NamespacedName(cr *apiv1alpha1.PerconaServerMySQLBackup) types.NamespacedName {
 	return types.NamespacedName{Name: Name(cr), Namespace: cr.Namespace}
 }
 
 func JobName(cr *apiv1alpha1.PerconaServerMySQLBackup) string {
 	return Name(cr)
+}
+
+func RestoreJobName(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerMySQLRestore) string {
+	return RestoreName(cr)
 }
 
 func MatchLabels(cluster *apiv1alpha1.PerconaServerMySQL) map[string]string {
@@ -83,6 +93,10 @@ func Job(
 							ImagePullPolicy: cluster.Spec.MySQL.ImagePullPolicy,
 							VolumeMounts: []corev1.VolumeMount{
 								{
+									Name:      binVolumeName,
+									MountPath: binMountPath,
+								},
+								{
 									Name:      dataVolumeName,
 									MountPath: dataMountPath,
 								},
@@ -113,6 +127,12 @@ func Job(
 					RuntimeClassName:  storage.RuntimeClassName,
 					DNSPolicy:         corev1.DNSClusterFirst,
 					Volumes: []corev1.Volume{
+						{
+							Name: binVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
+							},
+						},
 						{
 							Name: dataVolumeName,
 							VolumeSource: corev1.VolumeSource{
@@ -170,6 +190,10 @@ func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName, de
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
+				Name:      binVolumeName,
+				MountPath: binMountPath,
+			},
+			{
 				Name:      dataVolumeName,
 				MountPath: dataMountPath,
 			},
@@ -178,7 +202,168 @@ func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName, de
 				MountPath: tlsMountPath,
 			},
 		},
-		Command:                  []string{"/var/lib/mysql/run-backup.sh"},
+		Command:                  []string{"/opt/percona/run-backup.sh"},
+		TerminationMessagePath:   "/dev/termination-log",
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+		SecurityContext:          storage.ContainerSecurityContext,
+		Resources:                storage.Resources,
+	}
+}
+
+func RestoreJob(
+	cluster *apiv1alpha1.PerconaServerMySQL,
+	backup *apiv1alpha1.PerconaServerMySQLBackup,
+	restore *apiv1alpha1.PerconaServerMySQLRestore,
+	storage *apiv1alpha1.BackupStorageSpec,
+	initImage string,
+	pvcName string,
+) *batchv1.Job {
+	one := int32(1)
+
+	labels := util.SSMapMerge(storage.Labels, MatchLabels(cluster))
+
+	return &batchv1.Job{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "batch/v1",
+			Kind:       "Job",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        RestoreJobName(cluster, restore),
+			Namespace:   cluster.Namespace,
+			Labels:      labels,
+			Annotations: storage.Annotations,
+		},
+		Spec: batchv1.JobSpec{
+			Parallelism: &one,
+			Completions: &one,
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: corev1.PodSpec{
+					RestartPolicy: corev1.RestartPolicyOnFailure,
+					InitContainers: []corev1.Container{
+						{
+							Name:            componentName + "-init",
+							Image:           initImage,
+							ImagePullPolicy: cluster.Spec.MySQL.ImagePullPolicy,
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      binVolumeName,
+									MountPath: binMountPath,
+								},
+								{
+									Name:      dataVolumeName,
+									MountPath: dataMountPath,
+								},
+								{
+									Name:      credsVolumeName,
+									MountPath: credsMountPath,
+								},
+								{
+									Name:      tlsVolumeName,
+									MountPath: tlsMountPath,
+								},
+							},
+							Command:                  []string{"/ps-init-entrypoint.sh"},
+							TerminationMessagePath:   "/dev/termination-log",
+							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+							SecurityContext:          cluster.Spec.MySQL.ContainerSecurityContext,
+						},
+					},
+					Containers: []corev1.Container{
+						restoreContainer(cluster, restore.Name, backup.Name, storage),
+					},
+					Affinity:          storage.Affinity,
+					Tolerations:       storage.Tolerations,
+					NodeSelector:      storage.NodeSelector,
+					SchedulerName:     storage.SchedulerName,
+					PriorityClassName: storage.PriorityClassName,
+					RuntimeClassName:  storage.RuntimeClassName,
+					DNSPolicy:         corev1.DNSClusterFirst,
+					Volumes: []corev1.Volume{
+						{
+							Name: binVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
+							},
+						},
+						{
+							Name: dataVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: pvcName,
+								},
+							},
+						},
+						{
+							Name: credsVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: cluster.Spec.SecretsName,
+								},
+							},
+						},
+						{
+							Name: tlsVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: cluster.Spec.SSLSecretName,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restoreName, backupName string, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
+	spec := cluster.Spec.Backup
+
+	verifyTLS := true
+	if storage.VerifyTLS != nil {
+		verifyTLS = *storage.VerifyTLS
+	}
+
+	return corev1.Container{
+		Name:            componentName,
+		Image:           spec.Image,
+		ImagePullPolicy: spec.ImagePullPolicy,
+		Env: []corev1.EnvVar{
+			{
+				Name:  "RESTORE_NAME",
+				Value: restoreName,
+			},
+			{
+				Name:  "BACKUP_NAME",
+				Value: backupName,
+			},
+			{
+				Name:  "BACKUP_DEST",
+				Value: "",
+			},
+			{
+				Name:  "VERIFY_TLS",
+				Value: strconv.FormatBool(verifyTLS),
+			},
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      binVolumeName,
+				MountPath: binMountPath,
+			},
+			{
+				Name:      dataVolumeName,
+				MountPath: dataMountPath,
+			},
+			{
+				Name:      tlsVolumeName,
+				MountPath: tlsMountPath,
+			},
+		},
+		Command:                  []string{"/opt/percona/run-restore.sh"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          storage.ContainerSecurityContext,
