@@ -58,7 +58,7 @@ func (e *Exposer) Labels() map[string]string {
 
 func (e *Exposer) Service(name string) *corev1.Service {
 	cr := apiv1alpha1.PerconaServerMySQL(*e)
-	return PodService(&cr, cr.Spec.MySQL.ServiceType, name)
+	return PodService(&cr, cr.Spec.MySQL.Expose.Type, name)
 }
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
@@ -277,6 +277,13 @@ func UnreadyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	labels := MatchLabels(cr)
 
+	serviceType := corev1.ServiceTypeClusterIP
+	clusterIP := "None"
+	if cr.Spec.MySQL.ReplicasServiceType != "" && cr.Spec.MySQL.ReplicasServiceType != corev1.ServiceTypeClusterIP {
+		serviceType = cr.Spec.MySQL.ReplicasServiceType
+		clusterIP = ""
+	}
+
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -288,7 +295,8 @@ func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
-			ClusterIP: "None",
+			Type:      serviceType,
+			ClusterIP: clusterIP,
 			Ports: []corev1.ServicePort{
 				{
 					Name: "mysql",
@@ -352,8 +360,8 @@ func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	selector[apiv1alpha1.MySQLPrimaryLabel] = "true"
 
 	serviceType := corev1.ServiceTypeClusterIP
-	if cr.Spec.MySQL.Expose.Enabled {
-		serviceType = cr.Spec.MySQL.Expose.Type
+	if cr.Spec.MySQL.PrimaryServiceType != "" {
+		serviceType = cr.Spec.MySQL.PrimaryServiceType
 	}
 
 	return &corev1.Service{

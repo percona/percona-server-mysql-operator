@@ -817,7 +817,7 @@ func reconcileReplicationSemiSync(
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, exposer Exposer) error {
+func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Context, exposer Exposer) error {
 	l := log.FromContext(ctx).WithName("cleanupOutdatedServices")
 
 	size := int(exposer.Size())
@@ -857,12 +857,12 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 
 func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	mysqlExposer := mysql.Exposer(*cr)
-	if err := r.cleanupOutdatedServices(ctx, cr, &mysqlExposer); err != nil {
+	if err := r.cleanupOutdatedServices(ctx, &mysqlExposer); err != nil {
 		return errors.Wrap(err, "cleanup MySQL services")
 	}
 
 	orcExposer := orchestrator.Exposer(*cr)
-	if err := r.cleanupOutdatedServices(ctx, cr, &orcExposer); err != nil {
+	if err := r.cleanupOutdatedServices(ctx, &orcExposer); err != nil {
 		return errors.Wrap(err, "cleanup Orchestrator services")
 	}
 

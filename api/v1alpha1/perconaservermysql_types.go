@@ -64,6 +64,9 @@ type MySQLSpec struct {
 
 	Configuration string `json:"configuration,omitempty"`
 
+	PrimaryServiceType  corev1.ServiceType `json:"primaryServiceType,omitempty"`
+	ReplicasServiceType corev1.ServiceType `json:"replicasServiceType,omitempty"`
+
 	PodSpec `json:",inline"`
 }
 
@@ -99,8 +102,6 @@ type PodSpec struct {
 	EnvVarsSecretName             string                                  `json:"envVarsSecret,omitempty"`
 	TerminationGracePeriodSeconds *int64                                  `json:"gracePeriod,omitempty"`
 	ForceUnsafeBootstrap          bool                                    `json:"forceUnsafeBootstrap,omitempty"`
-	ServiceType                   corev1.ServiceType                      `json:"serviceType,omitempty"`
-	ReplicasServiceType           corev1.ServiceType                      `json:"replicasServiceType,omitempty"`
 	ExternalTrafficPolicy         corev1.ServiceExternalTrafficPolicyType `json:"externalTrafficPolicy,omitempty"`
 	ReplicasExternalTrafficPolicy corev1.ServiceExternalTrafficPolicyType `json:"replicasExternalTrafficPolicy,omitempty"`
 	LoadBalancerSourceRanges      []string                                `json:"loadBalancerSourceRanges,omitempty"`
