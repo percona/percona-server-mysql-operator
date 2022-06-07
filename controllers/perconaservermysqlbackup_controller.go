@@ -167,7 +167,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			}
 
 			if !exists {
-				return rr, errors.Wrapf(err, "secret %s not found", nn)
+				return rr, errors.Errorf("secret %s not found", nn)
 			}
 
 			if err := xtrabackup.SetStorageS3(job, storage.S3); err != nil {
@@ -185,7 +185,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			}
 
 			if !exists {
-				return rr, errors.Wrapf(err, "secret %s not found", nn)
+				return rr, errors.Errorf("secret %s not found", nn)
 			}
 
 			if err := xtrabackup.SetStorageGCS(job, storage.GCS); err != nil {
@@ -203,14 +203,14 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			}
 
 			if !exists {
-				return rr, errors.Wrapf(err, "secret %s not found", nn)
+				return rr, errors.Errorf("secret %s not found", nn)
 			}
 
 			if err := xtrabackup.SetStorageAzure(job, storage.Azure); err != nil {
 				return rr, errors.Wrap(err, "set storage Azure")
 			}
 		default:
-			return rr, errors.Errorf("Storage type %s is not supported", storage.Type)
+			return rr, errors.Errorf("storage type %s is not supported", storage.Type)
 		}
 
 		src, err := r.getBackupSource(ctx, cluster)
