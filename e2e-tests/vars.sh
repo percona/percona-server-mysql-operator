@@ -20,6 +20,8 @@ export IMAGE_PMM_SERVER_TAG="dev-latest"
 
 date=$(which gdate || which date)
 
-if oc get projects; then
-	export OPENSHIFT=4
+if command -v oc &> /dev/null; then
+	if oc get projects; then
+		export OPENSHIFT=4
+	fi
 fi
