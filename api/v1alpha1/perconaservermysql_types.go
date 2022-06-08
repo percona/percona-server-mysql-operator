@@ -339,12 +339,11 @@ func reconcileVol(v *VolumeSpec) (*VolumeSpec, error) {
 	}
 	if v.PersistentVolumeClaim == nil {
 		return nil, errors.New("pvc should be specified")
-	} else {
-		_, limits := v.PersistentVolumeClaim.Resources.Limits[corev1.ResourceStorage]
-		_, requests := v.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
-		if !(limits || requests) {
-			return nil, errors.New("pvc's resources.limits[storage] or resources.requests[storage] should be specified")
-		}
+	}
+	_, limits := v.PersistentVolumeClaim.Resources.Limits[corev1.ResourceStorage]
+	_, requests := v.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+	if !(limits || requests) {
+		return nil, errors.New("pvc's resources.limits[storage] or resources.requests[storage] should be specified")
 	}
 
 	defaultPVCSpec(v.PersistentVolumeClaim)
