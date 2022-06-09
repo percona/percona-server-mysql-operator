@@ -3356,6 +3356,10 @@ spec:
                             type: string
                         type: object
                     type: object
+                  primaryServiceType:
+                    description: Service Type string describes ingress methods for
+                      a service
+                    type: string
                   priorityClassName:
                     type: string
                   readinessProbe:
@@ -3537,10 +3541,6 @@ spec:
                     additionalProperties:
                       type: string
                     type: object
-                  serviceType:
-                    description: Service Type string describes ingress methods for
-                      a service
-                    type: string
                   sidecarPVCs:
                     items:
                       properties:
@@ -8407,10 +8407,6 @@ spec:
                   replicasExternalTrafficPolicy:
                     description: Service External Traffic Policy Type string
                     type: string
-                  replicasServiceType:
-                    description: Service Type string describes ingress methods for
-                      a service
-                    type: string
                   resources:
                     description: ResourceRequirements describes the compute resource
                       requirements.
@@ -8448,10 +8444,6 @@ spec:
                     additionalProperties:
                       type: string
                     type: object
-                  serviceType:
-                    description: Service Type string describes ingress methods for
-                      a service
-                    type: string
                   size:
                     format: int32
                     type: integer
