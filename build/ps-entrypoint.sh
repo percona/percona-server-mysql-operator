@@ -298,10 +298,10 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			CREATE USER 'operator'@'${MYSQL_ROOT_HOST}' IDENTIFIED BY '${OPERATOR_ADMIN_PASSWORD}' ;
 			GRANT ALL ON *.* TO 'operator'@'${MYSQL_ROOT_HOST}' WITH GRANT OPTION ;
 
-			CREATE USER 'xtrabackup'@'%' IDENTIFIED BY '${XTRABACKUP_PASSWORD}';
-			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'%';
-			GRANT SELECT ON performance_schema.log_status TO 'xtrabackup'@'%';
-			GRANT SELECT ON performance_schema.keyring_component_status TO 'xtrabackup'@'%';
+			CREATE USER 'xtrabackup'@'localhost' IDENTIFIED BY '${XTRABACKUP_PASSWORD}';
+			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
+			GRANT SELECT ON performance_schema.log_status TO 'xtrabackup'@'localhost';
+			GRANT SELECT ON performance_schema.keyring_component_status TO 'xtrabackup'@'localhost';
 
 			CREATE USER 'monitor'@'${MONITOR_HOST}' IDENTIFIED BY '${MONITOR_PASSWORD}' WITH MAX_USER_CONNECTIONS 100;
 			GRANT SYSTEM_USER, SELECT, PROCESS, SUPER, REPLICATION CLIENT, RELOAD, BACKUP_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
