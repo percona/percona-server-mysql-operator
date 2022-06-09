@@ -111,6 +111,9 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .status.host
+      name: Endpoint
+      type: string
     - jsonPath: .status.mysql.state
       name: MySQL
       type: string
@@ -3420,6 +3423,8 @@ spec:
             type: object
           status:
             properties:
+              host:
+                type: string
               mysql:
                 properties:
                   ready:
