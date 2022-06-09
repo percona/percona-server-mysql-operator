@@ -1678,6 +1678,8 @@ spec:
                           type: array
                         type:
                           type: string
+                        verifyTLS:
+                          type: boolean
                         volumeSpec:
                           properties:
                             emptyDir:

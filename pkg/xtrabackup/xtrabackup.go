@@ -1,6 +1,8 @@
 package xtrabackup
 
 import (
+	"strconv"
+
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -97,6 +99,7 @@ func Job(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerM
 					Containers: []corev1.Container{
 						xtrabackupContainer(cluster, cr.Name, storage),
 					},
+					SecurityContext:   storage.PodSecurityContext,
 					Affinity:          storage.Affinity,
 					Tolerations:       storage.Tolerations,
 					NodeSelector:      storage.NodeSelector,
@@ -137,6 +140,11 @@ func Job(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerM
 func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName string, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
 	spec := cluster.Spec.Backup
 
+	verifyTLS := true
+	if storage.VerifyTLS != nil {
+		verifyTLS = *storage.VerifyTLS
+	}
+
 	return corev1.Container{
 		Name:            componentName,
 		Image:           spec.Image,
@@ -145,6 +153,10 @@ func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName str
 			{
 				Name:  "BACKUP_NAME",
 				Value: backupName,
+			},
+			{
+				Name:  "VERIFY_TLS",
+				Value: strconv.FormatBool(verifyTLS),
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
