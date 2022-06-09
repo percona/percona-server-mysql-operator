@@ -9,13 +9,45 @@ spec:
     image: percona/percona-xtrabackup:8.0.28
     imagePullPolicy: Always
     storages:
-      fs-pvc:
-        type: filesystem
-        volumeSpec:
-          persistentVolumeClaim:
-            resources:
-              requests:
-                storage: 256M
+      s3-us-west:
+        type: s3
+        verifyTLS: true
+#        nodeSelector:
+#          storage: tape
+#          backupWorker: 'True'
+#        resources:
+#          requests:
+#            memory: 1G
+#            cpu: 600m
+#        affinity:
+#          nodeAffinity:
+#            requiredDuringSchedulingIgnoredDuringExecution:
+#              nodeSelectorTerms:
+#              - matchExpressions:
+#                - key: backupWorker
+#                  operator: In
+#                  values:
+#                  - 'True'
+#        tolerations:
+#          - key: "backupWorker"
+#            operator: "Equal"
+#            value: "True"
+#            effect: "NoSchedule"
+#        annotations:
+#          testName: scheduled-backup
+#        labels:
+#          backupWorker: 'True'
+#        schedulerName: 'default-scheduler'
+#        priorityClassName: 'high-priority'
+#        containerSecurityContext:
+#          privileged: true
+#        podSecurityContext:
+#          fsGroup: 1001
+#          supplementalGroups: [1001, 1002, 1003]
+        s3:
+          bucket: S3-BACKUP-BUCKET-NAME-HERE
+          credentialsSecret: my-cluster-name-backup-s3
+          region: us-west-2
   mysql:
     image: percona/percona-server:8.0.28
     imagePullPolicy: Always
