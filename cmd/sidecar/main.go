@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/pkg/errors"
 )
 
 var log = logf.Log.WithName("sidecar")
@@ -34,6 +35,15 @@ func main() {
 	log.Error(http.ListenAndServe(":6033", mux), "http server failed")
 }
 
+func getNamespace() (string, error) {
+	ns, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return "", errors.Wrap(err, "read namespace file")
+	}
+
+	return string(ns), nil
+}
+
 func xtrabackupArgs() []string {
 	return []string{
 		"--backup",
@@ -44,6 +54,12 @@ func xtrabackupArgs() []string {
 }
 
 func backupHandler(w http.ResponseWriter, req *http.Request) {
+	ns, err := getNamespace()
+	if err != nil {
+		http.Error(w, "failed to detect namespace", http.StatusInternalServerError)
+		return
+	}
+
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "HTTP server does not support streaming!", http.StatusInternalServerError)
@@ -82,7 +98,7 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Info("Backup starting", "name", backupName)
+	log.Info("Backup starting", "name", backupName, "namespace", ns)
 
 	if err := xtrabackup.Start(); err != nil {
 		log.Error(err, "failed to start xtrabackup command")
@@ -108,7 +124,7 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Info("Backup finished", "name", backupName)
+	log.Info("Backup finished successfully", "name", backupName, "namespace", ns)
 
 	flusher.Flush()
 }
