@@ -2,6 +2,11 @@
 
 set -e
 
+XBCLOUD_ARGS="--curl-retriable-errors=7 --parallel=10 --md5"
+if [ -n "$VERIFY_TLS" ] && [[ $VERIFY_TLS == "false" ]]; then
+	INSECURE_ARG="--insecure"
+fi
+
 request_backup() {
 	curl -s http://${SRC_NODE}:6033/backup/${BACKUP_NAME} -o /backup/${BACKUP_NAME}.stream
 }
@@ -10,18 +15,22 @@ request_logs() {
 	curl -s http://${SRC_NODE}:6033/logs/${BACKUP_NAME}
 }
 
+full_backup_name() {
+	echo "${BACKUP_NAME}-$(date +%Y-%m-%dT%H:%M:%S)-full"
+}
+
 run_s3() {
 	cat /backup/${BACKUP_NAME}.stream \
-		| xbcloud put ${BACKUP_NAME} --storage=s3 --s3-bucket="${S3_BUCKET}"
+		| xbcloud put ${XBCLOUD_ARGS} ${INSECURE_ARG} "$(full_backup_name)" --storage=s3 --s3-bucket="${S3_BUCKET}"
 }
 
 run_gcs() {
 	cat /backup/${BACKUP_NAME}.stream \
-		| xbcloud put ${BACKUP_NAME} --storage=google --google-bucket="${GCS_BUCKET}"
+		| xbcloud put ${XBCLOUD_ARGS} ${INSECURE_ARG} "$(full_backup_name)" --storage=google --google-bucket="${GCS_BUCKET}"
 }
 
 run_azure() {
-	cat /backup/${BACKUP_NAME}.stream | xbcloud put ${BACKUP_NAME} --storage=azure
+	cat /backup/${BACKUP_NAME}.stream | xbcloud put ${XBCLOUD_ARGS} ${INSECURE_ARG} "$(full_backup_name)" --storage=azure
 }
 
 main() {
@@ -39,6 +48,8 @@ main() {
 		"gcs") run_gcs ;;
 		"azure") run_azure ;;
 	esac
+
+	echo "Backup finished and uploaded successfully: $(full_backup_name)"
 }
 
 main
