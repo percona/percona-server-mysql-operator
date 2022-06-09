@@ -6,7 +6,7 @@ spec:
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
   backup:
-    image: percona/percona-xtrabackup:8.0.25-17
+    image: percona/percona-xtrabackup:8.0.28
     imagePullPolicy: Always
     storages:
       fs-pvc:
@@ -17,7 +17,7 @@ spec:
               requests:
                 storage: 256M
   mysql:
-    image: percona/percona-server:8.0.25
+    image: percona/percona-server:8.0.28
     imagePullPolicy: Always
 
     size: 3
