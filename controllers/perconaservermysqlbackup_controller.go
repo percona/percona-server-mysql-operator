@@ -139,7 +139,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	j := &batchv1.Job{}
-	nn = types.NamespacedName{Name: xtrabackup.JobName(cluster, cr), Namespace: req.Namespace}
+	nn = xtrabackup.NamespacedName(cr)
 	err := r.Client.Get(ctx, nn, j)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return rr, errors.Wrapf(err, "get job %v", nn.String())

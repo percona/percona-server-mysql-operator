@@ -27,16 +27,16 @@ const (
 	backupMountPath    = "/backup"
 )
 
-func Name(cluster *apiv1alpha1.PerconaServerMySQL) string {
-	return cluster.Name + "-" + componentShortName
+func Name(cr *apiv1alpha1.PerconaServerMySQLBackup) string {
+	return "xb-" + cr.Name + "-" + cr.Spec.StorageName
 }
 
-func NamespacedName(cluster *apiv1alpha1.PerconaServerMySQL) types.NamespacedName {
-	return types.NamespacedName{Name: Name(cluster), Namespace: cluster.Namespace}
+func NamespacedName(cr *apiv1alpha1.PerconaServerMySQLBackup) types.NamespacedName {
+	return types.NamespacedName{Name: Name(cr), Namespace: cr.Namespace}
 }
 
-func JobName(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerMySQLBackup) string {
-	return Name(cluster) + "-" + cr.Name
+func JobName(cr *apiv1alpha1.PerconaServerMySQLBackup) string {
+	return Name(cr)
 }
 
 func MatchLabels(cluster *apiv1alpha1.PerconaServerMySQL) map[string]string {
@@ -60,7 +60,7 @@ func Job(
 			Kind:       "Job",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        JobName(cluster, cr),
+			Name:        JobName(cr),
 			Namespace:   cluster.Namespace,
 			Labels:      labels,
 			Annotations: storage.Annotations,
@@ -199,7 +199,7 @@ func PVC(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerM
 			Kind:       "Job",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      JobName(cluster, cr),
+			Name:      JobName(cr),
 			Namespace: cluster.Namespace,
 		},
 		Spec: *storage.Volume.PersistentVolumeClaim,
