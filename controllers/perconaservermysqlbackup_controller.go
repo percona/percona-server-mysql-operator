@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/pkg/errors"
@@ -144,6 +145,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, errors.Wrapf(err, "get job %v", nn.String())
 	}
 
+	destination := fmt.Sprintf("%s-%s-full", cr.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
 	if k8serrors.IsNotFound(err) {
 		l.Info("Creating backup job", "jobName", nn.Name)
 
@@ -152,7 +154,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return rr, errors.Wrap(err, "get operator image")
 		}
 
-		job := xtrabackup.Job(cluster, cr, initImage, storage)
+		job := xtrabackup.Job(cluster, cr, destination, initImage, storage)
 
 		switch storage.Type {
 		case apiv1alpha1.BackupStorageS3:

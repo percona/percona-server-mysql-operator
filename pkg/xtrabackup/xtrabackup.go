@@ -43,7 +43,12 @@ func MatchLabels(cluster *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(map[string]string{apiv1alpha1.ComponentLabel: componentName}, cluster.Labels())
 }
 
-func Job(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerMySQLBackup, initImage string, storage *apiv1alpha1.BackupStorageSpec) *batchv1.Job {
+func Job(
+	cluster *apiv1alpha1.PerconaServerMySQL,
+	cr *apiv1alpha1.PerconaServerMySQLBackup,
+	destination, initImage string,
+	storage *apiv1alpha1.BackupStorageSpec,
+) *batchv1.Job {
 	var one int32 = 1
 	t := true
 
@@ -97,7 +102,7 @@ func Job(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerM
 						},
 					},
 					Containers: []corev1.Container{
-						xtrabackupContainer(cluster, cr.Name, storage),
+						xtrabackupContainer(cluster, cr.Name, destination, storage),
 					},
 					SecurityContext:   storage.PodSecurityContext,
 					Affinity:          storage.Affinity,
@@ -137,7 +142,7 @@ func Job(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerM
 	}
 }
 
-func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName string, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
+func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName, destination string, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
 	spec := cluster.Spec.Backup
 
 	verifyTLS := true
@@ -153,6 +158,10 @@ func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName str
 			{
 				Name:  "BACKUP_NAME",
 				Value: backupName,
+			},
+			{
+				Name:  "BACKUP_DEST",
+				Value: destination,
 			},
 			{
 				Name:  "VERIFY_TLS",

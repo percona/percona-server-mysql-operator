@@ -16,22 +16,18 @@ request_logs() {
 	curl -s http://${SRC_NODE}:6033/logs/${BACKUP_NAME}
 }
 
-full_backup_name() {
-	echo "${BACKUP_NAME}-$(date +%Y-%m-%dT%H:%M:%S)-full"
-}
-
 run_s3() {
 	cat /backup/${BACKUP_NAME}.stream \
-		| xbcloud put ${XBCLOUD_ARGS} ${MD5_ARG} ${INSECURE_ARG} "$(full_backup_name)" --storage=s3 --s3-bucket="${S3_BUCKET}"
+		| xbcloud put ${XBCLOUD_ARGS} ${MD5_ARG} ${INSECURE_ARG} --storage=s3 --s3-bucket="${S3_BUCKET}" "${BACKUP_DEST}"
 }
 
 run_gcs() {
 	cat /backup/${BACKUP_NAME}.stream \
-		| xbcloud put ${XBCLOUD_ARGS} ${MD5_ARG} ${INSECURE_ARG} "$(full_backup_name)" --storage=google --google-bucket="${GCS_BUCKET}"
+		| xbcloud put ${XBCLOUD_ARGS} ${MD5_ARG} ${INSECURE_ARG}--storage=google --google-bucket="${GCS_BUCKET}" "${BACKUP_DEST}"
 }
 
 run_azure() {
-	cat /backup/${BACKUP_NAME}.stream | xbcloud put ${XBCLOUD_ARGS} ${INSECURE_ARG} "$(full_backup_name)" --storage=azure
+	cat /backup/${BACKUP_NAME}.stream | xbcloud put ${XBCLOUD_ARGS} ${INSECURE_ARG} --storage=azure "${BACKUP_DEST}"
 }
 
 main() {
@@ -50,7 +46,7 @@ main() {
 		"azure") run_azure ;;
 	esac
 
-	echo "Backup finished and uploaded successfully: $(full_backup_name)"
+	echo "Backup finished and uploaded successfully to ${BACKUP_DEST}"
 }
 
 main
