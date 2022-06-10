@@ -2,7 +2,8 @@
 
 set -e
 
-XBCLOUD_ARGS="--curl-retriable-errors=7 --parallel=10 --md5"
+XBCLOUD_ARGS="--curl-retriable-errors=7 --parallel=10"
+MD5_ARG="--md5"
 if [ -n "$VERIFY_TLS" ] && [[ $VERIFY_TLS == "false" ]]; then
 	INSECURE_ARG="--insecure"
 fi
@@ -21,12 +22,12 @@ full_backup_name() {
 
 run_s3() {
 	cat /backup/${BACKUP_NAME}.stream \
-		| xbcloud put ${XBCLOUD_ARGS} ${INSECURE_ARG} "$(full_backup_name)" --storage=s3 --s3-bucket="${S3_BUCKET}"
+		| xbcloud put ${XBCLOUD_ARGS} ${MD5_ARG} ${INSECURE_ARG} "$(full_backup_name)" --storage=s3 --s3-bucket="${S3_BUCKET}"
 }
 
 run_gcs() {
 	cat /backup/${BACKUP_NAME}.stream \
-		| xbcloud put ${XBCLOUD_ARGS} ${INSECURE_ARG} "$(full_backup_name)" --storage=google --google-bucket="${GCS_BUCKET}"
+		| xbcloud put ${XBCLOUD_ARGS} ${MD5_ARG} ${INSECURE_ARG} "$(full_backup_name)" --storage=google --google-bucket="${GCS_BUCKET}"
 }
 
 run_azure() {
