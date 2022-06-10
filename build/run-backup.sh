@@ -13,21 +13,27 @@ request_backup() {
 }
 
 request_logs() {
-	curl -s http://${SRC_NODE}:6033/logs/${BACKUP_NAME}
+	curl -s http://${SRC_NODE}:6033/logs/${BACKUP_NAME} -o /backup/${BACKUP_NAME}.log
+	cat /backup/${BACKUP_NAME}.log
 }
 
 run_s3() {
 	cat /backup/${BACKUP_NAME}.stream \
 		| xbcloud put ${XBCLOUD_ARGS} ${MD5_ARG} ${INSECURE_ARG} --storage=s3 --s3-bucket="${S3_BUCKET}" "${BACKUP_DEST}"
+	cat /backup/${BACKUP_NAME}.log \
+		| xbcloud put ${XBCLOUD_ARGS} ${INSECURE_ARG} --storage=s3 --s3-bucket="${S3_BUCKET}" "${BACKUP_DEST}.log"
 }
 
 run_gcs() {
 	cat /backup/${BACKUP_NAME}.stream \
-		| xbcloud put ${XBCLOUD_ARGS} ${MD5_ARG} ${INSECURE_ARG}--storage=google --google-bucket="${GCS_BUCKET}" "${BACKUP_DEST}"
+		| xbcloud put ${XBCLOUD_ARGS} ${MD5_ARG} ${INSECURE_ARG} --storage=google --google-bucket="${GCS_BUCKET}" "${BACKUP_DEST}"
+	cat /backup/${BACKUP_NAME}.log \
+		| xbcloud put ${XBCLOUD_ARGS} ${INSECURE_ARG} --storage=google --google-bucket="${GCS_BUCKET}" "${BACKUP_DEST}.log"
 }
 
 run_azure() {
 	cat /backup/${BACKUP_NAME}.stream | xbcloud put ${XBCLOUD_ARGS} ${INSECURE_ARG} --storage=azure "${BACKUP_DEST}"
+	cat /backup/${BACKUP_NAME}.log | xbcloud put ${XBCLOUD_ARGS} ${INSECURE_ARG} --storage=azure "${BACKUP_DEST}.log"
 }
 
 main() {
