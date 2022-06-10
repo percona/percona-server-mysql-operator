@@ -61,6 +61,8 @@ spec:
               completed:
                 format: date-time
                 type: string
+              destination:
+                type: string
               state:
                 type: string
               storageName:

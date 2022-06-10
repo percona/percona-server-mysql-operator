@@ -145,7 +145,6 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, errors.Wrapf(err, "get job %v", nn.String())
 	}
 
-	destination := fmt.Sprintf("%s-%s-full", cr.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
 	if k8serrors.IsNotFound(err) {
 		l.Info("Creating backup job", "jobName", nn.Name)
 
@@ -154,6 +153,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return rr, errors.Wrap(err, "get operator image")
 		}
 
+		destination := fmt.Sprintf("%s-%s-full", cr.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
 		job := xtrabackup.Job(cluster, cr, destination, initImage, storage)
 
 		switch storage.Type {
@@ -175,6 +175,8 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			if err := xtrabackup.SetStorageS3(job, storage.S3); err != nil {
 				return rr, errors.Wrap(err, "set storage S3")
 			}
+
+			status.Destination = fmt.Sprintf("s3://%s/%s", storage.S3.Bucket, destination)
 		case apiv1alpha1.BackupStorageGCS:
 			if storage.GCS == nil {
 				return rr, errors.New("gcs stanza is required in storage")
@@ -193,6 +195,8 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			if err := xtrabackup.SetStorageGCS(job, storage.GCS); err != nil {
 				return rr, errors.Wrap(err, "set storage GCS")
 			}
+
+			status.Destination = fmt.Sprintf("gcs://%s/%s", storage.GCS.Bucket, destination)
 		case apiv1alpha1.BackupStorageAzure:
 			if storage.Azure == nil {
 				return rr, errors.New("azure stanza is required in storage")
@@ -211,6 +215,8 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			if err := xtrabackup.SetStorageAzure(job, storage.Azure); err != nil {
 				return rr, errors.Wrap(err, "set storage Azure")
 			}
+
+			status.Destination = fmt.Sprintf("%s/%s", storage.Azure.ContainerName, destination)
 		default:
 			return rr, errors.Errorf("storage type %s is not supported", storage.Type)
 		}

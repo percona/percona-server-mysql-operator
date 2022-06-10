@@ -37,8 +37,9 @@ const (
 // PerconaServerMySQLBackupStatus defines the observed state of PerconaServerMySQLBackup
 type PerconaServerMySQLBackupStatus struct {
 	State       BackupState  `json:"state,omitempty"`
-	CompletedAt *metav1.Time `json:"completed,omitempty"`
+	Destination string       `json:"destination,omitempty"`
 	StorageName string       `json:"storageName,omitempty"`
+	CompletedAt *metav1.Time `json:"completed,omitempty"`
 }
 
 //+kubebuilder:object:root=true
