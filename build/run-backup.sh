@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+set -o xtrace
 
 XBCLOUD_ARGS="--curl-retriable-errors=7 --parallel=10"
 MD5_ARG="--md5"
