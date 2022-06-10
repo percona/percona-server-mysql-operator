@@ -65,7 +65,7 @@ get_cr() {
 		| yq eval '.spec.sslSecretName="test-ssl"' - \
 		| yq eval "$(printf '.spec.mysql.image="%s"' "${IMAGE_MYSQL}")" - \
 		| yq eval "$(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}")" - \
-		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_MYSQL}")" -
+		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_PMM}")" -
 }
 
 run_mysql() {
@@ -189,7 +189,7 @@ wait_cluster_consistency() {
 	local orc_size=${3}
 
 	if [ -z "${orc_size}" ]; then
-		orc_size=1
+		orc_size=3
 	fi
 
 	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds

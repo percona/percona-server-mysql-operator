@@ -25,7 +25,7 @@ spec:
       - name: users
         secret:
           defaultMode: 420
-          secretName: test-secrets
+          secretName: internal-config
       - name: tls
         secret:
           defaultMode: 420
