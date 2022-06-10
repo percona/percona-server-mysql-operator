@@ -46,7 +46,7 @@ spec:
 #          supplementalGroups: [1001, 1002, 1003]
         s3:
           bucket: S3-BACKUP-BUCKET-NAME-HERE
-          credentialsSecret: my-cluster-name-backup-s3
+          credentialsSecret: cluster1-s3-credentials
           region: us-west-2
   mysql:
     image: percona/percona-server:8.0.28

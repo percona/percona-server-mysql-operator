@@ -3,6 +3,6 @@ kind: Secret
 metadata:
   name: cluster1-s3-credentials
 type: Opaque
-stringData:
-  AWS_ACCESS_KEY_ID: some-access-key
-  AWS_SECRET_ACCESS_KEY: some-secret-key
+data:
+  AWS_ACCESS_KEY_ID: c29tZS1hY2Nlc3Mta2V5
+  AWS_SECRET_ACCESS_KEY: c29tZS1zZWNyZXQta2V5
