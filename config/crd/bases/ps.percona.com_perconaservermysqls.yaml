@@ -1196,10 +1196,6 @@ spec:
                           type: object
                         azure:
                           properties:
-                            accountName:
-                              description: An Azure storage account is a unique namespace
-                                to access and store your Azure data objects.
-                              type: string
                             containerName:
                               description: A container name is a valid DNS name that
                                 conforms to the Azure naming rules.
@@ -1219,7 +1215,6 @@ spec:
                                 (Rarely accessed or modified data)
                               type: string
                           required:
-                          - accountName
                           - containerName
                           - credentialsSecret
                           type: object

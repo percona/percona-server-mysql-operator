@@ -186,9 +186,6 @@ type BackupStorageGCSSpec struct {
 }
 
 type BackupStorageAzureSpec struct {
-	// An Azure storage account is a unique namespace to access and store your Azure data objects.
-	AccountName string `json:"accountName"`
-
 	// A container name is a valid DNS name that conforms to the Azure naming rules.
 	ContainerName string `json:"containerName"`
 
