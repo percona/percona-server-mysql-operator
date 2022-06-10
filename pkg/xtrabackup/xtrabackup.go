@@ -73,7 +73,7 @@ func Job(
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					RestartPolicy:         corev1.RestartPolicyOnFailure,
+					RestartPolicy:         corev1.RestartPolicyNever,
 					ShareProcessNamespace: &t,
 					SetHostnameAsFQDN:     &t,
 					InitContainers: []corev1.Container{
