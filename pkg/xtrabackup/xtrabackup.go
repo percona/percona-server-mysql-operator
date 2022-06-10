@@ -298,7 +298,7 @@ func SetStorageGCS(job *batchv1.Job, gcs *apiv1alpha1.BackupStorageGCSSpec) erro
 			Value: gcs.Bucket,
 		},
 		{
-			Name:  "GCS_STORAGE_CLASS§",
+			Name:  "GCS_STORAGE_CLASS",
 			Value: gcs.StorageClass,
 		},
 	}
