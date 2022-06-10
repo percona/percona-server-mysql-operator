@@ -13,13 +13,23 @@ spec:
     plural: perconaservermysqlbackups
     shortNames:
     - ps-backup
+    - ps-backups
     singular: perconaservermysqlbackup
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .status.storageName
+      name: Storage
+      type: string
+    - jsonPath: .status.destination
+      name: Destination
+      type: string
     - jsonPath: .status.state
       name: State
       type: string
+    - jsonPath: .status.completedAt
+      name: Completed
+      type: date
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date

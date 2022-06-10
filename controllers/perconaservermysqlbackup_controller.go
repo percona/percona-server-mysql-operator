@@ -132,6 +132,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	if !ok {
 		return rr, errors.Errorf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", cr.Spec.StorageName)
 	}
+	status.StorageName = cr.Spec.StorageName
 
 	if cluster.Status.MySQL.State != apiv1alpha1.StateReady {
 		l.Info("Cluster is not ready", "cluster", cr.Name)
@@ -153,7 +154,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return rr, errors.Wrap(err, "get operator image")
 		}
 
-		destination := fmt.Sprintf("%s-%s-full", cr.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
+		destination := fmt.Sprintf("%s-%s-full", cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
 		job := xtrabackup.Job(cluster, cr, destination, initImage, storage)
 
 		switch storage.Type {
@@ -264,6 +265,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			}
 		}
 	case apiv1alpha1.BackupFailed, apiv1alpha1.BackupSucceeded:
+		status.CompletedAt = j.Status.CompletionTime
 		return rr, nil
 	default:
 		status.State = apiv1alpha1.BackupStarting
