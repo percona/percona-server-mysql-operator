@@ -324,17 +324,19 @@ func SetStorageAzure(job *batchv1.Job, azure *apiv1alpha1.BackupStorageAzureSpec
 			Value: string(apiv1alpha1.BackupStorageAzure),
 		},
 		{
-			Name:  "AZURE_STORAGE_ACCOUNT",
-			Value: azure.AccountName,
-		},
-		{
 			Name:  "AZURE_CONTAINER_NAME",
 			Value: azure.ContainerName,
 		},
 		{
+			Name: "AZURE_STORAGE_ACCOUNT",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: k8s.SecretKeySelector(azure.CredentialsSecret, "AZURE_STORAGE_ACCOUNT_NAME"),
+			},
+		},
+		{
 			Name: "AZURE_ACCESS_KEY",
 			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: k8s.SecretKeySelector(azure.CredentialsSecret, "AZURE_ACCESS_KEY"),
+				SecretKeyRef: k8s.SecretKeySelector(azure.CredentialsSecret, "AZURE_STORAGE_ACCOUNT_KEY"),
 			},
 		},
 		{
