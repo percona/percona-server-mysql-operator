@@ -18,7 +18,7 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.storageName
+    - jsonPath: .spec.storageName
       name: Storage
       type: string
     - jsonPath: .status.destination
@@ -27,7 +27,7 @@ spec:
     - jsonPath: .status.state
       name: State
       type: string
-    - jsonPath: .status.completedAt
+    - jsonPath: .status.completed
       name: Completed
       type: date
     - jsonPath: .metadata.creationTimestamp

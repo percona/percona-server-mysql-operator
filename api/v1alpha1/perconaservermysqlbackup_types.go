@@ -44,10 +44,10 @@ type PerconaServerMySQLBackupStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="Storage",type=string,JSONPath=".status.storageName"
+//+kubebuilder:printcolumn:name="Storage",type=string,JSONPath=".spec.storageName"
 //+kubebuilder:printcolumn:name="Destination",type=string,JSONPath=".status.destination"
 //+kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
-//+kubebuilder:printcolumn:name="Completed",type="date",JSONPath=".status.completedAt"
+//+kubebuilder:printcolumn:name="Completed",type="date",JSONPath=".status.completed"
 //+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 //+kubebuilder:resource:scope=Namespaced
 //+kubebuilder:resource:shortName=ps-backup;ps-backups

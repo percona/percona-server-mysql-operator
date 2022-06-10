@@ -84,7 +84,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	status := cr.Status
 
 	defer func() {
-		if status.State == cr.Status.State {
+		if status.State == cr.Status.State && status.Destination == cr.Status.Destination {
 			return
 		}
 
@@ -132,7 +132,6 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	if !ok {
 		return rr, errors.Errorf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", cr.Spec.StorageName)
 	}
-	status.StorageName = cr.Spec.StorageName
 
 	if cluster.Status.MySQL.State != apiv1alpha1.StateReady {
 		l.Info("Cluster is not ready", "cluster", cr.Name)
@@ -263,9 +262,10 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			case batchv1.JobComplete:
 				status.State = apiv1alpha1.BackupSucceeded
 			}
+
+			status.CompletedAt = j.Status.CompletionTime
 		}
 	case apiv1alpha1.BackupFailed, apiv1alpha1.BackupSucceeded:
-		status.CompletedAt = j.Status.CompletionTime
 		return rr, nil
 	default:
 		status.State = apiv1alpha1.BackupStarting
