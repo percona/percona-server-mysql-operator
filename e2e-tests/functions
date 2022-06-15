@@ -231,7 +231,7 @@ wait_cluster_consistency() {
 	local orc_size=${3}
 
 	if [ -z "${orc_size}" ]; then
-		orc_size=1
+		orc_size=3
 	fi
 
 	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds

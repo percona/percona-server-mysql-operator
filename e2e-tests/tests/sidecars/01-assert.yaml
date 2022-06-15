@@ -48,7 +48,7 @@ spec:
       - name: users
         secret:
           defaultMode: 420
-          secretName: test-secrets
+          secretName: internal-sidecars
       - name: tls
         secret:
           defaultMode: 420

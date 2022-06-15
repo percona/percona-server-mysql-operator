@@ -260,11 +260,14 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	MySQL        StatefulAppStatus `json:"mysql,omitempty"`
 	Orchestrator StatefulAppStatus `json:"orchestrator,omitempty"`
 	State        StatefulAppState  `json:"state,omitempty"`
+	// +optional
+	Host string `json:"host"`
 }
 
 // PerconaServerMySQL is the Schema for the perconaservermysqls API
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=".status.host"
 //+kubebuilder:printcolumn:name="MySQL",type=string,JSONPath=".status.mysql.state"
 //+kubebuilder:printcolumn:name="Orchestrator",type=string,JSONPath=".status.orchestrator.state"
 //+kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
@@ -389,8 +392,11 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 		cr.Spec.Orchestrator.PodSecurityContext = sc
 	}
 
-	cr.Spec.MySQL.VolumeSpec = reconcileVol(cr.Spec.MySQL.VolumeSpec)
-	cr.Spec.Orchestrator.VolumeSpec = reconcileVol(cr.Spec.Orchestrator.VolumeSpec)
+	var err error
+	cr.Spec.MySQL.VolumeSpec, err = reconcileVol(cr.Spec.MySQL.VolumeSpec)
+	if err != nil {
+		return errors.Wrap(err, "reconcile mysql volumeSpec")
+	}
 
 	for i := range cr.Spec.MySQL.SidecarPVCs {
 		defaultPVCSpec(&cr.Spec.MySQL.SidecarPVCs[i].Spec)
@@ -406,18 +412,22 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 	return nil
 }
 
-func reconcileVol(v *VolumeSpec) *VolumeSpec {
-	if v == nil {
-		v = &VolumeSpec{}
+func reconcileVol(v *VolumeSpec) (*VolumeSpec, error) {
+	if v == nil || v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil {
+		return nil, errors.New("volumeSpec and it's internals should be specified")
 	}
-
-	if v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil {
-		v.PersistentVolumeClaim = &corev1.PersistentVolumeClaimSpec{}
+	if v.PersistentVolumeClaim == nil {
+		return nil, errors.New("pvc should be specified")
+	}
+	_, limits := v.PersistentVolumeClaim.Resources.Limits[corev1.ResourceStorage]
+	_, requests := v.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+	if !(limits || requests) {
+		return nil, errors.New("pvc's resources.limits[storage] or resources.requests[storage] should be specified")
 	}
 
 	defaultPVCSpec(v.PersistentVolumeClaim)
 
-	return v
+	return v, nil
 }
 
 func defaultPVCSpec(pvc *corev1.PersistentVolumeClaimSpec) {

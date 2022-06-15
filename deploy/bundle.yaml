@@ -154,6 +154,9 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .status.host
+      name: Endpoint
+      type: string
     - jsonPath: .status.mysql.state
       name: MySQL
       type: string
@@ -5488,6 +5491,8 @@ spec:
           status:
             description: PerconaServerMySQLStatus defines the observed state of PerconaServerMySQL
             properties:
+              host:
+                type: string
               mysql:
                 description: 'Important: Run "make" to regenerate code after modifying this file'
                 properties:
