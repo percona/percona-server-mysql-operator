@@ -1,51 +1,90 @@
 #!/bin/bash
 
 set -e
-set -o xtrace
 
-XBCLOUD_ARGS="--curl-retriable-errors=7 --parallel=10"
-MD5_ARG="--md5"
-if [ -n "$VERIFY_TLS" ] && [[ $VERIFY_TLS == "false" ]]; then
-	INSECURE_ARG="--insecure"
-fi
+request_data() {
+	case "${STORAGE_TYPE}" in
+		"s3")
+			cat <<-EOF
+				{
+				    "destination": "${BACKUP_DEST}",
+				    "storage": {
+				        "type": "${STORAGE_TYPE}",
+				        "s3": {
+				            "bucket": "${S3_BUCKET}",
+				            "endpointUrl": "${AWS_ENDPOINT}",
+				            "accessKey": "${AWS_ACCESS_KEY_ID}",
+				            "secretKey": "${AWS_SECRET_ACCESS_KEY}",
+				            "region": "${AWS_DEFAULT_REGION}",
+				            "storageClass": "${S3_STORAGE_CLASS}"
+				        }
+				    }
+				}
+			EOF
+			;;
+		"gcs")
+			cat <<-EOF
+				{
+				    "destination": "${BACKUP_DEST}",
+				    "storage": {
+				        "type": "${STORAGE_TYPE}",
+				        "gcs": {
+				            "bucket": "${GCS_BUCKET}",
+				            "endpointUrl": "${GCS_ENDPOINT}",
+				            "accessKey": "${ACCESS_KEY_ID}",
+				            "secretKey": "${SECRET_ACCESS_KEY}",
+				            "storageClass": "${GCS_STORAGE_CLASS}"
+				        }
+				    }
+				}
+			EOF
+			;;
+		"azure")
+			cat <<-EOF
+				{
+				    "destination": "${BACKUP_DEST}",
+				    "storage": {
+				        "type": "${STORAGE_TYPE}",
+				        "azure": {
+				            "containerName": "${AZURE_CONTAINER_NAME}",
+				            "storageAccount": "${AZURE_STORAGE_ACCOUNT}",
+				            "accessKey": "${AZURE_ACCESS_KEY}",
+				            "endpointUrl": "${AZURE_ENDPOINT}",
+				            "storageClass": "${AZURE_STORAGE_CLASS}"
+				        }
+				    }
+				}
+			EOF
+			;;
+	esac
+}
 
 request_backup() {
-	curl -s http://${SRC_NODE}:6033/backup/${BACKUP_NAME} -o /backup/${BACKUP_NAME}.stream
+	local http_code=$(
+		curl \
+			-d "$(request_data)" \
+			-H "Content-Type: application/json" \
+			-w httpcode=%{http_code} \
+			"http://${SRC_NODE}:6033/backup/${BACKUP_NAME}" 2>/dev/null \
+			| sed -e 's/.*\httpcode=//'
+	)
+
+	if [ ${http_code} -ne 200 ]; then
+		echo "Backup failed. Check logs to troubleshoot:"
+		echo "kubectl logs ${SRC_NODE%%.*} xtrabackup"
+		exit 1
+	fi
 }
 
 request_logs() {
 	curl -s http://${SRC_NODE}:6033/logs/${BACKUP_NAME}
 }
 
-run_s3() {
-	cat /backup/${BACKUP_NAME}.stream \
-		| xbcloud put ${XBCLOUD_ARGS} ${MD5_ARG} ${INSECURE_ARG} --storage=s3 --s3-bucket="${S3_BUCKET}" "${BACKUP_DEST}"
-}
-
-run_gcs() {
-	cat /backup/${BACKUP_NAME}.stream \
-		| xbcloud put ${XBCLOUD_ARGS} ${MD5_ARG} ${INSECURE_ARG}--storage=google --google-bucket="${GCS_BUCKET}" "${BACKUP_DEST}"
-}
-
-run_azure() {
-	cat /backup/${BACKUP_NAME}.stream | xbcloud put ${XBCLOUD_ARGS} ${INSECURE_ARG} --storage=azure "${BACKUP_DEST}"
-}
-
 main() {
 	echo "Running backup ${BACKUP_NAME} on ${SRC_NODE}"
 
-	if [ ! -f /backup/${BACKUP_NAME}.stream ]; then
-		request_backup
-
-		echo "xtrabackup logs:"
-		request_logs
-	fi
-
-	case ${STORAGE_TYPE} in
-		"s3") run_s3 ;;
-		"gcs") run_gcs ;;
-		"azure") run_azure ;;
-	esac
+	request_backup
+	request_logs
 
 	echo "Backup finished and uploaded successfully to ${BACKUP_DEST}"
 }

@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
@@ -13,11 +15,17 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/pkg/errors"
 )
 
 var log = logf.Log.WithName("sidecar")
+
+type BackupConf struct {
+	Destination string                        `json:"destination"`
+	Storage     apiv1alpha1.BackupStorageSpec `json:"storage"`
+}
 
 func main() {
 	opts := zap.Options{Development: true}
@@ -53,16 +61,56 @@ func xtrabackupArgs() []string {
 	}
 }
 
+func xbcloudArgs(conf BackupConf) []string {
+	args := []string{"put", "--md5", "--parallel=10"}
+
+	switch conf.Storage.Type {
+	case apiv1alpha1.BackupStorageGCS:
+		args = append(
+			args,
+			[]string{
+				"--storage=google",
+				fmt.Sprintf("--google-bucket=%s", conf.Storage.GCS.Bucket),
+				fmt.Sprintf("--google-endpoint=%s", conf.Storage.GCS.EndpointURL),
+				fmt.Sprintf("--google-access-key=%s", conf.Storage.GCS.AccessKey),
+				fmt.Sprintf("--google-secret-key=%s", conf.Storage.GCS.SecretKey),
+			}...,
+		)
+	case apiv1alpha1.BackupStorageS3:
+		args = append(
+			args,
+			[]string{
+				"--storage=s3",
+				fmt.Sprintf("--s3-bucket=%s", conf.Storage.S3.Bucket),
+				fmt.Sprintf("--s3-region=%s", conf.Storage.S3.Region),
+				fmt.Sprintf("--s3-endpoint=%s", conf.Storage.S3.EndpointURL),
+				fmt.Sprintf("--s3-access-key=%s", conf.Storage.S3.AccessKey),
+				fmt.Sprintf("--s3-secret-key=%s", conf.Storage.S3.SecretKey),
+			}...,
+		)
+	case apiv1alpha1.BackupStorageAzure:
+		args = append(
+			args,
+			[]string{
+				"--storage=azure",
+				fmt.Sprintf("--azure-storage-account=%s", conf.Storage.Azure.StorageAccount),
+				fmt.Sprintf("--azure-container-name=%s", conf.Storage.Azure.ContainerName),
+				fmt.Sprintf("--azure-endpoint=%s", conf.Storage.Azure.EndpointURL),
+				fmt.Sprintf("--azure-access-key=%s", conf.Storage.Azure.AccessKey),
+			}...,
+		)
+	}
+
+	args = append(args, conf.Destination)
+
+	return args
+}
+
 func backupHandler(w http.ResponseWriter, req *http.Request) {
 	ns, err := getNamespace()
 	if err != nil {
-		http.Error(w, "failed to detect namespace", http.StatusInternalServerError)
-		return
-	}
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "HTTP server does not support streaming!", http.StatusInternalServerError)
+		log.Error(err, "failed to detect namespace")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
 
@@ -71,11 +119,21 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "backup name must be provided in URL", http.StatusBadRequest)
 		return
 	}
-
 	backupName := path[2]
-	logFile, err := os.Create(filepath.Join(mysql.BackupLogDir, backupName+".log"))
+	log = log.WithValues("namespace", ns, "name", backupName)
+
+	data, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		http.Error(w, "failed to create log file", http.StatusInternalServerError)
+		log.Error(err, "failed to read request data")
+		http.Error(w, "backup failed", http.StatusBadRequest)
+		return
+	}
+	defer req.Body.Close()
+
+	backupConf := BackupConf{}
+	if err := json.Unmarshal(data, &backupConf); err != nil {
+		log.Error(err, "failed to unmarshal backup config")
+		http.Error(w, "backup failed", http.StatusBadRequest)
 		return
 	}
 
@@ -84,49 +142,66 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 
 	xtrabackup := exec.Command("xtrabackup", xtrabackupArgs()...)
 
-	stdout, err := xtrabackup.StdoutPipe()
+	xbOut, err := xtrabackup.StdoutPipe()
 	if err != nil {
 		log.Error(err, "xtrabackup stdout pipe failed")
-		http.Error(w, "xtrabackup failed", http.StatusInternalServerError)
+		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
+	defer xbOut.Close()
 
-	stderr, err := xtrabackup.StderrPipe()
+	xbErr, err := xtrabackup.StderrPipe()
 	if err != nil {
 		log.Error(err, "xtrabackup stderr pipe failed")
-		http.Error(w, "xtrabackup failed", http.StatusInternalServerError)
+		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
+	defer xbErr.Close()
 
-	log.Info("Backup starting", "name", backupName, "namespace", ns)
+	xbcloud := exec.Command("xbcloud", xbcloudArgs(backupConf)...)
+	xbcloud.Stdin = xbOut
+
+	log.Info("Backup starting", "destination", backupConf.Destination, "storage", backupConf.Storage.Type)
+
+	if err := xbcloud.Start(); err != nil {
+		log.Error(err, "failed to start xbcloud command")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
+		return
+	}
 
 	if err := xtrabackup.Start(); err != nil {
 		log.Error(err, "failed to start xtrabackup command")
-		http.Error(w, "xtrabackup failed", http.StatusInternalServerError)
+		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
 
-	if _, err := io.Copy(w, stdout); err != nil {
-		log.Error(err, "failed to copy stdout")
-		http.Error(w, "buffer copy failed", http.StatusInternalServerError)
+	backupLog, err := os.Create(filepath.Join(mysql.BackupLogDir, backupName+".log"))
+	if err != nil {
+		log.Error(err, "failed to create log file")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
 
-	if _, err := io.Copy(logFile, stderr); err != nil {
+	logWriter := io.MultiWriter(backupLog, os.Stderr)
+	if _, err := io.Copy(logWriter, xbErr); err != nil {
 		log.Error(err, "failed to copy stderr")
-		http.Error(w, "log copy failed", http.StatusInternalServerError)
+		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
 
 	if err := xtrabackup.Wait(); err != nil {
 		log.Error(err, "failed waiting for xtrabackup to finish")
-		http.Error(w, "xtrabackup failed", http.StatusInternalServerError)
+		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
 
-	log.Info("Backup finished successfully", "name", backupName, "namespace", ns)
+	if err := xbcloud.Wait(); err != nil {
+		log.Error(err, "failed waiting for xbcloud to finish")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
+		return
+	}
 
-	flusher.Flush()
+	log.Info("Backup finished successfully", "destination", backupConf.Destination, "storage", backupConf.Storage.Type)
 }
 
 func logHandler(w http.ResponseWriter, req *http.Request) {

@@ -18,6 +18,9 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .status.host
+      name: Endpoint
+      type: string
     - jsonPath: .status.mysql.state
       name: MySQL
       type: string
@@ -1196,6 +1199,8 @@ spec:
                           type: object
                         azure:
                           properties:
+                            accessKey:
+                              type: string
                             containerName:
                               description: A container name is a valid DNS name that
                                 conforms to the Azure naming rules.
@@ -1208,6 +1213,8 @@ spec:
                             endpointUrl:
                               description: The endpoint allows clients to securely
                                 access data
+                              type: string
+                            storageAccount:
                               type: string
                             storageClass:
                               description: Hot (Frequently accessed or modified data),
@@ -1386,11 +1393,15 @@ spec:
                           type: object
                         gcs:
                           properties:
+                            accessKey:
+                              type: string
                             bucket:
                               type: string
                             credentialsSecret:
                               type: string
                             endpointUrl:
+                              type: string
+                            secretKey:
                               type: string
                             storageClass:
                               description: STANDARD, NEARLINE, COLDLINE, ARCHIVE
@@ -1613,6 +1624,8 @@ spec:
                           type: string
                         s3:
                           properties:
+                            accessKey:
+                              type: string
                             bucket:
                               type: string
                             credentialsSecret:
@@ -1620,6 +1633,8 @@ spec:
                             endpointUrl:
                               type: string
                             region:
+                              type: string
+                            secretKey:
                               type: string
                             storageClass:
                               type: string
@@ -9049,6 +9064,8 @@ spec:
           status:
             description: PerconaServerMySQLStatus defines the observed state of PerconaServerMySQL
             properties:
+              host:
+                type: string
               mysql:
                 description: 'Important: Run "make" to regenerate code after modifying
                   this file'
