@@ -200,7 +200,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 	create_default_cnf
 
 	if [ ! -d "$DATADIR/mysql" ]; then
-    touch /var/lib/mysql/bootstrap.lock
+		touch /var/lib/mysql/bootstrap.lock
 		file_env 'MYSQL_ROOT_PASSWORD' '' 'root'
 		{ set +x; } 2>/dev/null
 		if [ -z "$MYSQL_ROOT_PASSWORD" -a -z "$MYSQL_ALLOW_EMPTY_PASSWORD" -a -z "$MYSQL_RANDOM_ROOT_PASSWORD" ]; then
@@ -362,7 +362,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			exit 1
 		fi
 
-    rm /var/lib/mysql/bootstrap.lock
+		rm /var/lib/mysql/bootstrap.lock
 		echo
 		echo 'MySQL init process done. Ready for start up.'
 		echo
