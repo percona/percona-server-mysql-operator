@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/sjmudd/stopwatch"
@@ -53,6 +54,16 @@ func bootstrap() error {
 	}
 	log.Printf("Peers: %v", peers.List())
 
+	exists, err := lockExists()
+	if err != nil {
+		return errors.Wrap(err, "lock file check")
+	}
+	if exists {
+		log.Printf("Waiting for bootstrap.lock to be deleted")
+		if err = waitLockRemoval(); err != nil {
+			return errors.Wrap(err, "wait lock removal")
+		}
+	}
 	primary, replicas, err := getTopology(peers)
 	if err != nil {
 		return errors.Wrap(err, "select donor")
@@ -278,4 +289,28 @@ func selectDonor(fqdn, primary string, replicas []string) (string, error) {
 	}
 
 	return donor, nil
+}
+
+func waitLockRemoval() error {
+	for {
+		exists, err := lockExists()
+		if err != nil {
+			return err
+		}
+		time.Sleep(time.Second)
+		if !exists {
+			return nil
+		}
+	}
+}
+
+func lockExists() (bool, error) {
+	_, err := os.Stat("/var/lib/mysql/bootstrap.lock")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "os stat")
+	}
+	return true, nil
 }
