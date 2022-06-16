@@ -74,7 +74,14 @@ func xtrabackupArgs() []string {
 }
 
 func xbcloudArgs(conf BackupConf) []string {
-	args := []string{"put", "--md5", "--parallel=10"}
+	args := []string{"put", "--md5", "--parallel=10", "--curl-retriable-errors=7"}
+
+	if conf.Storage.VerifyTLS != nil {
+		verify := *conf.Storage.VerifyTLS
+		if !verify {
+			args = append(args, "--insecure")
+		}
+	}
 
 	switch conf.Storage.Type {
 	case apiv1alpha1.BackupStorageGCS:
