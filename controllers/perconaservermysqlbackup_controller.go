@@ -138,9 +138,9 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, nil
 	}
 
-	j := &batchv1.Job{}
+	job := &batchv1.Job{}
 	nn = xtrabackup.NamespacedName(cr)
-	err := r.Client.Get(ctx, nn, j)
+	err := r.Client.Get(ctx, nn, job)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return rr, errors.Wrapf(err, "get job %v", nn.String())
 	}
@@ -243,15 +243,15 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 	switch status.State {
 	case apiv1alpha1.BackupStarting:
-		if j.Status.Active > 0 {
+		if job.Status.Active > 0 {
 			status.State = apiv1alpha1.BackupRunning
 		}
 	case apiv1alpha1.BackupRunning:
-		if j.Status.Active > 0 {
+		if job.Status.Active > 0 {
 			return rr, nil
 		}
 
-		for _, cond := range j.Status.Conditions {
+		for _, cond := range job.Status.Conditions {
 			if cond.Status != corev1.ConditionTrue {
 				continue
 			}
@@ -263,7 +263,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 				status.State = apiv1alpha1.BackupSucceeded
 			}
 
-			status.CompletedAt = j.Status.CompletionTime
+			status.CompletedAt = job.Status.CompletionTime
 		}
 	case apiv1alpha1.BackupFailed, apiv1alpha1.BackupSucceeded:
 		return rr, nil
