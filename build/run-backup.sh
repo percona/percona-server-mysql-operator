@@ -69,7 +69,7 @@ request_backup() {
 			| sed -e 's/.*\httpcode=//'
 	)
 
-	if [ ${http_code} -ne 200 ]; then
+	if [ "${http_code}" -ne 200 ]; then
 		echo "Backup failed. Check logs to troubleshoot:"
 		echo "kubectl logs ${SRC_NODE%%.*} xtrabackup"
 		exit 1
@@ -77,7 +77,7 @@ request_backup() {
 }
 
 request_logs() {
-	curl -s http://${SRC_NODE}:6033/logs/${BACKUP_NAME}
+	curl -s http://"${SRC_NODE}":6033/logs/"${BACKUP_NAME}"
 }
 
 main() {
