@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -21,6 +22,7 @@ import (
 )
 
 var log = logf.Log.WithName("sidecar")
+var sensitiveFlags = regexp.MustCompile("--password=(.*)|--.*-access-key=(.*)|--.*secret-key=(.*)")
 
 type BackupConf struct {
 	Destination string                        `json:"destination"`
@@ -41,6 +43,16 @@ func main() {
 
 	log.Info("starting http server")
 	log.Error(http.ListenAndServe(":6033", mux), "http server failed")
+}
+
+func sanitizeCmd(cmd *exec.Cmd) string {
+	c := []string{cmd.Path}
+
+	for _, arg := range cmd.Args[1:] {
+		c = append(c, sensitiveFlags.ReplaceAllString(arg, ""))
+	}
+
+	return strings.Join(c, " ")
 }
 
 func getNamespace() (string, error) {
@@ -161,7 +173,13 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 	xbcloud := exec.Command("xbcloud", xbcloudArgs(backupConf)...)
 	xbcloud.Stdin = xbOut
 
-	log.Info("Backup starting", "destination", backupConf.Destination, "storage", backupConf.Storage.Type)
+	log.Info(
+		"Backup starting",
+		"destination", backupConf.Destination,
+		"storage", backupConf.Storage.Type,
+		"xtrabackupCmd", sanitizeCmd(xtrabackup),
+		"xbcloudCmd", sanitizeCmd(xbcloud),
+	)
 
 	if err := xbcloud.Start(); err != nil {
 		log.Error(err, "failed to start xbcloud command")
