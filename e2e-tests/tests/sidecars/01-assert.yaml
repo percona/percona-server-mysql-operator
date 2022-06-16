@@ -23,6 +23,12 @@ spec:
           name: tls
         - mountPath: /etc/mysql/config
           name: config
+      - name: xtrabackup
+        volumeMounts:
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /var/log/xtrabackup
+          name: backup-logs
       - image: busybox
         imagePullPolicy: Always
         name: sidecar1
@@ -69,6 +75,8 @@ spec:
                 path: my-secret.cnf
               name: sidecars-mysql
               optional: true
+      - emptyDir: {}
+        name: backup-logs
       - emptyDir:
           medium: Memory
         name: empty-vol
