@@ -73,6 +73,10 @@ spec:
     port: 33060
     protocol: TCP
     targetPort: 33060
+  - name: http
+    port: 6033
+    protocol: TCP
+    targetPort: 6033
   selector:
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: service-per-pod
@@ -112,6 +116,10 @@ spec:
     port: 33060
     protocol: TCP
     targetPort: 33060
+  - name: http
+    port: 6033
+    protocol: TCP
+    targetPort: 6033
   selector:
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: service-per-pod
@@ -155,6 +163,10 @@ spec:
     port: 33060
     protocol: TCP
     targetPort: 33060
+  - name: http
+    port: 6033
+    protocol: TCP
+    targetPort: 6033
   publishNotReadyAddresses: true
   selector:
     app.kubernetes.io/component: mysql
@@ -196,6 +208,10 @@ spec:
     port: 33060
     protocol: TCP
     targetPort: 33060
+  - name: http
+    port: 6033
+    protocol: TCP
+    targetPort: 6033
   selector:
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: service-per-pod
@@ -237,6 +253,10 @@ spec:
     port: 33060
     protocol: TCP
     targetPort: 33060
+  - name: http
+    port: 6033
+    protocol: TCP
+    targetPort: 6033
   selector:
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: service-per-pod
@@ -278,6 +298,10 @@ spec:
     port: 33060
     protocol: TCP
     targetPort: 33060
+  - name: http
+    port: 6033
+    protocol: TCP
+    targetPort: 6033
   selector:
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: service-per-pod
