@@ -40,10 +40,34 @@ Contributions to the source tree should follow the workflow described below:
    git commit -m "K8SPS-22 fixed by ......"
    git push -u origin K8SPS-22-fix-feature X
    ```
+3. Build the image and test your changes.
 
-3. Create a pull request to the main repository on GitHub.
-4. When the reviewer makes some comments, address any feedback that comes and update the pull request.
-5. When your contribution is accepted, your pull request will be approved and merged to the main branch.
+   Building and pushing the image to your own repository:
+
+   ```
+   make IMAGE=egegunes/percona-server-mysql-operator:k8sps-22
+   ```
+
+   `Makefile` can automatically detect the image tag using the current branch. You can just override the image with:
+
+   ```
+   make IMAGE_TAG_BASE=egegunes/percona-server-mysql-operator
+   ```
+
+   Our build script (`e2e-tests/build`) disables caching and uses the experimental squash feature of Docker. To disable this behaviours:
+
+   ```
+   DOCKER_SQUASH=0 DOCKER_NOCACHE=0 make IMAGE=egegunes/percona-server-mysql-operator:k8sps-22
+   ```
+
+   Once your image is built and ready, install CRDs and deploy operator to your cluster:
+
+   ```
+   make install deploy IMAGE=egegunes/percona-server-mysql-operator:k8sps-22
+   ```
+4. Create a pull request to the main repository on GitHub.
+5. When the reviewer makes some comments, address any feedback that comes and update the pull request.
+6. When your contribution is accepted, your pull request will be approved and merged to the main branch.
 
 
 ### 2. Contributing to documentation
