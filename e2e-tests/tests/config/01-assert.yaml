@@ -21,6 +21,12 @@ spec:
           name: tls
         - mountPath: /etc/mysql/config
           name: config
+      - name: xtrabackup
+        volumeMounts:
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /var/log/xtrabackup
+          name: backup-logs
       volumes:
       - name: users
         secret:
@@ -46,6 +52,8 @@ spec:
                 path: my-secret.cnf
               name: config-mysql
               optional: true
+      - emptyDir: {}
+        name: backup-logs
 status:
   observedGeneration: 1
   replicas: 3
