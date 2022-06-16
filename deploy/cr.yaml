@@ -6,6 +6,7 @@ spec:
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
   backup:
+    enabled: true
     image: percona/percona-xtrabackup:8.0.28
     imagePullPolicy: Always
     storages:

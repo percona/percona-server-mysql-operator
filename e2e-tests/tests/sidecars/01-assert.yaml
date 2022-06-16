@@ -27,6 +27,8 @@ spec:
         volumeMounts:
         - mountPath: /var/lib/mysql
           name: datadir
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
         - mountPath: /var/log/xtrabackup
           name: backup-logs
       - image: busybox

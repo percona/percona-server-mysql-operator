@@ -276,6 +276,8 @@ spec:
                             type: string
                         type: object
                     type: object
+                  enabled:
+                    type: boolean
                   image:
                     type: string
                   imagePullPolicy:

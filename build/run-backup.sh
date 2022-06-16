@@ -10,7 +10,7 @@ request_data() {
 				    "destination": "${BACKUP_DEST}",
 				    "storage": {
 				        "type": "${STORAGE_TYPE}",
-                                        "verifyTLS": ${VERIFY_TLS},
+				        "verifyTLS": ${VERIFY_TLS},
 				        "s3": {
 				            "bucket": "${S3_BUCKET}",
 				            "endpointUrl": "${AWS_ENDPOINT}",
@@ -29,7 +29,7 @@ request_data() {
 				    "destination": "${BACKUP_DEST}",
 				    "storage": {
 				        "type": "${STORAGE_TYPE}",
-                                        "verifyTLS": ${VERIFY_TLS},
+				        "verifyTLS": ${VERIFY_TLS},
 				        "gcs": {
 				            "bucket": "${GCS_BUCKET}",
 				            "endpointUrl": "${GCS_ENDPOINT}",
@@ -47,7 +47,7 @@ request_data() {
 				    "destination": "${BACKUP_DEST}",
 				    "storage": {
 				        "type": "${STORAGE_TYPE}",
-                                        "verifyTLS": ${VERIFY_TLS},
+				        "verifyTLS": ${VERIFY_TLS},
 				        "azure": {
 				            "containerName": "${AZURE_CONTAINER_NAME}",
 				            "storageAccount": "${AZURE_STORAGE_ACCOUNT}",

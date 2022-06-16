@@ -420,14 +420,17 @@ func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 }
 
 func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
-	containers := []corev1.Container{mysqldContainer(cr), backupContainer(cr)}
+	containers := []corev1.Container{mysqldContainer(cr)}
 
-	if pmm := cr.PMMSpec(); pmm != nil && pmm.Enabled {
-		c := pmmContainer(cr.Name, cr.Spec.SecretsName, pmm)
-		containers = append(containers, c)
+	if backup := cr.Spec.Backup; backup != nil && backup.Enabled {
+		containers = append(containers, backupContainer(cr))
 	}
 
-	return appendUniqueContainers(containers, cr.MySQLSpec().Sidecars...)
+	if pmm := cr.Spec.PMM; pmm != nil && pmm.Enabled {
+		containers = append(containers, pmmContainer(cr.Name, cr.Spec.SecretsName, pmm))
+	}
+
+	return appendUniqueContainers(containers, cr.Spec.MySQL.Sidecars...)
 }
 
 func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
