@@ -28,7 +28,7 @@ const (
 )
 
 func Name(cr *apiv1alpha1.PerconaServerMySQLBackup) string {
-	return "xb-" + cr.Name + "-" + cr.Spec.StorageName
+	return componentShortName + "-" + cr.Name + "-" + cr.Spec.StorageName
 }
 
 func NamespacedName(cr *apiv1alpha1.PerconaServerMySQLBackup) types.NamespacedName {
