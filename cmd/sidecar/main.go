@@ -45,6 +45,16 @@ func main() {
 	log.Error(http.ListenAndServe(":6033", mux), "http server failed")
 }
 
+func getSecret(username apiv1alpha1.SystemUser) (string, error) {
+	path := filepath.Join(mysql.CredsMountPath, string(username))
+	sBytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		return "", errors.Wrapf(err, "read %s", path)
+	}
+
+	return strings.TrimSpace(string(sBytes)), nil
+}
+
 func sanitizeCmd(cmd *exec.Cmd) string {
 	c := []string{cmd.Path}
 
@@ -64,12 +74,12 @@ func getNamespace() (string, error) {
 	return string(ns), nil
 }
 
-func xtrabackupArgs() []string {
+func xtrabackupArgs(user, pass string) []string {
 	return []string{
 		"--backup",
 		"--stream=xbstream",
-		fmt.Sprintf("--user=%s", os.Getenv("BACKUP_USER")),
-		fmt.Sprintf("--password=%s", os.Getenv("BACKUP_PASSWORD")),
+		fmt.Sprintf("--user=%s", user),
+		fmt.Sprintf("--password=%s", pass),
 	}
 }
 
@@ -159,7 +169,15 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Connection", "keep-alive")
 
-	xtrabackup := exec.Command("xtrabackup", xtrabackupArgs()...)
+	backupUser := apiv1alpha1.UserXtraBackup
+	backupPass, err := getSecret(backupUser)
+	if err != nil {
+		log.Error(err, "failed to get backup password")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
+		return
+	}
+
+	xtrabackup := exec.Command("xtrabackup", xtrabackupArgs(string(backupUser), backupPass)...)
 
 	xbOut, err := xtrabackup.StdoutPipe()
 	if err != nil {

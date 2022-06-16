@@ -504,18 +504,7 @@ func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		Name:            "xtrabackup",
 		Image:           cr.Spec.Backup.Image,
 		ImagePullPolicy: cr.Spec.Backup.ImagePullPolicy,
-		Env: []corev1.EnvVar{
-			{
-				Name:  "BACKUP_USER",
-				Value: string(apiv1alpha1.UserXtraBackup),
-			},
-			{
-				Name: "BACKUP_PASSWORD",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: k8s.SecretKeySelector(cr.Spec.SecretsName, string(apiv1alpha1.UserXtraBackup)),
-				},
-			},
-		},
+		Env:             []corev1.EnvVar{},
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "http",
@@ -526,6 +515,10 @@ func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			{
 				Name:      dataVolumeName,
 				MountPath: DataMountPath,
+			},
+			{
+				Name:      credsVolumeName,
+				MountPath: CredsMountPath,
 			},
 			{
 				Name:      "backup-logs",
