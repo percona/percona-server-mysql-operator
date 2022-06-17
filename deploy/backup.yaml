@@ -1,7 +1,7 @@
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQLBackup
 metadata:
-  name: backup5
+  name: backup1
 spec:
   clusterName: cluster1
-  storageName: s3-west
+  storageName: s3-us-west
