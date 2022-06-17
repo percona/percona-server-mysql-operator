@@ -64,11 +64,11 @@ request_data() {
 
 request_backup() {
 	local http_code=$(
-		curl \
+		curl -s -o /dev/null \
 			-d "$(request_data)" \
 			-H "Content-Type: application/json" \
 			-w httpcode=%{http_code} \
-			"http://${SRC_NODE}:6033/backup/${BACKUP_NAME}" 2>/dev/null \
+			"http://${SRC_NODE}:6033/backup/${BACKUP_NAME}" \
 			| sed -e 's/.*\httpcode=//'
 	)
 

@@ -197,6 +197,8 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 
 	xbcloud := exec.Command("xbcloud", xbcloudArgs(backupConf)...)
 	xbcloud.Stdin = xbOut
+	xbcloud.Stderr = os.Stderr
+	xbcloud.Stdout = os.Stdout
 
 	log.Info(
 		"Backup starting",
@@ -205,12 +207,6 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 		"xtrabackupCmd", sanitizeCmd(xtrabackup),
 		"xbcloudCmd", sanitizeCmd(xbcloud),
 	)
-
-	if err := xbcloud.Start(); err != nil {
-		log.Error(err, "failed to start xbcloud command")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
-		return
-	}
 
 	if err := xtrabackup.Start(); err != nil {
 		log.Error(err, "failed to start xtrabackup command")
@@ -225,21 +221,21 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	if err := xbcloud.Run(); err != nil {
+		log.Error(err, "failed to run xbcloud")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
+		return
+	}
+
 	logWriter := io.MultiWriter(backupLog, os.Stderr)
 	if _, err := io.Copy(logWriter, xbErr); err != nil {
-		log.Error(err, "failed to copy stderr")
+		log.Error(err, "failed to copy xtrabackup stderr")
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
 
 	if err := xtrabackup.Wait(); err != nil {
 		log.Error(err, "failed waiting for xtrabackup to finish")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
-		return
-	}
-
-	if err := xbcloud.Wait(); err != nil {
-		log.Error(err, "failed waiting for xbcloud to finish")
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
