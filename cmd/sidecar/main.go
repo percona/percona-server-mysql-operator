@@ -84,7 +84,7 @@ func xtrabackupArgs(user, pass string) []string {
 }
 
 func xbcloudArgs(conf BackupConf) []string {
-	args := []string{"put", "--md5", "--parallel=10", "--curl-retriable-errors=7"}
+	args := []string{"put", "--parallel=10", "--curl-retriable-errors=7"}
 
 	if conf.Storage.VerifyTLS != nil {
 		verify := *conf.Storage.VerifyTLS
@@ -98,6 +98,7 @@ func xbcloudArgs(conf BackupConf) []string {
 		args = append(
 			args,
 			[]string{
+				"--md5",
 				"--storage=google",
 				fmt.Sprintf("--google-bucket=%s", conf.Storage.GCS.Bucket),
 				fmt.Sprintf("--google-endpoint=%s", conf.Storage.GCS.EndpointURL),
@@ -109,6 +110,7 @@ func xbcloudArgs(conf BackupConf) []string {
 		args = append(
 			args,
 			[]string{
+				"--md5",
 				"--storage=s3",
 				fmt.Sprintf("--s3-bucket=%s", conf.Storage.S3.Bucket),
 				fmt.Sprintf("--s3-region=%s", conf.Storage.S3.Region),
