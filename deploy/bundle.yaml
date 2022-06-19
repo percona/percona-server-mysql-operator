@@ -786,8 +786,6 @@ spec:
                           type: object
                         azure:
                           properties:
-                            accessKey:
-                              type: string
                             containerName:
                               description: A container name is a valid DNS name that conforms to the Azure naming rules.
                               type: string
@@ -796,8 +794,6 @@ spec:
                               type: string
                             endpointUrl:
                               description: The endpoint allows clients to securely access data
-                              type: string
-                            storageAccount:
                               type: string
                             storageClass:
                               description: Hot (Frequently accessed or modified data), Cool (Infrequently accessed or modified data), Archive (Rarely accessed or modified data)
@@ -895,15 +891,11 @@ spec:
                           type: object
                         gcs:
                           properties:
-                            accessKey:
-                              type: string
                             bucket:
                               type: string
                             credentialsSecret:
                               type: string
                             endpointUrl:
-                              type: string
-                            secretKey:
                               type: string
                             storageClass:
                               description: STANDARD, NEARLINE, COLDLINE, ARCHIVE
@@ -1036,8 +1028,6 @@ spec:
                           type: string
                         s3:
                           properties:
-                            accessKey:
-                              type: string
                             bucket:
                               type: string
                             credentialsSecret:
@@ -1045,8 +1035,6 @@ spec:
                             endpointUrl:
                               type: string
                             region:
-                              type: string
-                            secretKey:
                               type: string
                             storageClass:
                               type: string

@@ -26,7 +26,30 @@ var sensitiveFlags = regexp.MustCompile("--password=(.*)|--.*-access-key=(.*)|--
 
 type BackupConf struct {
 	Destination string                        `json:"destination"`
-	Storage     apiv1alpha1.BackupStorageSpec `json:"storage"`
+	Type        apiv1alpha1.BackupStorageType `json:"type"`
+	VerifyTLS   bool                          `json:"verifyTLS,omitempty"`
+	S3          struct {
+		Bucket       string `json:"bucket"`
+		Region       string `json:"region,omitempty"`
+		EndpointURL  string `json:"endpointUrl,omitempty"`
+		StorageClass string `json:"storageClass,omitempty"`
+		AccessKey    string `json:"accessKey,omitempty"`
+		SecretKey    string `json:"secretKey,omitempty"`
+	} `json:"s3,omitempty"`
+	GCS struct {
+		Bucket       string `json:"bucket"`
+		EndpointURL  string `json:"endpointUrl,omitempty"`
+		StorageClass string `json:"storageClass,omitempty"`
+		AccessKey    string `json:"accessKey,omitempty"`
+		SecretKey    string `json:"secretKey,omitempty"`
+	} `json:"gcs,omitempty"`
+	Azure struct {
+		ContainerName  string `json:"containerName"`
+		EndpointURL    string `json:"endpointUrl,omitempty"`
+		StorageClass   string `json:"storageClass,omitempty"`
+		StorageAccount string `json:"storageAccount,omitempty"`
+		AccessKey      string `json:"accessKey,omitempty"`
+	} `json:"azure,omitempty"`
 }
 
 func main() {
@@ -86,24 +109,21 @@ func xtrabackupArgs(user, pass string) []string {
 func xbcloudArgs(conf BackupConf) []string {
 	args := []string{"put", "--parallel=10", "--curl-retriable-errors=7"}
 
-	if conf.Storage.VerifyTLS != nil {
-		verify := *conf.Storage.VerifyTLS
-		if !verify {
-			args = append(args, "--insecure")
-		}
+	if !conf.VerifyTLS {
+		args = append(args, "--insecure")
 	}
 
-	switch conf.Storage.Type {
+	switch conf.Type {
 	case apiv1alpha1.BackupStorageGCS:
 		args = append(
 			args,
 			[]string{
 				"--md5",
 				"--storage=google",
-				fmt.Sprintf("--google-bucket=%s", conf.Storage.GCS.Bucket),
-				fmt.Sprintf("--google-endpoint=%s", conf.Storage.GCS.EndpointURL),
-				fmt.Sprintf("--google-access-key=%s", conf.Storage.GCS.AccessKey),
-				fmt.Sprintf("--google-secret-key=%s", conf.Storage.GCS.SecretKey),
+				fmt.Sprintf("--google-bucket=%s", conf.GCS.Bucket),
+				fmt.Sprintf("--google-endpoint=%s", conf.GCS.EndpointURL),
+				fmt.Sprintf("--google-access-key=%s", conf.GCS.AccessKey),
+				fmt.Sprintf("--google-secret-key=%s", conf.GCS.SecretKey),
 			}...,
 		)
 	case apiv1alpha1.BackupStorageS3:
@@ -112,11 +132,11 @@ func xbcloudArgs(conf BackupConf) []string {
 			[]string{
 				"--md5",
 				"--storage=s3",
-				fmt.Sprintf("--s3-bucket=%s", conf.Storage.S3.Bucket),
-				fmt.Sprintf("--s3-region=%s", conf.Storage.S3.Region),
-				fmt.Sprintf("--s3-endpoint=%s", conf.Storage.S3.EndpointURL),
-				fmt.Sprintf("--s3-access-key=%s", conf.Storage.S3.AccessKey),
-				fmt.Sprintf("--s3-secret-key=%s", conf.Storage.S3.SecretKey),
+				fmt.Sprintf("--s3-bucket=%s", conf.S3.Bucket),
+				fmt.Sprintf("--s3-region=%s", conf.S3.Region),
+				fmt.Sprintf("--s3-endpoint=%s", conf.S3.EndpointURL),
+				fmt.Sprintf("--s3-access-key=%s", conf.S3.AccessKey),
+				fmt.Sprintf("--s3-secret-key=%s", conf.S3.SecretKey),
 			}...,
 		)
 	case apiv1alpha1.BackupStorageAzure:
@@ -124,10 +144,10 @@ func xbcloudArgs(conf BackupConf) []string {
 			args,
 			[]string{
 				"--storage=azure",
-				fmt.Sprintf("--azure-storage-account=%s", conf.Storage.Azure.StorageAccount),
-				fmt.Sprintf("--azure-container-name=%s", conf.Storage.Azure.ContainerName),
-				fmt.Sprintf("--azure-endpoint=%s", conf.Storage.Azure.EndpointURL),
-				fmt.Sprintf("--azure-access-key=%s", conf.Storage.Azure.AccessKey),
+				fmt.Sprintf("--azure-storage-account=%s", conf.Azure.StorageAccount),
+				fmt.Sprintf("--azure-container-name=%s", conf.Azure.ContainerName),
+				fmt.Sprintf("--azure-endpoint=%s", conf.Azure.EndpointURL),
+				fmt.Sprintf("--azure-access-key=%s", conf.Azure.AccessKey),
 			}...,
 		)
 	}
@@ -205,7 +225,7 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 	log.Info(
 		"Backup starting",
 		"destination", backupConf.Destination,
-		"storage", backupConf.Storage.Type,
+		"storage", backupConf.Type,
 		"xtrabackupCmd", sanitizeCmd(xtrabackup),
 		"xbcloudCmd", sanitizeCmd(xbcloud),
 	)
@@ -242,7 +262,7 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Info("Backup finished successfully", "destination", backupConf.Destination, "storage", backupConf.Storage.Type)
+	log.Info("Backup finished successfully", "destination", backupConf.Destination, "storage", backupConf.Type)
 }
 
 func logHandler(w http.ResponseWriter, req *http.Request) {

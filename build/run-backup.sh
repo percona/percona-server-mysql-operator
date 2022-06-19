@@ -8,17 +8,15 @@ request_data() {
 			cat <<-EOF
 				{
 				    "destination": "${BACKUP_DEST}",
-				    "storage": {
-				        "type": "${STORAGE_TYPE}",
-				        "verifyTLS": ${VERIFY_TLS},
-				        "s3": {
-				            "bucket": "${S3_BUCKET}",
-				            "endpointUrl": "${AWS_ENDPOINT}",
-				            "accessKey": "${AWS_ACCESS_KEY_ID}",
-				            "secretKey": "${AWS_SECRET_ACCESS_KEY}",
-				            "region": "${AWS_DEFAULT_REGION}",
-				            "storageClass": "${S3_STORAGE_CLASS}"
-				        }
+				    "type": "${STORAGE_TYPE}",
+				    "verifyTLS": ${VERIFY_TLS},
+				    "s3": {
+				        "bucket": "${S3_BUCKET}",
+				        "endpointUrl": "${AWS_ENDPOINT}",
+				        "accessKey": "${AWS_ACCESS_KEY_ID}",
+				        "secretKey": "${AWS_SECRET_ACCESS_KEY}",
+				        "region": "${AWS_DEFAULT_REGION}",
+				        "storageClass": "${S3_STORAGE_CLASS}"
 				    }
 				}
 			EOF
@@ -27,16 +25,14 @@ request_data() {
 			cat <<-EOF
 				{
 				    "destination": "${BACKUP_DEST}",
-				    "storage": {
-				        "type": "${STORAGE_TYPE}",
-				        "verifyTLS": ${VERIFY_TLS},
-				        "gcs": {
-				            "bucket": "${GCS_BUCKET}",
-				            "endpointUrl": "${GCS_ENDPOINT}",
-				            "accessKey": "${ACCESS_KEY_ID}",
-				            "secretKey": "${SECRET_ACCESS_KEY}",
-				            "storageClass": "${GCS_STORAGE_CLASS}"
-				        }
+				    "verifyTLS": ${VERIFY_TLS},
+				    "type": "${STORAGE_TYPE}",
+				    "gcs": {
+				        "bucket": "${GCS_BUCKET}",
+				        "endpointUrl": "${GCS_ENDPOINT}",
+				        "accessKey": "${ACCESS_KEY_ID}",
+				        "secretKey": "${SECRET_ACCESS_KEY}",
+				        "storageClass": "${GCS_STORAGE_CLASS}"
 				    }
 				}
 			EOF
@@ -45,16 +41,14 @@ request_data() {
 			cat <<-EOF
 				{
 				    "destination": "${BACKUP_DEST}",
-				    "storage": {
-				        "type": "${STORAGE_TYPE}",
-				        "verifyTLS": ${VERIFY_TLS},
-				        "azure": {
-				            "containerName": "${AZURE_CONTAINER_NAME}",
-				            "storageAccount": "${AZURE_STORAGE_ACCOUNT}",
-				            "accessKey": "${AZURE_ACCESS_KEY}",
-				            "endpointUrl": "${AZURE_ENDPOINT}",
-				            "storageClass": "${AZURE_STORAGE_CLASS}"
-				        }
+				    "verifyTLS": ${VERIFY_TLS},
+				    "type": "${STORAGE_TYPE}",
+				    "azure": {
+				        "containerName": "${AZURE_CONTAINER_NAME}",
+				        "storageAccount": "${AZURE_STORAGE_ACCOUNT}",
+				        "accessKey": "${AZURE_ACCESS_KEY}",
+				        "endpointUrl": "${AZURE_ENDPOINT}",
+				        "storageClass": "${AZURE_STORAGE_CLASS}"
 				    }
 				}
 			EOF

@@ -175,9 +175,6 @@ type BackupStorageS3Spec struct {
 	Region            string `json:"region,omitempty"`
 	EndpointURL       string `json:"endpointUrl,omitempty"`
 	StorageClass      string `json:"storageClass,omitempty"`
-
-	AccessKey string `json:"accessKey,omitempty"`
-	SecretKey string `json:"secretKey,omitempty"`
 }
 
 type BackupStorageGCSSpec struct {
@@ -187,9 +184,6 @@ type BackupStorageGCSSpec struct {
 
 	// STANDARD, NEARLINE, COLDLINE, ARCHIVE
 	StorageClass string `json:"storageClass,omitempty"`
-
-	AccessKey string `json:"accessKey,omitempty"`
-	SecretKey string `json:"secretKey,omitempty"`
 }
 
 type BackupStorageAzureSpec struct {
@@ -204,9 +198,6 @@ type BackupStorageAzureSpec struct {
 
 	// Hot (Frequently accessed or modified data), Cool (Infrequently accessed or modified data), Archive (Rarely accessed or modified data)
 	StorageClass string `json:"storageClass,omitempty"`
-
-	StorageAccount string `json:"storageAccount,omitempty"`
-	AccessKey      string `json:"accessKey,omitempty"`
 }
 
 type PodDisruptionBudgetSpec struct {
