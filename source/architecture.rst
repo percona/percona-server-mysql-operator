@@ -1,7 +1,7 @@
 Design overview
 ===============
 
-The Percona Distribution for MySQL Operator automates and simplifies deploying
+The Percona Operator for MySQL automates and simplifies deploying
 and managing open source MySQL clusters on Kubernetes.
 
 Containers deployed with the Operator include the following components:
