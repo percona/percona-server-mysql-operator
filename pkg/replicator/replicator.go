@@ -25,6 +25,7 @@ type Replicator interface {
 	StartReplication(host, replicaPass string, port int32) error
 	ReplicationStatus() (ReplicationStatus, string, error)
 	EnableReadonly() error
+	EnableSuperReadonly() error
 	IsReadonly() (bool, error)
 	ReportHost() (string, error)
 	Close() error
@@ -121,6 +122,11 @@ func (d *dbImpl) IsReplica() (bool, error) {
 func (d *dbImpl) EnableReadonly() error {
 	_, err := d.db.Exec("SET GLOBAL READ_ONLY=1")
 	return errors.Wrap(err, "set global read_only param to 1")
+}
+
+func (d *dbImpl) EnableSuperReadonly() error {
+	_, err := d.db.Exec("SET GLOBAL SUPER_READ_ONLY=1")
+	return errors.Wrap(err, "set global super_read_only param to 1")
 }
 
 func (d *dbImpl) IsReadonly() (bool, error) {
