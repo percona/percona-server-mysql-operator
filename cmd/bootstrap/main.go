@@ -137,7 +137,6 @@ func bootstrap() error {
 		log.Printf("Cloning from %s", donor)
 		err = db.Clone(donor, "operator", operatorPass, mysql.DefaultAdminPort)
 		timer.Stop("clone")
-		log.Printf("Clone finished in %f seconds", timer.ElapsedSeconds("clone"))
 		if err != nil {
 			return errors.Wrapf(err, "clone from donor %s", donor)
 		}

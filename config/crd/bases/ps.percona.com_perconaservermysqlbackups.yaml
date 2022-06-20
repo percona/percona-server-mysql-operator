@@ -14,10 +14,27 @@ spec:
     plural: perconaservermysqlbackups
     shortNames:
     - ps-backup
+    - ps-backups
     singular: perconaservermysqlbackup
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.storageName
+      name: Storage
+      type: string
+    - jsonPath: .status.destination
+      name: Destination
+      type: string
+    - jsonPath: .status.state
+      name: State
+      type: string
+    - jsonPath: .status.completed
+      name: Completed
+      type: date
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: PerconaServerMySQLBackup is the Schema for the perconaservermysqlbackups
@@ -39,14 +56,27 @@ spec:
             description: PerconaServerMySQLBackupSpec defines the desired state of
               PerconaServerMySQLBackup
             properties:
-              foo:
-                description: Foo is an example field of PerconaServerMySQLBackup.
-                  Edit perconaservermysqlbackup_types.go to remove/update
+              clusterName:
                 type: string
+              storageName:
+                type: string
+            required:
+            - clusterName
+            - storageName
             type: object
           status:
             description: PerconaServerMySQLBackupStatus defines the observed state
               of PerconaServerMySQLBackup
+            properties:
+              completed:
+                format: date-time
+                type: string
+              destination:
+                type: string
+              state:
+                type: string
+              storageName:
+                type: string
             type: object
         type: object
     served: true

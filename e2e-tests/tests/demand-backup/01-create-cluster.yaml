@@ -1,0 +1,17 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      get_cr \
+      	| yq eval '.spec.backup.storages.us-east-1.type="s3"' - \
+      	| yq eval '.spec.backup.storages.us-east-1.s3.bucket="operator-testing"' - \
+      	| yq eval '.spec.backup.storages.us-east-1.s3.credentialsSecret="minio-secret"' - \
+      	| yq eval '.spec.backup.storages.us-east-1.s3.endpointUrl="http://minio-service:9000"' - \
+      	| yq eval '.spec.backup.storages.us-east-1.s3.region="us-east-1"' - \
+      	| kubectl -n "${NAMESPACE}" apply -f -
