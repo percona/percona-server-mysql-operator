@@ -217,10 +217,17 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	defer xbErr.Close()
 
+	backupLog, err := os.Create(filepath.Join(mysql.BackupLogDir, backupName+".log"))
+	if err != nil {
+		log.Error(err, "failed to create log file")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
+		return
+	}
+	logWriter := io.MultiWriter(backupLog, os.Stderr)
+
 	xbcloud := exec.Command("xbcloud", xbcloudArgs(backupConf)...)
 	xbcloud.Stdin = xbOut
-	xbcloud.Stderr = os.Stderr
-	xbcloud.Stdout = os.Stdout
+	xbcloud.Stderr = logWriter
 
 	log.Info(
 		"Backup starting",
@@ -236,20 +243,12 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	backupLog, err := os.Create(filepath.Join(mysql.BackupLogDir, backupName+".log"))
-	if err != nil {
-		log.Error(err, "failed to create log file")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
-		return
-	}
-
 	if err := xbcloud.Run(); err != nil {
 		log.Error(err, "failed to run xbcloud")
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
 
-	logWriter := io.MultiWriter(backupLog, os.Stderr)
 	if _, err := io.Copy(logWriter, xbErr); err != nil {
 		log.Error(err, "failed to copy xtrabackup stderr")
 		http.Error(w, "backup failed", http.StatusInternalServerError)
