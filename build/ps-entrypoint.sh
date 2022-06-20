@@ -140,10 +140,15 @@ CUSTOM_CONFIG_FILES=("/etc/mysql/config/my-config.cnf" "/etc/mysql/config/my-sec
 
 create_default_cnf() {
 	POD_IP=$(hostname -I | awk '{print $1}')
-	CLUSTER_NAME="$(hostname -f | cut -d'.' -f2)"
-	SERVER_NUM=${HOSTNAME/$CLUSTER_NAME-/}
-	SERVER_ID=${CLUSTER_HASH}${SERVER_NUM}
-	FQDN="${HOSTNAME}.${SERVICE_NAME}.$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)"
+
+	if [[ ${HOSTNAME} =~ "-xb-" ]]; then
+		FQDN=${HOSTNAME}
+	else
+		CLUSTER_NAME="$(hostname -f | cut -d'.' -f2)"
+		SERVER_NUM=${HOSTNAME/$CLUSTER_NAME-/}
+		SERVER_ID=${CLUSTER_HASH}${SERVER_NUM}
+		FQDN="${HOSTNAME}.${SERVICE_NAME}.$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)"
+	fi
 
 	echo '[mysqld]' >$CFG
 	sed -i "/\[mysqld\]/a read_only=ON" $CFG
@@ -271,6 +276,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 
 		file_env 'MONITOR_HOST' 'localhost'
 		file_env 'MONITOR_PASSWORD' 'monitor' 'monitor'
+		file_env 'XTRABACKUP_PASSWORD' '' 'xtrabackup'
 		file_env 'REPLICATION_PASSWORD' '' 'replication'
 		file_env 'ORC_TOPOLOGY_PASSWORD' '' 'orchestrator'
 		file_env 'OPERATOR_ADMIN_PASSWORD' '' 'operator'

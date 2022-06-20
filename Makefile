@@ -117,7 +117,7 @@ build: generate ## Build docker image with the manager.
 ##@ Deployment
 
 install: manifests ## Install CRDs, rbac
-	kubectl apply -f $(DEPLOYDIR)/crd.yaml
+	kubectl apply --server-side -f $(DEPLOYDIR)/crd.yaml
 	kubectl apply -f $(DEPLOYDIR)/rbac.yaml
 
 uninstall: manifests ## Uninstall CRDs, rbac

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 exec 5>&2
 export BASH_XTRACEFD="5"
 

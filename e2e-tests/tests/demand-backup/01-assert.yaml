@@ -1,18 +1,11 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 300
+timeout: 420
 ---
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: monitoring-mysql
-spec:
-  template:
-    spec:
-      containers:
-      - name: mysql
-      - name: xtrabackup
-      - name: pmm-client
+  name: demand-backup-mysql
 status:
   observedGeneration: 1
   replicas: 3
@@ -24,7 +17,7 @@ status:
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: monitoring-orc
+  name: demand-backup-orc
 status:
   observedGeneration: 1
   replicas: 3
@@ -36,7 +29,7 @@ status:
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
-  name: monitoring
+  name: demand-backup
 status:
   mysql:
     ready: 3
