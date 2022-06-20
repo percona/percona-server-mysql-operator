@@ -121,11 +121,13 @@ func xbcloudArgs(conf BackupConf) []string {
 				"--md5",
 				"--storage=google",
 				fmt.Sprintf("--google-bucket=%s", conf.GCS.Bucket),
-				fmt.Sprintf("--google-endpoint=%s", conf.GCS.EndpointURL),
 				fmt.Sprintf("--google-access-key=%s", conf.GCS.AccessKey),
 				fmt.Sprintf("--google-secret-key=%s", conf.GCS.SecretKey),
 			}...,
 		)
+		if len(conf.GCS.EndpointURL) > 0 {
+			args = append(args, fmt.Sprintf("--google-endpoint=%s", conf.GCS.EndpointURL))
+		}
 	case apiv1alpha1.BackupStorageS3:
 		args = append(
 			args,
@@ -134,11 +136,13 @@ func xbcloudArgs(conf BackupConf) []string {
 				"--storage=s3",
 				fmt.Sprintf("--s3-bucket=%s", conf.S3.Bucket),
 				fmt.Sprintf("--s3-region=%s", conf.S3.Region),
-				fmt.Sprintf("--s3-endpoint=%s", conf.S3.EndpointURL),
 				fmt.Sprintf("--s3-access-key=%s", conf.S3.AccessKey),
 				fmt.Sprintf("--s3-secret-key=%s", conf.S3.SecretKey),
 			}...,
 		)
+		if len(conf.S3.EndpointURL) > 0 {
+			args = append(args, fmt.Sprintf("--s3-endpoint=%s", conf.S3.EndpointURL))
+		}
 	case apiv1alpha1.BackupStorageAzure:
 		args = append(
 			args,
@@ -146,10 +150,12 @@ func xbcloudArgs(conf BackupConf) []string {
 				"--storage=azure",
 				fmt.Sprintf("--azure-storage-account=%s", conf.Azure.StorageAccount),
 				fmt.Sprintf("--azure-container-name=%s", conf.Azure.ContainerName),
-				fmt.Sprintf("--azure-endpoint=%s", conf.Azure.EndpointURL),
 				fmt.Sprintf("--azure-access-key=%s", conf.Azure.AccessKey),
 			}...,
 		)
+		if len(conf.Azure.EndpointURL) > 0 {
+			args = append(args, fmt.Sprintf("--azure-endpoint=%s", conf.Azure.EndpointURL))
+		}
 	}
 
 	args = append(args, conf.Destination)
