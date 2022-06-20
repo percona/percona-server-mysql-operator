@@ -2,6 +2,7 @@ package xtrabackup
 
 import (
 	"strconv"
+	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -222,6 +223,16 @@ func RestoreJob(
 
 	labels := util.SSMapMerge(storage.Labels, MatchLabels(cluster))
 
+	var destination string
+	switch storage.Type {
+	case apiv1alpha1.BackupStorageAzure:
+		destination = strings.TrimPrefix(backup.Status.Destination, storage.Azure.ContainerName+"/")
+	case apiv1alpha1.BackupStorageS3:
+		destination = strings.TrimPrefix(backup.Status.Destination, "s3://"+storage.S3.Bucket+"/")
+	case apiv1alpha1.BackupStorageGCS:
+		destination = strings.TrimPrefix(backup.Status.Destination, "gcs://"+storage.GCS.Bucket+"/")
+	}
+
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1",
@@ -241,7 +252,7 @@ func RestoreJob(
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyOnFailure,
+					RestartPolicy: corev1.RestartPolicyNever,
 					InitContainers: []corev1.Container{
 						{
 							Name:            componentName + "-init",
@@ -272,7 +283,7 @@ func RestoreJob(
 						},
 					},
 					Containers: []corev1.Container{
-						restoreContainer(cluster, restore.Name, backup.Name, storage),
+						restoreContainer(cluster, restore.Name, backup.Name, destination, storage),
 					},
 					Affinity:          storage.Affinity,
 					Tolerations:       storage.Tolerations,
@@ -319,7 +330,7 @@ func RestoreJob(
 	}
 }
 
-func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restoreName, backupName string, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
+func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restoreName, backupName, destination string, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
 	spec := cluster.Spec.Backup
 
 	verifyTLS := true
@@ -342,7 +353,7 @@ func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restoreName, back
 			},
 			{
 				Name:  "BACKUP_DEST",
-				Value: "",
+				Value: destination,
 			},
 			{
 				Name:  "VERIFY_TLS",
