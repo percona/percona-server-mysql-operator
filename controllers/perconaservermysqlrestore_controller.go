@@ -100,13 +100,13 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	cluster := &apiv1alpha1.PerconaServerMySQL{}
 	nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
 	if err := r.Client.Get(ctx, nn, cluster); err != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "get cluster %s", nn.String)
+		return ctrl.Result{}, errors.Wrapf(err, "get cluster %s", nn)
 	}
 
 	backup := &apiv1alpha1.PerconaServerMySQLBackup{}
 	nn = types.NamespacedName{Name: cr.Spec.BackupName, Namespace: cr.Namespace}
 	if err := r.Client.Get(ctx, nn, backup); err != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "get backup %s", nn.String)
+		return ctrl.Result{}, errors.Wrapf(err, "get backup %s", nn)
 	}
 
 	storage, ok := cluster.Spec.Backup.Storages[backup.Spec.StorageName]
