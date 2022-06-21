@@ -230,7 +230,7 @@ func RestoreJob(
 	case apiv1alpha1.BackupStorageS3:
 		destination = strings.TrimPrefix(backup.Status.Destination, "s3://"+storage.S3.Bucket+"/")
 	case apiv1alpha1.BackupStorageGCS:
-		destination = strings.TrimPrefix(backup.Status.Destination, "gcs://"+storage.GCS.Bucket+"/")
+		destination = strings.TrimPrefix(backup.Status.Destination, "gs://"+storage.GCS.Bucket+"/")
 	}
 
 	return &batchv1.Job{
