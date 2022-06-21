@@ -26,7 +26,7 @@ data:
     GRANT REPLICATION SLAVE ON *.* TO `replication`@`%`
     GRANT SYSTEM_USER ON *.* TO `replication`@`%`
   xtrabackup: |
-    GRANT RELOAD, PROCESS, LOCK TABLES, REPLICATION CLIENT ON *.* TO `xtrabackup`@`localhost`
+    GRANT RELOAD, PROCESS, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO `xtrabackup`@`localhost`
     GRANT BACKUP_ADMIN,SYSTEM_USER ON *.* TO `xtrabackup`@`localhost`
     GRANT SELECT ON `performance_schema`.`keyring_component_status` TO `xtrabackup`@`localhost`
     GRANT SELECT ON `performance_schema`.`log_status` TO `xtrabackup`@`localhost`
