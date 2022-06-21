@@ -253,6 +253,8 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 	xbcloudDone := make(chan struct{}, 1)
 
 	go func() {
+		defer close(xbcloudDone)
+
 		if err := xbcloud.Start(); err != nil {
 			log.Error(err, "failed to start xbcloud")
 			http.Error(w, "backup failed", http.StatusInternalServerError)
