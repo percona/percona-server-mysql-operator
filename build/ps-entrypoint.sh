@@ -179,10 +179,6 @@ create_default_cnf() {
 	done
 }
 
-enable_super_read_only() {
-	sed -i "/\[mysqld\]/a super_read_only=ON" $CFG
-}
-
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
 
 if [ "$MYSQL_VERSION" != '8.0' ]; then
@@ -371,8 +367,6 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		echo 'MySQL init process done. Ready for start up.'
 		echo
 	fi
-
-	enable_super_read_only
 
 	# exit when MYSQL_INIT_ONLY environment variable is set to avoid starting mysqld
 	if [ ! -z "$MYSQL_INIT_ONLY" ]; then
