@@ -5759,7 +5759,7 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.namespace
-        image: perconalab/percona-server-mysql-operator:main
+        image: perconalab/percona-server-mysql-operator:k8sps-54
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

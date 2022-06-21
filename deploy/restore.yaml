@@ -1,7 +1,7 @@
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQLRestore
 metadata:
-  name: restore1
+  name: restore2
 spec:
   clusterName: cluster1
-  backupName: backup1
+  backupName: backup3

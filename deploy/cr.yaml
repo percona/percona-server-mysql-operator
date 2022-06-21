@@ -3,6 +3,8 @@ kind: PerconaServerMySQL
 metadata:
   name: cluster1
 spec:
+  allowUnsafeConfigurations: false
+#  pause: false
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
   backup:
