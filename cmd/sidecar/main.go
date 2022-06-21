@@ -101,6 +101,8 @@ func xtrabackupArgs(user, pass string) []string {
 	return []string{
 		"--backup",
 		"--stream=xbstream",
+		"--safe-slave-backup",
+		"--slave-info",
 		fmt.Sprintf("--user=%s", user),
 		fmt.Sprintf("--password=%s", pass),
 	}
