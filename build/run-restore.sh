@@ -34,7 +34,7 @@ main() {
 	echo "Restoring to backup ${BACKUP_NAME}: ${BACKUP_DEST}"
 
 	rm -rf ${DATADIR}/*
-	tmpdir=$(mktemp --directory)
+	tmpdir=$(mktemp --directory ${DATADIR}/${BACKUP_NAME}_XXXX)
 
 	case ${STORAGE_TYPE} in
 		"s3") run_s3 | extract ${tmpdir} ;;
@@ -44,6 +44,8 @@ main() {
 
 	xtrabackup --prepare --rollback-prepared-trx --target-dir=${tmpdir}
 	xtrabackup --datadir=${DATADIR} --move-back --force-non-empty-directories --target-dir=${tmpdir}
+
+	rm -rf "${tmpdir}"
 
 	echo "Restore finished"
 }
