@@ -196,7 +196,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 				return rr, errors.Wrap(err, "set storage GCS")
 			}
 
-			status.Destination = fmt.Sprintf("gcs://%s/%s", storage.GCS.Bucket, destination)
+			status.Destination = fmt.Sprintf("gs://%s/%s", storage.GCS.Bucket, destination)
 		case apiv1alpha1.BackupStorageAzure:
 			if storage.Azure == nil {
 				return rr, errors.New("azure stanza is required in storage")
