@@ -160,6 +160,10 @@ func bootstrap() error {
 		}
 	}
 
+	if err := db.EnableSuperReadonly(); err != nil {
+		return errors.Wrap(err, "enable super read only")
+	}
+
 	return nil
 }
 
