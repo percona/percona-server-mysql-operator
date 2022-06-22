@@ -100,7 +100,14 @@ spec:
     singular: perconaservermysqlrestore
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.state
+      name: State
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: PerconaServerMySQLRestore is the Schema for the perconaservermysqlrestores API
@@ -116,12 +123,22 @@ spec:
           spec:
             description: PerconaServerMySQLRestoreSpec defines the desired state of PerconaServerMySQLRestore
             properties:
-              foo:
-                description: Foo is an example field of PerconaServerMySQLRestore. Edit perconaservermysqlrestore_types.go to remove/update
+              backupName:
                 type: string
+              clusterName:
+                type: string
+            required:
+            - backupName
+            - clusterName
             type: object
           status:
             description: PerconaServerMySQLRestoreStatus defines the observed state of PerconaServerMySQLRestore
+            properties:
+              completed:
+                format: date-time
+                type: string
+              state:
+                type: string
             type: object
         type: object
     served: true

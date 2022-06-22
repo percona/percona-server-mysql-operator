@@ -410,6 +410,11 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 		return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup")
 	}
 
+	if cr.Spec.Pause {
+		cr.Spec.MySQL.Size = 0
+		cr.Spec.Orchestrator.Size = 0
+	}
+
 	return nil
 }
 
