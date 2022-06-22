@@ -906,7 +906,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(
 
 func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	serviceName := mysql.PrimaryServiceName(cr)
-	if cr.MySQLSpec().Expose.Enabled && cr.MySQLSpec().Expose.Type != corev1.ServiceTypeLoadBalancer {
+	if cr.MySQLSpec().PrimaryServiceType != corev1.ServiceTypeLoadBalancer {
 		return serviceName + "." + cr.GetNamespace(), nil
 	}
 
