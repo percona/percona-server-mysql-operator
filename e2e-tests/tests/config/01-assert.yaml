@@ -13,6 +13,8 @@ spec:
       containers:
       - name: mysql
         volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
         - mountPath: /var/lib/mysql
           name: datadir
         - mountPath: /etc/mysql/mysql-users-secret
@@ -21,7 +23,19 @@ spec:
           name: tls
         - mountPath: /etc/mysql/config
           name: config
+      - name: xtrabackup
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
+        - mountPath: /var/log/xtrabackup
+          name: backup-logs
       volumes:
+      - emptyDir: {}
+        name: bin
       - name: users
         secret:
           defaultMode: 420
@@ -46,6 +60,8 @@ spec:
                 path: my-secret.cnf
               name: config-mysql
               optional: true
+      - emptyDir: {}
+        name: backup-logs
 status:
   observedGeneration: 1
   replicas: 3

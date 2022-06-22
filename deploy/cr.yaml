@@ -3,10 +3,56 @@ kind: PerconaServerMySQL
 metadata:
   name: cluster1
 spec:
+  allowUnsafeConfigurations: false
+#  pause: false
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
+  backup:
+    enabled: true
+    image: percona/percona-xtrabackup:8.0.28
+    imagePullPolicy: Always
+    storages:
+      s3-us-west:
+        type: s3
+        verifyTLS: true
+#        nodeSelector:
+#          storage: tape
+#          backupWorker: 'True'
+#        resources:
+#          requests:
+#            memory: 1G
+#            cpu: 600m
+#        affinity:
+#          nodeAffinity:
+#            requiredDuringSchedulingIgnoredDuringExecution:
+#              nodeSelectorTerms:
+#              - matchExpressions:
+#                - key: backupWorker
+#                  operator: In
+#                  values:
+#                  - 'True'
+#        tolerations:
+#          - key: "backupWorker"
+#            operator: "Equal"
+#            value: "True"
+#            effect: "NoSchedule"
+#        annotations:
+#          testName: scheduled-backup
+#        labels:
+#          backupWorker: 'True'
+#        schedulerName: 'default-scheduler'
+#        priorityClassName: 'high-priority'
+#        containerSecurityContext:
+#          privileged: true
+#        podSecurityContext:
+#          fsGroup: 1001
+#          supplementalGroups: [1001, 1002, 1003]
+        s3:
+          bucket: S3-BACKUP-BUCKET-NAME-HERE
+          credentialsSecret: cluster1-s3-credentials
+          region: us-west-2
   mysql:
-    image: percona/percona-server:8.0.25
+    image: percona/percona-server:8.0.28
     imagePullPolicy: Always
 
     size: 3

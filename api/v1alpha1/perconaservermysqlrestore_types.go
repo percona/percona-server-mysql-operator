@@ -25,23 +25,32 @@ import (
 
 // PerconaServerMySQLRestoreSpec defines the desired state of PerconaServerMySQLRestore
 type PerconaServerMySQLRestoreSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of PerconaServerMySQLRestore. Edit perconaservermysqlrestore_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	ClusterName string `json:"clusterName"`
+	BackupName  string `json:"backupName"`
 }
+
+type RestoreState string
+
+const (
+	RestoreNew       RestoreState = ""
+	RestoreStarting  RestoreState = "Starting"
+	RestoreRunning   RestoreState = "Running"
+	RestoreFailed    RestoreState = "Failed"
+	RestoreSucceeded RestoreState = "Succeeded"
+)
 
 // PerconaServerMySQLRestoreStatus defines the observed state of PerconaServerMySQLRestore
 type PerconaServerMySQLRestoreStatus struct { // INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	State       RestoreState `json:"state,omitempty"`
+	CompletedAt *metav1.Time `json:"completed,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 //+kubebuilder:resource:scope=Namespaced
 //+kubebuilder:resource:shortName=ps-restore
-
+//+kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
+//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // PerconaServerMySQLRestore is the Schema for the perconaservermysqlrestores API
 type PerconaServerMySQLRestore struct {
 	metav1.TypeMeta   `json:",inline"`
