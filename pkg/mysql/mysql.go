@@ -13,7 +13,9 @@ import (
 
 const (
 	componentName    = "mysql"
-	dataVolumeName   = "datadir"
+	binVolumeName    = "bin"
+	binMountPath     = "/opt/percona"
+	DataVolumeName   = "datadir"
 	DataMountPath    = "/var/lib/mysql"
 	CustomConfigKey  = "my.cnf"
 	configVolumeName = "config"
@@ -137,7 +139,11 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 							ImagePullPolicy: spec.ImagePullPolicy,
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:      dataVolumeName,
+									Name:      binVolumeName,
+									MountPath: binMountPath,
+								},
+								{
+									Name:      DataVolumeName,
 									MountPath: DataMountPath,
 								},
 								{
@@ -164,6 +170,12 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 					DNSPolicy:     corev1.DNSClusterFirst,
 					Volumes: append(
 						[]corev1.Volume{
+							{
+								Name: binVolumeName,
+								VolumeSource: corev1.VolumeSource{
+									EmptyDir: &corev1.EmptyDirVolumeSource{},
+								},
+							},
 							{
 								Name: credsVolumeName,
 								VolumeSource: corev1.VolumeSource{
@@ -235,7 +247,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 
 func volumeClaimTemplates(spec *apiv1alpha1.MySQLSpec) []corev1.PersistentVolumeClaim {
 	pvcs := []corev1.PersistentVolumeClaim{
-		k8s.PVC(dataVolumeName, spec.VolumeSpec),
+		k8s.PVC(DataVolumeName, spec.VolumeSpec),
 	}
 	for _, p := range spec.SidecarPVCs {
 		pvcs = append(pvcs, corev1.PersistentVolumeClaim{
@@ -475,7 +487,11 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      dataVolumeName,
+				Name:      binVolumeName,
+				MountPath: binMountPath,
+			},
+			{
+				Name:      DataVolumeName,
 				MountPath: DataMountPath,
 			},
 			{
@@ -491,14 +507,14 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 				MountPath: configMountPath,
 			},
 		},
-		Command:                  []string{"/var/lib/mysql/ps-entrypoint.sh"},
+		Command:                  []string{"/opt/percona/ps-entrypoint.sh"},
 		Args:                     []string{"mysqld"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          spec.ContainerSecurityContext,
-		StartupProbe:             k8s.ExecProbe(spec.StartupProbe, []string{"/var/lib/mysql/bootstrap"}),
-		LivenessProbe:            k8s.ExecProbe(spec.LivenessProbe, []string{"/var/lib/mysql/healthcheck", "liveness"}),
-		ReadinessProbe:           k8s.ExecProbe(spec.ReadinessProbe, []string{"/var/lib/mysql/healthcheck", "readiness"}),
+		StartupProbe:             k8s.ExecProbe(spec.StartupProbe, []string{"/opt/percona/bootstrap"}),
+		LivenessProbe:            k8s.ExecProbe(spec.LivenessProbe, []string{"/opt/percona/healthcheck", "liveness"}),
+		ReadinessProbe:           k8s.ExecProbe(spec.ReadinessProbe, []string{"/opt/percona/healthcheck", "readiness"}),
 	}
 }
 
@@ -516,7 +532,11 @@ func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      dataVolumeName,
+				Name:      binVolumeName,
+				MountPath: binMountPath,
+			},
+			{
+				Name:      DataVolumeName,
 				MountPath: DataMountPath,
 			},
 			{
@@ -528,7 +548,7 @@ func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 				MountPath: BackupLogDir,
 			},
 		},
-		Command:                  []string{"/var/lib/mysql/sidecar"},
+		Command:                  []string{"/opt/percona/sidecar"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 	}
@@ -697,7 +717,11 @@ func pmmContainer(clusterName, secretsName string, pmmSpec *apiv1alpha1.PMMSpec)
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      dataVolumeName,
+				Name:      binVolumeName,
+				MountPath: binMountPath,
+			},
+			{
+				Name:      DataVolumeName,
 				MountPath: DataMountPath,
 			},
 		},

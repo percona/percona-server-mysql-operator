@@ -235,7 +235,14 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 
 	xbcloud := exec.Command("xbcloud", xbcloudArgs(backupConf)...)
 	xbcloud.Stdin = xbOut
-	xbcloud.Stderr = logWriter
+
+	xbcloudErr, err := xbcloud.StderrPipe()
+	if err != nil {
+		log.Error(err, "xbcloud stderr pipe failed")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
+		return
+	}
+	defer xbcloudErr.Close()
 
 	log.Info(
 		"Backup starting",
@@ -245,14 +252,34 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 		"xbcloudCmd", sanitizeCmd(xbcloud),
 	)
 
+	xbcloudDone := make(chan struct{}, 1)
+
+	go func() {
+		defer close(xbcloudDone)
+
+		if err := xbcloud.Start(); err != nil {
+			log.Error(err, "failed to start xbcloud")
+			http.Error(w, "backup failed", http.StatusInternalServerError)
+			return
+		}
+
+		if _, err := io.Copy(logWriter, xbcloudErr); err != nil {
+			log.Error(err, "failed to copy xbcloud stderr")
+			http.Error(w, "backup failed", http.StatusInternalServerError)
+			return
+		}
+
+		if err := xbcloud.Wait(); err != nil {
+			log.Error(err, "failed waiting for xbcloud to finish")
+			http.Error(w, "backup failed", http.StatusInternalServerError)
+			return
+		}
+
+		xbcloudDone <- struct{}{}
+	}()
+
 	if err := xtrabackup.Start(); err != nil {
 		log.Error(err, "failed to start xtrabackup command")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
-		return
-	}
-
-	if err := xbcloud.Run(); err != nil {
-		log.Error(err, "failed to run xbcloud")
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
@@ -268,6 +295,8 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
+
+	<-xbcloudDone
 
 	log.Info("Backup finished successfully", "destination", backupConf.Destination, "storage", backupConf.Type)
 }
