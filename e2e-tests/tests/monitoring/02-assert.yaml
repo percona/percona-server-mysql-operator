@@ -11,6 +11,7 @@ spec:
     spec:
       containers:
       - name: mysql
+      - name: xtrabackup
       - name: pmm-client
 status:
   observedGeneration: 1
@@ -26,10 +27,10 @@ metadata:
   name: monitoring-orc
 status:
   observedGeneration: 1
-  replicas: 1
-  readyReplicas: 1
-  currentReplicas: 1
-  updatedReplicas: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
   collisionCount: 0
 ---
 apiVersion: ps.percona.com/v1alpha1
@@ -42,6 +43,6 @@ status:
     size: 3
     state: ready
   orchestrator:
-    ready: 1
-    size: 1
+    ready: 3
+    size: 3
     state: ready

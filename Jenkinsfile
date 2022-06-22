@@ -5,6 +5,7 @@ void CreateCluster(String CLUSTER_PREFIX, String SUBNETWORK = CLUSTER_PREFIX) {
         sh """
             NODES_NUM=3
             export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
+            export USE_GKE_GCLOUD_AUTH_PLUGIN=True
             source $HOME/google-cloud-sdk/path.bash.inc
             gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
             gcloud config set project $GCP_PROJECT
@@ -18,6 +19,7 @@ void ShutdownCluster(String CLUSTER_PREFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
             export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
+            export USE_GKE_GCLOUD_AUTH_PLUGIN=True
             source $HOME/google-cloud-sdk/path.bash.inc
             gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
             gcloud config set project $GCP_PROJECT
@@ -33,7 +35,7 @@ void pushLogFile(String FILE_NAME) {
         sh """
             S3_PATH=s3://percona-jenkins-artifactory-public/\$JOB_NAME/\$(git rev-parse --short HEAD)
             aws s3 ls \$S3_PATH/${LOG_FILE_NAME} || :
-            aws s3 cp --quiet ${LOG_FILE_PATH} \$S3_PATH/${LOG_FILE_NAME} || :
+            aws s3 cp --content-type text/plain --quiet ${LOG_FILE_PATH} \$S3_PATH/${LOG_FILE_NAME} || :
         """
     }
 }
@@ -103,6 +105,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         export PATH="$HOME/.krew/bin:$PATH"
                         source $HOME/google-cloud-sdk/path.bash.inc
+                        set -o pipefail
                         time kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "${TEST_NAME}" |& tee e2e-tests/logs/${TEST_NAME}.log
                     fi
                 """
@@ -319,6 +322,18 @@ pipeline {
                 runTest('sidecars', 'basic')
                 runTest('users', 'basic')
                 ShutdownCluster('basic')
+            }
+        }
+        stage('E2E Backup Tests') {
+            when {
+                expression {
+                    !skipBranchBuilds
+                }
+            }
+            steps {
+                CreateCluster('backup')
+                runTest('demand-backup', 'backup')
+                ShutdownCluster('backup')
             }
         }
     }

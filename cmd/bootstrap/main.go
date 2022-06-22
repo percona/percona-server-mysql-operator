@@ -126,7 +126,6 @@ func bootstrap() error {
 		log.Printf("Cloning from %s", donor)
 		err = db.Clone(donor, "operator", operatorPass, mysql.DefaultAdminPort)
 		timer.Stop("clone")
-		log.Printf("Clone finished in %f seconds", timer.ElapsedSeconds("clone"))
 		if err != nil {
 			return errors.Wrapf(err, "clone from donor %s", donor)
 		}
@@ -148,6 +147,10 @@ func bootstrap() error {
 		if err := db.StartReplication(primary, replicaPass, mysql.DefaultPort); err != nil {
 			return errors.Wrap(err, "start replication")
 		}
+	}
+
+	if err := db.EnableSuperReadonly(); err != nil {
+		return errors.Wrap(err, "enable super read only")
 	}
 
 	return nil

@@ -43,6 +43,7 @@ type PerconaServerMySQLSpec struct {
 	MySQL                 MySQLSpec        `json:"mysql,omitempty"`
 	Orchestrator          OrchestratorSpec `json:"orchestrator,omitempty"`
 	PMM                   *PMMSpec         `json:"pmm,omitempty"`
+	Backup                *BackupSpec      `json:"backup,omitempty"`
 }
 
 type ClusterType string
@@ -63,6 +64,9 @@ type MySQLSpec struct {
 	SidecarPVCs    []SidecarPVC       `json:"sidecarPVCs,omitempty"`
 
 	Configuration string `json:"configuration,omitempty"`
+
+	PrimaryServiceType  corev1.ServiceType `json:"primaryServiceType,omitempty"`
+	ReplicasServiceType corev1.ServiceType `json:"replicasServiceType,omitempty"`
 
 	PodSpec `json:",inline"`
 }
@@ -99,8 +103,6 @@ type PodSpec struct {
 	EnvVarsSecretName             string                                  `json:"envVarsSecret,omitempty"`
 	TerminationGracePeriodSeconds *int64                                  `json:"gracePeriod,omitempty"`
 	ForceUnsafeBootstrap          bool                                    `json:"forceUnsafeBootstrap,omitempty"`
-	ServiceType                   corev1.ServiceType                      `json:"serviceType,omitempty"`
-	ReplicasServiceType           corev1.ServiceType                      `json:"replicasServiceType,omitempty"`
 	ExternalTrafficPolicy         corev1.ServiceExternalTrafficPolicyType `json:"externalTrafficPolicy,omitempty"`
 	ReplicasExternalTrafficPolicy corev1.ServiceExternalTrafficPolicyType `json:"replicasExternalTrafficPolicy,omitempty"`
 	LoadBalancerSourceRanges      []string                                `json:"loadBalancerSourceRanges,omitempty"`
@@ -125,6 +127,77 @@ type PMMSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
 	RuntimeClassName         *string                     `json:"runtimeClassName,omitempty"`
+}
+
+type BackupSpec struct {
+	Enabled                  bool                          `json:"enabled,omitempty"`
+	Image                    string                        `json:"image,omitempty"`
+	ImagePullSecrets         []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	ImagePullPolicy          corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
+	ServiceAccountName       string                        `json:"serviceAccountName,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext       `json:"containerSecurityContext,omitempty"`
+	Resources                corev1.ResourceRequirements   `json:"resources,omitempty"`
+	Storages                 map[string]*BackupStorageSpec `json:"storages,omitempty"`
+}
+
+type BackupStorageType string
+
+const (
+	BackupStorageFilesystem BackupStorageType = "filesystem"
+	BackupStorageS3         BackupStorageType = "s3"
+	BackupStorageGCS        BackupStorageType = "gcs"
+	BackupStorageAzure      BackupStorageType = "azure"
+)
+
+type BackupStorageSpec struct {
+	Type                     BackupStorageType           `json:"type"`
+	Volume                   *VolumeSpec                 `json:"volumeSpec,omitempty"`
+	S3                       *BackupStorageS3Spec        `json:"s3,omitempty"`
+	GCS                      *BackupStorageGCSSpec       `json:"gcs,omitempty"`
+	Azure                    *BackupStorageAzureSpec     `json:"azure,omitempty"`
+	NodeSelector             map[string]string           `json:"nodeSelector,omitempty"`
+	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
+	Affinity                 *corev1.Affinity            `json:"affinity,omitempty"`
+	Tolerations              []corev1.Toleration         `json:"tolerations,omitempty"`
+	Annotations              map[string]string           `json:"annotations,omitempty"`
+	Labels                   map[string]string           `json:"labels,omitempty"`
+	SchedulerName            string                      `json:"schedulerName,omitempty"`
+	PriorityClassName        string                      `json:"priorityClassName,omitempty"`
+	PodSecurityContext       *corev1.PodSecurityContext  `json:"podSecurityContext,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
+	RuntimeClassName         *string                     `json:"runtimeClassName,omitempty"`
+	VerifyTLS                *bool                       `json:"verifyTLS,omitempty"`
+}
+
+type BackupStorageS3Spec struct {
+	Bucket            string `json:"bucket"`
+	CredentialsSecret string `json:"credentialsSecret"`
+	Region            string `json:"region,omitempty"`
+	EndpointURL       string `json:"endpointUrl,omitempty"`
+	StorageClass      string `json:"storageClass,omitempty"`
+}
+
+type BackupStorageGCSSpec struct {
+	Bucket            string `json:"bucket"`
+	CredentialsSecret string `json:"credentialsSecret"`
+	EndpointURL       string `json:"endpointUrl,omitempty"`
+
+	// STANDARD, NEARLINE, COLDLINE, ARCHIVE
+	StorageClass string `json:"storageClass,omitempty"`
+}
+
+type BackupStorageAzureSpec struct {
+	// A container name is a valid DNS name that conforms to the Azure naming rules.
+	ContainerName string `json:"containerName"`
+
+	// A generated key that can be used to authorize access to data in your account using the Shared Key authorization.
+	CredentialsSecret string `json:"credentialsSecret"`
+
+	// The endpoint allows clients to securely access data
+	EndpointURL string `json:"endpointUrl,omitempty"`
+
+	// Hot (Frequently accessed or modified data), Cool (Infrequently accessed or modified data), Archive (Rarely accessed or modified data)
+	StorageClass string `json:"storageClass,omitempty"`
 }
 
 type PodDisruptionBudgetSpec struct {
@@ -188,11 +261,14 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	MySQL        StatefulAppStatus `json:"mysql,omitempty"`
 	Orchestrator StatefulAppStatus `json:"orchestrator,omitempty"`
 	State        StatefulAppState  `json:"state,omitempty"`
+	// +optional
+	Host string `json:"host"`
 }
 
 // PerconaServerMySQL is the Schema for the perconaservermysqls API
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=".status.host"
 //+kubebuilder:printcolumn:name="MySQL",type=string,JSONPath=".status.mysql.state"
 //+kubebuilder:printcolumn:name="Orchestrator",type=string,JSONPath=".status.orchestrator.state"
 //+kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
@@ -243,7 +319,11 @@ func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 }
 
 func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVersion) error {
-	if cr.Spec.MySQL.SizeSemiSync.IntVal >= cr.Spec.MySQL.Size {
+	if len(cr.Spec.Backup.Image) == 0 {
+		return errors.New("backup.image can't be empty")
+	}
+
+	if cr.Spec.MySQL.Size != 0 && cr.Spec.MySQL.SizeSemiSync.IntVal >= cr.Spec.MySQL.Size {
 		return errors.New("mysql.sizeSemiSync can't be greater than or equal to mysql.size")
 	}
 
@@ -313,8 +393,11 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 		cr.Spec.Orchestrator.PodSecurityContext = sc
 	}
 
-	cr.Spec.MySQL.VolumeSpec = reconcileVol(cr.Spec.MySQL.VolumeSpec)
-	cr.Spec.Orchestrator.VolumeSpec = reconcileVol(cr.Spec.Orchestrator.VolumeSpec)
+	var err error
+	cr.Spec.MySQL.VolumeSpec, err = reconcileVol(cr.Spec.MySQL.VolumeSpec)
+	if err != nil {
+		return errors.Wrap(err, "reconcile mysql volumeSpec")
+	}
 
 	for i := range cr.Spec.MySQL.SidecarPVCs {
 		defaultPVCSpec(&cr.Spec.MySQL.SidecarPVCs[i].Spec)
@@ -327,21 +410,30 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 		return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup")
 	}
 
+	if cr.Spec.Pause {
+		cr.Spec.MySQL.Size = 0
+		cr.Spec.Orchestrator.Size = 0
+	}
+
 	return nil
 }
 
-func reconcileVol(v *VolumeSpec) *VolumeSpec {
-	if v == nil {
-		v = &VolumeSpec{}
+func reconcileVol(v *VolumeSpec) (*VolumeSpec, error) {
+	if v == nil || v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil {
+		return nil, errors.New("volumeSpec and it's internals should be specified")
 	}
-
-	if v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil {
-		v.PersistentVolumeClaim = &corev1.PersistentVolumeClaimSpec{}
+	if v.PersistentVolumeClaim == nil {
+		return nil, errors.New("pvc should be specified")
+	}
+	_, limits := v.PersistentVolumeClaim.Resources.Limits[corev1.ResourceStorage]
+	_, requests := v.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+	if !(limits || requests) {
+		return nil, errors.New("pvc's resources.limits[storage] or resources.requests[storage] should be specified")
 	}
 
 	defaultPVCSpec(v.PersistentVolumeClaim)
 
-	return v
+	return v, nil
 }
 
 func defaultPVCSpec(pvc *corev1.PersistentVolumeClaimSpec) {
@@ -459,22 +551,25 @@ func GetClusterNameFromObject(obj client.Object) (string, error) {
 	return instance, nil
 }
 
+func FNVHash(p []byte) string {
+	hash := fnv.New32()
+	hash.Write(p)
+	return fmt.Sprint(hash.Sum32())
+}
+
 // ClusterHash returns FNV hash of the CustomResource UID
 func (cr *PerconaServerMySQL) ClusterHash() string {
-	serverIDHash := fnv.New32()
-	serverIDHash.Write([]byte(string(cr.UID)))
+	serverIDHash := FNVHash([]byte(string(cr.UID)))
 
 	// We use only first 7 digits to give a space for pod number which is
 	// appended to all server ids. If we don't do this, it can cause a
 	// int32 overflow.
 	// P.S max value is 4294967295
-	serverIDHashStr := fmt.Sprint(serverIDHash.Sum32())
-
-	if len(serverIDHashStr) > 7 {
-		serverIDHashStr = serverIDHashStr[:7]
+	if len(serverIDHash) > 7 {
+		serverIDHash = serverIDHash[:7]
 	}
 
-	return serverIDHashStr
+	return serverIDHash
 }
 
 func (cr *PerconaServerMySQL) InternalSecretName() string {

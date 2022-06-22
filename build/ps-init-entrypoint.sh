@@ -3,6 +3,9 @@
 set -o errexit
 set -o xtrace
 
-install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /ps-entrypoint.sh /var/lib/mysql/ps-entrypoint.sh
-install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /bootstrap /var/lib/mysql/bootstrap
-install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /healthcheck /var/lib/mysql/healthcheck
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /ps-entrypoint.sh /opt/percona/ps-entrypoint.sh
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /bootstrap /opt/percona/bootstrap
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /healthcheck /opt/percona/healthcheck
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /sidecar /opt/percona/sidecar
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /run-backup.sh /opt/percona/run-backup.sh
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /run-restore.sh /opt/percona/run-restore.sh

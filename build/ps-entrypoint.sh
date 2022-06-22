@@ -140,10 +140,15 @@ CUSTOM_CONFIG_FILES=("/etc/mysql/config/auto-config.cnf" "/etc/mysql/config/my-c
 
 create_default_cnf() {
 	POD_IP=$(hostname -I | awk '{print $1}')
-	CLUSTER_NAME="$(hostname -f | cut -d'.' -f2)"
-	SERVER_NUM=${HOSTNAME/$CLUSTER_NAME-/}
-	SERVER_ID=${CLUSTER_HASH}${SERVER_NUM}
-	FQDN="${HOSTNAME}.${SERVICE_NAME}.$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)"
+
+	if [[ ${HOSTNAME} =~ "-xb-" ]]; then
+		FQDN=${HOSTNAME}
+	else
+		CLUSTER_NAME="$(hostname -f | cut -d'.' -f2)"
+		SERVER_NUM=${HOSTNAME/$CLUSTER_NAME-/}
+		SERVER_ID=${CLUSTER_HASH}${SERVER_NUM}
+		FQDN="${HOSTNAME}.${SERVICE_NAME}.$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)"
+	fi
 
 	echo '[mysqld]' >$CFG
 	sed -i "/\[mysqld\]/a read_only=ON" $CFG
@@ -267,6 +272,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 
 		file_env 'MONITOR_HOST' 'localhost'
 		file_env 'MONITOR_PASSWORD' 'monitor' 'monitor'
+		file_env 'XTRABACKUP_PASSWORD' '' 'xtrabackup'
 		file_env 'REPLICATION_PASSWORD' '' 'replication'
 		file_env 'ORC_TOPOLOGY_PASSWORD' '' 'orchestrator'
 		file_env 'OPERATOR_ADMIN_PASSWORD' '' 'operator'
@@ -289,7 +295,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			GRANT ALL ON *.* TO 'operator'@'${MYSQL_ROOT_HOST}' WITH GRANT OPTION ;
 
 			CREATE USER 'xtrabackup'@'localhost' IDENTIFIED BY '${XTRABACKUP_PASSWORD}';
-			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
+			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.log_status TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.keyring_component_status TO 'xtrabackup'@'localhost';
 

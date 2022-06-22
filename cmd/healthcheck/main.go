@@ -25,8 +25,12 @@ func main() {
 		if err := checkLiveness(); err != nil {
 			log.Fatalf("liveness check failed: %v", err)
 		}
+	case "replication":
+		if err := checkReplication(); err != nil {
+			log.Fatalf("replication check failed: %v", err)
+		}
 	default:
-		log.Fatalf("Usage: %s liveness|readiness", os.Args[0])
+		log.Fatalf("Usage: %s liveness|readiness|replication", os.Args[0])
 	}
 }
 
@@ -83,6 +87,36 @@ func checkLiveness() error {
 	defer db.Close()
 
 	return db.DumbQuery()
+}
+
+func checkReplication() error {
+	podIP, err := getPodIP()
+	if err != nil {
+		return errors.Wrap(err, "get pod IP")
+	}
+
+	operatorPass, err := getSecret(string(apiv1alpha1.UserOperator))
+	if err != nil {
+		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
+	}
+
+	db, err := replicator.NewReplicator("operator", operatorPass, podIP, mysql.DefaultAdminPort)
+	if err != nil {
+		return errors.Wrap(err, "connect to db")
+	}
+	defer db.Close()
+
+	// if isReplica is true, replication is active
+	isReplica, err := db.IsReplica()
+	if err != nil {
+		return errors.Wrap(err, "check replica status")
+	}
+
+	if !isReplica {
+		return errors.New("replication is not active")
+	}
+
+	return nil
 }
 
 func getSecret(username string) (string, error) {

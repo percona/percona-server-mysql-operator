@@ -107,15 +107,17 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.PerconaServerMySQLBackupReconciler{
-		Client: nsClient,
-		Scheme: mgr.GetScheme(),
+		Client:        nsClient,
+		Scheme:        mgr.GetScheme(),
+		ServerVersion: serverVersion,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLBackup")
 		os.Exit(1)
 	}
 	if err = (&controllers.PerconaServerMySQLRestoreReconciler{
-		Client: nsClient,
-		Scheme: mgr.GetScheme(),
+		Client:        nsClient,
+		Scheme:        mgr.GetScheme(),
+		ServerVersion: serverVersion,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLRestore")
 		os.Exit(1)

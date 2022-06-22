@@ -13,7 +13,9 @@ import (
 
 const (
 	componentName    = "mysql"
-	dataVolumeName   = "datadir"
+	binVolumeName    = "bin"
+	binMountPath     = "/opt/percona"
+	DataVolumeName   = "datadir"
 	DataMountPath    = "/var/lib/mysql"
 	CustomConfigKey  = "my.cnf"
 	configVolumeName = "config"
@@ -22,12 +24,14 @@ const (
 	CredsMountPath   = "/etc/mysql/mysql-users-secret"
 	tlsVolumeName    = "tls"
 	tlsMountPath     = "/etc/mysql/mysql-tls-secret"
+	BackupLogDir     = "/var/log/xtrabackup"
 )
 
 const (
 	DefaultPort      = 3306
 	DefaultAdminPort = 33062
 	DefaultXPort     = 33060
+	SidecarHTTPPort  = 6033
 )
 
 type User struct {
@@ -58,7 +62,7 @@ func (e *Exposer) Labels() map[string]string {
 
 func (e *Exposer) Service(name string) *corev1.Service {
 	cr := apiv1alpha1.PerconaServerMySQL(*e)
-	return PodService(&cr, cr.Spec.MySQL.ServiceType, name)
+	return PodService(&cr, cr.Spec.MySQL.Expose.Type, name)
 }
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
@@ -140,7 +144,11 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, auto
 							ImagePullPolicy: spec.ImagePullPolicy,
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:      dataVolumeName,
+									Name:      binVolumeName,
+									MountPath: binMountPath,
+								},
+								{
+									Name:      DataVolumeName,
 									MountPath: DataMountPath,
 								},
 								{
@@ -167,6 +175,12 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, auto
 					DNSPolicy:     corev1.DNSClusterFirst,
 					Volumes: append(
 						[]corev1.Volume{
+							{
+								Name: binVolumeName,
+								VolumeSource: corev1.VolumeSource{
+									EmptyDir: &corev1.EmptyDirVolumeSource{},
+								},
+							},
 							{
 								Name: credsVolumeName,
 								VolumeSource: corev1.VolumeSource{
@@ -234,6 +248,12 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, auto
 									},
 								},
 							},
+							{
+								Name: "backup-logs",
+								VolumeSource: corev1.VolumeSource{
+									EmptyDir: &corev1.EmptyDirVolumeSource{},
+								},
+							},
 						},
 						spec.SidecarVolumes...,
 					),
@@ -246,7 +266,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, auto
 
 func volumeClaimTemplates(spec *apiv1alpha1.MySQLSpec) []corev1.PersistentVolumeClaim {
 	pvcs := []corev1.PersistentVolumeClaim{
-		k8s.PVC(dataVolumeName, spec.VolumeSpec),
+		k8s.PVC(DataVolumeName, spec.VolumeSpec),
 	}
 	for _, p := range spec.SidecarPVCs {
 		pvcs = append(pvcs, corev1.PersistentVolumeClaim{
@@ -286,6 +306,10 @@ func UnreadyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 					Name: "mysqlx",
 					Port: DefaultXPort,
 				},
+				{
+					Name: "http",
+					Port: SidecarHTTPPort,
+				},
 			},
 			Selector:                 labels,
 			PublishNotReadyAddresses: true,
@@ -295,6 +319,13 @@ func UnreadyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 
 func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	labels := MatchLabels(cr)
+
+	serviceType := corev1.ServiceTypeClusterIP
+	clusterIP := "None"
+	if cr.Spec.MySQL.ReplicasServiceType != "" && cr.Spec.MySQL.ReplicasServiceType != corev1.ServiceTypeClusterIP {
+		serviceType = cr.Spec.MySQL.ReplicasServiceType
+		clusterIP = ""
+	}
 
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -307,7 +338,8 @@ func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
-			ClusterIP: "None",
+			Type:      serviceType,
+			ClusterIP: clusterIP,
 			Ports: []corev1.ServicePort{
 				{
 					Name: "mysql",
@@ -320,6 +352,10 @@ func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 				{
 					Name: "mysqlx",
 					Port: DefaultXPort,
+				},
+				{
+					Name: "http",
+					Port: SidecarHTTPPort,
 				},
 			},
 			Selector: labels,
@@ -360,6 +396,10 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 					Name: componentName + "x",
 					Port: DefaultXPort,
 				},
+				{
+					Name: "http",
+					Port: SidecarHTTPPort,
+				},
 			},
 		},
 	}
@@ -371,8 +411,8 @@ func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	selector[apiv1alpha1.MySQLPrimaryLabel] = "true"
 
 	serviceType := corev1.ServiceTypeClusterIP
-	if cr.Spec.MySQL.Expose.Enabled {
-		serviceType = cr.Spec.MySQL.Expose.Type
+	if cr.Spec.MySQL.PrimaryServiceType != "" {
+		serviceType = cr.Spec.MySQL.PrimaryServiceType
 	}
 
 	return &corev1.Service{
@@ -400,6 +440,10 @@ func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 					Name: "mysqlx",
 					Port: DefaultXPort,
 				},
+				{
+					Name: "http",
+					Port: SidecarHTTPPort,
+				},
 			},
 			Selector: selector,
 		},
@@ -408,12 +452,16 @@ func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 
 func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 	containers := []corev1.Container{mysqldContainer(cr)}
-	if pmm := cr.PMMSpec(); pmm != nil && pmm.Enabled {
-		c := pmmContainer(cr.Name, cr.Spec.SecretsName, pmm)
-		containers = append(containers, c)
+
+	if backup := cr.Spec.Backup; backup != nil && backup.Enabled {
+		containers = append(containers, backupContainer(cr))
 	}
 
-	return appendUniqueContainers(containers, cr.MySQLSpec().Sidecars...)
+	if pmm := cr.Spec.PMM; pmm != nil && pmm.Enabled {
+		containers = append(containers, pmmContainer(cr.Name, cr.Spec.SecretsName, pmm))
+	}
+
+	return appendUniqueContainers(containers, cr.Spec.MySQL.Sidecars...)
 }
 
 func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
@@ -458,7 +506,11 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      dataVolumeName,
+				Name:      binVolumeName,
+				MountPath: binMountPath,
+			},
+			{
+				Name:      DataVolumeName,
 				MountPath: DataMountPath,
 			},
 			{
@@ -474,50 +526,50 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 				MountPath: configMountPath,
 			},
 		},
-		Command:                  []string{"/var/lib/mysql/ps-entrypoint.sh"},
+		Command:                  []string{"/opt/percona/ps-entrypoint.sh"},
 		Args:                     []string{"mysqld"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          spec.ContainerSecurityContext,
-		StartupProbe: &corev1.Probe{
-			Handler: corev1.Handler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"/var/lib/mysql/bootstrap"},
-				},
+		StartupProbe:             k8s.ExecProbe(spec.StartupProbe, []string{"/opt/percona/bootstrap"}),
+		LivenessProbe:            k8s.ExecProbe(spec.LivenessProbe, []string{"/opt/percona/healthcheck", "liveness"}),
+		ReadinessProbe:           k8s.ExecProbe(spec.ReadinessProbe, []string{"/opt/percona/healthcheck", "readiness"}),
+	}
+}
+
+func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
+	return corev1.Container{
+		Name:            "xtrabackup",
+		Image:           cr.Spec.Backup.Image,
+		ImagePullPolicy: cr.Spec.Backup.ImagePullPolicy,
+		Env:             []corev1.EnvVar{},
+		Ports: []corev1.ContainerPort{
+			{
+				Name:          "http",
+				ContainerPort: SidecarHTTPPort,
 			},
-			InitialDelaySeconds:           spec.StartupProbe.InitialDelaySeconds,
-			TimeoutSeconds:                spec.StartupProbe.TimeoutSeconds,
-			PeriodSeconds:                 spec.StartupProbe.PeriodSeconds,
-			FailureThreshold:              spec.StartupProbe.FailureThreshold,
-			SuccessThreshold:              spec.StartupProbe.SuccessThreshold,
-			TerminationGracePeriodSeconds: spec.StartupProbe.TerminationGracePeriodSeconds,
 		},
-		LivenessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"/var/lib/mysql/healthcheck", "liveness"},
-				},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      binVolumeName,
+				MountPath: binMountPath,
 			},
-			InitialDelaySeconds:           spec.LivenessProbe.InitialDelaySeconds,
-			TimeoutSeconds:                spec.LivenessProbe.TimeoutSeconds,
-			PeriodSeconds:                 spec.LivenessProbe.PeriodSeconds,
-			FailureThreshold:              spec.LivenessProbe.FailureThreshold,
-			SuccessThreshold:              spec.LivenessProbe.SuccessThreshold,
-			TerminationGracePeriodSeconds: spec.LivenessProbe.TerminationGracePeriodSeconds,
-		},
-		ReadinessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"/var/lib/mysql/healthcheck", "readiness"},
-				},
+			{
+				Name:      DataVolumeName,
+				MountPath: DataMountPath,
 			},
-			InitialDelaySeconds:           spec.ReadinessProbe.InitialDelaySeconds,
-			TimeoutSeconds:                spec.ReadinessProbe.TimeoutSeconds,
-			PeriodSeconds:                 spec.ReadinessProbe.PeriodSeconds,
-			FailureThreshold:              spec.ReadinessProbe.FailureThreshold,
-			SuccessThreshold:              spec.ReadinessProbe.SuccessThreshold,
-			TerminationGracePeriodSeconds: spec.ReadinessProbe.TerminationGracePeriodSeconds,
+			{
+				Name:      credsVolumeName,
+				MountPath: CredsMountPath,
+			},
+			{
+				Name:      "backup-logs",
+				MountPath: BackupLogDir,
+			},
 		},
+		Command:                  []string{"/opt/percona/sidecar"},
+		TerminationMessagePath:   "/dev/termination-log",
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 	}
 }
 
@@ -684,7 +736,11 @@ func pmmContainer(clusterName, secretsName string, pmmSpec *apiv1alpha1.PMMSpec)
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      dataVolumeName,
+				Name:      binVolumeName,
+				MountPath: binMountPath,
+			},
+			{
+				Name:      DataVolumeName,
 				MountPath: DataMountPath,
 			},
 		},
