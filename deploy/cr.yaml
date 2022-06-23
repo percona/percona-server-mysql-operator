@@ -64,6 +64,8 @@ spec:
 
     size: 3
     sizeSemiSync: 0
+#    primaryServiceType: LoadBalancer
+#    replicasServiceType: ClusterIP
 
     resources:
       requests:

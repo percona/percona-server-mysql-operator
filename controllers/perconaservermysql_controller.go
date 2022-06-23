@@ -1175,12 +1175,13 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(
 }
 
 func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
+
 	var serviceName string
 	if cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR {
 		serviceName = router.ServiceName(cr)
 	} else {
 		serviceName := mysql.PrimaryServiceName(cr)
-		if cr.Spec.MySQL.Expose.Enabled && cr.Spec.MySQL.Expose.Type != corev1.ServiceTypeLoadBalancer {
+		if cr.Spec.MySQL.PrimaryServiceType != corev1.ServiceTypeLoadBalancer {
 			return serviceName + "." + cr.GetNamespace(), nil
 		}
 	}
