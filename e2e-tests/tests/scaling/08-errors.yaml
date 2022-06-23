@@ -7,3 +7,13 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: scaling-mysql-4
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: scaling-orc-3
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: scaling-orc-4
