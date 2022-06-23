@@ -3,6 +3,8 @@ kind: PerconaServerMySQL
 metadata:
   name: cluster1
 spec:
+  allowUnsafeConfigurations: false
+#  pause: false
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
   backup:
@@ -55,6 +57,8 @@ spec:
 
     size: 3
     sizeSemiSync: 0
+#    primaryServiceType: LoadBalancer
+#    replicasServiceType: ClusterIP
 
     resources:
       requests:
