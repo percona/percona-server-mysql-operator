@@ -54,6 +54,12 @@ spec:
                 path: my-config.cnf
               name: config-mysql
               optional: true
+          - configMap:
+              items:
+                - key: my.cnf
+                  path: auto-config.cnf
+              name: auto-config-mysql
+              optional: true
           - secret:
               items:
               - key: my.cnf
