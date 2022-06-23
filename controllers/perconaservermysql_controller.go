@@ -1376,33 +1376,6 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 	return errors.Wrap(g.Wait(), "start replication on replicas")
 }
 
-func (r *PerconaServerMySQLReconciler) stopGroupReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
-	if err != nil {
-		return errors.Wrap(err, "get operator password")
-	}
-
-	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
-	if err != nil {
-		return errors.Wrap(err, "get MySQL pods")
-	}
-
-	for _, pod := range pods {
-		hostname := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
-		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, hostname, mysql.DefaultAdminPort)
-		if err != nil {
-			return errors.Wrapf(err, "get db connection to %s", hostname)
-		}
-		defer db.Close()
-
-		if err := db.StopGroupReplication(); err != nil {
-			return errors.Wrapf(err, "stop group replication on %s", pod.Name)
-		}
-	}
-
-	return nil
-}
-
 func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, replicaPass string) error {
 	l := log.FromContext(ctx).WithName("restartGroupReplication")
 
