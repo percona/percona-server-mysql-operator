@@ -291,7 +291,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	if err != nil {
 		return errors.Wrap(err, "get primary host")
 	}
-        l.V(1).Info("Got primary host", "primary", primaryHost)
+	l.V(1).Info("Got primary host", "primary", primaryHost)
 
 	um, err := users.NewManager(apiv1alpha1.UserOperator, operatorPass, primaryHost, mysql.DefaultAdminPort)
 	if err != nil {
