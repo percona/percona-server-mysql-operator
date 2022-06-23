@@ -1151,16 +1151,29 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(
 	}
 	cr.Status.MySQL = mysqlStatus
 
-	orcStatus, err := appStatus(ctx, r.Client, cr.OrchestratorSpec().Size, orchestrator.MatchLabels(cr))
-	if err != nil {
-		return errors.Wrap(err, "get Orchestrator status")
+	orcStatus := apiv1alpha1.StatefulAppStatus{}
+	if cr.Spec.MySQL.IsAsync() {
+		orcStatus, err = appStatus(ctx, r.Client, cr.OrchestratorSpec().Size, orchestrator.MatchLabels(cr))
+		if err != nil {
+			return errors.Wrap(err, "get Orchestrator status")
+		}
 	}
 	cr.Status.Orchestrator = orcStatus
 
-	if cr.Status.MySQL.State == cr.Status.Orchestrator.State {
+	routerStatus := apiv1alpha1.StatefulAppStatus{}
+	if cr.Spec.MySQL.IsGR() {
+		routerStatus, err = appStatus(ctx, r.Client, cr.Spec.Router.Size, router.MatchLabels(cr))
+		if err != nil {
+			return errors.Wrap(err, "get Router status")
+		}
+	}
+	cr.Status.Router = routerStatus
+
+	cr.Status.State = apiv1alpha1.StateInitializing
+	if cr.Spec.MySQL.IsAsync() && cr.Status.MySQL.State == cr.Status.Orchestrator.State {
 		cr.Status.State = cr.Status.MySQL.State
-	} else {
-		cr.Status.State = apiv1alpha1.StateInitializing
+	} else if cr.Spec.MySQL.IsGR() && cr.Status.MySQL.State == cr.Status.Router.State {
+		cr.Status.State = cr.Status.MySQL.State
 	}
 
 	cr.Status.Host, err = appHost(ctx, r.Client, cr)

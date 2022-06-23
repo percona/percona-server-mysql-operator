@@ -18,14 +18,11 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.mysql.clusterType
+      name: Replication
+      type: string
     - jsonPath: .status.host
       name: Endpoint
-      type: string
-    - jsonPath: .status.mysql.state
-      name: MySQL
-      type: string
-    - jsonPath: .status.orchestrator.state
-      name: Orchestrator
       type: string
     - jsonPath: .status.state
       name: State
@@ -11078,6 +11075,17 @@ spec:
                     type: string
                 type: object
               orchestrator:
+                properties:
+                  ready:
+                    format: int32
+                    type: integer
+                  size:
+                    format: int32
+                    type: integer
+                  state:
+                    type: string
+                type: object
+              router:
                 properties:
                   ready:
                     format: int32

@@ -275,6 +275,7 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	// Important: Run "make" to regenerate code after modifying this file
 	MySQL        StatefulAppStatus `json:"mysql,omitempty"`
 	Orchestrator StatefulAppStatus `json:"orchestrator,omitempty"`
+	Router       StatefulAppStatus `json:"router,omitempty"`
 	State        StatefulAppState  `json:"state,omitempty"`
 	// +optional
 	Host string `json:"host"`
@@ -283,9 +284,8 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 // PerconaServerMySQL is the Schema for the perconaservermysqls API
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="Replication",type=string,JSONPath=".spec.mysql.clusterType"
 //+kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=".status.host"
-//+kubebuilder:printcolumn:name="MySQL",type=string,JSONPath=".status.mysql.state"
-//+kubebuilder:printcolumn:name="Orchestrator",type=string,JSONPath=".status.orchestrator.state"
 //+kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
 //+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 //+kubebuilder:resource:scope=Namespaced
