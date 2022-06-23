@@ -55,7 +55,27 @@ spec:
   router:
     image: perconalab/percona-server-mysql-operator:router
     imagePullPolicy: Always
+
     size: 3
+
+    resources:
+      requests:
+        memory: 256M
+      limits:
+        memory: 256M
+
+    affinity:
+      antiAffinityTopologyKey: "kubernetes.io/hostname"
+#      advanced:
+#        nodeAffinity:
+#          requiredDuringSchedulingIgnoredDuringExecution:
+#            nodeSelectorTerms:
+#            - matchExpressions:
+#              - key: kubernetes.io/e2e-az-name
+#                operator: In
+#                values:
+#                - e2e-az1
+#                - e2e-az2
 
   mysql:
     clusterType: async
@@ -130,7 +150,7 @@ spec:
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 
-    size: 0
+    size: 3
 
     affinity:
       antiAffinityTopologyKey: "kubernetes.io/hostname"
