@@ -301,7 +301,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			GRANT ALL ON *.* TO 'operator'@'${MYSQL_ROOT_HOST}' WITH GRANT OPTION ;
 
 			CREATE USER 'xtrabackup'@'localhost' IDENTIFIED BY '${XTRABACKUP_PASSWORD}';
-			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
+			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.log_status TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.keyring_component_status TO 'xtrabackup'@'localhost';
 
