@@ -72,6 +72,14 @@ type MySQLSpec struct {
 	PodSpec `json:",inline"`
 }
 
+func (m MySQLSpec) IsAsync() bool {
+	return m.ClusterType == ClusterTypeAsync
+}
+
+func (m MySQLSpec) IsGR() bool {
+	return m.ClusterType == ClusterTypeGR
+}
+
 type SidecarPVC struct {
 	Name string `json:"name"`
 
@@ -202,7 +210,7 @@ type BackupStorageAzureSpec struct {
 }
 
 type MySQLRouterSpec struct {
-	Expose ServiceExpose `json:"expose,omitempty"`
+	Expose ServiceExposeTogglable `json:"expose,omitempty"`
 
 	PodSpec `json:",inline"`
 }

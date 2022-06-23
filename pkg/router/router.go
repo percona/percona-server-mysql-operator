@@ -18,6 +18,13 @@ const (
 	tlsMountPath    = "/etc/mysql/mysql-tls-secret"
 )
 
+const (
+	PortReadWrite  = 6446
+	PortReadOnly   = 6447
+	PortXReadWrite = 6448
+	PortXReadOnly  = 6449
+)
+
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return cr.Name + "-" + componentName
 }
@@ -35,6 +42,11 @@ func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	labels := MatchLabels(cr)
 
+	serviceType := corev1.ServiceTypeClusterIP
+	if cr.Spec.Router.Expose.Enabled {
+		serviceType = cr.Spec.Router.Expose.Type
+	}
+
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -46,22 +58,23 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
+			Type: serviceType,
 			Ports: []corev1.ServicePort{
 				{
 					Name: "read-write",
-					Port: int32(6446),
+					Port: int32(PortReadWrite),
 				},
 				{
 					Name: "read-only",
-					Port: int32(6447),
+					Port: int32(PortReadOnly),
 				},
 				{
 					Name: "x-read-write",
-					Port: int32(6448),
+					Port: int32(PortXReadWrite),
 				},
 				{
 					Name: "x-read-only",
-					Port: int32(6449),
+					Port: int32(PortXReadOnly),
 				},
 			},
 			Selector: labels,
@@ -149,19 +162,19 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "read-write",
-				ContainerPort: int32(6446),
+				ContainerPort: int32(PortReadWrite),
 			},
 			{
 				Name:          "read-only",
-				ContainerPort: int32(6447),
+				ContainerPort: int32(PortReadOnly),
 			},
 			{
 				Name:          "x-read-write",
-				ContainerPort: int32(6448),
+				ContainerPort: int32(PortXReadWrite),
 			},
 			{
 				Name:          "x-read-only",
-				ContainerPort: int32(6449),
+				ContainerPort: int32(PortXReadOnly),
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{

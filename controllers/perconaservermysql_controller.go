@@ -699,13 +699,13 @@ func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr
 		return errors.Wrap(err, "reconcile MySQL services")
 	}
 
-	if cr.Spec.MySQL.ClusterType != apiv1alpha1.ClusterTypeGR {
+	if cr.Spec.MySQL.IsAsync() {
 		if err := r.reconcileOrchestratorServices(ctx, cr); err != nil {
 			return errors.Wrap(err, "reconcile Orchestrator services")
 		}
 	}
 
-	if cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR {
+	if cr.Spec.MySQL.IsGR() {
 		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Service(cr), r.Scheme); err != nil {
 			return errors.Wrap(err, "reconcile router svc")
 		}
@@ -1168,18 +1168,30 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(
 		return errors.Wrap(err, "get app host")
 	}
 
-	l.V(1).Info("Writing CR status", "state", cr.Status.State, "orchestrator", cr.Status.Orchestrator, "mysql", cr.Status.MySQL, "host", cr.Status.Host)
+	l.V(1).Info(
+		"Writing CR status",
+		"mysql", cr.Status.MySQL,
+		"orchestrator", cr.Status.Orchestrator,
+		"router", cr.Status.Router,
+		"host", cr.Status.Host,
+		"state", cr.Status.State,
+	)
 
 	nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
 	return writeStatus(ctx, r.Client, nn, cr.Status)
 }
 
 func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
-
 	var serviceName string
-	if cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR {
+	if cr.Spec.MySQL.IsGR() {
 		serviceName = router.ServiceName(cr)
-	} else {
+		if !cr.Spec.Router.Expose.Enabled ||
+			(cr.Spec.Router.Expose.Enabled && cr.Spec.Router.Expose.Type != corev1.ServiceTypeLoadBalancer) {
+			return serviceName + "." + cr.GetNamespace(), nil
+		}
+	}
+
+	if cr.Spec.MySQL.IsAsync() {
 		serviceName := mysql.PrimaryServiceName(cr)
 		if cr.Spec.MySQL.PrimaryServiceType != corev1.ServiceTypeLoadBalancer {
 			return serviceName + "." + cr.GetNamespace(), nil

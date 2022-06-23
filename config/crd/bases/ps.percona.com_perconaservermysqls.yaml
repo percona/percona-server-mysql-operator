@@ -10126,6 +10126,8 @@ spec:
                         additionalProperties:
                           type: string
                         type: object
+                      enabled:
+                        type: boolean
                       loadBalancerSourceRanges:
                         items:
                           type: string
