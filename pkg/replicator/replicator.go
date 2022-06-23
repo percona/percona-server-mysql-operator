@@ -49,7 +49,11 @@ type Replicator interface {
 	SetSemiSyncSource(enabled bool) error
 	SetSemiSyncSize(size int) error
 	SetGlobal(variable, value string) error
+	ChangeGroupReplicationPassword(replicaPass string) error
 	StartGroupReplication(password string) error
+	StopGroupReplication() error
+	GetGroupReplicationPrimary() (string, error)
+	GetGroupReplicationReplicas() ([]string, error)
 	GetMemberState(host string) (MemberState, error)
 }
 
@@ -249,6 +253,57 @@ func (d *dbImpl) StartGroupReplication(password string) error {
 	}
 
 	return errors.Wrap(err, "start group replication")
+}
+
+func (d *dbImpl) StopGroupReplication() error {
+	_, err := d.db.Exec("STOP GROUP_REPLICATION")
+	return errors.Wrap(err, "stop group replication")
+}
+
+func (d *dbImpl) ChangeGroupReplicationPassword(replicaPass string) error {
+	_, err := d.db.Exec(`
+            CHANGE REPLICATION SOURCE TO
+                SOURCE_USER=?,
+                SOURCE_PASSWORD=?
+            FOR CHANNEL 'group_replication_recovery'
+        `, apiv1alpha1.UserReplication, replicaPass)
+	if err != nil {
+		return errors.Wrap(err, "exec CHANGE REPLICATION SOURCE TO")
+	}
+
+	return nil
+}
+
+func (d *dbImpl) GetGroupReplicationPrimary() (string, error) {
+	var host string
+
+	err := d.db.QueryRow("SELECT MEMBER_HOST FROM replication_group_members WHERE MEMBER_ROLE='PRIMARY'").Scan(&host)
+	if err != nil {
+		return "", errors.Wrap(err, "query primary member")
+	}
+
+	return host, nil
+}
+
+func (d *dbImpl) GetGroupReplicationReplicas() ([]string, error) {
+	replicas := make([]string, 0)
+
+	rows, err := d.db.Query("SELECT MEMBER_HOST FROM replication_group_members WHERE MEMBER_ROLE='SECONDARY'")
+	if err != nil {
+		return nil, errors.Wrap(err, "query replicas")
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var host string
+		if err := rows.Scan(&host); err != nil {
+			return nil, errors.Wrap(err, "scan rows")
+		}
+
+		replicas = append(replicas, host)
+	}
+
+	return replicas, nil
 }
 
 func (d *dbImpl) GetMemberState(host string) (MemberState, error) {

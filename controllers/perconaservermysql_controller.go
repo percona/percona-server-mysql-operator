@@ -270,7 +270,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		case apiv1alpha1.UserReplication:
 			restartReplication = true
 		case apiv1alpha1.UserOrchestrator:
-			restartOrchestrator = true
+			restartOrchestrator = true && cr.Spec.MySQL.IsAsync()
 		case apiv1alpha1.UserRoot:
 			mysqlUser.Hosts = append(mysqlUser.Hosts, "localhost")
 		case apiv1alpha1.UserClusterCheck, apiv1alpha1.UserXtraBackup:
@@ -287,13 +287,11 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return errors.Wrap(err, "get operator password")
 	}
 
-	orcHost := orchestrator.APIHost(cr)
-	primary, err := orchestrator.ClusterPrimary(ctx, orcHost, cr.ClusterHint())
+	primaryHost, err := r.getPrimaryHost(ctx, cr)
 	if err != nil {
-		return errors.Wrap(err, "get cluster primary")
+		return errors.Wrap(err, "get primary host")
 	}
-	l.V(1).Info("Got cluster primary", "primary", primary)
-	primaryHost := getPrimaryHostname(primary, cr)
+        l.V(1).Info("Got primary host", "primary", primaryHost)
 
 	um, err := users.NewManager(apiv1alpha1.UserOperator, operatorPass, primaryHost, mysql.DefaultAdminPort)
 	if err != nil {
@@ -302,51 +300,10 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	defer um.Close()
 
 	if restartReplication {
-		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, primaryHost, mysql.DefaultAdminPort)
-		if err != nil {
-			return errors.Wrap(err, "open connection to primary")
-		}
-
-		// We're disabling semi-sync replication on primary to avoid LockedSemiSyncMaster.
-		if err := db.SetSemiSyncSource(false); err != nil {
-			return errors.Wrap(err, "set semi_sync wait count")
-		}
-
-		g, gCtx := errgroup.WithContext(context.Background())
-		for _, replica := range primary.Replicas {
-			hostname := replica.Hostname
-			port := replica.Port
-			g.Go(func() error {
-				repDb, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, hostname, port)
-				if err != nil {
-					return errors.Wrapf(err, "connect to replica %s", hostname)
-				}
-
-				if err := orchestrator.StopReplication(gCtx, orcHost, hostname, port); err != nil {
-					return errors.Wrapf(err, "stop replica %s", hostname)
-				}
-
-				status, _, err := repDb.ReplicationStatus()
-				if err != nil {
-					return errors.Wrapf(err, "get replication status of %s", hostname)
-				}
-
-				for status == replicator.ReplicationStatusActive {
-					time.Sleep(250 * time.Millisecond)
-					status, _, err = repDb.ReplicationStatus()
-					if err != nil {
-						return errors.Wrapf(err, "get replication status of %s", hostname)
-					}
-				}
-
-				l.V(1).Info("Stopped replication on replica", "hostname", hostname, "port", port)
-
-				return nil
-			})
-		}
-
-		if err := g.Wait(); err != nil {
-			return errors.Wrap(err, "stop replication on replicas")
+		if cr.Spec.MySQL.IsAsync() {
+			if err := r.stopAsyncReplication(ctx, cr); err != nil {
+				return errors.Wrap(err, "stop async replication")
+			}
 		}
 	}
 
@@ -355,46 +312,24 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	if restartReplication {
-		var replicationPass string
+		var updatedReplicaPass string
 		for _, user := range updatedUsers {
 			if user.Username == apiv1alpha1.UserReplication {
-				replicationPass = user.Password
+				updatedReplicaPass = user.Password
 				break
 			}
 		}
-		g, gCtx := errgroup.WithContext(context.Background())
-		for _, replica := range primary.Replicas {
-			hostname := replica.Hostname
-			port := replica.Port
-			g.Go(func() error {
-				db, err := replicator.NewReplicator(
-					apiv1alpha1.UserOperator,
-					operatorPass,
-					hostname,
-					mysql.DefaultAdminPort,
-				)
-				if err != nil {
-					return errors.Wrapf(err, "get db connection to %s", hostname)
-				}
-				defer db.Close()
 
-				pHost := getPrimaryHostname(primary, cr)
-				l.V(1).Info("Change replication source", "primary", pHost, "replica", hostname)
-				if err := db.ChangeReplicationSource(pHost, replicationPass, primary.Key.Port); err != nil {
-					return errors.Wrapf(err, "change replication source on %s", hostname)
-				}
-
-				if err := orchestrator.StartReplication(gCtx, orcHost, hostname, port); err != nil {
-					return errors.Wrapf(err, "start replication on %s", hostname)
-				}
-
-				l.V(1).Info("Started replication on replica", "hostname", hostname, "port", port)
-
-				return nil
-			})
+		if cr.Spec.MySQL.IsAsync() {
+			if err := r.startAsyncReplication(ctx, cr, updatedReplicaPass); err != nil {
+				return errors.Wrap(err, "start async replication")
+			}
 		}
-		if err := g.Wait(); err != nil {
-			return errors.Wrap(err, "start replication on replicas")
+
+		if cr.Spec.MySQL.IsGR() {
+			if err := r.restartGroupReplication(ctx, cr, updatedReplicaPass); err != nil {
+				return errors.Wrap(err, "restart group replication")
+			}
 		}
 	}
 
@@ -426,6 +361,18 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		l.Info("Waiting cluster to be ready")
 		return nil
 	}
+
+	primaryHost, err = r.getPrimaryHost(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "get primary host")
+	}
+        l.V(1).Info("Got primary host", "primary", primaryHost)
+
+	um, err = users.NewManager(apiv1alpha1.UserOperator, operatorPass, primaryHost, mysql.DefaultAdminPort)
+	if err != nil {
+		return errors.Wrap(err, "init user manager")
+	}
+	defer um.Close()
 
 	if err := um.DiscardOldPasswords(updatedUsers); err != nil {
 		return errors.Wrap(err, "discard old passwords")
@@ -1024,13 +971,11 @@ func reconcileReplicationSemiSync(
 ) error {
 	l := log.FromContext(ctx).WithName("reconcileReplicationSemiSync")
 
-	host := orchestrator.APIHost(cr)
-	primary, err := orchestrator.ClusterPrimary(ctx, host, cr.ClusterHint())
+	primary, err := getPrimaryFromOrchestrator(ctx, cr)
 	if err != nil {
-		return errors.Wrap(err, "get cluster primary")
+		return errors.Wrap(err, "get primary")
 	}
-
-	primaryHost := getPrimaryHostname(primary, cr)
+	primaryHost := primary.Key.Hostname
 
 	l.V(1).Info(fmt.Sprintf("use primary host: %v", primaryHost), "clusterPrimary", primary)
 
@@ -1278,10 +1223,254 @@ func writeStatus(
 	})
 }
 
-func getPrimaryHostname(primary *orchestrator.Instance, cr *apiv1alpha1.PerconaServerMySQL) string {
-	if primary.Key.Hostname != "" {
-		return primary.Key.Hostname
+func getPrimaryFromOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (*orchestrator.Instance, error) {
+	orcHost := orchestrator.APIHost(cr)
+	primary, err := orchestrator.ClusterPrimary(ctx, orcHost, cr.ClusterHint())
+	if err != nil {
+		return nil, errors.Wrap(err, "get cluster primary")
 	}
 
-	return fmt.Sprintf("%s.%s.%s", primary.Alias, mysql.ServiceName(cr), cr.Namespace)
+	if primary.Key.Hostname == "" {
+		primary.Key.Hostname = fmt.Sprintf("%s.%s.%s", primary.Alias, mysql.ServiceName(cr), cr.Namespace)
+	}
+
+	return primary, nil
+}
+
+func (r *PerconaServerMySQLReconciler) getPrimaryFromGR(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+	if err != nil {
+		return "", errors.Wrap(err, "get operator password")
+	}
+
+	fqdn := mysql.FQDN(cr, 0)
+	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, fqdn, mysql.DefaultAdminPort)
+	if err != nil {
+		return "", errors.Wrapf(err, "open connection to %s", fqdn)
+	}
+
+	return db.GetGroupReplicationPrimary()
+}
+
+func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
+	l := log.FromContext(ctx).WithName("getPrimaryHost")
+
+	if cr.Spec.MySQL.IsGR() {
+		return r.getPrimaryFromGR(ctx, cr)
+	}
+
+	primary, err := getPrimaryFromOrchestrator(ctx, cr)
+	if err != nil {
+		return "", errors.Wrap(err, "get cluster primary")
+	}
+	l.V(1).Info("Cluster primary from orchestrator", "primary", primary)
+
+	return primary.Key.Hostname, nil
+}
+
+func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	l := log.FromContext(ctx).WithName("stopAsyncReplication")
+
+	orcHost := orchestrator.APIHost(cr)
+	primary, err := getPrimaryFromOrchestrator(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "get cluster primary")
+	}
+
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+
+	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, primary.Key.Hostname, mysql.DefaultAdminPort)
+	if err != nil {
+		return errors.Wrap(err, "open connection to primary")
+	}
+
+	// We're disabling semi-sync replication on primary to avoid LockedSemiSyncMaster.
+	if err := db.SetSemiSyncSource(false); err != nil {
+		return errors.Wrap(err, "set semi_sync wait count")
+	}
+
+	g, gCtx := errgroup.WithContext(context.Background())
+	for _, replica := range primary.Replicas {
+		hostname := replica.Hostname
+		port := replica.Port
+		g.Go(func() error {
+			repDb, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, hostname, port)
+			if err != nil {
+				return errors.Wrapf(err, "connect to replica %s", hostname)
+			}
+
+			if err := orchestrator.StopReplication(gCtx, orcHost, hostname, port); err != nil {
+				return errors.Wrapf(err, "stop replica %s", hostname)
+			}
+
+			status, _, err := repDb.ReplicationStatus()
+			if err != nil {
+				return errors.Wrapf(err, "get replication status of %s", hostname)
+			}
+
+			for status == replicator.ReplicationStatusActive {
+				time.Sleep(250 * time.Millisecond)
+				status, _, err = repDb.ReplicationStatus()
+				if err != nil {
+					return errors.Wrapf(err, "get replication status of %s", hostname)
+				}
+			}
+
+			l.V(1).Info("Stopped replication on replica", "hostname", hostname, "port", port)
+
+			return nil
+		})
+	}
+
+	return errors.Wrap(g.Wait(), "stop replication on replicas")
+}
+
+func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, replicaPass string) error {
+	l := log.FromContext(ctx).WithName("startAsyncReplication")
+
+	orcHost := orchestrator.APIHost(cr)
+	primary, err := getPrimaryFromOrchestrator(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "get cluster primary")
+	}
+
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+
+	g, gCtx := errgroup.WithContext(context.Background())
+	for _, replica := range primary.Replicas {
+		hostname := replica.Hostname
+		port := replica.Port
+		g.Go(func() error {
+			db, err := replicator.NewReplicator(
+				apiv1alpha1.UserOperator,
+				operatorPass,
+				hostname,
+				mysql.DefaultAdminPort,
+			)
+			if err != nil {
+				return errors.Wrapf(err, "get db connection to %s", hostname)
+			}
+			defer db.Close()
+
+			l.V(1).Info("Change replication source", "primary", primary.Key.Hostname, "replica", hostname)
+			if err := db.ChangeReplicationSource(primary.Key.Hostname, replicaPass, primary.Key.Port); err != nil {
+				return errors.Wrapf(err, "change replication source on %s", hostname)
+			}
+
+			if err := orchestrator.StartReplication(gCtx, orcHost, hostname, port); err != nil {
+				return errors.Wrapf(err, "start replication on %s", hostname)
+			}
+
+			l.V(1).Info("Started replication on replica", "hostname", hostname, "port", port)
+
+			return nil
+		})
+	}
+
+	return errors.Wrap(g.Wait(), "start replication on replicas")
+}
+
+func (r *PerconaServerMySQLReconciler) stopGroupReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+
+	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
+	if err != nil {
+		return errors.Wrap(err, "get MySQL pods")
+	}
+
+	for _, pod := range pods {
+		hostname := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
+		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, hostname, mysql.DefaultAdminPort)
+		if err != nil {
+			return errors.Wrapf(err, "get db connection to %s", hostname)
+		}
+		defer db.Close()
+
+		if err := db.StopGroupReplication(); err != nil {
+			return errors.Wrapf(err, "stop group replication on %s", pod.Name)
+		}
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, replicaPass string) error {
+	l := log.FromContext(ctx).WithName("restartGroupReplication")
+
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+
+	hostname := mysql.FQDN(cr, 0)
+	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, hostname, mysql.DefaultAdminPort)
+	if err != nil {
+		return errors.Wrapf(err, "get db connection to %s", hostname)
+	}
+	defer db.Close()
+
+	replicas, err := db.GetGroupReplicationReplicas()
+	if err != nil {
+		return errors.Wrap(err, "get replicas")
+	}
+
+	for _, host := range replicas {
+		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, host, mysql.DefaultAdminPort)
+		if err != nil {
+			return errors.Wrapf(err, "get db connection to %s", hostname)
+		}
+		defer db.Close()
+
+		if err := db.StopGroupReplication(); err != nil {
+			return errors.Wrapf(err, "stop group replication on %s", host)
+		}
+		l.V(1).Info("Stopped group replication", "hostname", host)
+
+		if err := db.ChangeGroupReplicationPassword(replicaPass); err != nil {
+			return errors.Wrapf(err, "change group replication password on %s", host)
+		}
+		l.V(1).Info("Changed group replication password", "hostname", host)
+
+		if err := db.StartGroupReplication(replicaPass); err != nil {
+			return errors.Wrapf(err, "start group replication on %s", host)
+		}
+		l.V(1).Info("Started group replication", "hostname", host)
+	}
+
+	primary, err := db.GetGroupReplicationPrimary()
+	if err != nil {
+		return errors.Wrap(err, "get primary member")
+	}
+
+	db, err = replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, primary, mysql.DefaultAdminPort)
+	if err != nil {
+		return errors.Wrapf(err, "get db connection to %s", hostname)
+	}
+	defer db.Close()
+
+	if err := db.StopGroupReplication(); err != nil {
+		return errors.Wrapf(err, "stop group replication on %s", primary)
+	}
+	l.V(1).Info("Stopped group replication", "hostname", primary)
+
+	if err := db.ChangeGroupReplicationPassword(replicaPass); err != nil {
+		return errors.Wrapf(err, "change group replication password on %s", primary)
+	}
+	l.V(1).Info("Changed group replication password", "hostname", primary)
+
+	if err := db.StartGroupReplication(replicaPass); err != nil {
+		return errors.Wrapf(err, "start group replication on %s", primary)
+	}
+	l.V(1).Info("Started group replication", "hostname", primary)
+
+	return nil
 }
