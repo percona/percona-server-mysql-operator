@@ -3,7 +3,7 @@
 Transport Layer Security (TLS)
 ******************************
 
-The Percona Distribution for MySQL Operator uses Transport Layer
+The Percona Operator for MySQL uses Transport Layer
 Security (TLS) cryptographic protocol for the following types of communication:
 
 * Internal - communication between Percona Server for MySQL instances,
