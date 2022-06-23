@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: sysbench
+spec:
+  replicas: 1
+  minReadySeconds: 20
+  selector:
+    matchLabels:
+      app: sysbench
+  template:
+    metadata:
+      name: sysbench
+      labels:
+        app: sysbench
+    spec:
+      containers:
+        - name: sysbench
+          image: perconalab/sysbench
+          env:
+            - name: MYSQL_USER
+              value: root
+            - name: MYSQL_PASSWORD
+              value: root_pass
+            - name: MYSQL_HOSTNAME
+              value: cluster1-mysql-primary
+          command: ["bash"]
+          args:
+            - "-c"
+            - |
+              set -ex
+              mysql \
+                --host="${MYSQL_HOSTNAME}" \
+                --port=3306 \
+                --user="${MYSQL_USER}" \
+                --password="${MYSQL_PASSWORD}" \
+                -e 'DROP DATABASE IF EXISTS sbtest;CREATE DATABASE IF NOT EXISTS sbtest;'
+              cd ./sysbench-tpcc
+              sed -i 's/con:query("SET SESSION sql_log_bin = 0")/con:query("SET SESSION sql_log_bin = 1")/' ./tpcc_common.lua
+              ./tpcc.lua \
+                  --mysql-host="${MYSQL_HOSTNAME}" \
+                  --mysql-user="${MYSQL_USER}" \
+                  --mysql-password="${MYSQL_PASSWORD}" \
+                  --mysql-db=sbtest \
+                  --threads=2 \
+                  --tables=60 \
+                  --time=120 \
+                  --force_pk=1 \
+                  --db-driver=mysql \
+                  --scale=20 prepare
