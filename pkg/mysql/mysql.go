@@ -270,6 +270,56 @@ func volumeClaimTemplates(spec *apiv1alpha1.MySQLSpec) []corev1.PersistentVolume
 	return pvcs
 }
 
+func servicePorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ServicePort {
+	ports := []corev1.ServicePort{
+		{
+			Name: componentName,
+			Port: DefaultPort,
+		},
+		{
+			Name: "mysql-admin",
+			Port: DefaultAdminPort,
+		},
+		{
+			Name: "mysqlx",
+			Port: DefaultXPort,
+		},
+		{
+			Name: "http",
+			Port: SidecarHTTPPort,
+		},
+	}
+
+	if cr.Spec.MySQL.IsGR() {
+		ports = append(ports, corev1.ServicePort{Name: componentName + "-gr", Port: DefaultGRPort})
+	}
+
+	return ports
+}
+
+func containerPorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ContainerPort {
+	ports := []corev1.ContainerPort{
+		{
+			Name:          componentName,
+			ContainerPort: DefaultPort,
+		},
+		{
+			Name:          "mysql-admin",
+			ContainerPort: DefaultAdminPort,
+		},
+		{
+			Name:          "mysqlx",
+			ContainerPort: DefaultXPort,
+		},
+	}
+
+	if cr.Spec.MySQL.IsGR() {
+		ports = append(ports, corev1.ContainerPort{Name: componentName + "-gr", ContainerPort: DefaultGRPort})
+	}
+
+	return ports
+}
+
 func UnreadyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	labels := MatchLabels(cr)
 
@@ -284,29 +334,8 @@ func UnreadyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
-			ClusterIP: "None",
-			Ports: []corev1.ServicePort{
-				{
-					Name: componentName,
-					Port: DefaultPort,
-				},
-				{
-					Name: "mysql-admin",
-					Port: DefaultAdminPort,
-				},
-				{
-					Name: "mysqlx",
-					Port: DefaultXPort,
-				},
-				{
-					Name: "http",
-					Port: SidecarHTTPPort,
-				},
-				{
-					Name: componentName + "-gr",
-					Port: DefaultGRPort,
-				},
-			},
+			ClusterIP:                "None",
+			Ports:                    servicePorts(cr),
 			Selector:                 labels,
 			PublishNotReadyAddresses: true,
 		},
@@ -336,29 +365,8 @@ func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Type:      serviceType,
 			ClusterIP: clusterIP,
-			Ports: []corev1.ServicePort{
-				{
-					Name: componentName,
-					Port: DefaultPort,
-				},
-				{
-					Name: "mysql-admin",
-					Port: DefaultAdminPort,
-				},
-				{
-					Name: "mysqlx",
-					Port: DefaultXPort,
-				},
-				{
-					Name: componentName + "-gr",
-					Port: DefaultGRPort,
-				},
-				{
-					Name: "http",
-					Port: SidecarHTTPPort,
-				},
-			},
-			Selector: labels,
+			Ports:     servicePorts(cr),
+			Selector:  labels,
 		},
 	}
 }
@@ -383,28 +391,7 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 		Spec: corev1.ServiceSpec{
 			Type:     t,
 			Selector: selector,
-			Ports: []corev1.ServicePort{
-				{
-					Name: componentName,
-					Port: DefaultPort,
-				},
-				{
-					Name: componentName + "-admin",
-					Port: DefaultAdminPort,
-				},
-				{
-					Name: componentName + "x",
-					Port: DefaultXPort,
-				},
-				{
-					Name: "http",
-					Port: SidecarHTTPPort,
-				},
-				{
-					Name: componentName + "-gr",
-					Port: DefaultGRPort,
-				},
-			},
+			Ports:    servicePorts(cr),
 		},
 	}
 }
@@ -430,29 +417,8 @@ func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
-			Type: serviceType,
-			Ports: []corev1.ServicePort{
-				{
-					Name: componentName,
-					Port: DefaultPort,
-				},
-				{
-					Name: "mysql-admin",
-					Port: DefaultAdminPort,
-				},
-				{
-					Name: "mysqlx",
-					Port: DefaultXPort,
-				},
-				{
-					Name: "http",
-					Port: SidecarHTTPPort,
-				},
-				{
-					Name: componentName + "-gr",
-					Port: DefaultGRPort,
-				},
-			},
+			Type:     serviceType,
+			Ports:    servicePorts(cr),
 			Selector: selector,
 		},
 	}
@@ -498,24 +464,7 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 				Value: cr.ClusterHash(),
 			},
 		},
-		Ports: []corev1.ContainerPort{
-			{
-				Name:          componentName,
-				ContainerPort: DefaultPort,
-			},
-			{
-				Name:          "mysql-admin",
-				ContainerPort: DefaultAdminPort,
-			},
-			{
-				Name:          "mysqlx",
-				ContainerPort: DefaultXPort,
-			},
-			{
-				Name:          componentName + "-gr",
-				ContainerPort: DefaultGRPort,
-			},
-		},
+		Ports: containerPorts(cr),
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      binVolumeName,
