@@ -9,7 +9,7 @@ stringData:
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQLBackup
 metadata:
-  name: demand-backup-1
+  name: demand-backup-minio
 spec:
   clusterName: demand-backup
   storageName: us-east-1

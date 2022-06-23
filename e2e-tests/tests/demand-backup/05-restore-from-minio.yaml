@@ -1,7 +1,7 @@
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQLRestore
 metadata:
-  name: demand-backup-restore-1
+  name: demand-backup-restore-minio
 spec:
   clusterName: demand-backup
-  backupName: demand-backup-1
+  backupName: demand-backup-minio
