@@ -268,3 +268,9 @@ wait_pod() {
 	done
 	set -o xtrace
 }
+
+get_mysql_router_service() {
+	local cluster=$1
+
+	echo "${cluster}-router"
+}

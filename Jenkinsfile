@@ -320,6 +320,7 @@ pipeline {
                 runTest('scaling', 'basic')
                 runTest('sidecars', 'basic')
                 runTest('users', 'basic')
+                runTest('groupreplication', 'basic')
                 ShutdownCluster('basic')
             }
         }
