@@ -15,4 +15,4 @@ commands:
       	| kubectl -n "${NAMESPACE}" apply -f -
 
       wait_cluster_consistency "${test_name}" "3" "3"
-    timeout: 60
+    timeout: 90
