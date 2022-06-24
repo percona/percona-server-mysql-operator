@@ -22,6 +22,7 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"reflect"
 	"strconv"
 	"time"
@@ -426,6 +427,10 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 		return errors.Wrap(err, "reconcile MySQL config")
 	}
 
+	if err = r.reconcileMySQLAutoConfig(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile MySQL auto-config")
+	}
+
 	initImage, err := k8s.InitImage(ctx, r.Client)
 	if err != nil {
 		return errors.Wrap(err, "get init image")
@@ -490,6 +495,59 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 		return errors.Wrap(err, "reconcile service per pod")
 	}
 
+	return nil
+}
+func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	l := log.FromContext(ctx).WithName("reconcileMySQLAutoConfig")
+	var memory *resource.Quantity
+	var err error
+
+	if res := cr.Spec.MySQL.Resources; res.Size() > 0 {
+		if _, ok := res.Requests[corev1.ResourceMemory]; ok {
+			memory = res.Requests.Memory()
+		}
+		if _, ok := res.Limits[corev1.ResourceMemory]; ok {
+			memory = res.Limits.Memory()
+		}
+	}
+
+	nn := types.NamespacedName{
+		Name:      mysql.AutoConfigMapName(cr),
+		Namespace: cr.Namespace,
+	}
+	currentConfigMap := new(corev1.ConfigMap)
+	if err = r.Client.Get(ctx, nn, currentConfigMap); client.IgnoreNotFound(err) != nil {
+		return errors.Wrapf(err, "get ConfigMap/%s", nn.Name)
+	}
+	if memory == nil {
+		exists := true
+		if k8serrors.IsNotFound(err) {
+			exists = false
+		}
+
+		if !exists || !metav1.IsControlledBy(currentConfigMap, cr) {
+			return nil
+		}
+
+		if err := r.Client.Delete(ctx, currentConfigMap); err != nil {
+			return errors.Wrapf(err, "delete ConfigMaps/%s", currentConfigMap.Name)
+		}
+
+		l.Info("ConfigMap deleted", "name", currentConfigMap.Name)
+
+		return nil
+	}
+	autotuneParams, err := mysql.GetAutoTuneParams(cr, memory)
+	if err != nil {
+		return err
+	}
+	configMap := k8s.ConfigMap(mysql.AutoConfigMapName(cr), cr.Namespace, mysql.CustomConfigKey, autotuneParams)
+	if !reflect.DeepEqual(currentConfigMap.Data, configMap.Data) {
+		if err := k8s.EnsureObject(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
+			return errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
+		}
+		l.Info("ConfigMap updated", "name", configMap.Name, "data", configMap.Data)
+	}
 	return nil
 }
 

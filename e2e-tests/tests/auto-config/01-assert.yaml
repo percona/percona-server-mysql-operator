@@ -6,7 +6,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 1
-  name: config-mysql
+  name: auto-config-mysql
 spec:
   template:
     spec:
@@ -39,7 +39,7 @@ spec:
       - name: users
         secret:
           defaultMode: 420
-          secretName: internal-config
+          secretName: internal-auto-config
       - name: tls
         secret:
           defaultMode: 420
@@ -52,19 +52,19 @@ spec:
               items:
               - key: my.cnf
                 path: my-config.cnf
-              name: config-mysql
+              name: auto-config-mysql
               optional: true
           - configMap:
               items:
-                - key: my.cnf
-                  path: auto-config.cnf
-              name: auto-config-mysql
+              - key: my.cnf
+                path: auto-config.cnf
+              name: auto-auto-config-mysql
               optional: true
           - secret:
               items:
               - key: my.cnf
                 path: my-secret.cnf
-              name: config-mysql
+              name: auto-config-mysql
               optional: true
       - emptyDir: {}
         name: backup-logs
