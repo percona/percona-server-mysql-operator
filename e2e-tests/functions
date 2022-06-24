@@ -125,6 +125,24 @@ run_curl() {
 	kubectl -n "${NAMESPACE}" exec mysql-client -- bash -c "curl -s -k $*"
 }
 
+get_innodb_cluster_name() {
+	echo $(get_cluster_name) | tr -cd '[^a-zA-Z0-9_]+'
+}
+
+get_mysqlsh_uri() {
+	local idx=${1:-0}
+
+	echo "root:root_password@$(get_cluster_name)-mysql-${idx}.$(get_cluster_name)-mysql.${NAMESPACE}"
+}
+
+get_gr_status() {
+	local uri="$1"
+
+	kubectl -n "${NAMESPACE}" exec $(get_operator_pod) -- mysqlsh --uri $uri --cluster --result-format json -- cluster status 2>&1 \
+		| sed -e 's/mysql: //' \
+		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
+}
+
 get_cluster_name() {
 	kubectl -n "${NAMESPACE}" get ps -o jsonpath='{.items[0].metadata.name}'
 }
