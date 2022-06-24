@@ -1,6 +1,6 @@
 # Contributing to the Operator
 
-Percona welcomes and encourages community contributions to help improve [Percona Distribution for MySQL Operator](https://www.percona.com/doc/kubernetes-operator-for-mysql/index.html). The Operator automates the creation, modification, or deletion of items in your Percona Server for MySQL environment, and contains the necessary Kubernetes settings to maintain a consistent Percona Server for MySQL instance.
+Percona welcomes and encourages community contributions to help improve [Percona Operator for MySQL](https://www.percona.com/doc/kubernetes-operator-for-mysql/index.html). The Operator automates the creation, modification, or deletion of items in your Percona Server for MySQL environment, and contains the necessary Kubernetes settings to maintain a consistent Percona Server for MySQL instance.
 
 ## Prerequisites
 
@@ -18,7 +18,7 @@ Please make sure to read and observe the [Contribution Policy](code-of-conduct.m
 
 Improvement and bugfix tasks for the Operator are tracked in [Jira](https://jira.percona.com/projects/K8SPS/issues). Although not mandatory, it is a good practice to examine already open Jira issues before submitting a pull request. For bigger contributions, we suggest creating a Jira issue first and discussing it with the engineering team and community before proposing any code changes.
 
-Another good place to discuss Percona Distribution for MySQL Operator with developers and other community members is the [community forum](https://forums.percona.com/c/mysql-mariadb/percona-kubernetes-operator-for-mysql).
+Another good place to discuss Percona Operator for MySQL with developers and other community members is the [community forum](https://forums.percona.com/c/mysql-mariadb/percona-kubernetes-operator-for-mysql).
 
 ### 1. Contributing to the source tree
 

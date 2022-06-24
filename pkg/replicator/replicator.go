@@ -14,6 +14,8 @@ const DefaultChannelName = ""
 
 type ReplicationStatus int8
 
+var ErrRestartAfterClone error = errors.New("Error 3707: Restart server failed (mysqld is not managed by supervisor process).")
+
 const (
 	ReplicationStatusActive ReplicationStatus = iota
 	ReplicationStatusError
@@ -212,8 +214,15 @@ func (d *dbImpl) Clone(donor, user, pass string, port int32) error {
 	}
 
 	_, err = d.db.Exec("CLONE INSTANCE FROM ?@?:? IDENTIFIED BY ?", user, donor, port, pass)
-	if err != nil {
+
+	mErr, ok := err.(*mysql.MySQLError)
+	if !ok {
 		return errors.Wrap(err, "clone instance")
+	}
+
+	// Error 3707: Restart server failed (mysqld is not managed by supervisor process).
+	if mErr.Number == uint16(3707) {
+		return ErrRestartAfterClone
 	}
 
 	return nil
