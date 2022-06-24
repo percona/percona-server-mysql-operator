@@ -1,0 +1,23 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 620
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 3
+  name: auto-config-mysql
+spec:
+  template:
+    spec:
+      containers:
+      - name: mysql
+        resources:
+          requests:
+            memory: 4Gi
+      - name: xtrabackup
+status:
+  observedGeneration: 3
+  replicas: 3
+  readyReplicas: 3
+  updatedReplicas: 3

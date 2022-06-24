@@ -92,6 +92,10 @@ func ConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
+func AutoConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
+	return "auto-" + Name(cr)
+}
+
 func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
 	return fmt.Sprintf("%s-%d", Name(cr), idx)
 }
@@ -217,6 +221,20 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 														{
 															Key:  CustomConfigKey,
 															Path: "my-config.cnf",
+														},
+													},
+													Optional: &t,
+												},
+											},
+											{
+												ConfigMap: &corev1.ConfigMapProjection{
+													LocalObjectReference: corev1.LocalObjectReference{
+														Name: AutoConfigMapName(cr),
+													},
+													Items: []corev1.KeyToPath{
+														{
+															Key:  CustomConfigKey,
+															Path: "auto-config.cnf",
 														},
 													},
 													Optional: &t,
