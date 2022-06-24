@@ -321,7 +321,6 @@ pipeline {
                 runTest('scaling', 'basic')
                 runTest('sidecars', 'basic')
                 runTest('users', 'basic')
-                runTest('groupreplication', 'basic')
                 ShutdownCluster('basic')
             }
         }
@@ -335,6 +334,18 @@ pipeline {
                 CreateCluster('backup')
                 runTest('demand-backup', 'backup')
                 ShutdownCluster('backup')
+            }
+        }
+        stage('E2E GR Tests') {
+            when {
+                expression {
+                    !skipBranchBuilds
+                }
+            }
+            steps {
+                CreateCluster('gr')
+                runTest('gr-init-deploy', 'gr')
+                ShutdownCluster('gr')
             }
         }
     }
