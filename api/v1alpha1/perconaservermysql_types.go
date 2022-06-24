@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	"fmt"
 	"hash/fnv"
+	"regexp"
 	"strings"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
@@ -598,6 +599,12 @@ func (cr *PerconaServerMySQL) InternalSecretName() string {
 
 func (cr *PerconaServerMySQL) PMMEnabled() bool {
 	return cr.Spec.PMM != nil && cr.Spec.PMM.Enabled
+}
+
+var NonAlphaNumeric = regexp.MustCompile("[^a-zA-Z0-9_]+")
+
+func (cr *PerconaServerMySQL) InnoDBClusterName() string {
+	return NonAlphaNumeric.ReplaceAllString(cr.Name, "")
 }
 
 func init() {
