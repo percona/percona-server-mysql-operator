@@ -81,7 +81,7 @@ spec:
               items:
                 - key: my.cnf
                   path: auto-config.cnf
-              name: auto-config-mysql
+              name: auto-sidecars-mysql
               optional: true
           - secret:
               items:
