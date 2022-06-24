@@ -14,7 +14,10 @@ require (
 	sigs.k8s.io/controller-runtime v0.10.3
 )
 
-require golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+require (
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
+)
 
 require (
 	cloud.google.com/go v0.54.0 // indirect
@@ -71,7 +74,6 @@ require (
 	k8s.io/component-base v0.22.2 // indirect
 	k8s.io/klog/v2 v2.9.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20211109043538-20434351676c // indirect
-	k8s.io/utils v0.0.0-20210819203725-bdf08cb9a70a // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.1.2 // indirect
 	sigs.k8s.io/yaml v1.2.0 // indirect
 )

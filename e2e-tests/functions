@@ -313,3 +313,9 @@ check_auto_tuning() {
 		fi
 	fi
 }
+
+get_mysql_router_service() {
+	local cluster=$1
+
+	echo "${cluster}-router"
+}

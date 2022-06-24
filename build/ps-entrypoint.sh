@@ -157,7 +157,7 @@ create_default_cnf() {
 	sed -i "/\[mysqld\]/a report_host=${FQDN}" $CFG
 	sed -i "/\[mysqld\]/a report_port=3306" $CFG
 	sed -i "/\[mysqld\]/a gtid-mode=ON" $CFG
-	sed -i "/\[mysqld\]/a enforce-gtid-consistency" $CFG
+	sed -i "/\[mysqld\]/a enforce-gtid-consistency=ON" $CFG
 	sed -i "/\[mysqld\]/a plugin-load-add=clone=mysql_clone.so" $CFG
 	sed -i "/\[mysqld\]/a plugin-load-add=rpl_semi_sync_master=semisync_master.so" $CFG
 	sed -i "/\[mysqld\]/a plugin-load-add=rpl_semi_sync_slave=semisync_slave.so" $CFG
@@ -177,6 +177,12 @@ create_default_cnf() {
 			) >>$CFG
 		fi
 	done
+}
+
+load_group_replication_plugin() {
+	sed -i "/\[mysqld\]/a plugin_load_add=group_replication.so" $CFG
+	sed -i "/\[mysqld\]/a group_replication_bootstrap_group=OFF" $CFG
+	sed -i "/\[mysqld\]/a group_replication_start_on_boot=OFF" $CFG
 }
 
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
@@ -296,7 +302,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			GRANT ALL ON *.* TO 'operator'@'${MYSQL_ROOT_HOST}' WITH GRANT OPTION ;
 
 			CREATE USER 'xtrabackup'@'localhost' IDENTIFIED BY '${XTRABACKUP_PASSWORD}';
-			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
+			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.log_status TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.keyring_component_status TO 'xtrabackup'@'localhost';
 
@@ -310,6 +316,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 
 			CREATE USER 'replication'@'%' IDENTIFIED BY '${REPLICATION_PASSWORD}';
 			GRANT SYSTEM_USER, REPLICATION SLAVE ON *.* to 'replication'@'%';
+			GRANT SELECT ON performance_schema.threads to 'replication'@'%';
 
 			CREATE USER 'orchestrator'@'%' IDENTIFIED BY '${ORC_TOPOLOGY_PASSWORD}';
 			GRANT SYSTEM_USER, SUPER, PROCESS, REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';
@@ -369,6 +376,8 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		echo 'MySQL init process done. Ready for start up.'
 		echo
 	fi
+
+	load_group_replication_plugin
 
 	# exit when MYSQL_INIT_ONLY environment variable is set to avoid starting mysqld
 	if [ ! -z "$MYSQL_INIT_ONLY" ]; then

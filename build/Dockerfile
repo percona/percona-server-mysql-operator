@@ -34,7 +34,27 @@ RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     && cp -r build/_output/bin/sidecar /usr/local/bin/sidecar
 
 FROM redhat/ubi8-minimal AS ubi8
-RUN microdnf update && microdnf clean all
+
+# check repository package signature in secure way
+RUN export GNUPGHOME="$(mktemp -d)" \
+        && microdnf install -y findutils \
+        && gpg --keyserver keyserver.ubuntu.com --recv-keys 430BDF5C56E7C94E848EE60C1C4CBDCDCD2EFD2A \
+        && gpg --export --armor 430BDF5C56E7C94E848EE60C1C4CBDCDCD2EFD2A > ${GNUPGHOME}/RPM-GPG-KEY-Percona \
+        && rpmkeys --import ${GNUPGHOME}/RPM-GPG-KEY-Percona \
+        && curl -Lf -o /tmp/percona-release.rpm https://repo.percona.com/yum/percona-release-latest.noarch.rpm \
+        && rpmkeys --checksig /tmp/percona-release.rpm \
+        && rpm -i /tmp/percona-release.rpm \
+        && rm -rf "$GNUPGHOME" /tmp/percona-release.rpm \
+        && rpm --import /etc/pki/rpm-gpg/PERCONA-PACKAGING-KEY \
+        && percona-release setup pdps-8.0
+
+RUN set -ex; \
+    microdnf update; \
+    microdnf install -y percona-mysql-shell; \
+    microdnf clean all; \
+    rm -rf /var/cache
+
+RUN mkdir /sbin/.mysqlsh && chown 2:2 /sbin/.mysqlsh
 
 LABEL name="Percona Distribution for MySQL Operator" \
       vendor="Percona" \

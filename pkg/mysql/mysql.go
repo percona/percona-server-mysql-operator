@@ -1,6 +1,8 @@
 package mysql
 
 import (
+	"fmt"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,6 +31,7 @@ const (
 
 const (
 	DefaultPort      = 3306
+	DefaultGRPort    = 33061
 	DefaultAdminPort = 33062
 	DefaultXPort     = 33060
 	SidecarHTTPPort  = 6033
@@ -91,6 +94,14 @@ func ConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
 
 func AutoConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return "auto-" + Name(cr)
+}
+
+func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
+	return fmt.Sprintf("%s-%d", Name(cr), idx)
+}
+
+func FQDN(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
+	return fmt.Sprintf("%s.%s.%s", PodName(cr, idx), ServiceName(cr), cr.Namespace)
 }
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
@@ -277,6 +288,56 @@ func volumeClaimTemplates(spec *apiv1alpha1.MySQLSpec) []corev1.PersistentVolume
 	return pvcs
 }
 
+func servicePorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ServicePort {
+	ports := []corev1.ServicePort{
+		{
+			Name: componentName,
+			Port: DefaultPort,
+		},
+		{
+			Name: "mysql-admin",
+			Port: DefaultAdminPort,
+		},
+		{
+			Name: "mysqlx",
+			Port: DefaultXPort,
+		},
+		{
+			Name: "http",
+			Port: SidecarHTTPPort,
+		},
+	}
+
+	if cr.Spec.MySQL.IsGR() {
+		ports = append(ports, corev1.ServicePort{Name: componentName + "-gr", Port: DefaultGRPort})
+	}
+
+	return ports
+}
+
+func containerPorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ContainerPort {
+	ports := []corev1.ContainerPort{
+		{
+			Name:          componentName,
+			ContainerPort: DefaultPort,
+		},
+		{
+			Name:          "mysql-admin",
+			ContainerPort: DefaultAdminPort,
+		},
+		{
+			Name:          "mysqlx",
+			ContainerPort: DefaultXPort,
+		},
+	}
+
+	if cr.Spec.MySQL.IsGR() {
+		ports = append(ports, corev1.ContainerPort{Name: componentName + "-gr", ContainerPort: DefaultGRPort})
+	}
+
+	return ports
+}
+
 func UnreadyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	labels := MatchLabels(cr)
 
@@ -291,25 +352,8 @@ func UnreadyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
-			ClusterIP: "None",
-			Ports: []corev1.ServicePort{
-				{
-					Name: "mysql",
-					Port: DefaultPort,
-				},
-				{
-					Name: "mysql-admin",
-					Port: DefaultAdminPort,
-				},
-				{
-					Name: "mysqlx",
-					Port: DefaultXPort,
-				},
-				{
-					Name: "http",
-					Port: SidecarHTTPPort,
-				},
-			},
+			ClusterIP:                "None",
+			Ports:                    servicePorts(cr),
 			Selector:                 labels,
 			PublishNotReadyAddresses: true,
 		},
@@ -339,25 +383,8 @@ func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Type:      serviceType,
 			ClusterIP: clusterIP,
-			Ports: []corev1.ServicePort{
-				{
-					Name: "mysql",
-					Port: DefaultPort,
-				},
-				{
-					Name: "mysql-admin",
-					Port: DefaultAdminPort,
-				},
-				{
-					Name: "mysqlx",
-					Port: DefaultXPort,
-				},
-				{
-					Name: "http",
-					Port: SidecarHTTPPort,
-				},
-			},
-			Selector: labels,
+			Ports:     servicePorts(cr),
+			Selector:  labels,
 		},
 	}
 }
@@ -382,24 +409,7 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 		Spec: corev1.ServiceSpec{
 			Type:     t,
 			Selector: selector,
-			Ports: []corev1.ServicePort{
-				{
-					Name: componentName,
-					Port: DefaultPort,
-				},
-				{
-					Name: componentName + "-admin",
-					Port: DefaultAdminPort,
-				},
-				{
-					Name: componentName + "x",
-					Port: DefaultXPort,
-				},
-				{
-					Name: "http",
-					Port: SidecarHTTPPort,
-				},
-			},
+			Ports:    servicePorts(cr),
 		},
 	}
 }
@@ -425,25 +435,8 @@ func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
-			Type: serviceType,
-			Ports: []corev1.ServicePort{
-				{
-					Name: "mysql",
-					Port: DefaultPort,
-				},
-				{
-					Name: "mysql-admin",
-					Port: DefaultAdminPort,
-				},
-				{
-					Name: "mysqlx",
-					Port: DefaultXPort,
-				},
-				{
-					Name: "http",
-					Port: SidecarHTTPPort,
-				},
-			},
+			Type:     serviceType,
+			Ports:    servicePorts(cr),
 			Selector: selector,
 		},
 	}
@@ -466,7 +459,7 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	spec := cr.MySQLSpec()
 
-	return corev1.Container{
+	container := corev1.Container{
 		Name:            componentName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
@@ -489,20 +482,7 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 				Value: cr.ClusterHash(),
 			},
 		},
-		Ports: []corev1.ContainerPort{
-			{
-				Name:          "mysql",
-				ContainerPort: DefaultPort,
-			},
-			{
-				Name:          "mysql-admin",
-				ContainerPort: DefaultAdminPort,
-			},
-			{
-				Name:          "mysqlx",
-				ContainerPort: DefaultXPort,
-			},
-		},
+		Ports: containerPorts(cr),
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      binVolumeName,
@@ -530,10 +510,15 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          spec.ContainerSecurityContext,
-		StartupProbe:             k8s.ExecProbe(spec.StartupProbe, []string{"/opt/percona/bootstrap"}),
 		LivenessProbe:            k8s.ExecProbe(spec.LivenessProbe, []string{"/opt/percona/healthcheck", "liveness"}),
 		ReadinessProbe:           k8s.ExecProbe(spec.ReadinessProbe, []string{"/opt/percona/healthcheck", "readiness"}),
 	}
+
+	if cr.Spec.MySQL.ClusterType != apiv1alpha1.ClusterTypeGR {
+		container.StartupProbe = k8s.ExecProbe(spec.StartupProbe, []string{"/opt/percona/bootstrap"})
+	}
+
+	return container
 }
 
 func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
