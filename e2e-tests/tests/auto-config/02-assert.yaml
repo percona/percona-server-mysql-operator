@@ -15,6 +15,7 @@ spec:
         resources:
           limits:
             memory: 512Mi
+      - name: xtrabackup
 status:
   observedGeneration: 2
   replicas: 3

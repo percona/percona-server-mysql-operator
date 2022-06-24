@@ -15,6 +15,7 @@ spec:
         resources:
           requests:
             memory: 4Gi
+      - name: xtrabackup
 status:
   observedGeneration: 3
   replicas: 3
