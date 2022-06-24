@@ -1143,8 +1143,7 @@ func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServe
 	var serviceName string
 	if cr.Spec.MySQL.IsGR() {
 		serviceName = router.ServiceName(cr)
-		if !cr.Spec.Router.Expose.Enabled ||
-			(cr.Spec.Router.Expose.Enabled && cr.Spec.Router.Expose.Type != corev1.ServiceTypeLoadBalancer) {
+		if cr.Spec.Router.Expose.Type != corev1.ServiceTypeLoadBalancer {
 			return serviceName + "." + cr.GetNamespace(), nil
 		}
 	}

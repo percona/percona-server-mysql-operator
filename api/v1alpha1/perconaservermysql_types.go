@@ -210,7 +210,7 @@ type BackupStorageAzureSpec struct {
 }
 
 type MySQLRouterSpec struct {
-	Expose ServiceExposeTogglable `json:"expose,omitempty"`
+	Expose ServiceExpose `json:"expose,omitempty"`
 
 	PodSpec `json:",inline"`
 }

@@ -42,10 +42,7 @@ func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	labels := MatchLabels(cr)
 
-	serviceType := corev1.ServiceTypeClusterIP
-	if cr.Spec.Router.Expose.Enabled {
-		serviceType = cr.Spec.Router.Expose.Type
-	}
+	serviceType := cr.Spec.Router.Expose.Type
 
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
