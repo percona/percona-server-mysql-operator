@@ -11,9 +11,9 @@ commands:
       	| yq eval '.spec.mysql.affinity.antiAffinityTopologyKey="none"' - \
       	| yq eval '.spec.mysql.size=5' - \
       	| yq eval '.spec.mysql.sizeSemiSync=4' - \
-      	| yq eval '.spec.orchestrator.size=5' - \
       	| yq eval '.spec.orchestrator.affinity.antiAffinityTopologyKey="none"' - \
+      	| yq eval '.spec.orchestrator.size=5' - \
       	| kubectl -n "${NAMESPACE}" apply -f -
 
       wait_cluster_consistency "${test_name}" "5" "5"
-    timeout: 240
+    timeout: 360
