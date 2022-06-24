@@ -115,13 +115,14 @@ func bootstrap() error {
 	}
 	defer db.Close()
 
-	needsClone, err := db.NeedsClone(donor, mysql.DefaultAdminPort)
+	cloneLock := filepath.Join(mysql.DataMountPath, "clone.lock")
+	requireClone, err := isCloneRequired(cloneLock)
 	if err != nil {
-		return errors.Wrap(err, "check if a clone is needed")
+		return errors.Wrap(err, "check if clone is required")
 	}
 
-	log.Printf("Clone needed: %t", needsClone)
-	if needsClone {
+	log.Printf("Clone required: %t", requireClone)
+	if requireClone {
 		log.Println("Checking if a clone in progress")
 		inProgress, err := db.CloneInProgress()
 		if err != nil {
@@ -137,8 +138,24 @@ func bootstrap() error {
 		log.Printf("Cloning from %s", donor)
 		err = db.Clone(donor, "operator", operatorPass, mysql.DefaultAdminPort)
 		timer.Stop("clone")
-		if err != nil {
+		if err != nil && !errors.Is(err, replicator.ErrRestartAfterClone) {
 			return errors.Wrapf(err, "clone from donor %s", donor)
+		}
+
+		err = createCloneLock(cloneLock)
+		if err != nil {
+			return errors.Wrap(err, "create clone lock")
+		}
+
+		log.Println("Clone finished. Restarting container...")
+
+		// We return with 1 to restart container
+		os.Exit(1)
+	}
+
+	if !requireClone {
+		if err := deleteCloneLock(cloneLock); err != nil {
+			return errors.Wrap(err, "delete clone lock")
 		}
 	}
 
@@ -292,6 +309,28 @@ func selectDonor(fqdn, primary string, replicas []string) (string, error) {
 	}
 
 	return donor, nil
+}
+
+func isCloneRequired(file string) (bool, error) {
+	_, err := os.Stat(file)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return true, nil
+		}
+		return false, errors.Wrapf(err, "stat %s", file)
+	}
+
+	return false, nil
+}
+
+func createCloneLock(file string) error {
+	_, err := os.Create(file)
+	return errors.Wrapf(err, "create %s", file)
+}
+
+func deleteCloneLock(file string) error {
+	err := os.Remove(file)
+	return errors.Wrapf(err, "remove %s", file)
 }
 
 func waitLockRemoval() error {
