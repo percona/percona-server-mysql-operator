@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
@@ -14,15 +14,30 @@ const DefaultChannelName = ""
 
 type ReplicationStatus int8
 
+var ErrRestartAfterClone error = errors.New("Error 3707: Restart server failed (mysqld is not managed by supervisor process).")
+
 const (
 	ReplicationStatusActive ReplicationStatus = iota
 	ReplicationStatusError
 	ReplicationStatusNotInitiated
 )
 
+type MemberState string
+
+const (
+	MemberStateOnline      MemberState = "ONLINE"
+	MemberStateRecovering  MemberState = "RECOVERING"
+	MemberStateOffline     MemberState = "OFFLINE"
+	MemberStateError       MemberState = "ERROR"
+	MemberStateUnreachable MemberState = "UNREACHABLE"
+)
+
+var ErrGroupReplicationNotReady = errors.New("Error 3092: The server is not configured properly to be an active member of the group.")
+
 type Replicator interface {
 	ChangeReplicationSource(host, replicaPass string, port int32) error
 	StartReplication(host, replicaPass string, port int32) error
+	StopReplication() error
 	ReplicationStatus() (ReplicationStatus, string, error)
 	EnableSuperReadonly() error
 	IsReadonly() (bool, error)
@@ -35,6 +50,13 @@ type Replicator interface {
 	DumbQuery() error
 	SetSemiSyncSource(enabled bool) error
 	SetSemiSyncSize(size int) error
+	SetGlobal(variable, value string) error
+	ChangeGroupReplicationPassword(replicaPass string) error
+	StartGroupReplication(password string) error
+	StopGroupReplication() error
+	GetGroupReplicationPrimary() (string, error)
+	GetGroupReplicationReplicas() ([]string, error)
+	GetMemberState(host string) (MemberState, error)
 }
 
 type dbImpl struct{ db *sql.DB }
@@ -82,6 +104,11 @@ func (d *dbImpl) StartReplication(host, replicaPass string, port int32) error {
 
 	_, err := d.db.Exec("START REPLICA")
 	return errors.Wrap(err, "start replication")
+}
+
+func (d *dbImpl) StopReplication() error {
+	_, err := d.db.Exec("STOP REPLICA")
+	return errors.Wrap(err, "stop replication")
 }
 
 func (d *dbImpl) ReplicationStatus() (ReplicationStatus, string, error) {
@@ -187,8 +214,15 @@ func (d *dbImpl) Clone(donor, user, pass string, port int32) error {
 	}
 
 	_, err = d.db.Exec("CLONE INSTANCE FROM ?@?:? IDENTIFIED BY ?", user, donor, port, pass)
-	if err != nil {
+
+	mErr, ok := err.(*mysql.MySQLError)
+	if !ok {
 		return errors.Wrap(err, "clone instance")
+	}
+
+	// Error 3707: Restart server failed (mysqld is not managed by supervisor process).
+	if mErr.Number == uint16(3707) {
+		return ErrRestartAfterClone
 	}
 
 	return nil
@@ -207,4 +241,90 @@ func (d *dbImpl) SetSemiSyncSource(enabled bool) error {
 func (d *dbImpl) SetSemiSyncSize(size int) error {
 	_, err := d.db.Exec("SET GLOBAL rpl_semi_sync_master_wait_for_slave_count=?", size)
 	return errors.Wrap(err, "set rpl_semi_sync_master_wait_for_slave_count")
+}
+
+func (d *dbImpl) SetGlobal(variable, value string) error {
+	_, err := d.db.Exec(fmt.Sprintf("SET GLOBAL %s=?", variable), value)
+	return errors.Wrapf(err, "SET GLOBAL %s=%s", variable, value)
+}
+
+func (d *dbImpl) StartGroupReplication(password string) error {
+	_, err := d.db.Exec("START GROUP_REPLICATION USER=?, PASSWORD=?", apiv1alpha1.UserReplication, password)
+
+	mErr, ok := err.(*mysql.MySQLError)
+	if !ok {
+		return errors.Wrap(err, "start group replication")
+	}
+
+	// Error 3092: The server is not configured properly to be an active member of the group.
+	if mErr.Number == uint16(3092) {
+		return ErrGroupReplicationNotReady
+	}
+
+	return errors.Wrap(err, "start group replication")
+}
+
+func (d *dbImpl) StopGroupReplication() error {
+	_, err := d.db.Exec("STOP GROUP_REPLICATION")
+	return errors.Wrap(err, "stop group replication")
+}
+
+func (d *dbImpl) ChangeGroupReplicationPassword(replicaPass string) error {
+	_, err := d.db.Exec(`
+            CHANGE REPLICATION SOURCE TO
+                SOURCE_USER=?,
+                SOURCE_PASSWORD=?
+            FOR CHANNEL 'group_replication_recovery'
+        `, apiv1alpha1.UserReplication, replicaPass)
+	if err != nil {
+		return errors.Wrap(err, "exec CHANGE REPLICATION SOURCE TO")
+	}
+
+	return nil
+}
+
+func (d *dbImpl) GetGroupReplicationPrimary() (string, error) {
+	var host string
+
+	err := d.db.QueryRow("SELECT MEMBER_HOST FROM replication_group_members WHERE MEMBER_ROLE='PRIMARY'").Scan(&host)
+	if err != nil {
+		return "", errors.Wrap(err, "query primary member")
+	}
+
+	return host, nil
+}
+
+func (d *dbImpl) GetGroupReplicationReplicas() ([]string, error) {
+	replicas := make([]string, 0)
+
+	rows, err := d.db.Query("SELECT MEMBER_HOST FROM replication_group_members WHERE MEMBER_ROLE='SECONDARY'")
+	if err != nil {
+		return nil, errors.Wrap(err, "query replicas")
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var host string
+		if err := rows.Scan(&host); err != nil {
+			return nil, errors.Wrap(err, "scan rows")
+		}
+
+		replicas = append(replicas, host)
+	}
+
+	return replicas, nil
+}
+
+func (d *dbImpl) GetMemberState(host string) (MemberState, error) {
+	var state MemberState
+
+	err := d.db.QueryRow("SELECT MEMBER_STATE FROM replication_group_members WHERE MEMBER_HOST=?", host).Scan(&state)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return MemberStateOffline, nil
+		}
+		return MemberStateError, errors.Wrap(err, "query member state")
+	}
+
+	return state, nil
 }
