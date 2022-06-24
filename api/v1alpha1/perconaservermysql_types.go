@@ -335,6 +335,10 @@ func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 }
 
 func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVersion) error {
+	if len(cr.Spec.MySQL.ClusterType) == 0 {
+		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
+	}
+
 	if len(cr.Spec.Backup.Image) == 0 {
 		return errors.New("backup.image can't be empty")
 	}
