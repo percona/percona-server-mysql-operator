@@ -1084,15 +1084,42 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) reconcileCRStatus(
-	ctx context.Context,
-	cr *apiv1alpha1.PerconaServerMySQL,
-) error {
+func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+	if err != nil {
+		return false, errors.Wrap(err, "get operator password")
+	}
+
+	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
+	mysh := mysqlsh.New(k8sexec.New(), fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri))
+	if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
+		return false, nil
+	}
+
+	status, err := mysh.ClusterStatus(ctx, cr.InnoDBClusterName())
+	if err != nil {
+		return false, errors.Wrap(err, "get cluster status")
+	}
+
+	return status.DefaultReplicaSet.Status == innodbcluster.ClusterStatusOK, nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("reconcileCRStatus")
 
 	mysqlStatus, err := appStatus(ctx, r.Client, cr.MySQLSpec().Size, mysql.MatchLabels(cr))
 	if err != nil {
 		return errors.Wrap(err, "get MySQL status")
+	}
+
+	if mysqlStatus.State == apiv1alpha1.StateReady && cr.Spec.MySQL.IsGR() {
+		ready, err := r.isGRReady(ctx, cr)
+		if err != nil {
+			return errors.Wrap(err, "check if GR ready")
+		}
+		if !ready {
+			mysqlStatus.State = apiv1alpha1.StateInitializing
+		}
 	}
 	cr.Status.MySQL = mysqlStatus
 
