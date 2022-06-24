@@ -179,10 +179,6 @@ create_default_cnf() {
 	done
 }
 
-enable_super_read_only() {
-	sed -i "/\[mysqld\]/a super_read_only=ON" $CFG
-}
-
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
 
 if [ "$MYSQL_VERSION" != '8.0' ]; then
@@ -205,6 +201,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 	create_default_cnf
 
 	if [ ! -d "$DATADIR/mysql" ]; then
+		touch /var/lib/mysql/bootstrap.lock
 		file_env 'MYSQL_ROOT_PASSWORD' '' 'root'
 		{ set +x; } 2>/dev/null
 		if [ -z "$MYSQL_ROOT_PASSWORD" -a -z "$MYSQL_ALLOW_EMPTY_PASSWORD" -a -z "$MYSQL_RANDOM_ROOT_PASSWORD" ]; then
@@ -299,7 +296,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			GRANT ALL ON *.* TO 'operator'@'${MYSQL_ROOT_HOST}' WITH GRANT OPTION ;
 
 			CREATE USER 'xtrabackup'@'localhost' IDENTIFIED BY '${XTRABACKUP_PASSWORD}';
-			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
+			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.log_status TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.keyring_component_status TO 'xtrabackup'@'localhost';
 
@@ -367,12 +364,11 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			exit 1
 		fi
 
+		rm /var/lib/mysql/bootstrap.lock
 		echo
 		echo 'MySQL init process done. Ready for start up.'
 		echo
 	fi
-
-	enable_super_read_only
 
 	# exit when MYSQL_INIT_ONLY environment variable is set to avoid starting mysqld
 	if [ ! -z "$MYSQL_INIT_ONLY" ]; then
