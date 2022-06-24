@@ -25,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"reflect"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -580,7 +579,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 
 		return "", nil
 	}
-	autotuneParams, err := getAutoTuneParams(cr, memory)
+	autotuneParams, err := mysql.GetAutoTuneParams(cr, memory)
 	if err != nil {
 		return "", err
 	}
@@ -650,59 +649,6 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfiguration(
 	}
 
 	return fmt.Sprintf("%x", md5.Sum(data)), nil
-}
-
-func getAutoTuneParams(cr *apiv1alpha1.PerconaServerMySQL, q *resource.Quantity) (string, error) {
-	autotuneParams := ""
-
-	poolSize := q.Value() * int64(75) / int64(100)
-	if q.Value()-poolSize < int64(1000000000) {
-		poolSize = q.Value() * int64(50) / int64(100)
-	}
-	instances := int64(1)                 // default value
-	chunkSize := int64(1024 * 1024 * 128) // default value
-
-	// Adjust innodb_buffer_pool_chunk_size
-	// If innodb_buffer_pool_size is bigger than 1Gi, innodb_buffer_pool_instances is set to 8.
-	// By default, innodb_buffer_pool_chunk_size is 128Mi and innodb_buffer_pool_size needs to be
-	// multiple of innodb_buffer_pool_chunk_size * innodb_buffer_pool_instances.
-	// More info: https://dev.mysql.com/doc/refman/8.0/en/innodb-buffer-pool-resize.html
-	if poolSize > int64(1073741824) {
-		instances = 8
-		chunkSize = poolSize / instances
-		// innodb_buffer_pool_chunk_size can be increased or decreased in units of 1Mi (1048576 bytes).
-		// That's why we should strip redundant bytes
-		chunkSize -= chunkSize % (1048576)
-	}
-
-	// Buffer pool size must always
-	// be equal to or a multiple of innodb_buffer_pool_chunk_size * innodb_buffer_pool_instances.
-	// If not, this value will be adjusted
-	if poolSize%(instances*chunkSize) != 0 {
-		poolSize += (instances * chunkSize) - poolSize%(instances*chunkSize)
-	}
-	conf := cr.Spec.MySQL.Configuration
-	if !strings.Contains(conf, "innodb_buffer_pool_size") {
-		poolSizeVal := strconv.FormatInt(poolSize, 10)
-		autotuneParams += "\ninnodb_buffer_pool_size=" + poolSizeVal
-
-		if !strings.Contains(conf, "innodb_buffer_pool_chunk_size") {
-			chunkSizeVal := strconv.FormatInt(chunkSize, 10)
-			autotuneParams += "\ninnodb_buffer_pool_chunk_size=" + chunkSizeVal
-		}
-	}
-
-	if !strings.Contains(conf, "max_connections") {
-		divider := int64(12582880)
-		if q.Value() < divider {
-			return "", errors.New("Not enough memory set in requests. Must be >= 12Mi.")
-		}
-		maxConnSize := q.Value() / divider
-		maxConnSizeVal := strconv.FormatInt(maxConnSize, 10)
-		autotuneParams += "\nmax_connections=" + maxConnSizeVal
-	}
-
-	return autotuneParams, nil
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
