@@ -77,6 +77,12 @@ spec:
                 path: my-config.cnf
               name: sidecars-mysql
               optional: true
+          - configMap:
+              items:
+                - key: my.cnf
+                  path: auto-config.cnf
+              name: auto-sidecars-mysql
+              optional: true
           - secret:
               items:
               - key: my.cnf

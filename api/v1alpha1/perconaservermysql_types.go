@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	"fmt"
 	"hash/fnv"
+	"regexp"
 	"strings"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
@@ -53,6 +54,15 @@ const (
 	ClusterTypeGR    ClusterType = "group-replication"
 	ClusterTypeAsync ClusterType = "async"
 )
+
+func (t ClusterType) isValid() bool {
+	switch ClusterType(t) {
+	case ClusterTypeGR, ClusterTypeAsync:
+		return true
+	}
+
+	return false
+}
 
 type MySQLSpec struct {
 	ClusterType  ClusterType            `json:"clusterType,omitempty"`
@@ -334,6 +344,14 @@ func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 }
 
 func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVersion) error {
+	if len(cr.Spec.MySQL.ClusterType) == 0 {
+		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
+	}
+
+	if valid := cr.Spec.MySQL.ClusterType.isValid(); !valid {
+		return errors.Errorf("%s is not a valid clusterType, valid options are %s and %s", cr.Spec.MySQL.ClusterType, ClusterTypeGR, ClusterTypeAsync)
+	}
+
 	if len(cr.Spec.Backup.Image) == 0 {
 		return errors.New("backup.image can't be empty")
 	}
@@ -598,6 +616,12 @@ func (cr *PerconaServerMySQL) InternalSecretName() string {
 
 func (cr *PerconaServerMySQL) PMMEnabled() bool {
 	return cr.Spec.PMM != nil && cr.Spec.PMM.Enabled
+}
+
+var NonAlphaNumeric = regexp.MustCompile("[^a-zA-Z0-9_]+")
+
+func (cr *PerconaServerMySQL) InnoDBClusterName() string {
+	return NonAlphaNumeric.ReplaceAllString(cr.Name, "")
 }
 
 func init() {

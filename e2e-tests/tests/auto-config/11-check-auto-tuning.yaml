@@ -1,0 +1,15 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      RAM_SIZE=1073741824 # 1Gi
+      CUSTOM_INNODB_SIZE=2147483648
+      CUSTOM_CONNECTIONS=200
+
+      check_auto_tuning ${RAM_SIZE} ${CUSTOM_INNODB_SIZE} ${CUSTOM_CONNECTIONS}

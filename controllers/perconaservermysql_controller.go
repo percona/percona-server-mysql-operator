@@ -22,6 +22,7 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"reflect"
 	"strconv"
 	"time"
@@ -426,6 +427,10 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 		return errors.Wrap(err, "reconcile MySQL config")
 	}
 
+	if err = r.reconcileMySQLAutoConfig(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile MySQL auto-config")
+	}
+
 	initImage, err := k8s.InitImage(ctx, r.Client)
 	if err != nil {
 		return errors.Wrap(err, "get init image")
@@ -490,6 +495,59 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 		return errors.Wrap(err, "reconcile service per pod")
 	}
 
+	return nil
+}
+func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	l := log.FromContext(ctx).WithName("reconcileMySQLAutoConfig")
+	var memory *resource.Quantity
+	var err error
+
+	if res := cr.Spec.MySQL.Resources; res.Size() > 0 {
+		if _, ok := res.Requests[corev1.ResourceMemory]; ok {
+			memory = res.Requests.Memory()
+		}
+		if _, ok := res.Limits[corev1.ResourceMemory]; ok {
+			memory = res.Limits.Memory()
+		}
+	}
+
+	nn := types.NamespacedName{
+		Name:      mysql.AutoConfigMapName(cr),
+		Namespace: cr.Namespace,
+	}
+	currentConfigMap := new(corev1.ConfigMap)
+	if err = r.Client.Get(ctx, nn, currentConfigMap); client.IgnoreNotFound(err) != nil {
+		return errors.Wrapf(err, "get ConfigMap/%s", nn.Name)
+	}
+	if memory == nil {
+		exists := true
+		if k8serrors.IsNotFound(err) {
+			exists = false
+		}
+
+		if !exists || !metav1.IsControlledBy(currentConfigMap, cr) {
+			return nil
+		}
+
+		if err := r.Client.Delete(ctx, currentConfigMap); err != nil {
+			return errors.Wrapf(err, "delete ConfigMaps/%s", currentConfigMap.Name)
+		}
+
+		l.Info("ConfigMap deleted", "name", currentConfigMap.Name)
+
+		return nil
+	}
+	autotuneParams, err := mysql.GetAutoTuneParams(cr, memory)
+	if err != nil {
+		return err
+	}
+	configMap := k8s.ConfigMap(mysql.AutoConfigMapName(cr), cr.Namespace, mysql.CustomConfigKey, autotuneParams)
+	if !reflect.DeepEqual(currentConfigMap.Data, configMap.Data) {
+		if err := k8s.EnsureObject(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
+			return errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
+		}
+		l.Info("ConfigMap updated", "name", configMap.Name, "data", configMap.Data)
+	}
 	return nil
 }
 
@@ -764,12 +822,12 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 
 	mysh := mysqlsh.New(k8sexec.New(), firstPodUri)
 
-	clusterExists := mysh.DoesClusterExist(ctx, cr.Name)
+	clusterExists := mysh.DoesClusterExist(ctx, cr.InnoDBClusterName())
 	state := innodbcluster.MemberStateOffline
 	// it's not possible to run Cluster.status() on a standalone MySQL node
 	if clusterExists {
 		instance := fmt.Sprintf("%s:%d", firstPodFQDN, mysql.DefaultPort)
-		state, err = mysh.MemberState(ctx, cr.Name, instance)
+		state, err = mysh.MemberState(ctx, cr.InnoDBClusterName(), instance)
 		if err != nil {
 			return errors.Wrapf(err, "get member state of %s", firstPod.Name)
 		}
@@ -784,14 +842,14 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	}
 
 	if !clusterExists {
-		if err := mysh.CreateCluster(ctx, cr.Name, firstPod.Status.PodIP); err != nil {
+		if err := mysh.CreateCluster(ctx, cr.InnoDBClusterName(), firstPod.Status.PodIP); err != nil {
 			return err
 		}
-		l.Info("Created InnoDB Cluster", "cluster", cr.Name)
+		l.Info("Created InnoDB Cluster", "cluster", cr.InnoDBClusterName())
 	}
 
 	if state == innodbcluster.MemberStateMissing {
-		if err := mysh.RejoinInstance(ctx, cr.Name, firstPodFQDN); err != nil {
+		if err := mysh.RejoinInstance(ctx, cr.InnoDBClusterName(), firstPodFQDN); err != nil {
 			return errors.Wrapf(err, "rejoin instance %s", firstPod.Name)
 		}
 		l.Info("Instance rejoined", "pod", firstPod.Name)
@@ -853,7 +911,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		}
 
 		instance := fmt.Sprintf("%s:%d", podFQDN, mysql.DefaultPort)
-		state, err := mysh.MemberState(ctx, cr.Name, instance)
+		state, err := mysh.MemberState(ctx, cr.InnoDBClusterName(), instance)
 		if err != nil && !errors.Is(err, innodbcluster.ErrMemberNotFound) {
 			return errors.Wrapf(err, "get member state of %s", pod.Name)
 		}
@@ -865,7 +923,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 			}
 			l.Info("Configured instance", "pod", pod.Name)
 
-			if err := mysh.AddInstance(ctx, cr.Name, podUri, pod.Status.PodIP); err != nil {
+			if err := mysh.AddInstance(ctx, cr.InnoDBClusterName(), podUri, pod.Status.PodIP); err != nil {
 				return errors.Wrapf(err, "add instance %s", pod.Name)
 			}
 			l.Info("Added instance to the cluster", "cluster", cr.Name, "pod", pod.Name)
@@ -873,7 +931,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 
 		l.V(1).Info("Member state", "pod", pod.Name, "state", state)
 		if state == innodbcluster.MemberStateMissing {
-			if err := mysh.RejoinInstance(ctx, cr.Name, podFQDN); err != nil {
+			if err := mysh.RejoinInstance(ctx, cr.InnoDBClusterName(), podFQDN); err != nil {
 				return errors.Wrapf(err, "rejoin instance %s", pod.Name)
 			}
 			l.Info("Instance rejoined", "pod", pod.Name)
@@ -894,7 +952,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	for instance := range topology {
 		_, ok := podNames[instance]
 		if !ok {
-			if err := mysh.RemoveInstance(ctx, cr.Name, instance); err != nil {
+			if err := mysh.RemoveInstance(ctx, cr.InnoDBClusterName(), instance); err != nil {
 				return errors.Wrap(err, "remove instance")
 			}
 			l.Info("Instance removed from cluster", "instance", instance)
@@ -1058,7 +1116,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 
 	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
 	mysh := mysqlsh.New(k8sexec.New(), fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri))
-	if !mysh.DoesClusterExist(ctx, cr.Name) {
+	if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
 		l.V(1).Info("Waiting for InnoDB Cluster", "cluster", cr.Name)
 		return nil
 	}
@@ -1084,15 +1142,42 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) reconcileCRStatus(
-	ctx context.Context,
-	cr *apiv1alpha1.PerconaServerMySQL,
-) error {
+func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+	if err != nil {
+		return false, errors.Wrap(err, "get operator password")
+	}
+
+	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
+	mysh := mysqlsh.New(k8sexec.New(), fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri))
+	if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
+		return false, nil
+	}
+
+	status, err := mysh.ClusterStatus(ctx, cr.InnoDBClusterName())
+	if err != nil {
+		return false, errors.Wrap(err, "get cluster status")
+	}
+
+	return status.DefaultReplicaSet.Status == innodbcluster.ClusterStatusOK, nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("reconcileCRStatus")
 
 	mysqlStatus, err := appStatus(ctx, r.Client, cr.MySQLSpec().Size, mysql.MatchLabels(cr))
 	if err != nil {
 		return errors.Wrap(err, "get MySQL status")
+	}
+
+	if mysqlStatus.State == apiv1alpha1.StateReady && cr.Spec.MySQL.IsGR() {
+		ready, err := r.isGRReady(ctx, cr)
+		if err != nil {
+			return errors.Wrap(err, "check if GR ready")
+		}
+		if !ready {
+			mysqlStatus.State = apiv1alpha1.StateInitializing
+		}
 	}
 	cr.Status.MySQL = mysqlStatus
 
