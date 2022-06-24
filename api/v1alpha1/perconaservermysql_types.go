@@ -55,6 +55,15 @@ const (
 	ClusterTypeAsync ClusterType = "async"
 )
 
+func (t ClusterType) isValid() bool {
+	switch ClusterType(t) {
+	case ClusterTypeGR, ClusterTypeAsync:
+		return true
+	}
+
+	return false
+}
+
 type MySQLSpec struct {
 	ClusterType  ClusterType            `json:"clusterType,omitempty"`
 	SizeSemiSync intstr.IntOrString     `json:"sizeSemiSync,omitempty"`
@@ -337,6 +346,10 @@ func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVersion) error {
 	if len(cr.Spec.MySQL.ClusterType) == 0 {
 		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
+	}
+
+	if valid := cr.Spec.MySQL.ClusterType.isValid(); !valid {
+		return errors.Errorf("%s is not a valid clusterType, valid options are %s and %s", cr.Spec.MySQL.ClusterType, ClusterTypeGR, ClusterTypeAsync)
 	}
 
 	if len(cr.Spec.Backup.Image) == 0 {
