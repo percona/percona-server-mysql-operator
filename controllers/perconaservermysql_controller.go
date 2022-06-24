@@ -470,8 +470,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 		return errors.Wrap(err, "reconcile MySQL config")
 	}
 
-	autoConfigHash, err := r.reconcileMySQLAutoConfig(ctx, cr)
-	if err != nil {
+	if err = r.reconcileMySQLAutoConfig(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile MySQL auto-config")
 	}
 
@@ -480,7 +479,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 		return errors.Wrap(err, "get init image")
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.StatefulSet(cr, initImage, configHash, autoConfigHash), r.Scheme); err != nil {
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.StatefulSet(cr, initImage, configHash), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile sts")
 	}
 
@@ -539,7 +538,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 
 	return nil
 }
-func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
+func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("reconcileMySQLAutoConfig")
 	var memory *resource.Quantity
 	var err error
@@ -559,7 +558,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 	}
 	currentConfigMap := new(corev1.ConfigMap)
 	if err = r.Client.Get(ctx, nn, currentConfigMap); client.IgnoreNotFound(err) != nil {
-		return "", errors.Wrapf(err, "get ConfigMap/%s", nn.Name)
+		return errors.Wrapf(err, "get ConfigMap/%s", nn.Name)
 	}
 	if memory == nil {
 		exists := true
@@ -568,35 +567,29 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 		}
 
 		if !exists || !metav1.IsControlledBy(currentConfigMap, cr) {
-			return "", nil
+			return nil
 		}
 
 		if err := r.Client.Delete(ctx, currentConfigMap); err != nil {
-			return "", errors.Wrapf(err, "delete ConfigMaps/%s", currentConfigMap.Name)
+			return errors.Wrapf(err, "delete ConfigMaps/%s", currentConfigMap.Name)
 		}
 
 		l.Info("ConfigMap deleted", "name", currentConfigMap.Name)
 
-		return "", nil
+		return nil
 	}
 	autotuneParams, err := mysql.GetAutoTuneParams(cr, memory)
 	if err != nil {
-		return "", err
+		return err
 	}
 	configMap := k8s.ConfigMap(mysql.AutoConfigMapName(cr), cr.Namespace, mysql.CustomConfigKey, autotuneParams)
 	if !reflect.DeepEqual(currentConfigMap.Data, configMap.Data) {
 		if err := k8s.EnsureObject(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
-			return "", errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
+			return errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
 		}
 		l.Info("ConfigMap updated", "name", configMap.Name, "data", configMap.Data)
 	}
-	d := struct{ Data map[string]string }{Data: configMap.Data}
-	data, err := json.Marshal(d)
-	if err != nil {
-		return "", errors.Wrap(err, "marshal configmap data to json")
-	}
-
-	return fmt.Sprintf("%x", md5.Sum(data)), nil
+	return nil
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileMySQLConfiguration(
