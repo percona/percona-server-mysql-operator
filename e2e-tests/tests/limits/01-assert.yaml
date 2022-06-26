@@ -57,7 +57,7 @@ spec:
       - args:
         - mysqld
         command:
-        - /var/lib/mysql/ps-entrypoint.sh
+        - /opt/percona/ps-entrypoint.sh
         env:
         - name: MONITOR_HOST
           value: '%'
@@ -70,7 +70,7 @@ spec:
         livenessProbe:
           exec:
             command:
-            - /var/lib/mysql/healthcheck
+            - /opt/percona/healthcheck
             - liveness
           failureThreshold: 3
           initialDelaySeconds: 15
@@ -91,7 +91,7 @@ spec:
         readinessProbe:
           exec:
             command:
-            - /var/lib/mysql/healthcheck
+            - /opt/percona/healthcheck
             - readiness
           failureThreshold: 3
           initialDelaySeconds: 30
@@ -100,11 +100,11 @@ spec:
           timeoutSeconds: 3
         resources:
           requests:
-            memory: 512M
+            memory: 1G
         startupProbe:
           exec:
             command:
-            - /var/lib/mysql/bootstrap
+            - /opt/percona/bootstrap
           failureThreshold: 1
           initialDelaySeconds: 15
           periodSeconds: 10
@@ -113,6 +113,8 @@ spec:
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
         - mountPath: /var/lib/mysql
           name: datadir
         - mountPath: /etc/mysql/mysql-users-secret
@@ -121,6 +123,27 @@ spec:
           name: tls
         - mountPath: /etc/mysql/config
           name: config
+      - command:
+        - /opt/percona/sidecar
+        image: percona/percona-xtrabackup:8.0
+        imagePullPolicy: Always
+        name: xtrabackup
+        ports:
+        - containerPort: 6033
+          name: http
+          protocol: TCP
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
+        - mountPath: /var/log/xtrabackup
+          name: backup-logs
       dnsPolicy: ClusterFirst
       initContainers:
       - command:
@@ -131,6 +154,8 @@ spec:
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
         - mountPath: /var/lib/mysql
           name: datadir
         - mountPath: /etc/mysql/mysql-users-secret
@@ -145,6 +170,8 @@ spec:
         - 1001
       terminationGracePeriodSeconds: 30
       volumes:
+      - emptyDir: {}
+        name: bin
       - name: users
         secret:
           defaultMode: 420
@@ -163,12 +190,20 @@ spec:
                 path: my-config.cnf
               name: limits-no-limits-mysql
               optional: true
+          - configMap:
+              items:
+              - key: my.cnf
+                path: auto-config.cnf
+              name: auto-limits-no-limits-mysql
+              optional: true
           - secret:
               items:
               - key: my.cnf
                 path: my-secret.cnf
               name: limits-no-limits-mysql
               optional: true
+      - emptyDir: {}
+        name: backup-logs
   updateStrategy:
     type: RollingUpdate
   volumeClaimTemplates:
@@ -327,6 +362,7 @@ spec:
       - configMap:
           defaultMode: 420
           name: limits-no-limits-orc
+        name: config
   updateStrategy:
     rollingUpdate:
       partition: 0
