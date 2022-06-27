@@ -14,6 +14,7 @@ export IMAGE=${IMAGE:-"perconalab/percona-server-mysql-operator:${VERSION}"}
 export IMAGE_MYSQL=${IMAGE_MYSQL:-"percona/percona-server:8.0"}
 export IMAGE_XTRABACKUP=${IMAGE_XTRABACKUP:-"percona/percona-xtrabackup:8.0"}
 export IMAGE_ORCHESTRATOR=${IMAGE_ORCHESTRATOR:-"perconalab/percona-server-mysql-operator:main-orchestrator"}
+export IMAGE_ROUTER=${IMAGE_ROUTER:-"perconalab/percona-server-mysql-operator:main-router"}
 export IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
 export PMM_SERVER_VERSION=${PMM_SERVER_VERSION:-$(curl https://raw.githubusercontent.com/Percona-Lab/percona-openshift/main/helm/pmm-server/Chart.yaml | awk '/^version/{print $NF}')}
 export IMAGE_PMM_SERVER_REPO="perconalab/pmm-server"

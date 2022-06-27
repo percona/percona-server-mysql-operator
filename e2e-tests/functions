@@ -114,6 +114,7 @@ get_cr() {
 		| yq eval "$(printf '.spec.mysql.image="%s"' "${IMAGE_MYSQL}")" - \
 		| yq eval "$(printf '.spec.backup.image="%s"' "${IMAGE_XTRABACKUP}")" - \
 		| yq eval "$(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}")" - \
+		| yq eval "$(printf '.spec.router.image="%s"' "${IMAGE_ROUTER}")" - \
 		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_PMM}")" -
 }
 
