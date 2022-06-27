@@ -19,11 +19,11 @@ apiVersion: apps/v1
 metadata:
   name: scaling-orc
 status:
-  observedGeneration: 1
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
+  observedGeneration: 2
+  replicas: 5
+  readyReplicas: 5
+  currentReplicas: 5
+  updatedReplicas: 5
   collisionCount: 0
 ---
 apiVersion: ps.percona.com/v1alpha1
@@ -36,6 +36,6 @@ status:
     size: 5
     state: ready
   orchestrator:
-    ready: 3
-    size: 3
+    ready: 5
+    size: 5
     state: ready

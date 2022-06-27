@@ -257,6 +257,7 @@ wait_cluster_consistency() {
 	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
 	until [[ "$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.mysql.state}')" == "ready" &&
 	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.mysql.ready}')" == "${cluster_size}" &&
+	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.orchestrator.ready}')" == "${orc_size}" &&
 	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.orchestrator.state}')" == "ready" ]]; do
 		echo 'waiting for cluster readyness'
 		sleep 15
