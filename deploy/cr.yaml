@@ -146,7 +146,7 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-xtrabackup:8.0.28
+    image: perconalab/percona-server-mysql-operator:main-backup
     imagePullPolicy: Always
     storages:
       s3-us-west:
