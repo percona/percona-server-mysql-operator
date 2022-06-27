@@ -19,6 +19,6 @@ status:
 kind: PerconaServerMySQLRestore
 apiVersion: ps.percona.com/v1alpha1
 metadata:
-  name: demand-backup-restore-minio
+  name: demand-backup-restore-s3
 status:
   state: Succeeded
