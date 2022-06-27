@@ -105,8 +105,11 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                         export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
                         export PATH="$HOME/.krew/bin:$PATH"
                         source $HOME/google-cloud-sdk/path.bash.inc
+                        kubectl delete ns "${TEST_NAME}" --force || :
+                        kubectl create ns "${TEST_NAME}"
                         set -o pipefail
-                        time kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "^${TEST_NAME}\$" |& tee e2e-tests/logs/${TEST_NAME}.log
+                        time kubectl kuttl test --namespace "${TEST_NAME}" --config ./e2e-tests/kuttl.yaml --test "^${TEST_NAME}\$" |& tee e2e-tests/logs/${TEST_NAME}.log
+                        kubectl delete ns "${TEST_NAME}" --force || :
                     fi
                 """
             }
@@ -211,7 +214,7 @@ pipeline {
 
                     kubectl krew install kuttl
                 '''
-                withCredentials([file(credentialsId: 'cloud-secret-file', variable: 'CLOUD_SECRET_FILE')]) {
+                withCredentials([file(credentialsId: 'cloud-secret-file-ps', variable: 'CLOUD_SECRET_FILE')]) {
                     sh 'cp $CLOUD_SECRET_FILE e2e-tests/conf/cloud-secret.yml'
                 }
             }
@@ -304,49 +307,52 @@ pipeline {
                 }
             }
         }
-        stage('E2E Basic Tests') {
+        stage('Run tests for operator') {
             when {
                 expression {
                     !skipBranchBuilds
                 }
             }
-            steps {
-                CreateCluster('basic')
-                runTest('auto-config', 'basic')
-                runTest('config', 'basic')
-                runTest('init-deploy', 'basic')
-                runTest('monitoring', 'basic')
-                runTest('semi-sync', 'basic')
-                runTest('service-per-pod', 'basic')
-                runTest('scaling', 'basic')
-                runTest('sidecars', 'basic')
-                runTest('users', 'basic')
-                runTest('limits', 'basic')
-                ShutdownCluster('basic')
+            options {
+                timeout(time: 3, unit: 'HOURS')
             }
-        }
-        stage('E2E Backup Tests') {
-            when {
-                expression {
-                    !skipBranchBuilds
+            parallel {
+                stage('E2E Cluster1') {
+                    steps {
+                        CreateCluster('cluster1')
+                        runTest('auto-config', 'cluster1')
+                        ShutdownCluster('cluster1')
+                    }
                 }
-            }
-            steps {
-                CreateCluster('backup')
-                runTest('demand-backup', 'backup')
-                ShutdownCluster('backup')
-            }
-        }
-        stage('E2E GR Tests') {
-            when {
-                expression {
-                    !skipBranchBuilds
+                stage('E2E Cluster2') {
+                    steps {
+                        CreateCluster('cluster2')
+                        runTest('config', 'cluster2')
+                        runTest('init-deploy', 'cluster2')
+                        runTest('monitoring', 'cluster2')
+                        runTest('semi-sync', 'cluster2')
+                        runTest('service-per-pod', 'cluster2')
+                        runTest('scaling', 'cluster2')
+                        runTest('sidecars', 'cluster2')
+                        runTest('users', 'cluster2')
+                        runTest('limits', 'cluster2')
+                        ShutdownCluster('cluster2')
+                    }
                 }
-            }
-            steps {
-                CreateCluster('gr')
-                runTest('gr-init-deploy', 'gr')
-                ShutdownCluster('gr')
+                stage('E2E Cluster3') {
+                    steps {
+                        CreateCluster('cluster3')
+                        runTest('demand-backup', 'cluster3')
+                        ShutdownCluster('cluster3')
+                    }
+                }
+                stage('E2E Cluster4') {
+                    steps {
+                        CreateCluster('cluster4')
+                        runTest('gr-init-deploy', 'cluster4')
+                        ShutdownCluster('cluster4')
+                    }
+                }
             }
         }
     }
