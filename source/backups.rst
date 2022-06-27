@@ -203,3 +203,23 @@ When the backup destination is configured and applied with `kubectl apply -f dep
         clusterName: cluster1
         storageName: s3-us-west
       EOF
+
+.. _backups-delete:
+
+Delete the unneeded backup
+--------------------------
+
+Manual deleting of a previously saved backup requires not more than the backup
+name. This name can be taken from the list of available backups returned
+by the following command:
+
+.. code:: bash
+
+   $ kubectl get ps-backup
+
+When the name is known, backup can be deleted as follows:
+
+.. code:: bash
+
+   $ kubectl delete ps-backup/<backup-name>
+
