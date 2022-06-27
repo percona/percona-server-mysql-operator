@@ -3,16 +3,16 @@
 Providing Backups
 =================
 
-The Operator stores Server for MongoDB backups outside the Kubernetes cluster: on `Amazon S3 or S3-compatible
-storage <https://en.wikipedia.org/wiki/Amazon_S3#S3_API_and_competing_services>`_, or on `Azure Blob Storage <https://azure.microsoft.com/en-us/services/storage/blobs/>`_.
+The Operator stores Percona Distribution for MySQL backups outside the
+Kubernetes cluster: on `Amazon S3 or S3-compatible storage <https://en.wikipedia.org/wiki/Amazon_S3#S3_API_and_competing_services>`_,
+or on `Azure Blob Storage <https://azure.microsoft.com/en-us/services/storage/blobs/>`_.
 
 .. figure:: assets/images/backup-s3.svg
    :align: center
    :alt: Backup on S3-compatible storage
 
 The Operator currently allows doing cluster backup *on-demand* (i.e. manually at
-any moment). It uses the `Percona
-XtraBackup <https://docs.percona.com/percona-xtrabackup/latest/>`_ tool.
+any moment). It uses the `Percona XtraBackup <https://docs.percona.com/percona-xtrabackup/latest/>`_ tool.
 
 Backups are controlled by the ``backup`` section of the
 `deploy/cr.yaml <https://github.com/percona/percona-server-mysql-operator/blob/main/deploy/cr.yaml>`__
@@ -178,7 +178,7 @@ contains correctly configured keys and is applied with ``kubectl`` command, use
 *a special backup configuration YAML file* with the following contents:
 
 * **backup name** in the ``metadata.name`` key,
-* **Percona Server for MySQL Cluster name** in the ``clusterName`` key,
+* **Percona Distribution for MySQL Cluster name** in the ``clusterName`` key,
 * **storage name** from ``deploy/cr.yaml`` in the ``spec.storageName`` key.
 
 The example of such file is `deploy/backup/backup.yaml <https://github.com/percona/percona-server-mysql-operator/blob/main/deploy/backup.yaml>`_.
@@ -202,6 +202,59 @@ When the backup destination is configured and applied with `kubectl apply -f dep
       spec:
         clusterName: cluster1
         storageName: s3-us-west
+      EOF
+
+.. _backups-restore:
+
+Restore the cluster from a previously saved backup
+--------------------------------------------------
+
+Following things are needed to restore a previously saved backup:
+
+* Make sure that the cluster is running.
+
+* Find out correct names for the **backup** and the **cluster**. Available
+  backups can be listed with the following command:
+
+  .. code:: bash
+
+     $ kubectl get ps-backup
+
+  And the following command will list existing Percona Distribution for MySQL
+  Cluster names in the current Kubernetes-based environment:
+
+  .. code:: bash
+
+     $ kubectl get ps
+
+When the correct names for the backup and the cluster are known, backup
+restoration can be done in the following way.
+
+1. Set appropriate keys in the ``deploy/restore.yaml`` file.
+
+   * set ``spec.clusterName`` key to the name of the target cluster to restore
+     the backup on,
+   * set ``spec.backupName`` key to the name of your backup.
+
+2. After that, the actual restoration process can be started as follows:
+
+   .. code:: bash
+
+      $ kubectl apply -f deploy/restore.yaml
+
+.. note:: Storing backup settings in a separate file can be replaced by passing
+   its content to the ``kubectl apply`` command as follows:
+
+   .. code:: bash
+
+      $ cat <<EOF | kubectl apply -f-
+      apiVersion: "pxc.percona.com/v1alpha1"
+      kind: "PerconaServerMySQLRestore"
+      metadata:
+        name: "restore1"
+      spec:
+        clusterName: "cluster1"
+        backupName: "backup1"
       EOF
 
 .. _backups-delete:
