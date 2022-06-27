@@ -44,6 +44,7 @@ release = '0.1.0'
 ps57recommended = '5.7.35'
 ps80recommended = '8.0.25'
 pmm2recommended = '2.25.0'
+pxbrecommended = '8.0.28'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -281,7 +282,8 @@ ultimate_replacements = {
     "{{{apiversion}}}" : release.replace(".", "-", 2),
     "{{{ps57recommended}}}" : ps57recommended,
     "{{{ps80recommended}}}" : ps80recommended,
-    "{{{pmm2recommended}}}" : pmm2recommended
+    "{{{pmm2recommended}}}" : pmm2recommended,
+    "{{{pxbrecommended}}}" : pxbrecommended
 }
 
 def setup(app):
