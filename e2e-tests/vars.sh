@@ -12,7 +12,7 @@ export VERSION=${VERSION:-$(echo "${GIT_BRANCH}" | sed -e 's^/^-^g; s^[.]^-^g;' 
 
 export IMAGE=${IMAGE:-"perconalab/percona-server-mysql-operator:${VERSION}"}
 export IMAGE_MYSQL=${IMAGE_MYSQL:-"percona/percona-server:8.0"}
-export IMAGE_XTRABACKUP=${IMAGE_XTRABACKUP:-"percona/percona-xtrabackup:8.0"}
+export IMAGE_BACKUP=${IMAGE_BACKUP:-"percona/percona-xtrabackup:8.0"}
 export IMAGE_ORCHESTRATOR=${IMAGE_ORCHESTRATOR:-"perconalab/percona-server-mysql-operator:main-orchestrator"}
 export IMAGE_ROUTER=${IMAGE_ROUTER:-"perconalab/percona-server-mysql-operator:main-router"}
 export IMAGE_PMM=${IMAGE_PMM:-"perconalab/pmm-client:dev-latest"}
