@@ -1,0 +1,15 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      suffix="no-storage"
+      get_cr "${suffix}" \
+        | yq eval 'del(.spec."*".volumeSpec)' - \
+      	| kubectl -n "${NAMESPACE}" apply -f -
+
+    timeout: 180
