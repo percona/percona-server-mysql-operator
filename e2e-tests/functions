@@ -21,6 +21,11 @@ deploy_client() {
 	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/client.yaml"
 }
 
+apply_s3_storage_secrets() {
+	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/minio-secret.yml"
+	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/cloud-secret.yml"
+}
+
 deploy_pmm_server() {
 	local platform=kubernetes
 	if [ -n "${OPENSHIFT}" ]; then
