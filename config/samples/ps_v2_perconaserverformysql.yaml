@@ -3,82 +3,25 @@ kind: PerconaServerMySQL
 metadata:
   name: cluster1
 spec:
-  crVersion:
-  secretsName: my-cluster-secrets
-  sslSecretName: my-cluster-ssl
-  sslInternalSecretName: my-cluster-ssl-internal
-  pause: false
+  allowUnsafeConfigurations: false
+  secretsName: cluster1-secrets
+  sslSecretName: cluster1-ssl
   mysql:
-    clusterType: gr|async
-    size: 2
-    sizeSemiSync: 1
-    semiSyncType: after-sync
-    image:
-   expose:
-     enabled: true
-     type: LoadBalancer
-     trafficPolicy: Local
-     loadBalancerSourceRanges:
-       - 10.0.0.0/8
-     annotations:
-       networking.gke.io/load-balancer-type: "Internal"
-   schedulerName: mycustom-scheduler
-   readinessDelaySec: 15
-   livenessDelaySec: 600
-   forceUnsafeBootstrap: false
-   configuration: |
-     [mysqld]
-     wsrep_debug=CLIENT
-     wsrep_provider_options="gcache.size=1G; gcache.recover=yes"
-     [sst]
-     xbstream-opts=--decompress
-     [xtrabackup]
-     compress=lz4
-     for PXC 5.7
-     [xtrabackup]
-     compress
-   imagePullSecrets:
-     - name: private-registry-credentials
-   priorityClassName: high-priority
-   annotations:
-     iam.amazonaws.com/role: role-arn
-   labels:
-     rack: rack-22
-   containerSecurityContext:
-     privileged: false
-   podSecurityContext:
-     runAsUser: 1001
-     runAsGroup: 1001
-     supplementalGroups: [1001]
-   serviceAccountName: percona-xtradb-cluster-operator-workload
-   imagePullPolicy: Always
-   runtimeClassName: image-rc
-   sidecars:
-   - image: busybox
-     command: ["/bin/sh"]
-     args: ["-c", "while true; do trap 'exit 0' SIGINT SIGTERM SIGQUIT SIGKILL; done;"]
-     name: my-sidecar-1
-   envVarsSecret: my-env-var-secrets
+    clusterType: async
+    size: 3
+    sizeSemiSync: 0
+    image: percona/percona-server:8.0.28
     resources:
       requests:
         memory: 1G
         cpu: 600m
-       ephemeral-storage: 1G
-     limits:
-       memory: 1G
-       cpu: "1"
-       ephemeral-storage: 1G
-   nodeSelector:
-     disktype: ssd
-   sidecarResources:
-     requests:
-       memory: 1G
-       cpu: 500m
-     limits:
-       memory: 2G
-       cpu: 600m
+        ephemeral-storage: 1G
+      limits:
+        memory: 1G
+        #cpu: "1"
+        #ephemeral-storage: 1G
     affinity:
-      antiAffinityTopologyKey: "kubernetes.io/hostname"
+      antiAffinityTopologyKey: "none"
 #      advanced:
 #        nodeAffinity:
 #          requiredDuringSchedulingIgnoredDuringExecution:
@@ -94,8 +37,8 @@ spec:
 #      operator: "Exists"
 #      effect: "NoExecute"
 #      tolerationSeconds: 6000
-    podDisruptionBudget:
-      maxUnavailable: 1
+#    podDisruptionBudget:
+#      maxUnavailable: 1
 #      minAvailable: 0
     volumeSpec:
 #      emptyDir: {}
@@ -108,8 +51,40 @@ spec:
         resources:
           requests:
             storage: 6G
-    gracePeriod: 600
+ #   gracePeriod: 600
 
+  router:
+    image: perconalab/percona-server-mysql-operator:main-router
+    imagePullPolicy: Always
+
+    size: 3
+
+    resources:
+      requests:
+        memory: 256M
+      limits:
+        memory: 256M
+    affinity:
+      antiAffinityTopologyKey: "none"
+
+  orchestrator:
+    image: perconalab/percona-server-mysql-operator:main-orchestrator
+    imagePullPolicy: Always
+    size: 3
+    resources:
+      requests:
+        memory: 128M
+      limits:
+        memory: 256M
+
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1G
+    affinity:
+      antiAffinityTopologyKey: "none"
+    
   pmm:
     enabled: false
     image: percona/pmm-client:2.12.0
@@ -123,6 +98,51 @@ spec:
 #        cpu: 500m
 
 
+  backup:
+    enabled: true
+    image: perconalab/percona-server-mysql-operator:main-backup
+    imagePullPolicy: Always
+    storages:
+      s3-us-west:
+        type: s3
+        verifyTLS: true
+#        nodeSelector:
+#          storage: tape
+#          backupWorker: 'True'
+#        resources:
+#          requests:
+#            memory: 1G
+#            cpu: 600m
+#        affinity:
+#          nodeAffinity:
+#            requiredDuringSchedulingIgnoredDuringExecution:
+#              nodeSelectorTerms:
+#              - matchExpressions:
+#                - key: backupWorker
+#                  operator: In
+#                  values:
+#                  - 'True'
+#        tolerations:
+#          - key: "backupWorker"
+#            operator: "Equal"
+#            value: "True"
+#            effect: "NoSchedule"
+#        annotations:
+#          testName: scheduled-backup
+#        labels:
+#          backupWorker: 'True'
+#        schedulerName: 'default-scheduler'
+#        priorityClassName: 'high-priority'
+#        containerSecurityContext:
+#          privileged: true
+#        podSecurityContext:
+#          fsGroup: 1001
+#          supplementalGroups: [1001, 1002, 1003]
+        s3:
+          bucket: S3-BACKUP-BUCKET-NAME-HERE
+          credentialsSecret: cluster1-s3-credentials
+          region: us-west-2
+#          prefix: ""
 
 
 
