@@ -1,0 +1,9 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: limits-no-limits-mysql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: limits-no-limits-orc

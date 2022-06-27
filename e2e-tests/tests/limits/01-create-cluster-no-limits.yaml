@@ -1,0 +1,16 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      suffix="no-limits"
+      get_cr "${suffix}" \
+        | yq eval 'del(.spec."*".resources.limits)' - \
+      	| kubectl -n "${NAMESPACE}" apply -f -
+
+      wait_pod "${test_name}-${suffix}-mysql-0"
+    timeout: 180
