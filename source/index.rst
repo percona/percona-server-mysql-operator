@@ -27,8 +27,18 @@ Requirements
 .. toctree::
    :maxdepth: 1
 
-   System-Requirements
-   architecture
+   System Requirements <System-Requirements>
+   Design and architecture <architecture>
+
+Quickstart guides
+=================
+
+.. toctree::
+   :maxdepth: 1
+
+   Install with Helm <helm.rst>
+   Install on Minikube <minikube.rst>
+   Install on Amazon Elastic Kubernetes Service (AWS EKS) <eks.rst>
 
 Installation guides
 ===================
@@ -36,9 +46,7 @@ Installation guides
 .. toctree::
    :maxdepth: 1
 
-   minikube
-   kubernetes
-   eks
+   Generic Kubernetes installation <kubernetes.rst>
 
 Configuration and Management
 ============================
@@ -46,13 +54,13 @@ Configuration and Management
 .. toctree::
    :maxdepth: 1
 
-   users
-   constraints
-   options
-   TLS
-   scaling
-   monitoring
-   sidecar
+   Application and system users <users.rst>
+   Anti-affinity and tolerations <constraints.rst>
+   Changing MySQL Options <options.rst>
+   Transport Encryption (TLS/SSL) <TLS.rst>
+   Horizontal and vertical scaling <scaling.rst>
+   Monitor with Percona Monitoring and Management (PMM) <monitoring.rst>
+   Add sidecar containers <sidecar.rst>
 
 .. toctree::
    :maxdepth: 1
@@ -63,6 +71,6 @@ Reference
 .. toctree::
    :maxdepth: 1
 
-   operator
-   images
+   Custom Resource options <operator.rst>
+   Percona certified images <images.rst>
    Release Notes <RN/index>
