@@ -72,7 +72,7 @@ configuration options for the Percona Server for MySQL.
 | **Example**     | ``async``                                                                                 |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | The cluster type: ``async`` for `Asynchronous replication                                 |
-|                 | <https://dev.mysql.com/doc/refman/8.0/en/replication.html>`_, ``gr``                      |
+|                 | <https://dev.mysql.com/doc/refman/8.0/en/replication.html>`_, ``group-replication``       |
 |                 | for `Group Replication <https://dev.mysql.com/doc/refman/8.0/en/group-replication.html>`_ |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
