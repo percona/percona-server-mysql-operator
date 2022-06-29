@@ -8,7 +8,8 @@ Containers deployed with the Operator include the following components:
 
 * `Percona Server for MySQL <https://www.percona.com/doc/percona-server/LATEST/index.html>`_ (a free, fully compatible, enhanced, and open source drop-in replacement for any MySQL database),
 * `Percona XtraBackup <https://www.percona.com/doc/percona-xtrabackup/8.0/index.html>`_ (a hot backup utility for MySQL based servers that doesn’t lock your database during the backup),
-* `Orchestrator <https://github.com/openark/orchestrator>`_ (a replication topology manager for MySQL).
+* `Orchestrator <https://github.com/openark/orchestrator>`_ (a replication topology manager for MySQL, used when `asynchronous replication <https://dev.mysql.com/doc/refman/8.0/en/group-replication-primary-secondary-replication.html>`_ betweem MySQL instances :ref:`is turned on<mysql-clustertype>`),
+* `MySQL Router <https://dev.mysql.com/doc/mysql-router/8.0/en/>`_, a proxy solution used when `group replication <https://dev.mysql.com/doc/refman/8.0/en/group-replication.html>`_ betweem MySQL instances :ref:`is turned on<mysql-clustertype>`).
 
 The design of the Operator is highly bound
 to Percona Server for MySQL and the high availability implementation based on Orchestrator,

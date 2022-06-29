@@ -63,6 +63,20 @@ configuration options for the Percona Server for MySQL.
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
 +-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _mysql-clustertype:                                                                    |
+|                 |                                                                                           |
+| **Key**         | `mysql.clusterType <operator.html#mysql-clustertype>`_                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | int                                                                                       |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``async``                                                                                 |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The cluster type: ``async`` for `Asynchronous replication                                 |
+|                 | <https://dev.mysql.com/doc/refman/8.0/en/replication.html>`_, ``gr``                      |
+|                 | for `Group Replication <https://dev.mysql.com/doc/refman/8.0/en/group-replication.html>`_ |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
 |                 | .. _mysql-size:                                                                           |
 |                 |                                                                                           |
 | **Key**         | `mysql.size <operator.html#mysql-size>`_                                                  |
@@ -379,7 +393,8 @@ configuration options for the Percona Server for MySQL.
 `Router Section <operator.html#operator-router-section>`_
 --------------------------------------------------------------------------------
 
-The ``router`` section in the `deploy/cr.yaml <https://github.com/percona/percona-server-mysql-operator/blob/main/deploy/cr.yaml>`__ file contains configuration options for the `MySQL Router <https://dev.mysql.com/doc/mysql-router/8.0/en/>`_.
+The ``router`` section in the `deploy/cr.yaml <https://github.com/percona/percona-server-mysql-operator/blob/main/deploy/cr.yaml>`__ file contains configuration options for the `MySQL Router <https://dev.mysql.com/doc/mysql-router/8.0/en/>`_,
+which acts as a proxy for Group replication.
 
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
@@ -502,7 +517,7 @@ The ``router`` section in the `deploy/cr.yaml <https://github.com/percona/percon
 --------------------------------------------------------------------------------
 
 The ``orchestrator`` section in the `deploy/cr.yaml <https://github.com/percona/percona-server-mysql-operator/blob/main/deploy/cr.yaml>`__ file contains
-configuration options for the HAProxy service.
+configuration options for the Orchestrator - a replication topology manager, used if asynchronous replication :ref:`is turned on<mysql-clustertype>`.
 
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
