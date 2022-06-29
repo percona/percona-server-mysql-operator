@@ -3,7 +3,7 @@
 Providing Backups
 =================
 
-The Operator stores Percona Distribution for MySQL backups outside the
+The Operator stores MySQL backups outside the
 Kubernetes cluster: on `Amazon S3 or S3-compatible storage <https://en.wikipedia.org/wiki/Amazon_S3#S3_API_and_competing_services>`_,
 or on `Azure Blob Storage <https://azure.microsoft.com/en-us/services/storage/blobs/>`_.
 
