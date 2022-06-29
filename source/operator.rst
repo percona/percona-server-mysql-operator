@@ -129,9 +129,9 @@ configuration options for the Percona Server for MySQL.
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
-|                 | .. _mysql-primaryServiceType:                                                             |
+|                 | .. _mysql-primaryservicetype:                                                             |
 |                 |                                                                                           |
-| **Key**         | `mysql.primaryServiceType <operator.html#mysql-primaryServiceType>`_                      |
+| **Key**         | `mysql.primaryServiceType <operator.html#mysql-primaryservicetype>`_                      |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Value Type**  | string                                                                                    |
 +-----------------+-------------------------------------------------------------------------------------------+
@@ -139,13 +139,14 @@ configuration options for the Percona Server for MySQL.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | Specifies the type of `Kubernetes Service                                                 |
 |                 | <https://kubernetes.io/docs/concepts/services-networking/service/                         |
-|                 | #publishing-services-service-types>`_ to be used for Primary instance                     |
+|                 | #publishing-services-service-types>`_ to be used for Primary instance if the asyncronous  |
+|                 | replication :ref:`is turned on<mysql-clustertype>`                                        |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
-|                 | .. _mysql-replicasServiceType:                                                            |
+|                 | .. _mysql-replicasservicetype:                                                            |
 |                 |                                                                                           |
-| **Key**         | `mysql.replicasServiceType <operator.html#mysql-replicasServiceType>`_                    |
+| **Key**         | `mysql.replicasServiceType <operator.html#mysql-replicasservicetype>`_                    |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Value Type**  | string                                                                                    |
 +-----------------+-------------------------------------------------------------------------------------------+
@@ -153,7 +154,8 @@ configuration options for the Percona Server for MySQL.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | Specifies the type of `Kubernetes Service                                                 |
 |                 | <https://kubernetes.io/docs/concepts/services-networking/service/                         |
-|                 | #publishing-services-service-types>`_ to be used for Replica instances                    |
+|                 | #publishing-services-service-types>`_ to be used for Replica instances if the asyncronous |
+|                 | replication :ref:`is turned on<mysql-clustertype>`                                        |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
