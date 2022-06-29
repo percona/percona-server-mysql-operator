@@ -6,7 +6,7 @@ source "${ROOT_REPO}/e2e-tests/vars.sh"
 test_name=$(basename "$(pwd)")
 
 deploy_operator() {
-	kubectl -n "${NAMESPACE}" apply --server-side -f "${DEPLOY_DIR}/crd.yaml"
+	kubectl -n "${NAMESPACE}" apply --server-side --force-conflicts -f "${DEPLOY_DIR}/crd.yaml"
 	kubectl -n "${NAMESPACE}" apply -f "${DEPLOY_DIR}/rbac.yaml"
 
 	yq eval \
