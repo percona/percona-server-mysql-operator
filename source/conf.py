@@ -42,8 +42,8 @@ version = '0.2.0'
 release = '0.2.0'
 # the PS 5.7 and PS 8.0 recommended versions to be used in docs
 ps57recommended = '5.7.35'
-ps80recommended = '8.0.25'
-pmm2recommended = '2.25.0'
+ps80recommended = '8.0.28'
+pmm2recommended = '2.28.0'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
