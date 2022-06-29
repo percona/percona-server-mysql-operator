@@ -58,8 +58,6 @@ metadata:
     name: service-per-pod
 spec:
   clusterIP: None
-  clusterIPs:
-  - None
   ports:
   - name: mysql
     port: 3306
@@ -148,8 +146,6 @@ metadata:
     name: service-per-pod
 spec:
   clusterIP: None
-  clusterIPs:
-  - None
   ports:
   - name: mysql
     port: 3306

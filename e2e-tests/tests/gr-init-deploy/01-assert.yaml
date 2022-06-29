@@ -56,8 +56,6 @@ metadata:
     name: gr-init-deploy
 spec:
   clusterIP: None
-  clusterIPs:
-  - None
   ports:
   - name: mysql
     port: 3306
