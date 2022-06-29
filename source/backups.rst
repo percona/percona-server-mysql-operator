@@ -83,10 +83,6 @@ is specific to the cloud provider. For example, using `Google Cloud <https://clo
 
    endpointUrl: https://storage.googleapis.com
 
-Also you can use :ref:`prefix<backup-storages-s3-prefix>` option to specify the
-path (sub-folder) to the backups inside the S3 bucket. If prefix is not set,
-backups are stored in the root directory.
-
 The options within this subsection are further explained in the
 :ref:`Operator Custom Resource options<operator.backup-section>`.
 
@@ -147,7 +143,6 @@ which uses Azure Blob storage for backups:
          type: azure
          azure:
            container: <your-container-name>
-           prefix: psmdb
            credentialsSecret: cluster1-azure-credentials
 
 The options within this subsection are further explained in the
@@ -159,10 +154,6 @@ secret <https://kubernetes.io/docs/concepts/configuration/secret/>`_
 for backups. Value of this key should be the same as the name used to
 create the secret object (``cluster1-azure-credentials`` in the last
 example).
-
-You can use :ref:`prefix<backup-storages-azure-prefix>` option to specify the
-path (sub-folder) to the backups inside the container. If prefix is not set,
-backups will be stored in the root directory of the container.
 
 .. _backups-manual:
 
