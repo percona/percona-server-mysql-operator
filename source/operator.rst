@@ -63,6 +63,20 @@ configuration options for the Percona Server for MySQL.
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
 +-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _mysql-clustertype:                                                                    |
+|                 |                                                                                           |
+| **Key**         | `mysql.clusterType <operator.html#mysql-clustertype>`_                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | int                                                                                       |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``async``                                                                                 |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The cluster type: ``async`` for `Asynchronous replication                                 |
+|                 | <https://dev.mysql.com/doc/refman/8.0/en/replication.html>`_, ``group-replication``       |
+|                 | for `Group Replication <https://dev.mysql.com/doc/refman/8.0/en/group-replication.html>`_ |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
 |                 | .. _mysql-size:                                                                           |
 |                 |                                                                                           |
 | **Key**         | `mysql.size <operator.html#mysql-size>`_                                                  |
@@ -111,7 +125,37 @@ configuration options for the Percona Server for MySQL.
 | **Example**     | ``0``                                                                                     |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | The number of the Percona Server for MySQL `semi-sync                                     |
-|                 | <https://dev.mysql.com/doc/refman/5.7/en/replication-semisync.html>`_ replicas            |
+|                 | <https://dev.mysql.com/doc/refman/8.0/en/replication-semisync.html>`_ replicas            |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _mysql-primaryservicetype:                                                             |
+|                 |                                                                                           |
+| **Key**         | `mysql.primaryServiceType <operator.html#mysql-primaryservicetype>`_                      |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value Type**  | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``LoadBalancer``                                                                          |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | Specifies the type of `Kubernetes Service                                                 |
+|                 | <https://kubernetes.io/docs/concepts/services-networking/service/                         |
+|                 | #publishing-services-service-types>`_ to be used for Primary instance if the asyncronous  |
+|                 | replication :ref:`is turned on<mysql-clustertype>`                                        |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _mysql-replicasservicetype:                                                            |
+|                 |                                                                                           |
+| **Key**         | `mysql.replicasServiceType <operator.html#mysql-replicasservicetype>`_                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value Type**  | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``ClusterIP``                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | Specifies the type of `Kubernetes Service                                                 |
+|                 | <https://kubernetes.io/docs/concepts/services-networking/service/                         |
+|                 | #publishing-services-service-types>`_ to be used for Replica instances if the asyncronous |
+|                 | replication :ref:`is turned on<mysql-clustertype>`                                        |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
@@ -169,7 +213,9 @@ configuration options for the Percona Server for MySQL.
 | **Example**     |                                                                                           |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | In cases where the Pods require complex tuning the `advanced` option turns off the        |
-|                 | ``topologyKey`` effect. This setting allows the standard Kubernetes affinity constraints  |
+|                 | ``topologyKey`` effect. This setting allows the                                           |
+|                 | `standard Kubernetes affinity constraints                                                 |
+|                 | <https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity>`_|
 |                 | of any complexity to be used                                                              |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
@@ -192,7 +238,7 @@ configuration options for the Percona Server for MySQL.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Value Type**  | string                                                                                    |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Example**     | ``LoadBalancer``                                                                          |
+| **Example**     | ``ClusterIP``                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | The `Kubernetes Service Type                                                              |
 |                 | <https://kubernetes.io/docs/concepts/services-networking/service/                         |
@@ -346,13 +392,138 @@ configuration options for the Percona Server for MySQL.
 |                 | for Replica Set Pods                                                                      |
 +-----------------+-------------------------------------------------------------------------------------------+
 
+.. _operator.router-section:
+
+`Router Section <operator.html#operator-router-section>`_
+--------------------------------------------------------------------------------
+
+The ``router`` section in the `deploy/cr.yaml <https://github.com/percona/percona-server-mysql-operator/blob/main/deploy/cr.yaml>`__ file contains configuration options for the `MySQL Router <https://dev.mysql.com/doc/mysql-router/8.0/en/>`_,
+which acts as a proxy for Group replication.
+
+.. tabularcolumns:: |p{2cm}|p{13.6cm}|
+
+
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _router-size:                                                                          |
+|                 |                                                                                           |
+| **Key**         | `router.size <operator.html#router-size>`_                                                |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | int                                                                                       |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``3``                                                                                     |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The number of the Router Pods to provide routing to MySQL Servers                         |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _router-image:                                                                         |
+|                 |                                                                                           |
+| **Key**         | `router.image <operator.html#router-image>`_                                              |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``perconalab/percona-server-mysql-operator:main-router``                                  |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | Router Docker image to use                                                                |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _router-imagepullpolicy:                                                               |
+|                 |                                                                                           |
+| **Key**         | `router.imagePullPolicy <operator.html#router-imagepullpolicy>`_                          |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``Always``                                                                                |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The `policy used to update images <https://kubernetes.io/docs/concepts/containers/images/ |
+|                 | #updating-images>`_                                                                       |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _router-affinity-antiaffinitytopologykey:                                              |
+|                 |                                                                                           |
+| **Key**         | `router.affinity.antiAffinityTopologyKey                                                  |
+|                 | <operator.html#router-affinity-antiAffinityTopologyKey>`_                                 |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``kubernetes.io/hostname``                                                                |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The Operator `topology key                                                                |
+|                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/                       |
+|                 | #affinity-and-anti-affinity>`_ node anti-affinity constraint                              |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _router-affinity-advanced:                                                             |
+|                 |                                                                                           |
+| **Key**         | `router.affinity.advanced                                                                 |
+|                 | <operator.html#router-affinity-advanced>`_                                                |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | subdoc                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     |                                                                                           |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | In cases where the Pods require complex tuning the `advanced` option turns off the        |
+|                 | ``topologyKey`` effect. This setting allows the                                           |
+|                 | `standard Kubernetes affinity constraints                                                 |
+|                 | <https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity>`_|
+|                 | of any complexity to be used                                                              |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _router-resources-requests-memory:                                                     |
+|                 |                                                                                           |
+| **Key**         | `router.resources.requests.memory                                                         |
+|                 | <operator.html#router-resources-requests-memory>`_                                        |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``256M``                                                                                  |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes memory requests                                                           |
+|                 | <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/    |
+|                 | #resource-requests-and-limits-of-pod-and-container>`_ for MySQL Router container          |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _router-resources-limits-memory:                                                       |
+|                 |                                                                                           |
+| **Key**         | `router.resources.limits.memory                                                           |
+|                 | <operator.html#router-resources-limits-memory>`_                                          |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``256M``                                                                                  |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | `Kubernetes memory limits                                                                 |
+|                 | <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/    |
+|                 | #resource-requests-and-limits-of-pod-and-container>`_ for MySQL Router container          |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _router-expose-type:                                                                   |
+|                 |                                                                                           |
+| **Key**         | `router.expose.type <operator.html#router-expose-type>`_                                  |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value Type**  | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``ClusterIP``                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Service Type                                                              |
+|                 | <https://kubernetes.io/docs/concepts/services-networking/service/                         |
+|                 | #publishing-services-service-types>`_ used for for MySQL Router instances xposure         |
++-----------------+-------------------------------------------------------------------------------------------+
+
+
 .. _operator.orchestrator-section:
 
 `Orchestrator Section <operator.html#operator-orchestrator-section>`_
 --------------------------------------------------------------------------------
 
 The ``orchestrator`` section in the `deploy/cr.yaml <https://github.com/percona/percona-server-mysql-operator/blob/main/deploy/cr.yaml>`__ file contains
-configuration options for the HAProxy service.
+configuration options for the Orchestrator - a replication topology manager, used if asynchronous replication :ref:`is turned on<mysql-clustertype>`.
 
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
@@ -364,10 +535,9 @@ configuration options for the HAProxy service.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Value**       | int                                                                                       |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Example**     | ``1``                                                                                     |
+| **Example**     | ``3``                                                                                     |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Description** | The number of the Orchestrator Pods `to provide load balancing                            |
-|                 | <https://www.percona.com/doc/percona-xtradb-cluster/8.0/howtos/haproxy.html>`__.          |
+| **Description** | The number of the Orchestrator Pods to provide load balancing                             |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
@@ -393,6 +563,38 @@ configuration options for the HAProxy service.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | The `policy used to update images <https://kubernetes.io/docs/concepts/containers/images/ |
 |                 | #updating-images>`_                                                                       |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _orchestrator-affinity-antiaffinitytopologykey:                                        |
+|                 |                                                                                           |
+| **Key**         | `orchestrator.affinity.antiAffinityTopologyKey                                            |
+|                 | <operator.html#orchestrator-affinity-antiAffinityTopologyKey>`_                           |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``kubernetes.io/hostname``                                                                |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The Operator `topology key                                                                |
+|                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/                       |
+|                 | #affinity-and-anti-affinity>`_ node anti-affinity constraint                              |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _orchestrator-affinity-advanced:                                                       |
+|                 |                                                                                           |
+| **Key**         | `orchestrator.affinity.advanced                                                           |
+|                 | <operator.html#orchestrator-affinity-advanced>`_                                          |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | subdoc                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     |                                                                                           |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | In cases where the Pods require complex tuning the `advanced` option turns off the        |
+|                 | ``topologyKey`` effect. This setting allows the                                           |
+|                 | `standard Kubernetes affinity constraints                                                 |
+|                 | <https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity>`_|
+|                 | of any complexity to be used                                                              |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
