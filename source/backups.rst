@@ -174,7 +174,7 @@ contains correctly configured keys and is applied with ``kubectl`` command, use
 
 The example of such file is `deploy/backup/backup.yaml <https://github.com/percona/percona-server-mysql-operator/blob/main/deploy/backup.yaml>`_.
 
-When the backup destination is configured and applied with `kubectl apply -f deploy/cr.yaml` command, the actual backup command is executed:
+When the backup destination is configured and applied with `kubectl apply -f deploy/cr.yaml` command, make backup as follows:
 
 .. code:: bash
 
