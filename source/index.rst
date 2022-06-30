@@ -53,6 +53,7 @@ Configuration and Management
 .. toctree::
    :maxdepth: 1
 
+   Backup and restore <backups.rst>
    Application and system users <users.rst>
    Anti-affinity and tolerations <constraints.rst>
    Changing MySQL Options <options.rst>
