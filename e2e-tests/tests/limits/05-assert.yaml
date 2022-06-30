@@ -123,7 +123,6 @@ spec:
           name: config
       - command:
         - /opt/percona/sidecar
-        image: percona/percona-xtrabackup:8.0
         imagePullPolicy: Always
         name: xtrabackup
         ports:
