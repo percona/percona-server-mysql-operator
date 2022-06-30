@@ -213,7 +213,9 @@ configuration options for the Percona Server for MySQL.
 | **Example**     |                                                                                           |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | In cases where the Pods require complex tuning the `advanced` option turns off the        |
-|                 | ``topologyKey`` effect. This setting allows the standard Kubernetes affinity constraints  |
+|                 | ``topologyKey`` effect. This setting allows the                                           |
+|                 | `standard Kubernetes affinity constraints                                                 |
+|                 | <https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity>`_|
 |                 | of any complexity to be used                                                              |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
@@ -464,7 +466,9 @@ which acts as a proxy for Group replication.
 | **Example**     |                                                                                           |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | In cases where the Pods require complex tuning the `advanced` option turns off the        |
-|                 | ``topologyKey`` effect. This setting allows the standard Kubernetes affinity constraints  |
+|                 | ``topologyKey`` effect. This setting allows the                                           |
+|                 | `standard Kubernetes affinity constraints                                                 |
+|                 | <https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity>`_|
 |                 | of any complexity to be used                                                              |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
@@ -587,7 +591,9 @@ configuration options for the Orchestrator - a replication topology manager, use
 | **Example**     |                                                                                           |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | In cases where the Pods require complex tuning the `advanced` option turns off the        |
-|                 | ``topologyKey`` effect. This setting allows the standard Kubernetes affinity constraints  |
+|                 | ``topologyKey`` effect. This setting allows the                                           |
+|                 | `standard Kubernetes affinity constraints                                                 |
+|                 | <https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity>`_|
 |                 | of any complexity to be used                                                              |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
