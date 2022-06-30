@@ -41,9 +41,9 @@ version = '0.2.0'
 # the full version including alpha/beta/rc tags.
 release = '0.2.0'
 # the PS 5.7 and PS 8.0 recommended versions to be used in docs
-ps57recommended = '5.7.35'
-ps80recommended = '8.0.25'
-pmm2recommended = '2.25.0'
+
+ps80recommended = '8.0.28'
+pmm2recommended = '2.28.0'
 pxbrecommended = '8.0.28'
 
 # List of patterns, relative to source directory, that match files and
@@ -280,7 +280,6 @@ def ultimateReplace(app, docname, source):
 ultimate_replacements = {
     "{{{release}}}" : release,
     "{{{apiversion}}}" : release.replace(".", "-", 2),
-    "{{{ps57recommended}}}" : ps57recommended,
     "{{{ps80recommended}}}" : ps80recommended,
     "{{{pmm2recommended}}}" : pmm2recommended,
     "{{{pxbrecommended}}}" : pxbrecommended
