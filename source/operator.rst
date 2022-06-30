@@ -63,6 +63,20 @@ configuration options for the Percona Server for MySQL.
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
 +-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _mysql-clustertype:                                                                    |
+|                 |                                                                                           |
+| **Key**         | `mysql.clusterType <operator.html#mysql-clustertype>`_                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | int                                                                                       |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``async``                                                                                 |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The cluster type: ``async`` for `Asynchronous replication                                 |
+|                 | <https://dev.mysql.com/doc/refman/8.0/en/replication.html>`_, ``group-replication``       |
+|                 | for `Group Replication <https://dev.mysql.com/doc/refman/8.0/en/group-replication.html>`_ |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
 |                 | .. _mysql-size:                                                                           |
 |                 |                                                                                           |
 | **Key**         | `mysql.size <operator.html#mysql-size>`_                                                  |
@@ -111,7 +125,37 @@ configuration options for the Percona Server for MySQL.
 | **Example**     | ``0``                                                                                     |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | The number of the Percona Server for MySQL `semi-sync                                     |
-|                 | <https://dev.mysql.com/doc/refman/5.7/en/replication-semisync.html>`_ replicas            |
+|                 | <https://dev.mysql.com/doc/refman/8.0/en/replication-semisync.html>`_ replicas            |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _mysql-primaryservicetype:                                                             |
+|                 |                                                                                           |
+| **Key**         | `mysql.primaryServiceType <operator.html#mysql-primaryservicetype>`_                      |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value Type**  | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``LoadBalancer``                                                                          |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | Specifies the type of `Kubernetes Service                                                 |
+|                 | <https://kubernetes.io/docs/concepts/services-networking/service/                         |
+|                 | #publishing-services-service-types>`_ to be used for Primary instance if the asyncronous  |
+|                 | replication :ref:`is turned on<mysql-clustertype>`                                        |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _mysql-replicasservicetype:                                                            |
+|                 |                                                                                           |
+| **Key**         | `mysql.replicasServiceType <operator.html#mysql-replicasservicetype>`_                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value Type**  | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``ClusterIP``                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | Specifies the type of `Kubernetes Service                                                 |
+|                 | <https://kubernetes.io/docs/concepts/services-networking/service/                         |
+|                 | #publishing-services-service-types>`_ to be used for Replica instances if the asyncronous |
+|                 | replication :ref:`is turned on<mysql-clustertype>`                                        |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
@@ -169,7 +213,9 @@ configuration options for the Percona Server for MySQL.
 | **Example**     |                                                                                           |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | In cases where the Pods require complex tuning the `advanced` option turns off the        |
-|                 | ``topologyKey`` effect. This setting allows the standard Kubernetes affinity constraints  |
+|                 | ``topologyKey`` effect. This setting allows the                                           |
+|                 | `standard Kubernetes affinity constraints                                                 |
+|                 | <https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity>`_|
 |                 | of any complexity to be used                                                              |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
@@ -192,7 +238,7 @@ configuration options for the Percona Server for MySQL.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Value Type**  | string                                                                                    |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Example**     | ``LoadBalancer``                                                                          |
+| **Example**     | ``ClusterIP``                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | The `Kubernetes Service Type                                                              |
 |                 | <https://kubernetes.io/docs/concepts/services-networking/service/                         |
@@ -346,13 +392,138 @@ configuration options for the Percona Server for MySQL.
 |                 | for Replica Set Pods                                                                      |
 +-----------------+-------------------------------------------------------------------------------------------+
 
+.. _operator.router-section:
+
+`Router Section <operator.html#operator-router-section>`_
+--------------------------------------------------------------------------------
+
+The ``router`` section in the `deploy/cr.yaml <https://github.com/percona/percona-server-mysql-operator/blob/main/deploy/cr.yaml>`__ file contains configuration options for the `MySQL Router <https://dev.mysql.com/doc/mysql-router/8.0/en/>`_,
+which acts as a proxy for Group replication.
+
+.. tabularcolumns:: |p{2cm}|p{13.6cm}|
+
+
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _router-size:                                                                          |
+|                 |                                                                                           |
+| **Key**         | `router.size <operator.html#router-size>`_                                                |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | int                                                                                       |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``3``                                                                                     |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The number of the Router Pods to provide routing to MySQL Servers                         |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _router-image:                                                                         |
+|                 |                                                                                           |
+| **Key**         | `router.image <operator.html#router-image>`_                                              |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``perconalab/percona-server-mysql-operator:main-router``                                  |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | Router Docker image to use                                                                |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _router-imagepullpolicy:                                                               |
+|                 |                                                                                           |
+| **Key**         | `router.imagePullPolicy <operator.html#router-imagepullpolicy>`_                          |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``Always``                                                                                |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The `policy used to update images <https://kubernetes.io/docs/concepts/containers/images/ |
+|                 | #updating-images>`_                                                                       |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _router-affinity-antiaffinitytopologykey:                                              |
+|                 |                                                                                           |
+| **Key**         | `router.affinity.antiAffinityTopologyKey                                                  |
+|                 | <operator.html#router-affinity-antiAffinityTopologyKey>`_                                 |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``kubernetes.io/hostname``                                                                |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The Operator `topology key                                                                |
+|                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/                       |
+|                 | #affinity-and-anti-affinity>`_ node anti-affinity constraint                              |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _router-affinity-advanced:                                                             |
+|                 |                                                                                           |
+| **Key**         | `router.affinity.advanced                                                                 |
+|                 | <operator.html#router-affinity-advanced>`_                                                |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | subdoc                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     |                                                                                           |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | In cases where the Pods require complex tuning the `advanced` option turns off the        |
+|                 | ``topologyKey`` effect. This setting allows the                                           |
+|                 | `standard Kubernetes affinity constraints                                                 |
+|                 | <https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity>`_|
+|                 | of any complexity to be used                                                              |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _router-resources-requests-memory:                                                     |
+|                 |                                                                                           |
+| **Key**         | `router.resources.requests.memory                                                         |
+|                 | <operator.html#router-resources-requests-memory>`_                                        |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``256M``                                                                                  |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes memory requests                                                           |
+|                 | <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/    |
+|                 | #resource-requests-and-limits-of-pod-and-container>`_ for MySQL Router container          |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _router-resources-limits-memory:                                                       |
+|                 |                                                                                           |
+| **Key**         | `router.resources.limits.memory                                                           |
+|                 | <operator.html#router-resources-limits-memory>`_                                          |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``256M``                                                                                  |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | `Kubernetes memory limits                                                                 |
+|                 | <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/    |
+|                 | #resource-requests-and-limits-of-pod-and-container>`_ for MySQL Router container          |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _router-expose-type:                                                                   |
+|                 |                                                                                           |
+| **Key**         | `router.expose.type <operator.html#router-expose-type>`_                                  |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value Type**  | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``ClusterIP``                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Service Type                                                              |
+|                 | <https://kubernetes.io/docs/concepts/services-networking/service/                         |
+|                 | #publishing-services-service-types>`_ used for for MySQL Router instances xposure         |
++-----------------+-------------------------------------------------------------------------------------------+
+
+
 .. _operator.orchestrator-section:
 
 `Orchestrator Section <operator.html#operator-orchestrator-section>`_
 --------------------------------------------------------------------------------
 
 The ``orchestrator`` section in the `deploy/cr.yaml <https://github.com/percona/percona-server-mysql-operator/blob/main/deploy/cr.yaml>`__ file contains
-configuration options for the HAProxy service.
+configuration options for the Orchestrator - a replication topology manager, used if asynchronous replication :ref:`is turned on<mysql-clustertype>`.
 
 .. tabularcolumns:: |p{2cm}|p{13.6cm}|
 
@@ -364,10 +535,9 @@ configuration options for the HAProxy service.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Value**       | int                                                                                       |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Example**     | ``1``                                                                                     |
+| **Example**     | ``3``                                                                                     |
 +-----------------+-------------------------------------------------------------------------------------------+
-| **Description** | The number of the Orchestrator Pods `to provide load balancing                            |
-|                 | <https://www.percona.com/doc/percona-xtradb-cluster/8.0/howtos/haproxy.html>`__.          |
+| **Description** | The number of the Orchestrator Pods to provide load balancing                             |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
@@ -393,6 +563,38 @@ configuration options for the HAProxy service.
 +-----------------+-------------------------------------------------------------------------------------------+
 | **Description** | The `policy used to update images <https://kubernetes.io/docs/concepts/containers/images/ |
 |                 | #updating-images>`_                                                                       |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _orchestrator-affinity-antiaffinitytopologykey:                                        |
+|                 |                                                                                           |
+| **Key**         | `orchestrator.affinity.antiAffinityTopologyKey                                            |
+|                 | <operator.html#orchestrator-affinity-antiAffinityTopologyKey>`_                           |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``kubernetes.io/hostname``                                                                |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The Operator `topology key                                                                |
+|                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/                       |
+|                 | #affinity-and-anti-affinity>`_ node anti-affinity constraint                              |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _orchestrator-affinity-advanced:                                                       |
+|                 |                                                                                           |
+| **Key**         | `orchestrator.affinity.advanced                                                           |
+|                 | <operator.html#orchestrator-affinity-advanced>`_                                          |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | subdoc                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     |                                                                                           |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | In cases where the Pods require complex tuning the `advanced` option turns off the        |
+|                 | ``topologyKey`` effect. This setting allows the                                           |
+|                 | `standard Kubernetes affinity constraints                                                 |
+|                 | <https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity>`_|
+|                 | of any complexity to be used                                                              |
 +-----------------+-------------------------------------------------------------------------------------------+
 |                                                                                                             |
 +-----------------+-------------------------------------------------------------------------------------------+
@@ -512,5 +714,296 @@ options for Percona Monitoring and Management.
 | **Description** | The `PMM Serve_User                                                                       |
 |                 | <https://www.percona.com/doc/percona-monitoring-and-management/glossary.option.html>`_.   |
 |                 | The PMM Server password should be configured using Secrets                                |
++-----------------+-------------------------------------------------------------------------------------------+
+
+.. _operator.backup-section:
+
+`Backup Section <operator.html#operator-backup-section>`_
+--------------------------------------------------------------------------------
+
+The ``backup`` section in the
+`deploy/cr.yaml <https://github.com/percona/percona-server-mysql-operator/blob/main/deploy/cr.yaml>`__
+file contains the following configuration options for the regular
+Percona XtraDB Cluster backups.
+
+.. tabularcolumns:: |p{2cm}|p{13.6cm}|
+
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-enabled:                                                                       |
+|                 |                                                                                           |
+| **Key**         | `backup.enabled <operator.html#backup-enabled>`_                                          |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value Type**  | boolean                                                                                   |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``true``                                                                                  |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | Enables or disables making backups                                                        |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-image:                                                                         |
+|                 |                                                                                           |
+| **Key**         | `backup.image <operator.html#backup-image>`_                                              |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``percona/percona-server-mysql-operator:{{{release}}}-backup``                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The Percona XtraBackup Docker image to use for the backup                                 |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-imagepullpolicy:                                                               |
+|                 |                                                                                           |
+| **Key**         | `backup.imagePullPolicy <operator.html#backup-imagepullpolicy>`_                          |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``Always``                                                                                |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The `policy used to update images <https://kubernetes.io/docs/concepts/containers/images/ |
+|                 | #updating-images>`_                                                                       |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-storages-type:                                                                 |
+|                 |                                                                                           |
+| **Key**         | `backup.storages.<storage-name>.type <operator.html#backup-storages-type>`_               |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``s3``                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The cloud storage type used for backups. Only ``s3`` and ``azure`` types are              |
+|                 | supported                                                                                 |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-storages-verifytls:                                                            |
+|                 |                                                                                           |
+| **Key**         | `backup.storages.<storage-name>.verifyTLS <operator.html#backup-storages-verifytls>`_     |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | boolean                                                                                   |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``true``                                                                                  |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | Enable or disable verification of the storage server TLS certificate. Disabling it may be |
+|                 | useful e.g. to skip TLS verification for private S3-compatible storage with a self-issued |
+|                 | certificate.                                                                              |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-storages-nodeselector:                                                         |
+|                 |                                                                                           |
+| **Key**         | `backup.storages.<storage-name>.nodeSelector                                              |
+|                 | <operator.html#backup-storages-nodeselector>`_                                            |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | label                                                                                     |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``disktype: ssd``                                                                         |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | `Kubernetes nodeSelector                                                                  |
+|                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector>`_       |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-storages-resources-requests-memory:                                            |
+|                 |                                                                                           |
+| **Key**         | `backup.storages.<storage-name>.resources.requests.memory                                 |
+|                 | <operator.html#backup-storages-resources-requests-memory>`_                               |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``1G``                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes memory requests                                                           |
+|                 | <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/    |
+|                 | #resource-requests-and-limits-of-pod-and-container>`_                                     |
+|                 | for a Percona XtraBackup container                                                        |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-storages-resources-requests-cpu:                                               |
+|                 |                                                                                           |
+| **Key**         | `backup.storages.<storage-name>.resources.requests.cpu                                    |
+|                 | <operator.html#backup-storages-resources-requests-cpu>`_                                  |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``600m``                                                                                  |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | `Kubernetes CPU requests                                                                  |
+|                 | <https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/    |
+|                 | #resource-requests-and-limits-of-pod-and-container>`_ for a Percona XtraBackup            |
+|                 | container                                                                                 |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-storages-affinity-nodeaffinity:                                                |
+|                 |                                                                                           |
+| **Key**         | `backup.storages.<storage-name>.affinity.nodeAffinity                                     |
+|                 | <operator.html#backup-storages-affinity-nodeaffinity>`_                                   |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | subdoc                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     |                                                                                           |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The Operator `node affinity                                                               |
+|                 | <https://kubernetes.io/docs/concepts/configuration/assign-pod-node/                       |
+|                 | #affinity-and-anti-affinity>`_ constraint                                                 |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-storages-tolerations:                                                          |
+|                 |                                                                                           |
+| **Key**         | `backup.storages.<storage-name>.tolerations <operator.html#backup-storages-tolerations>`_ |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | subdoc                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     |                                                                                           |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | `Kubernetes Pod tolerations                                                               |
+|                 | <https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/>`_               |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-storages-schedulername:                                                        |
+|                 |                                                                                           |
+| **Key**         | `backup.storages.<storage-name>.schedulerName                                             |
+|                 | <operator.html#backup-storages-schedulername>`_                                           |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``mycustom-scheduler``                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Scheduler                                                                 |
+|                 | <https://kubernetes.io/docs/tasks/administer-cluster/configure-multiple-schedulers>`_     |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-storages-priorityclassname:                                                    |
+|                 |                                                                                           |
+| **Key**         | `backup.storages.<storage-name>.priorityClassName                                         |
+|                 | <operator.html#backup-storages-priorityclassname>`_                                       |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``high-priority``                                                                         |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes Pod priority class                                                        |
+|                 | <https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/               |
+|                 | #priorityclass>`_                                                                         |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-storages-containersecuritycontext:                                             |
+|                 |                                                                                           |
+| **Key**         | `backup.storages.<storage-name>.containerSecurityContext                                  |
+|                 | <operator.html#backup-storages-containersecuritycontext>`_                                |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | subdoc                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``privileged: true``                                                                      |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | A custom `Kubernetes Security Context for a Container                                     |
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/security-context/>`_ to be used |
+|                 | instead of the default one                                                                |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-storages-podsecuritycontext:                                                   |
+|                 |                                                                                           |
+| **Key**         | `backup.storages.<storage-name>.podSecurityContext                                        |
+|                 | <operator.html#backup-storages-podsecuritycontext>`_                                      |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | subdoc                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``fsGroup: 1001``                                                                         |
+|                 |                                                                                           |
+|                 | ``supplementalGroups: [1001, 1002, 1003]``                                                |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | A custom `Kubernetes Security Context for a Pod                                           |
+|                 | <https://kubernetes.io/docs/tasks/configure-pod-container/security-context/>`_ to be used |
+|                 | instead of the default one                                                                |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-storages-annotations:                                                          |
+|                 |                                                                                           |
+| **Key**         | `backup.storages.<storage-name>.annotations <operator.html#backup-storages-annotations>`_ |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | label                                                                                     |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``testName: scheduled-backup``                                                            |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes annotations                                                               |
+|                 | <https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/>`_        |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-storages-labels:                                                               |
+|                 |                                                                                           |
+| **Key**         | `backup.storages.<storage-name>.labels <operator.html#backup-storages-labels>`_           |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | label                                                                                     |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``backupWorker: 'True'``                                                                  |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | `Labels are key-value pairs attached to objects                                           |
+|                 | <https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/>`_             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-storages-s3-bucket:                                                            |
+|                 |                                                                                           |
+| **Key**         | `backup.storages.<storage-name>.s3.bucket <operator.html#backup-storages-s3-bucket>`_     |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     |                                                                                           |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The `Amazon S3 bucket <https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingBucket.html>`_|
+|                 | name for backups                                                                          |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-storages-s3-region:                                                            |
+|                 |                                                                                           |
+| **Key**         | `backup.storages.s3.<storage-name>.region <operator.html#backup-storages-s3-region>`_     |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``us-west-2``                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The `AWS region <https://docs.aws.amazon.com/general/latest/gr/rande.html>`_ to use.      |
+|                 | Please note **this option is mandatory** for Amazon and all S3-compatible storages        |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-storages-s3-credentialssecret:                                                 |
+|                 |                                                                                           |
+| **Key**         | `backup.storages.<storage-name>.s3.credentialsSecret                                      |
+|                 | <operator.html#backup-storages-s3-credentialssecret>`_                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     | ``my-cluster-name-backup-s3``                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The `Kubernetes secret <https://kubernetes.io/docs/concepts/configuration/secret/>`_ for  |
+|                 | backups. It should contain ``AWS_ACCESS_KEY_ID`` and ``AWS_SECRET_ACCESS_KEY`` keys.      |
++-----------------+-------------------------------------------------------------------------------------------+
+|                                                                                                             |
++-----------------+-------------------------------------------------------------------------------------------+
+|                 | .. _backup-storages-s3-endpointurl:                                                       |
+|                 |                                                                                           |
+| **Key**         | `backup.storages.s3.<storage-name>.endpointUrl                                            |
+|                 | <operator.html#backup-storages-s3-endpointurl>`_                                          |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Value**       | string                                                                                    |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Example**     |                                                                                           |
++-----------------+-------------------------------------------------------------------------------------------+
+| **Description** | The endpoint URL of the S3-compatible storage to be used (not needed for the original     |
+|                 | Amazon S3 cloud)                                                                          |
 +-----------------+-------------------------------------------------------------------------------------------+
 

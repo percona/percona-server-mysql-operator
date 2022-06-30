@@ -104,11 +104,11 @@ Install the Operator
 
       cd percona-server-mysql-operator
 
-#. Deploy the Operator with the following command:
+#. Deploy the Operator `using <https://kubernetes.io/docs/reference/using-api/server-side-apply/>`_ the following command:
 
    .. code:: bash
 
-      kubectl apply -f deploy/bundle.yaml
+      kubectl apply --server-side -f deploy/bundle.yaml
 
    The following confirmation is returned:
 

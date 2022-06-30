@@ -29,11 +29,11 @@ The following steps are needed to run Percona Operator for MySQL on Minikube:
    Executing ``minikube dashboard`` will start the dashboard and open it in your
    default web browser.
 
-#. Deploy the operator with the following command:
+#. Deploy the Operator `using <https://kubernetes.io/docs/reference/using-api/server-side-apply/>`_ the following command:
 
    .. code:: bash
 
-      $ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mysql-operator/main/deploy/bundle.yaml
+      $ kubectl apply --server-side -f https://raw.githubusercontent.com/percona/percona-server-mysql-operator/v{{{release}}}/deploy/bundle.yaml
 
 #. Deploy Percona Server for MySQL:
 

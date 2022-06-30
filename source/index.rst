@@ -17,9 +17,8 @@ Operator extends the Kubernetes API with custom resources.
 is a free, fully compatible, enhanced, and open source drop-in replacement for
 any MySQL database. It provides superior performance, scalability, and
 instrumentation.
-Based on our best practices for deployment and configuration, `Percona Operator for MySQL <https://github.com/percona/percona-server-mysql-operator>`_
-contains everything you need to quickly and consistently deploy and scale MySQL
-instances in a Kubernetes-based environment on-premises or in the cloud.
+
+.. note:: Version 0.2.0 of the `Percona Operator for MySQL <https://github.com/percona/percona-server-mysql-operator>`_ is **a tech preview release** and it is **not recommended for production environments**. **As of today, we recommend using** `Percona Operator for MySQL based on Percona XtraDB Cluster <https://www.percona.com/doc/kubernetes-operator-for-pxc/index.html>`_, which is production-ready and contains everything you need to quickly and consistently deploy and scale MySQL clusters in a Kubernetes-based environment, on-premises or in the cloud.
 
 Requirements
 ============
