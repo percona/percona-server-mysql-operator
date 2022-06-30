@@ -15,7 +15,7 @@ Release Highlights
 * With this release, the Operator turns to a simplified naming convention and
   changes its official name to **Percona Operator for MySQL**
 * This release brings initial :ref:`implementation of Group Replication<mysql-clustertype>` between Percona Server for MySQL instances. Group Replication works in conjunction with MySQL Router, which is used instead of Orchestrator and also provides load balancing
-* Now the Operator :ref:`is capable of making backups<backups>`. Backups are stored on the cloud outside the Kubernetes cluster: `Amazon S3, or S3-compatible storage <https://en.wikipedia.org/wiki/Amazon_S3#S3_API_and_competing_services>`_ is supported, as well as `Azure Blob Storage <https://azure.microsoft.com/en-us/services/storage/blobs>`_. Currently, backups are work with asynchronous replication; support for backups with Group Replication is coming
+* Now the Operator :ref:`is capable of making backups<backups>`. Backups are stored on the cloud outside the Kubernetes cluster: `Amazon S3, or S3-compatible storage <https://en.wikipedia.org/wiki/Amazon_S3#S3_API_and_competing_services>`_ is supported, as well as `Azure Blob Storage <https://azure.microsoft.com/en-us/services/storage/blobs>`_. Currently, backups work with asynchronous replication; support for backups with Group Replication is coming
 
 New Features
 ================================================================================
