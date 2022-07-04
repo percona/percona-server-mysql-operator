@@ -22,9 +22,9 @@ Network design in this case looks like this:
 
 picture here
 
-To configure MySQL Router use `router` section, and for exposure - `router.expose`.
+To configure MySQL Router use ``router`` section, and for exposure - ``router.expose``.
 
-Set `router.expose.type` to specify Kubernetes Service object. The following example
+Set ``router.expose.type`` to specify Kubernetes Service object. The following example
 is going to expose MySQL Router through a LoadBalancer object:
 
 .. code:: yaml
