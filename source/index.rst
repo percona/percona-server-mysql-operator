@@ -35,7 +35,6 @@ Quickstart guides
 .. toctree::
    :maxdepth: 1
 
-   Install with Helm <helm.rst>
    Install on Minikube <minikube.rst>
    Install on Amazon Elastic Kubernetes Service (AWS EKS) <eks.rst>
 
