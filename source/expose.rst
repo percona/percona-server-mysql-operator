@@ -18,7 +18,10 @@ Group Replication
 -----------------
 
 `MySQL Router <https://dev.mysql.com/doc/mysql-router/8.0/en/>`_  is used to expose clusters with Group Replication. 
-Network design 
+Network design in this case looks like this:
+
+picture here
+
 To configure MySQL Router use `router` section, and for exposure - `router.expose`.
 
 Set `router.expose.type` to specify Kubernetes Service object. The following example
