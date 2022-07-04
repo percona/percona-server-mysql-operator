@@ -24,6 +24,7 @@ build_operator() {
 		GO_LDFLAGS="-race"
 	fi
 
+	export DOCKER_DEFAULT_PLATFORM=${DOCKER_DEFAULT_PLATFORM:-linux/amd64}
 	export GO_LDFLAGS="-w -s -trimpath ${GO_LDFLAGS}"
 	pushd "${ROOT_REPO}" || exit
 	docker build \
