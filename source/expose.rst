@@ -15,8 +15,10 @@ Asyncronous Replication
 With Asyncronous or Semi-syncronous replication the cluster is exposed through Kubernetes Service. 
 The service is called ``<CLUSTER_NAME>-mysql-primary``. For example, ``cluster1-mysql-primary``.
 
-This Service is created by default and always present. You can change the type of the S
-ervice object by setting ``mysql.primaryServiceType`` variable in the Custom Resource. 
+picture here
+
+This Service is created by default and always present. You can change the type of the Service 
+object by setting ``mysql.primaryServiceType`` variable in the Custom Resource. 
 
 For example the following example is going to expose the Primary node of the asyncronous cluster with the LoadBalancer object:
 
@@ -25,7 +27,13 @@ For example the following example is going to expose the Primary node of the asy
   mysql:
     primaryServiceType: LoadBalancer
     
-G
+Get the LoadBalancer endpoint or IP-address by getting the Service object:
+
+.. code:: bash
+
+  $ kubectl get service cluster1-mysql-primary
+  NAME                     TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)                                                         AGE
+  cluster1-mysql-primary   LoadBalancer   10.40.37.98    35.192.172.85   3306:32146/TCP,33062:31062/TCP,33060:32026/TCP,6033:30521/TCP   3m31s
 
 Group Replication
 -----------------
