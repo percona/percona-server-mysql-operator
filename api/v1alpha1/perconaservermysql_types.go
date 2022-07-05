@@ -297,8 +297,8 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 //+kubebuilder:printcolumn:name="Replication",type=string,JSONPath=".spec.mysql.clusterType"
 //+kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=".status.host"
 //+kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
-//+kubebuilder:printcolumn:name="Orchestrator",type=string,JSONPath=".status.orchestrator.state"
-//+kubebuilder:printcolumn:name="Router",type=string,JSONPath=".status.router.state"
+//+kubebuilder:printcolumn:name="Orchestrator",type=string,JSONPath=".status.orchestrator.ready"
+//+kubebuilder:printcolumn:name="Router",type=string,JSONPath=".status.router.ready"
 //+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 //+kubebuilder:resource:scope=Namespaced
 //+kubebuilder:resource:shortName=ps
