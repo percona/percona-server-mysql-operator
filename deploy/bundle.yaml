@@ -194,6 +194,12 @@ spec:
     - jsonPath: .status.state
       name: State
       type: string
+    - jsonPath: .status.orchestrator.state
+      name: Orchestrator
+      type: string
+    - jsonPath: .status.router.state
+      name: Router
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
