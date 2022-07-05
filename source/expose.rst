@@ -15,7 +15,8 @@ Asyncronous Replication
 With Asyncronous or Semi-syncronous replication the cluster is exposed through Kubernetes Service. 
 The service is called ``<CLUSTER_NAME>-mysql-primary``. For example, ``cluster1-mysql-primary``.
 
-picture here
+.. image:: ./assets/images/exposure-async.svg
+   :align: center
 
 This Service is created by default and always present. You can change the type of the Service 
 object by setting ``mysql.primaryServiceType`` variable in the Custom Resource. 
@@ -41,7 +42,8 @@ Group Replication
 `MySQL Router <https://dev.mysql.com/doc/mysql-router/8.0/en/>`_  is used to expose clusters with Group Replication. 
 Network design in this case looks like this:
 
-picture here
+.. image:: ./assets/images/exposure-gr.svg
+   :align: center
 
 To configure MySQL Router use ``router`` section, and for exposure - ``router.expose``.
 
