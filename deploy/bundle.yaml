@@ -194,6 +194,9 @@ spec:
     - jsonPath: .status.state
       name: State
       type: string
+    - jsonPath: .status.mysql.ready
+      name: MySQL
+      type: string
     - jsonPath: .status.orchestrator.ready
       name: Orchestrator
       type: string
