@@ -12,29 +12,31 @@ different replication types: Asyncronous and `Group Replicaiton <https://dev.mys
 Asyncronous Replication
 -----------------------
 
-With Asyncronous or Semi-syncronous replication the cluster is exposed through Kubernetes Service. 
+With `Asyncronous or Semi-syncronous replication <https://dev.mysql.com/doc/refman/8.0/en/group-replication-primary-secondary-replication.html>`_ the cluster is exposed through Kubernetes Service. 
 The service is called ``<CLUSTER_NAME>-mysql-primary``. For example, ``cluster1-mysql-primary``.
 
 .. image:: ./assets/images/exposure-async.svg
    :align: center
 
 This Service is created by default and always present. You can change the type of the Service 
-object by setting ``mysql.primaryServiceType`` variable in the Custom Resource. 
+object by setting ``mysql.primaryServiceType`` variable in the Custom Resource.
 
-For example the following example is going to expose the Primary node of the asyncronous cluster with the LoadBalancer object:
+For example, the following example is going to expose the Primary node of the asyncronous cluster with the LoadBalancer object:
 
 .. code:: yaml
 
-  mysql:
-    primaryServiceType: LoadBalancer
-    
+   mysql:
+     clusterType: async
+     ...
+     primaryServiceType: LoadBalancer
+
 Get the LoadBalancer endpoint or IP-address by getting the Service object:
 
 .. code:: bash
 
-  $ kubectl get service cluster1-mysql-primary
-  NAME                     TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)                                                         AGE
-  cluster1-mysql-primary   LoadBalancer   10.40.37.98    35.192.172.85   3306:32146/TCP,33062:31062/TCP,33060:32026/TCP,6033:30521/TCP   3m31s
+   $ kubectl get service cluster1-mysql-primary
+   NAME                     TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)                                                         AGE
+   cluster1-mysql-primary   LoadBalancer   10.40.37.98    35.192.172.85   3306:32146/TCP,33062:31062/TCP,33060:32026/TCP,6033:30521/TCP   3m31s
 
 Group Replication
 -----------------
@@ -52,18 +54,21 @@ is going to expose MySQL Router through a LoadBalancer object:
 
 .. code:: yaml
 
-  router:
-    expose:
-      type: LoadBalancer
+   mysql:
+     clusterType: group-replication
+     ...
+   router:
+     expose:
+       type: LoadBalancer
 
 
 Get the endpoint to connect to by getting the output of PerconaServerMySQL object:
 
 .. code:: bash
 
-  $ kubectl get ps
-  NAME       REPLICATION         ENDPOINT        STATE   AGE
-  cluster1   group-replication   35.239.63.143   ready   10m
+   $ kubectl get ps
+   NAME       REPLICATION         ENDPOINT        STATE   AGE
+   cluster1   group-replication   35.239.63.143   ready   10m
 
 
 Service per Pod
@@ -79,19 +84,19 @@ The following example is going to create a dedicated LoadBalancer Service for ea
 
 .. code:: yaml
 
-  mysql:
-    expose:
-      enabled: true
-      type: LoadBalancer
+   mysql:
+     expose:
+       enabled: true
+       type: LoadBalancer
       
       
 Get the Services as usual:
 
 .. code:: bash
 
-  $ kubectl get services
-  NAME                     TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)                                                         AGE
-  ...
-  cluster1-mysql-0         LoadBalancer   10.40.44.110   104.198.16.21   3306:31009/TCP,33062:31319/TCP,33060:30737/TCP,6033:30660/TCP   75s
-  cluster1-mysql-1         LoadBalancer   10.40.42.5     34.70.170.187   3306:30601/TCP,33062:30273/TCP,33060:30910/TCP,6033:30847/TCP   75s
-  cluster1-mysql-2         LoadBalancer   10.40.42.158   35.193.50.44    3306:32042/TCP,33062:31576/TCP,33060:31656/TCP,6033:31448/TCP   75s
+   $ kubectl get services
+   NAME                     TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)                                                         AGE
+   ...
+   cluster1-mysql-0         LoadBalancer   10.40.44.110   104.198.16.21   3306:31009/TCP,33062:31319/TCP,33060:30737/TCP,6033:30660/TCP   75s
+   cluster1-mysql-1         LoadBalancer   10.40.42.5     34.70.170.187   3306:30601/TCP,33062:30273/TCP,33060:30910/TCP,6033:30847/TCP   75s
+   cluster1-mysql-2         LoadBalancer   10.40.42.158   35.193.50.44    3306:32042/TCP,33062:31576/TCP,33060:31656/TCP,6033:31448/TCP   75s
