@@ -1220,6 +1220,10 @@ spec:
                               description: The endpoint allows clients to securely
                                 access data
                               type: string
+                            prefix:
+                              description: A prefix is a sub-folder to the backups
+                                inside the container
+                              type: string
                             storageClass:
                               description: Hot (Frequently accessed or modified data),
                                 Cool (Infrequently accessed or modified data), Archive
@@ -1402,6 +1406,8 @@ spec:
                             credentialsSecret:
                               type: string
                             endpointUrl:
+                              type: string
+                            prefix:
                               type: string
                             storageClass:
                               description: STANDARD, NEARLINE, COLDLINE, ARCHIVE
@@ -1629,6 +1635,8 @@ spec:
                             credentialsSecret:
                               type: string
                             endpointUrl:
+                              type: string
+                            prefix:
                               type: string
                             region:
                               type: string
