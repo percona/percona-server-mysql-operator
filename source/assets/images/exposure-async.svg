@@ -189,14 +189,14 @@
    </g>
    <g class="com.sun.star.drawing.CustomShape">
     <g id="id17">
-     <rect class="BoundingBox" stroke="none" fill="none" x="12611" y="9432" width="833" height="2182"/>
-     <text class="SVGTextShape" transform="rotate(-90 13211 11473)"><tspan class="TextParagraph" font-family="Arial, sans-serif" font-size="459px" font-weight="400"><tspan class="TextPosition" x="13211" y="11473"><tspan fill="rgb(9,34,87)" stroke="none" style="white-space: pre">      </tspan></tspan><tspan class="TextPosition" x="13211" y="10681"><tspan fill="rgb(9,34,87)" stroke="none" style="white-space: pre">Read</tspan></tspan></tspan></text>
+     <rect class="BoundingBox" stroke="none" fill="none" x="12611" y="9633" width="833" height="1392"/>
+     <text class="SVGTextShape" transform="rotate(-90 13211 10884)"><tspan class="TextParagraph" font-family="Arial, sans-serif" font-size="459px" font-weight="400"><tspan class="TextPosition" x="13211" y="10884"><tspan fill="rgb(9,34,87)" stroke="none" style="white-space: pre">Read</tspan></tspan></tspan></text>
     </g>
    </g>
    <g class="com.sun.star.drawing.CustomShape">
     <g id="id18">
-     <rect class="BoundingBox" stroke="none" fill="none" x="13358" y="9460" width="833" height="2153"/>
-     <text class="SVGTextShape" transform="rotate(90 13590 9601)"><tspan class="TextParagraph" font-family="Arial, sans-serif" font-size="459px" font-weight="400"><tspan class="TextPosition" x="13590" y="9601"><tspan fill="rgb(9,34,87)" stroke="none" style="white-space: pre">Write      </tspan></tspan></tspan></text>
+     <rect class="BoundingBox" stroke="none" fill="none" x="13358" y="9660" width="833" height="2153"/>
+     <text class="SVGTextShape" transform="rotate(90 13590 9801)"><tspan class="TextParagraph" font-family="Arial, sans-serif" font-size="459px" font-weight="400"><tspan class="TextPosition" x="13590" y="9801"><tspan fill="rgb(9,34,87)" stroke="none" style="white-space: pre">Write      </tspan></tspan></tspan></text>
     </g>
    </g>
   </g>
