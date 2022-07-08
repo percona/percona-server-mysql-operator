@@ -27,6 +27,15 @@ spec:
     - jsonPath: .status.state
       name: State
       type: string
+    - jsonPath: .status.mysql.ready
+      name: MySQL
+      type: string
+    - jsonPath: .status.orchestrator.ready
+      name: Orchestrator
+      type: string
+    - jsonPath: .status.router.ready
+      name: Router
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
