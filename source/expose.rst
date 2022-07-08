@@ -82,7 +82,12 @@ Service per Pod
 ---------------
 
 Still, sometimes it is required to expose all MySQL instances, where each of
-them gets its own IP address. This is possible by setting the following options in :ref:`spec.mysql section<operator.mysql-section>`.
+them gets its own IP address.
+
+.. image:: ./assets/images/exposure-all.svg
+   :align: center
+
+This is possible by setting the following options in :ref:`spec.mysql section<operator.mysql-section>`.
 
 * :ref:`mysql.expose.enabled<mysql-expose-enabled>` enables or disables exposure
   of MySQL instances,
