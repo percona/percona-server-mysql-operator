@@ -37,7 +37,7 @@ the LoadBalancer object:
 
 When the cluster is configured in this way, you can find the endpoint (the
 public IP address of the load balancer in our example) by getting the Service
-object with ``kubectl get service`` command:
+object with the ``kubectl get service`` command:
 
 .. code:: bash
 
@@ -77,7 +77,7 @@ exposes MySQL Router through a LoadBalancer object:
 
 When the cluster is configured in this way, you can find the endpoint (the
 public IP address of the load balancer in our example) by getting the Service
-object with ``kubectl get service`` command:
+object with the ``kubectl get service`` command:
 
 .. code:: bash
 
@@ -133,7 +133,7 @@ the MySQL cluster:
        type: LoadBalancer
 
 When the cluster instances are exposed in this way, you can find the
-corresponding Services with ``kubectl get services`` command:
+corresponding Services with the ``kubectl get services`` command:
 
 .. code:: bash
 
