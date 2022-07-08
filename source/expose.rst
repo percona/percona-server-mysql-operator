@@ -35,9 +35,9 @@ the LoadBalancer object:
      ...
      primaryServiceType: LoadBalancer
 
-When the cluster is configured in this way, you can find the LoadBalancer
-endpoint or IP-address by getting the Service object with
-``kubectl get service`` command:
+When the cluster is configured in this way, you can find the endpoint (the
+public IP address of the load balancer in our example) by getting the Service
+object with ``kubectl get service`` command:
 
 .. code:: bash
 
@@ -45,11 +45,18 @@ endpoint or IP-address by getting the Service object with
    NAME                     TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)                                                         AGE
    cluster1-mysql-primary   LoadBalancer   10.40.37.98    35.192.172.85   3306:32146/TCP,33062:31062/TCP,33060:32026/TCP,6033:30521/TCP   3m31s
 
+As you could notice, this command also shows mapped ports the application can
+use to communicate with MySQL primary instance (e.g. ``3306`` for the classic
+MySQL protocol, or ``33060`` for `MySQL X Protocol <https://dev.mysql.com/doc/dev/mysql-server/latest/page_mysqlx_protocol.html>`__
+useful for :abbr:`CRUD (Create, Read, Update and Delete)` operations, such as
+asynchronous calls).
+
 Group Replication
 -----------------
 
-Clusters configured to use Group Replication are exposed via the `MySQL Router <https://dev.mysql.com/doc/mysql-router/8.0/en/>`_ proxy.
-Network design in this case looks like this:
+Clusters configured to use Group Replication are exposed via the `MySQL Router <https://dev.mysql.com/doc/mysql-router/8.0/en/>`_
+through a Kubernetes Service called ``<CLUSTER_NAME>-router``: for example,
+``cluster1-router``. Network design in this case looks like this:
 
 .. image:: ./assets/images/exposure-gr.svg
    :align: center
@@ -68,9 +75,29 @@ exposes MySQL Router through a LoadBalancer object:
      expose:
        type: LoadBalancer
 
-When the cluster is configured in this way, you can find the endpoint to
-connect to by getting the output of ``PerconaServerMySQL`` object by
-``kubectl get ps`` command:
+When the cluster is configured in this way, you can find the endpoint (the
+public IP address of the load balancer in our example) by getting the Service
+object with ``kubectl get service`` command:
+
+.. code:: bash
+
+   $ kubectl get service cluster1-router
+   NAME                TYPE           CLUSTER-IP    EXTERNAL-IP     PORT(S)                                                       AGE
+   my-cluster-router   LoadBalancer   10.20.22.90   35.223.42.238   6446:30852/TCP,6447:31694/TCP,6448:31515/TCP,6449:31686/TCP   18h
+
+As you could notice, this command also shows mapped ports the application can
+use to communicate with MySQL Router:
+
+* ``6446`` - read/write, routing traffic to a Primary node,
+* ``6447`` - read-only, load balancing the traffic across Replicas.
+
+Additionally, ports ``6448`` and ``6449`` are available in the same way to
+connect via `MySQL X Protocol <https://dev.mysql.com/doc/dev/mysql-server/latest/page_mysqlx_protocol.html>`__
+useful for :abbr:`CRUD (Create, Read, Update and Delete)` operations, such as
+asynchronous calls.
+
+Alternatively, you can find the endpoint to connect to by ``kubectl get ps``
+command:
 
 .. code:: bash
 
@@ -82,7 +109,8 @@ Service per Pod
 ---------------
 
 Still, sometimes it is required to expose all MySQL instances, where each of
-them gets its own IP address.
+them gets its own IP address (e.g. in case of load balancing implemented on the
+application level).
 
 .. image:: ./assets/images/exposure-all.svg
    :align: center
@@ -115,3 +143,9 @@ corresponding Services with ``kubectl get services`` command:
    cluster1-mysql-0         LoadBalancer   10.40.44.110   104.198.16.21   3306:31009/TCP,33062:31319/TCP,33060:30737/TCP,6033:30660/TCP   75s
    cluster1-mysql-1         LoadBalancer   10.40.42.5     34.70.170.187   3306:30601/TCP,33062:30273/TCP,33060:30910/TCP,6033:30847/TCP   75s
    cluster1-mysql-2         LoadBalancer   10.40.42.158   35.193.50.44    3306:32042/TCP,33062:31576/TCP,33060:31656/TCP,6033:31448/TCP   75s
+
+As you could notice, this command also shows mapped ports the application can
+use to communicate with MySQL instances (e.g. ``3306`` for the classic MySQL
+protocol, or ``33060`` for `MySQL X Protocol <https://dev.mysql.com/doc/dev/mysql-server/latest/page_mysqlx_protocol.html>`__
+useful for :abbr:`CRUD (Create, Read, Update and Delete)` operations, such as
+asynchronous calls).
