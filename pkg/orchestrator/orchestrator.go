@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 	"github.com/pkg/errors"
@@ -97,7 +98,7 @@ func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 		cr.Labels())
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 	spec := cr.OrchestratorSpec()
 	Replicas := spec.Size
@@ -123,8 +124,16 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.StatefulSet {
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector:     cr.Spec.Orchestrator.NodeSelector,
-					Tolerations:      cr.Spec.Orchestrator.Tolerations,
+					NodeSelector: cr.Spec.Orchestrator.NodeSelector,
+					Tolerations:  cr.Spec.Orchestrator.Tolerations,
+					InitContainers: []corev1.Container{
+						k8s.InitContainer(
+							componentName,
+							initImage,
+							spec.ImagePullPolicy,
+							spec.ContainerSecurityContext,
+						),
+					},
 					Containers:       containers(cr),
 					Affinity:         spec.GetAffinity(labels),
 					ImagePullSecrets: spec.ImagePullSecrets,
@@ -133,6 +142,12 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.StatefulSet {
 					SchedulerName: "default-scheduler",
 					DNSPolicy:     corev1.DNSClusterFirst,
 					Volumes: []corev1.Volume{
+						{
+							Name: apiv1alpha1.BinVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
+							},
+						},
 						{
 							Name: credsVolumeName,
 							VolumeSource: corev1.VolumeSource{
@@ -256,6 +271,7 @@ func sidecarContainers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 				},
 			},
 			VolumeMounts: containerMounts(),
+			Command:      []string{"/opt/percona/orc-entrypoint.sh"},
 			Args: []string{
 				"/usr/bin/peer-list",
 				"-on-change=/usr/bin/add_mysql_nodes.sh",
@@ -270,6 +286,10 @@ func sidecarContainers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 
 func containerMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
+		{
+			Name:      apiv1alpha1.BinVolumeName,
+			MountPath: apiv1alpha1.BinVolumePath,
+		},
 		{
 			Name:      tlsVolumeName,
 			MountPath: tlsMountPath,
