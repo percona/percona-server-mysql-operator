@@ -15,8 +15,6 @@ import (
 
 const (
 	componentName    = "mysql"
-	binVolumeName    = "bin"
-	binMountPath     = "/opt/percona"
 	DataVolumeName   = "datadir"
 	DataMountPath    = "/var/lib/mysql"
 	CustomConfigKey  = "my.cnf"
@@ -146,33 +144,12 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 				},
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
-						{
-							Name:            componentName + "-init",
-							Image:           initImage,
-							ImagePullPolicy: spec.ImagePullPolicy,
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      binVolumeName,
-									MountPath: binMountPath,
-								},
-								{
-									Name:      DataVolumeName,
-									MountPath: DataMountPath,
-								},
-								{
-									Name:      credsVolumeName,
-									MountPath: CredsMountPath,
-								},
-								{
-									Name:      tlsVolumeName,
-									MountPath: tlsMountPath,
-								},
-							},
-							Command:                  []string{"/ps-init-entrypoint.sh"},
-							TerminationMessagePath:   "/dev/termination-log",
-							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-							SecurityContext:          spec.ContainerSecurityContext,
-						},
+						k8s.InitContainer(
+							componentName,
+							initImage,
+							spec.ImagePullPolicy,
+							spec.ContainerSecurityContext,
+						),
 					},
 					Containers:                    containers(cr, secret),
 					ServiceAccountName:            cr.Spec.MySQL.ServiceAccountName,
@@ -189,7 +166,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 					Volumes: append(
 						[]corev1.Volume{
 							{
-								Name: binVolumeName,
+								Name: apiv1alpha1.BinVolumeName,
 								VolumeSource: corev1.VolumeSource{
 									EmptyDir: &corev1.EmptyDirVolumeSource{},
 								},
@@ -492,8 +469,8 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		Ports: containerPorts(cr),
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      binVolumeName,
-				MountPath: binMountPath,
+				Name:      apiv1alpha1.BinVolumeName,
+				MountPath: apiv1alpha1.BinVolumePath,
 			},
 			{
 				Name:      DataVolumeName,
@@ -542,8 +519,8 @@ func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      binVolumeName,
-				MountPath: binMountPath,
+				Name:      apiv1alpha1.BinVolumeName,
+				MountPath: apiv1alpha1.BinVolumePath,
 			},
 			{
 				Name:      DataVolumeName,
@@ -764,8 +741,8 @@ func pmmContainer(clusterName string, secret *corev1.Secret, pmmSpec *apiv1alpha
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      binVolumeName,
-				MountPath: binMountPath,
+				Name:      apiv1alpha1.BinVolumeName,
+				MountPath: apiv1alpha1.BinVolumePath,
 			},
 			{
 				Name:      DataVolumeName,

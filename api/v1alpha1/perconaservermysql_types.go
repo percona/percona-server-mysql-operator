@@ -468,6 +468,11 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 	return nil
 }
 
+const (
+	BinVolumeName = "bin"
+	BinVolumePath = "/opt/percona"
+)
+
 func reconcileVol(v *VolumeSpec) (*VolumeSpec, error) {
 	if v == nil || v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil {
 		return nil, errors.New("volumeSpec and it's internals should be specified")

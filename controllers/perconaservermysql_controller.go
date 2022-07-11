@@ -22,7 +22,6 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"reflect"
 	"strconv"
 	"time"
@@ -32,6 +31,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -654,7 +654,12 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return errors.Wrap(err, "reconcile ConfigMap")
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.StatefulSet(cr), r.Scheme); err != nil {
+	initImage, err := k8s.InitImage(ctx, r.Client)
+	if err != nil {
+		return errors.Wrap(err, "get init image")
+	}
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.StatefulSet(cr, initImage), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile StatefulSet")
 	}
 
@@ -738,7 +743,8 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 	}
 
 	sts := &appsv1.StatefulSet{}
-	if err := r.Get(ctx, client.ObjectKeyFromObject(orchestrator.StatefulSet(cr)), sts); err != nil {
+	// no need to set init image since we're just getting obj from API
+	if err := r.Get(ctx, client.ObjectKeyFromObject(orchestrator.StatefulSet(cr, "")), sts); err != nil {
 		return client.IgnoreNotFound(err)
 	}
 
@@ -1128,7 +1134,12 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		return nil
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Deployment(cr), r.Scheme); err != nil {
+	initImage, err := k8s.InitImage(ctx, r.Client)
+	if err != nil {
+		return errors.Wrap(err, "get init image")
+	}
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Deployment(cr, initImage), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile Deployment")
 	}
 
