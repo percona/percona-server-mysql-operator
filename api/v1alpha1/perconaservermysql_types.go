@@ -148,6 +148,15 @@ type PMMSpec struct {
 	RuntimeClassName         *string                     `json:"runtimeClassName,omitempty"`
 }
 
+func (spec *PMMSpec) ShouldUseAPIKeyAuth(secret *corev1.Secret) bool {
+	if _, ok := secret.Data[string(UserPMMServerKey)]; !ok {
+		if _, ok = secret.Data[string(UserPMMServer)]; ok {
+			return false
+		}
+	}
+	return true
+}
+
 type BackupSpec struct {
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	Image                    string                        `json:"image,omitempty"`
@@ -297,17 +306,17 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 }
 
 // PerconaServerMySQL is the Schema for the perconaservermysqls API
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="Replication",type=string,JSONPath=".spec.mysql.clusterType"
-//+kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=".status.host"
-//+kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
-//+kubebuilder:printcolumn:name="MySQL",type=string,JSONPath=".status.mysql.ready"
-//+kubebuilder:printcolumn:name="Orchestrator",type=string,JSONPath=".status.orchestrator.ready"
-//+kubebuilder:printcolumn:name="Router",type=string,JSONPath=".status.router.ready"
-//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-//+kubebuilder:resource:scope=Namespaced
-//+kubebuilder:resource:shortName=ps
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Replication",type=string,JSONPath=".spec.mysql.clusterType"
+// +kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=".status.host"
+// +kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
+// +kubebuilder:printcolumn:name="MySQL",type=string,JSONPath=".status.mysql.ready"
+// +kubebuilder:printcolumn:name="Orchestrator",type=string,JSONPath=".status.orchestrator.ready"
+// +kubebuilder:printcolumn:name="Router",type=string,JSONPath=".status.router.ready"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:resource:scope=Namespaced
+// +kubebuilder:resource:shortName=ps
 type PerconaServerMySQL struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -337,6 +346,7 @@ const (
 	UserReplication  SystemUser = "replication"
 	UserOrchestrator SystemUser = "orchestrator"
 	UserPMMServer    SystemUser = "pmmserver"
+	UserPMMServerKey SystemUser = "pmmserverkey"
 )
 
 func (cr *PerconaServerMySQL) MySQLSpec() *MySQLSpec {
