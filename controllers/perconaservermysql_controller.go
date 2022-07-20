@@ -1259,7 +1259,7 @@ func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServe
 	}
 
 	if cr.Spec.MySQL.IsAsync() {
-		serviceName := mysql.PrimaryServiceName(cr)
+		serviceName = mysql.PrimaryServiceName(cr)
 		if cr.Spec.MySQL.PrimaryServiceType != corev1.ServiceTypeLoadBalancer {
 			return serviceName + "." + cr.GetNamespace(), nil
 		}
