@@ -9,7 +9,7 @@ configured by the Operator.
 This document describes the usage of :ref:`Custom Resource manifest options<operator.custom-resource-options>`
 to expose the clusters deployed with the Operator. The expose options vary for
 different replication types: `Asynchronous <https://dev.mysql.com/doc/refman/8.0/en/replication.html>`_
-and `Group Replicaiton <https://dev.mysql.com/doc/refman/8.0/en/group-replication.html>`_.
+and `Group Replication <https://dev.mysql.com/doc/refman/8.0/en/group-replication.html>`_.
 
 Asynchronous Replication
 -----------------------
