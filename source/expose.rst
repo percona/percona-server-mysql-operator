@@ -11,7 +11,7 @@ to expose the clusters deployed with the Operator. The expose options vary for
 different replication types: `Asyncronous<https://dev.mysql.com/doc/refman/8.0/en/replication.html>`_
 and `Group Replicaiton <https://dev.mysql.com/doc/refman/8.0/en/group-replication.html>`_.
 
-Asyncronous Replication
+Asynchronous Replication
 -----------------------
 
 With `Asyncronous or Semi-syncronous replication <https://dev.mysql.com/doc/refman/8.0/en/group-replication-primary-secondary-replication.html>`_
