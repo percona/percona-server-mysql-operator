@@ -25,7 +25,7 @@ This Service is created by default and is always present. You can change the
 type of the Service object by setting :ref:`mysql.primaryServiceType<mysql-primaryservicetype>`
 variable in the Custom Resource.
 
-The following example exposes the Primary node of the asyncronous cluster with
+The following example exposes the Primary node of the asynchronous cluster with
 the LoadBalancer object:
 
 .. code:: yaml
