@@ -190,6 +190,7 @@ type BackupStorageSpec struct {
 
 type BackupStorageS3Spec struct {
 	Bucket            string `json:"bucket"`
+	Prefix            string `json:"prefix,omitempty"`
 	CredentialsSecret string `json:"credentialsSecret"`
 	Region            string `json:"region,omitempty"`
 	EndpointURL       string `json:"endpointUrl,omitempty"`
@@ -198,6 +199,7 @@ type BackupStorageS3Spec struct {
 
 type BackupStorageGCSSpec struct {
 	Bucket            string `json:"bucket"`
+	Prefix            string `json:"prefix,omitempty"`
 	CredentialsSecret string `json:"credentialsSecret"`
 	EndpointURL       string `json:"endpointUrl,omitempty"`
 
@@ -208,6 +210,9 @@ type BackupStorageGCSSpec struct {
 type BackupStorageAzureSpec struct {
 	// A container name is a valid DNS name that conforms to the Azure naming rules.
 	ContainerName string `json:"containerName"`
+
+	// A prefix is a sub-folder to the backups inside the container
+	Prefix string `json:"prefix,omitempty"`
 
 	// A generated key that can be used to authorize access to data in your account using the Shared Key authorization.
 	CredentialsSecret string `json:"credentialsSecret"`
