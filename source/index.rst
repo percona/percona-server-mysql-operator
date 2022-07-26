@@ -57,6 +57,7 @@ Configuration and Management
    Application and system users <users.rst>
    Anti-affinity and tolerations <constraints.rst>
    Changing MySQL Options <options.rst>
+   Exposing the cluster <expose.rst>
    Transport Encryption (TLS/SSL) <TLS.rst>
    Horizontal and vertical scaling <scaling.rst>
    Monitor with Percona Monitoring and Management (PMM) <monitoring.rst>
