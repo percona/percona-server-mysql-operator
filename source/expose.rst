@@ -14,7 +14,7 @@ and `Group Replicaiton <https://dev.mysql.com/doc/refman/8.0/en/group-replicatio
 Asynchronous Replication
 -----------------------
 
-With `Asyncronous or Semi-syncronous replication <https://dev.mysql.com/doc/refman/8.0/en/group-replication-primary-secondary-replication.html>`_
+With `Asynchronous or Semi-synchronous replication <https://dev.mysql.com/doc/refman/8.0/en/group-replication-primary-secondary-replication.html>`_
 the cluster is exposed through a Kubernetes Service called
 ``<CLUSTER_NAME>-mysql-primary``: for example, ``cluster1-mysql-primary``.
 
