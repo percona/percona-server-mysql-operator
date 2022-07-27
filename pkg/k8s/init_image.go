@@ -8,7 +8,27 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 )
+
+func InitContainer(component, image string, pullPolicy corev1.PullPolicy, secCtx *corev1.SecurityContext) corev1.Container {
+	return corev1.Container{
+		Name:            component + "-init",
+		Image:           image,
+		ImagePullPolicy: pullPolicy,
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      apiv1alpha1.BinVolumeName,
+				MountPath: apiv1alpha1.BinVolumePath,
+			},
+		},
+		Command:                  []string{"/ps-init-entrypoint.sh"},
+		TerminationMessagePath:   "/dev/termination-log",
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+		SecurityContext:          secCtx,
+	}
+}
 
 func InitImage(ctx context.Context, cl client.Reader) (string, error) {
 	return OperatorImage(ctx, cl)

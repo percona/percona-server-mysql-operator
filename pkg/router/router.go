@@ -6,6 +6,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -79,7 +80,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
-func Deployment(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.Deployment {
+func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.Deployment {
 	labels := MatchLabels(cr)
 	spec := cr.Spec.Router
 	replicas := spec.Size
@@ -104,8 +105,16 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.Deployment {
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector:     cr.Spec.Router.NodeSelector,
-					Tolerations:      cr.Spec.Router.Tolerations,
+					NodeSelector: cr.Spec.Router.NodeSelector,
+					Tolerations:  cr.Spec.Router.Tolerations,
+					InitContainers: []corev1.Container{
+						k8s.InitContainer(
+							componentName,
+							initImage,
+							spec.ImagePullPolicy,
+							spec.ContainerSecurityContext,
+						),
+					},
 					Containers:       containers(cr),
 					Affinity:         spec.GetAffinity(labels),
 					ImagePullSecrets: spec.ImagePullSecrets,
@@ -115,6 +124,12 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.Deployment {
 					DNSPolicy:       corev1.DNSClusterFirst,
 					SecurityContext: spec.PodSecurityContext,
 					Volumes: []corev1.Volume{
+						{
+							Name: apiv1alpha1.BinVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
+							},
+						},
 						{
 							Name: credsVolumeName,
 							VolumeSource: corev1.VolumeSource{
@@ -176,6 +191,10 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
+				Name:      apiv1alpha1.BinVolumeName,
+				MountPath: apiv1alpha1.BinVolumePath,
+			},
+			{
 				Name:      credsVolumeName,
 				MountPath: credsMountPath,
 			},
@@ -184,6 +203,7 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 				MountPath: tlsMountPath,
 			},
 		},
+		Command:                  []string{"/opt/percona/router-entrypoint.sh"},
 		Args:                     []string{"mysqlrouter", "-c", "/tmp/router/mysqlrouter.conf"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
