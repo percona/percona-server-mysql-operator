@@ -18,12 +18,14 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -32,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/go-logr/logr"
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/controllers"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -62,8 +65,9 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+
 	opts := zap.Options{
-		Development: true,
+		Level: getLogLevel(setupLog),
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -143,5 +147,24 @@ func main() {
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
+	}
+}
+
+func getLogLevel(log logr.Logger) zapcore.LevelEnabler {
+	l, found := os.LookupEnv("LOG_LEVEL")
+	if !found {
+		return zapcore.InfoLevel
+	}
+
+	switch l {
+	case "debug", "DEBUG":
+		return zapcore.DebugLevel
+	case "info", "INFO":
+		return zapcore.InfoLevel
+	case "error", "ERROR":
+		return zapcore.InfoLevel
+	default:
+		log.Info(fmt.Sprintf("unsupported log level: %s, using INFO level", l))
+		return zapcore.InfoLevel
 	}
 }
