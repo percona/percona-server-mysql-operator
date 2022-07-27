@@ -106,7 +106,7 @@ func issueCerts(hosts []string) (caCert, tlsCert, tlsKey []byte, err error) {
 	tlsTemplate := x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization: []string{"PXC"},
+			Organization: []string{"PS"},
 		},
 		Issuer: pkix.Name{
 			Organization: []string{"Root CA"},

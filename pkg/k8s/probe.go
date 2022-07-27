@@ -6,7 +6,7 @@ import (
 
 func ExecProbe(probe corev1.Probe, cmd []string) *corev1.Probe {
 	return &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			Exec: &corev1.ExecAction{Command: cmd},
 		},
 		InitialDelaySeconds:           probe.InitialDelaySeconds,
