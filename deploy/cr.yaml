@@ -188,4 +188,5 @@ spec:
           bucket: S3-BACKUP-BUCKET-NAME-HERE
           credentialsSecret: cluster1-s3-credentials
           region: us-west-2
+#          prefix: ""
 
