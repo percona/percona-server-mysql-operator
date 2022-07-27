@@ -48,6 +48,7 @@ spec:
 
 #    configuration: |
 #      max_connections=250
+#      innodb_buffer_pool_size={{int64 (mulf .Memory (divf 3 4))}}
 
 #    sidecars:
 #    - name: noop-memory

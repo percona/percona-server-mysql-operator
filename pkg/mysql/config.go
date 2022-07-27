@@ -1,10 +1,13 @@
 package mysql
 
 import (
-	"errors"
+	"bytes"
 	"strconv"
 	"strings"
+	"text/template"
 
+	"github.com/Masterminds/sprig/v3"
+	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
@@ -61,4 +64,16 @@ func GetAutoTuneParams(cr *apiv1alpha1.PerconaServerMySQL, q *resource.Quantity)
 	}
 
 	return autotuneParams, nil
+}
+
+func ExecuteConfigurationTemplate(input string, memory *resource.Quantity) (string, error) {
+	t, err := template.New("configuration").Funcs(sprig.TxtFuncMap()).Parse(input)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse configuration template")
+	}
+	buf := new(bytes.Buffer)
+	if err = t.Execute(buf, map[string]int64{"Memory": memory.Value()}); err != nil {
+		return "", errors.Wrap(err, "failed to execute configuration template")
+	}
+	return buf.String(), nil
 }
