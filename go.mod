@@ -18,14 +18,19 @@ require (
 	github.com/go-logr/logr v1.2.3
 	go.uber.org/zap v1.22.0
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
-	k8s.io/utils v0.0.0-20220728103510-ee6ede2d64ed
+)
+
+
+require (
+	github.com/cert-manager/cert-manager v1.8.2
+	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
 )
 
 require (
-	cloud.google.com/go v0.97.0 // indirect
+	cloud.google.com/go v0.99.0 // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
-	github.com/Azure/go-autorest/autorest v0.11.27 // indirect
-	github.com/Azure/go-autorest/autorest/adal v0.9.20 // indirect
+	github.com/Azure/go-autorest/autorest v0.11.20 // indirect
+	github.com/Azure/go-autorest/autorest/adal v0.9.15 // indirect
 	github.com/Azure/go-autorest/autorest/date v0.3.0 // indirect
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
@@ -47,8 +52,8 @@ require (
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/gnostic v0.5.7-v3refs // indirect
 	github.com/google/go-cmp v0.5.8 // indirect
-	github.com/google/gofuzz v1.1.0 // indirect
-	github.com/google/uuid v1.1.2 // indirect
+	github.com/google/gofuzz v1.2.0 // indirect
+	github.com/google/uuid v1.3.0 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
