@@ -322,6 +322,7 @@ pipeline {
                 runTest('sidecars', 'basic')
                 runTest('users', 'basic')
                 runTest('limits', 'basic')
+                runTest('tls-cert-manager', 'basic')
                 ShutdownCluster('basic')
             }
         }
