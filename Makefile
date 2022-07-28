@@ -30,7 +30,7 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 # This variable is used to construct full image tags for bundle and catalog images.
 #
 # For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
-# percona/percona-server-mysql-operator-bundle:$VERSION and percona/percona-server-mysql-operator-catalog:$VERSION.
+# perconalab/percona-server-mysql-operator-bundle:v$VERSION and perconalab/percona-server-mysql-operator-catalog:v$VERSION.
 IMAGE_TAG_BASE ?= perconalab/percona-server-mysql-operator
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
