@@ -349,6 +349,28 @@ pipeline {
                         ShutdownCluster('cluster2')
                     }
                 }
+            }
+            steps {
+                CreateCluster('basic')
+                runTest('auto-config', 'basic')
+                runTest('config', 'basic')
+                runTest('init-deploy', 'basic')
+                runTest('monitoring', 'basic')
+                runTest('semi-sync', 'basic')
+                runTest('service-per-pod', 'basic')
+                runTest('scaling', 'basic')
+                runTest('sidecars', 'basic')
+                runTest('users', 'basic')
+                runTest('limits', 'basic')
+                runTest('tls-cert-manager', 'basic')
+                ShutdownCluster('basic')
+            }
+        }
+        stage('E2E Backup Tests') {
+            when {
+                expression {
+                    !skipBranchBuilds
+                }
                 stage('E2E Cluster3') {
                     when {
                         expression {
