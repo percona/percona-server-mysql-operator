@@ -24,6 +24,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	certmgrscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -95,6 +96,11 @@ func main() {
 	serverVersion, err := platform.GetServerVersion()
 	if err != nil {
 		setupLog.Error(err, "unable to get server version")
+		os.Exit(1)
+	}
+	// Setup Scheme for cert-manager resources
+	if err := certmgrscheme.AddToScheme(mgr.GetScheme()); err != nil {
+		setupLog.Error(err, "")
 		os.Exit(1)
 	}
 
