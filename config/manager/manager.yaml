@@ -22,7 +22,7 @@ spec:
         - --leader-elect
         env:
         - name: LOG_STRUCTURED
-          value: TRUE
+          value: 'false'
         - name: LOG_LEVEL
           value: INFO
         - name: WATCH_NAMESPACE

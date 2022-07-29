@@ -26,6 +26,8 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"github.com/go-logr/logr"
+	uzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -35,7 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/go-logr/logr"
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/controllers"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -152,28 +153,26 @@ func main() {
 	}
 }
 
-// getLogEncoder return a log encoder based on the LOG_STRUCTURED env var.
-// If the var is set to true, structured (JSON) encoder is returned, otherwise a console encoder.
-// If the var is not present or can't be parsed, structured logger will be returned.
 func getLogEncoder(log logr.Logger) zapcore.Encoder {
-	se := zapcore.NewJSONEncoder(zapcore.EncoderConfig{})
+	jsonEnc := zapcore.NewJSONEncoder(uzap.NewProductionEncoderConfig())
 
 	s, found := os.LookupEnv("LOG_STRUCTURED")
 	if !found {
-		return se
+		return jsonEnc
 	}
 
-	if structured, err := strconv.ParseBool(s); err != nil || structured {
+	useJson, err := strconv.ParseBool(s)
+	if err != nil {
 		log.Info(fmt.Sprintf("can't parse LOG_STRUCTURED env var: %s, using structured logger", s))
-		return se
+		return jsonEnc
+	}
+	if useJson {
+		return jsonEnc
 	}
 
-	return zapcore.NewConsoleEncoder(zapcore.EncoderConfig{})
+	return zapcore.NewConsoleEncoder(uzap.NewDevelopmentEncoderConfig())
 }
 
-// getLogLevel returns a log level based on the LOG_LEVEL env var.
-// Levels that can be returned are DEBUG, INFO and ERRORE.
-// If the var is not present or unsupported level is provided, it returns INFO level.
 func getLogLevel(log logr.Logger) zapcore.LevelEnabler {
 	l, found := os.LookupEnv("LOG_LEVEL")
 	if !found {
@@ -186,7 +185,7 @@ func getLogLevel(log logr.Logger) zapcore.LevelEnabler {
 	case "info", "INFO":
 		return zapcore.InfoLevel
 	case "error", "ERROR":
-		return zapcore.InfoLevel
+		return zapcore.ErrorLevel
 	default:
 		log.Info(fmt.Sprintf("unsupported log level: %s, using INFO level", l))
 		return zapcore.InfoLevel
