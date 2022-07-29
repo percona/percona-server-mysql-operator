@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -67,7 +68,8 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 
 	opts := zap.Options{
-		Level: getLogLevel(setupLog),
+		Encoder: getLogEncoder(setupLog),
+		Level:   getLogLevel(setupLog),
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -150,6 +152,28 @@ func main() {
 	}
 }
 
+// getLogEncoder return a log encoder based on the LOG_STRUCTURED env var.
+// If the var is set to true, structured (JSON) encoder is returned, otherwise a console encoder.
+// If the var is not present or can't be parsed, structured logger will be returned.
+func getLogEncoder(log logr.Logger) zapcore.Encoder {
+	se := zapcore.NewJSONEncoder(zapcore.EncoderConfig{})
+
+	s, found := os.LookupEnv("LOG_STRUCTURED")
+	if !found {
+		return se
+	}
+
+	if structured, err := strconv.ParseBool(s); err != nil || structured {
+		log.Info(fmt.Sprintf("can't parse LOG_STRUCTURED env var: %s, using structured logger", s))
+		return se
+	}
+
+	return zapcore.NewConsoleEncoder(zapcore.EncoderConfig{})
+}
+
+// getLogLevel returns a log level based on the LOG_LEVEL env var.
+// Levels that can be returned are DEBUG, INFO and ERRORE.
+// If the var is not present or unsupported level is provided, it returns INFO level.
 func getLogLevel(log logr.Logger) zapcore.LevelEnabler {
 	l, found := os.LookupEnv("LOG_LEVEL")
 	if !found {
