@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -179,12 +180,12 @@ func getLogLevel(log logr.Logger) zapcore.LevelEnabler {
 		return zapcore.InfoLevel
 	}
 
-	switch l {
-	case "debug", "DEBUG":
+	switch strings.ToUpper(l) {
+	case "DEBUG":
 		return zapcore.DebugLevel
-	case "info", "INFO":
+	case "INFO":
 		return zapcore.InfoLevel
-	case "error", "ERROR":
+	case "ERROR":
 		return zapcore.ErrorLevel
 	default:
 		log.Info(fmt.Sprintf("unsupported log level: %s, using INFO level", l))
