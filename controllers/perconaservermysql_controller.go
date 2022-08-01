@@ -22,10 +22,11 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"reflect"
 	"strconv"
 	"time"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -1314,7 +1315,7 @@ func getPrimaryFromOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServ
 		return nil, errors.Wrap(err, "get cluster primary")
 	}
 
-	if primary.Key.Hostname == "" {
+	if primary.Key.Hostname == "" && primary.Alias != "" {
 		primary.Key.Hostname = fmt.Sprintf("%s.%s.%s", primary.Alias, mysql.ServiceName(cr), cr.Namespace)
 	}
 
