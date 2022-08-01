@@ -351,6 +351,10 @@ func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 	return &cr.Spec.Orchestrator
 }
 
+func (cr *PerconaServerMySQL) RouterSpec() *MySQLRouterSpec {
+	return cr.Spec.Router
+}
+
 func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVersion) error {
 	if len(cr.Spec.MySQL.ClusterType) == 0 {
 		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
