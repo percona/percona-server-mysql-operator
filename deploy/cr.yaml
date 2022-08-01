@@ -76,20 +76,21 @@ spec:
 #          requests:
 #            storage: 1G
 
-  router:
-    image: perconalab/percona-server-mysql-operator:main-router
-    imagePullPolicy: Always
+# Router is used for group replication
+#  router:
+#    image: perconalab/percona-server-mysql-operator:main-router
+#    imagePullPolicy: Always
 
-    size: 3
+#    size: 3
 
-    resources:
-      requests:
-        memory: 256M
-      limits:
-        memory: 256M
+#    resources:
+#      requests:
+#        memory: 256M
+#      limits:
+#        memory: 256M
 
-    affinity:
-      antiAffinityTopologyKey: "kubernetes.io/hostname"
+#    affinity:
+#      antiAffinityTopologyKey: "kubernetes.io/hostname"
 #      advanced:
 #        nodeAffinity:
 #          requiredDuringSchedulingIgnoredDuringExecution:
