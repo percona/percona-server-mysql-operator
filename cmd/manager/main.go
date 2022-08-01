@@ -154,23 +154,23 @@ func main() {
 }
 
 func getLogEncoder(log logr.Logger) zapcore.Encoder {
-	jsonEnc := zapcore.NewJSONEncoder(uzap.NewProductionEncoderConfig())
+	consoleEnc := zapcore.NewConsoleEncoder(uzap.NewDevelopmentEncoderConfig())
 
 	s, found := os.LookupEnv("LOG_STRUCTURED")
 	if !found {
-		return jsonEnc
+		return consoleEnc
 	}
 
 	useJson, err := strconv.ParseBool(s)
 	if err != nil {
-		log.Info(fmt.Sprintf("can't parse LOG_STRUCTURED env var: %s, using structured logger", s))
-		return jsonEnc
+		log.Info(fmt.Sprintf("can't parse LOG_STRUCTURED env var: %s, using console logger", s))
+		return consoleEnc
 	}
-	if useJson {
-		return jsonEnc
+	if !useJson {
+		return consoleEnc
 	}
 
-	return zapcore.NewConsoleEncoder(uzap.NewDevelopmentEncoderConfig())
+	return zapcore.NewJSONEncoder(uzap.NewProductionEncoderConfig())
 }
 
 func getLogLevel(log logr.Logger) zapcore.LevelEnabler {
