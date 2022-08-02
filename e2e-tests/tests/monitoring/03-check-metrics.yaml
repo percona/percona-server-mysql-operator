@@ -7,8 +7,10 @@ commands:
 
       source ../../functions
 
-      get_metric_values node_boot_time_seconds ${NAMESPACE}-$(get_cluster_name)-mysql-0 admin:admin
-      get_metric_values mysql_global_status_uptime ${NAMESPACE}-$(get_cluster_name)-mysql-0 admin:admin
+      for i in $(seq 0 2); do
+          get_metric_values node_boot_time_seconds ${NAMESPACE}-$(get_cluster_name)-mysql-${i} admin:admin
+          get_metric_values mysql_global_status_uptime ${NAMESPACE}-$(get_cluster_name)-mysql-${i} admin:admin
+      done
 
       sleep 90 # wait for QAN
 
