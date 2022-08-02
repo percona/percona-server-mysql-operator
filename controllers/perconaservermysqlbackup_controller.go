@@ -153,7 +153,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return rr, errors.Wrap(err, "get operator image")
 		}
 
-		destination := fmt.Sprintf("%s-%s-full", cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
+		destination := getDestination(storage, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
 		job := xtrabackup.Job(cluster, cr, destination, initImage, storage)
 
 		switch storage.Type {
@@ -272,6 +272,27 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	return rr, nil
+}
+
+func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creationTimeStamp string) string {
+	dest := fmt.Sprintf("%s-%s-full", clusterName, creationTimeStamp)
+
+	switch storage.Type {
+	case apiv1alpha1.BackupStorageS3:
+		if storage.S3.Prefix != "" {
+			dest = storage.S3.Prefix + "/" + dest
+		}
+	case apiv1alpha1.BackupStorageGCS:
+		if storage.GCS.Prefix != "" {
+			dest = storage.GCS.Prefix + "/" + dest
+		}
+	case apiv1alpha1.BackupStorageAzure:
+		if storage.Azure.Prefix != "" {
+			dest = storage.Azure.Prefix + "/" + dest
+		}
+	}
+
+	return dest
 }
 
 func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) (string, error) {
