@@ -33,7 +33,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -42,7 +41,6 @@ import (
 	k8sexec "k8s.io/utils/exec"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
@@ -408,7 +406,7 @@ func (r *PerconaServerMySQLReconciler) ensureTLSSecret(
 	} else if ok {
 		return nil
 	}
-	err := r.createSSLByCertManager(cr)
+	err := r.createSSLByCertManager(ctx, cr)
 	if err != nil {
 		if cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
 			return errors.Wrap(err, "create ssl with cert manager")
@@ -1572,12 +1570,8 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) createSSLByCertManager(cr *apiv1alpha1.PerconaServerMySQL) error {
-	owner, err := OwnerRef(cr, r.Scheme)
-	if err != nil {
-		return err
-	}
-	ownerReferences := []metav1.OwnerReference{owner}
+func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	ownerReferences := cr.GetOwnerReferences()
 
 	issuerName := cr.Name + "-pso-issuer"
 	caIssuerName := cr.Name + "-pso-ca-issuer"
@@ -1588,7 +1582,15 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(cr *apiv1alpha1.Pe
 		issuerName = cr.Spec.TLS.IssuerConf.Name
 		issuerGroup = cr.Spec.TLS.IssuerConf.Group
 	} else {
-		if err := r.createIssuer(ownerReferences, cr.Namespace, caIssuerName, ""); err != nil {
+		issuerConf := cm.IssuerConfig{
+			SelfSigned: &cm.SelfSignedIssuer{},
+		}
+		if cr.Spec.TLS.IssuerConf != nil {
+			issuerConf = cm.IssuerConfig{
+				CA: &cm.CAIssuer{SecretName: cr.Spec.TLS.IssuerConf.Name},
+			}
+		}
+		if err := r.createIssuer(ctx, ownerReferences, cr.Namespace, caIssuerName, issuerConf); err != nil {
 			return err
 		}
 
@@ -1612,16 +1614,20 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(cr *apiv1alpha1.Pe
 			},
 		}
 
-		err = r.Create(context.TODO(), caCert)
+		err := r.Create(ctx, caCert)
 		if err != nil && !k8serrors.IsAlreadyExists(err) {
 			return errors.Wrap(err, "create CA certificate")
 		}
 
-		if err := r.waitForCerts(cr.Namespace, cr.Name+"-ca-cert"); err != nil {
+		if err := r.waitForCerts(ctx, cr.Namespace, cr.Name+"-ca-cert"); err != nil {
 			return err
 		}
 
-		if err := r.createIssuer(ownerReferences, cr.Namespace, issuerName, caCert.Spec.SecretName); err != nil {
+		issuerConf = cm.IssuerConfig{
+			CA: &cm.CAIssuer{SecretName: caCert.Spec.SecretName},
+		}
+
+		if err := r.createIssuer(ctx, ownerReferences, cr.Namespace, issuerName, issuerConf); err != nil {
 			return err
 		}
 	}
@@ -1632,6 +1638,7 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(cr *apiv1alpha1.Pe
 		fmt.Sprintf("*.%s-orchestrator", cr.Name),
 		fmt.Sprintf("*.%s-orchestrator.%s", cr.Name, cr.Namespace),
 		fmt.Sprintf("*.%s-orchestrator.%s.svc.cluster.local", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-router", cr.Name),
 	}
 	kubeCert := &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1651,19 +1658,19 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(cr *apiv1alpha1.Pe
 		},
 	}
 
-	if cr.Spec.TLS != nil && len(cr.Spec.MySQL.ServiceAccountName) > 0 {
+	if cr.Spec.TLS != nil {
 		kubeCert.Spec.DNSNames = append(kubeCert.Spec.DNSNames, cr.Spec.TLS.SANs...)
 	}
 
-	err = r.Create(context.TODO(), kubeCert)
+	err := r.Create(ctx, kubeCert)
 	if err != nil && !k8serrors.IsAlreadyExists(err) {
 		return errors.Wrap(err, "create certificate")
 	}
 
-	return r.waitForCerts(cr.Namespace, cr.Spec.SSLSecretName)
+	return r.waitForCerts(ctx, cr.Namespace, cr.Spec.SSLSecretName)
 }
 
-func (r *PerconaServerMySQLReconciler) waitForCerts(namespace string, secretsList ...string) error {
+func (r *PerconaServerMySQLReconciler) waitForCerts(ctx context.Context, namespace string, secretsList ...string) error {
 	ticker := time.NewTicker(3 * time.Second)
 	timeoutTimer := time.NewTimer(30 * time.Second)
 	defer timeoutTimer.Stop()
@@ -1676,7 +1683,7 @@ func (r *PerconaServerMySQLReconciler) waitForCerts(namespace string, secretsLis
 			sucessCount := 0
 			for _, secretName := range secretsList {
 				secret := &corev1.Secret{}
-				err := r.Get(context.TODO(), types.NamespacedName{
+				err := r.Get(ctx, types.NamespacedName{
 					Name:      secretName,
 					Namespace: namespace,
 				}, secret)
@@ -1693,57 +1700,21 @@ func (r *PerconaServerMySQLReconciler) waitForCerts(namespace string, secretsLis
 	}
 }
 
-func (r *PerconaServerMySQLReconciler) createIssuer(ownRef []metav1.OwnerReference, namespace, issuer string, caCertSecret string) error {
+func (r *PerconaServerMySQLReconciler) createIssuer(ctx context.Context, ownRef []metav1.OwnerReference, namespace, issuerName string, IssuerConf cm.IssuerConfig,
+) error {
 
-	spec := cm.IssuerSpec{}
-
-	if caCertSecret == "" {
-		spec = cm.IssuerSpec{
-			IssuerConfig: cm.IssuerConfig{
-				SelfSigned: &cm.SelfSignedIssuer{},
-			},
-		}
-	} else {
-		spec = cm.IssuerSpec{
-			IssuerConfig: cm.IssuerConfig{
-				CA: &cm.CAIssuer{SecretName: caCertSecret},
-			},
-		}
-	}
-
-	err := r.Create(context.TODO(), &cm.Issuer{
+	err := r.Create(ctx, &cm.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            issuer,
+			Name:            issuerName,
 			Namespace:       namespace,
 			OwnerReferences: ownRef,
 		},
-		Spec: spec,
+		Spec: cm.IssuerSpec{
+			IssuerConfig: IssuerConf,
+		},
 	})
 	if err != nil && !k8serrors.IsAlreadyExists(err) {
 		return errors.Wrap(err, "create issuer")
 	}
 	return nil
-}
-
-// OwnerRef returns OwnerReference to object
-func OwnerRef(ro runtime.Object, scheme *runtime.Scheme) (metav1.OwnerReference, error) {
-	gvk, err := apiutil.GVKForObject(ro, scheme)
-	if err != nil {
-		return metav1.OwnerReference{}, err
-	}
-
-	trueVar := true
-
-	ca, err := meta.Accessor(ro)
-	if err != nil {
-		return metav1.OwnerReference{}, err
-	}
-
-	return metav1.OwnerReference{
-		APIVersion: gvk.GroupVersion().String(),
-		Kind:       gvk.Kind,
-		Name:       ca.GetName(),
-		UID:        ca.GetUID(),
-		Controller: &trueVar,
-	}, nil
 }
