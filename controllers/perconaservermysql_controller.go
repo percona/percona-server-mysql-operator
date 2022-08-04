@@ -1571,7 +1571,6 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 }
 
 func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	ownerReferences := cr.GetOwnerReferences()
 
 	issuerName := cr.Name + "-pso-issuer"
 	caIssuerName := cr.Name + "-pso-ca-issuer"
@@ -1590,15 +1589,14 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 				CA: &cm.CAIssuer{SecretName: cr.Spec.TLS.IssuerConf.Name},
 			}
 		}
-		if err := r.createIssuer(ctx, ownerReferences, cr.Namespace, caIssuerName, issuerConf); err != nil {
+		if err := r.createIssuer(ctx, cr, caIssuerName, issuerConf); err != nil {
 			return err
 		}
 
 		caCert := &cm.Certificate{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:            cr.Name + "-ca-cert",
-				Namespace:       cr.Namespace,
-				OwnerReferences: ownerReferences,
+				Name:      cr.Name + "-ca-cert",
+				Namespace: cr.Namespace,
 			},
 			Spec: cm.CertificateSpec{
 				SecretName: cr.Name + "-ca-cert",
@@ -1613,8 +1611,11 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 				RenewBefore: &metav1.Duration{Duration: 730 * time.Hour},
 			},
 		}
-
-		err := r.Create(ctx, caCert)
+		err := ctrl.SetControllerReference(cr, caCert, r.Scheme)
+		if err != nil {
+			return errors.Wrap(err, "set controller refference")
+		}
+		err = r.Create(ctx, caCert)
 		if err != nil && !k8serrors.IsAlreadyExists(err) {
 			return errors.Wrap(err, "create CA certificate")
 		}
@@ -1627,7 +1628,7 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 			CA: &cm.CAIssuer{SecretName: caCert.Spec.SecretName},
 		}
 
-		if err := r.createIssuer(ctx, ownerReferences, cr.Namespace, issuerName, issuerConf); err != nil {
+		if err := r.createIssuer(ctx, cr, issuerName, issuerConf); err != nil {
 			return err
 		}
 	}
@@ -1642,9 +1643,8 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 	}
 	kubeCert := &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            cr.Name + "-ssl",
-			Namespace:       cr.Namespace,
-			OwnerReferences: ownerReferences,
+			Name:      cr.Name + "-ssl",
+			Namespace: cr.Namespace,
 		},
 		Spec: cm.CertificateSpec{
 			SecretName: cr.Spec.SSLSecretName,
@@ -1657,12 +1657,15 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 			},
 		},
 	}
-
+	err := ctrl.SetControllerReference(cr, kubeCert, r.Scheme)
+	if err != nil {
+		return errors.Wrap(err, "set controller refference")
+	}
 	if cr.Spec.TLS != nil {
 		kubeCert.Spec.DNSNames = append(kubeCert.Spec.DNSNames, cr.Spec.TLS.SANs...)
 	}
 
-	err := r.Create(ctx, kubeCert)
+	err = r.Create(ctx, kubeCert)
 	if err != nil && !k8serrors.IsAlreadyExists(err) {
 		return errors.Wrap(err, "create certificate")
 	}
@@ -1700,21 +1703,26 @@ func (r *PerconaServerMySQLReconciler) waitForCerts(ctx context.Context, namespa
 	}
 }
 
-func (r *PerconaServerMySQLReconciler) createIssuer(ctx context.Context, ownRef []metav1.OwnerReference, namespace, issuerName string, IssuerConf cm.IssuerConfig,
+func (r *PerconaServerMySQLReconciler) createIssuer(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, issuerName string, IssuerConf cm.IssuerConfig,
 ) error {
 
-	err := r.Create(ctx, &cm.Issuer{
+	isr := &cm.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            issuerName,
-			Namespace:       namespace,
-			OwnerReferences: ownRef,
+			Name:      issuerName,
+			Namespace: cr.Namespace,
 		},
 		Spec: cm.IssuerSpec{
 			IssuerConfig: IssuerConf,
 		},
-	})
+	}
+	err := ctrl.SetControllerReference(cr, isr, r.Scheme)
+	if err != nil {
+		return errors.Wrap(err, "set controller refference")
+	}
+	err = r.Create(ctx, isr)
 	if err != nil && !k8serrors.IsAlreadyExists(err) {
 		return errors.Wrap(err, "create issuer")
 	}
+
 	return nil
 }
