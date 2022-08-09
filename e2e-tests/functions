@@ -182,9 +182,17 @@ get_metric_values() {
 	local start=$($date -u "+%s" -d "-1 minute")
 	local end=$($date -u "+%s")
 
-	run_curl "https://${user_pass}@monitoring-service/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28$metric%7Bnode_name%3D%7E%22$instance%22%7d%20or%20$metric%7Bnode_name%3D%7E%22$instance%22%7D%29&start=$start&end=$end&step=60" \
-		| jq '.data.result[0].values[][1]' \
-		| grep '^"[0-9]'
+	set +o xtrace
+	retry=0
+	until run_curl "https://${user_pass}@monitoring-service/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28$metric%7Bnode_name%3D%7E%22$instance%22%7d%20or%20$metric%7Bnode_name%3D%7E%22$instance%22%7D%29&start=$start&end=$end&step=60" | jq '.data.result[0].values[][1]' | grep '^"[0-9]*"$'; do
+		sleep 1
+		let retry+=1
+		if [ $retry -ge 30 ]; then
+			echo "Max retry count $retry reached. Data about instance $instance was not collected!"
+			exit 1
+		fi
+	done
+	set -o xtrace
 }
 
 get_qan20_values() {

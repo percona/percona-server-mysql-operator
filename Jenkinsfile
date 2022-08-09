@@ -94,7 +94,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
             FILE_NAME = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME-gke-${env.PLATFORM_VER}"
             popArtifactFile("$FILE_NAME")
 
-            timeout(time: 30, unit: 'MINUTES') {
+            timeout(time: 90, unit: 'MINUTES') {
                 sh """
                     if [ -f "$FILE_NAME" ]; then
                         echo "Skipping $TEST_NAME test because it passed in previous run."
