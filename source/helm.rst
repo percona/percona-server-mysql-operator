@@ -64,6 +64,6 @@ The following example will deploy a Percona Server for MySQL in the
 .. code:: bash
 
    $ helm install my-db percona/ps-db --namespace my-namespace \
-     --set mysql.volumeSpec.resources.requests.storage=20Gi \
+     --set mysql.volumeSpec.pvc.resources.requests.storage=20Gi \
      --set backup.enabled=false
 
