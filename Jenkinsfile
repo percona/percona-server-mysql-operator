@@ -312,7 +312,7 @@ pipeline {
         }
         stage('Run E2E tests') {
             parallel {
-                stage('E2E Basic Tests') {
+                stage('E2E Cluster1') {
                     when {
                         expression {
                             !skipBranchBuilds
@@ -330,7 +330,7 @@ pipeline {
                         ShutdownCluster('cluster1')
                     }
                 }
-                stage('E2E Backup Tests') {
+                stage('E2E Cluster2') {
                     when {
                         expression {
                             !skipBranchBuilds
@@ -349,7 +349,7 @@ pipeline {
                         ShutdownCluster('cluster2')
                     }
                 }
-                stage('E2E GR Tests') {
+                stage('E2E Cluster3') {
                     when {
                         expression {
                             !skipBranchBuilds
