@@ -324,18 +324,10 @@ pipeline {
                     steps {
                         prepareNode()
                         unstash "sourceFILES"
-                        CreateCluster('basic')
-                        runTest('auto-config', 'basic')
-                        runTest('config', 'basic')
-                        runTest('init-deploy', 'basic')
-                        runTest('monitoring', 'basic')
-                        runTest('semi-sync', 'basic')
-                        runTest('service-per-pod', 'basic')
-                        runTest('scaling', 'basic')
-                        runTest('sidecars', 'basic')
-                        runTest('users', 'basic')
-                        runTest('limits', 'basic')
-                        ShutdownCluster('basic')
+                        CreateCluster('cluster1')
+                        runTest('auto-config', 'cluster1')
+                        runTest('config', 'cluster1')
+                        ShutdownCluster('cluster1')
                     }
                 }
                 stage('E2E Backup Tests') {
@@ -350,9 +342,11 @@ pipeline {
                     steps {
                         prepareNode()
                         unstash "sourceFILES"
-                        CreateCluster('backup')
-                        runTest('demand-backup', 'backup')
-                        ShutdownCluster('backup')
+                        CreateCluster('cluster2')
+                        runTest('demand-backup', 'cluster2')
+                        runTest('scaling', 'cluster2')
+                        runTest('users', 'cluster2')
+                        ShutdownCluster('cluster2')
                     }
                 }
                 stage('E2E GR Tests') {
@@ -367,9 +361,15 @@ pipeline {
                     steps {
                         prepareNode()
                         unstash "sourceFILES"
-                        CreateCluster('gr')
-                        runTest('gr-init-deploy', 'gr')
-                        ShutdownCluster('gr')
+                        CreateCluster('cluster3')
+                        runTest('init-deploy', 'cluster3')
+                        runTest('gr-init-deploy', 'cluster3')
+                        runTest('monitoring', 'cluster3')
+                        runTest('semi-sync', 'cluster3')
+                        runTest('service-per-pod', 'cluster3')
+                        runTest('sidecars', 'cluster3')
+                        runTest('limits', 'cluster3')
+                        ShutdownCluster('cluster3')
                     }
                 }
             }
