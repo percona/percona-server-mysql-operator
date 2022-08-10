@@ -108,7 +108,7 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
                         export PATH="$HOME/.krew/bin:$PATH"
                         source $HOME/google-cloud-sdk/path.bash.inc
                         set -o pipefail
-                        # time kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "^${TEST_NAME}\$" |& tee e2e-tests/logs/${TEST_NAME}.log
+                        time kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "^${TEST_NAME}\$" |& tee e2e-tests/logs/${TEST_NAME}.log
                     fi
                 """
             }
