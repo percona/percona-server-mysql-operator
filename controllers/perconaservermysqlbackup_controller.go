@@ -123,8 +123,8 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, nil
 	}
 
-	if cluster.Spec.Backup == nil {
-		l.Info("spec.backup stanza not found in PerconaServerMySQL CustomResource")
+	if cluster.Spec.Backup == nil || !cluster.Spec.Backup.Enabled {
+		l.Info("spec.backup stanza not found in PerconaServerMySQL CustomResource or backup is disabled")
 		return rr, nil
 	}
 
