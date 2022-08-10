@@ -1,4 +1,4 @@
-FROM golang:1.18 AS go_builder
+FROM golang:1.19.0 AS go_builder
 WORKDIR /go/src/github.com/percona/percona-server-mysql-operator
 
 COPY . .
