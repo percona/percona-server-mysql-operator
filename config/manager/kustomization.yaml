@@ -8,6 +8,12 @@ configMapGenerator:
 - files:
   - controller_manager_config.yaml
   name: percona-server-mysql-operator-config
+- behavior: create
+  envs:
+  - environment-properties.env
+  name: environment-variables
+
+
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 images:
