@@ -36,6 +36,10 @@ spec:
         command:
         - /usr/local/bin/percona-server-mysql-operator
         env:
+        - name: LOG_STRUCTURED
+          value: "false"
+        - name: LOG_LEVEL
+          value: INFO
         - name: WATCH_NAMESPACE
           valueFrom:
             fieldRef:

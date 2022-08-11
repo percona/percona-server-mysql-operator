@@ -1,32 +1,34 @@
 GKERegion='us-central1-a'
 
-void CreateCluster(String CLUSTER_PREFIX, String SUBNETWORK = CLUSTER_PREFIX) {
+void CreateCluster(String CLUSTER_SUFFIX, String SUBNETWORK = CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
             NODES_NUM=3
-            export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
+            export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_SUFFIX}
             export USE_GKE_GCLOUD_AUTH_PLUGIN=True
             source $HOME/google-cloud-sdk/path.bash.inc
             gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
             gcloud config set project $GCP_PROJECT
-            gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_PREFIX} --zone $GKERegion --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $GKERegion --quiet || true
-            gcloud container clusters create --zone $GKERegion $CLUSTER_NAME-${CLUSTER_PREFIX} --cluster-version=1.21 --machine-type=n1-standard-4 --preemptible --num-nodes=\$NODES_NUM --network=jenkins-ps-vpc --subnetwork=jenkins-ps-${SUBNETWORK} --no-enable-autoupgrade
+            gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone $GKERegion --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $GKERegion --quiet || true
+            gcloud container clusters create --zone $GKERegion $CLUSTER_NAME-${CLUSTER_SUFFIX} --cluster-version=1.21 --machine-type=n1-standard-4 --preemptible --num-nodes=\$NODES_NUM --network=jenkins-ps-vpc --subnetwork=jenkins-ps-${SUBNETWORK} --no-enable-autoupgrade
             kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"$GCP_PROJECT".iam.gserviceaccount.com
         """
    }
 }
-void ShutdownCluster(String CLUSTER_PREFIX) {
+
+void ShutdownCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
-            export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
+            export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_SUFFIX}
             export USE_GKE_GCLOUD_AUTH_PLUGIN=True
             source $HOME/google-cloud-sdk/path.bash.inc
             gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
             gcloud config set project $GCP_PROJECT
-            gcloud container clusters delete --zone $GKERegion $CLUSTER_NAME-${CLUSTER_PREFIX}
+            gcloud container clusters delete --zone $GKERegion $CLUSTER_NAME-${CLUSTER_SUFFIX}
         """
    }
 }
+
 void pushLogFile(String FILE_NAME) {
     LOG_FILE_PATH="e2e-tests/logs/${FILE_NAME}.log"
     LOG_FILE_NAME="${FILE_NAME}.log"
@@ -83,7 +85,7 @@ void setTestsresults() {
     }
 }
 
-void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
+void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
     def retryCount = 0
     waitUntil {
         def testUrl = "https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-ps-operator/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${TEST_NAME}.log"
@@ -94,7 +96,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
             FILE_NAME = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME-gke-${env.PLATFORM_VER}"
             popArtifactFile("$FILE_NAME")
 
-            timeout(time: 30, unit: 'MINUTES') {
+            timeout(time: 90, unit: 'MINUTES') {
                 sh """
                     if [ -f "$FILE_NAME" ]; then
                         echo "Skipping $TEST_NAME test because it passed in previous run."
@@ -102,7 +104,7 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
                         if [ ! -d "e2e-tests/logs" ]; then
                        		mkdir "e2e-tests/logs"
                         fi
-                        export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_PREFIX}
+                        export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_SUFFIX}
                         export PATH="$HOME/.krew/bin:$PATH"
                         source $HOME/google-cloud-sdk/path.bash.inc
                         set -o pipefail
@@ -131,11 +133,45 @@ void runTest(String TEST_NAME, String CLUSTER_PREFIX) {
     }
 }
 
-void installRpms() {
+void prepareNode() {
     sh '''
         sudo yum install -y https://repo.percona.com/yum/percona-release-latest.noarch.rpm || true
         sudo percona-release enable-only tools
         sudo yum install -y percona-xtrabackup-80 jq | true
+    '''
+
+    sh '''
+        if [ ! -d $HOME/google-cloud-sdk/bin ]; then
+            rm -rf $HOME/google-cloud-sdk
+            curl https://sdk.cloud.google.com | bash
+        fi
+
+        source $HOME/google-cloud-sdk/path.bash.inc
+        gcloud components install alpha
+        gcloud components install kubectl
+
+        curl -fsSL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+        curl -s -L https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz \
+            | sudo tar -C /usr/local/bin --strip-components 1 --wildcards -zxvpf - '*/oc'
+
+        curl -s -L https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz \
+            | sudo tar -C /usr/local/bin --wildcards -zxvpf -
+
+        sudo sh -c "curl -s -L https://github.com/mikefarah/yq/releases/download/v4.14.2/yq_linux_amd64 > /usr/local/bin/yq"
+        sudo chmod +x /usr/local/bin/yq
+
+        cd "$(mktemp -d)"
+        OS="$(uname | tr '[:upper:]' '[:lower:]')"
+        ARCH="$(uname -m | sed -e 's/x86_64/amd64/')"
+        KREW="krew-${OS}_${ARCH}"
+        curl -fsSLO "https://github.com/kubernetes-sigs/krew/releases/download/v0.4.3/${KREW}.tar.gz"
+        tar zxvf "${KREW}.tar.gz"
+        ./"${KREW}" install krew
+        rm -f "${KREW}.tar.gz"
+
+        export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
+
+        kubectl krew install kuttl
     '''
 }
 
@@ -165,8 +201,7 @@ pipeline {
                 }
             }
             steps {
-                stash includes: 'vendor/**', name: 'vendorFILES'
-                installRpms()
+                prepareNode()
                 script {
                     if ( AUTHOR_NAME == 'null' )  {
                         AUTHOR_NAME = sh(script: "git show -s --pretty=%ae | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
@@ -179,41 +214,13 @@ pipeline {
                         }
                     }
                 }
-                sh '''
-                    if [ ! -d $HOME/google-cloud-sdk/bin ]; then
-                        rm -rf $HOME/google-cloud-sdk
-                        curl https://sdk.cloud.google.com | bash
-                    fi
-
-                    source $HOME/google-cloud-sdk/path.bash.inc
-                    gcloud components install alpha
-                    gcloud components install kubectl
-
-                    curl -fsSL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
-                    curl -s -L https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz \
-                        | sudo tar -C /usr/local/bin --strip-components 1 --wildcards -zxvpf - '*/oc'
-
-                    curl -s -L https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz \
-                        | sudo tar -C /usr/local/bin --wildcards -zxvpf -
-
-                    sudo sh -c "curl -s -L https://github.com/mikefarah/yq/releases/download/v4.14.2/yq_linux_amd64 > /usr/local/bin/yq"
-                    sudo chmod +x /usr/local/bin/yq
-
-                    cd "$(mktemp -d)"
-                    OS="$(uname | tr '[:upper:]' '[:lower:]')"
-                    ARCH="$(uname -m | sed -e 's/x86_64/amd64/')"
-                    KREW="krew-${OS}_${ARCH}"
-                    curl -fsSLO "https://github.com/kubernetes-sigs/krew/releases/download/v0.4.2/${KREW}.tar.gz"
-                    tar zxvf "${KREW}.tar.gz"
-                    ./"${KREW}" install krew
-
-                    export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
-
-                    kubectl krew install kuttl
-                '''
                 withCredentials([file(credentialsId: 'cloud-secret-file-ps', variable: 'CLOUD_SECRET_FILE')]) {
-                    sh 'cp $CLOUD_SECRET_FILE e2e-tests/conf/cloud-secret.yml'
+                    sh '''
+                        cp $CLOUD_SECRET_FILE e2e-tests/conf/cloud-secret.yml
+                        chmod 600 e2e-tests/conf/cloud-secret.yml
+                    '''
                 }
+                stash includes: "**", name: "sourceFILES"
             }
         }
         stage('Build docker image') {
@@ -299,54 +306,72 @@ pipeline {
                                 diff -u ./e2e-tests/license/compare/golicense golicense-new
                             """
                         }
-                        unstash 'vendorFILES'
                     }
                 }
             }
         }
-        stage('E2E Basic Tests') {
-            when {
-                expression {
-                    !skipBranchBuilds
+        stage('Run E2E tests') {
+            parallel {
+                stage('E2E Cluster1') {
+                    when {
+                        expression {
+                            !skipBranchBuilds
+                        }
+                    }
+                    agent {
+                        label 'docker'
+                    }
+                    steps {
+                        prepareNode()
+                        unstash "sourceFILES"
+                        CreateCluster('cluster1')
+                        runTest('auto-config', 'cluster1')
+                        runTest('config', 'cluster1')
+                        ShutdownCluster('cluster1')
+                    }
                 }
-            }
-            steps {
-                CreateCluster('basic')
-                runTest('auto-config', 'basic')
-                runTest('config', 'basic')
-                runTest('init-deploy', 'basic')
-                runTest('monitoring', 'basic')
-                runTest('semi-sync', 'basic')
-                runTest('service-per-pod', 'basic')
-                runTest('scaling', 'basic')
-                runTest('sidecars', 'basic')
-                runTest('users', 'basic')
-                runTest('limits', 'basic')
-                ShutdownCluster('basic')
-            }
-        }
-        stage('E2E Backup Tests') {
-            when {
-                expression {
-                    !skipBranchBuilds
+                stage('E2E Cluster2') {
+                    when {
+                        expression {
+                            !skipBranchBuilds
+                        }
+                    }
+                    agent {
+                        label 'docker'
+                    }
+                    steps {
+                        prepareNode()
+                        unstash "sourceFILES"
+                        CreateCluster('cluster2')
+                        runTest('demand-backup', 'cluster2')
+                        runTest('scaling', 'cluster2')
+                        runTest('users', 'cluster2')
+                        ShutdownCluster('cluster2')
+                    }
                 }
-            }
-            steps {
-                CreateCluster('backup')
-                runTest('demand-backup', 'backup')
-                ShutdownCluster('backup')
-            }
-        }
-        stage('E2E GR Tests') {
-            when {
-                expression {
-                    !skipBranchBuilds
+                stage('E2E Cluster3') {
+                    when {
+                        expression {
+                            !skipBranchBuilds
+                        }
+                    }
+                    agent {
+                        label 'docker'
+                    }
+                    steps {
+                        prepareNode()
+                        unstash "sourceFILES"
+                        CreateCluster('cluster3')
+                        runTest('init-deploy', 'cluster3')
+                        runTest('gr-init-deploy', 'cluster3')
+                        runTest('monitoring', 'cluster3')
+                        runTest('semi-sync', 'cluster3')
+                        runTest('service-per-pod', 'cluster3')
+                        runTest('sidecars', 'cluster3')
+                        runTest('limits', 'cluster3')
+                        ShutdownCluster('cluster3')
+                    }
                 }
-            }
-            steps {
-                CreateCluster('gr')
-                runTest('gr-init-deploy', 'gr')
-                ShutdownCluster('gr')
             }
         }
     }
