@@ -15,7 +15,7 @@ require (
 )
 
 require (
-	github.com/go-logr/logr v0.4.0
+	github.com/go-logr/logr v1.2.3
 	go.uber.org/zap v1.22.0
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
