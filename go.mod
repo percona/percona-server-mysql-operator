@@ -10,7 +10,7 @@ require (
 	github.com/sjmudd/stopwatch v0.0.0-20170613150411-f380bf8a9be1
 	k8s.io/api v0.24.3
 	k8s.io/apimachinery v0.24.3
-	k8s.io/client-go v0.24.2
+	k8s.io/client-go v0.24.3
 	sigs.k8s.io/controller-runtime v0.12.3
 )
 
