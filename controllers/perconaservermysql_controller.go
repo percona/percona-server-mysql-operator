@@ -1211,6 +1211,14 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		return errors.Wrap(err, "get app host")
 	}
 
+	loadBalancersReady, err := r.allLoadBalancersReady(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "check load balancers")
+	}
+	if !loadBalancersReady {
+		cr.Status.State = apiv1alpha1.StateInitializing
+	}
+
 	l.V(1).Info(
 		"Writing CR status",
 		"mysql", cr.Status.MySQL,
@@ -1224,6 +1232,23 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	return writeStatus(ctx, r.Client, nn, cr.Status)
 }
 
+func (r *PerconaServerMySQLReconciler) allLoadBalancersReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
+	opts := &client.ListOptions{Namespace: cr.Namespace}
+	svcList := &corev1.ServiceList{}
+	if err := r.Client.List(ctx, svcList, opts); err != nil {
+		return false, errors.Wrap(err, "list services")
+	}
+	for _, svc := range svcList.Items {
+		if svc.Spec.Type != corev1.ServiceTypeLoadBalancer {
+			continue
+		}
+		if svc.Status.LoadBalancer.Ingress == nil {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	var serviceName string
 	if cr.Spec.MySQL.IsGR() {
@@ -1234,7 +1259,7 @@ func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServe
 	}
 
 	if cr.Spec.MySQL.IsAsync() {
-		serviceName := mysql.PrimaryServiceName(cr)
+		serviceName = mysql.PrimaryServiceName(cr)
 		if cr.Spec.MySQL.PrimaryServiceType != corev1.ServiceTypeLoadBalancer {
 			return serviceName + "." + cr.GetNamespace(), nil
 		}
