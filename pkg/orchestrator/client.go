@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-type orcResponse struct {
+type OrcResponse struct {
 	Code    string      `json:"Code"`
 	Message string      `json:"Message"`
 	Details interface{} `json:"Details,omitempty"`
@@ -47,7 +47,7 @@ func ClusterPrimary(ctx context.Context, apiHost, clusterHint string) (*Instance
 		return primary, nil
 	}
 
-	orcResp := &orcResponse{}
+	orcResp := &OrcResponse{}
 	if err := json.Unmarshal(body, orcResp); err != nil {
 		return nil, errors.Wrap(err, "json decode")
 	}
@@ -68,7 +68,7 @@ func StopReplication(ctx context.Context, apiHost, host string, port int32) erro
 	}
 	defer resp.Body.Close()
 
-	orcResp := &orcResponse{}
+	orcResp := &OrcResponse{}
 	if err := json.NewDecoder(resp.Body).Decode(orcResp); err != nil {
 		return errors.Wrap(err, "json decode")
 	}
@@ -89,7 +89,7 @@ func StartReplication(ctx context.Context, apiHost, host string, port int32) err
 	}
 	defer resp.Body.Close()
 
-	orcResp := &orcResponse{}
+	orcResp := &OrcResponse{}
 	if err := json.NewDecoder(resp.Body).Decode(orcResp); err != nil {
 		return errors.Wrap(err, "json decode")
 	}
@@ -121,7 +121,7 @@ func AddPeer(ctx context.Context, apiHost string, peer string) error {
 		return nil
 	}
 
-	orcResp := &orcResponse{}
+	orcResp := &OrcResponse{}
 	if err := json.Unmarshal(body, &orcResp); err != nil {
 		return errors.Wrap(err, "json decode")
 	}
@@ -153,7 +153,7 @@ func RemovePeer(ctx context.Context, apiHost string, peer string) error {
 		return nil
 	}
 
-	orcResp := &orcResponse{}
+	orcResp := &OrcResponse{}
 	if err := json.Unmarshal(body, &orcResp); err != nil {
 		return errors.Wrap(err, "json decode")
 	}
@@ -176,4 +176,20 @@ func doRequest(ctx context.Context, url string) (*http.Response, error) {
 	}
 
 	return resp, nil
+}
+
+func GetReplicationStatus(ctx context.Context, apiHost string, clusterName string) (orcResp *OrcResponse, err error) {
+	url := fmt.Sprintf("%s/api/replication-analysis/%s", apiHost, clusterName)
+
+	resp, err := doRequest(ctx, url)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	if err = json.NewDecoder(resp.Body).Decode(orcResp); err != nil {
+		return
+	}
+
+	return
 }

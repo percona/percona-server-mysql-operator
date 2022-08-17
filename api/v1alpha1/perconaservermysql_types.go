@@ -275,8 +275,9 @@ type ServiceExposeTogglable struct {
 type StatefulAppState string
 
 const (
-	StateInitializing StatefulAppState = "initializing"
-	StateReady        StatefulAppState = "ready"
+	StateInitializing     StatefulAppState = "initializing"
+	StateReady            StatefulAppState = "ready"
+	StateReplicationError StatefulAppState = "replication error"
 )
 
 type StatefulAppStatus struct {

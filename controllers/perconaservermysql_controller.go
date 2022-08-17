@@ -22,10 +22,11 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"reflect"
 	"strconv"
 	"time"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -1209,6 +1210,15 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	cr.Status.Host, err = appHost(ctx, r.Client, cr)
 	if err != nil {
 		return errors.Wrap(err, "get app host")
+	}
+
+	orcHost := orchestrator.APIHost(cr)
+	replStatus, err := orchestrator.GetReplicationStatus(ctx, orcHost, cr.Name)
+	if err != nil {
+		return errors.Wrap(err, "get replication status")
+	}
+	if replStatus.Code == "ERROR" {
+		cr.Status.MySQL.State = apiv1alpha1.StateReplicationError
 	}
 
 	l.V(1).Info(
