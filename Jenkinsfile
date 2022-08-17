@@ -1,3 +1,31 @@
+Skip to content
+Search or jump to…
+Pull requests
+Issues
+Marketplace
+Explore
+ 
+@nonemax 
+percona
+/
+percona-server-mysql-operator
+Public
+Code
+Pull requests
+9
+Actions
+Security
+Insights
+percona-server-mysql-operator/Jenkinsfile
+@tplavcic
+tplavcic K8SPS-123 - Run jenkins tests in parallel (#131)
+…
+Latest commit 3f54006 7 days ago
+ History
+ 8 contributors
+@nmarukovich@egegunes@hors@tplavcic@github-actions@inelpandzic@pooknull@defbin
+ 421 lines (396 sloc)  18.5 KB
+
 GKERegion='us-central1-a'
 
 void CreateCluster(String CLUSTER_SUFFIX, String SUBNETWORK = CLUSTER_SUFFIX) {
@@ -145,21 +173,16 @@ void prepareNode() {
             rm -rf $HOME/google-cloud-sdk
             curl https://sdk.cloud.google.com | bash
         fi
-
         source $HOME/google-cloud-sdk/path.bash.inc
         gcloud components install alpha
         gcloud components install kubectl
-
         curl -fsSL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
         curl -s -L https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz \
             | sudo tar -C /usr/local/bin --strip-components 1 --wildcards -zxvpf - '*/oc'
-
         curl -s -L https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz \
             | sudo tar -C /usr/local/bin --wildcards -zxvpf -
-
         sudo sh -c "curl -s -L https://github.com/mikefarah/yq/releases/download/v4.14.2/yq_linux_amd64 > /usr/local/bin/yq"
         sudo chmod +x /usr/local/bin/yq
-
         cd "$(mktemp -d)"
         OS="$(uname | tr '[:upper:]' '[:lower:]')"
         ARCH="$(uname -m | sed -e 's/x86_64/amd64/')"
@@ -168,9 +191,7 @@ void prepareNode() {
         tar zxvf "${KREW}.tar.gz"
         ./"${KREW}" install krew
         rm -f "${KREW}.tar.gz"
-
         export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
-
         kubectl krew install kuttl
     '''
 }
@@ -349,28 +370,6 @@ pipeline {
                         ShutdownCluster('cluster2')
                     }
                 }
-            }
-            steps {
-                CreateCluster('basic')
-                runTest('auto-config', 'basic')
-                runTest('config', 'basic')
-                runTest('init-deploy', 'basic')
-                runTest('monitoring', 'basic')
-                runTest('semi-sync', 'basic')
-                runTest('service-per-pod', 'basic')
-                runTest('scaling', 'basic')
-                runTest('sidecars', 'basic')
-                runTest('users', 'basic')
-                runTest('limits', 'basic')
-                runTest('tls-cert-manager', 'basic')
-                ShutdownCluster('basic')
-            }
-        }
-        stage('E2E Backup Tests') {
-            when {
-                expression {
-                    !skipBranchBuilds
-                }
                 stage('E2E Cluster3') {
                     when {
                         expression {
@@ -391,6 +390,7 @@ pipeline {
                         runTest('service-per-pod', 'cluster3')
                         runTest('sidecars', 'cluster3')
                         runTest('limits', 'cluster3')
+                        runTest('tls-cert-manager', 'cluster3')
                         ShutdownCluster('cluster3')
                     }
                 }
