@@ -18,12 +18,7 @@ Based on our best practices for deployment and configuration, [Percona Operator 
 
 ## Roadmap
 
-Our goal is to release the GA version late in Q2’2022. We plan to include the following:
-
-* Support for both sync and async replication
-* Backups and restores, proxies integration
-* Exceptional quality and full test coverage
-* Certifications on various Kubernetes platforms and flavors
+We have an experimental public roadmap which can be found [here](https://github.com/percona/roadmap/projects/1). Please feel free to contribute and propose new features by following the roadmap [guidelines](https://github.com/percona/roadmap).
 
 ## Architecture
 
