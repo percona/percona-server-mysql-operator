@@ -104,6 +104,10 @@ metadata:
     name: gr-init-deploy
 spec:
   ports:
+  - name: http
+    port: 8443
+    protocol: TCP
+    targetPort: 8443
   - name: read-write
     port: 6446
     protocol: TCP
