@@ -108,6 +108,12 @@ manifests: kustomize generate
 	echo "---" >> $(DEPLOYDIR)/operator.yaml
 	cat $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/rbac.yaml $(DEPLOYDIR)/operator.yaml > $(DEPLOYDIR)/bundle.yaml
 
+gen-versionservice-client: swagger
+	go get github.com/Percona-Lab/percona-version-service/api@latest
+	go mod vendor
+	rm -rf pkg/versionservice/client
+	swagger generate client -f vendor/github.com/Percona-Lab/percona-version-service/api/version.swagger.yaml -c pkg/versionservice/client -m pkg/versionservice/client/models
+
 ##@ Build
 
 .PHONY: build
@@ -142,6 +148,10 @@ kustomize: ## Download kustomize locally if necessary.
 ENVTEST = $(shell pwd)/bin/setup-envtest
 envtest: ## Download envtest-setup locally if necessary.
 	$(call go-get-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
+
+SWAGGER = $(shell pwd)/bin/swagger
+swagger: ## Download swagger locally if necessary.
+	$(call go-get-tool,$(SWAGGER),github.com/go-swagger/go-swagger/cmd/swagger@latest)
 
 # go-get-tool will 'go get' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))

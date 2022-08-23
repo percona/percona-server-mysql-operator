@@ -46,7 +46,10 @@ type PerconaServerMySQLSpec struct {
 	PMM                   *PMMSpec         `json:"pmm,omitempty"`
 	Backup                *BackupSpec      `json:"backup,omitempty"`
 	Router                *MySQLRouterSpec `json:"router,omitempty"`
+	UpgradeOptions        UpgradeOptions   `json:"upgradeOptions,omitempty"`
 }
+
+const Version = "0.2.0"
 
 type ClusterType string
 
@@ -280,34 +283,36 @@ const (
 )
 
 type StatefulAppStatus struct {
-	Size  int32            `json:"size,omitempty"`
-	Ready int32            `json:"ready,omitempty"`
-	State StatefulAppState `json:"state,omitempty"`
+	Size    int32            `json:"size,omitempty"`
+	Ready   int32            `json:"ready,omitempty"`
+	State   StatefulAppState `json:"state,omitempty"`
+	Version string           `json:"version,omitempty"`
 }
 
 // PerconaServerMySQLStatus defines the observed state of PerconaServerMySQL
 type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	MySQL        StatefulAppStatus `json:"mysql,omitempty"`
-	Orchestrator StatefulAppStatus `json:"orchestrator,omitempty"`
-	Router       StatefulAppStatus `json:"router,omitempty"`
-	State        StatefulAppState  `json:"state,omitempty"`
+	MySQL         StatefulAppStatus `json:"mysql,omitempty"`
+	Orchestrator  StatefulAppStatus `json:"orchestrator,omitempty"`
+	Router        StatefulAppStatus `json:"router,omitempty"`
+	State         StatefulAppState  `json:"state,omitempty"`
+	BackupVersion string            `json:"backupVersion,omitempty"`
 	// +optional
 	Host string `json:"host"`
 }
 
 // PerconaServerMySQL is the Schema for the perconaservermysqls API
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="Replication",type=string,JSONPath=".spec.mysql.clusterType"
-//+kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=".status.host"
-//+kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
-//+kubebuilder:printcolumn:name="MySQL",type=string,JSONPath=".status.mysql.ready"
-//+kubebuilder:printcolumn:name="Orchestrator",type=string,JSONPath=".status.orchestrator.ready"
-//+kubebuilder:printcolumn:name="Router",type=string,JSONPath=".status.router.ready"
-//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-//+kubebuilder:resource:scope=Namespaced
-//+kubebuilder:resource:shortName=ps
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Replication",type=string,JSONPath=".spec.mysql.clusterType"
+// +kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=".status.host"
+// +kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
+// +kubebuilder:printcolumn:name="MySQL",type=string,JSONPath=".status.mysql.ready"
+// +kubebuilder:printcolumn:name="Orchestrator",type=string,JSONPath=".status.orchestrator.ready"
+// +kubebuilder:printcolumn:name="Router",type=string,JSONPath=".status.router.ready"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:resource:scope=Namespaced
+// +kubebuilder:resource:shortName=ps
 type PerconaServerMySQL struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -351,6 +356,15 @@ func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 	return &cr.Spec.Orchestrator
 }
 
+func (cr *PerconaServerMySQL) SetVersion() {
+	if len(cr.Spec.CRVersion) > 0 {
+		return
+	}
+
+	cr.Spec.CRVersion = Version
+	return
+}
+
 func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVersion) error {
 	if len(cr.Spec.MySQL.ClusterType) == 0 {
 		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
@@ -359,6 +373,8 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 	if valid := cr.Spec.MySQL.ClusterType.isValid(); !valid {
 		return errors.Errorf("%s is not a valid clusterType, valid options are %s and %s", cr.Spec.MySQL.ClusterType, ClusterTypeGR, ClusterTypeAsync)
 	}
+
+	cr.SetVersion()
 
 	if len(cr.Spec.Backup.Image) == 0 {
 		return errors.New("backup.image can't be empty")
@@ -635,3 +651,15 @@ func (cr *PerconaServerMySQL) InnoDBClusterName() string {
 func init() {
 	SchemeBuilder.Register(&PerconaServerMySQL{}, &PerconaServerMySQLList{})
 }
+
+type UpgradeOptions struct {
+	VersionServiceEndpoint string `json:"versionServiceEndpoint,omitempty"`
+	Apply                  string `json:"apply,omitempty"`
+}
+
+const (
+	UpgradeStrategyDisabled    = "disabled"
+	UpgradeStrategyNever       = "never"
+	UpgradeStrategyRecommended = "recommended"
+	UpgradeStrategyLatest      = "latest"
+)

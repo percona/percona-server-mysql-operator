@@ -53,6 +53,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/users"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
+	"github.com/percona/percona-server-mysql-operator/pkg/versionservice"
 )
 
 // PerconaServerMySQLReconciler reconciles a PerconaServerMySQL object
@@ -143,7 +144,27 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.cleanupOutdated(ctx, cr); err != nil {
 		return errors.Wrap(err, "cleanup outdated")
 	}
+	if err := r.ensureOperatorVersion(ctx, cr); err != nil {
+		return errors.Wrap(err, "ensure operator version")
+	}
 
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) ensureOperatorVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if cr.Spec.UpgradeOptions.Apply == "" ||
+		cr.Spec.UpgradeOptions.Apply == apiv1alpha1.UpgradeStrategyDisabled ||
+		cr.Spec.UpgradeOptions.Apply == apiv1alpha1.UpgradeStrategyNever {
+		return nil
+	}
+
+	log := log.FromContext(ctx).WithName("ensureOperatorVersion")
+
+	version, err := versionservice.GetExactVersion(ctx, cr, r.ServerVersion)
+	if err != nil {
+		return errors.Wrap(err, "get exact version")
+	}
+	log.Info("got version", "versions", version.String())
 	return nil
 }
 
