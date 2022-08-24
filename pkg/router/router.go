@@ -4,6 +4,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -24,6 +25,7 @@ const (
 	PortReadOnly   = 6447
 	PortXReadWrite = 6448
 	PortXReadOnly  = 6449
+	PortRWAdmin    = 33062
 )
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
@@ -61,6 +63,9 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 				{
 					Name: "rw-default",
 					Port: int32(PortRWDefault),
+					TargetPort: intstr.IntOrString{
+						IntVal: PortReadWrite,
+					},
 				},
 				{
 					Name: "read-write",
@@ -77,6 +82,10 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 				{
 					Name: "x-read-only",
 					Port: int32(PortXReadOnly),
+				},
+				{
+					Name: "rw-admin",
+					Port: int32(PortRWAdmin),
 				},
 			},
 			Selector: labels,
@@ -163,10 +172,6 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		},
 		Ports: []corev1.ContainerPort{
 			{
-				Name:          "rw-default",
-				ContainerPort: int32(PortRWDefault),
-			},
-			{
 				Name:          "read-write",
 				ContainerPort: int32(PortReadWrite),
 			},
@@ -181,6 +186,10 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			{
 				Name:          "x-read-only",
 				ContainerPort: int32(PortXReadOnly),
+			},
+			{
+				Name:          "rw-admin",
+				ContainerPort: int32(PortRWAdmin),
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
