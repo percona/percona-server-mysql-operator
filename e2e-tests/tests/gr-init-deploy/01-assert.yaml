@@ -104,6 +104,10 @@ metadata:
     name: gr-init-deploy
 spec:
   ports:
+  - name: rw-default
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
   - name: read-write
     port: 6446
     protocol: TCP

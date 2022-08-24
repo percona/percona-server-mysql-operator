@@ -19,6 +19,7 @@ const (
 )
 
 const (
+	PortRWDefault  = 3306
 	PortReadWrite  = 6446
 	PortReadOnly   = 6447
 	PortXReadWrite = 6448
@@ -57,6 +58,10 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Type: serviceType,
 			Ports: []corev1.ServicePort{
+				{
+					Name: "rw-default",
+					Port: int32(PortRWDefault),
+				},
 				{
 					Name: "read-write",
 					Port: int32(PortReadWrite),
@@ -157,6 +162,10 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			},
 		},
 		Ports: []corev1.ContainerPort{
+			{
+				Name:          "rw-default",
+				ContainerPort: int32(PortRWDefault),
+			},
 			{
 				Name:          "read-write",
 				ContainerPort: int32(PortReadWrite),
