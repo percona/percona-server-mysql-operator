@@ -209,7 +209,7 @@ func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          cr.Spec.Orchestrator.ContainerSecurityContext,
 		LivenessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path: "/api/lb-check",
 					Port: intstr.FromString("web"),
@@ -222,7 +222,7 @@ func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			SuccessThreshold:    1,
 		},
 		ReadinessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path: "/api/health",
 					Port: intstr.FromString("web"),
