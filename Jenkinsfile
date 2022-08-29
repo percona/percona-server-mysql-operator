@@ -1,31 +1,3 @@
-Skip to content
-Search or jump to…
-Pull requests
-Issues
-Marketplace
-Explore
- 
-@nonemax 
-percona
-/
-percona-server-mysql-operator
-Public
-Code
-Pull requests
-9
-Actions
-Security
-Insights
-percona-server-mysql-operator/Jenkinsfile
-@tplavcic
-tplavcic K8SPS-123 - Run jenkins tests in parallel (#131)
-…
-Latest commit 3f54006 7 days ago
- History
- 8 contributors
-@nmarukovich@egegunes@hors@tplavcic@github-actions@inelpandzic@pooknull@defbin
- 421 lines (396 sloc)  18.5 KB
-
 GKERegion='us-central1-a'
 
 void CreateCluster(String CLUSTER_SUFFIX, String SUBNETWORK = CLUSTER_SUFFIX) {
