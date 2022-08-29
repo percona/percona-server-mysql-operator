@@ -2,6 +2,8 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: cluster1-s3-credentials
+  finalizers:
+    - delete-backup
 type: Opaque
 data:
   AWS_ACCESS_KEY_ID: c29tZS1hY2Nlc3Mta2V5

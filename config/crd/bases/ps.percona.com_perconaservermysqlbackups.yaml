@@ -68,15 +68,78 @@ spec:
             description: PerconaServerMySQLBackupStatus defines the observed state
               of PerconaServerMySQLBackup
             properties:
+              azure:
+                properties:
+                  containerName:
+                    description: A container name is a valid DNS name that conforms
+                      to the Azure naming rules.
+                    type: string
+                  credentialsSecret:
+                    description: A generated key that can be used to authorize access
+                      to data in your account using the Shared Key authorization.
+                    type: string
+                  endpointUrl:
+                    description: The endpoint allows clients to securely access data
+                    type: string
+                  prefix:
+                    description: A prefix is a sub-folder to the backups inside the
+                      container
+                    type: string
+                  storageClass:
+                    description: Hot (Frequently accessed or modified data), Cool
+                      (Infrequently accessed or modified data), Archive (Rarely accessed
+                      or modified data)
+                    type: string
+                required:
+                - containerName
+                - credentialsSecret
+                type: object
               completed:
                 format: date-time
                 type: string
               destination:
                 type: string
+              gcs:
+                properties:
+                  bucket:
+                    type: string
+                  credentialsSecret:
+                    type: string
+                  endpointUrl:
+                    type: string
+                  prefix:
+                    type: string
+                  storageClass:
+                    description: STANDARD, NEARLINE, COLDLINE, ARCHIVE
+                    type: string
+                required:
+                - bucket
+                - credentialsSecret
+                type: object
+              s3:
+                properties:
+                  bucket:
+                    type: string
+                  credentialsSecret:
+                    type: string
+                  endpointUrl:
+                    type: string
+                  prefix:
+                    type: string
+                  region:
+                    type: string
+                  storageClass:
+                    type: string
+                required:
+                - bucket
+                - credentialsSecret
+                type: object
               state:
                 type: string
               storageName:
                 type: string
+              verifyTLS:
+                type: boolean
             type: object
         type: object
     served: true

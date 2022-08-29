@@ -17,8 +17,13 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/pkg/errors"
@@ -37,6 +42,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
 
@@ -119,7 +125,9 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 	switch cr.Status.State {
 	case apiv1alpha1.BackupFailed, apiv1alpha1.BackupSucceeded:
-		// run finalizers
+		if err := r.checkFinalizers(ctx, cr, cluster); err != nil {
+			return rr, errors.Wrapf(err, "check finalizers for %v", nn.String())
+		}
 		return rr, nil
 	}
 
@@ -156,6 +164,10 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		destination := getDestination(storage, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
 		job := xtrabackup.Job(cluster, cr, destination, initImage, storage)
 
+		status.VerifyTLS = true
+		if storage.VerifyTLS != nil {
+			status.VerifyTLS = *storage.VerifyTLS
+		}
 		switch storage.Type {
 		case apiv1alpha1.BackupStorageS3:
 			if storage.S3 == nil {
@@ -177,6 +189,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			}
 
 			status.Destination = fmt.Sprintf("s3://%s/%s", storage.S3.Bucket, destination)
+			status.S3 = storage.S3
 		case apiv1alpha1.BackupStorageGCS:
 			if storage.GCS == nil {
 				return rr, errors.New("gcs stanza is required in storage")
@@ -197,6 +210,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			}
 
 			status.Destination = fmt.Sprintf("gs://%s/%s", storage.GCS.Bucket, destination)
+			status.GCS = storage.GCS
 		case apiv1alpha1.BackupStorageAzure:
 			if storage.Azure == nil {
 				return rr, errors.New("azure stanza is required in storage")
@@ -217,6 +231,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			}
 
 			status.Destination = fmt.Sprintf("%s/%s", storage.Azure.ContainerName, destination)
+			status.Azure = storage.Azure
 		default:
 			return rr, errors.Errorf("storage type %s is not supported", storage.Type)
 		}
@@ -314,4 +329,148 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 	}
 
 	return src, nil
+}
+
+const (
+	finalizerDeleteBackup = "delete-backup"
+)
+
+func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context,
+	cr *apiv1alpha1.PerconaServerMySQLBackup,
+	cluster *apiv1alpha1.PerconaServerMySQL) error {
+	if cr.DeletionTimestamp == nil {
+		return nil
+	}
+	l := log.FromContext(ctx).WithName("checkFinalizers")
+
+	var finalizers []string
+	for _, finalizer := range cr.GetFinalizers() {
+		var err error
+		switch finalizer {
+		case finalizerDeleteBackup:
+			err = r.deleteBackup(ctx, cr, cluster)
+		default:
+			finalizers = append(finalizers, finalizer)
+		}
+		if err != nil {
+			l.Error(err, "failed to run finalizer "+finalizer)
+			finalizers = append(finalizers, finalizer)
+		}
+	}
+	cr.Finalizers = finalizers
+
+	err := r.Update(ctx, cr)
+	if err != nil {
+		l.Error(err, "failed to update finalizers for backup", "backup", cr.Name)
+	}
+	return nil
+}
+
+func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context,
+	cr *apiv1alpha1.PerconaServerMySQLBackup,
+	cluster *apiv1alpha1.PerconaServerMySQL) error {
+
+	src, err := r.getBackupSource(ctx, cluster)
+	if err != nil {
+		return errors.Wrap(err, "get backup source node")
+	}
+	backupConf := &apiv1alpha1.SidecarBackupConfig{
+		Destination: cr.Status.Destination,
+		VerifyTLS:   cr.Status.VerifyTLS,
+	}
+	nn := types.NamespacedName{
+		Namespace: cr.Namespace,
+	}
+	s := new(corev1.Secret)
+	switch {
+	case cr.Status.S3 != nil:
+		s3 := cr.Status.S3
+		nn.Name = s3.CredentialsSecret
+		if err = r.Get(ctx, nn, s); err != nil {
+			return errors.Wrapf(err, "get secret/%s", nn.Name)
+		}
+		accessKey, ok := s.Data[secret.CredentialsAWSAccessKey]
+		if !ok {
+			return errors.Errorf("no credentials for Azure in secret %s", nn.Name)
+		}
+		secretKey, ok := s.Data[secret.CredentialsAWSSecretKey]
+		if !ok {
+			return errors.Errorf("no credentials for Azure in secret %s", nn.Name)
+		}
+		backupConf.S3.Bucket = s3.Bucket
+		backupConf.S3.Region = s3.Region
+		backupConf.S3.EndpointURL = s3.EndpointURL
+		backupConf.S3.StorageClass = s3.StorageClass
+		backupConf.S3.AccessKey = string(accessKey)
+		backupConf.S3.SecretKey = string(secretKey)
+		backupConf.Type = apiv1alpha1.BackupStorageS3
+	case cr.Status.GCS != nil:
+		gcs := cr.Status.GCS
+		nn.Name = gcs.CredentialsSecret
+		if err = r.Get(ctx, nn, s); err != nil {
+			return errors.Wrapf(err, "get secret/%s", nn.Name)
+		}
+		accessKey, ok := s.Data[secret.CredentialsGCSAccessKey]
+		if !ok {
+			return errors.Errorf("no credentials for Azure in secret %s", nn.Name)
+		}
+		secretKey, ok := s.Data[secret.CredentialsGCSSecretKey]
+		if !ok {
+			return errors.Errorf("no credentials for Azure in secret %s", nn.Name)
+		}
+		backupConf.GCS.Bucket = gcs.Bucket
+		backupConf.GCS.EndpointURL = gcs.EndpointURL
+		backupConf.GCS.StorageClass = gcs.StorageClass
+		backupConf.GCS.AccessKey = string(accessKey)
+		backupConf.GCS.SecretKey = string(secretKey)
+		backupConf.Type = apiv1alpha1.BackupStorageGCS
+	case cr.Status.Azure != nil:
+		azure := cr.Status.Azure
+		nn.Name = azure.CredentialsSecret
+		if err = r.Get(ctx, nn, s); err != nil {
+			return errors.Wrapf(err, "get secret/%s", nn.Name)
+		}
+		storageAccount, ok := s.Data[secret.CredentialsAzureStorageAccount]
+		if !ok {
+			return errors.Errorf("no credentials for Azure in secret %s", nn.Name)
+		}
+		accessKey, ok := s.Data[secret.CredentialsAzureAccessKey]
+		if !ok {
+			return errors.Errorf("no credentials for Azure in secret %s", nn.Name)
+		}
+		backupConf.Azure.ContainerName = azure.ContainerName
+		backupConf.Azure.EndpointURL = azure.EndpointURL
+		backupConf.Azure.StorageClass = azure.StorageClass
+		backupConf.Azure.StorageAccount = string(storageAccount)
+		backupConf.Azure.AccessKey = string(accessKey)
+		backupConf.Type = apiv1alpha1.BackupStorageAzure
+	default:
+		return errors.New("unknown backup storage type")
+	}
+	data, err := json.Marshal(backupConf)
+	if err != nil {
+		return errors.Wrap(err, "marshal sidecar backup config")
+	}
+	sidecarURL := url.URL{
+		Host:   src + ":6033",
+		Scheme: "http",
+		Path:   "/backup/" + cr.Name,
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, sidecarURL.String(), bytes.NewReader(data))
+	if err != nil {
+		return errors.Wrap(err, "create http request")
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "delete backup")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return errors.Wrap(err, "read response body")
+		}
+		return errors.Errorf("delete backup failed: %s", string(body))
+	}
+	return nil
 }

@@ -24,34 +24,6 @@ import (
 var log = logf.Log.WithName("sidecar")
 var sensitiveFlags = regexp.MustCompile("--password=(.*)|--.*-access-key=(.*)|--.*secret-key=(.*)")
 
-type BackupConf struct {
-	Destination string                        `json:"destination"`
-	Type        apiv1alpha1.BackupStorageType `json:"type"`
-	VerifyTLS   bool                          `json:"verifyTLS,omitempty"`
-	S3          struct {
-		Bucket       string `json:"bucket"`
-		Region       string `json:"region,omitempty"`
-		EndpointURL  string `json:"endpointUrl,omitempty"`
-		StorageClass string `json:"storageClass,omitempty"`
-		AccessKey    string `json:"accessKey,omitempty"`
-		SecretKey    string `json:"secretKey,omitempty"`
-	} `json:"s3,omitempty"`
-	GCS struct {
-		Bucket       string `json:"bucket"`
-		EndpointURL  string `json:"endpointUrl,omitempty"`
-		StorageClass string `json:"storageClass,omitempty"`
-		AccessKey    string `json:"accessKey,omitempty"`
-		SecretKey    string `json:"secretKey,omitempty"`
-	} `json:"gcs,omitempty"`
-	Azure struct {
-		ContainerName  string `json:"containerName"`
-		EndpointURL    string `json:"endpointUrl,omitempty"`
-		StorageClass   string `json:"storageClass,omitempty"`
-		StorageAccount string `json:"storageAccount,omitempty"`
-		AccessKey      string `json:"accessKey,omitempty"`
-	} `json:"azure,omitempty"`
-}
-
 func main() {
 	opts := zap.Options{Development: true}
 	logf.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
@@ -109,8 +81,15 @@ func xtrabackupArgs(user, pass string) []string {
 	}
 }
 
-func xbcloudArgs(conf BackupConf) []string {
-	args := []string{"put", "--parallel=10", "--curl-retriable-errors=7"}
+type xbcloudAction string
+
+const (
+	xbcloudActionPut    xbcloudAction = "put"
+	xbcloudActionDelete xbcloudAction = "delete"
+)
+
+func xbcloudArgs(action xbcloudAction, conf apiv1alpha1.SidecarBackupConfig) []string {
+	args := []string{string(action), "--parallel=10", "--curl-retriable-errors=7"}
 
 	if !conf.VerifyTLS {
 		args = append(args, "--insecure")
@@ -167,6 +146,91 @@ func xbcloudArgs(conf BackupConf) []string {
 }
 
 func backupHandler(w http.ResponseWriter, req *http.Request) {
+	switch req.Method {
+	case http.MethodPost:
+		createBackupHandler(w, req)
+	case http.MethodDelete:
+		deleteBackupHandler(w, req)
+	default:
+		http.Error(w, "method not supported", http.StatusMethodNotAllowed)
+	}
+}
+
+func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
+	ns, err := getNamespace()
+	if err != nil {
+		log.Error(err, "failed to detect namespace")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
+		return
+	}
+
+	path := strings.Split(req.URL.Path, "/")
+	if len(path) < 3 {
+		http.Error(w, "backup name must be provided in URL", http.StatusBadRequest)
+		return
+	}
+
+	backupName := path[2]
+	log = log.WithValues("namespace", ns, "name", backupName)
+	data, err := io.ReadAll(req.Body)
+	if err != nil {
+		log.Error(err, "failed to read request data")
+		http.Error(w, "backup failed", http.StatusBadRequest)
+		return
+	}
+	defer req.Body.Close()
+
+	backupConf := apiv1alpha1.SidecarBackupConfig{}
+	if err = json.Unmarshal(data, &backupConf); err != nil {
+		log.Error(err, "failed to unmarshal backup config")
+		http.Error(w, "backup failed", http.StatusBadRequest)
+		return
+	}
+
+	backupLog, err := os.OpenFile(filepath.Join(mysql.BackupLogDir, backupName+".log"), os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Error(err, "failed to open log file")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
+		return
+	}
+	defer backupLog.Close()
+	logWriter := io.MultiWriter(backupLog, os.Stderr)
+
+	xbcloud := exec.Command("xbcloud", xbcloudArgs(xbcloudActionDelete, backupConf)...)
+	xbcloudErr, err := xbcloud.StderrPipe()
+	if err != nil {
+		log.Error(err, "xbcloud stderr pipe failed")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
+		return
+	}
+	defer xbcloudErr.Close()
+	log.Info(
+		"Deleting Backup",
+		"destination", backupConf.Destination,
+		"storage", backupConf.Type,
+		"xbcloudCmd", sanitizeCmd(xbcloud),
+	)
+	if err := xbcloud.Start(); err != nil {
+		log.Error(err, "failed to start xbcloud")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := io.Copy(logWriter, xbcloudErr); err != nil {
+		log.Error(err, "failed to copy xbcloud stderr")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
+		return
+	}
+
+	if err := xbcloud.Wait(); err != nil {
+		log.Error(err, "failed waiting for xbcloud to finish")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
+		return
+	}
+	log.Info("Backup deleted successfully", "destination", backupConf.Destination, "storage", backupConf.Type)
+}
+
+func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	ns, err := getNamespace()
 	if err != nil {
 		log.Error(err, "failed to detect namespace")
@@ -190,7 +254,7 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	defer req.Body.Close()
 
-	backupConf := BackupConf{}
+	backupConf := apiv1alpha1.SidecarBackupConfig{}
 	if err := json.Unmarshal(data, &backupConf); err != nil {
 		log.Error(err, "failed to unmarshal backup config")
 		http.Error(w, "backup failed", http.StatusBadRequest)
@@ -232,9 +296,10 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
+	defer backupLog.Close()
 	logWriter := io.MultiWriter(backupLog, os.Stderr)
 
-	xbcloud := exec.Command("xbcloud", xbcloudArgs(backupConf)...)
+	xbcloud := exec.Command("xbcloud", xbcloudArgs(xbcloudActionPut, backupConf)...)
 	xbcloud.Stdin = xbOut
 
 	xbcloudErr, err := xbcloud.StderrPipe()

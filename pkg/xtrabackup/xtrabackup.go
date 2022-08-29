@@ -11,6 +11,7 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 	"github.com/pkg/errors"
 )
@@ -435,13 +436,13 @@ func SetStorageS3(job *batchv1.Job, s3 *apiv1alpha1.BackupStorageS3Spec) error {
 		{
 			Name: "AWS_ACCESS_KEY_ID",
 			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: k8s.SecretKeySelector(s3.CredentialsSecret, "AWS_ACCESS_KEY_ID"),
+				SecretKeyRef: k8s.SecretKeySelector(s3.CredentialsSecret, secret.CredentialsAWSAccessKey),
 			},
 		},
 		{
 			Name: "AWS_SECRET_ACCESS_KEY",
 			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: k8s.SecretKeySelector(s3.CredentialsSecret, "AWS_SECRET_ACCESS_KEY"),
+				SecretKeyRef: k8s.SecretKeySelector(s3.CredentialsSecret, secret.CredentialsAWSSecretKey),
 			},
 		},
 		{
@@ -485,13 +486,13 @@ func SetStorageGCS(job *batchv1.Job, gcs *apiv1alpha1.BackupStorageGCSSpec) erro
 		{
 			Name: "ACCESS_KEY_ID",
 			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: k8s.SecretKeySelector(gcs.CredentialsSecret, "ACCESS_KEY_ID"),
+				SecretKeyRef: k8s.SecretKeySelector(gcs.CredentialsSecret, secret.CredentialsGCSAccessKey),
 			},
 		},
 		{
 			Name: "SECRET_ACCESS_KEY",
 			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: k8s.SecretKeySelector(gcs.CredentialsSecret, "SECRET_ACCESS_KEY"),
+				SecretKeyRef: k8s.SecretKeySelector(gcs.CredentialsSecret, secret.CredentialsGCSSecretKey),
 			},
 		},
 		{
@@ -535,13 +536,13 @@ func SetStorageAzure(job *batchv1.Job, azure *apiv1alpha1.BackupStorageAzureSpec
 		{
 			Name: "AZURE_STORAGE_ACCOUNT",
 			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: k8s.SecretKeySelector(azure.CredentialsSecret, "AZURE_STORAGE_ACCOUNT_NAME"),
+				SecretKeyRef: k8s.SecretKeySelector(azure.CredentialsSecret, secret.CredentialsAzureStorageAccount),
 			},
 		},
 		{
 			Name: "AZURE_ACCESS_KEY",
 			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: k8s.SecretKeySelector(azure.CredentialsSecret, "AZURE_STORAGE_ACCOUNT_KEY"),
+				SecretKeyRef: k8s.SecretKeySelector(azure.CredentialsSecret, secret.CredentialsAzureAccessKey),
 			},
 		},
 		{
