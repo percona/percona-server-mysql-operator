@@ -100,7 +100,8 @@ Contributions to the source tree should follow the workflow described below:
    ```
    kubectl logs percona-server-mysql-operator-<pod-hash>
    ```
-
+   To get more detailed information in operator log change `LOG_LEVEL` value to `DEBUG`
+   in `deploy/operator.yaml`file.
    Now you need to create a custom resource (CR) from CRD.
    Here we will show CR for percona cluster with default asynchronous replication:
    ```
