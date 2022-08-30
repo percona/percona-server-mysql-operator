@@ -106,12 +106,86 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 		}
 	}()
 
+
+    if cr.ObjectMeta.DeletionTimestamp != nil {
+        err := r.applyFinalizers(ctx, cr)
+        // if rec || err != nil {
+        //     return rr, nil
+        // }
+        return rr, err
+    }
+    
 	if err := r.doReconcile(ctx, cr); err != nil {
 		return rr, errors.Wrap(err, "reconcile")
 	}
 
 	return rr, nil
 }
+
+func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+    l := log.FromContext(ctx).WithName("Finalizer")
+
+    l.Info("Applying finalizers", "CR", cr)
+    
+	var err error
+	
+	finalizers := []string{}
+	for _, f := range cr.GetFinalizers() {
+		switch f {
+		case "delete-ps-pods-in-order":
+		    l.Info("deleting PS pods")
+		    err = r.deletePSPods(ctx, cr)
+		}
+	
+		if err != nil {
+			l.Error(err, "failed to run finalizer", "finalizer", f)
+			finalizers = append(finalizers, f)
+		}
+	}
+	
+	cr.SetFinalizers(finalizers)
+	err = r.Client.Update(ctx, cr)
+
+	return err
+}
+
+func (r *PerconaServerMySQLReconciler) deletePSPods(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+    l := log.FromContext(ctx).WithName("Finalizer")
+    
+    pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
+    if err != nil {
+        l.Error(err, "failed to get the pods")
+        return errors.Wrap(err, "get pods")
+    }
+    l.Info("got pods", "pods", pods)
+	
+	// the last pod left - we can leave it for the stateful set
+	if len(pods) <= 1 {
+        l.Info("one or less then one pod")
+		time.Sleep(time.Second * 3)
+		return nil
+	}
+
+	sts := &appsv1.StatefulSet{}
+	if err := r.Client.Get(ctx, mysql.NamespacedName(cr), sts); err != nil {
+		return errors.Wrap(err, "get MySQL statefulset")
+	}
+    l.Info("got statefulset", "sts", sts)
+	
+	if sts.Spec.Replicas == nil || *sts.Spec.Replicas != 1 {
+	    dscaleTo := int32(1)
+		sts.Spec.Replicas = &dscaleTo
+		err = r.Client.Update(ctx, sts)
+		if err != nil {
+		    l.Error(err, "failed to update STS")
+			return errors.Wrap(err, "downscale StatefulSet")
+		}
+		l.Info("sts replicaset downscaled", "sts", sts)
+	}
+	
+	return nil
+}
+
 
 func (r *PerconaServerMySQLReconciler) doReconcile(
 	ctx context.Context,
