@@ -566,11 +566,6 @@ func pmmContainer(clusterName string, secret *corev1.Secret, pmmSpec *apiv1alpha
 	user := "api_key"
 	passwordKey := string(apiv1alpha1.UserPMMServerKey)
 
-	if !pmmSpec.ShouldUseAPIKeyAuth(secret) {
-		user = pmmSpec.ServerUser
-		passwordKey = string(apiv1alpha1.UserPMMServer)
-	}
-
 	return corev1.Container{
 		Name:            "pmm-client",
 		Image:           pmmSpec.Image,

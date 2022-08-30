@@ -35,20 +35,20 @@ spec:
           - name: PMM_AGENT_SERVER_ADDRESS
             value: monitoring-service
           - name: PMM_AGENT_SERVER_USERNAME
-            value: admin
+            value: api_key
           - name: PMM_AGENT_SERVER_PASSWORD
             valueFrom:
               secretKeyRef:
-                key: pmmserver
+                key: pmmserverkey
                 name: internal-monitoring
           - name: PMM_SERVER
             value: monitoring-service
           - name: PMM_USER
-            value: admin
+            value: api_key
           - name: PMM_PASSWORD
             valueFrom:
               secretKeyRef:
-                key: pmmserver
+                key: pmmserverkey
                 name: internal-monitoring
           - name: PMM_AGENT_LISTEN_PORT
             value: "7777"

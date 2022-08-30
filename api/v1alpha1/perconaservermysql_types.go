@@ -148,15 +148,6 @@ type PMMSpec struct {
 	RuntimeClassName         *string                     `json:"runtimeClassName,omitempty"`
 }
 
-func (spec *PMMSpec) ShouldUseAPIKeyAuth(secret *corev1.Secret) bool {
-	if _, ok := secret.Data[string(UserPMMServerKey)]; !ok {
-		if _, ok = secret.Data[string(UserPMMServer)]; ok {
-			return false
-		}
-	}
-	return true
-}
-
 type BackupSpec struct {
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	Image                    string                        `json:"image,omitempty"`
@@ -345,7 +336,6 @@ const (
 	UserOperator     SystemUser = "operator"
 	UserReplication  SystemUser = "replication"
 	UserOrchestrator SystemUser = "orchestrator"
-	UserPMMServer    SystemUser = "pmmserver"
 	UserPMMServerKey SystemUser = "pmmserverkey"
 )
 
