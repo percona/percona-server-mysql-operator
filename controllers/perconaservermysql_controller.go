@@ -265,7 +265,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		switch mysqlUser.Username {
 		case apiv1alpha1.UserMonitor:
 			restartMySQL = cr.PMMEnabled()
-		case apiv1alpha1.UserPMMServer:
+		case apiv1alpha1.UserPMMServerKey:
 			restartMySQL = cr.PMMEnabled()
 			continue // PMM server user credentials are not stored in db
 		case apiv1alpha1.UserReplication:
@@ -436,7 +436,14 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 		return errors.Wrap(err, "get init image")
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.StatefulSet(cr, initImage, configHash), r.Scheme); err != nil {
+	internalSecret := new(corev1.Secret)
+	nn := types.NamespacedName{Name: cr.InternalSecretName(), Namespace: cr.Namespace}
+	err = r.Client.Get(ctx, nn, internalSecret)
+	if client.IgnoreNotFound(err) != nil {
+		return errors.Wrapf(err, "get Secret/%s", nn.Name)
+	}
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.StatefulSet(cr, initImage, configHash, internalSecret), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile sts")
 	}
 

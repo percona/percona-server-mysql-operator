@@ -53,9 +53,11 @@ deploy_pmm_server() {
 			exit 1
 		fi
 	done
-	ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "printenv | grep ADMIN_PASSWORD | cut -d '=' -f2")
-	kubectl exec -n "${NAMESPACE}" monitoring-0 -- bash -c "grafana-cli --homepath=/usr/share/grafana --config=/etc/grafana/grafana.ini admin reset-admin-password $ADMIN_PASSWORD"
+}
 
+get_pmm_api_key() {
+	ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "printenv | grep ADMIN_PASSWORD | cut -d '=' -f2")
+  echo $(curl --insecure -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://admin:$ADMIN_PASSWORD@"$(get_service_ip monitoring-service)"/graph/api/auth/keys" | jq .key)
 }
 
 deploy_minio() {
