@@ -35,9 +35,11 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
-	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 // PerconaServerMySQLBackupReconciler reconciles a PerconaServerMySQLBackup object
@@ -298,20 +300,88 @@ func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creatio
 func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	l := log.FromContext(ctx).WithName("getBackupSource")
 
-	orcHost := orchestrator.APIHost(cluster)
-	primary, err := orchestrator.ClusterPrimary(ctx, orcHost, cluster.ClusterHint())
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cluster, apiv1alpha1.UserOperator)
 	if err != nil {
-		return "", errors.Wrap(err, "get primary")
+		return "", errors.Wrap(err, "get operator password")
 	}
-
-	var src string
-	if len(primary.Replicas) < 1 {
-		src = primary.Key.Hostname
+	var primary string
+	var replicas []string
+	if cluster.Spec.MySQL.IsGR() {
+		fqdn := mysql.FQDN(cluster, 0)
+		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, fqdn, mysql.DefaultAdminPort)
+		if err != nil {
+			return "", errors.Wrapf(err, "open connection to %s", fqdn)
+		}
+		replicas, err = db.GetGroupReplicationReplicas()
+		if err != nil {
+			return "", errors.Wrap(err, "get replicas")
+		}
+		primary, err = db.GetGroupReplicationPrimary()
+		if err != nil {
+			return "", errors.Wrap(err, "get primary")
+		}
+	} else {
+		podIPs := make([]string, 0, cluster.Spec.MySQL.Size)
+		for i := 0; i < int(cluster.Spec.MySQL.Size); i++ {
+			podIPs = append(podIPs, mysql.FQDN(cluster, i))
+		}
+		primary, replicas, err = getTopology(podIPs, operatorPass)
+		if err != nil {
+			return "", errors.Wrap(err, "select donor")
+		}
+	}
+	src := ""
+	l.Info("get topology", "primary", primary, "replicas", replicas)
+	if len(replicas) < 1 {
+		src = primary
 		l.Info("no replicas found, using primary as the backup source", "source", src)
 	} else {
-		src = primary.Replicas[0].Hostname
+		src = replicas[0]
 		l.Info("using replica as the backup source", "source", src)
 	}
 
 	return src, nil
+}
+
+func getTopology(hosts []string, operatorPass string) (string, []string, error) {
+	replicas := sets.NewString()
+	primary := ""
+
+	for _, host := range hosts {
+		p, err := getPrimary(host, operatorPass)
+		if err != nil {
+			return "", nil, errors.Wrap(err, "get primary")
+		}
+		if p != "" {
+			primary = p
+		}
+		replicas.Insert(host)
+	}
+	if primary == "" && len(hosts) == 1 {
+		primary = hosts[0]
+	} else if primary == "" {
+		primary = replicas.List()[0]
+	}
+	if replicas.Len() > 0 {
+		replicas.Delete(primary)
+	}
+	return primary, replicas.List(), nil
+}
+
+func getPrimary(host, operatorPass string) (string, error) {
+	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, host, mysql.DefaultAdminPort)
+	if err != nil {
+		return "", errors.Wrapf(err, "connect to %s", host)
+	}
+	defer db.Close()
+
+	status, source, err := db.ReplicationStatus()
+	if err != nil {
+		return "", errors.Wrap(err, "check replication status")
+	}
+	primary := ""
+	if status == replicator.ReplicationStatusActive {
+		primary = source
+	}
+	return primary, nil
 }
