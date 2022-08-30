@@ -291,7 +291,7 @@ pipeline {
                                     -v $WORKSPACE/src/github.com/percona/percona-server-mysql-operator:/go/src/github.com/percona/percona-server-mysql-operator \
                                     -w /go/src/github.com/percona/percona-server-mysql-operator \
                                     -e GO111MODULE=on \
-                                    golang:1.17 sh -c 'go build -v -mod=vendor -o percona-server-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
+                                    golang:1.17 sh -c 'go build -v -o percona-server-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
                             "
                         '''
 
