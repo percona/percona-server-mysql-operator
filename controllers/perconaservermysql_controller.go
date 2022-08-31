@@ -108,11 +108,7 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 
 
     if cr.ObjectMeta.DeletionTimestamp != nil {
-        err := r.applyFinalizers(ctx, cr)
-        // if rec || err != nil {
-        //     return rr, nil
-        // }
-        return rr, err
+        return rr, r.applyFinalizers(ctx, cr)
     }
     
 	if err := r.doReconcile(ctx, cr); err != nil {
@@ -145,6 +141,9 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 	
 	cr.SetFinalizers(finalizers)
 	err = r.Client.Update(ctx, cr)
+    if err != nil {
+        l.Error(err, "Client.Update failed")
+    }
 
 	return err
 }
@@ -157,7 +156,7 @@ func (r *PerconaServerMySQLReconciler) deletePSPods(ctx context.Context, cr *api
         l.Error(err, "failed to get the pods")
         return errors.Wrap(err, "get pods")
     }
-    l.Info("got pods", "pods", pods)
+    l.Info("got pods", "pods", len(pods), "pod name", pods[0].GetName())
 	
 	// the last pod left - we can leave it for the stateful set
 	if len(pods) <= 1 {
