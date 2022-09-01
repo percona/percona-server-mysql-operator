@@ -3,17 +3,17 @@ package versionservice
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
+	"time"
+
+	"github.com/pkg/errors"
+
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	vsclient "github.com/percona/percona-server-mysql-operator/pkg/versionservice/client"
 	"github.com/percona/percona-server-mysql-operator/pkg/versionservice/client/models"
 	"github.com/percona/percona-server-mysql-operator/pkg/versionservice/client/version_service"
-	"github.com/pkg/errors"
-	"net/http"
-	"net/url"
-	"time"
-
-	_ "github.com/Percona-Lab/percona-version-service/api"
 )
 
 const (

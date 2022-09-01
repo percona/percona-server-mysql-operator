@@ -109,10 +109,10 @@ manifests: kustomize generate
 	cat $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/rbac.yaml $(DEPLOYDIR)/operator.yaml > $(DEPLOYDIR)/bundle.yaml
 
 gen-versionservice-client: swagger
-	go get github.com/Percona-Lab/percona-version-service/api@latest
-	go mod vendor
+	rm pkg/versionservice/version.swagger.yaml
+	curl https://raw.githubusercontent.com/Percona-Lab/percona-version-service/main/api/version.swagger.yaml --output pkg/versionservice/version.swagger.yaml
 	rm -rf pkg/versionservice/client
-	swagger generate client -f vendor/github.com/Percona-Lab/percona-version-service/api/version.swagger.yaml -c pkg/versionservice/client -m pkg/versionservice/client/models
+	swagger generate client -f pkg/versionservice/version.swagger.yaml -c pkg/versionservice/client -m pkg/versionservice/client/models
 
 ##@ Build
 
