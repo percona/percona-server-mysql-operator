@@ -21,7 +21,7 @@ const (
 	defaultEndpoint = "https://check.percona.com"
 )
 
-func GetExactVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.ServerVersion) (DepVersion, error) {
+func GetVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.ServerVersion) (DepVersion, error) {
 	endpoint := cr.Spec.UpgradeOptions.VersionServiceEndpoint
 	if endpoint == "" {
 		endpoint = defaultEndpoint

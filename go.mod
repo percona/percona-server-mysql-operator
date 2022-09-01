@@ -15,7 +15,6 @@ require (
 )
 
 require (
-	github.com/Percona-Lab/percona-version-service/api v0.0.0-20220822065059-6971486ce63b
 	github.com/go-logr/logr v1.2.3
 	github.com/go-openapi/errors v0.20.3
 	github.com/go-openapi/runtime v0.24.1

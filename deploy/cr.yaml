@@ -5,11 +5,11 @@ metadata:
 spec:
   allowUnsafeConfigurations: false
 #  pause: false
-  crVersion: 0.2.0
+  crVersion: 0.3.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
   #upgradeOptions:
-  #  versionServiceEndpoint: http://percona-version-service:80
+  #  versionServiceEndpoint: https://check.percona.com
   #  apply: recommended
   mysql:
     clusterType: async

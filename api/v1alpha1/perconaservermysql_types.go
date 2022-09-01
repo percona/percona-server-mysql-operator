@@ -23,6 +23,8 @@ import (
 	"strings"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
+
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,8 +50,6 @@ type PerconaServerMySQLSpec struct {
 	Router                *MySQLRouterSpec `json:"router,omitempty"`
 	UpgradeOptions        UpgradeOptions   `json:"upgradeOptions,omitempty"`
 }
-
-const Version = "0.2.0"
 
 type ClusterType string
 
@@ -361,7 +361,7 @@ func (cr *PerconaServerMySQL) SetVersion() {
 		return
 	}
 
-	cr.Spec.CRVersion = Version
+	cr.Spec.CRVersion = version.Version
 	return
 }
 

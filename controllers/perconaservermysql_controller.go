@@ -22,7 +22,6 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"reflect"
 	"strconv"
 	"time"
@@ -32,6 +31,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -144,27 +144,27 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.cleanupOutdated(ctx, cr); err != nil {
 		return errors.Wrap(err, "cleanup outdated")
 	}
-	if err := r.ensureOperatorVersion(ctx, cr); err != nil {
+	if err := r.reconcileVersions(ctx, cr); err != nil {
 		return errors.Wrap(err, "ensure operator version")
 	}
 
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) ensureOperatorVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	if cr.Spec.UpgradeOptions.Apply == "" ||
 		cr.Spec.UpgradeOptions.Apply == apiv1alpha1.UpgradeStrategyDisabled ||
 		cr.Spec.UpgradeOptions.Apply == apiv1alpha1.UpgradeStrategyNever {
 		return nil
 	}
 
-	log := log.FromContext(ctx).WithName("ensureOperatorVersion")
+	l := log.FromContext(ctx).WithName("reconcileVersions")
 
-	version, err := versionservice.GetExactVersion(ctx, cr, r.ServerVersion)
+	version, err := versionservice.GetVersion(ctx, cr, r.ServerVersion)
 	if err != nil {
 		return errors.Wrap(err, "get exact version")
 	}
-	log.Info("got version", "versions", version.String())
+	l.Info("got version", "versions", version.String())
 	return nil
 }
 
