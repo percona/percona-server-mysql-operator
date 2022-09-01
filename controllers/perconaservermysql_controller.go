@@ -101,7 +101,7 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 	}
 
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		return rr, r.applyFinalizers(ctx, cr)
+		return ctrl.Result{}, r.applyFinalizers(ctx, cr)
 	}
 
 	defer func() {
@@ -127,9 +127,9 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 	finalizers := []string{}
 	for _, f := range cr.GetFinalizers() {
 		switch f {
-		case "delete-ps-pods-in-order":
+		case "delete-mysql-pods-in-order":
 			l.Info("deleting PS pods")
-			err = r.deletePSPods(ctx, cr)
+			err = r.deleteMySQLPods(ctx, cr)
 		}
 
 		if err != nil {
@@ -147,7 +147,7 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 	return err
 }
 
-func (r *PerconaServerMySQLReconciler) deletePSPods(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("Finalizer")
 
 	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))

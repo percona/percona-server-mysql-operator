@@ -3,7 +3,7 @@ kind: PerconaServerMySQL
 metadata:
   name: cluster1
   finalizers:
-    - delete-ps-pods-in-order
+    - delete-mysql-pods-in-order
 spec:
   allowUnsafeConfigurations: false
 #  pause: false
