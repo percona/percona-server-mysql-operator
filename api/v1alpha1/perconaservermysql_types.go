@@ -341,7 +341,7 @@ const (
 	UserOperator     SystemUser = "operator"
 	UserReplication  SystemUser = "replication"
 	UserOrchestrator SystemUser = "orchestrator"
-	UserPMMServer    SystemUser = "pmmserver"
+	UserPMMServerKey SystemUser = "pmmserverkey"
 )
 
 func (cr *PerconaServerMySQL) MySQLSpec() *MySQLSpec {
