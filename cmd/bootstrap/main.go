@@ -64,7 +64,13 @@ func bootstrap() error {
 			return errors.Wrap(err, "wait lock removal")
 		}
 	}
-	primary, replicas, err := getTopology(peers)
+
+	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
+	if err != nil {
+		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
+	}
+
+	primary, replicas, err := mysql.GetTopology(peers.List(), operatorPass)
 	if err != nil {
 		return errors.Wrap(err, "select donor")
 	}
@@ -104,10 +110,6 @@ func bootstrap() error {
 	}
 
 	log.Printf("Opening connection to %s", podIp)
-	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
-	if err != nil {
-		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
-	}
 
 	db, err := replicator.NewReplicator("operator", operatorPass, podIp, mysql.DefaultAdminPort)
 	if err != nil {

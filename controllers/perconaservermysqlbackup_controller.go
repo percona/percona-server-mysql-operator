@@ -39,7 +39,6 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
-	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 // PerconaServerMySQLBackupReconciler reconciles a PerconaServerMySQLBackup object
@@ -325,13 +324,13 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 		for i := 0; i < int(cluster.Spec.MySQL.Size); i++ {
 			podIPs = append(podIPs, mysql.FQDN(cluster, i))
 		}
-		primary, replicas, err = getTopology(podIPs, operatorPass)
+		primary, replicas, err = mysql.GetTopology(podIPs, operatorPass)
 		if err != nil {
 			return "", errors.Wrap(err, "select donor")
 		}
 	}
 	src := ""
-	l.Info("get topology", "primary", primary, "replicas", replicas)
+	l.V(1).Info("get topology", "primary", primary, "replicas", replicas)
 	if len(replicas) < 1 {
 		src = primary
 		l.Info("no replicas found, using primary as the backup source", "source", src)
@@ -341,47 +340,4 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 	}
 
 	return src, nil
-}
-
-func getTopology(hosts []string, operatorPass string) (string, []string, error) {
-	replicas := sets.NewString()
-	primary := ""
-
-	for _, host := range hosts {
-		p, err := getPrimary(host, operatorPass)
-		if err != nil {
-			return "", nil, errors.Wrap(err, "get primary")
-		}
-		if p != "" {
-			primary = p
-		}
-		replicas.Insert(host)
-	}
-	if primary == "" && len(hosts) == 1 {
-		primary = hosts[0]
-	} else if primary == "" {
-		primary = replicas.List()[0]
-	}
-	if replicas.Len() > 0 {
-		replicas.Delete(primary)
-	}
-	return primary, replicas.List(), nil
-}
-
-func getPrimary(host, operatorPass string) (string, error) {
-	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, host, mysql.DefaultAdminPort)
-	if err != nil {
-		return "", errors.Wrapf(err, "connect to %s", host)
-	}
-	defer db.Close()
-
-	status, source, err := db.ReplicationStatus()
-	if err != nil {
-		return "", errors.Wrap(err, "check replication status")
-	}
-	primary := ""
-	if status == replicator.ReplicationStatusActive {
-		primary = source
-	}
-	return primary, nil
 }
