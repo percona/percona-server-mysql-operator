@@ -1,7 +1,8 @@
 FROM golang:1.19.0 AS go_builder
 WORKDIR /go/src/github.com/percona/percona-server-mysql-operator
 
-COPY . .
+COPY go.mod go.sum ./
+RUN go mod download
 
 ARG GIT_COMMIT
 ARG BUILD_TIME
@@ -10,6 +11,11 @@ ARG GO_LDFLAGS
 ARG GOOS=linux
 ARG GOARCH=amd64
 ARG CGO_ENABLED=0
+
+COPY api ./api
+COPY cmd ./cmd
+COPY controllers ./controllers
+COPY pkg ./pkg
 
 RUN mkdir -p build/_output/bin \
     && GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
