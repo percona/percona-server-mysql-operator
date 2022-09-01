@@ -168,7 +168,7 @@ func (r *PerconaServerMySQLReconciler) deletePSPods(ctx context.Context, cr *api
 	if err := r.Client.Get(ctx, mysql.NamespacedName(cr), sts); err != nil {
 		return errors.Wrap(err, "get MySQL statefulset")
 	}
-	l.Info("got statefulset", "sts", sts)
+	l.Info("got statefulset", "sts", sts, "spec", sts.Spec)
 
 	if sts.Spec.Replicas == nil || *sts.Spec.Replicas != 1 {
 		dscaleTo := int32(1)
