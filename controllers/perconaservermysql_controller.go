@@ -44,6 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -136,6 +137,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	}
 	if err := r.reconcileOrchestrator(ctx, cr); err != nil {
 		return errors.Wrap(err, "orchestrator")
+	}
+	if err := r.reconcileHAProxy(ctx, cr); err != nil {
+		return errors.Wrap(err, "HAProxy")
 	}
 	if err := r.reconcileReplication(ctx, cr); err != nil {
 		return errors.Wrap(err, "replication")
@@ -713,6 +717,18 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context
 	return nil
 }
 
+func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if !cr.Spec.HAProxy.Enabled {
+		return nil
+	}
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, haproxy.StatefulSet(cr), r.Scheme); err != nil {
+		return errors.Wrap(err, "reconcile StatefulSet")
+	}
+
+	return nil
+}
+
 func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	if err := r.reconcileMySQLServices(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile MySQL services")
@@ -727,6 +743,12 @@ func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr
 	if cr.Spec.MySQL.IsGR() {
 		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Service(cr), r.Scheme); err != nil {
 			return errors.Wrap(err, "reconcile router svc")
+		}
+	}
+
+	if cr.Spec.HAProxy.Enabled {
+		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, haproxy.Service(cr), r.Scheme); err != nil {
+			return errors.Wrap(err, "reconcile HAProxy svc")
 		}
 	}
 

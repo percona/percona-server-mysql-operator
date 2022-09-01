@@ -47,6 +47,7 @@ type PerconaServerMySQLSpec struct {
 	PMM                   *PMMSpec         `json:"pmm,omitempty"`
 	Backup                *BackupSpec      `json:"backup,omitempty"`
 	Router                *MySQLRouterSpec `json:"router,omitempty"`
+	HAProxy               *HAProxySpec     `json:"haproxy,omitempty"`
 	TLS                   *TLSSpec         `json:"tls,omitempty"`
 	Toolkit               *ToolkitSpec     `json:"toolkit,omitempty"`
 }
@@ -238,6 +239,13 @@ type MySQLRouterSpec struct {
 
 type ToolkitSpec struct {
 	ContainerSpec `json:",inline"`
+}
+
+type HAProxySpec struct {
+	Enabled bool          `json:"enabled,omitempty"`
+	Expose  ServiceExpose `json:"expose,omitempty"`
+
+	PodSpec `json:",inline"`
 }
 
 type PodDisruptionBudgetSpec struct {

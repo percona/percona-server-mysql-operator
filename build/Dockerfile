@@ -35,6 +35,11 @@ RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
         -o build/_output/bin/sidecar \
             cmd/sidecar/main.go \
     && cp -r build/_output/bin/sidecar /usr/local/bin/sidecar
+RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
+    go build -mod=vendor -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
+        -o build/_output/bin/peer-list \
+            cmd/peer-list/main.go \
+    && cp -r build/_output/bin/peer-list /usr/local/bin/peer-list
 
 FROM redhat/ubi8-minimal AS ubi8
 
@@ -71,10 +76,19 @@ COPY --from=go_builder /usr/local/bin/percona-server-mysql-operator /usr/local/b
 COPY --from=go_builder /usr/local/bin/bootstrap /bootstrap
 COPY --from=go_builder /usr/local/bin/healthcheck /healthcheck
 COPY --from=go_builder /usr/local/bin/sidecar /sidecar
+COPY --from=go_builder /usr/local/bin/peer-list /peer-list
 COPY build/ps-entrypoint.sh /ps-entrypoint.sh
 COPY build/heartbeat-entrypoint.sh /heartbeat-entrypoint.sh
 COPY build/ps-init-entrypoint.sh /ps-init-entrypoint.sh
 COPY build/run-backup.sh /run-backup.sh
 COPY build/run-restore.sh /run-restore.sh
+COPY build/haproxy-entrypoint.sh /haproxy-entrypoint.sh
+COPY build/haproxy_add_mysql_nodes.sh /haproxy_add_mysql_nodes.sh
+COPY build/haproxy_check_primary.sh /haproxy_check_primary.sh
+COPY build/haproxy_check_replicas.sh /haproxy_check_replicas.sh
+COPY build/haproxy_liveness_check.sh /haproxy_liveness_check.sh
+COPY build/haproxy_readiness_check.sh /haproxy_readiness_check.sh
+COPY build/haproxy.cfg /haproxy.cfg
+COPY build/haproxy-global.cfg /haproxy-global.cfg
 
 USER 2
