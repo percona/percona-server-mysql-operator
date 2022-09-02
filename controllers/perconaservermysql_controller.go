@@ -173,6 +173,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 	if sts.Spec.Replicas == nil || *sts.Spec.Replicas != 1 {
 		dscaleTo := int32(1)
 		sts.Spec.Replicas = &dscaleTo
+		// TODO: check if we can delete this Client.Update, maybe we don't need it
 		err = r.Client.Update(ctx, sts)
 		if err != nil {
 			l.Error(err, "failed to update STS")
@@ -181,7 +182,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		l.Info("sts replicaset downscaled", "sts", sts)
 	}
 
-	return nil
+	return errors.New("waiting for pods to be deleted")
 }
 
 func (r *PerconaServerMySQLReconciler) doReconcile(
