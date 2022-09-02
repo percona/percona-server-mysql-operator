@@ -2,7 +2,6 @@ package versionservice
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/url"
 	"time"
@@ -115,15 +114,6 @@ type DepVersion struct {
 	RouterVersion       string `json:"routerVersion,omitempty"`
 	PMMImage            string `json:"pmmImage,omitempty"`
 	PMMVersion          string `json:"pmmVersion,omitempty"`
-}
-
-func (dv DepVersion) String() string {
-	str := fmt.Sprintf("PS: %s:%s", dv.PSImage, dv.PSVersion)
-	str += fmt.Sprintf("; Backup: %s:%s", dv.BackupImage, dv.BackupVersion)
-	str += fmt.Sprintf("; Orchestrator: %s:%s", dv.OrchestratorImage, dv.OrchestratorVersion)
-	str += fmt.Sprintf("; Router: %s:%s", dv.RouterImage, dv.RouterVersion)
-	str += fmt.Sprintf("; PMM: %s:%s", dv.PMMImage, dv.PMMVersion)
-	return str
 }
 
 func getVersion(versions map[string]models.VersionVersion) (string, error) {

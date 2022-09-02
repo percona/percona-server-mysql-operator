@@ -3051,7 +3051,10 @@ spec:
                           type: string
                         type: array
                       trafficPolicy:
-                        description: Service External Traffic Policy Type string
+                        description: ServiceExternalTrafficPolicyType describes how
+                          nodes distribute service traffic they receive on one of
+                          the Service's "externally-facing" addresses (NodePorts,
+                          ExternalIPs, and LoadBalancer IPs).
                         type: string
                       type:
                         description: Service Type string describes ingress methods
@@ -3059,7 +3062,10 @@ spec:
                         type: string
                     type: object
                   externalTrafficPolicy:
-                    description: Service External Traffic Policy Type string
+                    description: ServiceExternalTrafficPolicyType describes how nodes
+                      distribute service traffic they receive on one of the Service's
+                      "externally-facing" addresses (NodePorts, ExternalIPs, and LoadBalancer
+                      IPs).
                     type: string
                   forceUnsafeBootstrap:
                     type: boolean
@@ -3588,7 +3594,10 @@ spec:
                         type: integer
                     type: object
                   replicasExternalTrafficPolicy:
-                    description: Service External Traffic Policy Type string
+                    description: ServiceExternalTrafficPolicyType describes how nodes
+                      distribute service traffic they receive on one of the Service's
+                      "externally-facing" addresses (NodePorts, ExternalIPs, and LoadBalancer
+                      IPs).
                     type: string
                   replicasServiceType:
                     description: Service Type string describes ingress methods for
@@ -5935,13 +5944,13 @@ spec:
                           type: string
                         ports:
                           description: List of ports to expose from the container.
-                            Exposing a port here gives the system additional information
-                            about the network connections a container uses, but is
-                            primarily informational. Not specifying a port here DOES
-                            NOT prevent that port from being exposed. Any port which
-                            is listening on the default "0.0.0.0" address inside a
-                            container will be accessible from the network. Cannot
-                            be updated.
+                            Not specifying a port here DOES NOT prevent that port
+                            from being exposed. Any port which is listening on the
+                            default "0.0.0.0" address inside a container will be accessible
+                            from the network. Modifying this array with strategic
+                            merge patch may corrupt the data. For more information
+                            See https://github.com/kubernetes/kubernetes/issues/108255.
+                            Cannot be updated.
                           items:
                             description: ContainerPort represents a network port in
                               a single container.
@@ -8123,7 +8132,10 @@ spec:
                           type: string
                         type: array
                       trafficPolicy:
-                        description: Service External Traffic Policy Type string
+                        description: ServiceExternalTrafficPolicyType describes how
+                          nodes distribute service traffic they receive on one of
+                          the Service's "externally-facing" addresses (NodePorts,
+                          ExternalIPs, and LoadBalancer IPs).
                         type: string
                       type:
                         description: Service Type string describes ingress methods
@@ -8131,7 +8143,10 @@ spec:
                         type: string
                     type: object
                   externalTrafficPolicy:
-                    description: Service External Traffic Policy Type string
+                    description: ServiceExternalTrafficPolicyType describes how nodes
+                      distribute service traffic they receive on one of the Service's
+                      "externally-facing" addresses (NodePorts, ExternalIPs, and LoadBalancer
+                      IPs).
                     type: string
                   forceUnsafeBootstrap:
                     type: boolean
@@ -8656,7 +8671,10 @@ spec:
                         type: integer
                     type: object
                   replicasExternalTrafficPolicy:
-                    description: Service External Traffic Policy Type string
+                    description: ServiceExternalTrafficPolicyType describes how nodes
+                      distribute service traffic they receive on one of the Service's
+                      "externally-facing" addresses (NodePorts, ExternalIPs, and LoadBalancer
+                      IPs).
                     type: string
                   resources:
                     description: ResourceRequirements describes the compute resource
@@ -10414,7 +10432,10 @@ spec:
                           type: string
                         type: array
                       trafficPolicy:
-                        description: Service External Traffic Policy Type string
+                        description: ServiceExternalTrafficPolicyType describes how
+                          nodes distribute service traffic they receive on one of
+                          the Service's "externally-facing" addresses (NodePorts,
+                          ExternalIPs, and LoadBalancer IPs).
                         type: string
                       type:
                         description: Service Type string describes ingress methods
@@ -10422,7 +10443,10 @@ spec:
                         type: string
                     type: object
                   externalTrafficPolicy:
-                    description: Service External Traffic Policy Type string
+                    description: ServiceExternalTrafficPolicyType describes how nodes
+                      distribute service traffic they receive on one of the Service's
+                      "externally-facing" addresses (NodePorts, ExternalIPs, and LoadBalancer
+                      IPs).
                     type: string
                   forceUnsafeBootstrap:
                     type: boolean
@@ -10947,7 +10971,10 @@ spec:
                         type: integer
                     type: object
                   replicasExternalTrafficPolicy:
-                    description: Service External Traffic Policy Type string
+                    description: ServiceExternalTrafficPolicyType describes how nodes
+                      distribute service traffic they receive on one of the Service's
+                      "externally-facing" addresses (NodePorts, ExternalIPs, and LoadBalancer
+                      IPs).
                     type: string
                   resources:
                     description: ResourceRequirements describes the compute resource
@@ -11449,6 +11476,8 @@ spec:
                   version:
                     type: string
                 type: object
+              pmmVersion:
+                type: string
               router:
                 properties:
                   ready:
