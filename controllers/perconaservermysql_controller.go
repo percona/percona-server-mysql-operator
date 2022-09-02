@@ -155,7 +155,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		l.Error(err, "failed to get the pods")
 		return errors.Wrap(err, "get pods")
 	}
-	l.Info("got pods", "pods", len(pods), "pod name", pods[0].GetName())
+	l.Info("got pods", "pods", len(pods))
 
 	// the last pod left - we can leave it for the stateful set
 	if len(pods) <= 1 {
