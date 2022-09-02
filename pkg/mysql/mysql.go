@@ -145,8 +145,6 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector: cr.Spec.MySQL.NodeSelector,
-					Tolerations:  cr.Spec.MySQL.Tolerations,
 					InitContainers: []corev1.Container{
 						{
 							Name:            componentName + "-init",
@@ -176,13 +174,18 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 							SecurityContext:          spec.ContainerSecurityContext,
 						},
 					},
-					Containers:       containers(cr, secret),
-					Affinity:         spec.GetAffinity(labels),
-					ImagePullSecrets: spec.ImagePullSecrets,
-					// TerminationGracePeriodSeconds: 30,
-					RestartPolicy: corev1.RestartPolicyAlways,
-					SchedulerName: "default-scheduler",
-					DNSPolicy:     corev1.DNSClusterFirst,
+					Containers:                    containers(cr, secret),
+					ServiceAccountName:            cr.Spec.MySQL.ServiceAccountName,
+					NodeSelector:                  cr.Spec.MySQL.NodeSelector,
+					Tolerations:                   cr.Spec.MySQL.Tolerations,
+					Affinity:                      spec.GetAffinity(labels),
+					ImagePullSecrets:              spec.ImagePullSecrets,
+					TerminationGracePeriodSeconds: spec.TerminationGracePeriodSeconds,
+					PriorityClassName:             spec.PriorityClassName,
+					RuntimeClassName:              spec.RuntimeClassName,
+					RestartPolicy:                 corev1.RestartPolicyAlways,
+					SchedulerName:                 spec.SchedulerName,
+					DNSPolicy:                     corev1.DNSClusterFirst,
 					Volumes: append(
 						[]corev1.Volume{
 							{
