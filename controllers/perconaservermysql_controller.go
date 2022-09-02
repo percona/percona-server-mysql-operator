@@ -119,7 +119,6 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 
 func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("Finalizer")
-
 	l.Info("Applying finalizers", "CR", cr)
 
 	var err error
@@ -128,7 +127,6 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 	for _, f := range cr.GetFinalizers() {
 		switch f {
 		case "delete-mysql-pods-in-order":
-			l.Info("deleting PS pods")
 			err = r.deleteMySQLPods(ctx, cr)
 		}
 
@@ -152,14 +150,12 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 
 	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
 	if err != nil {
-		l.Error(err, "failed to get the pods")
 		return errors.Wrap(err, "get pods")
 	}
-	l.Info("got pods", "pods", len(pods))
+	l.Info("Deleting MySQL pods", "pods", len(pods))
 
 	// the last pod left - we can leave it for the stateful set
 	if len(pods) <= 1 {
-		l.Info("one or less then one pod")
 		time.Sleep(time.Second * 3)
 		return nil
 	}
@@ -168,15 +164,13 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 	if err := r.Client.Get(ctx, mysql.NamespacedName(cr), sts); err != nil {
 		return errors.Wrap(err, "get MySQL statefulset")
 	}
-	l.Info("got statefulset", "sts", sts, "spec", sts.Spec)
+	l.Info("Got statefulset", "sts", sts, "spec", sts.Spec)
 
 	if sts.Spec.Replicas == nil || *sts.Spec.Replicas != 1 {
 		dscaleTo := int32(1)
 		sts.Spec.Replicas = &dscaleTo
-		// TODO: check if we can delete this Client.Update, maybe we don't need it
 		err = r.Client.Update(ctx, sts)
 		if err != nil {
-			l.Error(err, "failed to update STS")
 			return errors.Wrap(err, "downscale StatefulSet")
 		}
 		l.Info("sts replicaset downscaled", "sts", sts)
