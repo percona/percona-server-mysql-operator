@@ -101,7 +101,7 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 	}
 
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		return ctrl.Result{}, r.applyFinalizers(ctx, cr)
+		return rr, r.applyFinalizers(ctx, cr)
 	}
 
 	defer func() {
