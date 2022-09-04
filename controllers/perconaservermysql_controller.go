@@ -137,12 +137,14 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 	}
 
 	cr.SetFinalizers(finalizers)
-	err = r.Client.Update(ctx, cr)
-	if err != nil {
-		l.Error(err, "Client.Update failed")
-	}
-
-	return err
+    
+    return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
+	    err = r.Client.Update(ctx, cr)
+	    if err != nil {
+		    l.Error(err, "Client.Update failed")
+	    }
+        return err
+    })
 }
 
 func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
