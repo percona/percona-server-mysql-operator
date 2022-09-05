@@ -8,9 +8,9 @@ spec:
   crVersion: 0.3.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
-  #upgradeOptions:
-  #  versionServiceEndpoint: https://check.percona.com
-  #  apply: recommended
+  upgradeOptions:
+    versionServiceEndpoint: https://check.percona.com
+    apply: recommended
   mysql:
     clusterType: async
     image: percona/percona-server:8.0.28
