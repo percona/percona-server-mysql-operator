@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"fmt"
+	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -452,6 +453,10 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 		containers = append(containers, backupContainer(cr))
 	}
 
+	if heartbeat := cr.Spec.Heartbeat; heartbeat != nil {
+		containers = append(containers, heartbeatContainer(cr))
+	}
+
 	if pmm := cr.Spec.PMM; pmm != nil && pmm.Enabled {
 		containers = append(containers, pmmContainer(cr.Name, secret, pmm))
 	}
@@ -555,6 +560,60 @@ func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			},
 		},
 		Command:                  []string{"/opt/percona/sidecar"},
+		TerminationMessagePath:   "/dev/termination-log",
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+	}
+}
+
+func heartbeatContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
+	return corev1.Container{
+		Name:            "pt-heartbeat",
+		Image:           cr.Spec.Heartbeat.Image,
+		ImagePullPolicy: cr.Spec.Heartbeat.ImagePullPolicy,
+		Env: []corev1.EnvVar{
+			{
+				Name: "HEARTBEAT_PASSWORD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: k8s.SecretKeySelector(cr.InternalSecretName(), string(apiv1alpha1.UserHeartbeat)),
+				},
+			},
+		},
+		Ports: []corev1.ContainerPort{},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      binVolumeName,
+				MountPath: binMountPath,
+			},
+			{
+				Name:      DataVolumeName,
+				MountPath: DataMountPath,
+			},
+			{
+				Name:      credsVolumeName,
+				MountPath: CredsMountPath,
+			},
+		},
+		Command: []string{"/opt/percona/heartbeat-entrypoint.sh"},
+		Args: []string{
+			"pt-heartbeat",
+			"--update",
+			"--replace",
+			"--check-read-only",
+			"--create-table",
+			"--database",
+			"sys_operator",
+			"--table",
+			"heartbeat",
+			"--fail-successive-errors=20",
+			"--user",
+			string(apiv1alpha1.UserHeartbeat),
+			"--password",
+			"$(HEARTBEAT_PASSWORD)",
+			"--port",
+			strconv.Itoa(DefaultAdminPort),
+			"--create-table-engine",
+			"MEMORY",
+		},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 	}

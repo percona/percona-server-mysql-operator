@@ -68,6 +68,7 @@ COPY --from=go_builder /usr/local/bin/bootstrap /bootstrap
 COPY --from=go_builder /usr/local/bin/healthcheck /healthcheck
 COPY --from=go_builder /usr/local/bin/sidecar /sidecar
 COPY build/ps-entrypoint.sh /ps-entrypoint.sh
+COPY build/heartbeat-entrypoint.sh /heartbeat-entrypoint.sh
 COPY build/ps-init-entrypoint.sh /ps-init-entrypoint.sh
 COPY build/run-backup.sh /run-backup.sh
 COPY build/run-restore.sh /run-restore.sh

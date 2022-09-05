@@ -46,6 +46,7 @@ type PerconaServerMySQLSpec struct {
 	PMM                   *PMMSpec         `json:"pmm,omitempty"`
 	Backup                *BackupSpec      `json:"backup,omitempty"`
 	Router                *MySQLRouterSpec `json:"router,omitempty"`
+	Heartbeat             *HeartbeatSpec   `json:"heartbeat,omitempty"`
 }
 
 type ClusterType string
@@ -228,6 +229,10 @@ type MySQLRouterSpec struct {
 	PodSpec `json:",inline"`
 }
 
+type HeartbeatSpec struct {
+	ContainerSpec `json:",inline"`
+}
+
 type PodDisruptionBudgetSpec struct {
 	MinAvailable   *intstr.IntOrString `json:"minAvailable,omitempty"`
 	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
@@ -326,15 +331,16 @@ type PerconaServerMySQLList struct {
 type SystemUser string
 
 const (
-	UserRoot         SystemUser = "root"
-	UserXtraBackup   SystemUser = "xtrabackup"
-	UserMonitor      SystemUser = "monitor"
 	UserClusterCheck SystemUser = "clustercheck"
-	UserProxyAdmin   SystemUser = "proxyadmin"
+	UserHeartbeat    SystemUser = "heartbeat"
+	UserMonitor      SystemUser = "monitor"
 	UserOperator     SystemUser = "operator"
-	UserReplication  SystemUser = "replication"
 	UserOrchestrator SystemUser = "orchestrator"
 	UserPMMServerKey SystemUser = "pmmserverkey"
+	UserProxyAdmin   SystemUser = "proxyadmin"
+	UserReplication  SystemUser = "replication"
+	UserRoot         SystemUser = "root"
+	UserXtraBackup   SystemUser = "xtrabackup"
 )
 
 func (cr *PerconaServerMySQL) MySQLSpec() *MySQLSpec {
