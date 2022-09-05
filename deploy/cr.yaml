@@ -7,6 +7,8 @@ spec:
 #  pause: false
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
+  heartbeat:
+    image: perconalab/percona-server-mysql-operator:k8sps-17-heartbeat
   mysql:
     clusterType: async
     image: percona/percona-server:8.0.28

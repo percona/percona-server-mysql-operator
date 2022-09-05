@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	componentName      = "orc"
+	ComponentName      = "orc"
 	componentShortName = "orc"
-	defaultWebPort     = 3000
+	DefaultWebPort     = 3000
 	defaultRaftPort    = 10008
 	configVolumeName   = "config"
 	configMountPath    = "/etc/orchestrator/config"
@@ -83,7 +83,7 @@ func FQDN(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
 }
 
 func APIHost(cr *apiv1alpha1.PerconaServerMySQL) string {
-	return fmt.Sprintf("http://%s:%d", FQDN(cr, 0), defaultWebPort)
+	return fmt.Sprintf("http://%s:%d", FQDN(cr, 0), DefaultWebPort)
 }
 
 // Labels returns labels of orchestrator
@@ -93,7 +93,7 @@ func Labels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(Labels(cr),
-		map[string]string{apiv1alpha1.ComponentLabel: componentName},
+		map[string]string{apiv1alpha1.ComponentLabel: ComponentName},
 		cr.Labels())
 }
 
@@ -179,7 +179,7 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 
 func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	return corev1.Container{
-		Name:            componentName,
+		Name:            ComponentName,
 		Image:           cr.Spec.Orchestrator.Image,
 		ImagePullPolicy: cr.Spec.Orchestrator.ImagePullPolicy,
 		Resources:       cr.Spec.Orchestrator.Resources,
@@ -200,7 +200,7 @@ func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "web",
-				ContainerPort: defaultWebPort,
+				ContainerPort: DefaultWebPort,
 			},
 			{
 				Name:          "raft",
@@ -305,7 +305,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Ports: []corev1.ServicePort{
 				{
 					Name: "web",
-					Port: defaultWebPort,
+					Port: DefaultWebPort,
 				},
 				{
 					Name: "raft",
@@ -341,7 +341,7 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 			Ports: []corev1.ServicePort{
 				{
 					Name: "web",
-					Port: defaultWebPort,
+					Port: DefaultWebPort,
 				},
 				{
 					Name: "raft",

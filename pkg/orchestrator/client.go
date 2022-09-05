@@ -165,6 +165,37 @@ func RemovePeer(ctx context.Context, apiHost string, peer string) error {
 	return nil
 }
 
+func RaftHealth(ctx context.Context, apiHost string) error {
+	url := fmt.Sprintf("%s/api/raft-health/", apiHost)
+
+	resp, err := doRequest(ctx, url)
+	if err != nil {
+		return errors.Wrapf(err, "do request to %s", url)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return errors.Wrap(err, "read response body")
+	}
+
+	o := ""
+	if err := json.Unmarshal(body, &o); err == nil {
+		return nil
+	}
+
+	orcResp := &orcResponse{}
+	if err := json.Unmarshal(body, &orcResp); err != nil {
+		return errors.Wrap(err, "json decode")
+	}
+
+	if orcResp.Code == "ERROR" {
+		return errors.New(orcResp.Message)
+	}
+
+	return nil
+}
+
 func doRequest(ctx context.Context, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
