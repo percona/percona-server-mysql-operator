@@ -109,7 +109,7 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 			l.Error(err, "failed to update status")
 		}
 	}()
-	
+
 	if err := r.doReconcile(ctx, cr); err != nil {
 		return rr, errors.Wrap(err, "reconcile")
 	}
@@ -137,37 +137,41 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 	}
 
 	cr.SetFinalizers(finalizers)
-    
-    return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
-	    err = r.Client.Update(ctx, cr)
-	    if err != nil {
-		    l.Error(err, "Client.Update failed")
-	    }
-        return err
-    })
+
+	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
+		err = r.Client.Update(ctx, cr)
+		if err != nil {
+			l.Error(err, "Client.Update failed")
+		}
+		return err
+	})
 }
 
 func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("Finalizer")
-	
+
 	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
 	if err != nil {
 		return errors.Wrap(err, "get pods")
 	}
 	l.Info("Deleting MySQL pods", "pods", len(pods))
 
-	if cr.Spec.MySQL.IsAsync() {
-	    p := pods[len(pods)]
-	    l.Info("Last pod", "podSpec", p.Spec)
-	    // if err := orchestrator.EnsureFirstPodIsPrimary(ctx, cr); err != nil {
-		   //  return errors.Wrap(err, "ensure first pod is primary")
-	    // }
-	}
-	
 	// the last pod left - we can leave it for the stateful set
 	if len(pods) <= 1 {
 		time.Sleep(time.Second * 3)
 		return nil
+	}
+	
+	for i, p := range pods {
+	    l.Info("got pods", "index", i, "podSpec", p.Spec)
+	}
+	
+	if cr.Spec.MySQL.IsAsync() {
+		p := pods[len(pods)-1]
+		l.Info("Last pod", "podSpec", p.Spec)
+		// if err := orchestrator.EnsureFirstPodIsPrimary(ctx, cr); err != nil {
+		//  return errors.Wrap(err, "ensure first pod is primary")
+		// }
 	}
 
 	sts := &appsv1.StatefulSet{}
