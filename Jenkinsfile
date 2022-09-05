@@ -369,6 +369,7 @@ pipeline {
                         runTest('service-per-pod', 'cluster3')
                         runTest('sidecars', 'cluster3')
                         runTest('limits', 'cluster3')
+                        runTest('version-service', 'cluster3')
                         ShutdownCluster('cluster3')
                     }
                 }

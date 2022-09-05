@@ -117,6 +117,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
+	if err := r.reconcileVersions(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile versions")
+	}
 	if err := r.ensureUserSecrets(ctx, cr); err != nil {
 		return errors.Wrap(err, "users secret")
 	}
@@ -143,9 +146,6 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	}
 	if err := r.cleanupOutdated(ctx, cr); err != nil {
 		return errors.Wrap(err, "cleanup outdated")
-	}
-	if err := r.reconcileVersions(ctx, cr); err != nil {
-		return errors.Wrap(err, "ensure operator version")
 	}
 
 	return nil

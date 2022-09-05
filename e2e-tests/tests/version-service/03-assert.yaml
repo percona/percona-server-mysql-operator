@@ -1,0 +1,36 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 100
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  name: cluster-recommended-mysql
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  name: cluster-recommended-orc
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  generation: 4
+  name: cluster-recommended
+status:
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+    version: 8.0.28-20
+  state: ready

@@ -1,0 +1,18 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      get_cr \
+        | yq eval '.metadata.name="cluster-exact"' - \
+        | yq eval '.spec.upgradeOptions.apply="8.0.28-19"' - \
+        | yq eval '.spec.crVersion="9.9.9"' - \
+        | yq eval '.spec.mysql.image="percona/percona-server:8.0.28-20"' \
+        | yq eval '.spec.backup.enabled=false' \
+        | yq eval '.spec.upgradeOptions.versionServiceEndpoint="http://percona-version-service:80"' - \
+        | kubectl -n "${NAMESPACE}" apply -f -

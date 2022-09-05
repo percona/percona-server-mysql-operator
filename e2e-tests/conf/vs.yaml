@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: percona-version-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: percona-version-service
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        name: percona-version-service
+    spec:
+      containers:
+      - env:
+        - name: SERVE_HTTP
+          value: "true"
+        image: ademajazzserve/operator-version-service # TODO: replace after merge https://github.com/Percona-Lab/percona-version-service/pull/88
+        imagePullPolicy: Always
+        name: percona-version-service
+        ports:
+        - containerPort: 11000
+          name: http
+          protocol: TCP
+        volumeMounts:
+          - name: versions
+            mountPath: /sources/operator.9.9.9.ps-operator.dep.json
+            subPath: operator.9.9.9.ps-operator.dep.json
+          - name: versions
+            mountPath: /sources/operator.9.9.9.ps-operator.json
+            subPath: operator.9.9.9.ps-operator.json
+      volumes:
+        - name: versions
+          configMap:
+            name: versions
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    name: percona-version-service
+  name: percona-version-service
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 11000
+  selector:
+    name: percona-version-service
+  type: ClusterIP
