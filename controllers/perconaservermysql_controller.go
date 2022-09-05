@@ -149,13 +149,21 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 
 func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("Finalizer")
-
+	
 	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
 	if err != nil {
 		return errors.Wrap(err, "get pods")
 	}
 	l.Info("Deleting MySQL pods", "pods", len(pods))
 
+	if cr.Spec.MySQL.IsAsync() {
+	    p := pods[len(pods)]
+	    l.Info("Last pod", "podSpec", p.Spec)
+	    // if err := orchestrator.EnsureFirstPodIsPrimary(ctx, cr); err != nil {
+		   //  return errors.Wrap(err, "ensure first pod is primary")
+	    // }
+	}
+	
 	// the last pod left - we can leave it for the stateful set
 	if len(pods) <= 1 {
 		time.Sleep(time.Second * 3)
