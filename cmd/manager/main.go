@@ -108,7 +108,7 @@ func main() {
 	}
 	// Setup Scheme for cert-manager resources
 	if err := cmscheme.AddToScheme(mgr.GetScheme()); err != nil {
-		setupLog.Error(err, "")
+		setupLog.Error(err, "unable to add cert-manager scheme")
 		os.Exit(1)
 	}
 
