@@ -173,7 +173,8 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		}
 		l.Info("Oldest pod", "name", oldest.GetName(), "spec", oldest.Spec)
 
-		err := orchestrator.EnsureNodeIsPrimary(ctx, cr.ClusterHint(), oldest.GetName(), mysql.DefaultPort)
+	    orcHost := orchestrator.APIHost(cr)
+		err := orchestrator.EnsureNodeIsPrimary(ctx,orcHost, cr.ClusterHint(), oldest.GetName(), mysql.DefaultPort)
 		if err != nil {
 			l.Error(err, "failed to ensure oldest mysql node is primary")
 			return errors.Wrap(err, "ensure node is primary")
