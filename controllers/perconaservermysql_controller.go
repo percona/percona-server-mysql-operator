@@ -166,7 +166,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		var oldest corev1.Pod
 		for i, p := range pods {
 			l.Info("Got pod", "index", i, "name", p.GetName(), "spec", p.Spec)
-			if p.GetName() == mysql.Name(cr)+fmt.Sprint(i) {
+			if p.GetName() == mysql.Name(cr)+"-"+fmt.Sprint(i) {
 				oldest = p
 				break
 			}
