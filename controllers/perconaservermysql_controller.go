@@ -161,17 +161,23 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		time.Sleep(time.Second * 3)
 		return nil
 	}
-	
-	for i, p := range pods {
-	    l.Info("got pods", "index", i, "podSpec", p.Spec)
-	}
-	
+
 	if cr.Spec.MySQL.IsAsync() {
-		p := pods[len(pods)-1]
-		l.Info("Last pod", "podSpec", p.Spec)
-		// if err := orchestrator.EnsureFirstPodIsPrimary(ctx, cr); err != nil {
-		//  return errors.Wrap(err, "ensure first pod is primary")
-		// }
+		var oldest corev1.Pod
+		for i, p := range pods {
+			l.Info("Got pod", "index", i, "name", p.GetName(), "spec", p.Spec)
+			if p.GetName() == mysql.Name(cr)+fmt.Sprint(i) {
+				oldest = p
+				break
+			}
+		}
+		l.Info("Oldest pod", "name", oldest.GetName(), "spec", oldest.Spec)
+
+		err := orchestrator.EnsureNodeIsPrimary(ctx, cr.ClusterHint(), oldest.GetName(), mysql.DefaultPort)
+		if err != nil {
+			l.Error(err, "failed to ensure oldest mysql node is primary")
+			return errors.Wrap(err, "ensure node is primary")
+		}
 	}
 
 	sts := &appsv1.StatefulSet{}

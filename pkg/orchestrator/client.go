@@ -165,9 +165,10 @@ func RemovePeer(ctx context.Context, apiHost string, peer string) error {
 	return nil
 }
 
-func EnsureFirstPodIsPrimary(ctx context.Context, apiHost string, port int) error {
-	//curl localhost:3000/api/graceful-master-takeover/cluster1-mysql-0/3306
-	url := fmt.Sprintf("%s/api/graceful-master-takeover/%s/%d", apiHost, apiHost, port)
+func EnsureNodeIsPrimary(ctx context.Context, clusterHint, apiHost string, port int) error {
+	// localhost:3000/api/graceful-master-takeover-auto/cluster1.default/cluster1-mysql-0/3306
+	url := fmt.Sprintf("%s/api/graceful-master-takeover-auto/%s/%s/%d", apiHost, clusterHint, apiHost, port)
+	fmt.Println("EnsureNodeIsPrimary url: ", url)
 
 	resp, err := doRequest(ctx, url)
 	if err != nil {
@@ -175,19 +176,8 @@ func EnsureFirstPodIsPrimary(ctx context.Context, apiHost string, port int) erro
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return errors.Wrap(err, "read response body")
-	}
-
-	// Orchestrator returns peer IP as string on success
-	o := ""
-	if err := json.Unmarshal(body, &o); err == nil {
-		return nil
-	}
-
 	orcResp := &orcResponse{}
-	if err := json.Unmarshal(body, &orcResp); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(orcResp); err != nil {
 		return errors.Wrap(err, "json decode")
 	}
 
@@ -197,7 +187,6 @@ func EnsureFirstPodIsPrimary(ctx context.Context, apiHost string, port int) erro
 
 	return nil
 }
-
 
 func doRequest(ctx context.Context, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
