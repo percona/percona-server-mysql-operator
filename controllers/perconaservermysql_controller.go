@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -166,18 +167,27 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		var oldest corev1.Pod
 		for i, p := range pods {
 			l.Info("Got pod", "index", i, "name", p.GetName(), "spec", p.Spec)
-			if p.GetName() == mysql.Name(cr)+"-"+fmt.Sprint(i) {
+			if p.GetName() == mysql.PodName(cr, i) {
 				oldest = p
 				break
 			}
 		}
 		l.Info("Oldest pod", "name", oldest.GetName(), "spec", oldest.Spec)
 
-	    orcHost := orchestrator.APIHost(cr)
-		err := orchestrator.EnsureNodeIsPrimary(ctx,orcHost, cr.ClusterHint(), oldest.GetName(), mysql.DefaultPort)
+		orcHost := orchestrator.APIHost(cr)
+
+		primary, err := orchestrator.ClusterPrimary(ctx, orcHost, cr.ClusterHint())
 		if err != nil {
-			l.Error(err, "failed to ensure oldest mysql node is primary")
-			return errors.Wrap(err, "ensure node is primary")
+			return errors.Wrap(err, "get pods")
+		}
+		l.Info("Cluster primary", "node", primary)
+
+		if !strings.Contains(primary.Key.Hostname, oldest.GetName()) {
+			err := orchestrator.EnsureNodeIsPrimary(ctx, orcHost, cr.ClusterHint(), oldest.GetName(), mysql.DefaultPort)
+			if err != nil {
+				l.Error(err, "failed to ensure oldest mysql node is primary")
+				return errors.Wrap(err, "ensure node is primary")
+			}
 		}
 	}
 
