@@ -14,6 +14,8 @@ import (
 )
 
 const (
+	binVolumeName    = "bin"
+	binMountPath     = "/opt/percona"
 	componentName    = "mysql"
 	DataVolumeName   = "datadir"
 	DataMountPath    = "/var/lib/mysql"

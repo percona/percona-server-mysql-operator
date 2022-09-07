@@ -12,6 +12,10 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 )
 
+type ComponentWithInit interface {
+	GetInitImage() string
+}
+
 func InitContainer(component, image string, pullPolicy corev1.PullPolicy, secCtx *corev1.SecurityContext) corev1.Container {
 	return corev1.Container{
 		Name:            component + "-init",
@@ -30,7 +34,16 @@ func InitContainer(component, image string, pullPolicy corev1.PullPolicy, secCtx
 	}
 }
 
-func InitImage(ctx context.Context, cl client.Reader) (string, error) {
+// InitImage returns the image to be used in init container.
+// It returns component specific init image if it's defined, else it return top level init image.
+// If there is no init image defined in the CR, it returns the current running operator image.
+func InitImage(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, comp ComponentWithInit) (string, error) {
+	if image := comp.GetInitImage(); len(image) > 0 {
+		return image, nil
+	}
+	if image := cr.Spec.InitImage; len(image) > 0 {
+		return image, nil
+	}
 	return OperatorImage(ctx, cl)
 }
 

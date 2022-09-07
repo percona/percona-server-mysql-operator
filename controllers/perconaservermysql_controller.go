@@ -431,7 +431,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 		return errors.Wrap(err, "reconcile MySQL auto-config")
 	}
 
-	initImage, err := k8s.InitImage(ctx, r.Client)
+	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.MySQL.PodSpec)
 	if err != nil {
 		return errors.Wrap(err, "get init image")
 	}
@@ -654,7 +654,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return errors.Wrap(err, "reconcile ConfigMap")
 	}
 
-	initImage, err := k8s.InitImage(ctx, r.Client)
+	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Orchestrator.PodSpec)
 	if err != nil {
 		return errors.Wrap(err, "get init image")
 	}
@@ -1134,7 +1134,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		return nil
 	}
 
-	initImage, err := k8s.InitImage(ctx, r.Client)
+	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Router.PodSpec)
 	if err != nil {
 		return errors.Wrap(err, "get init image")
 	}
