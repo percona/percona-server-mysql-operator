@@ -7,6 +7,9 @@ spec:
 #  pause: false
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
+  toolkit:
+    image: perconalab/percona-server-mysql-operator:k8sps-17-heartbeat
+    imagePullPolicy: Always
   mysql:
     clusterType: async
     image: percona/percona-server:8.0.28
@@ -44,7 +47,7 @@ spec:
       persistentVolumeClaim:
         resources:
           requests:
-            storage: 2G
+            storage: 20G
 
 #    configuration: |
 #      max_connections=250
@@ -105,7 +108,7 @@ spec:
 #      type: ClusterIP
 
   orchestrator:
-    image: perconalab/percona-server-mysql-operator:main-orchestrator
+    image: perconalab/percona-server-mysql-operator:k8sps-17-orchestrator
     imagePullPolicy: Always
 
     size: 3
