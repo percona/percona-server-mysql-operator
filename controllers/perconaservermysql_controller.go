@@ -1613,7 +1613,7 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 		}
 		err := ctrl.SetControllerReference(cr, caCert, r.Scheme)
 		if err != nil {
-			return errors.Wrap(err, "set controller refference")
+			return errors.Wrap(err, "set controller reference")
 		}
 		err = r.Create(ctx, caCert)
 		if err != nil && !k8serrors.IsAlreadyExists(err) {
@@ -1659,7 +1659,7 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 	}
 	err := ctrl.SetControllerReference(cr, kubeCert, r.Scheme)
 	if err != nil {
-		return errors.Wrap(err, "set controller refference")
+		return errors.Wrap(err, "set controller reference")
 	}
 	if cr.Spec.TLS != nil {
 		kubeCert.Spec.DNSNames = append(kubeCert.Spec.DNSNames, cr.Spec.TLS.SANs...)
