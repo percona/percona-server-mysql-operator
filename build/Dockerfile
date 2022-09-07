@@ -59,7 +59,7 @@ RUN set -ex; \
     rm -rf /usr/lib/debug/usr/bin;
 
 RUN mkdir /sbin/.mysqlsh && chown 2:2 /sbin/.mysqlsh
-RUN mkdir /opt/percona
+RUN mkdir /opt/percona-server-mysql-operator
 
 LABEL name="Percona Distribution for MySQL Operator" \
       vendor="Percona" \
@@ -69,16 +69,16 @@ LABEL name="Percona Distribution for MySQL Operator" \
 
 COPY LICENSE /licenses/
 COPY --from=go_builder /usr/local/bin/percona-server-mysql-operator /usr/local/bin/percona-server-mysql-operator
-COPY --from=go_builder /usr/local/bin/bootstrap /opt/percona/bootstrap
-COPY --from=go_builder /usr/local/bin/healthcheck /opt/percona/healthcheck
-COPY --from=go_builder /usr/local/bin/sidecar /opt/percona/sidecar
-COPY build/ps-entrypoint.sh /opt/percona/ps-entrypoint.sh
-COPY build/heartbeat-entrypoint.sh /opt/percona/heartbeat-entrypoint.sh
-COPY build/router-entrypoint.sh /opt/percona/router-entrypoint.sh
-COPY build/orc-entrypoint.sh /opt/percona/orc-entrypoint.sh
-COPY build/orchestrator.conf.json /opt/percona/orchestrator.conf.json
-COPY build/ps-init-entrypoint.sh /opt/percona/ps-init-entrypoint.sh
-COPY build/run-backup.sh /opt/percona/run-backup.sh
-COPY build/run-restore.sh /opt/percona/run-restore.sh
+COPY --from=go_builder /usr/local/bin/bootstrap /opt/percona-server-mysql-operator/bootstrap
+COPY --from=go_builder /usr/local/bin/healthcheck /opt/percona-server-mysql-operator/healthcheck
+COPY --from=go_builder /usr/local/bin/sidecar /opt/percona-server-mysql-operator/sidecar
+COPY build/ps-entrypoint.sh /opt/percona-server-mysql-operator/ps-entrypoint.sh
+COPY build/heartbeat-entrypoint.sh /opt/percona-server-mysql-operator/heartbeat-entrypoint.sh
+COPY build/router-entrypoint.sh /opt/percona-server-mysql-operator/router-entrypoint.sh
+COPY build/orc-entrypoint.sh /opt/percona-server-mysql-operator/orc-entrypoint.sh
+COPY build/orchestrator.conf.json /opt/percona-server-mysql-operator/orchestrator.conf.json
+COPY build/ps-init-entrypoint.sh /opt/percona-server-mysql-operator/ps-init-entrypoint.sh
+COPY build/run-backup.sh /opt/percona-server-mysql-operator/run-backup.sh
+COPY build/run-restore.sh /opt/percona-server-mysql-operator/run-restore.sh
 
 USER 2

@@ -14,8 +14,6 @@ import (
 )
 
 const (
-	binVolumeName    = "bin"
-	binMountPath     = "/opt/percona"
 	componentName    = "mysql"
 	DataVolumeName   = "datadir"
 	DataMountPath    = "/var/lib/mysql"
@@ -559,8 +557,8 @@ func heartbeatContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		Ports: []corev1.ContainerPort{},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      binVolumeName,
-				MountPath: binMountPath,
+				Name:      apiv1alpha1.BinVolumeName,
+				MountPath: apiv1alpha1.BinVolumePath,
 			},
 			{
 				Name:      DataVolumeName,

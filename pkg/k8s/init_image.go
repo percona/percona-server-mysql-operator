@@ -27,7 +27,7 @@ func InitContainer(component, image string, pullPolicy corev1.PullPolicy, secCtx
 				MountPath: apiv1alpha1.BinVolumePath,
 			},
 		},
-		Command:                  []string{"/ps-init-entrypoint.sh"},
+		Command:                  []string{"/opt/percona-server-mysql-operator/ps-init-entrypoint.sh"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          secCtx,

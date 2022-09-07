@@ -253,7 +253,7 @@ func RestoreJob(
 									MountPath: tlsMountPath,
 								},
 							},
-							Command:                  []string{"/ps-init-entrypoint.sh"},
+							Command:                  []string{"/opt/percona-server-mysql-operator/ps-init-entrypoint.sh"},
 							TerminationMessagePath:   "/dev/termination-log",
 							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 							SecurityContext:          cluster.Spec.MySQL.ContainerSecurityContext,
