@@ -36,14 +36,13 @@ const (
 
 // PerconaServerMySQLBackupStatus defines the observed state of PerconaServerMySQLBackup
 type PerconaServerMySQLBackupStatus struct {
-	State       BackupState             `json:"state,omitempty"`
-	Destination string                  `json:"destination,omitempty"`
-	StorageName string                  `json:"storageName,omitempty"`
-	CompletedAt *metav1.Time            `json:"completed,omitempty"`
-	S3          *BackupStorageS3Spec    `json:"s3,omitempty"`
-	GCS         *BackupStorageGCSSpec   `json:"gcs,omitempty"`
-	Azure       *BackupStorageAzureSpec `json:"azure,omitempty"`
-	VerifyTLS   bool                    `json:"verifyTLS,omitempty"`
+	State         BackupState        `json:"state,omitempty"`
+	Destination   string             `json:"destination,omitempty"`
+	Storage       *BackupStorageSpec `json:"storage,omitempty"`
+	CompletedAt   *metav1.Time       `json:"completed,omitempty"`
+	VerifyTLS     bool               `json:"verifyTLS,omitempty"`
+	Image         string             `json:"image,omitempty"`
+	SSLSecretName string             `json:"sslSecretName"`
 }
 
 // +kubebuilder:object:root=true

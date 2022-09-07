@@ -16,9 +16,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/pkg/errors"
+
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
-	"github.com/pkg/errors"
+	xb "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
 
 var log = logf.Log.WithName("sidecar")
@@ -81,70 +83,6 @@ func xtrabackupArgs(user, pass string) []string {
 	}
 }
 
-type xbcloudAction string
-
-const (
-	xbcloudActionPut    xbcloudAction = "put"
-	xbcloudActionDelete xbcloudAction = "delete"
-)
-
-func xbcloudArgs(action xbcloudAction, conf apiv1alpha1.SidecarBackupConfig) []string {
-	args := []string{string(action), "--parallel=10", "--curl-retriable-errors=7"}
-
-	if !conf.VerifyTLS {
-		args = append(args, "--insecure")
-	}
-
-	switch conf.Type {
-	case apiv1alpha1.BackupStorageGCS:
-		args = append(
-			args,
-			[]string{
-				"--md5",
-				"--storage=google",
-				fmt.Sprintf("--google-bucket=%s", conf.GCS.Bucket),
-				fmt.Sprintf("--google-access-key=%s", conf.GCS.AccessKey),
-				fmt.Sprintf("--google-secret-key=%s", conf.GCS.SecretKey),
-			}...,
-		)
-		if len(conf.GCS.EndpointURL) > 0 {
-			args = append(args, fmt.Sprintf("--google-endpoint=%s", conf.GCS.EndpointURL))
-		}
-	case apiv1alpha1.BackupStorageS3:
-		args = append(
-			args,
-			[]string{
-				"--md5",
-				"--storage=s3",
-				fmt.Sprintf("--s3-bucket=%s", conf.S3.Bucket),
-				fmt.Sprintf("--s3-region=%s", conf.S3.Region),
-				fmt.Sprintf("--s3-access-key=%s", conf.S3.AccessKey),
-				fmt.Sprintf("--s3-secret-key=%s", conf.S3.SecretKey),
-			}...,
-		)
-		if len(conf.S3.EndpointURL) > 0 {
-			args = append(args, fmt.Sprintf("--s3-endpoint=%s", conf.S3.EndpointURL))
-		}
-	case apiv1alpha1.BackupStorageAzure:
-		args = append(
-			args,
-			[]string{
-				"--storage=azure",
-				fmt.Sprintf("--azure-storage-account=%s", conf.Azure.StorageAccount),
-				fmt.Sprintf("--azure-container-name=%s", conf.Azure.ContainerName),
-				fmt.Sprintf("--azure-access-key=%s", conf.Azure.AccessKey),
-			}...,
-		)
-		if len(conf.Azure.EndpointURL) > 0 {
-			args = append(args, fmt.Sprintf("--azure-endpoint=%s", conf.Azure.EndpointURL))
-		}
-	}
-
-	args = append(args, conf.Destination)
-
-	return args
-}
-
 func backupHandler(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case http.MethodPost:
@@ -196,7 +134,7 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 	defer backupLog.Close()
 	logWriter := io.MultiWriter(backupLog, os.Stderr)
 
-	xbcloud := exec.Command("xbcloud", xbcloudArgs(xbcloudActionDelete, backupConf)...)
+	xbcloud := exec.Command("xbcloud", xb.XBCloudArgs(xb.XBCloudActionDelete, &backupConf)...)
 	xbcloudErr, err := xbcloud.StderrPipe()
 	if err != nil {
 		log.Error(err, "xbcloud stderr pipe failed")
@@ -299,7 +237,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	defer backupLog.Close()
 	logWriter := io.MultiWriter(backupLog, os.Stderr)
 
-	xbcloud := exec.Command("xbcloud", xbcloudArgs(xbcloudActionPut, backupConf)...)
+	xbcloud := exec.Command("xbcloud", xb.XBCloudArgs(xb.XBCloudActionPut, &backupConf)...)
 	xbcloud.Stdin = xbOut
 
 	xbcloudErr, err := xbcloud.StderrPipe()
