@@ -1,14 +1,19 @@
-#!/bin/sh
+#!/bin/bash
 
 set -e
 set -o xtrace
 
 export PATH=$PATH:/usr/local/orchestrator
 
+OPERATOR_BINDIR=/opt/percona
 ORC_CONF_PATH=${ORC_CONF_PATH:-/etc/orchestrator}
 ORC_CONF_FILE=${ORC_CONF_FILE:-"${ORC_CONF_PATH}/orchestrator.conf.json"}
 TOPOLOGY_USER=${ORC_TOPOLOGY_USER:-orchestrator}
 CUSTOM_CONF_FILE=${ORC_CONF_PATH}/config/orchestrator.conf.json
+
+if [ -f ${OPERATOR_BINDIR}/orchestrator.conf.json ]; then
+	cp "${OPERATOR_BINDIR}/orchestrator.conf.json" "${ORC_CONF_FILE}"
+fi
 
 sleep 10 # give time for SRV records to update
 
@@ -25,13 +30,13 @@ jq -M ". + {
     }" "${ORC_CONF_FILE}" 1<>"${ORC_CONF_FILE}"
 
 if [ -f ${CUSTOM_CONF_FILE} ]; then
-        jq -M -s ".[0] * .[1]" "${ORC_CONF_FILE}" "${CUSTOM_CONF_FILE}" 1<>"${ORC_CONF_FILE}"
+	jq -M -s ".[0] * .[1]" "${ORC_CONF_FILE}" "${CUSTOM_CONF_FILE}" 1<>"${ORC_CONF_FILE}"
 fi
 
 { set +x; } 2>/dev/null
 PATH_TO_SECRET="${ORC_CONF_PATH}/orchestrator-users-secret"
 if [ -f "$PATH_TO_SECRET/$TOPOLOGY_USER" ]; then
-        TOPOLOGY_PASSWORD=$(<$PATH_TO_SECRET/$TOPOLOGY_USER)
+	TOPOLOGY_PASSWORD=$(<$PATH_TO_SECRET/$TOPOLOGY_USER)
 fi
 
 if [ ! -d "/var/lib/orchestrator" ]; then

@@ -3,14 +3,17 @@
 set -o errexit
 set -o xtrace
 
-install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /ps-entrypoint.sh /opt/percona/ps-entrypoint.sh
-install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /heartbeat-entrypoint.sh /opt/percona/heartbeat-entrypoint.sh
-install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /router-entrypoint.sh /opt/percona/router-entrypoint.sh
-install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /orc-entrypoint.sh /opt/percona/orc-entrypoint.sh
+BINDIR="${BINDIR}"
 
-install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /bootstrap /opt/percona/bootstrap
-install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /healthcheck /opt/percona/healthcheck
-install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /sidecar /opt/percona/sidecar
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${BINDIR}/ps-entrypoint.sh" "${BINDIR}/ps-entrypoint.sh"
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${BINDIR}/heartbeat-entrypoint.sh" "${BINDIR}/heartbeat-entrypoint.sh"
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${BINDIR}/router-entrypoint.sh" "${BINDIR}/router-entrypoint.sh"
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${BINDIR}/orc-entrypoint.sh" "${BINDIR}/orc-entrypoint.sh"
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${BINDIR}/orchestrator.conf.json" "${BINDIR}/orchestrator.conf.json"
 
-install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /run-backup.sh /opt/percona/run-backup.sh
-install -o "$(id -u)" -g "$(id -g)" -m 0755 -D /run-restore.sh /opt/percona/run-restore.sh
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${BINDIR}/bootstrap" "${BINDIR}/bootstrap"
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${BINDIR}/healthcheck" "${BINDIR}/healthcheck"
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${BINDIR}/sidecar" "${BINDIR}/sidecar"
+
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${BINDIR}/run-backup.sh" "${BINDIR}/run-backup.sh"
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${BINDIR}/run-restore.sh" "${BINDIR}/run-restore.sh"

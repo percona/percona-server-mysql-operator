@@ -55,10 +55,11 @@ RUN set -ex; \
     microdnf update; \
     microdnf install -y percona-mysql-shell; \
     microdnf clean all; \
-    rm -rf /var/cache
+    rm -rf /var/cache; \
+    rm -rf /usr/lib/debug/usr/bin;
 
-RUN rm -rf /usr/lib/debug/usr/bin
 RUN mkdir /sbin/.mysqlsh && chown 2:2 /sbin/.mysqlsh
+RUN mkdir /opt/percona
 
 LABEL name="Percona Distribution for MySQL Operator" \
       vendor="Percona" \
@@ -68,15 +69,16 @@ LABEL name="Percona Distribution for MySQL Operator" \
 
 COPY LICENSE /licenses/
 COPY --from=go_builder /usr/local/bin/percona-server-mysql-operator /usr/local/bin/percona-server-mysql-operator
-COPY --from=go_builder /usr/local/bin/bootstrap /bootstrap
-COPY --from=go_builder /usr/local/bin/healthcheck /healthcheck
-COPY --from=go_builder /usr/local/bin/sidecar /sidecar
-COPY build/ps-entrypoint.sh /ps-entrypoint.sh
-COPY build/heartbeat-entrypoint.sh /heartbeat-entrypoint.sh
-COPY build/router-entrypoint.sh /router-entrypoint.sh
-COPY build/orc-entrypoint.sh /orc-entrypoint.sh
-COPY build/ps-init-entrypoint.sh /ps-init-entrypoint.sh
-COPY build/run-backup.sh /run-backup.sh
-COPY build/run-restore.sh /run-restore.sh
+COPY --from=go_builder /usr/local/bin/bootstrap /opt/percona/bootstrap
+COPY --from=go_builder /usr/local/bin/healthcheck /opt/percona/healthcheck
+COPY --from=go_builder /usr/local/bin/sidecar /opt/percona/sidecar
+COPY build/ps-entrypoint.sh /opt/percona/ps-entrypoint.sh
+COPY build/heartbeat-entrypoint.sh /opt/percona/heartbeat-entrypoint.sh
+COPY build/router-entrypoint.sh /opt/percona/router-entrypoint.sh
+COPY build/orc-entrypoint.sh /opt/percona/orc-entrypoint.sh
+COPY build/orchestrator.conf.json /opt/percona/orchestrator.conf.json
+COPY build/ps-init-entrypoint.sh /opt/percona/ps-init-entrypoint.sh
+COPY build/run-backup.sh /opt/percona/run-backup.sh
+COPY build/run-restore.sh /opt/percona/run-restore.sh
 
 USER 2
