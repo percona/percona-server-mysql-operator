@@ -1683,7 +1683,7 @@ func (r *PerconaServerMySQLReconciler) waitForCerts(ctx context.Context, namespa
 		case <-timeoutTimer.C:
 			return errors.Errorf("timeout: can't get tls certificates from certmanager, %s", secretsList)
 		case <-ticker.C:
-			sucessCount := 0
+			successCount := 0
 			for _, secretName := range secretsList {
 				secret := &corev1.Secret{}
 				err := r.Get(ctx, types.NamespacedName{
@@ -1693,10 +1693,10 @@ func (r *PerconaServerMySQLReconciler) waitForCerts(ctx context.Context, namespa
 				if err != nil && !k8serrors.IsNotFound(err) {
 					return err
 				} else if err == nil {
-					sucessCount++
+					successCount++
 				}
 			}
-			if sucessCount == len(secretsList) {
+			if successCount == len(secretsList) {
 				return nil
 			}
 		}
@@ -1717,7 +1717,7 @@ func (r *PerconaServerMySQLReconciler) createIssuer(ctx context.Context, cr *api
 	}
 	err := ctrl.SetControllerReference(cr, isr, r.Scheme)
 	if err != nil {
-		return errors.Wrap(err, "set controller refference")
+		return errors.Wrap(err, "set controller reference")
 	}
 	err = r.Create(ctx, isr)
 	if err != nil && !k8serrors.IsAlreadyExists(err) {
