@@ -12,10 +12,7 @@ ARG GOOS=linux
 ARG GOARCH=amd64
 ARG CGO_ENABLED=0
 
-COPY api ./api
-COPY cmd ./cmd
-COPY controllers ./controllers
-COPY pkg ./pkg
+COPY . .
 
 RUN mkdir -p build/_output/bin \
     && GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
@@ -60,6 +57,7 @@ RUN set -ex; \
     microdnf clean all; \
     rm -rf /var/cache
 
+RUN rm -rf /usr/lib/debug/usr/bin
 RUN mkdir /sbin/.mysqlsh && chown 2:2 /sbin/.mysqlsh
 
 LABEL name="Percona Distribution for MySQL Operator" \
