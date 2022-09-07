@@ -2,6 +2,8 @@
 # Ignore build and test binaries.
 bin/
 testbin/
+e2e-tests/
+config/
 
 !bin/bootstrap
 !bin/healthcheck
