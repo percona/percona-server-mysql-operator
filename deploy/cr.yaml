@@ -8,7 +8,7 @@ spec:
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
   toolkit:
-    image: perconalab/percona-server-mysql-operator:k8sps-17-heartbeat
+    image: perconalab/percona-server-mysql-operator:3.4.0-toolkit
     imagePullPolicy: Always
   mysql:
     clusterType: async
@@ -108,7 +108,7 @@ spec:
 #      type: ClusterIP
 
   orchestrator:
-    image: perconalab/percona-server-mysql-operator:k8sps-17-orchestrator
+    image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 
     size: 3
