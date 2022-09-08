@@ -16,6 +16,7 @@ spec:
           limits:
             memory: 512Mi
       - name: xtrabackup
+      - name: pt-heartbeat
 status:
   observedGeneration: 2
   replicas: 3
