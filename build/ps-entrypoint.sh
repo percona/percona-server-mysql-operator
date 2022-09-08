@@ -324,7 +324,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			GRANT SELECT ON mysql.slave_master_info TO 'orchestrator'@'%';
 			GRANT SELECT ON sys_operator.* TO 'orchestrator'@'%';
 
-			CREATE DATABASE sys_operator;
+			CREATE DATABASE IF NOT EXISTS sys_operator;
 			CREATE USER 'heartbeat'@'localhost' IDENTIFIED BY '${HEARTBEAT_PASSWORD}';
 			GRANT SYSTEM_USER, REPLICATION CLIENT ON *.* TO 'heartbeat'@'localhost';
 			GRANT SELECT, CREATE, DELETE, UPDATE, INSERT ON sys_operator.heartbeat TO 'heartbeat'@'localhost';

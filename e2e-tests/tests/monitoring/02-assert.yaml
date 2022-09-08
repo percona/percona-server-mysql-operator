@@ -12,6 +12,7 @@ spec:
       containers:
       - name: mysql
       - name: xtrabackup
+      - name: pt-heartbeat
       - name: pmm-client
         env:
           - name: POD_NAME
