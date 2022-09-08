@@ -166,9 +166,17 @@ func RemovePeer(ctx context.Context, apiHost string, peer string) error {
 }
 
 func EnsureNodeIsPrimary(ctx context.Context, apiHost, clusterHint, host string, port int) error {
+	primary, err := ClusterPrimary(ctx, apiHost, clusterHint)
+	if err != nil {
+		return errors.Wrap(err, "get cluster primary")
+	}
+
+	if primary.Alias == host{
+		return nil
+	}
+
 	// /api/graceful-master-takeover-auto/cluster1.default/cluster1-mysql-0/3306
 	url := fmt.Sprintf("%s/api/graceful-master-takeover-auto/%s/%s/%d", apiHost, clusterHint, host, port)
-	fmt.Println("EnsureNodeIsPrimary url: ", url)
 
 	resp, err := doRequest(ctx, url)
 	if err != nil {
