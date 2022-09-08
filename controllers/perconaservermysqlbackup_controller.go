@@ -35,9 +35,8 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
-	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
 
@@ -299,43 +298,18 @@ func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creatio
 func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	l := log.FromContext(ctx).WithName("getBackupSource")
 
-	operatorPass, err := k8s.UserPassword(ctx, r.Client, cluster, apiv1alpha1.UserOperator)
+	orcHost := orchestrator.APIHost(cluster)
+	primary, err := orchestrator.ClusterPrimary(ctx, orcHost, cluster.ClusterHint())
 	if err != nil {
-		return "", errors.Wrap(err, "get operator password")
+		return "", errors.Wrap(err, "get primary")
 	}
-	var primary string
-	var replicas []string
-	if cluster.Spec.MySQL.IsGR() {
-		fqdn := mysql.FQDN(cluster, 0)
-		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, fqdn, mysql.DefaultAdminPort)
-		if err != nil {
-			return "", errors.Wrapf(err, "open connection to %s", fqdn)
-		}
-		replicas, err = db.GetGroupReplicationReplicas()
-		if err != nil {
-			return "", errors.Wrap(err, "get replicas")
-		}
-		primary, err = db.GetGroupReplicationPrimary()
-		if err != nil {
-			return "", errors.Wrap(err, "get primary")
-		}
-	} else {
-		podIPs := make([]string, 0, cluster.Spec.MySQL.Size)
-		for i := 0; i < int(cluster.Spec.MySQL.Size); i++ {
-			podIPs = append(podIPs, mysql.FQDN(cluster, i))
-		}
-		primary, replicas, err = mysql.GetTopology(podIPs, operatorPass)
-		if err != nil {
-			return "", errors.Wrap(err, "select donor")
-		}
-	}
-	src := ""
-	l.V(1).Info("get topology", "primary", primary, "replicas", replicas)
-	if len(replicas) < 1 {
-		src = primary
+
+	var src string
+	if len(primary.Replicas) < 1 {
+		src = primary.Key.Hostname
 		l.Info("no replicas found, using primary as the backup source", "source", src)
 	} else {
-		src = replicas[0]
+		src = primary.Replicas[0].Hostname
 		l.Info("using replica as the backup source", "source", src)
 	}
 
