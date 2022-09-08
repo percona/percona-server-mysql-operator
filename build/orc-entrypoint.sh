@@ -3,7 +3,7 @@
 set -e
 set -o xtrace
 
-export PATH=$PATH:/usr/local/orchestrator
+export PATH="${PATH}:/usr/local/orchestrator"
 
 OPERATOR_BINDIR=/opt/percona
 ORC_CONF_PATH=${ORC_CONF_PATH:-/etc/orchestrator}
@@ -29,14 +29,14 @@ jq -M ". + {
         RaftNodes:[]
     }" "${ORC_CONF_FILE}" 1<>"${ORC_CONF_FILE}"
 
-if [ -f ${CUSTOM_CONF_FILE} ]; then
+if [ -f "${CUSTOM_CONF_FILE}" ]; then
 	jq -M -s ".[0] * .[1]" "${ORC_CONF_FILE}" "${CUSTOM_CONF_FILE}" 1<>"${ORC_CONF_FILE}"
 fi
 
 { set +x; } 2>/dev/null
 PATH_TO_SECRET="${ORC_CONF_PATH}/orchestrator-users-secret"
 if [ -f "$PATH_TO_SECRET/$TOPOLOGY_USER" ]; then
-	TOPOLOGY_PASSWORD=$(<$PATH_TO_SECRET/$TOPOLOGY_USER)
+	TOPOLOGY_PASSWORD=$(<"${PATH_TO_SECRET}/${TOPOLOGY_USER}")
 fi
 
 if [ ! -d "/var/lib/orchestrator" ]; then
@@ -55,4 +55,4 @@ cat "${temp}" >"${ORC_CONF_PATH}/orc-topology.cnf"
 rm "${temp}"
 set -o xtrace
 
-exec "$@" $orchestrator_opt
+exec "$@" "${orchestrator_opt}"
