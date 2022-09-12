@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 
+	"golang.org/x/sync/errgroup"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -253,52 +254,47 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 		"xbcloudCmd", sanitizeCmd(xbcloud),
 	)
 
-	xbcloudDone := make(chan struct{}, 1)
-
-	go func() {
-		defer close(xbcloudDone)
-
+	g := new(errgroup.Group)
+	g.Go(func() error {
 		if err := xbcloud.Start(); err != nil {
 			log.Error(err, "failed to start xbcloud")
-			http.Error(w, "backup failed", http.StatusInternalServerError)
-			return
+			return err
 		}
 
 		if _, err := io.Copy(logWriter, xbcloudErr); err != nil {
 			log.Error(err, "failed to copy xbcloud stderr")
-			http.Error(w, "backup failed", http.StatusInternalServerError)
-			return
+			return err
 		}
 
 		if err := xbcloud.Wait(); err != nil {
 			log.Error(err, "failed waiting for xbcloud to finish")
-			http.Error(w, "backup failed", http.StatusInternalServerError)
-			return
+			return err
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		if err := xtrabackup.Start(); err != nil {
+			log.Error(err, "failed to start xtrabackup command")
+			return err
 		}
 
-		xbcloudDone <- struct{}{}
-	}()
+		if _, err := io.Copy(logWriter, xbErr); err != nil {
+			log.Error(err, "failed to copy xtrabackup stderr")
+			return err
+		}
 
-	if err := xtrabackup.Start(); err != nil {
-		log.Error(err, "failed to start xtrabackup command")
+		if err := xtrabackup.Wait(); err != nil {
+			log.Error(err, "failed waiting for xtrabackup to finish")
+			return err
+		}
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
-
-	if _, err := io.Copy(logWriter, xbErr); err != nil {
-		log.Error(err, "failed to copy xtrabackup stderr")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
-		return
-	}
-
-	if err := xtrabackup.Wait(); err != nil {
-		log.Error(err, "failed waiting for xtrabackup to finish")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
-		return
-	}
-
-	<-xbcloudDone
-
 	log.Info("Backup finished successfully", "destination", backupConf.Destination, "storage", backupConf.Type)
 }
 
