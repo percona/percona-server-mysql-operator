@@ -35,7 +35,7 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
-	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql/topology"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
@@ -298,18 +298,21 @@ func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creatio
 func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	l := log.FromContext(ctx).WithName("getBackupSource")
 
-	orcHost := orchestrator.APIHost(cluster)
-	primary, err := orchestrator.ClusterPrimary(ctx, orcHost, cluster.ClusterHint())
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cluster, apiv1alpha1.UserOperator)
 	if err != nil {
-		return "", errors.Wrap(err, "get primary")
+		return "", errors.Wrap(err, "get operator password")
+	}
+	top, err := topology.Get(ctx, cluster, operatorPass)
+	if err != nil {
+		return "", errors.Wrap(err, "get topology")
 	}
 
 	var src string
-	if len(primary.Replicas) < 1 {
-		src = primary.Key.Hostname
+	if len(top.Replicas) < 1 {
+		src = top.Primary
 		l.Info("no replicas found, using primary as the backup source", "source", src)
 	} else {
-		src = primary.Replicas[0].Hostname
+		src = top.Replicas[0]
 		l.Info("using replica as the backup source", "source", src)
 	}
 

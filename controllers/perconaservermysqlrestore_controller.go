@@ -33,13 +33,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/pkg/errors"
+
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/router"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
-	"github.com/pkg/errors"
 )
 
 // PerconaServerMySQLRestoreReconciler reconciles a PerconaServerMySQLRestore object
@@ -283,14 +285,24 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 		return ErrWaitingTermination
 	}
 
-	sts = &appsv1.StatefulSet{}
-	nn = types.NamespacedName{Name: orchestrator.Name(cluster), Namespace: cluster.Namespace}
-	if err := r.Client.Get(ctx, nn, sts); err != nil {
-		return errors.Wrapf(err, "get statefulset %s", nn)
-	}
-
-	if sts.Status.Replicas != 0 {
-		return ErrWaitingTermination
+	switch cluster.Spec.MySQL.ClusterType {
+	case apiv1alpha1.ClusterTypeAsync:
+		nn = types.NamespacedName{Name: orchestrator.Name(cluster), Namespace: cluster.Namespace}
+		if err := r.Client.Get(ctx, nn, sts); err != nil {
+			return errors.Wrapf(err, "get statefulset %s", nn)
+		}
+		if sts.Status.Replicas != 0 {
+			return ErrWaitingTermination
+		}
+	case apiv1alpha1.ClusterTypeGR:
+		deployment := new(appsv1.Deployment)
+		nn = types.NamespacedName{Name: router.Name(cluster), Namespace: cluster.Namespace}
+		if err := r.Client.Get(ctx, nn, deployment); err != nil {
+			return errors.Wrapf(err, "get deployment %s", nn)
+		}
+		if deployment.Status.Replicas != 0 {
+			return ErrWaitingTermination
+		}
 	}
 
 	return nil
