@@ -455,8 +455,8 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 		return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup")
 	}
 
-	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Router == nil {
-		return errors.New("router section is needed for group replication")
+	if cr.Spec.MySQL.ClusterType == ClusterTypeAsync && cr.Spec.Orchestrator.Size == 0 {
+		return errors.Errorf("For clusterType %s orchestrator size must be set", ClusterTypeAsync)
 	}
 
 	if cr.Spec.Pause {

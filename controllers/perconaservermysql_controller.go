@@ -711,6 +711,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	l := log.FromContext(ctx).WithName("reconcileServices")
 	if err := r.reconcileMySQLServices(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile MySQL services")
 	}
@@ -722,8 +723,13 @@ func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr
 	}
 
 	if cr.Spec.MySQL.IsGR() {
-		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Service(cr), r.Scheme); err != nil {
-			return errors.Wrap(err, "reconcile router svc")
+		if cr.Spec.Router == nil {
+			l.Info("Router is not set for GR, but proceed", "size", cr.Spec.Router)
+		} else {
+			err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Service(cr), r.Scheme)
+			if err != nil {
+				return errors.Wrap(err, "reconcile router svc")
+			}
 		}
 	}
 
