@@ -10,7 +10,7 @@ done
 # we can get situation when ps-entrypoint removed bootstrap.lock but bootstrap has not created clone.lock yet 
 sleep 10
 if [ -f /var/lib/mysql/clone.lock ]; then
-   CLONE_IN_PROGRESS='yes'
+	CLONE_IN_PROGRESS='yes'
 fi
 
 MYSQL_ADMIN_PORT='33062'
