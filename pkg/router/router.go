@@ -64,8 +64,8 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 				{
 					Name: "http",
 					Port: int32(PortHTTP),
-        },
-        {
+				},
+				{
 					Name: "rw-default",
 					Port: int32(PortRWDefault),
 					TargetPort: intstr.IntOrString{
