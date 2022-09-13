@@ -132,6 +132,9 @@ spec:
 #                - e2e-az1
 #                - e2e-az2
 
+#    expose:
+#      type: ClusterIP
+
     resources:
       requests:
         memory: 128M
