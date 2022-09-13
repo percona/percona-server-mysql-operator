@@ -27,6 +27,9 @@ kind: PerconaServerMySQL
 metadata:
   generation: 2
   name: cluster-recommended
+spec:
+  mysql:
+    image: percona/percona-server:8.0.28-20
 status:
   mysql:
     ready: 3
@@ -34,3 +37,11 @@ status:
     state: ready
     version: 8.0.28-20
   state: ready
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cluster-recommended-mysql-0
+spec:
+  containers:
+    - image: percona/percona-server:8.0.28-20
