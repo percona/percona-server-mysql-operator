@@ -93,7 +93,7 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
             echo "The $TEST_NAME test was started!"
             testsReportMap[TEST_NAME] = "[failed]($testUrl)"
 
-            FILE_NAME = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME-gke-${env.PLATFORM_VER}"
+            def FILE_NAME = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"
             popArtifactFile("$FILE_NAME")
 
             timeout(time: 90, unit: 'MINUTES') {
@@ -114,7 +114,7 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
             }
             pushArtifactFile("$FILE_NAME")
             testsReportMap[TEST_NAME] = "[passed]($testUrl)"
-            testsResultsMap["${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"] = 'passed'
+            testsResultsMap["$FILE_NAME"] = 'passed'
             return true
         }
         catch (exc) {
@@ -291,7 +291,7 @@ pipeline {
                                     -v $WORKSPACE/src/github.com/percona/percona-server-mysql-operator:/go/src/github.com/percona/percona-server-mysql-operator \
                                     -w /go/src/github.com/percona/percona-server-mysql-operator \
                                     -e GO111MODULE=on \
-                                    golang:1.17 sh -c 'go build -v -mod=vendor -o percona-server-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
+                                    golang:1.19 sh -c 'go build -v -o percona-server-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
                             "
                         '''
 

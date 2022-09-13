@@ -110,7 +110,7 @@ func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 		cr.Labels())
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string, secret *corev1.Secret) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 	spec := cr.MySQLSpec()
 	replicas := spec.Size
@@ -176,7 +176,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 							SecurityContext:          spec.ContainerSecurityContext,
 						},
 					},
-					Containers:       containers(cr),
+					Containers:       containers(cr, secret),
 					Affinity:         spec.GetAffinity(labels),
 					ImagePullSecrets: spec.ImagePullSecrets,
 					// TerminationGracePeriodSeconds: 30,
@@ -442,7 +442,7 @@ func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
-func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
+func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []corev1.Container {
 	containers := []corev1.Container{mysqldContainer(cr)}
 
 	if backup := cr.Spec.Backup; backup != nil && backup.Enabled {
@@ -450,7 +450,7 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 	}
 
 	if pmm := cr.Spec.PMM; pmm != nil && pmm.Enabled {
-		containers = append(containers, pmmContainer(cr.Name, cr.Spec.SecretsName, pmm))
+		containers = append(containers, pmmContainer(cr.Name, secret, pmm))
 	}
 
 	return appendUniqueContainers(containers, cr.Spec.MySQL.Sidecars...)
@@ -557,11 +557,14 @@ func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	}
 }
 
-func pmmContainer(clusterName, secretsName string, pmmSpec *apiv1alpha1.PMMSpec) corev1.Container {
+func pmmContainer(clusterName string, secret *corev1.Secret, pmmSpec *apiv1alpha1.PMMSpec) corev1.Container {
 	ports := []corev1.ContainerPort{{ContainerPort: 7777}}
 	for port := 30100; port <= 30105; port++ {
 		ports = append(ports, corev1.ContainerPort{ContainerPort: int32(port)})
 	}
+
+	user := "api_key"
+	passwordKey := string(apiv1alpha1.UserPMMServerKey)
 
 	return corev1.Container{
 		Name:            "pmm-client",
@@ -609,12 +612,12 @@ func pmmContainer(clusterName, secretsName string, pmmSpec *apiv1alpha1.PMMSpec)
 			},
 			{
 				Name:  "PMM_AGENT_SERVER_USERNAME",
-				Value: pmmSpec.ServerUser,
+				Value: user,
 			},
 			{
 				Name: "PMM_AGENT_SERVER_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: k8s.SecretKeySelector(secretsName, "pmmserver"),
+					SecretKeyRef: k8s.SecretKeySelector(secret.Name, passwordKey),
 				},
 			},
 			{
@@ -623,12 +626,12 @@ func pmmContainer(clusterName, secretsName string, pmmSpec *apiv1alpha1.PMMSpec)
 			},
 			{
 				Name:  "PMM_USER",
-				Value: pmmSpec.ServerUser,
+				Value: user,
 			},
 			{
 				Name: "PMM_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: k8s.SecretKeySelector(secretsName, "pmmserver"),
+					SecretKeyRef: k8s.SecretKeySelector(secret.Name, passwordKey),
 				},
 			},
 			{
@@ -710,7 +713,7 @@ func pmmContainer(clusterName, secretsName string, pmmSpec *apiv1alpha1.PMMSpec)
 			{
 				Name: "DB_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: k8s.SecretKeySelector(secretsName, string(apiv1alpha1.UserMonitor)),
+					SecretKeyRef: k8s.SecretKeySelector(secret.Name, string(apiv1alpha1.UserMonitor)),
 				},
 			},
 			{

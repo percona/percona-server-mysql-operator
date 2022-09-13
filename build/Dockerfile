@@ -1,7 +1,8 @@
 FROM golang:1.19.0 AS go_builder
 WORKDIR /go/src/github.com/percona/percona-server-mysql-operator
 
-COPY . .
+COPY go.mod go.sum ./
+RUN go mod download
 
 ARG GIT_COMMIT
 ARG BUILD_TIME
@@ -11,24 +12,26 @@ ARG GOOS=linux
 ARG GOARCH=amd64
 ARG CGO_ENABLED=0
 
+COPY . .
+
 RUN mkdir -p build/_output/bin \
     && GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
-    go build -mod=vendor -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
+    go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
         -o build/_output/bin/percona-server-mysql-operator \
             cmd/manager/main.go \
     && cp -r build/_output/bin/percona-server-mysql-operator /usr/local/bin/percona-server-mysql-operator
 RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
-    go build -mod=vendor -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
+    go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
         -o build/_output/bin/bootstrap \
             cmd/bootstrap/main.go \
     && cp -r build/_output/bin/bootstrap /usr/local/bin/bootstrap
 RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
-    go build -mod=vendor -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
+    go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
         -o build/_output/bin/healthcheck \
             cmd/healthcheck/main.go \
     && cp -r build/_output/bin/healthcheck /usr/local/bin/healthcheck
 RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
-    go build -mod=vendor -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
+    go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
         -o build/_output/bin/sidecar \
             cmd/sidecar/main.go \
     && cp -r build/_output/bin/sidecar /usr/local/bin/sidecar
@@ -54,6 +57,7 @@ RUN set -ex; \
     microdnf clean all; \
     rm -rf /var/cache
 
+RUN rm -rf /usr/lib/debug/usr/bin
 RUN mkdir /sbin/.mysqlsh && chown 2:2 /sbin/.mysqlsh
 
 LABEL name="Percona Distribution for MySQL Operator" \
