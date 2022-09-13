@@ -7,7 +7,7 @@ until [ ! -f "$DATA_DIR/bootstrap.lock" ] && [ ! -f "$DATA_DIR/clone.lock" ] && 
 done
 
 # wait until bootstrap start clone process
-# we can get situation when ps-entrypoint removed bootstrap.lock but bootstrap has not created clone.lock yet 
+# we can get situation when ps-entrypoint removed bootstrap.lock but bootstrap has not created clone.lock yet
 sleep 10
 if [ -f /var/lib/mysql/clone.lock ]; then
 	CLONE_IN_PROGRESS='yes'
