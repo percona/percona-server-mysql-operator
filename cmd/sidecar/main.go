@@ -17,9 +17,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/pkg/errors"
+
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
-	"github.com/pkg/errors"
 )
 
 var log = logf.Log.WithName("sidecar")
@@ -208,8 +209,9 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
+	g, gCtx := errgroup.WithContext(req.Context())
 
-	xtrabackup := exec.Command("xtrabackup", xtrabackupArgs(string(backupUser), backupPass)...)
+	xtrabackup := exec.CommandContext(gCtx, "xtrabackup", xtrabackupArgs(string(backupUser), backupPass)...)
 
 	xbOut, err := xtrabackup.StdoutPipe()
 	if err != nil {
@@ -235,7 +237,7 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	logWriter := io.MultiWriter(backupLog, os.Stderr)
 
-	xbcloud := exec.Command("xbcloud", xbcloudArgs(backupConf)...)
+	xbcloud := exec.CommandContext(gCtx, "xbcloud", xbcloudArgs(backupConf)...)
 	xbcloud.Stdin = xbOut
 
 	xbcloudErr, err := xbcloud.StderrPipe()
@@ -254,7 +256,6 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 		"xbcloudCmd", sanitizeCmd(xbcloud),
 	)
 
-	g := new(errgroup.Group)
 	g.Go(func() error {
 		if err := xbcloud.Start(); err != nil {
 			log.Error(err, "failed to start xbcloud")
