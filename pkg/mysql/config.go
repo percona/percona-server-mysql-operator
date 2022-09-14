@@ -1,12 +1,10 @@
 package mysql
 
 import (
-	"bytes"
 	"strconv"
 	"strings"
-	"text/template"
 
-	"github.com/Masterminds/sprig/v3"
+	"github.com/flosch/pongo2"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 
@@ -67,13 +65,13 @@ func GetAutoTuneParams(cr *apiv1alpha1.PerconaServerMySQL, q *resource.Quantity)
 }
 
 func ExecuteConfigurationTemplate(input string, memory *resource.Quantity) (string, error) {
-	t, err := template.New("configuration").Funcs(sprig.TxtFuncMap()).Parse(input)
+	tmpl, err := pongo2.FromString(input)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to parse configuration template")
+		return "", errors.Wrap(err, "parse template")
 	}
-	buf := new(bytes.Buffer)
-	if err = t.Execute(buf, map[string]int64{"Memory": memory.Value()}); err != nil {
-		return "", errors.Wrap(err, "failed to execute configuration template")
+	result, err := tmpl.Execute(pongo2.Context{"containerMemoryLimit": memory.Value()})
+	if err != nil {
+		return "", errors.Wrap(err, "execute template")
 	}
-	return buf.String(), nil
+	return result, nil
 }
