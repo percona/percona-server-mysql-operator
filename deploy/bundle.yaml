@@ -759,10 +759,6 @@ spec:
                 required:
                 - type
                 type: object
-              verifyTLS:
-                type: boolean
-            required:
-            - sslSecretName
             type: object
         type: object
     served: true

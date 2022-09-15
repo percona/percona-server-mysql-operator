@@ -165,10 +165,6 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		destination := getDestination(storage, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
 		job := xtrabackup.Job(cluster, cr, destination, initImage, storage)
 
-		status.VerifyTLS = true
-		if storage.VerifyTLS != nil {
-			status.VerifyTLS = *storage.VerifyTLS
-		}
 		switch storage.Type {
 		case apiv1alpha1.BackupStorageS3:
 			if storage.S3 == nil {
@@ -372,15 +368,22 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 }
 
 func (r *PerconaServerMySQLBackupReconciler) sidecarBackupConfig(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup) (*apiv1alpha1.SidecarBackupConfig, error) {
+	storage := cr.Status.Storage
+	if storage == nil {
+		return nil, errors.New("storage is not set")
+	}
+	verifyTLS := true
+	if storage.VerifyTLS != nil {
+		verifyTLS = *storage.VerifyTLS
+	}
 	conf := &apiv1alpha1.SidecarBackupConfig{
 		Destination: cr.Status.Destination,
-		VerifyTLS:   cr.Status.VerifyTLS,
+		VerifyTLS:   verifyTLS,
 	}
+	s := new(corev1.Secret)
 	nn := types.NamespacedName{
 		Namespace: cr.Namespace,
 	}
-	s := new(corev1.Secret)
-	storage := cr.Status.Storage
 	switch storage.Type {
 	case apiv1alpha1.BackupStorageS3:
 		s3 := storage.S3

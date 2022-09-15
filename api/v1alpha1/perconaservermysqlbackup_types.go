@@ -40,9 +40,8 @@ type PerconaServerMySQLBackupStatus struct {
 	Destination   string             `json:"destination,omitempty"`
 	Storage       *BackupStorageSpec `json:"storage,omitempty"`
 	CompletedAt   *metav1.Time       `json:"completed,omitempty"`
-	VerifyTLS     bool               `json:"verifyTLS,omitempty"`
 	Image         string             `json:"image,omitempty"`
-	SSLSecretName string             `json:"sslSecretName"`
+	SSLSecretName string             `json:"sslSecretName,omitempty"`
 }
 
 // +kubebuilder:object:root=true
