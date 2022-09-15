@@ -7,16 +7,16 @@ commands:
       set -o xtrace
 
       source ../../functions
-      
-      kubectl delete ps-backup --all 
-      
+
+      kubectl delete ps-backup --all
+
       backup_name_minio="demand-backup-minio"
-        
+
       backup_exists=$(kubectl run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-        /usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-        /usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls operator-testing/ | grep -c "${backup_name_minio}/" | cat)
+      	/usr/bin/env AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+      	/usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls operator-testing/ | grep -c "${backup_name_minio}/" | cat)
 
       if [[ 1 -eq $backup_exists ]]; then
-          echo "Backup was not removed from bucket -- minio"
-          exit 1
+      	echo "Backup was not removed from bucket -- minio"
+      	exit 1
       fi
