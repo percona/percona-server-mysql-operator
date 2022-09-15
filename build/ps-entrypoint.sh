@@ -284,6 +284,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		file_env 'ORC_TOPOLOGY_PASSWORD' '' 'orchestrator'
 		file_env 'OPERATOR_ADMIN_PASSWORD' '' 'operator'
 		file_env 'XTRABACKUP_PASSWORD' '' 'xtrabackup'
+		file_env 'HEARTBEAT_PASSWORD' '' 'heartbeat'
 		read -r -d '' monitorConnectGrant <<-EOSQL || true
 			GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
 		EOSQL
@@ -321,7 +322,12 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			CREATE USER 'orchestrator'@'%' IDENTIFIED BY '${ORC_TOPOLOGY_PASSWORD}';
 			GRANT SYSTEM_USER, SUPER, PROCESS, REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';
 			GRANT SELECT ON mysql.slave_master_info TO 'orchestrator'@'%';
-			GRANT SELECT ON meta.* TO 'orchestrator'@'%';
+			GRANT SELECT ON sys_operator.* TO 'orchestrator'@'%';
+
+			CREATE DATABASE IF NOT EXISTS sys_operator;
+			CREATE USER 'heartbeat'@'localhost' IDENTIFIED BY '${HEARTBEAT_PASSWORD}';
+			GRANT SYSTEM_USER, REPLICATION CLIENT ON *.* TO 'heartbeat'@'localhost';
+			GRANT SELECT, CREATE, DELETE, UPDATE, INSERT ON sys_operator.heartbeat TO 'heartbeat'@'localhost';
 
 			DROP DATABASE IF EXISTS test;
 			FLUSH PRIVILEGES ;
