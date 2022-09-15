@@ -135,7 +135,7 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 	defer backupLog.Close()
 	logWriter := io.MultiWriter(backupLog, os.Stderr)
 
-	xbcloud := exec.Command("xbcloud", xb.XBCloudArgs(xb.XBCloudActionDelete, &backupConf)...)
+	xbcloud := exec.CommandContext(req.Context(), "xbcloud", xb.XBCloudArgs(xb.XBCloudActionDelete, &backupConf)...)
 	xbcloudErr, err := xbcloud.StderrPipe()
 	if err != nil {
 		log.Error(err, "xbcloud stderr pipe failed")
