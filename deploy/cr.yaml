@@ -123,6 +123,9 @@ spec:
 #                - e2e-az1
 #                - e2e-az2
 
+#    expose:
+#      type: ClusterIP
+
     resources:
       requests:
         memory: 128M
@@ -140,6 +143,14 @@ spec:
 
     image: percona/pmm-client:2.28.0
     imagePullPolicy: Always
+
+    resources:
+      requests:
+        memory: 150M
+        cpu: 300m
+#      limits:
+#        memory: 256M
+#        cpu: 400m
 
     serverHost: monitoring-service
     serverUser: admin
@@ -189,4 +200,15 @@ spec:
           credentialsSecret: cluster1-s3-credentials
           region: us-west-2
 #          prefix: ""
+
+  toolkit:
+    image: perconalab/percona-server-mysql-operator:3.4.0-toolkit
+    imagePullPolicy: Always
+#    resources:
+#      requests:
+#        memory: 150M
+#        cpu: 100m
+#      limits:
+#        memory: 256M
+#        cpu: 400m
 

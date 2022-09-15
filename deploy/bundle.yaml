@@ -2116,8 +2116,6 @@ spec:
                             type: string
                         type: object
                     type: object
-                  envVarsSecret:
-                    type: string
                   expose:
                     properties:
                       annotations:
@@ -2135,10 +2133,6 @@ spec:
                       type:
                         type: string
                     type: object
-                  externalTrafficPolicy:
-                    type: string
-                  forceUnsafeBootstrap:
-                    type: boolean
                   gracePeriod:
                     format: int64
                     type: integer
@@ -2235,26 +2229,9 @@ spec:
                         format: int32
                         type: integer
                     type: object
-                  loadBalancerSourceRanges:
-                    items:
-                      type: string
-                    type: array
                   nodeSelector:
                     additionalProperties:
                       type: string
-                    type: object
-                  podDisruptionBudget:
-                    properties:
-                      maxUnavailable:
-                        anyOf:
-                        - type: integer
-                        - type: string
-                        x-kubernetes-int-or-string: true
-                      minAvailable:
-                        anyOf:
-                        - type: integer
-                        - type: string
-                        x-kubernetes-int-or-string: true
                     type: object
                   podSecurityContext:
                     properties:
@@ -2402,8 +2379,6 @@ spec:
                         format: int32
                         type: integer
                     type: object
-                  replicasExternalTrafficPolicy:
-                    type: string
                   replicasServiceType:
                     type: string
                   resources:
@@ -2433,10 +2408,6 @@ spec:
                     type: string
                   serviceAccountName:
                     type: string
-                  serviceAnnotations:
-                    additionalProperties:
-                      type: string
-                    type: object
                   sidecarPVCs:
                     items:
                       properties:
@@ -3801,10 +3772,6 @@ spec:
                     - type: integer
                     - type: string
                     x-kubernetes-int-or-string: true
-                  sslInternalSecretName:
-                    type: string
-                  sslSecretName:
-                    type: string
                   startupProbe:
                     properties:
                       exec:
@@ -3899,8 +3866,6 @@ spec:
                           type: string
                       type: object
                     type: array
-                  vaultSecretName:
-                    type: string
                   volumeSpec:
                     properties:
                       emptyDir:
@@ -4369,8 +4334,6 @@ spec:
                     additionalProperties:
                       type: string
                     type: object
-                  configuration:
-                    type: string
                   containerSecurityContext:
                     properties:
                       allowPrivilegeEscalation:
@@ -4432,8 +4395,6 @@ spec:
                             type: string
                         type: object
                     type: object
-                  envVarsSecret:
-                    type: string
                   expose:
                     properties:
                       annotations:
@@ -4449,10 +4410,6 @@ spec:
                       type:
                         type: string
                     type: object
-                  externalTrafficPolicy:
-                    type: string
-                  forceUnsafeBootstrap:
-                    type: boolean
                   gracePeriod:
                     format: int64
                     type: integer
@@ -4549,26 +4506,9 @@ spec:
                         format: int32
                         type: integer
                     type: object
-                  loadBalancerSourceRanges:
-                    items:
-                      type: string
-                    type: array
                   nodeSelector:
                     additionalProperties:
                       type: string
-                    type: object
-                  podDisruptionBudget:
-                    properties:
-                      maxUnavailable:
-                        anyOf:
-                        - type: integer
-                        - type: string
-                        x-kubernetes-int-or-string: true
-                      minAvailable:
-                        anyOf:
-                        - type: integer
-                        - type: string
-                        x-kubernetes-int-or-string: true
                     type: object
                   podSecurityContext:
                     properties:
@@ -4714,8 +4654,6 @@ spec:
                         format: int32
                         type: integer
                     type: object
-                  replicasExternalTrafficPolicy:
-                    type: string
                   resources:
                     properties:
                       limits:
@@ -4741,17 +4679,9 @@ spec:
                     type: string
                   serviceAccountName:
                     type: string
-                  serviceAnnotations:
-                    additionalProperties:
-                      type: string
-                    type: object
                   size:
                     format: int32
                     type: integer
-                  sslInternalSecretName:
-                    type: string
-                  sslSecretName:
-                    type: string
                   startupProbe:
                     properties:
                       exec:
@@ -4846,8 +4776,6 @@ spec:
                           type: string
                       type: object
                     type: array
-                  vaultSecretName:
-                    type: string
                   volumeSpec:
                     properties:
                       emptyDir:
@@ -5413,8 +5341,6 @@ spec:
                     additionalProperties:
                       type: string
                     type: object
-                  configuration:
-                    type: string
                   containerSecurityContext:
                     properties:
                       allowPrivilegeEscalation:
@@ -5476,8 +5402,6 @@ spec:
                             type: string
                         type: object
                     type: object
-                  envVarsSecret:
-                    type: string
                   expose:
                     properties:
                       annotations:
@@ -5493,10 +5417,6 @@ spec:
                       type:
                         type: string
                     type: object
-                  externalTrafficPolicy:
-                    type: string
-                  forceUnsafeBootstrap:
-                    type: boolean
                   gracePeriod:
                     format: int64
                     type: integer
@@ -5593,26 +5513,9 @@ spec:
                         format: int32
                         type: integer
                     type: object
-                  loadBalancerSourceRanges:
-                    items:
-                      type: string
-                    type: array
                   nodeSelector:
                     additionalProperties:
                       type: string
-                    type: object
-                  podDisruptionBudget:
-                    properties:
-                      maxUnavailable:
-                        anyOf:
-                        - type: integer
-                        - type: string
-                        x-kubernetes-int-or-string: true
-                      minAvailable:
-                        anyOf:
-                        - type: integer
-                        - type: string
-                        x-kubernetes-int-or-string: true
                     type: object
                   podSecurityContext:
                     properties:
@@ -5758,8 +5661,6 @@ spec:
                         format: int32
                         type: integer
                     type: object
-                  replicasExternalTrafficPolicy:
-                    type: string
                   resources:
                     properties:
                       limits:
@@ -5785,17 +5686,9 @@ spec:
                     type: string
                   serviceAccountName:
                     type: string
-                  serviceAnnotations:
-                    additionalProperties:
-                      type: string
-                    type: object
                   size:
                     format: int32
                     type: integer
-                  sslInternalSecretName:
-                    type: string
-                  sslSecretName:
-                    type: string
                   startupProbe:
                     properties:
                       exec:
@@ -5890,8 +5783,6 @@ spec:
                           type: string
                       type: object
                     type: array
-                  vaultSecretName:
-                    type: string
                   volumeSpec:
                     properties:
                       emptyDir:
@@ -6001,6 +5892,334 @@ spec:
                 type: string
               sslSecretName:
                 type: string
+              toolkit:
+                properties:
+                  containerSecurityContext:
+                    properties:
+                      allowPrivilegeEscalation:
+                        type: boolean
+                      capabilities:
+                        properties:
+                          add:
+                            items:
+                              type: string
+                            type: array
+                          drop:
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      privileged:
+                        type: boolean
+                      procMount:
+                        type: string
+                      readOnlyRootFilesystem:
+                        type: boolean
+                      runAsGroup:
+                        format: int64
+                        type: integer
+                      runAsNonRoot:
+                        type: boolean
+                      runAsUser:
+                        format: int64
+                        type: integer
+                      seLinuxOptions:
+                        properties:
+                          level:
+                            type: string
+                          role:
+                            type: string
+                          type:
+                            type: string
+                          user:
+                            type: string
+                        type: object
+                      seccompProfile:
+                        properties:
+                          localhostProfile:
+                            type: string
+                          type:
+                            type: string
+                        required:
+                        - type
+                        type: object
+                      windowsOptions:
+                        properties:
+                          gmsaCredentialSpec:
+                            type: string
+                          gmsaCredentialSpecName:
+                            type: string
+                          hostProcess:
+                            type: boolean
+                          runAsUserName:
+                            type: string
+                        type: object
+                    type: object
+                  image:
+                    type: string
+                  imagePullPolicy:
+                    type: string
+                  imagePullSecrets:
+                    items:
+                      properties:
+                        name:
+                          type: string
+                      type: object
+                    type: array
+                  livenessProbe:
+                    properties:
+                      exec:
+                        properties:
+                          command:
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      failureThreshold:
+                        format: int32
+                        type: integer
+                      grpc:
+                        properties:
+                          port:
+                            format: int32
+                            type: integer
+                          service:
+                            type: string
+                        required:
+                        - port
+                        type: object
+                      httpGet:
+                        properties:
+                          host:
+                            type: string
+                          httpHeaders:
+                            items:
+                              properties:
+                                name:
+                                  type: string
+                                value:
+                                  type: string
+                              required:
+                              - name
+                              - value
+                              type: object
+                            type: array
+                          path:
+                            type: string
+                          port:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
+                          scheme:
+                            type: string
+                        required:
+                        - port
+                        type: object
+                      initialDelaySeconds:
+                        format: int32
+                        type: integer
+                      periodSeconds:
+                        format: int32
+                        type: integer
+                      successThreshold:
+                        format: int32
+                        type: integer
+                      tcpSocket:
+                        properties:
+                          host:
+                            type: string
+                          port:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
+                        required:
+                        - port
+                        type: object
+                      terminationGracePeriodSeconds:
+                        format: int64
+                        type: integer
+                      timeoutSeconds:
+                        format: int32
+                        type: integer
+                    type: object
+                  readinessProbe:
+                    properties:
+                      exec:
+                        properties:
+                          command:
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      failureThreshold:
+                        format: int32
+                        type: integer
+                      grpc:
+                        properties:
+                          port:
+                            format: int32
+                            type: integer
+                          service:
+                            type: string
+                        required:
+                        - port
+                        type: object
+                      httpGet:
+                        properties:
+                          host:
+                            type: string
+                          httpHeaders:
+                            items:
+                              properties:
+                                name:
+                                  type: string
+                                value:
+                                  type: string
+                              required:
+                              - name
+                              - value
+                              type: object
+                            type: array
+                          path:
+                            type: string
+                          port:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
+                          scheme:
+                            type: string
+                        required:
+                        - port
+                        type: object
+                      initialDelaySeconds:
+                        format: int32
+                        type: integer
+                      periodSeconds:
+                        format: int32
+                        type: integer
+                      successThreshold:
+                        format: int32
+                        type: integer
+                      tcpSocket:
+                        properties:
+                          host:
+                            type: string
+                          port:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
+                        required:
+                        - port
+                        type: object
+                      terminationGracePeriodSeconds:
+                        format: int64
+                        type: integer
+                      timeoutSeconds:
+                        format: int32
+                        type: integer
+                    type: object
+                  resources:
+                    properties:
+                      limits:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        type: object
+                      requests:
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        type: object
+                    type: object
+                  startupProbe:
+                    properties:
+                      exec:
+                        properties:
+                          command:
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      failureThreshold:
+                        format: int32
+                        type: integer
+                      grpc:
+                        properties:
+                          port:
+                            format: int32
+                            type: integer
+                          service:
+                            type: string
+                        required:
+                        - port
+                        type: object
+                      httpGet:
+                        properties:
+                          host:
+                            type: string
+                          httpHeaders:
+                            items:
+                              properties:
+                                name:
+                                  type: string
+                                value:
+                                  type: string
+                              required:
+                              - name
+                              - value
+                              type: object
+                            type: array
+                          path:
+                            type: string
+                          port:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
+                          scheme:
+                            type: string
+                        required:
+                        - port
+                        type: object
+                      initialDelaySeconds:
+                        format: int32
+                        type: integer
+                      periodSeconds:
+                        format: int32
+                        type: integer
+                      successThreshold:
+                        format: int32
+                        type: integer
+                      tcpSocket:
+                        properties:
+                          host:
+                            type: string
+                          port:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
+                        required:
+                        - port
+                        type: object
+                      terminationGracePeriodSeconds:
+                        format: int64
+                        type: integer
+                      timeoutSeconds:
+                        format: int32
+                        type: integer
+                    type: object
+                type: object
             type: object
           status:
             properties:
