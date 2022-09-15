@@ -15,8 +15,7 @@ fi
 
 MYSQL_ADMIN_PORT='33062'
 MYSQL_USER="${MYSQL_USERNAME:-monitor}"
-MONITOR_PASSWOR=$(cat /etc/mysql/mysql-users-secret/monitor || :)
-MYSQL_PASSWORD="${MONITOR_PASSWOR:-$MONITOR_PASSWORD}"
+MYSQL_PASSWORD=$(cat /etc/mysql/mysql-users-secret/monitor || :)
 TIMEOUT=10
 MYSQL_CMDLINE="/usr/bin/timeout 10 /usr/bin/mysql -nNE -u$MYSQL_USER"
 

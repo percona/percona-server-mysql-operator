@@ -14,11 +14,16 @@ spec:
       - name: mysql
         resources:
           limits:
-            memory: 512Mi
+            memory: 1Gi
       - name: xtrabackup
+        ports:
+        - containerPort: 6033
+          name: http
+          protocol: TCP
       - name: pt-heartbeat
+        resources: {}
 status:
   observedGeneration: 2
-  replicas: 3
   readyReplicas: 3
+  replicas: 3
   updatedReplicas: 3
