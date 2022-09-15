@@ -546,6 +546,8 @@ func heartbeatContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		Name:            "pt-heartbeat",
 		Image:           cr.Spec.Toolkit.Image,
 		ImagePullPolicy: cr.Spec.Toolkit.ImagePullPolicy,
+		SecurityContext: cr.Spec.Toolkit.ContainerSecurityContext,
+		Resources:       cr.Spec.Toolkit.Resources,
 		Env: []corev1.EnvVar{
 			{
 				Name: "HEARTBEAT_PASSWORD",
