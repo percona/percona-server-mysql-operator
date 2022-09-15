@@ -125,7 +125,7 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	backupLog, err := os.OpenFile(filepath.Join(mysql.BackupLogDir, backupName+".log"), os.O_WRONLY|os.O_APPEND, 0666)
+	backupLog, err := os.OpenFile(filepath.Join(mysql.BackupLogDir, backupName+".log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		log.Error(err, "failed to open log file")
 		http.Error(w, "backup failed", http.StatusInternalServerError)
