@@ -229,7 +229,7 @@ const (
 	XBCloudActionDelete XBCloudAction = "delete"
 )
 
-func XBCloudArgs(action XBCloudAction, conf *apiv1alpha1.SidecarBackupConfig) []string {
+func XBCloudArgs(action XBCloudAction, conf *BackupConfig) []string {
 	args := []string{string(action), "--parallel=10", "--curl-retriable-errors=7"}
 
 	if !conf.VerifyTLS {
@@ -286,7 +286,7 @@ func XBCloudArgs(action XBCloudAction, conf *apiv1alpha1.SidecarBackupConfig) []
 	return args
 }
 
-func deleteContainer(image string, conf *apiv1alpha1.SidecarBackupConfig, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
+func deleteContainer(image string, conf *BackupConfig, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
 	return corev1.Container{
 		Name:            componentName,
 		Image:           image,
@@ -432,7 +432,7 @@ func RestoreJob(
 	}
 }
 
-func DeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *apiv1alpha1.SidecarBackupConfig) *batchv1.Job {
+func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) *batchv1.Job {
 	var one int32 = 1
 	t := true
 
@@ -748,4 +748,32 @@ func SetSourceNode(job *batchv1.Job, src string) error {
 	}
 
 	return errors.Errorf("no container named %s in Job spec", componentName)
+}
+
+type BackupConfig struct {
+	Destination string                        `json:"destination"`
+	Type        apiv1alpha1.BackupStorageType `json:"type"`
+	VerifyTLS   bool                          `json:"verifyTLS,omitempty"`
+	S3          struct {
+		Bucket       string `json:"bucket"`
+		Region       string `json:"region,omitempty"`
+		EndpointURL  string `json:"endpointUrl,omitempty"`
+		StorageClass string `json:"storageClass,omitempty"`
+		AccessKey    string `json:"accessKey,omitempty"`
+		SecretKey    string `json:"secretKey,omitempty"`
+	} `json:"s3,omitempty"`
+	GCS struct {
+		Bucket       string `json:"bucket"`
+		EndpointURL  string `json:"endpointUrl,omitempty"`
+		StorageClass string `json:"storageClass,omitempty"`
+		AccessKey    string `json:"accessKey,omitempty"`
+		SecretKey    string `json:"secretKey,omitempty"`
+	} `json:"gcs,omitempty"`
+	Azure struct {
+		ContainerName  string `json:"containerName"`
+		EndpointURL    string `json:"endpointUrl,omitempty"`
+		StorageClass   string `json:"storageClass,omitempty"`
+		StorageAccount string `json:"storageAccount,omitempty"`
+		AccessKey      string `json:"accessKey,omitempty"`
+	} `json:"azure,omitempty"`
 }

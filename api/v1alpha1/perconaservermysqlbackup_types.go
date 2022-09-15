@@ -89,31 +89,3 @@ func (cr *PerconaServerMySQLBackup) Hash() string {
 
 	return hash
 }
-
-type SidecarBackupConfig struct {
-	Destination string            `json:"destination"`
-	Type        BackupStorageType `json:"type"`
-	VerifyTLS   bool              `json:"verifyTLS,omitempty"`
-	S3          struct {
-		Bucket       string `json:"bucket"`
-		Region       string `json:"region,omitempty"`
-		EndpointURL  string `json:"endpointUrl,omitempty"`
-		StorageClass string `json:"storageClass,omitempty"`
-		AccessKey    string `json:"accessKey,omitempty"`
-		SecretKey    string `json:"secretKey,omitempty"`
-	} `json:"s3,omitempty"`
-	GCS struct {
-		Bucket       string `json:"bucket"`
-		EndpointURL  string `json:"endpointUrl,omitempty"`
-		StorageClass string `json:"storageClass,omitempty"`
-		AccessKey    string `json:"accessKey,omitempty"`
-		SecretKey    string `json:"secretKey,omitempty"`
-	} `json:"gcs,omitempty"`
-	Azure struct {
-		ContainerName  string `json:"containerName"`
-		EndpointURL    string `json:"endpointUrl,omitempty"`
-		StorageClass   string `json:"storageClass,omitempty"`
-		StorageAccount string `json:"storageAccount,omitempty"`
-		AccessKey      string `json:"accessKey,omitempty"`
-	} `json:"azure,omitempty"`
-}

@@ -118,7 +118,7 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	defer req.Body.Close()
 
-	backupConf := apiv1alpha1.SidecarBackupConfig{}
+	backupConf := xb.BackupConfig{}
 	if err = json.Unmarshal(data, &backupConf); err != nil {
 		log.Error(err, "failed to unmarshal backup config")
 		http.Error(w, "backup failed", http.StatusBadRequest)
@@ -192,7 +192,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	defer req.Body.Close()
 
-	backupConf := apiv1alpha1.SidecarBackupConfig{}
+	backupConf := xb.BackupConfig{}
 	if err := json.Unmarshal(data, &backupConf); err != nil {
 		log.Error(err, "failed to unmarshal backup config")
 		http.Error(w, "backup failed", http.StatusBadRequest)

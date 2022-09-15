@@ -329,10 +329,6 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 	return src, nil
 }
 
-const (
-	finalizerDeleteBackup = "delete-backup"
-)
-
 func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQLBackup) error {
 	if cr.DeletionTimestamp == nil {
@@ -344,7 +340,7 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 	for _, finalizer := range cr.GetFinalizers() {
 		var err error
 		switch finalizer {
-		case finalizerDeleteBackup:
+		case "delete-backup":
 			var ok bool
 			ok, err = r.deleteBackup(ctx, cr)
 			if !ok {
@@ -367,7 +363,7 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 	return nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) sidecarBackupConfig(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup) (*apiv1alpha1.SidecarBackupConfig, error) {
+func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup) (*xtrabackup.BackupConfig, error) {
 	storage := cr.Status.Storage
 	if storage == nil {
 		return nil, errors.New("storage is not set")
@@ -376,7 +372,7 @@ func (r *PerconaServerMySQLBackupReconciler) sidecarBackupConfig(ctx context.Con
 	if storage.VerifyTLS != nil {
 		verifyTLS = *storage.VerifyTLS
 	}
-	conf := &apiv1alpha1.SidecarBackupConfig{
+	conf := &xtrabackup.BackupConfig{
 		Destination: cr.Status.Destination,
 		VerifyTLS:   verifyTLS,
 	}
@@ -453,7 +449,7 @@ func (r *PerconaServerMySQLBackupReconciler) sidecarBackupConfig(ctx context.Con
 }
 
 func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup) (bool, error) {
-	backupConf, err := r.sidecarBackupConfig(ctx, cr)
+	backupConf, err := r.backupConfig(ctx, cr)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to create sidecar backup config")
 	}
@@ -472,7 +468,7 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 			return false, errors.Wrapf(err, "get job %s", nn)
 		}
 		if k8serrors.IsNotFound(err) {
-			job = xtrabackup.DeleteJob(cr, backupConf)
+			job = xtrabackup.GetDeleteJob(cr, backupConf)
 			if err := controllerutil.SetControllerReference(cr, job, r.Scheme); err != nil {
 				return false, errors.Wrapf(err, "set controller reference to Job %s/%s", job.Namespace, job.Name)
 			}
