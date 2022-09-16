@@ -18,6 +18,7 @@ spec:
           requests:
             memory: 512M
       - name: xtrabackup
+      - name: pt-heartbeat
 status:
   observedGeneration: 4
   replicas: 3

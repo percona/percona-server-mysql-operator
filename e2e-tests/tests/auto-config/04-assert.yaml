@@ -16,6 +16,7 @@ spec:
           requests:
             memory: 4Gi
       - name: xtrabackup
+      - name: pt-heartbeat
 status:
   observedGeneration: 3
   replicas: 3

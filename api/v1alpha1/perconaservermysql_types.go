@@ -48,6 +48,7 @@ type PerconaServerMySQLSpec struct {
 	PMM                   *PMMSpec         `json:"pmm,omitempty"`
 	Backup                *BackupSpec      `json:"backup,omitempty"`
 	Router                *MySQLRouterSpec `json:"router,omitempty"`
+	Toolkit               *ToolkitSpec     `json:"toolkit,omitempty"`
 	UpgradeOptions        UpgradeOptions   `json:"upgradeOptions,omitempty"`
 }
 
@@ -105,39 +106,37 @@ type OrchestratorSpec struct {
 	PodSpec `json:",inline"`
 }
 
+type ContainerSpec struct {
+	Image            string                        `json:"image,omitempty"`
+	ImagePullPolicy  corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	Resources        corev1.ResourceRequirements   `json:"resources,omitempty"`
+
+	StartupProbe   corev1.Probe `json:"startupProbe,omitempty"`
+	ReadinessProbe corev1.Probe `json:"readinessProbe,omitempty"`
+	LivenessProbe  corev1.Probe `json:"livenessProbe,omitempty"`
+
+	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
+}
+
 type PodSpec struct {
-	Size                          int32                                   `json:"size,omitempty"`
-	Image                         string                                  `json:"image,omitempty"`
-	Resources                     corev1.ResourceRequirements             `json:"resources,omitempty"`
-	VolumeSpec                    *VolumeSpec                             `json:"volumeSpec,omitempty"`
-	Affinity                      *PodAffinity                            `json:"affinity,omitempty"`
-	NodeSelector                  map[string]string                       `json:"nodeSelector,omitempty"`
-	Tolerations                   []corev1.Toleration                     `json:"tolerations,omitempty"`
-	PriorityClassName             string                                  `json:"priorityClassName,omitempty"`
-	Annotations                   map[string]string                       `json:"annotations,omitempty"`
-	Labels                        map[string]string                       `json:"labels,omitempty"`
-	ImagePullSecrets              []corev1.LocalObjectReference           `json:"imagePullSecrets,omitempty"`
-	Configuration                 string                                  `json:"configuration,omitempty"`
-	PodDisruptionBudget           *PodDisruptionBudgetSpec                `json:"podDisruptionBudget,omitempty"`
-	VaultSecretName               string                                  `json:"vaultSecretName,omitempty"`
-	SSLSecretName                 string                                  `json:"sslSecretName,omitempty"`
-	SSLInternalSecretName         string                                  `json:"sslInternalSecretName,omitempty"`
-	EnvVarsSecretName             string                                  `json:"envVarsSecret,omitempty"`
-	TerminationGracePeriodSeconds *int64                                  `json:"gracePeriod,omitempty"`
-	ForceUnsafeBootstrap          bool                                    `json:"forceUnsafeBootstrap,omitempty"`
-	ExternalTrafficPolicy         corev1.ServiceExternalTrafficPolicyType `json:"externalTrafficPolicy,omitempty"`
-	ReplicasExternalTrafficPolicy corev1.ServiceExternalTrafficPolicyType `json:"replicasExternalTrafficPolicy,omitempty"`
-	LoadBalancerSourceRanges      []string                                `json:"loadBalancerSourceRanges,omitempty"`
-	ServiceAnnotations            map[string]string                       `json:"serviceAnnotations,omitempty"`
-	SchedulerName                 string                                  `json:"schedulerName,omitempty"`
-	StartupProbe                  corev1.Probe                            `json:"startupProbe,omitempty"`
-	ReadinessProbe                corev1.Probe                            `json:"readinessProbe,omitempty"`
-	LivenessProbe                 corev1.Probe                            `json:"livenessProbe,omitempty"`
-	PodSecurityContext            *corev1.PodSecurityContext              `json:"podSecurityContext,omitempty"`
-	ContainerSecurityContext      *corev1.SecurityContext                 `json:"containerSecurityContext,omitempty"`
-	ServiceAccountName            string                                  `json:"serviceAccountName,omitempty"`
-	ImagePullPolicy               corev1.PullPolicy                       `json:"imagePullPolicy,omitempty"`
-	RuntimeClassName              *string                                 `json:"runtimeClassName,omitempty"`
+	Size        int32             `json:"size,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	VolumeSpec  *VolumeSpec       `json:"volumeSpec,omitempty"`
+
+	Affinity                      *PodAffinity        `json:"affinity,omitempty"`
+	NodeSelector                  map[string]string   `json:"nodeSelector,omitempty"`
+	Tolerations                   []corev1.Toleration `json:"tolerations,omitempty"`
+	PriorityClassName             string              `json:"priorityClassName,omitempty"`
+	TerminationGracePeriodSeconds *int64              `json:"gracePeriod,omitempty"`
+	SchedulerName                 string              `json:"schedulerName,omitempty"`
+	RuntimeClassName              *string             `json:"runtimeClassName,omitempty"`
+
+	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	ServiceAccountName string                     `json:"serviceAccountName,omitempty"`
+
+	ContainerSpec `json:",inline"`
 }
 
 type PMMSpec struct {
@@ -231,6 +230,10 @@ type MySQLRouterSpec struct {
 	Expose ServiceExpose `json:"expose,omitempty"`
 
 	PodSpec `json:",inline"`
+}
+
+type ToolkitSpec struct {
+	ContainerSpec `json:",inline"`
 }
 
 type PodDisruptionBudgetSpec struct {
@@ -334,15 +337,16 @@ type PerconaServerMySQLList struct {
 type SystemUser string
 
 const (
-	UserRoot         SystemUser = "root"
-	UserXtraBackup   SystemUser = "xtrabackup"
-	UserMonitor      SystemUser = "monitor"
 	UserClusterCheck SystemUser = "clustercheck"
-	UserProxyAdmin   SystemUser = "proxyadmin"
+	UserHeartbeat    SystemUser = "heartbeat"
+	UserMonitor      SystemUser = "monitor"
 	UserOperator     SystemUser = "operator"
-	UserReplication  SystemUser = "replication"
 	UserOrchestrator SystemUser = "orchestrator"
 	UserPMMServerKey SystemUser = "pmmserverkey"
+	UserProxyAdmin   SystemUser = "proxyadmin"
+	UserReplication  SystemUser = "replication"
+	UserRoot         SystemUser = "root"
+	UserXtraBackup   SystemUser = "xtrabackup"
 )
 
 func (cr *PerconaServerMySQL) MySQLSpec() *MySQLSpec {
