@@ -10,7 +10,7 @@ import (
 	httptransport "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
 
-	"github.com/percona/percona-server-mysql-operator/pkg/versionservice/client/version_service"
+	"github.com/percona/percona-server-mysql-operator/pkg/version/service/client/version_service"
 )
 
 // Default API version proto HTTP client.

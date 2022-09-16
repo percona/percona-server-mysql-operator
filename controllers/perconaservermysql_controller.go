@@ -33,7 +33,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -55,7 +54,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/users"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
-	"github.com/percona/percona-server-mysql-operator/pkg/versionservice"
+	vs "github.com/percona/percona-server-mysql-operator/pkg/version/service"
 )
 
 // PerconaServerMySQLReconciler reconciles a PerconaServerMySQL object
@@ -162,7 +161,7 @@ func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr
 
 	l := log.FromContext(ctx).WithName("reconcileVersions")
 
-	version, err := versionservice.GetVersion(ctx, cr, r.ServerVersion)
+	version, err := vs.GetVersion(ctx, cr, r.ServerVersion)
 	if err != nil {
 		return errors.Wrap(err, "get exact version")
 	}

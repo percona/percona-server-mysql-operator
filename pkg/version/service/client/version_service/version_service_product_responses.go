@@ -12,7 +12,7 @@ import (
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/strfmt"
 
-	"github.com/percona/percona-server-mysql-operator/pkg/versionservice/client/models"
+	models2 "github.com/percona/percona-server-mysql-operator/pkg/version/service/client/models"
 )
 
 // VersionServiceProductReader is a Reader for the VersionServiceProduct structure.
@@ -52,19 +52,19 @@ VersionServiceProductOK describes a response with status code 200, with default 
 A successful response.
 */
 type VersionServiceProductOK struct {
-	Payload *models.VersionProductResponse
+	Payload *models2.VersionProductResponse
 }
 
 func (o *VersionServiceProductOK) Error() string {
 	return fmt.Sprintf("[GET /versions/v1/{product}][%d] versionServiceProductOK  %+v", 200, o.Payload)
 }
-func (o *VersionServiceProductOK) GetPayload() *models.VersionProductResponse {
+func (o *VersionServiceProductOK) GetPayload() *models2.VersionProductResponse {
 	return o.Payload
 }
 
 func (o *VersionServiceProductOK) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
 
-	o.Payload = new(models.VersionProductResponse)
+	o.Payload = new(models2.VersionProductResponse)
 
 	// response payload
 	if err := consumer.Consume(response.Body(), o.Payload); err != nil && err != io.EOF {
@@ -89,7 +89,7 @@ An unexpected error response
 type VersionServiceProductDefault struct {
 	_statusCode int
 
-	Payload *models.GooglerpcStatus
+	Payload *models2.GooglerpcStatus
 }
 
 // Code gets the status code for the version service product default response
@@ -100,13 +100,13 @@ func (o *VersionServiceProductDefault) Code() int {
 func (o *VersionServiceProductDefault) Error() string {
 	return fmt.Sprintf("[GET /versions/v1/{product}][%d] VersionService_Product default  %+v", o._statusCode, o.Payload)
 }
-func (o *VersionServiceProductDefault) GetPayload() *models.GooglerpcStatus {
+func (o *VersionServiceProductDefault) GetPayload() *models2.GooglerpcStatus {
 	return o.Payload
 }
 
 func (o *VersionServiceProductDefault) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
 
-	o.Payload = new(models.GooglerpcStatus)
+	o.Payload = new(models2.GooglerpcStatus)
 
 	// response payload
 	if err := consumer.Consume(response.Body(), o.Payload); err != nil && err != io.EOF {

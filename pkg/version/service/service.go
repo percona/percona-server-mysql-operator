@@ -1,4 +1,4 @@
-package versionservice
+package service
 
 import (
 	"context"
@@ -10,9 +10,9 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
-	vsclient "github.com/percona/percona-server-mysql-operator/pkg/versionservice/client"
-	"github.com/percona/percona-server-mysql-operator/pkg/versionservice/client/models"
-	"github.com/percona/percona-server-mysql-operator/pkg/versionservice/client/version_service"
+	vsclient "github.com/percona/percona-server-mysql-operator/pkg/version/service/client"
+	"github.com/percona/percona-server-mysql-operator/pkg/version/service/client/models"
+	"github.com/percona/percona-server-mysql-operator/pkg/version/service/client/version_service"
 )
 
 const (
