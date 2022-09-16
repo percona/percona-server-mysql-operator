@@ -45,3 +45,4 @@ metadata:
 spec:
   containers:
     - image: percona/percona-server:8.0.28-20
+    - name: pt-heartbeat
