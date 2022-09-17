@@ -57,20 +57,41 @@ request_data() {
 }
 
 request_backup() {
-	local http_code=$(
-		curl -s -o /dev/null \
-			-d "$(request_data)" \
-			-H "Content-Type: application/json" \
-			-w httpcode=%{http_code} \
-			"http://${SRC_NODE}:6033/backup/${BACKUP_NAME}" \
-			| sed -e 's/.*\httpcode=//'
-	)
+	readarray -td, SRC_NODES_ARR <<<"$SRC_NODES,"
+	unset 'SRC_NODES_ARR[-1]'
 
-	if [ "${http_code}" -ne 200 ]; then
-		echo "Backup failed. Check logs to troubleshoot:"
-		echo "kubectl logs ${SRC_NODE%%.*} xtrabackup"
-		exit 1
+	local sleep_duration=$1
+	local http_code
+	for src_node in "${SRC_NODES_ARR[@]}"; do
+		echo "Trying to run backup ${BACKUP_NAME} on ${src_node}"
+		http_code=$(
+			curl -s -o /dev/null \
+				-d "$(request_data)" \
+				-H "Content-Type: application/json" \
+				-w httpcode=%{http_code} \
+				"http://${src_node}:6033/backup/${BACKUP_NAME}" \
+				| sed -e 's/.*\httpcode=//'
+		)
+		if [ "${http_code}" -ne 200 ]; then
+			if [ "${http_code}" -eq 409 ]; then
+				echo "Backup is already running on ${src_node}"
+				continue
+			fi
+			echo "Backup failed. Check logs to troubleshoot:"
+			echo "kubectl logs ${src_node%%.*} xtrabackup"
+			exit 1
+		else
+			SRC_NODE=${src_node}
+			exit 0
+		fi
+	done
+
+	echo "All nodes are busy. Trying again after ${sleep_duration} seconds"
+	sleep "${sleep_duration}"
+	if [ "${sleep_duration}" -lt 600 ]; then
+		sleep_duration=$((sleep_duration * 2))
 	fi
+	request_backup "${sleep_duration}"
 }
 
 request_logs() {
@@ -78,9 +99,7 @@ request_logs() {
 }
 
 main() {
-	echo "Running backup ${BACKUP_NAME} on ${SRC_NODE}"
-
-	request_backup
+	request_backup 10
 	request_logs
 
 	echo "Backup finished and uploaded successfully to ${BACKUP_DEST}"

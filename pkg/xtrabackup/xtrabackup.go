@@ -9,10 +9,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/pkg/errors"
+
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -566,14 +567,14 @@ func SetStorageAzure(job *batchv1.Job, azure *apiv1alpha1.BackupStorageAzureSpec
 	return errors.Errorf("no container named %s in Job spec", componentName)
 }
 
-func SetSourceNode(job *batchv1.Job, src string) error {
+func SetSourceNodes(job *batchv1.Job, src []string) error {
 	spec := &job.Spec.Template.Spec
 
 	for i := range spec.Containers {
 		container := &spec.Containers[i]
 
 		if container.Name == componentName {
-			container.Env = append(container.Env, corev1.EnvVar{Name: "SRC_NODE", Value: src})
+			container.Env = append(container.Env, corev1.EnvVar{Name: "SRC_NODES", Value: strings.Join(src, ",")})
 			return nil
 		}
 	}

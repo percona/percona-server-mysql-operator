@@ -5,21 +5,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 
 	"golang.org/x/sync/errgroup"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/pkg/errors"
+
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
-	"github.com/pkg/errors"
 )
 
 var log = logf.Log.WithName("sidecar")
@@ -53,6 +54,24 @@ type BackupConf struct {
 	} `json:"azure,omitempty"`
 }
 
+var status Status
+
+type Status struct {
+	isRunning atomic.Bool
+}
+
+func (s *Status) TryRunBackup() bool {
+	swapped := s.isRunning.CompareAndSwap(false, true)
+	if !swapped {
+		return false
+	}
+	return true
+}
+
+func (s *Status) DoneBackup() {
+	s.isRunning.Store(false)
+}
+
 func main() {
 	opts := zap.Options{Development: true}
 	logf.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
@@ -71,7 +90,7 @@ func main() {
 
 func getSecret(username apiv1alpha1.SystemUser) (string, error) {
 	path := filepath.Join(mysql.CredsMountPath, string(username))
-	sBytes, err := ioutil.ReadFile(path)
+	sBytes, err := os.ReadFile(path)
 	if err != nil {
 		return "", errors.Wrapf(err, "read %s", path)
 	}
@@ -168,6 +187,12 @@ func xbcloudArgs(conf BackupConf) []string {
 }
 
 func backupHandler(w http.ResponseWriter, req *http.Request) {
+	if !status.TryRunBackup() {
+		log.Info("backup is already running", "host", req.Host)
+		http.Error(w, "backup is already running", http.StatusConflict)
+		return
+	}
+	defer status.DoneBackup()
 	ns, err := getNamespace()
 	if err != nil {
 		log.Error(err, "failed to detect namespace")
@@ -183,7 +208,7 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 	backupName := path[2]
 	log = log.WithValues("namespace", ns, "name", backupName)
 
-	data, err := ioutil.ReadAll(req.Body)
+	data, err := io.ReadAll(req.Body)
 	if err != nil {
 		log.Error(err, "failed to read request data")
 		http.Error(w, "backup failed", http.StatusBadRequest)
