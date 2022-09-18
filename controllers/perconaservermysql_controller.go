@@ -933,11 +933,11 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	mysh := mysqlsh.New(k8sexec.New(), firstPodUri)
 
 	if mState == replicator.MemberStateOffline {
-		l.Info("AAA mState offline configureInstance", "podUri", firstPodUri)
-		if err := mysh.ConfigureInstance(ctx, firstPodUri); err != nil {
-			return err
-		}
-		l.Info("AAA mstate offline Configured instance", "instance", firstPod.Name)
+		// l.Info("AAA mState offline configureInstance", "podUri", firstPodUri)
+		// if err := mysh.ConfigureInstance(ctx, firstPodUri); err != nil {
+		// 	return err
+		// }
+		// l.Info("AAA mstate offline Configured instance", "instance", firstPod.Name)
 		// err := db.StartGroupReplication(replicaPass)
 		// if err != nil && !errors.Is(err, replicator.ErrGroupReplicationNotReady) {
 		// 	return errors.Wrapf(err, "start group replication on %s", firstPod.Name)
@@ -977,7 +977,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		if err := mysh.CreateCluster(ctx, cr.InnoDBClusterName(), firstPod.Status.PodIP); err != nil {
 			return err
 		}
-		l.Info("Created InnoDB Cluster", "cluster", cr.InnoDBClusterName())
+		l.Info("AAA Created InnoDB Cluster", "cluster", cr.InnoDBClusterName())
 	}
 
 	if state == innodbcluster.MemberStateMissing {
@@ -1002,6 +1002,13 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		if pod.Name == firstPod.Name {
 			continue
 		}
+        
+        if !clusterExists {
+            l.Info("BBB cluster is not existing, waitin for it to be created.")
+            return nil
+        }
+
+
 		if !k8s.IsPodReady(pod) {
 			l.Info("BBB Waiting for pod to be ready", "pod", pod.Name)
 			continue
@@ -1030,14 +1037,13 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 			return errors.Wrapf(err, "get member state of %s from performance_schema", pod.Name)
 		}
 
-		podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
 
 		if mState == replicator.MemberStateOffline {
-
-			if err := mysh.ConfigureInstance(ctx, podUri); err != nil {
-				return errors.Wrapf(err, "configure instance %s", pod.Name)
-			}
-			l.Info("BBB Configured instance", "pod", pod.Name)
+   //
+			// if err := mysh.ConfigureInstance(ctx, podUri); err != nil {
+			// 	return errors.Wrapf(err, "configure instance %s", pod.Name)
+			// }
+			// l.Info("BBB mstate offline Configured instance", "pod", pod.Name)
 
 			// err := db.StartGroupReplication(replicaPass)
 			// if err != nil && !errors.Is(err, replicator.ErrGroupReplicationNotReady) {
@@ -1058,7 +1064,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		}
 
 		if errors.Is(err, innodbcluster.ErrMemberNotFound) {
-			//podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
+			podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
 			if err := mysh.ConfigureInstance(ctx, podUri); err != nil {
 				return errors.Wrapf(err, "configure instance %s", pod.Name)
 			}
