@@ -847,7 +847,8 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	l := log.FromContext(ctx).WithName("reconcileGroupReplication")
+	//l := log.FromContext(ctx).WithName("reconcileGroupReplication")
+	l := log.Log
 
 	if cr.Spec.MySQL.ClusterType != apiv1alpha1.ClusterTypeGR {
 		return nil
@@ -857,6 +858,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	err := r.Client.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: mysql.PodName(cr, 0)}, firstPod)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
+		    l.Info("AAA ERROR first pod not found")
 			return nil
 		}
 
@@ -864,7 +866,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	}
 
 	if !k8s.IsPodReady(*firstPod) {
-		l.V(1).Info("Waiting first pod to be ready")
+		l.Info("AAA Waiting first pod to be ready")
 		return nil
 	}
 
@@ -898,6 +900,8 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	firstPodFQDN := fmt.Sprintf("%s.%s.%s", firstPod.Name, mysql.ServiceName(cr), cr.Namespace)
 	firstPodUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodFQDN)
 
+	l.Info("AAA first pod uris", "podFQDN", firstPodFQDN, "podUri", firstPodUri)
+
 	mState, err := db.GetMemberState(firstPodFQDN)
 	if err != nil {
 		return errors.Wrapf(err, "get member state of %s from performance_schema", firstPod.Name)
@@ -910,9 +914,9 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		}
 
 		if errors.Is(err, replicator.ErrGroupReplicationNotReady) {
-			l.V(1).Info("Group replication is not configured yet", "pod", firstPod.Name)
+			l.Info("AAA Group replication is not configured yet", "pod", firstPod.Name)
 		} else {
-			l.V(1).Info("Started group replication", "pod", firstPod.Name)
+			l.Info("BBB Started group replication", "pod", firstPod.Name)
 		}
 	}
 
@@ -929,8 +933,9 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		}
 	}
 
-	l.V(1).Info("Member state", "pod", firstPod.Name, "state", state)
+	l.Info("AAA Member state", "pod", firstPod.Name, "state", state)
 	if state == innodbcluster.MemberStateOffline {
+	    l.Info("AAA configureInstance", "podUri", firstPodUri)
 		if err := mysh.ConfigureInstance(ctx, firstPodUri); err != nil {
 			return err
 		}
@@ -938,6 +943,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	}
 
 	if !clusterExists {
+	    l.Info("AAA creating a cluster")
 		if err := mysh.CreateCluster(ctx, cr.InnoDBClusterName(), firstPod.Status.PodIP); err != nil {
 			return err
 		}
@@ -945,14 +951,15 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	}
 
 	if state == innodbcluster.MemberStateMissing {
+	    l.Info("AAA rejoining intance")
 		if err := mysh.RejoinInstance(ctx, cr.InnoDBClusterName(), firstPodFQDN); err != nil {
 			return errors.Wrapf(err, "rejoin instance %s", firstPod.Name)
 		}
-		l.Info("Instance rejoined", "pod", firstPod.Name)
+		l.Info("AAA Instance rejoined", "pod", firstPod.Name)
 	}
 
 	if state != innodbcluster.MemberStateOnline {
-		l.V(1).Info("Waiting member to be ONLINE", "pod", firstPod.Name)
+		l.Info("AAA Waiting member to be ONLINE", "pod", firstPod.Name)
 		return nil
 	}
 
@@ -966,7 +973,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 			continue
 		}
 		if !k8s.IsPodReady(pod) {
-			l.V(1).Info("Waiting for pod to be ready", "pod", pod.Name)
+			l.Info("BBB Waiting for pod to be ready", "pod", pod.Name)
 			continue
 		}
 
@@ -1000,9 +1007,9 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 			}
 
 			if errors.Is(err, replicator.ErrGroupReplicationNotReady) {
-				l.V(1).Info("Group replication is not configured yet", "pod", pod.Name)
+				l.Info("BBB Group replication is not configured yet", "pod", pod.Name)
 			} else {
-				l.V(1).Info("Started group replication", "pod", pod.Name)
+				l.Info("BBB Started group replication", "pod", pod.Name)
 			}
 		}
 
@@ -1017,20 +1024,20 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 			if err := mysh.ConfigureInstance(ctx, podUri); err != nil {
 				return errors.Wrapf(err, "configure instance %s", pod.Name)
 			}
-			l.Info("Configured instance", "pod", pod.Name)
+			l.Info("BBB Configured instance", "pod", pod.Name)
 
 			if err := mysh.AddInstance(ctx, cr.InnoDBClusterName(), podUri, pod.Status.PodIP); err != nil {
 				return errors.Wrapf(err, "add instance %s", pod.Name)
 			}
-			l.Info("Added instance to the cluster", "cluster", cr.Name, "pod", pod.Name)
+			l.Info("BBB Added instance to the cluster", "cluster", cr.Name, "pod", pod.Name)
 		}
 
-		l.V(1).Info("Member state", "pod", pod.Name, "state", state)
+		l.Info("BBB Member state", "pod", pod.Name, "state", state)
 		if state == innodbcluster.MemberStateMissing {
 			if err := mysh.RejoinInstance(ctx, cr.InnoDBClusterName(), podFQDN); err != nil {
 				return errors.Wrapf(err, "rejoin instance %s", pod.Name)
 			}
-			l.Info("Instance rejoined", "pod", pod.Name)
+			l.Info("BBB Instance rejoined", "pod", pod.Name)
 			continue
 		}
 	}
