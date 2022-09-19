@@ -167,13 +167,14 @@ const (
 )
 
 var secretUsers = [...]apiv1alpha1.SystemUser{
+	apiv1alpha1.UserClusterCheck,
+	apiv1alpha1.UserHeartbeat,
+	apiv1alpha1.UserMonitor,
+	apiv1alpha1.UserOperator,
+	apiv1alpha1.UserOrchestrator,
+	apiv1alpha1.UserReplication,
 	apiv1alpha1.UserRoot,
 	apiv1alpha1.UserXtraBackup,
-	apiv1alpha1.UserMonitor,
-	apiv1alpha1.UserClusterCheck,
-	apiv1alpha1.UserOperator,
-	apiv1alpha1.UserReplication,
-	apiv1alpha1.UserOrchestrator,
 }
 
 func GeneratePasswordsSecret(name, namespace string) (*corev1.Secret, error) {

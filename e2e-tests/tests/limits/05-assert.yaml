@@ -141,6 +141,20 @@ spec:
           name: users
         - mountPath: /var/log/xtrabackup
           name: backup-logs
+      - command:
+        - /opt/percona/heartbeat-entrypoint.sh
+        imagePullPolicy: Always
+        name: pt-heartbeat
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
       dnsPolicy: ClusterFirst
       initContainers:
       - command:
