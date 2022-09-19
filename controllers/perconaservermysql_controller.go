@@ -158,7 +158,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 
 	// the last pod left - we can leave it for the stateful set
 	if len(pods) <= 1 {
-	    
+
 		l.Info(fmt.Sprintf("AAA last pod standing, pod %s", pods[0].GetName()))
 
 		if cr.MySQLSpec().IsGR() {
@@ -173,35 +173,60 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			}
 			defer db.Close()
 
-            l.Info("Stopping GR from the first pod")
+			l.Info("Stopping GR from the first pod")
 			err = db.StopGroupReplication()
 			if err != nil {
-			    l.Info("FINAL ERROR - failed to stop GR")
+				l.Info("FINAL ERROR - failed to stop GR")
 				return errors.Wrapf(err, "stop GR for %s", pods[0].Name)
 			}
 		}
 
 		time.Sleep(time.Second * 3)
+
+		l.Info("Cluster deleted")
 		return nil
 	}
 
-	if cr.Spec.MySQL.IsAsync() {
-		var oldest corev1.Pod
-
-		for _, p := range pods {
-			if p.GetName() == mysql.PodName(cr, 0) {
-				oldest = p
-				break
-			}
+	var firstPod corev1.Pod
+	for _, p := range pods {
+		if p.GetName() == mysql.PodName(cr, 0) {
+			firstPod = p
+			break
 		}
-		l.Info("Oldest pod", "name", oldest.GetName(), "spec", oldest.Spec)
+	}
+	l.Info("First pod", "name", firstPod.GetName())
 
+	if cr.Spec.MySQL.IsAsync() {
 		orcHost := orchestrator.APIHost(cr)
 
 		l.Info("Ensuring oldest mysql node is the primary")
-		err := orchestrator.EnsureNodeIsPrimary(ctx, orcHost, cr.ClusterHint(), oldest.GetName(), mysql.DefaultPort)
+		err := orchestrator.EnsureNodeIsPrimary(ctx, orcHost, cr.ClusterHint(), firstPod.GetName(), mysql.DefaultPort)
 		if err != nil {
 			return errors.Wrap(err, "ensure node is primary")
+		}
+	} else {
+		operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+		if err != nil {
+			return errors.Wrap(err, "get operator password")
+		}
+
+		firstPodFQDN := fmt.Sprintf("%s.%s.%s", firstPod.Name, mysql.ServiceName(cr), cr.Namespace)
+		firstPodUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodFQDN)
+
+		mysh := mysqlsh.New(k8sexec.New(), firstPodUri)
+
+		l.Info("AAA Removing instances from GR")
+		for _, pod := range pods {
+			if pod.Name == firstPod.Name {
+				continue
+			}
+
+			podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
+			if err := mysh.RemoveInstance(ctx, cr.InnoDBClusterName(), podFQDN); err != nil {
+			    l.Info("AAA ERROR removing instance from GR")
+				return errors.Wrapf(err, "remove instance %s", pod.Name)
+			}
+			l.Info("AAA GR Instance removed from cluster", "pod", pod.Name)
 		}
 	}
 
@@ -209,7 +234,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 	if err := r.Client.Get(ctx, mysql.NamespacedName(cr), sts); err != nil {
 		return errors.Wrap(err, "get MySQL statefulset")
 	}
-	l.Info("Got statefulset", "sts", sts, "spec", sts.Spec)
+	l.V(1).Info("Got statefulset", "sts", sts, "spec", sts.Spec)
 
 	if sts.Spec.Replicas == nil || *sts.Spec.Replicas != 1 {
 		dscaleTo := int32(1)
@@ -1002,12 +1027,11 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		if pod.Name == firstPod.Name {
 			continue
 		}
-        
-        if !clusterExists {
-            l.Info("BBB cluster is not existing, waitin for it to be created.")
-            return nil
-        }
 
+		if !clusterExists {
+			l.Info("BBB cluster is not existing, waitin for it to be created.")
+			return nil
+		}
 
 		if !k8s.IsPodReady(pod) {
 			l.Info("BBB Waiting for pod to be ready", "pod", pod.Name)
@@ -1037,9 +1061,8 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 			return errors.Wrapf(err, "get member state of %s from performance_schema", pod.Name)
 		}
 
-
 		if mState == replicator.MemberStateOffline {
-   //
+			//
 			// if err := mysh.ConfigureInstance(ctx, podUri); err != nil {
 			// 	return errors.Wrapf(err, "configure instance %s", pod.Name)
 			// }
