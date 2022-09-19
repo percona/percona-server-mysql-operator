@@ -220,14 +220,22 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			if pod.Name == firstPod.Name {
 				continue
 			}
-
+			
 			podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
-			if err := mysh.RemoveInstance(ctx, cr.InnoDBClusterName(), podFQDN); err != nil {
-			    l.Info("AAA ERROR removing instance from GR")
+			podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
+		
+		    
+		    l.Info(fmt.Sprintf("AAA Removing %s from GR", podUri))
+			if err := mysh.RemoveInstance(ctx, cr.InnoDBClusterName(), podUri); err != nil {
+				l.Info("AAA ERROR removing instance from GR")
 				return errors.Wrapf(err, "remove instance %s", pod.Name)
 			}
 			l.Info("AAA GR Instance removed from cluster", "pod", pod.Name)
 		}
+		
+		
+		l.Info("AAA Sleeping after removing instances from gr")
+		time.Sleep(30*time.Second) //TODO: this maybe is not necessary
 	}
 
 	sts := &appsv1.StatefulSet{}
