@@ -1584,7 +1584,7 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 		issuerConf := cm.IssuerConfig{
 			SelfSigned: &cm.SelfSignedIssuer{},
 		}
-		if cr.Spec.TLS.IssuerConf != nil {
+		if cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
 			issuerConf = cm.IssuerConfig{
 				CA: &cm.CAIssuer{SecretName: cr.Spec.TLS.IssuerConf.Name},
 			}
@@ -1640,6 +1640,8 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 		fmt.Sprintf("*.%s-orchestrator.%s", cr.Name, cr.Namespace),
 		fmt.Sprintf("*.%s-orchestrator.%s.svc.cluster.local", cr.Name, cr.Namespace),
 		fmt.Sprintf("*.%s-router", cr.Name),
+		fmt.Sprintf("*.%s-router.%s", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-router.%s.svc.cluster.local", cr.Name, cr.Namespace),
 	}
 	kubeCert := &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
