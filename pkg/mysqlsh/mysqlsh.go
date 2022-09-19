@@ -171,3 +171,11 @@ func (m *mysqlsh) Topology(ctx context.Context, clusterName string) (map[string]
 
 	return status.DefaultReplicaSet.Topology, nil
 }
+
+func (m *mysqlsh) DropMetadata(ctx context.Context) error {
+	if err := m.run(ctx, "dba.dropMetadataSchema({'force': true, 'clearReadOnly': true})"); err != nil {
+		return errors.Wrap(err, "drop metadata")
+	}
+
+	return nil
+}
