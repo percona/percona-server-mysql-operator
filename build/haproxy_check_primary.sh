@@ -5,22 +5,25 @@ set -o xtrace
 
 MYSQL_SERVER_IP=$3
 MYSQL_SERVER_PORT='33062'
+
 MONITOR_USER='monitor'
 MONITOR_PASSWORD=$(/bin/cat /etc/mysql/mysql-users-secret/monitor)
 
 TIMEOUT=${CUSTOM_TIMEOUT:-10}
 MYSQL_CMDLINE="/usr/bin/timeout $TIMEOUT /usr/bin/mysql -nE -u${MONITOR_USER} -p${MONITOR_PASSWORD} -h ${MYSQL_SERVER_IP} -P ${MYSQL_SERVER_PORT}"
 
-READ_ONLY=$(${MYSQL_CMDLINE} -N -e 'select @@read_only and @@super_read_only' | tail -1)
-IO_THREAD=$(${MYSQL_CMDLINE} -e 'SHOW REPLICA STATUS' | grep Replica_IO_Running: | tail -1 | awk '{print $2}')
-SQL_THREAD=$(${MYSQL_CMDLINE} -e 'SHOW REPLICA STATUS' | grep Replica_SQL_Running: | tail -1 | awk '{print $2}')
+READ_ONLY=$(${MYSQL_CMDLINE} -N -e 'select @@super_read_only' | /usr/bin/sed -n -e '2p' | /usr/bin/tr -d '\n')
+
+# ${REPLICATION_STATUS[0]} - Replica_IO_Running
+# ${REPLICATION_STATUS[1]} - Replica_SQL_Running
+REPLICATION_STATUS=$(${MYSQL_CMDLINE} -e 'SHOW REPLICA STATUS' | /usr/bin/sed -n -e '12p' -e '13p' | /usr/bin/tr -d '\n')
 
 echo "MySQL node ${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT}"
 echo "read_only: ${READ_ONLY}"
-echo "Replica_IO_Running: ${IO_THREAD}"
-echo "Replica_SQL_Running: ${SQL_THREAD}"
+echo "Replica_IO_Running: ${REPLICATION_STATUS[0]}"
+echo "Replica_SQL_Running: ${REPLICATION_STATUS[1]}"
 
-if [[ ${READ_ONLY} == "0" ]] && [[ ${IO_THREAD} != "Yes" ]] && [[ ${SQL_THREAD} != "Yes" ]]; then
+if [[ ${READ_ONLY} == '0' ]] && [[ ${REPLICATION_STATUS[0]} != 'Yes' ]] && [[ ${REPLICATION_STATUS[1]} != 'Yes' ]]; then
 	echo "MySQL node ${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} for backend ${HAPROXY_PROXY_NAME} is ok"
 	exit 0
 else
