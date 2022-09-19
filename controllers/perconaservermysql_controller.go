@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -161,25 +162,25 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 
 		l.Info(fmt.Sprintf("AAA last pod standing, pod %s", pods[0].GetName()))
 
-		if cr.MySQLSpec().IsGR() {
-
-			operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
-			if err != nil {
-				return errors.Wrap(err, "get operator password")
-			}
-			db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, mysql.FQDN(cr, 0), mysql.DefaultAdminPort)
-			if err != nil {
-				return errors.Wrapf(err, "connect to %s", pods[0].Name)
-			}
-			defer db.Close()
-
-			l.Info("Stopping GR from the first pod")
-			err = db.StopGroupReplication()
-			if err != nil {
-				l.Info("FINAL ERROR - failed to stop GR")
-				return errors.Wrapf(err, "stop GR for %s", pods[0].Name)
-			}
-		}
+		// if cr.MySQLSpec().IsGR() {
+		//
+		// 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+		// 	if err != nil {
+		// 		return errors.Wrap(err, "get operator password")
+		// 	}
+		// 	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, mysql.FQDN(cr, 0), mysql.DefaultAdminPort)
+		// 	if err != nil {
+		// 		return errors.Wrapf(err, "connect to %s", pods[0].Name)
+		// 	}
+		// 	defer db.Close()
+		//
+		// 	l.Info("Stopping GR from the first pod")
+		// 	err = db.StopGroupReplication()
+		// 	if err != nil {
+		// 		l.Info("FINAL ERROR - failed to stop GR")
+		// 		return errors.Wrapf(err, "stop GR for %s", pods[0].Name)
+		// 	}
+		// }
 
 		time.Sleep(time.Second * 3)
 
@@ -220,22 +221,27 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			if pod.Name == firstPod.Name {
 				continue
 			}
-			
+
 			podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
 			podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
-		
-		    
-		    l.Info(fmt.Sprintf("AAA Removing %s from GR", podUri))
-			if err := mysh.RemoveInstance(ctx, cr.InnoDBClusterName(), podUri); err != nil {
-				l.Info("AAA ERROR removing instance from GR")
+
+			l.Info(fmt.Sprintf("AAA Removing %s from GR", podUri))
+			err := mysh.RemoveInstance(ctx, cr.InnoDBClusterName(), podUri)
+			if err != nil {
+				l.Info("AAA ERROR removing instance from GR: " + err.Error())
+
+				if strings.Contains(err.Error(), "not reachable and does not belong to the cluster either") {
+				    l.Info("AAA instance already removed: " + pod.Name)
+					continue
+				}
+
 				return errors.Wrapf(err, "remove instance %s", pod.Name)
 			}
 			l.Info("AAA GR Instance removed from cluster", "pod", pod.Name)
 		}
-		
-		
+
 		l.Info("AAA Sleeping after removing instances from gr")
-		time.Sleep(30*time.Second) //TODO: this maybe is not necessary
+		time.Sleep(30 * time.Second) //TODO: this maybe is not necessary
 	}
 
 	sts := &appsv1.StatefulSet{}
