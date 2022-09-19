@@ -42,24 +42,23 @@ Contributions to the source tree should follow the workflow described below:
    ```
 3. Build the image and test your changes.
 
-   Before starting make sure you have your account created on [docker.io](https://www.docker.com/)and that you have logged-in from your terminal [docker login](https://docs.docker.com/engine/reference/commandline/login/).
-   First we are going to create the custom image with `make` utility (default one is [perconalab/percona-server-mysql-operator:<name-of-current-branch>](https://hub.docker.com/r/perconalab/percona-server-mysql-operator/).
-   Our build script (`e2e-tests/build`) disables caching and uses the experimental squash feature of Docker. To disable this behaviour and build the image use the following command:
+   Before starting, make sure you have your account created on [docker.io](https://www.docker.com/)and that you have logged-in from your terminal [docker login](https://docs.docker.com/engine/reference/commandline/login/).
+   First we are going to create the custom image with `make` utility (the default one is [perconalab/percona-server-mysql-operator:<name-of-current-branch>](https://hub.docker.com/r/perconalab/percona-server-mysql-operator/).
+   Our build script (`e2e-tests/build`) disables caching and uses the experimental squash feature of Docker. To disable this behavior and build the image use the following command:
 
    ```
-   DOCKER_SQUASH=0 DOCKER_NOCACHE=0 make IMAGE=<your-docker-id>/<custom-repository-name>:<custom-tag>
+   DOCKER_SQUASH=0 DOCKER_NOCACHE=0 make IMAGE=<your-docker-id>/<custom-repository-name>:<custom-tag> 
    ```
 
-   Let's use `percona-server-mysql-operator` as an `custom-repository-name` and follow the previous example:
+   Let's use `myid/percona-server-mysql-operator` as a `your-docker-id` and `custom-repository-name`, and follow the previous example:
 
    ```
-   DOCKER_SQUASH=0 DOCKER_NOCACHE=0 make IMAGE=egegunes/percona-server-mysql-operator:k8sps-22
+   DOCKER_SQUASH=0 DOCKER_NOCACHE=0 make IMAGE=myid/percona-server-mysql-operator:k8sps-22
    ```
 
    The process will build and push the image to your docker hub.
-   Reason for pushing to remote registry is that after installing the custom resource and generating the pod for the operator, image will be pulled from your remote repository.
-   In case you want to only to build the image use environment variable `DOCKER_PUSH=0`
-   and after image is built, push image manually:
+   Reason for pushing to remote registry is that after installing the custom resource and generating the Pod for the Operator, image will be pulled from your remote repository.
+   In case you want just to build the image, use environment variable `DOCKER_PUSH=0`. In this case, after the image is built you can push it manually:
 
    ```
    docker push <your-docker-id>/<custom-repository-name>:<custom-tag>
@@ -71,13 +70,13 @@ Contributions to the source tree should follow the workflow described below:
    DOCKER_SQUASH=0 DOCKER_NOCACHE=0 make IMAGE_TAG_BASE=<your-docker-id>/percona-server-mysql-operator
    ```
 
-   Once your image is built and ready, install custom resource definitions (CRDs) and deploy operator to your cluster:
+   Once your image is built and ready, install Custom Resource Sefinitions (CRDs) and deploy the Operator to your cluster:
 
    ```
    make install deploy IMAGE=<your-docker-id>/percona-server-mysql-operator:k8sps-22
    ```
 
-   You should expect that deployment for operator, CRDs, secret and cm will be created :
+   If everything goes ok, that Deployment for the Operator, CRDs, Secret objects and ComfigMaps will be created:
 
    ```
    kubectl get all
@@ -96,12 +95,12 @@ Contributions to the source tree should follow the workflow described below:
    perconaservermysqls.ps.percona.com          2022-06-27T15:14:49Z
    ```
 
-   To verify your operator works correctly, you can check the logs from operator
+   To verify your Operator works correctly, you can check its logs:
    ```
    kubectl logs percona-server-mysql-operator-<pod-hash>
    ```
-   To get more detailed information in operator log change `LOG_LEVEL` value to `DEBUG`
-   in `deploy/operator.yaml`file.
+   To get more detailed information in the Operator log, change `LOG_LEVEL` value to `DEBUG`
+   in the `deploy/operator.yaml`file.
    Now you need to create a custom resource (CR) from CRD.
    Here we will show CR for percona cluster with default asynchronous replication:
    ```
@@ -145,7 +144,7 @@ Contributions to the source tree should follow the workflow described below:
    statefulset.apps/cluster1-orc     3/3     16m
    ```
 
-   To clean the operator deployment, custom resource definitions as well as custom resource objects run
+   To clean the Operator Deployment, Custom Resource Definitions as well as Custom Resource objects, run
    ```
    make undeploy uninstall
    ```
