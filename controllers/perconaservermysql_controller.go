@@ -163,7 +163,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		l.Info(fmt.Sprintf("AAA last pod standing, pod %s", pods[0].GetName()))
 
 		if cr.MySQLSpec().IsGR() {
-		
+
 			operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 			if err != nil {
 				return errors.Wrap(err, "get operator password")
@@ -231,7 +231,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 				l.Info("AAA ERROR removing instance from GR: " + err.Error())
 
 				if strings.Contains(err.Error(), "not reachable and does not belong to the cluster either") {
-				    l.Info("AAA instance already removed: " + pod.Name)
+					l.Info("AAA instance already removed: " + pod.Name)
 					continue
 				}
 
@@ -1013,7 +1013,15 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 
 	if !clusterExists {
 		l.Info("AAA creating a cluster")
-		if err := mysh.CreateCluster(ctx, cr.InnoDBClusterName(), firstPod.Status.PodIP); err != nil {
+		err := mysh.CreateCluster(ctx, cr.InnoDBClusterName(), firstPod.Status.PodIP)
+		if err != nil {
+			if strings.Contains(err.Error(), "has a populated Metadata schema") {
+				l.Info("AAA rejoining intance after cluster deletion")
+				if err := mysh.RejoinInstance(ctx, cr.InnoDBClusterName(), firstPodFQDN); err != nil {
+					return errors.Wrapf(err, "rejoin instance %s", firstPod.Name)
+				}
+				l.Info("AAA Instance rejoined after cluster deletion", "pod", firstPod.Name)
+			}
 			return err
 		}
 		l.Info("AAA Created InnoDB Cluster", "cluster", cr.InnoDBClusterName())
