@@ -42,7 +42,7 @@ Contributions to the source tree should follow the workflow described below:
    ```
 3. Build the image and test your changes.
 
-   Before starting, make sure you have your account created on [docker.io](https://www.docker.com/)and that you have logged-in from your terminal [docker login](https://docs.docker.com/engine/reference/commandline/login/).
+   Before starting, make sure that you have your account created on [docker.io](https://www.docker.com/) and that you have logged-in from your terminal [docker login](https://docs.docker.com/engine/reference/commandline/login/).
    First we are going to create the custom image with `make` utility (the default one is [perconalab/percona-server-mysql-operator:<name-of-current-branch>](https://hub.docker.com/r/perconalab/percona-server-mysql-operator/).
    Our build script (`e2e-tests/build`) disables caching and uses the experimental squash feature of Docker. To disable this behavior and build the image use the following command:
 
