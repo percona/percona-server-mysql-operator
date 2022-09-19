@@ -57,8 +57,7 @@ request_data() {
 }
 
 request_backup() {
-	readarray -td, SRC_NODES_ARR <<<"$SRC_NODES,"
-	unset 'SRC_NODES_ARR[-1]'
+	IFS=',' read -r -a SRC_NODES_ARR <<<"$SRC_NODES"
 
 	local sleep_duration=$1
 	local http_code
@@ -82,7 +81,7 @@ request_backup() {
 			exit 1
 		else
 			SRC_NODE=${src_node}
-			exit 0
+			break
 		fi
 	done
 
