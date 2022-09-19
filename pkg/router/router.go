@@ -20,6 +20,7 @@ const (
 )
 
 const (
+	PortHTTP       = 8443
 	PortRWDefault  = 3306
 	PortReadWrite  = 6446
 	PortReadOnly   = 6447
@@ -60,6 +61,12 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Type: serviceType,
 			Ports: []corev1.ServicePort{
+				// do not change the port order
+				// 8443 port should be the first in service, see K8SPS-132 task
+				{
+					Name: "http",
+					Port: int32(PortHTTP),
+				},
 				{
 					Name: "rw-default",
 					Port: int32(PortRWDefault),
@@ -118,16 +125,18 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.Deployment {
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector:     cr.Spec.Router.NodeSelector,
-					Tolerations:      cr.Spec.Router.Tolerations,
-					Containers:       containers(cr),
-					Affinity:         spec.GetAffinity(labels),
-					ImagePullSecrets: spec.ImagePullSecrets,
-					// TerminationGracePeriodSeconds: 30,
-					RestartPolicy:   corev1.RestartPolicyAlways,
-					SchedulerName:   "default-scheduler",
-					DNSPolicy:       corev1.DNSClusterFirst,
-					SecurityContext: spec.PodSecurityContext,
+					Containers:                    containers(cr),
+					NodeSelector:                  cr.Spec.Router.NodeSelector,
+					Tolerations:                   cr.Spec.Router.Tolerations,
+					Affinity:                      spec.GetAffinity(labels),
+					ImagePullSecrets:              spec.ImagePullSecrets,
+					TerminationGracePeriodSeconds: spec.TerminationGracePeriodSeconds,
+					RestartPolicy:                 corev1.RestartPolicyAlways,
+					SchedulerName:                 spec.SchedulerName,
+					RuntimeClassName:              spec.RuntimeClassName,
+					ServiceAccountName:            spec.ServiceAccountName,
+					DNSPolicy:                     corev1.DNSClusterFirst,
+					SecurityContext:               spec.PodSecurityContext,
 					Volumes: []corev1.Volume{
 						{
 							Name: credsVolumeName,
@@ -171,6 +180,10 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			},
 		},
 		Ports: []corev1.ContainerPort{
+			{
+				Name:          "http",
+				ContainerPort: int32(PortHTTP),
+			},
 			{
 				Name:          "read-write",
 				ContainerPort: int32(PortReadWrite),

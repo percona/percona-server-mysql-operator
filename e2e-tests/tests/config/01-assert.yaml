@@ -33,6 +33,14 @@ spec:
           name: users
         - mountPath: /var/log/xtrabackup
           name: backup-logs
+      - name: pt-heartbeat
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
       volumes:
       - emptyDir: {}
         name: bin
