@@ -218,7 +218,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 			Namespace: cr.Namespace,
 		}
 
-		if err = k8s.EnsureObject(ctx, r.Client, cr, internalSecret, r.Scheme); err != nil {
+		if err = r.Client.Create(ctx, internalSecret); err != nil {
 			return errors.Wrapf(err, "create secret %s", internalSecret.Name)
 		}
 
