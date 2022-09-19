@@ -21,7 +21,7 @@ spec:
       - env:
         - name: SERVE_HTTP
           value: "true"
-        image: ademajazzserve/operator-version-service # TODO: replace after merge https://github.com/Percona-Lab/percona-version-service/pull/88
+        image: perconalab/version-service:main-f2ff9c4
         imagePullPolicy: Always
         name: percona-version-service
         ports:
