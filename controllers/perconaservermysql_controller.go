@@ -162,25 +162,25 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 
 		l.Info(fmt.Sprintf("AAA last pod standing, pod %s", pods[0].GetName()))
 
-		// if cr.MySQLSpec().IsGR() {
-		//
-		// 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
-		// 	if err != nil {
-		// 		return errors.Wrap(err, "get operator password")
-		// 	}
-		// 	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, mysql.FQDN(cr, 0), mysql.DefaultAdminPort)
-		// 	if err != nil {
-		// 		return errors.Wrapf(err, "connect to %s", pods[0].Name)
-		// 	}
-		// 	defer db.Close()
-		//
-		// 	l.Info("Stopping GR from the first pod")
-		// 	err = db.StopGroupReplication()
-		// 	if err != nil {
-		// 		l.Info("FINAL ERROR - failed to stop GR")
-		// 		return errors.Wrapf(err, "stop GR for %s", pods[0].Name)
-		// 	}
-		// }
+		if cr.MySQLSpec().IsGR() {
+		
+			operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+			if err != nil {
+				return errors.Wrap(err, "get operator password")
+			}
+			db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, mysql.FQDN(cr, 0), mysql.DefaultAdminPort)
+			if err != nil {
+				return errors.Wrapf(err, "connect to %s", pods[0].Name)
+			}
+			defer db.Close()
+
+			l.Info("Stopping GR from the first pod")
+			err = db.StopGroupReplication()
+			if err != nil {
+				l.Info("FINAL ERROR - failed to stop GR")
+				return errors.Wrapf(err, "stop GR for %s", pods[0].Name)
+			}
+		}
 
 		time.Sleep(time.Second * 3)
 
