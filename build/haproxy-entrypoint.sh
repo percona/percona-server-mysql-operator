@@ -11,4 +11,4 @@ if [ "$1" = 'haproxy' ]; then
 	haproxy_opt='-W -db -f /opt/percona/haproxy-global.cfg -f /etc/haproxy/mysql/haproxy.cfg -p /etc/haproxy/mysql/haproxy.pid -S /etc/haproxy/mysql/haproxy-main.sock'
 fi
 
-exec "$@" ${haproxy_opt}
+exec "$@" "${haproxy_opt}"
