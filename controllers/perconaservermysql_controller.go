@@ -223,18 +223,29 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			}
 
 			podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
+			
+			db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, podFQDN, mysql.DefaultAdminPort)
+			if err != nil {
+				return errors.Wrapf(err, "connect to %s", pod.Name)
+			}
+			defer db.Close()
+
+			state, err := db.GetMemberState(podFQDN)
+			if err != nil {
+				return errors.Wrapf(err, "get member state of %s from performance_schema", pod.Name)
+			}
+			l.Info(fmt.Sprintf("AAA member state: %s", state))
+
+			if state == replicator.MemberStateOffline {
+			    l.Info(fmt.Sprintf("AAA Pod %s not part of GR or already removed", pod.Name))
+				continue
+			}
+
 			podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
 
 			l.Info(fmt.Sprintf("AAA Removing %s from GR", podUri))
-			err := mysh.RemoveInstance(ctx, cr.InnoDBClusterName(), podUri)
+			err = mysh.RemoveInstance(ctx, cr.InnoDBClusterName(), podUri)
 			if err != nil {
-				l.Info("AAA ERROR removing instance from GR: " + err.Error())
-
-				if strings.Contains(err.Error(), "not reachable and does not belong to the cluster either") {
-					l.Info("AAA instance already removed: " + pod.Name)
-					continue
-				}
-
 				return errors.Wrapf(err, "remove instance %s", pod.Name)
 			}
 			l.Info("AAA GR Instance removed from cluster", "pod", pod.Name)
@@ -1030,7 +1041,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 				}
 				l.Info("Configured instance after dropping metadata", "instance", firstPod.Name)
 
-		        err = mysh.CreateCluster(ctx, cr.InnoDBClusterName(), firstPod.Status.PodIP)
+				err = mysh.CreateCluster(ctx, cr.InnoDBClusterName(), firstPod.Status.PodIP)
 				if err != nil {
 					l.Info("AAA ERROR creating cluster after deletion")
 					return err
