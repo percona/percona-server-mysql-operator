@@ -153,7 +153,7 @@ func (r *PerconaServerMySQLReconciler) getCRWithDefaults(
 	nn types.NamespacedName,
 ) (*apiv1alpha1.PerconaServerMySQL, error) {
 	cr := &apiv1alpha1.PerconaServerMySQL{}
-	if err := r.Get(ctx, nn, cr); err != nil {
+	if err := r.Client.Get(ctx, nn, cr); err != nil {
 		return nil, errors.Wrapf(err, "get %v", nn.String())
 	}
 	if err := cr.CheckNSetDefaults(r.ServerVersion); err != nil {
