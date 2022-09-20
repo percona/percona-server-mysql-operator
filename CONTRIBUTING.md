@@ -42,29 +42,31 @@ Contributions to the source tree should follow the workflow described below:
    ```
 3. Build the image and test your changes.
 
-   Before starting, make sure that you have your account created on [docker.io](https://www.docker.com/) and that you have logged-in from your terminal [docker login](https://docs.docker.com/engine/reference/commandline/login/).
-   First we are going to create the custom image with `make` utility (the default one is [perconalab/percona-server-mysql-operator:<name-of-current-branch>](https://hub.docker.com/r/perconalab/percona-server-mysql-operator/).
-   Our build script (`e2e-tests/build`) disables caching and uses the experimental squash feature of Docker. To disable this behavior and build the image use the following command:
+   The build is actually controlled by the `e2e-tests/build` script, and  we will invoke it through the traditional `make` command. You can just build the Operator locally, but you need to deploy it to Kubernetes via some Docker registry to check how the modified version works (while installing the Custom Resource and generating necessary Pods for the Operator, image will be pulled from your remote repository). Therefore building and uploading images is the main scenario.
+   
+   Before doing this, make sure that you have your account created on [docker.io](https://www.docker.com/) and that you have logged-in from your terminal [docker login](https://docs.docker.com/engine/reference/commandline/login/).
+   First we are going to create the custom image with `make` utility (the default one is [perconalab/percona-server-mysql-operator:<name-of-the-current-branch>](https://hub.docker.com/r/perconalab/percona-server-mysql-operator/) (`Makefile` will automatically detect the image tag from the current branch).
+   By default our build script (`e2e-tests/build`) disables caching and uses the experimental squash feature of Docker. To disable this behavior and build the image use the following command:
 
    ```
    DOCKER_SQUASH=0 DOCKER_NOCACHE=0 make IMAGE=<your-docker-id>/<custom-repository-name>:<custom-tag> 
    ```
 
-   Let's use `myid/percona-server-mysql-operator` as a `your-docker-id` and `custom-repository-name`, and follow the previous example:
+   Let's use `myid/percona-server-mysql-operator` as `your-docker-id` and `custom-repository-name`, and follow the previous example:
 
    ```
    DOCKER_SQUASH=0 DOCKER_NOCACHE=0 make IMAGE=myid/percona-server-mysql-operator:k8sps-22
    ```
 
-   The process will build and push the image to your docker hub.
-   Reason for pushing to remote registry is that after installing the custom resource and generating the Pod for the Operator, image will be pulled from your remote repository.
-   In case you want just to build the image, use environment variable `DOCKER_PUSH=0`. In this case, after the image is built you can push it manually:
+   The process will build and push the image to your Docker Hub.
+   
+   If you just want to build the image without uploading, use environment variable `DOCKER_PUSH=0`. In this case, after the image is built you can push it manually:
 
    ```
    docker push <your-docker-id>/<custom-repository-name>:<custom-tag>
    ```
 
-   `Makefile` can automatically detect the image tag using the current branch. You can just override the image with:
+   If you don't want the image tag to be detected from the current branch, you can just override the image with:
 
    ```
    DOCKER_SQUASH=0 DOCKER_NOCACHE=0 make IMAGE_TAG_BASE=<your-docker-id>/percona-server-mysql-operator
@@ -76,7 +78,7 @@ Contributions to the source tree should follow the workflow described below:
    make install deploy IMAGE=<your-docker-id>/percona-server-mysql-operator:k8sps-22
    ```
 
-   If everything goes ok, that Deployment for the Operator, CRDs, Secret objects and ComfigMaps will be created:
+   If everything goes OK, that Deployment for the Operator, CRDs, Secret objects and ComfigMaps will be created:
 
    ```
    kubectl get all
