@@ -62,6 +62,7 @@ type ClusterType string
 const (
 	ClusterTypeGR    ClusterType = "group-replication"
 	ClusterTypeAsync ClusterType = "async"
+	MinSafeProxySize             = 2
 )
 
 func (t ClusterType) isValid() bool {
@@ -369,6 +370,10 @@ func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 	return &cr.Spec.Orchestrator
 }
 
+func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
+	return cr.Spec.HAProxy != nil && cr.Spec.HAProxy.Enabled
+}
+
 func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVersion) error {
 	if len(cr.Spec.MySQL.ClusterType) == 0 {
 		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
@@ -473,8 +478,16 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 		return errors.New("router section is needed for group replication")
 	}
 
-	if cr.Spec.MySQL.ClusterType != ClusterTypeGR && !cr.Spec.HAProxy.Enabled && cr.Spec.HAProxy.Size == 0 {
-		cr.Spec.HAProxy.Size = 1
+	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Router != nil {
+		if cr.Spec.Router.Size < MinSafeProxySize {
+			cr.Spec.Router.Size = MinSafeProxySize
+		}
+	}
+
+	if cr.HAProxyEnabled() && cr.Spec.MySQL.ClusterType != ClusterTypeGR {
+		if cr.Spec.HAProxy.Size < MinSafeProxySize {
+			cr.Spec.HAProxy.Size = MinSafeProxySize
+		}
 	}
 
 	if cr.Spec.Pause {

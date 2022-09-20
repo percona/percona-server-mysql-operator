@@ -138,11 +138,11 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcileOrchestrator(ctx, cr); err != nil {
 		return errors.Wrap(err, "orchestrator")
 	}
-	if err := r.reconcileHAProxy(ctx, cr); err != nil {
-		return errors.Wrap(err, "HAProxy")
-	}
 	if err := r.reconcileReplication(ctx, cr); err != nil {
 		return errors.Wrap(err, "replication")
+	}
+	if err := r.reconcileHAProxy(ctx, cr); err != nil {
+		return errors.Wrap(err, "HAProxy")
 	}
 	if err := r.reconcileMySQLRouter(ctx, cr); err != nil {
 		return errors.Wrap(err, "MySQL router")
@@ -718,11 +718,16 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	if !cr.Spec.HAProxy.Enabled {
+	if !cr.HAProxyEnabled() || cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR {
 		return nil
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, haproxy.StatefulSet(cr), r.Scheme); err != nil {
+	initImage, err := k8s.InitImage(ctx, r.Client)
+	if err != nil {
+		return errors.Wrap(err, "get init image")
+	}
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, haproxy.StatefulSet(cr, initImage), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile StatefulSet")
 	}
 
@@ -738,17 +743,16 @@ func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr
 		if err := r.reconcileOrchestratorServices(ctx, cr); err != nil {
 			return errors.Wrap(err, "reconcile Orchestrator services")
 		}
+		if cr.HAProxyEnabled() {
+			if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, haproxy.Service(cr), r.Scheme); err != nil {
+				return errors.Wrap(err, "reconcile HAProxy svc")
+			}
+		}
 	}
 
 	if cr.Spec.MySQL.IsGR() {
 		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Service(cr), r.Scheme); err != nil {
 			return errors.Wrap(err, "reconcile router svc")
-		}
-	}
-
-	if cr.Spec.HAProxy.Enabled {
-		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, haproxy.Service(cr), r.Scheme); err != nil {
-			return errors.Wrap(err, "reconcile HAProxy svc")
 		}
 	}
 
@@ -780,7 +784,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return errors.Wrap(err, "reconcile primary pod")
 	}
 	if err := reconcileReplicationSemiSync(ctx, r.Client, cr); err != nil {
-		return errors.Wrap(err, "reconcile semi-sync")
+		return errors.Wrapf(err, "reconcile %s", cr.MySQLSpec().ClusterType)
 	}
 
 	return nil

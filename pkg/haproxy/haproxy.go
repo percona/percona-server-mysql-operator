@@ -74,7 +74,9 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.StatefulSet {
+//func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.StatefulSet {
+
 	labels := MatchLabels(cr)
 
 	return &appsv1.StatefulSet{
@@ -103,7 +105,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.StatefulSet {
 					InitContainers: []corev1.Container{
 						{
 							Name:            componentName + "-init",
-							Image:           "perconalab/percona-server-mysql-operator:k8sps-112",
+							Image:           initImage,
 							ImagePullPolicy: cr.Spec.HAProxy.ImagePullPolicy,
 							VolumeMounts: []corev1.VolumeMount{
 								{
