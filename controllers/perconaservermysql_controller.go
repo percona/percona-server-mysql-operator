@@ -183,7 +183,7 @@ func (r *PerconaServerMySQLReconciler) ensureUserSecrets(
 		return errors.Wrap(err, "generate passwords")
 	}
 
-	if err := k8s.EnsureObject(ctx, r.Client, cr, secret, r.Scheme); err != nil {
+	if err = r.Create(ctx, secret); err != nil {
 		return errors.Wrapf(err, "create secret %s", cr.Spec.SecretsName)
 	}
 
@@ -217,8 +217,8 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 			Namespace: cr.Namespace,
 		}
 
-		if err := r.Client.Create(ctx, internalSecret); err != nil {
-			return errors.Wrapf(err, "create Secret/%s", internalSecret.Name)
+		if err = r.Client.Create(ctx, internalSecret); err != nil {
+			return errors.Wrapf(err, "create secret %s", internalSecret.Name)
 		}
 
 		return nil
