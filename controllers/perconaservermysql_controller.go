@@ -214,6 +214,12 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		firstPodFQDN := fmt.Sprintf("%s.%s.%s", firstPod.Name, mysql.ServiceName(cr), cr.Namespace)
 		firstPodUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodFQDN)
 
+		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, firstPodFQDN, mysql.DefaultAdminPort)
+		if err != nil {
+			return errors.Wrapf(err, "connect to %s", firstPod.Name)
+		}
+		defer db.Close()
+		
 		mysh := mysqlsh.New(k8sexec.New(), firstPodUri)
 
 		l.Info("AAA Removing instances from GR")
@@ -223,12 +229,6 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			}
 
 			podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
-			
-			db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, podFQDN, mysql.DefaultAdminPort)
-			if err != nil {
-				return errors.Wrapf(err, "connect to %s", pod.Name)
-			}
-			defer db.Close()
 
 			state, err := db.GetMemberState(podFQDN)
 			if err != nil {
@@ -237,7 +237,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			l.Info(fmt.Sprintf("AAA member state: %s", state))
 
 			if state == replicator.MemberStateOffline {
-			    l.Info(fmt.Sprintf("AAA Pod %s not part of GR or already removed", pod.Name))
+				l.Info(fmt.Sprintf("AAA Pod %s not part of GR or already removed", pod.Name))
 				continue
 			}
 
