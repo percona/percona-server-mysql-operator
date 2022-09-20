@@ -42,7 +42,7 @@ Contributions to the source tree should follow the workflow described below:
    ```
 3. Build the image and test your changes.
 
-   The build is actually controlled by the `e2e-tests/build` script, and  we will invoke it through the traditional `make` command. You can just build the Operator locally, but you need to deploy it to Kubernetes via some Docker registry to check how the modified version works (while installing the Custom Resource and generating necessary Pods for the Operator, image will be pulled from your remote repository). Therefore building and uploading images is the main scenario.
+   The build is actually controlled by the `e2e-tests/build` script, and  we will invoke it through the traditional `make` command. You can build the Operator locally, but you need to deploy it to Kubernetes via some Docker registry to check how the modified version works (while installing the Custom Resource and generating necessary Pods for the Operator, image will be pulled from your remote repository). Therefore, building with the automatic image upload is the main scenario.
    
    Before doing this, make sure that you have your account created on [docker.io](https://www.docker.com/) and that you have logged-in from your terminal [docker login](https://docs.docker.com/engine/reference/commandline/login/).
    First we are going to create the custom image with `make` utility (the default one is [perconalab/percona-server-mysql-operator:<name-of-the-current-branch>](https://hub.docker.com/r/perconalab/percona-server-mysql-operator/) (`Makefile` will automatically detect the image tag from the current branch).
