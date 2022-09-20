@@ -33,13 +33,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/pkg/errors"
+
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
-	"github.com/pkg/errors"
 )
 
 // PerconaServerMySQLRestoreReconciler reconciles a PerconaServerMySQLRestore object
@@ -103,15 +104,26 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, errors.Wrapf(err, "get cluster %s", nn)
 	}
 
-	backup := &apiv1alpha1.PerconaServerMySQLBackup{}
-	nn = types.NamespacedName{Name: cr.Spec.BackupName, Namespace: cr.Namespace}
-	if err := r.Client.Get(ctx, nn, backup); err != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "get backup %s", nn)
+	var storageName string
+	var destination string
+	if cr.Spec.BackupName != "" {
+		backup := &apiv1alpha1.PerconaServerMySQLBackup{}
+		nn := types.NamespacedName{Name: cr.Spec.BackupName, Namespace: cr.Namespace}
+		if err := r.Client.Get(ctx, nn, backup); err != nil {
+			return ctrl.Result{}, errors.Wrapf(err, "get backup %s", nn)
+		}
+		storageName = backup.Spec.StorageName
+		destination = backup.Status.Destination
+	} else if cr.Spec.BackupSource != nil && cr.Spec.BackupSource.StorageName != "" {
+		storageName = cr.Spec.BackupSource.StorageName
+		destination = cr.Spec.BackupSource.Destination
+	} else {
+		return ctrl.Result{}, errors.New("spec.storageName and backupSource.storageName are empty")
 	}
 
-	storage, ok := cluster.Spec.Backup.Storages[backup.Spec.StorageName]
+	storage, ok := cluster.Spec.Backup.Storages[storageName]
 	if !ok {
-		return ctrl.Result{}, errors.Errorf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", backup.Spec.StorageName)
+		return ctrl.Result{}, errors.Errorf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", storageName)
 	}
 
 	switch status.State {
@@ -144,7 +156,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		}
 
 		pvcName := fmt.Sprintf("%s-%s-mysql-0", mysql.DataVolumeName, cluster.Name)
-		job := xtrabackup.RestoreJob(cluster, backup, cr, storage, initImage, pvcName)
+		job := xtrabackup.RestoreJob(cluster, destination, cr, storage, initImage, pvcName)
 
 		switch storage.Type {
 		case apiv1alpha1.BackupStorageS3:

@@ -9,10 +9,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/pkg/errors"
+
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -213,7 +214,7 @@ func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName, de
 
 func RestoreJob(
 	cluster *apiv1alpha1.PerconaServerMySQL,
-	backup *apiv1alpha1.PerconaServerMySQLBackup,
+	destination string,
 	restore *apiv1alpha1.PerconaServerMySQLRestore,
 	storage *apiv1alpha1.BackupStorageSpec,
 	initImage string,
@@ -223,14 +224,13 @@ func RestoreJob(
 
 	labels := util.SSMapMerge(storage.Labels, MatchLabels(cluster))
 
-	var destination string
 	switch storage.Type {
 	case apiv1alpha1.BackupStorageAzure:
-		destination = strings.TrimPrefix(backup.Status.Destination, storage.Azure.ContainerName+"/")
+		destination = strings.TrimPrefix(destination, storage.Azure.ContainerName+"/")
 	case apiv1alpha1.BackupStorageS3:
-		destination = strings.TrimPrefix(backup.Status.Destination, "s3://"+storage.S3.Bucket+"/")
+		destination = strings.TrimPrefix(destination, "s3://"+storage.S3.Bucket+"/")
 	case apiv1alpha1.BackupStorageGCS:
-		destination = strings.TrimPrefix(backup.Status.Destination, "gs://"+storage.GCS.Bucket+"/")
+		destination = strings.TrimPrefix(destination, "gs://"+storage.GCS.Bucket+"/")
 	}
 
 	return &batchv1.Job{
@@ -283,7 +283,7 @@ func RestoreJob(
 						},
 					},
 					Containers: []corev1.Container{
-						restoreContainer(cluster, restore.Name, backup.Name, destination, storage),
+						restoreContainer(cluster, restore, destination, storage),
 					},
 					Affinity:          storage.Affinity,
 					Tolerations:       storage.Tolerations,
@@ -330,7 +330,7 @@ func RestoreJob(
 	}
 }
 
-func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restoreName, backupName, destination string, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
+func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alpha1.PerconaServerMySQLRestore, destination string, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
 	spec := cluster.Spec.Backup
 
 	verifyTLS := true
@@ -345,11 +345,7 @@ func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restoreName, back
 		Env: []corev1.EnvVar{
 			{
 				Name:  "RESTORE_NAME",
-				Value: restoreName,
-			},
-			{
-				Name:  "BACKUP_NAME",
-				Value: backupName,
+				Value: restore.Name,
 			},
 			{
 				Name:  "BACKUP_DEST",

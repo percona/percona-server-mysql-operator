@@ -31,10 +31,10 @@ extract() {
 
 main() {
 	echo "Starting restore ${RESTORE_NAME}"
-	echo "Restoring to backup ${BACKUP_NAME}: ${BACKUP_DEST}"
+	echo "Restoring to backup: ${BACKUP_DEST}"
 
 	rm -rf ${DATADIR}/*
-	tmpdir=$(mktemp --directory ${DATADIR}/${BACKUP_NAME}_XXXX)
+	tmpdir=$(mktemp --directory ${DATADIR}/${RESTORE_NAME}_XXXX)
 
 	case ${STORAGE_TYPE} in
 		"s3") run_s3 | extract ${tmpdir} ;;

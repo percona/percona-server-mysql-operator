@@ -38,10 +38,21 @@ spec:
             properties:
               backupName:
                 type: string
+              backupSource:
+                properties:
+                  completed:
+                    format: date-time
+                    type: string
+                  destination:
+                    type: string
+                  state:
+                    type: string
+                  storageName:
+                    type: string
+                type: object
               clusterName:
                 type: string
             required:
-            - backupName
             - clusterName
             type: object
           status:

@@ -42,15 +42,15 @@ type PerconaServerMySQLBackupStatus struct {
 	CompletedAt *metav1.Time `json:"completed,omitempty"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="Storage",type=string,JSONPath=".spec.storageName"
-//+kubebuilder:printcolumn:name="Destination",type=string,JSONPath=".status.destination"
-//+kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
-//+kubebuilder:printcolumn:name="Completed",type="date",JSONPath=".status.completed"
-//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-//+kubebuilder:resource:scope=Namespaced
-//+kubebuilder:resource:shortName=ps-backup;ps-backups
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Storage",type=string,JSONPath=".spec.storageName"
+// +kubebuilder:printcolumn:name="Destination",type=string,JSONPath=".status.destination"
+// +kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
+// +kubebuilder:printcolumn:name="Completed",type="date",JSONPath=".status.completed"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:resource:scope=Namespaced
+// +kubebuilder:resource:shortName=ps-backup;ps-backups
 // PerconaServerMySQLBackup is the Schema for the perconaservermysqlbackups API
 type PerconaServerMySQLBackup struct {
 	metav1.TypeMeta   `json:",inline"`

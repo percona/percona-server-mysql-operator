@@ -1,0 +1,22 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      storage_name="minio"
+      backup_name="demand-backup-minio"
+      restore_name="demand-backup-restore-minio-backup-source"
+      cluster_name="${test_name}${name_suffix:+-$name_suffix}"
+      destination=$(kubectl -n "${NAMESPACE}" get ps-backup "${backup_name}" -o jsonpath='{.status.destination}')
+      
+      yq "${DEPLOY_DIR}/restore.yaml" \
+        | yq eval "$(printf '.metadata.name="%s"' "${restore_name}")" - \
+        | yq eval "$(printf '.spec.clusterName="%s"' "${cluster_name}")" - \
+        | yq eval "del(.spec.backupName)" - \
+        | yq eval "$(printf '.spec.backupSource.destination="%s"' "${destination}")" - \
+        | yq eval "$(printf '.spec.backupSource.storageName="%s"' "${storage_name}")" - \
+        | kubectl apply -n "${NAMESPACE}" -f -
