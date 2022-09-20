@@ -22,7 +22,7 @@ echo "read_only: ${READ_ONLY}"
 echo "Replica_IO_Running: ${REPLICATION_STATUS[0]}"
 echo "Replica_SQL_Running: ${REPLICATION_STATUS[1]}"
 
-if [[ ${READ_ONLY} == '0' ]] && [[ "${REPLICATION_STATUS[0]}" != 'Yes' ]] && [[ "${REPLICATION_STATUS[1]}" != 'Yes' ]]; then
+if [[ ${READ_ONLY} == '0' ]] && [[ ${REPLICATION_STATUS[0]} != 'Yes' ]] && [[ ${REPLICATION_STATUS[1]} != 'Yes' ]]; then
 	echo "MySQL node ${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} for backend ${HAPROXY_PROXY_NAME} is ok"
 	exit 0
 else
