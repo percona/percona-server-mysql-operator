@@ -31,6 +31,9 @@ func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL
 		fmt.Sprintf("*.%s-orchestrator", cr.Name),
 		fmt.Sprintf("*.%s-orchestrator.%s", cr.Name, cr.Namespace),
 		fmt.Sprintf("*.%s-orchestrator.%s.svc.cluster.local", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-router", cr.Name),
+		fmt.Sprintf("*.%s-router.%s", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-router.%s.svc.cluster.local", cr.Name, cr.Namespace),
 	}
 
 	ca, cert, key, err := issueCerts(hosts)
