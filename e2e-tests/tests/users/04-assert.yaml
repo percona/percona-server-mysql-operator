@@ -7,7 +7,7 @@ apiVersion: v1
 metadata:
   name: 04-check-connections
 data:
-  clustercheck: "success"
+  heartbeat: "success"
   monitor: "success"
   operator: "success"
   orchestrator: "success"
