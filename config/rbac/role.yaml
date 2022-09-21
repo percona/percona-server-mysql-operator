@@ -58,6 +58,21 @@ rules:
   - update
   - watch
 - apiGroups:
+  - cert-manager.io
+  - certmanager.k8s.io
+  resources:
+  - certificates
+  - issuers
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - ps.percona.com
   resources:
   - perconaservermysqlbackups
