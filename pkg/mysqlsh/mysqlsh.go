@@ -183,8 +183,12 @@ func (m *mysqlsh) Topology(ctx context.Context, clusterName string) (map[string]
 	return status.DefaultReplicaSet.Topology, nil
 }
 
-func (m *mysqlsh) RebootClusterFromCompleteOutage(ctx context.Context, clusterName string) error {
-	cmd := fmt.Sprintf("dba.rebootClusterFromCompleteOutage('%s')", clusterName)
+func (m *mysqlsh) RebootClusterFromCompleteOutage(ctx context.Context, clusterName string, rejoinInstances []string) error {
+	cmd := fmt.Sprintf(
+		"dba.rebootClusterFromCompleteOutage('%s', {rejoinInstances: ['%s']})",
+		clusterName,
+		strings.Join(rejoinInstances, ","),
+	)
 
 	if err := m.run(ctx, cmd); err != nil {
 		return errors.Wrap(err, "reboot cluster from complete outage")

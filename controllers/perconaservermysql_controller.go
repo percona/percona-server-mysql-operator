@@ -947,7 +947,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	if err != nil {
 		if errors.Is(err, mysqlsh.ErrMetadataExistsButGRNotActive) {
 			l.Info("Rebooting cluster from complete outage")
-			if err := mysh.RebootClusterFromCompleteOutage(ctx, cr.InnoDBClusterName()); err != nil {
+			if err := mysh.RebootClusterFromCompleteOutage(ctx, cr.InnoDBClusterName(), []string{firstPodFQDN}); err != nil {
 				return err
 			}
 			return nil
