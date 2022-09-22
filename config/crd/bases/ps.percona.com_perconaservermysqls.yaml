@@ -6315,6 +6315,17 @@ spec:
             type: object
           status:
             properties:
+              haproxy:
+                properties:
+                  ready:
+                    format: int32
+                    type: integer
+                  size:
+                    format: int32
+                    type: integer
+                  state:
+                    type: string
+                type: object
               host:
                 type: string
               mysql:
