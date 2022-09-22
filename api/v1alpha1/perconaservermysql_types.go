@@ -338,7 +338,6 @@ type PerconaServerMySQLList struct {
 type SystemUser string
 
 const (
-	UserClusterCheck SystemUser = "clustercheck"
 	UserHeartbeat    SystemUser = "heartbeat"
 	UserMonitor      SystemUser = "monitor"
 	UserOperator     SystemUser = "operator"

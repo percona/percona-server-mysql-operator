@@ -14,7 +14,7 @@ commands:
       for user in "${users[@]}"; do
       	host="%"
       	case $user in
-      		clustercheck | xtrabackup)
+      		heartbeat | xtrabackup)
       			host="localhost"
       			;;
       	esac

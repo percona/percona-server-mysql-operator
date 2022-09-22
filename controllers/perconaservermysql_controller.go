@@ -277,7 +277,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 			restartOrchestrator = true && cr.Spec.MySQL.IsAsync()
 		case apiv1alpha1.UserRoot:
 			mysqlUser.Hosts = append(mysqlUser.Hosts, "localhost")
-		case apiv1alpha1.UserClusterCheck, apiv1alpha1.UserXtraBackup:
+		case apiv1alpha1.UserHeartbeat, apiv1alpha1.UserXtraBackup:
 			mysqlUser.Hosts = []string{"localhost"}
 		}
 
