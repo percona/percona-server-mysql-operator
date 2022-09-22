@@ -167,7 +167,6 @@ const (
 )
 
 var secretUsers = [...]apiv1alpha1.SystemUser{
-	apiv1alpha1.UserClusterCheck,
 	apiv1alpha1.UserHeartbeat,
 	apiv1alpha1.UserMonitor,
 	apiv1alpha1.UserOperator,
