@@ -5208,6 +5208,24 @@ spec:
                 type: string
               sslSecretName:
                 type: string
+              tls:
+                properties:
+                  SANs:
+                    items:
+                      type: string
+                    type: array
+                  issuerConf:
+                    properties:
+                      group:
+                        type: string
+                      kind:
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
               toolkit:
                 properties:
                   containerSecurityContext:

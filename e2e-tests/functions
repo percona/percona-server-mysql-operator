@@ -117,6 +117,7 @@ get_cr() {
 		| yq eval "$(printf '.spec.backup.image="%s"' "${IMAGE_BACKUP}")" - \
 		| yq eval "$(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}")" - \
 		| yq eval "$(printf '.spec.router.image="%s"' "${IMAGE_ROUTER}")" - \
+		| yq eval "$(printf '.spec.toolkit.image="%s"' "${IMAGE_TOOLKIT}")" - \
 		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_PMM}")" -
 }
 
@@ -355,4 +356,10 @@ get_mysql_router_service() {
 	local cluster=$1
 
 	echo "${cluster}-router"
+}
+
+deploy_cert_manager() {
+	kubectl create namespace cert-manager || :
+	kubectl label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
+	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.8.0/cert-manager.yaml --validate=false || : 2>/dev/null
 }
