@@ -110,7 +110,7 @@ func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 		cr.Labels())
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string, secret *corev1.Secret) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 	spec := cr.MySQLSpec()
 	replicas := spec.Size
@@ -145,8 +145,6 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector: cr.Spec.MySQL.NodeSelector,
-					Tolerations:  cr.Spec.MySQL.Tolerations,
 					InitContainers: []corev1.Container{
 						{
 							Name:            componentName + "-init",
@@ -176,13 +174,18 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 							SecurityContext:          spec.ContainerSecurityContext,
 						},
 					},
-					Containers:       containers(cr),
-					Affinity:         spec.GetAffinity(labels),
-					ImagePullSecrets: spec.ImagePullSecrets,
-					// TerminationGracePeriodSeconds: 30,
-					RestartPolicy: corev1.RestartPolicyAlways,
-					SchedulerName: "default-scheduler",
-					DNSPolicy:     corev1.DNSClusterFirst,
+					Containers:                    containers(cr, secret),
+					ServiceAccountName:            cr.Spec.MySQL.ServiceAccountName,
+					NodeSelector:                  cr.Spec.MySQL.NodeSelector,
+					Tolerations:                   cr.Spec.MySQL.Tolerations,
+					Affinity:                      spec.GetAffinity(labels),
+					ImagePullSecrets:              spec.ImagePullSecrets,
+					TerminationGracePeriodSeconds: spec.TerminationGracePeriodSeconds,
+					PriorityClassName:             spec.PriorityClassName,
+					RuntimeClassName:              spec.RuntimeClassName,
+					RestartPolicy:                 corev1.RestartPolicyAlways,
+					SchedulerName:                 spec.SchedulerName,
+					DNSPolicy:                     corev1.DNSClusterFirst,
 					Volumes: append(
 						[]corev1.Volume{
 							{
@@ -442,15 +445,19 @@ func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
-func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
+func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []corev1.Container {
 	containers := []corev1.Container{mysqldContainer(cr)}
 
 	if backup := cr.Spec.Backup; backup != nil && backup.Enabled {
 		containers = append(containers, backupContainer(cr))
 	}
 
+	if toolkit := cr.Spec.Toolkit; toolkit != nil && cr.Spec.MySQL.IsAsync() {
+		containers = append(containers, heartbeatContainer(cr))
+	}
+
 	if pmm := cr.Spec.PMM; pmm != nil && pmm.Enabled {
-		containers = append(containers, pmmContainer(cr.Name, cr.Spec.SecretsName, pmm))
+		containers = append(containers, pmmContainer(cr.Name, secret, pmm))
 	}
 
 	return appendUniqueContainers(containers, cr.Spec.MySQL.Sidecars...)
@@ -557,11 +564,50 @@ func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	}
 }
 
-func pmmContainer(clusterName, secretsName string, pmmSpec *apiv1alpha1.PMMSpec) corev1.Container {
+func heartbeatContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
+	return corev1.Container{
+		Name:            "pt-heartbeat",
+		Image:           cr.Spec.Toolkit.Image,
+		ImagePullPolicy: cr.Spec.Toolkit.ImagePullPolicy,
+		SecurityContext: cr.Spec.Toolkit.ContainerSecurityContext,
+		Resources:       cr.Spec.Toolkit.Resources,
+		Env: []corev1.EnvVar{
+			{
+				Name: "HEARTBEAT_PASSWORD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: k8s.SecretKeySelector(cr.InternalSecretName(), string(apiv1alpha1.UserHeartbeat)),
+				},
+			},
+		},
+		Ports: []corev1.ContainerPort{},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      binVolumeName,
+				MountPath: binMountPath,
+			},
+			{
+				Name:      DataVolumeName,
+				MountPath: DataMountPath,
+			},
+			{
+				Name:      credsVolumeName,
+				MountPath: CredsMountPath,
+			},
+		},
+		Command:                  []string{"/opt/percona/heartbeat-entrypoint.sh"},
+		TerminationMessagePath:   "/dev/termination-log",
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+	}
+}
+
+func pmmContainer(clusterName string, secret *corev1.Secret, pmmSpec *apiv1alpha1.PMMSpec) corev1.Container {
 	ports := []corev1.ContainerPort{{ContainerPort: 7777}}
 	for port := 30100; port <= 30105; port++ {
 		ports = append(ports, corev1.ContainerPort{ContainerPort: int32(port)})
 	}
+
+	user := "api_key"
+	passwordKey := string(apiv1alpha1.UserPMMServerKey)
 
 	return corev1.Container{
 		Name:            "pmm-client",
@@ -609,12 +655,12 @@ func pmmContainer(clusterName, secretsName string, pmmSpec *apiv1alpha1.PMMSpec)
 			},
 			{
 				Name:  "PMM_AGENT_SERVER_USERNAME",
-				Value: pmmSpec.ServerUser,
+				Value: user,
 			},
 			{
 				Name: "PMM_AGENT_SERVER_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: k8s.SecretKeySelector(secretsName, "pmmserver"),
+					SecretKeyRef: k8s.SecretKeySelector(secret.Name, passwordKey),
 				},
 			},
 			{
@@ -623,12 +669,12 @@ func pmmContainer(clusterName, secretsName string, pmmSpec *apiv1alpha1.PMMSpec)
 			},
 			{
 				Name:  "PMM_USER",
-				Value: pmmSpec.ServerUser,
+				Value: user,
 			},
 			{
 				Name: "PMM_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: k8s.SecretKeySelector(secretsName, "pmmserver"),
+					SecretKeyRef: k8s.SecretKeySelector(secret.Name, passwordKey),
 				},
 			},
 			{
@@ -710,7 +756,7 @@ func pmmContainer(clusterName, secretsName string, pmmSpec *apiv1alpha1.PMMSpec)
 			{
 				Name: "DB_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: k8s.SecretKeySelector(secretsName, string(apiv1alpha1.UserMonitor)),
+					SecretKeyRef: k8s.SecretKeySelector(secret.Name, string(apiv1alpha1.UserMonitor)),
 				},
 			},
 			{

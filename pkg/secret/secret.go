@@ -31,6 +31,9 @@ func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL
 		fmt.Sprintf("*.%s-orchestrator", cr.Name),
 		fmt.Sprintf("*.%s-orchestrator.%s", cr.Name, cr.Namespace),
 		fmt.Sprintf("*.%s-orchestrator.%s.svc.cluster.local", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-router", cr.Name),
+		fmt.Sprintf("*.%s-router.%s", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-router.%s.svc.cluster.local", cr.Name, cr.Namespace),
 	}
 
 	ca, cert, key, err := issueCerts(hosts)
@@ -106,7 +109,7 @@ func issueCerts(hosts []string) (caCert, tlsCert, tlsKey []byte, err error) {
 	tlsTemplate := x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization: []string{"PXC"},
+			Organization: []string{"PS"},
 		},
 		Issuer: pkix.Name{
 			Organization: []string{"Root CA"},
@@ -167,13 +170,13 @@ const (
 )
 
 var secretUsers = [...]apiv1alpha1.SystemUser{
+	apiv1alpha1.UserHeartbeat,
+	apiv1alpha1.UserMonitor,
+	apiv1alpha1.UserOperator,
+	apiv1alpha1.UserOrchestrator,
+	apiv1alpha1.UserReplication,
 	apiv1alpha1.UserRoot,
 	apiv1alpha1.UserXtraBackup,
-	apiv1alpha1.UserMonitor,
-	apiv1alpha1.UserClusterCheck,
-	apiv1alpha1.UserOperator,
-	apiv1alpha1.UserReplication,
-	apiv1alpha1.UserOrchestrator,
 }
 
 func GeneratePasswordsSecret(name, namespace string) (*corev1.Secret, error) {

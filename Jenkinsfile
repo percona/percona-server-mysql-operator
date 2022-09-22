@@ -93,7 +93,7 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
             echo "The $TEST_NAME test was started!"
             testsReportMap[TEST_NAME] = "[failed]($testUrl)"
 
-            FILE_NAME = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME-gke-${env.PLATFORM_VER}"
+            def FILE_NAME = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"
             popArtifactFile("$FILE_NAME")
 
             timeout(time: 90, unit: 'MINUTES') {
@@ -114,7 +114,7 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
             }
             pushArtifactFile("$FILE_NAME")
             testsReportMap[TEST_NAME] = "[passed]($testUrl)"
-            testsResultsMap["${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"] = 'passed'
+            testsResultsMap["$FILE_NAME"] = 'passed'
             return true
         }
         catch (exc) {
@@ -145,21 +145,16 @@ void prepareNode() {
             rm -rf $HOME/google-cloud-sdk
             curl https://sdk.cloud.google.com | bash
         fi
-
         source $HOME/google-cloud-sdk/path.bash.inc
         gcloud components install alpha
         gcloud components install kubectl
-
         curl -fsSL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
         curl -s -L https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz \
             | sudo tar -C /usr/local/bin --strip-components 1 --wildcards -zxvpf - '*/oc'
-
         curl -s -L https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz \
             | sudo tar -C /usr/local/bin --wildcards -zxvpf -
-
         sudo sh -c "curl -s -L https://github.com/mikefarah/yq/releases/download/v4.14.2/yq_linux_amd64 > /usr/local/bin/yq"
         sudo chmod +x /usr/local/bin/yq
-
         cd "$(mktemp -d)"
         OS="$(uname | tr '[:upper:]' '[:lower:]')"
         ARCH="$(uname -m | sed -e 's/x86_64/amd64/')"
@@ -168,9 +163,7 @@ void prepareNode() {
         tar zxvf "${KREW}.tar.gz"
         ./"${KREW}" install krew
         rm -f "${KREW}.tar.gz"
-
         export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
-
         kubectl krew install kuttl
     '''
 }
@@ -291,7 +284,7 @@ pipeline {
                                     -v $WORKSPACE/src/github.com/percona/percona-server-mysql-operator:/go/src/github.com/percona/percona-server-mysql-operator \
                                     -w /go/src/github.com/percona/percona-server-mysql-operator \
                                     -e GO111MODULE=on \
-                                    golang:1.17 sh -c 'go build -v -mod=vendor -o percona-server-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
+                                    golang:1.19 sh -c 'go build -v -o percona-server-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
                             "
                         '''
 
@@ -369,6 +362,7 @@ pipeline {
                         runTest('service-per-pod', 'cluster3')
                         runTest('sidecars', 'cluster3')
                         runTest('limits', 'cluster3')
+                        runTest('tls-cert-manager', 'cluster3')
                         ShutdownCluster('cluster3')
                     }
                 }

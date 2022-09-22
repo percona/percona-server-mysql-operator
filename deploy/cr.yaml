@@ -7,6 +7,15 @@ spec:
 #  pause: false
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
+#  tls:
+#    SANs:
+#      - mysql-1.example.com
+#      - mysql-2.example.com
+#      - mysql-3.example.com
+#    issuerConf:
+#      name: special-selfsigned-issuer
+#      kind: ClusterIssuer
+#      group: cert-manager.io
   mysql:
     clusterType: async
     image: percona/percona-server:8.0.28
@@ -123,6 +132,9 @@ spec:
 #                - e2e-az1
 #                - e2e-az2
 
+#    expose:
+#      type: ClusterIP
+
     resources:
       requests:
         memory: 128M
@@ -140,6 +152,14 @@ spec:
 
     image: percona/pmm-client:2.28.0
     imagePullPolicy: Always
+
+    resources:
+      requests:
+        memory: 150M
+        cpu: 300m
+#      limits:
+#        memory: 256M
+#        cpu: 400m
 
     serverHost: monitoring-service
     serverUser: admin
@@ -189,4 +209,15 @@ spec:
           credentialsSecret: cluster1-s3-credentials
           region: us-west-2
 #          prefix: ""
+
+  toolkit:
+    image: perconalab/percona-server-mysql-operator:main-toolkit
+    imagePullPolicy: Always
+#    resources:
+#      requests:
+#        memory: 150M
+#        cpu: 100m
+#      limits:
+#        memory: 256M
+#        cpu: 400m
 

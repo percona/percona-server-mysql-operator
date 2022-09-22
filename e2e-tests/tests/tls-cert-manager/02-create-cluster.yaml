@@ -8,9 +8,4 @@ commands:
 
       source ../../functions
 
-      RAM_SIZE=1073741824 # 1024Mi
-
-      check_auto_tuning ${RAM_SIZE}
-
-
-
+      get_cr | kubectl -n "${NAMESPACE}" apply -f -

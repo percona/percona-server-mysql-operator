@@ -4,6 +4,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -19,10 +20,13 @@ const (
 )
 
 const (
+	PortHTTP       = 8443
+	PortRWDefault  = 3306
 	PortReadWrite  = 6446
 	PortReadOnly   = 6447
 	PortXReadWrite = 6448
 	PortXReadOnly  = 6449
+	PortRWAdmin    = 33062
 )
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
@@ -57,6 +61,19 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Type: serviceType,
 			Ports: []corev1.ServicePort{
+				// do not change the port order
+				// 8443 port should be the first in service, see K8SPS-132 task
+				{
+					Name: "http",
+					Port: int32(PortHTTP),
+				},
+				{
+					Name: "rw-default",
+					Port: int32(PortRWDefault),
+					TargetPort: intstr.IntOrString{
+						IntVal: PortReadWrite,
+					},
+				},
 				{
 					Name: "read-write",
 					Port: int32(PortReadWrite),
@@ -72,6 +89,10 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 				{
 					Name: "x-read-only",
 					Port: int32(PortXReadOnly),
+				},
+				{
+					Name: "rw-admin",
+					Port: int32(PortRWAdmin),
 				},
 			},
 			Selector: labels,
@@ -104,16 +125,18 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL) *appsv1.Deployment {
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector:     cr.Spec.Router.NodeSelector,
-					Tolerations:      cr.Spec.Router.Tolerations,
-					Containers:       containers(cr),
-					Affinity:         spec.GetAffinity(labels),
-					ImagePullSecrets: spec.ImagePullSecrets,
-					// TerminationGracePeriodSeconds: 30,
-					RestartPolicy:   corev1.RestartPolicyAlways,
-					SchedulerName:   "default-scheduler",
-					DNSPolicy:       corev1.DNSClusterFirst,
-					SecurityContext: spec.PodSecurityContext,
+					Containers:                    containers(cr),
+					NodeSelector:                  cr.Spec.Router.NodeSelector,
+					Tolerations:                   cr.Spec.Router.Tolerations,
+					Affinity:                      spec.GetAffinity(labels),
+					ImagePullSecrets:              spec.ImagePullSecrets,
+					TerminationGracePeriodSeconds: spec.TerminationGracePeriodSeconds,
+					RestartPolicy:                 corev1.RestartPolicyAlways,
+					SchedulerName:                 spec.SchedulerName,
+					RuntimeClassName:              spec.RuntimeClassName,
+					ServiceAccountName:            spec.ServiceAccountName,
+					DNSPolicy:                     corev1.DNSClusterFirst,
+					SecurityContext:               spec.PodSecurityContext,
 					Volumes: []corev1.Volume{
 						{
 							Name: credsVolumeName,
@@ -158,6 +181,10 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		},
 		Ports: []corev1.ContainerPort{
 			{
+				Name:          "http",
+				ContainerPort: int32(PortHTTP),
+			},
+			{
 				Name:          "read-write",
 				ContainerPort: int32(PortReadWrite),
 			},
@@ -172,6 +199,10 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			{
 				Name:          "x-read-only",
 				ContainerPort: int32(PortXReadOnly),
+			},
+			{
+				Name:          "rw-admin",
+				ContainerPort: int32(PortRWAdmin),
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{

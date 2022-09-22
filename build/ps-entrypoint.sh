@@ -38,7 +38,7 @@ file_env() {
 	elif [ "${!fileVar:-}" ]; then
 		val="$(<"${!fileVar}")"
 	elif [ "${3:-}" ] && [ -f "/etc/mysql/mysql-users-secret/$3" ]; then
-		val="$(</etc/mysql/mysql-users-secret/$3)"
+		val="$(</etc/mysql/mysql-users-secret/"$3")"
 	fi
 	export "$var"="$val"
 	unset "$fileVar"
@@ -192,8 +192,6 @@ if [ "$MYSQL_VERSION" != '8.0' ]; then
 	exit 1
 fi
 
-file_env 'CLUSTERCHECK_PASSWORD' '' 'clustercheck'
-
 if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 	# still need to check config, container may have started with --user
 	_check_config "$@"
@@ -254,12 +252,12 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			) | "${mysql[@]}" mysql
 		fi
 
+		{ set +x; } 2>/dev/null
 		if [ -n "$INIT_ROCKSDB" ]; then
-			ps-admin --docker --enable-rocksdb -u root -p $MYSQL_ROOT_PASSWORD
+			ps-admin --docker --enable-rocksdb -u root -p "$MYSQL_ROOT_PASSWORD"
 		fi
 
-		{ set +x; } 2>/dev/null
-		if [ ! -z "$MYSQL_RANDOM_ROOT_PASSWORD" ]; then
+		if [ -n "$MYSQL_RANDOM_ROOT_PASSWORD" ]; then
 			MYSQL_ROOT_PASSWORD="$(pwmake 128)"
 			echo "GENERATED ROOT PASSWORD: $MYSQL_ROOT_PASSWORD"
 		fi
@@ -268,7 +266,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		rootCreate=
 		# default root to listen for connections from anywhere
 		file_env 'MYSQL_ROOT_HOST' '%'
-		if [ ! -z "$MYSQL_ROOT_HOST" -a "$MYSQL_ROOT_HOST" != 'localhost' ]; then
+		if [ -n "$MYSQL_ROOT_HOST" -a "$MYSQL_ROOT_HOST" != 'localhost' ]; then
 			# no, we don't care if read finds a terminating character in this heredoc
 			# https://unix.stackexchange.com/questions/265149/why-is-set-o-errexit-breaking-this-read-heredoc-expression/265151#265151
 			read -r -d '' rootCreate <<-EOSQL || true
@@ -284,6 +282,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		file_env 'ORC_TOPOLOGY_PASSWORD' '' 'orchestrator'
 		file_env 'OPERATOR_ADMIN_PASSWORD' '' 'operator'
 		file_env 'XTRABACKUP_PASSWORD' '' 'xtrabackup'
+		file_env 'HEARTBEAT_PASSWORD' '' 'heartbeat'
 		read -r -d '' monitorConnectGrant <<-EOSQL || true
 			GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
 		EOSQL
@@ -311,9 +310,6 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			GRANT SELECT ON performance_schema.* TO 'monitor'@'${MONITOR_HOST}';
 			${monitorConnectGrant}
 
-			CREATE USER 'clustercheck'@'localhost' IDENTIFIED BY '${CLUSTERCHECK_PASSWORD}';
-			GRANT SYSTEM_USER, PROCESS ON *.* TO 'clustercheck'@'localhost';
-
 			CREATE USER 'replication'@'%' IDENTIFIED BY '${REPLICATION_PASSWORD}';
 			GRANT SYSTEM_USER, REPLICATION SLAVE ON *.* to 'replication'@'%';
 			GRANT SELECT ON performance_schema.threads to 'replication'@'%';
@@ -321,14 +317,19 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			CREATE USER 'orchestrator'@'%' IDENTIFIED BY '${ORC_TOPOLOGY_PASSWORD}';
 			GRANT SYSTEM_USER, SUPER, PROCESS, REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';
 			GRANT SELECT ON mysql.slave_master_info TO 'orchestrator'@'%';
-			GRANT SELECT ON meta.* TO 'orchestrator'@'%';
+			GRANT SELECT ON sys_operator.* TO 'orchestrator'@'%';
+
+			CREATE DATABASE IF NOT EXISTS sys_operator;
+			CREATE USER 'heartbeat'@'localhost' IDENTIFIED BY '${HEARTBEAT_PASSWORD}';
+			GRANT SYSTEM_USER, REPLICATION CLIENT ON *.* TO 'heartbeat'@'localhost';
+			GRANT SELECT, CREATE, DELETE, UPDATE, INSERT ON sys_operator.heartbeat TO 'heartbeat'@'localhost';
 
 			DROP DATABASE IF EXISTS test;
 			FLUSH PRIVILEGES ;
 		EOSQL
 
 		{ set +x; } 2>/dev/null
-		if [ ! -z "$MYSQL_ROOT_PASSWORD" ]; then
+		if [ -n "$MYSQL_ROOT_PASSWORD" ]; then
 			mysql+=(-p"${MYSQL_ROOT_PASSWORD}")
 		fi
 		set -x
@@ -360,7 +361,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		done
 
 		{ set +x; } 2>/dev/null
-		if [ ! -z "$MYSQL_ONETIME_PASSWORD" ]; then
+		if [ -n "$MYSQL_ONETIME_PASSWORD" ]; then
 			"${mysql[@]}" <<-EOSQL
 				ALTER USER 'root'@'%' PASSWORD EXPIRE;
 			EOSQL
@@ -380,7 +381,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 	load_group_replication_plugin
 
 	# exit when MYSQL_INIT_ONLY environment variable is set to avoid starting mysqld
-	if [ ! -z "$MYSQL_INIT_ONLY" ]; then
+	if [ -n "$MYSQL_INIT_ONLY" ]; then
 		echo 'Initialization complete, now exiting!'
 		exit 0
 	fi

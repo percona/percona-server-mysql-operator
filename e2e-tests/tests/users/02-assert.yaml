@@ -7,9 +7,6 @@ kind: ConfigMap
 metadata:
   name: 02-check-users
 data:
-  clustercheck: |
-    GRANT PROCESS ON *.* TO `clustercheck`@`localhost`
-    GRANT SYSTEM_USER ON *.* TO `clustercheck`@`localhost`
   monitor: |
     GRANT SELECT, RELOAD, PROCESS, SUPER, REPLICATION CLIENT ON *.* TO `monitor`@`%`
     GRANT BACKUP_ADMIN,SERVICE_CONNECTION_ADMIN,SYSTEM_USER ON *.* TO `monitor`@`%`
@@ -20,7 +17,7 @@ data:
   orchestrator: |
     GRANT RELOAD, PROCESS, SUPER, REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO `orchestrator`@`%`
     GRANT SYSTEM_USER ON *.* TO `orchestrator`@`%`
-    GRANT SELECT ON `meta`.* TO `orchestrator`@`%`
+    GRANT SELECT ON `sys_operator`.* TO `orchestrator`@`%`
     GRANT SELECT ON `mysql`.`slave_master_info` TO `orchestrator`@`%`
   replication: |
     GRANT REPLICATION SLAVE ON *.* TO `replication`@`%`
