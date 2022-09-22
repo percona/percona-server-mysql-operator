@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 
@@ -373,7 +374,6 @@ func (cr *PerconaServerMySQL) SetVersion() {
 	}
 
 	cr.Spec.CRVersion = version.Version
-	return
 }
 
 func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVersion) error {
