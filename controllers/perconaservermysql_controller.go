@@ -1348,6 +1348,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		"orchestrator", cr.Status.Orchestrator,
 		"router", cr.Status.Router,
 		"host", cr.Status.Host,
+		"loadbalancers", loadBalancersReady,
 		"state", cr.Status.State,
 	)
 
