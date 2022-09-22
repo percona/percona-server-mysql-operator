@@ -950,6 +950,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 			if err := mysh.RebootClusterFromCompleteOutage(ctx, cr.InnoDBClusterName(), []string{firstPodFQDN}); err != nil {
 				return err
 			}
+			l.Info("Successfully rebooted cluster")
 			return nil
 		}
 		return errors.Wrapf(err, "check if InnoDB Cluster %s exists", cr.InnoDBClusterName)

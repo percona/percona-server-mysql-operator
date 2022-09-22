@@ -33,7 +33,7 @@ func New(e k8sexec.Interface, uri string) *mysqlsh {
 func (m *mysqlsh) run(ctx context.Context, cmd string) error {
 	var errb, outb bytes.Buffer
 
-	args := []string{"--uri", m.uri, "-e", cmd}
+	args := []string{"--no-wizard", "--uri", m.uri, "-e", cmd}
 
 	c := m.exec.CommandContext(ctx, "mysqlsh", args...)
 	c.SetStdout(&outb)
@@ -185,7 +185,7 @@ func (m *mysqlsh) Topology(ctx context.Context, clusterName string) (map[string]
 
 func (m *mysqlsh) RebootClusterFromCompleteOutage(ctx context.Context, clusterName string, rejoinInstances []string) error {
 	cmd := fmt.Sprintf(
-		"dba.rebootClusterFromCompleteOutage('%s', {rejoinInstances: ['%s']})",
+		"dba.rebootClusterFromCompleteOutage('%s', {rejoinInstances: ['%s'], removeInstances: []})",
 		clusterName,
 		strings.Join(rejoinInstances, ","),
 	)
