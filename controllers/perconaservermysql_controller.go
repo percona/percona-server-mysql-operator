@@ -224,9 +224,6 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			}
 			l.Info(fmt.Sprintf("Pod %s removed from GR", pod.Name))
 		}
-
-		l.Info("Sleeping after removing instances from gr")
-		time.Sleep(30 * time.Second) //TODO: this maybe is not necessary
 	}
 
 	sts := &appsv1.StatefulSet{}
