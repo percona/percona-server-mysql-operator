@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"strings"
 
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -46,7 +47,13 @@ type PerconaServerMySQLSpec struct {
 	PMM                   *PMMSpec         `json:"pmm,omitempty"`
 	Backup                *BackupSpec      `json:"backup,omitempty"`
 	Router                *MySQLRouterSpec `json:"router,omitempty"`
+	TLS                   *TLSSpec         `json:"tls,omitempty"`
 	Toolkit               *ToolkitSpec     `json:"toolkit,omitempty"`
+}
+
+type TLSSpec struct {
+	SANs       []string                `json:"SANs,omitempty"`
+	IssuerConf *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
 }
 
 type ClusterType string
