@@ -9,6 +9,15 @@ spec:
 #  pause: false
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
+#  tls:
+#    SANs:
+#      - mysql-1.example.com
+#      - mysql-2.example.com
+#      - mysql-3.example.com
+#    issuerConf:
+#      name: special-selfsigned-issuer
+#      kind: ClusterIssuer
+#      group: cert-manager.io
   mysql:
     clusterType: async
     image: percona/percona-server:8.0.28
@@ -204,7 +213,7 @@ spec:
 #          prefix: ""
 
   toolkit:
-    image: perconalab/percona-server-mysql-operator:3.4.0-toolkit
+    image: perconalab/percona-server-mysql-operator:main-toolkit
     imagePullPolicy: Always
 #    resources:
 #      requests:
