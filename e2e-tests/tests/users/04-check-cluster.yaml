@@ -21,7 +21,7 @@ commands:
 
       	pod=mysql-client
       	case $user in
-      		clustercheck | xtrabackup)
+      		heartbeat | xtrabackup)
       			mysql_args="-h localhost -u${user} -p${user}_password_updated"
       			pod="$(get_cluster_name)-mysql-0"
       			;;
