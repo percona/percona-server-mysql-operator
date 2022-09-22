@@ -364,6 +364,8 @@ spec:
         - 1001
       terminationGracePeriodSeconds: 30
       volumes:
+      - emptyDir: {}
+        name: bin
       - name: users
         secret:
           defaultMode: 420
