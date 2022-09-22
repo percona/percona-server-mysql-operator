@@ -310,6 +310,7 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	MySQL        StatefulAppStatus `json:"mysql,omitempty"`
 	Orchestrator StatefulAppStatus `json:"orchestrator,omitempty"`
 	Router       StatefulAppStatus `json:"router,omitempty"`
+	HAProxy      StatefulAppStatus `json:"haproxy,omitempty"`
 	State        StatefulAppState  `json:"state,omitempty"`
 	// +optional
 	Host string `json:"host"`
