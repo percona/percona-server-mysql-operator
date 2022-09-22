@@ -129,6 +129,10 @@ func (m *mysqlsh) DoesClusterExist(ctx context.Context, clusterName string) (boo
 		return true, ErrMetadataExistsButGRNotActive
 	}
 
+	if strings.Contains(err.Error(), "rebootClusterFromCompleteOutage") {
+		return true, ErrMetadataExistsButGRNotActive
+	}
+
 	return false, nil
 }
 
