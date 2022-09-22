@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/pkg/errors"
 	k8sexec "k8s.io/utils/exec"
@@ -18,6 +19,8 @@ type mysqlsh struct {
 	uri  string
 	exec k8sexec.Interface
 }
+
+var ErrMetadataExistsButGRNotActive = errors.New("MYSQLSH 51314: metadata exists, instance belongs to that metadata, but GR is not active")
 
 var sensitiveRegexp = regexp.MustCompile(":.*@")
 
@@ -115,10 +118,18 @@ func (m *mysqlsh) CreateCluster(ctx context.Context, clusterName, podIp string) 
 	return nil
 }
 
-func (m *mysqlsh) DoesClusterExist(ctx context.Context, clusterName string) bool {
+func (m *mysqlsh) DoesClusterExist(ctx context.Context, clusterName string) (bool, error) {
 	cmd := fmt.Sprintf("dba.getCluster('%s').status()", clusterName)
 	err := m.run(ctx, cmd)
-	return err == nil
+	if err == nil {
+		return true, err
+	}
+
+	if strings.Contains(err.Error(), "MYSQLSH 51314") {
+		return true, ErrMetadataExistsButGRNotActive
+	}
+
+	return false, nil
 }
 
 func (m *mysqlsh) ClusterStatus(ctx context.Context, clusterName string) (innodbcluster.Status, error) {
@@ -172,9 +183,11 @@ func (m *mysqlsh) Topology(ctx context.Context, clusterName string) (map[string]
 	return status.DefaultReplicaSet.Topology, nil
 }
 
-func (m *mysqlsh) DropMetadata(ctx context.Context) error {
-	if err := m.run(ctx, "dba.dropMetadataSchema({'force': true, 'clearReadOnly': true})"); err != nil {
-		return errors.Wrap(err, "drop metadata")
+func (m *mysqlsh) RebootClusterFromCompleteOutage(ctx context.Context, clusterName string) error {
+	cmd := fmt.Sprintf("dba.rebootClusterFromCompleteOutage('%s')", clusterName)
+
+	if err := m.run(ctx, cmd); err != nil {
+		return errors.Wrap(err, "reboot cluster from complete outage")
 	}
 
 	return nil

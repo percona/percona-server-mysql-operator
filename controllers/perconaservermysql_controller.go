@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -944,7 +943,17 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 
 	mysh := mysqlsh.New(k8sexec.New(), firstPodUri)
 
-	clusterExists := mysh.DoesClusterExist(ctx, cr.InnoDBClusterName())
+	clusterExists, err := mysh.DoesClusterExist(ctx, cr.InnoDBClusterName())
+	if err != nil {
+		if errors.Is(err, mysqlsh.ErrMetadataExistsButGRNotActive) {
+			l.Info("Rebooting cluster from complete outage")
+			if err := mysh.RebootClusterFromCompleteOutage(ctx, cr.InnoDBClusterName()); err != nil {
+				return err
+			}
+			return nil
+		}
+		return errors.Wrapf(err, "check if InnoDB Cluster %s exists", cr.InnoDBClusterName)
+	}
 	state := innodbcluster.MemberStateOffline
 	// it's not possible to run Cluster.status() on a standalone MySQL node
 	if clusterExists {
@@ -968,27 +977,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		l.Info("Creating InnoDB cluster")
 		err := mysh.CreateCluster(ctx, cr.InnoDBClusterName(), firstPod.Status.PodIP)
 		if err != nil {
-			if strings.Contains(err.Error(), "has a populated Metadata schema") {
-				l.Info("Cluster already available")
-
-				err = mysh.DropMetadata(ctx)
-				if err != nil {
-					return errors.Wrap(err, "drop metadata schema")
-				}
-
-				l.Info("Configured first pod after dropping metadata", "pod", firstPod.Name)
-				if err := mysh.ConfigureInstance(ctx, firstPodUri); err != nil {
-					return err
-				}
-				l.Info("Configured instance after dropping metadata", "instance", firstPod.Name)
-
-				err = mysh.CreateCluster(ctx, cr.InnoDBClusterName(), firstPod.Status.PodIP)
-				if err != nil {
-					return err
-				}
-			} else {
-				return err
-			}
+			return errors.Wrapf(err, "create cluster %s", cr.InnoDBClusterName())
 		}
 		l.Info("Created InnoDB Cluster", "cluster", cr.InnoDBClusterName())
 	}
@@ -1250,7 +1239,8 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 
 	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
 	mysh := mysqlsh.New(k8sexec.New(), fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri))
-	if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
+	clusterExists, err := mysh.DoesClusterExist(ctx, cr.InnoDBClusterName())
+	if !clusterExists || err != nil {
 		l.V(1).Info("Waiting for InnoDB Cluster", "cluster", cr.Name)
 		return nil
 	}
@@ -1284,7 +1274,8 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 
 	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
 	mysh := mysqlsh.New(k8sexec.New(), fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri))
-	if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
+	clusterExists, err := mysh.DoesClusterExist(ctx, cr.InnoDBClusterName())
+	if !clusterExists || err != nil {
 		return false, nil
 	}
 
