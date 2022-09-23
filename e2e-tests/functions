@@ -57,7 +57,7 @@ deploy_pmm_server() {
 
 get_pmm_api_key() {
 	ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "printenv | grep ADMIN_PASSWORD | cut -d '=' -f2")
-  echo $(curl --insecure -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://admin:$ADMIN_PASSWORD@"$(get_service_ip monitoring-service)"/graph/api/auth/keys" | jq .key)
+	echo $(curl --insecure -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://admin:$ADMIN_PASSWORD@"$(get_service_ip monitoring-service)"/graph/api/auth/keys" | jq .key)
 }
 
 deploy_minio() {
@@ -113,6 +113,7 @@ get_cr() {
 	yq eval "$(printf '.metadata.name="%s"' "${test_name}${name_suffix:+-$name_suffix}")" "${DEPLOY_DIR}/cr.yaml" \
 		| yq eval '.spec.secretsName="test-secrets"' - \
 		| yq eval '.spec.sslSecretName="test-ssl"' - \
+		| yq eval '.spec.upgradeOptions.apply="disabled"' - \
 		| yq eval "$(printf '.spec.mysql.image="%s"' "${IMAGE_MYSQL}")" - \
 		| yq eval "$(printf '.spec.backup.image="%s"' "${IMAGE_BACKUP}")" - \
 		| yq eval "$(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}")" - \
@@ -356,6 +357,14 @@ get_mysql_router_service() {
 	local cluster=$1
 
 	echo "${cluster}-router"
+}
+
+deploy_version_service() {
+	kubectl create configmap -n "${NAMESPACE}" versions \
+		--from-file "${TESTS_CONFIG_DIR}/operator.9.9.9.ps-operator.dep.json" \
+		--from-file "${TESTS_CONFIG_DIR}/operator.9.9.9.ps-operator.json"
+
+	kubectl apply -n "${NAMESPACE}" -f "${TESTS_CONFIG_DIR}/vs.yaml"
 }
 
 deploy_cert_manager() {
