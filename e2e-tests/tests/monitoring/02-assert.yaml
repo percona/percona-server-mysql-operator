@@ -123,6 +123,8 @@ apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
   name: monitoring
+  finalizers:
+    - delete-mysql-pods-in-order
 status:
   mysql:
     ready: 3
