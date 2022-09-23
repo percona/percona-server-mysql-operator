@@ -67,7 +67,7 @@ request_backup() {
 			curl -s -o /dev/null \
 				-d "$(request_data)" \
 				-H "Content-Type: application/json" \
-				-w httpcode=%{http_code} \
+				-w "httpcode=%{http_code}" \
 				"http://${src_node}:6033/backup/${BACKUP_NAME}" \
 				| sed -e 's/.*\httpcode=//'
 		)
