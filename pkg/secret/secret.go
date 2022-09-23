@@ -214,3 +214,12 @@ func generatePass() ([]byte, error) {
 
 	return b, nil
 }
+
+const (
+	CredentialsAzureStorageAccount = "AZURE_STORAGE_ACCOUNT_NAME"
+	CredentialsAzureAccessKey      = "AZURE_STORAGE_ACCOUNT_KEY"
+	CredentialsAWSAccessKey        = "AWS_ACCESS_KEY_ID"
+	CredentialsAWSSecretKey        = "AWS_SECRET_ACCESS_KEY"
+	CredentialsGCSAccessKey        = "ACCESS_KEY_ID"
+	CredentialsGCSSecretKey        = "SECRET_ACCESS_KEY"
+)
