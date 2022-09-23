@@ -61,11 +61,7 @@ type Status struct {
 }
 
 func (s *Status) TryRunBackup() bool {
-	swapped := s.isRunning.CompareAndSwap(false, true)
-	if !swapped {
-		return false
-	}
-	return true
+	return s.isRunning.CompareAndSwap(false, true)
 }
 
 func (s *Status) DoneBackup() {
@@ -188,11 +184,12 @@ func xbcloudArgs(conf BackupConf) []string {
 
 func backupHandler(w http.ResponseWriter, req *http.Request) {
 	if !status.TryRunBackup() {
-		log.Info("backup is already running", "host", req.Host)
+		log.Info("backup is already running", "host", req.RemoteAddr)
 		http.Error(w, "backup is already running", http.StatusConflict)
 		return
 	}
 	defer status.DoneBackup()
+	log.Info("TEST", "host", req.RemoteAddr)
 	ns, err := getNamespace()
 	if err != nil {
 		log.Error(err, "failed to detect namespace")
