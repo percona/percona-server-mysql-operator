@@ -7,9 +7,6 @@ kind: ConfigMap
 metadata:
   name: 02-check-users
 data:
-  clustercheck: |
-    GRANT PROCESS ON *.* TO `clustercheck`@`localhost`
-    GRANT SYSTEM_USER ON *.* TO `clustercheck`@`localhost`
   monitor: |
     GRANT SELECT, RELOAD, PROCESS, SUPER, REPLICATION CLIENT ON *.* TO `monitor`@`%`
     GRANT BACKUP_ADMIN,SERVICE_CONNECTION_ADMIN,SYSTEM_USER ON *.* TO `monitor`@`%`

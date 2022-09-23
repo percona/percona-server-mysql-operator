@@ -2,6 +2,8 @@ apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQLBackup
 metadata:
   name: demand-backup-azure
+  finalizers:
+    - delete-backup
 spec:
   clusterName: demand-backup
   storageName: azure-blob

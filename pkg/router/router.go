@@ -20,6 +20,7 @@ const (
 )
 
 const (
+	PortHTTP       = 8443
 	PortRWDefault  = 3306
 	PortReadWrite  = 6446
 	PortReadOnly   = 6447
@@ -60,6 +61,12 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Type: serviceType,
 			Ports: []corev1.ServicePort{
+				// do not change the port order
+				// 8443 port should be the first in service, see K8SPS-132 task
+				{
+					Name: "http",
+					Port: int32(PortHTTP),
+				},
 				{
 					Name: "rw-default",
 					Port: int32(PortRWDefault),
@@ -173,6 +180,10 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			},
 		},
 		Ports: []corev1.ContainerPort{
+			{
+				Name:          "http",
+				ContainerPort: int32(PortHTTP),
+			},
 			{
 				Name:          "read-write",
 				ContainerPort: int32(PortReadWrite),
