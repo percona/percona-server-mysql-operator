@@ -6,21 +6,20 @@ set -o xtrace
 DATADIR=${DATADIR:-/var/lib/mysql}
 PARALLEL=$(grep -c processor /proc/cpuinfo)
 XBCLOUD_ARGS="--curl-retriable-errors=7 --parallel=${PARALLEL}"
-INSECURE_ARG=""
 if [ -n "$VERIFY_TLS" ] && [[ $VERIFY_TLS == "false" ]]; then
-	INSECURE_ARG="--insecure"
+	XBCLOUD_ARGS="${XBCLOUD_ARGS} --insecure"
 fi
 
 run_s3() {
-	xbcloud get "${XBCLOUD_ARGS}" "${INSECURE_ARG}" "${BACKUP_DEST}" --storage=s3 --s3-bucket="${S3_BUCKET}"
+	xbcloud get "${XBCLOUD_ARGS}" "${BACKUP_DEST}" --storage=s3 --s3-bucket="${S3_BUCKET}"
 }
 
 run_gcs() {
-	xbcloud get "${XBCLOUD_ARGS}" "${INSECURE_ARG}" "${BACKUP_DEST}" --storage=google --google-bucket="${GCS_BUCKET}"
+	xbcloud get "${XBCLOUD_ARGS}" "${BACKUP_DEST}" --storage=google --google-bucket="${GCS_BUCKET}"
 }
 
 run_azure() {
-	xbcloud get "${XBCLOUD_ARGS}" "${INSECURE_ARG}" "${BACKUP_DEST}" --storage=azure
+	xbcloud get "${XBCLOUD_ARGS}" "${BACKUP_DEST}" --storage=azure
 }
 
 extract() {
