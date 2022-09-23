@@ -18,7 +18,7 @@ type Topology struct {
 
 func Get(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL, operatorPass string) (Topology, error) {
 	var err error
-	top := Topology{}
+	var top Topology
 	switch cluster.Spec.MySQL.ClusterType {
 	case apiv1alpha1.ClusterTypeGR:
 		top, err = getGRTopology(cluster, operatorPass)
