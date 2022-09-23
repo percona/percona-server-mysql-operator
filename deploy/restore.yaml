@@ -5,3 +5,11 @@ metadata:
 spec:
   clusterName: cluster1
   backupName: backup1
+#  backupSource:
+#    destination: s3://S3-BACKUP-BUCKET-NAME-HERE/backup-path
+#    storage:
+#      s3:
+#        bucket: S3-BACKUP-BUCKET-NAME-HERE
+#        credentialsSecret: cluster1-s3-credentials
+#        region: us-west-2
+#      type: s3
