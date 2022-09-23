@@ -956,7 +956,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 			l.Info("Successfully rebooted cluster")
 			return nil
 		}
-		return errors.Wrapf(err, "check if InnoDB Cluster %s exists", cr.InnoDBClusterName)
+		return errors.Wrapf(err, "check if InnoDB Cluster %s exists", cr.InnoDBClusterName())
 	}
 	state := innodbcluster.MemberStateOffline
 	// it's not possible to run Cluster.status() on a standalone MySQL node
