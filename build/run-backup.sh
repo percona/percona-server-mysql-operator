@@ -57,30 +57,30 @@ request_data() {
 }
 
 request_backup() {
-	IFS=',' read -r -a SRC_NODES_ARR <<<"$SRC_NODES"
+	IFS=',' read -r -a SRC_NODES_ARR <<<"${SRC_NODES}"
 
 	local sleep_duration=$1
 	local http_code
-	for src_node in "${SRC_NODES_ARR[@]}"; do
-		echo "Trying to run backup ${BACKUP_NAME} on ${src_node}"
+	for node in "${SRC_NODES_ARR[@]}"; do
+		echo "Trying to run backup ${BACKUP_NAME} on ${node}"
 		http_code=$(
 			curl -s -o /dev/null \
 				-d "$(request_data)" \
 				-H "Content-Type: application/json" \
 				-w "httpcode=%{http_code}" \
-				"http://${src_node}:6033/backup/${BACKUP_NAME}" \
+				"http://${node}:6033/backup/${BACKUP_NAME}" \
 				| sed -e 's/.*\httpcode=//'
 		)
 		if [ "${http_code}" -ne 200 ]; then
 			if [ "${http_code}" -eq 409 ]; then
-				echo "Backup is already running on ${src_node}"
+				echo "Backup is already running on ${node}"
 				continue
 			fi
 			echo "Backup failed. Check logs to troubleshoot:"
-			echo "kubectl logs ${src_node%%.*} xtrabackup"
+			echo "kubectl logs ${node%%.*} xtrabackup"
 			exit 1
 		else
-			SRC_NODE=${src_node}
+			src_node="${node}"
 			return
 		fi
 	done
@@ -94,7 +94,7 @@ request_backup() {
 }
 
 request_logs() {
-	curl -s http://"${SRC_NODE}":6033/logs/"${BACKUP_NAME}"
+	curl -s http://"${src_node}":6033/logs/"${BACKUP_NAME}"
 }
 
 main() {
