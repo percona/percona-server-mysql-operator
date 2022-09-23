@@ -81,7 +81,7 @@ request_backup() {
 			exit 1
 		else
 			SRC_NODE=${src_node}
-			break
+			return
 		fi
 	done
 
