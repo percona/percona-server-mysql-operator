@@ -2,6 +2,8 @@ apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
   name: cluster1
+  finalizers:
+    - delete-mysql-pods-in-order
 spec:
   allowUnsafeConfigurations: false
 #  pause: false
