@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/pkg/errors"
 	k8sexec "k8s.io/utils/exec"
@@ -19,6 +20,8 @@ type mysqlsh struct {
 	exec k8sexec.Interface
 }
 
+var ErrMetadataExistsButGRNotActive = errors.New("MYSQLSH 51314: metadata exists, instance belongs to that metadata, but GR is not active")
+
 var sensitiveRegexp = regexp.MustCompile(":.*@")
 
 const defaultIPAllowList = "127.0.0.1/8,::1/128"
@@ -30,7 +33,7 @@ func New(e k8sexec.Interface, uri string) *mysqlsh {
 func (m *mysqlsh) run(ctx context.Context, cmd string) error {
 	var errb, outb bytes.Buffer
 
-	args := []string{"--uri", m.uri, "-e", cmd}
+	args := []string{"--no-wizard", "--uri", m.uri, "-e", cmd}
 
 	c := m.exec.CommandContext(ctx, "mysqlsh", args...)
 	c.SetStdout(&outb)
@@ -115,10 +118,22 @@ func (m *mysqlsh) CreateCluster(ctx context.Context, clusterName, podIp string) 
 	return nil
 }
 
-func (m *mysqlsh) DoesClusterExist(ctx context.Context, clusterName string) bool {
+func (m *mysqlsh) DoesClusterExist(ctx context.Context, clusterName string) (bool, error) {
 	cmd := fmt.Sprintf("dba.getCluster('%s').status()", clusterName)
 	err := m.run(ctx, cmd)
-	return err == nil
+	if err == nil {
+		return true, err
+	}
+
+	if strings.Contains(err.Error(), "MYSQLSH 51314") {
+		return true, ErrMetadataExistsButGRNotActive
+	}
+
+	if strings.Contains(err.Error(), "rebootClusterFromCompleteOutage") {
+		return true, ErrMetadataExistsButGRNotActive
+	}
+
+	return false, nil
 }
 
 func (m *mysqlsh) ClusterStatus(ctx context.Context, clusterName string) (innodbcluster.Status, error) {
@@ -170,4 +185,18 @@ func (m *mysqlsh) Topology(ctx context.Context, clusterName string) (map[string]
 	}
 
 	return status.DefaultReplicaSet.Topology, nil
+}
+
+func (m *mysqlsh) RebootClusterFromCompleteOutage(ctx context.Context, clusterName string, rejoinInstances []string) error {
+	cmd := fmt.Sprintf(
+		"dba.rebootClusterFromCompleteOutage('%s', {rejoinInstances: ['%s'], removeInstances: []})",
+		clusterName,
+		strings.Join(rejoinInstances, ","),
+	)
+
+	if err := m.run(ctx, cmd); err != nil {
+		return errors.Wrap(err, "reboot cluster from complete outage")
+	}
+
+	return nil
 }

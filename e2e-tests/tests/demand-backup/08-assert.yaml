@@ -6,6 +6,8 @@ apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
   name: demand-backup
+  finalizers:
+    - delete-mysql-pods-in-order
 status:
   mysql:
     ready: 3
