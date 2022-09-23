@@ -500,12 +500,12 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 	if err != nil {
 		return false, errors.Wrap(err, "marshal sidecar backup config")
 	}
-	src, err := r.getBackupSource(ctx, cluster)
+	src, err := r.getBackupSources(ctx, cluster)
 	if err != nil {
 		return false, errors.Wrap(err, "get backup source node")
 	}
 	sidecarURL := url.URL{
-		Host:   src + ":6033",
+		Host:   src[0] + ":6033",
 		Scheme: "http",
 		Path:   "/backup/" + cr.Name,
 	}
