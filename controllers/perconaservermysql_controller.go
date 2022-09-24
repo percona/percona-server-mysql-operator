@@ -55,6 +55,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/users"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
+	vs "github.com/percona/percona-server-mysql-operator/pkg/version/service"
 )
 
 // PerconaServerMySQLReconciler reconciles a PerconaServerMySQL object
@@ -251,6 +252,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
+	if err := r.reconcileVersions(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile versions")
+	}
 	if err := r.ensureUserSecrets(ctx, cr); err != nil {
 		return errors.Wrap(err, "users secret")
 	}
@@ -279,6 +283,75 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 		return errors.Wrap(err, "cleanup outdated")
 	}
 
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if cr.Spec.UpgradeOptions.Apply == "" ||
+		cr.Spec.UpgradeOptions.Apply == apiv1alpha1.UpgradeStrategyDisabled ||
+		cr.Spec.UpgradeOptions.Apply == apiv1alpha1.UpgradeStrategyNever {
+		return nil
+	}
+
+	l := log.FromContext(ctx).WithName("reconcileVersions")
+
+	version, err := vs.GetVersion(ctx, cr, r.ServerVersion)
+	if err != nil {
+		return errors.Wrap(err, "get exact version")
+	}
+
+	patch := client.MergeFrom(cr.DeepCopy())
+	if cr.Spec.MySQL.Image != version.PSImage {
+		if cr.Status.MySQL.Version == "" {
+			l.Info("set MySQL version to " + version.PSVersion)
+		} else {
+			l.Info("update MySQL version", "old version", cr.Status.MySQL.Version, "new version", version.PSVersion)
+		}
+		cr.Spec.MySQL.Image = version.PSImage
+	}
+	if cr.Spec.Backup.Image != version.BackupImage {
+		if cr.Status.BackupVersion == "" {
+			l.Info("set backup version to " + version.BackupVersion)
+		} else {
+			l.Info("update backup version", "old version", cr.Status.BackupVersion, "new version", version.BackupVersion)
+		}
+		cr.Spec.Backup.Image = version.BackupImage
+	}
+	if cr.Spec.Orchestrator.Image != version.OrchestratorImage {
+		if cr.Status.Orchestrator.Version == "" {
+			l.Info("set orchestrator version to " + version.OrchestratorVersion)
+		} else {
+			l.Info("update orchestrator version", "old version", cr.Status.Orchestrator.Version, "new version", version.OrchestratorVersion)
+		}
+		cr.Spec.Orchestrator.Image = version.OrchestratorImage
+	}
+	if cr.Spec.Router.Image != version.RouterImage {
+		if cr.Status.Router.Version == "" {
+			l.Info("set MySQL router version to " + version.RouterVersion)
+		} else {
+			l.Info("update MySQL router version", "old version", cr.Status.Router.Version, "new version", version.RouterVersion)
+		}
+		cr.Spec.Router.Image = version.RouterImage
+	}
+	if cr.Spec.PMM.Image != version.PMMImage {
+		if cr.Status.PMMVersion == "" {
+			l.Info("set PMM version to " + version.PMMVersion)
+		} else {
+			l.Info("update PMM version", "old version", cr.Status.PMMVersion, "new version", version.PMMVersion)
+		}
+		cr.Spec.PMM.Image = version.PMMImage
+	}
+
+	err = r.Patch(ctx, cr.DeepCopy(), patch)
+	if err != nil {
+		return errors.Wrap(err, "failed to update CR")
+	}
+
+	cr.Status.MySQL.Version = version.PSVersion
+	cr.Status.BackupVersion = version.BackupVersion
+	cr.Status.Orchestrator.Version = version.OrchestratorVersion
+	cr.Status.Router.Version = version.RouterVersion
+	cr.Status.PMMVersion = version.PMMVersion
 	return nil
 }
 
@@ -1294,7 +1367,7 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("reconcileCRStatus")
 
-	mysqlStatus, err := appStatus(ctx, r.Client, cr.MySQLSpec().Size, mysql.MatchLabels(cr))
+	mysqlStatus, err := appStatus(ctx, r.Client, cr.MySQLSpec().Size, mysql.MatchLabels(cr), cr.Status.MySQL.Version)
 	if err != nil {
 		return errors.Wrap(err, "get MySQL status")
 	}
@@ -1312,7 +1385,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	orcStatus := apiv1alpha1.StatefulAppStatus{}
 	if cr.Spec.MySQL.IsAsync() {
-		orcStatus, err = appStatus(ctx, r.Client, cr.OrchestratorSpec().Size, orchestrator.MatchLabels(cr))
+		orcStatus, err = appStatus(ctx, r.Client, cr.OrchestratorSpec().Size, orchestrator.MatchLabels(cr), cr.Status.Orchestrator.Version)
 		if err != nil {
 			return errors.Wrap(err, "get Orchestrator status")
 		}
@@ -1321,7 +1394,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	routerStatus := apiv1alpha1.StatefulAppStatus{}
 	if cr.Spec.MySQL.IsGR() {
-		routerStatus, err = appStatus(ctx, r.Client, cr.Spec.Router.Size, router.MatchLabels(cr))
+		routerStatus, err = appStatus(ctx, r.Client, cr.Spec.Router.Size, router.MatchLabels(cr), cr.Status.Router.Version)
 		if err != nil {
 			return errors.Wrap(err, "get Router status")
 		}
@@ -1417,6 +1490,7 @@ func appStatus(
 	cl client.Reader,
 	size int32,
 	labels map[string]string,
+	version string,
 ) (apiv1alpha1.StatefulAppStatus, error) {
 	status := apiv1alpha1.StatefulAppStatus{
 		Size:  size,
@@ -1437,6 +1511,8 @@ func appStatus(
 	if status.Ready == status.Size {
 		status.State = apiv1alpha1.StateReady
 	}
+
+	status.Version = version
 
 	return status, nil
 }
