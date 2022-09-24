@@ -72,7 +72,7 @@ Contributions to the source tree should follow the workflow described below:
    DOCKER_SQUASH=0 DOCKER_NOCACHE=0 make IMAGE_TAG_BASE=<your-docker-id>/percona-server-mysql-operator
    ```
 
-   Once your image is built and ready, install Custom Resource Sefinitions (CRDs) and deploy the Operator to your cluster:
+   Once your image is built and ready, install Custom Resource Definitions (CRDs) and deploy the Operator to your cluster:
 
    ```
    make install deploy IMAGE=<your-docker-id>/percona-server-mysql-operator:k8sps-22
