@@ -1,0 +1,64 @@
+{
+  "versions": [
+    {
+      "operator": "9.9.9",
+      "product": "ps-operator",
+      "matrix": {
+        "mysql": {
+          "8.0.28-20": {
+            "image_path": "percona/percona-server:8.0.28-20",
+            "image_hash": "7f4fc6f0323dcafa4e0efbc3318906d453e432de86f152625024db3ac38ce833",
+            "status": "recommended",
+            "critical": false
+          },
+          "8.0.28-19": {
+            "image_path": "percona/percona-server:8.0.28-19",
+            "image_hash": "8fdb833bede344f46714a8d21fd832c37224c3637d9117f8ae369360dfa89566",
+            "status": "available",
+            "critical": false
+          }
+        },
+        "pmm": {
+          "2.27.0": {
+            "image_path": "percona/pmm-client:2.27.0",
+            "image_hash": "4f4d4508afe4ef3b5d72e2ebec6485be84204902b0b2b23c3a9e7c2fe4726884",
+            "status": "recommended",
+            "critical": false
+          }
+        },
+        "orchestrator": {
+          "9.9.9": {
+            "image_path": "perconalab/percona-server-mysql-operator:main-orchestrator",
+            "image_hash": "26eabecccbbe04fa28d5cc1ca45884fea1cf48f9a8b1c4376c468c4cb4c56cc1",
+            "status": "recommended",
+            "critical": false
+          }
+        },
+        "router": {
+          "9.9.9": {
+            "image_path": "perconalab/percona-server-mysql-operator:main-router",
+            "image_hash": "2b5702d3d690646ff7bea51d5bed5e202602b492c54f645bac4f0884de237048",
+            "status": "recommended",
+            "critical": false
+          }
+        },
+        "backup": {
+          "9.9.9": {
+            "image_path": "perconalab/percona-server-mysql-operator:main-backup",
+            "image_hash": "04b7ed232aa00c31bcd23cbea8ce6bdd09f6e06fff5b1cad807ea8f4df0a89d5",
+            "status": "recommended",
+            "critical": false
+          }
+        },
+        "operator": {
+          "9.9.9": {
+            "image_path": "percona/percona-server-mysql-operator:0.2.0",
+            "image_hash": "e8b37ee33dc9a743bcaa77c05d555ec1eb29ece935fca7e74be0c1450f8599f0",
+            "status": "recommended",
+            "critical": false
+          }
+        }
+      }
+    }
+  ]
+}
