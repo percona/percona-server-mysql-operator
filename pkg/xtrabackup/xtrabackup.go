@@ -270,8 +270,8 @@ func deleteContainer(image string, conf *BackupConfig, storage *apiv1alpha1.Back
 		ImagePullPolicy: corev1.PullNever,
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      binVolumeName,
-				MountPath: binMountPath,
+				Name:      apiv1alpha1.BinVolumeName,
+				MountPath: apiv1alpha1.BinVolumePath,
 			},
 			{
 				Name:      dataVolumeName,
@@ -451,7 +451,7 @@ func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) 
 					DNSPolicy:         corev1.DNSClusterFirst,
 					Volumes: []corev1.Volume{
 						{
-							Name: binVolumeName,
+							Name: apiv1alpha1.BinVolumeName,
 							VolumeSource: corev1.VolumeSource{
 								EmptyDir: &corev1.EmptyDirVolumeSource{},
 							},
