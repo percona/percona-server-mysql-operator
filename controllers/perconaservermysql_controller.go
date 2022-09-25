@@ -55,6 +55,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/users"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
+	vs "github.com/percona/percona-server-mysql-operator/pkg/version/service"
 )
 
 // PerconaServerMySQLReconciler reconciles a PerconaServerMySQL object
@@ -102,6 +103,10 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 		return rr, errors.Wrap(err, "get CR")
 	}
 
+	if cr.ObjectMeta.DeletionTimestamp != nil {
+		return rr, r.applyFinalizers(ctx, cr)
+	}
+
 	defer func() {
 		if err := r.reconcileCRStatus(ctx, cr); err != nil {
 			l.Error(err, "failed to update status")
@@ -115,10 +120,141 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 	return rr, nil
 }
 
+func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	l := log.FromContext(ctx).WithName("Finalizer")
+	l.Info("Applying finalizers", "CR", cr)
+
+	var err error
+
+	finalizers := []string{}
+	for _, f := range cr.GetFinalizers() {
+		switch f {
+		case "delete-mysql-pods-in-order":
+			err = r.deleteMySQLPods(ctx, cr)
+		}
+
+		if err != nil {
+			l.Error(err, "failed to run finalizer", "finalizer", f)
+			finalizers = append(finalizers, f)
+		}
+	}
+
+	cr.SetFinalizers(finalizers)
+
+	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
+		err = r.Client.Update(ctx, cr)
+		if err != nil {
+			l.Error(err, "Client.Update failed")
+		}
+		return err
+	})
+}
+
+func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	l := log.FromContext(ctx)
+
+	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
+	if err != nil {
+		return errors.Wrap(err, "get pods")
+	}
+	l.Info("Deleting MySQL pods", "pods", len(pods))
+
+	// the last pod left - we can leave it for the stateful set
+	if len(pods) <= 1 {
+		time.Sleep(time.Second * 3)
+		l.Info("Cluster deleted")
+		return nil
+	}
+
+	var firstPod corev1.Pod
+	for _, p := range pods {
+		if p.GetName() == mysql.PodName(cr, 0) {
+			firstPod = p
+			break
+		}
+	}
+
+	if cr.Spec.MySQL.IsAsync() {
+		orcHost := orchestrator.APIHost(cr)
+
+		l.Info("Ensuring oldest mysql node is the primary")
+		err := orchestrator.EnsureNodeIsPrimary(ctx, orcHost, cr.ClusterHint(), firstPod.GetName(), mysql.DefaultPort)
+		if err != nil {
+			return errors.Wrap(err, "ensure node is primary")
+		}
+	} else {
+		operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+		if err != nil {
+			return errors.Wrap(err, "get operator password")
+		}
+
+		firstPodFQDN := fmt.Sprintf("%s.%s.%s", firstPod.Name, mysql.ServiceName(cr), cr.Namespace)
+		firstPodUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodFQDN)
+
+		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, firstPodFQDN, mysql.DefaultAdminPort)
+		if err != nil {
+			return errors.Wrapf(err, "connect to %s", firstPod.Name)
+		}
+		defer db.Close()
+
+		mysh := mysqlsh.New(k8sexec.New(), firstPodUri)
+
+		l.Info("Removing instances from GR")
+		for _, pod := range pods {
+			if pod.Name == firstPod.Name {
+				continue
+			}
+
+			podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
+
+			state, err := db.GetMemberState(podFQDN)
+			if err != nil {
+				return errors.Wrapf(err, "get member state of %s from performance_schema", pod.Name)
+			}
+			l.Info(fmt.Sprintf("Member %s state: %s", pod.Name, state))
+
+			if state == replicator.MemberStateOffline {
+				l.Info(fmt.Sprintf("Pod %s not part of GR or already removed", pod.Name))
+				continue
+			}
+
+			podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
+
+			l.Info(fmt.Sprintf("Removing %s from GR", pod.Name))
+			err = mysh.RemoveInstance(ctx, cr.InnoDBClusterName(), podUri)
+			if err != nil {
+				return errors.Wrapf(err, "remove instance %s", pod.Name)
+			}
+			l.Info(fmt.Sprintf("Pod %s removed from GR", pod.Name))
+		}
+	}
+
+	sts := &appsv1.StatefulSet{}
+	if err := r.Client.Get(ctx, mysql.NamespacedName(cr), sts); err != nil {
+		return errors.Wrap(err, "get MySQL statefulset")
+	}
+	l.V(1).Info("Got statefulset", "sts", sts, "spec", sts.Spec)
+
+	if sts.Spec.Replicas == nil || *sts.Spec.Replicas != 1 {
+		dscaleTo := int32(1)
+		sts.Spec.Replicas = &dscaleTo
+		err = r.Client.Update(ctx, sts)
+		if err != nil {
+			return errors.Wrap(err, "downscale StatefulSet")
+		}
+		l.Info("sts replicaset downscaled", "sts", sts)
+	}
+
+	return errors.New("waiting for pods to be deleted")
+}
+
 func (r *PerconaServerMySQLReconciler) doReconcile(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
+	if err := r.reconcileVersions(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile versions")
+	}
 	if err := r.ensureUserSecrets(ctx, cr); err != nil {
 		return errors.Wrap(err, "users secret")
 	}
@@ -147,6 +283,75 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 		return errors.Wrap(err, "cleanup outdated")
 	}
 
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if cr.Spec.UpgradeOptions.Apply == "" ||
+		cr.Spec.UpgradeOptions.Apply == apiv1alpha1.UpgradeStrategyDisabled ||
+		cr.Spec.UpgradeOptions.Apply == apiv1alpha1.UpgradeStrategyNever {
+		return nil
+	}
+
+	l := log.FromContext(ctx).WithName("reconcileVersions")
+
+	version, err := vs.GetVersion(ctx, cr, r.ServerVersion)
+	if err != nil {
+		return errors.Wrap(err, "get exact version")
+	}
+
+	patch := client.MergeFrom(cr.DeepCopy())
+	if cr.Spec.MySQL.Image != version.PSImage {
+		if cr.Status.MySQL.Version == "" {
+			l.Info("set MySQL version to " + version.PSVersion)
+		} else {
+			l.Info("update MySQL version", "old version", cr.Status.MySQL.Version, "new version", version.PSVersion)
+		}
+		cr.Spec.MySQL.Image = version.PSImage
+	}
+	if cr.Spec.Backup.Image != version.BackupImage {
+		if cr.Status.BackupVersion == "" {
+			l.Info("set backup version to " + version.BackupVersion)
+		} else {
+			l.Info("update backup version", "old version", cr.Status.BackupVersion, "new version", version.BackupVersion)
+		}
+		cr.Spec.Backup.Image = version.BackupImage
+	}
+	if cr.Spec.Orchestrator.Image != version.OrchestratorImage {
+		if cr.Status.Orchestrator.Version == "" {
+			l.Info("set orchestrator version to " + version.OrchestratorVersion)
+		} else {
+			l.Info("update orchestrator version", "old version", cr.Status.Orchestrator.Version, "new version", version.OrchestratorVersion)
+		}
+		cr.Spec.Orchestrator.Image = version.OrchestratorImage
+	}
+	if cr.Spec.Router.Image != version.RouterImage {
+		if cr.Status.Router.Version == "" {
+			l.Info("set MySQL router version to " + version.RouterVersion)
+		} else {
+			l.Info("update MySQL router version", "old version", cr.Status.Router.Version, "new version", version.RouterVersion)
+		}
+		cr.Spec.Router.Image = version.RouterImage
+	}
+	if cr.Spec.PMM.Image != version.PMMImage {
+		if cr.Status.PMMVersion == "" {
+			l.Info("set PMM version to " + version.PMMVersion)
+		} else {
+			l.Info("update PMM version", "old version", cr.Status.PMMVersion, "new version", version.PMMVersion)
+		}
+		cr.Spec.PMM.Image = version.PMMImage
+	}
+
+	err = r.Patch(ctx, cr.DeepCopy(), patch)
+	if err != nil {
+		return errors.Wrap(err, "failed to update CR")
+	}
+
+	cr.Status.MySQL.Version = version.PSVersion
+	cr.Status.BackupVersion = version.BackupVersion
+	cr.Status.Orchestrator.Version = version.OrchestratorVersion
+	cr.Status.Router.Version = version.RouterVersion
+	cr.Status.PMMVersion = version.PMMVersion
 	return nil
 }
 
@@ -781,6 +986,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	err := r.Client.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: mysql.PodName(cr, 0)}, firstPod)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
+			l.Info("First pod not found")
 			return nil
 		}
 
@@ -795,11 +1001,6 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 	if err != nil {
 		return errors.Wrap(err, "get operator password")
-	}
-
-	replicaPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserReplication)
-	if err != nil {
-		return errors.Wrap(err, "get replication password")
 	}
 
 	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, mysql.FQDN(cr, 0), mysql.DefaultAdminPort)
@@ -822,27 +1023,20 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	firstPodFQDN := fmt.Sprintf("%s.%s.%s", firstPod.Name, mysql.ServiceName(cr), cr.Namespace)
 	firstPodUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodFQDN)
 
-	mState, err := db.GetMemberState(firstPodFQDN)
-	if err != nil {
-		return errors.Wrapf(err, "get member state of %s from performance_schema", firstPod.Name)
-	}
-
-	if mState == replicator.MemberStateOffline {
-		err := db.StartGroupReplication(replicaPass)
-		if err != nil && !errors.Is(err, replicator.ErrGroupReplicationNotReady) {
-			return errors.Wrapf(err, "start group replication on %s", firstPod.Name)
-		}
-
-		if errors.Is(err, replicator.ErrGroupReplicationNotReady) {
-			l.V(1).Info("Group replication is not configured yet", "pod", firstPod.Name)
-		} else {
-			l.V(1).Info("Started group replication", "pod", firstPod.Name)
-		}
-	}
-
 	mysh := mysqlsh.New(k8sexec.New(), firstPodUri)
 
-	clusterExists := mysh.DoesClusterExist(ctx, cr.InnoDBClusterName())
+	clusterExists, err := mysh.DoesClusterExist(ctx, cr.InnoDBClusterName())
+	if err != nil {
+		if errors.Is(err, mysqlsh.ErrMetadataExistsButGRNotActive) {
+			l.Info("Rebooting cluster from complete outage")
+			if err := mysh.RebootClusterFromCompleteOutage(ctx, cr.InnoDBClusterName(), []string{firstPodFQDN}); err != nil {
+				return err
+			}
+			l.Info("Successfully rebooted cluster")
+			return nil
+		}
+		return errors.Wrapf(err, "check if InnoDB Cluster %s exists", cr.InnoDBClusterName())
+	}
 	state := innodbcluster.MemberStateOffline
 	// it's not possible to run Cluster.status() on a standalone MySQL node
 	if clusterExists {
@@ -853,26 +1047,30 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		}
 	}
 
-	l.V(1).Info("Member state", "pod", firstPod.Name, "state", state)
+	l.V(1).Info(fmt.Sprintf("First pod state: %s", state))
 	if state == innodbcluster.MemberStateOffline {
+		l.Info("Configuring first instace", "instace", firstPodFQDN)
 		if err := mysh.ConfigureInstance(ctx, firstPodUri); err != nil {
 			return err
 		}
-		l.Info("Configured instance", "instance", firstPod.Name)
+		l.Info("Configured first instance", "instance", firstPodFQDN)
 	}
 
 	if !clusterExists {
-		if err := mysh.CreateCluster(ctx, cr.InnoDBClusterName(), firstPod.Status.PodIP); err != nil {
-			return err
+		l.Info("Creating InnoDB cluster")
+		err := mysh.CreateCluster(ctx, cr.InnoDBClusterName(), firstPod.Status.PodIP)
+		if err != nil {
+			return errors.Wrapf(err, "create cluster %s", cr.InnoDBClusterName())
 		}
 		l.Info("Created InnoDB Cluster", "cluster", cr.InnoDBClusterName())
 	}
 
 	if state == innodbcluster.MemberStateMissing {
+		l.Info("First pod rejoining the cluster")
 		if err := mysh.RejoinInstance(ctx, cr.InnoDBClusterName(), firstPodFQDN); err != nil {
 			return errors.Wrapf(err, "rejoin instance %s", firstPod.Name)
 		}
-		l.Info("Instance rejoined", "pod", firstPod.Name)
+		l.Info("First pod rejoined the cluster", "pod", firstPod.Name)
 	}
 
 	if state != innodbcluster.MemberStateOnline {
@@ -889,6 +1087,12 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		if pod.Name == firstPod.Name {
 			continue
 		}
+
+		if !clusterExists {
+			l.V(1).Info("InnoDB cluster does not exist, waitin for it to be created.")
+			return nil
+		}
+
 		if !k8s.IsPodReady(pod) {
 			l.V(1).Info("Waiting for pod to be ready", "pod", pod.Name)
 			continue
@@ -909,24 +1113,6 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 			l.Info("Replication threads are running. Stopping them before starting group replication", "pod", pod.Name)
 			if err := db.StopReplication(); err != nil {
 				return err
-			}
-		}
-
-		mState, err := db.GetMemberState(podFQDN)
-		if err != nil {
-			return errors.Wrapf(err, "get member state of %s from performance_schema", pod.Name)
-		}
-
-		if mState == replicator.MemberStateOffline {
-			err := db.StartGroupReplication(replicaPass)
-			if err != nil && !errors.Is(err, replicator.ErrGroupReplicationNotReady) {
-				return errors.Wrapf(err, "start group replication on %s", firstPod.Name)
-			}
-
-			if errors.Is(err, replicator.ErrGroupReplicationNotReady) {
-				l.V(1).Info("Group replication is not configured yet", "pod", pod.Name)
-			} else {
-				l.V(1).Info("Started group replication", "pod", pod.Name)
 			}
 		}
 
@@ -1136,7 +1322,8 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 
 	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
 	mysh := mysqlsh.New(k8sexec.New(), fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri))
-	if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
+	clusterExists, err := mysh.DoesClusterExist(ctx, cr.InnoDBClusterName())
+	if !clusterExists || err != nil {
 		l.V(1).Info("Waiting for InnoDB Cluster", "cluster", cr.Name)
 		return nil
 	}
@@ -1175,7 +1362,8 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 
 	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
 	mysh := mysqlsh.New(k8sexec.New(), fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri))
-	if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
+	clusterExists, err := mysh.DoesClusterExist(ctx, cr.InnoDBClusterName())
+	if !clusterExists || err != nil {
 		return false, nil
 	}
 
@@ -1190,7 +1378,7 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("reconcileCRStatus")
 
-	mysqlStatus, err := appStatus(ctx, r.Client, cr.MySQLSpec().Size, mysql.MatchLabels(cr))
+	mysqlStatus, err := appStatus(ctx, r.Client, cr.MySQLSpec().Size, mysql.MatchLabels(cr), cr.Status.MySQL.Version)
 	if err != nil {
 		return errors.Wrap(err, "get MySQL status")
 	}
@@ -1208,7 +1396,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	orcStatus := apiv1alpha1.StatefulAppStatus{}
 	if cr.Spec.MySQL.IsAsync() {
-		orcStatus, err = appStatus(ctx, r.Client, cr.OrchestratorSpec().Size, orchestrator.MatchLabels(cr))
+		orcStatus, err = appStatus(ctx, r.Client, cr.OrchestratorSpec().Size, orchestrator.MatchLabels(cr), cr.Status.Orchestrator.Version)
 		if err != nil {
 			return errors.Wrap(err, "get Orchestrator status")
 		}
@@ -1217,7 +1405,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	routerStatus := apiv1alpha1.StatefulAppStatus{}
 	if cr.Spec.MySQL.IsGR() {
-		routerStatus, err = appStatus(ctx, r.Client, cr.Spec.Router.Size, router.MatchLabels(cr))
+		routerStatus, err = appStatus(ctx, r.Client, cr.Spec.Router.Size, router.MatchLabels(cr), cr.Status.Router.Version)
 		if err != nil {
 			return errors.Wrap(err, "get Router status")
 		}
@@ -1250,6 +1438,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		"orchestrator", cr.Status.Orchestrator,
 		"router", cr.Status.Router,
 		"host", cr.Status.Host,
+		"loadbalancers", loadBalancersReady,
 		"state", cr.Status.State,
 	)
 
@@ -1312,6 +1501,7 @@ func appStatus(
 	cl client.Reader,
 	size int32,
 	labels map[string]string,
+	version string,
 ) (apiv1alpha1.StatefulAppStatus, error) {
 	status := apiv1alpha1.StatefulAppStatus{
 		Size:  size,
@@ -1332,6 +1522,8 @@ func appStatus(
 	if status.Ready == status.Size {
 		status.State = apiv1alpha1.StateReady
 	}
+
+	status.Version = version
 
 	return status, nil
 }
