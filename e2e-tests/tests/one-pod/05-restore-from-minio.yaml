@@ -1,0 +1,7 @@
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: one-pod-restore-minio
+spec:
+  clusterName: one-pod
+  backupName: one-pod-minio
