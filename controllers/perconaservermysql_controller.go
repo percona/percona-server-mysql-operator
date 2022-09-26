@@ -1281,14 +1281,14 @@ func reconcileReplicationSemiSync(
 	defer db.Close()
 
 	if err := db.SetSemiSyncSource(cr.MySQLSpec().SizeSemiSync.IntValue() > 0); err != nil {
-		return errors.Wrapf(err, "set %s source on %#v", cr.MySQLSpec().ClusterType, primaryHost)
+		return errors.Wrapf(err, "set semi-sync source on %s", primaryHost)
 	}
-	l.Info(fmt.Sprintf("set %s source on %v", cr.MySQLSpec().ClusterType, primaryHost))
+	l.V(1).Info(fmt.Sprintf("set semi-sync source on %s", primaryHost))
 
 	if err := db.SetSemiSyncSize(cr.MySQLSpec().SizeSemiSync.IntValue()); err != nil {
-		return errors.Wrapf(err, "set %s size on %v", cr.MySQLSpec().ClusterType, primaryHost)
+		return errors.Wrapf(err, "set semi-sync size on %s", primaryHost)
 	}
-	l.Info(fmt.Sprintf("set %s size on %v", cr.MySQLSpec().ClusterType, primaryHost))
+	l.V(1).Info(fmt.Sprintf("set semi-sync size on %s", primaryHost))
 
 	return nil
 }
