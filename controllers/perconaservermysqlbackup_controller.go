@@ -41,7 +41,7 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
-	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql/topology"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
@@ -309,26 +309,29 @@ func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creatio
 }
 
 func (r *PerconaServerMySQLBackupReconciler) getBackupSources(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) ([]string, error) {
-	l := log.FromContext(ctx).WithName("getBackupSource")
+	l := log.FromContext(ctx).WithName("getBackupSources")
 
-	orcHost := orchestrator.APIHost(cluster)
-	primary, err := orchestrator.ClusterPrimary(ctx, orcHost, cluster.ClusterHint())
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cluster, apiv1alpha1.UserOperator)
 	if err != nil {
-		return nil, errors.Wrap(err, "get primary")
+		return nil, errors.Wrap(err, "get operator password")
 	}
 
-	var src []string
-	if len(primary.Replicas) < 1 {
-		src = append(src, primary.Key.Hostname)
-		l.Info("no replicas found, using primary as the backup source", "source", src)
+	top, err := topology.Get(ctx, cluster, operatorPass)
+	if err != nil {
+		return nil, errors.Wrap(err, "get topology")
+	}
+
+	var sources []string
+	if len(top.Replicas) < 1 {
+		sources = append(sources, top.Primary)
+		l.Info("no replicas found, using primary as the backup source", "primary", top.Primary)
 	} else {
-		for _, replica := range primary.Replicas {
-			src = append(src, replica.Hostname)
+		for _, replica := range top.Replicas {
+			sources = append(sources, replica)
 		}
-		l.Info("using replica as the backup source", "source", src)
 	}
 
-	return src, nil
+	return sources, nil
 }
 
 func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context,

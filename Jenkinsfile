@@ -338,6 +338,7 @@ pipeline {
                         unstash "sourceFILES"
                         CreateCluster('cluster2')
                         runTest('demand-backup', 'cluster2')
+                        runTest('gr-demand-backup', 'cluster2')
                         runTest('scaling', 'cluster2')
                         runTest('users', 'cluster2')
                         ShutdownCluster('cluster2')

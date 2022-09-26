@@ -1338,17 +1338,19 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		return nil
 	}
 
-	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
-	if err != nil {
-		return errors.Wrap(err, "get operator password")
-	}
+	if cr.Spec.Router.Size > 0 {
+		operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+		if err != nil {
+			return errors.Wrap(err, "get operator password")
+		}
 
-	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
-	mysh := mysqlsh.New(k8sexec.New(), fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri))
-	clusterExists, err := mysh.DoesClusterExist(ctx, cr.InnoDBClusterName())
-	if !clusterExists || err != nil {
-		l.V(1).Info("Waiting for InnoDB Cluster", "cluster", cr.Name)
-		return nil
+		firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
+		mysh := mysqlsh.New(k8sexec.New(), fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri))
+		clusterExists, err := mysh.DoesClusterExist(ctx, cr.InnoDBClusterName())
+		if !clusterExists || err != nil {
+			l.V(1).Info("Waiting for InnoDB Cluster", "cluster", cr.Name)
+			return nil
+		}
 	}
 
 	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Router.PodSpec)
