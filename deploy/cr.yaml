@@ -22,10 +22,6 @@ spec:
 #      name: special-selfsigned-issuer
 #      kind: ClusterIssuer
 #      group: cert-manager.io
-  haproxy:
-    enabled: true
-    image: perconalab/percona-xtradb-cluster-operator:main-haproxy
-    imagePullPolicy: Always
   mysql:
     clusterType: async
     image: percona/percona-server:8.0.29
