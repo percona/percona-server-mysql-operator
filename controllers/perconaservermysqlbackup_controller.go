@@ -157,7 +157,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	if k8serrors.IsNotFound(err) {
 		l.Info("Creating backup job", "jobName", nn.Name)
 
-		initImage, err := k8s.InitImage(ctx, r.Client)
+		initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
 		if err != nil {
 			return rr, errors.Wrap(err, "get operator image")
 		}
