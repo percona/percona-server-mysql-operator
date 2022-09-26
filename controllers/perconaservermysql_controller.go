@@ -923,8 +923,20 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	l := log.FromContext(ctx).WithName("reconcileHAProxy")
+
 	if !cr.HAProxyEnabled() || cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR {
 		return nil
+	}
+
+	nn := types.NamespacedName{Namespace: cr.Namespace, Name: mysql.PodName(cr, 0)}
+	firstMySQLPodReady, err := k8s.IsPodWithNameReady(ctx, r.Client, nn)
+	if err != nil {
+		return errors.Wrapf(err, "check if pod %s ready", nn.String())
+	}
+
+	if !firstMySQLPodReady {
+		l.V(1).Info("Waiting for pod to be ready", "pod", nn.Name)
 	}
 
 	initImage, err := k8s.InitImage(ctx, r.Client)
