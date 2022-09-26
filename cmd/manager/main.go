@@ -27,6 +27,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	cmscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
 	"github.com/go-logr/logr"
 	uzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -103,6 +104,11 @@ func main() {
 	serverVersion, err := platform.GetServerVersion()
 	if err != nil {
 		setupLog.Error(err, "unable to get server version")
+		os.Exit(1)
+	}
+	// Setup Scheme for cert-manager resources
+	if err := cmscheme.AddToScheme(mgr.GetScheme()); err != nil {
+		setupLog.Error(err, "unable to add cert-manager scheme")
 		os.Exit(1)
 	}
 

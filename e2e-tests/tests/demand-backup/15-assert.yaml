@@ -6,5 +6,7 @@ kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1alpha1
 metadata:
   name: demand-backup-azure
+  finalizers:
+    - delete-backup
 status:
   state: Succeeded

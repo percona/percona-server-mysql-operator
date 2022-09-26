@@ -40,12 +40,12 @@ func checkReadiness() error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	operatorPass, err := getSecret(string(apiv1alpha1.UserOperator))
+	monitorPass, err := getSecret(string(apiv1alpha1.UserMonitor))
 	if err != nil {
-		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
+		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, podIP, mysql.DefaultAdminPort)
+	db, err := replicator.NewReplicator(apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
@@ -75,12 +75,12 @@ func checkLiveness() error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	operatorPass, err := getSecret(string(apiv1alpha1.UserOperator))
+	monitorPass, err := getSecret(string(apiv1alpha1.UserMonitor))
 	if err != nil {
-		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
+		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := replicator.NewReplicator("operator", operatorPass, podIP, mysql.DefaultAdminPort)
+	db, err := replicator.NewReplicator(apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
@@ -95,12 +95,12 @@ func checkReplication() error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	operatorPass, err := getSecret(string(apiv1alpha1.UserOperator))
+	monitorPass, err := getSecret(string(apiv1alpha1.UserMonitor))
 	if err != nil {
-		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
+		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := replicator.NewReplicator("operator", operatorPass, podIP, mysql.DefaultAdminPort)
+	db, err := replicator.NewReplicator(apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
