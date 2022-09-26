@@ -45,6 +45,7 @@ type PerconaServerMySQLSpec struct {
 	SSLSecretName         string           `json:"sslSecretName,omitempty"`
 	SSLInternalSecretName string           `json:"sslInternalSecretName,omitempty"`
 	AllowUnsafeConfig     bool             `json:"allowUnsafeConfigurations,omitempty"`
+	InitImage             string           `json:"initImage,omitempty"`
 	MySQL                 MySQLSpec        `json:"mysql,omitempty"`
 	Orchestrator          OrchestratorSpec `json:"orchestrator,omitempty"`
 	PMM                   *PMMSpec         `json:"pmm,omitempty"`
@@ -132,6 +133,7 @@ type PodSpec struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	VolumeSpec  *VolumeSpec       `json:"volumeSpec,omitempty"`
+	InitImage   string            `json:"initImage,omitempty"`
 
 	Affinity                      *PodAffinity        `json:"affinity,omitempty"`
 	NodeSelector                  map[string]string   `json:"nodeSelector,omitempty"`
@@ -145,6 +147,10 @@ type PodSpec struct {
 	ServiceAccountName string                     `json:"serviceAccountName,omitempty"`
 
 	ContainerSpec `json:",inline"`
+}
+
+func (s *PodSpec) GetInitImage() string {
+	return s.InitImage
 }
 
 type PMMSpec struct {
@@ -161,12 +167,17 @@ type PMMSpec struct {
 type BackupSpec struct {
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	Image                    string                        `json:"image,omitempty"`
+	InitImage                string                        `json:"initImage,omitempty"`
 	ImagePullSecrets         []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
 	ServiceAccountName       string                        `json:"serviceAccountName,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext       `json:"containerSecurityContext,omitempty"`
 	Resources                corev1.ResourceRequirements   `json:"resources,omitempty"`
 	Storages                 map[string]*BackupStorageSpec `json:"storages,omitempty"`
+}
+
+func (s *BackupSpec) GetInitImage() string {
+	return s.InitImage
 }
 
 type BackupStorageType string
@@ -490,6 +501,11 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 
 	return nil
 }
+
+const (
+	BinVolumeName = "bin"
+	BinVolumePath = "/opt/percona"
+)
 
 func reconcileVol(v *VolumeSpec) (*VolumeSpec, error) {
 	if v == nil || v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil {
