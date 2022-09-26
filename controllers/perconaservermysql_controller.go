@@ -45,6 +45,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -276,6 +277,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	}
 	if err := r.reconcileReplication(ctx, cr); err != nil {
 		return errors.Wrap(err, "replication")
+	}
+	if err := r.reconcileHAProxy(ctx, cr); err != nil {
+		return errors.Wrap(err, "HAProxy")
 	}
 	if err := r.reconcileMySQLRouter(ctx, cr); err != nil {
 		return errors.Wrap(err, "MySQL router")
@@ -946,6 +950,36 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context
 	return nil
 }
 
+func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	l := log.FromContext(ctx).WithName("reconcileHAProxy")
+
+	if !cr.HAProxyEnabled() || cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR {
+		return nil
+	}
+
+	nn := types.NamespacedName{Namespace: cr.Namespace, Name: mysql.PodName(cr, 0)}
+	firstMySQLPodReady, err := k8s.IsPodWithNameReady(ctx, r.Client, nn)
+	if err != nil {
+		return errors.Wrapf(err, "check if pod %s ready", nn.String())
+	}
+
+	if !firstMySQLPodReady {
+		l.V(1).Info("Waiting for pod to be ready", "pod", nn.Name)
+		return nil
+	}
+
+	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.HAProxy.PodSpec)
+	if err != nil {
+		return errors.Wrap(err, "get init image")
+	}
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, haproxy.StatefulSet(cr, initImage), r.Scheme); err != nil {
+		return errors.Wrap(err, "reconcile StatefulSet")
+	}
+
+	return nil
+}
+
 func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	if err := r.reconcileMySQLServices(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile MySQL services")
@@ -954,6 +988,11 @@ func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr
 	if cr.Spec.MySQL.IsAsync() {
 		if err := r.reconcileOrchestratorServices(ctx, cr); err != nil {
 			return errors.Wrap(err, "reconcile Orchestrator services")
+		}
+		if cr.HAProxyEnabled() {
+			if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, haproxy.Service(cr), r.Scheme); err != nil {
+				return errors.Wrap(err, "reconcile HAProxy svc")
+			}
 		}
 	}
 
@@ -992,7 +1031,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return errors.Wrap(err, "reconcile primary pod")
 	}
 	if err := reconcileReplicationSemiSync(ctx, r.Client, cr); err != nil {
-		return errors.Wrap(err, "reconcile semi-sync")
+		return errors.Wrapf(err, "reconcile %s", cr.MySQLSpec().ClusterType)
 	}
 
 	return nil
@@ -1437,9 +1476,23 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 	cr.Status.Router = routerStatus
 
+	haproxyStatus := apiv1alpha1.StatefulAppStatus{}
+	if cr.HAProxyEnabled() && cr.Spec.MySQL.IsAsync() {
+		haproxyStatus, err = appStatus(ctx, r.Client, cr.Spec.HAProxy.Size, haproxy.MatchLabels(cr), cr.Status.HAProxy.Version)
+		if err != nil {
+			return errors.Wrap(err, "get HAProxy status")
+		}
+	}
+	cr.Status.HAProxy = haproxyStatus
+
 	cr.Status.State = apiv1alpha1.StateInitializing
-	if cr.Spec.MySQL.IsAsync() && cr.Status.MySQL.State == cr.Status.Orchestrator.State {
-		cr.Status.State = cr.Status.MySQL.State
+	if cr.Spec.MySQL.IsAsync() {
+		if cr.Status.MySQL.State == cr.Status.Orchestrator.State {
+			cr.Status.State = cr.Status.MySQL.State
+		}
+		if cr.HAProxyEnabled() && cr.Status.HAProxy.State != apiv1alpha1.StateReady {
+			cr.Status.State = cr.Status.HAProxy.State
+		}
 	} else if cr.Spec.MySQL.IsGR() && cr.Status.MySQL.State == cr.Status.Router.State {
 		cr.Status.State = cr.Status.MySQL.State
 	}
@@ -1498,9 +1551,16 @@ func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServe
 	}
 
 	if cr.Spec.MySQL.IsAsync() {
-		serviceName = mysql.PrimaryServiceName(cr)
-		if cr.Spec.MySQL.PrimaryServiceType != corev1.ServiceTypeLoadBalancer {
-			return serviceName + "." + cr.GetNamespace(), nil
+		if cr.HAProxyEnabled() {
+			serviceName = haproxy.ServiceName(cr)
+			if cr.Spec.HAProxy.Expose.Type != corev1.ServiceTypeLoadBalancer {
+				return serviceName + "." + cr.GetNamespace(), nil
+			}
+		} else {
+			serviceName = mysql.PrimaryServiceName(cr)
+			if cr.Spec.MySQL.PrimaryServiceType != corev1.ServiceTypeLoadBalancer {
+				return serviceName + "." + cr.GetNamespace(), nil
+			}
 		}
 	}
 

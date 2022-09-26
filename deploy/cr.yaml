@@ -92,6 +92,38 @@ spec:
 #          requests:
 #            storage: 1G
 
+  haproxy:
+    enabled: true
+
+    size: 3
+
+    image: perconalab/percona-xtradb-cluster-operator:main-haproxy
+    imagePullPolicy: Always
+
+    resources:
+      requests:
+        memory: 1G
+        cpu: 600m
+#      limits:
+#        memory: 1G
+#        cpu: 700m
+
+    affinity:
+      antiAffinityTopologyKey: "kubernetes.io/hostname"
+#      advanced:
+#        nodeAffinity:
+#          requiredDuringSchedulingIgnoredDuringExecution:
+#            nodeSelectorTerms:
+#            - matchExpressions:
+#              - key: kubernetes.io/e2e-az-name
+#                operator: In
+#                values:
+#                - e2e-az1
+#                - e2e-az2
+
+#    expose:
+#      type: ClusterIP
+
   router:
     image: perconalab/percona-server-mysql-operator:main-router
     imagePullPolicy: Always

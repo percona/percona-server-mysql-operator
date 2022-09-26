@@ -53,6 +53,20 @@ func AddLabel(obj client.Object, key, value string) {
 	obj.SetLabels(labels)
 }
 
+func IsPodWithNameReady(ctx context.Context, cl client.Client, nn types.NamespacedName) (bool, error) {
+	pod := &corev1.Pod{}
+
+	if err := cl.Get(ctx, nn, pod); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	return IsPodReady(*pod), nil
+}
+
 func IsPodReady(pod corev1.Pod) bool {
 	for _, cond := range pod.Status.Conditions {
 		if cond.Type == corev1.ContainersReady && cond.Status == corev1.ConditionTrue {
