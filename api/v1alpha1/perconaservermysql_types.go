@@ -314,6 +314,7 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	// Important: Run "make" to regenerate code after modifying this file
 	MySQL         StatefulAppStatus `json:"mysql,omitempty"`
 	Orchestrator  StatefulAppStatus `json:"orchestrator,omitempty"`
+	HAProxy       StatefulAppStatus `json:"haproxy,omitempty"`
 	Router        StatefulAppStatus `json:"router,omitempty"`
 	State         StatefulAppState  `json:"state,omitempty"`
 	BackupVersion string            `json:"backupVersion,omitempty"`
@@ -330,6 +331,7 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
 // +kubebuilder:printcolumn:name="MySQL",type=string,JSONPath=".status.mysql.ready"
 // +kubebuilder:printcolumn:name="Orchestrator",type=string,JSONPath=".status.orchestrator.ready"
+// +kubebuilder:printcolumn:name="HAProxy",type=string,JSONPath=".status.haproxy.ready"
 // +kubebuilder:printcolumn:name="Router",type=string,JSONPath=".status.router.ready"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:resource:scope=Namespaced
@@ -673,6 +675,10 @@ func (cr *PerconaServerMySQL) InternalSecretName() string {
 
 func (cr *PerconaServerMySQL) PMMEnabled() bool {
 	return cr.Spec.PMM != nil && cr.Spec.PMM.Enabled
+}
+
+func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
+	return cr.Spec.HAProxy != nil && cr.Spec.HAProxy.Enabled
 }
 
 var NonAlphaNumeric = regexp.MustCompile("[^a-zA-Z0-9_]+")

@@ -1428,8 +1428,8 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	cr.Status.Router = routerStatus
 
 	haproxyStatus := apiv1alpha1.StatefulAppStatus{}
-	if cr.Spec.HAProxy.Enabled && cr.Spec.MySQL.IsAsync() {
-		haproxyStatus, err = appStatus(ctx, r.Client, cr.Spec.HAProxy.Size, haproxy.MatchLabels(cr))
+	if cr.HAProxyEnabled() && cr.Spec.MySQL.IsAsync() {
+		haproxyStatus, err = appStatus(ctx, r.Client, cr.Spec.HAProxy.Size, haproxy.MatchLabels(cr), cr.Status.HAProxy.Version)
 		if err != nil {
 			return errors.Wrap(err, "get HAProxy status")
 		}
@@ -1441,7 +1441,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		if cr.Status.MySQL.State == cr.Status.Orchestrator.State {
 			cr.Status.State = cr.Status.MySQL.State
 		}
-		if cr.Spec.HAProxy.Enabled && cr.Status.HAProxy.State != apiv1alpha1.StateReady {
+		if cr.HAProxyEnabled() && cr.Status.HAProxy.State != apiv1alpha1.StateReady {
 			cr.Status.State = cr.Status.HAProxy.State
 		}
 	} else if cr.Spec.MySQL.IsGR() && cr.Status.MySQL.State == cr.Status.Router.State {
@@ -1502,7 +1502,7 @@ func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServe
 	}
 
 	if cr.Spec.MySQL.IsAsync() {
-		if cr.Spec.HAProxy.Enabled {
+		if cr.HAProxyEnabled() {
 			serviceName = haproxy.ServiceName(cr)
 			if cr.Spec.HAProxy.Expose.Type != corev1.ServiceTypeLoadBalancer {
 				return serviceName + "." + cr.GetNamespace(), nil

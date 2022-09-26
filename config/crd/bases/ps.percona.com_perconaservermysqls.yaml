@@ -33,6 +33,9 @@ spec:
     - jsonPath: .status.orchestrator.ready
       name: Orchestrator
       type: string
+    - jsonPath: .status.haproxy.ready
+      name: HAProxy
+      type: string
     - jsonPath: .status.router.ready
       name: Router
       type: string
@@ -6322,7 +6325,8 @@ spec:
             type: object
           status:
             properties:
-<<<<<<< HEAD
+              backupVersion:
+                type: string
               haproxy:
                 properties:
                   ready:
@@ -6333,11 +6337,9 @@ spec:
                     type: integer
                   state:
                     type: string
+                  version:
+                    type: string
                 type: object
-=======
-              backupVersion:
-                type: string
->>>>>>> main
               host:
                 type: string
               mysql:
