@@ -11,6 +11,3 @@ commands:
       RAM_SIZE=4294967296 # 4Gi
 
       check_auto_tuning ${RAM_SIZE}
-
-
-

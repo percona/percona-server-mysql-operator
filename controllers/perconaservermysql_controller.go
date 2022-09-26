@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -643,7 +644,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 		return errors.Wrap(err, "reconcile MySQL auto-config")
 	}
 
-	initImage, err := k8s.InitImage(ctx, r.Client)
+	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.MySQL.PodSpec)
 	if err != nil {
 		return errors.Wrap(err, "get init image")
 	}
@@ -804,6 +805,26 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfiguration(
 		return "", nil
 	}
 
+	var memory *resource.Quantity
+	if res := cr.Spec.MySQL.Resources; res.Size() > 0 {
+		if _, ok := res.Requests[corev1.ResourceMemory]; ok {
+			memory = res.Requests.Memory()
+		}
+		if _, ok := res.Limits[corev1.ResourceMemory]; ok {
+			memory = res.Limits.Memory()
+		}
+	}
+
+	if memory != nil {
+		var err error
+		cr.Spec.MySQL.Configuration, err = mysql.ExecuteConfigurationTemplate(cr.Spec.MySQL.Configuration, memory)
+		if err != nil {
+			return "", errors.Wrap(err, "execute configuration template")
+		}
+	} else if strings.Contains(cr.Spec.MySQL.Configuration, "{{") {
+		return "", errors.New("mysql resources.limits[memory] or resources.requests[memory] should be specified for template usage in configuration")
+	}
+
 	cm := k8s.ConfigMap(cmName, cr.Namespace, mysql.CustomConfigKey, cr.Spec.MySQL.Configuration)
 	if !reflect.DeepEqual(currCm.Data, cm.Data) {
 		if err := k8s.EnsureObject(ctx, r.Client, cr, cm, r.Scheme); err != nil {
@@ -866,7 +887,12 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return errors.Wrap(err, "reconcile ConfigMap")
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.StatefulSet(cr), r.Scheme); err != nil {
+	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Orchestrator.PodSpec)
+	if err != nil {
+		return errors.Wrap(err, "get init image")
+	}
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.StatefulSet(cr, initImage), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile StatefulSet")
 	}
 
@@ -950,7 +976,8 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 	}
 
 	sts := &appsv1.StatefulSet{}
-	if err := r.Get(ctx, client.ObjectKeyFromObject(orchestrator.StatefulSet(cr)), sts); err != nil {
+	// no need to set init image since we're just getting obj from API
+	if err := r.Get(ctx, client.ObjectKeyFromObject(orchestrator.StatefulSet(cr, "")), sts); err != nil {
 		return client.IgnoreNotFound(err)
 	}
 
@@ -1322,7 +1349,12 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		return nil
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Deployment(cr), r.Scheme); err != nil {
+	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Router.PodSpec)
+	if err != nil {
+		return errors.Wrap(err, "get init image")
+	}
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Deployment(cr, initImage), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile Deployment")
 	}
 
