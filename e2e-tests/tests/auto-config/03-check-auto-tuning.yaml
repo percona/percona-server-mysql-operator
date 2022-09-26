@@ -11,6 +11,3 @@ commands:
       RAM_SIZE=1073741824 # 1024Mi
 
       check_auto_tuning ${RAM_SIZE}
-
-
-

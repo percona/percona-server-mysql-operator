@@ -157,7 +157,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	if k8serrors.IsNotFound(err) {
 		l.Info("Creating backup job", "jobName", nn.Name)
 
-		initImage, err := k8s.InitImage(ctx, r.Client)
+		initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
 		if err != nil {
 			return rr, errors.Wrap(err, "get operator image")
 		}
@@ -234,12 +234,12 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		status.SSLSecretName = cluster.Spec.SSLSecretName
 		status.Storage = storage
 
-		src, err := r.getBackupSource(ctx, cluster)
+		src, err := r.getBackupSources(ctx, cluster)
 		if err != nil {
 			return rr, errors.Wrap(err, "get backup source node")
 		}
 
-		if err := xtrabackup.SetSourceNode(job, src); err != nil {
+		if err := xtrabackup.SetSourceNodes(job, src); err != nil {
 			return rr, errors.Wrap(err, "set backup source node")
 		}
 
@@ -308,21 +308,23 @@ func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creatio
 	return dest
 }
 
-func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) (string, error) {
+func (r *PerconaServerMySQLBackupReconciler) getBackupSources(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) ([]string, error) {
 	l := log.FromContext(ctx).WithName("getBackupSource")
 
 	orcHost := orchestrator.APIHost(cluster)
 	primary, err := orchestrator.ClusterPrimary(ctx, orcHost, cluster.ClusterHint())
 	if err != nil {
-		return "", errors.Wrap(err, "get primary")
+		return nil, errors.Wrap(err, "get primary")
 	}
 
-	var src string
+	var src []string
 	if len(primary.Replicas) < 1 {
-		src = primary.Key.Hostname
+		src = append(src, primary.Key.Hostname)
 		l.Info("no replicas found, using primary as the backup source", "source", src)
 	} else {
-		src = primary.Replicas[0].Hostname
+		for _, replica := range primary.Replicas {
+			src = append(src, replica.Hostname)
+		}
 		l.Info("using replica as the backup source", "source", src)
 	}
 
@@ -498,12 +500,12 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 	if err != nil {
 		return false, errors.Wrap(err, "marshal sidecar backup config")
 	}
-	src, err := r.getBackupSource(ctx, cluster)
+	src, err := r.getBackupSources(ctx, cluster)
 	if err != nil {
 		return false, errors.Wrap(err, "get backup source node")
 	}
 	sidecarURL := url.URL{
-		Host:   src + ":6033",
+		Host:   src[0] + ":6033",
 		Scheme: "http",
 		Path:   "/backup/" + cr.Name,
 	}
