@@ -12,7 +12,7 @@ spec:
   sslSecretName: cluster1-ssl
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
-    apply: recommended
+    apply: disabled
 #  tls:
 #    SANs:
 #      - mysql-1.example.com
@@ -24,7 +24,7 @@ spec:
 #      group: cert-manager.io
   mysql:
     clusterType: async
-    image: percona/percona-server:8.0.28
+    image: percona/percona-server:8.0.29
     imagePullPolicy: Always
 
     size: 3
@@ -157,7 +157,7 @@ spec:
   pmm:
     enabled: false
 
-    image: percona/pmm-client:2.28.0
+    image: percona/pmm-client:2.30.0
     imagePullPolicy: Always
 
     resources:
