@@ -1,10 +1,11 @@
 package mysql
 
 import (
-	"errors"
 	"strconv"
 	"strings"
 
+	"github.com/flosch/pongo2"
+	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
@@ -61,4 +62,16 @@ func GetAutoTuneParams(cr *apiv1alpha1.PerconaServerMySQL, q *resource.Quantity)
 	}
 
 	return autotuneParams, nil
+}
+
+func ExecuteConfigurationTemplate(input string, memory *resource.Quantity) (string, error) {
+	tmpl, err := pongo2.FromString(input)
+	if err != nil {
+		return "", errors.Wrap(err, "parse template")
+	}
+	result, err := tmpl.Execute(pongo2.Context{"containerMemoryLimit": memory.Value()})
+	if err != nil {
+		return "", errors.Wrap(err, "execute template")
+	}
+	return result, nil
 }

@@ -12,6 +12,3 @@ commands:
       CUSTOM_INNODB_SIZE=2147483648
 
       check_auto_tuning ${RAM_SIZE} ${CUSTOM_INNODB_SIZE}
-
-
-
