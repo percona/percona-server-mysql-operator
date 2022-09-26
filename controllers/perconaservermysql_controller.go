@@ -297,7 +297,8 @@ func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr
 
 	version, err := vs.GetVersion(ctx, cr, r.ServerVersion)
 	if err != nil {
-		return errors.Wrap(err, "get exact version")
+		l.Info("Failed to get versions, using the default ones", "error", err)
+		return nil
 	}
 
 	patch := client.MergeFrom(cr.DeepCopy())
@@ -344,7 +345,8 @@ func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr
 
 	err = r.Patch(ctx, cr.DeepCopy(), patch)
 	if err != nil {
-		return errors.Wrap(err, "failed to update CR")
+		l.Info("Failed to update CR, using the default version", "error", err)
+		return nil
 	}
 
 	cr.Status.MySQL.Version = version.PSVersion
