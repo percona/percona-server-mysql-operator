@@ -129,6 +129,8 @@ spec:
                           type: string
                       type: object
                     type: array
+                  initImage:
+                    type: string
                   resources:
                     properties:
                       limits:
@@ -848,6 +850,8 @@ spec:
                 type: object
               crVersion:
                 type: string
+              initImage:
+                type: string
               mysql:
                 properties:
                   affinity:
@@ -1309,6 +1313,8 @@ spec:
                           type: string
                       type: object
                     type: array
+                  initImage:
+                    type: string
                   labels:
                     additionalProperties:
                       type: string
@@ -3586,6 +3592,8 @@ spec:
                           type: string
                       type: object
                     type: array
+                  initImage:
+                    type: string
                   labels:
                     additionalProperties:
                       type: string
@@ -4593,6 +4601,8 @@ spec:
                           type: string
                       type: object
                     type: array
+                  initImage:
+                    type: string
                   labels:
                     additionalProperties:
                       type: string
