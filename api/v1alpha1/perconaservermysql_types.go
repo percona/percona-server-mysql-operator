@@ -23,7 +23,10 @@ import (
 	"strings"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
+
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,6 +53,7 @@ type PerconaServerMySQLSpec struct {
 	HAProxy               *HAProxySpec     `json:"haproxy,omitempty"`
 	TLS                   *TLSSpec         `json:"tls,omitempty"`
 	Toolkit               *ToolkitSpec     `json:"toolkit,omitempty"`
+	UpgradeOptions        UpgradeOptions   `json:"upgradeOptions,omitempty"`
 }
 
 type TLSSpec struct {
@@ -299,19 +303,21 @@ const (
 )
 
 type StatefulAppStatus struct {
-	Size  int32            `json:"size,omitempty"`
-	Ready int32            `json:"ready,omitempty"`
-	State StatefulAppState `json:"state,omitempty"`
+	Size    int32            `json:"size,omitempty"`
+	Ready   int32            `json:"ready,omitempty"`
+	State   StatefulAppState `json:"state,omitempty"`
+	Version string           `json:"version,omitempty"`
 }
 
 // PerconaServerMySQLStatus defines the observed state of PerconaServerMySQL
 type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	MySQL        StatefulAppStatus `json:"mysql,omitempty"`
-	Orchestrator StatefulAppStatus `json:"orchestrator,omitempty"`
-	Router       StatefulAppStatus `json:"router,omitempty"`
-	HAProxy      StatefulAppStatus `json:"haproxy,omitempty"`
-	State        StatefulAppState  `json:"state,omitempty"`
+	MySQL         StatefulAppStatus `json:"mysql,omitempty"`
+	Orchestrator  StatefulAppStatus `json:"orchestrator,omitempty"`
+	Router        StatefulAppStatus `json:"router,omitempty"`
+	State         StatefulAppState  `json:"state,omitempty"`
+	BackupVersion string            `json:"backupVersion,omitempty"`
+	PMMVersion    string            `json:"pmmVersion,omitempty"`
 	// +optional
 	Host string `json:"host"`
 }
@@ -371,8 +377,12 @@ func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 	return &cr.Spec.Orchestrator
 }
 
-func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
-	return cr.Spec.HAProxy != nil && cr.Spec.HAProxy.Enabled
+func (cr *PerconaServerMySQL) SetVersion() {
+	if len(cr.Spec.CRVersion) > 0 {
+		return
+	}
+
+	cr.Spec.CRVersion = version.Version
 }
 
 func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVersion) error {
@@ -383,6 +393,8 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 	if valid := cr.Spec.MySQL.ClusterType.isValid(); !valid {
 		return errors.Errorf("%s is not a valid clusterType, valid options are %s and %s", cr.Spec.MySQL.ClusterType, ClusterTypeGR, ClusterTypeAsync)
 	}
+
+	cr.SetVersion()
 
 	if len(cr.Spec.Backup.Image) == 0 {
 		return errors.New("backup.image can't be empty")
@@ -672,3 +684,15 @@ func (cr *PerconaServerMySQL) InnoDBClusterName() string {
 func init() {
 	SchemeBuilder.Register(&PerconaServerMySQL{}, &PerconaServerMySQLList{})
 }
+
+type UpgradeOptions struct {
+	VersionServiceEndpoint string `json:"versionServiceEndpoint,omitempty"`
+	Apply                  string `json:"apply,omitempty"`
+}
+
+const (
+	UpgradeStrategyDisabled    = "disabled"
+	UpgradeStrategyNever       = "never"
+	UpgradeStrategyRecommended = "recommended"
+	UpgradeStrategyLatest      = "latest"
+)

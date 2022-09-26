@@ -2,11 +2,17 @@ apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
   name: cluster1
+  finalizers:
+    - delete-mysql-pods-in-order
 spec:
   allowUnsafeConfigurations: false
 #  pause: false
+  crVersion: 0.3.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
+  upgradeOptions:
+    versionServiceEndpoint: https://check.percona.com
+    apply: recommended
 #  tls:
 #    SANs:
 #      - mysql-1.example.com

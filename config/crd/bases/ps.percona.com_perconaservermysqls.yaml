@@ -6312,9 +6312,17 @@ spec:
                         type: integer
                     type: object
                 type: object
+              upgradeOptions:
+                properties:
+                  apply:
+                    type: string
+                  versionServiceEndpoint:
+                    type: string
+                type: object
             type: object
           status:
             properties:
+<<<<<<< HEAD
               haproxy:
                 properties:
                   ready:
@@ -6326,6 +6334,10 @@ spec:
                   state:
                     type: string
                 type: object
+=======
+              backupVersion:
+                type: string
+>>>>>>> main
               host:
                 type: string
               mysql:
@@ -6338,6 +6350,8 @@ spec:
                     type: integer
                   state:
                     type: string
+                  version:
+                    type: string
                 type: object
               orchestrator:
                 properties:
@@ -6349,7 +6363,11 @@ spec:
                     type: integer
                   state:
                     type: string
+                  version:
+                    type: string
                 type: object
+              pmmVersion:
+                type: string
               router:
                 properties:
                   ready:
@@ -6359,6 +6377,8 @@ spec:
                     format: int32
                     type: integer
                   state:
+                    type: string
+                  version:
                     type: string
                 type: object
               state:
