@@ -6,6 +6,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -103,29 +104,12 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.S
 					NodeSelector: cr.Spec.HAProxy.NodeSelector,
 					Tolerations:  cr.Spec.HAProxy.Tolerations,
 					InitContainers: []corev1.Container{
-						{
-							Name:            componentName + "-init",
-							Image:           initImage,
-							ImagePullPolicy: cr.Spec.HAProxy.ImagePullPolicy,
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "bin",
-									MountPath: "/opt/percona",
-								},
-								{
-									Name:      credsVolumeName,
-									MountPath: credsMountPath,
-								},
-								{
-									Name:      tlsVolumeName,
-									MountPath: tlsMountPath,
-								},
-							},
-							Command:                  []string{"/ps-init-entrypoint.sh"},
-							TerminationMessagePath:   "/dev/termination-log",
-							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-							SecurityContext:          cr.Spec.HAProxy.ContainerSecurityContext,
-						},
+						k8s.InitContainer(
+							componentName,
+							initImage,
+							cr.Spec.HAProxy.ImagePullPolicy,
+							cr.Spec.HAProxy.ContainerSecurityContext,
+						),
 					},
 					Containers:       containers(cr),
 					Affinity:         cr.Spec.HAProxy.GetAffinity(labels),

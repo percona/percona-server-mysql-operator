@@ -60,10 +60,11 @@ RUN set -ex; \
     microdnf update; \
     microdnf install -y percona-mysql-shell; \
     microdnf clean all; \
-    rm -rf /var/cache
+    rm -rf /var/cache; \
+    rm -rf /usr/lib/debug/usr/bin;
 
-RUN rm -rf /usr/lib/debug/usr/bin
 RUN mkdir /sbin/.mysqlsh && chown 2:2 /sbin/.mysqlsh
+RUN mkdir /opt/percona-server-mysql-operator
 
 LABEL name="Percona Distribution for MySQL Operator" \
       vendor="Percona" \
@@ -73,22 +74,25 @@ LABEL name="Percona Distribution for MySQL Operator" \
 
 COPY LICENSE /licenses/
 COPY --from=go_builder /usr/local/bin/percona-server-mysql-operator /usr/local/bin/percona-server-mysql-operator
-COPY --from=go_builder /usr/local/bin/bootstrap /bootstrap
-COPY --from=go_builder /usr/local/bin/healthcheck /healthcheck
-COPY --from=go_builder /usr/local/bin/sidecar /sidecar
-COPY --from=go_builder /usr/local/bin/peer-list /peer-list
-COPY build/ps-entrypoint.sh /ps-entrypoint.sh
-COPY build/heartbeat-entrypoint.sh /heartbeat-entrypoint.sh
-COPY build/ps-init-entrypoint.sh /ps-init-entrypoint.sh
-COPY build/run-backup.sh /run-backup.sh
-COPY build/run-restore.sh /run-restore.sh
-COPY build/haproxy-entrypoint.sh /haproxy-entrypoint.sh
-COPY build/haproxy_add_mysql_nodes.sh /haproxy_add_mysql_nodes.sh
-COPY build/haproxy_check_primary.sh /haproxy_check_primary.sh
-COPY build/haproxy_check_replicas.sh /haproxy_check_replicas.sh
-COPY build/haproxy_liveness_check.sh /haproxy_liveness_check.sh
-COPY build/haproxy_readiness_check.sh /haproxy_readiness_check.sh
-COPY build/haproxy.cfg /haproxy.cfg
-COPY build/haproxy-global.cfg /haproxy-global.cfg
+COPY --from=go_builder /usr/local/bin/bootstrap /opt/percona-server-mysql-operator/bootstrap
+COPY --from=go_builder /usr/local/bin/healthcheck /opt/percona-server-mysql-operator/healthcheck
+COPY --from=go_builder /usr/local/bin/sidecar /opt/percona-server-mysql-operator/sidecar
+COPY --from=go_builder /usr/local/bin/peer-list /opt/percona-server-mysql-operator/peer-list
+COPY build/ps-entrypoint.sh /opt/percona-server-mysql-operator/ps-entrypoint.sh
+COPY build/heartbeat-entrypoint.sh /opt/percona-server-mysql-operator/heartbeat-entrypoint.sh
+COPY build/router-entrypoint.sh /opt/percona-server-mysql-operator/router-entrypoint.sh
+COPY build/orc-entrypoint.sh /opt/percona-server-mysql-operator/orc-entrypoint.sh
+COPY build/orchestrator.conf.json /opt/percona-server-mysql-operator/orchestrator.conf.json
+COPY build/ps-init-entrypoint.sh /opt/percona-server-mysql-operator/ps-init-entrypoint.sh
+COPY build/run-backup.sh /opt/percona-server-mysql-operator/run-backup.sh
+COPY build/run-restore.sh /opt/percona-server-mysql-operator/run-restore.sh
+COPY build/haproxy-entrypoint.sh /opt/percona-server-mysql-operator/haproxy-entrypoint.sh
+COPY build/haproxy_add_mysql_nodes.sh /opt/percona-server-mysql-operator/haproxy_add_mysql_nodes.sh
+COPY build/haproxy_check_primary.sh /opt/percona-server-mysql-operator/haproxy_check_primary.sh
+COPY build/haproxy_check_replicas.sh /opt/percona-server-mysql-operator/haproxy_check_replicas.sh
+COPY build/haproxy_liveness_check.sh /opt/percona-server-mysql-operator/haproxy_liveness_check.sh
+COPY build/haproxy_readiness_check.sh /opt/percona-server-mysql-operator/haproxy_readiness_check.sh
+COPY build/haproxy.cfg /opt/percona-server-mysql-operator/haproxy.cfg
+COPY build/haproxy-global.cfg /opt/percona-server-mysql-operator/haproxy-global.cfg
 
 USER 2
