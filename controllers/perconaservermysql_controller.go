@@ -942,6 +942,7 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 
 	if !firstMySQLPodReady {
 		l.V(1).Info("Waiting for pod to be ready", "pod", nn.Name)
+		return nil
 	}
 
 	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.HAProxy.PodSpec)
