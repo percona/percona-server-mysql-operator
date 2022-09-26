@@ -10,6 +10,4 @@ commands:
 
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
       	--type merge \
-        -p '{"spec": {"mysql": {"configuration": "innodb_buffer_pool_size=2147483648"}}}'
-
-
+      	-p '{"spec": {"mysql": {"configuration": "innodb_buffer_pool_size=2147483648"}}}'

@@ -63,6 +63,7 @@ spec:
 
 #    configuration: |
 #      max_connections=250
+#      innodb_buffer_pool_size={{containerMemoryLimit * 3/4}}
 
 #    sidecars:
 #    - name: noop-memory
