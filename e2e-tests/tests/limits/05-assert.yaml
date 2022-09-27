@@ -158,7 +158,7 @@ spec:
       dnsPolicy: ClusterFirst
       initContainers:
       - command:
-        - /ps-init-entrypoint.sh
+        - /opt/percona-server-mysql-operator/ps-init-entrypoint.sh
         imagePullPolicy: Always
         name: mysql-init
         resources: {}
@@ -167,12 +167,6 @@ spec:
         volumeMounts:
         - mountPath: /opt/percona
           name: bin
-        - mountPath: /var/lib/mysql
-          name: datadir
-        - mountPath: /etc/mysql/mysql-users-secret
-          name: users
-        - mountPath: /etc/mysql/mysql-tls-secret
-          name: tls
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext:
@@ -322,6 +316,8 @@ spec:
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
         - mountPath: /etc/orchestrator/ssl
           name: tls
         - mountPath: /etc/orchestrator/config
@@ -333,6 +329,8 @@ spec:
         - /usr/bin/peer-list
         - -on-change=/usr/bin/add_mysql_nodes.sh
         - -service=$(MYSQL_SERVICE)
+        command:
+        - /opt/percona/orc-entrypoint.sh
         env:
         - name: ORC_SERVICE
           value: limits-no-resources-mysql
@@ -344,6 +342,8 @@ spec:
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
         - mountPath: /etc/orchestrator/ssl
           name: tls
         - mountPath: /etc/orchestrator/config
@@ -352,6 +352,17 @@ spec:
           name: users
           subPath: orchestrator
       dnsPolicy: ClusterFirst
+      initContainers:
+      - command:
+        - /opt/percona-server-mysql-operator/ps-init-entrypoint.sh
+        imagePullPolicy: Always
+        name: orc-init
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext:
@@ -360,6 +371,8 @@ spec:
         - 1001
       terminationGracePeriodSeconds: 30
       volumes:
+      - emptyDir: {}
+        name: bin
       - name: users
         secret:
           defaultMode: 420

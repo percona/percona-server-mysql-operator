@@ -1,0 +1,35 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-demand-backup-mysql
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-demand-backup
+status:
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: gr-demand-backup-router
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  updatedReplicas: 3

@@ -21,8 +21,6 @@ import (
 const (
 	componentName      = "xtrabackup"
 	componentShortName = "xb"
-	binVolumeName      = "bin"
-	binMountPath       = "/opt/percona"
 	dataVolumeName     = "datadir"
 	dataMountPath      = "/var/lib/mysql"
 	credsVolumeName    = "users"
@@ -99,33 +97,12 @@ func Job(
 					ShareProcessNamespace: &t,
 					SetHostnameAsFQDN:     &t,
 					InitContainers: []corev1.Container{
-						{
-							Name:            componentName + "-init",
-							Image:           initImage,
-							ImagePullPolicy: cluster.Spec.MySQL.ImagePullPolicy,
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      binVolumeName,
-									MountPath: binMountPath,
-								},
-								{
-									Name:      dataVolumeName,
-									MountPath: dataMountPath,
-								},
-								{
-									Name:      credsVolumeName,
-									MountPath: credsMountPath,
-								},
-								{
-									Name:      tlsVolumeName,
-									MountPath: tlsMountPath,
-								},
-							},
-							Command:                  []string{"/ps-init-entrypoint.sh"},
-							TerminationMessagePath:   "/dev/termination-log",
-							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-							SecurityContext:          cluster.Spec.MySQL.ContainerSecurityContext,
-						},
+						k8s.InitContainer(
+							componentName,
+							initImage,
+							cluster.Spec.Backup.ImagePullPolicy,
+							cluster.Spec.Backup.ContainerSecurityContext,
+						),
 					},
 					Containers: []corev1.Container{
 						xtrabackupContainer(cluster, cr.Name, destination, storage),
@@ -140,7 +117,7 @@ func Job(
 					DNSPolicy:         corev1.DNSClusterFirst,
 					Volumes: []corev1.Volume{
 						{
-							Name: binVolumeName,
+							Name: apiv1alpha1.BinVolumeName,
 							VolumeSource: corev1.VolumeSource{
 								EmptyDir: &corev1.EmptyDirVolumeSource{},
 							},
@@ -202,8 +179,8 @@ func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName, de
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      binVolumeName,
-				MountPath: binMountPath,
+				Name:      apiv1alpha1.BinVolumeName,
+				MountPath: apiv1alpha1.BinVolumePath,
 			},
 			{
 				Name:      dataVolumeName,
@@ -293,8 +270,8 @@ func deleteContainer(image string, conf *BackupConfig, storage *apiv1alpha1.Back
 		ImagePullPolicy: corev1.PullNever,
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      binVolumeName,
-				MountPath: binMountPath,
+				Name:      apiv1alpha1.BinVolumeName,
+				MountPath: apiv1alpha1.BinVolumePath,
 			},
 			{
 				Name:      dataVolumeName,
@@ -361,8 +338,8 @@ func RestoreJob(
 							ImagePullPolicy: cluster.Spec.MySQL.ImagePullPolicy,
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:      binVolumeName,
-									MountPath: binMountPath,
+									Name:      apiv1alpha1.BinVolumeName,
+									MountPath: apiv1alpha1.BinVolumePath,
 								},
 								{
 									Name:      dataVolumeName,
@@ -377,7 +354,7 @@ func RestoreJob(
 									MountPath: tlsMountPath,
 								},
 							},
-							Command:                  []string{"/ps-init-entrypoint.sh"},
+							Command:                  []string{"/opt/percona-server-mysql-operator/ps-init-entrypoint.sh"},
 							TerminationMessagePath:   "/dev/termination-log",
 							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 							SecurityContext:          cluster.Spec.MySQL.ContainerSecurityContext,
@@ -395,7 +372,7 @@ func RestoreJob(
 					DNSPolicy:         corev1.DNSClusterFirst,
 					Volumes: []corev1.Volume{
 						{
-							Name: binVolumeName,
+							Name: apiv1alpha1.BinVolumeName,
 							VolumeSource: corev1.VolumeSource{
 								EmptyDir: &corev1.EmptyDirVolumeSource{},
 							},
@@ -473,7 +450,7 @@ func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) 
 					DNSPolicy:         corev1.DNSClusterFirst,
 					Volumes: []corev1.Volume{
 						{
-							Name: binVolumeName,
+							Name: apiv1alpha1.BinVolumeName,
 							VolumeSource: corev1.VolumeSource{
 								EmptyDir: &corev1.EmptyDirVolumeSource{},
 							},
@@ -526,8 +503,8 @@ func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alp
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      binVolumeName,
-				MountPath: binMountPath,
+				Name:      apiv1alpha1.BinVolumeName,
+				MountPath: apiv1alpha1.BinVolumePath,
 			},
 			{
 				Name:      dataVolumeName,
@@ -730,14 +707,14 @@ func SetStorageAzure(job *batchv1.Job, azure *apiv1alpha1.BackupStorageAzureSpec
 	return errors.Errorf("no container named %s in Job spec", componentName)
 }
 
-func SetSourceNode(job *batchv1.Job, src string) error {
+func SetSourceNodes(job *batchv1.Job, src []string) error {
 	spec := &job.Spec.Template.Spec
 
 	for i := range spec.Containers {
 		container := &spec.Containers[i]
 
 		if container.Name == componentName {
-			container.Env = append(container.Env, corev1.EnvVar{Name: "SRC_NODE", Value: src})
+			container.Env = append(container.Env, corev1.EnvVar{Name: "SRC_NODES", Value: strings.Join(src, ",")})
 			return nil
 		}
 	}

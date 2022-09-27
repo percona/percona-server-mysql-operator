@@ -45,11 +45,13 @@ type PerconaServerMySQLSpec struct {
 	SSLSecretName         string           `json:"sslSecretName,omitempty"`
 	SSLInternalSecretName string           `json:"sslInternalSecretName,omitempty"`
 	AllowUnsafeConfig     bool             `json:"allowUnsafeConfigurations,omitempty"`
+	InitImage             string           `json:"initImage,omitempty"`
 	MySQL                 MySQLSpec        `json:"mysql,omitempty"`
 	Orchestrator          OrchestratorSpec `json:"orchestrator,omitempty"`
 	PMM                   *PMMSpec         `json:"pmm,omitempty"`
 	Backup                *BackupSpec      `json:"backup,omitempty"`
 	Router                *MySQLRouterSpec `json:"router,omitempty"`
+	HAProxy               *HAProxySpec     `json:"haproxy,omitempty"`
 	TLS                   *TLSSpec         `json:"tls,omitempty"`
 	Toolkit               *ToolkitSpec     `json:"toolkit,omitempty"`
 	UpgradeOptions        UpgradeOptions   `json:"upgradeOptions,omitempty"`
@@ -65,6 +67,7 @@ type ClusterType string
 const (
 	ClusterTypeGR    ClusterType = "group-replication"
 	ClusterTypeAsync ClusterType = "async"
+	MinSafeProxySize             = 2
 )
 
 func (t ClusterType) isValid() bool {
@@ -132,6 +135,7 @@ type PodSpec struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	VolumeSpec  *VolumeSpec       `json:"volumeSpec,omitempty"`
+	InitImage   string            `json:"initImage,omitempty"`
 
 	Affinity                      *PodAffinity        `json:"affinity,omitempty"`
 	NodeSelector                  map[string]string   `json:"nodeSelector,omitempty"`
@@ -145,6 +149,10 @@ type PodSpec struct {
 	ServiceAccountName string                     `json:"serviceAccountName,omitempty"`
 
 	ContainerSpec `json:",inline"`
+}
+
+func (s *PodSpec) GetInitImage() string {
+	return s.InitImage
 }
 
 type PMMSpec struct {
@@ -161,12 +169,17 @@ type PMMSpec struct {
 type BackupSpec struct {
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	Image                    string                        `json:"image,omitempty"`
+	InitImage                string                        `json:"initImage,omitempty"`
 	ImagePullSecrets         []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
 	ServiceAccountName       string                        `json:"serviceAccountName,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext       `json:"containerSecurityContext,omitempty"`
 	Resources                corev1.ResourceRequirements   `json:"resources,omitempty"`
 	Storages                 map[string]*BackupStorageSpec `json:"storages,omitempty"`
+}
+
+func (s *BackupSpec) GetInitImage() string {
+	return s.InitImage
 }
 
 type BackupStorageType string
@@ -244,6 +257,13 @@ type ToolkitSpec struct {
 	ContainerSpec `json:",inline"`
 }
 
+type HAProxySpec struct {
+	Enabled bool          `json:"enabled,omitempty"`
+	Expose  ServiceExpose `json:"expose,omitempty"`
+
+	PodSpec `json:",inline"`
+}
+
 type PodDisruptionBudgetSpec struct {
 	MinAvailable   *intstr.IntOrString `json:"minAvailable,omitempty"`
 	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
@@ -305,6 +325,7 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	// Important: Run "make" to regenerate code after modifying this file
 	MySQL         StatefulAppStatus `json:"mysql,omitempty"`
 	Orchestrator  StatefulAppStatus `json:"orchestrator,omitempty"`
+	HAProxy       StatefulAppStatus `json:"haproxy,omitempty"`
 	Router        StatefulAppStatus `json:"router,omitempty"`
 	State         StatefulAppState  `json:"state,omitempty"`
 	BackupVersion string            `json:"backupVersion,omitempty"`
@@ -321,6 +342,7 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
 // +kubebuilder:printcolumn:name="MySQL",type=string,JSONPath=".status.mysql.ready"
 // +kubebuilder:printcolumn:name="Orchestrator",type=string,JSONPath=".status.orchestrator.ready"
+// +kubebuilder:printcolumn:name="HAProxy",type=string,JSONPath=".status.haproxy.ready"
 // +kubebuilder:printcolumn:name="Router",type=string,JSONPath=".status.router.ready"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:resource:scope=Namespaced
@@ -482,14 +504,32 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 		return errors.New("router section is needed for group replication")
 	}
 
+	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Router != nil {
+		if cr.Spec.Router.Size < MinSafeProxySize {
+			cr.Spec.Router.Size = MinSafeProxySize
+		}
+	}
+
+	if cr.HAProxyEnabled() && cr.Spec.MySQL.ClusterType != ClusterTypeGR {
+		if cr.Spec.HAProxy.Size < MinSafeProxySize {
+			cr.Spec.HAProxy.Size = MinSafeProxySize
+		}
+	}
+
 	if cr.Spec.Pause {
 		cr.Spec.MySQL.Size = 0
 		cr.Spec.Orchestrator.Size = 0
 		cr.Spec.Router.Size = 0
+		cr.Spec.HAProxy.Size = 0
 	}
 
 	return nil
 }
+
+const (
+	BinVolumeName = "bin"
+	BinVolumePath = "/opt/percona"
+)
 
 func reconcileVol(v *VolumeSpec) (*VolumeSpec, error) {
 	if v == nil || v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil {
@@ -651,6 +691,10 @@ func (cr *PerconaServerMySQL) InternalSecretName() string {
 
 func (cr *PerconaServerMySQL) PMMEnabled() bool {
 	return cr.Spec.PMM != nil && cr.Spec.PMM.Enabled
+}
+
+func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
+	return cr.Spec.HAProxy != nil && cr.Spec.HAProxy.Enabled
 }
 
 var NonAlphaNumeric = regexp.MustCompile("[^a-zA-Z0-9_]+")

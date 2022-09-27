@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 
 	"golang.org/x/sync/errgroup"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -26,6 +26,20 @@ import (
 
 var log = logf.Log.WithName("sidecar")
 var sensitiveFlags = regexp.MustCompile("--password=(.*)|--.*-access-key=(.*)|--.*secret-key=(.*)")
+
+var status Status
+
+type Status struct {
+	isRunning atomic.Bool
+}
+
+func (s *Status) TryRunBackup() bool {
+	return s.isRunning.CompareAndSwap(false, true)
+}
+
+func (s *Status) DoneBackup() {
+	s.isRunning.Store(false)
+}
 
 func main() {
 	opts := zap.Options{Development: true}
@@ -45,7 +59,7 @@ func main() {
 
 func getSecret(username apiv1alpha1.SystemUser) (string, error) {
 	path := filepath.Join(mysql.CredsMountPath, string(username))
-	sBytes, err := ioutil.ReadFile(path)
+	sBytes, err := os.ReadFile(path)
 	if err != nil {
 		return "", errors.Wrapf(err, "read %s", path)
 	}
@@ -170,6 +184,12 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func createBackupHandler(w http.ResponseWriter, req *http.Request) {
+	if !status.TryRunBackup() {
+		log.Info("backup is already running", "host", req.RemoteAddr)
+		http.Error(w, "backup is already running", http.StatusConflict)
+		return
+	}
+	defer status.DoneBackup()
 	ns, err := getNamespace()
 	if err != nil {
 		log.Error(err, "failed to detect namespace")
@@ -185,7 +205,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	backupName := path[2]
 	log = log.WithValues("namespace", ns, "name", backupName)
 
-	data, err := ioutil.ReadAll(req.Body)
+	data, err := io.ReadAll(req.Body)
 	if err != nil {
 		log.Error(err, "failed to read request data")
 		http.Error(w, "backup failed", http.StatusBadRequest)
@@ -210,8 +230,9 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
+	g, gCtx := errgroup.WithContext(req.Context())
 
-	xtrabackup := exec.Command("xtrabackup", xtrabackupArgs(string(backupUser), backupPass)...)
+	xtrabackup := exec.CommandContext(gCtx, "xtrabackup", xtrabackupArgs(string(backupUser), backupPass)...)
 
 	xbOut, err := xtrabackup.StdoutPipe()
 	if err != nil {
@@ -238,7 +259,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	defer backupLog.Close()
 	logWriter := io.MultiWriter(backupLog, os.Stderr)
 
-	xbcloud := exec.Command("xbcloud", xb.XBCloudArgs(xb.XBCloudActionPut, &backupConf)...)
+	xbcloud := exec.CommandContext(gCtx, "xbcloud", xb.XBCloudArgs(xb.XBCloudActionPut, &backupConf)...)
 	xbcloud.Stdin = xbOut
 
 	xbcloudErr, err := xbcloud.StderrPipe()
@@ -257,7 +278,6 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 		"xbcloudCmd", sanitizeCmd(xbcloud),
 	)
 
-	g := new(errgroup.Group)
 	g.Go(func() error {
 		if err := xbcloud.Start(); err != nil {
 			log.Error(err, "failed to start xbcloud")

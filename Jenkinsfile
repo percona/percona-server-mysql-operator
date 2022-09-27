@@ -320,6 +320,7 @@ pipeline {
                         CreateCluster('cluster1')
                         runTest('auto-config', 'cluster1')
                         runTest('config', 'cluster1')
+                        runTest('one-pod', 'cluster1')
                         ShutdownCluster('cluster1')
                     }
                 }
@@ -337,6 +338,7 @@ pipeline {
                         unstash "sourceFILES"
                         CreateCluster('cluster2')
                         runTest('demand-backup', 'cluster2')
+                        runTest('gr-demand-backup', 'cluster2')
                         runTest('scaling', 'cluster2')
                         runTest('users', 'cluster2')
                         ShutdownCluster('cluster2')
