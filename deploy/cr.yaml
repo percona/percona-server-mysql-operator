@@ -10,9 +10,6 @@ spec:
   crVersion: 0.3.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
-  upgradeOptions:
-    versionServiceEndpoint: https://check.percona.com
-    apply: disabled
 #  tls:
 #    SANs:
 #      - mysql-1.example.com
