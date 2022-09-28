@@ -26,6 +26,7 @@ spec:
     clusterType: async
     image: percona/percona-server:8.0.29
     imagePullPolicy: Always
+#    initImage: perconalab/percona-server-mysql-operator:main
 
     size: 3
     sizeSemiSync: 0
@@ -127,6 +128,7 @@ spec:
   router:
     image: perconalab/percona-server-mysql-operator:main-router
     imagePullPolicy: Always
+#    initImage: perconalab/percona-server-mysql-operator:main
 
     size: 3
 
@@ -155,6 +157,7 @@ spec:
   orchestrator:
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
+#    initImage: perconalab/percona-server-mysql-operator:main
 
     size: 3
 
@@ -207,6 +210,7 @@ spec:
     enabled: true
     image: perconalab/percona-server-mysql-operator:main-backup
     imagePullPolicy: Always
+#    initImage: perconalab/percona-server-mysql-operator:main
     storages:
       s3-us-west:
         type: s3
