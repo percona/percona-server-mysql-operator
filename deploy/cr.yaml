@@ -121,8 +121,8 @@ spec:
 #                - e2e-az1
 #                - e2e-az2
 
-#    expose:
-#      type: ClusterIP
+    expose:
+      type: ClusterIP
 
   router:
     image: perconalab/percona-server-mysql-operator:main-router
@@ -149,8 +149,8 @@ spec:
 #                - e2e-az1
 #                - e2e-az2
 
-#    expose:
-#      type: ClusterIP
+    expose:
+      type: ClusterIP
 
   orchestrator:
     image: perconalab/percona-server-mysql-operator:main-orchestrator
@@ -171,8 +171,8 @@ spec:
 #                - e2e-az1
 #                - e2e-az2
 
-#    expose:
-#      type: ClusterIP
+    expose:
+      type: ClusterIP
 
     resources:
       requests:
