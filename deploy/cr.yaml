@@ -19,6 +19,8 @@ spec:
 #      name: special-selfsigned-issuer
 #      kind: ClusterIssuer
 #      group: cert-manager.io
+#  initImage: perconalab/percona-server-mysql-operator:main
+
   mysql:
     clusterType: async
     image: percona/percona-server:8.0.29
