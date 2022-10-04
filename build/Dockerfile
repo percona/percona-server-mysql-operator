@@ -1,4 +1,4 @@
-FROM golang:1.19.1 AS go_builder
+FROM golang:1.19 AS go_builder
 WORKDIR /go/src/github.com/percona/percona-server-mysql-operator
 
 COPY go.mod go.sum ./
