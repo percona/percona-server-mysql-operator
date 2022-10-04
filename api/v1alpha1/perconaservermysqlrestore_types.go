@@ -25,8 +25,9 @@ import (
 
 // PerconaServerMySQLRestoreSpec defines the desired state of PerconaServerMySQLRestore
 type PerconaServerMySQLRestoreSpec struct {
-	ClusterName string `json:"clusterName"`
-	BackupName  string `json:"backupName"`
+	ClusterName  string                          `json:"clusterName"`
+	BackupName   string                          `json:"backupName,omitempty"`
+	BackupSource *PerconaServerMySQLBackupStatus `json:"backupSource,omitempty"`
 }
 
 type RestoreState string
@@ -45,12 +46,12 @@ type PerconaServerMySQLRestoreStatus struct { // INSERT ADDITIONAL STATUS FIELD 
 	CompletedAt *metav1.Time `json:"completed,omitempty"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:resource:scope=Namespaced
-//+kubebuilder:resource:shortName=ps-restore
-//+kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
-//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Namespaced
+// +kubebuilder:resource:shortName=ps-restore
+// +kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // PerconaServerMySQLRestore is the Schema for the perconaservermysqlrestores API
 type PerconaServerMySQLRestore struct {
 	metav1.TypeMeta   `json:",inline"`
