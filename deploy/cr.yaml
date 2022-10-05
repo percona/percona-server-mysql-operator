@@ -23,7 +23,7 @@ spec:
 
   mysql:
     clusterType: async
-    image: percona/percona-server:8.0.29
+    image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
 #    initImage: perconalab/percona-server-mysql-operator:main
 
@@ -97,7 +97,7 @@ spec:
 
     size: 3
 
-    image: percona/percona-server-mysql-operator:0.3.0-haproxy
+    image: perconalab/percona-server-mysql-operator:main-haproxy
     imagePullPolicy: Always
 
     resources:
@@ -125,7 +125,7 @@ spec:
 #      type: ClusterIP
 
   router:
-    image: percona/percona-server-mysql-operator:0.3.0-router
+    image: perconalab/percona-server-mysql-operator:main-router
     imagePullPolicy: Always
 #    initImage: perconalab/percona-server-mysql-operator:main
 
@@ -154,7 +154,7 @@ spec:
 #      type: ClusterIP
 
   orchestrator:
-    image: percona/percona-server-mysql-operator:0.3.0-orchestrator
+    image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 #    initImage: perconalab/percona-server-mysql-operator:main
 
@@ -207,7 +207,7 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-xtrabackup:8.0.29-22
+    image: perconalab/percona-server-mysql-operator:main-backup
     imagePullPolicy: Always
 #    initImage: perconalab/percona-server-mysql-operator:main
     storages:
@@ -253,7 +253,7 @@ spec:
 #          prefix: ""
 
   toolkit:
-    image: percona/percona-server-mysql-operator:0.3.0-toolkit
+    image: perconalab/percona-server-mysql-operator:main-toolkit
     imagePullPolicy: Always
 #    resources:
 #      requests:
