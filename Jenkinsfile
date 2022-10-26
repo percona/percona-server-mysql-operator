@@ -165,6 +165,7 @@ void prepareNode() {
         rm -f "${KREW}.tar.gz"
         export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
         kubectl krew install kuttl
+        gcloud version
     '''
 }
 
