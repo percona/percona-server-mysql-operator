@@ -16,6 +16,8 @@ Based on our best practices for deployment and configuration, [Percona Operator 
 
 **This project is in the tech preview state right now. Don't use it on production.**
 
+As of today, we recommend using [Percona Operator for MySQL based on Percona XtraDB Cluster](https://docs.percona.com/percona-operator-for-mysql/pxc/index.html), which is production-ready and contains everything you need to quickly and consistently deploy and scale MySQL clusters in a Kubernetes-based environment, on-premises or in the cloud.
+
 ## Roadmap
 
 We have an experimental public roadmap which can be found [here](https://github.com/percona/roadmap/projects/1). Please feel free to contribute and propose new features by following the roadmap [guidelines](https://github.com/percona/roadmap).
