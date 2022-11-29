@@ -69,7 +69,6 @@ request_backup() {
 			"http://${SRC_NODE}:6033/backup/${BACKUP_NAME}" \
 			| sed -e 's/.*\httpcode=//'
 	)
-	
 	if [ "${http_code}" -eq 200 ]; then
 		return
 	fi
