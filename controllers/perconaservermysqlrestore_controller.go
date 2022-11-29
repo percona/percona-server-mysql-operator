@@ -105,15 +105,26 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, errors.Wrapf(err, "get cluster %s", nn)
 	}
 
-	backup := &apiv1alpha1.PerconaServerMySQLBackup{}
-	nn = types.NamespacedName{Name: cr.Spec.BackupName, Namespace: cr.Namespace}
-	if err := r.Client.Get(ctx, nn, backup); err != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "get backup %s", nn)
-	}
-
-	storage, ok := cluster.Spec.Backup.Storages[backup.Spec.StorageName]
-	if !ok {
-		return ctrl.Result{}, errors.Errorf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", backup.Spec.StorageName)
+	var destination string
+	var storage *apiv1alpha1.BackupStorageSpec
+	if cr.Spec.BackupName != "" {
+		backup := &apiv1alpha1.PerconaServerMySQLBackup{}
+		nn := types.NamespacedName{Name: cr.Spec.BackupName, Namespace: cr.Namespace}
+		if err := r.Client.Get(ctx, nn, backup); err != nil {
+			return ctrl.Result{}, errors.Wrapf(err, "get backup %s", nn)
+		}
+		destination = backup.Status.Destination
+		storageName := backup.Spec.StorageName
+		var ok bool
+		storage, ok = cluster.Spec.Backup.Storages[storageName]
+		if !ok {
+			return ctrl.Result{}, errors.Errorf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", storageName)
+		}
+	} else if cr.Spec.BackupSource != nil && cr.Spec.BackupSource.Storage != nil {
+		storage = cr.Spec.BackupSource.Storage
+		destination = cr.Spec.BackupSource.Destination
+	} else {
+		return ctrl.Result{}, errors.New("spec.storageName and backupSource.storage are empty")
 	}
 
 	switch status.State {
@@ -146,7 +157,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		}
 
 		pvcName := fmt.Sprintf("%s-%s-mysql-0", mysql.DataVolumeName, cluster.Name)
-		job := xtrabackup.RestoreJob(cluster, backup, cr, storage, initImage, pvcName)
+		job := xtrabackup.RestoreJob(cluster, destination, cr, storage, initImage, pvcName)
 
 		switch storage.Type {
 		case apiv1alpha1.BackupStorageS3:

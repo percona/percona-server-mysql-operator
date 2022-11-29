@@ -23,7 +23,7 @@ spec:
 
   mysql:
     clusterType: async
-    image: percona/percona-server:8.0.29
+    image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
 #    initImage: perconalab/percona-server-mysql-operator:main
 
@@ -97,7 +97,7 @@ spec:
 
     size: 3
 
-    image: perconalab/percona-xtradb-cluster-operator:main-haproxy
+    image: perconalab/percona-server-mysql-operator:main-haproxy
     imagePullPolicy: Always
 
     resources:
