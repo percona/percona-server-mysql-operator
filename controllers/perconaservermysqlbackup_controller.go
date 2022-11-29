@@ -234,12 +234,12 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		status.SSLSecretName = cluster.Spec.SSLSecretName
 		status.Storage = storage
 
-		src, err := r.getBackupSources(ctx, cluster)
+		src, err := r.getBackupSource(ctx, cluster)
 		if err != nil {
 			return rr, errors.Wrap(err, "get backup source node")
 		}
 
-		if err := xtrabackup.SetSourceNodes(job, src); err != nil {
+		if err := xtrabackup.SetSourceNode(job, src); err != nil {
 			return rr, errors.Wrap(err, "set backup source node")
 		}
 
@@ -308,30 +308,31 @@ func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creatio
 	return dest
 }
 
-func (r *PerconaServerMySQLBackupReconciler) getBackupSources(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) ([]string, error) {
-	l := log.FromContext(ctx).WithName("getBackupSources")
+func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) (string, error) {
+	l := log.FromContext(ctx).WithName("getBackupSource")
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cluster, apiv1alpha1.UserOperator)
 	if err != nil {
-		return nil, errors.Wrap(err, "get operator password")
+		return "", errors.Wrap(err, "get operator password")
 	}
 
 	top, err := topology.Get(ctx, cluster, operatorPass)
 	if err != nil {
-		return nil, errors.Wrap(err, "get topology")
+		return "", errors.Wrap(err, "get topology")
 	}
 
-	var sources []string
+	var source string
 	if len(top.Replicas) < 1 {
-		sources = append(sources, top.Primary)
+		source = top.Primary
 		l.Info("no replicas found, using primary as the backup source", "primary", top.Primary)
 	} else {
 		for _, replica := range top.Replicas {
-			sources = append(sources, replica)
+			source = replica
+			break
 		}
 	}
 
-	return sources, nil
+	return source, nil
 }
 
 func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context,
@@ -503,12 +504,12 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 	if err != nil {
 		return false, errors.Wrap(err, "marshal sidecar backup config")
 	}
-	src, err := r.getBackupSources(ctx, cluster)
+	src, err := r.getBackupSource(ctx, cluster)
 	if err != nil {
 		return false, errors.Wrap(err, "get backup source node")
 	}
 	sidecarURL := url.URL{
-		Host:   src[0] + ":6033",
+		Host:   src + ":6033",
 		Scheme: "http",
 		Path:   "/backup/" + cr.Name,
 	}
