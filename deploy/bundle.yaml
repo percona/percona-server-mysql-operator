@@ -8149,7 +8149,7 @@ data:
       port: 9443
     leaderElection:
       leaderElect: true
-      resourceName: 08db0feb.percona.com
+      resourceName: 08db2feb.percona.com
 kind: ConfigMap
 metadata:
   name: percona-server-mysql-operator-config
