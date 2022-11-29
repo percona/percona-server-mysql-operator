@@ -91,7 +91,7 @@ func main() {
 		Port:                   9443,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "08db0feb.percona.com",
+		LeaderElectionID:       "08db2feb.percona.com",
 		Namespace:              ns,
 	})
 	if err != nil {
