@@ -136,7 +136,12 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 		}
 
 		if err != nil {
-			l.Error(err, "failed to run finalizer", "finalizer", f)
+			switch err {
+			case ErrWaitingTermination:
+				l.Info("waiting for pods to be deleted", "finalizer", f)
+			default:
+				l.Error(err, "failed to run finalizer", "finalizer", f)
+			}
 			finalizers = append(finalizers, f)
 		}
 	}
@@ -247,7 +252,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		l.Info("sts replicaset downscaled", "sts", sts)
 	}
 
-	return errors.New("waiting for pods to be deleted")
+	return ErrWaitingTermination
 }
 
 func (r *PerconaServerMySQLReconciler) doReconcile(
