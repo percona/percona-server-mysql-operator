@@ -377,8 +377,9 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 	if storage.VerifyTLS != nil {
 		verifyTLS = *storage.VerifyTLS
 	}
+	destination := getDestination(storage, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
 	conf := &xtrabackup.BackupConfig{
-		Destination: cr.Status.Destination,
+		Destination: destination,
 		VerifyTLS:   verifyTLS,
 	}
 	s := new(corev1.Secret)
