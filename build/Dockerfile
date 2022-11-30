@@ -17,44 +17,44 @@ COPY . .
 RUN mkdir -p build/_output/bin \
     && GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
-        -o build/_output/bin/percona-server-mysql-operator \
-            cmd/manager/main.go \
+    -o build/_output/bin/percona-server-mysql-operator \
+    cmd/manager/main.go \
     && cp -r build/_output/bin/percona-server-mysql-operator /usr/local/bin/percona-server-mysql-operator
 RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
-        -o build/_output/bin/bootstrap \
-            cmd/bootstrap/main.go \
+    -o build/_output/bin/bootstrap \
+    cmd/bootstrap/main.go \
     && cp -r build/_output/bin/bootstrap /usr/local/bin/bootstrap
 RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
-        -o build/_output/bin/healthcheck \
-            cmd/healthcheck/main.go \
+    -o build/_output/bin/healthcheck \
+    cmd/healthcheck/main.go \
     && cp -r build/_output/bin/healthcheck /usr/local/bin/healthcheck
 RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
-        -o build/_output/bin/sidecar \
-            cmd/sidecar/main.go \
+    -o build/_output/bin/sidecar \
+    ./cmd/sidecar \
     && cp -r build/_output/bin/sidecar /usr/local/bin/sidecar
 RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
-        -o build/_output/bin/peer-list \
-            cmd/peer-list/main.go \
+    -o build/_output/bin/peer-list \
+    cmd/peer-list/main.go \
     && cp -r build/_output/bin/peer-list /usr/local/bin/peer-list
 
 FROM redhat/ubi8-minimal AS ubi8
 
 # check repository package signature in secure way
 RUN export GNUPGHOME="$(mktemp -d)" \
-        && microdnf install -y findutils \
-        && gpg --keyserver keyserver.ubuntu.com --recv-keys 430BDF5C56E7C94E848EE60C1C4CBDCDCD2EFD2A \
-        && gpg --export --armor 430BDF5C56E7C94E848EE60C1C4CBDCDCD2EFD2A > ${GNUPGHOME}/RPM-GPG-KEY-Percona \
-        && rpmkeys --import ${GNUPGHOME}/RPM-GPG-KEY-Percona \
-        && curl -Lf -o /tmp/percona-release.rpm https://repo.percona.com/yum/percona-release-latest.noarch.rpm \
-        && rpmkeys --checksig /tmp/percona-release.rpm \
-        && rpm -i /tmp/percona-release.rpm \
-        && rm -rf "$GNUPGHOME" /tmp/percona-release.rpm \
-        && rpm --import /etc/pki/rpm-gpg/PERCONA-PACKAGING-KEY \
-        && percona-release setup pdps-8.0
+    && microdnf install -y findutils \
+    && gpg --keyserver keyserver.ubuntu.com --recv-keys 430BDF5C56E7C94E848EE60C1C4CBDCDCD2EFD2A \
+    && gpg --export --armor 430BDF5C56E7C94E848EE60C1C4CBDCDCD2EFD2A > ${GNUPGHOME}/RPM-GPG-KEY-Percona \
+    && rpmkeys --import ${GNUPGHOME}/RPM-GPG-KEY-Percona \
+    && curl -Lf -o /tmp/percona-release.rpm https://repo.percona.com/yum/percona-release-latest.noarch.rpm \
+    && rpmkeys --checksig /tmp/percona-release.rpm \
+    && rpm -i /tmp/percona-release.rpm \
+    && rm -rf "$GNUPGHOME" /tmp/percona-release.rpm \
+    && rpm --import /etc/pki/rpm-gpg/PERCONA-PACKAGING-KEY \
+    && percona-release setup pdps-8.0
 
 RUN set -ex; \
     microdnf update; \
@@ -67,10 +67,10 @@ RUN mkdir /sbin/.mysqlsh && chown 2:2 /sbin/.mysqlsh
 RUN mkdir /opt/percona-server-mysql-operator
 
 LABEL name="Percona Distribution for MySQL Operator" \
-      vendor="Percona" \
-      summary="Percona Distribution for MySQL Operator v1alpha1 contains everything you need to quickly and consistently deploy and scale Percona Server for MySQL instances" \
-      description="Percona Distribution for MySQL Operator v1alpha1 contains everything you need to quickly and consistently deploy and scale Percona Server for MySQL instances in a Kubernetes-based environment, both on-premises or in the cloud" \
-      maintainer="Percona Development <info@percona.com>"
+    vendor="Percona" \
+    summary="Percona Distribution for MySQL Operator v1alpha1 contains everything you need to quickly and consistently deploy and scale Percona Server for MySQL instances" \
+    description="Percona Distribution for MySQL Operator v1alpha1 contains everything you need to quickly and consistently deploy and scale Percona Server for MySQL instances in a Kubernetes-based environment, both on-premises or in the cloud" \
+    maintainer="Percona Development <info@percona.com>"
 
 COPY LICENSE /licenses/
 COPY --from=go_builder /usr/local/bin/percona-server-mysql-operator /usr/local/bin/percona-server-mysql-operator

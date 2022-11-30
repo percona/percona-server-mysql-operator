@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 	xb "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
 
@@ -140,47 +142,92 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	backupLog, err := os.OpenFile(filepath.Join(mysql.BackupLogDir, backupName+".log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Error(err, "failed to open log file")
+	if err := deleteBackup(req.Context(), &backupConf, backupName); err != nil {
+		log.Error(err, "failed to delete backup")
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
-	defer backupLog.Close()
-	logWriter := io.MultiWriter(backupLog, os.Stderr)
 
-	xbcloud := exec.CommandContext(req.Context(), "xbcloud", xb.XBCloudArgs(xb.XBCloudActionDelete, &backupConf)...)
+	log.Info("Backup deleted successfully", "destination", backupConf.Destination, "storage", backupConf.Type)
+}
+
+func deleteBackup(ctx context.Context, cfg *xtrabackup.BackupConfig, backupName string) error {
+	logWriter := io.Writer(os.Stderr)
+	if backupName != "" {
+		backupLog, err := os.OpenFile(filepath.Join(mysql.BackupLogDir, backupName+".log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			return errors.Wrap(err, "failed to open log file")
+		}
+		defer backupLog.Close()
+		logWriter = io.MultiWriter(backupLog, os.Stderr)
+	}
+	xbcloud := exec.CommandContext(ctx, "xbcloud", xb.XBCloudArgs(xb.XBCloudActionDelete, cfg)...)
 	xbcloudErr, err := xbcloud.StderrPipe()
 	if err != nil {
-		log.Error(err, "xbcloud stderr pipe failed")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
-		return
+		return errors.Wrap(err, "xbcloud stderr pipe failed")
 	}
 	defer xbcloudErr.Close()
 	log.Info(
 		"Deleting Backup",
-		"destination", backupConf.Destination,
-		"storage", backupConf.Type,
+		"destination", cfg.Destination,
+		"storage", cfg.Type,
 		"xbcloudCmd", sanitizeCmd(xbcloud),
 	)
 	if err := xbcloud.Start(); err != nil {
-		log.Error(err, "failed to start xbcloud")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
-		return
+		return errors.Wrap(err, "failed to start xbcloud")
 	}
 
 	if _, err := io.Copy(logWriter, xbcloudErr); err != nil {
-		log.Error(err, "failed to copy xbcloud stderr")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
-		return
+		return errors.Wrap(err, "failed to copy xbcloud stderr")
 	}
 
 	if err := xbcloud.Wait(); err != nil {
-		log.Error(err, "failed waiting for xbcloud to finish")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
-		return
+		return errors.Wrap(err, "failed waiting for xbcloud to finish")
 	}
-	log.Info("Backup deleted successfully", "destination", backupConf.Destination, "storage", backupConf.Type)
+	return nil
+}
+
+func backupExists(ctx context.Context, cfg *xtrabackup.BackupConfig) (bool, error) {
+	storage, err := NewStorage(cfg)
+	if err != nil {
+		return false, errors.Wrap(err, "new storage")
+	}
+	objects, err := storage.ListObjects(ctx, cfg.Destination)
+	if err != nil {
+		return false, errors.Wrap(err, "list objects")
+	}
+	if len(objects) == 0 {
+		return false, nil
+	}
+	return true, nil
+}
+
+func checkBackupMD5Size(ctx context.Context, cfg *xtrabackup.BackupConfig) error {
+	// xbcloud doesn't create md5 file for azure
+	if cfg.Type == apiv1alpha1.BackupStorageAzure {
+		return nil
+	}
+
+	storage, err := NewStorage(cfg)
+	if err != nil {
+		return errors.Wrap(err, "new storage")
+	}
+	r, err := storage.GetObject(ctx, cfg.Destination+".md5")
+	if err != nil {
+		return errors.Wrap(err, "get object")
+	}
+	defer r.Close()
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return errors.Wrap(err, "read all")
+	}
+
+	// Q: what value we should use here?
+	// size of the `demand-backup` test md5 file is 4575
+	if len(data) < 3000 {
+		return errors.Errorf("backup was finished unsuccessfull: md5 size: %d", len(data))
+	}
+	return nil
 }
 
 func createBackupHandler(w http.ResponseWriter, req *http.Request) {
@@ -218,6 +265,21 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 		log.Error(err, "failed to unmarshal backup config")
 		http.Error(w, "backup failed", http.StatusBadRequest)
 		return
+	}
+	log.V(1).Info("Checking if backup exists")
+	exists, err := backupExists(req.Context(), &backupConf)
+	if err != nil {
+		log.Error(err, "failed to check if backup exists")
+		http.Error(w, "backup failed", http.StatusBadRequest)
+		return
+	}
+	if exists {
+		log.V(1).Info("Backup exists. Deleting backup")
+		if err := deleteBackup(req.Context(), &backupConf, backupName); err != nil {
+			log.Error(err, "failed to delete existing backup")
+			http.Error(w, "backup failed", http.StatusBadRequest)
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -315,6 +377,11 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	})
 
 	if err := g.Wait(); err != nil {
+		http.Error(w, "backup failed", http.StatusInternalServerError)
+		return
+	}
+	if err := checkBackupMD5Size(req.Context(), &backupConf); err != nil {
+		log.Error(err, "check backup md5 file size")
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
