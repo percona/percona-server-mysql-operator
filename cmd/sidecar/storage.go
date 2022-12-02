@@ -17,31 +17,31 @@ import (
 	"github.com/pkg/errors"
 )
 
-type Storage interface {
-	GetObject(ctx context.Context, objectName string) (io.ReadCloser, error)
-	ListObjects(ctx context.Context, prefix string) ([]string, error)
+type storage interface {
+	getObject(ctx context.Context, objectName string) (io.ReadCloser, error)
+	listObjects(ctx context.Context, prefix string) ([]string, error)
 }
 
-func NewStorage(cfg *xtrabackup.BackupConfig) (Storage, error) {
+func newStorage(cfg *xtrabackup.BackupConfig) (storage, error) {
 	switch cfg.Type {
 	case apiv1alpha1.BackupStorageAzure:
 		a := cfg.Azure
-		return NewAzure(a.StorageAccount, a.AccessKey, a.EndpointURL, a.ContainerName)
+		return newAzure(a.StorageAccount, a.AccessKey, a.EndpointURL, a.ContainerName)
 	case apiv1alpha1.BackupStorageS3:
 		s3 := cfg.S3
-		return NewS3(s3.EndpointURL, s3.AccessKey, s3.SecretKey, s3.Bucket, s3.Region, cfg.VerifyTLS)
+		return newS3(s3.EndpointURL, s3.AccessKey, s3.SecretKey, s3.Bucket, s3.Region, cfg.VerifyTLS)
 	}
 	return nil, errors.Errorf("storage type %s is not supported", cfg.Type)
 }
 
-// S3 is a type for working with S3 storages
-type S3 struct {
+// s3 is a type for working with s3 storages
+type s3 struct {
 	client     *minio.Client // minio client for work with storage
 	bucketName string        // S3 bucket name where binlogs will be stored
 }
 
-// NewS3 return new Manager, useSSL using ssl for connection with storage
-func NewS3(endpoint, accessKeyID, secretAccessKey, bucketName, region string, verifyTLS bool) (*S3, error) {
+// newS3 return new Manager, useSSL using ssl for connection with storage
+func newS3(endpoint, accessKeyID, secretAccessKey, bucketName, region string, verifyTLS bool) (*s3, error) {
 	useSSL := strings.Contains(endpoint, "https")
 	endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "https://"), "http://")
 	transport := http.DefaultTransport
@@ -58,14 +58,14 @@ func NewS3(endpoint, accessKeyID, secretAccessKey, bucketName, region string, ve
 		return nil, errors.Wrap(err, "new minio client")
 	}
 
-	return &S3{
+	return &s3{
 		client:     minioClient,
 		bucketName: bucketName,
 	}, nil
 }
 
 // GetObject return content by given object name
-func (s *S3) GetObject(ctx context.Context, objectName string) (io.ReadCloser, error) {
+func (s *s3) getObject(ctx context.Context, objectName string) (io.ReadCloser, error) {
 	oldObj, err := s.client.GetObject(ctx, s.bucketName, objectName, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, errors.Wrapf(err, "get object %s", objectName)
@@ -74,7 +74,7 @@ func (s *S3) GetObject(ctx context.Context, objectName string) (io.ReadCloser, e
 	return oldObj, nil
 }
 
-func (s *S3) ListObjects(ctx context.Context, prefix string) ([]string, error) {
+func (s *s3) listObjects(ctx context.Context, prefix string) ([]string, error) {
 	opts := minio.ListObjectsOptions{
 		UseV1:  true,
 		Prefix: prefix,
@@ -91,13 +91,13 @@ func (s *S3) ListObjects(ctx context.Context, prefix string) ([]string, error) {
 	return list, nil
 }
 
-// Azure is a type for working with Azure Blob storages
-type Azure struct {
+// azure is a type for working with azure Blob storages
+type azure struct {
 	client    *azblob.Client // azure client for work with storage
 	container string
 }
 
-func NewAzure(storageAccount, accessKey, endpoint, container string) (*Azure, error) {
+func newAzure(storageAccount, accessKey, endpoint, container string) (*azure, error) {
 	credential, err := azblob.NewSharedKeyCredential(storageAccount, accessKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "new credentials")
@@ -110,13 +110,13 @@ func NewAzure(storageAccount, accessKey, endpoint, container string) (*Azure, er
 		return nil, errors.Wrap(err, "new client")
 	}
 
-	return &Azure{
+	return &azure{
 		client:    cli,
 		container: container,
 	}, nil
 }
 
-func (a *Azure) GetObject(ctx context.Context, name string) (io.ReadCloser, error) {
+func (a *azure) getObject(ctx context.Context, name string) (io.ReadCloser, error) {
 	resp, err := a.client.DownloadStream(ctx, a.container, name, &azblob.DownloadStreamOptions{})
 	if err != nil {
 		return nil, errors.Wrapf(err, "download stream: %s", name)
@@ -124,7 +124,7 @@ func (a *Azure) GetObject(ctx context.Context, name string) (io.ReadCloser, erro
 	return resp.Body, nil
 }
 
-func (a *Azure) ListObjects(ctx context.Context, prefix string) ([]string, error) {
+func (a *azure) listObjects(ctx context.Context, prefix string) ([]string, error) {
 	pg := a.client.NewListBlobsFlatPager(a.container, &container.ListBlobsFlatOptions{
 		Prefix: &prefix,
 	})

@@ -188,11 +188,11 @@ func deleteBackup(ctx context.Context, cfg *xtrabackup.BackupConfig, backupName 
 }
 
 func backupExists(ctx context.Context, cfg *xtrabackup.BackupConfig) (bool, error) {
-	storage, err := NewStorage(cfg)
+	storage, err := newStorage(cfg)
 	if err != nil {
 		return false, errors.Wrap(err, "new storage")
 	}
-	objects, err := storage.ListObjects(ctx, cfg.Destination)
+	objects, err := storage.listObjects(ctx, cfg.Destination)
 	if err != nil {
 		return false, errors.Wrap(err, "list objects")
 	}
@@ -208,11 +208,11 @@ func checkBackupMD5Size(ctx context.Context, cfg *xtrabackup.BackupConfig) error
 		return nil
 	}
 
-	storage, err := NewStorage(cfg)
+	storage, err := newStorage(cfg)
 	if err != nil {
 		return errors.Wrap(err, "new storage")
 	}
-	r, err := storage.GetObject(ctx, cfg.Destination+".md5")
+	r, err := storage.getObject(ctx, cfg.Destination+".md5")
 	if err != nil {
 		return errors.Wrap(err, "get object")
 	}
