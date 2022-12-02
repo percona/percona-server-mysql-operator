@@ -1127,7 +1127,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 
 	if !clusterExists {
 		l.Info("Creating InnoDB cluster")
-		err := mysh.CreateCluster(ctx, cr.InnoDBClusterName(), firstPod.Status.PodIP)
+		err := mysh.CreateCluster(ctx, cr.InnoDBClusterName())
 		if err != nil {
 			return errors.Wrapf(err, "create cluster %s", cr.InnoDBClusterName())
 		}
@@ -1198,7 +1198,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 			}
 			l.Info("Configured instance", "pod", pod.Name)
 
-			if err := mysh.AddInstance(ctx, cr.InnoDBClusterName(), podUri, pod.Status.PodIP); err != nil {
+			if err := mysh.AddInstance(ctx, cr.InnoDBClusterName(), podUri); err != nil {
 				return errors.Wrapf(err, "add instance %s", pod.Name)
 			}
 			l.Info("Added instance to the cluster", "cluster", cr.Name, "pod", pod.Name)
