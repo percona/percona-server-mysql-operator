@@ -225,7 +225,7 @@ func checkBackupMD5Size(ctx context.Context, cfg *xtrabackup.BackupConfig) error
 	// Q: what value we should use here?
 	// size of the `demand-backup` test md5 file is 4575
 	if len(data) < 3000 {
-		return errors.Errorf("backup was finished unsuccessfull: md5 size: %d", len(data))
+		return errors.Errorf("backup was finished unsuccessful: md5 size: %d", len(data))
 	}
 	return nil
 }
