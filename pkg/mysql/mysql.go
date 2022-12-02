@@ -433,8 +433,8 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 		containers = append(containers, heartbeatContainer(cr))
 	}
 
-	if pmm := cr.Spec.PMM; pmm != nil && pmm.Enabled {
-		containers = append(containers, pmmContainer(cr.Name, secret, pmm))
+	if cr.PMMEnabled(secret) {
+		containers = append(containers, pmmContainer(cr, secret))
 	}
 
 	return appendUniqueContainers(containers, cr.Spec.MySQL.Sidecars...)
@@ -577,7 +577,7 @@ func heartbeatContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	}
 }
 
-func pmmContainer(clusterName string, secret *corev1.Secret, pmmSpec *apiv1alpha1.PMMSpec) corev1.Container {
+func pmmContainer(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) corev1.Container {
 	ports := []corev1.ContainerPort{{ContainerPort: 7777}}
 	for port := 30100; port <= 30105; port++ {
 		ports = append(ports, corev1.ContainerPort{ContainerPort: int32(port)})
@@ -585,6 +585,8 @@ func pmmContainer(clusterName string, secret *corev1.Secret, pmmSpec *apiv1alpha
 
 	user := "api_key"
 	passwordKey := string(apiv1alpha1.UserPMMServerKey)
+
+	pmmSpec := cr.PMMSpec()
 
 	return corev1.Container{
 		Name:            "pmm-client",
@@ -612,7 +614,7 @@ func pmmContainer(clusterName string, secret *corev1.Secret, pmmSpec *apiv1alpha
 			},
 			{
 				Name:  "CLUSTER_NAME",
-				Value: clusterName,
+				Value: cr.Name,
 			},
 			{
 				Name:  "CLIENT_PORT_LISTEN",
@@ -712,7 +714,7 @@ func pmmContainer(clusterName string, secret *corev1.Secret, pmmSpec *apiv1alpha
 			},
 			{
 				Name:  "DB_CLUSTER",
-				Value: clusterName,
+				Value: cr.Name,
 			},
 			{
 				Name:  "DB_TYPE",
