@@ -58,8 +58,7 @@ RUN export GNUPGHOME="$(mktemp -d)" \
 
 RUN set -ex; \
     microdnf update; \
-    microdnf install -y glibc-langpack-en; \
-    microdnf install -y percona-mysql-shell; \
+    microdnf install -y glibc-langpack-en percona-mysql-shell; \
     microdnf clean all; \
     rm -rf /var/cache; \
     rm -rf /usr/lib/debug/usr/bin;
