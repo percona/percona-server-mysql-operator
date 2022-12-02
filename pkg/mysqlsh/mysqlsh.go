@@ -24,8 +24,6 @@ var ErrMetadataExistsButGRNotActive = errors.New("MYSQLSH 51314: metadata exists
 
 var sensitiveRegexp = regexp.MustCompile(":.*@")
 
-const defaultIPAllowList = "127.0.0.1/8,::1/128"
-
 func New(e k8sexec.Interface, uri string) *mysqlsh {
 	return &mysqlsh{exec: e, uri: uri}
 }
@@ -61,17 +59,15 @@ func (m *mysqlsh) ConfigureInstance(ctx context.Context, instance string) error 
 	return nil
 }
 
-func (m *mysqlsh) AddInstance(ctx context.Context, clusterName, instance, podIp string) error {
+func (m *mysqlsh) AddInstance(ctx context.Context, clusterName, instance string) error {
 	opts := struct {
 		Interactive    bool   `json:"interactive"`
 		RecoveryMethod string `json:"recoveryMethod"`
 		WaitRecovery   int    `json:"waitRecovery"`
-		IpAllowList    string `json:"ipAllowList"`
 	}{
 		Interactive:    false,
 		RecoveryMethod: "clone",
 		WaitRecovery:   0,
-		IpAllowList:    fmt.Sprintf("%s,%s/8", defaultIPAllowList, podIp),
 	}
 
 	o, err := json.Marshal(opts)
@@ -108,8 +104,8 @@ func (m *mysqlsh) RemoveInstance(ctx context.Context, clusterName, instance stri
 	return nil
 }
 
-func (m *mysqlsh) CreateCluster(ctx context.Context, clusterName, podIp string) error {
-	cmd := fmt.Sprintf("dba.createCluster('%s', {'ipAllowList': '%s,%s/8'})", clusterName, defaultIPAllowList, podIp)
+func (m *mysqlsh) CreateCluster(ctx context.Context, clusterName string) error {
+	cmd := fmt.Sprintf("dba.createCluster('%s')", clusterName)
 
 	if err := m.run(ctx, cmd); err != nil {
 		return errors.Wrap(err, "create cluster")
