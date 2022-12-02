@@ -479,9 +479,9 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 
 		switch mysqlUser.Username {
 		case apiv1alpha1.UserMonitor:
-			restartMySQL = cr.PMMEnabled()
+			restartMySQL = cr.PMMEnabled(internalSecret)
 		case apiv1alpha1.UserPMMServerKey:
-			restartMySQL = cr.PMMEnabled()
+			restartMySQL = cr.PMMEnabled(internalSecret)
 			continue // PMM server user credentials are not stored in db
 		case apiv1alpha1.UserReplication:
 			restartReplication = true
@@ -641,6 +641,8 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
+	l := log.FromContext(ctx).WithName("reconcileDatabase")
+
 	configHash, err := r.reconcileMySQLConfiguration(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "reconcile MySQL config")
@@ -664,6 +666,11 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.StatefulSet(cr, initImage, configHash, internalSecret), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile sts")
+	}
+
+	if pmm := cr.Spec.PMM; pmm != nil && pmm.Enabled && !pmm.HasSecret(internalSecret) {
+		l.Info(fmt.Sprintf(`Can't enable PMM: either "%s" key doesn't exist in the %s, or %s and %s secrets are out of sync`,
+			apiv1alpha1.UserPMMServerKey, cr.Spec.SecretsName, cr.Spec.SecretsName, cr.InternalSecretName()))
 	}
 
 	return nil
