@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
@@ -117,7 +118,7 @@ func newAzure(storageAccount, accessKey, endpoint, container string) (*azure, er
 }
 
 func (a *azure) getObject(ctx context.Context, name string) (io.ReadCloser, error) {
-	resp, err := a.client.DownloadStream(ctx, a.container, name, &azblob.DownloadStreamOptions{})
+	resp, err := a.client.DownloadStream(ctx, a.container, url.QueryEscape(name), &azblob.DownloadStreamOptions{})
 	if err != nil {
 		return nil, errors.Wrapf(err, "download stream: %s", name)
 	}
