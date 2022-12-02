@@ -326,10 +326,7 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 		source = top.Primary
 		l.Info("no replicas found, using primary as the backup source", "primary", top.Primary)
 	} else {
-		for _, replica := range top.Replicas {
-			source = replica
-			break
-		}
+		source = top.Replicas[0]
 	}
 
 	return source, nil
