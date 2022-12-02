@@ -1020,7 +1020,11 @@ func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr
 func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("reconcileReplication")
 
-	if err := r.reconcileGroupReplication(ctx, cr); err != nil {
+	// if err := r.reconcileGroupReplication(ctx, cr); err != nil {
+	// 	return errors.Wrap(err, "reconcile group replication")
+	// }
+
+	if err := r.reconcileGroupReplicationUpgraded(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile group replication")
 	}
 
