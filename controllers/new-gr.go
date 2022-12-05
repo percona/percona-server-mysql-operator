@@ -53,6 +53,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 	}
 
 	somePod := pods[1]
+	l.Info(fmt.Sprintf("Some pod is: %s", somePod.Name))
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 	if err != nil {
@@ -71,6 +72,9 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 
 	if exists {
 		l.Info("AAAA - yes, cluster exists")
+	} else {
+		l.Info("AAAA - nooo, cluster does not exists")
+		return errors.New("cluster does not exist")
 	}
 
 	top, err := mysh.Topology(ctx, cr.InnoDBClusterName())
@@ -81,9 +85,20 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 
 	l.Info(fmt.Sprintf("AAAAA topology: %v", top))
 
-	// for _, pod := range pods {
+	for _, pod := range pods {
+		podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
 
-	// }
+		instance := fmt.Sprintf("%s:%d", podFQDN, mysql.DefaultPort)
+		state, err := mysh.MemberState(ctx, cr.InnoDBClusterName(), instance)
+		if err != nil && !errors.Is(err, innodbcluster.ErrMemberNotFound) {
+			return errors.Wrapf(err, "get member state of %s", pod.Name)
+		}
+		if errors.Is(err, innodbcluster.ErrMemberNotFound) {
+			l.Info(fmt.Sprintf("Pod %s memeber not found", pod.Name))
+		} else {
+			l.Info(fmt.Sprintf("Pod %s has state %s", pod.Name, state))
+		}
+	}
 
 	return nil
 }
@@ -199,10 +214,10 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 		}
 		l.Info(fmt.Sprintf("Configured secondary instace: %s", pod.Name))
 
-		if err := mysh.AddInstance(ctx, cr.InnoDBClusterName(), podUri); err != nil {
-			return errors.Wrapf(err, "add instance %s", pod.Name)
-		}
-		l.Info(fmt.Sprintf("Added instance %s to the cluster %s", pod.Name, cr.InnoDBClusterName()))
+		// if err := mysh.AddInstance(ctx, cr.InnoDBClusterName(), podUri); err != nil {
+		// 	return errors.Wrapf(err, "add instance %s", pod.Name)
+		// }
+		// l.Info(fmt.Sprintf("Added instance %s to the cluster %s", pod.Name, cr.InnoDBClusterName()))
 	}
 
 	return nil
