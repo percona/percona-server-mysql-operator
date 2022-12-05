@@ -21,13 +21,12 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 	l := log.FromContext(ctx).WithName("reconcileGroupReplication")
 
 	if cr.Status.MySQL.Ready != cr.MySQLSpec().Size {
-		l.V(1).Info("Waiting for all pods to be ready")
+		l.Info("Waiting for all pods to be ready")
 		return nil
 	}
 
 	cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1alpha1.InnoDBClusterInitialized)
 	if cond == nil || cond.Status == metav1.ConditionFalse {
-
 		err := r.bootstrapInnoDBCluster(ctx, cr)
 		if err != nil {
 			return err
@@ -41,7 +40,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 			LastTransitionTime: metav1.Now(),
 		})
 
-		l.Info(fmt.Sprintf("%s cluster successfully initialized with %d nodes", cr.InnoDBClusterName(), cr.MySQLSpec().Size))
+		l.Info(fmt.Sprintf("InnoDB cluster %s successfully initialized with %d nodes", cr.InnoDBClusterName(), cr.MySQLSpec().Size))
 		return nil
 	}
 
@@ -80,7 +79,6 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 	}
 
 	l.Info(fmt.Sprintf("AAAAA topology: %v", top))
-
 
 	// for _, pod := range pods {
 
@@ -146,18 +144,18 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 		return nil
 	}
 
-	l.Info("Configuring seed instace", "instace", seedFQDN)
+	l.Info(fmt.Sprintf("Configuring seed instace: %s", seedFQDN))
 	if err := mysh.ConfigureInstance(ctx, seedUri); err != nil {
 		return err
 	}
-	l.Info("Configured seed instance", "instance", seedFQDN)
+	l.Info(fmt.Sprintf("Configured seed instace: %s", seedFQDN))
 
 	l.Info("Creating InnoDB cluster")
 	err = mysh.CreateCluster(ctx, cr.InnoDBClusterName())
 	if err != nil {
 		return errors.Wrapf(err, "create cluster %s", cr.InnoDBClusterName())
 	}
-	l.Info("Created InnoDB Cluster", "cluster", cr.InnoDBClusterName())
+	l.Info(fmt.Sprintf("Created InnoDB cluster: %s", cr.InnoDBClusterName()))
 
 	for _, pod := range pods {
 		if pod.Name == seed.Name {
@@ -186,12 +184,12 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 		if err := mysh.ConfigureInstance(ctx, podUri); err != nil {
 			return errors.Wrapf(err, "configure instance %s", pod.Name)
 		}
-		l.Info("Configured instance", "pod", pod.Name)
+		l.Info(fmt.Sprintf("Configured secondary instace: %s", pod.Name))
 
 		if err := mysh.AddInstance(ctx, cr.InnoDBClusterName(), podUri); err != nil {
 			return errors.Wrapf(err, "add instance %s", pod.Name)
 		}
-		l.Info("Added instance to the cluster", "cluster", cr.Name, "pod", pod.Name)
+		l.Info(fmt.Sprintf("Added instance %s to the cluster %s", pod.Name, cr.InnoDBClusterName()))
 	}
 
 	return nil
