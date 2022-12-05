@@ -30,7 +30,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 
 		err := r.bootstrapInnoDBCluster(ctx, cr)
 		if err != nil {
-			return nil
+			return err
 		}
 
 		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
@@ -44,8 +44,6 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 		l.Info(fmt.Sprintf("%s cluster successfully initialized with %d nodes", cr.InnoDBClusterName(), cr.MySQLSpec().Size))
 		return nil
 	}
-
-	// TODO: check if we need to reboot from complete outage
 
 	l.Info("Now we need to keep the cluster running")
 
@@ -130,7 +128,23 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 
 	mysh := mysqlsh.New(k8sexec.New(), seedUri)
 
-	// TODO: probably should sanity check if the cluster already exists
+	clusterExists, err := mysh.DoesClusterExist(ctx, cr.InnoDBClusterName())
+	if err != nil {
+		if errors.Is(err, mysqlsh.ErrMetadataExistsButGRNotActive) {
+			l.Info("Rebooting cluster from complete outage")
+			if err := mysh.RebootClusterFromCompleteOutage(ctx, cr.InnoDBClusterName(), []string{seedFQDN}); err != nil {
+				return err
+			}
+			l.Info("Successfully rebooted cluster")
+			return nil
+		}
+		return errors.Wrapf(err, "check if InnoDB Cluster %s exists", cr.InnoDBClusterName())
+	}
+
+	if clusterExists {
+		l.Info(fmt.Sprintf("Aborting InnoDB cluster bootstrap, cluster %s already exists", cr.InnoDBClusterName()))
+		return nil
+	}
 
 	l.Info("Configuring seed instace", "instace", seedFQDN)
 	if err := mysh.ConfigureInstance(ctx, seedUri); err != nil {
