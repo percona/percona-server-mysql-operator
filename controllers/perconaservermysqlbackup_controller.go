@@ -231,7 +231,6 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		}
 
 		status.Image = cluster.Spec.Backup.Image
-		status.SSLSecretName = cluster.Spec.SSLSecretName
 		status.Storage = storage
 
 		src, err := r.getBackupSource(ctx, cluster)

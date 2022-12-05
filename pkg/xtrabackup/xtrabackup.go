@@ -273,14 +273,6 @@ func deleteContainer(image string, conf *BackupConfig, storage *apiv1alpha1.Back
 				Name:      apiv1alpha1.BinVolumeName,
 				MountPath: apiv1alpha1.BinVolumePath,
 			},
-			{
-				Name:      dataVolumeName,
-				MountPath: dataMountPath,
-			},
-			{
-				Name:      tlsVolumeName,
-				MountPath: tlsMountPath,
-			},
 		},
 		Command:                  append([]string{"xbcloud"}, XBCloudArgs(XBCloudActionDelete, conf)...),
 		TerminationMessagePath:   "/dev/termination-log",
@@ -453,20 +445,6 @@ func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) 
 							Name: apiv1alpha1.BinVolumeName,
 							VolumeSource: corev1.VolumeSource{
 								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
-						},
-						{
-							Name: dataVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
-						},
-						{
-							Name: tlsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cr.Status.SSLSecretName,
-								},
 							},
 						},
 					},
