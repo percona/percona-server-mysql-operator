@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
@@ -162,6 +163,11 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 			continue
 		}
 
+		if !k8s.IsPodReady(pod) {
+			l.Info(fmt.Sprintf("Waiting for pod %s to be ready", pod.Name))
+			continue
+		}
+
 		podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
 		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, podFQDN, mysql.DefaultAdminPort)
 		if err != nil {
@@ -179,6 +185,13 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 				return err
 			}
 		}
+
+		instance := fmt.Sprintf("%s:%d", podFQDN, mysql.DefaultPort)
+		state, err := mysh.MemberState(ctx, cr.InnoDBClusterName(), instance)
+		if err != nil && !errors.Is(err, innodbcluster.ErrMemberNotFound) {
+			return errors.Wrapf(err, "get member state of %s", pod.Name)
+		}
+		l.Info("Pod %s has state %s", pod.Name, state)
 
 		podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
 		if err := mysh.ConfigureInstance(ctx, podUri); err != nil {
