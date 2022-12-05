@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -173,6 +174,8 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 	}
 	l.Info(fmt.Sprintf("Created InnoDB cluster: %s", cr.InnoDBClusterName()))
 
+	time.Sleep(30 * time.Second)
+
 	for _, pod := range pods {
 		if pod.Name == seed.Name {
 			continue
@@ -208,16 +211,20 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 		}
 		l.Info(fmt.Sprintf("Pod %s has state %s", pod.Name, state))
 
-		podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
-		if err := mysh.ConfigureInstance(ctx, podUri); err != nil {
-			return errors.Wrapf(err, "configure instance %s", pod.Name)
-		}
-		l.Info(fmt.Sprintf("Configured secondary instace: %s", pod.Name))
+		if errors.Is(err, innodbcluster.ErrMemberNotFound) {
+			podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
+			if err := mysh.ConfigureInstance(ctx, podUri); err != nil {
+				return errors.Wrapf(err, "configure instance %s", pod.Name)
+			}
+			l.Info(fmt.Sprintf("Configured secondary instace: %s", pod.Name))
 
-		// if err := mysh.AddInstance(ctx, cr.InnoDBClusterName(), podUri); err != nil {
-		// 	return errors.Wrapf(err, "add instance %s", pod.Name)
-		// }
-		// l.Info(fmt.Sprintf("Added instance %s to the cluster %s", pod.Name, cr.InnoDBClusterName()))
+			if err := mysh.AddInstance(ctx, cr.InnoDBClusterName(), podUri); err != nil {
+				return errors.Wrapf(err, "add instance %s", pod.Name)
+			}
+			l.Info(fmt.Sprintf("Added instance %s to the cluster %s", pod.Name, cr.InnoDBClusterName()))
+		}
+
+		time.Sleep(30 * time.Second)
 	}
 
 	return nil
