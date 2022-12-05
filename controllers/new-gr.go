@@ -191,7 +191,7 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 		if err != nil && !errors.Is(err, innodbcluster.ErrMemberNotFound) {
 			return errors.Wrapf(err, "get member state of %s", pod.Name)
 		}
-		l.Info("Pod %s has state %s", pod.Name, state)
+		l.Info(fmt.Sprintf("Pod %s has state %s", pod.Name, state))
 
 		podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
 		if err := mysh.ConfigureInstance(ctx, podUri); err != nil {
