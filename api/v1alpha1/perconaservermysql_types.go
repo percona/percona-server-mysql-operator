@@ -46,6 +46,8 @@ type PerconaServerMySQLSpec struct {
 	SSLInternalSecretName string           `json:"sslInternalSecretName,omitempty"`
 	AllowUnsafeConfig     bool             `json:"allowUnsafeConfigurations,omitempty"`
 	InitImage             string           `json:"initImage,omitempty"`
+	IgnoreAnnotations     []string         `json:"ignoreAnnotations,omitempty"`
+	IgnoreLabels          []string         `json:"ignoreLabels,omitempty"`
 	MySQL                 MySQLSpec        `json:"mysql,omitempty"`
 	Orchestrator          OrchestratorSpec `json:"orchestrator,omitempty"`
 	PMM                   *PMMSpec         `json:"pmm,omitempty"`
@@ -90,9 +92,6 @@ type MySQLSpec struct {
 	SidecarPVCs    []SidecarPVC       `json:"sidecarPVCs,omitempty"`
 
 	Configuration string `json:"configuration,omitempty"`
-
-	PrimaryServiceType  corev1.ServiceType `json:"primaryServiceType,omitempty"`
-	ReplicasServiceType corev1.ServiceType `json:"replicasServiceType,omitempty"`
 
 	PodSpec `json:",inline"`
 }
@@ -294,10 +293,17 @@ type VolumeSpec struct {
 }
 
 type ServiceExpose struct {
-	Type                     corev1.ServiceType                      `json:"type,omitempty"`
-	LoadBalancerSourceRanges []string                                `json:"loadBalancerSourceRanges,omitempty"`
-	Annotations              map[string]string                       `json:"annotations,omitempty"`
-	TrafficPolicy            corev1.ServiceExternalTrafficPolicyType `json:"trafficPolicy,omitempty"`
+	Type                     corev1.ServiceType                       `json:"type,omitempty"`
+	LoadBalancerIP           string                                   `json:"loadBalancerIP,omitempty"`
+	LoadBalancerSourceRanges []string                                 `json:"loadBalancerSourceRanges,omitempty"`
+	Annotations              map[string]string                        `json:"annotations,omitempty"`
+	Labels                   map[string]string                        `json:"labels,omitempty"`
+	InternalTrafficPolicy    *corev1.ServiceInternalTrafficPolicyType `json:"internalTrafficPolicy,omitempty"`
+	ExternalTrafficPolicy    corev1.ServiceExternalTrafficPolicyType  `json:"externalTrafficPolicy,omitempty"`
+}
+
+func (e *ServiceExpose) SaveOldMeta() bool {
+	return len(e.Annotations) == 0 && len(e.Labels) == 0
 }
 
 type ServiceExposeTogglable struct {

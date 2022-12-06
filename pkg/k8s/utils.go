@@ -209,6 +209,59 @@ func EnsureObjectWithHash(
 	return nil
 }
 
+func EnsureService(
+	ctx context.Context,
+	cl client.Client,
+	cr *apiv1alpha1.PerconaServerMySQL,
+	svc *corev1.Service,
+	s *runtime.Scheme,
+	saveOldMeta bool,
+) error {
+	if !saveOldMeta && len(cr.Spec.IgnoreAnnotations) == 0 && len(cr.Spec.IgnoreLabels) == 0 {
+		return EnsureObjectWithHash(ctx, cl, cr, svc, s)
+	}
+	oldSvc := new(corev1.Service)
+	err := cl.Get(ctx, types.NamespacedName{
+		Name:      svc.GetName(),
+		Namespace: svc.GetNamespace(),
+	}, oldSvc)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return EnsureObjectWithHash(ctx, cl, cr, svc, s)
+		}
+		return errors.Wrap(err, "get object")
+	}
+
+	if saveOldMeta {
+		svc.SetAnnotations(util.SSMapMerge(oldSvc.GetAnnotations(), svc.GetAnnotations()))
+		svc.SetLabels(util.SSMapMerge(oldSvc.GetLabels(), svc.GetLabels()))
+	}
+	if err = setIgnoredAnnotationsAndLabels(cr, svc, oldSvc); err != nil {
+		return errors.Wrap(err, "set ignored annotations and labels")
+	}
+	return EnsureObjectWithHash(ctx, cl, cr, svc, s)
+}
+
+func setIgnoredAnnotationsAndLabels(cr *apiv1alpha1.PerconaServerMySQL, obj, oldObject client.Object) error {
+	oldAnnotations := oldObject.GetAnnotations()
+	annotations := obj.GetAnnotations()
+	for _, annotation := range cr.Spec.IgnoreAnnotations {
+		if v, ok := oldAnnotations[annotation]; ok {
+			annotations[annotation] = v
+		}
+	}
+	obj.SetAnnotations(annotations)
+	oldLabels := oldObject.GetLabels()
+	labels := obj.GetLabels()
+	for _, label := range cr.Spec.IgnoreLabels {
+		if v, ok := oldLabels[label]; ok {
+			labels[label] = v
+		}
+	}
+	obj.SetLabels(labels)
+	return nil
+}
+
 func ObjectHash(obj runtime.Object) (string, error) {
 	var dataToMarshal interface{}
 

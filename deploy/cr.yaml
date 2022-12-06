@@ -10,6 +10,10 @@ spec:
   crVersion: 0.3.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
+#  ignoreAnnotations:
+#    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
+#  ignoreLabels:
+#    - rack
 #  tls:
 #    SANs:
 #      - mysql-1.example.com
@@ -29,8 +33,6 @@ spec:
 
     size: 3
     sizeSemiSync: 0
-#    primaryServiceType: LoadBalancer
-#    replicasServiceType: ClusterIP
 
     resources:
       requests:
@@ -54,6 +56,15 @@ spec:
 #    expose:
 #      enabled: false
 #      type: ClusterIP
+#      annotations:
+#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#      externalTrafficPolicy: Cluster
+#      internalTrafficPolicy: Cluster
+#      labels:
+#        rack: rack-22
+#      loadBalancerIP: 127.0.0.1
+#      loadBalancerSourceRanges:
+#        - 10.0.0.0/8
 
     volumeSpec:
       persistentVolumeClaim:
@@ -123,6 +134,15 @@ spec:
 
 #    expose:
 #      type: ClusterIP
+#      annotations:
+#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#      externalTrafficPolicy: Cluster
+#      internalTrafficPolicy: Cluster
+#      labels:
+#        rack: rack-22
+#      loadBalancerIP: 127.0.0.1
+#      loadBalancerSourceRanges:
+#        - 10.0.0.0/8
 
   router:
     image: perconalab/percona-server-mysql-operator:main-router
@@ -152,6 +172,15 @@ spec:
 
 #    expose:
 #      type: ClusterIP
+#      annotations:
+#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#      externalTrafficPolicy: Cluster
+#      internalTrafficPolicy: Cluster
+#      labels:
+#        rack: rack-22
+#      loadBalancerIP: 127.0.0.1
+#      loadBalancerSourceRanges:
+#        - 10.0.0.0/8
 
   orchestrator:
     image: perconalab/percona-server-mysql-operator:main-orchestrator
@@ -175,6 +204,15 @@ spec:
 
 #    expose:
 #      type: ClusterIP
+#      annotations:
+#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#      externalTrafficPolicy: Cluster
+#      internalTrafficPolicy: Cluster
+#      labels:
+#        rack: rack-22
+#      loadBalancerIP: 127.0.0.1
+#      loadBalancerSourceRanges:
+#        - 10.0.0.0/8
 
     resources:
       requests:

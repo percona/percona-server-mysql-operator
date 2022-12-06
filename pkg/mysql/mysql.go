@@ -66,6 +66,11 @@ func (e *Exposer) Service(name string) *corev1.Service {
 	return PodService(&cr, cr.Spec.MySQL.Expose.Type, name)
 }
 
+func (e *Exposer) SaveOldMeta() bool {
+	cr := apiv1alpha1.PerconaServerMySQL(*e)
+	return cr.MySQLSpec().Expose.SaveOldMeta()
+}
+
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return cr.Name + "-" + componentName
 }
@@ -342,14 +347,6 @@ func UnreadyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 
 func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	labels := MatchLabels(cr)
-
-	serviceType := corev1.ServiceTypeClusterIP
-	clusterIP := "None"
-	if cr.Spec.MySQL.ReplicasServiceType != "" && cr.Spec.MySQL.ReplicasServiceType != corev1.ServiceTypeClusterIP {
-		serviceType = cr.Spec.MySQL.ReplicasServiceType
-		clusterIP = ""
-	}
-
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -361,8 +358,8 @@ func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
-			Type:      serviceType,
-			ClusterIP: clusterIP,
+			Type:      corev1.ServiceTypeClusterIP,
+			ClusterIP: "None",
 			Ports:     servicePorts(cr),
 			Selector:  labels,
 		},
@@ -370,54 +367,38 @@ func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 }
 
 func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podName string) *corev1.Service {
+	expose := cr.Spec.MySQL.Expose
+
 	labels := MatchLabels(cr)
 	labels[apiv1alpha1.ExposedLabel] = "true"
+	labels = util.SSMapMerge(expose.Labels, labels)
 
 	selector := MatchLabels(cr)
 	selector["statefulset.kubernetes.io/pod-name"] = podName
+	selector = util.SSMapMerge(expose.Labels, selector)
 
+	var loadBalancerSourceRanges []string
+	if t == corev1.ServiceTypeLoadBalancer {
+		loadBalancerSourceRanges = expose.LoadBalancerSourceRanges
+	}
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      podName,
-			Namespace: cr.Namespace,
-			Labels:    labels,
+			Name:        podName,
+			Namespace:   cr.Namespace,
+			Labels:      labels,
+			Annotations: expose.Annotations,
 		},
 		Spec: corev1.ServiceSpec{
-			Type:     t,
-			Selector: selector,
-			Ports:    servicePorts(cr),
-		},
-	}
-}
-
-func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
-	labels := MatchLabels(cr)
-	selector := util.SSMapCopy(labels)
-	selector[apiv1alpha1.MySQLPrimaryLabel] = "true"
-
-	serviceType := corev1.ServiceTypeClusterIP
-	if cr.Spec.MySQL.PrimaryServiceType != "" {
-		serviceType = cr.Spec.MySQL.PrimaryServiceType
-	}
-
-	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      PrimaryServiceName(cr),
-			Namespace: cr.Namespace,
-			Labels:    labels,
-		},
-		Spec: corev1.ServiceSpec{
-			Type:     serviceType,
-			Ports:    servicePorts(cr),
-			Selector: selector,
+			Type:                     t,
+			Selector:                 selector,
+			Ports:                    servicePorts(cr),
+			LoadBalancerSourceRanges: loadBalancerSourceRanges,
+			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
+			ExternalTrafficPolicy:    expose.ExternalTrafficPolicy,
 		},
 	}
 }

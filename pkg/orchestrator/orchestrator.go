@@ -57,6 +57,11 @@ func (e *Exposer) Service(name string) *corev1.Service {
 	return PodService(&cr, cr.Spec.Orchestrator.Expose.Type, name)
 }
 
+func (e *Exposer) SaveOldMeta() bool {
+	cr := apiv1alpha1.PerconaServerMySQL(*e)
+	return cr.OrchestratorSpec().Expose.SaveOldMeta()
+}
+
 // Name returns component name
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return cr.Name + "-" + componentShortName
@@ -339,11 +344,20 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 }
 
 func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podName string) *corev1.Service {
+	expose := cr.Spec.Orchestrator.Expose
+
 	labels := MatchLabels(cr)
 	labels[apiv1alpha1.ExposedLabel] = "true"
+	labels = util.SSMapMerge(expose.Labels, labels)
 
 	selector := MatchLabels(cr)
 	selector["statefulset.kubernetes.io/pod-name"] = podName
+	selector = util.SSMapMerge(expose.Labels, selector)
+
+	var loadBalancerSourceRanges []string
+	if t == corev1.ServiceTypeLoadBalancer {
+		loadBalancerSourceRanges = expose.LoadBalancerSourceRanges
+	}
 
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -351,9 +365,10 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      podName,
-			Namespace: cr.Namespace,
-			Labels:    labels,
+			Name:        podName,
+			Namespace:   cr.Namespace,
+			Labels:      labels,
+			Annotations: expose.Annotations,
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     t,
@@ -368,6 +383,9 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 					Port: defaultRaftPort,
 				},
 			},
+			LoadBalancerSourceRanges: loadBalancerSourceRanges,
+			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
+			ExternalTrafficPolicy:    expose.ExternalTrafficPolicy,
 		},
 	}
 }

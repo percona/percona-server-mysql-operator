@@ -40,9 +40,19 @@ func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 }
 
 func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
+	expose := cr.Spec.HAProxy.Expose
+
 	labels := MatchLabels(cr)
+	labels = util.SSMapMerge(expose.Labels, labels)
 
 	serviceType := cr.Spec.HAProxy.Expose.Type
+
+	var loadBalancerSourceRanges []string
+	var loadBalancerIP string
+	if serviceType == corev1.ServiceTypeLoadBalancer {
+		loadBalancerSourceRanges = expose.LoadBalancerSourceRanges
+		loadBalancerIP = expose.LoadBalancerIP
+	}
 
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -50,9 +60,10 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ServiceName(cr),
-			Namespace: cr.Namespace,
-			Labels:    labels,
+			Name:        ServiceName(cr),
+			Namespace:   cr.Namespace,
+			Labels:      labels,
+			Annotations: expose.Annotations,
 		},
 		Spec: corev1.ServiceSpec{
 			Type: serviceType,
@@ -70,12 +81,15 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 					Port: int32(PortProxyProtocol),
 				},
 			},
-			Selector: labels,
+			Selector:                 labels,
+			LoadBalancerIP:           loadBalancerIP,
+			LoadBalancerSourceRanges: loadBalancerSourceRanges,
+			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
+			ExternalTrafficPolicy:    expose.ExternalTrafficPolicy,
 		},
 	}
 }
 
-//func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage) *appsv1.StatefulSet {
 func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.StatefulSet {
 
 	labels := MatchLabels(cr)

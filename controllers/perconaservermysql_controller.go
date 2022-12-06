@@ -687,6 +687,7 @@ type Exposer interface {
 	Size() int32
 	Labels() map[string]string
 	Service(name string) *corev1.Service
+	SaveOldMeta() bool
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileServicePerPod(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, exposer Exposer) error {
@@ -703,7 +704,7 @@ func (r *PerconaServerMySQLReconciler) reconcileServicePerPod(ctx context.Contex
 		svc := exposer.Service(svcName)
 		svcNames[svc.Name] = struct{}{}
 
-		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, svc, r.Scheme); err != nil {
+		if err := k8s.EnsureService(ctx, r.Client, cr, svc, r.Scheme, exposer.SaveOldMeta()); err != nil {
 			return errors.Wrapf(err, "reconcile svc for pod %s", svc.Name)
 		}
 	}
@@ -714,17 +715,11 @@ func (r *PerconaServerMySQLReconciler) reconcileServicePerPod(ctx context.Contex
 func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	_ = log.FromContext(ctx).WithName("reconcileMySQLServices")
 
-	if cr.Spec.MySQL.ClusterType != apiv1alpha1.ClusterTypeGR {
-		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.PrimaryService(cr), r.Scheme); err != nil {
-			return errors.Wrap(err, "reconcile primary svc")
-		}
-	}
-
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.UnreadyService(cr), r.Scheme); err != nil {
+	if err := k8s.EnsureService(ctx, r.Client, cr, mysql.UnreadyService(cr), r.Scheme, true); err != nil {
 		return errors.Wrap(err, "reconcile unready svc")
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.HeadlessService(cr), r.Scheme); err != nil {
+	if err := k8s.EnsureService(ctx, r.Client, cr, mysql.HeadlessService(cr), r.Scheme, true); err != nil {
 		return errors.Wrap(err, "reconcile headless svc")
 	}
 
@@ -950,7 +945,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.Service(cr), r.Scheme); err != nil {
+	if err := k8s.EnsureService(ctx, r.Client, cr, orchestrator.Service(cr), r.Scheme, true); err != nil {
 		return errors.Wrap(err, "reconcile Service")
 	}
 
@@ -1002,14 +997,16 @@ func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr
 			return errors.Wrap(err, "reconcile Orchestrator services")
 		}
 		if cr.HAProxyEnabled() {
-			if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, haproxy.Service(cr), r.Scheme); err != nil {
+			expose := cr.Spec.HAProxy.Expose
+			if err := k8s.EnsureService(ctx, r.Client, cr, haproxy.Service(cr), r.Scheme, expose.SaveOldMeta()); err != nil {
 				return errors.Wrap(err, "reconcile HAProxy svc")
 			}
 		}
 	}
 
 	if cr.Spec.MySQL.IsGR() {
-		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Service(cr), r.Scheme); err != nil {
+		expose := cr.Spec.MySQL.Expose
+		if err := k8s.EnsureService(ctx, r.Client, cr, router.Service(cr), r.Scheme, expose.SaveOldMeta()); err != nil {
 			return errors.Wrap(err, "reconcile router svc")
 		}
 	}
@@ -1569,10 +1566,7 @@ func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServe
 				return serviceName + "." + cr.GetNamespace(), nil
 			}
 		} else {
-			serviceName = mysql.PrimaryServiceName(cr)
-			if cr.Spec.MySQL.PrimaryServiceType != corev1.ServiceTypeLoadBalancer {
-				return serviceName + "." + cr.GetNamespace(), nil
-			}
+			return mysql.PrimaryServiceName(cr) + "." + cr.GetNamespace(), nil
 		}
 	}
 

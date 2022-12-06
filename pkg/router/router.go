@@ -45,9 +45,16 @@ func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 }
 
 func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
-	labels := MatchLabels(cr)
+	expose := cr.Spec.Router.Expose
 
-	serviceType := cr.Spec.Router.Expose.Type
+	labels := util.SSMapMerge(expose.Labels, MatchLabels(cr))
+
+	var loadBalancerSourceRanges []string
+	var loadBalancerIP string
+	if expose.Type == corev1.ServiceTypeLoadBalancer {
+		loadBalancerSourceRanges = expose.LoadBalancerSourceRanges
+		loadBalancerIP = expose.LoadBalancerIP
+	}
 
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -55,12 +62,13 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ServiceName(cr),
-			Namespace: cr.Namespace,
-			Labels:    labels,
+			Name:        ServiceName(cr),
+			Namespace:   cr.Namespace,
+			Labels:      labels,
+			Annotations: expose.Annotations,
 		},
 		Spec: corev1.ServiceSpec{
-			Type: serviceType,
+			Type: expose.Type,
 			Ports: []corev1.ServicePort{
 				// do not change the port order
 				// 8443 port should be the first in service, see K8SPS-132 task
@@ -96,7 +104,11 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 					Port: int32(PortRWAdmin),
 				},
 			},
-			Selector: labels,
+			Selector:                 labels,
+			LoadBalancerIP:           loadBalancerIP,
+			LoadBalancerSourceRanges: loadBalancerSourceRanges,
+			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
+			ExternalTrafficPolicy:    expose.ExternalTrafficPolicy,
 		},
 	}
 }
