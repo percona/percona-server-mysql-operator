@@ -689,8 +689,19 @@ func (cr *PerconaServerMySQL) InternalSecretName() string {
 	return "internal-" + cr.Name
 }
 
-func (cr *PerconaServerMySQL) PMMEnabled() bool {
-	return cr.Spec.PMM != nil && cr.Spec.PMM.Enabled
+func (cr *PerconaServerMySQL) PMMEnabled(secret *corev1.Secret) bool {
+	if cr.Spec.PMM != nil && cr.Spec.PMM.Enabled && secret.Data != nil {
+		return cr.Spec.PMM.HasSecret(secret)
+	}
+	return false
+}
+
+func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
+	if secret.Data != nil {
+		_, ok := secret.Data[string(UserPMMServerKey)]
+		return ok
+	}
+	return false
 }
 
 func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
