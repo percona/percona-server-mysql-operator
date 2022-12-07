@@ -37,8 +37,8 @@ func GetWatchNamespace() (string, error) {
 	return ns, nil
 }
 
-func LabelsEqual(old, new metav1.Object) bool {
-	return util.SSMapEqual(old.GetLabels(), new.GetLabels())
+func objectMetaEqual(old, new metav1.Object) bool {
+	return util.SSMapEqual(old.GetLabels(), new.GetLabels()) && util.SSMapEqual(old.GetAnnotations(), new.GetAnnotations())
 }
 
 func RemoveLabel(obj client.Object, key string) {
@@ -190,7 +190,7 @@ func EnsureObjectWithHash(
 	oldObjectMeta := oldObject.(metav1.ObjectMetaAccessor).GetObjectMeta()
 
 	if oldObjectMeta.GetAnnotations()["percona.com/last-config-hash"] != hash ||
-		!LabelsEqual(objectMeta, oldObjectMeta) {
+		!objectMetaEqual(objectMeta, oldObjectMeta) {
 
 		objectMeta.SetResourceVersion(oldObjectMeta.GetResourceVersion())
 		switch object := obj.(type) {
