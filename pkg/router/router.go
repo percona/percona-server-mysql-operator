@@ -56,6 +56,11 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 		loadBalancerIP = expose.LoadBalancerIP
 	}
 
+	var externalTrafficPolicy corev1.ServiceExternalTrafficPolicyType
+	if expose.Type == corev1.ServiceTypeLoadBalancer || expose.Type == corev1.ServiceTypeNodePort {
+		externalTrafficPolicy = expose.ExternalTrafficPolicy
+	}
+
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -108,7 +113,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			LoadBalancerIP:           loadBalancerIP,
 			LoadBalancerSourceRanges: loadBalancerSourceRanges,
 			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
-			ExternalTrafficPolicy:    expose.ExternalTrafficPolicy,
+			ExternalTrafficPolicy:    externalTrafficPolicy,
 		},
 	}
 }

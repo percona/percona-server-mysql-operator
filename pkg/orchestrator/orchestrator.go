@@ -359,6 +359,11 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 		loadBalancerSourceRanges = expose.LoadBalancerSourceRanges
 	}
 
+	var externalTrafficPolicy corev1.ServiceExternalTrafficPolicyType
+	if t == corev1.ServiceTypeLoadBalancer || t == corev1.ServiceTypeNodePort {
+		externalTrafficPolicy = expose.ExternalTrafficPolicy
+	}
+
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -385,7 +390,7 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 			},
 			LoadBalancerSourceRanges: loadBalancerSourceRanges,
 			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
-			ExternalTrafficPolicy:    expose.ExternalTrafficPolicy,
+			ExternalTrafficPolicy:    externalTrafficPolicy,
 		},
 	}
 }
