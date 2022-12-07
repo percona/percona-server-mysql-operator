@@ -1566,7 +1566,7 @@ func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServe
 				return serviceName + "." + cr.GetNamespace(), nil
 			}
 		} else {
-			return mysql.PrimaryServiceName(cr) + "." + cr.GetNamespace(), nil
+			return mysql.ServiceName(cr) + "." + cr.GetNamespace(), nil
 		}
 	}
 

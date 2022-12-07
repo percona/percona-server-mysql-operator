@@ -83,10 +83,6 @@ func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
-func PrimaryServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
-	return Name(cr) + "-primary"
-}
-
 func UnreadyServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr) + "-unready"
 }
