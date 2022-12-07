@@ -66,6 +66,20 @@ func checkReadiness() error {
 		return errors.New("replica is not read only")
 	}
 
+	hostname, err := getPodHostname()
+	if err != nil {
+		return errors.Wrap(err, "get pod hostname")
+	}
+
+	state, err := db.GetMemberState(hostname)
+	if err != nil {
+		return errors.Wrap(err, "get memeber state")
+	}
+
+	if state != replicator.MemberStateOnline {
+		return errors.New("group replication member is not online")
+	}
+
 	return nil
 }
 
@@ -141,4 +155,13 @@ func getPodIP() (string, error) {
 	}
 
 	return addrs[0], nil
+}
+
+func getPodHostname() (string, error) {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "", errors.Wrap(err, "get hostname")
+	}
+
+	return hostname, nil
 }

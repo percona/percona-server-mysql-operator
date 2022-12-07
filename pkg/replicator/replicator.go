@@ -318,7 +318,7 @@ func (d *dbImpl) GetGroupReplicationReplicas() ([]string, error) {
 func (d *dbImpl) GetMemberState(host string) (MemberState, error) {
 	var state MemberState
 
-	err := d.db.QueryRow("SELECT MEMBER_STATE FROM replication_group_members WHERE MEMBER_HOST=?", host).Scan(&state)
+	err := d.db.QueryRow("SELECT MEMBER_STATE FROM replication_group_members WHERE MEMBER_HOST like ?", host + "%").Scan(&state)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return MemberStateOffline, nil
