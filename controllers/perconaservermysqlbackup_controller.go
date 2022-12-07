@@ -114,9 +114,10 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		}
 	}()
 
+	r.checkFinalizers(ctx, cr)
+
 	switch cr.Status.State {
-	case apiv1alpha1.BackupFailed, apiv1alpha1.BackupSucceeded, apiv1alpha1.BackupNew:
-		r.checkFinalizers(ctx, cr)
+	case apiv1alpha1.BackupFailed, apiv1alpha1.BackupSucceeded:
 		return rr, nil
 	}
 
@@ -332,7 +333,7 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 
 func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQLBackup) {
-	if cr.DeletionTimestamp == nil {
+	if cr.DeletionTimestamp == nil || cr.Status.State == apiv1alpha1.BackupStarting || cr.Status.State == apiv1alpha1.BackupRunning {
 		return
 	}
 	l := log.FromContext(ctx).WithName("checkFinalizers")
