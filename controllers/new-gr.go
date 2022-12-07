@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -22,10 +21,10 @@ import (
 func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("reconcileGroupReplication")
 
-	if cr.Status.MySQL.Ready != cr.MySQLSpec().Size {
-		l.Info("Waiting for all pods to be ready")
-		return nil
-	}
+	// if cr.Status.MySQL.Ready != cr.MySQLSpec().Size {
+	// 	l.Info("Waiting for all pods to be ready")
+	// 	return nil
+	// }
 
 	cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1alpha1.InnoDBClusterInitialized)
 	if cond == nil || cond.Status == metav1.ConditionFalse {
@@ -53,8 +52,12 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 		return errors.Wrap(err, "get pods")
 	}
 
-	somePod := pods[1]
+	somePod := pods[1] // Here we need to get the primary
 	l.Info(fmt.Sprintf("Some pod is: %s", somePod.Name))
+	if !k8s.IsPodReady(somePod) {
+		l.Info(fmt.Sprintf("Waiting for pod %s to be ready", somePod.Name))
+		return errors.New("SOME POD NOT READY")
+	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 	if err != nil {
@@ -87,6 +90,12 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 	l.Info(fmt.Sprintf("AAAAA topology: %v", top))
 
 	for _, pod := range pods {
+
+		if !k8s.IsPodReady(pod) {
+			l.Info(fmt.Sprintf("Waiting for pod %s to be ready", pod.Name))
+			continue
+		}
+
 		podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
 
 		instance := fmt.Sprintf("%s:%d", podFQDN, mysql.DefaultPort)
@@ -138,7 +147,7 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 		}
 	}
 
-	seedFQDN := fmt.Sprintf("%s.%s.%s", seed.Name, mysql.ServiceName(cr), cr.Namespace)
+	seedFQDN := fmt.Sprintf("%s.%s.%s", seed.Name, mysql.UnreadyServiceName(cr), cr.Namespace)
 	seedUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, seedFQDN)
 
 	mysh := mysqlsh.New(k8sexec.New(), seedUri)
@@ -174,19 +183,13 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 	}
 	l.Info(fmt.Sprintf("Created InnoDB cluster: %s", cr.InnoDBClusterName()))
 
-	time.Sleep(30 * time.Second)
-
 	for _, pod := range pods {
 		if pod.Name == seed.Name {
 			continue
 		}
 
-		if !k8s.IsPodReady(pod) {
-			l.Info(fmt.Sprintf("Waiting for pod %s to be ready", pod.Name))
-			continue
-		}
+		podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.UnreadyServiceName(cr), cr.Namespace)
 
-		podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
 		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, podFQDN, mysql.DefaultAdminPort)
 		if err != nil {
 			return errors.Wrapf(err, "connect to %s", pod.Name)
@@ -223,8 +226,6 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 			}
 			l.Info(fmt.Sprintf("Added instance %s to the cluster %s", pod.Name, cr.InnoDBClusterName()))
 		}
-
-		time.Sleep(30 * time.Second)
 	}
 
 	return nil
