@@ -172,6 +172,10 @@ func bootstrap() error {
 			return errors.Wrapf(err, "get %s password", apiv1alpha1.UserReplication)
 		}
 
+		if err := db.StopReplication(); err != nil {
+			return errors.Wrap(err, "stop replication")
+		}
+
 		if err := db.StartReplication(primary, replicaPass, mysql.DefaultPort); err != nil {
 			return errors.Wrap(err, "start replication")
 		}
