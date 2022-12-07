@@ -127,14 +127,17 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 		return errors.New("NOO PODS")
 	}
 
-	// Seed can be whatever node, not necessarily pod-0
 	seed := pods[0]
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 	if err != nil {
 		return errors.Wrap(err, "get operator password")
 	}
-	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, mysql.FQDN(cr, 0), mysql.DefaultAdminPort)
+
+	seedFQDN := fmt.Sprintf("%s.%s.%s", seed.Name, mysql.UnreadyServiceName(cr), cr.Namespace)
+
+	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, seedFQDN, mysql.DefaultAdminPort)
+	// db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, mysql.FQDN(cr, 0), mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrapf(err, "connect to %s", seed.Name)
 	}
@@ -151,7 +154,6 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 		}
 	}
 
-	seedFQDN := fmt.Sprintf("%s.%s.%s", seed.Name, mysql.UnreadyServiceName(cr), cr.Namespace)
 	seedUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, seedFQDN)
 
 	mysh := mysqlsh.New(k8sexec.New(), seedUri)
