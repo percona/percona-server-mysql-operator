@@ -123,6 +123,10 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 		return errors.Wrap(err, "get pods")
 	}
 
+	if len(pods) == 0 {
+		return errors.Wrap(err, "NOO PODS")
+	}
+
 	// Seed can be whatever node, not necessarily pod-0
 	seed := pods[0]
 
