@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"net"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -10,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	k8sexec "k8s.io/utils/exec"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -87,7 +89,6 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 			return errors.Wrapf(err, "get member state of %s", pod.Name)
 		}
 
-
 		if errors.Is(err, innodbcluster.ErrMemberNotFound) {
 			podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
 			if err := mysh.ConfigureInstance(ctx, podUri); err != nil {
@@ -130,14 +131,22 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 		return false, errors.Wrap(err, "get first MySQL pod")
 	}
 
+	peers, err := lookup(mysql.UnreadyServiceName(cr))
+	if err != nil {
+		return false, errors.Wrap(err, "lookup")
+	}
+	l.Info(fmt.Sprintf("AAAA peers: %v", peers.List()))
+
 	if k8s.IsPodReady(*seed) {
 		l.Info(fmt.Sprintf("Seed pod %s already configured and part of the cluster", seed.Name))
 		return true, nil
 	}
 
 	//cluster1-mysql-0.cluster1-mysql.default.svc.cluster.local
-	seedFQDN := "cluster1-mysql-unready.default.svc.cluster.local"
+
 	//seedFQDN := fmt.Sprintf("%s.%s.%s", seed.Name, mysql.UnreadyServiceName(cr), cr.Namespace)
+
+	seedFQDN := peers.List()[0]
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 	if err != nil {
@@ -251,6 +260,20 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 	// }
 
 	return true, nil
+}
+
+func lookup(svcName string) (sets.String, error) {
+	endpoints := sets.NewString()
+	_, srvRecords, err := net.LookupSRV("", "", svcName)
+	if err != nil {
+		return endpoints, err
+	}
+	for _, srvRecord := range srvRecords {
+		// The SRV records ends in a "." for the root domain
+		ep := fmt.Sprintf("%v", srvRecord.Target[:len(srvRecord.Target)-1])
+		endpoints.Insert(ep)
+	}
+	return endpoints, nil
 }
 
 func (r *PerconaServerMySQLReconciler) getGRPrimary(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, pods []corev1.Pod) (*corev1.Pod, error) {
