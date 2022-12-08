@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
@@ -339,4 +340,21 @@ func RolloutRestart(ctx context.Context, cl client.Client, obj runtime.Object, k
 	default:
 		return errors.New("not supported")
 	}
+}
+
+func GetCRWithDefaults(
+	ctx context.Context,
+	cl client.Client,
+	nn types.NamespacedName,
+	serverVersion *platform.ServerVersion,
+) (*apiv1alpha1.PerconaServerMySQL, error) {
+	cr := new(apiv1alpha1.PerconaServerMySQL)
+	if err := cl.Get(ctx, nn, cr); err != nil {
+		return nil, errors.Wrapf(err, "get %v", nn.String())
+	}
+	if err := cr.CheckNSetDefaults(serverVersion); err != nil {
+		return nil, errors.Wrapf(err, "check and set defaults for %v", nn.String())
+	}
+
+	return cr, nil
 }

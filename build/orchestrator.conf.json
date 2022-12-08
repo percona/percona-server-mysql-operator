@@ -17,10 +17,12 @@
     "echo 'Detected {failureType} on {failureCluster}. Affected replicas: {countSlaves}' >> /tmp/recovery.log"
   ],
   "PostIntermediateMasterFailoverProcesses": [
-    "echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Successor: {successorHost}:{successorPort}' >> /tmp/recovery.log"
+    "echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Successor: {successorHost}:{successorPort}' >> /tmp/recovery.log",
+    "/opt/percona/orc-handler -primary {successorHost} 2>> /tmp/recovery.log"
   ],
   "PostMasterFailoverProcesses": [
-    "echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Promoted: {successorHost}:{successorPort}' >> /tmp/recovery.log"
+    "echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Promoted: {successorHost}:{successorPort}' >> /tmp/recovery.log",
+    "/opt/percona/orc-handler -primary {successorHost} 2>> /tmp/recovery.log"
   ],
   "PostUnsuccessfulFailoverProcesses": [],
   "PreFailoverProcesses": [

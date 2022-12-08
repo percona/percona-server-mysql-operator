@@ -203,6 +203,8 @@ func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		Image:           cr.Spec.Orchestrator.Image,
 		ImagePullPolicy: cr.Spec.Orchestrator.ImagePullPolicy,
 		Resources:       cr.Spec.Orchestrator.Resources,
+		Command:         []string{"/opt/percona/orc-entrypoint.sh"},
+		Args:            []string{"/usr/local/orchestrator/orchestrator", "-config", "/etc/orchestrator/orchestrator.conf.json", "http"},
 		Env: []corev1.EnvVar{
 			{
 				Name:  "ORC_SERVICE",
@@ -215,6 +217,10 @@ func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			{
 				Name:  "RAFT_ENABLED",
 				Value: "true",
+			},
+			{
+				Name:  "CLUSTER_NAME",
+				Value: cr.Name,
 			},
 		},
 		Ports: []corev1.ContainerPort{
