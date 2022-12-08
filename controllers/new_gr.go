@@ -148,7 +148,6 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 	if err != nil {
 		return false, err
 	}
-	
 	l.Info(fmt.Sprintf("AAAA peers: %v", peers.List()))
 
 	if k8s.IsPodReady(*seed) {
@@ -161,6 +160,7 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 	//seedFQDN := fmt.Sprintf("%s.%s.%s", seed.Name, mysql.UnreadyServiceName(cr), cr.Namespace)
 
 	seedFQDN := peers.List()[0]
+	l.Info(fmt.Sprintf("AAAA seedFQDN: %s", seedFQDN))
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 	if err != nil {
@@ -280,7 +280,7 @@ func lookup(svcName string) (sets.String, error) {
 	endpoints := sets.NewString()
 	_, srvRecords, err := net.LookupSRV("", "", svcName)
 	if err != nil {
-		if strings.Contains("no such host", err.Error()) {
+		if strings.Contains(err.Error(), "no such host") {
 			return endpoints, LookupNotReadyError
 			
 		}
