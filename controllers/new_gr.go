@@ -24,6 +24,8 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
+var LookupNotReadyError = errors.New("lookup not ready")
+
 func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("reconcileGroupReplication")
 
@@ -68,10 +70,10 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 		return errors.Wrap(err, "get operator password")
 	}
 
-	somePodFQDN := fmt.Sprintf("%s.%s.%s", primary.Name, mysql.ServiceName(cr), cr.Namespace)
-	somePodUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, somePodFQDN)
+	primaryFQDN := fmt.Sprintf("%s.%s.%s", primary.Name, mysql.ServiceName(cr), cr.Namespace)
+	primaryUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, primaryFQDN)
 
-	mysh := mysqlsh.New(k8sexec.New(), somePodUri)
+	mysh := mysqlsh.New(k8sexec.New(), primaryUri)
 
 	// TODO: Check does the cluster exist?
 	// Can we get a full cluster outage case here as well?
@@ -133,15 +135,20 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 	}
 
 	peers, err := lookup(mysql.UnreadyServiceName(cr))
-	if err != nil {
+	if err != nil && errors.Is(err, LookupNotReadyError){
 		// return false, errors.Wrap(err, "lookup peers")
-		l.Info(fmt.Sprintf("AAAA ERRRRROR peers: %v, error: %s", peers.List(), err.Error()))
+		l.Info("Waiting for lookup to be ready")
+		return false, nil
 
-		peers, err = lookup(mysql.UnreadyServiceName(cr) + "." + cr.Namespace + ".svc.cluster.local")
-		if err != nil {
-			return false, errors.Wrap(err, "lookup peers")
-		}
+		// peers, err = lookup(mysql.UnreadyServiceName(cr) + "." + cr.Namespace + ".svc.cluster.local")
+		// if err != nil {
+		// 	return false, errors.Wrap(err, "lookup peers")
+		// }
 	}
+	if err != nil {
+		return false, err
+	}
+	
 	l.Info(fmt.Sprintf("AAAA peers: %v", peers.List()))
 
 	if k8s.IsPodReady(*seed) {
@@ -273,6 +280,10 @@ func lookup(svcName string) (sets.String, error) {
 	endpoints := sets.NewString()
 	_, srvRecords, err := net.LookupSRV("", "", svcName)
 	if err != nil {
+		if strings.Contains("no such host", err.Error()) {
+			return endpoints, LookupNotReadyError
+			
+		}
 		return endpoints, err
 	}
 	for _, srvRecord := range srvRecords {
