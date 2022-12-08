@@ -133,7 +133,12 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 
 	peers, err := lookup(mysql.UnreadyServiceName(cr))
 	if err != nil {
-		return false, errors.Wrap(err, "lookup")
+		// return false, errors.Wrap(err, "lookup peers")
+		l.Info(fmt.Sprintf("AAAA ERRRRROR peers: %v, error: %s", peers.List(), err.Error()))
+	}
+	peers, err = lookup(mysql.UnreadyServiceName(cr) + ".default.svc.cluster.local")
+	if err != nil {
+		return false, errors.Wrap(err, "lookup peers")
 	}
 	l.Info(fmt.Sprintf("AAAA peers: %v", peers.List()))
 
