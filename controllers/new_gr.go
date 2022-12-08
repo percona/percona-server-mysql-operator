@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -135,10 +136,11 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 	if err != nil {
 		// return false, errors.Wrap(err, "lookup peers")
 		l.Info(fmt.Sprintf("AAAA ERRRRROR peers: %v, error: %s", peers.List(), err.Error()))
-	}
-	peers, err = lookup(mysql.UnreadyServiceName(cr) + "." + cr.Namespace + ".svc.cluster.local")
-	if err != nil {
-		return false, errors.Wrap(err, "lookup peers")
+
+		peers, err = lookup(mysql.UnreadyServiceName(cr) + "." + cr.Namespace + ".svc.cluster.local")
+		if err != nil {
+			return false, errors.Wrap(err, "lookup peers")
+		}
 	}
 	l.Info(fmt.Sprintf("AAAA peers: %v", peers.List()))
 
@@ -274,8 +276,11 @@ func lookup(svcName string) (sets.String, error) {
 		return endpoints, err
 	}
 	for _, srvRecord := range srvRecords {
-		// The SRV records ends in a "." for the root domain
-		ep := fmt.Sprintf("%v", srvRecord.Target[:len(srvRecord.Target)-1])
+		// The SRV records have the pattern $HOSTNAME.$SERVICE.$.NAMESPACE.svc.$CLUSTER_DNS_SUFFIX
+		// We only want $HOSTNAME.$SERVICE.$NAMESPACE because in the `selectDonor` function we
+		// compare the list generated here with the output of the `getFQDN` function
+		srv := strings.Split(srvRecord.Target, ".")
+		ep := strings.Join(srv[:3], ".")
 		endpoints.Insert(ep)
 	}
 	return endpoints, nil
