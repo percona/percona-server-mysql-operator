@@ -1664,26 +1664,26 @@ func getPrimaryFromOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServ
 	return primary, nil
 }
 
-// func (r *PerconaServerMySQLReconciler) getPrimaryFromGR(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
-// 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
-// 	if err != nil {
-// 		return "", errors.Wrap(err, "get operator password")
-// 	}
+func (r *PerconaServerMySQLReconciler) getPrimaryFromGR(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+	if err != nil {
+		return "", errors.Wrap(err, "get operator password")
+	}
 
-// 	fqdn := mysql.FQDN(cr, 0)
-// 	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, fqdn, mysql.DefaultAdminPort)
-// 	if err != nil {
-// 		return "", errors.Wrapf(err, "open connection to %s", fqdn)
-// 	}
+	fqdn := mysql.FQDN(cr, 0)
+	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, fqdn, mysql.DefaultAdminPort)
+	if err != nil {
+		return "", errors.Wrapf(err, "open connection to %s", fqdn)
+	}
 
-// 	return db.GetGroupReplicationPrimary()
-// }
+	return db.GetGroupReplicationPrimary()
+}
 
 func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	l := log.FromContext(ctx).WithName("getPrimaryHost")
 
 	if cr.Spec.MySQL.IsGR() {
-		p, err :=  r.getGRPrimary(ctx, cr)
+		p, err :=  r.getPrimaryFromGR(ctx, cr)
 		if err != nil {
 			return "", errors.Wrap(err, "")
 		}

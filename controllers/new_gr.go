@@ -53,9 +53,8 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 		return nil
 	}
 
-
 	// When we get the primary, that means it is operational within a good cluster
-	primaryFQDN, err := r.getGRPrimary(ctx, cr)
+	primaryFQDN, err := r.getPrimaryFromGR(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "get GR primary")
 	}
@@ -74,8 +73,8 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 	// TODO: Check does the cluster exist?
 	// Can we get a full cluster outage case here as well?
 
-	peers, err := lookup(mysql.UnreadyServiceName(cr))
-	if err != nil && errors.Is(err, ErrLookupNotReady){
+	peers, err := lookup(ctx, mysql.UnreadyServiceName(cr))
+	if err != nil && errors.Is(err, ErrLookupNotReady) {
 		l.Info("Waiting for lookup to be ready")
 		return nil
 	}
@@ -95,21 +94,31 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 			continue
 		}
 
-		// TODO
-		// if pod.Name is in peers {
-		// 	handle pod
-		// }
+		//pod nije ready, uzmi njen fqdn from peers i uzmi to kao konekciju
 
-		podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
+		peer := ""
+		for _, p := range peers.List() {
+			if strings.Contains(p, pod.Name){
+				peer = p
+				break
+			}
+		}
 
-		instance := fmt.Sprintf("%s:%d", podFQDN, mysql.DefaultPort)
+		if peer == "" {
+			// Ovo znaci imamo pod, koji nije ready, ali nemamo ga u peerovima, wait for it
+			continue
+		}
+
+		// podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
+
+		instance := fmt.Sprintf("%s:%d", peer, mysql.DefaultPort)
 		state, err := mysh.MemberState(ctx, cr.InnoDBClusterName(), instance)
 		if err != nil && !errors.Is(err, innodbcluster.ErrMemberNotFound) {
 			return errors.Wrapf(err, "get member state of %s", pod.Name)
 		}
 
 		if errors.Is(err, innodbcluster.ErrMemberNotFound) {
-			podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
+			podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, peer)
 			if err := mysh.ConfigureInstance(ctx, podUri); err != nil {
 				return errors.Wrapf(err, "configure instance %s", pod.Name)
 			}
@@ -123,7 +132,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 
 		l.V(1).Info("Member state", "pod", pod.Name, "state", state)
 		if state == innodbcluster.MemberStateMissing {
-			if err := mysh.RejoinInstance(ctx, cr.InnoDBClusterName(), podFQDN); err != nil {
+			if err := mysh.RejoinInstance(ctx, cr.InnoDBClusterName(), peer); err != nil {
 				return errors.Wrapf(err, "rejoin instance %s", pod.Name)
 			}
 			l.Info("Instance rejoined", "pod", pod.Name)
@@ -150,7 +159,7 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 		return false, errors.Wrap(err, "get first MySQL pod")
 	}
 
-	peers, err := lookup(mysql.UnreadyServiceName(cr))
+	peers, err := lookup(ctx, mysql.UnreadyServiceName(cr))
 	if err != nil && errors.Is(err, ErrLookupNotReady) {
 		// return false, errors.Wrap(err, "lookup peers")
 		l.Info("Waiting for lookup to be ready")
@@ -292,7 +301,9 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 	return true, nil
 }
 
-func lookup(svcName string) (sets.String, error) {
+func lookup(ctx context.Context, svcName string) (sets.String, error) {
+	l := log.FromContext(ctx).WithName("reconcileGroupReplication")
+
 	endpoints := sets.NewString()
 	_, srvRecords, err := net.LookupSRV("", "", svcName)
 	if err != nil {
@@ -307,38 +318,9 @@ func lookup(svcName string) (sets.String, error) {
 		// compare the list generated here with the output of the `getFQDN` function
 		srv := strings.Split(srvRecord.Target, ".")
 		ep := strings.Join(srv[:3], ".")
+		l.Info("AAAA target: %s, endpoint: %s", srvRecord.Target, ep)
+
 		endpoints.Insert(ep)
 	}
 	return endpoints, nil
-}
-
-func (r *PerconaServerMySQLReconciler) getGRPrimary(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
-	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
-	if err != nil {
-		return "", errors.Wrap(err, "get operator password")
-	}
-
-	fqdn := mysql.FQDN(cr, 0)
-	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, fqdn, mysql.DefaultAdminPort)
-	if err != nil {
-		return "", errors.Wrapf(err, "open connection to %s", fqdn)
-	}
-
-	hostname, err := db.GetGroupReplicationPrimary()
-	if err != nil {
-		return "", errors.Wrap(err, "get GR primary")
-	}
-
-	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
-	if err != nil {
-		return "", errors.Wrap(err, "get pods")
-	}
-
-	for _, pod := range pods {
-		if strings.Contains(hostname, pod.Name) {
-			return hostname, nil
-		}
-	}
-
-	return "", errors.New("GR primary not found")
 }
