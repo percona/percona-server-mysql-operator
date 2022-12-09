@@ -55,20 +55,18 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 
 
 	// When we get the primary, that means it is operational within a good cluster
-
-	// primary, err := r.getPrimaryFromGR(ctx, cr)
-	primary, err := r.getGRPrimary(ctx, cr)
+	primaryFQDN, err := r.getGRPrimary(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "get GR primary")
 	}
-	l.Info(fmt.Sprintf("Some pod is: %s", primary.Name))
+	l.Info(fmt.Sprintf("Some pod is: %s", primaryFQDN))
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 	if err != nil {
 		return errors.Wrap(err, "get operator password")
 	}
 
-	primaryFQDN := fmt.Sprintf("%s.%s.%s", primary.Name, mysql.ServiceName(cr), cr.Namespace)
+	// primaryFQDN := fmt.Sprintf("%s.%s.%s", primary.Name, mysql.ServiceName(cr), cr.Namespace)
 	primaryUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, primaryFQDN)
 
 	mysh := mysqlsh.New(k8sexec.New(), primaryUri)
@@ -314,33 +312,33 @@ func lookup(svcName string) (sets.String, error) {
 	return endpoints, nil
 }
 
-func (r *PerconaServerMySQLReconciler) getGRPrimary(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Pod, error) {
+func (r *PerconaServerMySQLReconciler) getGRPrimary(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 	if err != nil {
-		return nil, errors.Wrap(err, "get operator password")
+		return "", errors.Wrap(err, "get operator password")
 	}
 
 	fqdn := mysql.FQDN(cr, 0)
 	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, fqdn, mysql.DefaultAdminPort)
 	if err != nil {
-		return nil, errors.Wrapf(err, "open connection to %s", fqdn)
+		return "", errors.Wrapf(err, "open connection to %s", fqdn)
 	}
 
 	hostname, err := db.GetGroupReplicationPrimary()
 	if err != nil {
-		return nil, errors.Wrap(err, "get GR primary")
+		return "", errors.Wrap(err, "get GR primary")
 	}
 
 	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
 	if err != nil {
-		return nil, errors.Wrap(err, "get pods")
+		return "", errors.Wrap(err, "get pods")
 	}
 
 	for _, pod := range pods {
 		if strings.Contains(hostname, pod.Name) {
-			return &pod, nil
+			return hostname, nil
 		}
 	}
 
-	return nil, errors.New("GR primary not found")
+	return "", errors.New("GR primary not found")
 }
