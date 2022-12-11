@@ -1020,17 +1020,13 @@ func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr
 func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("reconcileReplication")
 
-	// if err := r.reconcileGroupReplication(ctx, cr); err != nil {
-	// 	return errors.Wrap(err, "reconcile group replication")
-	// }
-
 	if err := r.reconcileGroupReplicationUpgraded(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile group replication")
 	}
 
-	// if cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR {
-	// 	return nil
-	// }
+	if cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR {
+		return nil
+	}
 
 	sts := &appsv1.StatefulSet{}
 	// no need to set init image since we're just getting obj from API
@@ -1683,11 +1679,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cr *a
 	l := log.FromContext(ctx).WithName("getPrimaryHost")
 
 	if cr.Spec.MySQL.IsGR() {
-		p, err :=  r.getPrimaryFromGR(ctx, cr)
-		if err != nil {
-			return "", errors.Wrap(err, "")
-		}
-		return p, nil
+		return  r.getPrimaryFromGR(ctx, cr)
 	}
 
 	primary, err := getPrimaryFromOrchestrator(ctx, cr)

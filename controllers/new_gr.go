@@ -24,7 +24,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
-var ErrLookupNotReady = errors.New("lookup not ready") // TODO: update this err
+var ErrPodNotYetRunning = errors.New("pod not yet running")
 
 func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("reconcileGroupReplication")
@@ -53,14 +53,17 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 		return nil
 	}
 
-	// When we get the primary, that means it is operational within a good cluster
-	hostname, err := r.getPrimaryFromGR(ctx, cr)
+	// Because of removing `report_host=${FQDN}` from entrypoint, MEMBER_HOST is now only the hostname,
+	// like `cluster1-mysql-0` instead of FQDN lke `cluster1-mysql-0.cluster1-mysql.default`
+	primaryHostname, err := r.getPrimaryFromGR(ctx, cr)
 	if err != nil {
+		// TODO: handle initial `connection refused` errors.
+		// 	while the pod gets ready right after cluster bootstrap, we will get bunch of these errors
 		return errors.Wrap(err, "get GR primary")
 	}
-	l.Info(fmt.Sprintf("Primary hostname: %s", hostname))
+	l.Info(fmt.Sprintf("Primary hostname: %s", primaryHostname))
 
-	primaryFQDN := fmt.Sprintf("%s.%s.%s", hostname, mysql.ServiceName(cr), cr.Namespace)
+	primaryFQDN := fmt.Sprintf("%s.%s.%s", primaryHostname, mysql.ServiceName(cr), cr.Namespace)
 	l.Info(fmt.Sprintf("Primary FQDN: %s", primaryFQDN))
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
@@ -74,55 +77,17 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 	mysh := mysqlsh.New(k8sexec.New(), primaryUri)
 
 	// TODO: Check does the cluster exist?
-	// Can we get a full cluster outage case here as well?
-
-	// peers, err := lookup(ctx, mysql.UnreadyServiceName(cr))
-	// if err != nil && errors.Is(err, ErrLookupNotReady) {
-	// 	l.Info("Waiting for lookup to be ready")
-	// 	return nil
-	// }
-	// if err != nil {
-	// 	return err
-	// }
-	// l.Info(fmt.Sprintf("AAAA peers: %v", peers.List()))
-
-	// pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
-	// if err != nil {
-	// 	return errors.Wrap(err, "get pods")
-	// }
+	// 		Can we get a full cluster outage case here as well?
 
 	endpoints := &corev1.Endpoints{}
 	err = r.Client.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: mysql.ServiceName(cr)}, endpoints)
 	if err != nil {
 		return errors.Wrap(err, "get endpoints")
 	}
-
 	l.Info(fmt.Sprintf("Endpoints unready addresses: %v", endpoints.Subsets[0].NotReadyAddresses))
 
 	for _, addr := range endpoints.Subsets[0].NotReadyAddresses {
-
-		l.Info(fmt.Sprintf("Looping - pod IP: %s, pod hostname: %s", addr.IP, addr.Hostname))
-		// if k8s.IsPodReady(pod) {
-		// 	l.Info(fmt.Sprintf("Pod %s ready and part of the InnoDB cluster %s", pod.Name, cr.InnoDBClusterName()))
-		// 	continue
-		// }
-
-		//pod nije ready, uzmi njen fqdn from peers i uzmi to kao konekciju
-
-		// peer := ""
-		// for _, p := range peers.List() {
-		// 	if strings.Contains(p, pod.Name){
-		// 		peer = p
-		// 		break
-		// 	}
-		// }
-
-		// if peer == "" {
-		// 	// Ovo znaci imamo pod, koji nije ready, ali nemamo ga u peerovima, wait for it
-		// 	continue
-		// }
-
-		// podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
+		l.Info(fmt.Sprintf("Handling not ready instance - pod IP: %s, pod hostname: %s", addr.IP, addr.Hostname))
 
 		instance := fmt.Sprintf("%s:%d", addr.IP, mysql.DefaultPort)
 		state, err := mysh.MemberState(ctx, cr.InnoDBClusterName(), instance)
@@ -176,32 +141,23 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 	}
 
 	peers, err := lookup(ctx, mysql.UnreadyServiceName(cr))
-	if err != nil && errors.Is(err, ErrLookupNotReady) {
-		// return false, errors.Wrap(err, "lookup peers")
-		l.Info("Waiting for lookup to be ready")
+	if err != nil && errors.Is(err, ErrPodNotYetRunning) {
+		l.Info("Waiting for seed to start running")
 		return false, nil
-
-		// peers, err = lookup(mysql.UnreadyServiceName(cr) + "." + cr.Namespace + ".svc.cluster.local")
-		// if err != nil {
-		// 	return false, errors.Wrap(err, "lookup peers")
-		// }
 	}
 	if err != nil {
 		return false, err
 	}
-	l.Info(fmt.Sprintf("AAAA peers: %v", peers.List()))
+	l.Info(fmt.Sprintf("Peers: %v", peers.List()))
 
 	if k8s.IsPodReady(*seed) {
 		l.Info(fmt.Sprintf("Seed pod %s already configured and part of the cluster", seed.Name))
 		return true, nil
 	}
 
-	//cluster1-mysql-0.cluster1-mysql.default.svc.cluster.local
-
 	//seedFQDN := fmt.Sprintf("%s.%s.%s", seed.Name, mysql.UnreadyServiceName(cr), cr.Namespace)
-
 	seedFQDN := peers.List()[0]
-	l.Info(fmt.Sprintf("AAAA seedFQDN: %s", seedFQDN))
+	l.Info(fmt.Sprintf("Seed FQDN: %s", seedFQDN))
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 	if err != nil {
@@ -259,61 +215,6 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 	}
 	l.Info(fmt.Sprintf("Created InnoDB cluster: %s", cr.InnoDBClusterName()))
 
-	// pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
-	// if err != nil {
-	// 	return false, errors.Wrap(err, "get pods")
-	// }
-
-	// for _, pod := range pods {
-	// 	if pod.Name == seed.Name {
-	// 		continue
-	// 	}
-
-	// 	if k8s.IsPodReady(pod) {
-	// 		l.Info(fmt.Sprintf("Pod %s already configured and part of the cluster", pod.Name))
-	// 		continue
-	// 	}
-
-	// 	podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.UnreadyServiceName(cr), cr.Namespace)
-
-	// 	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, podFQDN, mysql.DefaultAdminPort)
-	// 	if err != nil {
-	// 		return false, errors.Wrapf(err, "connect to %s", pod.Name)
-	// 	}
-	// 	defer db.Close()
-
-	// 	asyncReplicationStatus, _, err := db.ReplicationStatus()
-	// 	if err != nil {
-	// 		return false, errors.Wrapf(err, "get async replication status of %s", pod.Name)
-	// 	}
-	// 	if asyncReplicationStatus == replicator.ReplicationStatusActive {
-	// 		l.Info("Replication threads are running. Stopping them before starting group replication", "pod", pod.Name)
-	// 		if err := db.StopReplication(); err != nil {
-	// 			return false, err
-	// 		}
-	// 	}
-
-	// 	instance := fmt.Sprintf("%s:%d", podFQDN, mysql.DefaultPort)
-	// 	state, err := mysh.MemberState(ctx, cr.InnoDBClusterName(), instance)
-	// 	if err != nil && !errors.Is(err, innodbcluster.ErrMemberNotFound) {
-	// 		return false, errors.Wrapf(err, "get member state of %s", pod.Name)
-	// 	}
-	// 	l.Info(fmt.Sprintf("Pod %s has state %s", pod.Name, state))
-
-	// 	if errors.Is(err, innodbcluster.ErrMemberNotFound) {
-	// 		podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
-	// 		if err := mysh.ConfigureInstance(ctx, podUri); err != nil {
-	// 			return false, errors.Wrapf(err, "configure instance %s", pod.Name)
-	// 		}
-	// 		l.Info(fmt.Sprintf("Configured secondary instace: %s", pod.Name))
-
-	// 		if err := mysh.AddInstance(ctx, cr.InnoDBClusterName(), podUri); err != nil {
-	// 			return false, errors.Wrapf(err, "add instance %s", pod.Name)
-	// 		}
-	// 		l.Info(fmt.Sprintf("Added instance %s to the cluster %s", pod.Name, cr.InnoDBClusterName()))
-	// 	}
-	// }
-
 	return true, nil
 }
 
@@ -324,7 +225,7 @@ func lookup(ctx context.Context, svcName string) (sets.String, error) {
 	_, srvRecords, err := net.LookupSRV("", "", svcName)
 	if err != nil {
 		if strings.Contains(err.Error(), "no such host") {
-			return endpoints, ErrLookupNotReady
+			return endpoints, ErrPodNotYetRunning
 		}
 		return endpoints, err
 	}
@@ -334,7 +235,7 @@ func lookup(ctx context.Context, svcName string) (sets.String, error) {
 		// compare the list generated here with the output of the `getFQDN` function
 		srv := strings.Split(srvRecord.Target, ".")
 		ep := strings.Join(srv[:3], ".")
-		l.Info("AAAA target: %s, endpoint: %s", srvRecord.Target, ep)
+		l.Info("Lookup target: %s, endpoint: %s", srvRecord.Target, ep)
 
 		endpoints.Insert(ep)
 	}
