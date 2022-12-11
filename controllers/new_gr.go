@@ -73,69 +73,79 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 	// TODO: Check does the cluster exist?
 	// Can we get a full cluster outage case here as well?
 
-	peers, err := lookup(ctx, mysql.UnreadyServiceName(cr))
-	if err != nil && errors.Is(err, ErrLookupNotReady) {
-		l.Info("Waiting for lookup to be ready")
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	l.Info(fmt.Sprintf("AAAA peers: %v", peers.List()))
+	// peers, err := lookup(ctx, mysql.UnreadyServiceName(cr))
+	// if err != nil && errors.Is(err, ErrLookupNotReady) {
+	// 	l.Info("Waiting for lookup to be ready")
+	// 	return nil
+	// }
+	// if err != nil {
+	// 	return err
+	// }
+	// l.Info(fmt.Sprintf("AAAA peers: %v", peers.List()))
 
-	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
+
+	// pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
+	// if err != nil {
+	// 	return errors.Wrap(err, "get pods")
+	// }
+
+	endpoints := &corev1.Endpoints{}
+	err = r.Client.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: mysql.ServiceName(cr)}, endpoints)
 	if err != nil {
-		return errors.Wrap(err, "get pods")
+		return errors.Wrap(err, "get endpoints")
 	}
 
-	for _, pod := range pods {
-		if k8s.IsPodReady(pod) {
-			l.Info(fmt.Sprintf("Pod %s ready and part of the InnoDB cluster %s", pod.Name, cr.InnoDBClusterName()))
-			continue
-		}
+
+	for _, addr := range endpoints.Subsets[0].NotReadyAddresses {
+		// if k8s.IsPodReady(pod) {
+		// 	l.Info(fmt.Sprintf("Pod %s ready and part of the InnoDB cluster %s", pod.Name, cr.InnoDBClusterName()))
+		// 	continue
+		// }
 
 		//pod nije ready, uzmi njen fqdn from peers i uzmi to kao konekciju
 
-		peer := ""
-		for _, p := range peers.List() {
-			if strings.Contains(p, pod.Name){
-				peer = p
-				break
-			}
-		}
+		// peer := ""
+		// for _, p := range peers.List() {
+		// 	if strings.Contains(p, pod.Name){
+		// 		peer = p
+		// 		break
+		// 	}
+		// }
 
-		if peer == "" {
-			// Ovo znaci imamo pod, koji nije ready, ali nemamo ga u peerovima, wait for it
-			continue
-		}
+		// if peer == "" {
+		// 	// Ovo znaci imamo pod, koji nije ready, ali nemamo ga u peerovima, wait for it
+		// 	continue
+		// }
 
 		// podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
 
-		instance := fmt.Sprintf("%s:%d", peer, mysql.DefaultPort)
+
+
+		instance := fmt.Sprintf("%s:%d", addr.IP, mysql.DefaultPort)
 		state, err := mysh.MemberState(ctx, cr.InnoDBClusterName(), instance)
 		if err != nil && !errors.Is(err, innodbcluster.ErrMemberNotFound) {
-			return errors.Wrapf(err, "get member state of %s", pod.Name)
+			return errors.Wrapf(err, "get member state of %s", addr.Hostname)
 		}
 
 		if errors.Is(err, innodbcluster.ErrMemberNotFound) {
-			podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, peer)
+			podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, addr.IP)
 			if err := mysh.ConfigureInstance(ctx, podUri); err != nil {
-				return errors.Wrapf(err, "configure instance %s", pod.Name)
+				return errors.Wrapf(err, "configure instance %s", addr.Hostname)
 			}
-			l.Info("Configured instance", "pod", pod.Name)
+			l.Info("Configured instance", "pod", addr.Hostname)
 
 			if err := mysh.AddInstance(ctx, cr.InnoDBClusterName(), podUri); err != nil {
-				return errors.Wrapf(err, "add instance %s", pod.Name)
+				return errors.Wrapf(err, "add instance %s", addr.Hostname)
 			}
-			l.Info("Added instance to the cluster", "cluster", cr.Name, "pod", pod.Name)
+			l.Info("Added instance to the cluster", "cluster", cr.Name, "pod", addr.Hostname)
 		}
 
-		l.V(1).Info("Member state", "pod", pod.Name, "state", state)
+		l.V(1).Info("Member state", "pod", addr.Hostname, "state", state)
 		if state == innodbcluster.MemberStateMissing {
-			if err := mysh.RejoinInstance(ctx, cr.InnoDBClusterName(), peer); err != nil {
-				return errors.Wrapf(err, "rejoin instance %s", pod.Name)
+			if err := mysh.RejoinInstance(ctx, cr.InnoDBClusterName(), addr.IP); err != nil {
+				return errors.Wrapf(err, "rejoin instance %s", addr.Hostname)
 			}
-			l.Info("Instance rejoined", "pod", pod.Name)
+			l.Info("Instance rejoined", "pod", addr.Hostname)
 			continue
 		}
 	}
