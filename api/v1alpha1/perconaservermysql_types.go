@@ -340,7 +340,6 @@ const (
 	InnoDBClusterInitialized string = "InnoDBClusterInitialized"
 )
 
-
 // PerconaServerMySQL is the Schema for the perconaservermysqls API
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
