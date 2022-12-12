@@ -47,8 +47,6 @@ spec:
                     type: string
                   image:
                     type: string
-                  sslSecretName:
-                    type: string
                   state:
                     type: string
                   storage:
