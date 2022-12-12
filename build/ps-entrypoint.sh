@@ -141,14 +141,14 @@ CUSTOM_CONFIG_FILES=("/etc/mysql/config/auto-config.cnf" "/etc/mysql/config/my-c
 create_default_cnf() {
 	POD_IP=$(hostname -I | awk '{print $1}')
 
-	# if [[ ${HOSTNAME} =~ "-xb-" ]]; then
-	# 	FQDN=${HOSTNAME}
-	# else
-	# 	CLUSTER_NAME="$(hostname -f | cut -d'.' -f2)"
-	# 	SERVER_NUM=${HOSTNAME/$CLUSTER_NAME-/}
-	# 	SERVER_ID=${CLUSTER_HASH}${SERVER_NUM}
-	# 	FQDN="${HOSTNAME}.${SERVICE_NAME}.$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)"
-	# fi
+	if [[ ${HOSTNAME} =~ "-xb-" ]]; then
+		FQDN=${HOSTNAME}
+	else
+		CLUSTER_NAME="$(hostname -f | cut -d'.' -f2)"
+		SERVER_NUM=${HOSTNAME/$CLUSTER_NAME-/}
+		SERVER_ID=${CLUSTER_HASH}${SERVER_NUM}
+		FQDN="${HOSTNAME}.${SERVICE_NAME}.$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)"
+	fi
 
 	CLUSTER_NAME="$(hostname -f | cut -d'.' -f2)"
 	SERVER_NUM=${HOSTNAME/$CLUSTER_NAME-/}
@@ -158,13 +158,14 @@ create_default_cnf() {
 	sed -i "/\[mysqld\]/a read_only=ON" $CFG
 	sed -i "/\[mysqld\]/a server_id=${SERVER_ID}" $CFG
 	sed -i "/\[mysqld\]/a admin-address=${POD_IP}" $CFG
-	# sed -i "/\[mysqld\]/a report_host=${FQDN}" $CFG
+	sed -i "/\[mysqld\]/a report_host=${FQDN}" $CFG
 	sed -i "/\[mysqld\]/a report_port=3306" $CFG
 	sed -i "/\[mysqld\]/a gtid-mode=ON" $CFG
 	sed -i "/\[mysqld\]/a enforce-gtid-consistency=ON" $CFG
 	sed -i "/\[mysqld\]/a plugin-load-add=clone=mysql_clone.so" $CFG
 	sed -i "/\[mysqld\]/a plugin-load-add=rpl_semi_sync_master=semisync_master.so" $CFG
 	sed -i "/\[mysqld\]/a plugin-load-add=rpl_semi_sync_slave=semisync_slave.so" $CFG
+	sed -i "/\[mysqld\]/a log_error_verbosity=3" $CFG
 
 	if [[ -d ${TLS_DIR} ]]; then
 		sed -i "/\[mysqld\]/a ssl_ca=${TLS_DIR}/ca.crt" $CFG
@@ -185,8 +186,6 @@ create_default_cnf() {
 
 load_group_replication_plugin() {
 	sed -i "/\[mysqld\]/a plugin_load_add=group_replication.so" $CFG
-	sed -i "/\[mysqld\]/a group_replication_bootstrap_group=OFF" $CFG
-	sed -i "/\[mysqld\]/a group_replication_start_on_boot=OFF" $CFG
 }
 
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')

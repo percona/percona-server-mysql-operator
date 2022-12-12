@@ -53,17 +53,12 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 		return nil
 	}
 
-	// Because of removing `report_host=${FQDN}` from entrypoint, MEMBER_HOST is now only the hostname,
-	// like `cluster1-mysql-0` instead of FQDN lke `cluster1-mysql-0.cluster1-mysql.default`
-	primaryHostname, err := r.getPrimaryFromGR(ctx, cr)
+	primaryFQDN, err := r.getPrimaryFromGR(ctx, cr)
 	if err != nil {
 		// TODO: handle initial `connection refused` errors.
 		// 	while the pod gets ready right after cluster bootstrap, we will get bunch of these errors
 		return errors.Wrap(err, "get GR primary")
 	}
-	l.Info(fmt.Sprintf("Primary hostname: %s", primaryHostname))
-
-	primaryFQDN := fmt.Sprintf("%s.%s.%s", primaryHostname, mysql.ServiceName(cr), cr.Namespace)
 	l.Info(fmt.Sprintf("Primary FQDN: %s", primaryFQDN))
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
@@ -84,26 +79,27 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 	if err != nil {
 		return errors.Wrap(err, "get endpoints")
 	}
-	l.Info(fmt.Sprintf("Endpoints unready addresses: %v", endpoints.Subsets[0].NotReadyAddresses))
+	l.Info(fmt.Sprintf("Endpoint addresses: %v", endpoints.Subsets[0].Addresses))
 
-	for _, addr := range endpoints.Subsets[0].NotReadyAddresses {
+	for _, addr := range endpoints.Subsets[0].Addresses {
 		l.Info(fmt.Sprintf("Handling not ready instance - pod IP: %s, pod hostname: %s", addr.IP, addr.Hostname))
 
-		instance := fmt.Sprintf("%s:%d", addr.IP, mysql.DefaultPort)
+		instance := fmt.Sprintf("%s.%s.%s:%d", addr.Hostname, mysql.ServiceName(cr), cr.Namespace, mysql.DefaultPort)
 		state, err := mysh.MemberState(ctx, cr.InnoDBClusterName(), instance)
 		if err != nil && !errors.Is(err, innodbcluster.ErrMemberNotFound) {
 			return errors.Wrapf(err, "get member state of %s", addr.Hostname)
 		}
 
+		podUri := fmt.Sprintf("%s:%s@%s.%s.%s", apiv1alpha1.UserOperator, operatorPass, addr.Hostname, mysql.ServiceName(cr), cr.Namespace)
+
 		if errors.Is(err, innodbcluster.ErrMemberNotFound) {
-			l.Info(fmt.Sprintf("Configuring instace: %s, %s", addr.Hostname, addr.IP))
-			podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, addr.IP)
+			l.Info(fmt.Sprintf("Configuring instace: %s", podUri))
 			if err := mysh.ConfigureInstance(ctx, podUri); err != nil {
 				return errors.Wrapf(err, "configure instance %s", addr.Hostname)
 			}
 			l.Info("Configured instance", "pod", addr.Hostname)
 
-			l.Info(fmt.Sprintf("Adding instace: %s, %s", addr.Hostname, addr.IP))
+			l.Info(fmt.Sprintf("Adding instace: %s", podUri))
 			if err := mysh.AddInstance(ctx, cr.InnoDBClusterName(), podUri); err != nil {
 				return errors.Wrapf(err, "add instance %s", addr.Hostname)
 			}
@@ -112,8 +108,8 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplicationUpgraded(ctx con
 
 		l.V(1).Info("Member state", "pod", addr.Hostname, "state", state)
 		if state == innodbcluster.MemberStateMissing {
-			l.Info(fmt.Sprintf("Rejoining instace: %s, %s", addr.Hostname, addr.IP))
-			if err := mysh.RejoinInstance(ctx, cr.InnoDBClusterName(), addr.IP); err != nil {
+			l.Info(fmt.Sprintf("Rejoining instace: %s", podUri))
+			if err := mysh.RejoinInstance(ctx, cr.InnoDBClusterName(), podUri); err != nil {
 				return errors.Wrapf(err, "rejoin instance %s", addr.Hostname)
 			}
 			l.Info("Instance rejoined", "pod", addr.Hostname)
@@ -155,8 +151,8 @@ func (r *PerconaServerMySQLReconciler) bootstrapInnoDBCluster(ctx context.Contex
 		return true, nil
 	}
 
-	//seedFQDN := fmt.Sprintf("%s.%s.%s", seed.Name, mysql.UnreadyServiceName(cr), cr.Namespace)
-	seedFQDN := peers.List()[0]
+	seedFQDN := fmt.Sprintf("%s.%s.%s", seed.Name, mysql.ServiceName(cr), cr.Namespace)
+	// seedFQDN := peers.List()[0]
 	l.Info(fmt.Sprintf("Seed FQDN: %s", seedFQDN))
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)

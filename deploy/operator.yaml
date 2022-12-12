@@ -45,7 +45,7 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.namespace
-        image: perconalab/percona-server-mysql-operator:main
+        image: perconalab/percona-server-mysql-operator:ege-k8sps-179-gr-improvement
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
