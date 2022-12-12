@@ -114,11 +114,10 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		}
 	}()
 
+	r.checkFinalizers(ctx, cr)
+
 	switch cr.Status.State {
 	case apiv1alpha1.BackupFailed, apiv1alpha1.BackupSucceeded:
-		if err := r.checkFinalizers(ctx, cr); err != nil {
-			return rr, errors.Wrapf(err, "check finalizers for %v", cr.Name)
-		}
 		return rr, nil
 	}
 
@@ -333,11 +332,22 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 }
 
 func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context,
-	cr *apiv1alpha1.PerconaServerMySQLBackup) error {
-	if cr.DeletionTimestamp == nil {
-		return nil
+	cr *apiv1alpha1.PerconaServerMySQLBackup) {
+	if cr.DeletionTimestamp == nil || cr.Status.State == apiv1alpha1.BackupStarting || cr.Status.State == apiv1alpha1.BackupRunning {
+		return
 	}
 	l := log.FromContext(ctx).WithName("checkFinalizers")
+
+	defer func() {
+		if err := r.Update(ctx, cr); err != nil {
+			l.Error(err, "failed to update finalizers for backup", "backup", cr.Name)
+		}
+	}()
+
+	if cr.Status.State == apiv1alpha1.BackupNew {
+		cr.Finalizers = nil
+		return
+	}
 
 	finalizers := sets.NewString()
 	for _, finalizer := range cr.GetFinalizers() {
@@ -358,12 +368,6 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 		}
 	}
 	cr.Finalizers = finalizers.List()
-
-	err := r.Update(ctx, cr)
-	if err != nil {
-		l.Error(err, "failed to update finalizers for backup", "backup", cr.Name)
-	}
-	return nil
 }
 
 func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup) (*xtrabackup.BackupConfig, error) {
