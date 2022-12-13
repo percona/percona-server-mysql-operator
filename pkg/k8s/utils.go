@@ -190,6 +190,19 @@ func EnsureObjectWithHash(
 
 	oldObjectMeta := oldObject.(metav1.ObjectMetaAccessor).GetObjectMeta()
 
+	switch obj.(type) {
+	case *appsv1.Deployment:
+		annotations := objectMeta.GetAnnotations()
+		ignoreAnnotations := []string{"deployment.kubernetes.io/revision"}
+		for _, key := range ignoreAnnotations {
+			v, ok := oldObjectMeta.GetAnnotations()[key]
+			if ok {
+				annotations[key] = v
+			}
+		}
+		objectMeta.SetAnnotations(annotations)
+	}
+
 	if oldObjectMeta.GetAnnotations()["percona.com/last-config-hash"] != hash ||
 		!objectMetaEqual(objectMeta, oldObjectMeta) {
 
