@@ -105,7 +105,7 @@ func (m *mysqlsh) RemoveInstance(ctx context.Context, clusterName, instance stri
 }
 
 func (m *mysqlsh) CreateCluster(ctx context.Context, clusterName string) error {
-	cmd := fmt.Sprintf("dba.createCluster('%s')", clusterName)
+	cmd := fmt.Sprintf("dba.createCluster('%s', {'adoptFromGR': true})", clusterName)
 
 	if err := m.run(ctx, cmd); err != nil {
 		return errors.Wrap(err, "create cluster")
@@ -119,14 +119,6 @@ func (m *mysqlsh) DoesClusterExist(ctx context.Context, clusterName string) (boo
 	err := m.run(ctx, cmd)
 	if err == nil {
 		return true, err
-	}
-
-	if strings.Contains(err.Error(), "MYSQLSH 51314") {
-		return true, ErrMetadataExistsButGRNotActive
-	}
-
-	if strings.Contains(err.Error(), "rebootClusterFromCompleteOutage") {
-		return true, ErrMetadataExistsButGRNotActive
 	}
 
 	return false, nil

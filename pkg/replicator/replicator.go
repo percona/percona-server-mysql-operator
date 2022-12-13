@@ -50,6 +50,7 @@ type Replicator interface {
 	DumbQuery() error
 	SetSemiSyncSource(enabled bool) error
 	SetSemiSyncSize(size int) error
+	GetGlobal(variable string) (interface{}, error)
 	SetGlobal(variable, value string) error
 	ChangeGroupReplicationPassword(replicaPass string) error
 	StartGroupReplication(password string) error
@@ -57,6 +58,7 @@ type Replicator interface {
 	GetGroupReplicationPrimary() (string, error)
 	GetGroupReplicationReplicas() ([]string, error)
 	GetMemberState(host string) (MemberState, error)
+	GetGroupReplicationMembers() ([]string, error)
 }
 
 type dbImpl struct{ db *sql.DB }
@@ -243,6 +245,13 @@ func (d *dbImpl) SetSemiSyncSize(size int) error {
 	return errors.Wrap(err, "set rpl_semi_sync_master_wait_for_slave_count")
 }
 
+func (d *dbImpl) GetGlobal(variable string) (interface{}, error) {
+	// TODO: check how to do this without being vulnerable to injection
+	var value interface{}
+	err := d.db.QueryRow(fmt.Sprintf("SELECT @@%s", variable)).Scan(&value)
+	return value, errors.Wrapf(err, "SELECT @@%s", variable)
+}
+
 func (d *dbImpl) SetGlobal(variable, value string) error {
 	_, err := d.db.Exec(fmt.Sprintf("SET GLOBAL %s=?", variable), value)
 	return errors.Wrapf(err, "SET GLOBAL %s=%s", variable, value)
@@ -327,4 +336,25 @@ func (d *dbImpl) GetMemberState(host string) (MemberState, error) {
 	}
 
 	return state, nil
+}
+
+func (d *dbImpl) GetGroupReplicationMembers() ([]string, error) {
+	members := make([]string, 0)
+
+	rows, err := d.db.Query("SELECT MEMBER_HOST FROM replication_group_members")
+	if err != nil {
+		return nil, errors.Wrap(err, "query members")
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var host string
+		if err := rows.Scan(&host); err != nil {
+			return nil, errors.Wrap(err, "scan rows")
+		}
+
+		members = append(members, host)
+	}
+
+	return members, nil
 }

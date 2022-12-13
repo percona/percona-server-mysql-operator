@@ -361,10 +361,11 @@ func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
-			Type:      serviceType,
-			ClusterIP: clusterIP,
-			Ports:     servicePorts(cr),
-			Selector:  labels,
+			Type:                     serviceType,
+			ClusterIP:                clusterIP,
+			Ports:                    servicePorts(cr),
+			Selector:                 labels,
+			PublishNotReadyAddresses: cr.Spec.MySQL.IsGR(),
 		},
 	}
 }
@@ -465,6 +466,14 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 				Name:  "CLUSTER_HASH",
 				Value: cr.ClusterHash(),
 			},
+			{
+				Name:  "CR_UID",
+				Value: string(cr.UID),
+			},
+			{
+				Name:  "CLUSTER_TYPE",
+				Value: string(cr.Spec.MySQL.ClusterType),
+			},
 		},
 		Ports: containerPorts(cr),
 		VolumeMounts: []corev1.VolumeMount{
@@ -496,10 +505,7 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		SecurityContext:          spec.ContainerSecurityContext,
 		LivenessProbe:            k8s.ExecProbe(spec.LivenessProbe, []string{"/opt/percona/healthcheck", "liveness"}),
 		ReadinessProbe:           k8s.ExecProbe(spec.ReadinessProbe, []string{"/opt/percona/healthcheck", "readiness"}),
-	}
-
-	if cr.Spec.MySQL.ClusterType != apiv1alpha1.ClusterTypeGR {
-		container.StartupProbe = k8s.ExecProbe(spec.StartupProbe, []string{"/opt/percona/bootstrap"})
+		StartupProbe:             k8s.ExecProbe(spec.StartupProbe, []string{"/opt/percona/bootstrap"}),
 	}
 
 	return container
