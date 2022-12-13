@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -108,38 +109,40 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 		return errors.New("pods not found")
 	}
 
-	// TODO: make it in one for loop
+	var primaryPod *corev1.Pod
 	for i := range pods {
+		if pods[i].Name == primaryName {
+			primaryPod = &pods[i]
+			continue
+		}
 		pod := pods[i].DeepCopy()
 		if pod.GetLabels()[apiv1alpha1.MySQLPrimaryLabel] == "true" {
-			if pod.Name == primaryName {
-				l.Info(fmt.Sprintf("primary %v is not changed. skip", primaryName))
-				return nil
-			}
-
 			k8s.RemoveLabel(pod, apiv1alpha1.MySQLPrimaryLabel)
 			if err := cl.Patch(ctx, pod, client.StrategicMergeFrom(&pods[i])); err != nil {
 				return errors.Wrapf(err, "remove label from old primary pod: %v/%v", pod.GetNamespace(), pod.GetName())
 			}
 
 			l.Info(fmt.Sprintf("removed label from old primary pod: %v/%v", pod.GetNamespace(), pod.GetName()))
-			break
 		}
 	}
 
-	for i := range pods {
-		pod := pods[i].DeepCopy()
-		if pod.Name == primaryName {
-			k8s.AddLabel(pod, apiv1alpha1.MySQLPrimaryLabel, "true")
-			if err := cl.Patch(ctx, pod, client.StrategicMergeFrom(&pods[i])); err != nil {
-				return errors.Wrapf(err, "add label to new primary pod %v/%v", pod.GetNamespace(), pod.GetName())
-			}
-
-			l.Info(fmt.Sprintf("added label to new primary pod: %v/%v", pod.GetNamespace(), pod.GetName()))
-			return nil
-		}
+	if primaryPod == nil {
+		return errors.Wrapf(err, "primary pod %s not found %s", primaryName, primary)
 	}
-	return errors.Wrapf(err, "primary pod %s not found %s", primaryName, primary)
+
+	if primaryPod.GetLabels()[apiv1alpha1.MySQLPrimaryLabel] == "true" {
+		l.Info(fmt.Sprintf("primary %v is not changed. skip", primaryName))
+		return nil
+	}
+
+	pod := primaryPod.DeepCopy()
+	k8s.AddLabel(pod, apiv1alpha1.MySQLPrimaryLabel, "true")
+	if err := cl.Patch(ctx, pod, client.StrategicMergeFrom(primaryPod)); err != nil {
+		return errors.Wrapf(err, "add label to new primary pod %v/%v", pod.GetNamespace(), pod.GetName())
+	}
+
+	l.Info(fmt.Sprintf("added label to new primary pod: %v/%v", pod.GetNamespace(), pod.GetName()))
+	return nil
 }
 
 func newClient(namespace string) (client.Client, error) {
