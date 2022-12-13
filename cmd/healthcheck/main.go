@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -164,7 +163,7 @@ func checkReplication() error {
 
 func getSecret(username string) (string, error) {
 	path := filepath.Join(mysql.CredsMountPath, username)
-	sBytes, err := ioutil.ReadFile(path)
+	sBytes, err := os.ReadFile(path)
 	if err != nil {
 		return "", errors.Wrapf(err, "read %s", path)
 	}
