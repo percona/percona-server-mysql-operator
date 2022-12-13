@@ -285,6 +285,8 @@ spec:
           value: limits-no-limits-mysql
         - name: RAFT_ENABLED
           value: "true"
+        - name: CLUSTER_NAME
+          value: limits-no-limits
         imagePullPolicy: Always
         livenessProbe:
           failureThreshold: 3
@@ -373,6 +375,8 @@ spec:
         fsGroup: 1001
         supplementalGroups:
         - 1001
+      serviceAccount: percona-server-mysql-operator-orchestrator
+      serviceAccountName: percona-server-mysql-operator-orchestrator
       terminationGracePeriodSeconds: 30
       volumes:
       - emptyDir: {}

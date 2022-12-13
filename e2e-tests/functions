@@ -160,10 +160,16 @@ get_cluster_name() {
 	kubectl -n "${NAMESPACE}" get ps -o jsonpath='{.items[0].metadata.name}'
 }
 
-get_mysql_primary_service() {
+get_mysql_service() {
 	local cluster=$1
 
-	echo "${cluster}-mysql-primary"
+	echo "${cluster}-mysql"
+}
+
+get_haproxy_svc() {
+	local cluster=$1
+
+	echo "${cluster}-haproxy"
 }
 
 get_mysql_headless_fqdn() {
@@ -317,10 +323,10 @@ check_auto_tuning() {
 
 	INNODB_SIZE=$(run_mysql \
 		'SELECT @@innodb_buffer_pool_size;' \
-		"-h $(get_mysql_primary_service "$(get_cluster_name)") -uroot -proot_password")
+		"-h $(get_haproxy_svc "$(get_cluster_name)") -uroot -proot_password")
 	CONNECTIONS=$(run_mysql \
 		'SELECT @@max_connections;' \
-		"-h $(get_mysql_primary_service "$(get_cluster_name)") -uroot -proot_password")
+		"-h $(get_haproxy_svc "$(get_cluster_name)") -uroot -proot_password")
 
 	if [[ -n ${CUSTOM_INNODB_SIZE} ]]; then
 		if [[ ${INNODB_SIZE} != ${CUSTOM_INNODB_SIZE} ]]; then
