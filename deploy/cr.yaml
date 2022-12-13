@@ -185,7 +185,7 @@ spec:
   orchestrator:
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
-    serviceAccountName: percona-server-mysql-operator-orchestrator
+#    serviceAccountName: percona-server-mysql-operator-orchestrator
 #    initImage: perconalab/percona-server-mysql-operator:main
 
     size: 3

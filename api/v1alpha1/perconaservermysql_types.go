@@ -489,6 +489,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 		cr.Spec.Orchestrator.PodSecurityContext = sc
 	}
 
+	if cr.Spec.Orchestrator.ServiceAccountName == "" {
+		cr.Spec.Orchestrator.ServiceAccountName = "percona-server-mysql-operator-orchestrator"
+	}
+
 	var err error
 	cr.Spec.MySQL.VolumeSpec, err = reconcileVol(cr.Spec.MySQL.VolumeSpec)
 	if err != nil {
