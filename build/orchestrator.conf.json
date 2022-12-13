@@ -18,17 +18,17 @@
   ],
   "PostIntermediateMasterFailoverProcesses": [
     "echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Successor: {successorHost}:{successorPort}' >> /tmp/recovery.log",
-    "/opt/percona/orc-handler -primary {successorHost} 2>> /tmp/orc-handler.log"
+    "echo 'PostIntermediateMasterFailoverProcesses:' >> /tmp/orc-handler.log && /opt/percona/orc-handler -primary {successorHost} 2>> /tmp/orc-handler.log"
   ],
   "PostMasterFailoverProcesses": [
     "echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Promoted: {successorHost}:{successorPort}' >> /tmp/recovery.log",
-    "/opt/percona/orc-handler -primary {successorHost} 2>> /tmp/orc-handler.log"
-  ],
-  "PostTakeMasterProcesses": [
-    "/opt/percona/orc-handler -primary {successorHost} 2>> /tmp/orc-handler.log"
+    "echo 'PostMasterFailoverProcesses:' >> /tmp/orc-handler.log && /opt/percona/orc-handler -primary {successorHost} 2>> /tmp/orc-handler.log"
   ],
   "PostGracefulTakeoverProcesses": [
-    "/opt/percona/orc-handler -primary {successorHost} 2>> /tmp/orc-handler.log"
+    "echo 'PostGracefulTakeoverProcesses:' >> /tmp/orc-handler.log && /opt/percona/orc-handler -primary {successorHost} 2>> /tmp/orc-handler.log"
+  ],
+  "PostFailoverProcesses": [
+    "echo 'PostFailoverProcesses:' >> /tmp/orc-handler.log && /opt/percona/orc-handler -primary {successorHost} 2>> /tmp/orc-handler.log"
   ],
   "PostUnsuccessfulFailoverProcesses": [],
   "PreFailoverProcesses": [
