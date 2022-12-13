@@ -1056,19 +1056,8 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		return nil
 	}
 
-	firstPod := &corev1.Pod{}
-	err := r.Client.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: mysql.PodName(cr, 0)}, firstPod)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			l.Info("First pod not found")
-			return nil
-		}
-
-		return errors.Wrap(err, "get first MySQL pod")
-	}
-
-	if !k8s.IsPodReady(*firstPod) {
-		l.V(1).Info("Waiting first pod to be ready")
+	if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
+		l.V(1).Info("Waiting for MySQL pods to be ready")
 		return nil
 	}
 
@@ -1077,57 +1066,12 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		return errors.Wrap(err, "get operator password")
 	}
 
-	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, mysql.FQDN(cr, 0), mysql.DefaultAdminPort)
-	if err != nil {
-		return errors.Wrapf(err, "connect to %s", firstPod.Name)
-	}
-	defer db.Close()
-
-	asyncReplicationStatus, _, err := db.ReplicationStatus()
-	if err != nil {
-		return errors.Wrapf(err, "get async replication status of %s", firstPod.Name)
-	}
-	if asyncReplicationStatus == replicator.ReplicationStatusActive {
-		l.Info("Replication threads are running. Stopping them before starting group replication", "pod", firstPod.Name)
-		if err := db.StopReplication(); err != nil {
-			return err
-		}
-	}
-
-	firstPodFQDN := fmt.Sprintf("%s.%s.%s", firstPod.Name, mysql.ServiceName(cr), cr.Namespace)
-	firstPodUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodFQDN)
-
-	mysh := mysqlsh.New(k8sexec.New(), firstPodUri)
+	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, mysql.ServiceName(cr))
+	mysh := mysqlsh.New(k8sexec.New(), uri)
 
 	clusterExists, err := mysh.DoesClusterExist(ctx, cr.InnoDBClusterName())
 	if err != nil {
-		if errors.Is(err, mysqlsh.ErrMetadataExistsButGRNotActive) {
-			l.Info("Rebooting cluster from complete outage")
-			if err := mysh.RebootClusterFromCompleteOutage(ctx, cr.InnoDBClusterName(), []string{firstPodFQDN}); err != nil {
-				return err
-			}
-			l.Info("Successfully rebooted cluster")
-			return nil
-		}
 		return errors.Wrapf(err, "check if InnoDB Cluster %s exists", cr.InnoDBClusterName())
-	}
-	state := innodbcluster.MemberStateOffline
-	// it's not possible to run Cluster.status() on a standalone MySQL node
-	if clusterExists {
-		instance := fmt.Sprintf("%s:%d", firstPodFQDN, mysql.DefaultPort)
-		state, err = mysh.MemberState(ctx, cr.InnoDBClusterName(), instance)
-		if err != nil {
-			return errors.Wrapf(err, "get member state of %s", firstPod.Name)
-		}
-	}
-
-	l.V(1).Info(fmt.Sprintf("First pod state: %s", state))
-	if state == innodbcluster.MemberStateOffline {
-		l.Info("Configuring first instace", "instace", firstPodFQDN)
-		if err := mysh.ConfigureInstance(ctx, firstPodUri); err != nil {
-			return err
-		}
-		l.Info("Configured first instance", "instance", firstPodFQDN)
 	}
 
 	if !clusterExists {
@@ -1137,106 +1081,6 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 			return errors.Wrapf(err, "create cluster %s", cr.InnoDBClusterName())
 		}
 		l.Info("Created InnoDB Cluster", "cluster", cr.InnoDBClusterName())
-	}
-
-	if state == innodbcluster.MemberStateMissing {
-		l.Info("First pod rejoining the cluster")
-		if err := mysh.RejoinInstance(ctx, cr.InnoDBClusterName(), firstPodFQDN); err != nil {
-			return errors.Wrapf(err, "rejoin instance %s", firstPod.Name)
-		}
-		l.Info("First pod rejoined the cluster", "pod", firstPod.Name)
-	}
-
-	if state != innodbcluster.MemberStateOnline {
-		l.V(1).Info("Waiting member to be ONLINE", "pod", firstPod.Name)
-		return nil
-	}
-
-	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
-	if err != nil {
-		return errors.Wrap(err, "get MySQL pods")
-	}
-
-	for _, pod := range pods {
-		if pod.Name == firstPod.Name {
-			continue
-		}
-
-		if !clusterExists {
-			l.V(1).Info("InnoDB cluster does not exist, waitin for it to be created.")
-			return nil
-		}
-
-		if !k8s.IsPodReady(pod) {
-			l.V(1).Info("Waiting for pod to be ready", "pod", pod.Name)
-			continue
-		}
-
-		podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
-		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, podFQDN, mysql.DefaultAdminPort)
-		if err != nil {
-			return errors.Wrapf(err, "connect to %s", pod.Name)
-		}
-		defer db.Close()
-
-		asyncReplicationStatus, _, err := db.ReplicationStatus()
-		if err != nil {
-			return errors.Wrapf(err, "get async replication status of %s", pod.Name)
-		}
-		if asyncReplicationStatus == replicator.ReplicationStatusActive {
-			l.Info("Replication threads are running. Stopping them before starting group replication", "pod", pod.Name)
-			if err := db.StopReplication(); err != nil {
-				return err
-			}
-		}
-
-		instance := fmt.Sprintf("%s:%d", podFQDN, mysql.DefaultPort)
-		state, err := mysh.MemberState(ctx, cr.InnoDBClusterName(), instance)
-		if err != nil && !errors.Is(err, innodbcluster.ErrMemberNotFound) {
-			return errors.Wrapf(err, "get member state of %s", pod.Name)
-		}
-
-		if errors.Is(err, innodbcluster.ErrMemberNotFound) {
-			podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
-			if err := mysh.ConfigureInstance(ctx, podUri); err != nil {
-				return errors.Wrapf(err, "configure instance %s", pod.Name)
-			}
-			l.Info("Configured instance", "pod", pod.Name)
-
-			if err := mysh.AddInstance(ctx, cr.InnoDBClusterName(), podUri); err != nil {
-				return errors.Wrapf(err, "add instance %s", pod.Name)
-			}
-			l.Info("Added instance to the cluster", "cluster", cr.Name, "pod", pod.Name)
-		}
-
-		l.V(1).Info("Member state", "pod", pod.Name, "state", state)
-		if state == innodbcluster.MemberStateMissing {
-			if err := mysh.RejoinInstance(ctx, cr.InnoDBClusterName(), podFQDN); err != nil {
-				return errors.Wrapf(err, "rejoin instance %s", pod.Name)
-			}
-			l.Info("Instance rejoined", "pod", pod.Name)
-			continue
-		}
-	}
-
-	podNames := make(map[string]struct{})
-	for i := 0; i < int(cr.Spec.MySQL.Size); i++ {
-		podNames[fmt.Sprintf("%s:%d", mysql.FQDN(cr, i), mysql.DefaultPort)] = struct{}{}
-	}
-
-	topology, err := mysh.Topology(ctx, cr.Name)
-	if err != nil {
-		return errors.Wrap(err, "get cluster topology")
-	}
-
-	for instance := range topology {
-		_, ok := podNames[instance]
-		if !ok {
-			if err := mysh.RemoveInstance(ctx, cr.InnoDBClusterName(), instance); err != nil {
-				return errors.Wrap(err, "remove instance")
-			}
-			l.Info("Instance removed from cluster", "instance", instance)
-		}
 	}
 
 	return nil

@@ -62,8 +62,6 @@ spec:
                 type: string
               image:
                 type: string
-              sslSecretName:
-                type: string
               state:
                 type: string
               storage:
@@ -819,8 +817,6 @@ spec:
                   destination:
                     type: string
                   image:
-                    type: string
-                  sslSecretName:
                     type: string
                   state:
                     type: string
