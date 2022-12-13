@@ -52,8 +52,7 @@ type PerconaServerMySQLSpec struct {
 	Orchestrator          OrchestratorSpec `json:"orchestrator,omitempty"`
 	PMM                   *PMMSpec         `json:"pmm,omitempty"`
 	Backup                *BackupSpec      `json:"backup,omitempty"`
-	Router                *MySQLRouterSpec `json:"router,omitempty"`
-	HAProxy               *HAProxySpec     `json:"haproxy,omitempty"`
+	Proxy                 ProxySpec        `json:"proxy,omitempty"`
 	TLS                   *TLSSpec         `json:"tls,omitempty"`
 	Toolkit               *ToolkitSpec     `json:"toolkit,omitempty"`
 	UpgradeOptions        UpgradeOptions   `json:"upgradeOptions,omitempty"`
@@ -244,6 +243,11 @@ type BackupStorageAzureSpec struct {
 
 	// Hot (Frequently accessed or modified data), Cool (Infrequently accessed or modified data), Archive (Rarely accessed or modified data)
 	StorageClass string `json:"storageClass,omitempty"`
+}
+
+type ProxySpec struct {
+	Router  *MySQLRouterSpec `json:"router,omitempty"`
+	HAProxy *HAProxySpec     `json:"haproxy,omitempty"`
 }
 
 type MySQLRouterSpec struct {
@@ -510,27 +514,27 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 		return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup")
 	}
 
-	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Router == nil {
+	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Proxy.Router == nil {
 		return errors.New("router section is needed for group replication")
 	}
 
-	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Router != nil {
-		if cr.Spec.Router.Size < MinSafeProxySize {
-			cr.Spec.Router.Size = MinSafeProxySize
+	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Proxy.Router != nil {
+		if cr.Spec.Proxy.Router.Size < MinSafeProxySize {
+			cr.Spec.Proxy.Router.Size = MinSafeProxySize
 		}
 	}
 
 	if cr.HAProxyEnabled() && cr.Spec.MySQL.ClusterType != ClusterTypeGR {
-		if cr.Spec.HAProxy.Size < MinSafeProxySize {
-			cr.Spec.HAProxy.Size = MinSafeProxySize
+		if cr.Spec.Proxy.HAProxy.Size < MinSafeProxySize {
+			cr.Spec.Proxy.HAProxy.Size = MinSafeProxySize
 		}
 	}
 
 	if cr.Spec.Pause {
 		cr.Spec.MySQL.Size = 0
 		cr.Spec.Orchestrator.Size = 0
-		cr.Spec.Router.Size = 0
-		cr.Spec.HAProxy.Size = 0
+		cr.Spec.Proxy.Router.Size = 0
+		cr.Spec.Proxy.HAProxy.Size = 0
 	}
 
 	return nil
@@ -715,7 +719,7 @@ func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 }
 
 func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
-	return cr.Spec.HAProxy != nil && cr.Spec.HAProxy.Enabled
+	return cr.Spec.Proxy.HAProxy != nil && cr.Spec.Proxy.HAProxy.Enabled
 }
 
 var NonAlphaNumeric = regexp.MustCompile("[^a-zA-Z0-9_]+")

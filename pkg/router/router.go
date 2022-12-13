@@ -45,7 +45,7 @@ func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 }
 
 func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
-	expose := cr.Spec.Router.Expose
+	expose := cr.Spec.Proxy.Router.Expose
 
 	labels := util.SSMapMerge(expose.Labels, MatchLabels(cr))
 
@@ -120,7 +120,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 
 func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.Deployment {
 	labels := MatchLabels(cr)
-	spec := cr.Spec.Router
+	spec := cr.Spec.Proxy.Router
 	replicas := spec.Size
 
 	return &appsv1.Deployment{
@@ -152,8 +152,8 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.De
 						),
 					},
 					Containers:                    containers(cr),
-					NodeSelector:                  cr.Spec.Router.NodeSelector,
-					Tolerations:                   cr.Spec.Router.Tolerations,
+					NodeSelector:                  cr.Spec.Proxy.Router.NodeSelector,
+					Tolerations:                   cr.Spec.Proxy.Router.Tolerations,
 					Affinity:                      spec.GetAffinity(labels),
 					ImagePullSecrets:              spec.ImagePullSecrets,
 					TerminationGracePeriodSeconds: spec.TerminationGracePeriodSeconds,
@@ -198,7 +198,7 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 }
 
 func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
-	spec := cr.Spec.Router
+	spec := cr.Spec.Proxy.Router
 
 	return corev1.Container{
 		Name:            componentName,

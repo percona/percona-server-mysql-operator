@@ -40,12 +40,12 @@ func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 }
 
 func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
-	expose := cr.Spec.HAProxy.Expose
+	expose := cr.Spec.Proxy.HAProxy.Expose
 
 	labels := MatchLabels(cr)
 	labels = util.SSMapMerge(expose.Labels, labels)
 
-	serviceType := cr.Spec.HAProxy.Expose.Type
+	serviceType := cr.Spec.Proxy.HAProxy.Expose.Type
 
 	var loadBalancerSourceRanges []string
 	var loadBalancerIP string
@@ -110,7 +110,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.S
 			Labels:    labels,
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas:    &cr.Spec.HAProxy.Size,
+			Replicas:    &cr.Spec.Proxy.HAProxy.Size,
 			ServiceName: Name(cr),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
@@ -120,19 +120,19 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.S
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector: cr.Spec.HAProxy.NodeSelector,
-					Tolerations:  cr.Spec.HAProxy.Tolerations,
+					NodeSelector: cr.Spec.Proxy.HAProxy.NodeSelector,
+					Tolerations:  cr.Spec.Proxy.HAProxy.Tolerations,
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
 							componentName,
 							initImage,
-							cr.Spec.HAProxy.ImagePullPolicy,
-							cr.Spec.HAProxy.ContainerSecurityContext,
+							cr.Spec.Proxy.HAProxy.ImagePullPolicy,
+							cr.Spec.Proxy.HAProxy.ContainerSecurityContext,
 						),
 					},
 					Containers:       containers(cr),
-					Affinity:         cr.Spec.HAProxy.GetAffinity(labels),
-					ImagePullSecrets: cr.Spec.HAProxy.ImagePullSecrets,
+					Affinity:         cr.Spec.Proxy.HAProxy.GetAffinity(labels),
+					ImagePullSecrets: cr.Spec.Proxy.HAProxy.ImagePullSecrets,
 					// TerminationGracePeriodSeconds: 30,
 					RestartPolicy: corev1.RestartPolicyAlways,
 					SchedulerName: "default-scheduler",
@@ -167,7 +167,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.S
 							},
 						},
 					},
-					SecurityContext: cr.Spec.HAProxy.PodSecurityContext,
+					SecurityContext: cr.Spec.Proxy.HAProxy.PodSecurityContext,
 				},
 			},
 		},
@@ -182,7 +182,7 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 }
 
 func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
-	spec := cr.Spec.HAProxy
+	spec := cr.Spec.Proxy.HAProxy
 
 	return corev1.Container{
 		Name:            componentName,
@@ -231,7 +231,7 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 }
 
 func mysqlMonitContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
-	spec := cr.Spec.HAProxy
+	spec := cr.Spec.Proxy.HAProxy
 
 	return corev1.Container{
 		Name:            "mysql-monit",

@@ -336,13 +336,13 @@ func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr
 		}
 		cr.Spec.Orchestrator.Image = version.OrchestratorImage
 	}
-	if cr.Spec.Router.Image != version.RouterImage {
+	if cr.Spec.Proxy.Router.Image != version.RouterImage {
 		if cr.Status.Router.Version == "" {
 			l.Info("set MySQL router version to " + version.RouterVersion)
 		} else {
 			l.Info("update MySQL router version", "old version", cr.Status.Router.Version, "new version", version.RouterVersion)
 		}
-		cr.Spec.Router.Image = version.RouterImage
+		cr.Spec.Proxy.Router.Image = version.RouterImage
 	}
 	if cr.Spec.PMM.Image != version.PMMImage {
 		if cr.Status.PMMVersion == "" {
@@ -975,7 +975,7 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 		return nil
 	}
 
-	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.HAProxy.PodSpec)
+	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Proxy.HAProxy.PodSpec)
 	if err != nil {
 		return errors.Wrap(err, "get init image")
 	}
@@ -997,7 +997,7 @@ func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr
 			return errors.Wrap(err, "reconcile Orchestrator services")
 		}
 		if cr.HAProxyEnabled() {
-			expose := cr.Spec.HAProxy.Expose
+			expose := cr.Spec.Proxy.HAProxy.Expose
 			if err := k8s.EnsureService(ctx, r.Client, cr, haproxy.Service(cr), r.Scheme, expose.SaveOldMeta()); err != nil {
 				return errors.Wrap(err, "reconcile HAProxy svc")
 			}
@@ -1323,7 +1323,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		return nil
 	}
 
-	if cr.Spec.Router.Size > 0 {
+	if cr.Spec.Proxy.Router.Size > 0 {
 		operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 		if err != nil {
 			return errors.Wrap(err, "get operator password")
@@ -1338,7 +1338,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		}
 	}
 
-	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Router.PodSpec)
+	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Proxy.Router.PodSpec)
 	if err != nil {
 		return errors.Wrap(err, "get init image")
 	}
@@ -1415,7 +1415,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	routerStatus := apiv1alpha1.StatefulAppStatus{}
 	if cr.Spec.MySQL.IsGR() {
-		routerStatus, err = appStatus(ctx, r.Client, cr.Spec.Router.Size, router.MatchLabels(cr), cr.Status.Router.Version)
+		routerStatus, err = appStatus(ctx, r.Client, cr.Spec.Proxy.Router.Size, router.MatchLabels(cr), cr.Status.Router.Version)
 		if err != nil {
 			return errors.Wrap(err, "get Router status")
 		}
@@ -1424,7 +1424,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	haproxyStatus := apiv1alpha1.StatefulAppStatus{}
 	if cr.HAProxyEnabled() && cr.Spec.MySQL.IsAsync() {
-		haproxyStatus, err = appStatus(ctx, r.Client, cr.Spec.HAProxy.Size, haproxy.MatchLabels(cr), cr.Status.HAProxy.Version)
+		haproxyStatus, err = appStatus(ctx, r.Client, cr.Spec.Proxy.HAProxy.Size, haproxy.MatchLabels(cr), cr.Status.HAProxy.Version)
 		if err != nil {
 			return errors.Wrap(err, "get HAProxy status")
 		}
@@ -1491,7 +1491,7 @@ func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServe
 	var serviceName string
 	if cr.Spec.MySQL.IsGR() {
 		serviceName = router.ServiceName(cr)
-		if cr.Spec.Router.Expose.Type != corev1.ServiceTypeLoadBalancer {
+		if cr.Spec.Proxy.Router.Expose.Type != corev1.ServiceTypeLoadBalancer {
 			return serviceName + "." + cr.GetNamespace(), nil
 		}
 	}
@@ -1499,7 +1499,7 @@ func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServe
 	if cr.Spec.MySQL.IsAsync() {
 		if cr.HAProxyEnabled() {
 			serviceName = haproxy.ServiceName(cr)
-			if cr.Spec.HAProxy.Expose.Type != corev1.ServiceTypeLoadBalancer {
+			if cr.Spec.Proxy.HAProxy.Expose.Type != corev1.ServiceTypeLoadBalancer {
 				return serviceName + "." + cr.GetNamespace(), nil
 			}
 		} else {
