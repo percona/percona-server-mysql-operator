@@ -15,7 +15,15 @@ import (
 )
 
 func bootstrapGroupReplication() error {
-	exists, err := lockExists()
+	sleepFileexists, err := isFileExists(sleepFile)
+	if err != nil {
+		return errors.Wrap(err, "sleep file check")
+	}
+	if sleepFileexists {
+		return nil
+	}
+
+	exists, err := isFileExists(lockFile)
 	if err != nil {
 		return errors.Wrap(err, "lock file check")
 	}

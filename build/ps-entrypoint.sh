@@ -386,8 +386,23 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		echo
 	fi
 
-	load_group_replication_plugin
+	function is_manual_recovery() {
+		set +o xtrace
+		recovery_file='/var/lib/mysql/sleep-forever'
+		if [ -f "${recovery_file}" ]; then
+			echo "The $recovery_file file is detected, node is going to infinity loop"
+			echo "If you want to exit from infinity loop you need to remove $recovery_file file"
+			for (( ; ; )); do
+				if [ ! -f "${recovery_file}" ]; then
+					exit 0
+				fi
+			done
+		fi
+		set -o xtrace
+	}
 
+	load_group_replication_plugin
+	is_manual_recovery
 	# exit when MYSQL_INIT_ONLY environment variable is set to avoid starting mysqld
 	if [ -n "$MYSQL_INIT_ONLY" ]; then
 		echo 'Initialization complete, now exiting!'

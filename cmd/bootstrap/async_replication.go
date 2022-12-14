@@ -35,7 +35,7 @@ func bootstrapAsyncReplication() error {
 	}
 	log.Printf("Peers: %v", peers.List())
 
-	exists, err := lockExists()
+	exists, err := isFileExists(lockFile)
 	if err != nil {
 		return errors.Wrap(err, "lock file check")
 	}

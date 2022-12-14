@@ -8,6 +8,11 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
+const (
+	sleepFile = "/var/lib/mysql/sleep-forever"
+	lockFile  = "/var/lib/mysql/bootstrap.lock"
+)
+
 func main() {
 	f, err := os.OpenFile(filepath.Join(mysql.DataMountPath, "bootstrap.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {

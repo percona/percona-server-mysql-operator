@@ -42,7 +42,26 @@ func main() {
 	}
 }
 
+func isRecoveryFileExists() (bool, error) {
+	_, err := os.Stat("/var/lib/mysql/sleep-forever")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "os stat")
+	}
+	return true, nil
+}
+
 func checkReadinessAsync() error {
+	sleepFileexists, err := isRecoveryFileExists()
+	if err != nil {
+		return errors.Wrap(err, "sleep file check")
+	}
+	if sleepFileexists {
+		return nil
+	}
+
 	podIP, err := getPodIP()
 	if err != nil {
 		return errors.Wrap(err, "get pod IP")
@@ -78,6 +97,14 @@ func checkReadinessAsync() error {
 }
 
 func checkReadinessGR() error {
+	sleepFileexists, err := isRecoveryFileExists()
+	if err != nil {
+		return errors.Wrap(err, "sleep file check")
+	}
+	if sleepFileexists {
+		return nil
+	}
+
 	podIP, err := getPodIP()
 	if err != nil {
 		return errors.Wrap(err, "get pod IP")
@@ -112,6 +139,14 @@ func checkReadinessGR() error {
 }
 
 func checkLiveness() error {
+	sleepFileexists, err := isRecoveryFileExists()
+	if err != nil {
+		return errors.Wrap(err, "sleep file check")
+	}
+	if sleepFileexists {
+		return nil
+	}
+
 	podIP, err := getPodIP()
 	if err != nil {
 		return errors.Wrap(err, "get pod IP")
