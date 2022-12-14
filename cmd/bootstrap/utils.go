@@ -69,7 +69,11 @@ func lookup(svcName string) (sets.String, error) {
 }
 
 func lockExists() (bool, error) {
-	_, err := os.Stat("/var/lib/mysql/bootstrap.lock")
+	return fileExists("/var/lib/mysql/bootstrap.lock")
+}
+
+func fileExists(name string) (bool, error) {
+	_, err := os.Stat(name)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil

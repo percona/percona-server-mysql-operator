@@ -59,6 +59,7 @@ type Replicator interface {
 	GetGroupReplicationReplicas() ([]string, error)
 	GetMemberState(host string) (MemberState, error)
 	GetGroupReplicationMembers() ([]string, error)
+	CheckIfDatabaseExists(name string) (bool, error)
 }
 
 type dbImpl struct{ db *sql.DB }
@@ -357,4 +358,18 @@ func (d *dbImpl) GetGroupReplicationMembers() ([]string, error) {
 	}
 
 	return members, nil
+}
+
+func (d *dbImpl) CheckIfDatabaseExists(name string) (bool, error) {
+	var db string
+
+	err := d.db.QueryRow("SHOW DATABASES LIKE ?", name).Scan(&db)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return true, nil
 }

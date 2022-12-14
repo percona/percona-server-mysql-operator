@@ -319,7 +319,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			${monitorConnectGrant}
 
 			CREATE USER 'replication'@'%' IDENTIFIED BY '${REPLICATION_PASSWORD}';
-			GRANT SYSTEM_USER, REPLICATION SLAVE, CONNECTION_ADMIN, BACKUP_ADMIN, GROUP_REPLICATION_STREAM ON *.* to 'replication'@'%';
+			GRANT SYSTEM_USER, REPLICATION SLAVE, CONNECTION_ADMIN, BACKUP_ADMIN, GROUP_REPLICATION_STREAM, CLONE_ADMIN ON *.* to 'replication'@'%';
 			GRANT SELECT ON performance_schema.threads to 'replication'@'%';
 
 			CREATE USER 'orchestrator'@'%' IDENTIFIED BY '${ORC_TOPOLOGY_PASSWORD}';
@@ -393,6 +393,40 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		echo 'Initialization complete, now exiting!'
 		exit 0
 	fi
+fi
+
+if [[ -f /var/lib/mysql/full-cluster-crash ]]; then
+	set +o xtrace
+	node_name=$(hostname -f)
+	cluster_name=$(hostname | cut -d '-' -f1) # TODO: This won't work if CR has `-` in its name.
+	gtid_executed=$(</var/lib/mysql/full-cluster-crash)
+
+	echo "######FULL_CLUSTER_CRASH:${node_name}######"
+	echo "You have full cluster crash. You need to recover the cluster manually. Here are the steps:"
+	echo ""
+	echo "Latest GTID_EXECUTED in this node is ${gtid_executed}"
+	echo "Compare GTIDs in each MySQL pod and select the one with the newest GTID."
+	echo ""
+	echo "Create /var/lib/mysql/force-bootstrap inside the mysql container. For example:"
+	echo "$ kubectl exec ${cluster_name}-mysql-2 -c mysql -- touch /var/lib/mysql/force-bootstrap"
+	echo ""
+	echo "Remove /var/lib/mysql/full-cluster-crash in this pod to re-bootstrap the group. For example:"
+	echo "$ kubectl exec ${cluster_name}-mysql-2 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
+	echo "This will restart the mysql container."
+	echo ""
+	echo "After group is bootstrapped and mysql container is ready, move on to the other pods:"
+	echo "$ kubectl exec ${cluster_name}-mysql-1 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
+	echo "Wait until the pod ready"
+	echo ""
+	echo "$ kubectl exec ${cluster_name}-mysql-0 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
+	echo "#####LAST_LINE:${node_name}:${gtid_executed}"
+
+	for (( ; ; )); do
+		if [[ ! -f /var/lib/mysql/full-cluster-crash ]]; then
+			exit 0
+		fi
+		sleep 5
+	done
 fi
 
 exec "$@"

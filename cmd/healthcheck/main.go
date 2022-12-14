@@ -17,6 +17,14 @@ import (
 )
 
 func main() {
+	fullClusterCrash, err := fileExists("/var/lib/mysql/full-cluster-crash")
+	if err != nil {
+		log.Fatalf("check /var/lib/mysql/full-cluster-crash: %s", err)
+	}
+	if fullClusterCrash {
+		os.Exit(0)
+	}
+
 	switch os.Args[1] {
 	case "readiness":
 		switch os.Getenv("CLUSTER_TYPE") {
@@ -206,4 +214,15 @@ func getPodFQDN(svcName string) (string, error) {
 	}
 
 	return fmt.Sprintf("%s.%s.%s", hostname, svcName, namespace), nil
+}
+
+func fileExists(name string) (bool, error) {
+	_, err := os.Stat(name)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "os stat")
+	}
+	return true, nil
 }

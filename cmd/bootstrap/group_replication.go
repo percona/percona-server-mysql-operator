@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/sjmudd/stopwatch"
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
@@ -14,7 +15,21 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
+var ErrNoPrimaryInCluster = errors.New("primary not found in cluster")
+
 func bootstrapGroupReplication() error {
+	timer := stopwatch.NewNamedStopwatch()
+	err := timer.Add("total")
+	if err != nil {
+		return errors.Wrap(err, "add timer")
+	}
+	timer.Start("total")
+
+	defer func() {
+		timer.Stop("total")
+		log.Printf("bootstrap finished in %f seconds", timer.ElapsedSeconds("total"))
+	}()
+
 	exists, err := lockExists()
 	if err != nil {
 		return errors.Wrap(err, "lock file check")
@@ -26,6 +41,15 @@ func bootstrapGroupReplication() error {
 		}
 	}
 
+	exists, err = checkFullClusterCrash()
+	if err != nil {
+		return errors.Wrap(err, "check full cluster crash file")
+	}
+	if exists {
+		log.Printf("/var/lib/mysql/full-cluster-crash exists. exiting...")
+		return nil
+	}
+
 	podHostname, err := os.Hostname()
 	if err != nil {
 		return errors.Wrap(err, "get hostname")
@@ -35,9 +59,9 @@ func bootstrapGroupReplication() error {
 	if err != nil {
 		return errors.Wrap(err, "get pod IP")
 	}
-	log.Printf("PodIP: %s", podIp)
+	log.Printf("Pod IP: %s", podIp)
 
-	log.Printf("Opening connection to %s", podIp)
+	log.Printf("opening connection to %s", podIp)
 	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
 	if err != nil {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
@@ -67,15 +91,42 @@ func bootstrapGroupReplication() error {
 	}
 	log.Printf("set group_replication_local_address: %s", localAddress)
 
-	peers, err := lookup(os.Getenv("SERVICE_NAME"))
+	forceBootstrap, err := checkForceBootstrap()
 	if err != nil {
-		return errors.Wrap(err, "lookup")
+		return errors.Wrap(err, "check force bootstrap file")
 	}
-	log.Printf("Peers: %v", peers.List())
+	log.Printf("check if /var/lib/mysql/force-bootstrap exists: %t", forceBootstrap)
 
-	seeds, err := getGroupSeeds(peers)
-	if err != nil {
-		return errors.Wrap(err, "get group seeds")
+	var seeds []string
+	if forceBootstrap {
+		seeds = []string{fmt.Sprintf("%s:%d", fqdn, mysql.DefaultGRPort)}
+	} else {
+		peers, err := lookup(os.Getenv("SERVICE_NAME"))
+		if err != nil {
+			return errors.Wrap(err, "lookup")
+		}
+		log.Printf("peers: %v", peers.List())
+
+		seeds, err = getGroupSeeds(peers)
+		if err != nil {
+			if errors.Is(err, ErrNoPrimaryInCluster) {
+				log.Printf("CRITICAL: %s, we're in a full cluster crash", ErrNoPrimaryInCluster)
+
+				gtidExecuted, err := db.GetGlobal("GTID_EXECUTED")
+				if err != nil {
+					return err
+				}
+
+				log.Printf("GTID_EXECUTED: %s", gtidExecuted)
+
+				if err := createFile("/var/lib/mysql/full-cluster-crash", fmt.Sprintf("%s", gtidExecuted)); err != nil {
+					return err
+				}
+
+				return errors.New("full cluster crash")
+			}
+			return errors.Wrap(err, "get group seeds")
+		}
 	}
 	seedsStr := strings.Join(seeds, ",")
 
@@ -84,7 +135,12 @@ func bootstrapGroupReplication() error {
 	}
 	log.Printf("set group_replication_group_seeds: %s", seedsStr)
 
-	if strings.HasSuffix(podHostname, "0") && peers.Len() == 1 {
+	bootstrap, err := shouldIBootstrap(db, forceBootstrap)
+	if err != nil {
+		return errors.Wrap(err, "check if I need to bootstrap")
+	}
+
+	if bootstrap {
 		if err := db.SetGlobal("group_replication_bootstrap_group", "ON"); err != nil {
 			return err
 		}
@@ -114,7 +170,7 @@ func getGroupSeeds(peers sets.String) ([]string, error) {
 
 	if peers.Len() == 1 {
 		peer := peers.List()[0]
-		log.Printf("There is only 1 peer: %s", peer)
+		log.Printf("there is only 1 peer: %s", peer)
 		seeds.Insert(fmt.Sprintf("%s:%d", peer, mysql.DefaultGRPort))
 		return seeds.List(), nil
 	}
@@ -139,18 +195,24 @@ func getGroupSeeds(peers sets.String) ([]string, error) {
 		log.Printf("connecting to peer %s", peer)
 		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, peer, mysql.DefaultAdminPort)
 		if err != nil {
-			return nil, errors.Wrapf(err, "connect to %s", peer)
+			log.Printf("ERROR: connect to %s: %v", peer, err)
+			continue
 		}
 		defer db.Close()
 
 		p, err := db.GetGroupReplicationPrimary()
 		if err != nil {
-			return nil, errors.Wrapf(err, "get primary from %s", peer)
+			log.Printf("ERROR: get primary from %s: %v", peer, err)
+			continue
 		}
-		log.Printf("Found primary: %s", p)
 
+		log.Printf("found primary: %s", p)
 		primary = p
 		break
+	}
+
+	if primary == "" {
+		return nil, ErrNoPrimaryInCluster
 	}
 
 	log.Printf("connecting to primary %s", primary)
@@ -171,4 +233,55 @@ func getGroupSeeds(peers sets.String) ([]string, error) {
 	}
 
 	return seeds.List(), nil
+}
+
+func checkFullClusterCrash() (bool, error) {
+	return fileExists("/var/lib/mysql/full-cluster-crash")
+}
+
+func checkForceBootstrap() (bool, error) {
+	return fileExists("/var/lib/mysql/force-bootstrap")
+}
+
+func shouldIBootstrap(db replicator.Replicator, forceBootstrap bool) (bool, error) {
+	podHostname, err := os.Hostname()
+	if err != nil {
+		return false, errors.Wrap(err, "get hostname")
+	}
+
+	alreadyBootstrapped, err := db.CheckIfDatabaseExists("mysql_innodb_cluster_metadata")
+	if err != nil {
+		return false, errors.Wrap(err, "check if database mysql_innodb_cluster_metadata exists")
+	}
+	log.Printf("check if InnoDB Cluster is already bootstrapped: %t", alreadyBootstrapped)
+
+	switch {
+	case forceBootstrap:
+		log.Printf("WARNING: FORCING BOOTSTRAP")
+		if err := os.Remove("/var/lib/mysql/force-bootstrap"); err != nil {
+			log.Printf("ERROR: remove /var/lib/mysql/force-bootstrap: %s", err)
+		}
+		return true, nil
+	case !alreadyBootstrapped && strings.HasSuffix(podHostname, "0"):
+		log.Printf("group is not bootstrapped yet, bootstrapping")
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
+func createFile(name, content string) error {
+	f, err := os.Create(name)
+	if err != nil {
+		return errors.Wrapf(err, "create %s", name)
+	}
+
+	n, err := f.WriteString(content)
+	if err != nil {
+		return errors.Wrapf(err, "write to %s", name)
+	}
+
+	log.Printf("written %d bytes to %s", n, name)
+
+	return nil
 }
