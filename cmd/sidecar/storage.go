@@ -13,9 +13,10 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/pkg/errors"
+
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
-	"github.com/pkg/errors"
 )
 
 type storage interface {
@@ -27,10 +28,25 @@ func newStorage(cfg *xtrabackup.BackupConfig) (storage, error) {
 	switch cfg.Type {
 	case apiv1alpha1.BackupStorageAzure:
 		a := cfg.Azure
-		return newAzure(a.StorageAccount, a.AccessKey, a.EndpointURL, a.ContainerName)
+		endpoint := a.EndpointURL
+		if endpoint == "" {
+			endpoint = fmt.Sprintf("https://%s.blob.core.windows.net/", a.StorageAccount)
+		}
+		return newAzure(a.StorageAccount, a.AccessKey, endpoint, a.ContainerName)
+	case apiv1alpha1.BackupStorageGCS:
+		gcs := cfg.GCS
+		endpoint := gcs.EndpointURL
+		if endpoint == "" {
+			endpoint = "https://storage.googleapis.com"
+		}
+		return newS3(endpoint, gcs.AccessKey, gcs.SecretKey, gcs.Bucket, "", cfg.VerifyTLS)
 	case apiv1alpha1.BackupStorageS3:
 		s3 := cfg.S3
-		return newS3(s3.EndpointURL, s3.AccessKey, s3.SecretKey, s3.Bucket, s3.Region, cfg.VerifyTLS)
+		endpoint := s3.EndpointURL
+		if endpoint == "" {
+			endpoint = "https://s3.amazonaws.com"
+		}
+		return newS3(endpoint, s3.AccessKey, s3.SecretKey, s3.Bucket, s3.Region, cfg.VerifyTLS)
 	}
 	return nil, errors.Errorf("storage type %s is not supported", cfg.Type)
 }
@@ -102,9 +118,6 @@ func newAzure(storageAccount, accessKey, endpoint, container string) (*azure, er
 	credential, err := azblob.NewSharedKeyCredential(storageAccount, accessKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "new credentials")
-	}
-	if endpoint == "" {
-		endpoint = fmt.Sprintf("https://%s.blob.core.windows.net/", storageAccount)
 	}
 	cli, err := azblob.NewClientWithSharedKeyCredential(endpoint, credential, nil)
 	if err != nil {
