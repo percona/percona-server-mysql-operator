@@ -24,7 +24,7 @@ data:
     GRANT SELECT ON `sys_operator`.* TO `orchestrator`@`%`
     GRANT SELECT ON `mysql`.`slave_master_info` TO `orchestrator`@`%`
   replication: |
-    GRANT SYSTEM_USER, REPLICATION SLAVE, CONNECTION_ADMIN, BACKUP_ADMIN, GROUP_REPLICATION_STREAM ON *.* to `replication`@`%`;
+    GRANT SYSTEM_USER, REPLICATION SLAVE, CONNECTION_ADMIN, BACKUP_ADMIN, GROUP_REPLICATION_STREAM ON *.* to `replication`@`%`
     GRANT SELECT ON `performance_schema`.`threads` TO `replication`@`%`
   xtrabackup: |
     GRANT RELOAD, PROCESS, LOCK TABLES, REPLICATION CLIENT ON *.* TO `xtrabackup`@`localhost`
