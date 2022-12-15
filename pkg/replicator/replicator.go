@@ -65,9 +65,21 @@ type Replicator interface {
 type dbImpl struct{ db *sql.DB }
 
 func NewReplicator(user apiv1alpha1.SystemUser, pass, host string, port int32) (Replicator, error) {
-	connStr := fmt.Sprintf("%s:%s@tcp(%s:%d)/performance_schema?interpolateParams=true",
-		user, pass, host, port)
-	db, err := sql.Open("mysql", connStr)
+	config := mysql.NewConfig()
+
+	config.User = string(user)
+	config.Passwd = pass
+	config.Net = "tcp"
+	config.Addr = fmt.Sprintf("%s:%d", host, port)
+	config.DBName = "performance_schema"
+	config.Params = map[string]string{
+		"interpolateParams": "true",
+		"timeout":           "20s",
+		"readTimeout":       "20s",
+		"writeTimeout":      "20s",
+	}
+
+	db, err := sql.Open("mysql", config.FormatDSN())
 	if err != nil {
 		return nil, errors.Wrap(err, "connect to MySQL")
 	}
