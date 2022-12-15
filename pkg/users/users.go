@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	_ "github.com/go-sql-driver/mysql"
+	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
@@ -20,9 +20,21 @@ type Manager interface {
 type dbImpl struct{ db *sql.DB }
 
 func NewManager(user apiv1alpha1.SystemUser, pass, host string, port int32) (Manager, error) {
-	connStr := fmt.Sprintf("%s:%s@tcp(%s:%d)/performance_schema?interpolateParams=true",
-		user, pass, host, port)
-	db, err := sql.Open("mysql", connStr)
+	config := mysqldriver.NewConfig()
+
+	config.User = string(user)
+	config.Passwd = pass
+	config.Net = "tcp"
+	config.Addr = fmt.Sprintf("%s:%d", host, port)
+	config.DBName = "performance_schema"
+	config.Params = map[string]string{
+		"interpolateParams": "true",
+		"timeout":           "20s",
+		"readTimeout":       "20s",
+		"writeTimeout":      "20s",
+	}
+
+	db, err := sql.Open("mysql", config.FormatDSN())
 	if err != nil {
 		return nil, errors.Wrap(err, "connect to MySQL")
 	}
