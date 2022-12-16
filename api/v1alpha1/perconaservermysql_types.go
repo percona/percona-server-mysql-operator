@@ -518,13 +518,13 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 		return errors.New("router section is needed for group replication")
 	}
 
-	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Proxy.Router != nil {
+	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Proxy.Router != nil && !cr.Spec.AllowUnsafeConfig {
 		if cr.Spec.Proxy.Router.Size < MinSafeProxySize {
 			cr.Spec.Proxy.Router.Size = MinSafeProxySize
 		}
 	}
 
-	if cr.HAProxyEnabled() && cr.Spec.MySQL.ClusterType != ClusterTypeGR {
+	if cr.HAProxyEnabled() && cr.Spec.MySQL.ClusterType != ClusterTypeGR && !cr.Spec.AllowUnsafeConfig {
 		if cr.Spec.Proxy.HAProxy.Size < MinSafeProxySize {
 			cr.Spec.Proxy.HAProxy.Size = MinSafeProxySize
 		}
