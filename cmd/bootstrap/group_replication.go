@@ -73,6 +73,11 @@ func bootstrapGroupReplication() error {
 	}
 	defer db.Close()
 
+	if err := db.StopGroupReplication(); err != nil {
+		return err
+	}
+	log.Printf("stop group replication")
+
 	crUID := os.Getenv("CR_UID")
 	if err := db.SetGlobal("group_replication_group_name", crUID); err != nil {
 		return err
@@ -135,7 +140,7 @@ func bootstrapGroupReplication() error {
 	}
 	log.Printf("set group_replication_group_seeds: %s", seedsStr)
 
-	bootstrap, err := shouldIBootstrap(db, forceBootstrap)
+	bootstrap, err := shouldIBootstrap(db, forceBootstrap, seeds)
 	if err != nil {
 		return errors.Wrap(err, "check if I need to bootstrap")
 	}
@@ -243,7 +248,7 @@ func checkForceBootstrap() (bool, error) {
 	return fileExists("/var/lib/mysql/force-bootstrap")
 }
 
-func shouldIBootstrap(db replicator.Replicator, forceBootstrap bool) (bool, error) {
+func shouldIBootstrap(db replicator.Replicator, forceBootstrap bool, seeds []string) (bool, error) {
 	podHostname, err := os.Hostname()
 	if err != nil {
 		return false, errors.Wrap(err, "get hostname")
@@ -255,12 +260,20 @@ func shouldIBootstrap(db replicator.Replicator, forceBootstrap bool) (bool, erro
 	}
 	log.Printf("check if InnoDB Cluster is already bootstrapped: %t", alreadyBootstrapped)
 
+	fqdn, err := getFQDN(os.Getenv("SERVICE_NAME"))
+	if err != nil {
+		return false, errors.Wrap(err, "get FQDN")
+	}
+
 	switch {
 	case forceBootstrap:
 		log.Printf("WARNING: FORCING BOOTSTRAP")
 		if err := os.Remove("/var/lib/mysql/force-bootstrap"); err != nil {
 			log.Printf("ERROR: remove /var/lib/mysql/force-bootstrap: %s", err)
 		}
+		return true, nil
+	case len(seeds) == 1 && seeds[0] == fmt.Sprintf("%s:%d", fqdn, mysql.DefaultGRPort) && strings.HasSuffix(podHostname, "0"):
+		log.Printf("there is only this node as seed: %s, bootstrapping", seeds[0])
 		return true, nil
 	case !alreadyBootstrapped && strings.HasSuffix(podHostname, "0"):
 		log.Printf("group is not bootstrapped yet, bootstrapping")

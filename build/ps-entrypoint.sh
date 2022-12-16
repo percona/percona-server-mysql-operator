@@ -158,6 +158,7 @@ create_default_cnf() {
 	sed -i "/\[mysqld\]/a report_port=3306" $CFG
 	sed -i "/\[mysqld\]/a gtid-mode=ON" $CFG
 	sed -i "/\[mysqld\]/a enforce-gtid-consistency=ON" $CFG
+	sed -i "/\[mysqld\]/a log_error_verbosity=3" $CFG
 	sed -i "/\[mysqld\]/a plugin-load-add=clone=mysql_clone.so" $CFG
 	sed -i "/\[mysqld\]/a plugin-load-add=rpl_semi_sync_master=semisync_master.so" $CFG
 	sed -i "/\[mysqld\]/a plugin-load-add=rpl_semi_sync_slave=semisync_slave.so" $CFG
