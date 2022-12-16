@@ -51,7 +51,7 @@ type Replicator interface {
 	SetSemiSyncSource(enabled bool) error
 	SetSemiSyncSize(size int) error
 	GetGlobal(variable string) (interface{}, error)
-	SetGlobal(variable, value string) error
+	SetGlobal(variable, value interface{}) error
 	ChangeGroupReplicationPassword(replicaPass string) error
 	StartGroupReplication(password string) error
 	StopGroupReplication() error
@@ -265,7 +265,7 @@ func (d *dbImpl) GetGlobal(variable string) (interface{}, error) {
 	return value, errors.Wrapf(err, "SELECT @@%s", variable)
 }
 
-func (d *dbImpl) SetGlobal(variable, value string) error {
+func (d *dbImpl) SetGlobal(variable, value interface{}) error {
 	_, err := d.db.Exec(fmt.Sprintf("SET GLOBAL %s=?", variable), value)
 	return errors.Wrapf(err, "SET GLOBAL %s=%s", variable, value)
 }
@@ -308,7 +308,7 @@ func (d *dbImpl) ChangeGroupReplicationPassword(replicaPass string) error {
 func (d *dbImpl) GetGroupReplicationPrimary() (string, error) {
 	var host string
 
-	err := d.db.QueryRow("SELECT MEMBER_HOST FROM replication_group_members WHERE MEMBER_ROLE='PRIMARY'").Scan(&host)
+	err := d.db.QueryRow("SELECT MEMBER_HOST FROM replication_group_members WHERE MEMBER_ROLE='PRIMARY' AND MEMBER_STATE='ONLINE'").Scan(&host)
 	if err != nil {
 		return "", errors.Wrap(err, "query primary member")
 	}
@@ -319,7 +319,7 @@ func (d *dbImpl) GetGroupReplicationPrimary() (string, error) {
 func (d *dbImpl) GetGroupReplicationReplicas() ([]string, error) {
 	replicas := make([]string, 0)
 
-	rows, err := d.db.Query("SELECT MEMBER_HOST FROM replication_group_members WHERE MEMBER_ROLE='SECONDARY'")
+	rows, err := d.db.Query("SELECT MEMBER_HOST FROM replication_group_members WHERE MEMBER_ROLE='SECONDARY' AND MEMBER_STATE='ONLINE'")
 	if err != nil {
 		return nil, errors.Wrap(err, "query replicas")
 	}
