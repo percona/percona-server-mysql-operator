@@ -250,30 +250,33 @@ func EnsureService(
 		svc.SetAnnotations(util.SSMapMerge(oldSvc.GetAnnotations(), svc.GetAnnotations()))
 		svc.SetLabels(util.SSMapMerge(oldSvc.GetLabels(), svc.GetLabels()))
 	}
-	if err = setIgnoredAnnotationsAndLabels(cr, svc, oldSvc); err != nil {
-		return errors.Wrap(err, "set ignored annotations and labels")
-	}
+	setIgnoredAnnotations(cr, svc, oldSvc)
+	setIgnoredLabels(cr, svc, oldSvc)
 	return EnsureObjectWithHash(ctx, cl, cr, svc, s)
 }
 
-func setIgnoredAnnotationsAndLabels(cr *apiv1alpha1.PerconaServerMySQL, obj, oldObject client.Object) error {
+func setIgnoredAnnotations(cr *apiv1alpha1.PerconaServerMySQL, obj, oldObject client.Object) {
 	oldAnnotations := oldObject.GetAnnotations()
-	annotations := obj.GetAnnotations()
-	for _, annotation := range cr.Spec.IgnoreAnnotations {
-		if v, ok := oldAnnotations[annotation]; ok {
-			annotations[annotation] = v
-		}
+	if len(oldAnnotations) == 0 {
+		return
 	}
+
+	ignoredAnnotations := util.SSMapFilterByKeys(oldAnnotations, cr.Spec.IgnoreAnnotations)
+
+	annotations := util.SSMapMerge(obj.GetAnnotations(), ignoredAnnotations)
 	obj.SetAnnotations(annotations)
+}
+
+func setIgnoredLabels(cr *apiv1alpha1.PerconaServerMySQL, obj, oldObject client.Object) {
 	oldLabels := oldObject.GetLabels()
-	labels := obj.GetLabels()
-	for _, label := range cr.Spec.IgnoreLabels {
-		if v, ok := oldLabels[label]; ok {
-			labels[label] = v
-		}
+	if len(oldLabels) == 0 {
+		return
 	}
+
+	ignoredLabels := util.SSMapFilterByKeys(oldLabels, cr.Spec.IgnoreLabels)
+
+	labels := util.SSMapMerge(obj.GetLabels(), ignoredLabels)
 	obj.SetLabels(labels)
-	return nil
 }
 
 func ObjectHash(obj runtime.Object) (string, error) {
