@@ -34,6 +34,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -1069,18 +1070,34 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, mysql.ServiceName(cr))
 	mysh := mysqlsh.New(k8sexec.New(), uri)
 
+	cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1alpha1.ConditionInnoDBClusterBootstrapped)
+	if cond == nil || cond.Status == metav1.ConditionFalse {
+		l.Info("Creating InnoDB cluster")
+		err = mysh.CreateCluster(ctx, cr.InnoDBClusterName())
+		if err != nil {
+			return errors.Wrapf(err, "create cluster %s", cr.InnoDBClusterName())
+		}
+		l.Info("Created InnoDB Cluster", "cluster", cr.InnoDBClusterName())
+
+		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+			Type:               apiv1alpha1.ConditionInnoDBClusterBootstrapped,
+			Status:             metav1.ConditionTrue,
+			Reason:             apiv1alpha1.ConditionInnoDBClusterBootstrapped,
+			Message:            fmt.Sprintf("InnoDB cluster successfully bootstrapped with %d nodes", cr.MySQLSpec().Size),
+			LastTransitionTime: metav1.Now(),
+		})
+
+		l.Info(fmt.Sprintf("%s cluster successfully bootstrapped with %d nodes", cr.Name, cr.MySQLSpec().Size))
+		return nil
+	}
+
 	clusterExists, err := mysh.DoesClusterExist(ctx, cr.InnoDBClusterName())
 	if err != nil {
 		return errors.Wrapf(err, "check if InnoDB Cluster %s exists", cr.InnoDBClusterName())
 	}
 
 	if !clusterExists {
-		l.Info("Creating InnoDB cluster")
-		err := mysh.CreateCluster(ctx, cr.InnoDBClusterName())
-		if err != nil {
-			return errors.Wrapf(err, "create cluster %s", cr.InnoDBClusterName())
-		}
-		l.Info("Created InnoDB Cluster", "cluster", cr.InnoDBClusterName())
+		return errors.New("InnoDB cluster is already bootstrapped, but failed to check its status")
 	}
 
 	return nil
