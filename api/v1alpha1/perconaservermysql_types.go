@@ -110,7 +110,8 @@ type SidecarPVC struct {
 }
 
 type OrchestratorSpec struct {
-	Expose ServiceExpose `json:"expose,omitempty"`
+	Enabled bool          `json:"enabled,omitempty"`
+	Expose  ServiceExpose `json:"expose,omitempty"`
 
 	PodSpec `json:",inline"`
 }
@@ -510,7 +511,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 	cr.Spec.MySQL.reconcileAffinityOpts()
 	cr.Spec.Orchestrator.reconcileAffinityOpts()
 
-	if oSize := int(cr.Spec.Orchestrator.Size); (oSize < 3 || oSize%2 == 0) && oSize != 0 && !cr.Spec.AllowUnsafeConfig {
+	if oSize := int(cr.Spec.Orchestrator.Size); cr.OrchestratorEnabled() && (oSize < 3 || oSize%2 == 0) && oSize != 0 && !cr.Spec.AllowUnsafeConfig {
 		return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup")
 	}
 
@@ -719,7 +720,17 @@ func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 }
 
 func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
+	if !cr.Spec.AllowUnsafeConfig {
+		return true
+	}
 	return cr.Spec.Proxy.HAProxy != nil && cr.Spec.Proxy.HAProxy.Enabled
+}
+
+func (cr *PerconaServerMySQL) OrchestratorEnabled() bool {
+	if !cr.Spec.AllowUnsafeConfig {
+		return true
+	}
+	return cr.Spec.Orchestrator.Enabled
 }
 
 var NonAlphaNumeric = regexp.MustCompile("[^a-zA-Z0-9_]+")

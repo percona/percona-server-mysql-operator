@@ -554,7 +554,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		}
 	}
 
-	if restartOrchestrator {
+	if cr.OrchestratorEnabled() && restartOrchestrator {
 		l.Info("Orchestrator password updated. Restarting orchestrator.")
 
 		sts := &appsv1.StatefulSet{}
@@ -859,7 +859,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfiguration(
 func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("reconcileOrchestrator")
 
-	if cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR {
+	if cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR || !cr.OrchestratorEnabled() {
 		return nil
 	}
 
@@ -1021,7 +1021,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return errors.Wrap(err, "reconcile group replication")
 	}
 
-	if cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR {
+	if cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR || !cr.OrchestratorEnabled() || cr.Spec.Orchestrator.Size <= 0 {
 		return nil
 	}
 
@@ -1316,6 +1316,20 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 	return nil
 }
 
+func (r *PerconaServerMySQLReconciler) cleanupOutdatedStatefulSets(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if !cr.OrchestratorEnabled() {
+		if err := r.Delete(ctx, orchestrator.StatefulSet(cr, "")); err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to delete orchestrator statefulset")
+		}
+	}
+	if !cr.HAProxyEnabled() {
+		if err := r.Delete(ctx, haproxy.StatefulSet(cr, "")); err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to delete haproxy statefulset")
+		}
+	}
+	return nil
+}
+
 func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	l := log.FromContext(ctx).WithName("reconcileMySQLRouter")
 
@@ -1359,6 +1373,10 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 	orcExposer := orchestrator.Exposer(*cr)
 	if err := r.cleanupOutdatedServices(ctx, &orcExposer); err != nil {
 		return errors.Wrap(err, "cleanup Orchestrator services")
+	}
+
+	if err := r.cleanupOutdatedStatefulSets(ctx, cr); err != nil {
+		return errors.Wrap(err, "cleanup statefulsets")
 	}
 
 	return nil

@@ -3578,6 +3578,8 @@ spec:
                             type: string
                         type: object
                     type: object
+                  enabled:
+                    type: boolean
                   expose:
                     properties:
                       annotations:
