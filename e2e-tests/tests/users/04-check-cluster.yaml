@@ -10,14 +10,14 @@ commands:
 
       sleep 15
       wait_cluster_consistency "${test_name}" "3"
-      mysql_args="-h $(get_mysql_primary_service $(get_cluster_name)) -uroot -proot_password_updated"
+      mysql_args="-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password_updated"
       users=($(get_mysql_users "${mysql_args}"))
 
       # check connection
       args=""
       set +o errexit
       for user in "${users[@]}"; do
-      	mysql_args="-h $(get_mysql_primary_service $(get_cluster_name)) -u${user} -p${user}_password_updated"
+      	mysql_args="-h $(get_haproxy_svc $(get_cluster_name)) -u${user} -p${user}_password_updated"
 
       	pod=mysql-client
       	case $user in

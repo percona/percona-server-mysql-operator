@@ -40,3 +40,17 @@ func SSMapMerge(ms ...map[string]string) map[string]string {
 
 	return rv
 }
+
+// SSMapFilterByKeys returns a new map that contains keys from the keys array existing in the m map.
+func SSMapFilterByKeys(m map[string]string, keys []string) map[string]string {
+	if len(m) == 0 || len(keys) == 0 {
+		return nil
+	}
+	filteredMap := make(map[string]string)
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			filteredMap[k] = v
+		}
+	}
+	return filteredMap
+}

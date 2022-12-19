@@ -46,12 +46,13 @@ type PerconaServerMySQLSpec struct {
 	SSLInternalSecretName string           `json:"sslInternalSecretName,omitempty"`
 	AllowUnsafeConfig     bool             `json:"allowUnsafeConfigurations,omitempty"`
 	InitImage             string           `json:"initImage,omitempty"`
+	IgnoreAnnotations     []string         `json:"ignoreAnnotations,omitempty"`
+	IgnoreLabels          []string         `json:"ignoreLabels,omitempty"`
 	MySQL                 MySQLSpec        `json:"mysql,omitempty"`
 	Orchestrator          OrchestratorSpec `json:"orchestrator,omitempty"`
 	PMM                   *PMMSpec         `json:"pmm,omitempty"`
 	Backup                *BackupSpec      `json:"backup,omitempty"`
-	Router                *MySQLRouterSpec `json:"router,omitempty"`
-	HAProxy               *HAProxySpec     `json:"haproxy,omitempty"`
+	Proxy                 ProxySpec        `json:"proxy,omitempty"`
 	TLS                   *TLSSpec         `json:"tls,omitempty"`
 	Toolkit               *ToolkitSpec     `json:"toolkit,omitempty"`
 	UpgradeOptions        UpgradeOptions   `json:"upgradeOptions,omitempty"`
@@ -90,9 +91,6 @@ type MySQLSpec struct {
 	SidecarPVCs    []SidecarPVC       `json:"sidecarPVCs,omitempty"`
 
 	Configuration string `json:"configuration,omitempty"`
-
-	PrimaryServiceType  corev1.ServiceType `json:"primaryServiceType,omitempty"`
-	ReplicasServiceType corev1.ServiceType `json:"replicasServiceType,omitempty"`
 
 	PodSpec `json:",inline"`
 }
@@ -247,6 +245,11 @@ type BackupStorageAzureSpec struct {
 	StorageClass string `json:"storageClass,omitempty"`
 }
 
+type ProxySpec struct {
+	Router  *MySQLRouterSpec `json:"router,omitempty"`
+	HAProxy *HAProxySpec     `json:"haproxy,omitempty"`
+}
+
 type MySQLRouterSpec struct {
 	Expose ServiceExpose `json:"expose,omitempty"`
 
@@ -294,10 +297,17 @@ type VolumeSpec struct {
 }
 
 type ServiceExpose struct {
-	Type                     corev1.ServiceType                      `json:"type,omitempty"`
-	LoadBalancerSourceRanges []string                                `json:"loadBalancerSourceRanges,omitempty"`
-	Annotations              map[string]string                       `json:"annotations,omitempty"`
-	TrafficPolicy            corev1.ServiceExternalTrafficPolicyType `json:"trafficPolicy,omitempty"`
+	Type                     corev1.ServiceType                       `json:"type,omitempty"`
+	LoadBalancerIP           string                                   `json:"loadBalancerIP,omitempty"`
+	LoadBalancerSourceRanges []string                                 `json:"loadBalancerSourceRanges,omitempty"`
+	Annotations              map[string]string                        `json:"annotations,omitempty"`
+	Labels                   map[string]string                        `json:"labels,omitempty"`
+	InternalTrafficPolicy    *corev1.ServiceInternalTrafficPolicyType `json:"internalTrafficPolicy,omitempty"`
+	ExternalTrafficPolicy    corev1.ServiceExternalTrafficPolicyType  `json:"externalTrafficPolicy,omitempty"`
+}
+
+func (e *ServiceExpose) SaveOldMeta() bool {
+	return len(e.Annotations) == 0 && len(e.Labels) == 0
 }
 
 type ServiceExposeTogglable struct {
@@ -483,6 +493,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 		cr.Spec.Orchestrator.PodSecurityContext = sc
 	}
 
+	if cr.Spec.Orchestrator.ServiceAccountName == "" {
+		cr.Spec.Orchestrator.ServiceAccountName = "percona-server-mysql-operator-orchestrator"
+	}
+
 	var err error
 	cr.Spec.MySQL.VolumeSpec, err = reconcileVol(cr.Spec.MySQL.VolumeSpec)
 	if err != nil {
@@ -500,27 +514,27 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 		return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup")
 	}
 
-	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Router == nil {
+	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Proxy.Router == nil {
 		return errors.New("router section is needed for group replication")
 	}
 
-	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Router != nil && !cr.Spec.AllowUnsafeConfig {
-		if cr.Spec.Router.Size < MinSafeProxySize {
-			cr.Spec.Router.Size = MinSafeProxySize
+	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Proxy.Router != nil && !cr.Spec.AllowUnsafeConfig {
+		if cr.Spec.Proxy.Router.Size < MinSafeProxySize {
+			cr.Spec.Proxy.Router.Size = MinSafeProxySize
 		}
 	}
 
 	if cr.HAProxyEnabled() && cr.Spec.MySQL.ClusterType != ClusterTypeGR && !cr.Spec.AllowUnsafeConfig {
-		if cr.Spec.HAProxy.Size < MinSafeProxySize {
-			cr.Spec.HAProxy.Size = MinSafeProxySize
+		if cr.Spec.Proxy.HAProxy.Size < MinSafeProxySize {
+			cr.Spec.Proxy.HAProxy.Size = MinSafeProxySize
 		}
 	}
 
 	if cr.Spec.Pause {
 		cr.Spec.MySQL.Size = 0
 		cr.Spec.Orchestrator.Size = 0
-		cr.Spec.Router.Size = 0
-		cr.Spec.HAProxy.Size = 0
+		cr.Spec.Proxy.Router.Size = 0
+		cr.Spec.Proxy.HAProxy.Size = 0
 	}
 
 	return nil
@@ -705,7 +719,7 @@ func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 }
 
 func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
-	return cr.Spec.HAProxy != nil && cr.Spec.HAProxy.Enabled
+	return cr.Spec.Proxy.HAProxy != nil && cr.Spec.Proxy.HAProxy.Enabled
 }
 
 var NonAlphaNumeric = regexp.MustCompile("[^a-zA-Z0-9_]+")
