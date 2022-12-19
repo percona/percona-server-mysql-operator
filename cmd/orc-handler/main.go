@@ -35,7 +35,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
 
-	opts := zap.Options{Development: true}
+	opts := zap.Options{
+		Development: true,
+		DestWriter:  os.Stdout,
+	}
 	logf.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	flag.Parse()
@@ -106,7 +109,7 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 	}
 
 	if len(pods) == 0 {
-		return errors.New("pods not found")
+		return errors.New("MySQL pods not found")
 	}
 
 	var primaryPod *corev1.Pod

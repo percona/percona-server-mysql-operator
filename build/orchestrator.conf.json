@@ -14,25 +14,25 @@
   "MySQLHostnameResolveMethod": "@@report_host",
   "MySQLTopologyCredentialsConfigFile": "/etc/orchestrator/orc-topology.cnf",
   "OnFailureDetectionProcesses": [
-    "echo 'Detected {failureType} on {failureCluster}. Affected replicas: {countSlaves}' >> /tmp/recovery.log"
+    "echo 'Detected {failureType} on {failureCluster}. Affected replicas: {countSlaves}'"
   ],
   "PostIntermediateMasterFailoverProcesses": [
-    "echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Successor: {successorHost}:{successorPort}' >> /tmp/recovery.log",
-    "echo 'PostIntermediateMasterFailoverProcesses:' >> /tmp/orc-handler.log && /opt/percona/orc-handler -primary {successorHost} 2>> /tmp/orc-handler.log"
+    "echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Successor: {successorHost}:{successorPort}'",
+    "echo 'PostIntermediateMasterFailoverProcesses:' && /opt/percona/orc-handler -primary {successorHost}"
   ],
   "PostMasterFailoverProcesses": [
-    "echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Promoted: {successorHost}:{successorPort}' >> /tmp/recovery.log",
-    "echo 'PostMasterFailoverProcesses:' >> /tmp/orc-handler.log && /opt/percona/orc-handler -primary {successorHost} 2>> /tmp/orc-handler.log"
+    "echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Promoted: {successorHost}:{successorPort}'",
+    "echo 'PostMasterFailoverProcesses:' && /opt/percona/orc-handler -primary {successorHost}"
   ],
   "PostGracefulTakeoverProcesses": [
-    "echo 'PostGracefulTakeoverProcesses:' >> /tmp/orc-handler.log && /opt/percona/orc-handler -primary {successorHost} 2>> /tmp/orc-handler.log"
+    "echo 'PostGracefulTakeoverProcesses:' && /opt/percona/orc-handler -primary {successorHost}"
   ],
   "PostFailoverProcesses": [
-    "echo 'PostFailoverProcesses:' >> /tmp/orc-handler.log && /opt/percona/orc-handler -primary {successorHost} 2>> /tmp/orc-handler.log"
+    "echo 'PostFailoverProcesses:' && /opt/percona/orc-handler -primary {successorHost}"
   ],
   "PostUnsuccessfulFailoverProcesses": [],
   "PreFailoverProcesses": [
-    "echo 'Will recover from {failureType} on {failureCluster}' >> /tmp/recovery.log"
+    "echo 'Will recover from {failureType} on {failureCluster}'"
   ],
   "ProcessesShellCommand": "sh",
   "RaftAdvertise": "127.0.0.1",
