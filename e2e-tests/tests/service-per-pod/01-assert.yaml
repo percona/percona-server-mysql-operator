@@ -95,50 +95,6 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
-  name: service-per-pod-mysql-primary
-  ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
-    blockOwnerDeletion: true
-    controller: true
-    kind: PerconaServerMySQL
-    name: service-per-pod
-spec:
-  ports:
-  - name: mysql
-    port: 3306
-    protocol: TCP
-    targetPort: 3306
-  - name: mysql-admin
-    port: 33062
-    protocol: TCP
-    targetPort: 33062
-  - name: mysqlx
-    port: 33060
-    protocol: TCP
-    targetPort: 33060
-  - name: http
-    port: 6033
-    protocol: TCP
-    targetPort: 6033
-  selector:
-    app.kubernetes.io/component: mysql
-    app.kubernetes.io/instance: service-per-pod
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
-    app.kubernetes.io/part-of: percona-server
-    mysql.percona.com/primary: "true"
-  sessionAffinity: None
-  type: ClusterIP
----
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app.kubernetes.io/component: mysql
-    app.kubernetes.io/instance: service-per-pod
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
-    app.kubernetes.io/part-of: percona-server
   name: service-per-pod-mysql-unready
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1

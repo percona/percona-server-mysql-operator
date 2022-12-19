@@ -40,6 +40,11 @@ RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     -o build/_output/bin/peer-list \
     cmd/peer-list/main.go \
     && cp -r build/_output/bin/peer-list /usr/local/bin/peer-list
+RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
+    go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
+    -o build/_output/bin/orc-handler \
+    cmd/orc-handler/main.go \
+    && cp -r build/_output/bin/orc-handler /usr/local/bin/orc-handler
 
 FROM redhat/ubi8-minimal AS ubi8
 
@@ -78,6 +83,7 @@ COPY --from=go_builder /usr/local/bin/bootstrap /opt/percona-server-mysql-operat
 COPY --from=go_builder /usr/local/bin/healthcheck /opt/percona-server-mysql-operator/healthcheck
 COPY --from=go_builder /usr/local/bin/sidecar /opt/percona-server-mysql-operator/sidecar
 COPY --from=go_builder /usr/local/bin/peer-list /opt/percona-server-mysql-operator/peer-list
+COPY --from=go_builder /usr/local/bin/orc-handler /opt/percona-server-mysql-operator/orc-handler
 COPY build/ps-entrypoint.sh /opt/percona-server-mysql-operator/ps-entrypoint.sh
 COPY build/heartbeat-entrypoint.sh /opt/percona-server-mysql-operator/heartbeat-entrypoint.sh
 COPY build/router-entrypoint.sh /opt/percona-server-mysql-operator/router-entrypoint.sh

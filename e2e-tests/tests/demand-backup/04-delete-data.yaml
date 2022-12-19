@@ -9,7 +9,7 @@ commands:
 
       run_mysql \
       	"TRUNCATE TABLE myDB.myTable" \
-      	"-h $(get_mysql_primary_service $(get_cluster_name)) -uroot -proot_password"
+      	"-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
 
       cluster_name=$(get_cluster_name)
       for i in 0 1 2; do
