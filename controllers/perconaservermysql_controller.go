@@ -1584,6 +1584,16 @@ func getPrimaryFromOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServ
 		return nil, errors.Wrap(err, "get cluster primary")
 	}
 
+	if primary.Alias == "" {
+		if err := orchestrator.Discover(ctx, orcHost, mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
+			return nil, errors.Wrap(err, "failed to discover")
+		}
+		primary, err = orchestrator.ClusterPrimary(ctx, orcHost, cr.ClusterHint())
+		if err != nil {
+			return nil, errors.Wrap(err, "get cluster primary")
+		}
+	}
+
 	if primary.Key.Hostname == "" {
 		primary.Key.Hostname = fmt.Sprintf("%s.%s.%s", primary.Alias, mysql.ServiceName(cr), cr.Namespace)
 	}
