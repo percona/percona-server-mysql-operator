@@ -311,6 +311,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 
 			CREATE USER 'xtrabackup'@'localhost' IDENTIFIED BY '${XTRABACKUP_PASSWORD}';
 			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
+			GRANT SELECT ON performance_schema.replication_group_members TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.log_status TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.keyring_component_status TO 'xtrabackup'@'localhost';
 
