@@ -10,6 +10,10 @@ spec:
   crVersion: 0.3.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
+#  ignoreAnnotations:
+#    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
+#  ignoreLabels:
+#    - rack
 #  tls:
 #    SANs:
 #      - mysql-1.example.com
@@ -29,8 +33,6 @@ spec:
 
     size: 3
     sizeSemiSync: 0
-#    primaryServiceType: LoadBalancer
-#    replicasServiceType: ClusterIP
 
     resources:
       requests:
@@ -54,6 +56,15 @@ spec:
 #    expose:
 #      enabled: false
 #      type: ClusterIP
+#      annotations:
+#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#      externalTrafficPolicy: Cluster
+#      internalTrafficPolicy: Cluster
+#      labels:
+#        rack: rack-22
+#      loadBalancerIP: 127.0.0.1
+#      loadBalancerSourceRanges:
+#        - 10.0.0.0/8
 
     volumeSpec:
       persistentVolumeClaim:
@@ -92,70 +103,89 @@ spec:
 #          requests:
 #            storage: 1G
 
-  haproxy:
-    enabled: true
+  proxy:
+    haproxy:
+      enabled: true
 
-    size: 3
+      size: 3
 
-    image: perconalab/percona-server-mysql-operator:main-haproxy
-    imagePullPolicy: Always
+      image: perconalab/percona-server-mysql-operator:main-haproxy
+      imagePullPolicy: Always
 
-    resources:
-      requests:
-        memory: 1G
-        cpu: 600m
-#      limits:
-#        memory: 1G
-#        cpu: 700m
+      resources:
+        requests:
+          memory: 1G
+          cpu: 600m
+#        limits:
+#          memory: 1G
+#          cpu: 700m
 
-    affinity:
-      antiAffinityTopologyKey: "kubernetes.io/hostname"
-#      advanced:
-#        nodeAffinity:
-#          requiredDuringSchedulingIgnoredDuringExecution:
-#            nodeSelectorTerms:
-#            - matchExpressions:
-#              - key: kubernetes.io/e2e-az-name
-#                operator: In
-#                values:
-#                - e2e-az1
-#                - e2e-az2
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+#        advanced:
+#          nodeAffinity:
+#            requiredDuringSchedulingIgnoredDuringExecution:
+#              nodeSelectorTerms:
+#              - matchExpressions:
+#                - key: kubernetes.io/e2e-az-name
+#                  operator: In
+#                  values:
+#                  - e2e-az1
+#                  - e2e-az2
 
-#    expose:
-#      type: ClusterIP
+#      expose:
+#        type: ClusterIP
+#        annotations:
+#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#        externalTrafficPolicy: Cluster
+#        internalTrafficPolicy: Cluster
+#        labels:
+#          rack: rack-22
+#        loadBalancerIP: 127.0.0.1
+#        loadBalancerSourceRanges:
+#          - 10.0.0.0/8
+    router:
+      image: perconalab/percona-server-mysql-operator:main-router
+      imagePullPolicy: Always
+#      initImage: perconalab/percona-server-mysql-operator:main
 
-  router:
-    image: perconalab/percona-server-mysql-operator:main-router
-    imagePullPolicy: Always
-#    initImage: perconalab/percona-server-mysql-operator:main
+      size: 3
 
-    size: 3
+      resources:
+        requests:
+          memory: 256M
+        limits:
+          memory: 256M
 
-    resources:
-      requests:
-        memory: 256M
-      limits:
-        memory: 256M
+      affinity:
+        antiAffinityTopologyKey: "kubernetes.io/hostname"
+#        advanced:
+#          nodeAffinity:
+#            requiredDuringSchedulingIgnoredDuringExecution:
+#              nodeSelectorTerms:
+#              - matchExpressions:
+#                - key: kubernetes.io/e2e-az-name
+#                  operator: In
+#                  values:
+#                  - e2e-az1
+#                  - e2e-az2
 
-    affinity:
-      antiAffinityTopologyKey: "kubernetes.io/hostname"
-#      advanced:
-#        nodeAffinity:
-#          requiredDuringSchedulingIgnoredDuringExecution:
-#            nodeSelectorTerms:
-#            - matchExpressions:
-#              - key: kubernetes.io/e2e-az-name
-#                operator: In
-#                values:
-#                - e2e-az1
-#                - e2e-az2
-
-#    expose:
-#      type: ClusterIP
+#      expose:
+#        type: ClusterIP
+#        annotations:
+#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#        externalTrafficPolicy: Cluster
+#        internalTrafficPolicy: Cluster
+#        labels:
+#          rack: rack-22
+#        loadBalancerIP: 127.0.0.1
+#        loadBalancerSourceRanges:
+#          - 10.0.0.0/8
 
   orchestrator:
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
+#    serviceAccountName: percona-server-mysql-operator-orchestrator
 #    initImage: perconalab/percona-server-mysql-operator:main
 
     size: 3
@@ -175,6 +205,15 @@ spec:
 
 #    expose:
 #      type: ClusterIP
+#      annotations:
+#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#      externalTrafficPolicy: Cluster
+#      internalTrafficPolicy: Cluster
+#      labels:
+#        rack: rack-22
+#      loadBalancerIP: 127.0.0.1
+#      loadBalancerSourceRanges:
+#        - 10.0.0.0/8
 
     resources:
       requests:

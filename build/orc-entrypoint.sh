@@ -3,8 +3,6 @@
 set -e
 set -o xtrace
 
-export PATH="${PATH}:/usr/local/orchestrator"
-
 OPERATOR_BINDIR=/opt/percona
 ORC_CONF_PATH=${ORC_CONF_PATH:-/etc/orchestrator}
 ORC_CONF_FILE=${ORC_CONF_FILE:-"${ORC_CONF_PATH}/orchestrator.conf.json"}
@@ -43,10 +41,6 @@ if [ ! -d "/var/lib/orchestrator" ]; then
 	mkdir /var/lib/orchestrator
 fi
 
-if [ "$1" = 'orchestrator' ]; then
-	orchestrator_opt="-config ${ORC_CONF_FILE} http"
-fi
-
 set +o xtrace
 temp=$(mktemp)
 sed -r "s|^[#]?user=.*$|user=${TOPOLOGY_USER}|" "${ORC_CONF_PATH}/orc-topology.cnf" >"${temp}"
@@ -55,4 +49,4 @@ cat "${temp}" >"${ORC_CONF_PATH}/orc-topology.cnf"
 rm "${temp}"
 set -o xtrace
 
-exec "$@" "${orchestrator_opt}"
+exec "$@"
