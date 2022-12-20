@@ -1072,12 +1072,14 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 
 	cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1alpha1.ConditionInnoDBClusterBootstrapped)
 	if cond == nil || cond.Status == metav1.ConditionFalse {
-		l.Info("Creating InnoDB cluster")
-		err = mysh.CreateCluster(ctx, cr.InnoDBClusterName())
-		if err != nil {
-			return errors.Wrapf(err, "create cluster %s", cr.InnoDBClusterName())
+		if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
+			l.Info("Creating InnoDB cluster")
+			err = mysh.CreateCluster(ctx, cr.InnoDBClusterName())
+			if err != nil {
+				return errors.Wrapf(err, "create cluster %s", cr.InnoDBClusterName())
+			}
+			l.Info("Created InnoDB Cluster", "cluster", cr.InnoDBClusterName())
 		}
-		l.Info("Created InnoDB Cluster", "cluster", cr.InnoDBClusterName())
 
 		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
 			Type:               apiv1alpha1.ConditionInnoDBClusterBootstrapped,
@@ -1087,16 +1089,10 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 			LastTransitionTime: metav1.Now(),
 		})
 
-		l.Info(fmt.Sprintf("%s cluster successfully bootstrapped with %d nodes", cr.Name, cr.MySQLSpec().Size))
 		return nil
 	}
 
-	clusterExists, err := mysh.DoesClusterExist(ctx, cr.InnoDBClusterName())
-	if err != nil {
-		return errors.Wrapf(err, "check if InnoDB Cluster %s exists", cr.InnoDBClusterName())
-	}
-
-	if !clusterExists {
+	if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
 		return errors.New("InnoDB cluster is already bootstrapped, but failed to check its status")
 	}
 
@@ -1258,8 +1254,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 
 		firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
 		mysh := mysqlsh.New(k8sexec.New(), fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri))
-		clusterExists, err := mysh.DoesClusterExist(ctx, cr.InnoDBClusterName())
-		if !clusterExists || err != nil {
+		if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
 			l.V(1).Info("Waiting for InnoDB Cluster", "cluster", cr.Name)
 			return nil
 		}
@@ -1299,8 +1294,7 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 
 	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
 	mysh := mysqlsh.New(k8sexec.New(), fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri))
-	clusterExists, err := mysh.DoesClusterExist(ctx, cr.InnoDBClusterName())
-	if !clusterExists || err != nil {
+	if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
 		return false, nil
 	}
 
