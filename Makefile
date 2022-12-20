@@ -131,7 +131,10 @@ uninstall: manifests ## Uninstall CRDs, rbac
 	kubectl delete -f $(DEPLOYDIR)/rbac.yaml
 
 deploy: manifests ## Deploy operator
-	kubectl apply -f $(DEPLOYDIR)/operator.yaml
+	yq eval \
+		'(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG"' \
+		$(DEPLOYDIR)/operator.yaml \
+		| kubectl apply -f -
 
 undeploy: manifests ## Undeploy operator
 	kubectl delete -f $(DEPLOYDIR)/operator.yaml
