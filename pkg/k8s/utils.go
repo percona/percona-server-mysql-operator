@@ -255,6 +255,17 @@ func ServicesByLabels(ctx context.Context, cl client.Reader, l map[string]string
 	return svcList.Items, nil
 }
 
+func PVCsByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([]corev1.PersistentVolumeClaim, error) {
+	pvcList := &corev1.PersistentVolumeClaimList{}
+
+	opts := &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)}
+	if err := cl.List(ctx, pvcList, opts); err != nil {
+		return nil, err
+	}
+
+	return pvcList.Items, nil
+}
+
 // DefaultAPINamespace returns namespace for direct api access from a pod
 // https://v1-21.docs.kubernetes.io/docs/tasks/run-application/access-api-from-pod/#directly-accessing-the-rest-api
 func DefaultAPINamespace() (string, error) {

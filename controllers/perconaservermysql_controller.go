@@ -1247,6 +1247,11 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 	}
 
 	if cr.Spec.Router.Size > 0 {
+		if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
+			l.V(1).Info("Waiting for MySQL pods to be ready")
+			return nil
+		}
+
 		operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 		if err != nil {
 			return errors.Wrap(err, "get operator password")
@@ -1287,6 +1292,10 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 }
 
 func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
+	if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
+		return false, nil
+	}
+
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 	if err != nil {
 		return false, errors.Wrap(err, "get operator password")
@@ -1384,6 +1393,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		"router", cr.Status.Router,
 		"host", cr.Status.Host,
 		"loadbalancers", loadBalancersReady,
+		"conditions", cr.Status.Conditions,
 		"state", cr.Status.State,
 	)
 
