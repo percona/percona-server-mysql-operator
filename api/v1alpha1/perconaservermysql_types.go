@@ -468,6 +468,19 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 		cr.Spec.MySQL.ReadinessProbe.TimeoutSeconds = 3
 	}
 
+	if cr.Spec.Router.ReadinessProbe.PeriodSeconds == 0 {
+		cr.Spec.Router.ReadinessProbe.PeriodSeconds = 5
+	}
+	if cr.Spec.Router.ReadinessProbe.FailureThreshold == 0 {
+		cr.Spec.Router.ReadinessProbe.FailureThreshold = 3
+	}
+	if cr.Spec.Router.ReadinessProbe.SuccessThreshold == 0 {
+		cr.Spec.Router.ReadinessProbe.SuccessThreshold = 1
+	}
+	if cr.Spec.Router.ReadinessProbe.TimeoutSeconds == 0 {
+		cr.Spec.Router.ReadinessProbe.TimeoutSeconds = 3
+	}
+
 	var fsgroup *int64
 	if serverVersion.Platform != platform.PlatformOpenshift {
 		var tp int64 = 1001
