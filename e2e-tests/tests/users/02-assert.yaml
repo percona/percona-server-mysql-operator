@@ -32,3 +32,4 @@ data:
     GRANT BACKUP_ADMIN,GROUP_REPLICATION_ADMIN,REPLICATION_SLAVE_ADMIN,SYSTEM_USER ON *.* TO `xtrabackup`@`localhost`
     GRANT SELECT ON `performance_schema`.`keyring_component_status` TO `xtrabackup`@`localhost`
     GRANT SELECT ON `performance_schema`.`log_status` TO `xtrabackup`@`localhost`
+    GRANT SELECT ON `performance_schema`.`replication_group_members` TO `xtrabackup`@`localhost`
