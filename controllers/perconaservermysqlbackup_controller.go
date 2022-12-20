@@ -127,7 +127,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, errors.Wrapf(err, "get %v", nn.String())
 	}
 
-	if err := cluster.CheckNSetDefaults(r.ServerVersion); err != nil {
+	if err := cluster.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
 		return rr, errors.Wrapf(err, "check and set defaults for %v", nn.String())
 	}
 

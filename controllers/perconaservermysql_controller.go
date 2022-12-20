@@ -96,6 +96,13 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 
 	rr := ctrl.Result{RequeueAfter: 5 * time.Second}
 
+	var cr *apiv1alpha1.PerconaServerMySQL
+	defer func() {
+		if err := r.reconcileCRStatus(ctx, cr); err != nil {
+			l.Error(err, "failed to update status")
+		}
+	}()
+
 	cr, err := k8s.GetCRWithDefaults(ctx, r.Client, req.NamespacedName, r.ServerVersion)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -108,12 +115,6 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		return rr, r.applyFinalizers(ctx, cr)
 	}
-
-	defer func() {
-		if err := r.reconcileCRStatus(ctx, cr); err != nil {
-			l.Error(err, "failed to update status")
-		}
-	}()
 
 	if err := r.doReconcile(ctx, cr); err != nil {
 		return rr, errors.Wrap(err, "reconcile")
@@ -375,8 +376,8 @@ func (r *PerconaServerMySQLReconciler) getCRWithDefaults(
 	if err := r.Client.Get(ctx, nn, cr); err != nil {
 		return nil, errors.Wrapf(err, "get %v", nn.String())
 	}
-	if err := cr.CheckNSetDefaults(r.ServerVersion); err != nil {
-		return nil, errors.Wrapf(err, "check and set defaults for %v", nn.String())
+	if err := cr.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
+		return cr, errors.Wrapf(err, "check and set defaults for %v", nn.String())
 	}
 
 	return cr, nil
@@ -1404,6 +1405,14 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
+		return nil
+	}
+	if err := cr.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
+		cr.Status.State = apiv1alpha1.StateError
+		nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
+		return writeStatus(ctx, r.Client, nn, cr.Status)
+	}
 	l := log.FromContext(ctx).WithName("reconcileCRStatus")
 
 	mysqlStatus, err := appStatus(ctx, r.Client, cr.MySQLSpec().Size, mysql.MatchLabels(cr), cr.Status.MySQL.Version)
