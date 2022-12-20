@@ -12,7 +12,7 @@ require (
 	github.com/go-openapi/strfmt v0.21.3
 	github.com/go-openapi/swag v0.22.3
 	github.com/go-openapi/validate v0.22.0
-	github.com/go-sql-driver/mysql v1.6.0
+	github.com/go-sql-driver/mysql v1.7.0
 	github.com/minio/minio-go/v7 v7.0.44
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.24.1
