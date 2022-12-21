@@ -196,6 +196,26 @@ func EnsureNodeIsPrimary(ctx context.Context, apiHost, clusterHint, host string,
 	return nil
 }
 
+func Discover(ctx context.Context, apiHost, host string, port int) error {
+	url := fmt.Sprintf("%s/api/discover/%s/%d", apiHost, host, port)
+
+	resp, err := doRequest(ctx, url)
+	if err != nil {
+		return errors.Wrapf(err, "do request to %s", url)
+	}
+	defer resp.Body.Close()
+
+	orcResp := &orcResponse{}
+	if err := json.NewDecoder(resp.Body).Decode(orcResp); err != nil {
+		return errors.Wrap(err, "json decode")
+	}
+
+	if orcResp.Code == "ERROR" {
+		return errors.New(orcResp.Message)
+	}
+	return nil
+}
+
 func doRequest(ctx context.Context, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
