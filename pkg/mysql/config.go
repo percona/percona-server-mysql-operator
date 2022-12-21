@@ -32,8 +32,8 @@ func GetAutoTuneParams(cr *apiv1alpha1.PerconaServerMySQL, q *resource.Quantity)
 		// innodb_buffer_pool_chunk_size can be increased or decreased in units of 1Mi (1048576 bytes).
 		// That's why we should strip redundant bytes
 		chunkSize -= chunkSize % (1048576)
-		poolSize = instances * poolSize
-	} else {
+		poolSize = instances * chunkSize
+	} else if poolSize%(instances*chunkSize) != 0 {
 		// Buffer pool size must always
 		// be equal to or a multiple of innodb_buffer_pool_chunk_size * innodb_buffer_pool_instances.
 		// If not, this value will be adjusted
