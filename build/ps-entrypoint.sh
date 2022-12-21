@@ -402,6 +402,7 @@ if [[ -f /var/lib/mysql/full-cluster-crash ]]; then
 	node_name=$(hostname -f)
 	cluster_name=$(hostname | cut -d '-' -f1) # TODO: This won't work if CR has `-` in its name.
 	gtid_executed=$(</var/lib/mysql/full-cluster-crash)
+	namespace=$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)
 
 	echo "######FULL_CLUSTER_CRASH:${node_name}######"
 	echo "You have full cluster crash. You need to recover the cluster manually. Here are the steps:"
@@ -409,18 +410,21 @@ if [[ -f /var/lib/mysql/full-cluster-crash ]]; then
 	echo "Latest GTID_EXECUTED in this node is ${gtid_executed}"
 	echo "Compare GTIDs in each MySQL pod and select the one with the newest GTID."
 	echo ""
-	echo "Create /var/lib/mysql/force-bootstrap inside the mysql container. For example:"
-	echo "$ kubectl exec ${cluster_name}-mysql-2 -c mysql -- touch /var/lib/mysql/force-bootstrap"
+	echo "Create /var/lib/mysql/force-bootstrap inside the mysql container. For example, if you select ${cluster_name}-mysql-2 to recover from:"
+	echo "$ kubectl -n ${namespace} exec ${cluster_name}-mysql-2 -c mysql -- touch /var/lib/mysql/force-bootstrap"
 	echo ""
 	echo "Remove /var/lib/mysql/full-cluster-crash in this pod to re-bootstrap the group. For example:"
-	echo "$ kubectl exec ${cluster_name}-mysql-2 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
+	echo "$ kubectl -n ${namespace} exec ${cluster_name}-mysql-2 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
 	echo "This will restart the mysql container."
 	echo ""
 	echo "After group is bootstrapped and mysql container is ready, move on to the other pods:"
-	echo "$ kubectl exec ${cluster_name}-mysql-1 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
+	echo "$ kubectl -n ${namespace} exec ${cluster_name}-mysql-1 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
 	echo "Wait until the pod ready"
 	echo ""
-	echo "$ kubectl exec ${cluster_name}-mysql-0 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
+	echo "$ kubectl -n ${namespace} exec ${cluster_name}-mysql-0 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
+	echo "Wait until the pod ready"
+	echo ""
+	echo "Continue to other pods if you have more."
 	echo "#####LAST_LINE:${node_name}:${gtid_executed}"
 
 	for (( ; ; )); do
