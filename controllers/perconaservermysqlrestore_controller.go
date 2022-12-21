@@ -25,6 +25,8 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	k8sretry "k8s.io/client-go/util/retry"
@@ -140,6 +142,12 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, errors.Wrap(err, "pause cluster")
 	}
 	l.Info("Cluster paused", "cluster", cluster.Name)
+
+	if cluster.Spec.MySQL.IsGR() {
+		if err := r.removeBootstrapCondition(ctx, cluster); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "remove bootstrap condition")
+		}
+	}
 
 	job := &batchv1.Job{}
 	nn = types.NamespacedName{Name: xtrabackup.RestoreJobName(cluster, cr), Namespace: req.Namespace}
@@ -258,12 +266,67 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	if status.State == apiv1alpha1.RestoreSucceeded {
+		if cluster.Spec.MySQL.IsGR() {
+			if err := r.deletePVCs(ctx, cluster); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "delete PVCs")
+			}
+		}
 		if err := r.unpauseCluster(ctx, cluster); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "unpause cluster")
 		}
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) error {
+	l := log.FromContext(ctx)
+
+	pvcs, err := k8s.PVCsByLabels(ctx, r.Client, mysql.MatchLabels(cluster))
+	if err != nil {
+		return errors.Wrap(err, "get PVC list")
+	}
+
+	for _, pvc := range pvcs {
+		if pvc.Name == fmt.Sprintf("%s-%s-mysql-0", mysql.DataVolumeName, cluster.Name) {
+			continue
+		}
+
+		if err := r.Client.Delete(ctx, &pvc); err != nil {
+			l.Error(err, "failed to delete PVC")
+			continue
+		}
+
+		l.Info("Deleted PVC after restore", "pvc", pvc.Name)
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) removeBootstrapCondition(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) error {
+	l := log.FromContext(ctx)
+
+	err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
+		c := &apiv1alpha1.PerconaServerMySQL{}
+		nn := types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}
+		if err := r.Client.Get(ctx, nn, c); err != nil {
+			return err
+		}
+
+		meta.SetStatusCondition(&c.Status.Conditions, metav1.Condition{
+			Type:               apiv1alpha1.ConditionInnoDBClusterBootstrapped,
+			Status:             metav1.ConditionFalse,
+			Reason:             apiv1alpha1.ConditionInnoDBClusterBootstrapped,
+			Message:            "InnoDB cluster is not bootstrapped after restore",
+			LastTransitionTime: metav1.Now(),
+		})
+
+		return r.Client.Status().Update(ctx, c)
+	})
+
+	l.Info(fmt.Sprintf("Set %s condition to false", apiv1alpha1.ConditionInnoDBClusterBootstrapped))
+
+	return err
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) error {
