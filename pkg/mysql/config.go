@@ -14,10 +14,7 @@ import (
 func GetAutoTuneParams(cr *apiv1alpha1.PerconaServerMySQL, q *resource.Quantity) (string, error) {
 	autotuneParams := ""
 
-	poolSize := q.Value() * int64(75) / int64(100)
-	if q.Value()-poolSize < int64(1000000000) {
-		poolSize = q.Value() * int64(50) / int64(100)
-	}
+	poolSize := q.Value() * int64(50) / int64(100)
 	instances := int64(1)                 // default value
 	chunkSize := int64(1024 * 1024 * 128) // default value
 

@@ -26,7 +26,7 @@ spec:
 #  initImage: perconalab/percona-server-mysql-operator:main
 
   mysql:
-    clusterType: async
+    clusterType: group-replication
     image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
 #    initImage: perconalab/percona-server-mysql-operator:main

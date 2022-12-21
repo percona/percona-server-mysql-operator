@@ -114,6 +114,7 @@ get_cr() {
 		| yq eval '.spec.secretsName="test-secrets"' - \
 		| yq eval '.spec.sslSecretName="test-ssl"' - \
 		| yq eval '.spec.upgradeOptions.apply="disabled"' - \
+		| yq eval '.spec.mysql.clusterType="async"' - \
 		| yq eval "$(printf '.spec.mysql.image="%s"' "${IMAGE_MYSQL}")" - \
 		| yq eval "$(printf '.spec.backup.image="%s"' "${IMAGE_BACKUP}")" - \
 		| yq eval "$(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}")" - \
@@ -334,16 +335,9 @@ check_auto_tuning() {
 			exit 1
 		fi
 	else
-		if [[ 1000000000 -lt $((RAM_SIZE - $((RAM_SIZE * 75 / 100)))) ]]; then
-			if [[ ${INNODB_SIZE} != $((RAM_SIZE * 75 / 100)) ]]; then
-				echo "innodb_buffer_pool_size is set to ${INNODB_SIZE}, which does not correlate with cr.pxc.limits.memory * 0.75"
-				exit 1
-			fi
-		else
-			if [[ ${INNODB_SIZE} != $((RAM_SIZE * 50 / 100)) ]]; then
-				echo "innodb_buffer_pool_size is set to ${INNODB_SIZE}, which does not correlate with cr.pxc.limits.memory * 0.5"
-				exit 1
-			fi
+		if [[ ${INNODB_SIZE} != $((RAM_SIZE * 50 / 100)) ]]; then
+			echo "innodb_buffer_pool_size is set to ${INNODB_SIZE}, which does not correlate with cr.pxc.limits.memory * 0.5"
+			exit 1
 		fi
 	fi
 
