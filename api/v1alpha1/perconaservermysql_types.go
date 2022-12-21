@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
 	"fmt"
 	"hash/fnv"
 	"regexp"
@@ -32,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -110,7 +112,8 @@ type SidecarPVC struct {
 }
 
 type OrchestratorSpec struct {
-	Expose ServiceExpose `json:"expose,omitempty"`
+	Enabled bool          `json:"enabled,omitempty"`
+	Expose  ServiceExpose `json:"expose,omitempty"`
 
 	PodSpec `json:",inline"`
 }
@@ -321,6 +324,7 @@ type StatefulAppState string
 const (
 	StateInitializing StatefulAppState = "initializing"
 	StateReady        StatefulAppState = "ready"
+	StateError        StatefulAppState = "error"
 )
 
 type StatefulAppStatus struct {
@@ -333,16 +337,19 @@ type StatefulAppStatus struct {
 // PerconaServerMySQLStatus defines the observed state of PerconaServerMySQL
 type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	MySQL         StatefulAppStatus `json:"mysql,omitempty"`
-	Orchestrator  StatefulAppStatus `json:"orchestrator,omitempty"`
-	HAProxy       StatefulAppStatus `json:"haproxy,omitempty"`
-	Router        StatefulAppStatus `json:"router,omitempty"`
-	State         StatefulAppState  `json:"state,omitempty"`
-	BackupVersion string            `json:"backupVersion,omitempty"`
-	PMMVersion    string            `json:"pmmVersion,omitempty"`
+	MySQL         StatefulAppStatus  `json:"mysql,omitempty"`
+	Orchestrator  StatefulAppStatus  `json:"orchestrator,omitempty"`
+	HAProxy       StatefulAppStatus  `json:"haproxy,omitempty"`
+	Router        StatefulAppStatus  `json:"router,omitempty"`
+	State         StatefulAppState   `json:"state,omitempty"`
+	BackupVersion string             `json:"backupVersion,omitempty"`
+	PMMVersion    string             `json:"pmmVersion,omitempty"`
+	Conditions    []metav1.Condition `json:"conditions,omitempty"`
 	// +optional
 	Host string `json:"host"`
 }
+
+const ConditionInnoDBClusterBootstrapped string = "InnoDBClusterBootstrapped"
 
 // PerconaServerMySQL is the Schema for the perconaservermysqls API
 // +kubebuilder:object:root=true
@@ -408,7 +415,8 @@ func (cr *PerconaServerMySQL) SetVersion() {
 	cr.Spec.CRVersion = version.Version
 }
 
-func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVersion) error {
+func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersion *platform.ServerVersion) error {
+	l := log.FromContext(ctx).WithName("CheckNSetDefaults")
 	if len(cr.Spec.MySQL.ClusterType) == 0 {
 		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
 	}
@@ -475,6 +483,19 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 		cr.Spec.MySQL.ReadinessProbe.TimeoutSeconds = 3
 	}
 
+	if cr.Spec.Proxy.Router.ReadinessProbe.PeriodSeconds == 0 {
+		cr.Spec.Proxy.Router.ReadinessProbe.PeriodSeconds = 5
+	}
+	if cr.Spec.Proxy.Router.ReadinessProbe.FailureThreshold == 0 {
+		cr.Spec.Proxy.Router.ReadinessProbe.FailureThreshold = 3
+	}
+	if cr.Spec.Proxy.Router.ReadinessProbe.SuccessThreshold == 0 {
+		cr.Spec.Proxy.Router.ReadinessProbe.SuccessThreshold = 1
+	}
+	if cr.Spec.Proxy.Router.ReadinessProbe.TimeoutSeconds == 0 {
+		cr.Spec.Proxy.Router.ReadinessProbe.TimeoutSeconds = 3
+	}
+
 	var fsgroup *int64
 	if serverVersion.Platform != platform.PlatformOpenshift {
 		var tp int64 = 1001
@@ -510,7 +531,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 	cr.Spec.MySQL.reconcileAffinityOpts()
 	cr.Spec.Orchestrator.reconcileAffinityOpts()
 
-	if oSize := int(cr.Spec.Orchestrator.Size); (oSize < 3 || oSize%2 == 0) && oSize != 0 && !cr.Spec.AllowUnsafeConfig {
+	if oSize := int(cr.Spec.Orchestrator.Size); cr.OrchestratorEnabled() && (oSize < 3 || oSize%2 == 0) && oSize != 0 && !cr.Spec.AllowUnsafeConfig {
 		return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup")
 	}
 
@@ -527,6 +548,18 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(serverVersion *platform.ServerVe
 	if cr.HAProxyEnabled() && cr.Spec.MySQL.ClusterType != ClusterTypeGR && !cr.Spec.AllowUnsafeConfig {
 		if cr.Spec.Proxy.HAProxy.Size < MinSafeProxySize {
 			cr.Spec.Proxy.HAProxy.Size = MinSafeProxySize
+		}
+	}
+
+	if cr.Spec.MySQL.ClusterType != ClusterTypeGR && !cr.OrchestratorEnabled() {
+		switch cr.Generation {
+		case 1:
+			if cr.Spec.MySQL.Size > 1 {
+				return errors.New("mysql size should be 1 when orchestrator is disabled")
+			}
+		default:
+			cr.Spec.Orchestrator.Enabled = true
+			l.Info("orchestrator can't be disabled on an existing cluster")
 		}
 	}
 
@@ -719,7 +752,17 @@ func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 }
 
 func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
+	if !cr.Spec.AllowUnsafeConfig {
+		return true
+	}
 	return cr.Spec.Proxy.HAProxy != nil && cr.Spec.Proxy.HAProxy.Enabled
+}
+
+func (cr *PerconaServerMySQL) OrchestratorEnabled() bool {
+	if !cr.Spec.AllowUnsafeConfig {
+		return true
+	}
+	return cr.Spec.Orchestrator.Enabled
 }
 
 var NonAlphaNumeric = regexp.MustCompile("[^a-zA-Z0-9_]+")

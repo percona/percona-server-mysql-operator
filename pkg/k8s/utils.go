@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"strings"
@@ -326,10 +325,21 @@ func ServicesByLabels(ctx context.Context, cl client.Reader, l map[string]string
 	return svcList.Items, nil
 }
 
+func PVCsByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([]corev1.PersistentVolumeClaim, error) {
+	pvcList := &corev1.PersistentVolumeClaimList{}
+
+	opts := &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)}
+	if err := cl.List(ctx, pvcList, opts); err != nil {
+		return nil, err
+	}
+
+	return pvcList.Items, nil
+}
+
 // DefaultAPINamespace returns namespace for direct api access from a pod
 // https://v1-21.docs.kubernetes.io/docs/tasks/run-application/access-api-from-pod/#directly-accessing-the-rest-api
 func DefaultAPINamespace() (string, error) {
-	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	nsBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
 		return "", err
 	}
@@ -368,8 +378,8 @@ func GetCRWithDefaults(
 	if err := cl.Get(ctx, nn, cr); err != nil {
 		return nil, errors.Wrapf(err, "get %v", nn.String())
 	}
-	if err := cr.CheckNSetDefaults(serverVersion); err != nil {
-		return nil, errors.Wrapf(err, "check and set defaults for %v", nn.String())
+	if err := cr.CheckNSetDefaults(ctx, serverVersion); err != nil {
+		return cr, errors.Wrapf(err, "check and set defaults for %v", nn.String())
 	}
 
 	return cr, nil
