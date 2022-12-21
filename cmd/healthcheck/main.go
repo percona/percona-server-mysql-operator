@@ -1,7 +1,7 @@
 package main
 
 import (
-	"io/ioutil"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -11,15 +11,31 @@ import (
 	"github.com/pkg/errors"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
 func main() {
+	fullClusterCrash, err := fileExists("/var/lib/mysql/full-cluster-crash")
+	if err != nil {
+		log.Fatalf("check /var/lib/mysql/full-cluster-crash: %s", err)
+	}
+	if fullClusterCrash {
+		os.Exit(0)
+	}
+
 	switch os.Args[1] {
 	case "readiness":
-		if err := checkReadiness(); err != nil {
-			log.Fatalf("readiness check failed: %v", err)
+		switch os.Getenv("CLUSTER_TYPE") {
+		case "async":
+			if err := checkReadinessAsync(); err != nil {
+				log.Fatalf("readiness check failed: %v", err)
+			}
+		case "group-replication":
+			if err := checkReadinessGR(); err != nil {
+				log.Fatalf("readiness check failed: %v", err)
+			}
 		}
 	case "liveness":
 		if err := checkLiveness(); err != nil {
@@ -34,7 +50,7 @@ func main() {
 	}
 }
 
-func checkReadiness() error {
+func checkReadinessAsync() error {
 	podIP, err := getPodIP()
 	if err != nil {
 		return errors.Wrap(err, "get pod IP")
@@ -64,6 +80,40 @@ func checkReadiness() error {
 
 	if isReplica && !readOnly {
 		return errors.New("replica is not read only")
+	}
+
+	return nil
+}
+
+func checkReadinessGR() error {
+	podIP, err := getPodIP()
+	if err != nil {
+		return errors.Wrap(err, "get pod IP")
+	}
+
+	monitorPass, err := getSecret(string(apiv1alpha1.UserMonitor))
+	if err != nil {
+		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
+	}
+
+	db, err := replicator.NewReplicator(apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
+	if err != nil {
+		return errors.Wrap(err, "connect to db")
+	}
+	defer db.Close()
+
+	fqdn, err := getPodFQDN(os.Getenv("SERVICE_NAME"))
+	if err != nil {
+		return errors.Wrap(err, "get pod hostname")
+	}
+
+	state, err := db.GetMemberState(fqdn)
+	if err != nil {
+		return errors.Wrap(err, "get member state")
+	}
+
+	if state != replicator.MemberStateOnline {
+		return errors.Errorf("Member state: %s", state)
 	}
 
 	return nil
@@ -121,7 +171,7 @@ func checkReplication() error {
 
 func getSecret(username string) (string, error) {
 	path := filepath.Join(mysql.CredsMountPath, username)
-	sBytes, err := ioutil.ReadFile(path)
+	sBytes, err := os.ReadFile(path)
 	if err != nil {
 		return "", errors.Wrapf(err, "read %s", path)
 	}
@@ -129,10 +179,19 @@ func getSecret(username string) (string, error) {
 	return strings.TrimSpace(string(sBytes)), nil
 }
 
-func getPodIP() (string, error) {
+func getPodHostname() (string, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
 		return "", errors.Wrap(err, "get hostname")
+	}
+
+	return hostname, nil
+}
+
+func getPodIP() (string, error) {
+	hostname, err := getPodHostname()
+	if err != nil {
+		return "", err
 	}
 
 	addrs, err := net.LookupHost(hostname)
@@ -141,4 +200,29 @@ func getPodIP() (string, error) {
 	}
 
 	return addrs[0], nil
+}
+
+func getPodFQDN(svcName string) (string, error) {
+	hostname, err := getPodHostname()
+	if err != nil {
+		return "", err
+	}
+
+	namespace, err := k8s.DefaultAPINamespace()
+	if err != nil {
+		return "", errors.Wrap(err, "get namespace")
+	}
+
+	return fmt.Sprintf("%s.%s.%s", hostname, svcName, namespace), nil
+}
+
+func fileExists(name string) (bool, error) {
+	_, err := os.Stat(name)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "os stat")
+	}
+	return true, nil
 }
