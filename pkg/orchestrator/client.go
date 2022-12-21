@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/pkg/errors"
@@ -37,7 +37,7 @@ func ClusterPrimary(ctx context.Context, apiHost, clusterHint string) (*Instance
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "read response body")
 	}
@@ -110,7 +110,7 @@ func AddPeer(ctx context.Context, apiHost string, peer string) error {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return errors.Wrap(err, "read response body")
 	}
@@ -142,7 +142,7 @@ func RemovePeer(ctx context.Context, apiHost string, peer string) error {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return errors.Wrap(err, "read response body")
 	}
@@ -171,7 +171,7 @@ func EnsureNodeIsPrimary(ctx context.Context, apiHost, clusterHint, host string,
 		return errors.Wrap(err, "get cluster primary")
 	}
 
-	if primary.Alias == host{
+	if primary.Alias == host {
 		return nil
 	}
 
@@ -193,6 +193,26 @@ func EnsureNodeIsPrimary(ctx context.Context, apiHost, clusterHint, host string,
 		return errors.New(orcResp.Message)
 	}
 
+	return nil
+}
+
+func Discover(ctx context.Context, apiHost, host string, port int) error {
+	url := fmt.Sprintf("%s/api/discover/%s/%d", apiHost, host, port)
+
+	resp, err := doRequest(ctx, url)
+	if err != nil {
+		return errors.Wrapf(err, "do request to %s", url)
+	}
+	defer resp.Body.Close()
+
+	orcResp := &orcResponse{}
+	if err := json.NewDecoder(resp.Body).Decode(orcResp); err != nil {
+		return errors.Wrap(err, "json decode")
+	}
+
+	if orcResp.Code == "ERROR" {
+		return errors.New(orcResp.Message)
+	}
 	return nil
 }
 

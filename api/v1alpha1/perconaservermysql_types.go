@@ -337,16 +337,19 @@ type StatefulAppStatus struct {
 // PerconaServerMySQLStatus defines the observed state of PerconaServerMySQL
 type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	MySQL         StatefulAppStatus `json:"mysql,omitempty"`
-	Orchestrator  StatefulAppStatus `json:"orchestrator,omitempty"`
-	HAProxy       StatefulAppStatus `json:"haproxy,omitempty"`
-	Router        StatefulAppStatus `json:"router,omitempty"`
-	State         StatefulAppState  `json:"state,omitempty"`
-	BackupVersion string            `json:"backupVersion,omitempty"`
-	PMMVersion    string            `json:"pmmVersion,omitempty"`
+	MySQL         StatefulAppStatus  `json:"mysql,omitempty"`
+	Orchestrator  StatefulAppStatus  `json:"orchestrator,omitempty"`
+	HAProxy       StatefulAppStatus  `json:"haproxy,omitempty"`
+	Router        StatefulAppStatus  `json:"router,omitempty"`
+	State         StatefulAppState   `json:"state,omitempty"`
+	BackupVersion string             `json:"backupVersion,omitempty"`
+	PMMVersion    string             `json:"pmmVersion,omitempty"`
+	Conditions    []metav1.Condition `json:"conditions,omitempty"`
 	// +optional
 	Host string `json:"host"`
 }
+
+const ConditionInnoDBClusterBootstrapped string = "InnoDBClusterBootstrapped"
 
 // PerconaServerMySQL is the Schema for the perconaservermysqls API
 // +kubebuilder:object:root=true
@@ -478,6 +481,19 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 	}
 	if cr.Spec.MySQL.ReadinessProbe.TimeoutSeconds == 0 {
 		cr.Spec.MySQL.ReadinessProbe.TimeoutSeconds = 3
+	}
+
+	if cr.Spec.Proxy.Router.ReadinessProbe.PeriodSeconds == 0 {
+		cr.Spec.Proxy.Router.ReadinessProbe.PeriodSeconds = 5
+	}
+	if cr.Spec.Proxy.Router.ReadinessProbe.FailureThreshold == 0 {
+		cr.Spec.Proxy.Router.ReadinessProbe.FailureThreshold = 3
+	}
+	if cr.Spec.Proxy.Router.ReadinessProbe.SuccessThreshold == 0 {
+		cr.Spec.Proxy.Router.ReadinessProbe.SuccessThreshold = 1
+	}
+	if cr.Spec.Proxy.Router.ReadinessProbe.TimeoutSeconds == 0 {
+		cr.Spec.Proxy.Router.ReadinessProbe.TimeoutSeconds = 3
 	}
 
 	var fsgroup *int64

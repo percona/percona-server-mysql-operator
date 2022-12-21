@@ -26,6 +26,18 @@ status:
   updatedReplicas: 3
   collisionCount: 0
 ---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: init-deploy-haproxy
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
@@ -41,3 +53,4 @@ status:
     ready: 3
     size: 3
     state: ready
+  state: ready

@@ -105,7 +105,7 @@ func (m *mysqlsh) RemoveInstance(ctx context.Context, clusterName, instance stri
 }
 
 func (m *mysqlsh) CreateCluster(ctx context.Context, clusterName string) error {
-	cmd := fmt.Sprintf("dba.createCluster('%s')", clusterName)
+	cmd := fmt.Sprintf("dba.createCluster('%s', {'adoptFromGR': true})", clusterName)
 
 	if err := m.run(ctx, cmd); err != nil {
 		return errors.Wrap(err, "create cluster")
@@ -114,22 +114,16 @@ func (m *mysqlsh) CreateCluster(ctx context.Context, clusterName string) error {
 	return nil
 }
 
-func (m *mysqlsh) DoesClusterExist(ctx context.Context, clusterName string) (bool, error) {
+func (m *mysqlsh) DoesClusterExist(ctx context.Context, clusterName string) bool {
+	l := log.FromContext(ctx)
+
 	cmd := fmt.Sprintf("dba.getCluster('%s').status()", clusterName)
 	err := m.run(ctx, cmd)
-	if err == nil {
-		return true, err
+	if err != nil {
+		l.Error(err, "failed to get cluster status")
 	}
 
-	if strings.Contains(err.Error(), "MYSQLSH 51314") {
-		return true, ErrMetadataExistsButGRNotActive
-	}
-
-	if strings.Contains(err.Error(), "rebootClusterFromCompleteOutage") {
-		return true, ErrMetadataExistsButGRNotActive
-	}
-
-	return false, nil
+	return err == nil
 }
 
 func (m *mysqlsh) ClusterStatus(ctx context.Context, clusterName string) (innodbcluster.Status, error) {

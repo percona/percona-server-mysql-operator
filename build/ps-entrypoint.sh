@@ -158,6 +158,7 @@ create_default_cnf() {
 	sed -i "/\[mysqld\]/a report_port=3306" $CFG
 	sed -i "/\[mysqld\]/a gtid-mode=ON" $CFG
 	sed -i "/\[mysqld\]/a enforce-gtid-consistency=ON" $CFG
+	sed -i "/\[mysqld\]/a log_error_verbosity=3" $CFG
 	sed -i "/\[mysqld\]/a plugin-load-add=clone=mysql_clone.so" $CFG
 	sed -i "/\[mysqld\]/a plugin-load-add=rpl_semi_sync_master=semisync_master.so" $CFG
 	sed -i "/\[mysqld\]/a plugin-load-add=rpl_semi_sync_slave=semisync_slave.so" $CFG
@@ -180,9 +181,17 @@ create_default_cnf() {
 }
 
 load_group_replication_plugin() {
+	POD_IP=$(hostname -I | awk '{print $1}')
+
 	sed -i "/\[mysqld\]/a plugin_load_add=group_replication.so" $CFG
 	sed -i "/\[mysqld\]/a group_replication_bootstrap_group=OFF" $CFG
 	sed -i "/\[mysqld\]/a group_replication_start_on_boot=OFF" $CFG
+	sed -i "/\[mysqld\]/a group_replication_consistency=EVENTUAL" $CFG
+	sed -i "/\[mysqld\]/a group_replication_exit_state_action=READ_ONLY" $CFG
+	sed -i "/\[mysqld\]/a group_replication_communication_stack=XCOM" $CFG
+	sed -i "/\[mysqld\]/a group_replication_ip_allowlist=${POD_IP}/16" $CFG
+	sed -i "/\[mysqld\]/a group_replication_ssl_mode=REQUIRED" $CFG
+	sed -i "/\[mysqld\]/a group_replication_recovery_use_ssl=ON" $CFG
 }
 
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
@@ -302,6 +311,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 
 			CREATE USER 'xtrabackup'@'localhost' IDENTIFIED BY '${XTRABACKUP_PASSWORD}';
 			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
+			GRANT SELECT ON performance_schema.replication_group_members TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.log_status TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.keyring_component_status TO 'xtrabackup'@'localhost';
 
@@ -311,7 +321,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			${monitorConnectGrant}
 
 			CREATE USER 'replication'@'%' IDENTIFIED BY '${REPLICATION_PASSWORD}';
-			GRANT SYSTEM_USER, REPLICATION SLAVE ON *.* to 'replication'@'%';
+			GRANT SYSTEM_USER, REPLICATION SLAVE, CONNECTION_ADMIN, BACKUP_ADMIN, GROUP_REPLICATION_STREAM, CLONE_ADMIN ON *.* to 'replication'@'%';
 			GRANT SELECT ON performance_schema.threads to 'replication'@'%';
 
 			CREATE USER 'orchestrator'@'%' IDENTIFIED BY '${ORC_TOPOLOGY_PASSWORD}';
@@ -385,6 +395,44 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		echo 'Initialization complete, now exiting!'
 		exit 0
 	fi
+fi
+
+if [[ -f /var/lib/mysql/full-cluster-crash ]]; then
+	set +o xtrace
+	node_name=$(hostname -f)
+	cluster_name=$(hostname | cut -d '-' -f1) # TODO: This won't work if CR has `-` in its name.
+	gtid_executed=$(</var/lib/mysql/full-cluster-crash)
+	namespace=$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)
+
+	echo "######FULL_CLUSTER_CRASH:${node_name}######"
+	echo "You have full cluster crash. You need to recover the cluster manually. Here are the steps:"
+	echo ""
+	echo "Latest GTID_EXECUTED in this node is ${gtid_executed}"
+	echo "Compare GTIDs in each MySQL pod and select the one with the newest GTID."
+	echo ""
+	echo "Create /var/lib/mysql/force-bootstrap inside the mysql container. For example, if you select ${cluster_name}-mysql-2 to recover from:"
+	echo "$ kubectl -n ${namespace} exec ${cluster_name}-mysql-2 -c mysql -- touch /var/lib/mysql/force-bootstrap"
+	echo ""
+	echo "Remove /var/lib/mysql/full-cluster-crash in this pod to re-bootstrap the group. For example:"
+	echo "$ kubectl -n ${namespace} exec ${cluster_name}-mysql-2 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
+	echo "This will restart the mysql container."
+	echo ""
+	echo "After group is bootstrapped and mysql container is ready, move on to the other pods:"
+	echo "$ kubectl -n ${namespace} exec ${cluster_name}-mysql-1 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
+	echo "Wait until the pod ready"
+	echo ""
+	echo "$ kubectl -n ${namespace} exec ${cluster_name}-mysql-0 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
+	echo "Wait until the pod ready"
+	echo ""
+	echo "Continue to other pods if you have more."
+	echo "#####LAST_LINE:${node_name}:${gtid_executed}"
+
+	for (( ; ; )); do
+		if [[ ! -f /var/lib/mysql/full-cluster-crash ]]; then
+			exit 0
+		fi
+		sleep 5
+	done
 fi
 
 exec "$@"

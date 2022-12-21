@@ -21,9 +21,12 @@ spec:
             - name: MYSQL_USER
               value: root
             - name: MYSQL_PASSWORD
-              value: root_pass
+              valueFrom:
+                secretKeyRef:
+                  name: cluster1-secrets
+                  key: root
             - name: MYSQL_HOSTNAME
-              value: cluster1-mysql-primary
+              value: cluster1-router
           command: ["bash"]
           args:
             - "-c"
