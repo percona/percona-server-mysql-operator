@@ -15,7 +15,7 @@ require (
 	github.com/go-sql-driver/mysql v1.7.0
 	github.com/minio/minio-go/v7 v7.0.45
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.24.1
+	github.com/onsi/gomega v1.24.2
 	github.com/pkg/errors v0.9.1
 	github.com/sjmudd/stopwatch v0.0.0-20170613150411-f380bf8a9be1
 	go.uber.org/zap v1.24.0
@@ -81,7 +81,7 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	golang.org/x/crypto v0.1.0 // indirect
-	golang.org/x/net v0.3.1-0.20221206200815-1e63c2f08a10 // indirect
+	golang.org/x/net v0.4.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20220909003341-f21342109be1 // indirect
 	golang.org/x/sys v0.3.0 // indirect
 	golang.org/x/term v0.3.0 // indirect
