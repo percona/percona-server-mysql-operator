@@ -362,10 +362,11 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 	switch cluster.Spec.MySQL.ClusterType {
 	case apiv1alpha1.ClusterTypeAsync:
 		nn = types.NamespacedName{Name: orchestrator.Name(cluster), Namespace: cluster.Namespace}
-		if err := r.Client.Get(ctx, nn, sts); err != nil {
+		err := r.Client.Get(ctx, nn, sts)
+		if client.IgnoreNotFound(err) != nil {
 			return errors.Wrapf(err, "get statefulset %s", nn)
 		}
-		if sts.Status.Replicas != 0 {
+		if !k8serrors.IsNotFound(err) && sts.Status.Replicas != 0 {
 			return ErrWaitingTermination
 		}
 	case apiv1alpha1.ClusterTypeGR:

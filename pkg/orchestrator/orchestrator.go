@@ -35,7 +35,8 @@ const (
 type Exposer apiv1alpha1.PerconaServerMySQL
 
 func (e *Exposer) Exposed() bool {
-	return true
+	cr := apiv1alpha1.PerconaServerMySQL(*e)
+	return cr.OrchestratorEnabled()
 }
 
 func (e *Exposer) Name(index string) string {

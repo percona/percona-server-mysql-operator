@@ -378,8 +378,8 @@ func GetCRWithDefaults(
 	if err := cl.Get(ctx, nn, cr); err != nil {
 		return nil, errors.Wrapf(err, "get %v", nn.String())
 	}
-	if err := cr.CheckNSetDefaults(serverVersion); err != nil {
-		return nil, errors.Wrapf(err, "check and set defaults for %v", nn.String())
+	if err := cr.CheckNSetDefaults(ctx, serverVersion); err != nil {
+		return cr, errors.Wrapf(err, "check and set defaults for %v", nn.String())
 	}
 
 	return cr, nil
