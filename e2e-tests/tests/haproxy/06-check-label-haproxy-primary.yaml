@@ -1,0 +1,16 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 30
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      primary_label="$(get_primary_from_label)"
+      primary_haproxy="$(get_primary_from_haproxy ${test_name}-haproxy-0)"
+      if [ "${primary_label}" != "${primary_haproxy}" ]; then
+        echo "Primary label (${primary_label}) is not set to same pod as primary in haproxy (${primary_haproxy})!"
+        exit 1
+      fi

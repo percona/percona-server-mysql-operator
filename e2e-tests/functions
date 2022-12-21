@@ -373,3 +373,14 @@ deploy_cert_manager() {
 	kubectl label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
 	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.8.0/cert-manager.yaml --validate=false || : 2>/dev/null
 }
+
+get_primary_from_label() {
+	kubectl -n "${NAMESPACE}" get pods -l mysql.percona.com/primary=true -ojsonpath="{.items[0].metadata.name}"
+}
+
+get_primary_from_haproxy() {
+	local haproxy_pod=$1
+	local haproxy_pod_ip=$(kubectl -n "${NAMESPACE}" get pods ${haproxy_pod} -o jsonpath="{.status.podIP}")
+
+	run_mysql "SHOW VARIABLES LIKE '%hostname%';" "-h ${haproxy_pod_ip} -P3306 -uroot -proot_password" | awk '{print $2}'
+}

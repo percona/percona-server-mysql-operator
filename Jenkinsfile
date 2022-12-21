@@ -347,7 +347,7 @@ pipeline {
         }
         stage('Run E2E tests') {
             parallel {
-                stage('1 AutoConf Conf OneP') {
+                stage('1 AutoConf Conf OneP HAProxy') {
                     when {
                         expression {
                             !skipBranchBuilds
@@ -363,6 +363,7 @@ pipeline {
                         runTest('auto-config', 'cluster1')
                         runTest('config', 'cluster1')
                         runTest('one-pod', 'cluster1')
+                        runTest('haproxy', 'cluster1')
                         ShutdownCluster('cluster1')
                     }
                 }
