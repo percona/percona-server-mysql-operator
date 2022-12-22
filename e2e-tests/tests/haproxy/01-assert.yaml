@@ -77,7 +77,6 @@ metadata:
     kind: PerconaServerMySQL
     name: haproxy
 spec:
-  internalTrafficPolicy: Cluster
   ipFamilies:
   - IPv4
   ipFamilyPolicy: SingleStack
