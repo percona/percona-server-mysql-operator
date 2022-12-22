@@ -8,9 +8,9 @@ commands:
 
       source ../../functions
 
-      primary_label="$(get_primary_from_label)"
+      primary_pod_from_label="$(get_primary_from_label)"
 
-      kubectl -n "${NAMESPACE}" delete pod ${primary_label}
+      kubectl -n "${NAMESPACE}" delete pod ${primary_pod_from_label}
       sleep 3
 
       data=()
@@ -22,10 +22,10 @@ commands:
         exit 1
       fi
 
-      primary_label="$(get_primary_from_label)"
-      primary_haproxy="$(get_primary_from_haproxy ${test_name}-haproxy-0)"
-      if [ "${primary_label}" != "${primary_haproxy}" ]; then
-        echo "Primary label (${primary_label}) is not set to same pod as primary in haproxy (${primary_haproxy})!"
+      primary_pod_from_label="$(get_primary_from_label)"
+      primary_pod_from_haproxy="$(get_primary_from_haproxy ${test_name}-haproxy-0)"
+      if [ "${primary_pod_from_label}" != "${primary_pod_from_haproxy}" ]; then
+        echo "Primary in k8s label (${primary_pod_from_label}) is not set to same pod as in haproxy (${primary_pod_from_haproxy})!"
         exit 1
       fi
     timeout: 60
