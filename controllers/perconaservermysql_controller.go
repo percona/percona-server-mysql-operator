@@ -1052,7 +1052,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		return nil
 	}
 
-	if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
+	if cr.Status.MySQL.Ready == 0 || cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
 		l.V(1).Info("Waiting for MySQL pods to be ready")
 		return nil
 	}
