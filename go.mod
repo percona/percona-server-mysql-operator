@@ -14,7 +14,8 @@ require (
 	github.com/go-openapi/validate v0.22.0
 	github.com/go-sql-driver/mysql v1.7.0
 	github.com/minio/minio-go/v7 v7.0.45
-	github.com/onsi/ginkgo v1.16.5
+	// github.com/onsi/ginkgo v1.16.5
+	github.com/onsi/ginkgo/v2 v2.6.1
 	github.com/onsi/gomega v1.24.2
 	github.com/pkg/errors v0.9.1
 	github.com/sjmudd/stopwatch v0.0.0-20170613150411-f380bf8a9be1
@@ -77,6 +78,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
+	github.com/onsi/ginkgo v1.16.5 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/prometheus/client_golang v1.13.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
