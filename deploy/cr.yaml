@@ -104,7 +104,7 @@ spec:
 
   proxy:
     haproxy:
-      enabled: true
+      enabled: false
 
       size: 3
 
@@ -182,7 +182,7 @@ spec:
 #          - 10.0.0.0/8
 
   orchestrator:
-    enabled: true
+    enabled: false
 
     image: percona/percona-server-mysql-operator:0.4.0-orchestrator
     imagePullPolicy: Always
