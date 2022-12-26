@@ -347,26 +347,6 @@ pipeline {
         }
         stage('Run E2E tests') {
             parallel {
-                stage('1 AutoConf Conf OneP HAProxy') {
-                    when {
-                        expression {
-                            !skipBranchBuilds
-                        }
-                    }
-                    agent {
-                        label 'docker'
-                    }
-                    steps {
-                        prepareNode()
-                        unstash "sourceFILES"
-                        CreateCluster('cluster1')
-                        runTest('auto-config', 'cluster1')
-                        runTest('config', 'cluster1')
-                        runTest('one-pod', 'cluster1')
-                        runTest('haproxy', 'cluster1')
-                        ShutdownCluster('cluster1')
-                    }
-                }
                 stage('2 DemB GRDemB Scal Users') {
                     when {
                         expression {
@@ -380,36 +360,8 @@ pipeline {
                         prepareNode()
                         unstash "sourceFILES"
                         CreateCluster('cluster2')
-                        runTest('demand-backup', 'cluster2')
-                        runTest('gr-demand-backup', 'cluster2')
-                        runTest('scaling', 'cluster2')
                         runTest('users', 'cluster2')
                         ShutdownCluster('cluster2')
-                    }
-                }
-                stage('3 InitD GRInitD Mon SemiS SerPP SideC Lim VS TlsCM') {
-                    when {
-                        expression {
-                            !skipBranchBuilds
-                        }
-                    }
-                    agent {
-                        label 'docker'
-                    }
-                    steps {
-                        prepareNode()
-                        unstash "sourceFILES"
-                        CreateCluster('cluster3')
-                        runTest('init-deploy', 'cluster3')
-                        runTest('gr-init-deploy', 'cluster3')
-                        runTest('monitoring', 'cluster3')
-                        runTest('semi-sync', 'cluster3')
-                        runTest('service-per-pod', 'cluster3')
-                        runTest('sidecars', 'cluster3')
-                        runTest('limits', 'cluster3')
-                        runTest('version-service', 'cluster3')
-                        runTest('tls-cert-manager', 'cluster3')
-                        ShutdownCluster('cluster3')
                     }
                 }
             }
