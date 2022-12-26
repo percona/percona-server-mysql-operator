@@ -45,9 +45,21 @@ func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 }
 
 func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
-	labels := MatchLabels(cr)
+	expose := cr.Spec.Proxy.Router.Expose
 
-	serviceType := cr.Spec.Router.Expose.Type
+	labels := util.SSMapMerge(expose.Labels, MatchLabels(cr))
+
+	var loadBalancerSourceRanges []string
+	var loadBalancerIP string
+	if expose.Type == corev1.ServiceTypeLoadBalancer {
+		loadBalancerSourceRanges = expose.LoadBalancerSourceRanges
+		loadBalancerIP = expose.LoadBalancerIP
+	}
+
+	var externalTrafficPolicy corev1.ServiceExternalTrafficPolicyType
+	if expose.Type == corev1.ServiceTypeLoadBalancer || expose.Type == corev1.ServiceTypeNodePort {
+		externalTrafficPolicy = expose.ExternalTrafficPolicy
+	}
 
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -55,12 +67,13 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ServiceName(cr),
-			Namespace: cr.Namespace,
-			Labels:    labels,
+			Name:        ServiceName(cr),
+			Namespace:   cr.Namespace,
+			Labels:      labels,
+			Annotations: expose.Annotations,
 		},
 		Spec: corev1.ServiceSpec{
-			Type: serviceType,
+			Type: expose.Type,
 			Ports: []corev1.ServicePort{
 				// do not change the port order
 				// 8443 port should be the first in service, see K8SPS-132 task
@@ -96,14 +109,18 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 					Port: int32(PortRWAdmin),
 				},
 			},
-			Selector: labels,
+			Selector:                 labels,
+			LoadBalancerIP:           loadBalancerIP,
+			LoadBalancerSourceRanges: loadBalancerSourceRanges,
+			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
+			ExternalTrafficPolicy:    externalTrafficPolicy,
 		},
 	}
 }
 
 func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.Deployment {
 	labels := MatchLabels(cr)
-	spec := cr.Spec.Router
+	spec := cr.Spec.Proxy.Router
 	replicas := spec.Size
 
 	return &appsv1.Deployment{
@@ -135,8 +152,8 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.De
 						),
 					},
 					Containers:                    containers(cr),
-					NodeSelector:                  cr.Spec.Router.NodeSelector,
-					Tolerations:                   cr.Spec.Router.Tolerations,
+					NodeSelector:                  cr.Spec.Proxy.Router.NodeSelector,
+					Tolerations:                   cr.Spec.Proxy.Router.Tolerations,
 					Affinity:                      spec.GetAffinity(labels),
 					ImagePullSecrets:              spec.ImagePullSecrets,
 					TerminationGracePeriodSeconds: spec.TerminationGracePeriodSeconds,
@@ -181,7 +198,7 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 }
 
 func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
-	spec := cr.Spec.Router
+	spec := cr.Spec.Proxy.Router
 
 	return corev1.Container{
 		Name:            componentName,
@@ -239,5 +256,6 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          spec.ContainerSecurityContext,
+		ReadinessProbe:           k8s.ExecProbe(spec.ReadinessProbe, []string{"/opt/percona/router_readiness_check.sh"}),
 	}
 }

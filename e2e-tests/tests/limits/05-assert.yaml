@@ -66,6 +66,8 @@ spec:
         - name: SERVICE_NAME_UNREADY
           value: limits-no-resources-mysql-unready
         - name: CLUSTER_HASH
+        - name: CR_UID
+        - name: CLUSTER_TYPE
         imagePullPolicy: Always
         livenessProbe:
           exec:
@@ -283,6 +285,8 @@ spec:
           value: limits-no-resources-mysql
         - name: RAFT_ENABLED
           value: "true"
+        - name: CLUSTER_NAME
+          value: limits-no-resources
         imagePullPolicy: Always
         livenessProbe:
           failureThreshold: 3
@@ -369,6 +373,8 @@ spec:
         fsGroup: 1001
         supplementalGroups:
         - 1001
+      serviceAccount: percona-server-mysql-operator-orchestrator
+      serviceAccountName: percona-server-mysql-operator-orchestrator
       terminationGracePeriodSeconds: 30
       volumes:
       - emptyDir: {}

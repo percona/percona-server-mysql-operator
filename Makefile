@@ -131,7 +131,10 @@ uninstall: manifests ## Uninstall CRDs, rbac
 	kubectl delete -f $(DEPLOYDIR)/rbac.yaml
 
 deploy: manifests ## Deploy operator
-	kubectl apply -f $(DEPLOYDIR)/operator.yaml
+	yq eval \
+		'(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG"' \
+		$(DEPLOYDIR)/operator.yaml \
+		| kubectl apply -f -
 
 undeploy: manifests ## Undeploy operator
 	kubectl delete -f $(DEPLOYDIR)/operator.yaml
@@ -139,7 +142,7 @@ undeploy: manifests ## Undeploy operator
 
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
 controller-gen: ## Download controller-gen locally if necessary.
-	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.8.0)
+	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.10.0)
 
 KUSTOMIZE = $(shell pwd)/bin/kustomize
 kustomize: ## Download kustomize locally if necessary.

@@ -10,6 +10,5 @@ commands:
       get_cr \
       	| yq eval '.spec.mysql.expose.enabled = true' - \
       	| yq eval '.spec.mysql.expose.type = "LoadBalancer"' - \
-      	| yq eval '.spec.mysql.primaryServiceType = "LoadBalancer"' - \
       	| kubectl -n "${NAMESPACE}" apply -f -
     timeout: 10

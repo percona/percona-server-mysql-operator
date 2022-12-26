@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"strings"
@@ -23,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
@@ -37,8 +37,8 @@ func GetWatchNamespace() (string, error) {
 	return ns, nil
 }
 
-func LabelsEqual(old, new metav1.Object) bool {
-	return util.SSMapEqual(old.GetLabels(), new.GetLabels())
+func objectMetaEqual(old, new metav1.Object) bool {
+	return util.SSMapEqual(old.GetLabels(), new.GetLabels()) && util.SSMapEqual(old.GetAnnotations(), new.GetAnnotations())
 }
 
 func RemoveLabel(obj client.Object, key string) {
@@ -189,8 +189,21 @@ func EnsureObjectWithHash(
 
 	oldObjectMeta := oldObject.(metav1.ObjectMetaAccessor).GetObjectMeta()
 
+	switch obj.(type) {
+	case *appsv1.Deployment:
+		annotations := objectMeta.GetAnnotations()
+		ignoreAnnotations := []string{"deployment.kubernetes.io/revision"}
+		for _, key := range ignoreAnnotations {
+			v, ok := oldObjectMeta.GetAnnotations()[key]
+			if ok {
+				annotations[key] = v
+			}
+		}
+		objectMeta.SetAnnotations(annotations)
+	}
+
 	if oldObjectMeta.GetAnnotations()["percona.com/last-config-hash"] != hash ||
-		!LabelsEqual(objectMeta, oldObjectMeta) {
+		!objectMetaEqual(objectMeta, oldObjectMeta) {
 
 		objectMeta.SetResourceVersion(oldObjectMeta.GetResourceVersion())
 		switch object := obj.(type) {
@@ -207,6 +220,62 @@ func EnsureObjectWithHash(
 	}
 
 	return nil
+}
+
+func EnsureService(
+	ctx context.Context,
+	cl client.Client,
+	cr *apiv1alpha1.PerconaServerMySQL,
+	svc *corev1.Service,
+	s *runtime.Scheme,
+	saveOldMeta bool,
+) error {
+	if !saveOldMeta && len(cr.Spec.IgnoreAnnotations) == 0 && len(cr.Spec.IgnoreLabels) == 0 {
+		return EnsureObjectWithHash(ctx, cl, cr, svc, s)
+	}
+	oldSvc := new(corev1.Service)
+	err := cl.Get(ctx, types.NamespacedName{
+		Name:      svc.GetName(),
+		Namespace: svc.GetNamespace(),
+	}, oldSvc)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return EnsureObjectWithHash(ctx, cl, cr, svc, s)
+		}
+		return errors.Wrap(err, "get object")
+	}
+
+	if saveOldMeta {
+		svc.SetAnnotations(util.SSMapMerge(oldSvc.GetAnnotations(), svc.GetAnnotations()))
+		svc.SetLabels(util.SSMapMerge(oldSvc.GetLabels(), svc.GetLabels()))
+	}
+	setIgnoredAnnotations(cr, svc, oldSvc)
+	setIgnoredLabels(cr, svc, oldSvc)
+	return EnsureObjectWithHash(ctx, cl, cr, svc, s)
+}
+
+func setIgnoredAnnotations(cr *apiv1alpha1.PerconaServerMySQL, obj, oldObject client.Object) {
+	oldAnnotations := oldObject.GetAnnotations()
+	if len(oldAnnotations) == 0 {
+		return
+	}
+
+	ignoredAnnotations := util.SSMapFilterByKeys(oldAnnotations, cr.Spec.IgnoreAnnotations)
+
+	annotations := util.SSMapMerge(obj.GetAnnotations(), ignoredAnnotations)
+	obj.SetAnnotations(annotations)
+}
+
+func setIgnoredLabels(cr *apiv1alpha1.PerconaServerMySQL, obj, oldObject client.Object) {
+	oldLabels := oldObject.GetLabels()
+	if len(oldLabels) == 0 {
+		return
+	}
+
+	ignoredLabels := util.SSMapFilterByKeys(oldLabels, cr.Spec.IgnoreLabels)
+
+	labels := util.SSMapMerge(obj.GetLabels(), ignoredLabels)
+	obj.SetLabels(labels)
 }
 
 func ObjectHash(obj runtime.Object) (string, error) {
@@ -256,10 +325,21 @@ func ServicesByLabels(ctx context.Context, cl client.Reader, l map[string]string
 	return svcList.Items, nil
 }
 
+func PVCsByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([]corev1.PersistentVolumeClaim, error) {
+	pvcList := &corev1.PersistentVolumeClaimList{}
+
+	opts := &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)}
+	if err := cl.List(ctx, pvcList, opts); err != nil {
+		return nil, err
+	}
+
+	return pvcList.Items, nil
+}
+
 // DefaultAPINamespace returns namespace for direct api access from a pod
 // https://v1-21.docs.kubernetes.io/docs/tasks/run-application/access-api-from-pod/#directly-accessing-the-rest-api
 func DefaultAPINamespace() (string, error) {
-	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	nsBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
 		return "", err
 	}
@@ -286,4 +366,21 @@ func RolloutRestart(ctx context.Context, cl client.Client, obj runtime.Object, k
 	default:
 		return errors.New("not supported")
 	}
+}
+
+func GetCRWithDefaults(
+	ctx context.Context,
+	cl client.Client,
+	nn types.NamespacedName,
+	serverVersion *platform.ServerVersion,
+) (*apiv1alpha1.PerconaServerMySQL, error) {
+	cr := new(apiv1alpha1.PerconaServerMySQL)
+	if err := cl.Get(ctx, nn, cr); err != nil {
+		return nil, errors.Wrapf(err, "get %v", nn.String())
+	}
+	if err := cr.CheckNSetDefaults(ctx, serverVersion); err != nil {
+		return cr, errors.Wrapf(err, "check and set defaults for %v", nn.String())
+	}
+
+	return cr, nil
 }
