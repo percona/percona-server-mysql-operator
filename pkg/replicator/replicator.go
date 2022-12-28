@@ -38,6 +38,7 @@ type Replicator interface {
 	ChangeReplicationSource(host, replicaPass string, port int32) error
 	StartReplication(host, replicaPass string, port int32) error
 	StopReplication() error
+	ResetReplication() error
 	ReplicationStatus() (ReplicationStatus, string, error)
 	EnableSuperReadonly() error
 	IsReadonly() (bool, error)
@@ -124,6 +125,11 @@ func (d *dbImpl) StartReplication(host, replicaPass string, port int32) error {
 func (d *dbImpl) StopReplication() error {
 	_, err := d.db.Exec("STOP REPLICA")
 	return errors.Wrap(err, "stop replication")
+}
+
+func (d *dbImpl) ResetReplication() error {
+	_, err := d.db.Exec("RESET REPLICA ALL")
+	return errors.Wrap(err, "reset replication")
 }
 
 func (d *dbImpl) ReplicationStatus() (ReplicationStatus, string, error) {
