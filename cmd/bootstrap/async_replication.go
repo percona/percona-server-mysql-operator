@@ -80,10 +80,6 @@ func bootstrapAsyncReplication() error {
 	}
 	log.Printf("Donor: %s", donor)
 
-	if donor == "" || donor == fqdn || primary == fqdn || primaryIp == podIp {
-		return nil
-	}
-
 	log.Printf("Opening connection to %s", podIp)
 	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
 	if err != nil {
@@ -95,6 +91,34 @@ func bootstrapAsyncReplication() error {
 		return errors.Wrap(err, "connect to db")
 	}
 	defer db.Close()
+
+	if err := db.StopReplication(); err != nil {
+		return err
+	}
+
+	switch {
+	case donor == "":
+		if err := db.ResetReplication(); err != nil {
+			return err
+		}
+
+		log.Printf("Can't find a donor, we're on our own.")
+		return nil
+	case donor == fqdn:
+		if err := db.ResetReplication(); err != nil {
+			return err
+		}
+
+		log.Printf("I'm the donor and therefore the primary.")
+		return nil
+	case primary == fqdn || primaryIp == podIp:
+		if err := db.ResetReplication(); err != nil {
+			return err
+		}
+
+		log.Printf("I'm the primary.")
+		return nil
+	}
 
 	cloneLock := filepath.Join(mysql.DataMountPath, "clone.lock")
 	requireClone, err := isCloneRequired(cloneLock)
