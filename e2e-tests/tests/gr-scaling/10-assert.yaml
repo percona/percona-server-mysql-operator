@@ -1,0 +1,56 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 180
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-scaling-mysql
+status:
+  observedGeneration: 3
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-scaling-orc
+status:
+  observedGeneration: 3
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-scaling-haproxy
+status:
+  observedGeneration: 3
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-scaling
+  finalizers:
+    - delete-mysql-pods-in-order
+status:
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  orchestrator:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready

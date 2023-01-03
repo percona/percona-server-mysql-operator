@@ -1,0 +1,14 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 30
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 05-check-orchestrator
+data:
+  cluster: gr-scaling-mysql-0.gr-scaling-mysql:3306
+  instances: |
+    gr-scaling-mysql-0.gr-scaling-mysql
+    gr-scaling-mysql-1.gr-scaling-mysql
+    gr-scaling-mysql-2.gr-scaling-mysql
