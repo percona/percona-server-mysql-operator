@@ -1,14 +1,44 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 30
+timeout: 120
 ---
-kind: ConfigMap
-apiVersion: v1
+kind: StatefulSet
+apiVersion: apps/v1
 metadata:
-  name: 05-check-orchestrator
-data:
-  cluster: gr-scaling-mysql-0.gr-scaling-mysql:3306
-  instances: |
-    gr-scaling-mysql-0.gr-scaling-mysql
-    gr-scaling-mysql-1.gr-scaling-mysql
-    gr-scaling-mysql-2.gr-scaling-mysql
+  name: gr-scaling-mysql
+status:
+  observedGeneration: 2
+  replicas: 1
+  readyReplicas: 1
+  currentReplicas: 1
+  updatedReplicas: 1
+  collisionCount: 0
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: gr-scaling-router
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-scaling
+  finalizers:
+    - delete-mysql-pods-in-order
+status:
+  mysql:
+    ready: 1
+    size: 1
+    state: ready
+  router:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready

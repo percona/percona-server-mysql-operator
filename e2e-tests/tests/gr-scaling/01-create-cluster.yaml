@@ -10,4 +10,5 @@ commands:
 
       get_cr \
         | yq eval '.spec.allowUnsafeConfigurations=true' - \
+        | yq eval '.spec.mysql.clusterType="group-replication"' - \
         | kubectl -n "${NAMESPACE}" apply -f -

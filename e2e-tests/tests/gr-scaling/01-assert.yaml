@@ -14,29 +14,16 @@ status:
   updatedReplicas: 3
   collisionCount: 0
 ---
-kind: StatefulSet
+kind: Deployment
 apiVersion: apps/v1
 metadata:
-  name: gr-scaling-orc
+  name: gr-scaling-router
 status:
   observedGeneration: 1
   replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
   updatedReplicas: 3
-  collisionCount: 0
----
-kind: StatefulSet
-apiVersion: apps/v1
-metadata:
-  name: gr-scaling-haproxy
-status:
-  observedGeneration: 1
-  replicas: 3
   readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
-  collisionCount: 0
+  availableReplicas: 3
 ---
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
@@ -49,7 +36,7 @@ status:
     ready: 3
     size: 3
     state: ready
-  orchestrator:
+  router:
     ready: 3
     size: 3
     state: ready

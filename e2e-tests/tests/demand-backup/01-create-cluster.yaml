@@ -9,6 +9,7 @@ commands:
       source ../../functions
 
       get_cr \
+				| yq eval '.spec.mysql.clusterType="async"' - \
       	| yq eval '.spec.backup.storages.minio.type="s3"' - \
       	| yq eval '.spec.backup.storages.minio.s3.bucket="operator-testing"' - \
       	| yq eval '.spec.backup.storages.minio.s3.credentialsSecret="minio-secret"' - \

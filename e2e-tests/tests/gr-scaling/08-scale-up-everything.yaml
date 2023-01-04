@@ -5,8 +5,8 @@ metadata:
   finalizers:
     - delete-mysql-pods-in-order
 spec:
+  mysql:
+    size: 3
   proxy:
-    haproxy:
-      size: 1
     router:
-      size: 1
+      size: 3
