@@ -9,3 +9,4 @@ commands:
       source ../../functions
 
       deploy_operator
+      deploy_cluster_secrets all

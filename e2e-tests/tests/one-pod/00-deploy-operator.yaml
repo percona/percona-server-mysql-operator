@@ -9,6 +9,7 @@ commands:
 
       apply_s3_storage_secrets
       deploy_operator
+      deploy_cluster_secrets all
       deploy_client
       deploy_minio
     timeout: 300

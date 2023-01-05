@@ -13,8 +13,15 @@ deploy_operator() {
 		"$(printf 'select(documentIndex==1).spec.template.spec.containers[0].image="%s"' "${IMAGE}")" \
 		"${DEPLOY_DIR}/operator.yaml" \
 		| kubectl -n "${NAMESPACE}" apply -f -
+}
 
+deploy_cluster_secrets() {
+	local secrets_to_apply=${1}
+	
 	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/secrets.yaml"
+	if [[ "${secrets_to_apply}" == "all" ]]; then
+		kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/ssl-secret.yaml"
+	fi
 }
 
 deploy_client() {

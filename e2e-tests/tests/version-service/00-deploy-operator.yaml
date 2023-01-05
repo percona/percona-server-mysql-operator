@@ -9,5 +9,6 @@ commands:
       source ../../functions
 
       deploy_operator
+      deploy_cluster_secrets all
       deploy_client
       deploy_version_service
