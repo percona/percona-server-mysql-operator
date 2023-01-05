@@ -47,7 +47,7 @@ type PerconaServerMySQLSpec struct {
 	SSLSecretName         string           `json:"sslSecretName,omitempty"`
 	SSLInternalSecretName string           `json:"sslInternalSecretName,omitempty"`
 	AllowUnsafeConfig     bool             `json:"allowUnsafeConfigurations,omitempty"`
-	InitImage             string           `json:"initImage"`
+	InitImage             string           `json:"initImage,omitempty"`
 	IgnoreAnnotations     []string         `json:"ignoreAnnotations,omitempty"`
 	IgnoreLabels          []string         `json:"ignoreLabels,omitempty"`
 	MySQL                 MySQLSpec        `json:"mysql,omitempty"`
@@ -136,7 +136,7 @@ type PodSpec struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	VolumeSpec  *VolumeSpec       `json:"volumeSpec,omitempty"`
-	InitImage   string            `json:"initImage"`
+	InitImage   string            `json:"initImage,omitempty"`
 
 	Affinity                      *PodAffinity        `json:"affinity,omitempty"`
 	NodeSelector                  map[string]string   `json:"nodeSelector,omitempty"`
@@ -170,7 +170,7 @@ type PMMSpec struct {
 type BackupSpec struct {
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	Image                    string                        `json:"image"`
-	InitImage                string                        `json:"initImage"`
+	InitImage                string                        `json:"initImage,omitempty"`
 	ImagePullSecrets         []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
 	ServiceAccountName       string                        `json:"serviceAccountName,omitempty"`

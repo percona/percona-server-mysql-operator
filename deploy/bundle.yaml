@@ -2423,7 +2423,6 @@ spec:
                     type: object
                 required:
                 - image
-                - initImage
                 type: object
               crVersion:
                 type: string
@@ -4769,7 +4768,6 @@ spec:
                     type: object
                 required:
                 - image
-                - initImage
                 type: object
               orchestrator:
                 properties:
@@ -5709,7 +5707,6 @@ spec:
                     type: object
                 required:
                 - image
-                - initImage
                 type: object
               pause:
                 type: boolean
@@ -6750,7 +6747,6 @@ spec:
                         type: object
                     required:
                     - image
-                    - initImage
                     type: object
                   router:
                     properties:
@@ -7688,7 +7684,6 @@ spec:
                         type: object
                     required:
                     - image
-                    - initImage
                     type: object
                 type: object
               secretsName:
@@ -8053,8 +8048,6 @@ spec:
                   versionServiceEndpoint:
                     type: string
                 type: object
-            required:
-            - initImage
             type: object
           status:
             properties:
