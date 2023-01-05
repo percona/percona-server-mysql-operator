@@ -47,7 +47,7 @@ type PerconaServerMySQLSpec struct {
 	SSLSecretName         string           `json:"sslSecretName,omitempty"`
 	SSLInternalSecretName string           `json:"sslInternalSecretName,omitempty"`
 	AllowUnsafeConfig     bool             `json:"allowUnsafeConfigurations,omitempty"`
-	InitImage             string           `json:"initImage,omitempty"`
+	InitImage             string           `json:"initImage"`
 	IgnoreAnnotations     []string         `json:"ignoreAnnotations,omitempty"`
 	IgnoreLabels          []string         `json:"ignoreLabels,omitempty"`
 	MySQL                 MySQLSpec        `json:"mysql,omitempty"`
@@ -119,7 +119,7 @@ type OrchestratorSpec struct {
 }
 
 type ContainerSpec struct {
-	Image            string                        `json:"image,omitempty"`
+	Image            string                        `json:"image"`
 	ImagePullPolicy  corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	Resources        corev1.ResourceRequirements   `json:"resources,omitempty"`
@@ -136,7 +136,7 @@ type PodSpec struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	VolumeSpec  *VolumeSpec       `json:"volumeSpec,omitempty"`
-	InitImage   string            `json:"initImage,omitempty"`
+	InitImage   string            `json:"initImage"`
 
 	Affinity                      *PodAffinity        `json:"affinity,omitempty"`
 	NodeSelector                  map[string]string   `json:"nodeSelector,omitempty"`
@@ -158,7 +158,7 @@ func (s *PodSpec) GetInitImage() string {
 
 type PMMSpec struct {
 	Enabled                  bool                        `json:"enabled,omitempty"`
-	Image                    string                      `json:"image,omitempty"`
+	Image                    string                      `json:"image"`
 	ServerHost               string                      `json:"serverHost,omitempty"`
 	ServerUser               string                      `json:"serverUser,omitempty"`
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
@@ -169,8 +169,8 @@ type PMMSpec struct {
 
 type BackupSpec struct {
 	Enabled                  bool                          `json:"enabled,omitempty"`
-	Image                    string                        `json:"image,omitempty"`
-	InitImage                string                        `json:"initImage,omitempty"`
+	Image                    string                        `json:"image"`
+	InitImage                string                        `json:"initImage"`
 	ImagePullSecrets         []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
 	ServiceAccountName       string                        `json:"serviceAccountName,omitempty"`
