@@ -18,7 +18,7 @@ deploy_operator() {
 deploy_cluster_secrets() {
 	local secrets_to_apply=${1}
 	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/secrets.yaml"
-	if [[ "${secrets_to_apply}" == "all" ]]; then
+	if [[ ${secrets_to_apply} == "all" ]]; then
 		kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/ssl-secret.yaml"
 	fi
 }
