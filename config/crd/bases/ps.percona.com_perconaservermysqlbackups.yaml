@@ -65,6 +65,8 @@ spec:
                 type: string
               state:
                 type: string
+              stateDescription:
+                type: string
               storage:
                 properties:
                   affinity:
