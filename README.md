@@ -1,5 +1,7 @@
 # Percona Operator for MySQL
 
+[[CHANGE-to-be-picked-up-for-PR]]
+
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 [Percona Server for MySQL](https://www.percona.com/software/mysql-database/percona-server) is a free, fully compatible, enhanced, and open source drop-in replacement for any MySQL database. It provides superior performance, scalability, and instrumentation.
