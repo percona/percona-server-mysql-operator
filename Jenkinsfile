@@ -202,7 +202,8 @@ void prepareNode() {
         ./"${KREW}" install krew
         rm -f "${KREW}.tar.gz"
         export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
-        kubectl krew install kuttl
+        # v0.14.0 kuttl version
+        kubectl krew install --manifest-url https://raw.githubusercontent.com/kubernetes-sigs/krew-index/7a3144dc1553407d47583b5d240a115345117819/plugins/kuttl.yaml
     '''
 }
 
