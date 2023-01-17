@@ -368,7 +368,7 @@ pipeline {
                         ShutdownCluster('cluster1')
                     }
                 }
-                stage('2 DemB GRDemB Scal Users') {
+                stage('2 DemB GRDemB Scal Users Ignore GRIgn') {
                     when {
                         expression {
                             !skipBranchBuilds
@@ -385,6 +385,8 @@ pipeline {
                         runTest('gr-demand-backup', 'cluster2')
                         runTest('scaling', 'cluster2')
                         runTest('users', 'cluster2')
+                        runTest('async-ignore-annotations', 'cluster2')
+                        runTest('gr-ignore-annotations', 'cluster2')
                         ShutdownCluster('cluster2')
                     }
                 }
