@@ -1,0 +1,18 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
+        --type json \
+        -p '[{"op": "add", "path": "/spec/ignoreAnnotations", "value": ["async-ignore-annotations-mysql","async-ignore-annotations-haproxy", "async-ignore-annotations-orc"] }]'
+
+      kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
+        --type json \
+        -p '[{"op": "add", "path": "/spec/ignoreLabels", "value": ["async-ignore-labels-mysql","async-ignore-labels-haproxy","async-ignore-labels-orc" ] }]'
+
+    timeout: 10

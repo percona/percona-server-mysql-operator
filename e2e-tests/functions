@@ -173,6 +173,12 @@ get_haproxy_svc() {
 	echo "${cluster}-haproxy"
 }
 
+get_orc_svc() {
+	local cluster=$1
+
+	echo "${cluster}-orc"
+}
+
 get_mysql_headless_fqdn() {
 	local cluster=$1
 	local index=$2

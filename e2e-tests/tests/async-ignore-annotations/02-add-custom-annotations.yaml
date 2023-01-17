@@ -1,0 +1,34 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+      mysql_svc=$(get_mysql_service async-ignore-annotations)
+      haproxy_svc=$(get_haproxy_svc async-ignore-annotations)
+      orc_svc=$(get_orc_svc async-ignore-annotations)
+
+      kubectl get svc  $mysql_svc-0 -o yaml -n "${NAMESPACE}" \
+      	| yq  '.metadata.annotations = {"async-ignore-annotations-mysql": "test"} + .metadata.annotations ' - \
+      	| yq  '.metadata.annotations = {"async-ignore-annotations-mysql-1": "test"} + .metadata.annotations ' - \
+      	| yq  '.metadata.labels = {"async-ignore-labels-mysql": "test"} + .metadata.labels ' - \
+        | yq  '.metadata.labels = {"async-ignore-labels-mysql-1": "test"} + .metadata.labels ' - \
+        | kubectl -n "${NAMESPACE}" apply -f -
+
+      kubectl get svc  $haproxy_svc -o yaml -n "${NAMESPACE}"\
+        | yq  '.metadata.annotations = {"async-ignore-annotations-haproxy": "test" } + .metadata.annotations ' - \
+        | yq  '.metadata.annotations = {"async-ignore-annotations-haproxy-1": "test" } + .metadata.annotations ' - \
+        | yq  '.metadata.labels = {"async-ignore-labels-haproxy": "test"} + .metadata.labels ' - \
+        | yq  '.metadata.labels = {"async-ignore-labels-haproxy-1": "test"} + .metadata.labels ' - \
+        | kubectl -n "${NAMESPACE}" apply -f -
+
+      kubectl get svc  $orc_svc-0 -o yaml -n "${NAMESPACE}"\
+        | yq  '.metadata.annotations = {"async-ignore-annotations-orc": "test" } + .metadata.annotations ' - \
+        | yq  '.metadata.annotations = {"async-ignore-annotations-orc-1": "test" } + .metadata.annotations ' - \
+        | yq  '.metadata.labels = {"async-ignore-labels-orc": "test"} + .metadata.labels ' - \
+        | yq  '.metadata.labels = {"async-ignore-labels-orc-1": "test"} + .metadata.labels ' - \
+        | kubectl -n "${NAMESPACE}" apply -f -
+
+    timeout: 100

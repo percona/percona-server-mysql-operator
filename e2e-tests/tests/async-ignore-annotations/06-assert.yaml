@@ -1,0 +1,144 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    async-ignore-labels-mysql: "test"
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: async-ignore-annotations
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    percona.com/exposed: "true"
+    rack: rack-22-test
+  annotations:
+    async-ignore-annotations-mysql: "test"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
+  name: async-ignore-annotations-mysql-0
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: async-ignore-annotations
+spec:
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  - name: mysql-admin
+    port: 33062
+    protocol: TCP
+    targetPort: 33062
+  - name: mysqlx
+    port: 33060
+    protocol: TCP
+    targetPort: 33060
+  - name: http
+    port: 6033
+    protocol: TCP
+    targetPort: 6033
+  selector:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: async-ignore-annotations
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    rack: rack-22-test
+  sessionAffinity: None
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    async-ignore-labels-haproxy: "test"
+    app.kubernetes.io/component: haproxy
+    app.kubernetes.io/instance: async-ignore-annotations
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    rack: rack-22-test
+  annotations:
+    async-ignore-annotations-haproxy: "test"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
+  name: async-ignore-annotations-haproxy
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: async-ignore-annotations
+spec:
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  - name: mysql-replicas
+    port: 3307
+    protocol: TCP
+    targetPort: 3307
+  - name: proxy-protocol
+    port: 3309
+    protocol: TCP
+    targetPort: 3309
+  selector:
+    app.kubernetes.io/component: haproxy
+    app.kubernetes.io/instance: async-ignore-annotations
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    rack: rack-22-test
+  sessionAffinity: None
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    async-ignore-annotations-orc: test
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
+  labels:
+    app.kubernetes.io/component: orc
+    app.kubernetes.io/instance: async-ignore-annotations
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    async-ignore-labels-orc: test
+    percona.com/exposed: "true"
+    rack: rack-22-test
+  name: async-ignore-annotations-orc-0
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: async-ignore-annotations
+spec:
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: web
+    port: 3000
+    protocol: TCP
+    targetPort: 3000
+  - name: raft
+    port: 10008
+    protocol: TCP
+    targetPort: 10008
+  selector:
+    app.kubernetes.io/component: orc
+    app.kubernetes.io/instance: async-ignore-annotations
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    rack: rack-22-test
+  sessionAffinity: None
+  type: LoadBalancer

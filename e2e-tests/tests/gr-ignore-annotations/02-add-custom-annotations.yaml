@@ -1,0 +1,28 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+      mysql_svc=$(get_mysql_service gr-ignore-annotations)
+      router_svc=$(get_mysql_router_service gr-ignore-annotations)
+
+
+      kubectl get svc  $mysql_svc-0 -o yaml -n "${NAMESPACE}" \
+      	| yq  '.metadata.annotations = {"gr-ignore-annotations-mysql": "test"} + .metadata.annotations ' - \
+      	| yq  '.metadata.annotations = {"gr-ignore-annotations-mysql-1": "test"} + .metadata.annotations ' - \
+      	| yq  '.metadata.labels = {"gr-ignore-labels-mysql": "test"} + .metadata.labels ' - \
+        | yq  '.metadata.labels = {"gr-ignore-labels-mysql-1": "test"} + .metadata.labels ' - \
+        | kubectl -n "${NAMESPACE}" apply -f -
+
+      kubectl get svc  $router_svc -o yaml -n "${NAMESPACE}"\
+        | yq  '.metadata.annotations = {"gr-ignore-annotations-router": "test" } + .metadata.annotations ' - \
+        | yq  '.metadata.annotations = {"gr-ignore-annotations-router-1": "test" } + .metadata.annotations ' - \
+        | yq  '.metadata.labels = {"gr-ignore-labels-router": "test"} + .metadata.labels ' - \
+        | yq  '.metadata.labels = {"gr-ignore-labels-router-1": "test"} + .metadata.labels ' - \
+        | kubectl -n "${NAMESPACE}" apply -f -
+
+    timeout: 100
+
