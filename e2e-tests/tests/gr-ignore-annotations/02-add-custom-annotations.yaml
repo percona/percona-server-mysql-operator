@@ -9,19 +9,14 @@ commands:
       mysql_svc=$(get_mysql_service gr-ignore-annotations)
       router_svc=$(get_mysql_router_service gr-ignore-annotations)
 
-
       kubectl get svc  $mysql_svc-0 -o yaml -n "${NAMESPACE}" \
-      	| yq eval '.metadata.annotations = {"gr-ignore-annotations-mysql": "true" } + .metadata.annotations ' - \
-      	| yq eval '.metadata.annotations = {"gr-not-ignore-annotations-mysql": "true" } + .metadata.annotations ' - \
-      	| yq eval '.metadata.labels = {"gr-ignore-labels-mysql": "true" } + .metadata.labels ' - \
-        | yq eval '.metadata.labels = {"gr-not-ignore-labels-mysql": "true" } + .metadata.labels ' - \
+      	| yq eval '.metadata.annotations += {"gr-ignore-annotations-mysql": "true", "gr-not-ignore-annotations-mysql": "true" }' - \
+      	| yq eval '.metadata.labels += {"gr-ignore-labels-mysql": "true", "gr-not-ignore-labels-mysql": "true" }' - \
         | kubectl -n "${NAMESPACE}" apply -f -
 
       kubectl get svc  $router_svc -o yaml -n "${NAMESPACE}"\
-        | yq eval '.metadata.annotations = {"gr-ignore-annotations-router": "true" } + .metadata.annotations ' - \
-        | yq eval '.metadata.annotations = {"gr-not-ignore-annotations-router": "true" } + .metadata.annotations ' - \
-        | yq eval '.metadata.labels = {"gr-ignore-labels-router": "true" } + .metadata.labels ' - \
-        | yq eval '.metadata.labels = {"gr-not-ignore-labels-router": "true" } + .metadata.labels ' - \
+        | yq eval '.metadata.annotations += {"gr-ignore-annotations-router": "true", "gr-not-ignore-annotations-router": "true" }' - \
+        | yq eval '.metadata.labels += {"gr-ignore-labels-router": "true", "gr-not-ignore-labels-router": "true" }' - \
         | kubectl -n "${NAMESPACE}" apply -f -
 
     timeout: 100
