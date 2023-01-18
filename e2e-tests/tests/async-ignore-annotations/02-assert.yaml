@@ -6,8 +6,8 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    async-ignore-labels-mysql: "test"
-    async-ignore-labels-mysql-1: "test"
+    async-ignore-labels-mysql: "true"
+    async-not-ignore-labels-mysql: "true"
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: async-ignore-annotations
     app.kubernetes.io/managed-by: percona-server-operator
@@ -16,8 +16,8 @@ metadata:
     percona.com/exposed: "true"
   annotations:
     cloud.google.com/neg: '{"ingress":true}'
-    async-ignore-annotations-mysql: "test"
-    async-ignore-annotations-mysql-1: "test"
+    async-ignore-annotations-mysql: "true"
+    async-not-ignore-annotations-mysql: "true"
   name: async-ignore-annotations-mysql-0
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
@@ -56,8 +56,8 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    async-ignore-labels-haproxy: "test"
-    async-ignore-labels-haproxy-1: "test"
+    async-ignore-labels-haproxy: "true"
+    async-not-ignore-labels-haproxy: "true"
     app.kubernetes.io/component: haproxy
     app.kubernetes.io/instance: async-ignore-annotations
     app.kubernetes.io/managed-by: percona-server-operator
@@ -65,8 +65,8 @@ metadata:
     app.kubernetes.io/part-of: percona-server
   annotations:
     cloud.google.com/neg: '{"ingress":true}'
-    async-ignore-annotations-haproxy: "test"
-    async-ignore-annotations-haproxy-1: "test"
+    async-ignore-annotations-haproxy: "true"
+    async-not-ignore-annotations-haproxy: "true"
   name: async-ignore-annotations-haproxy
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
@@ -104,8 +104,8 @@ apiVersion: v1
 kind: Service
 metadata:
   annotations:
-    async-ignore-annotations-orc: test
-    async-ignore-annotations-orc-1: test
+    async-ignore-annotations-orc: "true"
+    async-not-ignore-annotations-orc: "true"
     cloud.google.com/neg: '{"ingress":true}'
   labels:
     app.kubernetes.io/component: orc
@@ -113,8 +113,8 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
-    async-ignore-labels-orc: test
-    async-ignore-labels-orc-1: test
+    async-ignore-labels-orc: "true"
+    async-not-ignore-labels-orc: "true"
     percona.com/exposed: "true"
   name: async-ignore-annotations-orc-0
   ownerReferences:

@@ -1,29 +1,24 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 20
 ---
 apiVersion: v1
 kind: Service
 metadata:
   labels:
     app.kubernetes.io/component: mysql
-    app.kubernetes.io/instance: gr-ignore-annotations
+    app.kubernetes.io/instance: async-ignore-annotations
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
-    gr-ignore-labels-mysql: "true"
     percona.com/exposed: "true"
     rack: rack-22-test
   annotations:
-    gr-ignore-annotations-mysql: "true"
     service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
-  name: gr-ignore-annotations-mysql-0
+  name: async-ignore-annotations-mysql-0
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
-    name: gr-ignore-annotations
+    name: async-ignore-annotations
 spec:
   ports:
   - name: mysql
@@ -42,13 +37,9 @@ spec:
     port: 6033
     protocol: TCP
     targetPort: 6033
-  - name: mysql-gr
-    port: 33061
-    protocol: TCP
-    targetPort: 33061
   selector:
     app.kubernetes.io/component: mysql
-    app.kubernetes.io/instance: gr-ignore-annotations
+    app.kubernetes.io/instance: async-ignore-annotations
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
@@ -60,56 +51,85 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app.kubernetes.io/component: router
-    app.kubernetes.io/instance: gr-ignore-annotations
+    app.kubernetes.io/component: haproxy
+    app.kubernetes.io/instance: async-ignore-annotations
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
-    gr-ignore-labels-router: "true"
     rack: rack-22-test
   annotations:
-    gr-ignore-annotations-router: "true"
     service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
-  name: gr-ignore-annotations-router
+  name: async-ignore-annotations-haproxy
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
-    name: gr-ignore-annotations
+    name: async-ignore-annotations
 spec:
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
   ports:
-  - name: http
-    port: 8443
-    protocol: TCP
-    targetPort: 8443
-  - name: rw-default
+  - name: mysql
     port: 3306
     protocol: TCP
-    targetPort: 6446
-  - name: read-write
-    port: 6446
+    targetPort: 3306
+  - name: mysql-replicas
+    port: 3307
     protocol: TCP
-    targetPort: 6446
-  - name: read-only
-    port: 6447
+    targetPort: 3307
+  - name: proxy-protocol
+    port: 3309
     protocol: TCP
-    targetPort: 6447
-  - name: x-read-write
-    port: 6448
-    protocol: TCP
-    targetPort: 6448
-  - name: x-read-only
-    port: 6449
-    protocol: TCP
-    targetPort: 6449
-  - name: rw-admin
-    port: 33062
-    protocol: TCP
-    targetPort: 33062
+    targetPort: 3309
   selector:
-    app.kubernetes.io/component: router
-    app.kubernetes.io/instance: gr-ignore-annotations
+    app.kubernetes.io/component: haproxy
+    app.kubernetes.io/instance: async-ignore-annotations
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    rack: rack-22-test
+  sessionAffinity: None
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
+  labels:
+    app.kubernetes.io/component: orc
+    app.kubernetes.io/instance: async-ignore-annotations
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    percona.com/exposed: "true"
+    rack: rack-22-test
+  name: async-ignore-annotations-orc-0
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: async-ignore-annotations
+spec:
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: web
+    port: 3000
+    protocol: TCP
+    targetPort: 3000
+  - name: raft
+    port: 10008
+    protocol: TCP
+    targetPort: 10008
+  selector:
+    app.kubernetes.io/component: orc
+    app.kubernetes.io/instance: async-ignore-annotations
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server

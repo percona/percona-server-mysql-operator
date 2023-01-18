@@ -3,7 +3,7 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    async-ignore-labels-mysql: "test"
+    async-ignore-labels-mysql: "true"
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: async-ignore-annotations
     app.kubernetes.io/managed-by: percona-server-operator
@@ -12,7 +12,7 @@ metadata:
     percona.com/exposed: "true"
     rack: rack-22-test
   annotations:
-    async-ignore-annotations-mysql: "test"
+    async-ignore-annotations-mysql: "true"
     service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
   name: async-ignore-annotations-mysql-0
   ownerReferences:
@@ -53,7 +53,7 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    async-ignore-labels-haproxy: "test"
+    async-ignore-labels-haproxy: "true"
     app.kubernetes.io/component: haproxy
     app.kubernetes.io/instance: async-ignore-annotations
     app.kubernetes.io/managed-by: percona-server-operator
@@ -61,7 +61,7 @@ metadata:
     app.kubernetes.io/part-of: percona-server
     rack: rack-22-test
   annotations:
-    async-ignore-annotations-haproxy: "test"
+    async-ignore-annotations-haproxy: "true"
     service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
   name: async-ignore-annotations-haproxy
   ownerReferences:
@@ -101,7 +101,7 @@ apiVersion: v1
 kind: Service
 metadata:
   annotations:
-    async-ignore-annotations-orc: test
+    async-ignore-annotations-orc: "true"
     service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
   labels:
     app.kubernetes.io/component: orc
@@ -109,7 +109,7 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
-    async-ignore-labels-orc: test
+    async-ignore-labels-orc: "true"
     percona.com/exposed: "true"
     rack: rack-22-test
   name: async-ignore-annotations-orc-0

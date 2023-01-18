@@ -11,11 +11,9 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
-    gr-ignore-labels-mysql: "true"
     percona.com/exposed: "true"
     rack: rack-22-test
   annotations:
-    gr-ignore-annotations-mysql: "true"
     service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
   name: gr-ignore-annotations-mysql-0
   ownerReferences:
@@ -65,10 +63,8 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
-    gr-ignore-labels-router: "true"
     rack: rack-22-test
   annotations:
-    gr-ignore-annotations-router: "true"
     service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
   name: gr-ignore-annotations-router
   ownerReferences:
