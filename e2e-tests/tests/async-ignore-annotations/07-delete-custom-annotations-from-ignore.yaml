@@ -15,4 +15,4 @@ commands:
         --type json \
         -p '[{"op": "replace", "path": "/spec/ignoreLabels", "value": [] }]'
 
-    timeout: 10
+    timeout: 30

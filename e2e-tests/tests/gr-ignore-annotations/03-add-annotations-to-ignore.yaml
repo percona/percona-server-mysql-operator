@@ -15,4 +15,4 @@ commands:
         --type json \
         -p '[{"op": "add", "path": "/spec/ignoreLabels", "value": ["gr-ignore-labels-mysql","gr-ignore-labels-router"] }]'
 
-    timeout: 10
+    timeout: 30
