@@ -546,6 +546,8 @@ func SetStoragePVC(job *batchv1.Job, pvc *corev1.PersistentVolumeClaim) error {
 func SetStorageS3(job *batchv1.Job, s3 *apiv1alpha1.BackupStorageS3Spec) error {
 	spec := &job.Spec.Template.Spec
 
+	bucket, _, _ := strings.Cut(s3.Bucket, "/")
+
 	env := []corev1.EnvVar{
 		{
 			Name:  "STORAGE_TYPE",
@@ -573,7 +575,7 @@ func SetStorageS3(job *batchv1.Job, s3 *apiv1alpha1.BackupStorageS3Spec) error {
 		},
 		{
 			Name:  "S3_BUCKET",
-			Value: s3.Bucket,
+			Value: bucket,
 		},
 		{
 			Name:  "S3_STORAGE_CLASS",
@@ -595,6 +597,8 @@ func SetStorageS3(job *batchv1.Job, s3 *apiv1alpha1.BackupStorageS3Spec) error {
 
 func SetStorageGCS(job *batchv1.Job, gcs *apiv1alpha1.BackupStorageGCSSpec) error {
 	spec := &job.Spec.Template.Spec
+
+	bucket, _, _ := strings.Cut(gcs.Bucket, "/")
 
 	env := []corev1.EnvVar{
 		{
@@ -619,7 +623,7 @@ func SetStorageGCS(job *batchv1.Job, gcs *apiv1alpha1.BackupStorageGCSSpec) erro
 		},
 		{
 			Name:  "GCS_BUCKET",
-			Value: gcs.Bucket,
+			Value: bucket,
 		},
 		{
 			Name:  "GCS_STORAGE_CLASS",
@@ -642,6 +646,8 @@ func SetStorageGCS(job *batchv1.Job, gcs *apiv1alpha1.BackupStorageGCSSpec) erro
 func SetStorageAzure(job *batchv1.Job, azure *apiv1alpha1.BackupStorageAzureSpec) error {
 	spec := &job.Spec.Template.Spec
 
+	container, _, _ := strings.Cut(azure.ContainerName, "/")
+
 	env := []corev1.EnvVar{
 		{
 			Name:  "STORAGE_TYPE",
@@ -649,7 +655,7 @@ func SetStorageAzure(job *batchv1.Job, azure *apiv1alpha1.BackupStorageAzureSpec
 		},
 		{
 			Name:  "AZURE_CONTAINER_NAME",
-			Value: azure.ContainerName,
+			Value: container,
 		},
 		{
 			Name: "AZURE_STORAGE_ACCOUNT",

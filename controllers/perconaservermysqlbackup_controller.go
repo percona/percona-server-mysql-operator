@@ -24,6 +24,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -290,17 +292,14 @@ func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creatio
 
 	switch storage.Type {
 	case apiv1alpha1.BackupStorageS3:
-		if storage.S3.Prefix != "" {
-			dest = storage.S3.Prefix + "/" + dest
-		}
+		_, prefix, _ := strings.Cut(storage.S3.Bucket, "/")
+		dest = path.Join(prefix, storage.S3.Prefix, dest)
 	case apiv1alpha1.BackupStorageGCS:
-		if storage.GCS.Prefix != "" {
-			dest = storage.GCS.Prefix + "/" + dest
-		}
+		_, prefix, _ := strings.Cut(storage.GCS.Bucket, "/")
+		dest = path.Join(prefix, storage.GCS.Prefix, dest)
 	case apiv1alpha1.BackupStorageAzure:
-		if storage.Azure.Prefix != "" {
-			dest = storage.Azure.Prefix + "/" + dest
-		}
+		_, prefix, _ := strings.Cut(storage.Azure.ContainerName, "/")
+		dest = path.Join(prefix, storage.Azure.Prefix, dest)
 	}
 
 	return dest
@@ -402,6 +401,7 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 		if !ok {
 			return nil, errors.Errorf("no credentials for Azure in secret %s", nn.Name)
 		}
+		conf.S3.Bucket, _, _ = strings.Cut(s3.Bucket, "/")
 		conf.S3.Bucket = s3.Bucket
 		conf.S3.Region = s3.Region
 		conf.S3.EndpointURL = s3.EndpointURL
@@ -423,7 +423,7 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 		if !ok {
 			return nil, errors.Errorf("no credentials for Azure in secret %s", nn.Name)
 		}
-		conf.GCS.Bucket = gcs.Bucket
+		conf.GCS.Bucket, _, _ = strings.Cut(gcs.Bucket, "/")
 		conf.GCS.EndpointURL = gcs.EndpointURL
 		conf.GCS.StorageClass = gcs.StorageClass
 		conf.GCS.AccessKey = string(accessKey)
@@ -443,7 +443,7 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 		if !ok {
 			return nil, errors.Errorf("no credentials for Azure in secret %s", nn.Name)
 		}
-		conf.Azure.ContainerName = azure.ContainerName
+		conf.Azure.ContainerName, _, _ = strings.Cut(azure.ContainerName, "/")
 		conf.Azure.EndpointURL = azure.EndpointURL
 		conf.Azure.StorageClass = azure.StorageClass
 		conf.Azure.StorageAccount = string(storageAccount)
