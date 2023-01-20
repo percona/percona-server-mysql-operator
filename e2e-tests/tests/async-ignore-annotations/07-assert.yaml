@@ -114,7 +114,6 @@ metadata:
     kind: PerconaServerMySQL
     name: async-ignore-annotations
 spec:
-  internalTrafficPolicy: Cluster
   ipFamilies:
   - IPv4
   ipFamilyPolicy: SingleStack
