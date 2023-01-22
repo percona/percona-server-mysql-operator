@@ -202,8 +202,8 @@ void prepareNode() {
         ./"${KREW}" install krew
         rm -f "${KREW}.tar.gz"
         export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
-        printf "Kuttl %s is to be installed" "$(curl -s https://raw.githubusercontent.com/kubernetes-sigs/krew-index/master/plugins/kuttl.yaml | yq eval '.spec.version' -)"
         kubectl krew install kuttl
+        printf "%s is installed" "$(kubectl kuttl --version)"
     '''
 }
 
@@ -420,7 +420,7 @@ pipeline {
         always {
             script {
                 setTestsresults()
-                if (currentBuild.result != null && currentBuild.result != 'SUCCESS' && currentBuild.result != 'NOT_BUILT') {
+                if (currentBuild.result != null && currentBuild.result != 'SUCCESS' && currentBuild.nextBuild == null) {
                     try {
                         slackSend channel: "@${AUTHOR_NAME}", color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
                     }
@@ -428,7 +428,7 @@ pipeline {
                         slackSend channel: '#cloud-dev-ci', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
                     }
                 }
-                if (env.CHANGE_URL) {
+                if (env.CHANGE_URL && currentBuild.nextBuild == null) {
                     for (comment in pullRequest.comments) {
                         println("Author: ${comment.user}, Comment: ${comment.body}")
                         if (comment.user.equals('JNKPercona')) {
@@ -436,13 +436,11 @@ pipeline {
                             comment.delete()
                         }
                     }
-                    if (currentBuild.result != 'NOT_BUILT') {
-                        makeReport()
-                        unstash 'IMAGE'
-                        def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
-                        TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
-                        pullRequest.comment(TestsReport)
-                    }
+                    makeReport()
+                    unstash 'IMAGE'
+                    def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
+                    TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
+                    pullRequest.comment(TestsReport)
                 }
             }
             DeleteOldClusters("$CLUSTER_NAME")
