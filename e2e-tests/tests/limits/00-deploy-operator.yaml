@@ -9,4 +9,5 @@ commands:
       source ../../functions
 
       deploy_operator
-      deploy_cluster_secrets all
+      deploy_non_tls_cluster_secrets
+      deploy_tls_cluster_secrets

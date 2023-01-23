@@ -15,12 +15,12 @@ deploy_operator() {
 		| kubectl -n "${NAMESPACE}" apply -f -
 }
 
-deploy_cluster_secrets() {
-	local secrets_to_apply=${1}
+deploy_non_tls_cluster_secrets() {
 	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/secrets.yaml"
-	if [[ ${secrets_to_apply} == "all" ]]; then
-		kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/ssl-secret.yaml"
-	fi
+}
+
+deploy_tls_cluster_secrets() {
+	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/ssl-secret.yaml"
 }
 
 deploy_client() {
