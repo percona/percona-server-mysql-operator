@@ -1245,6 +1245,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 }
 
 func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
+	l := log.FromContext(ctx).WithName("GRStatus")
 	if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
 		return false, nil
 	}
@@ -1265,7 +1266,21 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 		return false, errors.Wrap(err, "get cluster status")
 	}
 
-	return status.DefaultReplicaSet.Status == innodbcluster.ClusterStatusOK, nil
+	for addr, member := range status.DefaultReplicaSet.Topology {
+		for _, err := range member.InstanceErrors {
+			l.WithName(addr).Info(err)
+		}
+	}
+
+	switch status.DefaultReplicaSet.Status {
+	case innodbcluster.ClusterStatusOK:
+		return true, nil
+	case innodbcluster.ClusterStatusOKPartial, innodbcluster.ClusterStatusOKNoTolerance, innodbcluster.ClusterStatusOKNoTolerancePartial:
+		l.Info(fmt.Sprintf("%s: %s", status.DefaultReplicaSet.Status, status.DefaultReplicaSet.StatusText))
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
