@@ -22,9 +22,8 @@ status:
   observedGeneration: 1
   replicas: 3
   readyReplicas: 3
-  currentReplicas: 3
   updatedReplicas: 3
-  collisionCount: 0
+  availableReplicas: 3
 ---
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL

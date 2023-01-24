@@ -19,7 +19,7 @@ apiVersion: apps/v1
 metadata:
   name: gr-scaling-router
 status:
-  observedGeneration: 1
+  observedGeneration: 2
   replicas: 1
   updatedReplicas: 1
   readyReplicas: 1
