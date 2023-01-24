@@ -1,0 +1,103 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 600
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: async-ignore-annotations-mysql
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: async-ignore-annotations-orc
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: async-ignore-annotations-haproxy
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: async-ignore-annotations
+  finalizers:
+    - delete-mysql-pods-in-order
+status:
+  haproxy:
+    ready: 3
+    size: 3
+    state: ready
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  orchestrator:
+    ready: 3
+    size: 3
+    state: ready
+  router: {}
+  state: ready
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: haproxy
+    app.kubernetes.io/instance: async-ignore-annotations
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: async-ignore-annotations-haproxy
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: async-ignore-annotations
+spec:
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  - name: mysql-replicas
+    port: 3307
+    protocol: TCP
+    targetPort: 3307
+  - name: proxy-protocol
+    port: 3309
+    protocol: TCP
+    targetPort: 3309
+  selector:
+    app.kubernetes.io/component: haproxy
+    app.kubernetes.io/instance: async-ignore-annotations
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  sessionAffinity: None
+  type: LoadBalancer
