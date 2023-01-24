@@ -412,6 +412,7 @@ pipeline {
                         runTest('limits', 'cluster3')
                         runTest('version-service', 'cluster3')
                         runTest('tls-cert-manager', 'cluster3')
+                        runTest('gr-tls-cert-manager', 'cluster3')
                         ShutdownCluster('cluster3')
                     }
                 }
