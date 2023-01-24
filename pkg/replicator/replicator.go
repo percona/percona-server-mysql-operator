@@ -250,7 +250,7 @@ func (d *dbImpl) Clone(donor, user, pass string, port int32) error {
 }
 
 func (d *dbImpl) DumbQuery() error {
-	_, err := d.db.Query("SELECT 1")
+	_, err := d.db.Exec("SELECT 1")
 	return errors.Wrap(err, "SELECT 1")
 }
 

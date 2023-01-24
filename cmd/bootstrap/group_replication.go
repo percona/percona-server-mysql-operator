@@ -5,10 +5,13 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/sjmudd/stopwatch"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/wait"
+	k8sretry "k8s.io/client-go/util/retry"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -67,12 +70,22 @@ func bootstrapGroupReplication() error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
 
-	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, podIp, mysql.DefaultAdminPort)
-	if err != nil {
-		return errors.Wrap(err, "connect to db")
+	backoff := wait.Backoff{
+		Steps:    10,
+		Duration: 1 * time.Second,
+		Factor:   5.0,
+		Jitter:   5,
 	}
-	defer db.Close()
+	var db replicator.Replicator
+	k8sretry.OnError(backoff, func(err error) bool { return true }, func() error {
+		db, err = replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, podIp, mysql.DefaultAdminPort)
+		if err != nil {
+			log.Printf("failed to connect: %v. retrying...", err)
+		}
+		return err
+	})
 
+	defer db.Close()
 	if err := db.StopGroupReplication(); err != nil {
 		return err
 	}

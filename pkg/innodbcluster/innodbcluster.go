@@ -5,15 +5,16 @@ import "github.com/pkg/errors"
 type ClusterStatus string
 
 const (
-	ClusterStatusOK            ClusterStatus = "OK"
-	ClusterStatusOKPartial     ClusterStatus = "OK_PARTIAL"
-	ClusterStatusOKNoTolerance ClusterStatus = "OK_NO_TOLERANCE"
-	ClusterStatusNoQuorum      ClusterStatus = "NO_QUORUM"
-	ClusterStatusOffline       ClusterStatus = "OFFLINE"
-	ClusterStatusError         ClusterStatus = "ERROR"
-	ClusterStatusUnreachable   ClusterStatus = "UNREACHABLE"
-	ClusterStatusUnknown       ClusterStatus = "UNKNOWN"
-	ClusterStatusFenced        ClusterStatus = "FENCED_WRITES"
+	ClusterStatusOK                   ClusterStatus = "OK"
+	ClusterStatusOKPartial            ClusterStatus = "OK_PARTIAL"
+	ClusterStatusOKNoTolerance        ClusterStatus = "OK_NO_TOLERANCE"
+	ClusterStatusOKNoTolerancePartial ClusterStatus = "OK_NO_TOLERANCE_PARTIAL"
+	ClusterStatusNoQuorum             ClusterStatus = "NO_QUORUM"
+	ClusterStatusOffline              ClusterStatus = "OFFLINE"
+	ClusterStatusError                ClusterStatus = "ERROR"
+	ClusterStatusUnreachable          ClusterStatus = "UNREACHABLE"
+	ClusterStatusUnknown              ClusterStatus = "UNKNOWN"
+	ClusterStatusFenced               ClusterStatus = "FENCED_WRITES"
 )
 
 type MemberState string
@@ -28,8 +29,9 @@ const (
 )
 
 type Member struct {
-	Address     string      `json:"address"`
-	MemberState MemberState `json:"status"`
+	Address        string      `json:"address"`
+	MemberState    MemberState `json:"status"`
+	InstanceErrors []string    `json:"instanceErrors"`
 }
 
 type Status struct {
