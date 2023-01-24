@@ -6,9 +6,8 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-
-    gr-ignore-labels-mysql: "true"
-    gr-not-ignore-labels-mysql: "true"
+    gr-labels-to-ignore-mysql: "true"
+    gr-labels-not-to-ignore-mysql: "true"
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: gr-ignore-annotations
     app.kubernetes.io/managed-by: percona-server-operator
@@ -16,8 +15,8 @@ metadata:
     app.kubernetes.io/part-of: percona-server
   annotations:
     cloud.google.com/neg: '{"ingress":true}'
-    gr-ignore-annotations-mysql: "true"
-    gr-not-ignore-annotations-mysql: "true"
+    gr-annotations-to-ignore-mysql: "true"
+    gr-annotations-not-to-ignore-mysql: "true"
   name: gr-ignore-annotations-mysql-0
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
@@ -60,8 +59,8 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    gr-ignore-labels-router: "true"
-    gr-not-ignore-labels-router: "true"
+    gr-labels-to-ignore-router: "true"
+    gr-labels-not-to-ignore-router: "true"
     app.kubernetes.io/component: router
     app.kubernetes.io/instance: gr-ignore-annotations
     app.kubernetes.io/managed-by: percona-server-operator
@@ -69,8 +68,8 @@ metadata:
     app.kubernetes.io/part-of: percona-server
   annotations:
     cloud.google.com/neg: '{"ingress":true}'
-    gr-ignore-annotations-router: "true"
-    gr-not-ignore-annotations-router: "true"
+    gr-annotations-to-ignore-router: "true"
+    gr-annotations-not-to-ignore-router: "true"
   name: gr-ignore-annotations-router
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1

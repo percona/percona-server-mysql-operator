@@ -1,3 +1,6 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 20
 ---
 apiVersion: v1
 kind: Service

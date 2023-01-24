@@ -8,13 +8,13 @@ metadata:
   name: async-ignore-annotations
 spec:
   ignoreAnnotations:
-    - async-ignore-annotations-mysql
-    - async-ignore-annotations-haproxy
-    - async-ignore-annotations-orc
+    - async-annotations-to-ignore-mysql
+    - async-annotations-to-ignore-haproxy
+    - async-annotations-to-ignore-orc
   ignoreLabels:
-    - async-ignore-labels-mysql
-    - async-ignore-labels-haproxy
-    - async-ignore-labels-orc
+    - async-labels-to-ignore-mysql
+    - async-labels-to-ignore-haproxy
+    - async-labels-to-ignore-orc
 
 status:
   haproxy:
