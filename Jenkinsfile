@@ -191,7 +191,7 @@ void prepareNode() {
             | sudo tar -C /usr/local/bin --strip-components 1 --wildcards -zxvpf - '*/oc'
         curl -s -L https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz \
             | sudo tar -C /usr/local/bin --wildcards -zxvpf -
-        sudo sh -c "curl -s -L https://github.com/mikefarah/yq/releases/download/v4.14.2/yq_linux_amd64 > /usr/local/bin/yq"
+        sudo sh -c "curl -s -L https://github.com/mikefarah/yq/releases/download/v4.29.1/yq_linux_amd64 > /usr/local/bin/yq"
         sudo chmod +x /usr/local/bin/yq
         cd "$(mktemp -d)"
         OS="$(uname | tr '[:upper:]' '[:lower:]')"
@@ -368,7 +368,7 @@ pipeline {
                         ShutdownCluster('cluster1')
                     }
                 }
-                stage('2 DemB GRDemB Scal Users') {
+                stage('2 DemB GRDemB Scal Users Ignore GRIgn') {
                     when {
                         expression {
                             !skipBranchBuilds
@@ -385,6 +385,8 @@ pipeline {
                         runTest('gr-demand-backup', 'cluster2')
                         runTest('scaling', 'cluster2')
                         runTest('users', 'cluster2')
+                        runTest('async-ignore-annotations', 'cluster2')
+                        runTest('gr-ignore-annotations', 'cluster2')
                         ShutdownCluster('cluster2')
                     }
                 }

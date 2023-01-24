@@ -1,0 +1,146 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    async-labels-to-ignore-mysql: "true"
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: async-ignore-annotations
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    percona.com/exposed: "true"
+    rack: rack-22
+  annotations:
+    async-annotations-to-ignore-mysql: "true"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+  name: async-ignore-annotations-mysql-0
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: async-ignore-annotations
+spec:
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  - name: mysql-admin
+    port: 33062
+    protocol: TCP
+    targetPort: 33062
+  - name: mysqlx
+    port: 33060
+    protocol: TCP
+    targetPort: 33060
+  - name: http
+    port: 6033
+    protocol: TCP
+    targetPort: 6033
+  selector:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: async-ignore-annotations
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    rack: rack-22
+  sessionAffinity: None
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    async-labels-to-ignore-haproxy: "true"
+    app.kubernetes.io/component: haproxy
+    app.kubernetes.io/instance: async-ignore-annotations
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    rack: rack-22
+  annotations:
+    async-annotations-to-ignore-haproxy: "true"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+  name: async-ignore-annotations-haproxy
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: async-ignore-annotations
+spec:
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  - name: mysql-replicas
+    port: 3307
+    protocol: TCP
+    targetPort: 3307
+  - name: proxy-protocol
+    port: 3309
+    protocol: TCP
+    targetPort: 3309
+  selector:
+    app.kubernetes.io/component: haproxy
+    app.kubernetes.io/instance: async-ignore-annotations
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    rack: rack-22
+  sessionAffinity: None
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    async-annotations-to-ignore-orc: "true"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+  labels:
+    app.kubernetes.io/component: orc
+    app.kubernetes.io/instance: async-ignore-annotations
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    async-labels-to-ignore-orc: "true"
+    percona.com/exposed: "true"
+    rack: rack-22
+  name: async-ignore-annotations-orc-0
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: async-ignore-annotations
+spec:
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: web
+    port: 3000
+    protocol: TCP
+    targetPort: 3000
+  - name: raft
+    port: 10008
+    protocol: TCP
+    targetPort: 10008
+  selector:
+    app.kubernetes.io/component: orc
+    app.kubernetes.io/instance: async-ignore-annotations
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+    rack: rack-22
+  sessionAffinity: None
+  type: LoadBalancer
