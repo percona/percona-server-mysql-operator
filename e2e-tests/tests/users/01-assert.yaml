@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 300
+timeout: 420
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -21,3 +21,15 @@ status:
   observedGeneration: 1
   replicas: 3
   readyReplicas: 3
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: users-haproxy
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
