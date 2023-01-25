@@ -405,6 +405,7 @@ pipeline {
                         CreateCluster('cluster3')
                         runTest('init-deploy', 'cluster3')
                         runTest('gr-init-deploy', 'cluster3')
+                        runTest('gr-scaling', 'cluster3')
                         runTest('monitoring', 'cluster3')
                         runTest('semi-sync', 'cluster3')
                         runTest('service-per-pod', 'cluster3')
