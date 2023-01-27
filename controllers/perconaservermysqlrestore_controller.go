@@ -67,7 +67,7 @@ var ErrWaitingTermination error = errors.New("waiting for MySQL pods to terminat
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.9.2/pkg/reconcile
 func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	l := log.FromContext(ctx).WithName("PerconaServerMySQLRestore").WithValues("name", req.Name, "namespace", req.Namespace)
+	log := log.FromContext(ctx).WithName("PerconaServerMySQLRestore").WithValues("name", req.Name, "namespace", req.Namespace)
 
 	cr := &apiv1alpha1.PerconaServerMySQLRestore{}
 	err := r.Client.Get(ctx, req.NamespacedName, cr)
@@ -89,7 +89,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			}
 
 			cr.Status = status
-			l.Info("Updating status", "state", cr.Status.State)
+			log.Info("Updating status", "state", cr.Status.State)
 			if err := r.Client.Status().Update(ctx, cr); err != nil {
 				return errors.Wrapf(err, "update %v", req.NamespacedName.String())
 			}
@@ -97,7 +97,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			return nil
 		})
 		if err != nil {
-			l.Error(err, "failed to update status")
+			log.Error(err, "failed to update status")
 		}
 	}()
 
@@ -134,14 +134,14 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, nil
 	}
 
-	l.Info("Pausing cluster", "cluster", cluster.Name)
+	log.Info("Pausing cluster", "cluster", cluster.Name)
 	if err := r.pauseCluster(ctx, cluster); err != nil {
 		if errors.Is(err, ErrWaitingTermination) {
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		return ctrl.Result{}, errors.Wrap(err, "pause cluster")
 	}
-	l.Info("Cluster paused", "cluster", cluster.Name)
+	log.Info("Cluster paused", "cluster", cluster.Name)
 
 	if cluster.Spec.MySQL.IsGR() {
 		if err := r.removeBootstrapCondition(ctx, cluster); err != nil {
@@ -157,7 +157,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	if k8serrors.IsNotFound(err) {
-		l.Info("Creating restore job", "jobName", nn.Name)
+		log.Info("Creating restore job", "jobName", nn.Name)
 
 		initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
 		if err != nil {
@@ -280,7 +280,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) error {
-	l := log.FromContext(ctx)
+	log := log.FromContext(ctx)
 
 	pvcs, err := k8s.PVCsByLabels(ctx, r.Client, mysql.MatchLabels(cluster))
 	if err != nil {
@@ -293,18 +293,18 @@ func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cl
 		}
 
 		if err := r.Client.Delete(ctx, &pvc); err != nil {
-			l.Error(err, "failed to delete PVC")
+			log.Error(err, "failed to delete PVC")
 			continue
 		}
 
-		l.Info("Deleted PVC after restore", "pvc", pvc.Name)
+		log.Info("Deleted PVC after restore", "pvc", pvc.Name)
 	}
 
 	return nil
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) removeBootstrapCondition(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) error {
-	l := log.FromContext(ctx)
+	log := log.FromContext(ctx)
 
 	err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		c := &apiv1alpha1.PerconaServerMySQL{}
@@ -324,7 +324,7 @@ func (r *PerconaServerMySQLRestoreReconciler) removeBootstrapCondition(ctx conte
 		return r.Client.Status().Update(ctx, c)
 	})
 
-	l.Info("Set condition to false", "confition", apiv1alpha1.ConditionInnoDBClusterBootstrapped)
+	log.Info("Set condition to false", "confition", apiv1alpha1.ConditionInnoDBClusterBootstrapped)
 
 	return err
 }

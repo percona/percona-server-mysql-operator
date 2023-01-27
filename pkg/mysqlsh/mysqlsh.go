@@ -115,12 +115,12 @@ func (m *mysqlsh) CreateCluster(ctx context.Context, clusterName string) error {
 }
 
 func (m *mysqlsh) DoesClusterExist(ctx context.Context, clusterName string) bool {
-	l := log.FromContext(ctx)
+	log := log.FromContext(ctx)
 
 	cmd := fmt.Sprintf("dba.getCluster('%s').status()", clusterName)
 	err := m.run(ctx, cmd)
 	if err != nil {
-		l.Error(err, "failed to get cluster status")
+		log.Error(err, "failed to get cluster status")
 	}
 
 	return err == nil
@@ -151,14 +151,14 @@ func (m *mysqlsh) ClusterStatus(ctx context.Context, clusterName string) (innodb
 }
 
 func (m *mysqlsh) MemberState(ctx context.Context, clusterName, instance string) (innodbcluster.MemberState, error) {
-	l := log.FromContext(ctx).WithName("InnoDBCluster").WithValues("cluster", clusterName)
+	log := log.FromContext(ctx).WithName("InnoDBCluster").WithValues("cluster", clusterName)
 
 	status, err := m.ClusterStatus(ctx, clusterName)
 	if err != nil {
 		return innodbcluster.MemberStateOffline, errors.Wrap(err, "get cluster status")
 	}
 
-	l.V(1).Info("Cluster status", "status", status)
+	log.V(1).Info("Cluster status", "status", status)
 
 	member, ok := status.DefaultReplicaSet.Topology[instance]
 	if !ok {
