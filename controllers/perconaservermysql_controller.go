@@ -675,8 +675,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 	}
 
 	if pmm := cr.Spec.PMM; pmm != nil && pmm.Enabled && !pmm.HasSecret(internalSecret) {
-		l.Info("Can't enable PMM, either key doesn't exist or secrets and internal secrets are our of sync", "key",
-			apiv1alpha1.UserPMMServerKey, "secrets", cr.Spec.SecretsName, "internalSecrets", cr.InternalSecretName())
+		l.Info("Can't enable PMM, credentials are not setup correctly or secrets and internal secrets are our of sync")
 	}
 
 	return nil
