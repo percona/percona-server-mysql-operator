@@ -45,6 +45,10 @@ metadata:
   finalizers:
     - delete-mysql-pods-in-order
 status:
+  haproxy:
+    ready: 3
+    size: 3
+    state: ready
   mysql:
     ready: 3
     size: 3
@@ -53,3 +57,4 @@ status:
     ready: 3
     size: 3
     state: ready
+  state: ready

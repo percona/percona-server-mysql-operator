@@ -50,6 +50,10 @@ spec:
   orchestrator:
     size: 1
 status:
+  haproxy:
+    ready: 1
+    size: 1
+    state: ready
   mysql:
     ready: 1
     size: 1
@@ -58,3 +62,4 @@ status:
     ready: 1
     size: 1
     state: ready
+  state: ready
