@@ -125,7 +125,7 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 				return errors.Wrapf(err, "remove label from old primary pod: %v/%v", pod.GetNamespace(), pod.GetName())
 			}
 
-			l.Info(fmt.Sprintf("removed label from old primary pod: %v/%v", pod.GetNamespace(), pod.GetName()))
+			l.Info("Removed lavel from of old primary pod", "pod", pod.GetName(), "namespace", pod.GetNamespace())
 		}
 	}
 
@@ -134,7 +134,7 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 	}
 
 	if primaryPod.GetLabels()[apiv1alpha1.MySQLPrimaryLabel] == "true" {
-		l.Info(fmt.Sprintf("primary %v is not changed. skip", primaryName))
+		l.Info("Primary pod not changed, skipping", "pod", primaryName)
 		return nil
 	}
 
@@ -144,7 +144,7 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 		return errors.Wrapf(err, "add label to new primary pod %v/%v", pod.GetNamespace(), pod.GetName())
 	}
 
-	l.Info(fmt.Sprintf("added label to new primary pod: %v/%v", pod.GetNamespace(), pod.GetName()))
+	l.Info("Labels added to the new primary pod", "pod", pod.GetName(), "namespace", pod.GetNamespace())
 	return nil
 }
 

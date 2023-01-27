@@ -220,21 +220,20 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			if err != nil {
 				return errors.Wrapf(err, "get member state of %s from performance_schema", pod.Name)
 			}
-			l.Info(fmt.Sprintf("Member %s state: %s", pod.Name, state))
 
 			if state == replicator.MemberStateOffline {
-				l.Info(fmt.Sprintf("Pod %s not part of GR or already removed", pod.Name))
+				l.Info("Member is not part of GR or already removed", "member", pod.Name, "memberState", state)
 				continue
 			}
 
 			podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
 
-			l.Info(fmt.Sprintf("Removing %s from GR", pod.Name))
+			l.Info("Removing member from GR", "member", pod.Name, "memberState", state)
 			err = mysh.RemoveInstance(ctx, cr.InnoDBClusterName(), podUri)
 			if err != nil {
 				return errors.Wrapf(err, "remove instance %s", pod.Name)
 			}
-			l.Info(fmt.Sprintf("Pod %s removed from GR", pod.Name))
+			l.Info("Member removed from GR", "member", pod.Name)
 		}
 	}
 
@@ -676,8 +675,8 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 	}
 
 	if pmm := cr.Spec.PMM; pmm != nil && pmm.Enabled && !pmm.HasSecret(internalSecret) {
-		l.Info(fmt.Sprintf(`Can't enable PMM: either "%s" key doesn't exist in the %s, or %s and %s secrets are out of sync`,
-			apiv1alpha1.UserPMMServerKey, cr.Spec.SecretsName, cr.Spec.SecretsName, cr.InternalSecretName()))
+		l.Info("Can't enable PMM, either key doesn't exist or secrets and internal secrets are our of sync", "key",
+			apiv1alpha1.UserPMMServerKey, "secrets", cr.Spec.SecretsName, "internalSecrets", cr.InternalSecretName())
 	}
 
 	return nil
@@ -1107,7 +1106,7 @@ func reconcileReplicationSemiSync(
 	}
 	primaryHost := primary.Key.Hostname
 
-	l.V(1).Info(fmt.Sprintf("use primary host: %v", primaryHost), "clusterPrimary", primary)
+	l.V(1).Info("Use primary host", "primaryHost", primaryHost, "clusterPrimary", primary)
 
 	operatorPass, err := k8s.UserPassword(ctx, cl, cr, apiv1alpha1.UserOperator)
 	if err != nil {
@@ -1126,12 +1125,12 @@ func reconcileReplicationSemiSync(
 	if err := db.SetSemiSyncSource(cr.MySQLSpec().SizeSemiSync.IntValue() > 0); err != nil {
 		return errors.Wrapf(err, "set semi-sync source on %s", primaryHost)
 	}
-	l.V(1).Info(fmt.Sprintf("set semi-sync source on %s", primaryHost))
+	l.V(1).Info("Set semi-sync source", "host", primaryHost)
 
 	if err := db.SetSemiSyncSize(cr.MySQLSpec().SizeSemiSync.IntValue()); err != nil {
 		return errors.Wrapf(err, "set semi-sync size on %s", primaryHost)
 	}
-	l.V(1).Info(fmt.Sprintf("set semi-sync size on %s", primaryHost))
+	l.V(1).Info("Set semi-sync size", "host", primaryHost)
 
 	return nil
 }
@@ -1276,7 +1275,7 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 	case innodbcluster.ClusterStatusOK:
 		return true, nil
 	case innodbcluster.ClusterStatusOKPartial, innodbcluster.ClusterStatusOKNoTolerance, innodbcluster.ClusterStatusOKNoTolerancePartial:
-		l.Info(fmt.Sprintf("%s: %s", status.DefaultReplicaSet.Status, status.DefaultReplicaSet.StatusText))
+		l.Info("GR status", "status", status.DefaultReplicaSet.Status, "statusText", status.DefaultReplicaSet.StatusText)
 		return true, nil
 	default:
 		return false, nil

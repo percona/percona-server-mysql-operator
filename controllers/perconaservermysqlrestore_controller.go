@@ -324,7 +324,7 @@ func (r *PerconaServerMySQLRestoreReconciler) removeBootstrapCondition(ctx conte
 		return r.Client.Status().Update(ctx, c)
 	})
 
-	l.Info(fmt.Sprintf("Set %s condition to false", apiv1alpha1.ConditionInnoDBClusterBootstrapped))
+	l.Info("Set condition to false", "confition", apiv1alpha1.ConditionInnoDBClusterBootstrapped)
 
 	return err
 }
