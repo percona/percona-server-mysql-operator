@@ -191,7 +191,7 @@ void prepareNode() {
             | sudo tar -C /usr/local/bin --strip-components 1 --wildcards -zxvpf - '*/oc'
         curl -s -L https://github.com/mitchellh/golicense/releases/latest/download/golicense_0.2.0_linux_x86_64.tar.gz \
             | sudo tar -C /usr/local/bin --wildcards -zxvpf -
-        sudo sh -c "curl -s -L https://github.com/mikefarah/yq/releases/download/v4.14.2/yq_linux_amd64 > /usr/local/bin/yq"
+        sudo sh -c "curl -s -L https://github.com/mikefarah/yq/releases/download/v4.29.1/yq_linux_amd64 > /usr/local/bin/yq"
         sudo chmod +x /usr/local/bin/yq
         cd "$(mktemp -d)"
         OS="$(uname | tr '[:upper:]' '[:lower:]')"
@@ -202,7 +202,9 @@ void prepareNode() {
         ./"${KREW}" install krew
         rm -f "${KREW}.tar.gz"
         export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
-        kubectl krew install kuttl
+
+        # v0.15.0 kuttl version
+        kubectl krew install --manifest-url https://raw.githubusercontent.com/kubernetes-sigs/krew-index/a67f31ecb2e62f15149ca66d096357050f07b77d/plugins/kuttl.yaml
         printf "%s is installed" "$(kubectl kuttl --version)"
     '''
 }
@@ -368,7 +370,7 @@ pipeline {
                         ShutdownCluster('cluster1')
                     }
                 }
-                stage('2 DemB GRDemB Scal Users') {
+                stage('2 DemB GRDemB Scal Users Ignore GRIgn') {
                     when {
                         expression {
                             !skipBranchBuilds
@@ -385,6 +387,8 @@ pipeline {
                         runTest('gr-demand-backup', 'cluster2')
                         runTest('scaling', 'cluster2')
                         runTest('users', 'cluster2')
+                        runTest('async-ignore-annotations', 'cluster2')
+                        runTest('gr-ignore-annotations', 'cluster2')
                         ShutdownCluster('cluster2')
                     }
                 }
@@ -403,6 +407,7 @@ pipeline {
                         CreateCluster('cluster3')
                         runTest('init-deploy', 'cluster3')
                         runTest('gr-init-deploy', 'cluster3')
+                        runTest('gr-scaling', 'cluster3')
                         runTest('monitoring', 'cluster3')
                         runTest('semi-sync', 'cluster3')
                         runTest('service-per-pod', 'cluster3')
@@ -410,6 +415,7 @@ pipeline {
                         runTest('limits', 'cluster3')
                         runTest('version-service', 'cluster3')
                         runTest('tls-cert-manager', 'cluster3')
+                        runTest('gr-tls-cert-manager', 'cluster3')
                         ShutdownCluster('cluster3')
                     }
                 }
@@ -420,7 +426,7 @@ pipeline {
         always {
             script {
                 setTestsresults()
-                if (currentBuild.result != null && currentBuild.result != 'SUCCESS' && currentBuild.result != 'NOT_BUILT') {
+                if (currentBuild.result != null && currentBuild.result != 'SUCCESS' && currentBuild.nextBuild == null) {
                     try {
                         slackSend channel: "@${AUTHOR_NAME}", color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
                     }
@@ -428,7 +434,7 @@ pipeline {
                         slackSend channel: '#cloud-dev-ci', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
                     }
                 }
-                if (env.CHANGE_URL) {
+                if (env.CHANGE_URL && currentBuild.nextBuild == null) {
                     for (comment in pullRequest.comments) {
                         println("Author: ${comment.user}, Comment: ${comment.body}")
                         if (comment.user.equals('JNKPercona')) {
@@ -436,13 +442,11 @@ pipeline {
                             comment.delete()
                         }
                     }
-                    if (currentBuild.result != 'NOT_BUILT') {
-                        makeReport()
-                        unstash 'IMAGE'
-                        def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
-                        TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
-                        pullRequest.comment(TestsReport)
-                    }
+                    makeReport()
+                    unstash 'IMAGE'
+                    def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
+                    TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
+                    pullRequest.comment(TestsReport)
                 }
             }
             DeleteOldClusters("$CLUSTER_NAME")

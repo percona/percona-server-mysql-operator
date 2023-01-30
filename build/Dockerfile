@@ -46,7 +46,7 @@ RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     cmd/orc-handler/main.go \
     && cp -r build/_output/bin/orc-handler /usr/local/bin/orc-handler
 
-FROM redhat/ubi8-minimal AS ubi8
+FROM redhat/ubi9-minimal AS ubi9
 
 # check repository package signature in secure way
 RUN export GNUPGHOME="$(mktemp -d)" \
@@ -62,7 +62,7 @@ RUN export GNUPGHOME="$(mktemp -d)" \
     && percona-release setup pdps-8.0
 
 RUN set -ex; \
-    microdnf update; \
+    microdnf -y update; \
     microdnf install -y glibc-langpack-en percona-mysql-shell; \
     microdnf clean all; \
     rm -rf /var/cache; \

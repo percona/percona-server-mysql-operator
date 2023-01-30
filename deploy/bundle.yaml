@@ -2421,6 +2421,8 @@ spec:
                       - type
                       type: object
                     type: object
+                required:
+                - image
                 type: object
               crVersion:
                 type: string
@@ -4764,6 +4766,8 @@ spec:
                             type: string
                         type: object
                     type: object
+                required:
+                - image
                 type: object
               orchestrator:
                 properties:
@@ -5701,6 +5705,8 @@ spec:
                             type: string
                         type: object
                     type: object
+                required:
+                - image
                 type: object
               pause:
                 type: boolean
@@ -5798,6 +5804,8 @@ spec:
                     type: string
                   serverUser:
                     type: string
+                required:
+                - image
                 type: object
               proxy:
                 properties:
@@ -6737,6 +6745,8 @@ spec:
                                 type: string
                             type: object
                         type: object
+                    required:
+                    - image
                     type: object
                   router:
                     properties:
@@ -7672,6 +7682,8 @@ spec:
                                 type: string
                             type: object
                         type: object
+                    required:
+                    - image
                     type: object
                 type: object
               secretsName:
@@ -8026,6 +8038,8 @@ spec:
                         format: int32
                         type: integer
                     type: object
+                required:
+                - image
                 type: object
               upgradeOptions:
                 properties:
