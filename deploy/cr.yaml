@@ -27,7 +27,7 @@ spec:
 
   mysql:
     clusterType: group-replication
-    image: perconalab/percona-server-mysql-operator:main-psmysql
+    image: percona/percona-server:8.0.30-22
     imagePullPolicy: Always
 #    initImage: perconalab/percona-server-mysql-operator:main
 
@@ -104,11 +104,11 @@ spec:
 
   proxy:
     haproxy:
-      enabled: true
+      enabled: false
 
       size: 3
 
-      image: perconalab/percona-server-mysql-operator:main-haproxy
+      image: percona/percona-server-mysql-operator:0.4.0-haproxy
       imagePullPolicy: Always
 
       resources:
@@ -144,7 +144,7 @@ spec:
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
     router:
-      image: perconalab/percona-server-mysql-operator:main-router
+      image: percona/percona-server-mysql-operator:0.4.0-router
       imagePullPolicy: Always
 #      initImage: perconalab/percona-server-mysql-operator:main
 
@@ -182,9 +182,9 @@ spec:
 #          - 10.0.0.0/8
 
   orchestrator:
-    enabled: true
+    enabled: false
 
-    image: perconalab/percona-server-mysql-operator:main-orchestrator
+    image: percona/percona-server-mysql-operator:0.4.0-orchestrator
     imagePullPolicy: Always
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
 #    initImage: perconalab/percona-server-mysql-operator:main
@@ -230,7 +230,7 @@ spec:
   pmm:
     enabled: false
 
-    image: percona/pmm-client:2.30.0
+    image: percona/pmm-client:2.33.0
     imagePullPolicy: Always
 
     resources:
@@ -246,7 +246,7 @@ spec:
 
   backup:
     enabled: true
-    image: perconalab/percona-server-mysql-operator:main-backup
+    image: percona/percona-xtrabackup:8.0.30-23
     imagePullPolicy: Always
 #    initImage: perconalab/percona-server-mysql-operator:main
     storages:
@@ -292,7 +292,7 @@ spec:
 #          prefix: ""
 
   toolkit:
-    image: perconalab/percona-server-mysql-operator:main-toolkit
+    image: percona/percona-server-mysql-operator:0.4.0-toolkit
     imagePullPolicy: Always
 #    resources:
 #      requests:
