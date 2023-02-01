@@ -68,7 +68,7 @@ status:
   accessModes:
   - ReadWriteOnce
   capacity:
-    storage: 2G
+    storage: 2Gi
   phase: Bound
 ---
 apiVersion: v1
@@ -97,5 +97,5 @@ status:
   accessModes:
   - ReadWriteOnce
   capacity:
-    storage: 2G
+    storage: 2Gi
   phase: Bound
