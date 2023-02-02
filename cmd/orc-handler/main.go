@@ -133,7 +133,7 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 	}
 
 	if primaryPod.GetLabels()[apiv1alpha1.MySQLPrimaryLabel] == "true" {
-		log.Info("Primary pod not changed, skipping", "pod", primaryName)
+		log.Info("Primary pod is not changed, skipping", "pod", primaryName)
 		return nil
 	}
 
