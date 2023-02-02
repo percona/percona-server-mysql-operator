@@ -124,7 +124,7 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 				return errors.Wrapf(err, "remove label from old primary pod: %v/%v", pod.GetNamespace(), pod.GetName())
 			}
 
-			log.Info("Removed lavel from of old primary pod", "pod", pod.GetName(), "namespace", pod.GetNamespace())
+			log.Info("Removed label from the old primary pod", "pod", pod.GetName(), "namespace", pod.GetNamespace())
 		}
 	}
 
