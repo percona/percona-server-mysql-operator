@@ -10,7 +10,7 @@ import (
 
 	"github.com/pkg/errors"
 	k8sexec "k8s.io/utils/exec"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 )
@@ -115,7 +115,7 @@ func (m *mysqlsh) CreateCluster(ctx context.Context, clusterName string) error {
 }
 
 func (m *mysqlsh) DoesClusterExist(ctx context.Context, clusterName string) bool {
-	log := log.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	cmd := fmt.Sprintf("dba.getCluster('%s').status()", clusterName)
 	err := m.run(ctx, cmd)
@@ -151,7 +151,7 @@ func (m *mysqlsh) ClusterStatus(ctx context.Context, clusterName string) (innodb
 }
 
 func (m *mysqlsh) MemberState(ctx context.Context, clusterName, instance string) (innodbcluster.MemberState, error) {
-	log := log.FromContext(ctx).WithName("InnoDBCluster").WithValues("cluster", clusterName)
+	log := logf.FromContext(ctx).WithName("InnoDBCluster").WithValues("cluster", clusterName)
 
 	status, err := m.ClusterStatus(ctx, clusterName)
 	if err != nil {

@@ -33,7 +33,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/pkg/errors"
 
@@ -67,7 +67,7 @@ var ErrWaitingTermination error = errors.New("waiting for MySQL pods to terminat
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.9.2/pkg/reconcile
 func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx).WithName("PerconaServerMySQLRestore").WithValues("name", req.Name, "namespace", req.Namespace)
+	log := logf.FromContext(ctx).WithName("PerconaServerMySQLRestore").WithValues("name", req.Name, "namespace", req.Namespace)
 
 	cr := &apiv1alpha1.PerconaServerMySQLRestore{}
 	err := r.Client.Get(ctx, req.NamespacedName, cr)
@@ -280,7 +280,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) error {
-	log := log.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	pvcs, err := k8s.PVCsByLabels(ctx, r.Client, mysql.MatchLabels(cluster))
 	if err != nil {
@@ -304,7 +304,7 @@ func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cl
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) removeBootstrapCondition(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) error {
-	log := log.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		c := &apiv1alpha1.PerconaServerMySQL{}

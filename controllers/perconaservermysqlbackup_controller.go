@@ -37,7 +37,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -75,7 +75,7 @@ func (r *PerconaServerMySQLBackupReconciler) SetupWithManager(mgr ctrl.Manager) 
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.9.2/pkg/reconcile
 func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx).WithName("PerconaServerMySQLBackup")
+	log := logf.FromContext(ctx).WithName("PerconaServerMySQLBackup")
 
 	rr := ctrl.Result{RequeueAfter: 5 * time.Second}
 
@@ -307,7 +307,7 @@ func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creatio
 }
 
 func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) (string, error) {
-	log := log.FromContext(ctx).WithName("getBackupSource")
+	log := logf.FromContext(ctx).WithName("getBackupSource")
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cluster, apiv1alpha1.UserOperator)
 	if err != nil {
@@ -335,7 +335,7 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 	if cr.DeletionTimestamp == nil || cr.Status.State == apiv1alpha1.BackupStarting || cr.Status.State == apiv1alpha1.BackupRunning {
 		return
 	}
-	log := log.FromContext(ctx).WithName("checkFinalizers")
+	log := logf.FromContext(ctx).WithName("checkFinalizers")
 
 	defer func() {
 		if err := r.Update(ctx, cr); err != nil {
