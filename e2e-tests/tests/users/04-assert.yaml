@@ -34,10 +34,10 @@ status:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  generation: 1
+  generation: 2
   name: users-orc
 status:
-  observedGeneration: 1
+  observedGeneration: 2
   replicas: 3
   readyReplicas: 3
 ---
