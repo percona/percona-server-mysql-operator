@@ -43,7 +43,7 @@ import (
 	k8sexec "k8s.io/utils/exec"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
@@ -93,14 +93,14 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
 ) (ctrl.Result, error) {
-	l := log.FromContext(ctx).WithName("PerconaServerMySQL")
+	log := logf.FromContext(ctx).WithName("PerconaServerMySQL")
 
 	rr := ctrl.Result{RequeueAfter: 5 * time.Second}
 
 	var cr *apiv1alpha1.PerconaServerMySQL
 	defer func() {
 		if err := r.reconcileCRStatus(ctx, cr); err != nil {
-			l.Error(err, "failed to update status")
+			log.Error(err, "failed to update status")
 		}
 	}()
 
@@ -125,8 +125,8 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 }
 
 func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	l := log.FromContext(ctx).WithName("Finalizer")
-	l.Info("Applying finalizers", "CR", cr)
+	log := logf.FromContext(ctx).WithName("Finalizer")
+	log.Info("Applying finalizers", "CR", cr)
 
 	var err error
 
@@ -140,9 +140,9 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 		if err != nil {
 			switch err {
 			case ErrWaitingTermination:
-				l.Info("waiting for pods to be deleted", "finalizer", f)
+				log.Info("waiting for pods to be deleted", "finalizer", f)
 			default:
-				l.Error(err, "failed to run finalizer", "finalizer", f)
+				log.Error(err, "failed to run finalizer", "finalizer", f)
 			}
 			finalizers = append(finalizers, f)
 		}
@@ -153,25 +153,25 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		err = r.Client.Update(ctx, cr)
 		if err != nil {
-			l.Error(err, "Client.Update failed")
+			log.Error(err, "Client.Update failed")
 		}
 		return err
 	})
 }
 
 func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	l := log.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
 	if err != nil {
 		return errors.Wrap(err, "get pods")
 	}
-	l.Info("Deleting MySQL pods", "pods", len(pods))
+	log.Info("Deleting MySQL pods", "pods", len(pods))
 
 	// the last pod left - we can leave it for the stateful set
 	if len(pods) <= 1 {
 		time.Sleep(time.Second * 3)
-		l.Info("Cluster deleted")
+		log.Info("Cluster deleted")
 		return nil
 	}
 
@@ -186,7 +186,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 	if cr.Spec.MySQL.IsAsync() {
 		orcHost := orchestrator.APIHost(cr)
 
-		l.Info("Ensuring oldest mysql node is the primary")
+		log.Info("Ensuring oldest mysql node is the primary")
 		err := orchestrator.EnsureNodeIsPrimary(ctx, orcHost, cr.ClusterHint(), firstPod.GetName(), mysql.DefaultPort)
 		if err != nil {
 			return errors.Wrap(err, "ensure node is primary")
@@ -208,7 +208,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 
 		mysh := mysqlsh.New(k8sexec.New(), firstPodUri)
 
-		l.Info("Removing instances from GR")
+		log.Info("Removing instances from GR")
 		for _, pod := range pods {
 			if pod.Name == firstPod.Name {
 				continue
@@ -220,21 +220,20 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			if err != nil {
 				return errors.Wrapf(err, "get member state of %s from performance_schema", pod.Name)
 			}
-			l.Info(fmt.Sprintf("Member %s state: %s", pod.Name, state))
 
 			if state == replicator.MemberStateOffline {
-				l.Info(fmt.Sprintf("Pod %s not part of GR or already removed", pod.Name))
+				log.Info("Member is not part of GR or already removed", "member", pod.Name, "memberState", state)
 				continue
 			}
 
 			podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
 
-			l.Info(fmt.Sprintf("Removing %s from GR", pod.Name))
+			log.Info("Removing member from GR", "member", pod.Name, "memberState", state)
 			err = mysh.RemoveInstance(ctx, cr.InnoDBClusterName(), podUri)
 			if err != nil {
 				return errors.Wrapf(err, "remove instance %s", pod.Name)
 			}
-			l.Info(fmt.Sprintf("Pod %s removed from GR", pod.Name))
+			log.Info("Member removed from GR", "member", pod.Name)
 		}
 	}
 
@@ -242,7 +241,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 	if err := r.Client.Get(ctx, mysql.NamespacedName(cr), sts); err != nil {
 		return errors.Wrap(err, "get MySQL statefulset")
 	}
-	l.V(1).Info("Got statefulset", "sts", sts, "spec", sts.Spec)
+	log.V(1).Info("Got statefulset", "sts", sts, "spec", sts.Spec)
 
 	if sts.Spec.Replicas == nil || *sts.Spec.Replicas != 1 {
 		dscaleTo := int32(1)
@@ -251,7 +250,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		if err != nil {
 			return errors.Wrap(err, "downscale StatefulSet")
 		}
-		l.Info("sts replicaset downscaled", "sts", sts)
+		log.Info("sts replicaset downscaled", "sts", sts)
 	}
 
 	return ErrWaitingTermination
@@ -305,59 +304,59 @@ func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr
 		return nil
 	}
 
-	l := log.FromContext(ctx).WithName("reconcileVersions")
+	log := logf.FromContext(ctx).WithName("reconcileVersions")
 
 	version, err := vs.GetVersion(ctx, cr, r.ServerVersion)
 	if err != nil {
-		l.Info("Failed to get versions, using the default ones", "error", err)
+		log.Info("Failed to get versions, using the default ones", "error", err)
 		return nil
 	}
 
 	patch := client.MergeFrom(cr.DeepCopy())
 	if cr.Spec.MySQL.Image != version.PSImage {
 		if cr.Status.MySQL.Version == "" {
-			l.Info("set MySQL version to " + version.PSVersion)
+			log.Info("set MySQL version to " + version.PSVersion)
 		} else {
-			l.Info("update MySQL version", "old version", cr.Status.MySQL.Version, "new version", version.PSVersion)
+			log.Info("update MySQL version", "old version", cr.Status.MySQL.Version, "new version", version.PSVersion)
 		}
 		cr.Spec.MySQL.Image = version.PSImage
 	}
 	if cr.Spec.Backup.Image != version.BackupImage {
 		if cr.Status.BackupVersion == "" {
-			l.Info("set backup version to " + version.BackupVersion)
+			log.Info("set backup version to " + version.BackupVersion)
 		} else {
-			l.Info("update backup version", "old version", cr.Status.BackupVersion, "new version", version.BackupVersion)
+			log.Info("update backup version", "old version", cr.Status.BackupVersion, "new version", version.BackupVersion)
 		}
 		cr.Spec.Backup.Image = version.BackupImage
 	}
 	if cr.Spec.Orchestrator.Image != version.OrchestratorImage {
 		if cr.Status.Orchestrator.Version == "" {
-			l.Info("set orchestrator version to " + version.OrchestratorVersion)
+			log.Info("set orchestrator version to " + version.OrchestratorVersion)
 		} else {
-			l.Info("update orchestrator version", "old version", cr.Status.Orchestrator.Version, "new version", version.OrchestratorVersion)
+			log.Info("update orchestrator version", "old version", cr.Status.Orchestrator.Version, "new version", version.OrchestratorVersion)
 		}
 		cr.Spec.Orchestrator.Image = version.OrchestratorImage
 	}
 	if cr.Spec.Proxy.Router.Image != version.RouterImage {
 		if cr.Status.Router.Version == "" {
-			l.Info("set MySQL router version to " + version.RouterVersion)
+			log.Info("set MySQL router version to " + version.RouterVersion)
 		} else {
-			l.Info("update MySQL router version", "old version", cr.Status.Router.Version, "new version", version.RouterVersion)
+			log.Info("update MySQL router version", "old version", cr.Status.Router.Version, "new version", version.RouterVersion)
 		}
 		cr.Spec.Proxy.Router.Image = version.RouterImage
 	}
 	if cr.Spec.PMM.Image != version.PMMImage {
 		if cr.Status.PMMVersion == "" {
-			l.Info("set PMM version to " + version.PMMVersion)
+			log.Info("set PMM version to " + version.PMMVersion)
 		} else {
-			l.Info("update PMM version", "old version", cr.Status.PMMVersion, "new version", version.PMMVersion)
+			log.Info("update PMM version", "old version", cr.Status.PMMVersion, "new version", version.PMMVersion)
 		}
 		cr.Spec.PMM.Image = version.PMMImage
 	}
 
 	err = r.Patch(ctx, cr.DeepCopy(), patch)
 	if err != nil {
-		l.Info("Failed to update CR, using the default version", "error", err)
+		log.Info("Failed to update CR, using the default version", "error", err)
 		return nil
 	}
 
@@ -413,7 +412,7 @@ func (r *PerconaServerMySQLReconciler) ensureUserSecrets(
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	l := log.FromContext(ctx).WithName("reconcileUsers")
+	log := logf.FromContext(ctx).WithName("reconcileUsers")
 
 	secret := &corev1.Secret{}
 	nn := types.NamespacedName{Name: cr.Spec.SecretsName, Namespace: cr.Namespace}
@@ -457,12 +456,12 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	if hash == internalHash {
-		l.V(1).Info("Secret data is up to date")
+		log.V(1).Info("Secret data is up to date")
 		return nil
 	}
 
 	if cr.Status.MySQL.State != apiv1alpha1.StateReady {
-		l.Info("MySQL is not ready")
+		log.Info("MySQL is not ready")
 		return nil
 	}
 
@@ -474,7 +473,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	updatedUsers := make([]mysql.User, 0)
 	for user, pass := range secret.Data {
 		if bytes.Equal(pass, internalSecret.Data[user]) {
-			l.V(1).Info("User password is up to date", "user", user)
+			log.V(1).Info("User password is up to date", "user", user)
 			continue
 		}
 
@@ -500,7 +499,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 			mysqlUser.Hosts = []string{"localhost"}
 		}
 
-		l.V(1).Info("User password changed", "user", user)
+		log.V(1).Info("User password changed", "user", user)
 
 		updatedUsers = append(updatedUsers, mysqlUser)
 	}
@@ -514,7 +513,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	if err != nil {
 		return errors.Wrap(err, "get primary host")
 	}
-	l.V(1).Info("Got primary host", "primary", primaryHost)
+	log.V(1).Info("Got primary host", "primary", primaryHost)
 
 	um, err := users.NewManager(apiv1alpha1.UserOperator, operatorPass, primaryHost, mysql.DefaultAdminPort)
 	if err != nil {
@@ -557,7 +556,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	if cr.OrchestratorEnabled() && restartOrchestrator {
-		l.Info("Orchestrator password updated. Restarting orchestrator.")
+		log.Info("Orchestrator password updated. Restarting orchestrator.")
 
 		sts := &appsv1.StatefulSet{}
 		if err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), sts); err != nil {
@@ -569,7 +568,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	if restartMySQL {
-		l.Info("Monitor user password updated. Restarting MySQL.")
+		log.Info("Monitor user password updated. Restarting MySQL.")
 
 		sts := &appsv1.StatefulSet{}
 		if err := r.Client.Get(ctx, mysql.NamespacedName(cr), sts); err != nil {
@@ -581,7 +580,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	if cr.Status.State != apiv1alpha1.StateReady {
-		l.Info("Waiting cluster to be ready")
+		log.Info("Waiting cluster to be ready")
 		return nil
 	}
 
@@ -589,7 +588,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	if err != nil {
 		return errors.Wrap(err, "get primary host")
 	}
-	l.V(1).Info("Got primary host", "primary", primaryHost)
+	log.V(1).Info("Got primary host", "primary", primaryHost)
 
 	um, err = users.NewManager(apiv1alpha1.UserOperator, operatorPass, primaryHost, mysql.DefaultAdminPort)
 	if err != nil {
@@ -601,14 +600,14 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return errors.Wrap(err, "discard old passwords")
 	}
 
-	l.Info("Discarded old user passwords")
+	log.Info("Discarded old user passwords")
 
 	internalSecret.Data = secret.Data
 	if err := r.Client.Update(ctx, internalSecret); err != nil {
 		return errors.Wrapf(err, "update Secret/%s", internalSecret.Name)
 	}
 
-	l.Info("Updated internal secret", "secretName", cr.InternalSecretName())
+	log.Info("Updated internal secret", "secretName", cr.InternalSecretName())
 
 	return nil
 }
@@ -648,7 +647,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
-	l := log.FromContext(ctx).WithName("reconcileDatabase")
+	log := logf.FromContext(ctx).WithName("reconcileDatabase")
 
 	configHash, err := r.reconcileMySQLConfiguration(ctx, cr)
 	if err != nil {
@@ -676,8 +675,8 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 	}
 
 	if pmm := cr.Spec.PMM; pmm != nil && pmm.Enabled && !pmm.HasSecret(internalSecret) {
-		l.Info(fmt.Sprintf(`Can't enable PMM: either "%s" key doesn't exist in the %s, or %s and %s secrets are out of sync`,
-			apiv1alpha1.UserPMMServerKey, cr.Spec.SecretsName, cr.Spec.SecretsName, cr.InternalSecretName()))
+		log.Info(fmt.Sprintf(`Can't enable PMM: either "%s" key doesn't exist in the secrets, or secrets and internal secrets are out of sync`,
+			apiv1alpha1.UserPMMServerKey), "secrets", cr.Spec.SecretsName, "internalSecrets", cr.InternalSecretName())
 	}
 
 	return nil
@@ -693,7 +692,7 @@ type Exposer interface {
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileServicePerPod(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, exposer Exposer) error {
-	_ = log.FromContext(ctx).WithName("reconcileServicePerPod")
+	_ = logf.FromContext(ctx).WithName("reconcileServicePerPod")
 
 	if !exposer.Exposed() {
 		return nil
@@ -715,7 +714,7 @@ func (r *PerconaServerMySQLReconciler) reconcileServicePerPod(ctx context.Contex
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	_ = log.FromContext(ctx).WithName("reconcileMySQLServices")
+	_ = logf.FromContext(ctx).WithName("reconcileMySQLServices")
 
 	if err := k8s.EnsureService(ctx, r.Client, cr, mysql.UnreadyService(cr), r.Scheme, true); err != nil {
 		return errors.Wrap(err, "reconcile unready svc")
@@ -733,7 +732,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 	return nil
 }
 func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	l := log.FromContext(ctx).WithName("reconcileMySQLAutoConfig")
+	log := logf.FromContext(ctx).WithName("reconcileMySQLAutoConfig")
 	var memory *resource.Quantity
 	var err error
 
@@ -768,7 +767,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 			return errors.Wrapf(err, "delete ConfigMaps/%s", currentConfigMap.Name)
 		}
 
-		l.Info("ConfigMap deleted", "name", currentConfigMap.Name)
+		log.Info("ConfigMap deleted", "name", currentConfigMap.Name)
 
 		return nil
 	}
@@ -781,7 +780,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 		if err := k8s.EnsureObject(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
 			return errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
 		}
-		l.Info("ConfigMap updated", "name", configMap.Name, "data", configMap.Data)
+		log.Info("ConfigMap updated", "name", configMap.Name, "data", configMap.Data)
 	}
 	return nil
 }
@@ -790,7 +789,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfiguration(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQL,
 ) (string, error) {
-	l := log.FromContext(ctx).WithName("reconcileMySQLConfiguration")
+	log := logf.FromContext(ctx).WithName("reconcileMySQLConfiguration")
 
 	cmName := mysql.ConfigMapName(cr)
 	nn := types.NamespacedName{Name: cmName, Namespace: cr.Namespace}
@@ -815,7 +814,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfiguration(
 			return "", errors.Wrapf(err, "delete ConfigMaps/%s", cmName)
 		}
 
-		l.Info("ConfigMap deleted", "name", cmName)
+		log.Info("ConfigMap deleted", "name", cmName)
 
 		return "", nil
 	}
@@ -846,7 +845,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfiguration(
 			return "", errors.Wrapf(err, "ensure ConfigMap/%s", cmName)
 		}
 
-		l.Info("ConfigMap updated", "name", cmName, "data", cm.Data)
+		log.Info("ConfigMap updated", "name", cmName, "data", cm.Data)
 	}
 
 	d := struct{ Data map[string]string }{Data: cm.Data}
@@ -859,7 +858,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfiguration(
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	l := log.FromContext(ctx).WithName("reconcileOrchestrator")
+	log := logf.FromContext(ctx).WithName("reconcileOrchestrator")
 
 	if cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR || !cr.OrchestratorEnabled() {
 		return nil
@@ -929,7 +928,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 			})
 		}
 
-		l.Error(g.Wait(), "Orchestrator add peers", "peers", newPeers)
+		log.Error(g.Wait(), "Orchestrator add peers", "peers", newPeers)
 	} else {
 		oldPeers := util.Difference(existingNodes, raftNodes)
 
@@ -940,7 +939,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 			})
 		}
 
-		l.Error(g.Wait(), "Orchestrator remove peers", "peers", oldPeers)
+		log.Error(g.Wait(), "Orchestrator remove peers", "peers", oldPeers)
 	}
 
 	return nil
@@ -960,7 +959,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	l := log.FromContext(ctx).WithName("reconcileHAProxy")
+	log := logf.FromContext(ctx).WithName("reconcileHAProxy")
 
 	if !cr.HAProxyEnabled() || cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR {
 		return nil
@@ -973,7 +972,7 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 	}
 
 	if !firstMySQLPodReady {
-		l.V(1).Info("Waiting for pod to be ready", "pod", nn.Name)
+		log.V(1).Info("Waiting for pod to be ready", "pod", nn.Name)
 		return nil
 	}
 
@@ -1017,7 +1016,7 @@ func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	l := log.FromContext(ctx).WithName("reconcileReplication")
+	log := logf.FromContext(ctx).WithName("reconcileReplication")
 
 	if err := r.reconcileGroupReplication(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile group replication")
@@ -1034,7 +1033,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 	}
 
 	if sts.Status.ReadyReplicas == 0 {
-		l.Info("orchestrator is not ready. skip", "ready", sts.Status.ReadyReplicas)
+		log.Info("orchestrator is not ready. skip", "ready", sts.Status.ReadyReplicas)
 		return nil
 	}
 
@@ -1046,14 +1045,14 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	l := log.FromContext(ctx).WithName("reconcileGroupReplication")
+	log := logf.FromContext(ctx).WithName("reconcileGroupReplication")
 
 	if cr.Spec.MySQL.ClusterType != apiv1alpha1.ClusterTypeGR {
 		return nil
 	}
 
 	if cr.Status.MySQL.Ready == 0 || cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
-		l.V(1).Info("Waiting for MySQL pods to be ready")
+		log.V(1).Info("Waiting for MySQL pods to be ready")
 		return nil
 	}
 
@@ -1068,12 +1067,12 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1alpha1.ConditionInnoDBClusterBootstrapped)
 	if cond == nil || cond.Status == metav1.ConditionFalse {
 		if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
-			l.Info("Creating InnoDB cluster")
+			log.Info("Creating InnoDB cluster")
 			err = mysh.CreateCluster(ctx, cr.InnoDBClusterName())
 			if err != nil {
 				return errors.Wrapf(err, "create cluster %s", cr.InnoDBClusterName())
 			}
-			l.Info("Created InnoDB Cluster", "cluster", cr.InnoDBClusterName())
+			log.Info("Created InnoDB Cluster", "cluster", cr.InnoDBClusterName())
 		}
 
 		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
@@ -1099,7 +1098,7 @@ func reconcileReplicationSemiSync(
 	cl client.Reader,
 	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
-	l := log.FromContext(ctx).WithName("reconcileReplicationSemiSync")
+	log := logf.FromContext(ctx).WithName("reconcileReplicationSemiSync")
 
 	primary, err := getPrimaryFromOrchestrator(ctx, cr)
 	if err != nil {
@@ -1107,7 +1106,7 @@ func reconcileReplicationSemiSync(
 	}
 	primaryHost := primary.Key.Hostname
 
-	l.V(1).Info(fmt.Sprintf("use primary host: %v", primaryHost), "clusterPrimary", primary)
+	log.V(1).Info("Use primary host", "primaryHost", primaryHost, "clusterPrimary", primary)
 
 	operatorPass, err := k8s.UserPassword(ctx, cl, cr, apiv1alpha1.UserOperator)
 	if err != nil {
@@ -1126,18 +1125,18 @@ func reconcileReplicationSemiSync(
 	if err := db.SetSemiSyncSource(cr.MySQLSpec().SizeSemiSync.IntValue() > 0); err != nil {
 		return errors.Wrapf(err, "set semi-sync source on %s", primaryHost)
 	}
-	l.V(1).Info(fmt.Sprintf("set semi-sync source on %s", primaryHost))
+	log.V(1).Info("Set semi-sync source", "host", primaryHost)
 
 	if err := db.SetSemiSyncSize(cr.MySQLSpec().SizeSemiSync.IntValue()); err != nil {
 		return errors.Wrapf(err, "set semi-sync size on %s", primaryHost)
 	}
-	l.V(1).Info(fmt.Sprintf("set semi-sync size on %s", primaryHost))
+	log.V(1).Info("Set semi-sync size", "host", primaryHost)
 
 	return nil
 }
 
 func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Context, exposer Exposer) error {
-	l := log.FromContext(ctx).WithName("cleanupOutdatedServices")
+	log := logf.FromContext(ctx).WithName("cleanupOutdatedServices")
 
 	size := int(exposer.Size())
 	svcNames := make(map[string]struct{}, size)
@@ -1165,7 +1164,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 			continue
 		}
 
-		l.Info("Deleting outdated service", "service", svc.Name)
+		log.Info("Deleting outdated service", "service", svc.Name)
 		if err := r.Client.Delete(ctx, &svc); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrapf(err, "delete Service/%s", svc.Name)
 		}
@@ -1189,7 +1188,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedStatefulSets(ctx context.C
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	l := log.FromContext(ctx).WithName("reconcileMySQLRouter")
+	log := logf.FromContext(ctx).WithName("reconcileMySQLRouter")
 
 	if cr.Spec.MySQL.ClusterType != apiv1alpha1.ClusterTypeGR {
 		return nil
@@ -1197,7 +1196,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 
 	if cr.Spec.Proxy.Router.Size > 0 {
 		if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
-			l.V(1).Info("Waiting for MySQL pods to be ready")
+			log.V(1).Info("Waiting for MySQL pods to be ready")
 			return nil
 		}
 
@@ -1209,7 +1208,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
 		mysh := mysqlsh.New(k8sexec.New(), fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri))
 		if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
-			l.V(1).Info("Waiting for InnoDB Cluster", "cluster", cr.Name)
+			log.V(1).Info("Waiting for InnoDB Cluster", "cluster", cr.Name)
 			return nil
 		}
 	}
@@ -1245,7 +1244,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 }
 
 func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
-	l := log.FromContext(ctx).WithName("GRStatus")
+	log := logf.FromContext(ctx).WithName("GRStatus")
 	if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
 		return false, nil
 	}
@@ -1268,7 +1267,7 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 
 	for addr, member := range status.DefaultReplicaSet.Topology {
 		for _, err := range member.InstanceErrors {
-			l.WithName(addr).Info(err)
+			log.WithName(addr).Info(err)
 		}
 	}
 
@@ -1276,7 +1275,7 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 	case innodbcluster.ClusterStatusOK:
 		return true, nil
 	case innodbcluster.ClusterStatusOKPartial, innodbcluster.ClusterStatusOKNoTolerance, innodbcluster.ClusterStatusOKNoTolerancePartial:
-		l.Info(fmt.Sprintf("%s: %s", status.DefaultReplicaSet.Status, status.DefaultReplicaSet.StatusText))
+		log.Info("GR status", "status", status.DefaultReplicaSet.Status, "statusText", status.DefaultReplicaSet.StatusText)
 		return true, nil
 	default:
 		return false, nil
@@ -1292,7 +1291,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
 		return writeStatus(ctx, r.Client, nn, cr.Status)
 	}
-	l := log.FromContext(ctx).WithName("reconcileCRStatus")
+	log := logf.FromContext(ctx).WithName("reconcileCRStatus")
 
 	mysqlStatus, err := appStatus(ctx, r.Client, cr.MySQLSpec().Size, mysql.MatchLabels(cr), cr.Status.MySQL.Version)
 	if err != nil {
@@ -1362,7 +1361,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		cr.Status.State = apiv1alpha1.StateInitializing
 	}
 
-	l.V(1).Info(
+	log.V(1).Info(
 		"Writing CR status",
 		"mysql", cr.Status.MySQL,
 		"orchestrator", cr.Status.Orchestrator,
@@ -1524,7 +1523,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryFromGR(ctx context.Context, cr 
 }
 
 func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
-	l := log.FromContext(ctx).WithName("getPrimaryHost")
+	log := logf.FromContext(ctx).WithName("getPrimaryHost")
 
 	if cr.Spec.MySQL.IsGR() {
 		return r.getPrimaryFromGR(ctx, cr)
@@ -1534,13 +1533,13 @@ func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cr *a
 	if err != nil {
 		return "", errors.Wrap(err, "get cluster primary")
 	}
-	l.V(1).Info("Cluster primary from orchestrator", "primary", primary)
+	log.V(1).Info("Cluster primary from orchestrator", "primary", primary)
 
 	return primary.Key.Hostname, nil
 }
 
 func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	l := log.FromContext(ctx).WithName("stopAsyncReplication")
+	log := logf.FromContext(ctx).WithName("stopAsyncReplication")
 
 	orcHost := orchestrator.APIHost(cr)
 	primary, err := getPrimaryFromOrchestrator(ctx, cr)
@@ -1590,7 +1589,7 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 				}
 			}
 
-			l.V(1).Info("Stopped replication on replica", "hostname", hostname, "port", port)
+			log.V(1).Info("Stopped replication on replica", "hostname", hostname, "port", port)
 
 			return nil
 		})
@@ -1600,7 +1599,7 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 }
 
 func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, replicaPass string) error {
-	l := log.FromContext(ctx).WithName("startAsyncReplication")
+	log := logf.FromContext(ctx).WithName("startAsyncReplication")
 
 	orcHost := orchestrator.APIHost(cr)
 	primary, err := getPrimaryFromOrchestrator(ctx, cr)
@@ -1629,7 +1628,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 			}
 			defer db.Close()
 
-			l.V(1).Info("Change replication source", "primary", primary.Key.Hostname, "replica", hostname)
+			log.V(1).Info("Change replication source", "primary", primary.Key.Hostname, "replica", hostname)
 			if err := db.ChangeReplicationSource(primary.Key.Hostname, replicaPass, primary.Key.Port); err != nil {
 				return errors.Wrapf(err, "change replication source on %s", hostname)
 			}
@@ -1638,7 +1637,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 				return errors.Wrapf(err, "start replication on %s", hostname)
 			}
 
-			l.V(1).Info("Started replication on replica", "hostname", hostname, "port", port)
+			log.V(1).Info("Started replication on replica", "hostname", hostname, "port", port)
 
 			return nil
 		})
@@ -1648,7 +1647,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 }
 
 func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, replicaPass string) error {
-	l := log.FromContext(ctx).WithName("restartGroupReplication")
+	log := logf.FromContext(ctx).WithName("restartGroupReplication")
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 	if err != nil {
@@ -1677,17 +1676,17 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 		if err := db.StopGroupReplication(); err != nil {
 			return errors.Wrapf(err, "stop group replication on %s", host)
 		}
-		l.V(1).Info("Stopped group replication", "hostname", host)
+		log.V(1).Info("Stopped group replication", "hostname", host)
 
 		if err := db.ChangeGroupReplicationPassword(replicaPass); err != nil {
 			return errors.Wrapf(err, "change group replication password on %s", host)
 		}
-		l.V(1).Info("Changed group replication password", "hostname", host)
+		log.V(1).Info("Changed group replication password", "hostname", host)
 
 		if err := db.StartGroupReplication(replicaPass); err != nil {
 			return errors.Wrapf(err, "start group replication on %s", host)
 		}
-		l.V(1).Info("Started group replication", "hostname", host)
+		log.V(1).Info("Started group replication", "hostname", host)
 	}
 
 	primary, err := db.GetGroupReplicationPrimary()
@@ -1704,17 +1703,17 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 	if err := db.StopGroupReplication(); err != nil {
 		return errors.Wrapf(err, "stop group replication on %s", primary)
 	}
-	l.V(1).Info("Stopped group replication", "hostname", primary)
+	log.V(1).Info("Stopped group replication", "hostname", primary)
 
 	if err := db.ChangeGroupReplicationPassword(replicaPass); err != nil {
 		return errors.Wrapf(err, "change group replication password on %s", primary)
 	}
-	l.V(1).Info("Changed group replication password", "hostname", primary)
+	log.V(1).Info("Changed group replication password", "hostname", primary)
 
 	if err := db.StartGroupReplication(replicaPass); err != nil {
 		return errors.Wrapf(err, "start group replication on %s", primary)
 	}
-	l.V(1).Info("Started group replication", "hostname", primary)
+	log.V(1).Info("Started group replication", "hostname", primary)
 
 	return nil
 }

@@ -33,7 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -416,7 +416,7 @@ func (cr *PerconaServerMySQL) SetVersion() {
 }
 
 func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersion *platform.ServerVersion) error {
-	l := log.FromContext(ctx).WithName("CheckNSetDefaults")
+	log := logf.FromContext(ctx).WithName("CheckNSetDefaults")
 	if len(cr.Spec.MySQL.ClusterType) == 0 {
 		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
 	}
@@ -559,7 +559,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 			}
 		default:
 			cr.Spec.Orchestrator.Enabled = true
-			l.Info("orchestrator can't be disabled on an existing cluster")
+			log.Info("orchestrator can't be disabled on an existing cluster")
 		}
 	}
 
