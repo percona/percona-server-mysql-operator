@@ -305,8 +305,9 @@ pipeline {
                                     --rm \
                                     -v $WORKSPACE/src/github.com/percona/percona-server-mysql-operator:/go/src/github.com/percona/percona-server-mysql-operator \
                                     -w /go/src/github.com/percona/percona-server-mysql-operator \
+                                    -e GOFLAGS='-buildvcs=false' \
                                     -e GO111MODULE=on \
-                                    golang:1.17 sh -c '
+                                    golang:1.19 sh -c '
                                         go install github.com/google/go-licenses@latest;
                                         /go/bin/go-licenses csv github.com/percona/percona-server-mysql-operator/cmd/manager \
                                             | cut -d , -f 3 \
@@ -328,6 +329,7 @@ pipeline {
                                     --rm \
                                     -v $WORKSPACE/src/github.com/percona/percona-server-mysql-operator:/go/src/github.com/percona/percona-server-mysql-operator \
                                     -w /go/src/github.com/percona/percona-server-mysql-operator \
+                                    -e GOFLAGS='-buildvcs=false' \
                                     -e GO111MODULE=on \
                                     golang:1.19 sh -c 'go build -v -o percona-server-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
                             "

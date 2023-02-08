@@ -10,6 +10,11 @@ commands:
 
       get_cr \
         | yq eval '.spec.mysql.clusterType="async"' - \
+        | yq eval '.spec.mysql.size=3' - \
+        | yq eval '.spec.proxy.haproxy.enabled=true' - \
+        | yq eval '.spec.proxy.haproxy.size=3' - \
+        | yq eval '.spec.orchestrator.enabled=true' - \
+        | yq eval '.spec.orchestrator.size=3' - \
         | yq eval '.spec.backup.storages.minio.type="s3"' - \
         | yq eval '.spec.backup.storages.minio.s3.bucket="operator-testing"' - \
         | yq eval '.spec.backup.storages.minio.s3.credentialsSecret="minio-secret"' - \

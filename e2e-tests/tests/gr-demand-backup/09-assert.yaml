@@ -15,6 +15,7 @@ status:
     ready: 3
     size: 3
     state: ready
+  state: ready
 ---
 kind: PerconaServerMySQLRestore
 apiVersion: ps.percona.com/v1alpha1

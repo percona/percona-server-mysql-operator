@@ -12,6 +12,7 @@ commands:
         | yq eval '.spec.mysql.size=5' - \
         | yq eval '.spec.mysql.sizeSemiSync=4' - \
         | yq eval '.spec.orchestrator.affinity.antiAffinityTopologyKey="none"' - \
+        | yq eval '.spec.orchestrator.enabled=true' - \
         | yq eval '.spec.orchestrator.size=5' - \
         | kubectl -n "${NAMESPACE}" apply -f -
 
