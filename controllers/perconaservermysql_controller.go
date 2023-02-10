@@ -1783,13 +1783,13 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 	hosts := []string{
 		fmt.Sprintf("*.%s-mysql", cr.Name),
 		fmt.Sprintf("*.%s-mysql.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-mysql.%s.svc.cluster.local", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-mysql.%s.svc", cr.Name, cr.Namespace),
 		fmt.Sprintf("*.%s-orchestrator", cr.Name),
 		fmt.Sprintf("*.%s-orchestrator.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-orchestrator.%s.svc.cluster.local", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-orchestrator.%s.svc", cr.Name, cr.Namespace),
 		fmt.Sprintf("*.%s-router", cr.Name),
 		fmt.Sprintf("*.%s-router.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-router.%s.svc.cluster.local", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-router.%s.svc", cr.Name, cr.Namespace),
 	}
 	kubeCert := &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
