@@ -67,8 +67,8 @@ deploy_minio() {
 	retry 10 60 helm install minio-service \
 		-n "${NAMESPACE}" \
 		--version 8.0.5 \
-		--set accessKey=some-access-key \
-		--set secretKey=some-secret-key \
+		--set accessKey='some-access$\\n"-key' \
+		--set secretKey='some-$\\n"secret-key' \
 		--set service.type=ClusterIP \
 		--set configPathmc=/tmp/.minio/ \
 		--set persistence.size=2G \
@@ -81,7 +81,7 @@ deploy_minio() {
 
 	# create bucket
 	kubectl -n "${NAMESPACE}" run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-		bash -c 'AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
+		bash -c 'AWS_ACCESS_KEY_ID='"'"'some-access$\n"-key'"'"' AWS_SECRET_ACCESS_KEY='"'"'some-$\n"secret-key'"'"' AWS_DEFAULT_REGION=us-east-1 \
         /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing'
 }
 
