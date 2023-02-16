@@ -8,12 +8,13 @@ commands:
       source ../../functions
 
       get_cr \
-      	| yq eval '.spec.mysql.affinity.antiAffinityTopologyKey="none"' - \
-      	| yq eval '.spec.mysql.size=3' - \
-      	| yq eval '.spec.mysql.sizeSemiSync=1' - \
-      	| yq eval '.spec.orchestrator.affinity.antiAffinityTopologyKey="none"' - \
-      	| yq eval '.spec.orchestrator.size=3' - \
-      	| kubectl -n "${NAMESPACE}" apply -f -
+        | yq eval '.spec.mysql.affinity.antiAffinityTopologyKey="none"' - \
+        | yq eval '.spec.mysql.size=3' - \
+        | yq eval '.spec.mysql.sizeSemiSync=1' - \
+        | yq eval '.spec.orchestrator.affinity.antiAffinityTopologyKey="none"' - \
+        | yq eval '.spec.orchestrator.enabled=true' - \
+        | yq eval '.spec.orchestrator.size=3' - \
+        | kubectl -n "${NAMESPACE}" apply -f -
 
       wait_cluster_consistency "${test_name}" "3" "3"
     timeout: 120

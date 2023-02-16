@@ -26,6 +26,18 @@ status:
   updatedReplicas: 3
   collisionCount: 0
 ---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: demand-backup-haproxy
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
@@ -33,6 +45,10 @@ metadata:
   finalizers:
     - delete-mysql-pods-in-order
 status:
+  haproxy:
+    ready: 3
+    size: 3
+    state: ready
   mysql:
     ready: 3
     size: 3
@@ -41,3 +57,4 @@ status:
     ready: 3
     size: 3
     state: ready
+  state: ready

@@ -18,7 +18,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -170,7 +169,7 @@ func getLogEncoder(log logr.Logger) zapcore.Encoder {
 
 	useJson, err := strconv.ParseBool(s)
 	if err != nil {
-		log.Info(fmt.Sprintf("can't parse LOG_STRUCTURED env var: %s, using console logger", s))
+		log.Info("Can't parse LOG_STRUCTURED env var, using console logger", "envVar", s)
 		return consoleEnc
 	}
 	if !useJson {
@@ -194,7 +193,7 @@ func getLogLevel(log logr.Logger) zapcore.LevelEnabler {
 	case "ERROR":
 		return zapcore.ErrorLevel
 	default:
-		log.Info(fmt.Sprintf("unsupported log level: %s, using INFO level", l))
+		log.Info("Unsupported log level, using INFO", "level", l)
 		return zapcore.InfoLevel
 	}
 }

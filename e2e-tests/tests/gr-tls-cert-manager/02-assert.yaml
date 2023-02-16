@@ -1,0 +1,70 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: gr-tls-cert-manager-ca-cert
+spec:
+  commonName: gr-tls-cert-manager-ca
+  duration: 8760h0m0s
+  isCA: true
+  issuerRef:
+    kind: Issuer
+    name: gr-tls-cert-manager-pso-ca-issuer
+  renewBefore: 730h0m0s
+  secretName: gr-tls-cert-manager-ca-cert
+status:
+  conditions:
+    - message: Certificate is up to date and has not expired
+      observedGeneration: 1
+      reason: Ready
+      status: 'True'
+      type: Ready
+  revision: 1
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: gr-tls-cert-manager-ssl
+spec:
+  issuerRef:
+    kind: Issuer
+    name: gr-tls-cert-manager-pso-issuer
+  secretName: test-ssl
+status:
+  conditions:
+    - message: Certificate is up to date and has not expired
+      observedGeneration: 1
+      reason: Ready
+      status: 'True'
+      type: Ready
+  revision: 1
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  name: gr-tls-cert-manager-mysql
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: gr-tls-cert-manager-router
+  labels:
+    app.kubernetes.io/component: router
+    app.kubernetes.io/instance: gr-tls-cert-manager
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+status:
+  observedGeneration: 1
+  replicas: 3
+  updatedReplicas: 3
+  readyReplicas: 3
+  availableReplicas: 3

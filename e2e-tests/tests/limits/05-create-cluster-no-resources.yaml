@@ -9,6 +9,7 @@ commands:
 
       suffix="no-resources"
       get_cr "${suffix}" \
+        | yq eval '.spec.mysql.clusterType="async"' - \
         | yq eval 'del(.spec."*".resources.requests)' - \
         | yq eval 'del(.spec."*".resources.limits)' - \
       	| kubectl -n "${NAMESPACE}" apply -f -
