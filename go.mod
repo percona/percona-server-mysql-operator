@@ -20,7 +20,7 @@ require (
 	github.com/sjmudd/stopwatch v0.0.0-20170613150411-f380bf8a9be1
 	go.uber.org/zap v1.24.0
 	golang.org/x/sync v0.0.0-20220923202941-7f9b1623fab7
-	k8s.io/api v0.25.4
+	k8s.io/api v0.26.1
 	k8s.io/apimachinery v0.26.1
 	k8s.io/client-go v0.25.4
 	k8s.io/utils v0.0.0-20221107191617-1a15be271d1d
