@@ -88,6 +88,46 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			},
 			stateDesc: "spec.backup stanza not found in PerconaServerMySQL CustomResource or backup is disabled",
 		},
+		{
+			name: "Test without storage",
+			cr: &apiv1alpha1.PerconaServerMySQLBackup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      backupName,
+					Namespace: namespace,
+				},
+				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
+					ClusterName: clusterName,
+					StorageName: storageName,
+				},
+			},
+			cluster: &apiv1alpha1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: namespace,
+				},
+				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+					MySQL: apiv1alpha1.MySQLSpec{
+						PodSpec: apiv1alpha1.PodSpec{
+							VolumeSpec: &apiv1alpha1.VolumeSpec{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+									Resources: corev1.ResourceRequirements{
+										Requests: map[corev1.ResourceName]resource.Quantity{
+											corev1.ResourceStorage: q,
+										},
+									},
+								},
+							},
+						},
+					},
+					Backup: &apiv1alpha1.BackupSpec{
+						Image:    "some-image",
+						Enabled:  true,
+						Storages: make(map[string]*apiv1alpha1.BackupStorageSpec),
+					},
+				},
+			},
+			stateDesc: fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", storageName),
+		},
 	}
 
 	scheme := runtime.NewScheme()
