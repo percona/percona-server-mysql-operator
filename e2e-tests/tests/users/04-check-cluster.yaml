@@ -8,8 +8,8 @@ commands:
 
       source ../../functions
 
-      sleep 15
-      wait_cluster_consistency "${test_name}" "3"
+      sleep 20 # wait for cluster status to change to initializing
+      wait_cluster_consistency "${test_name}" "3" "3"
       mysql_args="-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password_updated"
       users=($(get_mysql_users "${mysql_args}"))
 

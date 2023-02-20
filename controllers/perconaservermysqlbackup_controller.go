@@ -37,7 +37,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -75,7 +75,7 @@ func (r *PerconaServerMySQLBackupReconciler) SetupWithManager(mgr ctrl.Manager) 
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.9.2/pkg/reconcile
 func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	l := log.FromContext(ctx).WithName("PerconaServerMySQLBackup")
+	log := logf.FromContext(ctx).WithName("PerconaServerMySQLBackup")
 
 	rr := ctrl.Result{RequeueAfter: 5 * time.Second}
 
@@ -106,7 +106,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			}
 
 			cr.Status = status
-			l.Info("Updating status", "state", cr.Status.State)
+			log.Info("Updating status", "state", cr.Status.State)
 			if err := r.Client.Status().Update(ctx, cr); err != nil {
 				return errors.Wrapf(err, "update %v", req.NamespacedName.String())
 			}
@@ -114,7 +114,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return nil
 		})
 		if err != nil {
-			l.Error(err, "failed to update status")
+			log.Error(err, "failed to update status")
 		}
 	}()
 
@@ -154,7 +154,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	if cluster.Status.MySQL.State != apiv1alpha1.StateReady {
-		l.Info("Cluster is not ready", "cluster", cr.Name)
+		log.Info("Cluster is not ready", "cluster", cr.Name)
 		return rr, nil
 	}
 
@@ -166,7 +166,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	if k8serrors.IsNotFound(err) {
-		l.Info("Creating backup job", "jobName", nn.Name)
+		log.Info("Creating backup job", "jobName", nn.Name)
 
 		initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
 		if err != nil {
@@ -319,7 +319,7 @@ func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creatio
 }
 
 func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) (string, error) {
-	l := log.FromContext(ctx).WithName("getBackupSource")
+	log := logf.FromContext(ctx).WithName("getBackupSource")
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cluster, apiv1alpha1.UserOperator)
 	if err != nil {
@@ -334,7 +334,7 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 	var source string
 	if len(top.Replicas) < 1 {
 		source = top.Primary
-		l.Info("no replicas found, using primary as the backup source", "primary", top.Primary)
+		log.Info("no replicas found, using primary as the backup source", "primary", top.Primary)
 	} else {
 		source = top.Replicas[0]
 	}
@@ -347,11 +347,11 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 	if cr.DeletionTimestamp == nil || cr.Status.State == apiv1alpha1.BackupStarting || cr.Status.State == apiv1alpha1.BackupRunning {
 		return
 	}
-	l := log.FromContext(ctx).WithName("checkFinalizers")
+	log := logf.FromContext(ctx).WithName("checkFinalizers")
 
 	defer func() {
 		if err := r.Update(ctx, cr); err != nil {
-			l.Error(err, "failed to update finalizers for backup", "backup", cr.Name)
+			log.Error(err, "failed to update finalizers for backup", "backup", cr.Name)
 		}
 	}()
 
@@ -374,7 +374,7 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 			finalizers.Insert(finalizer)
 		}
 		if err != nil {
-			l.Error(err, "failed to run finalizer "+finalizer)
+			log.Error(err, "failed to run finalizer "+finalizer)
 			finalizers.Insert(finalizer)
 		}
 	}

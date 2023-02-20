@@ -8,4 +8,6 @@ commands:
 
       source ../../functions
 
-      get_cr | kubectl -n "${NAMESPACE}" apply -f -
+      get_cr \
+        | yq eval '.spec.mysql.clusterType="async"' - \
+        | kubectl -n "${NAMESPACE}" apply -f -
