@@ -483,6 +483,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		cr.Spec.MySQL.ReadinessProbe.TimeoutSeconds = 3
 	}
 
+	if cr.Spec.Proxy.Router == nil {
+		cr.Spec.Proxy.Router = new(MySQLRouterSpec)
+	}
+
 	if cr.Spec.Proxy.Router.ReadinessProbe.PeriodSeconds == 0 {
 		cr.Spec.Proxy.Router.ReadinessProbe.PeriodSeconds = 5
 	}
@@ -543,6 +547,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		if cr.Spec.Proxy.Router.Size < MinSafeProxySize {
 			cr.Spec.Proxy.Router.Size = MinSafeProxySize
 		}
+	}
+
+	if cr.Spec.Proxy.HAProxy == nil {
+		cr.Spec.Proxy.HAProxy = new(HAProxySpec)
 	}
 
 	if cr.HAProxyEnabled() && cr.Spec.MySQL.ClusterType != ClusterTypeGR && !cr.Spec.AllowUnsafeConfig {
