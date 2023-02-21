@@ -22,6 +22,7 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -260,8 +261,10 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
+	log := logf.FromContext(ctx).WithName("doReconcile")
+
 	if err := r.reconcileVersions(ctx, cr); err != nil {
-		return errors.Wrap(err, "reconcile versions")
+		log.Info("reconcileVersions", "error", err.Error())
 	}
 	if err := r.ensureUserSecrets(ctx, cr); err != nil {
 		return errors.Wrap(err, "users secret")
@@ -297,19 +300,41 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	return nil
 }
 
+func telemetryEnabled() bool {
+	value, ok := os.LookupEnv("DISABLE_TELEMETRY")
+	if ok {
+		return value != "true"
+	}
+	return true
+}
+
+func versionUpgradeEnabled(cr *apiv1alpha1.PerconaServerMySQL) bool {
+	return cr.Spec.UpgradeOptions.Apply != "" &&
+		cr.Spec.UpgradeOptions.Apply != apiv1alpha1.UpgradeStrategyDisabled &&
+		cr.Spec.UpgradeOptions.Apply != apiv1alpha1.UpgradeStrategyNever
+}
+
 func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	if cr.Spec.UpgradeOptions.Apply == "" ||
-		cr.Spec.UpgradeOptions.Apply == apiv1alpha1.UpgradeStrategyDisabled ||
-		cr.Spec.UpgradeOptions.Apply == apiv1alpha1.UpgradeStrategyNever {
+	if !(versionUpgradeEnabled(cr) || telemetryEnabled()) {
 		return nil
 	}
 
 	log := logf.FromContext(ctx).WithName("reconcileVersions")
 
-	version, err := vs.GetVersion(ctx, cr, r.ServerVersion)
-	if err != nil {
-		log.Info("Failed to get versions, using the default ones", "error", err)
+	if telemetryEnabled() && (!versionUpgradeEnabled(cr) || cr.Spec.UpgradeOptions.VersionServiceEndpoint != vs.GetDefaultVersionServiceEndpoint()) {
+		_, err := vs.GetVersion(ctx, cr, vs.GetDefaultVersionServiceEndpoint(), r.ServerVersion)
+		if err != nil {
+			log.Error(err, "failed to send telemetry to "+vs.GetDefaultVersionServiceEndpoint())
+		}
+	}
+
+	if !versionUpgradeEnabled(cr) {
 		return nil
+	}
+
+	version, err := vs.GetVersion(ctx, cr, cr.Spec.UpgradeOptions.VersionServiceEndpoint, r.ServerVersion)
+	if err != nil {
+		return errors.Wrap(err, "failed to get versions, using the default ones")
 	}
 
 	patch := client.MergeFrom(cr.DeepCopy())
@@ -356,8 +381,7 @@ func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr
 
 	err = r.Patch(ctx, cr.DeepCopy(), patch)
 	if err != nil {
-		log.Info("Failed to update CR, using the default version", "error", err)
-		return nil
+		return errors.Wrap(err, "failed to update CR, using the default version")
 	}
 
 	cr.Status.MySQL.Version = version.PSVersion

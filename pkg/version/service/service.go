@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/pkg/errors"
@@ -20,12 +21,15 @@ const (
 	defaultEndpoint = "https://check.percona.com"
 )
 
-func GetVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.ServerVersion) (DepVersion, error) {
-	endpoint := cr.Spec.UpgradeOptions.VersionServiceEndpoint
-	if endpoint == "" {
-		endpoint = defaultEndpoint
+func GetDefaultVersionServiceEndpoint() string {
+	if endpoint := os.Getenv("PERCONA_VS_FALLBACK_URI"); len(endpoint) > 0 {
+		return endpoint
 	}
 
+	return defaultEndpoint
+}
+
+func GetVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, endpoint string, serverVersion *platform.ServerVersion) (DepVersion, error) {
 	requestURL, err := url.Parse(endpoint)
 	if err != nil {
 		return DepVersion{}, errors.Wrap(err, "url parse")
@@ -47,7 +51,6 @@ func GetVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, serverV
 		CustomResourceUID: &crUID,
 		DatabaseVersion:   &cr.Status.MySQL.Version,
 		KubeVersion:       &serverVersion.Info.GitVersion,
-		NamespaceUID:      new(string),
 		OperatorVersion:   cr.Spec.CRVersion,
 		Platform:          &platformStr,
 		Product:           productName,
@@ -59,6 +62,10 @@ func GetVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, serverV
 	resp, err := client.VersionService.VersionServiceApply(applyParams)
 	if err != nil {
 		return DepVersion{}, errors.Wrap(err, "version service apply")
+	}
+
+	if resp.Payload == nil || len(resp.Payload.Versions) == 0 {
+		return DepVersion{}, nil
 	}
 
 	matrix := resp.Payload.Versions[0].Matrix
