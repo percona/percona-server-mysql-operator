@@ -1194,6 +1194,11 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		return nil
 	}
 
+	configHash, err := r.reconcileMySQLRouterConfiguration(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "reconcile MySQL config")
+	}
+
 	if cr.Spec.Proxy.Router.Size > 0 {
 		if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
 			log.V(1).Info("Waiting for MySQL pods to be ready")
@@ -1218,11 +1223,60 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		return errors.Wrap(err, "get init image")
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Deployment(cr, initImage), r.Scheme); err != nil {
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Deployment(cr, initImage, configHash), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile Deployment")
 	}
 
 	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileMySQLRouterConfiguration(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
+	log := logf.FromContext(ctx).WithName("reconcileMySQLRouterConfiguration")
+
+	cmName := router.Name(cr)
+	nn := types.NamespacedName{Name: cmName, Namespace: cr.Namespace}
+
+	currCm := &corev1.ConfigMap{}
+	if err := r.Client.Get(ctx, nn, currCm); err != nil && !k8serrors.IsNotFound(err) {
+		return "", errors.Wrapf(err, "get ConfigMap/%s", cmName)
+	}
+
+	// Cleanup if user removed the configuration from CR
+	if cr.Spec.Proxy.Router.Configuration == "" {
+		exists, err := k8s.ObjectExists(ctx, r.Client, nn, currCm)
+		if err != nil {
+			return "", errors.Wrapf(err, "check if ConfigMap/%s exists", cmName)
+		}
+
+		if !exists || !metav1.IsControlledBy(currCm, cr) {
+			return "", nil
+		}
+
+		if err := r.Client.Delete(ctx, currCm); err != nil {
+			return "", errors.Wrapf(err, "delete ConfigMaps/%s", cmName)
+		}
+
+		log.Info("ConfigMap deleted", "name", cmName)
+
+		return "", nil
+	}
+
+	cm := k8s.ConfigMap(cmName, cr.Namespace, router.CustomConfigKey, cr.Spec.Proxy.Router.Configuration)
+	if !reflect.DeepEqual(currCm.Data, cm.Data) {
+		if err := k8s.EnsureObject(ctx, r.Client, cr, cm, r.Scheme); err != nil {
+			return "", errors.Wrapf(err, "ensure ConfigMap/%s", cmName)
+		}
+
+		log.Info("ConfigMap updated", "name", cmName, "data", cm.Data)
+	}
+
+	d := struct{ Data map[string]string }{Data: cm.Data}
+	data, err := json.Marshal(d)
+	if err != nil {
+		return "", errors.Wrap(err, "marshal configmap data to json")
+	}
+
+	return fmt.Sprintf("%x", md5.Sum(data)), nil
 }
 
 func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {

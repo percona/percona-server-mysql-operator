@@ -13,11 +13,14 @@ import (
 )
 
 const (
-	componentName   = "router"
-	credsVolumeName = "users"
-	credsMountPath  = "/etc/mysql/mysql-users-secret"
-	tlsVolumeName   = "tls"
-	tlsMountPath    = "/etc/mysql/mysql-tls-secret"
+	componentName    = "router"
+	credsVolumeName  = "users"
+	credsMountPath   = "/etc/mysql/mysql-users-secret"
+	tlsVolumeName    = "tls"
+	tlsMountPath     = "/etc/mysql/mysql-tls-secret"
+	configVolumeName = "config"
+	configMountPath  = "/etc/mysql/config"
+	CustomConfigKey  = "mysqlrouter.conf"
 )
 
 const (
@@ -118,10 +121,13 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
-func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.Deployment {
+func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string) *appsv1.Deployment {
 	labels := MatchLabels(cr)
 	spec := cr.Spec.Proxy.Router
 	replicas := spec.Size
+
+	annotations := make(map[string]string)
+	annotations["percona.com/configuration-hash"] = configHash // TODO: set this only if there is a hash
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
@@ -183,6 +189,29 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.De
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
 									SecretName: cr.Spec.SSLSecretName,
+								},
+							},
+						},
+						{
+							Name: configVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								Projected: &corev1.ProjectedVolumeSource{
+									Sources: []corev1.VolumeProjection{
+										{
+											ConfigMap: &corev1.ConfigMapProjection{
+												LocalObjectReference: corev1.LocalObjectReference{
+													Name: Name(cr),
+												},
+												Items: []corev1.KeyToPath{
+													{
+														Key:  CustomConfigKey,
+														Path: "/aaaaa/mysqlrouter.conf",
+													},
+												},
+												Optional: new(bool),
+											},
+										},
+									},
 								},
 							},
 						},
@@ -249,6 +278,10 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			{
 				Name:      tlsVolumeName,
 				MountPath: tlsMountPath,
+			},
+			{
+				Name:      configVolumeName,
+				MountPath: configMountPath,
 			},
 		},
 		Command:                  []string{"/opt/percona/router-entrypoint.sh"},

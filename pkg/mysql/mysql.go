@@ -116,7 +116,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 	t := true
 
 	annotations := make(map[string]string)
-	annotations["percona.com/configuration-hash"] = configHash
+	annotations["percona.com/configuration-hash"] = configHash // TODO: set this only if there is a hash
 
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
