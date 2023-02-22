@@ -205,7 +205,7 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string
 												Items: []corev1.KeyToPath{
 													{
 														Key:  CustomConfigKey,
-														Path: "/aaaaa/mysqlrouter.conf",
+														Path: "aaaaa/mysqlrouter.conf",
 													},
 												},
 												Optional: new(bool),
