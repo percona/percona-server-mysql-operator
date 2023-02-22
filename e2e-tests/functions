@@ -12,6 +12,7 @@ deploy_operator() {
 	yq eval \
 		"$(printf 'select(documentIndex==1).spec.template.spec.containers[0].image="%s"' "${IMAGE}")" \
 		"${DEPLOY_DIR}/operator.yaml" \
+		| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "true"' \
 		| kubectl -n "${NAMESPACE}" apply -f -
 }
 
