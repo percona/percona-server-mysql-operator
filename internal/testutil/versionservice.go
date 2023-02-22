@@ -70,7 +70,7 @@ func (vs *fakeVS) Apply(_ context.Context, req *pbVersion.ApplyRequest) (*pbVers
 	}
 
 	if !reflect.DeepEqual(have, want) {
-		return nil, errors.Errorf("Have: %v; Want: %v", *have, *want)
+		return nil, errors.Errorf("Have: %v; Want: %v", have, want)
 	}
 
 	return &pbVersion.VersionResponse{
