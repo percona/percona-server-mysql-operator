@@ -125,6 +125,7 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string
 	labels := MatchLabels(cr)
 	spec := cr.Spec.Proxy.Router
 	replicas := spec.Size
+	t := true
 
 	annotations := make(map[string]string)
 	annotations["percona.com/configuration-hash"] = configHash // TODO: set this only if there is a hash
@@ -205,10 +206,10 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string
 												Items: []corev1.KeyToPath{
 													{
 														Key:  CustomConfigKey,
-														Path: "aaaaa/mysqlrouter.conf",
+														Path: "mysqlrouter.conf",
 													},
 												},
-												Optional: new(bool),
+												Optional: &t,
 											},
 										},
 									},
