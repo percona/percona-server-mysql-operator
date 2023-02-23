@@ -745,8 +745,8 @@ func (cr *PerconaServerMySQL) PMMEnabled(secret *corev1.Secret) bool {
 
 func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	if secret.Data != nil {
-		_, ok := secret.Data[string(UserPMMServerKey)]
-		return ok
+		v, ok := secret.Data[string(UserPMMServerKey)]
+		return ok && len(v) > 0
 	}
 	return false
 }
