@@ -128,7 +128,9 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string
 	t := true
 
 	annotations := make(map[string]string)
-	annotations["percona.com/configuration-hash"] = configHash // TODO: set this only if there is a hash
+	if configHash != "" {
+		annotations["percona.com/configuration-hash"] = configHash
+	}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
@@ -147,7 +149,8 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
