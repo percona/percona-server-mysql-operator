@@ -150,11 +150,15 @@ func (vs *fakeVS) Start(t *testing.T) error {
 		Addr:    fmt.Sprintf("%s:%d", vs.addr, vs.gwPort),
 		Handler: gwmux,
 	}
-
+	gwLis, err := net.Listen("tcp", gwServer.Addr)
+	if err != nil {
+		return errors.Wrap(err, "failed to listen gateway")
+	}
 	go func() {
-		if err := gwServer.ListenAndServe(); err != nil {
+		if err := gwServer.Serve(gwLis); err != nil {
 			t.Error("failed to serve gRPC-Gateway", err)
 		}
 	}()
+
 	return nil
 }
