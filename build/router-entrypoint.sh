@@ -22,4 +22,13 @@ echo ${OPERATOR_PASS} | mysqlrouter_passwd set "${ROUTER_DIR}/realm.txt" ${OPERA
 sed -i 's/logging_folder=.*/logging_folder=/g' "${ROUTER_DIR}/mysqlrouter.conf"
 sed -i "/\[logger\]/a destination=/dev/stdout" "${ROUTER_DIR}/mysqlrouter.conf"
 
-exec "$@"
+cmd=("$@")
+
+custom_conf=/etc/mysql/config/mysqlrouter.conf
+if test -f "$custom_conf"; then
+	cmd+=(--extra-config "$custom_conf")
+fi
+
+set -o xtrace
+
+exec "${cmd[@]}"
