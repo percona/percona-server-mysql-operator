@@ -39,7 +39,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-	"github.com/percona/percona-server-mysql-operator/controllers"
+	"github.com/percona/percona-server-mysql-operator/pkg/controller/ps"
+	"github.com/percona/percona-server-mysql-operator/pkg/controller/psbackup"
+	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	//+kubebuilder:scaffold:imports
@@ -111,7 +113,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.PerconaServerMySQLReconciler{
+	if err = (&ps.PerconaServerMySQLReconciler{
 		Client:        nsClient,
 		Scheme:        mgr.GetScheme(),
 		ServerVersion: serverVersion,
@@ -119,7 +121,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQL")
 		os.Exit(1)
 	}
-	if err = (&controllers.PerconaServerMySQLBackupReconciler{
+	if err = (&psbackup.PerconaServerMySQLBackupReconciler{
 		Client:        nsClient,
 		Scheme:        mgr.GetScheme(),
 		ServerVersion: serverVersion,
@@ -127,7 +129,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLBackup")
 		os.Exit(1)
 	}
-	if err = (&controllers.PerconaServerMySQLRestoreReconciler{
+	if err = (&psrestore.PerconaServerMySQLRestoreReconciler{
 		Client:        nsClient,
 		Scheme:        mgr.GetScheme(),
 		ServerVersion: serverVersion,
