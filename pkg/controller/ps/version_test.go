@@ -277,8 +277,8 @@ func TestGetVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	addr := "127.0.0.1"
-	port := 10000
-	gwPort := 11000
+	port := 14000
+	gwPort := 15000
 	s := fakeVersionService(addr, port, gwPort, false)
 	if err := s.Start(t); err != nil {
 		t.Fatal(err, "failed to start fake version service server")
