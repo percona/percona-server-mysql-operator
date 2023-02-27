@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package ps
 
 import (
 	"bytes"
@@ -47,6 +47,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -140,7 +141,7 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 
 		if err != nil {
 			switch err {
-			case ErrWaitingTermination:
+			case psrestore.ErrWaitingTermination:
 				log.Info("waiting for pods to be deleted", "finalizer", f)
 			default:
 				log.Error(err, "failed to run finalizer", "finalizer", f)
@@ -254,7 +255,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		log.Info("sts replicaset downscaled", "sts", sts)
 	}
 
-	return ErrWaitingTermination
+	return psrestore.ErrWaitingTermination
 }
 
 func (r *PerconaServerMySQLReconciler) doReconcile(
