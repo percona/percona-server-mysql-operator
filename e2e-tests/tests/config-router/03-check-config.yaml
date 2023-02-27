@@ -1,0 +1,14 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      pod=$(kubectl get pod --no-headers --selector=app.kubernetes.io/component=router | awk '{print $1}' | head -n 1)
+
+      if ! kubectl exec -it $pod  -- bash -c 'cat /tmp/router/log/mysqlrouter.log' | grep -q 'DEBUG' ; then
+        exit 1
+      fi

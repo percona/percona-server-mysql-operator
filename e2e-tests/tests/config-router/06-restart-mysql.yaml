@@ -1,0 +1,15 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      pods=($(get_router_pods))
+      for pod in "${pods[@]}"; do
+      	kubectl -n "${NAMESPACE}" delete pod "${pod}"
+      	kubectl -n "${NAMESPACE}" wait --for=condition=Ready "pod/${pod}" --timeout=120s
+      done
+    timeout: 360

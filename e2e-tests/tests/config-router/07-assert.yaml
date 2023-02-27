@@ -1,0 +1,15 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 60
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: 07-check-config
+data:
+  mysqlrouter.conf: |
+    [default]
+    logging_folder=/tmp/router/log
+
+    [logger]
+    level=DEBUG

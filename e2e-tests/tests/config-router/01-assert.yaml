@@ -1,0 +1,82 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  name: config-router
+spec:
+  template:
+    spec:
+      containers:
+      - name: mysql
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
+        - mountPath: /etc/mysql/mysql-tls-secret
+          name: tls
+        - mountPath: /etc/mysql/config
+          name: config
+      - name: xtrabackup
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
+        - mountPath: /var/log/xtrabackup
+          name: backup-logs
+      - name: pt-heartbeat
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
+      volumes:
+      - emptyDir: {}
+        name: bin
+      - name: users
+        secret:
+          defaultMode: 420
+          secretName: internal-config
+      - name: tls
+        secret:
+          defaultMode: 420
+          secretName: test-ssl
+      - name: config
+        projected:
+          defaultMode: 420
+          sources:
+          - configMap:
+              items:
+              - key: my.cnf
+                path: my-config.cnf
+              name: config-mysql
+              optional: true
+          - configMap:
+              items:
+                - key: my.cnf
+                  path: auto-config.cnf
+              name: auto-config-mysql
+              optional: true
+          - secret:
+              items:
+              - key: my.cnf
+                path: my-secret.cnf
+              name: config-mysql
+              optional: true
+      - emptyDir: {}
+        name: backup-logs
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
