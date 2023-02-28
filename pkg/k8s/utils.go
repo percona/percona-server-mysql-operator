@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -141,29 +142,22 @@ func EnsureObjectWithHash(
 			obj.GetName())
 	}
 
-	metaAccessor, ok := obj.(metav1.ObjectMetaAccessor)
-	if !ok {
-		return errors.New("can't convert object to ObjectMetaAccessor")
+	if obj.GetAnnotations() == nil {
+		obj.SetAnnotations(make(map[string]string))
 	}
 
-	objectMeta := metaAccessor.GetObjectMeta()
-
-	if objectMeta.GetAnnotations() == nil {
-		objectMeta.SetAnnotations(make(map[string]string))
-	}
-
-	objAnnotations := objectMeta.GetAnnotations()
+	objAnnotations := obj.GetAnnotations()
 	delete(objAnnotations, "percona.com/last-config-hash")
-	objectMeta.SetAnnotations(objAnnotations)
+	obj.SetAnnotations(objAnnotations)
 
 	hash, err := ObjectHash(obj)
 	if err != nil {
 		return errors.Wrap(err, "calculate object hash")
 	}
 
-	objAnnotations = objectMeta.GetAnnotations()
+	objAnnotations = obj.GetAnnotations()
 	objAnnotations["percona.com/last-config-hash"] = hash
-	objectMeta.SetAnnotations(objAnnotations)
+	obj.SetAnnotations(objAnnotations)
 
 	val := reflect.ValueOf(obj)
 	if val.Kind() == reflect.Ptr {
@@ -172,8 +166,8 @@ func EnsureObjectWithHash(
 	oldObject := reflect.New(val.Type()).Interface().(client.Object)
 
 	nn := types.NamespacedName{
-		Name:      objectMeta.GetName(),
-		Namespace: objectMeta.GetNamespace(),
+		Name:      obj.GetName(),
+		Namespace: obj.GetNamespace(),
 	}
 	if err = cl.Get(ctx, nn, oldObject); err != nil {
 		if !k8serrors.IsNotFound(err) {
@@ -187,25 +181,23 @@ func EnsureObjectWithHash(
 		return nil
 	}
 
-	oldObjectMeta := oldObject.(metav1.ObjectMetaAccessor).GetObjectMeta()
-
 	switch obj.(type) {
 	case *appsv1.Deployment:
-		annotations := objectMeta.GetAnnotations()
+		annotations := obj.GetAnnotations()
 		ignoreAnnotations := []string{"deployment.kubernetes.io/revision"}
 		for _, key := range ignoreAnnotations {
-			v, ok := oldObjectMeta.GetAnnotations()[key]
+			v, ok := oldObject.GetAnnotations()[key]
 			if ok {
 				annotations[key] = v
 			}
 		}
-		objectMeta.SetAnnotations(annotations)
+		obj.SetAnnotations(annotations)
 	}
 
-	if oldObjectMeta.GetAnnotations()["percona.com/last-config-hash"] != hash ||
-		!objectMetaEqual(objectMeta, oldObjectMeta) {
+	if oldObject.GetAnnotations()["percona.com/last-config-hash"] != hash ||
+		!objectMetaEqual(obj, oldObject) {
 
-		objectMeta.SetResourceVersion(oldObjectMeta.GetResourceVersion())
+		obj.SetResourceVersion(oldObject.GetResourceVersion())
 		switch object := obj.(type) {
 		case *corev1.Service:
 			object.Spec.ClusterIP = oldObject.(*corev1.Service).Spec.ClusterIP
@@ -214,7 +206,16 @@ func EnsureObjectWithHash(
 			}
 		}
 
-		if err := cl.Patch(ctx, obj, client.StrategicMergeFrom(oldObject)); err != nil {
+		var patch client.Patch
+		switch oldObj := oldObject.(type) {
+		case *cm.Certificate:
+			patch = client.MergeFrom(oldObj.DeepCopy())
+			obj.(*cm.Certificate).TypeMeta = oldObj.DeepCopy().TypeMeta
+		default:
+			patch = client.StrategicMergeFrom(oldObject)
+		}
+
+		if err := cl.Patch(ctx, obj, patch); err != nil {
 			return errors.Wrapf(err, "patch %v", nn.String())
 		}
 	}
@@ -290,6 +291,10 @@ func ObjectHash(obj runtime.Object) (string, error) {
 		dataToMarshal = object.Spec
 	case *corev1.Secret:
 		dataToMarshal = object.Data
+	case *cm.Certificate:
+		dataToMarshal = object.Spec
+	case *cm.Issuer:
+		dataToMarshal = object.Spec
 	default:
 		dataToMarshal = obj
 	}

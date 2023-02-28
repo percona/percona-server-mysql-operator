@@ -617,16 +617,7 @@ func (r *PerconaServerMySQLReconciler) ensureTLSSecret(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQL,
 ) error {
-	nn := types.NamespacedName{
-		Name:      cr.Spec.SSLSecretName,
-		Namespace: cr.Namespace,
-	}
-	if ok, err := k8s.ObjectExists(ctx, r.Client, nn, &corev1.Secret{}); err != nil {
-		return errors.Wrap(err, "check existence")
-	} else if ok {
-		return nil
-	}
-	err := r.createSSLByCertManager(ctx, cr)
+	err := r.ensureSSLByCertManager(ctx, cr)
 	if err != nil {
 		if cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
 			return errors.Wrap(err, "create ssl with cert manager")
@@ -636,7 +627,7 @@ func (r *PerconaServerMySQLReconciler) ensureTLSSecret(
 			return errors.Wrap(err, "create SSL manually")
 		}
 
-		if err := k8s.EnsureObject(ctx, r.Client, cr, secret, r.Scheme); err != nil {
+		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, secret, r.Scheme); err != nil {
 			return errors.Wrap(err, "create secret")
 		}
 	}
@@ -1035,6 +1026,27 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 
 	if sts.Status.ReadyReplicas == 0 {
 		log.Info("orchestrator is not ready. skip", "ready", sts.Status.ReadyReplicas)
+		return nil
+	}
+
+	if err := orchestrator.Discover(ctx, orchestrator.APIHost(cr), mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
+		switch err.Error() {
+		case "Unauthorized":
+			log.Info("mysql is not ready, unauthorized orchestrator discover response. skip")
+			return nil
+		case orchestrator.ErrEmptyResponse.Error():
+			log.Info("mysql is not ready, empty orchestrator discover response. skip")
+			return nil
+		}
+		return errors.Wrap(err, "failed to discover cluster")
+	}
+
+	primary, err := orchestrator.ClusterPrimary(ctx, orchestrator.APIHost(cr), cr.ClusterHint())
+	if err != nil {
+		return errors.Wrap(err, "get cluster primary")
+	}
+	if primary.Alias == "" {
+		log.Info("mysql is not ready, orchestrator cluster primary alias is empty. skip")
 		return nil
 	}
 
@@ -1491,16 +1503,6 @@ func getPrimaryFromOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServ
 		return nil, errors.Wrap(err, "get cluster primary")
 	}
 
-	if primary.Alias == "" {
-		if err := orchestrator.Discover(ctx, orcHost, mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
-			return nil, errors.Wrap(err, "failed to discover")
-		}
-		primary, err = orchestrator.ClusterPrimary(ctx, orcHost, cr.ClusterHint())
-		if err != nil {
-			return nil, errors.Wrap(err, "get cluster primary")
-		}
-	}
-
 	if primary.Key.Hostname == "" {
 		primary.Key.Hostname = fmt.Sprintf("%s.%s.%s", primary.Alias, mysql.ServiceName(cr), cr.Namespace)
 	}
@@ -1719,8 +1721,7 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-
+func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	issuerName := cr.Name + "-pso-issuer"
 	caIssuerName := cr.Name + "-pso-ca-issuer"
 	issuerKind := "Issuer"
@@ -1738,7 +1739,7 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 				CA: &cm.CAIssuer{SecretName: cr.Spec.TLS.IssuerConf.Name},
 			}
 		}
-		if err := r.createIssuer(ctx, cr, caIssuerName, issuerConf); err != nil {
+		if err := r.ensureIssuer(ctx, cr, caIssuerName, issuerConf); err != nil {
 			return err
 		}
 
@@ -1760,13 +1761,8 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 				RenewBefore: &metav1.Duration{Duration: 730 * time.Hour},
 			},
 		}
-		err := ctrl.SetControllerReference(cr, caCert, r.Scheme)
-		if err != nil {
-			return errors.Wrap(err, "set controller reference")
-		}
-		err = r.Create(ctx, caCert)
-		if err != nil && !k8serrors.IsAlreadyExists(err) {
-			return errors.Wrap(err, "create CA certificate")
+		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, caCert, r.Scheme); err != nil {
+			return errors.Wrap(err, "ensure CA certificate")
 		}
 
 		if err := r.waitForCerts(ctx, cr.Namespace, cr.Name+"-ca-cert"); err != nil {
@@ -1777,7 +1773,7 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 			CA: &cm.CAIssuer{SecretName: caCert.Spec.SecretName},
 		}
 
-		if err := r.createIssuer(ctx, cr, issuerName, issuerConf); err != nil {
+		if err := r.ensureIssuer(ctx, cr, issuerName, issuerConf); err != nil {
 			return err
 		}
 	}
@@ -1808,55 +1804,62 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 			},
 		},
 	}
-	err := ctrl.SetControllerReference(cr, kubeCert, r.Scheme)
-	if err != nil {
-		return errors.Wrap(err, "set controller reference")
-	}
 	if cr.Spec.TLS != nil {
 		kubeCert.Spec.DNSNames = append(kubeCert.Spec.DNSNames, cr.Spec.TLS.SANs...)
 	}
 
-	err = r.Create(ctx, kubeCert)
-	if err != nil && !k8serrors.IsAlreadyExists(err) {
-		return errors.Wrap(err, "create certificate")
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, kubeCert, r.Scheme); err != nil {
+		return errors.Wrap(err, "ensure certificate")
 	}
 
 	return r.waitForCerts(ctx, cr.Namespace, cr.Spec.SSLSecretName)
 }
 
-func (r *PerconaServerMySQLReconciler) waitForCerts(ctx context.Context, namespace string, secretsList ...string) error {
+func (r *PerconaServerMySQLReconciler) waitForCerts(ctx context.Context, namespace string, secretName string) error {
 	ticker := time.NewTicker(3 * time.Second)
 	timeoutTimer := time.NewTimer(30 * time.Second)
 	defer timeoutTimer.Stop()
 	defer ticker.Stop()
+	secretFound := false
 	for {
 		select {
 		case <-timeoutTimer.C:
-			return errors.Errorf("timeout: can't get tls certificates from certmanager, %s", secretsList)
-		case <-ticker.C:
-			successCount := 0
-			for _, secretName := range secretsList {
-				secret := &corev1.Secret{}
-				err := r.Get(ctx, types.NamespacedName{
-					Name:      secretName,
-					Namespace: namespace,
-				}, secret)
-				if err != nil && !k8serrors.IsNotFound(err) {
-					return err
-				} else if err == nil {
-					successCount++
-				}
+			if !secretFound {
+				return errors.Errorf("timeout: can't get tls certificate from certmanager: %s", secretName)
 			}
-			if successCount == len(secretsList) {
-				return nil
+			return errors.Errorf("timeout: tls certificate from certmanager is not ready: %s", secretName)
+		case <-ticker.C:
+			secret := new(corev1.Secret)
+			err := r.Get(ctx, types.NamespacedName{
+				Name:      secretName,
+				Namespace: namespace,
+			}, secret)
+			if client.IgnoreNotFound(err) != nil {
+				return errors.Wrap(err, "failed to get secret")
+			} else if k8serrors.IsNotFound(err) {
+				continue
+			}
+			secretFound = true
+
+			cert := new(cm.Certificate)
+			err = r.Get(ctx, types.NamespacedName{
+				Name:      secretName,
+				Namespace: namespace,
+			}, cert)
+			if err != nil {
+				return errors.Wrap(err, "failed to get certificate")
+			}
+			for _, cond := range cert.Status.Conditions {
+				if cond.Type == cm.CertificateConditionReady && cond.Status == cmmeta.ConditionTrue {
+					return nil
+				}
 			}
 		}
 	}
 }
 
-func (r *PerconaServerMySQLReconciler) createIssuer(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, issuerName string, IssuerConf cm.IssuerConfig,
+func (r *PerconaServerMySQLReconciler) ensureIssuer(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, issuerName string, IssuerConf cm.IssuerConfig,
 ) error {
-
 	isr := &cm.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      issuerName,
@@ -1866,12 +1869,8 @@ func (r *PerconaServerMySQLReconciler) createIssuer(ctx context.Context, cr *api
 			IssuerConfig: IssuerConf,
 		},
 	}
-	err := ctrl.SetControllerReference(cr, isr, r.Scheme)
+	err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, isr, r.Scheme)
 	if err != nil {
-		return errors.Wrap(err, "set controller reference")
-	}
-	err = r.Create(ctx, isr)
-	if err != nil && !k8serrors.IsAlreadyExists(err) {
 		return errors.Wrap(err, "create issuer")
 	}
 
