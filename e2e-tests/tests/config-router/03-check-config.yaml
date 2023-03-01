@@ -7,8 +7,6 @@ commands:
 
       source ../../functions
 
-      # pod=$(kubectl get pod --no-headers --selector=app.kubernetes.io/component=router | awk '{print $1}' | head -n 1)
-      
       pod=$(get_router_pods | head -n 1)
 
       echo "$pod"
