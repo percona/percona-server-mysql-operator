@@ -7,9 +7,11 @@ commands:
 
       source ../../functions
 
-      pods=($(get_router_pods))
-      for pod in "${pods[@]}"; do
-      	kubectl -n "${NAMESPACE}" delete pod "${pod}"
-      	kubectl -n "${NAMESPACE}" wait --for=condition=Ready "pod/${pod}" --timeout=120s
-      done
-    timeout: 360
+      kubectl -n "${NAMESPACE}" rollout restart deployment config-router-router
+
+      # pods=($(get_router_pods))
+      # for pod in "${pods[@]}"; do
+      # 	kubectl -n "${NAMESPACE}" delete pod "${pod}"
+      # 	kubectl -n "${NAMESPACE}" wait --for=condition=Ready "pod/${pod}" --timeout=120s
+      # done
+    # timeout: 360

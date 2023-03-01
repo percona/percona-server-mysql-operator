@@ -13,14 +13,6 @@ status:
   replicas: 3
   updatedReplicas: 3
 ---
-apiVersion: v1
-kind: Pod
-metadata:
-  labels:
-    mysql.percona.com/primary: "true"
-status:
-  phase: Running
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
