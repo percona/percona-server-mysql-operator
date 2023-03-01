@@ -1,0 +1,178 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "2"
+    percona.com/last-config-hash: 4f717e87cdeba1b53e6a8c24c8ac7a8f
+  creationTimestamp: "2023-03-01T09:10:51Z"
+  generation: 2
+  labels:
+    app.kubernetes.io/component: router
+    app.kubernetes.io/instance: config-router
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: config-router-router
+  namespace: kuttl-test-picked-ghoul
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: config-router
+    uid: 9981eff5-0925-4fba-9a93-d6528e8128c9
+  resourceVersion: "30239"
+  uid: f643e8a5-8713-47ee-bc99-febdef7d498e
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 3
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: router
+      app.kubernetes.io/instance: config-router
+      app.kubernetes.io/managed-by: percona-server-operator
+      app.kubernetes.io/name: percona-server
+      app.kubernetes.io/part-of: percona-server
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        percona.com/configuration-hash: 129d3ece6beddd354d747a2e34c2f21f
+      creationTimestamp: null
+      labels:
+        app.kubernetes.io/component: router
+        app.kubernetes.io/instance: config-router
+        app.kubernetes.io/managed-by: percona-server-operator
+        app.kubernetes.io/name: percona-server
+        app.kubernetes.io/part-of: percona-server
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: router
+                app.kubernetes.io/instance: config-router
+                app.kubernetes.io/managed-by: percona-server-operator
+                app.kubernetes.io/name: percona-server
+                app.kubernetes.io/part-of: percona-server
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - args:
+        - mysqlrouter
+        - -c
+        - /tmp/router/mysqlrouter.conf
+        command:
+        - /opt/percona/router-entrypoint.sh
+        env:
+        - name: MYSQL_SERVICE_NAME
+          value: config-router-mysql
+        image: perconalab/percona-server-mysql-operator:main-router
+        imagePullPolicy: Always
+        name: router
+        ports:
+        - containerPort: 8443
+          name: http
+          protocol: TCP
+        - containerPort: 6446
+          name: read-write
+          protocol: TCP
+        - containerPort: 6447
+          name: read-only
+          protocol: TCP
+        - containerPort: 6448
+          name: x-read-write
+          protocol: TCP
+        - containerPort: 6449
+          name: x-read-only
+          protocol: TCP
+        - containerPort: 33062
+          name: rw-admin
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - /opt/percona/router_readiness_check.sh
+          failureThreshold: 3
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 3
+        resources:
+          limits:
+            memory: 256M
+          requests:
+            memory: 256M
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
+        - mountPath: /etc/mysql/mysql-tls-secret
+          name: tls
+        - mountPath: /etc/mysql/config
+          name: config
+      dnsPolicy: ClusterFirst
+      initContainers:
+      - command:
+        - /opt/percona-server-mysql-operator/ps-init-entrypoint.sh
+        image: perconalab/percona-server-mysql-operator:k8sps-217-custom-router-config
+        imagePullPolicy: Always
+        name: router-init
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - emptyDir: {}
+        name: bin
+      - name: users
+        secret:
+          defaultMode: 420
+          secretName: internal-config-router
+      - name: tls
+        secret:
+          defaultMode: 420
+          secretName: test-ssl
+      - name: config
+        projected:
+          defaultMode: 420
+          sources:
+          - configMap:
+              items:
+              - key: mysqlrouter.conf
+                path: mysqlrouter.conf
+              name: config-router-router
+              optional: true
+status:
+  availableReplicas: 3
+  conditions:
+  - lastTransitionTime: "2023-03-01T09:10:58Z"
+    lastUpdateTime: "2023-03-01T09:10:58Z"
+    message: Deployment has minimum availability.
+    reason: MinimumReplicasAvailable
+    status: "True"
+    type: Available
+  - lastTransitionTime: "2023-03-01T09:10:51Z"
+    lastUpdateTime: "2023-03-01T09:11:07Z"
+    message: ReplicaSet "config-router-router-7ff4bd98" is progressing.
+    reason: ReplicaSetUpdated
+    status: "True"
+    type: Progressing
+  observedGeneration: 2
+  readyReplicas: 3
+  replicas: 4
+  unavailableReplicas: 1
+  updatedReplicas: 1

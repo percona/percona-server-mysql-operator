@@ -132,6 +132,7 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string
 		annotations["percona.com/configuration-hash"] = configHash
 	}
 
+	zero := intstr.FromInt(0)
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -146,6 +147,12 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
+			},
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxSurge: &zero,
+				},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{

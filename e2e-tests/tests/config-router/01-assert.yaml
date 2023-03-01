@@ -6,7 +6,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 1
-  name: config-router
+  name: config-router-mysql
 spec:
   template:
     spec:
@@ -33,21 +33,13 @@ spec:
           name: users
         - mountPath: /var/log/xtrabackup
           name: backup-logs
-      - name: pt-heartbeat
-        volumeMounts:
-        - mountPath: /opt/percona
-          name: bin
-        - mountPath: /var/lib/mysql
-          name: datadir
-        - mountPath: /etc/mysql/mysql-users-secret
-          name: users
       volumes:
       - emptyDir: {}
         name: bin
       - name: users
         secret:
           defaultMode: 420
-          secretName: internal-config
+          secretName: internal-config-router
       - name: tls
         secret:
           defaultMode: 420
@@ -60,19 +52,19 @@ spec:
               items:
               - key: my.cnf
                 path: my-config.cnf
-              name: config-mysql
+              name: config-router-mysql
               optional: true
           - configMap:
               items:
                 - key: my.cnf
                   path: auto-config.cnf
-              name: auto-config-mysql
+              name: auto-config-router-mysql
               optional: true
           - secret:
               items:
               - key: my.cnf
                 path: my-secret.cnf
-              name: config-mysql
+              name: config-router-mysql
               optional: true
       - emptyDir: {}
         name: backup-logs
@@ -80,3 +72,14 @@ status:
   observedGeneration: 1
   replicas: 3
   readyReplicas: 3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  generation: 1
+  name: config-router-router
+status:
+  observedGeneration: 1
+  readyReplicas: 3
+  replicas: 3
+  updatedReplicas: 3

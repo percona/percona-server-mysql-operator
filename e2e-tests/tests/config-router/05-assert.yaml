@@ -5,4 +5,4 @@ timeout: 60
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: config-router
+  name: config-router-router

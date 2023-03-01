@@ -5,7 +5,7 @@ timeout: 60
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: 07-check-config
+  name: config-router-router
 data:
   mysqlrouter.conf: |
     [default]

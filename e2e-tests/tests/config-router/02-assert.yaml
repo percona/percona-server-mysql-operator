@@ -5,10 +5,10 @@ timeout: 480
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  generation: 2
-  name: config-router
+  generation: 1
+  name: config-router-mysql
 status:
-  observedGeneration: 2
+  observedGeneration: 1
   readyReplicas: 3
   replicas: 3
   updatedReplicas: 3
@@ -20,3 +20,14 @@ metadata:
     mysql.percona.com/primary: "true"
 status:
   phase: Running
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  generation: 2
+  name: config-router-router
+status:
+  observedGeneration: 2
+  readyReplicas: 3
+  replicas: 3
+  updatedReplicas: 3
