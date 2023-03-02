@@ -78,6 +78,7 @@ func NewReplicator(user apiv1alpha1.SystemUser, pass, host string, port int32) (
 		"timeout":           "20s",
 		"readTimeout":       "20s",
 		"writeTimeout":      "20s",
+		"tls":               "preferred",
 	}
 
 	db, err := sql.Open("mysql", config.FormatDSN())

@@ -18,7 +18,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -40,7 +39,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-	"github.com/percona/percona-server-mysql-operator/controllers"
+	"github.com/percona/percona-server-mysql-operator/pkg/controller/ps"
+	"github.com/percona/percona-server-mysql-operator/pkg/controller/psbackup"
+	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	//+kubebuilder:scaffold:imports
@@ -112,7 +113,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.PerconaServerMySQLReconciler{
+	if err = (&ps.PerconaServerMySQLReconciler{
 		Client:        nsClient,
 		Scheme:        mgr.GetScheme(),
 		ServerVersion: serverVersion,
@@ -120,7 +121,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQL")
 		os.Exit(1)
 	}
-	if err = (&controllers.PerconaServerMySQLBackupReconciler{
+	if err = (&psbackup.PerconaServerMySQLBackupReconciler{
 		Client:        nsClient,
 		Scheme:        mgr.GetScheme(),
 		ServerVersion: serverVersion,
@@ -128,7 +129,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLBackup")
 		os.Exit(1)
 	}
-	if err = (&controllers.PerconaServerMySQLRestoreReconciler{
+	if err = (&psrestore.PerconaServerMySQLRestoreReconciler{
 		Client:        nsClient,
 		Scheme:        mgr.GetScheme(),
 		ServerVersion: serverVersion,
@@ -170,7 +171,7 @@ func getLogEncoder(log logr.Logger) zapcore.Encoder {
 
 	useJson, err := strconv.ParseBool(s)
 	if err != nil {
-		log.Info(fmt.Sprintf("can't parse LOG_STRUCTURED env var: %s, using console logger", s))
+		log.Info("Can't parse LOG_STRUCTURED env var, using console logger", "envVar", s)
 		return consoleEnc
 	}
 	if !useJson {
@@ -194,7 +195,7 @@ func getLogLevel(log logr.Logger) zapcore.LevelEnabler {
 	case "ERROR":
 		return zapcore.ErrorLevel
 	default:
-		log.Info(fmt.Sprintf("unsupported log level: %s, using INFO level", l))
+		log.Info("Unsupported log level, using INFO", "level", l)
 		return zapcore.InfoLevel
 	}
 }

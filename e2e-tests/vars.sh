@@ -29,3 +29,7 @@ if command -v oc &> /dev/null; then
 		export OPENSHIFT=4
 	fi
 fi
+
+if kubectl get nodes | grep "^minikube" >/dev/null; then
+	export MINIKUBE=1
+fi

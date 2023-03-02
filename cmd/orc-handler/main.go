@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
 	"strings"
@@ -72,7 +71,7 @@ func getClusterName() (string, error) {
 }
 
 func setPrimaryLabel(ctx context.Context, primary string) error {
-	l := log.WithName("setPrimaryLabel")
+	log := log.WithName("setPrimaryLabel")
 
 	ns, err := getNamespace()
 	if err != nil {
@@ -125,7 +124,7 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 				return errors.Wrapf(err, "remove label from old primary pod: %v/%v", pod.GetNamespace(), pod.GetName())
 			}
 
-			l.Info(fmt.Sprintf("removed label from old primary pod: %v/%v", pod.GetNamespace(), pod.GetName()))
+			log.Info("Removed label from the old primary pod", "pod", pod.GetName(), "namespace", pod.GetNamespace())
 		}
 	}
 
@@ -134,7 +133,7 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 	}
 
 	if primaryPod.GetLabels()[apiv1alpha1.MySQLPrimaryLabel] == "true" {
-		l.Info(fmt.Sprintf("primary %v is not changed. skip", primaryName))
+		log.Info("Primary pod is not changed, skipping", "pod", primaryName)
 		return nil
 	}
 
@@ -144,7 +143,7 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 		return errors.Wrapf(err, "add label to new primary pod %v/%v", pod.GetNamespace(), pod.GetName())
 	}
 
-	l.Info(fmt.Sprintf("added label to new primary pod: %v/%v", pod.GetNamespace(), pod.GetName()))
+	log.Info("Labels added to the new primary pod", "pod", pod.GetName(), "namespace", pod.GetNamespace())
 	return nil
 }
 

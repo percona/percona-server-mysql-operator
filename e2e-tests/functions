@@ -13,8 +13,14 @@ deploy_operator() {
 		"$(printf 'select(documentIndex==1).spec.template.spec.containers[0].image="%s"' "${IMAGE}")" \
 		"${DEPLOY_DIR}/operator.yaml" \
 		| kubectl -n "${NAMESPACE}" apply -f -
+}
 
+deploy_non_tls_cluster_secrets() {
 	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/secrets.yaml"
+}
+
+deploy_tls_cluster_secrets() {
+	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/ssl-secret.yaml"
 }
 
 deploy_client() {
@@ -121,7 +127,13 @@ get_cr() {
 		| yq eval "$(printf '.spec.proxy.router.image="%s"' "${IMAGE_ROUTER}")" - \
 		| yq eval "$(printf '.spec.toolkit.image="%s"' "${IMAGE_TOOLKIT}")" - \
 		| yq eval "$(printf '.spec.proxy.haproxy.image="%s"' "${IMAGE_HAPROXY}")" - \
-		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_PMM}")" -
+		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_PMM}")" - \
+		| if [ -n "${MINIKUBE}" ]; then
+			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) |= "none"' - \
+				| yq eval '.spec.proxy.haproxy.resources.requests.cpu="300m"' -
+		else
+			yq eval -
+		fi
 }
 
 run_mysql() {
@@ -171,6 +183,12 @@ get_haproxy_svc() {
 	local cluster=$1
 
 	echo "${cluster}-haproxy"
+}
+
+get_orc_svc() {
+	local cluster=$1
+
+	echo "${cluster}-orc"
 }
 
 get_mysql_headless_fqdn() {
@@ -284,7 +302,8 @@ wait_cluster_consistency() {
 	until [[ "$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.mysql.state}')" == "ready" &&
 	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.mysql.ready}')" == "${cluster_size}" &&
 	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.orchestrator.ready}')" == "${orc_size}" &&
-	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.orchestrator.state}')" == "ready" ]]; do
+	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.orchestrator.state}')" == "ready" &&
+	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.state}')" == "ready" ]]; do
 		echo 'waiting for cluster readyness'
 		sleep 15
 	done

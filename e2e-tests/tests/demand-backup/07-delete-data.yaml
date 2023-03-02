@@ -8,8 +8,8 @@ commands:
       source ../../functions
 
       run_mysql \
-      	"TRUNCATE TABLE myDB.myTable" \
-      	"-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+        "TRUNCATE TABLE myDB.myTable" \
+        "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
 
       cluster_name=$(get_cluster_name)
       for i in 0 1 2
