@@ -30,16 +30,10 @@ function main() {
 
 		node_name=$(echo "$mysql_host" | cut -d . -f -1)
 		NODE_LIST_REPL+=("server ${node_name} ${mysql_host}:${MYSQL_PORT} ${send_proxy} ${SERVER_OPTIONS}")
-		NODE_LIST+=("server ${node_name} ${mysql_host}:${MYSQL_PORT} ${send_proxy} ${SERVER_OPTIONS} backup")
-		NODE_LIST_ADMIN+=("server ${node_name} ${mysql_host}:${MYSQL_ADMIN_PORT} ${SERVER_OPTIONS} backup")
-		NODE_LIST_MYSQLX+=("server ${node_name} ${mysql_host}:${MYSQLX_PORT} ${send_proxy} ${SERVER_OPTIONS} backup")
+		NODE_LIST+=("server ${node_name} ${mysql_host}:${MYSQL_PORT} ${send_proxy} ${SERVER_OPTIONS}")
+		NODE_LIST_ADMIN+=("server ${node_name} ${mysql_host}:${MYSQL_ADMIN_PORT} ${SERVER_OPTIONS}")
+		NODE_LIST_MYSQLX+=("server ${node_name} ${mysql_host}:${MYSQLX_PORT} ${send_proxy} ${SERVER_OPTIONS}")
 	done
-
-	if [[ ${#NODE_LIST[@]} -ne 0 ]]; then
-		NODE_LIST=("$(printf '%s\n' "${NODE_LIST[@]}" | sort --version-sort -r | uniq)")
-		NODE_LIST_ADMIN=("$(printf '%s\n' "${NODE_LIST_ADMIN[@]}" | sort --version-sort -r | uniq)")
-		NODE_LIST_MYSQLX=("$(printf '%s\n' "${NODE_LIST_MYSQLX[@]}" | sort --version-sort -r | uniq)")
-	fi
 
 	echo "${#NODE_LIST_REPL[@]}" >$path_to_haproxy_cfg/AVAILABLE_NODES
 
