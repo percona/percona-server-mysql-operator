@@ -1311,7 +1311,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	cr.Status.MySQL = mysqlStatus
 
 	orcStatus := apiv1alpha1.StatefulAppStatus{}
-	if cr.Spec.Orchestrator.Enabled && cr.Spec.MySQL.IsAsync() {
+	if cr.OrchestratorEnabled() && cr.Spec.MySQL.IsAsync() {
 		orcStatus, err = appStatus(ctx, r.Client, cr.OrchestratorSpec().Size, orchestrator.MatchLabels(cr), cr.Status.Orchestrator.Version)
 		if err != nil {
 			return errors.Wrap(err, "get Orchestrator status")
@@ -1339,7 +1339,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	cr.Status.State = apiv1alpha1.StateInitializing
 	if cr.Spec.MySQL.IsAsync() {
-		if !cr.Spec.Orchestrator.Enabled || cr.Status.MySQL.State == cr.Status.Orchestrator.State {
+		if !cr.OrchestratorEnabled() || cr.Status.MySQL.State == cr.Status.Orchestrator.State {
 			cr.Status.State = cr.Status.MySQL.State
 		}
 		if cr.HAProxyEnabled() && cr.Status.HAProxy.State != apiv1alpha1.StateReady {
