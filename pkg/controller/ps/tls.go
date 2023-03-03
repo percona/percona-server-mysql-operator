@@ -12,7 +12,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -62,14 +61,16 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 		if err := r.ensureIssuer(ctx, cr, caIssuerName, issuerConf); err != nil {
 			return err
 		}
+		certName := cr.Name + "-ca-cert"
+		secretName := cr.Name + "-ca-cert"
 
 		caCert := &cm.Certificate{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      cr.Name + "-ca-cert",
+				Name:      certName,
 				Namespace: cr.Namespace,
 			},
 			Spec: cm.CertificateSpec{
-				SecretName: cr.Name + "-ca-cert",
+				SecretName: secretName,
 				CommonName: cr.Name + "-ca",
 				IsCA:       true,
 				IssuerRef: cmmeta.ObjectReference{
@@ -85,7 +86,7 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 			return errors.Wrap(err, "ensure CA certificate")
 		}
 
-		if err := r.waitForCerts(ctx, cr.Namespace, cr.Name+"-ca-cert"); err != nil {
+		if err := r.waitForCert(ctx, cr.Namespace, certName, secretName); err != nil {
 			return err
 		}
 
@@ -108,9 +109,11 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 		fmt.Sprintf("*.%s-router.%s", cr.Name, cr.Namespace),
 		fmt.Sprintf("*.%s-router.%s.svc.cluster.local", cr.Name, cr.Namespace),
 	}
+	certName := cr.Name + "-ssl"
+
 	kubeCert := &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-ssl",
+			Name:      certName,
 			Namespace: cr.Namespace,
 		},
 		Spec: cm.CertificateSpec{
@@ -132,7 +135,7 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 		return errors.Wrap(err, "ensure certificate")
 	}
 
-	return r.waitForCerts(ctx, cr.Namespace, cr.Spec.SSLSecretName)
+	return r.waitForCert(ctx, cr.Namespace, certName, cr.Spec.SSLSecretName)
 }
 
 func (r *PerconaServerMySQLReconciler) ensureIssuer(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, issuerName string, IssuerConf cm.IssuerConfig,
@@ -154,7 +157,7 @@ func (r *PerconaServerMySQLReconciler) ensureIssuer(ctx context.Context, cr *api
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) waitForCerts(ctx context.Context, namespace string, secretName string) error {
+func (r *PerconaServerMySQLReconciler) waitForCert(ctx context.Context, namespace, certName, secretName string) error {
 	ticker := time.NewTicker(3 * time.Second)
 	timeoutTimer := time.NewTimer(30 * time.Second)
 	defer timeoutTimer.Stop()
@@ -168,21 +171,21 @@ func (r *PerconaServerMySQLReconciler) waitForCerts(ctx context.Context, namespa
 			}
 			return errors.Errorf("timeout: tls certificate from certmanager is not ready: %s", secretName)
 		case <-ticker.C:
-			secret := new(corev1.Secret)
 			err := r.Get(ctx, types.NamespacedName{
 				Name:      secretName,
 				Namespace: namespace,
-			}, secret)
-			if client.IgnoreNotFound(err) != nil {
+			}, new(corev1.Secret))
+			if err != nil {
+				if k8serrors.IsNotFound(err) {
+					continue
+				}
 				return errors.Wrap(err, "failed to get secret")
-			} else if k8serrors.IsNotFound(err) {
-				continue
 			}
 			secretFound = true
 
 			cert := new(cm.Certificate)
 			err = r.Get(ctx, types.NamespacedName{
-				Name:      secretName,
+				Name:      certName,
 				Namespace: namespace,
 			}, cert)
 			if err != nil {
