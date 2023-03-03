@@ -8300,6 +8300,13 @@ spec:
                     type: string
                 type: object
             type: object
+            x-kubernetes-validations:
+            - message: HAProxy can not be enabled with 'group-replication' clusterType
+              rule: 'self.mysql.clusterType==''group-replication'' ? !self.proxy.haproxy.enabled
+                : true'
+            - message: HAProxy and Orchestrator must be enabled with 'async' clusterType
+              rule: 'self.mysql.clusterType==''async'' ? self.proxy.haproxy.enabled
+                && self.orchestrator.enabled : true'
           status:
             properties:
               backupVersion:

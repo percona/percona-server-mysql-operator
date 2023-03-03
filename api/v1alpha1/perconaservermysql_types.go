@@ -40,6 +40,9 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // PerconaServerMySQLSpec defines the desired state of PerconaServerMySQL
+
+// +kubebuilder:validation:XValidation:message="HAProxy can not be enabled with 'group-replication' clusterType", rule="self.mysql.clusterType=='group-replication' ? !self.proxy.haproxy.enabled : true"
+// +kubebuilder:validation:XValidation:message="HAProxy and Orchestrator must be enabled with 'async' clusterType", rule="self.mysql.clusterType=='async' ? self.proxy.haproxy.enabled && self.orchestrator.enabled : true"
 type PerconaServerMySQLSpec struct {
 	CRVersion             string           `json:"crVersion,omitempty"`
 	Pause                 bool             `json:"pause,omitempty"`
