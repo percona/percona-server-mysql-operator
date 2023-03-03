@@ -603,12 +603,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 
 	log.Info("Discarded old user passwords")
 
-	internalSecret.Data = secret.Data
-	for k, v := range internalSecret.Data {
-		if len(v) == 0 {
-			delete(internalSecret.Data, k)
-		}
-	}
+	internalSecret.Data = secret.DeepCopy().Data
 	if err := r.Client.Update(ctx, internalSecret); err != nil {
 		return errors.Wrapf(err, "update Secret/%s", internalSecret.Name)
 	}
