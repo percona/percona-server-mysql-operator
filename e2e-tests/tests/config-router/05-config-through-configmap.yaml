@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-router-router
+data:
+  mysqlrouter.conf: |
+    [default]
+    logging_folder=/tmp/router/log
+
+    [logger]
+    level=DEBUG
