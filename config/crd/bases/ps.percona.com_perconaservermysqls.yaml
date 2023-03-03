@@ -6701,6 +6701,9 @@ spec:
             - message: HAProxy and Orchestrator must be enabled with 'async' clusterType
               rule: 'self.mysql.clusterType==''async'' ? self.proxy.haproxy.enabled
                 && self.orchestrator.enabled : true'
+            - message: Orchestrator can't be enabled with 'group-replication' clusterType
+              rule: 'self.mysql.clusterType==''group-replication'' ? !self.orchestrator.enabled
+                : true'
           status:
             properties:
               backupVersion:

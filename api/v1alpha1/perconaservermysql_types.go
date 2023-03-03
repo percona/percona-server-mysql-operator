@@ -43,6 +43,7 @@ import (
 
 // +kubebuilder:validation:XValidation:message="HAProxy can not be enabled with 'group-replication' clusterType", rule="self.mysql.clusterType=='group-replication' ? !self.proxy.haproxy.enabled : true"
 // +kubebuilder:validation:XValidation:message="HAProxy and Orchestrator must be enabled with 'async' clusterType", rule="self.mysql.clusterType=='async' ? self.proxy.haproxy.enabled && self.orchestrator.enabled : true"
+// +kubebuilder:validation:XValidation:message="Orchestrator can't be enabled with 'group-replication' clusterType", rule="self.mysql.clusterType=='group-replication' ? !self.orchestrator.enabled : true"
 type PerconaServerMySQLSpec struct {
 	CRVersion             string           `json:"crVersion,omitempty"`
 	Pause                 bool             `json:"pause,omitempty"`
