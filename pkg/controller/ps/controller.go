@@ -1007,7 +1007,7 @@ func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr
 	}
 
 	if cr.Spec.MySQL.IsGR() {
-		expose := cr.Spec.MySQL.Expose
+		expose := cr.Spec.Proxy.Router.Expose
 		if err := k8s.EnsureService(ctx, r.Client, cr, router.Service(cr), r.Scheme, expose.SaveOldMeta()); err != nil {
 			return errors.Wrap(err, "reconcile router svc")
 		}
