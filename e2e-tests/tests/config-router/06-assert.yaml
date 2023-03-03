@@ -1,0 +1,24 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: config-router-mysql
+status:
+  observedGeneration: 1
+  readyReplicas: 3
+  replicas: 3
+  updatedReplicas: 3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  generation: 4
+  name: config-router-router
+status:
+  observedGeneration: 4
+  readyReplicas: 3
+  replicas: 3
+  updatedReplicas: 3
