@@ -380,8 +380,8 @@ github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6Mwd
 github.com/sirupsen/logrus v1.6.0/go.mod h1:7uNnSEd1DgxDLC74fIahvMZmmYsHGZGEOFrfsX/uA88=
 github.com/sirupsen/logrus v1.9.0 h1:trlNQbNUG3OdDrDil03MCb1H2o9nJ1x4/5LYw7byDE0=
 github.com/sirupsen/logrus v1.9.0/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
-github.com/sjmudd/stopwatch v0.0.0-20170613150411-f380bf8a9be1 h1:acClJNSOjUrAUKW+ZneCZymCFDWtSaJG5YQl8FoOlyI=
-github.com/sjmudd/stopwatch v0.0.0-20170613150411-f380bf8a9be1/go.mod h1:Pgf1sZ2KrHK8vdRTV5UHGp80LT7HMUKuNAiKC402abY=
+github.com/sjmudd/stopwatch v0.1.1 h1:x45OvxFB5OtCkjvYtzRF5fWB857Jzjjk84Oyd5C5ebw=
+github.com/sjmudd/stopwatch v0.1.1/go.mod h1:BLw0oIQJ1YLXBO/q9ufK/SgnKBVIkC2qrm6uy78Zw6U=
 github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 github.com/spf13/cobra v0.0.3/go.mod h1:1l0Ry5zgKvJasoi3XT1TypsSe7PqH0Sj9dhYf7v3XqQ=
 github.com/spf13/pflag v1.0.3/go.mod h1:DYY7MBk1bdzusC3SYhjObp+wFpr4gzcvqqNjLnInEg4=
