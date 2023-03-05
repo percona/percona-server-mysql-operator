@@ -17,7 +17,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.8.1
 	github.com/onsi/gomega v1.26.0
 	github.com/pkg/errors v0.9.1
-	github.com/sjmudd/stopwatch v0.0.0-20170613150411-f380bf8a9be1
+	github.com/sjmudd/stopwatch v0.1.1
 	go.uber.org/zap v1.24.0
 	golang.org/x/sync v0.1.0
 	k8s.io/api v0.26.2
