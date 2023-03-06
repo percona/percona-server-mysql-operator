@@ -1,0 +1,63 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: tls-cert-manager-ca-cert
+spec:
+  commonName: tls-cert-manager-ca
+  duration: 8760h0m0s
+  isCA: true
+  issuerRef:
+    kind: Issuer
+    name: tls-cert-manager-pso-ca-issuer
+  renewBefore: 730h0m0s
+  secretName: tls-cert-manager-ca-cert
+status:
+  conditions:
+    - message: Certificate is up to date and has not expired
+      observedGeneration: 1
+      reason: Ready
+      status: 'True'
+      type: Ready
+  revision: 1
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: tls-cert-manager-ssl
+spec:
+  issuerRef:
+    kind: Issuer
+    name: tls-cert-manager-pso-issuer
+  secretName: test-ssl
+status:
+  conditions:
+    - message: Certificate is up to date and has not expired
+      observedGeneration: 2
+      reason: Ready
+      status: 'True'
+      type: Ready
+  revision: 2
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  name: tls-cert-manager-mysql
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  name: tls-cert-manager-orc
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
