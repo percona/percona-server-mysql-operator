@@ -1,0 +1,21 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      verify_certificate_sans gr-tls-cert-manager-ssl '[
+        "*.gr-tls-cert-manager-mysql",
+        "*.gr-tls-cert-manager-mysql.'"${NAMESPACE}"'",
+        "*.gr-tls-cert-manager-mysql.'"${NAMESPACE}"'.svc.cluster.local",
+        "*.gr-tls-cert-manager-orchestrator",
+        "*.gr-tls-cert-manager-orchestrator.'"${NAMESPACE}"'",
+        "*.gr-tls-cert-manager-orchestrator.'"${NAMESPACE}"'.svc.cluster.local",
+        "*.gr-tls-cert-manager-router",
+        "*.gr-tls-cert-manager-router.'"${NAMESPACE}"'",
+        "*.gr-tls-cert-manager-router.'"${NAMESPACE}"'.svc.cluster.local"
+      ]'
