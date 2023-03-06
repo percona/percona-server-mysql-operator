@@ -33,8 +33,6 @@ spec:
   serviceName: limits-no-resources-mysql
   template:
     metadata:
-      annotations:
-        percona.com/configuration-hash: ""
       labels:
         app.kubernetes.io/component: mysql
         app.kubernetes.io/instance: limits-no-resources
