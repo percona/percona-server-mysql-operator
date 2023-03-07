@@ -23,20 +23,7 @@ import (
 var validityNotAfter = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
 
 func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Secret, error) {
-	// TODO: DNS suffix
-	hosts := []string{
-		fmt.Sprintf("*.%s-mysql", cr.Name),
-		fmt.Sprintf("*.%s-mysql.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-mysql.%s.svc.cluster.local", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-orchestrator", cr.Name),
-		fmt.Sprintf("*.%s-orchestrator.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-orchestrator.%s.svc.cluster.local", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-router", cr.Name),
-		fmt.Sprintf("*.%s-router.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-router.%s.svc.cluster.local", cr.Name, cr.Namespace),
-	}
-
-	ca, cert, key, err := issueCerts(hosts)
+	ca, cert, key, err := issueCerts(DNSNames(cr))
 	if err != nil {
 		return nil, errors.Wrap(err, "issue TLS certificates")
 	}
@@ -54,6 +41,24 @@ func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL
 		Type: corev1.SecretTypeTLS,
 	}
 	return secret, nil
+}
+
+func DNSNames(cr *apiv1alpha1.PerconaServerMySQL) []string {
+	hosts := []string{
+		fmt.Sprintf("*.%s-mysql", cr.Name),
+		fmt.Sprintf("*.%s-mysql.%s", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-mysql.%s.svc.cluster.local", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-orchestrator", cr.Name),
+		fmt.Sprintf("*.%s-orchestrator.%s", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-orchestrator.%s.svc.cluster.local", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-router", cr.Name),
+		fmt.Sprintf("*.%s-router.%s", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-router.%s.svc.cluster.local", cr.Name, cr.Namespace),
+	}
+	if cr.Spec.TLS != nil {
+		hosts = append(hosts, cr.Spec.TLS.SANs...)
+	}
+	return hosts
 }
 
 // issueCerts returns CA certificate, TLS certificate and TLS private key

@@ -2,7 +2,6 @@ package ps
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -98,17 +97,6 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 			return err
 		}
 	}
-	hosts := []string{
-		fmt.Sprintf("*.%s-mysql", cr.Name),
-		fmt.Sprintf("*.%s-mysql.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-mysql.%s.svc.cluster.local", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-orchestrator", cr.Name),
-		fmt.Sprintf("*.%s-orchestrator.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-orchestrator.%s.svc.cluster.local", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-router", cr.Name),
-		fmt.Sprintf("*.%s-router.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-router.%s.svc.cluster.local", cr.Name, cr.Namespace),
-	}
 	certName := cr.Name + "-ssl"
 
 	kubeCert := &cm.Certificate{
@@ -118,7 +106,7 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 		},
 		Spec: cm.CertificateSpec{
 			SecretName: cr.Spec.SSLSecretName,
-			DNSNames:   hosts,
+			DNSNames:   secret.DNSNames(cr),
 			IsCA:       false,
 			IssuerRef: cmmeta.ObjectReference{
 				Name:  issuerName,
@@ -126,9 +114,6 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 				Group: issuerGroup,
 			},
 		},
-	}
-	if cr.Spec.TLS != nil {
-		kubeCert.Spec.DNSNames = append(kubeCert.Spec.DNSNames, cr.Spec.TLS.SANs...)
 	}
 
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, kubeCert, r.Scheme); err != nil {
