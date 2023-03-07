@@ -256,6 +256,8 @@ type ProxySpec struct {
 type MySQLRouterSpec struct {
 	Expose ServiceExpose `json:"expose,omitempty"`
 
+	Configuration string `json:"configuration,omitempty"`
+
 	PodSpec `json:",inline"`
 }
 
