@@ -393,20 +393,19 @@ func (r *PerconaServerMySQLReconciler) ensureUserSecrets(
 		Name:      cr.Spec.SecretsName,
 	}
 
-	exists, err := k8s.ObjectExists(ctx, r.Client, nn, &corev1.Secret{})
-	if err != nil {
-		return errors.Wrap(err, "check if secret exists")
-	} else if exists {
-		return nil
-	}
+	userSecret := new(corev1.Secret)
 
-	secret, err := secret.GeneratePasswordsSecret(cr.Spec.SecretsName, cr.Namespace)
+	if err := r.Get(ctx, nn, userSecret); client.IgnoreNotFound(err) != nil {
+		return errors.Wrap(err, "get user secret")
+	}
+	err := secret.FillPasswordsSecret(userSecret)
 	if err != nil {
 		return errors.Wrap(err, "generate passwords")
 	}
-
-	if err = r.Create(ctx, secret); err != nil {
-		return errors.Wrapf(err, "create secret %s", cr.Spec.SecretsName)
+	userSecret.Name = cr.Spec.SecretsName
+	userSecret.Namespace = cr.Namespace
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, userSecret, r.Scheme); err != nil {
+		return errors.Wrap(err, "ensure user secret")
 	}
 
 	return nil
