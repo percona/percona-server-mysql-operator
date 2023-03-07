@@ -1,13 +1,18 @@
 name: Run tests
-on: [pull_request]
+
+on:
+  pull_request:
+
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v3
+      - name: Clone the code
+        uses: actions/checkout@v3
+      - name: Setup Go
+        uses: actions/setup-go@v3
         with:
-          go-version: '^1.19'
-      - uses: actions/checkout@v3
-      - name: go test
-        run: go test -v ./...
+          go-version: "1.19"
+      - name: Perform the test
+        run: make test
