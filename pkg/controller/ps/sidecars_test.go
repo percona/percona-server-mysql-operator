@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	// metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -69,11 +70,10 @@ var _ = Describe("PerconaServerMongoDB controller", func() {
 		// 	},
 		// }
 
-		cr, err := readCRNative()
+		cr, err := readDefaultCR("default")
 		It("should read defautl cr.yaml", func() {
-			Expect(err).Error().Should(BeNil())
+			Expect(err).NotTo(HaveOccurred())
 		})
-		cr.Namespace = "default"
 
 		ctx := context.Background()
 
@@ -83,12 +83,15 @@ var _ = Describe("PerconaServerMongoDB controller", func() {
 
 		Describe("Sidecars", func() {
 			Context("sidecar container specified in the CR", func() {
+				sidecar := corev1.Container{
+					Name:    "sidecar1",
+					Image:   "busybox",
+					Command: []string{"sleep", "30d"},
+				}
 
-				// add sidecar to CR
-				cr.MySQLSpec().Size = 4
+				cr.MySQLSpec().Sidecars = []corev1.Container{sidecar}
 
-				// By("Update CR with sidecars")
-				It("CR should be updated", func() {
+				Specify("CR should be updated", func() {
 					Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
 				})
 
@@ -100,19 +103,25 @@ var _ = Describe("PerconaServerMongoDB controller", func() {
 						return err == nil
 					}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 
-					Expect(cr.MySQLSpec().Size).Should(Equal(*&sts.Spec.Replicas))
+					Expect(sts.Spec.Template.Spec.Containers).
+						Should(ContainElement(ContainElement(sidecar)))
 				})
 			})
 		})
 	})
 })
 
-func readCRNative() (*psv1alpha1.PerconaServerMySQL, error) {
-	var cr *psv1alpha1.PerconaServerMySQL
-
+func readDefaultCR(namespace string) (*psv1alpha1.PerconaServerMySQL, error) {
 	sch := runtime.NewScheme()
-	_ = scheme.AddToScheme(sch)
-	_ = psv1alpha1.AddToScheme(sch)
+	err := scheme.AddToScheme(sch)
+	if err != nil {
+		return nil, err
+	}
+	err = psv1alpha1.AddToScheme(sch)
+	if err != nil {
+		return nil, err
+	}
+
 	decode := serializer.NewCodecFactory(sch).UniversalDeserializer().Decode
 
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "cr.yaml"))
@@ -120,11 +129,17 @@ func readCRNative() (*psv1alpha1.PerconaServerMySQL, error) {
 		return nil, err
 	}
 
-	obj, gKV, _ := decode(data, nil, nil)
+	obj, gKV, err := decode(data, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var cr *psv1alpha1.PerconaServerMySQL
 
 	if gKV.Kind == "PerconaServerMySQL" {
 		cr = obj.(*psv1alpha1.PerconaServerMySQL)
 	}
 
+	cr.Namespace = namespace
 	return cr, nil
 }

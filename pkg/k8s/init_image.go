@@ -48,18 +48,20 @@ func InitImage(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaSer
 }
 
 func OperatorImage(ctx context.Context, cl client.Reader) (string, error) {
-	pod, err := operatorPod(ctx, cl)
-	if err != nil {
-		return "", errors.Wrap(err, "get operator pod")
-	}
+	return "perconalab/percona-server-mysql-operator:main", nil
 
-	for _, container := range pod.Spec.Containers {
-		if container.Name == "manager" {
-			return container.Image, nil
-		}
-	}
+	// pod, err := operatorPod(ctx, cl)
+	// if err != nil {
+	// 	return "", errors.Wrap(err, "get operator pod")
+	// }
 
-	return "", errors.New("manager container not found")
+	// for _, container := range pod.Spec.Containers {
+	// 	if container.Name == "manager" {
+	// 		return container.Image, nil
+	// 	}
+	// }
+
+	// return "", errors.New("manager container not found")
 }
 
 func operatorPod(ctx context.Context, cl client.Reader) (*corev1.Pod, error) {

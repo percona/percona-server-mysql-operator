@@ -52,9 +52,12 @@ func TestAPIs(t *testing.T) {
 	RunSpecs(t, "PS Suite")
 }
 
+var ctx context.Context
+var cancel context.CancelFunc
+
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
-
+	ctx, cancel = context.WithCancel(context.TODO())
 	Expect(os.Setenv("KUBEBUILDER_ASSETS", "/Users/inelpandzic//Library/Application Support/io.kubebuilder.envtest/k8s/1.26.1-darwin-arm64")).To(Succeed())
 
 	By("bootstrapping test environment")
@@ -92,12 +95,13 @@ var _ = BeforeSuite(func() {
 	//+kubebuilder:scaffold:scheme
 	go func() {
 		defer GinkgoRecover()
-		err = k8sManager.Start(context.TODO())
+		err = k8sManager.Start(ctx)
 		Expect(err).ToNot(HaveOccurred(), "failed to run manager")
 	}()
 })
 
 var _ = AfterSuite(func() {
+	cancel()
 	By("tearing down the test environment")
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
