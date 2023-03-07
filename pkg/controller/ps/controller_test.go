@@ -24,6 +24,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gstruct"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	// metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,67 +47,45 @@ import (
 	//+kubebuilder:scaffold:imports
 )
 
-var _ = Describe("PerconaServerMongoDB controller", func() {
+var _ = Describe("Sidecars", func() {
 
-	Describe("given a CR", func() {
-		// cr := &psv1alpha1.PerconaServerMySQL{
-		// 	TypeMeta: metav1.TypeMeta{
-		// 		APIVersion: "ps.percona.com/v1alpha1",
-		// 		Kind:       "PerconaServerMySQL",
-		// 	},
-		// 	ObjectMeta: metav1.ObjectMeta{
-		// 		Name:      "test-cr",
-		// 		Namespace: "default",
-		// 	},
-		// 	Spec: psv1alpha1.PerconaServerMySQLSpec{
-		// 		CRVersion: version.Version,
-		// 		Backup: &psv1alpha1.BackupSpec{
-		// 			Enabled: false,
-		// 		},
-		// 		Proxy: psv1alpha1.ProxySpec{
-		// 			Router: &psv1alpha1.MySQLRouterSpec{},
-		// 		},
-		// 		Orchestrator: psv1alpha1.OrchestratorSpec{},
-		// 	},
-		// }
+	cr, err := readDefaultCR("default")
+	It("should read defautl cr.yaml", func() {
+		Expect(err).NotTo(HaveOccurred())
+	})
 
-		cr, err := readDefaultCR("default")
-		It("should read defautl cr.yaml", func() {
-			Expect(err).NotTo(HaveOccurred())
+	ctx := context.Background()
+
+	It("Should create PerconaServerMongoDB", func() {
+		Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+	})
+
+	Context("sidecar container specified in the CR", func() {
+		sidecar := corev1.Container{
+			Name:    "sidecar1",
+			Image:   "busybox",
+			Command: []string{"sleep", "30d"},
+		}
+
+		cr.MySQLSpec().Sidecars = []corev1.Container{sidecar}
+
+		Specify("CR should be updated", func() {
+			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
 		})
 
-		ctx := context.Background()
+		Specify("controller should add specified sidecar to mysql STS", func() {
+			sts := &appsv1.StatefulSet{}
 
-		It("Should create PerconaServerMongoDB", func() {
-			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
-		})
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts)
+				return err == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 
-		Describe("Sidecars", func() {
-			Context("sidecar container specified in the CR", func() {
-				sidecar := corev1.Container{
-					Name:    "sidecar1",
-					Image:   "busybox",
-					Command: []string{"sleep", "30d"},
-				}
-
-				cr.MySQLSpec().Sidecars = []corev1.Container{sidecar}
-
-				Specify("CR should be updated", func() {
-					Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
-				})
-
-				Specify("controller should add specified sidecar to mysql STS", func() {
-					sts := &appsv1.StatefulSet{}
-
-					Eventually(func() bool {
-						err := k8sClient.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts)
-						return err == nil
-					}, time.Second*15, time.Millisecond*250).Should(BeTrue())
-
-					Expect(sts.Spec.Template.Spec.Containers).
-						Should(ContainElement(ContainElement(sidecar)))
-				})
-			})
+			Expect(sts.Spec.Template.Spec.Containers).
+				Should(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
+					"Name":  Equal(sidecar.Name),
+					"Image": Equal(sidecar.Image),
+				})))
 		})
 	})
 })
