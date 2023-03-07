@@ -18,7 +18,6 @@ package ps
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -56,8 +55,6 @@ var ctx context.Context
 var cancel context.CancelFunc
 
 var _ = BeforeSuite(func() {
-	Expect(os.Setenv("KUBEBUILDER_ASSETS", "/Users/inelpandzic//Library/Application Support/io.kubebuilder.envtest/k8s/1.26.1-darwin-arm64")).To(Succeed())
-
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	ctx, cancel = context.WithCancel(context.TODO())
