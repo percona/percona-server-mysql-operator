@@ -33,8 +33,6 @@ spec:
   serviceName: limits-no-requests-mysql
   template:
     metadata:
-      annotations:
-        percona.com/configuration-hash: ""
       labels:
         app.kubernetes.io/component: mysql
         app.kubernetes.io/instance: limits-no-requests
