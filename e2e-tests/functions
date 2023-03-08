@@ -267,6 +267,10 @@ get_mysql_pods() {
 	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/component=mysql | awk '{print $1}'
 }
 
+get_router_pods() {
+	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/component=router | awk '{print $1}'
+}
+
 get_mysql_users() {
 	local args=$1
 
