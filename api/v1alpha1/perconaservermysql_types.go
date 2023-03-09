@@ -442,6 +442,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 
 	cr.SetVersion()
 
+	if cr.Spec.Backup == nil {
+		cr.Spec.Backup = new(BackupSpec)
+	}
+
 	if len(cr.Spec.Backup.Image) == 0 {
 		return errors.New("backup.image can't be empty")
 	}
@@ -496,6 +500,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 	}
 	if cr.Spec.MySQL.ReadinessProbe.TimeoutSeconds == 0 {
 		cr.Spec.MySQL.ReadinessProbe.TimeoutSeconds = 3
+	}
+
+	if cr.Spec.Proxy.Router == nil {
+		cr.Spec.Proxy.Router = new(MySQLRouterSpec)
 	}
 
 	if cr.Spec.Proxy.Router.ReadinessProbe.PeriodSeconds == 0 {
@@ -560,6 +568,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		}
 	}
 
+	if cr.Spec.Proxy.HAProxy == nil {
+		cr.Spec.Proxy.HAProxy = new(HAProxySpec)
+	}
+
 	if cr.HAProxyEnabled() && cr.Spec.MySQL.ClusterType != ClusterTypeGR && !cr.Spec.AllowUnsafeConfig {
 		if cr.Spec.Proxy.HAProxy.Size < MinSafeProxySize {
 			cr.Spec.Proxy.HAProxy.Size = MinSafeProxySize
@@ -576,6 +588,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 			cr.Spec.Orchestrator.Enabled = true
 			log.Info("orchestrator can't be disabled on an existing cluster")
 		}
+	}
+
+	if cr.Spec.PMM == nil {
+		cr.Spec.PMM = new(PMMSpec)
 	}
 
 	if cr.Spec.Pause {
@@ -760,8 +776,8 @@ func (cr *PerconaServerMySQL) PMMEnabled(secret *corev1.Secret) bool {
 
 func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	if secret.Data != nil {
-		_, ok := secret.Data[string(UserPMMServerKey)]
-		return ok
+		v, ok := secret.Data[string(UserPMMServerKey)]
+		return ok && len(v) > 0
 	}
 	return false
 }
