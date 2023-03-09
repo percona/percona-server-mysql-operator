@@ -429,6 +429,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 
 	cr.SetVersion()
 
+	if cr.Spec.Backup == nil {
+		cr.Spec.Backup = new(BackupSpec)
+	}
+
 	if len(cr.Spec.Backup.Image) == 0 {
 		return errors.New("backup.image can't be empty")
 	}
@@ -571,6 +575,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 			cr.Spec.Orchestrator.Enabled = true
 			log.Info("orchestrator can't be disabled on an existing cluster")
 		}
+	}
+
+	if cr.Spec.PMM == nil {
+		cr.Spec.PMM = new(PMMSpec)
 	}
 
 	if cr.Spec.Pause {
@@ -755,8 +763,8 @@ func (cr *PerconaServerMySQL) PMMEnabled(secret *corev1.Secret) bool {
 
 func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	if secret.Data != nil {
-		_, ok := secret.Data[string(UserPMMServerKey)]
-		return ok
+		v, ok := secret.Data[string(UserPMMServerKey)]
+		return ok && len(v) > 0
 	}
 	return false
 }
