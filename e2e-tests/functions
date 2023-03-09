@@ -412,5 +412,11 @@ verify_certificate_sans() {
 	local certificate=$1
 	local expected_sans=$2
 
-	kubectl -n "${NAMESPACE}" get certificate "${certificate}" -o jsonpath='{.spec.dnsNames}' | jq | diff <(echo "${expected_sans}" | jq) -
+	have=$(mktemp)
+	want=$(mktemp)
+
+	kubectl -n "${NAMESPACE}" get certificate "${certificate}" -o jsonpath='{.spec.dnsNames}' | jq >"${have}"
+	echo "${expected_sans}" | jq >"${want}"
+
+	diff "${have}" "${want}"
 }
