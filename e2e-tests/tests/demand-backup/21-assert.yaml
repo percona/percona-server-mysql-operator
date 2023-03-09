@@ -1,24 +1,31 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 30
+timeout: 400
 ---
-kind: ConfigMap
-apiVersion: v1
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
 metadata:
-  name: 06-read-data-azure-0
-data:
-  data: "100500"
+  name: demand-backup
+  finalizers:
+    - delete-mysql-pods-in-order
+status:
+  haproxy:
+    ready: 3
+    size: 3
+    state: ready
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  orchestrator:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
 ---
-kind: ConfigMap
-apiVersion: v1
+kind: PerconaServerMySQLRestore
+apiVersion: ps.percona.com/v1alpha1
 metadata:
-  name: 06-read-data-azure-1
-data:
-  data: "100500"
----
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: 06-read-data-azure-2
-data:
-  data: "100500"
+  name: demand-backup-restore-azure
+status:
+  state: Succeeded
