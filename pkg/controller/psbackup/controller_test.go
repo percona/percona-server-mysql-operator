@@ -35,7 +35,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 		stateDesc string
 	}{
 		{
-			name: "Test without cluster",
+			name: "without cluster",
 			cr: &apiv1alpha1.PerconaServerMySQLBackup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      backupName,
@@ -49,7 +49,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			stateDesc: fmt.Sprintf("PerconaServerMySQL %s in namespace %s is not found", clusterName, namespace),
 		},
 		{
-			name: "Test without enabled backup section",
+			name: "without enabled backup section",
 			cr: &apiv1alpha1.PerconaServerMySQLBackup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      backupName,
@@ -89,7 +89,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			stateDesc: "spec.backup stanza not found in PerconaServerMySQL CustomResource or backup is disabled",
 		},
 		{
-			name: "Test without storage",
+			name: "without storage",
 			cr: &apiv1alpha1.PerconaServerMySQLBackup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      backupName,
