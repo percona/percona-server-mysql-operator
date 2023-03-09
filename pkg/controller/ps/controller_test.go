@@ -145,7 +145,7 @@ var _ = Describe("Sidecars", Ordered, func() {
 	})
 
 	Context("Sidecar container specified with a PVC mounted", func() {
-		Specify("should get latest CR", func() {
+		It("should get latest CR", func() {
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{Name: "cluster1", Namespace: cr.Namespace}, cr)
 				return err == nil
