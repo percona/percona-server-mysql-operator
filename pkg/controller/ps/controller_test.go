@@ -39,7 +39,7 @@ import (
 	//+kubebuilder:scaffold:imports
 )
 
-var _ = Describe("Sidecars", func() {
+var _ = Describe("Sidecars", Ordered, func() {
 	cr, err := readDefaultCR("default")
 	It("should read defautl cr.yaml", func() {
 		Expect(err).NotTo(HaveOccurred())
@@ -212,7 +212,6 @@ var _ = Describe("Sidecars", func() {
 })
 
 func readDefaultCR(namespace string) (*psv1alpha1.PerconaServerMySQL, error) {
-
 	sch := runtime.NewScheme()
 	err := scheme.AddToScheme(sch)
 	if err != nil {
@@ -242,5 +241,6 @@ func readDefaultCR(namespace string) (*psv1alpha1.PerconaServerMySQL, error) {
 	}
 
 	cr.Namespace = namespace
+	cr.Spec.InitImage = "perconalab/percona-server-mysql-operator:main"
 	return cr, nil
 }
