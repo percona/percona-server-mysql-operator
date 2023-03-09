@@ -296,11 +296,11 @@ func RestoreJob(
 
 	switch storage.Type {
 	case apiv1alpha1.BackupStorageAzure:
-		destination = strings.TrimPrefix(destination, storage.Azure.ContainerName+"/")
+		destination = strings.TrimPrefix(destination, string(storage.Azure.ContainerName)+"/")
 	case apiv1alpha1.BackupStorageS3:
-		destination = strings.TrimPrefix(destination, "s3://"+storage.S3.Bucket+"/")
+		destination = strings.TrimPrefix(destination, "s3://"+string(storage.S3.Bucket)+"/")
 	case apiv1alpha1.BackupStorageGCS:
-		destination = strings.TrimPrefix(destination, "gs://"+storage.GCS.Bucket+"/")
+		destination = strings.TrimPrefix(destination, "gs://"+string(storage.GCS.Bucket)+"/")
 	}
 
 	return &batchv1.Job{
@@ -546,7 +546,7 @@ func SetStoragePVC(job *batchv1.Job, pvc *corev1.PersistentVolumeClaim) error {
 func SetStorageS3(job *batchv1.Job, s3 *apiv1alpha1.BackupStorageS3Spec) error {
 	spec := &job.Spec.Template.Spec
 
-	bucket, _, _ := strings.Cut(s3.Bucket, "/")
+	bucket := s3.Bucket.Bucket()
 
 	env := []corev1.EnvVar{
 		{
@@ -598,7 +598,7 @@ func SetStorageS3(job *batchv1.Job, s3 *apiv1alpha1.BackupStorageS3Spec) error {
 func SetStorageGCS(job *batchv1.Job, gcs *apiv1alpha1.BackupStorageGCSSpec) error {
 	spec := &job.Spec.Template.Spec
 
-	bucket, _, _ := strings.Cut(gcs.Bucket, "/")
+	bucket := gcs.Bucket.Bucket()
 
 	env := []corev1.EnvVar{
 		{
@@ -646,7 +646,7 @@ func SetStorageGCS(job *batchv1.Job, gcs *apiv1alpha1.BackupStorageGCSSpec) erro
 func SetStorageAzure(job *batchv1.Job, azure *apiv1alpha1.BackupStorageAzureSpec) error {
 	spec := &job.Spec.Template.Spec
 
-	container, _, _ := strings.Cut(azure.ContainerName, "/")
+	container := azure.ContainerName.Bucket()
 
 	env := []corev1.EnvVar{
 		{
