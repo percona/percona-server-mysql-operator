@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -15,18 +12,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/internal/testutil"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 )
 
 func TestBackupStatusErrStateDesc(t *testing.T) {
 	namespace := "some-namespace"
-	clusterName := "some-name"
-	backupName := "backup1"
-	q, err := resource.ParseQuantity("1Gi")
-	if err != nil {
-		t.Fatal(err)
-	}
-	storageName := "some-storage"
+
+	cr := testutil.UpdateResource(
+		testutil.DefaultResource(new(apiv1alpha1.PerconaServerMySQLBackup)),
+		func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
+			cr.Namespace = namespace
+		})
 
 	tests := []struct {
 		name      string
@@ -35,98 +32,42 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 		stateDesc string
 	}{
 		{
-			name: "without cluster",
-			cr: &apiv1alpha1.PerconaServerMySQLBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      backupName,
-					Namespace: namespace,
-				},
-				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
-					ClusterName: clusterName,
-					StorageName: storageName,
-				},
-			},
-			stateDesc: fmt.Sprintf("PerconaServerMySQL %s in namespace %s is not found", clusterName, namespace),
+			name:      "without cluster",
+			cr:        cr,
+			stateDesc: fmt.Sprintf("PerconaServerMySQL %s in namespace %s is not found", cr.Spec.ClusterName, namespace),
 		},
 		{
 			name: "without enabled backup section",
-			cr: &apiv1alpha1.PerconaServerMySQLBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      backupName,
-					Namespace: namespace,
-				},
-				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
-					ClusterName: clusterName,
-					StorageName: storageName,
-				},
-			},
-			cluster: &apiv1alpha1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName,
-					Namespace: namespace,
-				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: apiv1alpha1.MySQLSpec{
-						PodSpec: apiv1alpha1.PodSpec{
-							VolumeSpec: &apiv1alpha1.VolumeSpec{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-									Resources: corev1.ResourceRequirements{
-										Requests: map[corev1.ResourceName]resource.Quantity{
-											corev1.ResourceStorage: q,
-										},
-									},
-								},
-							},
-						},
-					},
-					Backup: &apiv1alpha1.BackupSpec{
+			cr:   cr,
+			cluster: testutil.UpdateResource(
+				testutil.DefaultResource(new(apiv1alpha1.PerconaServerMySQL)),
+				func(cr *apiv1alpha1.PerconaServerMySQL) {
+					cr.Namespace = namespace
+
+					cr.Spec.Backup = &apiv1alpha1.BackupSpec{
 						Image:    "some-image",
 						Enabled:  false,
 						Storages: make(map[string]*apiv1alpha1.BackupStorageSpec),
-					},
+					}
 				},
-			},
+			),
 			stateDesc: "spec.backup stanza not found in PerconaServerMySQL CustomResource or backup is disabled",
 		},
 		{
 			name: "without storage",
-			cr: &apiv1alpha1.PerconaServerMySQLBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      backupName,
-					Namespace: namespace,
-				},
-				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
-					ClusterName: clusterName,
-					StorageName: storageName,
-				},
-			},
-			cluster: &apiv1alpha1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName,
-					Namespace: namespace,
-				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: apiv1alpha1.MySQLSpec{
-						PodSpec: apiv1alpha1.PodSpec{
-							VolumeSpec: &apiv1alpha1.VolumeSpec{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-									Resources: corev1.ResourceRequirements{
-										Requests: map[corev1.ResourceName]resource.Quantity{
-											corev1.ResourceStorage: q,
-										},
-									},
-								},
-							},
-						},
-					},
-					Backup: &apiv1alpha1.BackupSpec{
+			cr:   cr,
+			cluster: testutil.UpdateResource(
+				testutil.DefaultResource(new(apiv1alpha1.PerconaServerMySQL)),
+				func(cr *apiv1alpha1.PerconaServerMySQL) {
+					cr.Namespace = namespace
+					cr.Spec.Backup = &apiv1alpha1.BackupSpec{
 						Image:    "some-image",
 						Enabled:  true,
 						Storages: make(map[string]*apiv1alpha1.BackupStorageSpec),
-					},
+					}
 				},
-			},
-			stateDesc: fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", storageName),
+			),
+			stateDesc: fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", cr.Spec.StorageName),
 		},
 	}
 
