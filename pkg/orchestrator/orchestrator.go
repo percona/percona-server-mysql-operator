@@ -86,7 +86,7 @@ func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
 
 func FQDN(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
 	// TODO: DNS suffix
-	return fmt.Sprintf("%s.%s.svc.cluster.local", PodName(cr, idx), cr.Namespace)
+	return fmt.Sprintf("%s.%s.svc", PodName(cr, idx), cr.Namespace)
 }
 
 func APIHost(cr *apiv1alpha1.PerconaServerMySQL) string {

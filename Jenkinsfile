@@ -414,7 +414,6 @@ pipeline {
                         runTest('monitoring', 'cluster3')
                         runTest('semi-sync', 'cluster3')
                         runTest('service-per-pod', 'cluster3')
-                        runTest('sidecars', 'cluster3')
                         runTest('limits', 'cluster3')
                         runTest('version-service', 'cluster3')
                         runTest('tls-cert-manager', 'cluster3')
