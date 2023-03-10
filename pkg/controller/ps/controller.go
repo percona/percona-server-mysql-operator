@@ -1744,11 +1744,8 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 				RenewBefore: &metav1.Duration{Duration: 730 * time.Hour},
 			},
 		}
-		err := ctrl.SetControllerReference(cr, caCert, r.Scheme)
-		if err != nil {
-			return errors.Wrap(err, "set controller reference")
-		}
-		err = r.Create(ctx, caCert)
+
+		err := r.Create(ctx, caCert)
 		if err != nil && !k8serrors.IsAlreadyExists(err) {
 			return errors.Wrap(err, "create CA certificate")
 		}
@@ -1792,15 +1789,12 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 			},
 		},
 	}
-	err := ctrl.SetControllerReference(cr, kubeCert, r.Scheme)
-	if err != nil {
-		return errors.Wrap(err, "set controller reference")
-	}
+
 	if cr.Spec.TLS != nil {
 		kubeCert.Spec.DNSNames = append(kubeCert.Spec.DNSNames, cr.Spec.TLS.SANs...)
 	}
 
-	err = r.Create(ctx, kubeCert)
+	err := r.Create(ctx, kubeCert)
 	if err != nil && !k8serrors.IsAlreadyExists(err) {
 		return errors.Wrap(err, "create certificate")
 	}
@@ -1850,11 +1844,8 @@ func (r *PerconaServerMySQLReconciler) createIssuer(ctx context.Context, cr *api
 			IssuerConfig: IssuerConf,
 		},
 	}
-	err := ctrl.SetControllerReference(cr, isr, r.Scheme)
-	if err != nil {
-		return errors.Wrap(err, "set controller reference")
-	}
-	err = r.Create(ctx, isr)
+
+	err := r.Create(ctx, isr)
 	if err != nil && !k8serrors.IsAlreadyExists(err) {
 		return errors.Wrap(err, "create issuer")
 	}
