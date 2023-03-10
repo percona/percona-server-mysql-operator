@@ -89,10 +89,6 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	status := cr.Status
-	if status.State == apiv1alpha1.BackupError {
-		status.State = apiv1alpha1.BackupNew
-		status.StateDesc = ""
-	}
 
 	defer func() {
 		if status.State == cr.Status.State && status.Destination == cr.Status.Destination {
@@ -155,6 +151,8 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 	if cluster.Status.MySQL.State != apiv1alpha1.StateReady {
 		log.Info("Cluster is not ready", "cluster", cr.Name)
+		status.State = apiv1alpha1.BackupNew
+		status.StateDesc = "cluster is not ready"
 		return rr, nil
 	}
 
@@ -292,6 +290,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, nil
 	default:
 		status.State = apiv1alpha1.BackupStarting
+		status.StateDesc = ""
 	}
 
 	return rr, nil
