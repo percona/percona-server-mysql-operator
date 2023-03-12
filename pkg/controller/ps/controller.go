@@ -135,6 +135,8 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 		switch f {
 		case "delete-mysql-pods-in-order":
 			err = r.deleteMySQLPods(ctx, cr)
+		case "delete-ssl":
+			err = r.deleteCerts(ctx, cr)
 		}
 
 		if err != nil {
@@ -254,6 +256,68 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 	}
 
 	return psrestore.ErrWaitingTermination
+}
+
+// create ussuer, certificate and certs by hand
+
+func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	issuers := []string{
+		cr.Name + "-pso-ca-issuer",
+		cr.Name + "-pso-issuer",
+	}
+	for _, issuerName := range issuers {
+		issuer := &cm.Issuer{}
+		err := r.Client.Get(context.TODO(), types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      issuerName,
+		}, issuer)
+		if err != nil {
+			continue
+		}
+		err = r.Client.Delete(context.TODO(), issuer, &client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &issuer.UID}})
+		if err != nil {
+			return errors.Wrapf(err, "delete issuer %s", issuerName)
+		}
+	}
+
+	certs := []string{
+		cr.Name + "-ssl",
+		cr.Name + "-ssl-internal",
+		cr.Name + "-ca-cert",
+	}
+	for _, certName := range certs {
+		secret := &corev1.Secret{}
+		err := r.Client.Get(context.TODO(), types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      certName,
+		}, secret)
+		if client.IgnoreNotFound(err) != nil {
+			continue
+		}
+
+		err = r.Client.Delete(context.TODO(), secret,
+			&client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &secret.UID}})
+		if client.IgnoreNotFound(err) != nil {
+			return errors.Wrapf(err, "delete secret %s", certName)
+		}
+
+		cert := &cm.Certificate{}
+		err = r.Client.Get(context.TODO(), types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      certName,
+		}, cert)
+		if err != nil {
+			continue
+		}
+
+		err = r.Client.Delete(context.TODO(), cert,
+			&client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &cert.UID}})
+		if err != nil {
+			return errors.Wrapf(err, "delete certificate %s", certName)
+		}
+	}
+
+	return nil
 }
 
 func (r *PerconaServerMySQLReconciler) doReconcile(
