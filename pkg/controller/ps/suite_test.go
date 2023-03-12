@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	cmscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -80,6 +81,9 @@ var _ = BeforeSuite(func() {
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme.Scheme,
 	})
+	Expect(err).ToNot(HaveOccurred())
+
+	err = cmscheme.AddToScheme(k8sManager.GetScheme())
 	Expect(err).ToNot(HaveOccurred())
 
 	err = (&PerconaServerMySQLReconciler{
