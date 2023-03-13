@@ -18,6 +18,8 @@ package ps
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
@@ -29,18 +31,124 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 
+	"github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	psv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	//+kubebuilder:scaffold:imports
 )
 
+var _ = Describe("Unsafe configurations", Ordered, func() {
+	ctx := context.Background()
+
+	ns := fmt.Sprintf("unsafe-%d", rand.Intn(1000))
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ns,
+		},
+	}
+
+	BeforeAll(func() {
+		By("Creating the Namespace to perform the tests")
+		err := k8sClient.Create(ctx, namespace)
+		Expect(err).To(Not(HaveOccurred()))
+	})
+
+	AfterAll(func() {
+		By("Deleting the Namespace to perform the tests")
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	Context("Unsafe configurations are disabled", func() {
+		Specify("controller should set minimum safe number of replicas to MySQL statefulset", func() {
+			cr, err := readDefaultCR("unsafe-disabled-min", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.AllowUnsafeConfig = false
+			cr.MySQLSpec().Size = 1
+
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+
+			sts := &appsv1.StatefulSet{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts)
+				return err == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+			Expect(*sts.Spec.Replicas).Should(Equal(int32(v1alpha1.MinSafeGRSize)))
+		})
+
+		Specify("controller should set maximum safe number of replicas to MySQL statefulset", func() {
+			cr, err := readDefaultCR("unsafe-disabled-max", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.AllowUnsafeConfig = false
+			cr.MySQLSpec().Size = 11
+
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+
+			sts := &appsv1.StatefulSet{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts)
+				return err == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+			Expect(*sts.Spec.Replicas).Should(Equal(int32(v1alpha1.MaxSafeGRSize)))
+		})
+
+		Specify("controller should set even number of replicas to MySQL statefulset", func() {
+			cr, err := readDefaultCR("unsafe-disabled-even", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.AllowUnsafeConfig = false
+			cr.MySQLSpec().Size = 4
+
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+
+			sts := &appsv1.StatefulSet{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts)
+				return err == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+			Expect(*sts.Spec.Replicas).Should(Equal(int32(5)))
+		})
+	})
+
+	Context("Unsafe configurations are enabled", func() {
+		Specify("controller should set unsafe number of replicas to MySQL statefulset", func() {
+			cr, err := readDefaultCR("unsafe-enabled-min", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.AllowUnsafeConfig = true
+			cr.MySQLSpec().Size = 1
+
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+
+			sts := &appsv1.StatefulSet{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts)
+				return err == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+			Expect(*sts.Spec.Replicas).Should(Equal(int32(1)))
+		})
+	})
+})
+
 var _ = Describe("Sidecars", Ordered, func() {
-	cr, err := readDefaultCR("default")
+	crName := "sidecars"
+	cr, err := readDefaultCR(crName, "default")
 	It("should read defautl cr.yaml", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -82,7 +190,7 @@ var _ = Describe("Sidecars", Ordered, func() {
 	Context("Sidecar container specified with a volume mounted", func() {
 		Specify("should get latest CR", func() {
 			Eventually(func() bool {
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: "cluster1", Namespace: cr.Namespace}, cr)
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: crName, Namespace: cr.Namespace}, cr)
 				return err == nil
 			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 		})
@@ -147,7 +255,7 @@ var _ = Describe("Sidecars", Ordered, func() {
 	Context("Sidecar container specified with a PVC mounted", func() {
 		It("should get latest CR", func() {
 			Eventually(func() bool {
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: "cluster1", Namespace: cr.Namespace}, cr)
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: crName, Namespace: cr.Namespace}, cr)
 				return err == nil
 			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 		})
@@ -211,7 +319,7 @@ var _ = Describe("Sidecars", Ordered, func() {
 	})
 })
 
-func readDefaultCR(namespace string) (*psv1alpha1.PerconaServerMySQL, error) {
+func readDefaultCR(name, namespace string) (*psv1alpha1.PerconaServerMySQL, error) {
 	sch := runtime.NewScheme()
 	err := scheme.AddToScheme(sch)
 	if err != nil {
@@ -240,6 +348,7 @@ func readDefaultCR(namespace string) (*psv1alpha1.PerconaServerMySQL, error) {
 		cr = obj.(*psv1alpha1.PerconaServerMySQL)
 	}
 
+	cr.Name = name
 	cr.Namespace = namespace
 	cr.Spec.InitImage = "perconalab/percona-server-mysql-operator:main"
 	return cr, nil
