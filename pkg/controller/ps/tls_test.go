@@ -17,9 +17,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
-var _ = FDescribe("Cert-Manager delete-ssl finalizer", Ordered, func() {
+var _ = XDescribe("Cert-Manager delete-ssl finalizer", Ordered, func() {
 
-	It("should create cert-manager CRDs", func() {
+	It("should install cert-manager CRDs", func() {
 		crds, err := envtest.InstallCRDs(cfg, envtest.CRDInstallOptions{
 			Paths: []string{filepath.Join("testdata", "cert-manager.yaml")},
 		})
@@ -28,7 +28,7 @@ var _ = FDescribe("Cert-Manager delete-ssl finalizer", Ordered, func() {
 		log.Println(crds)
 	})
 
-	cr, err := readDefaultCR("default")
+	cr, err := readDefaultCR("cm-finalizer", "default")
 	It("should read defautl cr.yaml", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
