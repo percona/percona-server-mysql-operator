@@ -288,26 +288,8 @@ func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv
 		cr.Name + "-ca-cert",
 	}
 	for _, certName := range certs {
-		secret := &corev1.Secret{}
-		err := r.Client.Get(ctx, types.NamespacedName{
-			Namespace: cr.Namespace,
-			Name:      certName,
-		}, secret)
-		if client.IgnoreNotFound(err) != nil {
-			log.Info(fmt.Sprintf("AAAAAAAA - secret/cert GET ERROR: %s, err: %s", certName, err.Error()))
-			continue
-		}
-
-		log.Info(fmt.Sprintf("AAAAAAAA - deleting secret/cert: %s", certName), "secret", secret)
-		err = r.Client.Delete(ctx, secret,
-			&client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &secret.UID}})
-		if client.IgnoreNotFound(err) != nil {
-			log.Info(fmt.Sprintf("AAAAAAAA - secret/cert on DELETE ERROR: %s, error: %s", certName, err.Error()))
-			return errors.Wrapf(err, "delete secret %s", certName)
-		}
-
 		cert := &cm.Certificate{}
-		err = r.Client.Get(ctx, types.NamespacedName{
+		err := r.Client.Get(ctx, types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      certName,
 		}, cert)
@@ -319,6 +301,27 @@ func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv
 			&client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &cert.UID}})
 		if err != nil {
 			return errors.Wrapf(err, "delete certificate %s", certName)
+		}
+	}
+
+	secretNames := []string{
+		cr.Name + "-ca-cert",
+		cr.Spec.SSLSecretName,
+	}
+	for _, secretName := range secretNames {
+		secret := &corev1.Secret{}
+		err := r.Client.Get(ctx, types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      secretName,
+		}, secret)
+		if err != nil {
+			continue
+		}
+
+		err = r.Client.Delete(ctx, secret,
+			&client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &secret.UID}})
+		if err != nil {
+			return errors.Wrapf(err, "delete secret %s", secretName)
 		}
 	}
 
