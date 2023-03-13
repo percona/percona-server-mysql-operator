@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
-var _ = FDescribe("Finalizer delete-ssl", Ordered, func() {
+var _ = Describe("Finalizer delete-ssl", Ordered, func() {
 	ctx := context.Background()
 
 	const crName = "delete-ssl-finalizer"
