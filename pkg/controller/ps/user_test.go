@@ -25,7 +25,7 @@ func TestEnsureUserSecrets(t *testing.T) {
 		secret *corev1.Secret
 	}{
 		{
-			name: "Test without user secret",
+			name: "without user secret",
 			cr: &apiv1alpha1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "some-cluster",
@@ -37,7 +37,7 @@ func TestEnsureUserSecrets(t *testing.T) {
 			},
 		},
 		{
-			name: "Test with user secret",
+			name: "with user secret",
 			cr: &apiv1alpha1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "some-cluster",
@@ -64,7 +64,7 @@ func TestEnsureUserSecrets(t *testing.T) {
 			},
 		},
 		{
-			name: "Test with partially filled secret",
+			name: "with partially filled secret",
 			cr: &apiv1alpha1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "some-cluster",
@@ -88,7 +88,7 @@ func TestEnsureUserSecrets(t *testing.T) {
 			},
 		},
 		{
-			name: "Test with existing empty secret",
+			name: "with existing empty secret",
 			cr: &apiv1alpha1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "some-cluster",
