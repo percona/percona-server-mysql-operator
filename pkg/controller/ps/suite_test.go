@@ -24,8 +24,7 @@ import (
 	cmscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -95,32 +94,15 @@ func reconciler() *PerconaServerMySQLReconciler {
 }
 
 func readDefaultCR(name, namespace string) (*psv1alpha1.PerconaServerMySQL, error) {
-	sch := runtime.NewScheme()
-	err := scheme.AddToScheme(sch)
-	if err != nil {
-		return nil, err
-	}
-	err = psv1alpha1.AddToScheme(sch)
-	if err != nil {
-		return nil, err
-	}
-
-	decode := serializer.NewCodecFactory(sch).UniversalDeserializer().Decode
-
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "cr.yaml"))
 	if err != nil {
 		return nil, err
 	}
 
-	obj, gKV, err := decode(data, nil, nil)
-	if err != nil {
+	cr := &psv1alpha1.PerconaServerMySQL{}
+
+	if err := yaml.Unmarshal(data, cr); err != nil {
 		return nil, err
-	}
-
-	var cr *psv1alpha1.PerconaServerMySQL
-
-	if gKV.Kind == "PerconaServerMySQL" {
-		cr = obj.(*psv1alpha1.PerconaServerMySQL)
 	}
 
 	cr.Name = name
