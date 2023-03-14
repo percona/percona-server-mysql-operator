@@ -302,7 +302,7 @@ spec:
                           - DER
                           - CombinedPEM
                 commonName:
-                  description: 'CommonName is a common name to be used on the Certificate. The CommonName should have a length of 64 characters or fewer to avoid generating invalid CSRs. This value is ignored by TLS clients when any subject alt name is set. This is x509 behaviour: https://tools.ietf.org/html/rfc6125#section-6.4.4'
+                  description: 'CommonName is a common name to be used on the Certificate. The CommonName should have a length of 64 characters or fewer to avoid generating invalid CSRs. This value is ignored by TLS clients when any subject alt name is set. This is x509 behavior: https://tools.ietf.org/html/rfc6125#section-6.4.4'
                   type: string
                 dnsNames:
                   description: DNSNames is a list of DNS subjectAltNames to be set on the Certificate.
@@ -962,7 +962,7 @@ spec:
                       type: object
                       properties:
                         gatewayHTTPRoute:
-                          description: The Gateway API is a sig-network community API that models service networking in Kubernetes (https://gateway-api.sigs.k8s.io/). The Gateway solver will create HTTPRoutes with the specified labels in the same namespace as the challenge. This solver is experimental, and fields / behaviour may change in the future.
+                          description: The Gateway API is a sig-network community API that models service networking in Kubernetes (https://gateway-api.sigs.k8s.io/). The Gateway solver will create HTTPRoutes with the specified labels in the same namespace as the challenge. This solver is experimental, and fields / behavior may change in the future.
                           type: object
                           properties:
                             labels:
@@ -2032,7 +2032,7 @@ spec:
                             type: object
                             properties:
                               gatewayHTTPRoute:
-                                description: The Gateway API is a sig-network community API that models service networking in Kubernetes (https://gateway-api.sigs.k8s.io/). The Gateway solver will create HTTPRoutes with the specified labels in the same namespace as the challenge. This solver is experimental, and fields / behaviour may change in the future.
+                                description: The Gateway API is a sig-network community API that models service networking in Kubernetes (https://gateway-api.sigs.k8s.io/). The Gateway solver will create HTTPRoutes with the specified labels in the same namespace as the challenge. This solver is experimental, and fields / behavior may change in the future.
                                 type: object
                                 properties:
                                   labels:
@@ -3284,7 +3284,7 @@ spec:
                             type: object
                             properties:
                               gatewayHTTPRoute:
-                                description: The Gateway API is a sig-network community API that models service networking in Kubernetes (https://gateway-api.sigs.k8s.io/). The Gateway solver will create HTTPRoutes with the specified labels in the same namespace as the challenge. This solver is experimental, and fields / behaviour may change in the future.
+                                description: The Gateway API is a sig-network community API that models service networking in Kubernetes (https://gateway-api.sigs.k8s.io/). The Gateway solver will create HTTPRoutes with the specified labels in the same namespace as the challenge. This solver is experimental, and fields / behavior may change in the future.
                                 type: object
                                 properties:
                                   labels:
