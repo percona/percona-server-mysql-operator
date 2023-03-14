@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
-var _ = Describe("Finalizer delete-ssl", Ordered, func() {
+var _ = FDescribe("Finalizer delete-ssl", Ordered, func() {
 	ctx := context.Background()
 
 	const crName = "delete-ssl-finalizer"
@@ -56,6 +56,8 @@ var _ = Describe("Finalizer delete-ssl", Ordered, func() {
 
 		// This way we simulate cert-manager creating secrets
 		go func() {
+			defer GinkgoRecover()
+
 			// Wait for reconcile run to start creting CM resoureces
 			time.Sleep(10 * time.Second)
 			secretCACert := &corev1.Secret{
