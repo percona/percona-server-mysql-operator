@@ -43,6 +43,7 @@ var _ = Describe("Finalizer delete-ssl", Ordered, func() {
 	})
 
 	AfterAll(func() {
+		time.Sleep(30 * time.Second)
 		By("Deleting the Namespace to perform the tests")
 		_ = k8sClient.Delete(ctx, namespace)
 	})
