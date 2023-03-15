@@ -51,8 +51,8 @@ func getPodIP(hostname string) (string, error) {
 	return addrs[0], nil
 }
 
-func lookup(svcName string) (sets.String, error) {
-	endpoints := sets.NewString()
+func lookup(svcName string) (sets.Set[string], error) {
+	endpoints := sets.New[string]()
 	_, srvRecords, err := net.LookupSRV("", "", svcName)
 	if err != nil {
 		return endpoints, err

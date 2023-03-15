@@ -33,7 +33,7 @@ func bootstrapAsyncReplication() error {
 	if err != nil {
 		return errors.Wrap(err, "lookup")
 	}
-	log.Printf("Peers: %v", peers.List())
+	log.Printf("Peers: %v", peers.UnsortedList())
 
 	exists, err := lockExists()
 	if err != nil {
@@ -193,7 +193,7 @@ func bootstrapAsyncReplication() error {
 	return nil
 }
 
-func getTopology(peers sets.String) (string, []string, error) {
+func getTopology(peers sets.Set[string]) (string, []string, error) {
 	replicas := sets.NewString()
 	primary := ""
 
@@ -202,7 +202,7 @@ func getTopology(peers sets.String) (string, []string, error) {
 		return "", nil, errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
 
-	for _, peer := range peers.List() {
+	for _, peer := range peers.UnsortedList() {
 		db, err := replicator.NewReplicator("operator", operatorPass, peer, mysql.DefaultAdminPort)
 		if err != nil {
 			return "", nil, errors.Wrapf(err, "connect to %s", peer)
@@ -229,7 +229,7 @@ func getTopology(peers sets.String) (string, []string, error) {
 	}
 
 	if primary == "" && peers.Len() == 1 {
-		primary = peers.List()[0]
+		primary = peers.UnsortedList()[0]
 	} else if primary == "" {
 		primary = replicas.List()[0]
 	}
