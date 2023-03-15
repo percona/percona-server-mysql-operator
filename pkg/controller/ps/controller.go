@@ -256,8 +256,6 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 	return psrestore.ErrWaitingTermination
 }
 
-// create ussuer, certificate and certs by hand
-
 func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 	log.Info("Deleting SSL certificates")
