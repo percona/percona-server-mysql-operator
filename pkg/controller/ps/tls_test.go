@@ -59,7 +59,10 @@ var _ = Describe("Finalizer delete-ssl", Ordered, func() {
 		go func() {
 			defer GinkgoRecover()
 
-			// Wait for reconcile run to start creting CM resoureces
+			// We need to wait a bit in order to ensure that the operator starts
+			// creating issuers and certificates, because if secrets
+			// are already there, the operator will see that they exist and will
+			// not proceed with the algorithm.
 			time.Sleep(10 * time.Second)
 			secretCACert := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
