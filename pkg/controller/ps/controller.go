@@ -133,6 +133,8 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 		switch f {
 		case "delete-mysql-pods-in-order":
 			err = r.deleteMySQLPods(ctx, cr)
+		case "delete-ssl":
+			err = r.deleteCerts(ctx, cr)
 		}
 
 		if err != nil {
@@ -252,6 +254,74 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 	}
 
 	return psrestore.ErrWaitingTermination
+}
+
+func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	log := logf.FromContext(ctx)
+	log.Info("Deleting SSL certificates")
+
+	issuers := []string{
+		cr.Name + "-pso-ca-issuer",
+		cr.Name + "-pso-issuer",
+	}
+	for _, issuerName := range issuers {
+		issuer := &cm.Issuer{}
+		err := r.Client.Get(ctx, types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      issuerName,
+		}, issuer)
+		if err != nil {
+			continue
+		}
+		err = r.Client.Delete(ctx, issuer, &client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &issuer.UID}})
+		if err != nil {
+			return errors.Wrapf(err, "delete issuer %s", issuerName)
+		}
+	}
+
+	certs := []string{
+		cr.Name + "-ssl",
+		cr.Name + "-ca-cert",
+	}
+	for _, certName := range certs {
+		cert := &cm.Certificate{}
+		err := r.Client.Get(ctx, types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      certName,
+		}, cert)
+		if err != nil {
+			continue
+		}
+
+		err = r.Client.Delete(ctx, cert,
+			&client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &cert.UID}})
+		if err != nil {
+			return errors.Wrapf(err, "delete certificate %s", certName)
+		}
+	}
+
+	secretNames := []string{
+		cr.Name + "-ca-cert",
+		cr.Spec.SSLSecretName,
+	}
+	for _, secretName := range secretNames {
+		secret := &corev1.Secret{}
+		err := r.Client.Get(ctx, types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      secretName,
+		}, secret)
+		if err != nil {
+			continue
+		}
+
+		err = r.Client.Delete(ctx, secret,
+			&client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &secret.UID}})
+		if err != nil {
+			return errors.Wrapf(err, "delete secret %s", secretName)
+		}
+	}
+
+	return nil
 }
 
 func (r *PerconaServerMySQLReconciler) doReconcile(
@@ -1513,11 +1583,8 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 				RenewBefore: &metav1.Duration{Duration: 730 * time.Hour},
 			},
 		}
-		err := ctrl.SetControllerReference(cr, caCert, r.Scheme)
-		if err != nil {
-			return errors.Wrap(err, "set controller reference")
-		}
-		err = r.Create(ctx, caCert)
+
+		err := r.Create(ctx, caCert)
 		if err != nil && !k8serrors.IsAlreadyExists(err) {
 			return errors.Wrap(err, "create CA certificate")
 		}
@@ -1561,15 +1628,12 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 			},
 		},
 	}
-	err := ctrl.SetControllerReference(cr, kubeCert, r.Scheme)
-	if err != nil {
-		return errors.Wrap(err, "set controller reference")
-	}
+
 	if cr.Spec.TLS != nil {
 		kubeCert.Spec.DNSNames = append(kubeCert.Spec.DNSNames, cr.Spec.TLS.SANs...)
 	}
 
-	err = r.Create(ctx, kubeCert)
+	err := r.Create(ctx, kubeCert)
 	if err != nil && !k8serrors.IsAlreadyExists(err) {
 		return errors.Wrap(err, "create certificate")
 	}
@@ -1619,11 +1683,8 @@ func (r *PerconaServerMySQLReconciler) createIssuer(ctx context.Context, cr *api
 			IssuerConfig: IssuerConf,
 		},
 	}
-	err := ctrl.SetControllerReference(cr, isr, r.Scheme)
-	if err != nil {
-		return errors.Wrap(err, "set controller reference")
-	}
-	err = r.Create(ctx, isr)
+
+	err := r.Create(ctx, isr)
 	if err != nil && !k8serrors.IsAlreadyExists(err) {
 		return errors.Wrap(err, "create issuer")
 	}
