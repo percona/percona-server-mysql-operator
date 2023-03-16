@@ -1,6 +1,8 @@
-GKERegion='us-central1-a'
+GKERegion="us-central1-a"
+testUrlPrefix="https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-ps-operator"
+tests=[]
 
-void CreateCluster(String CLUSTER_SUFFIX, String SUBNETWORK = CLUSTER_SUFFIX) {
+void createCluster(String CLUSTER_SUFFIX, String SUBNETWORK = CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
             NODES_NUM=3
@@ -26,7 +28,7 @@ void CreateCluster(String CLUSTER_SUFFIX, String SUBNETWORK = CLUSTER_SUFFIX) {
    }
 }
 
-void ShutdownCluster(String CLUSTER_SUFFIX) {
+void shutdownCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
             export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_SUFFIX}
@@ -39,7 +41,7 @@ void ShutdownCluster(String CLUSTER_SUFFIX) {
    }
 }
 
-void DeleteOldClusters(String FILTER) {
+void deleteOldClusters(String FILTER) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
             if [ -f $HOME/google-cloud-sdk/path.bash.inc ]; then
@@ -68,8 +70,8 @@ void DeleteOldClusters(String FILTER) {
 }
 
 void pushLogFile(String FILE_NAME) {
-    LOG_FILE_PATH="e2e-tests/logs/${FILE_NAME}.log"
-    LOG_FILE_NAME="${FILE_NAME}.log"
+    def LOG_FILE_PATH="e2e-tests/logs/${FILE_NAME}.log"
+    def LOG_FILE_NAME="${FILE_NAME}.log"
     echo "Push logfile $LOG_FILE_NAME file to S3!"
     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
         sh """
@@ -104,60 +106,111 @@ void popArtifactFile(String FILE_NAME) {
     }
 }
 
+void initTests() {
+    echo "Populating tests into the tests array!"
+
+    def records = readCSV file: 'e2e-tests/run-pr.csv'
+
+    for (int i=0; i<records.size(); i++) {
+        tests.add(["name": records[i][0], "cluster": "NA", "result": "skipped", "time": "0"])
+    }
+
+    markPassedTests()
+}
+
+void markPassedTests() {
+    echo "Marking passed tests in the tests map!"
+
+    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+        sh """
+            aws s3 ls "s3://percona-jenkins-artifactory/${JOB_NAME}/${env.GIT_SHORT_COMMIT}/" || :
+        """
+
+        for (int i=0; i<tests.size(); i++) {
+            def testName = tests[i]["name"]
+            def file="${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName"
+            def retFileExists = sh(script: "aws s3api head-object --bucket percona-jenkins-artifactory --key ${JOB_NAME}/${env.GIT_SHORT_COMMIT}/${file} >/dev/null 2>&1", returnStatus: true)
+
+            if (retFileExists == 0) {
+                tests[i]["result"] = "passed"
+            }
+        }
+    }
+}
+
 TestsReport = '| Test name  | Status |\r\n| ------------- | ------------- |'
-testsReportMap  = [:]
-testsResultsMap = [:]
+TestsReportXML = '<testsuite name=\\"PS\\">\n'
 
 void makeReport() {
-    def wholeTestAmount=sh(script: 'ls e2e-tests/tests| wc -l', , returnStdout: true).trim()
-    def startedTestAmount = testsReportMap.size()
-    for ( test in testsReportMap ) {
-        TestsReport = TestsReport + "\r\n| ${test.key} | ${test.value} |"
+    def wholeTestAmount=tests.size()
+    def startedTestAmount = 0
+
+    for (int i=0; i<tests.size(); i++) {
+        def testName = tests[i]["name"]
+        def testResult = tests[i]["result"]
+        def testTime = tests[i]["time"]
+        def testUrl = "${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${testName}.log"
+
+        if (tests[i]["result"] != "skipped") {
+            startedTestAmount++
+        }
+        TestsReport = TestsReport + "\r\n| "+ testName +" | ["+ testResult +"]("+ testUrl +") |"
+        TestsReportXML = TestsReportXML + '<testcase name=\\"' + testName + '\\" time=\\"' + testTime + '\\"><'+ testResult +'/></testcase>\n'
     }
     TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
+    TestsReportXML = TestsReportXML + '</testsuite>\n'
 }
 
-void setTestsresults() {
-    testsResultsMap.each { file ->
-        pushArtifactFile("${file.key}")
+void clusterRunner(String cluster) {
+    def clusterCreated=0
+
+    for (int i=0; i<tests.size(); i++) {
+        if (tests[i]["result"] == "skipped" && currentBuild.nextBuild == null) {
+            tests[i]["result"] = "failure"
+            tests[i]["cluster"] = cluster
+            if (clusterCreated == 0) {
+                createCluster(cluster)
+                clusterCreated++
+            }
+            runTest(i)
+        }
+    }
+
+    if (clusterCreated >= 1) {
+        shutdownCluster(cluster)
     }
 }
 
-void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
+void runTest(Integer TEST_ID) {
     def retryCount = 0
-    waitUntil {
-        def testUrl = "https://percona-jenkins-artifactory-public.s3.amazonaws.com/cloud-ps-operator/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${TEST_NAME}.log"
-        try {
-            echo "The $TEST_NAME test was started!"
-            testsReportMap[TEST_NAME] = "[failed]($testUrl)"
+    def testName = tests[TEST_ID]["name"]
+    def clusterSuffix = tests[TEST_ID]["cluster"]
 
-            def FILE_NAME = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$TEST_NAME"
-            popArtifactFile("$FILE_NAME")
+    waitUntil {
+        def timeStart = new Date().getTime()
+        try {
+            echo "The $testName test was started on cluster $CLUSTER_NAME-$clusterSuffix !"
+            tests[TEST_ID]["result"] = "failure"
 
             timeout(time: 90, unit: 'MINUTES') {
                 sh """
-                    if [ -f "$FILE_NAME" ]; then
-                        echo "Skipping $TEST_NAME test because it passed in previous run."
-                    else
-                        if [ ! -d "e2e-tests/logs" ]; then
-                       		mkdir "e2e-tests/logs"
-                        fi
-                        export KUBECONFIG=/tmp/$CLUSTER_NAME-${CLUSTER_SUFFIX}
-                        export PATH="$HOME/.krew/bin:$PATH"
-                        source $HOME/google-cloud-sdk/path.bash.inc
-                        set -o pipefail
-                        time kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "^${TEST_NAME}\$" |& tee e2e-tests/logs/${TEST_NAME}.log
+                    if [ ! -d "e2e-tests/logs" ]; then
+                        mkdir "e2e-tests/logs"
                     fi
+                    export KUBECONFIG=/tmp/$CLUSTER_NAME-$clusterSuffix
+                    export PATH="$HOME/.krew/bin:$PATH"
+                    source $HOME/google-cloud-sdk/path.bash.inc
+                    set -o pipefail
+                    kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "^${testName}\$" |& tee e2e-tests/logs/${testName}.log
                 """
             }
-            pushArtifactFile("$FILE_NAME")
-            testsReportMap[TEST_NAME] = "[passed]($testUrl)"
-            testsResultsMap["$FILE_NAME"] = 'passed'
+            pushArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName")
+            tests[TEST_ID]["result"] = "passed"
             return true
         }
         catch (exc) {
-            echo "The $TEST_NAME test was failed!"
-            if (retryCount >= 2) {
+            echo "The $testName test was failed!"
+            if (retryCount >= 1 || currentBuild.nextBuild != null) {
                 currentBuild.result = 'FAILURE'
                 return true
             }
@@ -165,8 +218,11 @@ void runTest(String TEST_NAME, String CLUSTER_SUFFIX) {
             return false
         }
         finally {
-            pushLogFile(TEST_NAME)
-            echo "The $TEST_NAME test was finished!"
+            def timeStop = new Date().getTime()
+            def durationSec = (timeStop - timeStart) / 1000
+            tests[TEST_ID]["time"] = durationSec
+            pushLogFile("$testName")
+            echo "The $testName test was finished!"
         }
     }
 }
@@ -210,7 +266,7 @@ void prepareNode() {
 }
 
 def skipBranchBuilds = true
-if ( env.CHANGE_URL ) {
+if (env.CHANGE_URL) {
     skipBranchBuilds = false
 }
 
@@ -222,7 +278,7 @@ pipeline {
         GIT_SHORT_COMMIT = sh(script: 'git rev-parse --short HEAD', , returnStdout: true).trim()
         VERSION = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}"
         CLUSTER_NAME = sh(script: "echo jen-ps-${env.CHANGE_ID}-${GIT_SHORT_COMMIT}-${env.BUILD_NUMBER} | tr '[:upper:]' '[:lower:]'", , returnStdout: true).trim()
-        AUTHOR_NAME  = sh(script: "echo ${CHANGE_AUTHOR_EMAIL} | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
+        AUTHOR_NAME = sh(script: "echo ${CHANGE_AUTHOR_EMAIL} | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
     }
     agent {
         label 'docker'
@@ -238,9 +294,10 @@ pipeline {
                 }
             }
             steps {
+                initTests()
                 prepareNode()
                 script {
-                    if ( AUTHOR_NAME == 'null' )  {
+                    if (AUTHOR_NAME == 'null') {
                         AUTHOR_NAME = sh(script: "git show -s --pretty=%ae | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
                     }
                     for (comment in pullRequest.comments) {
@@ -258,7 +315,7 @@ pipeline {
                     '''
                 }
                 stash includes: "**", name: "sourceFILES"
-                DeleteOldClusters("jen-ps-$CHANGE_ID")
+                deleteOldClusters("jen-ps-$CHANGE_ID")
             }
         }
         stage('Build docker image') {
@@ -351,8 +408,11 @@ pipeline {
             }
         }
         stage('Run E2E tests') {
+            options {
+                timeout(time: 3, unit: 'HOURS')
+            }
             parallel {
-                stage('1 AutoConf Conf ConfRouter OneP HAProxy') {
+                stage('cluster1') {
                     when {
                         expression {
                             !skipBranchBuilds
@@ -364,16 +424,10 @@ pipeline {
                     steps {
                         prepareNode()
                         unstash "sourceFILES"
-                        CreateCluster('cluster1')
-                        runTest('auto-config', 'cluster1')
-                        runTest('config', 'cluster1')
-                        runTest('config-router', 'cluster1')
-                        runTest('one-pod', 'cluster1')
-                        runTest('haproxy', 'cluster1')
-                        ShutdownCluster('cluster1')
+                        clusterRunner('cluster1')
                     }
                 }
-                stage('2 DemB GRDemB Scal Users Ignore GRIgn') {
+                stage('cluster2') {
                     when {
                         expression {
                             !skipBranchBuilds
@@ -385,17 +439,10 @@ pipeline {
                     steps {
                         prepareNode()
                         unstash "sourceFILES"
-                        CreateCluster('cluster2')
-                        runTest('demand-backup', 'cluster2')
-                        runTest('gr-demand-backup', 'cluster2')
-                        runTest('scaling', 'cluster2')
-                        runTest('users', 'cluster2')
-                        runTest('async-ignore-annotations', 'cluster2')
-                        runTest('gr-ignore-annotations', 'cluster2')
-                        ShutdownCluster('cluster2')
+                        clusterRunner('cluster2')
                     }
                 }
-                stage('3 InitD GRInitD Mon SemiS SerPP SideC Lim VS TlsCM') {
+                stage('cluster3') {
                     when {
                         expression {
                             !skipBranchBuilds
@@ -407,19 +454,22 @@ pipeline {
                     steps {
                         prepareNode()
                         unstash "sourceFILES"
-                        CreateCluster('cluster3')
-                        runTest('init-deploy', 'cluster3')
-                        runTest('gr-init-deploy', 'cluster3')
-                        runTest('gr-scaling', 'cluster3')
-                        runTest('monitoring', 'cluster3')
-                        runTest('semi-sync', 'cluster3')
-                        runTest('service-per-pod', 'cluster3')
-                        runTest('sidecars', 'cluster3')
-                        runTest('limits', 'cluster3')
-                        runTest('version-service', 'cluster3')
-                        runTest('tls-cert-manager', 'cluster3')
-                        runTest('gr-tls-cert-manager', 'cluster3')
-                        ShutdownCluster('cluster3')
+                        clusterRunner('cluster3')
+                    }
+                }
+                stage('cluster4') {
+                    when {
+                        expression {
+                            !skipBranchBuilds
+                        }
+                    }
+                    agent {
+                        label 'docker'
+                    }
+                    steps {
+                        prepareNode()
+                        unstash "sourceFILES"
+                        clusterRunner('cluster4')
                     }
                 }
             }
@@ -428,7 +478,8 @@ pipeline {
     post {
         always {
             script {
-                setTestsresults()
+                echo "CLUSTER ASSIGNMENTS\n" + tests.toString().replace("], ","]\n").replace("]]","]").replaceFirst("\\[","")
+
                 if (currentBuild.result != null && currentBuild.result != 'SUCCESS' && currentBuild.nextBuild == null) {
                     try {
                         slackSend channel: "@${AUTHOR_NAME}", color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
@@ -437,6 +488,7 @@ pipeline {
                         slackSend channel: '#cloud-dev-ci', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL} owner: @${AUTHOR_NAME}"
                     }
                 }
+
                 if (env.CHANGE_URL && currentBuild.nextBuild == null) {
                     for (comment in pullRequest.comments) {
                         println("Author: ${comment.user}, Comment: ${comment.body}")
@@ -446,13 +498,19 @@ pipeline {
                         }
                     }
                     makeReport()
+                    sh """
+                        echo "${TestsReportXML}" > TestsReport.xml
+                    """
+                    step([$class: 'JUnitResultArchiver', testResults: '*.xml', healthScaleFactor: 1.0])
+                    archiveArtifacts '*.xml'
+
                     unstash 'IMAGE'
                     def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
                     TestsReport = TestsReport + "\r\n\r\ncommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nimage: `${IMAGE}`\r\n"
                     pullRequest.comment(TestsReport)
                 }
             }
-            DeleteOldClusters("$CLUSTER_NAME")
+            deleteOldClusters("$CLUSTER_NAME")
             sh """
                 sudo docker system prune -fa
                 sudo rm -rf ./*
