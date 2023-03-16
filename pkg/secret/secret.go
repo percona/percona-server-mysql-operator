@@ -174,7 +174,7 @@ const (
 		"0123456789"
 )
 
-var secretUsers = [...]apiv1alpha1.SystemUser{
+var SecretUsers = [...]apiv1alpha1.SystemUser{
 	apiv1alpha1.UserHeartbeat,
 	apiv1alpha1.UserMonitor,
 	apiv1alpha1.UserOperator,
@@ -184,24 +184,21 @@ var secretUsers = [...]apiv1alpha1.SystemUser{
 	apiv1alpha1.UserXtraBackup,
 }
 
-func GeneratePasswordsSecret(name, namespace string) (*corev1.Secret, error) {
-	data := make(map[string][]byte)
-	for _, user := range secretUsers {
+func FillPasswordsSecret(secret *corev1.Secret) error {
+	if len(secret.Data) == 0 {
+		secret.Data = make(map[string][]byte, len(SecretUsers))
+	}
+	for _, user := range SecretUsers {
+		if _, ok := secret.Data[string(user)]; ok {
+			continue
+		}
 		pass, err := generatePass()
 		if err != nil {
-			return nil, errors.Wrapf(err, "create %s user password", user)
+			return errors.Wrapf(err, "create %s user password", user)
 		}
-		data[string(user)] = pass
+		secret.Data[string(user)] = pass
 	}
-
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-		Data: data,
-		Type: corev1.SecretTypeOpaque,
-	}, nil
+	return nil
 }
 
 // generatePass generates a random password
