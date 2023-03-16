@@ -4,6 +4,7 @@ metadata:
   name: cluster1
   finalizers:
     - delete-mysql-pods-in-order
+    # - delete-ssl
 spec:
   allowUnsafeConfigurations: false
 #  pause: false

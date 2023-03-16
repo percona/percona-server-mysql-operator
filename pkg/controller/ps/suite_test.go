@@ -14,14 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controller
+package ps
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
+	cmscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	psv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -45,7 +49,7 @@ var (
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	RunSpecs(t, "Controller Suite")
+	RunSpecs(t, "PS Suite")
 }
 
 var _ = BeforeSuite(func() {
@@ -53,7 +57,7 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "config", "crd", "bases")},
+		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
 	}
 
@@ -65,17 +69,12 @@ var _ = BeforeSuite(func() {
 	err = psv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = psv1alpha1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = psv1alpha1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	//+kubebuilder:scaffold:scheme
-
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	err = cmscheme.AddToScheme(k8sClient.Scheme())
+	Expect(err).ToNot(HaveOccurred())
 })
 
 var _ = AfterSuite(func() {
@@ -83,3 +82,31 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 })
+
+func reconciler() *PerconaServerMySQLReconciler {
+	return (&PerconaServerMySQLReconciler{
+		Client: k8sClient,
+		Scheme: k8sClient.Scheme(),
+		ServerVersion: &platform.ServerVersion{
+			Platform: platform.PlatformKubernetes,
+		},
+	})
+}
+
+func readDefaultCR(name, namespace string) (*psv1alpha1.PerconaServerMySQL, error) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "cr.yaml"))
+	if err != nil {
+		return nil, err
+	}
+
+	cr := &psv1alpha1.PerconaServerMySQL{}
+
+	if err := yaml.Unmarshal(data, cr); err != nil {
+		return nil, err
+	}
+
+	cr.Name = name
+	cr.Namespace = namespace
+	cr.Spec.InitImage = "perconalab/percona-server-mysql-operator:main"
+	return cr, nil
+}
