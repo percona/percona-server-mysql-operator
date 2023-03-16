@@ -17,15 +17,16 @@ limitations under the License.
 package ps
 
 import (
-	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
+	cmscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -51,13 +52,8 @@ func TestAPIs(t *testing.T) {
 	RunSpecs(t, "PS Suite")
 }
 
-var ctx context.Context
-var cancel context.CancelFunc
-
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
-
-	ctx, cancel = context.WithCancel(context.TODO())
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
@@ -77,32 +73,40 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
-	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme: scheme.Scheme,
-	})
+	err = cmscheme.AddToScheme(k8sClient.Scheme())
 	Expect(err).ToNot(HaveOccurred())
-
-	err = (&PerconaServerMySQLReconciler{
-		Client: k8sManager.GetClient(),
-		Scheme: k8sManager.GetScheme(),
-		ServerVersion: &platform.ServerVersion{
-			Platform: platform.PlatformKubernetes,
-		},
-	}).SetupWithManager(k8sManager)
-	Expect(err).ToNot(HaveOccurred())
-
-	//+kubebuilder:scaffold:scheme
-
-	go func() {
-		defer GinkgoRecover()
-		err = k8sManager.Start(ctx)
-		Expect(err).ToNot(HaveOccurred(), "failed to run manager")
-	}()
 })
 
 var _ = AfterSuite(func() {
-	cancel()
 	By("tearing down the test environment")
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 })
+
+func reconciler() *PerconaServerMySQLReconciler {
+	return (&PerconaServerMySQLReconciler{
+		Client: k8sClient,
+		Scheme: k8sClient.Scheme(),
+		ServerVersion: &platform.ServerVersion{
+			Platform: platform.PlatformKubernetes,
+		},
+	})
+}
+
+func readDefaultCR(name, namespace string) (*psv1alpha1.PerconaServerMySQL, error) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "cr.yaml"))
+	if err != nil {
+		return nil, err
+	}
+
+	cr := &psv1alpha1.PerconaServerMySQL{}
+
+	if err := yaml.Unmarshal(data, cr); err != nil {
+		return nil, err
+	}
+
+	cr.Name = name
+	cr.Namespace = namespace
+	cr.Spec.InitImage = "perconalab/percona-server-mysql-operator:main"
+	return cr, nil
+}
