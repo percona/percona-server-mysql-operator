@@ -71,6 +71,8 @@ const (
 	ClusterTypeGR    ClusterType = "group-replication"
 	ClusterTypeAsync ClusterType = "async"
 	MinSafeProxySize             = 2
+	MinSafeGRSize                = 3
+	MaxSafeGRSize                = 9
 )
 
 func (t ClusterType) isValid() bool {
@@ -560,6 +562,20 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 
 	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Proxy.Router == nil {
 		return errors.New("router section is needed for group replication")
+	}
+
+	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && !cr.Spec.AllowUnsafeConfig {
+		if cr.Spec.MySQL.Size < MinSafeGRSize {
+			cr.Spec.MySQL.Size = MinSafeGRSize
+		}
+
+		if cr.Spec.MySQL.Size > MaxSafeGRSize {
+			cr.Spec.MySQL.Size = MaxSafeGRSize
+		}
+
+		if cr.Spec.MySQL.Size%2 == 0 {
+			cr.Spec.MySQL.Size++
+		}
 	}
 
 	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Proxy.Router != nil && !cr.Spec.AllowUnsafeConfig {
