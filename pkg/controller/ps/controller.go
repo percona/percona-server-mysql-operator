@@ -1543,7 +1543,6 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 }
 
 func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-
 	issuerName := cr.Name + "-pso-issuer"
 	caIssuerName := cr.Name + "-pso-ca-issuer"
 	issuerKind := "Issuer"
@@ -1552,6 +1551,16 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 		issuerKind = cr.Spec.TLS.IssuerConf.Kind
 		issuerName = cr.Spec.TLS.IssuerConf.Name
 		issuerGroup = cr.Spec.TLS.IssuerConf.Group
+
+		isr := &cm.Issuer{}
+		err := r.Get(ctx, types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      issuerName,
+		}, isr)
+		if k8serrors.IsNotFound(err) {
+			return err
+		}
+
 	} else {
 		issuerConf := cm.IssuerConfig{
 			SelfSigned: &cm.SelfSignedIssuer{},
