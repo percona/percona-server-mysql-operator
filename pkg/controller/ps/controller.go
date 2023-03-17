@@ -42,7 +42,6 @@ import (
 	k8sexec "k8s.io/utils/exec"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
@@ -1559,7 +1558,6 @@ func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Contex
 			Name:      issuerName,
 		}, isr)
 		if k8serrors.IsNotFound(err) {
-			log.FromContext(ctx).Error(err, "Can't find specified cert-manager issuer", "issuer", issuerName)
 			return err
 		}
 
