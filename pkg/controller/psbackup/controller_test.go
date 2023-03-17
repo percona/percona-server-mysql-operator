@@ -3,27 +3,32 @@ package psbackup
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-	"github.com/percona/percona-server-mysql-operator/internal/testutil"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 )
 
 func TestBackupStatusErrStateDesc(t *testing.T) {
 	namespace := "some-namespace"
 
-	cr := testutil.UpdateResource(
-		testutil.DefaultResource(new(apiv1alpha1.PerconaServerMySQLBackup)),
-		func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-			cr.Namespace = namespace
-		})
+	cr, err := readDefaultCRBackup("some-name", namespace)
+	if err != nil {
+		t.Fatal(err, "failed to read default backup")
+	}
+	cluster, err := readDefaultCR("cluster1", namespace)
+	if err != nil {
+		t.Fatal(err, "failed to read default backup")
+	}
 
 	tests := []struct {
 		name      string
@@ -39,8 +44,8 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 		{
 			name: "without enabled backup section",
 			cr:   cr,
-			cluster: testutil.UpdateResource(
-				testutil.DefaultResource(new(apiv1alpha1.PerconaServerMySQL)),
+			cluster: updateResource(
+				cluster.DeepCopy(),
 				func(cr *apiv1alpha1.PerconaServerMySQL) {
 					cr.Namespace = namespace
 
@@ -56,8 +61,8 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 		{
 			name: "without storage",
 			cr:   cr,
-			cluster: testutil.UpdateResource(
-				testutil.DefaultResource(new(apiv1alpha1.PerconaServerMySQL)),
+			cluster: updateResource(
+				cluster.DeepCopy(),
 				func(cr *apiv1alpha1.PerconaServerMySQL) {
 					cr.Namespace = namespace
 					cr.Spec.Backup = &apiv1alpha1.BackupSpec{
@@ -118,4 +123,45 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			}
 		})
 	}
+}
+
+func readDefaultCR(name, namespace string) (*apiv1alpha1.PerconaServerMySQL, error) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "cr.yaml"))
+	if err != nil {
+		return nil, err
+	}
+
+	cr := &apiv1alpha1.PerconaServerMySQL{}
+
+	if err := yaml.Unmarshal(data, cr); err != nil {
+		return nil, err
+	}
+
+	cr.Name = name
+	cr.Namespace = namespace
+	return cr, nil
+}
+
+func readDefaultCRBackup(name, namespace string) (*apiv1alpha1.PerconaServerMySQLBackup, error) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "backup.yaml"))
+	if err != nil {
+		return nil, err
+	}
+
+	cr := &apiv1alpha1.PerconaServerMySQLBackup{}
+
+	if err := yaml.Unmarshal(data, cr); err != nil {
+		return nil, err
+	}
+
+	cr.Name = name
+	cr.Namespace = namespace
+	return cr, nil
+}
+
+func updateResource[T any](cr *T, updateFuncs ...func(cr *T)) *T {
+	for _, f := range updateFuncs {
+		f(cr)
+	}
+	return cr
 }

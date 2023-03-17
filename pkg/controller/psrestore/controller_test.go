@@ -3,11 +3,14 @@ package psrestore
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -193,4 +196,21 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 			}
 		})
 	}
+}
+
+func readDefaultCRRestore(name, namespace string) (*apiv1alpha1.PerconaServerMySQLRestore, error) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "restore.yaml"))
+	if err != nil {
+		return nil, err
+	}
+
+	cr := &apiv1alpha1.PerconaServerMySQLRestore{}
+
+	if err := yaml.Unmarshal(data, cr); err != nil {
+		return nil, err
+	}
+
+	cr.Name = name
+	cr.Namespace = namespace
+	return cr, nil
 }
