@@ -20,10 +20,15 @@ import (
 
 func TestRestoreStatusErrStateDesc(t *testing.T) {
 	namespace := "some-namespace"
-	clusterName := "some-name"
+	clusterName := "cluster1"
 	backupName := "backup1"
 	restoreName := "restore1"
 	storageName := "some-storage"
+
+	cr, err := readDefaultCRRestore(restoreName, namespace)
+	if err != nil {
+		t.Fatal(err, "failed to read restore file")
+	}
 
 	tests := []struct {
 		name      string
@@ -33,30 +38,17 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 		stateDesc string
 	}{
 		{
-			name: "Test without cluster",
-			cr: &apiv1alpha1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      restoreName,
-					Namespace: namespace,
-				},
-				Spec: apiv1alpha1.PerconaServerMySQLRestoreSpec{
-					ClusterName: clusterName,
-				},
-			},
+			name:      "without cluster",
+			cr:        cr,
 			cluster:   nil,
 			stateDesc: fmt.Sprintf("PerconaServerMySQL %s in namespace %s is not found", clusterName, namespace),
 		},
 		{
-			name: "Test without storage name and backup source",
-			cr: &apiv1alpha1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      backupName,
-					Namespace: namespace,
-				},
-				Spec: apiv1alpha1.PerconaServerMySQLRestoreSpec{
-					ClusterName: clusterName,
-				},
-			},
+			name: "without storage name and backup source",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLRestore) {
+				cr.Spec.BackupName = ""
+				cr.Spec.ClusterName = clusterName
+			}),
 			cluster: &apiv1alpha1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,
@@ -67,19 +59,13 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 			stateDesc: "spec.storageName and backupSource.storage are empty",
 		},
 		{
-			name: "Test with empty destination in backup source",
-			cr: &apiv1alpha1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      restoreName,
-					Namespace: namespace,
-				},
-				Spec: apiv1alpha1.PerconaServerMySQLRestoreSpec{
-					ClusterName: clusterName,
-					BackupSource: &apiv1alpha1.PerconaServerMySQLBackupStatus{
-						Storage: &apiv1alpha1.BackupStorageSpec{},
-					},
-				},
-			},
+			name: "with empty destination in backup source",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLRestore) {
+				cr.Spec.BackupName = ""
+				cr.Spec.BackupSource = &apiv1alpha1.PerconaServerMySQLBackupStatus{
+					Storage: &apiv1alpha1.BackupStorageSpec{},
+				}
+			}),
 			cluster: &apiv1alpha1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,
@@ -90,17 +76,8 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 			stateDesc: "backupSource.storage.destination is empty",
 		},
 		{
-			name: "Test without PerconaServerMySQLBackup",
-			cr: &apiv1alpha1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      restoreName,
-					Namespace: namespace,
-				},
-				Spec: apiv1alpha1.PerconaServerMySQLRestoreSpec{
-					ClusterName: clusterName,
-					BackupName:  backupName,
-				},
-			},
+			name: "without PerconaServerMySQLBackup",
+			cr:   cr,
 			cluster: &apiv1alpha1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,
@@ -111,17 +88,8 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 			stateDesc: fmt.Sprintf("PerconaServerMySQLBackup %s in namespace %s is not found", backupName, namespace),
 		},
 		{
-			name: "Test without backup storage in cluster",
-			cr: &apiv1alpha1.PerconaServerMySQLRestore{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      restoreName,
-					Namespace: namespace,
-				},
-				Spec: apiv1alpha1.PerconaServerMySQLRestoreSpec{
-					ClusterName: clusterName,
-					BackupName:  backupName,
-				},
-			},
+			name: "without backup storage in cluster",
+			cr:   cr,
 			backup: &apiv1alpha1.PerconaServerMySQLBackup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      backupName,
@@ -213,4 +181,11 @@ func readDefaultCRRestore(name, namespace string) (*apiv1alpha1.PerconaServerMyS
 	cr.Name = name
 	cr.Namespace = namespace
 	return cr, nil
+}
+
+func updateResource[T any](cr *T, updateFuncs ...func(cr *T)) *T {
+	for _, f := range updateFuncs {
+		f(cr)
+	}
+	return cr
 }

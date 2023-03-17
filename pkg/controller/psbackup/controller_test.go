@@ -27,7 +27,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 	}
 	cluster, err := readDefaultCR("cluster1", namespace)
 	if err != nil {
-		t.Fatal(err, "failed to read default backup")
+		t.Fatal(err, "failed to read default cr")
 	}
 
 	tests := []struct {
