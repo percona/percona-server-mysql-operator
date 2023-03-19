@@ -1060,6 +1060,11 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 		return errors.Wrap(err, "cleanup Orchestrator services")
 	}
 
+	hapExposer := haproxy.Exposer(*cr)
+	if err := r.cleanupOutdatedServices(ctx, &hapExposer); err != nil {
+		return errors.Wrap(err, "cleanup Orchestrator services")
+	}
+
 	if err := r.cleanupOutdatedStatefulSets(ctx, cr); err != nil {
 		return errors.Wrap(err, "cleanup statefulsets")
 	}
