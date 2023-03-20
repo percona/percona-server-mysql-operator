@@ -64,6 +64,8 @@ spec:
                 type: string
               state:
                 type: string
+              stateDescription:
+                type: string
               storage:
                 properties:
                   affinity:
@@ -853,6 +855,8 @@ spec:
                     type: string
                   state:
                     type: string
+                  stateDescription:
+                    type: string
                   storage:
                     properties:
                       affinity:
@@ -1597,6 +1601,8 @@ spec:
                 format: date-time
                 type: string
               state:
+                type: string
+              stateDescription:
                 type: string
             type: object
         type: object

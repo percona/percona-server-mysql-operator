@@ -125,6 +125,11 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	cluster := &apiv1alpha1.PerconaServerMySQL{}
 	nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
 	if err := r.Client.Get(ctx, nn, cluster); err != nil {
+		if k8serrors.IsNotFound(err) {
+			status.State = apiv1alpha1.BackupError
+			status.StateDesc = fmt.Sprintf("PerconaServerMySQL %s in namespace %s is not found", cr.Spec.ClusterName, cr.Namespace)
+			return rr, nil
+		}
 		return rr, errors.Wrapf(err, "get %v", nn.String())
 	}
 
@@ -133,17 +138,22 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	if cluster.Spec.Backup == nil || !cluster.Spec.Backup.Enabled {
-		log.Info("spec.backup stanza not found in PerconaServerMySQL CustomResource or backup is disabled")
+		status.State = apiv1alpha1.BackupError
+		status.StateDesc = "spec.backup stanza not found in PerconaServerMySQL CustomResource or backup is disabled"
 		return rr, nil
 	}
 
 	storage, ok := cluster.Spec.Backup.Storages[cr.Spec.StorageName]
 	if !ok {
-		return rr, errors.Errorf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", cr.Spec.StorageName)
+		status.State = apiv1alpha1.BackupError
+		status.StateDesc = fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", cr.Spec.StorageName)
+		return rr, nil
 	}
 
 	if cluster.Status.MySQL.State != apiv1alpha1.StateReady {
 		log.Info("Cluster is not ready", "cluster", cr.Name)
+		status.State = apiv1alpha1.BackupNew
+		status.StateDesc = "cluster is not ready"
 		return rr, nil
 	}
 
@@ -281,6 +291,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, nil
 	default:
 		status.State = apiv1alpha1.BackupStarting
+		status.StateDesc = ""
 	}
 
 	return rr, nil
