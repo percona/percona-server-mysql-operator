@@ -1,6 +1,11 @@
 # Percona Operator for MySQL
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+![Docker Pulls](https://img.shields.io/docker/pulls/percona/percona-server-mysql-operator)
+![Docker Image Size (latest by date)](https://img.shields.io/docker/image-size/percona/percona-server-mysql-operator)
+![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/percona/percona-server-mysql-operator)
+![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/percona/percona-server-mysql-operator)
+[![Go Report Card](https://goreportcard.com/badge/github.com/percona/percona-server-mysql-operator)](https://goreportcard.com/report/github.com/percona/percona-server-mysql-operator)
 
 [Percona Server for MySQL](https://www.percona.com/software/mysql-database/percona-server) is a free, fully compatible, enhanced, and open source drop-in replacement for any MySQL database. It provides superior performance, scalability, and instrumentation.
 
