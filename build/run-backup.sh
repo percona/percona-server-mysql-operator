@@ -7,16 +7,16 @@ request_data() {
 		"s3")
 			cat <<-EOF
 				{
-				    "destination": "${BACKUP_DEST}",
-				    "type": "${STORAGE_TYPE}",
-				    "verifyTLS": ${VERIFY_TLS},
+				    "destination": "$(json_escape "${BACKUP_DEST}")",
+				    "type": "$(json_escape "${STORAGE_TYPE}")",
+				    "verifyTLS": $(json_escape "${VERIFY_TLS}"),
 				    "s3": {
-				        "bucket": "${S3_BUCKET}",
-				        "endpointUrl": "${AWS_ENDPOINT}",
-				        "accessKey": "${AWS_ACCESS_KEY_ID}",
-				        "secretKey": "${AWS_SECRET_ACCESS_KEY}",
-				        "region": "${AWS_DEFAULT_REGION}",
-				        "storageClass": "${S3_STORAGE_CLASS}"
+				        "bucket": "$(json_escape "${S3_BUCKET}")",
+				        "endpointUrl": "$(json_escape "${AWS_ENDPOINT}")",
+				        "accessKey": "$(json_escape "${AWS_ACCESS_KEY_ID}")",
+				        "secretKey": "$(json_escape "${AWS_SECRET_ACCESS_KEY}")",
+				        "region": "$(json_escape "${AWS_DEFAULT_REGION}")",
+				        "storageClass": "$(json_escape "${S3_STORAGE_CLASS}")"
 				    }
 				}
 			EOF
@@ -24,15 +24,15 @@ request_data() {
 		"gcs")
 			cat <<-EOF
 				{
-				    "destination": "${BACKUP_DEST}",
-				    "verifyTLS": ${VERIFY_TLS},
-				    "type": "${STORAGE_TYPE}",
+				    "destination": "$(json_escape "${BACKUP_DEST}")",
+				    "verifyTLS": $(json_escape "${VERIFY_TLS}"),
+				    "type": "$(json_escape "${STORAGE_TYPE}")",
 				    "gcs": {
-				        "bucket": "${GCS_BUCKET}",
-				        "endpointUrl": "${GCS_ENDPOINT}",
-				        "accessKey": "${ACCESS_KEY_ID}",
-				        "secretKey": "${SECRET_ACCESS_KEY}",
-				        "storageClass": "${GCS_STORAGE_CLASS}"
+				        "bucket": "$(json_escape "${GCS_BUCKET}")",
+				        "endpointUrl": "$(json_escape "${GCS_ENDPOINT}")",
+				        "accessKey": "$(json_escape "${ACCESS_KEY_ID}")",
+				        "secretKey": "$(json_escape "${SECRET_ACCESS_KEY}")",
+				        "storageClass": "$(json_escape "${GCS_STORAGE_CLASS}")"
 				    }
 				}
 			EOF
@@ -40,20 +40,27 @@ request_data() {
 		"azure")
 			cat <<-EOF
 				{
-				    "destination": "${BACKUP_DEST}",
-				    "verifyTLS": ${VERIFY_TLS},
-				    "type": "${STORAGE_TYPE}",
+				    "destination": "$(json_escape "${BACKUP_DEST}")",
+				    "verifyTLS": $(json_escape "${VERIFY_TLS}"),
+				    "type": "$(json_escape "${STORAGE_TYPE}")",
 				    "azure": {
-				        "containerName": "${AZURE_CONTAINER_NAME}",
-				        "storageAccount": "${AZURE_STORAGE_ACCOUNT}",
-				        "accessKey": "${AZURE_ACCESS_KEY}",
-				        "endpointUrl": "${AZURE_ENDPOINT}",
-				        "storageClass": "${AZURE_STORAGE_CLASS}"
+				        "containerName": "$(json_escape "${AZURE_CONTAINER_NAME}")",
+				        "storageAccount": "$(json_escape "${AZURE_STORAGE_ACCOUNT}")",
+				        "accessKey": "$(json_escape "${AZURE_ACCESS_KEY}")",
+				        "endpointUrl": "$(json_escape "${AZURE_ENDPOINT}")",
+				        "storageClass": "$(json_escape "${AZURE_STORAGE_CLASS}")"
 				    }
 				}
 			EOF
 			;;
 	esac
+}
+
+# json_escape takes a string and replaces `\` to `\\` and `"` to `\"` to make it safe to insert provided argument into a json string
+json_escape() {
+	escaped_backslash=${1//'\'/'\\'}
+	escaped_quotes=${escaped_backslash//'"'/'\"'}
+	echo -n "$escaped_quotes"
 }
 
 request_backup() {
