@@ -42,12 +42,6 @@ var _ = Describe("Finalizer delete-ssl", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	AfterAll(func() {
-		time.Sleep(60 * time.Second)
-		By("Deleting the Namespace to perform the tests")
-		_ = k8sClient.Delete(ctx, namespace)
-	})
-
 	Context("delete-ssl finalizer not set", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
 		It("should read and create defautl cr.yaml", func() {
