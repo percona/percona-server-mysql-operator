@@ -184,14 +184,6 @@ load_group_replication_plugin() {
 	POD_IP=$(hostname -I | awk '{print $1}')
 
 	sed -i "/\[mysqld\]/a plugin_load_add=group_replication.so" $CFG
-	sed -i "/\[mysqld\]/a group_replication_bootstrap_group=OFF" $CFG
-	sed -i "/\[mysqld\]/a group_replication_start_on_boot=OFF" $CFG
-	sed -i "/\[mysqld\]/a group_replication_consistency=EVENTUAL" $CFG
-	sed -i "/\[mysqld\]/a group_replication_exit_state_action=READ_ONLY" $CFG
-	sed -i "/\[mysqld\]/a group_replication_communication_stack=XCOM" $CFG
-	sed -i "/\[mysqld\]/a group_replication_ip_allowlist=${POD_IP}/16" $CFG
-	sed -i "/\[mysqld\]/a group_replication_ssl_mode=REQUIRED" $CFG
-	sed -i "/\[mysqld\]/a group_replication_recovery_use_ssl=ON" $CFG
 }
 
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')

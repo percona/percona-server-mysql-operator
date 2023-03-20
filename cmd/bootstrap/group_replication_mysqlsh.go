@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/sjmudd/stopwatch"
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
@@ -37,8 +38,7 @@ func (m *mysqlsh) getURI() string {
 }
 
 func (m *mysqlsh) getCluster() string {
-	// return os.Getenv("INNODB_CLUSTER_NAME")
-	return "cluster1"
+	return os.Getenv("INNODB_CLUSTER_NAME")
 }
 
 func (m *mysqlsh) run(ctx context.Context, cmd string) (bytes.Buffer, bytes.Buffer, error) {
@@ -107,7 +107,7 @@ func (m *mysqlsh) rebootClusterFromCompleteOutage(ctx context.Context, force boo
 }
 
 func (m *mysqlsh) addInstance(ctx context.Context, instanceDef string) error {
-	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone'})", m.getCluster(), instanceDef))
+	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'waitRecovery': 0})", m.getCluster(), instanceDef))
 	if err != nil {
 		return errors.Wrapf(err, "add instance stdout: %s stderr: %s", stdout.String(), stderr.String())
 	}
@@ -124,7 +124,7 @@ func (m *mysqlsh) rejoinInstance(ctx context.Context, instanceDef string) error 
 }
 
 func (m *mysqlsh) rescanCluster(ctx context.Context) error {
-	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rescan()", m.getCluster()))
+	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rescan({'addInstances': 'auto', 'removeInstances': 'auto'})", m.getCluster()))
 	if err != nil {
 		return errors.Wrapf(err, "rescan cluster stdout: %s stderr: %s", stdout.String(), stderr.String())
 	}
@@ -157,6 +157,29 @@ func connectToCluster(ctx context.Context, peers sets.Set[string]) (*mysqlsh, er
 }
 
 func bootstrapGroupReplicationMySQLShell(ctx context.Context) error {
+	timer := stopwatch.NewNamedStopwatch()
+	err := timer.Add("total")
+	if err != nil {
+		return errors.Wrap(err, "add timer")
+	}
+	timer.Start("total")
+
+	defer func() {
+		timer.Stop("total")
+		log.Printf("bootstrap finished in %f seconds", timer.ElapsedSeconds("total"))
+	}()
+
+	exists, err := lockExists()
+	if err != nil {
+		return errors.Wrap(err, "lock file check")
+	}
+	if exists {
+		log.Printf("Waiting for bootstrap.lock to be deleted")
+		if err = waitLockRemoval(); err != nil {
+			return errors.Wrap(err, "wait lock removal")
+		}
+	}
+
 	log.Println("Bootstrap starting...")
 
 	localShell, err := connectToLocal(ctx)
@@ -169,6 +192,11 @@ func bootstrapGroupReplicationMySQLShell(ctx context.Context) error {
 		return err
 	}
 	log.Printf("Instance (%s) configured to join to the InnoDB cluster", localShell.host)
+
+	podName, err := os.Hostname()
+	if err != nil {
+		return errors.Wrap(err, "get pod hostname")
+	}
 
 	peers, err := lookup(os.Getenv("SERVICE_NAME"))
 	if err != nil {
@@ -198,6 +226,12 @@ func bootstrapGroupReplicationMySQLShell(ctx context.Context) error {
 			if err != nil {
 				return errors.Wrap(err, "connect to the cluster")
 			}
+		} else if peers.Len() > 1 && strings.HasSuffix(podName, "-0") {
+			log.Printf("Can't connect to any of the peers, we need to reboot")
+			err := localShell.rebootClusterFromCompleteOutage(ctx, false)
+			if err != nil {
+				return err
+			}
 		} else {
 			return errors.Wrap(err, "connect to the cluster")
 		}
@@ -210,12 +244,13 @@ func bootstrapGroupReplicationMySQLShell(ctx context.Context) error {
 		return errors.Wrap(err, "get cluster status")
 	}
 
-	log.Printf("Cluster status: %+v", status)
+	log.Printf("Cluster status:\n%s", status)
 
 	member, ok := status.DefaultReplicaSet.Topology[fmt.Sprintf("%s:%d", localShell.host, 3306)]
 	if !ok {
-		err := shell.addInstance(ctx, localShell.getURI())
-		if err != nil {
+		log.Printf("Adding instance (%s) to InnoDB cluster", localShell.host)
+
+		if err := shell.addInstance(ctx, localShell.getURI()); err != nil {
 			return err
 		}
 
@@ -224,16 +259,21 @@ func bootstrapGroupReplicationMySQLShell(ctx context.Context) error {
 		return nil
 	}
 
-	for i, instErr := range member.InstanceErrors {
+	rescanNeeded := false
+	if len(member.InstanceErrors) > 0 {
 		log.Printf("Instance (%s) has errors:", localShell.host)
-		log.Printf("Error %d: %s", i, instErr)
-		if strings.Contains(instErr, "cluster.rescan") {
-			err := shell.rescanCluster(ctx)
-			if err != nil {
-				return err
-			}
-			log.Println("Cluster rescanned")
+		for i, instErr := range member.InstanceErrors {
+			log.Printf("Error %d: %s", i, instErr)
+			rescanNeeded = rescanNeeded || strings.Contains(instErr, "rescan()")
 		}
+	}
+
+	if rescanNeeded {
+		err := shell.rescanCluster(ctx)
+		if err != nil {
+			return err
+		}
+		log.Println("Cluster rescanned")
 	}
 
 	switch member.MemberState {
