@@ -31,12 +31,14 @@ const (
 	BackupStarting  BackupState = "Starting"
 	BackupRunning   BackupState = "Running"
 	BackupFailed    BackupState = "Failed"
+	BackupError     BackupState = "Error"
 	BackupSucceeded BackupState = "Succeeded"
 )
 
 // PerconaServerMySQLBackupStatus defines the observed state of PerconaServerMySQLBackup
 type PerconaServerMySQLBackupStatus struct {
 	State       BackupState        `json:"state,omitempty"`
+	StateDesc   string             `json:"stateDescription,omitempty"`
 	Destination string             `json:"destination,omitempty"`
 	Storage     *BackupStorageSpec `json:"storage,omitempty"`
 	CompletedAt *metav1.Time       `json:"completed,omitempty"`
