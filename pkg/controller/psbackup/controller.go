@@ -24,6 +24,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"time"
 
 	"github.com/pkg/errors"
@@ -301,17 +302,11 @@ func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creatio
 
 	switch storage.Type {
 	case apiv1alpha1.BackupStorageS3:
-		if storage.S3.Prefix != "" {
-			dest = storage.S3.Prefix + "/" + dest
-		}
+		dest = path.Join(storage.S3.Bucket.Prefix(), storage.S3.Prefix, dest)
 	case apiv1alpha1.BackupStorageGCS:
-		if storage.GCS.Prefix != "" {
-			dest = storage.GCS.Prefix + "/" + dest
-		}
+		dest = path.Join(storage.GCS.Bucket.Prefix(), storage.GCS.Prefix, dest)
 	case apiv1alpha1.BackupStorageAzure:
-		if storage.Azure.Prefix != "" {
-			dest = storage.Azure.Prefix + "/" + dest
-		}
+		dest = path.Join(storage.Azure.ContainerName.Prefix(), storage.Azure.Prefix, dest)
 	}
 
 	return dest
@@ -413,7 +408,7 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 		if !ok {
 			return nil, errors.Errorf("no credentials for Azure in secret %s", nn.Name)
 		}
-		conf.S3.Bucket = s3.Bucket
+		conf.S3.Bucket = s3.Bucket.Bucket()
 		conf.S3.Region = s3.Region
 		conf.S3.EndpointURL = s3.EndpointURL
 		conf.S3.StorageClass = s3.StorageClass
@@ -434,7 +429,7 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 		if !ok {
 			return nil, errors.Errorf("no credentials for Azure in secret %s", nn.Name)
 		}
-		conf.GCS.Bucket = gcs.Bucket
+		conf.GCS.Bucket = gcs.Bucket.Bucket()
 		conf.GCS.EndpointURL = gcs.EndpointURL
 		conf.GCS.StorageClass = gcs.StorageClass
 		conf.GCS.AccessKey = string(accessKey)
@@ -454,7 +449,7 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 		if !ok {
 			return nil, errors.Errorf("no credentials for Azure in secret %s", nn.Name)
 		}
-		conf.Azure.ContainerName = azure.ContainerName
+		conf.Azure.ContainerName = azure.ContainerName.Bucket()
 		conf.Azure.EndpointURL = azure.EndpointURL
 		conf.Azure.StorageClass = azure.StorageClass
 		conf.Azure.StorageAccount = string(storageAccount)

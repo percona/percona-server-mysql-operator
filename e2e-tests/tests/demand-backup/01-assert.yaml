@@ -1,60 +1,29 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 420
+timeout: 150
 ---
-kind: StatefulSet
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: perconaservermysqls.ps.percona.com
+spec:
+  group: ps.percona.com
+  names:
+    kind: PerconaServerMySQL
+    listKind: PerconaServerMySQLList
+    plural: perconaservermysqls
+    shortNames:
+    - ps
+    singular: perconaservermysql
+  scope: Namespaced
+---
 apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: demand-backup-mysql
+  name: percona-server-mysql-operator
 status:
+  availableReplicas: 1
   observedGeneration: 1
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
-  collisionCount: 0
----
-kind: StatefulSet
-apiVersion: apps/v1
-metadata:
-  name: demand-backup-orc
-status:
-  observedGeneration: 1
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
-  collisionCount: 0
----
-kind: StatefulSet
-apiVersion: apps/v1
-metadata:
-  name: demand-backup-haproxy
-status:
-  observedGeneration: 1
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
-  collisionCount: 0
----
-apiVersion: ps.percona.com/v1alpha1
-kind: PerconaServerMySQL
-metadata:
-  name: demand-backup
-  finalizers:
-    - delete-mysql-pods-in-order
-status:
-  haproxy:
-    ready: 3
-    size: 3
-    state: ready
-  mysql:
-    ready: 3
-    size: 3
-    state: ready
-  orchestrator:
-    ready: 3
-    size: 3
-    state: ready
-  state: ready
+  readyReplicas: 1
+  replicas: 1
+  updatedReplicas: 1
