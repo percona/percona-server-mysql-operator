@@ -12,10 +12,10 @@ fi
 wantHelp=
 for arg; do
 	case "$arg" in
-	-'?' | --help | --print-defaults | -V | --version)
-		wantHelp=1
-		break
-		;;
+		-'?' | --help | --print-defaults | -V | --version)
+			wantHelp=1
+			break
+			;;
 	esac
 done
 
@@ -56,21 +56,21 @@ process_init_file() {
 	local mysql=("$@")
 
 	case "$f" in
-	*.sh)
-		echo "$0: running $f"
-		. "$f"
-		;;
-	*.sql)
-		echo "$0: running $f"
-		"${mysql[@]}" <"$f"
-		echo
-		;;
-	*.sql.gz)
-		echo "$0: running $f"
-		gunzip -c "$f" | "${mysql[@]}"
-		echo
-		;;
-	*) echo "$0: ignoring $f" ;;
+		*.sh)
+			echo "$0: running $f"
+			. "$f"
+			;;
+		*.sql)
+			echo "$0: running $f"
+			"${mysql[@]}" <"$f"
+			echo
+			;;
+		*.sql.gz)
+			echo "$0: running $f"
+			gunzip -c "$f" | "${mysql[@]}"
+			echo
+			;;
+		*) echo "$0: ignoring $f" ;;
 	esac
 	echo
 }
@@ -95,8 +95,8 @@ _check_config() {
 _get_config() {
 	local conf="$1"
 	shift
-	"$@" --verbose --help --log-bin-index="$(mktemp -u)" 2>/dev/null |
-		awk '$1 == "'"$conf"'" && /^[^ \t]/ { sub(/^[^ \t]+[ \t]+/, ""); print; exit }'
+	"$@" --verbose --help --log-bin-index="$(mktemp -u)" 2>/dev/null \
+		| awk '$1 == "'"$conf"'" && /^[^ \t]/ { sub(/^[^ \t]+[ \t]+/, ""); print; exit }'
 	# match "datadir      /some/path with/spaces in/it here" but not "--xyz=abc\n     datadir (xyz)"
 }
 
@@ -107,11 +107,11 @@ _get_cnf_config() {
 	local reval=""
 
 	reval=$(
-		my_print_defaults "${group}" |
-			awk -F= '{st=index($0,"="); cur=$0; if ($1 ~ /_/) { gsub(/_/,"-",$1);} if (st != 0) { print $1"="substr(cur,st+1) } else { print cur }}' |
-			grep -- "--$var=" |
-			cut -d= -f2- |
-			tail -1
+		my_print_defaults "${group}" \
+			| awk -F= '{st=index($0,"="); cur=$0; if ($1 ~ /_/) { gsub(/_/,"-",$1);} if (st != 0) { print $1"="substr(cur,st+1) } else { print cur }}' \
+			| grep -- "--$var=" \
+			| cut -d= -f2- \
+			| tail -1
 	)
 
 	if [[ -z $reval ]]; then
@@ -321,9 +321,9 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			${monitorConnectGrant}
 
 			CREATE USER 'replication'@'%' IDENTIFIED BY '${REPLICATION_PASSWORD}';
+			GRANT DELETE, INSERT, UPDATE ON mysql.* TO 'replication'@'%' WITH GRANT OPTION;
 			GRANT SELECT ON performance_schema.threads to 'replication'@'%';
 			GRANT CLONE_ADMIN, CONNECTION_ADMIN, CREATE USER, EXECUTE, FILE, GROUP_REPLICATION_ADMIN, PERSIST_RO_VARIABLES_ADMIN, PROCESS, RELOAD, REPLICATION CLIENT, REPLICATION_APPLIER, REPLICATION_SLAVE_ADMIN, ROLE_ADMIN, SELECT, SHUTDOWN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'replication'@'%' WITH GRANT OPTION;
-			GRANT DELETE, INSERT, UPDATE ON mysql.* TO 'replication'@'%' WITH GRANT OPTION;
 			GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata.* TO 'replication'@'%' WITH GRANT OPTION;
 			GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata_bkp.* TO 'replication'@'%' WITH GRANT OPTION;
 			GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata_previous.* TO 'replication'@'%' WITH GRANT OPTION;
