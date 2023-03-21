@@ -123,3 +123,6 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
+
+// TODO: remove after https://github.com/Percona-Lab/percona-version-service/pull/130 merge
+replace github.com/Percona-Lab/percona-version-service => github.com/Percona-Lab/percona-version-service v0.0.0-20230321184200-8ff0b912ad81

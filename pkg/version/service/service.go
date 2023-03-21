@@ -56,6 +56,8 @@ func GetVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, endpoin
 		Product:           productName,
 		Context:           ctx,
 		HTTPClient:        &http.Client{Timeout: timeout},
+		HaproxyVersion:    &cr.Status.HAProxy.Version,
+		ToolkitVersion:    &cr.Status.ToolkitVersion,
 	}
 	applyParams = applyParams.WithTimeout(timeout)
 
@@ -95,6 +97,16 @@ func GetVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, endpoin
 		return DepVersion{}, errors.Wrap(err, "get router version")
 	}
 
+	haproxyVersion, err := getVersion(matrix.Haproxy)
+	if err != nil {
+		return DepVersion{}, errors.Wrap(err, "get haproxy version")
+	}
+
+	toolkitVersion, err := getVersion(matrix.Toolkit)
+	if err != nil {
+		return DepVersion{}, errors.Wrap(err, "get toolkit version")
+	}
+
 	dv := DepVersion{
 		PSImage:             matrix.Mysql[psVersion].ImagePath,
 		PSVersion:           psVersion,
@@ -106,6 +118,10 @@ func GetVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, endpoin
 		RouterVersion:       routerVersion,
 		PMMImage:            matrix.Pmm[pmmVersion].ImagePath,
 		PMMVersion:          pmmVersion,
+		HAProxyImage:        matrix.Haproxy[haproxyVersion].ImagePath,
+		HAProxyVersion:      haproxyVersion,
+		ToolkitImage:        matrix.Toolkit[toolkitVersion].ImagePath,
+		ToolkitVersion:      toolkitVersion,
 	}
 	return dv, nil
 }
@@ -121,6 +137,10 @@ type DepVersion struct {
 	RouterVersion       string `json:"routerVersion,omitempty"`
 	PMMImage            string `json:"pmmImage,omitempty"`
 	PMMVersion          string `json:"pmmVersion,omitempty"`
+	HAProxyImage        string `json:"haproxyImage,omitempty"`
+	HAProxyVersion      string `json:"haproxyVersion,omitempty"`
+	ToolkitImage        string `json:"toolkitImage,omitempty"`
+	ToolkitVersion      string `json:"toolkitVersion,omitempty"`
 }
 
 func getVersion(versions map[string]models.VersionVersion) (string, error) {

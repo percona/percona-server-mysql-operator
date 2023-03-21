@@ -68,6 +68,16 @@ type VersionServiceApplyParams struct {
 	// BackupVersion.
 	BackupVersion *string
 
+	// BackupsEnabled.
+	//
+	// Format: boolean
+	BackupsEnabled *bool
+
+	// ClusterSize.
+	//
+	// Format: int32
+	ClusterSize *int32
+
 	// ClusterWideEnabled.
 	//
 	// Format: boolean
@@ -87,6 +97,16 @@ type VersionServiceApplyParams struct {
 	// Format: boolean
 	HashicorpVaultEnabled *bool
 
+	// HelmDeployCr.
+	//
+	// Format: boolean
+	HelmDeployCr *bool
+
+	// HelmDeployOperator.
+	//
+	// Format: boolean
+	HelmDeployOperator *bool
+
 	// KubeVersion.
 	KubeVersion *string
 
@@ -99,8 +119,23 @@ type VersionServiceApplyParams struct {
 	// OperatorVersion.
 	OperatorVersion string
 
+	// PhysicalBackupScheduled.
+	//
+	// Format: boolean
+	PhysicalBackupScheduled *bool
+
+	// PitrEnabled.
+	//
+	// Format: boolean
+	PitrEnabled *bool
+
 	// Platform.
 	Platform *string
+
+	// PmmEnabled.
+	//
+	// Format: boolean
+	PmmEnabled *bool
 
 	// PmmVersion.
 	PmmVersion *string
@@ -115,6 +150,14 @@ type VersionServiceApplyParams struct {
 	//
 	// Format: boolean
 	ShardingEnabled *bool
+
+	// SidecarsUsed.
+	//
+	// Format: boolean
+	SidecarsUsed *bool
+
+	// ToolkitVersion.
+	ToolkitVersion *string
 
 	timeout    time.Duration
 	Context    context.Context
@@ -191,6 +234,28 @@ func (o *VersionServiceApplyParams) SetBackupVersion(backupVersion *string) {
 	o.BackupVersion = backupVersion
 }
 
+// WithBackupsEnabled adds the backupsEnabled to the version service apply params
+func (o *VersionServiceApplyParams) WithBackupsEnabled(backupsEnabled *bool) *VersionServiceApplyParams {
+	o.SetBackupsEnabled(backupsEnabled)
+	return o
+}
+
+// SetBackupsEnabled adds the backupsEnabled to the version service apply params
+func (o *VersionServiceApplyParams) SetBackupsEnabled(backupsEnabled *bool) {
+	o.BackupsEnabled = backupsEnabled
+}
+
+// WithClusterSize adds the clusterSize to the version service apply params
+func (o *VersionServiceApplyParams) WithClusterSize(clusterSize *int32) *VersionServiceApplyParams {
+	o.SetClusterSize(clusterSize)
+	return o
+}
+
+// SetClusterSize adds the clusterSize to the version service apply params
+func (o *VersionServiceApplyParams) SetClusterSize(clusterSize *int32) {
+	o.ClusterSize = clusterSize
+}
+
 // WithClusterWideEnabled adds the clusterWideEnabled to the version service apply params
 func (o *VersionServiceApplyParams) WithClusterWideEnabled(clusterWideEnabled *bool) *VersionServiceApplyParams {
 	o.SetClusterWideEnabled(clusterWideEnabled)
@@ -246,6 +311,28 @@ func (o *VersionServiceApplyParams) SetHashicorpVaultEnabled(hashicorpVaultEnabl
 	o.HashicorpVaultEnabled = hashicorpVaultEnabled
 }
 
+// WithHelmDeployCr adds the helmDeployCr to the version service apply params
+func (o *VersionServiceApplyParams) WithHelmDeployCr(helmDeployCr *bool) *VersionServiceApplyParams {
+	o.SetHelmDeployCr(helmDeployCr)
+	return o
+}
+
+// SetHelmDeployCr adds the helmDeployCr to the version service apply params
+func (o *VersionServiceApplyParams) SetHelmDeployCr(helmDeployCr *bool) {
+	o.HelmDeployCr = helmDeployCr
+}
+
+// WithHelmDeployOperator adds the helmDeployOperator to the version service apply params
+func (o *VersionServiceApplyParams) WithHelmDeployOperator(helmDeployOperator *bool) *VersionServiceApplyParams {
+	o.SetHelmDeployOperator(helmDeployOperator)
+	return o
+}
+
+// SetHelmDeployOperator adds the helmDeployOperator to the version service apply params
+func (o *VersionServiceApplyParams) SetHelmDeployOperator(helmDeployOperator *bool) {
+	o.HelmDeployOperator = helmDeployOperator
+}
+
 // WithKubeVersion adds the kubeVersion to the version service apply params
 func (o *VersionServiceApplyParams) WithKubeVersion(kubeVersion *string) *VersionServiceApplyParams {
 	o.SetKubeVersion(kubeVersion)
@@ -290,6 +377,28 @@ func (o *VersionServiceApplyParams) SetOperatorVersion(operatorVersion string) {
 	o.OperatorVersion = operatorVersion
 }
 
+// WithPhysicalBackupScheduled adds the physicalBackupScheduled to the version service apply params
+func (o *VersionServiceApplyParams) WithPhysicalBackupScheduled(physicalBackupScheduled *bool) *VersionServiceApplyParams {
+	o.SetPhysicalBackupScheduled(physicalBackupScheduled)
+	return o
+}
+
+// SetPhysicalBackupScheduled adds the physicalBackupScheduled to the version service apply params
+func (o *VersionServiceApplyParams) SetPhysicalBackupScheduled(physicalBackupScheduled *bool) {
+	o.PhysicalBackupScheduled = physicalBackupScheduled
+}
+
+// WithPitrEnabled adds the pitrEnabled to the version service apply params
+func (o *VersionServiceApplyParams) WithPitrEnabled(pitrEnabled *bool) *VersionServiceApplyParams {
+	o.SetPitrEnabled(pitrEnabled)
+	return o
+}
+
+// SetPitrEnabled adds the pitrEnabled to the version service apply params
+func (o *VersionServiceApplyParams) SetPitrEnabled(pitrEnabled *bool) {
+	o.PitrEnabled = pitrEnabled
+}
+
 // WithPlatform adds the platform to the version service apply params
 func (o *VersionServiceApplyParams) WithPlatform(platform *string) *VersionServiceApplyParams {
 	o.SetPlatform(platform)
@@ -299,6 +408,17 @@ func (o *VersionServiceApplyParams) WithPlatform(platform *string) *VersionServi
 // SetPlatform adds the platform to the version service apply params
 func (o *VersionServiceApplyParams) SetPlatform(platform *string) {
 	o.Platform = platform
+}
+
+// WithPmmEnabled adds the pmmEnabled to the version service apply params
+func (o *VersionServiceApplyParams) WithPmmEnabled(pmmEnabled *bool) *VersionServiceApplyParams {
+	o.SetPmmEnabled(pmmEnabled)
+	return o
+}
+
+// SetPmmEnabled adds the pmmEnabled to the version service apply params
+func (o *VersionServiceApplyParams) SetPmmEnabled(pmmEnabled *bool) {
+	o.PmmEnabled = pmmEnabled
 }
 
 // WithPmmVersion adds the pmmVersion to the version service apply params
@@ -345,6 +465,28 @@ func (o *VersionServiceApplyParams) SetShardingEnabled(shardingEnabled *bool) {
 	o.ShardingEnabled = shardingEnabled
 }
 
+// WithSidecarsUsed adds the sidecarsUsed to the version service apply params
+func (o *VersionServiceApplyParams) WithSidecarsUsed(sidecarsUsed *bool) *VersionServiceApplyParams {
+	o.SetSidecarsUsed(sidecarsUsed)
+	return o
+}
+
+// SetSidecarsUsed adds the sidecarsUsed to the version service apply params
+func (o *VersionServiceApplyParams) SetSidecarsUsed(sidecarsUsed *bool) {
+	o.SidecarsUsed = sidecarsUsed
+}
+
+// WithToolkitVersion adds the toolkitVersion to the version service apply params
+func (o *VersionServiceApplyParams) WithToolkitVersion(toolkitVersion *string) *VersionServiceApplyParams {
+	o.SetToolkitVersion(toolkitVersion)
+	return o
+}
+
+// SetToolkitVersion adds the toolkitVersion to the version service apply params
+func (o *VersionServiceApplyParams) SetToolkitVersion(toolkitVersion *string) {
+	o.ToolkitVersion = toolkitVersion
+}
+
 // WriteToRequest writes these params to a swagger request
 func (o *VersionServiceApplyParams) WriteToRequest(r runtime.ClientRequest, reg strfmt.Registry) error {
 
@@ -370,6 +512,40 @@ func (o *VersionServiceApplyParams) WriteToRequest(r runtime.ClientRequest, reg 
 		if qBackupVersion != "" {
 
 			if err := r.SetQueryParam("backupVersion", qBackupVersion); err != nil {
+				return err
+			}
+		}
+	}
+
+	if o.BackupsEnabled != nil {
+
+		// query param backupsEnabled
+		var qrBackupsEnabled bool
+
+		if o.BackupsEnabled != nil {
+			qrBackupsEnabled = *o.BackupsEnabled
+		}
+		qBackupsEnabled := swag.FormatBool(qrBackupsEnabled)
+		if qBackupsEnabled != "" {
+
+			if err := r.SetQueryParam("backupsEnabled", qBackupsEnabled); err != nil {
+				return err
+			}
+		}
+	}
+
+	if o.ClusterSize != nil {
+
+		// query param clusterSize
+		var qrClusterSize int32
+
+		if o.ClusterSize != nil {
+			qrClusterSize = *o.ClusterSize
+		}
+		qClusterSize := swag.FormatInt32(qrClusterSize)
+		if qClusterSize != "" {
+
+			if err := r.SetQueryParam("clusterSize", qClusterSize); err != nil {
 				return err
 			}
 		}
@@ -460,6 +636,40 @@ func (o *VersionServiceApplyParams) WriteToRequest(r runtime.ClientRequest, reg 
 		}
 	}
 
+	if o.HelmDeployCr != nil {
+
+		// query param helmDeployCr
+		var qrHelmDeployCr bool
+
+		if o.HelmDeployCr != nil {
+			qrHelmDeployCr = *o.HelmDeployCr
+		}
+		qHelmDeployCr := swag.FormatBool(qrHelmDeployCr)
+		if qHelmDeployCr != "" {
+
+			if err := r.SetQueryParam("helmDeployCr", qHelmDeployCr); err != nil {
+				return err
+			}
+		}
+	}
+
+	if o.HelmDeployOperator != nil {
+
+		// query param helmDeployOperator
+		var qrHelmDeployOperator bool
+
+		if o.HelmDeployOperator != nil {
+			qrHelmDeployOperator = *o.HelmDeployOperator
+		}
+		qHelmDeployOperator := swag.FormatBool(qrHelmDeployOperator)
+		if qHelmDeployOperator != "" {
+
+			if err := r.SetQueryParam("helmDeployOperator", qHelmDeployOperator); err != nil {
+				return err
+			}
+		}
+	}
+
 	if o.KubeVersion != nil {
 
 		// query param kubeVersion
@@ -516,6 +726,40 @@ func (o *VersionServiceApplyParams) WriteToRequest(r runtime.ClientRequest, reg 
 		return err
 	}
 
+	if o.PhysicalBackupScheduled != nil {
+
+		// query param physicalBackupScheduled
+		var qrPhysicalBackupScheduled bool
+
+		if o.PhysicalBackupScheduled != nil {
+			qrPhysicalBackupScheduled = *o.PhysicalBackupScheduled
+		}
+		qPhysicalBackupScheduled := swag.FormatBool(qrPhysicalBackupScheduled)
+		if qPhysicalBackupScheduled != "" {
+
+			if err := r.SetQueryParam("physicalBackupScheduled", qPhysicalBackupScheduled); err != nil {
+				return err
+			}
+		}
+	}
+
+	if o.PitrEnabled != nil {
+
+		// query param pitrEnabled
+		var qrPitrEnabled bool
+
+		if o.PitrEnabled != nil {
+			qrPitrEnabled = *o.PitrEnabled
+		}
+		qPitrEnabled := swag.FormatBool(qrPitrEnabled)
+		if qPitrEnabled != "" {
+
+			if err := r.SetQueryParam("pitrEnabled", qPitrEnabled); err != nil {
+				return err
+			}
+		}
+	}
+
 	if o.Platform != nil {
 
 		// query param platform
@@ -528,6 +772,23 @@ func (o *VersionServiceApplyParams) WriteToRequest(r runtime.ClientRequest, reg 
 		if qPlatform != "" {
 
 			if err := r.SetQueryParam("platform", qPlatform); err != nil {
+				return err
+			}
+		}
+	}
+
+	if o.PmmEnabled != nil {
+
+		// query param pmmEnabled
+		var qrPmmEnabled bool
+
+		if o.PmmEnabled != nil {
+			qrPmmEnabled = *o.PmmEnabled
+		}
+		qPmmEnabled := swag.FormatBool(qrPmmEnabled)
+		if qPmmEnabled != "" {
+
+			if err := r.SetQueryParam("pmmEnabled", qPmmEnabled); err != nil {
 				return err
 			}
 		}
@@ -584,6 +845,40 @@ func (o *VersionServiceApplyParams) WriteToRequest(r runtime.ClientRequest, reg 
 		if qShardingEnabled != "" {
 
 			if err := r.SetQueryParam("shardingEnabled", qShardingEnabled); err != nil {
+				return err
+			}
+		}
+	}
+
+	if o.SidecarsUsed != nil {
+
+		// query param sidecarsUsed
+		var qrSidecarsUsed bool
+
+		if o.SidecarsUsed != nil {
+			qrSidecarsUsed = *o.SidecarsUsed
+		}
+		qSidecarsUsed := swag.FormatBool(qrSidecarsUsed)
+		if qSidecarsUsed != "" {
+
+			if err := r.SetQueryParam("sidecarsUsed", qSidecarsUsed); err != nil {
+				return err
+			}
+		}
+	}
+
+	if o.ToolkitVersion != nil {
+
+		// query param toolkitVersion
+		var qrToolkitVersion string
+
+		if o.ToolkitVersion != nil {
+			qrToolkitVersion = *o.ToolkitVersion
+		}
+		qToolkitVersion := qrToolkitVersion
+		if qToolkitVersion != "" {
+
+			if err := r.SetQueryParam("toolkitVersion", qToolkitVersion); err != nil {
 				return err
 			}
 		}

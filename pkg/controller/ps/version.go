@@ -91,6 +91,14 @@ func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr
 		}
 		cr.Spec.PMM.Image = version.PMMImage
 	}
+	if cr.Spec.Toolkit.Image != version.ToolkitImage {
+		if cr.Status.ToolkitVersion == "" {
+			log.Info("set Percona Toolkit version to " + version.ToolkitVersion)
+		} else {
+			log.Info("update Percona Toolkit version", "old version", cr.Status.ToolkitVersion, "new version", version.ToolkitVersion)
+		}
+		cr.Spec.Toolkit.Image = version.ToolkitImage
+	}
 
 	err = r.Patch(ctx, cr.DeepCopy(), patch)
 	if err != nil {
@@ -103,5 +111,7 @@ func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr
 	cr.Status.Orchestrator.Version = version.OrchestratorVersion
 	cr.Status.Router.Version = version.RouterVersion
 	cr.Status.PMMVersion = version.PMMVersion
+	cr.Status.HAProxy.Version = version.HAProxyVersion
+	cr.Status.ToolkitVersion = version.ToolkitVersion
 	return nil
 }
