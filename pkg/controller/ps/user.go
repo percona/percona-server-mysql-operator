@@ -38,7 +38,7 @@ func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr
 	}
 	userSecret.Name = cr.Spec.SecretsName
 	userSecret.Namespace = cr.Namespace
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, userSecret, r.Scheme); err != nil {
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, nil, userSecret, r.Scheme); err != nil {
 		return errors.Wrap(err, "ensure user secret")
 	}
 
