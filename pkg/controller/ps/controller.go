@@ -1063,7 +1063,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 	}
 
 	orcExposer := orchestrator.Exposer(*cr)
-	if err := r.cleanupOutdatedServices(ctx,cr, &orcExposer); err != nil {
+	if err := r.cleanupOutdatedServices(ctx, cr, &orcExposer); err != nil {
 		return errors.Wrap(err, "cleanup Orchestrator services")
 	}
 
