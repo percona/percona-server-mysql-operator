@@ -3,17 +3,69 @@ package ps
 import (
 	"context"
 	"testing"
+	"time"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 )
+
+var _ = Describe("Keep user secrets", Ordered, func() {
+	ctx := context.Background()
+
+	const crName = "user-keep-secret"
+	const ns = crName
+
+	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      crName,
+			Namespace: ns,
+		},
+	}
+
+	BeforeAll(func() {
+		By("Creating the Namespace to perform the tests")
+		err := k8sClient.Create(ctx, namespace)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterAll(func() {
+		time.Sleep(60 * time.Second)
+		By("Deleting the Namespace to perform the tests")
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	Context("create and delete PS cluster", Ordered, func() {
+		cr, err := readDefaultCR(crName, ns)
+		It("should read and create default cr.yaml", func() {
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+		})
+
+		It("should reconcile once to create user secret", func() {
+			_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+		})
+		It("should create user secret without owner references", func() {
+			secret := new(corev1.Secret)
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cr.Spec.SecretsName, Namespace: cr.Namespace}, secret)).
+				Should(Succeed())
+
+			Expect(secret.OwnerReferences).Should(BeEmpty())
+		})
+	})
+})
 
 func TestEnsureUserSecrets(t *testing.T) {
 	ctx := context.Background()
