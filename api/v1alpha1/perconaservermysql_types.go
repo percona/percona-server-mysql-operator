@@ -799,6 +799,10 @@ func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 }
 
 func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
+	if cr.Spec.Proxy.HAProxy.Size == 0 {
+		return false
+	}
+
 	if !cr.Spec.AllowUnsafeConfig {
 		return true
 	}

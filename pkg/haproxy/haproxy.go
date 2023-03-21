@@ -25,37 +25,6 @@ const (
 	PortProxyProtocol = 3309
 )
 
-type Exposer apiv1alpha1.PerconaServerMySQL
-
-func (e *Exposer) Exposed() bool {
-	cr := apiv1alpha1.PerconaServerMySQL(*e)
-	return cr.HAProxyEnabled()
-}
-
-func (e *Exposer) Name(index string) string {
-	cr := apiv1alpha1.PerconaServerMySQL(*e)
-	return Name(&cr)
-}
-
-func (e *Exposer) Size() int32 {
-	return e.Spec.Proxy.HAProxy.Size
-}
-
-func (e *Exposer) Labels() map[string]string {
-	cr := apiv1alpha1.PerconaServerMySQL(*e)
-	return MatchLabels(&cr)
-}
-
-func (e *Exposer) Service(name string) *corev1.Service {
-	cr := apiv1alpha1.PerconaServerMySQL(*e)
-	return Service(&cr)
-}
-
-func (e *Exposer) SaveOldMeta() bool {
-	cr := apiv1alpha1.PerconaServerMySQL(*e)
-	return cr.Spec.Proxy.HAProxy.Expose.SaveOldMeta()
-}
-
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return cr.Name + "-" + componentName
 }

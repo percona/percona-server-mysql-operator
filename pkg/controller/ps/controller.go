@@ -732,6 +732,11 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 	log := logf.FromContext(ctx).WithName("reconcileHAProxy")
 
 	if !cr.HAProxyEnabled() || cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR {
+		svc := haproxy.Service(cr)
+		if err := r.Client.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrapf(err, "delete svc for pod %s", svc.Name)
+		}
+
 		return nil
 	}
 
@@ -1057,11 +1062,6 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 
 	orcExposer := orchestrator.Exposer(*cr)
 	if err := r.cleanupOutdatedServices(ctx, &orcExposer); err != nil {
-		return errors.Wrap(err, "cleanup Orchestrator services")
-	}
-
-	hapExposer := haproxy.Exposer(*cr)
-	if err := r.cleanupOutdatedServices(ctx, &hapExposer); err != nil {
 		return errors.Wrap(err, "cleanup Orchestrator services")
 	}
 
