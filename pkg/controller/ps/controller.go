@@ -731,7 +731,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context
 func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileHAProxy")
 
-	if !cr.HAProxyEnabled() || cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR {
+	if !cr.HAProxyEnabled() || cr.Spec.Proxy.HAProxy.Size == 0 || cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR {
 		svc := haproxy.Service(cr)
 		if err := r.Client.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrapf(err, "delete svc for pod %s", svc.Name)
