@@ -363,10 +363,10 @@ var _ = Describe("Unsafe configurations", Ordered, func() {
 	})
 })
 
-var _ = Describe("Cleanup outdated", Ordered, func() {
+var _ = Describe("Reconcile HAProxy", Ordered, func() {
 	ctx := context.Background()
 
-	crName := "cleanup-outdated"
+	crName := "reconcile-haproxy"
 	ns := crName
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
@@ -388,7 +388,7 @@ var _ = Describe("Cleanup outdated", Ordered, func() {
 		_ = k8sClient.Delete(ctx, namespace)
 	})
 
-	Context("Cleanup outdated HAProxy service", func() {
+	Context("Cleanup outdated HAProxy service", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
 		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
 		cr.Spec.Proxy.HAProxy.Enabled = true
@@ -400,25 +400,11 @@ var _ = Describe("Cleanup outdated", Ordered, func() {
 
 		svcName := crName + "-haproxy"
 
-		It("should reconcile and create HAProxy service", func() {
-			_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
-			Expect(err).NotTo(HaveOccurred())
-
-			svc := &corev1.Service{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, types.NamespacedName{
-					Namespace: cr.Namespace,
-					Name:      svcName,
-				}, svc)
-
-				return err == nil
-			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
-
-			Expect(svc.Name).Should(Equal(svcName))
-		})
-
-		When("HAPRoxy is disabled", Ordered, func() {
+		When("HAPRoxy is disabled with setting enabled option to false", Ordered, func() {
 			It("should remove outdated HAProxy service", func() {
+				_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+				Expect(err).NotTo(HaveOccurred())
+
 				Eventually(func() bool {
 					err := k8sClient.Get(ctx, crNamespacedName, cr)
 					return err == nil
@@ -426,6 +412,43 @@ var _ = Describe("Cleanup outdated", Ordered, func() {
 
 				cr.Spec.Proxy.HAProxy.Enabled = false
 				cr.Spec.AllowUnsafeConfig = true
+				Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+
+				_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+				Expect(err).NotTo(HaveOccurred())
+
+				svc := &corev1.Service{}
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, types.NamespacedName{
+						Namespace: cr.Namespace,
+						Name:      svcName,
+					}, svc)
+
+					return k8serrors.IsNotFound(err)
+				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+			})
+		})
+
+		When("HAPRoxy is disabled by setting the size to zero", Ordered, func() {
+			It("should remove outdated HAProxy service", func() {
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, crNamespacedName, cr)
+					return err == nil
+				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+				cr.Spec.Proxy.HAProxy.Enabled = true
+				Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+
+				By("Reconcile once so the operator can create HAProxy service")
+				_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+				Expect(err).NotTo(HaveOccurred())
+
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, crNamespacedName, cr)
+					return err == nil
+				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+				cr.Spec.Proxy.HAProxy.Size = 0
 				Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
 
 				_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
