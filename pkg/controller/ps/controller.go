@@ -905,8 +905,15 @@ func reconcileReplicationSemiSync(
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Context, exposer Exposer) error {
+func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, exposer Exposer) error {
 	log := logf.FromContext(ctx).WithName("cleanupOutdatedServices")
+
+	if !cr.HAProxyEnabled() || cr.Spec.Proxy.HAProxy.Size == 0 {
+		svc := haproxy.Service(cr)
+		if err := r.Client.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrapf(err, "delete HAProxy svc %s", svc.Name)
+		}
+	}
 
 	size := int(exposer.Size())
 	svcNames := make(map[string]struct{}, size)
@@ -1051,12 +1058,12 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouterConfiguration(ctx con
 
 func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	mysqlExposer := mysql.Exposer(*cr)
-	if err := r.cleanupOutdatedServices(ctx, &mysqlExposer); err != nil {
+	if err := r.cleanupOutdatedServices(ctx, cr, &mysqlExposer); err != nil {
 		return errors.Wrap(err, "cleanup MySQL services")
 	}
 
 	orcExposer := orchestrator.Exposer(*cr)
-	if err := r.cleanupOutdatedServices(ctx, &orcExposer); err != nil {
+	if err := r.cleanupOutdatedServices(ctx, cr, &orcExposer); err != nil {
 		return errors.Wrap(err, "cleanup Orchestrator services")
 	}
 
