@@ -1,24 +1,10 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 30
+timeout: 300
 ---
-kind: ConfigMap
-apiVersion: v1
+kind: PerconaServerMySQLBackup
+apiVersion: ps.percona.com/v1alpha1
 metadata:
-  name: 12-delete-data-gcp-0
-data:
-  data: ""
----
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: 12-delete-data-gcp-1
-data:
-  data: ""
----
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: 12-delete-data-gcp-2
-data:
-  data: ""
+  name: gr-demand-backup-gcp
+status:
+  state: Succeeded
