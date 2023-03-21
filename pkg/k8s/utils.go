@@ -132,14 +132,16 @@ func EnsureObject(
 func EnsureObjectWithHash(
 	ctx context.Context,
 	cl client.Client,
-	cr *apiv1alpha1.PerconaServerMySQL,
+	owner metav1.Object,
 	obj client.Object,
 	s *runtime.Scheme,
 ) error {
-	if err := controllerutil.SetControllerReference(cr, obj, s); err != nil {
-		return errors.Wrapf(err, "set controller reference to %s/%s",
-			obj.GetObjectKind().GroupVersionKind().Kind,
-			obj.GetName())
+	if owner != nil {
+		if err := controllerutil.SetControllerReference(owner, obj, s); err != nil {
+			return errors.Wrapf(err, "set controller reference to %s/%s",
+				obj.GetObjectKind().GroupVersionKind().Kind,
+				obj.GetName())
+		}
 	}
 
 	if obj.GetAnnotations() == nil {
