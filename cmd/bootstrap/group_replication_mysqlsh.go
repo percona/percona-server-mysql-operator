@@ -21,11 +21,15 @@ import (
 var errRebootClusterFromCompleteOutage = errors.New("run dba.rebootClusterFromCompleteOutage() to reboot the cluster from complete outage")
 
 type mysqlsh struct {
-	host string
+	clusterName string
+	host        string
 }
 
 func newShell(host string) *mysqlsh {
-	return &mysqlsh{host: host}
+	return &mysqlsh{
+		clusterName: os.Getenv("INNODB_CLUSTER_NAME"),
+		host:        host,
+	}
 }
 
 func (m *mysqlsh) getURI() string {
@@ -35,10 +39,6 @@ func (m *mysqlsh) getURI() string {
 	}
 
 	return fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, m.host)
-}
-
-func (m *mysqlsh) getCluster() string {
-	return os.Getenv("INNODB_CLUSTER_NAME")
 }
 
 func (m *mysqlsh) run(ctx context.Context, cmd string) (bytes.Buffer, bytes.Buffer, error) {
@@ -86,7 +86,7 @@ func (m *mysqlsh) configureLocalInstance(ctx context.Context) error {
 }
 
 func (m *mysqlsh) createCluster(ctx context.Context) error {
-	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.createCluster('%s')", m.getCluster()))
+	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.createCluster('%s')", m.clusterName))
 	if err != nil {
 		if strings.Contains(stderr.String(), "dba.rebootClusterFromCompleteOutage") {
 			return errRebootClusterFromCompleteOutage
@@ -98,7 +98,7 @@ func (m *mysqlsh) createCluster(ctx context.Context) error {
 }
 
 func (m *mysqlsh) rebootClusterFromCompleteOutage(ctx context.Context, force bool) error {
-	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.rebootClusterFromCompleteOutage('%s', {'force': %t})", m.getCluster(), force))
+	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.rebootClusterFromCompleteOutage('%s', {'force': %t})", m.clusterName, force))
 	if err != nil {
 		return errors.Wrapf(err, "reboot cluster from complete outage stdout: %s, stderr: %s", stdout.String(), stderr.String())
 	}
@@ -107,7 +107,7 @@ func (m *mysqlsh) rebootClusterFromCompleteOutage(ctx context.Context, force boo
 }
 
 func (m *mysqlsh) addInstance(ctx context.Context, instanceDef string) error {
-	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'waitRecovery': 0})", m.getCluster(), instanceDef))
+	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'waitRecovery': 0})", m.clusterName, instanceDef))
 	if err != nil {
 		return errors.Wrapf(err, "add instance stdout: %s stderr: %s", stdout.String(), stderr.String())
 	}
@@ -115,7 +115,7 @@ func (m *mysqlsh) addInstance(ctx context.Context, instanceDef string) error {
 	return nil
 }
 func (m *mysqlsh) rejoinInstance(ctx context.Context, instanceDef string) error {
-	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rejoinInstance('%s')", m.getCluster(), instanceDef))
+	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rejoinInstance('%s')", m.clusterName, instanceDef))
 	if err != nil {
 		return errors.Wrapf(err, "rejoin instance stdout: %s stderr: %s", stdout.String(), stderr.String())
 	}
@@ -124,7 +124,7 @@ func (m *mysqlsh) rejoinInstance(ctx context.Context, instanceDef string) error 
 }
 
 func (m *mysqlsh) rescanCluster(ctx context.Context) error {
-	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rescan({'addInstances': 'auto', 'removeInstances': 'auto'})", m.getCluster()))
+	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rescan({'addInstances': 'auto', 'removeInstances': 'auto'})", m.clusterName))
 	if err != nil {
 		return errors.Wrapf(err, "rescan cluster stdout: %s stderr: %s", stdout.String(), stderr.String())
 	}
@@ -144,7 +144,7 @@ func connectToLocal(ctx context.Context) (*mysqlsh, error) {
 func connectToCluster(ctx context.Context, peers sets.Set[string]) (*mysqlsh, error) {
 	for _, peer := range peers.UnsortedList() {
 		shell := newShell(peer)
-		stdout, stderr, err := shell.run(ctx, "dba.getCluster('cluster1')")
+		stdout, stderr, err := shell.run(ctx, fmt.Sprintf("dba.getCluster('%s')", shell.clusterName))
 		if err != nil {
 			log.Printf("Failed get cluster from peer %s, stdout: %s stderr: %s", peer, stdout.String(), stderr.String())
 			continue
@@ -207,7 +207,7 @@ func bootstrapGroupReplicationMySQLShell(ctx context.Context) error {
 	shell, err := connectToCluster(ctx, peers)
 	if err != nil {
 		if peers.Len() == 1 {
-			log.Printf("Creating InnoDB cluster %s", localShell.getCluster())
+			log.Printf("Creating InnoDB cluster: %s", localShell.clusterName)
 
 			err := localShell.createCluster(ctx)
 			if err != nil {

@@ -15,8 +15,8 @@ limitations under the License.
 */
 
 // Package v1alpha1 contains API Schema definitions for the ps v1alpha1 API group
-//+kubebuilder:object:generate=true
-//+groupName=ps.percona.com
+// +kubebuilder:object:generate=true
+// +groupName=ps.percona.com
 package v1alpha1
 
 import (
