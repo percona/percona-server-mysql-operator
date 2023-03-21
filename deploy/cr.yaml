@@ -8,7 +8,7 @@ metadata:
 spec:
   allowUnsafeConfigurations: false
 #  pause: false
-  crVersion: 0.4.0
+  crVersion: 0.5.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
 #  ignoreAnnotations:
