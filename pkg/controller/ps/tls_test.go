@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
-	"fmt"
 	"path/filepath"
 	"time"
 
@@ -62,7 +61,6 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 
 			tlsCert, err := x509.ParseCertificate(bl.Bytes)
 			Expect(err).NotTo(HaveOccurred())
-			fmt.Fprintln(GinkgoWriter, tlsCert)
 
 			dnsNames := []string{
 				"*.cluster1-mysql",
