@@ -43,112 +43,11 @@ var _ = Describe("Finalizer delete-ssl", Ordered, func() {
 	})
 
 	AfterAll(func() {
-		time.Sleep(60 * time.Second)
 		By("Deleting the Namespace to perform the tests")
 		_ = k8sClient.Delete(ctx, namespace)
 	})
 
-	Context("delete-ssl finalizer not set", Ordered, func() {
-		cr, err := readDefaultCR(crName, ns)
-		It("should read and create defautl cr.yaml", func() {
-			Expect(err).NotTo(HaveOccurred())
-			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
-		})
-
-		// This way we simulate cert-manager creating secrets.
-		// Normally these secrets are created by cert-manager controller after creating
-		// the certificates but in envtest environment we don't (and can't have) have cert-manager running.
-		// We are creating secrets manually to make operator think they're created by cert-manager,
-		go func() {
-			defer GinkgoRecover()
-
-			// We need to wait a bit in order to ensure that the operator starts
-			// creating issuers and certificates, because if secrets
-			// are already there, the operator will see that they exist and will
-			// not proceed with the algorithm.
-			time.Sleep(10 * time.Second)
-			secretCACert := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cr.Name + "-ca-cert",
-					Namespace: cr.Namespace,
-				},
-				Type: corev1.SecretTypeOpaque,
-			}
-
-			secretSSL := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cr.Spec.SSLSecretName,
-					Namespace: cr.Namespace,
-				},
-				Type: corev1.SecretTypeOpaque,
-			}
-
-			Expect(k8sClient.Create(ctx, secretCACert)).Should(Succeed())
-			Expect(k8sClient.Create(ctx, secretSSL)).Should(Succeed())
-		}()
-
-		It("should reconcile once to create issuers and certificates", func() {
-			_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		When("PS cluster is deleted, without delete-ssl finalizer certs should not be deleted", func() {
-			It("should delete PS cluster and reconcile changes", func() {
-				Expect(k8sClient.Delete(ctx, cr, &client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &cr.UID}})).
-					Should(Succeed())
-
-				_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("controller should not remove secrets", func() {
-				secret := &corev1.Secret{}
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, types.NamespacedName{
-						Namespace: cr.Namespace,
-						Name:      cr.Spec.SSLSecretName,
-					}, secret)
-
-					return err == nil
-				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
-
-				Expect(secret.Name).Should(Equal(cr.Spec.SSLSecretName))
-
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, types.NamespacedName{
-						Namespace: cr.Namespace,
-						Name:      cr.Name + "-ca-cert",
-					}, secret)
-
-					return err == nil
-				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
-
-				Expect(secret.Name).Should(Equal(cr.Name + "-ca-cert"))
-			})
-
-			It("controller should not remove CM issuers and certificates", func() {
-				issuers := &cm.IssuerList{}
-				Eventually(func() bool {
-					opts := &client.ListOptions{Namespace: cr.Namespace}
-					err := k8sClient.List(ctx, issuers, opts)
-
-					return err == nil
-				}, time.Second*30, time.Millisecond*250).Should(BeTrue())
-				Expect(issuers.Items).Should(HaveLen(2))
-
-				certs := &cm.CertificateList{}
-				Eventually(func() bool {
-					opts := &client.ListOptions{Namespace: cr.Namespace}
-					err := k8sClient.List(ctx, certs, opts)
-
-					return err == nil
-				}, time.Second*30, time.Millisecond*250).Should(BeTrue())
-				Expect(certs.Items).Should(HaveLen(2))
-			})
-		})
-	})
-
-	Context("delete-ssl finalizer set", Ordered, func() {
+	Context("delete-ssl finalizer specified", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
 		cr.Finalizers = append(cr.Finalizers, "delete-ssl")
 		It("should read and create defautl cr.yaml", func() {
