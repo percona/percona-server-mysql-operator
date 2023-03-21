@@ -76,6 +76,10 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	status := cr.Status
+	if status.State == apiv1alpha1.RestoreError {
+		status.State = apiv1alpha1.RestoreNew
+		status.StateDesc = ""
+	}
 
 	defer func() {
 		if status.State == cr.Status.State {
@@ -104,6 +108,11 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	cluster := &apiv1alpha1.PerconaServerMySQL{}
 	nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
 	if err := r.Client.Get(ctx, nn, cluster); err != nil {
+		if k8serrors.IsNotFound(err) {
+			status.State = apiv1alpha1.RestoreError
+			status.StateDesc = fmt.Sprintf("PerconaServerMySQL %s in namespace %s is not found", cr.Spec.ClusterName, cr.Namespace)
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, errors.Wrapf(err, "get cluster %s", nn)
 	}
 
@@ -113,6 +122,11 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		backup := &apiv1alpha1.PerconaServerMySQLBackup{}
 		nn := types.NamespacedName{Name: cr.Spec.BackupName, Namespace: cr.Namespace}
 		if err := r.Client.Get(ctx, nn, backup); err != nil {
+			if k8serrors.IsNotFound(err) {
+				status.State = apiv1alpha1.RestoreError
+				status.StateDesc = fmt.Sprintf("PerconaServerMySQLBackup %s in namespace %s is not found", cr.Spec.BackupName, cr.Namespace)
+				return ctrl.Result{}, nil
+			}
 			return ctrl.Result{}, errors.Wrapf(err, "get backup %s", nn)
 		}
 		destination = backup.Status.Destination
@@ -120,13 +134,22 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		var ok bool
 		storage, ok = cluster.Spec.Backup.Storages[storageName]
 		if !ok {
-			return ctrl.Result{}, errors.Errorf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", storageName)
+			status.State = apiv1alpha1.RestoreError
+			status.StateDesc = fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", storageName)
+			return ctrl.Result{}, nil
 		}
 	} else if cr.Spec.BackupSource != nil && cr.Spec.BackupSource.Storage != nil {
 		storage = cr.Spec.BackupSource.Storage
 		destination = cr.Spec.BackupSource.Destination
+		if destination == "" {
+			status.State = apiv1alpha1.RestoreError
+			status.StateDesc = "backupSource.storage.destination is empty"
+			return ctrl.Result{}, nil
+		}
 	} else {
-		return ctrl.Result{}, errors.New("spec.storageName and backupSource.storage are empty")
+		status.State = apiv1alpha1.RestoreError
+		status.StateDesc = "spec.storageName and backupSource.storage are empty"
+		return ctrl.Result{}, nil
 	}
 
 	switch status.State {

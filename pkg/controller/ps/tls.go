@@ -48,6 +48,16 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 		issuerKind = cr.Spec.TLS.IssuerConf.Kind
 		issuerName = cr.Spec.TLS.IssuerConf.Name
 		issuerGroup = cr.Spec.TLS.IssuerConf.Group
+
+		isr := &cm.Issuer{}
+		err := r.Get(ctx, types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      issuerName,
+		}, isr)
+		if k8serrors.IsNotFound(err) {
+			return err
+		}
+
 	} else {
 		issuerConf := cm.IssuerConfig{
 			SelfSigned: &cm.SelfSignedIssuer{},

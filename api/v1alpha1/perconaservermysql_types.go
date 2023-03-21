@@ -71,6 +71,8 @@ const (
 	ClusterTypeGR    ClusterType = "group-replication"
 	ClusterTypeAsync ClusterType = "async"
 	MinSafeProxySize             = 2
+	MinSafeGRSize                = 3
+	MaxSafeGRSize                = 9
 )
 
 func (t ClusterType) isValid() bool {
@@ -213,19 +215,32 @@ type BackupStorageSpec struct {
 }
 
 type BackupStorageS3Spec struct {
-	Bucket            string `json:"bucket"`
-	Prefix            string `json:"prefix,omitempty"`
-	CredentialsSecret string `json:"credentialsSecret"`
-	Region            string `json:"region,omitempty"`
-	EndpointURL       string `json:"endpointUrl,omitempty"`
-	StorageClass      string `json:"storageClass,omitempty"`
+	Bucket            BucketWithPrefix `json:"bucket"`
+	Prefix            string           `json:"prefix,omitempty"`
+	CredentialsSecret string           `json:"credentialsSecret"`
+	Region            string           `json:"region,omitempty"`
+	EndpointURL       string           `json:"endpointUrl,omitempty"`
+	StorageClass      string           `json:"storageClass,omitempty"`
+}
+
+// BucketWithPrefix contains a bucket name with or without a prefix in a format <bucket>/<prefix>
+type BucketWithPrefix string
+
+func (b BucketWithPrefix) Bucket() string {
+	bucket, _, _ := strings.Cut(string(b), "/")
+	return bucket
+}
+
+func (b BucketWithPrefix) Prefix() string {
+	_, prefix, _ := strings.Cut(string(b), "/")
+	return prefix
 }
 
 type BackupStorageGCSSpec struct {
-	Bucket            string `json:"bucket"`
-	Prefix            string `json:"prefix,omitempty"`
-	CredentialsSecret string `json:"credentialsSecret"`
-	EndpointURL       string `json:"endpointUrl,omitempty"`
+	Bucket            BucketWithPrefix `json:"bucket"`
+	Prefix            string           `json:"prefix,omitempty"`
+	CredentialsSecret string           `json:"credentialsSecret"`
+	EndpointURL       string           `json:"endpointUrl,omitempty"`
 
 	// STANDARD, NEARLINE, COLDLINE, ARCHIVE
 	StorageClass string `json:"storageClass,omitempty"`
@@ -233,7 +248,7 @@ type BackupStorageGCSSpec struct {
 
 type BackupStorageAzureSpec struct {
 	// A container name is a valid DNS name that conforms to the Azure naming rules.
-	ContainerName string `json:"containerName"`
+	ContainerName BucketWithPrefix `json:"containerName"`
 
 	// A prefix is a sub-folder to the backups inside the container
 	Prefix string `json:"prefix,omitempty"`
@@ -547,6 +562,20 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 
 	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Proxy.Router == nil {
 		return errors.New("router section is needed for group replication")
+	}
+
+	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && !cr.Spec.AllowUnsafeConfig {
+		if cr.Spec.MySQL.Size < MinSafeGRSize {
+			cr.Spec.MySQL.Size = MinSafeGRSize
+		}
+
+		if cr.Spec.MySQL.Size > MaxSafeGRSize {
+			cr.Spec.MySQL.Size = MaxSafeGRSize
+		}
+
+		if cr.Spec.MySQL.Size%2 == 0 {
+			cr.Spec.MySQL.Size++
+		}
 	}
 
 	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Proxy.Router != nil && !cr.Spec.AllowUnsafeConfig {

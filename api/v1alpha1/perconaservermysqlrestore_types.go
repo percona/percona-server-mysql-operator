@@ -37,12 +37,14 @@ const (
 	RestoreStarting  RestoreState = "Starting"
 	RestoreRunning   RestoreState = "Running"
 	RestoreFailed    RestoreState = "Failed"
+	RestoreError     RestoreState = "Error"
 	RestoreSucceeded RestoreState = "Succeeded"
 )
 
 // PerconaServerMySQLRestoreStatus defines the observed state of PerconaServerMySQLRestore
 type PerconaServerMySQLRestoreStatus struct { // INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	State       RestoreState `json:"state,omitempty"`
+	StateDesc   string       `json:"stateDescription,omitempty"`
 	CompletedAt *metav1.Time `json:"completed,omitempty"`
 }
 

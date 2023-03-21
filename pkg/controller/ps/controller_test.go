@@ -239,3 +239,125 @@ var _ = Describe("Sidecars", Ordered, func() {
 		})
 	})
 })
+
+var _ = Describe("Unsafe configurations", Ordered, func() {
+	ctx := context.Background()
+
+	crName := "unsafe-configs"
+	ns := crName
+	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      crName,
+			Namespace: ns,
+		},
+	}
+
+	BeforeAll(func() {
+		By("Creating the Namespace to perform the tests")
+		err := k8sClient.Create(ctx, namespace)
+		Expect(err).To(Not(HaveOccurred()))
+	})
+
+	AfterAll(func() {
+		By("Deleting the Namespace to perform the tests")
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	cr, err := readDefaultCR(crName, ns)
+	It("should read and create defautl cr.yaml", func() {
+		Expect(err).NotTo(HaveOccurred())
+		Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+	})
+
+	Context("Unsafe configurations are disabled", func() {
+		Specify("controller should set minimum safe number of replicas to MySQL statefulset", func() {
+			cr.Spec.AllowUnsafeConfig = false
+			cr.MySQLSpec().Size = 1
+			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+
+			_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			sts := &appsv1.StatefulSet{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts)
+				return err == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+			Expect(*sts.Spec.Replicas).Should(Equal(int32(psv1alpha1.MinSafeGRSize)))
+		})
+
+		Specify("controller should set maximum safe number of replicas to MySQL statefulset", func() {
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, crNamespacedName, cr)
+				return err == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+			cr.Spec.AllowUnsafeConfig = false
+			cr.MySQLSpec().Size = 11
+			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+
+			_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			sts := &appsv1.StatefulSet{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts)
+				return err == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+			Expect(*sts.Spec.Replicas).Should(Equal(int32(psv1alpha1.MaxSafeGRSize)))
+		})
+
+		Specify("controller should set even number of replicas to MySQL statefulset", func() {
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, crNamespacedName, cr)
+				return err == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+			cr.Spec.AllowUnsafeConfig = false
+			cr.MySQLSpec().Size = 4
+			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+
+			_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			sts := &appsv1.StatefulSet{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts)
+				return err == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+			Expect(*sts.Spec.Replicas).Should(Equal(int32(5)))
+		})
+	})
+
+	Context("Unsafe configurations are enabled", func() {
+		Specify("controller should set unsafe number of replicas to MySQL statefulset", func() {
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, crNamespacedName, cr)
+				return err == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+			cr.Spec.AllowUnsafeConfig = true
+			cr.MySQLSpec().Size = 1
+			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+
+			_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+
+			sts := &appsv1.StatefulSet{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts)
+				return err == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+			Expect(*sts.Spec.Replicas).Should(Equal(int32(1)))
+		})
+	})
+})

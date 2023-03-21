@@ -24,6 +24,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"time"
 
 	"github.com/pkg/errors"
@@ -124,6 +125,11 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	cluster := &apiv1alpha1.PerconaServerMySQL{}
 	nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
 	if err := r.Client.Get(ctx, nn, cluster); err != nil {
+		if k8serrors.IsNotFound(err) {
+			status.State = apiv1alpha1.BackupError
+			status.StateDesc = fmt.Sprintf("PerconaServerMySQL %s in namespace %s is not found", cr.Spec.ClusterName, cr.Namespace)
+			return rr, nil
+		}
 		return rr, errors.Wrapf(err, "get %v", nn.String())
 	}
 
@@ -132,17 +138,22 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	if cluster.Spec.Backup == nil || !cluster.Spec.Backup.Enabled {
-		log.Info("spec.backup stanza not found in PerconaServerMySQL CustomResource or backup is disabled")
+		status.State = apiv1alpha1.BackupError
+		status.StateDesc = "spec.backup stanza not found in PerconaServerMySQL CustomResource or backup is disabled"
 		return rr, nil
 	}
 
 	storage, ok := cluster.Spec.Backup.Storages[cr.Spec.StorageName]
 	if !ok {
-		return rr, errors.Errorf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", cr.Spec.StorageName)
+		status.State = apiv1alpha1.BackupError
+		status.StateDesc = fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", cr.Spec.StorageName)
+		return rr, nil
 	}
 
 	if cluster.Status.MySQL.State != apiv1alpha1.StateReady {
 		log.Info("Cluster is not ready", "cluster", cr.Name)
+		status.State = apiv1alpha1.BackupNew
+		status.StateDesc = "cluster is not ready"
 		return rr, nil
 	}
 
@@ -280,6 +291,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, nil
 	default:
 		status.State = apiv1alpha1.BackupStarting
+		status.StateDesc = ""
 	}
 
 	return rr, nil
@@ -290,17 +302,11 @@ func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creatio
 
 	switch storage.Type {
 	case apiv1alpha1.BackupStorageS3:
-		if storage.S3.Prefix != "" {
-			dest = storage.S3.Prefix + "/" + dest
-		}
+		dest = path.Join(storage.S3.Bucket.Prefix(), storage.S3.Prefix, dest)
 	case apiv1alpha1.BackupStorageGCS:
-		if storage.GCS.Prefix != "" {
-			dest = storage.GCS.Prefix + "/" + dest
-		}
+		dest = path.Join(storage.GCS.Bucket.Prefix(), storage.GCS.Prefix, dest)
 	case apiv1alpha1.BackupStorageAzure:
-		if storage.Azure.Prefix != "" {
-			dest = storage.Azure.Prefix + "/" + dest
-		}
+		dest = path.Join(storage.Azure.ContainerName.Prefix(), storage.Azure.Prefix, dest)
 	}
 
 	return dest
@@ -402,7 +408,7 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 		if !ok {
 			return nil, errors.Errorf("no credentials for Azure in secret %s", nn.Name)
 		}
-		conf.S3.Bucket = s3.Bucket
+		conf.S3.Bucket = s3.Bucket.Bucket()
 		conf.S3.Region = s3.Region
 		conf.S3.EndpointURL = s3.EndpointURL
 		conf.S3.StorageClass = s3.StorageClass
@@ -423,7 +429,7 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 		if !ok {
 			return nil, errors.Errorf("no credentials for Azure in secret %s", nn.Name)
 		}
-		conf.GCS.Bucket = gcs.Bucket
+		conf.GCS.Bucket = gcs.Bucket.Bucket()
 		conf.GCS.EndpointURL = gcs.EndpointURL
 		conf.GCS.StorageClass = gcs.StorageClass
 		conf.GCS.AccessKey = string(accessKey)
@@ -443,7 +449,7 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 		if !ok {
 			return nil, errors.Errorf("no credentials for Azure in secret %s", nn.Name)
 		}
-		conf.Azure.ContainerName = azure.ContainerName
+		conf.Azure.ContainerName = azure.ContainerName.Bucket()
 		conf.Azure.EndpointURL = azure.EndpointURL
 		conf.Azure.StorageClass = azure.StorageClass
 		conf.Azure.StorageAccount = string(storageAccount)

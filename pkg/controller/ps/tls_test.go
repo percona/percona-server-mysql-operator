@@ -184,7 +184,10 @@ var _ = Describe("Finalizer delete-ssl", Ordered, func() {
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 		})
 
-		// This way we simulate cert-manager creating secrets
+		// This way we simulate cert-manager creating secrets.
+		// Normally these secrets are created by cert-manager controller after creating
+		// the certificates but in envtest environment we don't (and can't have) have cert-manager running.
+		// We are creating secrets manually to make operator think they're created by cert-manager,
 		go func() {
 			defer GinkgoRecover()
 
