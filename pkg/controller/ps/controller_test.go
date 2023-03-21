@@ -243,8 +243,8 @@ var _ = Describe("Sidecars", Ordered, func() {
 var _ = Describe("Unsafe configurations", Ordered, func() {
 	ctx := context.Background()
 
-	crName := "unsafe-configs"
-	ns := crName
+	const crName = "unsafe-configs"
+	const ns = crName
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
 	namespace := &corev1.Namespace{
