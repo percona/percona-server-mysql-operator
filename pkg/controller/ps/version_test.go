@@ -202,6 +202,7 @@ func TestReconcileVersions(t *testing.T) {
 					},
 					BackupVersion:  "backup-version",
 					ToolkitVersion: "toolkit-version",
+					PMMVersion:     "pmm-version",
 				},
 			},
 			telemetryEnabled: false,
@@ -329,6 +330,7 @@ func TestGetVersion(t *testing.T) {
 					},
 					BackupVersion:  "backup-version",
 					ToolkitVersion: "toolkit-version",
+					PMMVersion:     "pmm-version",
 				},
 			},
 			want: vs.DepVersion{
@@ -417,6 +419,7 @@ func (vs *fakeVS) Apply(_ context.Context, req any) (any, error) {
 		Product:           r.GetProduct(),
 		HaproxyVersion:    r.GetHaproxyVersion(),
 		ToolkitVersion:    r.GetToolkitVersion(),
+		PmmVersion:        r.GetPmmVersion(),
 	}
 	want := &pbVersion.ApplyRequest{
 		BackupVersion:     "backup-version",
@@ -428,6 +431,7 @@ func (vs *fakeVS) Apply(_ context.Context, req any) (any, error) {
 		Platform:          string(platform.PlatformKubernetes),
 		HaproxyVersion:    "haproxy-version",
 		ToolkitVersion:    "toolkit-version",
+		PmmVersion:        "pmm-version",
 	}
 
 	if !reflect.DeepEqual(have, want) {

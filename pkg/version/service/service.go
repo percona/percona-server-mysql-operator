@@ -56,6 +56,7 @@ func GetVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, endpoin
 		Product:           productName,
 		Context:           ctx,
 		HTTPClient:        &http.Client{Timeout: timeout},
+		PmmVersion:        &cr.Status.PMMVersion,
 		HaproxyVersion:    &cr.Status.HAProxy.Version,
 		ToolkitVersion:    &cr.Status.ToolkitVersion,
 	}
