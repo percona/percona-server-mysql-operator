@@ -25,6 +25,7 @@ import (
 	gs "github.com/onsi/gomega/gstruct"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -243,8 +244,8 @@ var _ = Describe("Sidecars", Ordered, func() {
 var _ = Describe("Unsafe configurations", Ordered, func() {
 	ctx := context.Background()
 
-	crName := "unsafe-configs"
-	ns := crName
+	const crName = "unsafe-configs"
+	const ns = crName
 	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
 	namespace := &corev1.Namespace{
@@ -358,6 +359,111 @@ var _ = Describe("Unsafe configurations", Ordered, func() {
 			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 
 			Expect(*sts.Spec.Replicas).Should(Equal(int32(1)))
+		})
+	})
+})
+
+var _ = Describe("Reconcile HAProxy", Ordered, func() {
+	ctx := context.Background()
+
+	crName := "reconcile-haproxy"
+	ns := crName
+	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      crName,
+			Namespace: ns,
+		},
+	}
+
+	BeforeAll(func() {
+		By("Creating the Namespace to perform the tests")
+		err := k8sClient.Create(ctx, namespace)
+		Expect(err).To(Not(HaveOccurred()))
+	})
+
+	AfterAll(func() {
+		By("Deleting the Namespace to perform the tests")
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	Context("Cleanup outdated HAProxy service", Ordered, func() {
+		cr, err := readDefaultCR(crName, ns)
+		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+		cr.Spec.Proxy.HAProxy.Enabled = true
+		cr.Spec.AllowUnsafeConfig = false
+		It("should read and create defautl cr.yaml", func() {
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+		})
+
+		svcName := crName + "-haproxy"
+
+		When("HAPRoxy is disabled with setting enabled option to false", Ordered, func() {
+			It("should remove outdated HAProxy service", func() {
+				_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+				Expect(err).NotTo(HaveOccurred())
+
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, crNamespacedName, cr)
+					return err == nil
+				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+				cr.Spec.Proxy.HAProxy.Enabled = false
+				cr.Spec.AllowUnsafeConfig = true
+				Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+
+				_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+				Expect(err).NotTo(HaveOccurred())
+
+				svc := &corev1.Service{}
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, types.NamespacedName{
+						Namespace: cr.Namespace,
+						Name:      svcName,
+					}, svc)
+
+					return k8serrors.IsNotFound(err)
+				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+			})
+		})
+
+		When("HAPRoxy is disabled by setting the size to zero", Ordered, func() {
+			It("should remove outdated HAProxy service", func() {
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, crNamespacedName, cr)
+					return err == nil
+				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+				cr.Spec.Proxy.HAProxy.Enabled = true
+				Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+
+				By("Reconcile once so the operator can create HAProxy service")
+				_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+				Expect(err).NotTo(HaveOccurred())
+
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, crNamespacedName, cr)
+					return err == nil
+				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+				cr.Spec.Proxy.HAProxy.Size = 0
+				Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+
+				_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+				Expect(err).NotTo(HaveOccurred())
+
+				svc := &corev1.Service{}
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, types.NamespacedName{
+						Namespace: cr.Namespace,
+						Name:      svcName,
+					}, svc)
+
+					return k8serrors.IsNotFound(err)
+				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+			})
 		})
 	})
 })
