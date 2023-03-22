@@ -1,0 +1,26 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 360
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-one-pod
+status:
+  mysql:
+    ready: 1
+    size: 1
+    state: ready
+  orchestrator: {}
+  router:
+    ready: 1
+    size: 1
+    state: ready
+  state: ready
+---
+kind: PerconaServerMySQLRestore
+apiVersion: ps.percona.com/v1alpha1
+metadata:
+  name: gr-one-pod-restore-minio
+status:
+  state: Succeeded
