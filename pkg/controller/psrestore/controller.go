@@ -148,7 +148,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		}
 	} else {
 		status.State = apiv1alpha1.RestoreError
-		status.StateDesc = "spec.storageName and backupSource.storage are empty"
+		status.StateDesc = "backupName and backupSource.storage are empty"
 		return ctrl.Result{}, nil
 	}
 
@@ -203,6 +203,8 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			}
 
 			if !exists {
+				status.State = apiv1alpha1.RestoreError
+				status.StateDesc = fmt.Sprintf("secret %s is not found", storage.S3.CredentialsSecret)
 				return ctrl.Result{}, errors.Wrapf(err, "secret %s not found", nn)
 			}
 
@@ -221,6 +223,8 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			}
 
 			if !exists {
+				status.State = apiv1alpha1.RestoreError
+				status.StateDesc = fmt.Sprintf("secret %s is not found", storage.GCS.CredentialsSecret)
 				return ctrl.Result{}, errors.Wrapf(err, "secret %s not found", nn)
 			}
 
@@ -239,6 +243,8 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			}
 
 			if !exists {
+				status.State = apiv1alpha1.RestoreError
+				status.StateDesc = fmt.Sprintf("secret %s is not found", storage.Azure.CredentialsSecret)
 				return ctrl.Result{}, errors.Wrapf(err, "secret %s not found", nn)
 			}
 

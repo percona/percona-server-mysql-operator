@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -16,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
 func TestRestoreStatusErrStateDesc(t *testing.T) {
@@ -31,11 +34,13 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		cr        *apiv1alpha1.PerconaServerMySQLRestore
-		cluster   *apiv1alpha1.PerconaServerMySQL
-		backup    *apiv1alpha1.PerconaServerMySQLBackup
-		stateDesc string
+		name          string
+		cr            *apiv1alpha1.PerconaServerMySQLRestore
+		cluster       *apiv1alpha1.PerconaServerMySQL
+		backup        *apiv1alpha1.PerconaServerMySQLBackup
+		secret        *corev1.Secret
+		stateDesc     string
+		shouldSucceed bool
 	}{
 		{
 			name:      "without cluster",
@@ -56,7 +61,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 				},
 				Spec: apiv1alpha1.PerconaServerMySQLSpec{},
 			},
-			stateDesc: "spec.storageName and backupSource.storage are empty",
+			stateDesc: "backupName and backupSource.storage are empty",
 		},
 		{
 			name: "with empty destination in backup source",
@@ -113,6 +118,81 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 			},
 			stateDesc: fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", storageName),
 		},
+		{
+			name: "without secret",
+			cr:   cr,
+			backup: &apiv1alpha1.PerconaServerMySQLBackup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      backupName,
+					Namespace: namespace,
+				},
+				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
+					ClusterName: clusterName,
+					StorageName: storageName,
+				},
+			},
+			cluster: &apiv1alpha1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: namespace,
+				},
+				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+					Backup: &apiv1alpha1.BackupSpec{
+						Storages: map[string]*apiv1alpha1.BackupStorageSpec{
+							storageName: {
+								S3: &apiv1alpha1.BackupStorageS3Spec{
+									CredentialsSecret: "aws-secret",
+								},
+								Type: apiv1alpha1.BackupStorageS3,
+							},
+						},
+						InitImage: "operator-image",
+					},
+				},
+			},
+			stateDesc: "secret aws-secret is not found",
+		},
+		{
+			name: "should succeed",
+			cr:   cr,
+			backup: &apiv1alpha1.PerconaServerMySQLBackup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      backupName,
+					Namespace: namespace,
+				},
+				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
+					ClusterName: clusterName,
+					StorageName: storageName,
+				},
+			},
+			cluster: &apiv1alpha1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: namespace,
+				},
+				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+					Backup: &apiv1alpha1.BackupSpec{
+						Storages: map[string]*apiv1alpha1.BackupStorageSpec{
+							storageName: {
+								S3: &apiv1alpha1.BackupStorageS3Spec{
+									CredentialsSecret: "aws-secret",
+								},
+								Type: apiv1alpha1.BackupStorageS3,
+							},
+						},
+						InitImage: "operator-image",
+					},
+				},
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "aws-secret",
+					Namespace: namespace,
+				},
+			},
+			stateDesc:     "",
+			shouldSucceed: true,
+		},
 	}
 
 	scheme := runtime.NewScheme()
@@ -129,10 +209,18 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr)
 			if tt.cluster != nil {
-				cb.WithObjects(tt.cluster)
+				cb.WithObjects(tt.cluster, &appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      mysql.Name(tt.cluster),
+						Namespace: namespace,
+					},
+				})
 			}
 			if tt.backup != nil {
 				cb.WithObjects(tt.backup)
+			}
+			if tt.secret != nil {
+				cb.WithObjects(tt.secret)
 			}
 
 			r := PerconaServerMySQLRestoreReconciler{
@@ -159,8 +247,14 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 			if cr.Status.StateDesc != tt.stateDesc {
 				t.Fatalf("expected stateDesc %s, got %s", tt.stateDesc, cr.Status.StateDesc)
 			}
-			if cr.Status.State != apiv1alpha1.RestoreError {
-				t.Fatalf("expected state %s, got %s", apiv1alpha1.RestoreError, cr.Status.State)
+			if tt.shouldSucceed {
+				if cr.Status.State != "" {
+					t.Fatalf("expected state %s, got %s", apiv1alpha1.RestoreError, cr.Status.State)
+				}
+			} else {
+				if cr.Status.State != apiv1alpha1.RestoreError {
+					t.Fatalf("expected state %s, got %s", apiv1alpha1.RestoreError, cr.Status.State)
+				}
 			}
 		})
 	}
