@@ -419,8 +419,8 @@ verify_certificate_sans() {
 	have=$(mktemp)
 	want=$(mktemp)
 
-	kubectl -n "${NAMESPACE}" get certificate "${certificate}" -o jsonpath='{.spec.dnsNames}' | jq >"${have}"
-	echo "${expected_sans}" | jq >"${want}"
+	kubectl -n "${NAMESPACE}" get certificate "${certificate}" -o jsonpath='{.spec.dnsNames}' | jq '.' >"${have}"
+	echo "${expected_sans}" | jq '.' >"${want}"
 
 	diff "${have}" "${want}"
 }
