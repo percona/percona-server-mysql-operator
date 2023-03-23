@@ -1023,7 +1023,6 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouterConfiguration(ctx con
 	if err := r.Client.Get(ctx, nn, currCm); err != nil && !k8serrors.IsNotFound(err) {
 		return "", errors.Wrapf(err, "get ConfigMap/%s", cmName)
 	}
-	log.Info("AAAAAAAAA - current CM", "currCm", currCm)
 
 	// Cleanup if user removed the configuration from CR
 	if cr.Spec.Proxy.Router.Configuration == "" {
@@ -1033,8 +1032,6 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouterConfiguration(ctx con
 		}
 
 		if !exists || !metav1.IsControlledBy(currCm, cr) {
-			log.Info("AAAAAAAAA - if !exists || !metav1.IsControlledBy(currCm, cr)", "currCm", currCm)
-
 			d := struct{ Data map[string]string }{Data: currCm.Data}
 			data, err := json.Marshal(d)
 			if err != nil {
@@ -1055,12 +1052,9 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouterConfiguration(ctx con
 
 	cm := k8s.ConfigMap(cmName, cr.Namespace, router.CustomConfigKey, cr.Spec.Proxy.Router.Configuration)
 	if !reflect.DeepEqual(currCm.Data, cm.Data) {
-		log.Info("AAAAA - !reflect.DeepEqual(currCm.Data, cm.Data)", "currCM", currCm, "cm", cm)
 		if err := k8s.EnsureObject(ctx, r.Client, cr, cm, r.Scheme); err != nil {
 			return "", errors.Wrapf(err, "ensure ConfigMap/%s", cmName)
 		}
-
-		log.Info("AAAA ConfigMap updated", "name", cmName, "data", cm.Data)
 	}
 
 	d := struct{ Data map[string]string }{Data: cm.Data}
