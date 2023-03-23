@@ -11,11 +11,11 @@ commands:
       verify_certificate_sans gr-tls-cert-manager-ssl '[
         "*.gr-tls-cert-manager-mysql",
         "*.gr-tls-cert-manager-mysql.'"${NAMESPACE}"'",
-        "*.gr-tls-cert-manager-mysql.'"${NAMESPACE}"'.svc.cluster.local",
+        "*.gr-tls-cert-manager-mysql.'"${NAMESPACE}"'.svc",
         "*.gr-tls-cert-manager-orchestrator",
         "*.gr-tls-cert-manager-orchestrator.'"${NAMESPACE}"'",
-        "*.gr-tls-cert-manager-orchestrator.'"${NAMESPACE}"'.svc.cluster.local",
+        "*.gr-tls-cert-manager-orchestrator.'"${NAMESPACE}"'.svc",
         "*.gr-tls-cert-manager-router",
         "*.gr-tls-cert-manager-router.'"${NAMESPACE}"'",
-        "*.gr-tls-cert-manager-router.'"${NAMESPACE}"'.svc.cluster.local"
+        "*.gr-tls-cert-manager-router.'"${NAMESPACE}"'.svc"
       ]'

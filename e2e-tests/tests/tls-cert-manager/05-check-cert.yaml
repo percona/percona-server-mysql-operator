@@ -11,12 +11,12 @@ commands:
       verify_certificate_sans tls-cert-manager-ssl '[
         "*.tls-cert-manager-mysql",
         "*.tls-cert-manager-mysql.'"${NAMESPACE}"'",
-        "*.tls-cert-manager-mysql.'"${NAMESPACE}"'.svc.cluster.local",
+        "*.tls-cert-manager-mysql.'"${NAMESPACE}"'.svc",
         "*.tls-cert-manager-orchestrator",
         "*.tls-cert-manager-orchestrator.'"${NAMESPACE}"'",
-        "*.tls-cert-manager-orchestrator.'"${NAMESPACE}"'.svc.cluster.local",
+        "*.tls-cert-manager-orchestrator.'"${NAMESPACE}"'.svc",
         "*.tls-cert-manager-router",
         "*.tls-cert-manager-router.'"${NAMESPACE}"'",
-        "*.tls-cert-manager-router.'"${NAMESPACE}"'.svc.cluster.local",
+        "*.tls-cert-manager-router.'"${NAMESPACE}"'.svc",
         "mysql-1.example.com"
       ]'
