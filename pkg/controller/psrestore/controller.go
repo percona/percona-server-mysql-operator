@@ -138,17 +138,22 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			status.StateDesc = fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", storageName)
 			return ctrl.Result{}, nil
 		}
-	} else if cr.Spec.BackupSource != nil && cr.Spec.BackupSource.Storage != nil {
+	} else if cr.Spec.BackupSource != nil {
 		storage = cr.Spec.BackupSource.Storage
 		destination = cr.Spec.BackupSource.Destination
 		if destination == "" {
 			status.State = apiv1alpha1.RestoreError
-			status.StateDesc = "backupSource.storage.destination is empty"
+			status.StateDesc = "backupSource.destination is empty"
+			return ctrl.Result{}, nil
+		}
+		if storage == nil {
+			status.State = apiv1alpha1.RestoreError
+			status.StateDesc = "backupSource.storage is empty"
 			return ctrl.Result{}, nil
 		}
 	} else {
 		status.State = apiv1alpha1.RestoreError
-		status.StateDesc = "backupName and backupSource.storage are empty"
+		status.StateDesc = "backupName and backupSource are empty"
 		return ctrl.Result{}, nil
 	}
 

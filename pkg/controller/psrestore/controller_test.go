@@ -61,7 +61,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 				},
 				Spec: apiv1alpha1.PerconaServerMySQLSpec{},
 			},
-			stateDesc: "backupName and backupSource.storage are empty",
+			stateDesc: "backupName and backupSource are empty",
 		},
 		{
 			name: "with empty destination in backup source",
@@ -78,7 +78,24 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 				},
 				Spec: apiv1alpha1.PerconaServerMySQLSpec{},
 			},
-			stateDesc: "backupSource.storage.destination is empty",
+			stateDesc: "backupSource.destination is empty",
+		},
+		{
+			name: "with empty storage in backup source",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLRestore) {
+				cr.Spec.BackupName = ""
+				cr.Spec.BackupSource = &apiv1alpha1.PerconaServerMySQLBackupStatus{
+					Destination: "some-destination",
+				}
+			}),
+			cluster: &apiv1alpha1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: namespace,
+				},
+				Spec: apiv1alpha1.PerconaServerMySQLSpec{},
+			},
+			stateDesc: "backupSource.storage is empty",
 		},
 		{
 			name: "without PerconaServerMySQLBackup",
