@@ -17,6 +17,3 @@ commands:
         | yq eval '.spec.orchestrator.size=3' - \
         | yq eval '.spec.orchestrator.affinity.antiAffinityTopologyKey="none"' - \
         | kubectl -n "${NAMESPACE}" apply -f -
-
-      wait_cluster_consistency "${test_name}" "3" "3"
-    timeout: 420

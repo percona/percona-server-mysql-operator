@@ -302,7 +302,7 @@ get_service_ip() {
 	kubectl get service/$service -n "${NAMESPACE}" -o 'jsonpath={.status.loadBalancer.ingress[].hostname}'
 }
 
-wait_cluster_consistency() {
+wait_cluster_consistency_async() {
 	local cluster_name=${1}
 	local cluster_size=${2}
 	local orc_size=${3}
