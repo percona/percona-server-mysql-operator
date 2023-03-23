@@ -1,4 +1,4 @@
-apiVersion: ps.percona.com/v1alpha1
+hpiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
   name: config-router
