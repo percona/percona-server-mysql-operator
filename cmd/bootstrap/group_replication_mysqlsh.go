@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -18,7 +19,11 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 )
 
-var errRebootClusterFromCompleteOutage = errors.New("run dba.rebootClusterFromCompleteOutage() to reboot the cluster from complete outage")
+var (
+	errRebootClusterFromCompleteOutage     = errors.New("run dba.rebootClusterFromCompleteOutage() to reboot the cluster from complete outage")
+	errCouldNotDetermineIfClusterIsOffline = errors.New("Could not determine if Cluster is completely OFFLINE")
+	errEmptyGTIDSet                        = errors.New("The target instance has an empty GTID set so it cannot be safely rejoined to the cluster. Please remove it and add it back to the cluster.")
+)
 
 type mysqlsh struct {
 	clusterName string
@@ -44,9 +49,11 @@ func (m *mysqlsh) getURI() string {
 func (m *mysqlsh) run(ctx context.Context, cmd string) (bytes.Buffer, bytes.Buffer, error) {
 	var stdoutb, stderrb bytes.Buffer
 
+	log.Printf("Running %s", cmd)
+
 	c := exec.CommandContext(ctx, "mysqlsh", "--no-wizard", "--uri", m.getURI(), "-e", cmd)
-	c.Stdout = &stdoutb
-	c.Stderr = &stderrb
+	c.Stdout = io.MultiWriter(log.Writer(), &stdoutb)
+	c.Stderr = io.MultiWriter(log.Writer(), &stderrb)
 
 	err := c.Run()
 
@@ -77,56 +84,72 @@ func (m *mysqlsh) clusterStatus(ctx context.Context) (innodbcluster.Status, erro
 }
 
 func (m *mysqlsh) configureLocalInstance(ctx context.Context) error {
-	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.configureLocalInstance('%s', {'clearReadOnly': true})", m.getURI()))
+	_, _, err := m.run(ctx, fmt.Sprintf("dba.configureLocalInstance('%s', {'clearReadOnly': true, 'clusterAdmin': 'operator'})", m.getURI()))
 	if err != nil {
-		return errors.Wrapf(err, "configure local instance stdout: %s, stderr: %s", stdout.String(), stderr.String())
+		return errors.Wrapf(err, "configure local instance")
 	}
 
 	return nil
 }
 
 func (m *mysqlsh) createCluster(ctx context.Context) error {
-	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.createCluster('%s')", m.clusterName))
+	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.createCluster('%s', {'expelTimeout': 30})", m.clusterName))
 	if err != nil {
 		if strings.Contains(stderr.String(), "dba.rebootClusterFromCompleteOutage") {
 			return errRebootClusterFromCompleteOutage
 		}
-		return errors.Wrapf(err, "create InnoDB cluster stdout: %s, stderr: %s", stdout.String(), stderr.String())
+		return errors.Wrapf(err, "create InnoDB cluster")
 	}
 
 	return nil
 }
 
 func (m *mysqlsh) rebootClusterFromCompleteOutage(ctx context.Context, force bool) error {
-	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.rebootClusterFromCompleteOutage('%s', {'force': %t})", m.clusterName, force))
+	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.rebootClusterFromCompleteOutage('%s', {'force': %t})", m.clusterName, force))
 	if err != nil {
-		return errors.Wrapf(err, "reboot cluster from complete outage stdout: %s, stderr: %s", stdout.String(), stderr.String())
+		if strings.Contains(stderr.String(), "Could not determine if Cluster is completely OFFLINE") {
+			return errCouldNotDetermineIfClusterIsOffline
+		}
+		return errors.Wrapf(err, "reboot cluster from complete outage")
 	}
 
 	return nil
 }
 
 func (m *mysqlsh) addInstance(ctx context.Context, instanceDef string) error {
-	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'waitRecovery': 0})", m.clusterName, instanceDef))
+	_, _, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'waitRecovery': 3})", m.clusterName, instanceDef))
 	if err != nil {
-		return errors.Wrapf(err, "add instance stdout: %s stderr: %s", stdout.String(), stderr.String())
+		return errors.Wrapf(err, "add instance")
 	}
 
 	return nil
 }
+
 func (m *mysqlsh) rejoinInstance(ctx context.Context, instanceDef string) error {
-	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rejoinInstance('%s')", m.clusterName, instanceDef))
+	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rejoinInstance('%s')", m.clusterName, instanceDef))
 	if err != nil {
-		return errors.Wrapf(err, "rejoin instance stdout: %s stderr: %s", stdout.String(), stderr.String())
+		if strings.Contains(stderr.String(), "empty GTID set") {
+			return errEmptyGTIDSet
+		}
+		return errors.Wrapf(err, "rejoin instance")
+	}
+
+	return nil
+}
+
+func (m *mysqlsh) removeInstance(ctx context.Context, instanceDef string, force bool) error {
+	_, _, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').removeInstance('%s', {'force': %t})", m.clusterName, instanceDef, force))
+	if err != nil {
+		return errors.Wrapf(err, "remove instance")
 	}
 
 	return nil
 }
 
 func (m *mysqlsh) rescanCluster(ctx context.Context) error {
-	stdout, stderr, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rescan({'addInstances': 'auto', 'removeInstances': 'auto'})", m.clusterName))
+	_, _, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rescan({'addInstances': 'auto', 'removeInstances': 'auto'})", m.clusterName))
 	if err != nil {
-		return errors.Wrapf(err, "rescan cluster stdout: %s stderr: %s", stdout.String(), stderr.String())
+		return errors.Wrapf(err, "rescan cluster")
 	}
 
 	return nil
@@ -230,7 +253,14 @@ func bootstrapGroupReplicationMySQLShell(ctx context.Context) error {
 			log.Printf("Can't connect to any of the peers, we need to reboot")
 			err := localShell.rebootClusterFromCompleteOutage(ctx, false)
 			if err != nil {
-				return err
+				if errors.Is(err, errCouldNotDetermineIfClusterIsOffline) {
+					err := localShell.rebootClusterFromCompleteOutage(ctx, true)
+					if err != nil {
+						return err
+					}
+				} else {
+					return err
+				}
 			}
 		} else {
 			return errors.Wrap(err, "connect to the cluster")
@@ -256,7 +286,7 @@ func bootstrapGroupReplicationMySQLShell(ctx context.Context) error {
 
 		log.Printf("Added instance (%s) to InnoDB cluster", localShell.host)
 
-		return nil
+		os.Exit(1)
 	}
 
 	rescanNeeded := false
@@ -268,28 +298,37 @@ func bootstrapGroupReplicationMySQLShell(ctx context.Context) error {
 		}
 	}
 
-	if rescanNeeded {
-		err := shell.rescanCluster(ctx)
-		if err != nil {
-			return err
-		}
-		log.Println("Cluster rescanned")
-	}
-
 	switch member.MemberState {
 	case innodbcluster.MemberStateOnline:
 		log.Printf("Instance (%s) is already in InnoDB Cluster and its state is %s", localShell.host, member.MemberState)
-		return nil
 	case innodbcluster.MemberStateMissing:
 		log.Printf("Instance (%s) is in InnoDB Cluster but its state is %s", localShell.host, member.MemberState)
 		err := shell.rejoinInstance(ctx, localShell.getURI())
 		if err != nil {
+			if errors.Is(err, errEmptyGTIDSet) {
+				log.Printf("Removing instance (%s) from cluster", localShell.host)
+				err := shell.removeInstance(ctx, localShell.getURI(), true)
+				if err != nil {
+					return err
+				}
+
+				// we fail the bootstrap after removing instance to add instance properly
+				os.Exit(1)
+			}
 			return err
 		}
 
 		log.Printf("Instance (%s) rejoined to InnoDB cluster", localShell.host)
 	default:
 		log.Printf("Instance (%s) state is %s", localShell.host, member.MemberState)
+	}
+
+	if rescanNeeded {
+		err := shell.rescanCluster(ctx)
+		if err != nil {
+			return err
+		}
+		log.Println("Cluster rescanned")
 	}
 
 	return nil
