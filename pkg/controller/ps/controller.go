@@ -577,6 +577,10 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfiguration(
 		}
 
 		if !exists || !metav1.IsControlledBy(currCm, cr) {
+			if len(currCm.Data) == 0 {
+				return "", nil
+			}
+
 			d := struct{ Data map[string]string }{Data: currCm.Data}
 			data, err := json.Marshal(d)
 			if err != nil {
@@ -1032,15 +1036,17 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouterConfiguration(ctx con
 		}
 
 		if !exists || !metav1.IsControlledBy(currCm, cr) {
-			log.Info("BBBBBBBBBBB - ne postoji ili nije kontrolisana", "MAPA", currCm)
-			// d := struct{ Data map[string]string }{Data: currCm.Data}
-			// data, err := json.Marshal(d)
-			// if err != nil {
-			// 	return "", errors.Wrap(err, "marshal configmap data to json")
-			// }
-			//
-			// return fmt.Sprintf("%x", md5.Sum(data)), nil
-			return "", nil
+			if len(currCm.Data) == 0 {
+				return "", nil
+			}
+
+			d := struct{ Data map[string]string }{Data: currCm.Data}
+			data, err := json.Marshal(d)
+			if err != nil {
+				return "", errors.Wrap(err, "marshal configmap data to json")
+			}
+
+			return fmt.Sprintf("%x", md5.Sum(data)), nil
 		}
 
 		if err := r.Client.Delete(ctx, currCm); err != nil {
