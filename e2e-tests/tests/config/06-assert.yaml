@@ -16,7 +16,7 @@ metadata:
   generation: 4
   name: config-mysql
 status:
-  observedGeneration: 3
+  observedGeneration: 4
   readyReplicas: 3
   replicas: 3
   updatedReplicas: 3
