@@ -1,0 +1,9 @@
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-one-pod-orc
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-one-pod-haproxy
