@@ -1,0 +1,19 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
+        --type json \
+        -p '[
+              {
+                "op": "add",
+                "path": "/spec/tls",
+                "value": {"SANs": ["mysql-1.example.com"]},
+              },
+            ]'

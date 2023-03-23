@@ -436,3 +436,16 @@ get_primary_from_haproxy() {
 
 	run_mysql "SHOW VARIABLES LIKE '%hostname%';" "-h ${haproxy_pod_ip} -P3306 -uroot -proot_password" | awk '{print $2}'
 }
+
+verify_certificate_sans() {
+	local certificate=$1
+	local expected_sans=$2
+
+	have=$(mktemp)
+	want=$(mktemp)
+
+	kubectl -n "${NAMESPACE}" get certificate "${certificate}" -o jsonpath='{.spec.dnsNames}' | jq '.' >"${have}"
+	echo "${expected_sans}" | jq '.' >"${want}"
+
+	diff "${have}" "${want}"
+}

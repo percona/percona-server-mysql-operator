@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 400
+timeout: 300
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -36,11 +36,11 @@ spec:
 status:
   conditions:
     - message: Certificate is up to date and has not expired
-      observedGeneration: 1
+      observedGeneration: 2
       reason: Ready
       status: 'True'
       type: Ready
-  revision: 1
+  revision: 2
 ---
 apiVersion: apps/v1
 kind: StatefulSet
