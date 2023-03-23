@@ -12,7 +12,7 @@ data:
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: one-pod-mysql
+  name: gr-one-pod-mysql
 status:
   observedGeneration: 3
   replicas: 1
@@ -21,28 +21,36 @@ status:
   updatedReplicas: 1
   collisionCount: 0
 ---
-kind: StatefulSet
 apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: one-pod-orc
-status:
-  observedGeneration: 3
+  labels:
+    app.kubernetes.io/component: router
+    app.kubernetes.io/instance: gr-one-pod
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: gr-one-pod-router
+spec:
   replicas: 1
+status:
+  availableReplicas: 1
+  observedGeneration: 3
   readyReplicas: 1
-  currentReplicas: 1
+  replicas: 1
   updatedReplicas: 1
-  collisionCount: 0
 ---
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
-  name: one-pod
+  name: gr-one-pod
 status:
   mysql:
     ready: 1
     size: 1
     state: ready
-  orchestrator:
+  orchestrator: {}
+  router:
     ready: 1
     size: 1
     state: ready

@@ -8,5 +8,8 @@ commands:
 
       source ../../functions
 
-      data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password")
+      wait_cluster_consistency_gr "${test_name}" "1" "1"
+
+      data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_router_service $(get_cluster_name)) -uroot -proot_password")
       kubectl create configmap -n "${NAMESPACE}" 06-read-data-minio --from-literal=data="${data}"
+    timeout: 120
