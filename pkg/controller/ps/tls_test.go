@@ -28,13 +28,23 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 	It("should read defautl cr.yaml", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
-	It("should create namespace", func() {
-		Expect(k8sClient.Create(ctx, &corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: cr.Namespace,
-			},
-		})).Should(Succeed())
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: cr.Namespace,
+		},
+	}
+
+	BeforeAll(func() {
+		By("Creating the Namespace to perform the tests")
+		err := k8sClient.Create(ctx, namespace)
+		Expect(err).To(Not(HaveOccurred()))
 	})
+
+	AfterAll(func() {
+		By("Deleting the Namespace to perform the tests")
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
 	It("should create PerconaServerMySQL", func() {
 		Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 	})
