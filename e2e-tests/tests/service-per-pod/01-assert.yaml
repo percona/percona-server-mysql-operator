@@ -41,6 +41,7 @@ status:
     ready: 3
     size: 3
     state: ready
+  state: ready
 ---
 apiVersion: v1
 kind: Service
