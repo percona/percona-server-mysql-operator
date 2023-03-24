@@ -197,7 +197,12 @@ func TestReconcileVersions(t *testing.T) {
 					MySQL: apiv1alpha1.StatefulAppStatus{
 						Version: "database-version",
 					},
-					BackupVersion: "backup-version",
+					HAProxy: apiv1alpha1.StatefulAppStatus{
+						Version: "haproxy-version",
+					},
+					BackupVersion:  "backup-version",
+					ToolkitVersion: "toolkit-version",
+					PMMVersion:     "pmm-version",
 				},
 			},
 			telemetryEnabled: false,
@@ -211,8 +216,12 @@ func TestReconcileVersions(t *testing.T) {
 				Router: apiv1alpha1.StatefulAppStatus{
 					Version: "router-version",
 				},
-				BackupVersion: "backup-version",
-				PMMVersion:    "pmm-version",
+				HAProxy: apiv1alpha1.StatefulAppStatus{
+					Version: "haproxy-version",
+				},
+				ToolkitVersion: "toolkit-version",
+				BackupVersion:  "backup-version",
+				PMMVersion:     "pmm-version",
 			},
 		},
 	}
@@ -316,7 +325,12 @@ func TestGetVersion(t *testing.T) {
 					MySQL: apiv1alpha1.StatefulAppStatus{
 						Version: "database-version",
 					},
-					BackupVersion: "backup-version",
+					HAProxy: apiv1alpha1.StatefulAppStatus{
+						Version: "haproxy-version",
+					},
+					BackupVersion:  "backup-version",
+					ToolkitVersion: "toolkit-version",
+					PMMVersion:     "pmm-version",
 				},
 			},
 			want: vs.DepVersion{
@@ -330,6 +344,10 @@ func TestGetVersion(t *testing.T) {
 				RouterVersion:       "router-version",
 				PMMImage:            "pmm-image",
 				PMMVersion:          "pmm-version",
+				ToolkitImage:        "toolkit-image",
+				ToolkitVersion:      "toolkit-version",
+				HAProxyImage:        "haproxy-image",
+				HAProxyVersion:      "haproxy-version",
 			},
 		},
 	}
@@ -399,6 +417,8 @@ func (vs *fakeVS) Apply(_ context.Context, req any) (any, error) {
 		OperatorVersion:   r.GetOperatorVersion(),
 		Platform:          r.GetPlatform(),
 		Product:           r.GetProduct(),
+		HaproxyVersion:    r.GetHaproxyVersion(),
+		PmmVersion:        r.GetPmmVersion(),
 	}
 	want := &pbVersion.ApplyRequest{
 		BackupVersion:     "backup-version",
@@ -408,6 +428,8 @@ func (vs *fakeVS) Apply(_ context.Context, req any) (any, error) {
 		OperatorVersion:   version.Version,
 		Product:           "ps-operator",
 		Platform:          string(platform.PlatformKubernetes),
+		HaproxyVersion:    "haproxy-version",
+		PmmVersion:        "pmm-version",
 	}
 
 	if !reflect.DeepEqual(have, want) {
@@ -441,6 +463,16 @@ func (vs *fakeVS) Apply(_ context.Context, req any) (any, error) {
 					Router: map[string]*pbVersion.Version{
 						"router-version": {
 							ImagePath: "router-image",
+						},
+					},
+					Haproxy: map[string]*pbVersion.Version{
+						"haproxy-version": {
+							ImagePath: "haproxy-image",
+						},
+					},
+					Toolkit: map[string]*pbVersion.Version{
+						"toolkit-version": {
+							ImagePath: "toolkit-image",
 						},
 					},
 				},

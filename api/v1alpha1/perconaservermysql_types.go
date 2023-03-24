@@ -354,14 +354,15 @@ type StatefulAppStatus struct {
 // PerconaServerMySQLStatus defines the observed state of PerconaServerMySQL
 type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	MySQL         StatefulAppStatus  `json:"mysql,omitempty"`
-	Orchestrator  StatefulAppStatus  `json:"orchestrator,omitempty"`
-	HAProxy       StatefulAppStatus  `json:"haproxy,omitempty"`
-	Router        StatefulAppStatus  `json:"router,omitempty"`
-	State         StatefulAppState   `json:"state,omitempty"`
-	BackupVersion string             `json:"backupVersion,omitempty"`
-	PMMVersion    string             `json:"pmmVersion,omitempty"`
-	Conditions    []metav1.Condition `json:"conditions,omitempty"`
+	MySQL          StatefulAppStatus  `json:"mysql,omitempty"`
+	Orchestrator   StatefulAppStatus  `json:"orchestrator,omitempty"`
+	HAProxy        StatefulAppStatus  `json:"haproxy,omitempty"`
+	Router         StatefulAppStatus  `json:"router,omitempty"`
+	State          StatefulAppState   `json:"state,omitempty"`
+	BackupVersion  string             `json:"backupVersion,omitempty"`
+	PMMVersion     string             `json:"pmmVersion,omitempty"`
+	ToolkitVersion string             `json:"toolkitVersion,omitempty"`
+	Conditions     []metav1.Condition `json:"conditions,omitempty"`
 	// +optional
 	Host string `json:"host"`
 }
@@ -608,6 +609,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 
 	if cr.Spec.PMM == nil {
 		cr.Spec.PMM = new(PMMSpec)
+	}
+
+	if cr.Spec.Toolkit == nil {
+		cr.Spec.Toolkit = new(ToolkitSpec)
 	}
 
 	if cr.Spec.Pause {
