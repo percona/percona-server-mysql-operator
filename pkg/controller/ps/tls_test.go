@@ -2,10 +2,13 @@ package ps
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"path/filepath"
 	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -15,7 +18,141 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 )
+
+var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
+	ctx := context.Background()
+	cr, err := readDefaultCR("cluster1", "tls-1")
+	It("should read defautl cr.yaml", func() {
+		Expect(err).NotTo(HaveOccurred())
+	})
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: cr.Namespace,
+		},
+	}
+
+	BeforeAll(func() {
+		By("Creating the Namespace to perform the tests")
+		err := k8sClient.Create(ctx, namespace)
+		Expect(err).To(Not(HaveOccurred()))
+	})
+
+	AfterAll(func() {
+		By("Deleting the Namespace to perform the tests")
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	It("should create PerconaServerMySQL", func() {
+		Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+	})
+
+	Context("without custom SANs", Ordered, func() {
+		It("should reconcile", func() {
+			req := ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Namespace: cr.Namespace,
+					Name:      cr.Name,
+				}}
+			_, err := reconciler().Reconcile(ctx, req)
+			Expect(err).Should(Succeed())
+		})
+		Specify("should not have custom SAN", func() {
+			secret := new(corev1.Secret)
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: cr.Spec.SSLSecretName, Namespace: cr.Namespace}, secret)
+				return err == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+			bl, _ := pem.Decode(secret.Data["tls.crt"])
+
+			tlsCert, err := x509.ParseCertificate(bl.Bytes)
+			Expect(err).NotTo(HaveOccurred())
+
+			dnsNames := []string{
+				"*.cluster1-mysql",
+				"*.cluster1-mysql.tls-1",
+				"*.cluster1-mysql.tls-1.svc",
+				"*.cluster1-orchestrator",
+				"*.cluster1-orchestrator.tls-1",
+				"*.cluster1-orchestrator.tls-1.svc",
+				"*.cluster1-router",
+				"*.cluster1-router.tls-1",
+				"*.cluster1-router.tls-1.svc",
+			}
+
+			Expect(tlsCert.DNSNames).Should(BeEquivalentTo(dnsNames))
+		})
+	})
+
+	Context("with custom SANs", func() {
+		Specify("CR should be updated", func() {
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, cr)).Should(Succeed())
+			cr.Spec.TLS = &apiv1alpha1.TLSSpec{
+				SANs: []string{"mysql-1.example.com"},
+			}
+			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+		})
+		It("should reconcile", func() {
+			req := ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Namespace: cr.Namespace,
+					Name:      cr.Name,
+				}}
+			_, err := reconciler().Reconcile(ctx, req)
+			Expect(err).Should(Succeed())
+		})
+		Specify("should have custom SAN", func() {
+			secret := new(corev1.Secret)
+
+			time.Sleep(time.Second * 5)
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: cr.Spec.SSLSecretName, Namespace: cr.Namespace}, secret)
+				return err == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+			bl, _ := pem.Decode(secret.Data["tls.crt"])
+
+			tlsCert, err := x509.ParseCertificate(bl.Bytes)
+			Expect(err).NotTo(HaveOccurred())
+
+			dnsNames := []string{
+				"*.cluster1-mysql",
+				"*.cluster1-mysql.tls-1",
+				"*.cluster1-mysql.tls-1.svc",
+				"*.cluster1-orchestrator",
+				"*.cluster1-orchestrator.tls-1",
+				"*.cluster1-orchestrator.tls-1.svc",
+				"*.cluster1-router",
+				"*.cluster1-router.tls-1",
+				"*.cluster1-router.tls-1.svc",
+				"mysql-1.example.com",
+			}
+
+			Expect(tlsCert.DNSNames).Should(BeEquivalentTo(dnsNames))
+		})
+	})
+
+	Context("with specified TLS issuerConf", func() {
+		Specify("CR should be updated", func() {
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, cr)).Should(Succeed())
+
+			cr.Spec.TLS = &apiv1alpha1.TLSSpec{
+				SANs: []string{"mysql-1.example.com"},
+				IssuerConf: &cmmeta.ObjectReference{
+					Name: "some-issuer",
+				},
+			}
+			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+		})
+		It("should fail on ensure TLS secret", func() {
+			Expect(reconciler().ensureTLSSecret(ctx, cr)).ShouldNot(BeNil())
+		})
+	})
+})
 
 var _ = Describe("Finalizer delete-ssl", Ordered, func() {
 	ctx := context.Background()

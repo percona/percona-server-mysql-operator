@@ -27,7 +27,6 @@ import (
 	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
@@ -55,7 +54,6 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
-	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
@@ -380,37 +378,6 @@ func (r *PerconaServerMySQLReconciler) getCRWithDefaults(
 	}
 
 	return cr, nil
-}
-
-func (r *PerconaServerMySQLReconciler) ensureTLSSecret(
-	ctx context.Context,
-	cr *apiv1alpha1.PerconaServerMySQL,
-) error {
-	nn := types.NamespacedName{
-		Name:      cr.Spec.SSLSecretName,
-		Namespace: cr.Namespace,
-	}
-	if ok, err := k8s.ObjectExists(ctx, r.Client, nn, &corev1.Secret{}); err != nil {
-		return errors.Wrap(err, "check existence")
-	} else if ok {
-		return nil
-	}
-	err := r.createSSLByCertManager(ctx, cr)
-	if err != nil {
-		if cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
-			return errors.Wrap(err, "create ssl with cert manager")
-		}
-		secret, err := secret.GenerateCertsSecret(ctx, cr)
-		if err != nil {
-			return errors.Wrap(err, "create SSL manually")
-		}
-
-		if err := k8s.EnsureObject(ctx, r.Client, cr, secret, r.Scheme); err != nil {
-			return errors.Wrap(err, "create secret")
-		}
-	}
-
-	return nil
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileDatabase(
@@ -804,6 +771,27 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 
 	if sts.Status.ReadyReplicas == 0 {
 		log.Info("orchestrator is not ready. skip", "ready", sts.Status.ReadyReplicas)
+		return nil
+	}
+
+	if err := orchestrator.Discover(ctx, orchestrator.APIHost(cr), mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
+		switch err.Error() {
+		case "Unauthorized":
+			log.Info("mysql is not ready, unauthorized orchestrator discover response. skip")
+			return nil
+		case orchestrator.ErrEmptyResponse.Error():
+			log.Info("mysql is not ready, empty orchestrator discover response. skip")
+			return nil
+		}
+		return errors.Wrap(err, "failed to discover cluster")
+	}
+
+	primary, err := orchestrator.ClusterPrimary(ctx, orchestrator.APIHost(cr), cr.ClusterHint())
+	if err != nil {
+		return errors.Wrap(err, "get cluster primary")
+	}
+	if primary.Alias == "" {
+		log.Info("mysql is not ready, orchestrator cluster primary alias is empty. skip")
 		return nil
 	}
 
@@ -1321,16 +1309,6 @@ func getPrimaryFromOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServ
 		return nil, errors.Wrap(err, "get cluster primary")
 	}
 
-	if primary.Alias == "" {
-		if err := orchestrator.Discover(ctx, orcHost, mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
-			return nil, errors.Wrap(err, "failed to discover")
-		}
-		primary, err = orchestrator.ClusterPrimary(ctx, orcHost, cr.ClusterHint())
-		if err != nil {
-			return nil, errors.Wrap(err, "get cluster primary")
-		}
-	}
-
 	if primary.Key.Hostname == "" {
 		primary.Key.Hostname = fmt.Sprintf("%s.%s.%s", primary.Alias, mysql.ServiceName(cr), cr.Namespace)
 	}
@@ -1545,165 +1523,6 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 		return errors.Wrapf(err, "start group replication on %s", primary)
 	}
 	log.V(1).Info("Started group replication", "hostname", primary)
-
-	return nil
-}
-
-func (r *PerconaServerMySQLReconciler) createSSLByCertManager(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	issuerName := cr.Name + "-pso-issuer"
-	caIssuerName := cr.Name + "-pso-ca-issuer"
-	issuerKind := "Issuer"
-	issuerGroup := ""
-	if cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
-		issuerKind = cr.Spec.TLS.IssuerConf.Kind
-		issuerName = cr.Spec.TLS.IssuerConf.Name
-		issuerGroup = cr.Spec.TLS.IssuerConf.Group
-
-		isr := &cm.Issuer{}
-		err := r.Get(ctx, types.NamespacedName{
-			Namespace: cr.Namespace,
-			Name:      issuerName,
-		}, isr)
-		if k8serrors.IsNotFound(err) {
-			return err
-		}
-
-	} else {
-		issuerConf := cm.IssuerConfig{
-			SelfSigned: &cm.SelfSignedIssuer{},
-		}
-		if cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
-			issuerConf = cm.IssuerConfig{
-				CA: &cm.CAIssuer{SecretName: cr.Spec.TLS.IssuerConf.Name},
-			}
-		}
-		if err := r.createIssuer(ctx, cr, caIssuerName, issuerConf); err != nil {
-			return err
-		}
-
-		caCert := &cm.Certificate{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cr.Name + "-ca-cert",
-				Namespace: cr.Namespace,
-			},
-			Spec: cm.CertificateSpec{
-				SecretName: cr.Name + "-ca-cert",
-				CommonName: cr.Name + "-ca",
-				IsCA:       true,
-				IssuerRef: cmmeta.ObjectReference{
-					Name:  caIssuerName,
-					Kind:  issuerKind,
-					Group: issuerGroup,
-				},
-				Duration:    &metav1.Duration{Duration: time.Hour * 24 * 365},
-				RenewBefore: &metav1.Duration{Duration: 730 * time.Hour},
-			},
-		}
-
-		err := r.Create(ctx, caCert)
-		if err != nil && !k8serrors.IsAlreadyExists(err) {
-			return errors.Wrap(err, "create CA certificate")
-		}
-
-		if err := r.waitForCerts(ctx, cr.Namespace, cr.Name+"-ca-cert"); err != nil {
-			return err
-		}
-
-		issuerConf = cm.IssuerConfig{
-			CA: &cm.CAIssuer{SecretName: caCert.Spec.SecretName},
-		}
-
-		if err := r.createIssuer(ctx, cr, issuerName, issuerConf); err != nil {
-			return err
-		}
-	}
-	hosts := []string{
-		fmt.Sprintf("*.%s-mysql", cr.Name),
-		fmt.Sprintf("*.%s-mysql.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-mysql.%s.svc", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-orchestrator", cr.Name),
-		fmt.Sprintf("*.%s-orchestrator.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-orchestrator.%s.svc", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-router", cr.Name),
-		fmt.Sprintf("*.%s-router.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-router.%s.svc", cr.Name, cr.Namespace),
-	}
-	kubeCert := &cm.Certificate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-ssl",
-			Namespace: cr.Namespace,
-		},
-		Spec: cm.CertificateSpec{
-			SecretName: cr.Spec.SSLSecretName,
-			DNSNames:   hosts,
-			IsCA:       false,
-			IssuerRef: cmmeta.ObjectReference{
-				Name:  issuerName,
-				Kind:  issuerKind,
-				Group: issuerGroup,
-			},
-		},
-	}
-
-	if cr.Spec.TLS != nil {
-		kubeCert.Spec.DNSNames = append(kubeCert.Spec.DNSNames, cr.Spec.TLS.SANs...)
-	}
-
-	err := r.Create(ctx, kubeCert)
-	if err != nil && !k8serrors.IsAlreadyExists(err) {
-		return errors.Wrap(err, "create certificate")
-	}
-
-	return r.waitForCerts(ctx, cr.Namespace, cr.Spec.SSLSecretName)
-}
-
-func (r *PerconaServerMySQLReconciler) waitForCerts(ctx context.Context, namespace string, secretsList ...string) error {
-	ticker := time.NewTicker(3 * time.Second)
-	timeoutTimer := time.NewTimer(30 * time.Second)
-	defer timeoutTimer.Stop()
-	defer ticker.Stop()
-	for {
-		select {
-		case <-timeoutTimer.C:
-			return errors.Errorf("timeout: can't get tls certificates from certmanager, %s", secretsList)
-		case <-ticker.C:
-			successCount := 0
-			for _, secretName := range secretsList {
-				secret := &corev1.Secret{}
-				err := r.Get(ctx, types.NamespacedName{
-					Name:      secretName,
-					Namespace: namespace,
-				}, secret)
-				if err != nil && !k8serrors.IsNotFound(err) {
-					return err
-				} else if err == nil {
-					successCount++
-				}
-			}
-			if successCount == len(secretsList) {
-				return nil
-			}
-		}
-	}
-}
-
-func (r *PerconaServerMySQLReconciler) createIssuer(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, issuerName string, IssuerConf cm.IssuerConfig,
-) error {
-
-	isr := &cm.Issuer{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      issuerName,
-			Namespace: cr.Namespace,
-		},
-		Spec: cm.IssuerSpec{
-			IssuerConfig: IssuerConf,
-		},
-	}
-
-	err := r.Create(ctx, isr)
-	if err != nil && !k8serrors.IsAlreadyExists(err) {
-		return errors.Wrap(err, "create issuer")
-	}
 
 	return nil
 }
