@@ -48,8 +48,8 @@ github.com/AzureAD/microsoft-authentication-library-for-go v0.5.1 h1:BWe8a+f/t+7
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
-github.com/Percona-Lab/percona-version-service v0.0.0-20230321184200-8ff0b912ad81 h1:Ra+4u25kLaXyOzfiDDDmFW6O5fRUItNBfsHCGsV5y6o=
-github.com/Percona-Lab/percona-version-service v0.0.0-20230321184200-8ff0b912ad81/go.mod h1:2gW0U0FS5Bpl2cL9PrmeSb1Vp/5x0zmrN1o5iiiTd9k=
+github.com/Percona-Lab/percona-version-service v0.0.0-20230324081000-27de445df239 h1:3A878XXdSJGu9JPeOQ7bPe3g7SLkghJqcMFWL8GulLA=
+github.com/Percona-Lab/percona-version-service v0.0.0-20230324081000-27de445df239/go.mod h1:2gW0U0FS5Bpl2cL9PrmeSb1Vp/5x0zmrN1o5iiiTd9k=
 github.com/PuerkitoBio/purell v1.1.1/go.mod h1:c11w/QuzBsJSee3cPx9rAFu61PvFxuPbtSwDGJws/X0=
 github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578/go.mod h1:uGdkoq3SwY9Y+13GIhn11/XLaGBb4BfwItxLd5jeuXE=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=

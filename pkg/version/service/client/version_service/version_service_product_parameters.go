@@ -150,9 +150,6 @@ type VersionServiceProductParams struct {
 	// Format: boolean
 	SidecarsUsed *bool
 
-	// ToolkitVersion.
-	ToolkitVersion *string
-
 	timeout    time.Duration
 	Context    context.Context
 	HTTPClient *http.Client
@@ -446,17 +443,6 @@ func (o *VersionServiceProductParams) WithSidecarsUsed(sidecarsUsed *bool) *Vers
 // SetSidecarsUsed adds the sidecarsUsed to the version service product params
 func (o *VersionServiceProductParams) SetSidecarsUsed(sidecarsUsed *bool) {
 	o.SidecarsUsed = sidecarsUsed
-}
-
-// WithToolkitVersion adds the toolkitVersion to the version service product params
-func (o *VersionServiceProductParams) WithToolkitVersion(toolkitVersion *string) *VersionServiceProductParams {
-	o.SetToolkitVersion(toolkitVersion)
-	return o
-}
-
-// SetToolkitVersion adds the toolkitVersion to the version service product params
-func (o *VersionServiceProductParams) SetToolkitVersion(toolkitVersion *string) {
-	o.ToolkitVersion = toolkitVersion
 }
 
 // WriteToRequest writes these params to a swagger request
@@ -824,23 +810,6 @@ func (o *VersionServiceProductParams) WriteToRequest(r runtime.ClientRequest, re
 		if qSidecarsUsed != "" {
 
 			if err := r.SetQueryParam("sidecarsUsed", qSidecarsUsed); err != nil {
-				return err
-			}
-		}
-	}
-
-	if o.ToolkitVersion != nil {
-
-		// query param toolkitVersion
-		var qrToolkitVersion string
-
-		if o.ToolkitVersion != nil {
-			qrToolkitVersion = *o.ToolkitVersion
-		}
-		qToolkitVersion := qrToolkitVersion
-		if qToolkitVersion != "" {
-
-			if err := r.SetQueryParam("toolkitVersion", qToolkitVersion); err != nil {
 				return err
 			}
 		}

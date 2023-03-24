@@ -418,7 +418,6 @@ func (vs *fakeVS) Apply(_ context.Context, req any) (any, error) {
 		Platform:          r.GetPlatform(),
 		Product:           r.GetProduct(),
 		HaproxyVersion:    r.GetHaproxyVersion(),
-		ToolkitVersion:    r.GetToolkitVersion(),
 		PmmVersion:        r.GetPmmVersion(),
 	}
 	want := &pbVersion.ApplyRequest{
@@ -430,7 +429,6 @@ func (vs *fakeVS) Apply(_ context.Context, req any) (any, error) {
 		Product:           "ps-operator",
 		Platform:          string(platform.PlatformKubernetes),
 		HaproxyVersion:    "haproxy-version",
-		ToolkitVersion:    "toolkit-version",
 		PmmVersion:        "pmm-version",
 	}
 
