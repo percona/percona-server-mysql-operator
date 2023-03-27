@@ -75,6 +75,7 @@ type PerconaServerMySQLReconciler struct {
 func (r *PerconaServerMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1alpha1.PerconaServerMySQL{}).
+		Named("ps-controller").
 		Complete(r)
 }
 
