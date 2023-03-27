@@ -57,8 +57,6 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
-const ControllerName = "ps-controller"
-
 // PerconaServerMySQLReconciler reconciles a PerconaServerMySQL object
 type PerconaServerMySQLReconciler struct {
 	client.Client
@@ -92,7 +90,7 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
 ) (ctrl.Result, error) {
-	log := logf.FromContext(ctx).WithName(ControllerName)
+	log := logf.FromContext(ctx)
 
 	rr := ctrl.Result{RequeueAfter: 5 * time.Second}
 
