@@ -11,6 +11,9 @@ spec:
   crVersion: 0.5.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
+  upgradeOptions:
+    versionServiceEndpoint: https://check.percona.com
+    apply: disabled
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
 #  ignoreLabels:
@@ -169,6 +172,12 @@ spec:
 #                  values:
 #                  - e2e-az1
 #                  - e2e-az2
+
+#      configuration: |
+#        [default]
+#        logging_folder=/tmp/router/log
+#        [logger]
+#        level=DEBUG
 
 #      expose:
 #        type: ClusterIP

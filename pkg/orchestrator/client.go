@@ -196,6 +196,8 @@ func EnsureNodeIsPrimary(ctx context.Context, apiHost, clusterHint, host string,
 	return nil
 }
 
+var ErrEmptyResponse = errors.New("empty response")
+
 func Discover(ctx context.Context, apiHost, host string, port int) error {
 	url := fmt.Sprintf("%s/api/discover/%s/%d", apiHost, host, port)
 
@@ -205,9 +207,18 @@ func Discover(ctx context.Context, apiHost, host string, port int) error {
 	}
 	defer resp.Body.Close()
 
-	orcResp := &orcResponse{}
-	if err := json.NewDecoder(resp.Body).Decode(orcResp); err != nil {
-		return errors.Wrap(err, "json decode")
+	orcResp := new(orcResponse)
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return errors.Wrap(err, "read response body")
+	}
+
+	if len(data) == 0 {
+		return ErrEmptyResponse
+	}
+
+	if err := json.Unmarshal(data, orcResp); err != nil {
+		return errors.Wrapf(err, "json decode \"%s\"", string(data))
 	}
 
 	if orcResp.Code == "ERROR" {

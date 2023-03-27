@@ -93,6 +93,9 @@ type VersionVersionMatrix struct {
 
 	// router
 	Router map[string]VersionVersion `json:"router,omitempty"`
+
+	// toolkit
+	Toolkit map[string]VersionVersion `json:"toolkit,omitempty"`
 }
 
 // Validate validates this version version matrix
@@ -196,6 +199,10 @@ func (m *VersionVersionMatrix) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateRouter(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateToolkit(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -855,6 +862,32 @@ func (m *VersionVersionMatrix) validateRouter(formats strfmt.Registry) error {
 	return nil
 }
 
+func (m *VersionVersionMatrix) validateToolkit(formats strfmt.Registry) error {
+	if swag.IsZero(m.Toolkit) { // not required
+		return nil
+	}
+
+	for k := range m.Toolkit {
+
+		if err := validate.Required("toolkit"+"."+k, "body", m.Toolkit[k]); err != nil {
+			return err
+		}
+		if val, ok := m.Toolkit[k]; ok {
+			if err := val.Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("toolkit" + "." + k)
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("toolkit" + "." + k)
+				}
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
 // ContextValidate validate this version version matrix based on the context it is used
 func (m *VersionVersionMatrix) ContextValidate(ctx context.Context, formats strfmt.Registry) error {
 	var res []error
@@ -956,6 +989,10 @@ func (m *VersionVersionMatrix) ContextValidate(ctx context.Context, formats strf
 	}
 
 	if err := m.contextValidateRouter(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateToolkit(ctx, formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -1330,6 +1367,21 @@ func (m *VersionVersionMatrix) contextValidateRouter(ctx context.Context, format
 	for k := range m.Router {
 
 		if val, ok := m.Router[k]; ok {
+			if err := val.ContextValidate(ctx, formats); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *VersionVersionMatrix) contextValidateToolkit(ctx context.Context, formats strfmt.Registry) error {
+
+	for k := range m.Toolkit {
+
+		if val, ok := m.Toolkit[k]; ok {
 			if err := val.ContextValidate(ctx, formats); err != nil {
 				return err
 			}

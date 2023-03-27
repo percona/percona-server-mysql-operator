@@ -57,6 +57,22 @@
             "status": "recommended",
             "critical": false
           }
+        },
+        "haproxy": {
+          "9.9.9": {
+            "image_path": "perconalab/percona-server-mysql-operator:main-haproxy",
+            "image_hash": "ef6825b2960c9a565376c2177f218abfcbb63266eab5d725d5e76dc6095f6d26",
+            "status": "recommended",
+            "critical": false
+          }
+        },
+        "toolkit": {
+          "9.9.9": {
+            "image_path": "perconalab/percona-server-mysql-operator:main-toolkit",
+            "image_hash": "f94b75783ee99b85b7b70ae10bc749eb23f8720b00117f825bb5490f3a1f285f",
+            "status": "recommended",
+            "critical": false
+          }
         }
       }
     }

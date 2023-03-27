@@ -32,7 +32,7 @@ require (
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.3.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.1.1 // indirect
-	github.com/Percona-Lab/percona-version-service v0.0.0-20230216163816-b6375965bdc9
+	github.com/Percona-Lab/percona-version-service v0.0.0-20230324081000-27de445df239
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bool64/shared v0.1.5 // indirect

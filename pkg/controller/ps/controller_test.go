@@ -68,7 +68,7 @@ var _ = Describe("Sidecars", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should create PerconaServerMongoDB", func() {
+	It("should create PerconaServerMySQL", func() {
 		Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 	})
 
