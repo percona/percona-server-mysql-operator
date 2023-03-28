@@ -27,13 +27,13 @@ spec:
 #      name: special-selfsigned-issuer
 #      kind: ClusterIssuer
 #      group: cert-manager.io
-#  initImage: perconalab/percona-server-mysql-operator:main
+#  initImage: percona/percona-server-mysql-operator:0.5.0
 
   mysql:
     clusterType: group-replication
-    image: perconalab/percona-server-mysql-operator:main-psmysql
+    image: percona/percona-server:8.0.32-24
     imagePullPolicy: Always
-#    initImage: perconalab/percona-server-mysql-operator:main
+#    initImage: percona/percona-server-mysql-operator:0.5.0
 
     size: 3
     sizeSemiSync: 0
@@ -112,7 +112,7 @@ spec:
 
       size: 3
 
-      image: perconalab/percona-server-mysql-operator:main-haproxy
+      image: percona/percona-server-mysql-operator:0.5.0-haproxy
       imagePullPolicy: Always
 
       resources:
@@ -148,9 +148,9 @@ spec:
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
     router:
-      image: perconalab/percona-server-mysql-operator:main-router
+      image: percona/percona-server-mysql-operator:0.5.0-router
       imagePullPolicy: Always
-#      initImage: perconalab/percona-server-mysql-operator:main
+#      initImage: percona/percona-server-mysql-operator:0.5.0
 
       size: 3
 
@@ -194,10 +194,10 @@ spec:
   orchestrator:
     enabled: false
 
-    image: perconalab/percona-server-mysql-operator:main-orchestrator
+    image: percona/percona-server-mysql-operator:0.5.0-orchestrator
     imagePullPolicy: Always
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
-#    initImage: perconalab/percona-server-mysql-operator:main
+#    initImage: percona/percona-server-mysql-operator:0.5.0
 
     size: 3
 
@@ -240,7 +240,7 @@ spec:
   pmm:
     enabled: false
 
-    image: percona/pmm-client:2.33.0
+    image: percona/pmm-client:2.36.0
     imagePullPolicy: Always
 
     resources:
@@ -256,9 +256,9 @@ spec:
 
   backup:
     enabled: true
-    image: perconalab/percona-server-mysql-operator:main-backup
+    image: percona/percona-xtrabackup:8.0.32-25
     imagePullPolicy: Always
-#    initImage: perconalab/percona-server-mysql-operator:main
+#    initImage: percona/percona-server-mysql-operator:0.5.0
     storages:
       s3-us-west:
         type: s3
@@ -302,7 +302,7 @@ spec:
 #          prefix: ""
 
   toolkit:
-    image: perconalab/percona-server-mysql-operator:main-toolkit
+    image: percona/percona-server-mysql-operator:0.5.0-toolkit
     imagePullPolicy: Always
 #    resources:
 #      requests:
