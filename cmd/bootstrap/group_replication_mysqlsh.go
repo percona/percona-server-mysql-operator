@@ -84,7 +84,7 @@ func (m *mysqlsh) clusterStatus(ctx context.Context) (innodbcluster.Status, erro
 }
 
 func (m *mysqlsh) configureLocalInstance(ctx context.Context) error {
-	_, _, err := m.run(ctx, fmt.Sprintf("dba.configureLocalInstance('%s', {'clearReadOnly': true, 'clusterAdmin': 'operator'})", m.getURI()))
+	_, _, err := m.run(ctx, fmt.Sprintf("dba.configureLocalInstance('%s', {'clearReadOnly': true})", m.getURI()))
 	if err != nil {
 		return errors.Wrapf(err, "configure local instance")
 	}
@@ -93,7 +93,7 @@ func (m *mysqlsh) configureLocalInstance(ctx context.Context) error {
 }
 
 func (m *mysqlsh) createCluster(ctx context.Context) error {
-	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.createCluster('%s', {'expelTimeout': 30})", m.clusterName))
+	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.createCluster('%s')", m.clusterName))
 	if err != nil {
 		if strings.Contains(stderr.String(), "dba.rebootClusterFromCompleteOutage") {
 			return errRebootClusterFromCompleteOutage
@@ -312,13 +312,16 @@ func bootstrapGroupReplicationMySQLShell(ctx context.Context) error {
 					return err
 				}
 
-				// we fail the bootstrap after removing instance to add instance properly
+				// we deliberately fail the bootstrap after removing instance to add it back
 				os.Exit(1)
 			}
 			return err
 		}
 
 		log.Printf("Instance (%s) rejoined to InnoDB cluster", localShell.host)
+	case innodbcluster.MemberStateUnreachable:
+		log.Printf("Instance (%s) is in InnoDB Cluster but its state is %s", localShell.host, member.MemberState)
+		os.Exit(1)
 	default:
 		log.Printf("Instance (%s) state is %s", localShell.host, member.MemberState)
 	}
