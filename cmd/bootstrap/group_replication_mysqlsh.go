@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -17,6 +18,7 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
 var (
@@ -24,6 +26,8 @@ var (
 	errCouldNotDetermineIfClusterIsOffline = errors.New("Could not determine if Cluster is completely OFFLINE")
 	errEmptyGTIDSet                        = errors.New("The target instance has an empty GTID set so it cannot be safely rejoined to the cluster. Please remove it and add it back to the cluster.")
 )
+
+var sensitiveRegexp = regexp.MustCompile(":.*@")
 
 type mysqlsh struct {
 	clusterName string
@@ -49,11 +53,16 @@ func (m *mysqlsh) getURI() string {
 func (m *mysqlsh) run(ctx context.Context, cmd string) (bytes.Buffer, bytes.Buffer, error) {
 	var stdoutb, stderrb bytes.Buffer
 
-	log.Printf("Running %s", cmd)
+	log.Printf("Running %s", sensitiveRegexp.ReplaceAllString(cmd, ":*****@"))
 
 	c := exec.CommandContext(ctx, "mysqlsh", "--no-wizard", "--uri", m.getURI(), "-e", cmd)
-	c.Stdout = io.MultiWriter(log.Writer(), &stdoutb)
-	c.Stderr = io.MultiWriter(log.Writer(), &stderrb)
+
+	logWriter := util.NewSensitiveWriter(log.Writer(), sensitiveRegexp)
+	stdout := util.NewSensitiveWriter(&stdoutb, sensitiveRegexp)
+	stderr := util.NewSensitiveWriter(&stderrb, sensitiveRegexp)
+
+	c.Stdout = io.MultiWriter(logWriter, stdout)
+	c.Stderr = io.MultiWriter(logWriter, stderr)
 
 	err := c.Run()
 
