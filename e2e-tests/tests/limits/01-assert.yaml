@@ -66,6 +66,8 @@ spec:
         - name: CLUSTER_HASH
         - name: CR_UID
         - name: CLUSTER_TYPE
+        - name: INNODB_CLUSTER_NAME
+          value: limitsnolimits
         imagePullPolicy: Always
         livenessProbe:
           exec:
