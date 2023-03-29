@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"path/filepath"
@@ -11,10 +12,11 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql/topology"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
-func bootstrapAsyncReplication() error {
+func bootstrapAsyncReplication(ctx context.Context) error {
 	timer := stopwatch.NewNamedStopwatch()
 	err := timer.AddMany([]string{"clone", "total"})
 	if err != nil {
@@ -45,17 +47,17 @@ func bootstrapAsyncReplication() error {
 			return errors.Wrap(err, "wait lock removal")
 		}
 	}
-	primary, replicas, err := getTopology(peers)
-	if err != nil {
-		return errors.Wrap(err, "select donor")
-	}
-	log.Printf("Primary: %s Replicas: %v", primary, replicas)
-
 	fqdn, err := getFQDN(mysqlSvc)
 	if err != nil {
 		return errors.Wrap(err, "get FQDN")
 	}
 	log.Printf("FQDN: %s", fqdn)
+
+	primary, replicas, err := getTopology(ctx, fqdn, peers)
+	if err != nil {
+		return errors.Wrap(err, "get topology")
+	}
+	log.Printf("Primary: %s Replicas: %v", primary, replicas)
 
 	podHostname, err := os.Hostname()
 	if err != nil {
@@ -67,12 +69,6 @@ func bootstrapAsyncReplication() error {
 		return errors.Wrap(err, "get pod IP")
 	}
 	log.Printf("PodIP: %s", podIp)
-
-	primaryIp, err := getPodIP(primary)
-	if err != nil {
-		return errors.Wrap(err, "get primary IP")
-	}
-	log.Printf("PrimaryIP: %s", primaryIp)
 
 	donor, err := selectDonor(fqdn, primary, replicas)
 	if err != nil {
@@ -97,6 +93,13 @@ func bootstrapAsyncReplication() error {
 	}
 
 	switch {
+	case primary == fqdn:
+		if err := db.ResetReplication(); err != nil {
+			return err
+		}
+
+		log.Printf("I'm the primary.")
+		return nil
 	case donor == "":
 		if err := db.ResetReplication(); err != nil {
 			return err
@@ -110,13 +113,6 @@ func bootstrapAsyncReplication() error {
 		}
 
 		log.Printf("I'm the donor and therefore the primary.")
-		return nil
-	case primary == fqdn || primaryIp == podIp:
-		if err := db.ResetReplication(); err != nil {
-			return err
-		}
-
-		log.Printf("I'm the primary.")
 		return nil
 	}
 
@@ -193,52 +189,25 @@ func bootstrapAsyncReplication() error {
 	return nil
 }
 
-func getTopology(peers sets.Set[string]) (string, []string, error) {
-	replicas := sets.New[string]()
-	primary := ""
-
+func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (string, []string, error) {
 	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
 	if err != nil {
 		return "", nil, errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
-
-	for _, peer := range sets.List(peers) {
-		db, err := replicator.NewReplicator("operator", operatorPass, peer, mysql.DefaultAdminPort)
-		if err != nil {
-			return "", nil, errors.Wrapf(err, "connect to %s", peer)
-		}
-		defer db.Close()
-
-		status, source, err := db.ReplicationStatus()
-		if err != nil {
-			return "", nil, errors.Wrap(err, "check replication status")
-		}
-
-		replicaHost, err := db.ReportHost()
-		if err != nil {
-			return "", nil, errors.Wrap(err, "get report_host")
-		}
-		if replicaHost == "" {
-			continue
-		}
-		replicas.Insert(replicaHost)
-
-		if status == replicator.ReplicationStatusActive {
-			primary = source
-		}
+	t, err := topology.GetAsync(ctx, operatorPass, sets.List(peers)...)
+	if err != nil {
+		return "", nil, errors.Wrap(err, "failed to get topology")
 	}
 
-	if primary == "" && peers.Len() == 1 {
-		primary = sets.List(peers)[0]
-	} else if primary == "" {
-		primary = sets.List(replicas)[0]
+	// When there are only 2 MySQL pods and one of them is not bootstrapped `GetAsync` returns first replica as a primary
+	// There could be a case when this primary is actually a bootstrapping pod
+	// To avoid that, we should swap first replica with the primary
+	if t.Primary == fqdn && len(t.Replicas) >= 1 {
+		t.SetPrimary(t.Replicas[0])
+		t.AddReplica(fqdn)
 	}
 
-	if replicas.Len() > 0 {
-		replicas.Delete(primary)
-	}
-
-	return primary, sets.List(replicas), nil
+	return t.Primary, t.Replicas, nil
 }
 
 func selectDonor(fqdn, primary string, replicas []string) (string, error) {

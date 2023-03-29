@@ -1,6 +1,7 @@
 package replicator
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -60,6 +61,8 @@ type Replicator interface {
 	GetGroupReplicationMembers() ([]string, error)
 	CheckIfDatabaseExists(name string) (bool, error)
 	CheckIfInPrimaryPartition() (bool, error)
+	ShowReplicas(ctx context.Context) ([]string, error)
+	ShowReplicaStatus(ctx context.Context) (map[string]string, error)
 }
 
 type dbImpl struct{ db *sql.DB }
@@ -416,4 +419,65 @@ func (d *dbImpl) CheckIfInPrimaryPartition() (bool, error) {
 	}
 
 	return in, nil
+}
+
+func (d *dbImpl) ShowReplicas(ctx context.Context) ([]string, error) {
+	replicas := make([]string, 0)
+
+	rows, err := d.db.QueryContext(ctx, "SHOW REPLICAS")
+	if err != nil {
+		return nil, errors.Wrap(err, "query replicas")
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var serverID string
+		var host string
+		var port int
+		var sourceID string
+		var replicaUUID string
+		if err := rows.Scan(&serverID, &host, &port, &sourceID, &replicaUUID); err != nil {
+			return nil, errors.Wrap(err, "scan rows")
+		}
+
+		replicas = append(replicas, host)
+	}
+
+	return replicas, nil
+}
+
+func (d *dbImpl) ShowReplicaStatus(ctx context.Context) (map[string]string, error) {
+	rows, err := d.db.QueryContext(ctx, "SHOW REPLICA STATUS")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+	ok := rows.Next()
+	if !ok {
+		return make(map[string]string), nil
+	}
+
+	values := make([]any, 0, len(columns))
+	for range columns {
+		values = append(values, new([]byte))
+	}
+	status := make(map[string]string, len(columns))
+
+	if err := rows.Scan(values...); err != nil {
+		return nil, err
+	}
+
+	for i, name := range columns {
+		ptr, ok := values[i].(*[]byte)
+		if !ok {
+			return nil, errors.Errorf("failed to convert %T to *[]byte: %s", values[i], name)
+		}
+		status[name] = string(*ptr)
+	}
+
+	return status, nil
 }

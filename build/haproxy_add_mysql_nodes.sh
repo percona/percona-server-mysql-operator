@@ -43,7 +43,7 @@ function main() {
 		      option srvtcpka
 		      balance roundrobin
 		      option external-check
-		     external-check command /opt/percona/haproxy_check_primary.sh
+		     external-check command /opt/percona/haproxy-check
 	EOF
 
 	(
@@ -57,7 +57,7 @@ function main() {
 		      option srvtcpka
 		      balance roundrobin
 		      option external-check
-		      external-check command /opt/percona/haproxy_check_replicas.sh
+		      external-check command /opt/percona/haproxy-check
 	EOF
 
 	(

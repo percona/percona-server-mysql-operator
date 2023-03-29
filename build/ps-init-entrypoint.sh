@@ -19,15 +19,13 @@ install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/bootstrap" "${BIN
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/healthcheck" "${BINDIR}/healthcheck"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/sidecar" "${BINDIR}/sidecar"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/peer-list" "${BINDIR}/peer-list"
-install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/orc-handler" "${BINDIR}/orc-handler"
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy-check" "${BINDIR}/haproxy-check"
 
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/run-backup.sh" "${BINDIR}/run-backup.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/run-restore.sh" "${BINDIR}/run-restore.sh"
 
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy-entrypoint.sh" "${BINDIR}/haproxy-entrypoint.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy_add_mysql_nodes.sh" "${BINDIR}/haproxy_add_mysql_nodes.sh"
-install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy_check_primary.sh" "${BINDIR}/haproxy_check_primary.sh"
-install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy_check_replicas.sh" "${BINDIR}/haproxy_check_replicas.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy_liveness_check.sh" "${BINDIR}/haproxy_liveness_check.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy_readiness_check.sh" "${BINDIR}/haproxy_readiness_check.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy.cfg" "${BINDIR}/haproxy.cfg"

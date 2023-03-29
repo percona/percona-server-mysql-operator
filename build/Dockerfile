@@ -41,10 +41,9 @@ RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     cmd/peer-list/main.go \
     && cp -r build/_output/bin/peer-list /usr/local/bin/peer-list
 RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
-    go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
-    -o build/_output/bin/orc-handler \
-    cmd/orc-handler/main.go \
-    && cp -r build/_output/bin/orc-handler /usr/local/bin/orc-handler
+    go build -o build/_output/bin/haproxy-check \
+    cmd/haproxy-check/main.go \
+    && cp -r build/_output/bin/haproxy-check /usr/local/bin/haproxy-check
 
 FROM redhat/ubi9-minimal AS ubi9
 
@@ -83,7 +82,7 @@ COPY --from=go_builder /usr/local/bin/bootstrap /opt/percona-server-mysql-operat
 COPY --from=go_builder /usr/local/bin/healthcheck /opt/percona-server-mysql-operator/healthcheck
 COPY --from=go_builder /usr/local/bin/sidecar /opt/percona-server-mysql-operator/sidecar
 COPY --from=go_builder /usr/local/bin/peer-list /opt/percona-server-mysql-operator/peer-list
-COPY --from=go_builder /usr/local/bin/orc-handler /opt/percona-server-mysql-operator/orc-handler
+COPY --from=go_builder /usr/local/bin/haproxy-check /opt/percona-server-mysql-operator/haproxy-check
 COPY build/ps-entrypoint.sh /opt/percona-server-mysql-operator/ps-entrypoint.sh
 COPY build/heartbeat-entrypoint.sh /opt/percona-server-mysql-operator/heartbeat-entrypoint.sh
 COPY build/router-entrypoint.sh /opt/percona-server-mysql-operator/router-entrypoint.sh
@@ -95,8 +94,6 @@ COPY build/run-backup.sh /opt/percona-server-mysql-operator/run-backup.sh
 COPY build/run-restore.sh /opt/percona-server-mysql-operator/run-restore.sh
 COPY build/haproxy-entrypoint.sh /opt/percona-server-mysql-operator/haproxy-entrypoint.sh
 COPY build/haproxy_add_mysql_nodes.sh /opt/percona-server-mysql-operator/haproxy_add_mysql_nodes.sh
-COPY build/haproxy_check_primary.sh /opt/percona-server-mysql-operator/haproxy_check_primary.sh
-COPY build/haproxy_check_replicas.sh /opt/percona-server-mysql-operator/haproxy_check_replicas.sh
 COPY build/haproxy_liveness_check.sh /opt/percona-server-mysql-operator/haproxy_liveness_check.sh
 COPY build/haproxy_readiness_check.sh /opt/percona-server-mysql-operator/haproxy_readiness_check.sh
 COPY build/haproxy.cfg /opt/percona-server-mysql-operator/haproxy.cfg

@@ -7,13 +7,55 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
-	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
 type Topology struct {
 	Primary  string
 	Replicas []string
+}
+
+func (t *Topology) AddReplica(host string) {
+	if host == "" || t.Primary == host {
+		return
+	}
+	for _, replica := range t.Replicas {
+		if replica == host {
+			return
+		}
+	}
+	t.Replicas = append(t.Replicas, host)
+}
+
+func (t *Topology) SetPrimary(host string) {
+	if host == "" {
+		return
+	}
+	t.RemoveReplica(host)
+	t.Primary = host
+}
+
+func (t *Topology) IsPrimary(host string) bool {
+	return t.Primary == host
+}
+
+func (t *Topology) RemoveReplica(host string) {
+	newReplicas := make([]string, 0, len(t.Replicas))
+	for _, replica := range t.Replicas {
+		if replica != host {
+			newReplicas = append(newReplicas, replica)
+		}
+	}
+	t.Replicas = newReplicas
+}
+
+func (t *Topology) HasReplica(host string) bool {
+	for _, replica := range t.Replicas {
+		if replica == host {
+			return true
+		}
+	}
+	return false
 }
 
 func Get(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL, operatorPass string) (Topology, error) {
@@ -26,9 +68,9 @@ func Get(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL, operatorP
 			return Topology{}, errors.Wrap(err, "get group-replication topology")
 		}
 	case apiv1alpha1.ClusterTypeAsync:
-		top, err = getAsyncTopology(ctx, cluster)
+		top, err = GetAsync(ctx, operatorPass, mysql.ServiceName(cluster))
 		if err != nil {
-			return Topology{}, errors.Wrap(err, "get async topology")
+			return Topology{}, err
 		}
 	default:
 		return Topology{}, errors.New("unknown cluster type")
@@ -55,23 +97,6 @@ func getGRTopology(cluster *apiv1alpha1.PerconaServerMySQL, operatorPass string)
 	}
 	return Topology{
 		Primary:  primary,
-		Replicas: replicas,
-	}, nil
-}
-
-func getAsyncTopology(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) (Topology, error) {
-	orcHost := orchestrator.APIHost(cluster)
-	primary, err := orchestrator.ClusterPrimary(ctx, orcHost, cluster.ClusterHint())
-	if err != nil {
-		return Topology{}, errors.Wrap(err, "get primary")
-	}
-
-	replicas := make([]string, 0, len(primary.Replicas))
-	for _, r := range primary.Replicas {
-		replicas = append(replicas, r.Hostname)
-	}
-	return Topology{
-		Primary:  primary.Key.Hostname,
 		Replicas: replicas,
 	}, nil
 }

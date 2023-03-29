@@ -17,20 +17,11 @@
     "echo 'Detected {failureType} on {failureCluster}. Affected replicas: {countSlaves}'"
   ],
   "PostIntermediateMasterFailoverProcesses": [
-    "echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Successor: {successorHost}:{successorPort}'",
-    "echo 'PostIntermediateMasterFailoverProcesses:' && /opt/percona/orc-handler -primary {successorHost}"
+    "echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Successor: {successorHost}:{successorPort}'"
   ],
   "PostMasterFailoverProcesses": [
-    "echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Promoted: {successorHost}:{successorPort}'",
-    "echo 'PostMasterFailoverProcesses:' && /opt/percona/orc-handler -primary {successorHost}"
+    "echo 'Recovered from {failureType} on {failureCluster}. Failed: {failedHost}:{failedPort}; Promoted: {successorHost}:{successorPort}'"
   ],
-  "PostGracefulTakeoverProcesses": [
-    "echo 'PostGracefulTakeoverProcesses:' && /opt/percona/orc-handler -primary {successorHost}"
-  ],
-  "PostFailoverProcesses": [
-    "echo 'PostFailoverProcesses:' && /opt/percona/orc-handler -primary {successorHost}"
-  ],
-  "PostUnsuccessfulFailoverProcesses": [],
   "PreFailoverProcesses": [
     "echo 'Will recover from {failureType} on {failureCluster}'"
   ],

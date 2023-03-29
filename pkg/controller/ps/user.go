@@ -16,6 +16,7 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql/topology"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/users"
@@ -143,7 +144,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return errors.Wrap(err, "get operator password")
 	}
 
-	primaryHost, err := r.getPrimaryHost(ctx, cr)
+	primaryHost, err := r.getPrimaryHost(ctx, r.Client, cr)
 	if err != nil {
 		return errors.Wrap(err, "get primary host")
 	}
@@ -168,11 +169,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 
 	if restartReplication {
 		if cr.Spec.MySQL.IsAsync() {
-			asyncPrimary, err = r.getPrimaryFromOrchestrator(ctx, cr)
-			if err != nil {
-				return errors.Wrap(err, "get cluster primary")
-			}
-			if err := r.stopAsyncReplication(ctx, cr, asyncPrimary); err != nil {
+			if err := r.stopAsyncReplication(ctx, cr); err != nil {
 				return errors.Wrap(err, "stop async replication")
 			}
 		}
@@ -233,7 +230,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return nil
 	}
 
-	primaryHost, err = r.getPrimaryHost(ctx, cr)
+	primaryHost, err = r.getPrimaryHost(ctx, r.Client, cr)
 	if err != nil {
 		return errors.Wrap(err, "get primary host")
 	}
@@ -271,4 +268,21 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	log.Info("Updated internal secret", "secretName", cr.InternalSecretName())
 
 	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
+	log := logf.FromContext(ctx).WithName("getPrimaryHost")
+
+	operatorPass, err := k8s.UserPassword(ctx, cl, cr, apiv1alpha1.UserOperator)
+	if err != nil {
+		return "", errors.Wrap(err, "get root password")
+	}
+	t, err := topology.Get(ctx, cr, operatorPass)
+	if err != nil {
+		return "", errors.Wrap(err, "discover topology")
+	}
+
+	log.V(1).Info("Cluster primary", "primary", t.Primary)
+
+	return t.Primary, nil
 }
