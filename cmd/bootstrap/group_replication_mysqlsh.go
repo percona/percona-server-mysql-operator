@@ -25,6 +25,7 @@ var (
 	errRebootClusterFromCompleteOutage     = errors.New("run dba.rebootClusterFromCompleteOutage() to reboot the cluster from complete outage")
 	errCouldNotDetermineIfClusterIsOffline = errors.New("Could not determine if Cluster is completely OFFLINE")
 	errEmptyGTIDSet                        = errors.New("The target instance has an empty GTID set so it cannot be safely rejoined to the cluster. Please remove it and add it back to the cluster.")
+	errInstanceMissingPurgedTransactions   = errors.New("The instance is missing transactions that were purged from all cluster members.")
 )
 
 var sensitiveRegexp = regexp.MustCompile(":.*@")
@@ -139,6 +140,9 @@ func (m *mysqlsh) rejoinInstance(ctx context.Context, instanceDef string) error 
 	if err != nil {
 		if strings.Contains(stderr.String(), "empty GTID set") {
 			return errEmptyGTIDSet
+		}
+		if strings.Contains(stderr.String(), "is missing transactions that were purged from all cluster members") {
+			return errInstanceMissingPurgedTransactions
 		}
 		return errors.Wrapf(err, "rejoin instance")
 	}
@@ -314,7 +318,7 @@ func bootstrapGroupReplicationMySQLShell(ctx context.Context) error {
 		log.Printf("Instance (%s) is in InnoDB Cluster but its state is %s", localShell.host, member.MemberState)
 		err := shell.rejoinInstance(ctx, localShell.getURI())
 		if err != nil {
-			if errors.Is(err, errEmptyGTIDSet) {
+			if errors.Is(err, errEmptyGTIDSet) || errors.Is(err, errInstanceMissingPurgedTransactions) {
 				log.Printf("Removing instance (%s) from cluster", localShell.host)
 				err := shell.removeInstance(ctx, localShell.getURI(), true)
 				if err != nil {
