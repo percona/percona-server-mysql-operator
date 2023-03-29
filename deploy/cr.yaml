@@ -30,7 +30,7 @@ spec:
 #  initImage: percona/percona-server-mysql-operator:0.5.0
 
   mysql:
-    clusterType: group-replication
+    clusterType: async
     image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
 #    initImage: percona/percona-server-mysql-operator:0.5.0
@@ -108,7 +108,7 @@ spec:
 
   proxy:
     haproxy:
-      enabled: false
+      enabled: true
 
       size: 3
 
