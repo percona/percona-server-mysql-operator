@@ -112,7 +112,7 @@ spec:
 
       size: 3
 
-      image: percona/percona-server-mysql-operator:0.5.0-haproxy
+      image: percona/haproxy:2.5.12
       imagePullPolicy: Always
 
       resources:
@@ -148,7 +148,7 @@ spec:
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
     router:
-      image: percona/percona-server-mysql-operator:0.5.0-router
+      image: percona/percona-mysql-router:8.0.32
       imagePullPolicy: Always
 #      initImage: percona/percona-server-mysql-operator:0.5.0
 
@@ -194,7 +194,7 @@ spec:
   orchestrator:
     enabled: false
 
-    image: percona/percona-server-mysql-operator:0.5.0-orchestrator
+    image: percona/percona-orchestrator:3.2.6-8
     imagePullPolicy: Always
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
 #    initImage: percona/percona-server-mysql-operator:0.5.0
