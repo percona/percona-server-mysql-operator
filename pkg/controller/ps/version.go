@@ -91,6 +91,14 @@ func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr
 		}
 		cr.Spec.PMM.Image = version.PMMImage
 	}
+	if cr.Spec.Proxy.HAProxy.Image != version.HAProxyImage {
+		if cr.Status.HAProxy.Version == "" {
+			log.Info("set HAProxy version to " + version.HAProxyVersion)
+		} else {
+			log.Info("update HAProxy version", "old version", cr.Status.HAProxy.Version, "new version", version.HAProxyVersion)
+		}
+		cr.Spec.Proxy.HAProxy.Image = version.HAProxyImage
+	}
 	if cr.Spec.Toolkit.Image != version.ToolkitImage {
 		if cr.Status.ToolkitVersion == "" {
 			log.Info("set Percona Toolkit version to " + version.ToolkitVersion)
