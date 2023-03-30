@@ -133,7 +133,8 @@ get_cr() {
 		| yq eval "$(printf '.spec.proxy.haproxy.image="%s"' "${IMAGE_HAPROXY}")" - \
 		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_PMM}")" - \
 		| if [ -n "${MINIKUBE}" ]; then
-			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) |= "none"' -
+			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) |= "none"' - \
+				| yq eval '.spec.proxy.haproxy.resources.requests.cpu="400m"' -
 		else
 			yq eval -
 		fi

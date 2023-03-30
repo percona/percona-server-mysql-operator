@@ -8404,6 +8404,8 @@ spec:
                 type: object
               state:
                 type: string
+              toolkitVersion:
+                type: string
             type: object
         type: object
     served: true
@@ -8678,7 +8680,7 @@ spec:
               fieldPath: metadata.namespace
         - name: DISABLE_TELEMETRY
           value: "false"
-        image: perconalab/percona-server-mysql-operator:main
+        image: percona/percona-server-mysql-operator:0.5.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
