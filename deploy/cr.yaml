@@ -8,7 +8,7 @@ metadata:
 spec:
   allowUnsafeConfigurations: false
 #  pause: false
-  crVersion: 0.5.0
+  crVersion: 0.6.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
   upgradeOptions:
@@ -31,7 +31,7 @@ spec:
 
   mysql:
     clusterType: group-replication
-    image: percona/percona-server:8.0.32-24
+    image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
 #    initImage: percona/percona-server-mysql-operator:0.5.0
 
@@ -112,7 +112,7 @@ spec:
 
       size: 3
 
-      image: percona/haproxy:2.5.12
+      image: perconalab/percona-server-mysql-operator:main-haproxy
       imagePullPolicy: Always
 
       resources:
@@ -148,7 +148,7 @@ spec:
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
     router:
-      image: percona/percona-mysql-router:8.0.32
+      image: perconalab/percona-server-mysql-operator:main-router
       imagePullPolicy: Always
 #      initImage: percona/percona-server-mysql-operator:0.5.0
 
@@ -194,7 +194,7 @@ spec:
   orchestrator:
     enabled: false
 
-    image: percona/percona-orchestrator:3.2.6-8
+    image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
 #    initImage: percona/percona-server-mysql-operator:0.5.0
@@ -256,7 +256,7 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-xtrabackup:8.0.32-25
+    image: perconalab/percona-server-mysql-operator:main-backup
     imagePullPolicy: Always
 #    initImage: percona/percona-server-mysql-operator:0.5.0
     storages:
@@ -302,7 +302,7 @@ spec:
 #          prefix: ""
 
   toolkit:
-    image: percona/percona-server-mysql-operator:0.5.0-toolkit
+    image: perconalab/percona-server-mysql-operator:main-toolkit
     imagePullPolicy: Always
 #    resources:
 #      requests:
