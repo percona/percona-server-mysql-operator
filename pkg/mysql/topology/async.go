@@ -34,6 +34,7 @@ func recursiveAsyncDiscover(ctx context.Context, host, operatorPass string, repl
 	var replicas []string
 	var source string
 	var status replicator.ReplicationStatus
+	var failedToConnect bool
 	err := func() error {
 		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator,
 			operatorPass,
@@ -41,6 +42,7 @@ func recursiveAsyncDiscover(ctx context.Context, host, operatorPass string, repl
 			mysql.DefaultAdminPort)
 		if err != nil {
 			// We should ignore connection errors because function can try to connect to starting pod
+			failedToConnect = true
 			return nil
 		}
 		defer db.Close()
@@ -68,6 +70,9 @@ func recursiveAsyncDiscover(ctx context.Context, host, operatorPass string, repl
 	}()
 	if err != nil {
 		return errors.Wrap(err, "failed to retrieve replication info")
+	}
+	if failedToConnect {
+		return nil
 	}
 	// If a pod has `read_only` set to `true` we should add it to replicas slice
 	if readOnly {
