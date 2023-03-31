@@ -18,6 +18,11 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
+const (
+	backendNamePrimary = "mysql-primary"
+	backendNameReplica = "mysql-replicas"
+)
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
@@ -27,6 +32,14 @@ func main() {
 		log.Fatalln("Too few arguments")
 	}
 	host := args[2]
+
+	backendName, ok := os.LookupEnv("HAPROXY_PROXY_NAME")
+	if !ok {
+		log.Fatalln("Failed to get backend name from `HAPROXY_PROXY_NAME`")
+	}
+	if backendName != backendNamePrimary && backendName != backendNameReplica {
+		log.Fatalln("HAProxy backend name from `HAPROXY_PROXY_NAME` is unknown: " + backendName)
+	}
 
 	fqdn, err := getHostFQDN(host)
 	if err != nil {
@@ -55,12 +68,10 @@ func main() {
 	log.Printf("Replica_IO_Running: %t\n", ioRunning)
 	log.Printf("Replica_SQL_Running: %t\n", sqlRunning)
 
-	proxyName := os.Getenv("HAPROXY_PROXY_NAME")
-	if (t.IsPrimary(fqdn) && !readOnly && !ioRunning && !sqlRunning) ||
-		(t.HasReplica(fqdn) && readOnly && ioRunning && sqlRunning) {
-		log.Printf("MySQL node %s:%d for backend %s is ok\n", fqdn, mysql.DefaultAdminPort, proxyName)
+	if (t.IsPrimary(fqdn) && backendName == backendNamePrimary) || (t.HasReplica(fqdn) && backendName == backendNameReplica) {
+		log.Printf("MySQL node %s:%d for backend %s is ok\n", fqdn, mysql.DefaultAdminPort, backendName)
 	} else {
-		log.Printf("MySQL node %s:%d for backend %s is not ok\n", fqdn, mysql.DefaultAdminPort, proxyName)
+		log.Printf("MySQL node %s:%d for backend %s is not ok\n", fqdn, mysql.DefaultAdminPort, backendName)
 		os.Exit(1)
 	}
 }
