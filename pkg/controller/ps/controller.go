@@ -795,32 +795,6 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return nil
 	}
 
-	pod, err := getOrcPod(ctx, r.Client, cr, 0)
-	if err != nil {
-		return nil
-	}
-
-	if err := orchestrator.DiscoverExec(ctx, pod, mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
-		switch err.Error() {
-		case "Unauthorized":
-			log.Info("mysql is not ready, unauthorized orchestrator discover response. skip")
-			return nil
-		case orchestrator.ErrEmptyResponse.Error():
-			log.Info("mysql is not ready, empty orchestrator discover response. skip")
-			return nil
-		}
-		return errors.Wrap(err, "failed to discover cluster")
-	}
-
-	primary, err := orchestrator.ClusterPrimaryExec(ctx, pod, cr.ClusterHint())
-	if err != nil {
-		return errors.Wrap(err, "get cluster primary")
-	}
-	if primary.Alias == "" {
-		log.Info("mysql is not ready, orchestrator cluster primary alias is empty. skip")
-		return nil
-	}
-
 	if err := r.reconcileLabels(ctx, cr); err != nil {
 		return errors.Wrap(err, "failed to reconcile labels")
 	}
