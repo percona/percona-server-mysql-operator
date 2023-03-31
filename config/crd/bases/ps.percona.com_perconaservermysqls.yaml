@@ -6792,6 +6792,8 @@ spec:
                 type: object
               state:
                 type: string
+              toolkitVersion:
+                type: string
             type: object
         type: object
     served: true
