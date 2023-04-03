@@ -58,6 +58,16 @@ func (t *Topology) HasReplica(host string) bool {
 	return false
 }
 
+func (t *Topology) AddUnreadyPods(cluster *apiv1alpha1.PerconaServerMySQL) {
+	for i := 0; i < int(cluster.MySQLSpec().Size); i++ {
+		fqdn := mysql.FQDN(cluster, i)
+		if t.Primary == fqdn || t.HasReplica(fqdn) {
+			continue
+		}
+		t.AddReplica(fqdn)
+	}
+}
+
 func Get(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL, operatorPass string) (Topology, error) {
 	var err error
 	var top Topology

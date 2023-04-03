@@ -1417,6 +1417,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 	if err != nil {
 		return errors.Wrap(err, "get cluster topology")
 	}
+	topology.AddUnreadyPods(cr)
 
 	g, gCtx := errgroup.WithContext(context.Background())
 	for _, replica := range topology.Replicas {
