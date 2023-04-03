@@ -46,8 +46,8 @@ var (
 	domain    = flag.String("domain", "", "The Cluster Domain which is used by the Cluster, if not set it tries to determine it from /etc/resolv.conf file.")
 )
 
-func lookup(svcName string) (sets.String, error) {
-	endpoints := sets.NewString()
+func lookup(svcName string) (sets.Set[string], error) {
+	endpoints := sets.New[string]()
 	_, srvRecords, err := net.LookupSRV("", "", svcName)
 	if err != nil {
 		return endpoints, err
@@ -136,23 +136,23 @@ func main() {
 		log.Printf("No on-start supplied, on-change %v will be applied on start.", script)
 	}
 
-	for peers := sets.NewString(); script != ""; time.Sleep(pollPeriod) {
+	for peers := sets.New[string](); script != ""; time.Sleep(pollPeriod) {
 		newPeers, err := lookup(*svc)
 		if err != nil {
 			log.Printf("%v", err)
 
 			if lerr, ok := err.(*net.DNSError); ok && lerr.IsNotFound {
 				// Service not resolved - no endpoints, so reset peers list
-				peers = sets.NewString()
+				peers = sets.New[string]()
 				continue
 			}
 		}
 
-		peerList := newPeers.List()
+		peerList := sets.List(newPeers)
 		sort.Strings(peerList)
 
-		if strings.Join(peers.List(), ":") != strings.Join(newPeers.List(), ":") {
-			log.Printf("Peer list updated\nwas %v\nnow %v", peers.List(), newPeers.List())
+		if strings.Join(sets.List(peers), ":") != strings.Join(sets.List(newPeers), ":") {
+			log.Printf("Peer list updated\nwas %v\nnow %v", sets.List(peers), sets.List(newPeers))
 			shellOut(strings.Join(peerList, "\n"), script)
 			peers = newPeers
 		}
