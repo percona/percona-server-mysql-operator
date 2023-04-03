@@ -61,6 +61,7 @@ type Replicator interface {
 	GetMemberState(host string) (MemberState, error)
 	GetGroupReplicationMembers() ([]string, error)
 	CheckIfDatabaseExists(name string) (bool, error)
+	CheckIfInPrimaryPartition() (bool, error)
 }
 
 type dbImpl struct{ db *sql.DB }
@@ -391,4 +392,40 @@ func (d *dbImpl) CheckIfDatabaseExists(name string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func (d *dbImpl) CheckIfInPrimaryPartition() (bool, error) {
+	var in bool
+
+	err := d.db.QueryRow(`
+	SELECT
+		MEMBER_STATE = 'ONLINE'
+		AND (
+			(
+				SELECT
+					COUNT(*)
+				FROM
+					performance_schema.replication_group_members
+				WHERE
+					MEMBER_STATE NOT IN ('ONLINE', 'RECOVERING')
+			) >= (
+				(
+					SELECT
+						COUNT(*)
+					FROM
+						performance_schema.replication_group_members
+				) / 2
+			) = 0
+		)
+	FROM
+		performance_schema.replication_group_members
+		JOIN performance_schema.replication_group_member_stats USING(member_id)
+	WHERE
+		member_id = @@global.server_uuid;
+	`).Scan(&in)
+	if err != nil {
+		return false, err
+	}
+
+	return in, nil
 }
