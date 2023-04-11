@@ -472,6 +472,21 @@ pipeline {
                         clusterRunner('cluster4')
                     }
                 }
+                stage('cluster5') {
+                    when {
+                        expression {
+                            !skipBranchBuilds
+                        }
+                    }
+                    agent {
+                        label 'docker'
+                    }
+                    steps {
+                        prepareNode()
+                        unstash "sourceFILES"
+                        clusterRunner('cluster5')
+                    }
+                }
             }
         }
     }
