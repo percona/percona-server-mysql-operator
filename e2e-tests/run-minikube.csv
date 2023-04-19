@@ -1,0 +1,17 @@
+auto-config
+config
+config-router
+demand-backup
+gr-demand-backup
+gr-init-deploy
+gr-one-pod
+gr-scaling
+gr-tls-cert-manager
+haproxy
+init-deploy
+one-pod
+semi-sync
+sidecars
+tls-cert-manager
+users
+version-service
