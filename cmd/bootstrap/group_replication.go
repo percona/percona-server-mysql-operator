@@ -59,11 +59,9 @@ func (m *mysqlsh) run(ctx context.Context, cmd string) (bytes.Buffer, bytes.Buff
 	c := exec.CommandContext(ctx, "mysqlsh", "--no-wizard", "--uri", m.getURI(), "-e", cmd)
 
 	logWriter := util.NewSensitiveWriter(log.Writer(), sensitiveRegexp)
-	stdout := util.NewSensitiveWriter(&stdoutb, sensitiveRegexp)
-	stderr := util.NewSensitiveWriter(&stderrb, sensitiveRegexp)
 
-	c.Stdout = io.MultiWriter(logWriter, stdout)
-	c.Stderr = io.MultiWriter(logWriter, stderr)
+	c.Stdout = io.MultiWriter(logWriter, &stdoutb)
+	c.Stderr = io.MultiWriter(logWriter, &stderrb)
 
 	err := c.Run()
 
@@ -96,7 +94,7 @@ func (m *mysqlsh) clusterStatus(ctx context.Context) (innodbcluster.Status, erro
 func (m *mysqlsh) configureLocalInstance(ctx context.Context) error {
 	_, _, err := m.run(ctx, fmt.Sprintf("dba.configureLocalInstance('%s', {'clearReadOnly': true})", m.getURI()))
 	if err != nil {
-		return errors.Wrapf(err, "configure local instance")
+		return errors.Wrap(err, "configure local instance")
 	}
 
 	return nil
@@ -108,7 +106,7 @@ func (m *mysqlsh) createCluster(ctx context.Context) error {
 		if strings.Contains(stderr.String(), "dba.rebootClusterFromCompleteOutage") {
 			return errRebootClusterFromCompleteOutage
 		}
-		return errors.Wrapf(err, "create InnoDB cluster")
+		return errors.Wrap(err, "create InnoDB cluster")
 	}
 
 	return nil
@@ -120,7 +118,7 @@ func (m *mysqlsh) rebootClusterFromCompleteOutage(ctx context.Context, force boo
 		if strings.Contains(stderr.String(), "Could not determine if Cluster is completely OFFLINE") {
 			return errCouldNotDetermineIfClusterIsOffline
 		}
-		return errors.Wrapf(err, "reboot cluster from complete outage")
+		return errors.Wrap(err, "reboot cluster from complete outage")
 	}
 
 	return nil
@@ -129,7 +127,7 @@ func (m *mysqlsh) rebootClusterFromCompleteOutage(ctx context.Context, force boo
 func (m *mysqlsh) addInstance(ctx context.Context, instanceDef string) error {
 	_, _, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'waitRecovery': 3})", m.clusterName, instanceDef))
 	if err != nil {
-		return errors.Wrapf(err, "add instance")
+		return errors.Wrap(err, "add instance")
 	}
 
 	return nil
@@ -144,7 +142,7 @@ func (m *mysqlsh) rejoinInstance(ctx context.Context, instanceDef string) error 
 		if strings.Contains(stderr.String(), "is missing transactions that were purged from all cluster members") {
 			return errInstanceMissingPurgedTransactions
 		}
-		return errors.Wrapf(err, "rejoin instance")
+		return errors.Wrap(err, "rejoin instance")
 	}
 
 	return nil
@@ -153,7 +151,7 @@ func (m *mysqlsh) rejoinInstance(ctx context.Context, instanceDef string) error 
 func (m *mysqlsh) removeInstance(ctx context.Context, instanceDef string, force bool) error {
 	_, _, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').removeInstance('%s', {'force': %t})", m.clusterName, instanceDef, force))
 	if err != nil {
-		return errors.Wrapf(err, "remove instance")
+		return errors.Wrap(err, "remove instance")
 	}
 
 	return nil
@@ -162,7 +160,7 @@ func (m *mysqlsh) removeInstance(ctx context.Context, instanceDef string, force 
 func (m *mysqlsh) rescanCluster(ctx context.Context) error {
 	_, _, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rescan({'addInstances': 'auto', 'removeInstances': 'auto'})", m.clusterName))
 	if err != nil {
-		return errors.Wrapf(err, "rescan cluster")
+		return errors.Wrap(err, "rescan cluster")
 	}
 
 	return nil
