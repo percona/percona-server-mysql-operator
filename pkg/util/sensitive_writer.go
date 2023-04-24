@@ -15,5 +15,6 @@ func NewSensitiveWriter(w io.Writer, r *regexp.Regexp) *SensitiveWriter {
 }
 
 func (s *SensitiveWriter) Write(p []byte) (n int, err error) {
-	return s.writer.Write(s.regexp.ReplaceAll(p, []byte(`:*****@`)))
+	_, err = s.writer.Write(s.regexp.ReplaceAll(p, []byte(`:*****@`)))
+	return len(p), err
 }
