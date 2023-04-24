@@ -1,0 +1,14 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      kubectl delete statefulset -n ${NAMESPACE} gr-bootstrap-mysql --force --grace-period=0
+
+      # give time for cluster state to change
+      sleep 10
