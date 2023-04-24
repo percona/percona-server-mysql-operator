@@ -15,7 +15,6 @@ metadata:
     app.kubernetes.io/part-of: percona-server
     percona.com/exposed: "true"
   annotations:
-    cloud.google.com/neg: '{"ingress":true}'
     async-annotations-to-ignore-mysql: "true"
     async-annotations-not-to-ignore-mysql: "true"
   name: async-ignore-annotations-mysql-0
@@ -64,7 +63,6 @@ metadata:
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
   annotations:
-    cloud.google.com/neg: '{"ingress":true}'
     async-annotations-to-ignore-haproxy: "true"
     async-annotations-not-to-ignore-haproxy: "true"
   name: async-ignore-annotations-haproxy
@@ -106,7 +104,6 @@ metadata:
   annotations:
     async-annotations-to-ignore-orc: "true"
     async-annotations-not-to-ignore-orc: "true"
-    cloud.google.com/neg: '{"ingress":true}'
   labels:
     app.kubernetes.io/component: orc
     app.kubernetes.io/instance: async-ignore-annotations

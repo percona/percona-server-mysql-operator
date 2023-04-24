@@ -73,6 +73,7 @@ type PerconaServerMySQLReconciler struct {
 func (r *PerconaServerMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1alpha1.PerconaServerMySQL{}).
+		Named("ps-controller").
 		Complete(r)
 }
 
@@ -89,7 +90,7 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
 ) (ctrl.Result, error) {
-	log := logf.FromContext(ctx).WithName("PerconaServerMySQL")
+	log := logf.FromContext(ctx)
 
 	rr := ctrl.Result{RequeueAfter: 5 * time.Second}
 
@@ -835,12 +836,8 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1alpha1.ConditionInnoDBClusterBootstrapped)
 	if cond == nil || cond.Status == metav1.ConditionFalse {
 		if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
-			log.Info("Creating InnoDB cluster")
-			err = mysh.CreateCluster(ctx, cr.InnoDBClusterName())
-			if err != nil {
-				return errors.Wrapf(err, "create cluster %s", cr.InnoDBClusterName())
-			}
-			log.Info("Created InnoDB Cluster", "cluster", cr.InnoDBClusterName())
+			log.V(1).Info("InnoDB cluster is not created yet")
+			return nil
 		}
 
 		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{

@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sysbench-tpcc
+spec:
+  restartPolicy: Never
+  containers:
+    - name: sysbench
+      image: perconalab/percona-server-mysql-operator:sysbench
+      imagePullPolicy: Always
+      env:
+        - name: MYSQL_USER
+          value: root
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: cluster1-secrets
+              key: root
+        - name: MYSQL_HOSTNAME
+          value: cluster1-router
+      command: ["bash"]
+      args:
+        - "-c"
+        - |
+          set -ex
+          cd ./sysbench-tpcc
+          sed -i 's/con:query("SET SESSION sql_log_bin = 0")/con:query("SET SESSION sql_log_bin = 1")/' ./tpcc_common.lua
+          mysql \
+            --host="${MYSQL_HOSTNAME}" \
+            --port=3306 \
+            --user="${MYSQL_USER}" \
+            --password="${MYSQL_PASSWORD}" \
+            -e 'DROP DATABASE IF EXISTS sbtest;CREATE DATABASE IF NOT EXISTS sbtest;'
+          sysbench ./tpcc.lua \
+              --mysql-host="${MYSQL_HOSTNAME}" \
+              --mysql-user="${MYSQL_USER}" \
+              --mysql-password="${MYSQL_PASSWORD}" \
+              --mysql-db=sbtest \
+              --threads=10 \
+              --tables=20 \
+              --time=600 \
+              --force_pk=1 \
+              --rand-type=zipfian \
+              --rand-zipfian-exp=0 \
+              --report-interval=1 \
+              --db-driver=mysql \
+              --mysql-ignore-errors=all \
+              --histogram \
+              --report_csv=yes \
+              --db-ps-mode=disable \
+              --enable_purge=yes \
+              --scale=20 prepare
+          sysbench ./tpcc.lua \
+              --mysql-host="${MYSQL_HOSTNAME}" \
+              --mysql-user="${MYSQL_USER}" \
+              --mysql-password="${MYSQL_PASSWORD}" \
+              --mysql-db=sbtest \
+              --threads=10 \
+              --tables=20 \
+              --time=100 \
+              --force_pk=1 \
+              --rand-type=zipfian \
+              --rand-zipfian-exp=0 \
+              --report-interval=1 \
+              --db-driver=mysql \
+              --mysql-ignore-errors=all \
+              --histogram \
+              --db-ps-mode=disable \
+              --scale=20 run

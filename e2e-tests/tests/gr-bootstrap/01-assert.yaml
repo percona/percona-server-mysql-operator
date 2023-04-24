@@ -1,29 +1,64 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 120
+timeout: 420
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-bootstrap-mysql
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: gr-bootstrap-router
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  updatedReplicas: 3
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-bootstrap
+  finalizers:
+    - delete-mysql-pods-in-order
+status:
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  router:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
 ---
 apiVersion: v1
 kind: Service
 metadata:
   labels:
-    gr-labels-to-ignore-mysql: "true"
-    gr-labels-not-to-ignore-mysql: "true"
     app.kubernetes.io/component: mysql
-    app.kubernetes.io/instance: gr-ignore-annotations
+    app.kubernetes.io/instance: gr-bootstrap
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
-  annotations:
-    gr-annotations-to-ignore-mysql: "true"
-    gr-annotations-not-to-ignore-mysql: "true"
-  name: gr-ignore-annotations-mysql-0
+  name: gr-bootstrap-mysql
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
-    name: gr-ignore-annotations
+    name: gr-bootstrap
 spec:
+  clusterIP: None
   ports:
   - name: mysql
     port: 3306
@@ -47,34 +82,29 @@ spec:
     targetPort: 33061
   selector:
     app.kubernetes.io/component: mysql
-    app.kubernetes.io/instance: gr-ignore-annotations
+    app.kubernetes.io/instance: gr-bootstrap
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
   sessionAffinity: None
-  type: LoadBalancer
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
 metadata:
   labels:
-    gr-labels-to-ignore-router: "true"
-    gr-labels-not-to-ignore-router: "true"
     app.kubernetes.io/component: router
-    app.kubernetes.io/instance: gr-ignore-annotations
+    app.kubernetes.io/instance: gr-bootstrap
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
-  annotations:
-    gr-annotations-to-ignore-router: "true"
-    gr-annotations-not-to-ignore-router: "true"
-  name: gr-ignore-annotations-router
+  name: gr-bootstrap-router
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
-    name: gr-ignore-annotations
+    name: gr-bootstrap
 spec:
   ports:
   - name: http
@@ -107,9 +137,9 @@ spec:
     targetPort: 33062
   selector:
     app.kubernetes.io/component: router
-    app.kubernetes.io/instance: gr-ignore-annotations
+    app.kubernetes.io/instance: gr-bootstrap
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
   sessionAffinity: None
-  type: LoadBalancer
+  type: ClusterIP

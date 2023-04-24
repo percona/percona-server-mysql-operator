@@ -38,8 +38,15 @@ func main() {
 			}
 		}
 	case "liveness":
-		if err := checkLiveness(); err != nil {
-			log.Fatalf("liveness check failed: %v", err)
+		switch os.Getenv("CLUSTER_TYPE") {
+		case "async":
+			if err := checkLivenessAsync(); err != nil {
+				log.Fatalf("readiness check failed: %v", err)
+			}
+		case "group-replication":
+			if err := checkLivenessGR(); err != nil {
+				log.Fatalf("readiness check failed: %v", err)
+			}
 		}
 	case "replication":
 		if err := checkReplication(); err != nil {
@@ -119,7 +126,7 @@ func checkReadinessGR() error {
 	return nil
 }
 
-func checkLiveness() error {
+func checkLivenessAsync() error {
 	podIP, err := getPodIP()
 	if err != nil {
 		return errors.Wrap(err, "get pod IP")
@@ -137,6 +144,37 @@ func checkLiveness() error {
 	defer db.Close()
 
 	return db.DumbQuery()
+}
+
+func checkLivenessGR() error {
+	podIP, err := getPodIP()
+	if err != nil {
+		return errors.Wrap(err, "get pod IP")
+	}
+
+	monitorPass, err := getSecret(string(apiv1alpha1.UserMonitor))
+	if err != nil {
+		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
+	}
+
+	db, err := replicator.NewReplicator(apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
+	if err != nil {
+		return errors.Wrap(err, "connect to db")
+	}
+	defer db.Close()
+
+	in, err := db.CheckIfInPrimaryPartition()
+	if err != nil {
+		return errors.Wrap(err, "check if member in primary partition")
+	}
+
+	log.Printf("in primary partition: %t", in)
+
+	if !in {
+		return errors.New("possible split brain!")
+	}
+
+	return nil
 }
 
 func checkReplication() error {

@@ -8,7 +8,7 @@ metadata:
 spec:
   allowUnsafeConfigurations: false
 #  pause: false
-  crVersion: 0.5.0
+  crVersion: 0.6.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
   upgradeOptions:
@@ -27,13 +27,13 @@ spec:
 #      name: special-selfsigned-issuer
 #      kind: ClusterIssuer
 #      group: cert-manager.io
-#  initImage: perconalab/percona-server-mysql-operator:main
+#  initImage: percona/percona-server-mysql-operator:0.5.0
 
   mysql:
     clusterType: group-replication
     image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
-#    initImage: perconalab/percona-server-mysql-operator:main
+#    initImage: percona/percona-server-mysql-operator:0.5.0
 
     size: 3
     sizeSemiSync: 0
@@ -150,7 +150,7 @@ spec:
     router:
       image: perconalab/percona-server-mysql-operator:main-router
       imagePullPolicy: Always
-#      initImage: perconalab/percona-server-mysql-operator:main
+#      initImage: percona/percona-server-mysql-operator:0.5.0
 
       size: 3
 
@@ -197,7 +197,7 @@ spec:
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
-#    initImage: perconalab/percona-server-mysql-operator:main
+#    initImage: percona/percona-server-mysql-operator:0.5.0
 
     size: 3
 
@@ -240,7 +240,7 @@ spec:
   pmm:
     enabled: false
 
-    image: percona/pmm-client:2.33.0
+    image: percona/pmm-client:2.36.0
     imagePullPolicy: Always
 
     resources:
@@ -258,7 +258,7 @@ spec:
     enabled: true
     image: perconalab/percona-server-mysql-operator:main-backup
     imagePullPolicy: Always
-#    initImage: perconalab/percona-server-mysql-operator:main
+#    initImage: percona/percona-server-mysql-operator:0.5.0
     storages:
       s3-us-west:
         type: s3
