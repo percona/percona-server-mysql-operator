@@ -73,6 +73,7 @@ type PerconaServerMySQLReconciler struct {
 func (r *PerconaServerMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1alpha1.PerconaServerMySQL{}).
+		Named("ps-controller").
 		Complete(r)
 }
 
@@ -89,7 +90,7 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 	ctx context.Context,
 	req ctrl.Request,
 ) (ctrl.Result, error) {
-	log := logf.FromContext(ctx).WithName("PerconaServerMySQL")
+	log := logf.FromContext(ctx)
 
 	rr := ctrl.Result{RequeueAfter: 5 * time.Second}
 

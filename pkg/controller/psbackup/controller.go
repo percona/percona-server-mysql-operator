@@ -63,6 +63,7 @@ type PerconaServerMySQLBackupReconciler struct {
 func (r *PerconaServerMySQLBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1alpha1.PerconaServerMySQLBackup{}).
+		Named("psbackup-controller").
 		Complete(r)
 }
 

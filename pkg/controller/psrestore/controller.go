@@ -439,6 +439,7 @@ func (r *PerconaServerMySQLRestoreReconciler) unpauseCluster(ctx context.Context
 func (r *PerconaServerMySQLRestoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1alpha1.PerconaServerMySQLRestore{}).
+		Named("psrestore-controller").
 		Owns(&batchv1.Job{}).
 		Complete(r)
 }
