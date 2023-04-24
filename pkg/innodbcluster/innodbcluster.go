@@ -1,6 +1,12 @@
 package innodbcluster
 
-import "github.com/pkg/errors"
+import (
+	"fmt"
+
+	"github.com/pkg/errors"
+)
+
+var ErrMemberNotFound error = errors.New("member not found")
 
 type ClusterStatus string
 
@@ -45,4 +51,33 @@ type Status struct {
 	} `json:"defaultReplicaSet"`
 }
 
-var ErrMemberNotFound error = errors.New("member not found")
+func (s Status) String() string {
+	status := fmt.Sprintf(`
+ClusterName: %s
+Status: %s
+StatusText: %s
+SSL: %s
+Primary: %s
+Topology:
+	`,
+		s.ClusterName,
+		s.DefaultReplicaSet.Status,
+		s.DefaultReplicaSet.StatusText,
+		s.DefaultReplicaSet.SSL,
+		s.DefaultReplicaSet.Primary,
+	)
+
+	i := 0
+	for _, member := range s.DefaultReplicaSet.Topology {
+		status += fmt.Sprintf(`
+	Member %d
+	Address: %s
+	State: %s
+	Errors: %v
+
+		`, i, member.Address, member.MemberState, member.InstanceErrors)
+		i++
+	}
+
+	return status
+}

@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sysbench-oltp-read
+spec:
+  restartPolicy: Never
+  containers:
+    - name: sysbench
+      image: perconalab/percona-server-mysql-operator:sysbench
+      imagePullPolicy: Always
+      env:
+        - name: MYSQL_USER
+          value: root
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: cluster1-secrets
+              key: root
+        - name: MYSQL_HOSTNAME
+          value: cluster1-router
+      command: ["bash"]
+      args:
+        - "-c"
+        - |
+          set -ex
+          mysql \
+            --host="${MYSQL_HOSTNAME}" \
+            --port=3306 \
+            --user="${MYSQL_USER}" \
+            --password="${MYSQL_PASSWORD}" \
+            -e 'DROP DATABASE IF EXISTS sbtest;CREATE DATABASE IF NOT EXISTS sbtest;'
+          sysbench ./src/lua/windmills/oltp_read.lua \
+              --mysql-host="${MYSQL_HOSTNAME}" \
+              --mysql-user="${MYSQL_USER}" \
+              --mysql-password="${MYSQL_PASSWORD}" \
+              --mysql-db=sbtest \
+              --mysql_storage_engine=innodb \
+              --db-driver=mysql \
+              --tables=80 \
+              --table_size=1000000 \
+              --table_name=windmills \
+              --mysql_table_options="CHARSET=utf8 COLLATE=utf8_bin" \
+              --mysql-ignore-errors=all \
+              --threads=2 prepare
+          sysbench ./src/lua/windmills/oltp_read.lua \
+              --mysql-host="${MYSQL_HOSTNAME}" \
+              --mysql-user="${MYSQL_USER}" \
+              --mysql-password="${MYSQL_PASSWORD}" \
+              --mysql-db=sbtest \
+              --db-driver=mysql \
+              --tables=80 \
+              --table_size=900000 \
+              --rand-type=zipfian \
+              --rand-zipfian-exp=0.5 \
+              --skip_trx=false \
+              --report-interval=1 \
+              --mysql_storage_engine=innodb \
+              --auto_inc=off \
+              --histogram \
+              --table_name=windmills \
+              --db-ps-mode=disable \
+              --point-selects=100 \
+              --range-selects=true \
+              --mysql-ignore-errors=all \
+              --reconnect=10 \
+              --threads=80 \
+              --time=1200 run

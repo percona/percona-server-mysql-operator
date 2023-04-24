@@ -826,12 +826,8 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1alpha1.ConditionInnoDBClusterBootstrapped)
 	if cond == nil || cond.Status == metav1.ConditionFalse {
 		if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
-			log.Info("Creating InnoDB cluster")
-			err = mysh.CreateCluster(ctx, cr.InnoDBClusterName())
-			if err != nil {
-				return errors.Wrapf(err, "create cluster %s", cr.InnoDBClusterName())
-			}
-			log.Info("Created InnoDB Cluster", "cluster", cr.InnoDBClusterName())
+			log.V(1).Info("InnoDB cluster is not created yet")
+			return nil
 		}
 
 		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{

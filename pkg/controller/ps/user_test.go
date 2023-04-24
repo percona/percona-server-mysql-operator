@@ -3,7 +3,6 @@ package ps
 import (
 	"context"
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -41,7 +40,6 @@ var _ = Describe("Keep user secrets", Ordered, func() {
 	})
 
 	AfterAll(func() {
-		time.Sleep(60 * time.Second)
 		By("Deleting the Namespace to perform the tests")
 		_ = k8sClient.Delete(ctx, namespace)
 	})

@@ -2,8 +2,8 @@ apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQLBackup
 metadata:
   name: backup1
-#  finalizers:
-#    - delete-backup
+  finalizers:
+    - delete-backup
 spec:
   clusterName: cluster1
-  storageName: s3-us-west
+  storageName: minio
