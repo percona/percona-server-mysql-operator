@@ -20,7 +20,7 @@ func main() {
 	clusterType := os.Getenv("CLUSTER_TYPE")
 	switch clusterType {
 	case "group-replication":
-		if err := bootstrapGroupReplication(context.TODO()); err != nil {
+		if err := bootstrapGroupReplication(context.Background()); err != nil {
 			log.Fatalf("bootstrap failed: %v", err)
 		}
 	case "async":
