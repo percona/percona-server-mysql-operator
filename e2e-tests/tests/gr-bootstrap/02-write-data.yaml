@@ -1,0 +1,16 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      run_mysql \
+      	"CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable (id int PRIMARY KEY)" \
+      	"-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password"
+
+      run_mysql \
+      	"INSERT myDB.myTable (id) VALUES (100500)" \
+      	"-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password"

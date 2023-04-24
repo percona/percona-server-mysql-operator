@@ -356,10 +356,10 @@ func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
-			Type:      corev1.ServiceTypeClusterIP,
-			ClusterIP: "None",
-			Ports:     servicePorts(cr),
-			Selector:  labels,
+			Type:                     corev1.ServiceTypeClusterIP,
+			ClusterIP:                "None",
+			Ports:                    servicePorts(cr),
+			Selector:                 labels,
 			PublishNotReadyAddresses: cr.Spec.MySQL.IsGR(),
 		},
 	}
@@ -450,6 +450,10 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			{
 				Name:  "CLUSTER_HASH",
 				Value: cr.ClusterHash(),
+			},
+			{
+				Name:  "INNODB_CLUSTER_NAME",
+				Value: cr.InnoDBClusterName(),
 			},
 			{
 				Name:  "CR_UID",

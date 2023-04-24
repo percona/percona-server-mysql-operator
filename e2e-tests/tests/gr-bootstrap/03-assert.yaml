@@ -1,0 +1,18 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-bootstrap
+status:
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  router:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
