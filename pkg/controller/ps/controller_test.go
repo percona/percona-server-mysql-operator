@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	"github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	psv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	//+kubebuilder:scaffold:imports
@@ -275,6 +276,7 @@ var _ = Describe("Unsafe configurations", Ordered, func() {
 	Context("Unsafe configurations are disabled", func() {
 		Specify("controller should set minimum safe number of replicas to MySQL statefulset", func() {
 			cr.Spec.AllowUnsafeConfig = false
+			cr.MySQLSpec().ClusterType = v1alpha1.ClusterTypeGR
 			cr.MySQLSpec().Size = 1
 			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
 
@@ -298,6 +300,7 @@ var _ = Describe("Unsafe configurations", Ordered, func() {
 			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 
 			cr.Spec.AllowUnsafeConfig = false
+			cr.MySQLSpec().ClusterType = v1alpha1.ClusterTypeGR
 			cr.MySQLSpec().Size = 11
 			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
 
@@ -321,6 +324,7 @@ var _ = Describe("Unsafe configurations", Ordered, func() {
 			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 
 			cr.Spec.AllowUnsafeConfig = false
+			cr.MySQLSpec().ClusterType = v1alpha1.ClusterTypeGR
 			cr.MySQLSpec().Size = 4
 			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
 
@@ -346,6 +350,7 @@ var _ = Describe("Unsafe configurations", Ordered, func() {
 			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 
 			cr.Spec.AllowUnsafeConfig = true
+			cr.MySQLSpec().ClusterType = v1alpha1.ClusterTypeGR
 			cr.MySQLSpec().Size = 1
 			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
 
