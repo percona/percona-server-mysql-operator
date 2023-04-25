@@ -50,7 +50,7 @@ spec:
     app.kubernetes.io/part-of: percona-server
     rack: rack-22
   sessionAffinity: None
-  type: LoadBalancer
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
@@ -98,7 +98,7 @@ spec:
     app.kubernetes.io/part-of: percona-server
     rack: rack-22
   sessionAffinity: None
-  type: LoadBalancer
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
@@ -143,4 +143,4 @@ spec:
     app.kubernetes.io/part-of: percona-server
     rack: rack-22
   sessionAffinity: None
-  type: LoadBalancer
+  type: ClusterIP

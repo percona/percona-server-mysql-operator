@@ -53,7 +53,7 @@ spec:
     rack: rack-22
     rack-test: rack-test-22
   sessionAffinity: None
-  type: LoadBalancer
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
@@ -104,7 +104,7 @@ spec:
     rack: rack-22
     rack-test: rack-test-22
   sessionAffinity: None
-  type: LoadBalancer
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
@@ -152,4 +152,4 @@ spec:
     rack: rack-22
     rack-test: rack-test-22
   sessionAffinity: None
-  type: LoadBalancer
+  type: ClusterIP

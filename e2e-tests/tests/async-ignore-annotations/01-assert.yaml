@@ -100,4 +100,4 @@ spec:
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
   sessionAffinity: None
-  type: LoadBalancer
+  type: ClusterIP
