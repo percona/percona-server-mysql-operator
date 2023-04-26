@@ -503,6 +503,22 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		cr.Spec.Proxy.Router = new(MySQLRouterSpec)
 	}
 
+	if cr.Spec.Proxy.Router.StartupProbe.InitialDelaySeconds == 0 {
+		cr.Spec.Proxy.Router.StartupProbe.InitialDelaySeconds = 5
+	}
+	if cr.Spec.Proxy.Router.StartupProbe.PeriodSeconds == 0 {
+		cr.Spec.Proxy.Router.StartupProbe.PeriodSeconds = 5
+	}
+	if cr.Spec.Proxy.Router.StartupProbe.FailureThreshold == 0 {
+		cr.Spec.Proxy.Router.StartupProbe.FailureThreshold = 1
+	}
+	if cr.Spec.Proxy.Router.StartupProbe.SuccessThreshold == 0 {
+		cr.Spec.Proxy.Router.StartupProbe.SuccessThreshold = 1
+	}
+	if cr.Spec.Proxy.Router.StartupProbe.TimeoutSeconds == 0 {
+		cr.Spec.Proxy.Router.StartupProbe.TimeoutSeconds = 3
+	}
+
 	if cr.Spec.Proxy.Router.ReadinessProbe.PeriodSeconds == 0 {
 		cr.Spec.Proxy.Router.ReadinessProbe.PeriodSeconds = 5
 	}
