@@ -47,6 +47,22 @@ Percona welcomes and encourages community contributions to help improve open sou
 See the [Contribution Guide](CONTRIBUTING.md) for more information.
 
 ## Join Percona Kubernetes Squad!
+                                                                              
+                                                                                
+                    %                   
+                   %%%                  
+                 ###%%%%%%%%%%%%*           
+                ###  ##%%      %%%%         
+              ####     ##%       %%%%       ####################################
+             ###        ####      %%%       X  Join Percona Kubernetes Squad!  X
+           ,((###         ###     %%%       ####################################
+          (((( (###        ####  %%%%   
+         (((     ((#         ######     
+       ((((       (((#        ####      
+      /((          ,(((        *###     
+    ////             (((         ####   
+   ///                ((((        ####  
+ /////////////(((((((((((((((((########
 
 You can get early access to new product features, invite-only ”ask me anything” sessions with Percona Kubernetes experts, and monthly swag raffles. Interested? Fill in the form at [percona.com/k8s](https://www.percona.com/k8s).
 
