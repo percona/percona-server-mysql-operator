@@ -49,7 +49,7 @@ See the [Contribution Guide](CONTRIBUTING.md) for more information.
 ## Join Percona Kubernetes Squad!
                                                                               
 ```                                                                                     
-                    %                        _____                                           
+                    %                        _____                
                    %%%                      |  __ \                                          
                  ###%%%%%%%%%%%%*           | |__) |__ _ __ ___ ___  _ __   __ _             
                 ###  ##%%      %%%%         |  ___/ _ \ '__/ __/ _ \| '_ \ / _` |            
@@ -62,7 +62,7 @@ See the [Contribution Guide](CONTRIBUTING.md) for more information.
       /((          ,(((        *###         |   <| (_) \__ \  ____) | (_| | |_| | (_| | (_| |
     ////             (((         ####       |_|\_\\___/|___/ |_____/ \__, |\__,_|\__,_|\__,_|
    ///                ((((        ####                                  | |                  
- /////////////(((((((((((((((((########                                 |_|                             
+ /////////////(((((((((((((((((########                                 |_|   Join @ percona.com/k8s                                                              
 ```
 
 You can get early access to new product features, invite-only ”ask me anything” sessions with Percona Kubernetes experts, and monthly swag raffles. Interested? Fill in the form at [percona.com/k8s](https://www.percona.com/k8s).
