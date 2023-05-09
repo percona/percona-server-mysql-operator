@@ -214,6 +214,15 @@ func bootstrapGroupReplication(ctx context.Context) error {
 		}
 	}
 
+	exists, err = checkFullClusterCrash()
+	if err != nil {
+		return errors.Wrap(err, "check full cluster crash file")
+	}
+	if exists {
+		log.Printf("/var/lib/mysql/full-cluster-crash exists. exiting...")
+		return nil
+	}
+
 	log.Println("Bootstrap starting...")
 
 	localShell, err := connectToLocal(ctx)
@@ -346,4 +355,8 @@ func bootstrapGroupReplication(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func checkFullClusterCrash() (bool, error) {
+	return fileExists("/var/lib/mysql/full-cluster-crash")
 }
