@@ -87,7 +87,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 					Port: int32(PortProxyProtocol),
 				},
 				{
-					Name: "mysql-x",
+					Name: "mysqlx",
 					Port: int32(PortMySQLXProtocol),
 				},
 			},
@@ -211,7 +211,7 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 				ContainerPort: int32(PortProxyProtocol),
 			},
 			{
-				Name:          "mysql-x",
+				Name:          "mysqlx",
 				ContainerPort: int32(PortMySQLXProtocol),
 			},
 		},

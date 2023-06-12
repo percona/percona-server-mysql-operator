@@ -89,7 +89,7 @@ spec:
     port: 3309
     protocol: TCP
     targetPort: 3309
-  - name: mysql-x
+  - name: mysqlx
     port: 33060
     protocol: TCP
     targetPort: 33060
