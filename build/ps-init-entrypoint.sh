@@ -32,3 +32,5 @@ install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy_liveness_
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy_readiness_check.sh" "${BINDIR}/haproxy_readiness_check.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy.cfg" "${BINDIR}/haproxy.cfg"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy-global.cfg" "${BINDIR}/haproxy-global.cfg"
+
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/pmm-prerun.sh" "${BINDIR}/pmm-prerun.sh"
