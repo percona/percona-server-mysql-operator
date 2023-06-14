@@ -6,3 +6,24 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: config-router-router
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: config-router-mysql
+status:
+  observedGeneration: 1
+  readyReplicas: 3
+  replicas: 3
+  updatedReplicas: 3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  generation: 5
+  name: config-router-router
+status:
+  observedGeneration: 5
+  readyReplicas: 3
+  replicas: 3
+  updatedReplicas: 3
