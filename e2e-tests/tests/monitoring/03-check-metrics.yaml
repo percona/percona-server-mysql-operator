@@ -17,4 +17,11 @@ commands:
       sleep 90 # wait for QAN
 
       get_qan20_values monitoring-mysql-0 api_key:$API_KEY
+
+      haproxy_svc=$(get_service_ip "monitoring-haproxy")
+      http_code=$(curl -s -o /dev/null -w "%{http_code}" http://${haproxy_svc}:8404/metrics)
+      if [[ $http_code != 200 ]]; then
+          echo "Error: http code is $http_code"
+          exit 1
+      fi
     timeout: 120
