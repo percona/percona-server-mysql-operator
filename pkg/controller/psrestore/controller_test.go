@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	controllerruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
@@ -37,8 +38,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 		name          string
 		cr            *apiv1alpha1.PerconaServerMySQLRestore
 		cluster       *apiv1alpha1.PerconaServerMySQL
-		backup        *apiv1alpha1.PerconaServerMySQLBackup
-		secret        *corev1.Secret
+		objects       []client.Object
 		stateDesc     string
 		shouldSucceed bool
 	}{
@@ -112,14 +112,16 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 		{
 			name: "without backup storage in cluster",
 			cr:   cr,
-			backup: &apiv1alpha1.PerconaServerMySQLBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      backupName,
-					Namespace: namespace,
-				},
-				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
-					ClusterName: clusterName,
-					StorageName: storageName,
+			objects: []client.Object{
+				&apiv1alpha1.PerconaServerMySQLBackup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      backupName,
+						Namespace: namespace,
+					},
+					Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
+						ClusterName: clusterName,
+						StorageName: storageName,
+					},
 				},
 			},
 			cluster: &apiv1alpha1.PerconaServerMySQL{
@@ -138,14 +140,16 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 		{
 			name: "without secret",
 			cr:   cr,
-			backup: &apiv1alpha1.PerconaServerMySQLBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      backupName,
-					Namespace: namespace,
-				},
-				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
-					ClusterName: clusterName,
-					StorageName: storageName,
+			objects: []client.Object{
+				&apiv1alpha1.PerconaServerMySQLBackup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      backupName,
+						Namespace: namespace,
+					},
+					Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
+						ClusterName: clusterName,
+						StorageName: storageName,
+					},
 				},
 			},
 			cluster: &apiv1alpha1.PerconaServerMySQL{
@@ -172,14 +176,22 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 		{
 			name: "should succeed",
 			cr:   cr,
-			backup: &apiv1alpha1.PerconaServerMySQLBackup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      backupName,
-					Namespace: namespace,
+			objects: []client.Object{
+				&apiv1alpha1.PerconaServerMySQLBackup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      backupName,
+						Namespace: namespace,
+					},
+					Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
+						ClusterName: clusterName,
+						StorageName: storageName,
+					},
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
-					ClusterName: clusterName,
-					StorageName: storageName,
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "aws-secret",
+						Namespace: namespace,
+					},
 				},
 			},
 			cluster: &apiv1alpha1.PerconaServerMySQL{
@@ -201,10 +213,150 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 					},
 				},
 			},
-			secret: &corev1.Secret{
+			stateDesc:     "",
+			shouldSucceed: true,
+		},
+		{
+			name: "with running restore",
+			cr:   cr,
+			objects: []client.Object{
+				&apiv1alpha1.PerconaServerMySQLBackup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      backupName,
+						Namespace: namespace,
+					},
+					Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
+						ClusterName: clusterName,
+						StorageName: storageName,
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "aws-secret",
+						Namespace: namespace,
+					},
+				},
+				&apiv1alpha1.PerconaServerMySQLRestore{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "running-restore",
+						Namespace: namespace,
+					},
+					Spec: apiv1alpha1.PerconaServerMySQLRestoreSpec{
+						ClusterName: clusterName,
+					},
+					Status: apiv1alpha1.PerconaServerMySQLRestoreStatus{
+						State: apiv1alpha1.RestoreRunning,
+					},
+				},
+			},
+			cluster: &apiv1alpha1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "aws-secret",
+					Name:      clusterName,
 					Namespace: namespace,
+				},
+				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+					Backup: &apiv1alpha1.BackupSpec{
+						Storages: map[string]*apiv1alpha1.BackupStorageSpec{
+							storageName: {
+								S3: &apiv1alpha1.BackupStorageS3Spec{
+									CredentialsSecret: "aws-secret",
+								},
+								Type: apiv1alpha1.BackupStorageS3,
+							},
+						},
+						InitImage: "operator-image",
+					},
+				},
+			},
+			stateDesc:     "PerconaServerMySQLRestore running-restore is already running",
+			shouldSucceed: false,
+		},
+		{
+			name: "with new, failed, errored and succeeded restore",
+			cr:   cr,
+			objects: []client.Object{
+				&apiv1alpha1.PerconaServerMySQLBackup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      backupName,
+						Namespace: namespace,
+					},
+					Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
+						ClusterName: clusterName,
+						StorageName: storageName,
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "aws-secret",
+						Namespace: namespace,
+					},
+				},
+				&apiv1alpha1.PerconaServerMySQLRestore{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "new-restore",
+						Namespace: namespace,
+					},
+					Spec: apiv1alpha1.PerconaServerMySQLRestoreSpec{
+						ClusterName: clusterName,
+					},
+					Status: apiv1alpha1.PerconaServerMySQLRestoreStatus{
+						State: apiv1alpha1.RestoreNew,
+					},
+				},
+				&apiv1alpha1.PerconaServerMySQLRestore{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "failed-restore",
+						Namespace: namespace,
+					},
+					Spec: apiv1alpha1.PerconaServerMySQLRestoreSpec{
+						ClusterName: clusterName,
+					},
+					Status: apiv1alpha1.PerconaServerMySQLRestoreStatus{
+						State: apiv1alpha1.RestoreFailed,
+					},
+				},
+				&apiv1alpha1.PerconaServerMySQLRestore{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "succeeded-restore",
+						Namespace: namespace,
+					},
+					Spec: apiv1alpha1.PerconaServerMySQLRestoreSpec{
+						ClusterName: clusterName,
+					},
+					Status: apiv1alpha1.PerconaServerMySQLRestoreStatus{
+						State: apiv1alpha1.RestoreSucceeded,
+					},
+				},
+				&apiv1alpha1.PerconaServerMySQLRestore{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "error-restore",
+						Namespace: namespace,
+					},
+					Spec: apiv1alpha1.PerconaServerMySQLRestoreSpec{
+						ClusterName: clusterName,
+					},
+					Status: apiv1alpha1.PerconaServerMySQLRestoreStatus{
+						State: apiv1alpha1.RestoreError,
+					},
+				},
+			},
+			cluster: &apiv1alpha1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: namespace,
+				},
+				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+					Backup: &apiv1alpha1.BackupSpec{
+						Storages: map[string]*apiv1alpha1.BackupStorageSpec{
+							storageName: {
+								S3: &apiv1alpha1.BackupStorageS3Spec{
+									CredentialsSecret: "aws-secret",
+								},
+								Type: apiv1alpha1.BackupStorageS3,
+							},
+						},
+						InitImage: "operator-image",
+					},
 				},
 			},
 			stateDesc:     "",
@@ -224,7 +376,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr)
+			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr).WithObjects(tt.objects...)
 			if tt.cluster != nil {
 				cb.WithObjects(tt.cluster, &appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
@@ -232,12 +384,6 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 						Namespace: namespace,
 					},
 				})
-			}
-			if tt.backup != nil {
-				cb.WithObjects(tt.backup)
-			}
-			if tt.secret != nil {
-				cb.WithObjects(tt.secret)
 			}
 
 			r := PerconaServerMySQLRestoreReconciler{
