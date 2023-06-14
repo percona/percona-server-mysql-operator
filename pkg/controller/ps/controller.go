@@ -719,7 +719,14 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 		return errors.Wrap(err, "get init image")
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, haproxy.StatefulSet(cr, initImage), r.Scheme); err != nil {
+	internalSecret := new(corev1.Secret)
+	nn = types.NamespacedName{Name: cr.InternalSecretName(), Namespace: cr.Namespace}
+	err = r.Client.Get(ctx, nn, internalSecret)
+	if client.IgnoreNotFound(err) != nil {
+		return errors.Wrapf(err, "get Secret/%s", nn.Name)
+	}
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, haproxy.StatefulSet(cr, initImage, internalSecret), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile StatefulSet")
 	}
 
@@ -736,8 +743,15 @@ func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr
 			return errors.Wrap(err, "reconcile Orchestrator services")
 		}
 		if cr.HAProxyEnabled() {
+			internalSecret := new(corev1.Secret)
+			nn := types.NamespacedName{Name: cr.InternalSecretName(), Namespace: cr.Namespace}
+			err := r.Client.Get(ctx, nn, internalSecret)
+			if client.IgnoreNotFound(err) != nil {
+				return errors.Wrapf(err, "get Secret/%s", nn.Name)
+			}
+
 			expose := cr.Spec.Proxy.HAProxy.Expose
-			if err := k8s.EnsureService(ctx, r.Client, cr, haproxy.Service(cr), r.Scheme, expose.SaveOldMeta()); err != nil {
+			if err := k8s.EnsureService(ctx, r.Client, cr, haproxy.Service(cr, internalSecret), r.Scheme, expose.SaveOldMeta()); err != nil {
 				return errors.Wrap(err, "reconcile HAProxy svc")
 			}
 		}
@@ -894,7 +908,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 	log := logf.FromContext(ctx).WithName("cleanupOutdatedServices")
 
 	if !cr.HAProxyEnabled() || cr.Spec.Proxy.HAProxy.Size == 0 {
-		svc := haproxy.Service(cr)
+		svc := haproxy.Service(cr, nil)
 		if err := r.Client.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrapf(err, "delete HAProxy svc %s", svc.Name)
 		}
@@ -942,7 +956,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedStatefulSets(ctx context.C
 		}
 	}
 	if !cr.HAProxyEnabled() {
-		if err := r.Delete(ctx, haproxy.StatefulSet(cr, "")); err != nil && !k8serrors.IsNotFound(err) {
+		if err := r.Delete(ctx, haproxy.StatefulSet(cr, "", nil)); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrap(err, "failed to delete haproxy statefulset")
 		}
 	}
