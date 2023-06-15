@@ -337,8 +337,9 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 	return source, nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context,
-	cr *apiv1alpha1.PerconaServerMySQLBackup) {
+const finalizerDeleteBackup = "delete-backup"
+
+func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup) {
 	if cr.DeletionTimestamp == nil || cr.Status.State == apiv1alpha1.BackupStarting || cr.Status.State == apiv1alpha1.BackupRunning {
 		return
 	}
@@ -350,7 +351,8 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 		}
 	}()
 
-	if cr.Status.State == apiv1alpha1.BackupNew {
+	switch cr.Status.State {
+	case apiv1alpha1.BackupError, apiv1alpha1.BackupNew:
 		cr.Finalizers = nil
 		return
 	}
@@ -359,7 +361,7 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 	for _, finalizer := range cr.GetFinalizers() {
 		var err error
 		switch finalizer {
-		case "delete-backup":
+		case finalizerDeleteBackup:
 			var ok bool
 			ok, err = r.deleteBackup(ctx, cr)
 			if !ok {
@@ -403,11 +405,11 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 		}
 		accessKey, ok := s.Data[secret.CredentialsAWSAccessKey]
 		if !ok {
-			return nil, errors.Errorf("no credentials for Azure in secret %s", nn.Name)
+			return nil, errors.Errorf("no credentials for S3 in secret %s", nn.Name)
 		}
 		secretKey, ok := s.Data[secret.CredentialsAWSSecretKey]
 		if !ok {
-			return nil, errors.Errorf("no credentials for Azure in secret %s", nn.Name)
+			return nil, errors.Errorf("no credentials for S3 in secret %s", nn.Name)
 		}
 		conf.S3.Bucket = s3.Bucket.Bucket()
 		conf.S3.Region = s3.Region
@@ -424,11 +426,11 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 		}
 		accessKey, ok := s.Data[secret.CredentialsGCSAccessKey]
 		if !ok {
-			return nil, errors.Errorf("no credentials for Azure in secret %s", nn.Name)
+			return nil, errors.Errorf("no credentials for GCS in secret %s", nn.Name)
 		}
 		secretKey, ok := s.Data[secret.CredentialsGCSSecretKey]
 		if !ok {
-			return nil, errors.Errorf("no credentials for Azure in secret %s", nn.Name)
+			return nil, errors.Errorf("no credentials for GCS in secret %s", nn.Name)
 		}
 		conf.GCS.Bucket = gcs.Bucket.Bucket()
 		conf.GCS.EndpointURL = gcs.EndpointURL
