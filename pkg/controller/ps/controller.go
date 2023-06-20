@@ -44,6 +44,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
@@ -205,7 +206,11 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		}
 		defer db.Close()
 
-		mysh := mysqlsh.New(k8sexec.New(), firstPodUri)
+		c, err := clientcmd.NewClient()
+		if err != nil {
+			return err
+		}
+		mysh := mysqlsh.NewWithExec(c, &firstPod, firstPodUri)
 
 		log.Info("Removing instances from GR")
 		for _, pod := range pods {
@@ -228,7 +233,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
 
 			log.Info("Removing member from GR", "member", pod.Name, "memberState", state)
-			err = mysh.RemoveInstance(ctx, cr.InnoDBClusterName(), podUri)
+			err = mysh.RemoveInstanceWithExec(ctx, cr.InnoDBClusterName(), podUri)
 			if err != nil {
 				return errors.Wrapf(err, "remove instance %s", pod.Name)
 			}
@@ -829,10 +834,13 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		return nil
 	}
 
+
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 	if err != nil {
 		return errors.Wrap(err, "get operator password")
 	}
+
+
 
 	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, mysql.ServiceName(cr))
 	mysh := mysqlsh.New(k8sexec.New(), uri)

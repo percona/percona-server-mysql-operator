@@ -120,6 +120,10 @@ gen-versionservice-client: swagger
 build: generate ## Build docker image with the manager.
 	ROOT_REPO=$(ROOT_REPO) VERSION=$(VERSION) IMAGE=$(IMAGE) $(ROOT_REPO)/e2e-tests/build
 
+.PHONY: run
+run: manifests generate fmt vet ## Run a controller from your host.
+	go run ./cmd/manager/main.go
+
 ##@ Deployment
 
 install: manifests ## Install CRDs, rbac

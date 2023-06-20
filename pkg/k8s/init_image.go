@@ -48,6 +48,12 @@ func InitImage(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaSer
 }
 
 func OperatorImage(ctx context.Context, cl client.Reader) (string, error) {
+	var imageEnvVar = "OPERATOR_IMAGE"
+	image, found := os.LookupEnv(imageEnvVar)
+	if found {
+		return image, nil
+	}
+
 	pod, err := operatorPod(ctx, cl)
 	if err != nil {
 		return "", errors.Wrap(err, "get operator pod")

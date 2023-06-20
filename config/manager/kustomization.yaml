@@ -13,4 +13,4 @@ kind: Kustomization
 images:
 - name: perconalab/percona-server-mysql-operator
   newName: perconalab/percona-server-mysql-operator
-  newTag: k8sps-239
+  newTag: k8sps-205-update-users-individually
