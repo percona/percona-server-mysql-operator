@@ -48,7 +48,6 @@ func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr
 func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileUsers")
 
-	log.Info("AAAAAAAAAAAAAAAAAA reconcile users")
 	secret := &corev1.Secret{}
 	nn := types.NamespacedName{Name: cr.Spec.SecretsName, Namespace: cr.Namespace}
 	if err := r.Client.Get(ctx, nn, secret); err != nil {
@@ -139,8 +138,6 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		updatedUsers = append(updatedUsers, mysqlUser)
 	}
 
-	log.Info("AAAAAAAAAAAAAAAAAA have updated users", "updatedUsers", updatedUsers)
-
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 	if err != nil {
 		return errors.Wrap(err, "get operator password")
@@ -169,7 +166,6 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	if err := um.UpdateUserPasswords(updatedUsers); err != nil {
 		return errors.Wrapf(err, "update passwords")
 	}
-	log.Info("AAAAAAAAAAAAAAAAAA usrs updated", "updatedUsers", updatedUsers)
 
 	if restartReplication {
 		var updatedReplicaPass string
@@ -238,7 +234,6 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return errors.Wrap(err, "discard old passwords")
 	}
 
-	log.Info("AAAAAAAAAAAAAAAAAA discarded old passwords")
 	log.Info("Discarded old user passwords")
 
 	internalSecret.Data = secret.DeepCopy().Data
@@ -246,7 +241,6 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return errors.Wrapf(err, "update Secret/%s", internalSecret.Name)
 	}
 
-	log.Info("AAAAAAAAAAAAAAAAAA discarded old passwords")
 	log.Info("Updated internal secret", "secretName", cr.InternalSecretName())
 
 	return nil

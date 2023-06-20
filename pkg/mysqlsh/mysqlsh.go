@@ -114,17 +114,17 @@ func (m *mysqlsh) CreateCluster(ctx context.Context, clusterName string) error {
 	return nil
 }
 
-func (m *mysqlsh) DoesClusterExist(ctx context.Context, clusterName string) bool {
-	log := logf.FromContext(ctx)
+// func (m *mysqlsh) DoesClusterExist(ctx context.Context, clusterName string) bool {
+// 	log := logf.FromContext(ctx)
 
-	cmd := fmt.Sprintf("dba.getCluster('%s').status()", clusterName)
-	err := m.run(ctx, cmd)
-	if err != nil {
-		log.Error(err, "failed to get cluster status")
-	}
+// 	cmd := fmt.Sprintf("dba.getCluster('%s').status()", clusterName)
+// 	err := m.run(ctx, cmd)
+// 	if err != nil {
+// 		log.Error(err, "failed to get cluster status")
+// 	}
 
-	return err == nil
-}
+// 	return err == nil
+// }
 
 func (m *mysqlsh) ClusterStatus(ctx context.Context, clusterName string) (innodbcluster.Status, error) {
 	var errb, outb bytes.Buffer

@@ -38,7 +38,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	k8sretry "k8s.io/client-go/util/retry"
-	k8sexec "k8s.io/utils/exec"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -834,20 +833,41 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		return nil
 	}
 
+	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
+	if err != nil {
+		return errors.Wrap(err, "get pods")
+	}
+
+	// the last pod left - we can leave it for the stateful set
+	if len(pods) <= 1 {
+		time.Sleep(time.Second * 3)
+		log.Info("Cluster deleted")
+		return nil
+	}
+
+	var firstPod corev1.Pod
+	for _, p := range pods {
+		if p.GetName() == mysql.PodName(cr, 0) {
+			firstPod = p
+			break
+		}
+	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 	if err != nil {
 		return errors.Wrap(err, "get operator password")
 	}
 
-
-
 	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, mysql.ServiceName(cr))
-	mysh := mysqlsh.New(k8sexec.New(), uri)
+	c, err := clientcmd.NewClient()
+	if err != nil {
+		return err
+	}
+	mysh := mysqlsh.NewWithExec(c, &firstPod, uri)
 
 	cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1alpha1.ConditionInnoDBClusterBootstrapped)
 	if cond == nil || cond.Status == metav1.ConditionFalse {
-		if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
+		if !mysh.DoesClusterExistWithExec(ctx, cr.InnoDBClusterName()) {
 			log.V(1).Info("InnoDB cluster is not created yet")
 			return nil
 		}
@@ -863,7 +883,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		return nil
 	}
 
-	if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
+	if !mysh.DoesClusterExistWithExec(ctx, cr.InnoDBClusterName()) {
 		return errors.New("InnoDB cluster is already bootstrapped, but failed to check its status")
 	}
 
@@ -989,14 +1009,39 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 			return nil
 		}
 
+		pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
+		if err != nil {
+			return errors.Wrap(err, "get pods")
+		}
+
+		// the last pod left - we can leave it for the stateful set
+		if len(pods) <= 1 {
+			time.Sleep(time.Second * 3)
+			log.Info("Cluster deleted")
+			return nil
+		}
+
+		var firstPod corev1.Pod
+		for _, p := range pods {
+			if p.GetName() == mysql.PodName(cr, 0) {
+				firstPod = p
+				break
+			}
+		}
+
 		operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 		if err != nil {
 			return errors.Wrap(err, "get operator password")
 		}
 
 		firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
-		mysh := mysqlsh.New(k8sexec.New(), fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri))
-		if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
+		aa := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri)
+		c, err := clientcmd.NewClient()
+		if err != nil {
+			return err
+		}
+		mysh := mysqlsh.NewWithExec(c, &firstPod, aa)
+		if !mysh.DoesClusterExistWithExec(ctx, cr.InnoDBClusterName()) {
 			log.V(1).Info("Waiting for InnoDB Cluster", "cluster", cr.Name)
 			return nil
 		}
@@ -1092,13 +1137,40 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 		return false, errors.Wrap(err, "get operator password")
 	}
 
-	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
-	mysh := mysqlsh.New(k8sexec.New(), fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri))
-	if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
+	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
+	if err != nil {
+		return false, errors.Wrap(err, "get pods")
+	}
+
+	// the last pod left - we can leave it for the stateful set
+	if len(pods) <= 1 {
+		time.Sleep(time.Second * 3)
+		log.Info("Cluster deleted")
 		return false, nil
 	}
 
-	status, err := mysh.ClusterStatus(ctx, cr.InnoDBClusterName())
+	var firstPod corev1.Pod
+	for _, p := range pods {
+		if p.GetName() == mysql.PodName(cr, 0) {
+			firstPod = p
+			break
+		}
+	}
+
+	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
+	aa := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri)
+
+	c, err := clientcmd.NewClient()
+	if err != nil {
+		return false, err
+	}
+	mysh := mysqlsh.NewWithExec(c, &firstPod, aa)
+
+	if !mysh.DoesClusterExistWithExec(ctx, cr.InnoDBClusterName()) {
+		return false, nil
+	}
+
+	status, err := mysh.ClusterStatusWithExec(ctx, cr.InnoDBClusterName())
 	if err != nil {
 		return false, errors.Wrap(err, "get cluster status")
 	}

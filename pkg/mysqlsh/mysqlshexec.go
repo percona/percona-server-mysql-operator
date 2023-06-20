@@ -33,22 +33,12 @@ func (m *mysqlshExec) runWithExec(ctx context.Context, cmd string) error {
 	stderrBuffer := bytes.Buffer{}
 
 	c := []string{"mysqlsh", "--no-wizard", "--uri", m.uri, "-e", cmd}
-	err := m.client.Exec(ctx, m.pod, "memcached", c, nil, &stdoutBuffer, &stderrBuffer, false)
+	err := m.client.Exec(ctx, m.pod, "mysql", c, nil, &stdoutBuffer, &stderrBuffer, false)
 	if err != nil {
 		sout := sensitiveRegexp.ReplaceAllString(outb.String(), ":*****@")
 		serr := sensitiveRegexp.ReplaceAllString(errb.String(), ":*****@")
 		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, sout, serr)
 	}
-
-	// c := m.exec.CommandContext(ctx, "mysqlsh", args...)
-	// c.SetStdout(&outb)
-	// c.SetStderr(&errb)
-
-	// if err := c.Run(); err != nil {
-	// 	sout := sensitiveRegexp.ReplaceAllString(outb.String(), ":*****@")
-	// 	serr := sensitiveRegexp.ReplaceAllString(errb.String(), ":*****@")
-	// 	return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, sout, serr)
-	// }
 
 	return nil
 }
@@ -134,19 +124,21 @@ func (m *mysqlshExec) DoesClusterExistWithExec(ctx context.Context, clusterName 
 }
 
 func (m *mysqlshExec) ClusterStatusWithExec(ctx context.Context, clusterName string) (innodbcluster.Status, error) {
-	var errb, outb bytes.Buffer
-
-	c := []string{"--result-format", "json", "--uri", m.uri, "--cluster", "--", "cluster", "status"}
-
 	status := innodbcluster.Status{}
 
-	if err := m.runWithExec(ctx, strings.Join(c, " ")); err != nil {
-		sout := sensitiveRegexp.ReplaceAllString(outb.String(), ":*****@")
-		serr := sensitiveRegexp.ReplaceAllString(errb.String(), ":*****@")
-		return status, errors.Wrapf(err, "run Cluster.status(), stdout: %s, stderr: %s", sout, serr)
+	stdoutBuffer := bytes.Buffer{}
+	stderrBuffer := bytes.Buffer{}
+
+	c := []string{"mysqlsh", "--result-format", "json", "--uri", m.uri, "--cluster", "--", "cluster", "status"}
+
+	err := m.client.Exec(ctx, m.pod, "mysql", c, nil, &stdoutBuffer, &stderrBuffer, false)
+	if err != nil {
+		sout := sensitiveRegexp.ReplaceAllString(stdoutBuffer.String(), ":*****@")
+		serr := sensitiveRegexp.ReplaceAllString(stderrBuffer.String(), ":*****@")
+		return status, errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", c, sout, serr)
 	}
 
-	if err := json.Unmarshal(outb.Bytes(), &status); err != nil {
+	if err := json.Unmarshal(stdoutBuffer.Bytes(), &status); err != nil {
 		return status, errors.Wrap(err, "unmarshal status")
 	}
 
