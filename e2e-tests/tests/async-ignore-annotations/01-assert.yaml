@@ -93,6 +93,10 @@ spec:
     port: 3309
     protocol: TCP
     targetPort: 3309
+  - name: mysqlx
+    port: 33060
+    protocol: TCP
+    targetPort: 33060
   selector:
     app.kubernetes.io/component: haproxy
     app.kubernetes.io/instance: async-ignore-annotations

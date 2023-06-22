@@ -793,7 +793,7 @@ func (cr *PerconaServerMySQL) InternalSecretName() string {
 }
 
 func (cr *PerconaServerMySQL) PMMEnabled(secret *corev1.Secret) bool {
-	if cr.Spec.PMM != nil && cr.Spec.PMM.Enabled && secret.Data != nil {
+	if cr.Spec.PMM != nil && cr.Spec.PMM.Enabled && secret != nil && secret.Data != nil {
 		return cr.Spec.PMM.HasSecret(secret)
 	}
 	return false

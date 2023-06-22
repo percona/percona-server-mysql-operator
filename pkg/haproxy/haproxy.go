@@ -1,6 +1,8 @@
 package haproxy
 
 import (
+	"strconv"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -8,6 +10,7 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/pmm"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
@@ -20,9 +23,11 @@ const (
 )
 
 const (
-	PortMySQL         = 3306
-	PortMySQLReplicas = 3307
-	PortProxyProtocol = 3309
+	PortMySQL          = 3306
+	PortMySQLReplicas  = 3307
+	PortProxyProtocol  = 3309
+	PortMySQLXProtocol = 33060
+	PortPMMStats       = 8404
 )
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
@@ -39,7 +44,7 @@ func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 		cr.Labels())
 }
 
-func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
+func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.Service {
 	expose := cr.Spec.Proxy.HAProxy.Expose
 
 	labels := MatchLabels(cr)
@@ -59,6 +64,32 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 		externalTrafficPolicy = expose.ExternalTrafficPolicy
 	}
 
+	ports := []corev1.ServicePort{
+		{
+			Name: "mysql",
+			Port: int32(PortMySQL),
+		},
+		{
+			Name: "mysql-replicas",
+			Port: int32(PortMySQLReplicas),
+		},
+		{
+			Name: "proxy-protocol",
+			Port: int32(PortProxyProtocol),
+		},
+		{
+			Name: "mysqlx",
+			Port: int32(PortMySQLXProtocol),
+		},
+	}
+
+	if cr.PMMEnabled(secret) {
+		ports = append(ports, corev1.ServicePort{
+			Name: "pmm-stats",
+			Port: int32(PortPMMStats),
+		})
+	}
+
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -71,21 +102,8 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Annotations: expose.Annotations,
 		},
 		Spec: corev1.ServiceSpec{
-			Type: serviceType,
-			Ports: []corev1.ServicePort{
-				{
-					Name: "mysql",
-					Port: int32(PortMySQL),
-				},
-				{
-					Name: "mysql-replicas",
-					Port: int32(PortMySQLReplicas),
-				},
-				{
-					Name: "proxy-protocol",
-					Port: int32(PortProxyProtocol),
-				},
-			},
+			Type:                     serviceType,
+			Ports:                    ports,
 			Selector:                 labels,
 			LoadBalancerIP:           loadBalancerIP,
 			LoadBalancerSourceRanges: loadBalancerSourceRanges,
@@ -95,8 +113,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.StatefulSet {
-
+func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string, secret *corev1.Secret) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 
 	return &appsv1.StatefulSet{
@@ -130,7 +147,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.S
 							cr.Spec.Proxy.HAProxy.ContainerSecurityContext,
 						),
 					},
-					Containers:       containers(cr),
+					Containers:       containers(cr, secret),
 					Affinity:         cr.Spec.Proxy.HAProxy.GetAffinity(labels),
 					ImagePullSecrets: cr.Spec.Proxy.HAProxy.ImagePullSecrets,
 					// TerminationGracePeriodSeconds: 30,
@@ -174,11 +191,23 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.S
 	}
 }
 
-func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
-	return []corev1.Container{
+func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []corev1.Container {
+	containers := []corev1.Container{
 		haproxyContainer(cr),
 		mysqlMonitContainer(cr),
 	}
+	if cr.PMMEnabled(secret) {
+		pmmC := pmm.Container(cr, secret, componentName)
+
+		pmmC.Env = append(pmmC.Env, corev1.EnvVar{
+			Name:  "PMM_ADMIN_CUSTOM_PARAMS",
+			Value: "--listen-port=" + strconv.Itoa(PortPMMStats),
+		})
+		pmmC.Ports = append(pmmC.Ports, corev1.ContainerPort{ContainerPort: PortPMMStats})
+
+		containers = append(containers, pmmC)
+	}
+	return containers
 }
 
 func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
@@ -204,6 +233,10 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			{
 				Name:          "proxy-protocol",
 				ContainerPort: int32(PortProxyProtocol),
+			},
+			{
+				Name:          "mysqlx",
+				ContainerPort: int32(PortMySQLXProtocol),
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
