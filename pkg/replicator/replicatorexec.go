@@ -20,9 +20,10 @@ type dbImplExec struct {
 	pod    *corev1.Pod
 	user   apiv1alpha1.SystemUser
 	pass   string
+	host   string
 }
 
-func NewReplicatorExec(pod *corev1.Pod, user apiv1alpha1.SystemUser, pass string) (Replicator, error) {
+func NewReplicatorExec(pod *corev1.Pod, user apiv1alpha1.SystemUser, pass, host string) (Replicator, error) {
 	// config := mysql.NewConfig()
 
 	// config.User = string(user)
@@ -51,16 +52,16 @@ func NewReplicatorExec(pod *corev1.Pod, user apiv1alpha1.SystemUser, pass string
 		return nil, err
 	}
 
-	return &dbImplExec{client: c, pod: pod, user: user, pass: pass}, nil
+	return &dbImplExec{client: c, pod: pod, user: user, pass: pass, host: host}, nil
 }
 
 func (d *dbImplExec) exec(query string, stdout, stderr io.Writer) error {
-	cmd := []string{"mysql", "-p", d.pass, "-u", string(d.user), "-e", query}
+	cmd := []string{"mysql", "--database", "performance_schema", fmt.Sprintf("-p%s", d.pass), "-u", string(d.user), "-h", d.host, "-e", query}
 
 	println("exec() ================")
 	println(query)
 	println("----------------------------------")
-	println(cmd)
+	println(fmt.Sprintf("%v", cmd))
 	println("exec() ================")
 
 	err := d.client.Exec(context.TODO(), d.pod, "mysql", cmd, nil, stdout, stderr, false)
