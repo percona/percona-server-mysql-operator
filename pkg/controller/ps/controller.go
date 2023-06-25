@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
@@ -199,7 +200,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		firstPodFQDN := fmt.Sprintf("%s.%s.%s", firstPod.Name, mysql.ServiceName(cr), cr.Namespace)
 		firstPodUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodFQDN)
 
-		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, firstPodFQDN, mysql.DefaultAdminPort)
+		db, err := replicator.NewReplicatorExec(&firstPod, v1alpha1.UserOperator, operatorPass)
 		if err != nil {
 			return errors.Wrapf(err, "connect to %s", firstPod.Name)
 		}
@@ -910,10 +911,13 @@ func reconcileReplicationSemiSync(
 		return errors.Wrap(err, "get operator password")
 	}
 
-	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator,
-		operatorPass,
-		primaryHost,
-		mysql.DefaultAdminPort)
+	firstPod, err := GetPod(ctx, cl, cr, 0)
+	if err != nil {
+		return err
+	}
+
+	db, err := replicator.NewReplicatorExec(firstPod, apiv1alpha1.UserOperator,
+		operatorPass)
 	if err != nil {
 		return errors.Wrapf(err, "connect to %v", primaryHost)
 	}
@@ -1414,7 +1418,13 @@ func (r *PerconaServerMySQLReconciler) getPrimaryFromGR(ctx context.Context, cr 
 	}
 
 	fqdn := mysql.FQDN(cr, 0)
-	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, fqdn, mysql.DefaultAdminPort)
+
+	firstPod, err := GetPod(ctx, r.Client, cr, 0)
+	if err != nil {
+		return "", err
+	}
+
+	db, err := replicator.NewReplicatorExec(firstPod, apiv1alpha1.UserOperator, operatorPass)
 	if err != nil {
 		return "", errors.Wrapf(err, "open connection to %s", fqdn)
 	}
@@ -1452,7 +1462,12 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 		return errors.Wrap(err, "get operator password")
 	}
 
-	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, primary.Key.Hostname, mysql.DefaultAdminPort)
+	firstPod, err := GetPod(ctx, r.Client, cr, 0)
+	if err != nil {
+		return err
+	}
+
+	db, err := replicator.NewReplicatorExec(firstPod, apiv1alpha1.UserOperator, operatorPass)
 	if err != nil {
 		return errors.Wrap(err, "open connection to primary")
 	}
@@ -1467,7 +1482,11 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 		hostname := replica.Hostname
 		port := replica.Port
 		g.Go(func() error {
-			repDb, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, hostname, port)
+			pod, err := GetPod(ctx, r.Client, cr, 0)
+			if err != nil {
+				return err
+			}
+			repDb, err := replicator.NewReplicatorExec(pod, apiv1alpha1.UserOperator, operatorPass)
 			if err != nil {
 				return errors.Wrapf(err, "connect to replica %s", hostname)
 			}
@@ -1517,12 +1536,11 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 		hostname := replica.Hostname
 		port := replica.Port
 		g.Go(func() error {
-			db, err := replicator.NewReplicator(
-				apiv1alpha1.UserOperator,
-				operatorPass,
-				hostname,
-				mysql.DefaultAdminPort,
-			)
+			pod, err := GetPod(ctx, r.Client, cr, 0)
+			if err != nil {
+				return err
+			}
+			db, err := replicator.NewReplicatorExec(pod, apiv1alpha1.UserOperator, operatorPass)
 			if err != nil {
 				return errors.Wrapf(err, "get db connection to %s", hostname)
 			}
@@ -1555,7 +1573,11 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 	}
 
 	hostname := mysql.FQDN(cr, 0)
-	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, hostname, mysql.DefaultAdminPort)
+	firstPod, err := GetPod(ctx, r.Client, cr, 0)
+	if err != nil {
+		return err
+	}
+	db, err := replicator.NewReplicatorExec(firstPod, apiv1alpha1.UserOperator, operatorPass)
 	if err != nil {
 		return errors.Wrapf(err, "get db connection to %s", hostname)
 	}
@@ -1616,4 +1638,29 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 	log.V(1).Info("Started group replication", "hostname", primary)
 
 	return nil
+}
+
+func GetPod(ctx context.Context, cl client.Reader, cr *v1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
+	//TODO: get single pod directly without getting all of them
+	pods, err := k8s.PodsByLabels(ctx, cl, mysql.MatchLabels(cr))
+	if err != nil {
+		return nil, errors.Wrap(err, "get pods")
+	}
+
+	// the last pod left - we can leave it for the stateful set
+	if len(pods) <= 1 {
+		time.Sleep(time.Second * 3)
+		println("GetFirstPod() --- cluster, deleted")
+		return nil, errors.New("cluster deleted")
+	}
+
+	var pod corev1.Pod
+	for _, p := range pods {
+		if p.GetName() == mysql.PodName(cr, idx) {
+			pod = p
+			break
+		}
+	}
+
+	return &pod, nil
 }

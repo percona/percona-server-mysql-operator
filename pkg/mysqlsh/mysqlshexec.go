@@ -29,11 +29,8 @@ func NewWithExec(client *clientcmd.Client, pod *corev1.Pod, uri string) *mysqlsh
 func (m *mysqlshExec) runWithExec(ctx context.Context, cmd string) error {
 	var errb, outb bytes.Buffer
 
-	stdoutBuffer := bytes.Buffer{}
-	stderrBuffer := bytes.Buffer{}
-
 	c := []string{"mysqlsh", "--no-wizard", "--uri", m.uri, "-e", cmd}
-	err := m.client.Exec(ctx, m.pod, "mysql", c, nil, &stdoutBuffer, &stderrBuffer, false)
+	err := m.client.Exec(ctx, m.pod, "mysql", c, nil, &outb, &errb, false)
 	if err != nil {
 		sout := sensitiveRegexp.ReplaceAllString(outb.String(), ":*****@")
 		serr := sensitiveRegexp.ReplaceAllString(errb.String(), ":*****@")
