@@ -23,10 +23,11 @@ const (
 )
 
 const (
-	PortMySQL         = 3306
-	PortMySQLReplicas = 3307
-	PortProxyProtocol = 3309
-	PortPMMStats      = 8404
+	PortMySQL          = 3306
+	PortMySQLReplicas  = 3307
+	PortProxyProtocol  = 3309
+	PortMySQLXProtocol = 33060
+	PortPMMStats       = 8404
 )
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
@@ -75,6 +76,10 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 		{
 			Name: "proxy-protocol",
 			Port: int32(PortProxyProtocol),
+		},
+		{
+			Name: "mysqlx",
+			Port: int32(PortMySQLXProtocol),
 		},
 	}
 
@@ -228,6 +233,10 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			{
 				Name:          "proxy-protocol",
 				ContainerPort: int32(PortProxyProtocol),
+			},
+			{
+				Name:          "mysqlx",
+				ContainerPort: int32(PortMySQLXProtocol),
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
