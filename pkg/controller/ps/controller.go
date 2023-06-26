@@ -940,10 +940,6 @@ func (r *PerconaServerMySQLReconciler) reconcileReplicationSemiSync(
 	}
 	log.V(1).Info("Set semi-sync source", "host", primaryHost)
 
-	log.Info("++++++++++++++++++++++++++++++++++++++++++++++++++")
-	_, _, _ = db.ReplicationStatus()
-	log.Info("++++++++++++++++++++++++++++++++++++++++++++++++++")
-
 	if err := db.SetSemiSyncSize(cr.MySQLSpec().SizeSemiSync.IntValue()); err != nil {
 		return errors.Wrapf(err, "set semi-sync size on %s", primaryHost)
 	}

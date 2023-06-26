@@ -7,6 +7,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/gocarina/gocsv"
@@ -50,6 +51,10 @@ func (d *dbImplExec) query(stm string, out interface{}) error {
 	err := d.exec(stm, &outb, &errb)
 	if err != nil {
 		return err
+	}
+
+	if !strings.Contains(errb.String(), "ERROR") && outb.Len() == 0 {
+		return sql.ErrNoRows
 	}
 
 	r := csv.NewReader(bytes.NewReader(outb.Bytes()))
@@ -108,13 +113,17 @@ func (d *dbImplExec) ResetReplication() error {
 }
 
 func (d *dbImplExec) ReplicationStatus() (ReplicationStatus, string, error) {
-	var errb, outb bytes.Buffer
+	rows := []*struct {
+		ioState  string `csv:"iostate"`
+		sqlState string `csv:"sqlstate"`
+		host     string `csv:"host"`
+	}{}
 
 	q := fmt.Sprintf(`
         SELECT
-	    connection_status.SERVICE_STATE,
-	    applier_status.SERVICE_STATE,
-            HOST
+	    connection_status.SERVICE_STATE as iostate,
+	    applier_status.SERVICE_STATE as sqlstate,
+            HOST as host,
         FROM replication_connection_status connection_status
         JOIN replication_connection_configuration connection_configuration
             ON connection_status.channel_name = connection_configuration.channel_name
@@ -122,28 +131,11 @@ func (d *dbImplExec) ReplicationStatus() (ReplicationStatus, string, error) {
             ON connection_status.channel_name = applier_status.channel_name
         WHERE connection_status.channel_name = '%s'
 		`, DefaultChannelName)
-	err := d.exec(q, &outb, &errb)
-
-
+	err := d.query(q, &rows)
 	if err != nil {
-		return ReplicationStatusActive, "", err
-	}
-
-	if outb.Len() == 0 {
-		return ReplicationStatusNotInitiated, "", nil
-	}
-
-	r := csv.NewReader(bytes.NewReader(outb.Bytes()))
-	r.Comma = '\t'
-
-	type row struct {
-		ioState  string `csv:"ioState"`
-		sqlState string `csv:"sqlState"`
-		host     string `csv:"host"`
-	}
-
-	rows := []*row{}
-	if err := gocsv.UnmarshalCSV(r, &rows); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ReplicationStatusNotInitiated, "", nil
+		}
 		return ReplicationStatusActive, "", err
 	}
 
