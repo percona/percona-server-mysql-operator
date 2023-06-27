@@ -46,9 +46,9 @@ func (d *dbImplExec) exec(stm string, stdout, stderr io.Writer) error {
 	return nil
 }
 
-func (d *dbImplExec) query(stm string, out interface{}) error {
+func (d *dbImplExec) query(query string, out interface{}) error {
 	var errb, outb bytes.Buffer
-	err := d.exec(stm, &outb, &errb)
+	err := d.exec(query, &outb, &errb)
 	if err != nil {
 		return err
 	}
@@ -57,10 +57,10 @@ func (d *dbImplExec) query(stm string, out interface{}) error {
 		return sql.ErrNoRows
 	}
 
-	r := csv.NewReader(bytes.NewReader(outb.Bytes()))
-	r.Comma = '\t'
+	csv := csv.NewReader(bytes.NewReader(outb.Bytes()))
+	csv.Comma = '\t'
 
-	if err = gocsv.UnmarshalCSV(r, out); err != nil {
+	if err = gocsv.UnmarshalCSV(csv, out); err != nil {
 		return err
 	}
 
@@ -114,9 +114,9 @@ func (d *dbImplExec) ResetReplication() error {
 
 func (d *dbImplExec) ReplicationStatus() (ReplicationStatus, string, error) {
 	rows := []*struct {
-		ioState  string `csv:"iostate"`
-		sqlState string `csv:"sqlstate"`
-		host     string `csv:"host"`
+		IoState  string `csv:"iostate"`
+		SqlState string `csv:"sqlstate"`
+		Host     string `csv:"host"`
 	}{}
 
 	q := fmt.Sprintf(`
@@ -139,8 +139,8 @@ func (d *dbImplExec) ReplicationStatus() (ReplicationStatus, string, error) {
 		return ReplicationStatusActive, "", err
 	}
 
-	if rows[0].ioState == "ON" && rows[0].sqlState == "ON" {
-		return ReplicationStatusActive, rows[0].host, nil
+	if rows[0].IoState == "ON" && rows[0].SqlState == "ON" {
+		return ReplicationStatusActive, rows[0].Host, nil
 	}
 
 	return ReplicationStatusActive, "", err
@@ -157,54 +157,73 @@ func (d *dbImplExec) EnableSuperReadonly() error {
 	return errors.Wrap(err, "set global super_read_only param to 1")
 }
 
-// TODO: finish implementation
 func (d *dbImplExec) IsReadonly() (bool, error) {
-	var readonly int
+	rows := []*struct {
+		Readonly int `csv:"readonly"`
+	}{}
 
-	var errb, outb bytes.Buffer
+	err := d.query("select @@read_only and @@super_read_only as readonly", &rows)
+	if err != nil {
+		return false, err
+	}
 
-	err := d.exec("select @@read_only and @@super_read_only", &outb, &errb)
-
-	return readonly == 1, errors.Wrap(err, "select global read_only param")
+	return rows[0].Readonly == 1, nil
 }
 
-// TODO: finish implementation
 func (d *dbImplExec) ReportHost() (string, error) {
-	var reportHost string
+	rows := []*struct {
+		Host string `csv:"host"`
+	}{}
 
-	var errb, outb bytes.Buffer
-	err := d.exec("select @@report_host", &outb, &errb)
+	err := d.query("select @@report_host as host", &rows)
+	if err != nil {
+		return "", err
+	}
 
-	return reportHost, errors.Wrap(err, "select report_host param")
+	return rows[0].Host, nil
 }
 
 func (d *dbImplExec) Close() error {
 	return nil
 }
 
-// TODO: finish implementation
 func (d *dbImplExec) CloneInProgress() (bool, error) {
-	var errb, outb bytes.Buffer
-	err := d.exec("SELECT STATE FROM clone_status", &outb, &errb)
+	rows := []*struct {
+		State string `csv:"state"`
+	}{}
+	err := d.query("SELECT STATE FROM clone_status as state", &rows)
 	if err != nil {
 		return false, errors.Wrap(err, "fetch clone status")
+	}
+
+	for _, row := range rows {
+		if row.State != "Completed" && row.State != "Failed" {
+			return true, nil
+		}
 	}
 
 	return false, nil
 }
 
-// TODO: finish implementation
 func (d *dbImplExec) NeedsClone(donor string, port int32) (bool, error) {
-	var errb, outb bytes.Buffer
-	err := d.exec("SELECT SOURCE, STATE FROM clone_status", &outb, &errb)
+	rows := []*struct {
+		Source string `csv:"source"`
+		State  string `csv:"state"`
+	}{}
+	err := d.query("SELECT SOURCE as source, STATE as state FROM clone_status", &rows)
 	if err != nil {
 		return false, errors.Wrap(err, "fetch clone status")
+	}
+
+	for _, row := range rows {
+		if row.Source == fmt.Sprintf("%s:%d", donor, port) && row.State == "Completed" {
+			return false, nil
+		}
 	}
 
 	return true, nil
 }
 
-// TODO: finish implementation
 func (d *dbImplExec) Clone(donor, user, pass string, port int32) error {
 	var errb, outb bytes.Buffer
 	q := fmt.Sprintf("SET GLOBAL clone_valid_donor_list=%s", fmt.Sprintf("%s:%d", donor, port))
@@ -216,13 +235,12 @@ func (d *dbImplExec) Clone(donor, user, pass string, port int32) error {
 	q = fmt.Sprintf("CLONE INSTANCE FROM %s@%s:%d IDENTIFIED BY %s", user, donor, port, pass)
 	err = d.exec(q, &outb, &errb)
 
-	mErr, ok := err.(*mysql.MySQLError)
-	if !ok {
+	if strings.Contains(errb.String(), "ERROR") {
 		return errors.Wrap(err, "clone instance")
 	}
 
 	// Error 3707: Restart server failed (mysqld is not managed by supervisor process).
-	if mErr.Number == uint16(3707) {
+	if strings.Contains(errb.String(), "3707") {
 		return ErrRestartAfterClone
 	}
 
@@ -250,20 +268,29 @@ func (d *dbImplExec) SetSemiSyncSize(size int) error {
 	return errors.Wrap(err, "set rpl_semi_sync_master_wait_for_slave_count")
 }
 
-// TODO: finish implementation
 func (d *dbImplExec) GetGlobal(variable string) (interface{}, error) {
+	rows := []*struct {
+		Val interface{} `csv:"val"`
+	}{}
+
 	// TODO: check how to do this without being vulnerable to injection
-	var value interface{}
-	var errb, outb bytes.Buffer
-	err := d.exec(fmt.Sprintf("SELECT @@%s", variable), &outb, &errb)
-	return value, errors.Wrapf(err, "SELECT @@%s", variable)
+	err := d.query(fmt.Sprintf("SELECT @@%s as val", variable), &rows)
+	if err != nil {
+		return nil, errors.Wrapf(err, "SELECT @@%s", variable)
+	}
+
+	return rows[0].Val, nil
 }
 
 func (d *dbImplExec) SetGlobal(variable, value interface{}) error {
 	var errb, outb bytes.Buffer
 	q := fmt.Sprintf("SET GLOBAL %s=%s", variable, value)
 	err := d.exec(q, &outb, &errb)
-	return errors.Wrapf(err, "SET GLOBAL %s=%s", variable, value)
+	if err != nil {
+		return errors.Wrapf(err, "SET GLOBAL %s=%s", variable, value)
+
+	}
+	return nil
 }
 
 func (d *dbImplExec) StartGroupReplication(password string) error {
@@ -300,7 +327,6 @@ func (d *dbImplExec) ChangeGroupReplicationPassword(replicaPass string) error {
         `, apiv1alpha1.UserReplication, replicaPass)
 
 	err := d.exec(q, &outb, &errb)
-
 	if err != nil {
 		return errors.Wrap(err, "exec CHANGE REPLICATION SOURCE TO")
 	}
@@ -308,39 +334,44 @@ func (d *dbImplExec) ChangeGroupReplicationPassword(replicaPass string) error {
 	return nil
 }
 
-// TODO: finish implementation
 func (d *dbImplExec) GetGroupReplicationPrimary() (string, error) {
-	var host string
+	rows := []*struct {
+		Host string `csv:"host"`
+	}{}
 
-	var errb, outb bytes.Buffer
-	err := d.exec("SELECT MEMBER_HOST FROM replication_group_members WHERE MEMBER_ROLE='PRIMARY' AND MEMBER_STATE='ONLINE'", &outb, &errb)
+	err := d.query("SELECT MEMBER_HOST as host FROM replication_group_members WHERE MEMBER_ROLE='PRIMARY' AND MEMBER_STATE='ONLINE'", &rows)
 	if err != nil {
 		return "", errors.Wrap(err, "query primary member")
 	}
 
-	return host, nil
+	return rows[0].Host, nil
 }
 
 // TODO: finish implementation
 func (d *dbImplExec) GetGroupReplicationReplicas() ([]string, error) {
-	replicas := make([]string, 0)
+	rows := []*struct {
+		Host string `csv:"host"`
+	}{}
 
-	var errb, outb bytes.Buffer
-	err := d.exec("SELECT MEMBER_HOST FROM replication_group_members WHERE MEMBER_ROLE='SECONDARY' AND MEMBER_STATE='ONLINE'", &outb, &errb)
+	err := d.query("SELECT MEMBER_HOST as host FROM replication_group_members WHERE MEMBER_ROLE='SECONDARY' AND MEMBER_STATE='ONLINE'", &rows)
 	if err != nil {
 		return nil, errors.Wrap(err, "query replicas")
+	}
+
+	replicas := make([]string, 0)
+	for _, row := range rows {
+		replicas = append(replicas, row.Host)
 	}
 
 	return replicas, nil
 }
 
-// TODO: finish implementation
 func (d *dbImplExec) GetMemberState(host string) (MemberState, error) {
-	var state MemberState
-
-	var errb, outb bytes.Buffer
-	q := fmt.Sprintf(`SELECT MEMBER_STATE FROM replication_group_members WHERE MEMBER_HOST='%s'`, host)
-	err := d.exec(q, &outb, &errb)
+	rows := []*struct {
+		State MemberState `csv:"state"`
+	}{}
+	q := fmt.Sprintf(`SELECT MEMBER_STATE as state FROM replication_group_members WHERE MEMBER_HOST='%s'`, host)
+	err := d.query(q, &rows)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return MemberStateOffline, nil
@@ -348,28 +379,34 @@ func (d *dbImplExec) GetMemberState(host string) (MemberState, error) {
 		return MemberStateError, errors.Wrap(err, "query member state")
 	}
 
-	return state, nil
+	return rows[0].State, nil
 }
 
-// TODO: finish implementation
 func (d *dbImplExec) GetGroupReplicationMembers() ([]string, error) {
-	members := make([]string, 0)
+	rows := []*struct {
+		Member string `csv:"member"`
+	}{}
 
-	var errb, outb bytes.Buffer
-	err := d.exec("SELECT MEMBER_HOST FROM replication_group_members", &outb, &errb)
+	err := d.query("SELECT MEMBER_HOST as member FROM replication_group_members", &rows)
 	if err != nil {
 		return nil, errors.Wrap(err, "query members")
+	}
+
+	members := make([]string, 0)
+	for _, row := range rows {
+		members = append(members, row.Member)
 	}
 
 	return members, nil
 }
 
-// TODO: finish implementation
 func (d *dbImplExec) CheckIfDatabaseExists(name string) (bool, error) {
-	// var db string
+	rows := []*struct {
+		DB string `csv:"db"`
+	}{}
 
-	var outb, errb bytes.Buffer
-	err := d.exec(fmt.Sprintf("SHOW DATABASES LIKE %s", name), &outb, &errb)
+	q := fmt.Sprintf("SELECT SCHEMA_NAME AS db FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME LIKE '%s'", name)
+	err := d.query(q, &rows)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -383,10 +420,11 @@ func (d *dbImplExec) CheckIfDatabaseExists(name string) (bool, error) {
 
 // TODO: finish implementation
 func (d *dbImplExec) CheckIfInPrimaryPartition() (bool, error) {
-	var in bool
+	rows := []*struct {
+		In bool `csv:"in"`
+	}{}
 
-	var outb, errb bytes.Buffer
-	err := d.exec(`
+	err := d.query(`
 	SELECT
 		MEMBER_STATE = 'ONLINE'
 		AND (
@@ -405,17 +443,17 @@ func (d *dbImplExec) CheckIfInPrimaryPartition() (bool, error) {
 						performance_schema.replication_group_members
 				) / 2
 			) = 0
-		)
+		) as in
 	FROM
 		performance_schema.replication_group_members
 		JOIN performance_schema.replication_group_member_stats USING(member_id)
 	WHERE
 		member_id = @@glob, &outb, &errba
-	`, &outb, &errb)
+	`, &rows)
 
 	if err != nil {
 		return false, err
 	}
 
-	return in, nil
+	return rows[0].In, nil
 }
