@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
-	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -266,7 +266,6 @@ func TestCheckFinalizers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.cr.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 			tt.cr.Status.Storage = storage
 
 			job := xtrabackup.GetDeleteJob(tt.cr, new(xtrabackup.BackupConfig))
@@ -285,9 +284,20 @@ func TestCheckFinalizers(t *testing.T) {
 				Scheme:        scheme,
 				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
 			}
+			err := r.Delete(ctx, tt.cr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cr := new(apiv1alpha1.PerconaServerMySQLBackup)
+			if err := r.Get(ctx, types.NamespacedName{Name: tt.cr.Name, Namespace: tt.cr.Namespace}, cr); err != nil {
+				if k8serrors.IsNotFound(err) && len(cr.Finalizers) == 0 {
+					return
+				}
+				t.Fatal(err)
+			}
 
-			r.checkFinalizers(ctx, tt.cr)
-			if !reflect.DeepEqual(tt.cr.Finalizers, tt.expectedFinalizers) {
+			r.checkFinalizers(ctx, cr)
+			if !reflect.DeepEqual(cr.Finalizers, tt.expectedFinalizers) {
 				t.Fatalf("expected finalizers %v, got %v", tt.expectedFinalizers, tt.cr.Finalizers)
 			}
 		})
