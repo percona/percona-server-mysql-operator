@@ -226,7 +226,7 @@ func (d *dbImplExec) NeedsClone(donor string, port int32) (bool, error) {
 
 func (d *dbImplExec) Clone(donor, user, pass string, port int32) error {
 	var errb, outb bytes.Buffer
-	q := fmt.Sprintf("SET GLOBAL clone_valid_donor_list=%s", fmt.Sprintf("%s:%d", donor, port))
+	q := fmt.Sprintf("SET GLOBAL clone_valid_donor_list='%s'", fmt.Sprintf("%s:%d", donor, port))
 	err := d.exec(q, &outb, &errb)
 	if err != nil {
 		return errors.Wrap(err, "set clone_valid_donor_list")
@@ -295,7 +295,7 @@ func (d *dbImplExec) SetGlobal(variable, value interface{}) error {
 
 func (d *dbImplExec) StartGroupReplication(password string) error {
 	var errb, outb bytes.Buffer
-	q := fmt.Sprintf("START GROUP_REPLICATION USER=%s, PASSWORD=%s", apiv1alpha1.UserReplication, password)
+	q := fmt.Sprintf("START GROUP_REPLICATION USER='%s', PASSWORD='%s'", apiv1alpha1.UserReplication, password)
 	err := d.exec(q, &outb, &errb)
 
 	mErr, ok := err.(*mysql.MySQLError)
