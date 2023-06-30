@@ -543,8 +543,12 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfiguration(
 			return "", errors.Wrapf(err, "check if ConfigMap/%s exists", cmName)
 		}
 
-		if !exists || !metav1.IsControlledBy(currCm, cr) {
-			//ConfigMap exists and is created by the user
+		if !exists {
+			return "", nil
+		}
+
+		if exists && !metav1.IsControlledBy(currCm, cr) {
+			//ConfigMap exists and is created by the user, not the operator
 
 			d := struct{ Data map[string]string }{Data: currCm.Data}
 			data, err := json.Marshal(d)
@@ -1030,8 +1034,12 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouterConfiguration(ctx con
 			return "", errors.Wrapf(err, "check if ConfigMap/%s exists", cmName)
 		}
 
-		if !exists || !metav1.IsControlledBy(currCm, cr) {
-			//ConfigMap exists and is created by the user
+		if !exists {
+			return "", nil
+		}
+
+		if exists && !metav1.IsControlledBy(currCm, cr) {
+			//ConfigMap exists and is created by the user, not the operator
 
 			d := struct{ Data map[string]string }{Data: currCm.Data}
 			data, err := json.Marshal(d)
