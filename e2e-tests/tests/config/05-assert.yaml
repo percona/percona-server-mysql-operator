@@ -17,7 +17,7 @@ kind: StatefulSet
 metadata:
   name: config-mysql
 status:
-  observedGeneration: 5
+  observedGeneration: 4
   readyReplicas: 3
   replicas: 3
   updatedReplicas: 3
