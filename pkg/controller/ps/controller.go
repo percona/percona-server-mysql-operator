@@ -44,7 +44,6 @@ import (
 
 	"github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
@@ -184,7 +183,6 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 	}
 
 	if cr.Spec.MySQL.IsAsync() {
-		// orcHost := orchestrator.APIHost(cr)
 		orcPod, err := GetOrcPod(ctx, r.Client, cr, 0)
 		if err != nil {
 			return nil
@@ -210,11 +208,10 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		}
 		defer db.Close()
 
-		c, err := clientcmd.NewClient()
+		mysh, err := mysqlsh.NewWithExec(&firstPod, firstPodUri)
 		if err != nil {
 			return err
 		}
-		mysh := mysqlsh.NewWithExec(c, &firstPod, firstPodUri)
 
 		log.Info("Removing instances from GR")
 		for _, pod := range pods {
@@ -662,7 +659,6 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return nil
 	}
 
-	// orcHost := orchestrator.APIHost(cr)
 	orcPod, err := GetOrcPod(ctx, r.Client, cr, 0)
 	if err != nil {
 		return nil
@@ -847,24 +843,9 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		return nil
 	}
 
-	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
+	firstPod, err := GetMySQLPod(ctx, r.Client, cr, 0)
 	if err != nil {
-		return errors.Wrap(err, "get pods")
-	}
-
-	// the last pod left - we can leave it for the stateful set
-	if len(pods) <= 1 {
-		time.Sleep(time.Second * 3)
-		log.Info("Cluster deleted")
-		return nil
-	}
-
-	var firstPod corev1.Pod
-	for _, p := range pods {
-		if p.GetName() == mysql.PodName(cr, 0) {
-			firstPod = p
-			break
-		}
+		return err
 	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
@@ -873,11 +854,11 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	}
 
 	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, mysql.ServiceName(cr))
-	c, err := clientcmd.NewClient()
+
+	mysh, err := mysqlsh.NewWithExec(firstPod, uri)
 	if err != nil {
 		return err
 	}
-	mysh := mysqlsh.NewWithExec(c, &firstPod, uri)
 
 	cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1alpha1.ConditionInnoDBClusterBootstrapped)
 	if cond == nil || cond.Status == metav1.ConditionFalse {
@@ -1025,24 +1006,9 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 			return nil
 		}
 
-		pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
+		firstPod, err := GetMySQLPod(ctx, r.Client, cr, 0)
 		if err != nil {
-			return errors.Wrap(err, "get pods")
-		}
-
-		// the last pod left - we can leave it for the stateful set
-		if len(pods) <= 1 {
-			time.Sleep(time.Second * 3)
-			log.Info("Cluster deleted")
-			return nil
-		}
-
-		var firstPod corev1.Pod
-		for _, p := range pods {
-			if p.GetName() == mysql.PodName(cr, 0) {
-				firstPod = p
-				break
-			}
+			return err
 		}
 
 		operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
@@ -1051,12 +1017,12 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		}
 
 		firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
-		aa := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri)
-		c, err := clientcmd.NewClient()
+		uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri)
+		mysh, err := mysqlsh.NewWithExec(firstPod, uri)
 		if err != nil {
 			return err
 		}
-		mysh := mysqlsh.NewWithExec(c, &firstPod, aa)
+
 		if !mysh.DoesClusterExistWithExec(ctx, cr.InnoDBClusterName()) {
 			log.V(1).Info("Waiting for InnoDB Cluster", "cluster", cr.Name)
 			return nil
@@ -1153,34 +1119,17 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 		return false, errors.Wrap(err, "get operator password")
 	}
 
-	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
-	if err != nil {
-		return false, errors.Wrap(err, "get pods")
-	}
-
-	// the last pod left - we can leave it for the stateful set
-	if len(pods) <= 1 {
-		time.Sleep(time.Second * 3)
-		log.Info("Cluster deleted")
-		return false, nil
-	}
-
-	var firstPod corev1.Pod
-	for _, p := range pods {
-		if p.GetName() == mysql.PodName(cr, 0) {
-			firstPod = p
-			break
-		}
-	}
-
-	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
-	aa := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri)
-
-	c, err := clientcmd.NewClient()
+	firstPod, err := GetMySQLPod(ctx, r.Client, cr, 0)
 	if err != nil {
 		return false, err
 	}
-	mysh := mysqlsh.NewWithExec(c, &firstPod, aa)
+
+	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
+	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri)
+	mysh, err := mysqlsh.NewWithExec(firstPod, uri)
+	if err != nil {
+		return false, err
+	}
 
 	if !mysh.DoesClusterExistWithExec(ctx, cr.InnoDBClusterName()) {
 		return false, nil
@@ -1410,7 +1359,6 @@ func writeStatus(
 }
 
 func (r *PerconaServerMySQLReconciler) getPrimaryFromOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (*orchestrator.Instance, error) {
-	// orcHost := orchestrator.APIHost(cr)
 	pod, err := GetOrcPod(ctx, r.Client, cr, 0)
 	if err != nil {
 		return nil, err
@@ -1467,7 +1415,6 @@ func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cr *a
 func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("stopAsyncReplication")
 
-	// orcHost := orchestrator.APIHost(cr)
 	orcPod, err := GetOrcPod(ctx, r.Client, cr, 0)
 	if err != nil {
 		return err
@@ -1540,7 +1487,6 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, replicaPass string) error {
 	log := logf.FromContext(ctx).WithName("startAsyncReplication")
 
-	// orcHost := orchestrator.APIHost(cr)
 	orcPod, err := GetOrcPod(ctx, r.Client, cr, 0)
 	if err != nil {
 		return nil
