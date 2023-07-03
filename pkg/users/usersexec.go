@@ -35,10 +35,10 @@ func (d *dbExecImpl) exec(stm string) error {
 
 	cmd := []string{"mysql", "--database", "performance_schema", fmt.Sprintf("-p%s", d.pass), "-u", string(d.user), "-h", d.host, "-e", stm}
 
-	var outb, errb *bytes.Buffer
-	err := d.client.Exec(context.TODO(), d.pod, "mysql", cmd, nil, outb, errb, false)
+	var outb, errb bytes.Buffer
+	err := d.client.Exec(context.TODO(), d.pod, "mysql", cmd, nil, &outb, &errb, false)
 	if err != nil {
-		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, outb, errb)
+		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, outb.String(), errb.String())
 	}
 
 	if strings.Contains(errb.String(), "ERROR") {

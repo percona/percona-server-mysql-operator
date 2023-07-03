@@ -39,7 +39,7 @@ func (d *dbImplExec) exec(stm string, stdout, stderr *bytes.Buffer) error {
 
 	err := d.client.Exec(context.TODO(), d.pod, "mysql", cmd, nil, stdout, stderr, false)
 	if err != nil {
-		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, stdout, stderr)
+		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, stdout.String(), stderr.String())
 	}
 
 	if strings.Contains(stderr.String(), "ERROR") {
