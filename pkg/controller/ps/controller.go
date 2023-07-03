@@ -1633,37 +1633,23 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 }
 
 func getMySQLPod(ctx context.Context, cl client.Reader, cr *v1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
-	//TODO: get single pod directly without getting all of them
-	pods, err := k8s.PodsByLabels(ctx, cl, mysql.MatchLabels(cr))
-	if err != nil {
-		return nil, errors.Wrap(err, "get pods")
+	pod := &corev1.Pod{}
+
+	nn := types.NamespacedName{Namespace: cr.Namespace, Name: mysql.PodName(cr, idx)}
+	if err := cl.Get(ctx, nn, pod); err != nil {
+		return nil, err
 	}
 
-	var pod corev1.Pod
-	for _, p := range pods {
-		if p.GetName() == mysql.PodName(cr, idx) {
-			pod = p
-			break
-		}
-	}
-
-	return &pod, nil
+	return pod, nil
 }
 
 func getOrcPod(ctx context.Context, cl client.Reader, cr *v1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
-	//TODO: get single pod directly without getting all of them
-	pods, err := k8s.PodsByLabels(ctx, cl, orchestrator.Labels(cr))
-	if err != nil {
-		return nil, errors.Wrap(err, "get pods")
+	pod := &corev1.Pod{}
+
+	nn := types.NamespacedName{Namespace: cr.Namespace, Name: orchestrator.PodName(cr, idx)}
+	if err := cl.Get(ctx, nn, pod); err != nil {
+		return nil, err
 	}
 
-	var pod corev1.Pod
-	for _, p := range pods {
-		if p.GetName() == orchestrator.PodName(cr, idx) {
-			pod = p
-			break
-		}
-	}
-
-	return &pod, nil
+	return pod, nil
 }
