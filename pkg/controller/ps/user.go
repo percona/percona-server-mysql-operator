@@ -149,7 +149,16 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 	log.V(1).Info("Got primary host", "primary", primaryHost)
 
-	um, err := users.NewManager(apiv1alpha1.UserOperator, operatorPass, primaryHost, mysql.DefaultAdminPort)
+	idx, err := getPodIndexFromHostname(primaryHost)
+	if err != nil {
+		return err
+	}
+	firstPod, err := getMySQLPod(ctx, r.Client, cr, idx)
+	if err != nil {
+		return err
+	}
+
+	um, err := users.NewManagerExec(firstPod, apiv1alpha1.UserOperator, operatorPass, primaryHost)
 	if err != nil {
 		return errors.Wrap(err, "init user manager")
 	}
@@ -224,7 +233,17 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 	log.V(1).Info("Got primary host", "primary", primaryHost)
 
-	um, err = users.NewManager(apiv1alpha1.UserOperator, operatorPass, primaryHost, mysql.DefaultAdminPort)
+	idx, err = getPodIndexFromHostname(primaryHost)
+	if err != nil {
+		return err
+	}
+
+	firstPod, err = getMySQLPod(ctx, r.Client, cr, idx)
+	if err != nil {
+		return err
+	}
+
+	um, err = users.NewManagerExec(firstPod, apiv1alpha1.UserOperator, operatorPass, primaryHost)
 	if err != nil {
 		return errors.Wrap(err, "init user manager")
 	}

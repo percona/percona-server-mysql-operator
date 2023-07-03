@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
@@ -35,12 +34,16 @@ func NewReplicatorExec(pod *corev1.Pod, user apiv1alpha1.SystemUser, pass, host 
 	return &dbImplExec{client: c, pod: pod, user: user, pass: pass, host: host}, nil
 }
 
-func (d *dbImplExec) exec(stm string, stdout, stderr io.Writer) error {
+func (d *dbImplExec) exec(stm string, stdout, stderr *bytes.Buffer) error {
 	cmd := []string{"mysql", "--database", "performance_schema", fmt.Sprintf("-p%s", d.pass), "-u", string(d.user), "-h", d.host, "-e", stm}
 
 	err := d.client.Exec(context.TODO(), d.pod, "mysql", cmd, nil, stdout, stderr, false)
 	if err != nil {
 		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, stdout, stderr)
+	}
+
+	if strings.Contains(stderr.String(), "ERROR") {
+		return fmt.Errorf("sql error: %s", stderr)
 	}
 
 	return nil

@@ -1451,7 +1451,11 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 		return errors.Wrap(err, "get operator password")
 	}
 
-	firstPod, err := getMySQLPod(ctx, r.Client, cr, 0)
+	idx, err := getPodIndexFromHostname(primary.Key.Hostname)
+	if err != nil {
+		return err
+	}
+	firstPod, err := getMySQLPod(ctx, r.Client, cr, idx)
 	if err != nil {
 		return err
 	}
@@ -1471,7 +1475,12 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 		hostname := replica.Hostname
 		port := replica.Port
 		g.Go(func() error {
-			pod, err := getMySQLPod(ctx, r.Client, cr, 0)
+			idx, err := getPodIndexFromHostname(hostname)
+			if err != nil {
+				return err
+			}
+
+			pod, err := getMySQLPod(ctx, r.Client, cr, idx)
 			if err != nil {
 				return err
 			}
@@ -1528,11 +1537,15 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 		hostname := replica.Hostname
 		port := replica.Port
 		g.Go(func() error {
-			pod, err := getMySQLPod(ctx, r.Client, cr, 0)
+			idx, err := getPodIndexFromHostname(hostname)
 			if err != nil {
 				return err
 			}
-			db, err := replicator.NewReplicatorExec(pod, apiv1alpha1.UserOperator, operatorPass, mysql.FQDN(cr, 0))
+			pod, err := getMySQLPod(ctx, r.Client, cr, idx)
+			if err != nil {
+				return err
+			}
+			db, err := replicator.NewReplicatorExec(pod, apiv1alpha1.UserOperator, operatorPass, hostname)
 			if err != nil {
 				return errors.Wrapf(err, "get db connection to %s", hostname)
 			}
@@ -1652,4 +1665,26 @@ func getOrcPod(ctx context.Context, cl client.Reader, cr *v1alpha1.PerconaServer
 	}
 
 	return pod, nil
+}
+
+func getPodIndexFromHostname(hostname string) (int, error) {
+	host := "cluster1-mysql-1.cluster1-mysql.ps-test"
+
+	h := strings.Split(host, ".")
+
+	if len(h) == 0 {
+		return 0, fmt.Errorf("can't get pod index from hostname: %s", h)
+	}
+
+	idx := strings.Split(h[0], "-")
+	if len(h) == 0 {
+		return 0, fmt.Errorf("can't get pod index from pod name: %s", h[0])
+	}
+
+	i, err := strconv.Atoi(idx[len(idx)-1])
+	if err != nil {
+		return 0, err
+	}
+
+	return i, nil
 }
