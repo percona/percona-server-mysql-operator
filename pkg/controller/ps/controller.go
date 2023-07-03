@@ -183,7 +183,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 	}
 
 	if cr.Spec.MySQL.IsAsync() {
-		orcPod, err := GetOrcPod(ctx, r.Client, cr, 0)
+		orcPod, err := getOrcPod(ctx, r.Client, cr, 0)
 		if err != nil {
 			return nil
 		}
@@ -670,7 +670,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return nil
 	}
 
-	orcPod, err := GetOrcPod(ctx, r.Client, cr, 0)
+	orcPod, err := getOrcPod(ctx, r.Client, cr, 0)
 	if err != nil {
 		return nil
 	}
@@ -809,7 +809,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return nil
 	}
 
-	pod, err := GetOrcPod(ctx, r.Client, cr, 0)
+	pod, err := getOrcPod(ctx, r.Client, cr, 0)
 	if err != nil {
 		return nil
 	}
@@ -854,7 +854,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		return nil
 	}
 
-	firstPod, err := GetMySQLPod(ctx, r.Client, cr, 0)
+	firstPod, err := getMySQLPod(ctx, r.Client, cr, 0)
 	if err != nil {
 		return err
 	}
@@ -916,7 +916,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplicationSemiSync(
 		return errors.Wrap(err, "get operator password")
 	}
 
-	firstPod, err := GetMySQLPod(ctx, cl, cr, 0)
+	firstPod, err := getMySQLPod(ctx, cl, cr, 0)
 	if err != nil {
 		return err
 	}
@@ -1017,7 +1017,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 			return nil
 		}
 
-		firstPod, err := GetMySQLPod(ctx, r.Client, cr, 0)
+		firstPod, err := getMySQLPod(ctx, r.Client, cr, 0)
 		if err != nil {
 			return err
 		}
@@ -1141,7 +1141,7 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 		return false, errors.Wrap(err, "get operator password")
 	}
 
-	firstPod, err := GetMySQLPod(ctx, r.Client, cr, 0)
+	firstPod, err := getMySQLPod(ctx, r.Client, cr, 0)
 	if err != nil {
 		return false, err
 	}
@@ -1381,7 +1381,7 @@ func writeStatus(
 }
 
 func (r *PerconaServerMySQLReconciler) getPrimaryFromOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (*orchestrator.Instance, error) {
-	pod, err := GetOrcPod(ctx, r.Client, cr, 0)
+	pod, err := getOrcPod(ctx, r.Client, cr, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -1405,7 +1405,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryFromGR(ctx context.Context, cr 
 
 	fqdn := mysql.FQDN(cr, 0)
 
-	firstPod, err := GetMySQLPod(ctx, r.Client, cr, 0)
+	firstPod, err := getMySQLPod(ctx, r.Client, cr, 0)
 	if err != nil {
 		return "", err
 	}
@@ -1437,7 +1437,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cr *a
 func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("stopAsyncReplication")
 
-	orcPod, err := GetOrcPod(ctx, r.Client, cr, 0)
+	orcPod, err := getOrcPod(ctx, r.Client, cr, 0)
 	if err != nil {
 		return err
 	}
@@ -1451,7 +1451,7 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 		return errors.Wrap(err, "get operator password")
 	}
 
-	firstPod, err := GetMySQLPod(ctx, r.Client, cr, 0)
+	firstPod, err := getMySQLPod(ctx, r.Client, cr, 0)
 	if err != nil {
 		return err
 	}
@@ -1471,7 +1471,7 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 		hostname := replica.Hostname
 		port := replica.Port
 		g.Go(func() error {
-			pod, err := GetMySQLPod(ctx, r.Client, cr, 0)
+			pod, err := getMySQLPod(ctx, r.Client, cr, 0)
 			if err != nil {
 				return err
 			}
@@ -1509,7 +1509,7 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, replicaPass string) error {
 	log := logf.FromContext(ctx).WithName("startAsyncReplication")
 
-	orcPod, err := GetOrcPod(ctx, r.Client, cr, 0)
+	orcPod, err := getOrcPod(ctx, r.Client, cr, 0)
 	if err != nil {
 		return nil
 	}
@@ -1528,7 +1528,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 		hostname := replica.Hostname
 		port := replica.Port
 		g.Go(func() error {
-			pod, err := GetMySQLPod(ctx, r.Client, cr, 0)
+			pod, err := getMySQLPod(ctx, r.Client, cr, 0)
 			if err != nil {
 				return err
 			}
@@ -1565,7 +1565,7 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 	}
 
 	hostname := mysql.FQDN(cr, 0)
-	firstPod, err := GetMySQLPod(ctx, r.Client, cr, 0)
+	firstPod, err := getMySQLPod(ctx, r.Client, cr, 0)
 	if err != nil {
 		return err
 	}
@@ -1632,7 +1632,7 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 	return nil
 }
 
-func GetMySQLPod(ctx context.Context, cl client.Reader, cr *v1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
+func getMySQLPod(ctx context.Context, cl client.Reader, cr *v1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
 	//TODO: get single pod directly without getting all of them
 	pods, err := k8s.PodsByLabels(ctx, cl, mysql.MatchLabels(cr))
 	if err != nil {
@@ -1640,11 +1640,11 @@ func GetMySQLPod(ctx context.Context, cl client.Reader, cr *v1alpha1.PerconaServ
 	}
 
 	// the last pod left - we can leave it for the stateful set
-	if len(pods) <= 1 {
-		time.Sleep(time.Second * 3)
-		println("GetFirstPod() --- cluster, deleted")
-		return nil, errors.New("cluster deleted")
-	}
+	// if len(pods) <= 1 {
+	// 	time.Sleep(time.Second * 3)
+	// 	println("GetFirstPod() --- cluster, deleted")
+	// 	return nil, errors.New("cluster deleted")
+	// }
 
 	var pod corev1.Pod
 	for _, p := range pods {
@@ -1657,7 +1657,7 @@ func GetMySQLPod(ctx context.Context, cl client.Reader, cr *v1alpha1.PerconaServ
 	return &pod, nil
 }
 
-func GetOrcPod(ctx context.Context, cl client.Reader, cr *v1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
+func getOrcPod(ctx context.Context, cl client.Reader, cr *v1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
 	//TODO: get single pod directly without getting all of them
 	pods, err := k8s.PodsByLabels(ctx, cl, orchestrator.Labels(cr))
 	if err != nil {
@@ -1665,11 +1665,11 @@ func GetOrcPod(ctx context.Context, cl client.Reader, cr *v1alpha1.PerconaServer
 	}
 
 	// the last pod left - we can leave it for the stateful set
-	if len(pods) <= 1 {
-		time.Sleep(time.Second * 3)
-		println("GetFirstPod() --- cluster, deleted")
-		return nil, errors.New("cluster deleted")
-	}
+	// if len(pods) <= 1 {
+	// 	time.Sleep(time.Second * 3)
+	// 	println("GetFirstPod() --- cluster, deleted")
+	// 	return nil, errors.New("cluster deleted")
+	// }
 
 	var pod corev1.Pod
 	for _, p := range pods {
