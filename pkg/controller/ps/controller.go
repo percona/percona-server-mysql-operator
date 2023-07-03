@@ -1639,13 +1639,6 @@ func getMySQLPod(ctx context.Context, cl client.Reader, cr *v1alpha1.PerconaServ
 		return nil, errors.Wrap(err, "get pods")
 	}
 
-	// the last pod left - we can leave it for the stateful set
-	// if len(pods) <= 1 {
-	// 	time.Sleep(time.Second * 3)
-	// 	println("GetFirstPod() --- cluster, deleted")
-	// 	return nil, errors.New("cluster deleted")
-	// }
-
 	var pod corev1.Pod
 	for _, p := range pods {
 		if p.GetName() == mysql.PodName(cr, idx) {
@@ -1663,13 +1656,6 @@ func getOrcPod(ctx context.Context, cl client.Reader, cr *v1alpha1.PerconaServer
 	if err != nil {
 		return nil, errors.Wrap(err, "get pods")
 	}
-
-	// the last pod left - we can leave it for the stateful set
-	// if len(pods) <= 1 {
-	// 	time.Sleep(time.Second * 3)
-	// 	println("GetFirstPod() --- cluster, deleted")
-	// 	return nil, errors.New("cluster deleted")
-	// }
 
 	var pod corev1.Pod
 	for _, p := range pods {
