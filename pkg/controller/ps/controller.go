@@ -543,15 +543,26 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfiguration(
 		return "", errors.Wrapf(err, "get ConfigMap/%s", cmName)
 	}
 
-	// Cleanup if user removed the configuration from CR
 	if cr.Spec.MySQL.Configuration == "" {
 		exists, err := k8s.ObjectExists(ctx, r.Client, nn, currCm)
 		if err != nil {
 			return "", errors.Wrapf(err, "check if ConfigMap/%s exists", cmName)
 		}
 
-		if !exists || !metav1.IsControlledBy(currCm, cr) {
+		if !exists {
 			return "", nil
+		}
+
+		if exists && !metav1.IsControlledBy(currCm, cr) {
+			//ConfigMap exists and is created by the user, not the operator
+
+			d := struct{ Data map[string]string }{Data: currCm.Data}
+			data, err := json.Marshal(d)
+			if err != nil {
+				return "", errors.Wrap(err, "marshal configmap data to json")
+			}
+
+			return fmt.Sprintf("%x", md5.Sum(data)), nil
 		}
 
 		if err := r.Client.Delete(ctx, currCm); err != nil {
@@ -1052,15 +1063,26 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouterConfiguration(ctx con
 		return "", errors.Wrapf(err, "get ConfigMap/%s", cmName)
 	}
 
-	// Cleanup if user removed the configuration from CR
 	if cr.Spec.Proxy.Router.Configuration == "" {
 		exists, err := k8s.ObjectExists(ctx, r.Client, nn, currCm)
 		if err != nil {
 			return "", errors.Wrapf(err, "check if ConfigMap/%s exists", cmName)
 		}
 
-		if !exists || !metav1.IsControlledBy(currCm, cr) {
+		if !exists {
 			return "", nil
+		}
+
+		if exists && !metav1.IsControlledBy(currCm, cr) {
+			//ConfigMap exists and is created by the user, not the operator
+
+			d := struct{ Data map[string]string }{Data: currCm.Data}
+			data, err := json.Marshal(d)
+			if err != nil {
+				return "", errors.Wrap(err, "marshal configmap data to json")
+			}
+
+			return fmt.Sprintf("%x", md5.Sum(data)), nil
 		}
 
 		if err := r.Client.Delete(ctx, currCm); err != nil {
