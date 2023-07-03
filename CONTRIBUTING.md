@@ -173,7 +173,7 @@ Contributions to the source tree should follow the workflow described below:
 
 1. Save your changes
 2. Tell the operator which namespace to watch by running `export WATCH_NAMESPACE=my-namespace`
-3. Run the command `make run`.
+3. Run the command `make install run`.
 
 ### 2. Contributing to documentation
 

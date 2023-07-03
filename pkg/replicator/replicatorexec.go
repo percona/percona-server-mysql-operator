@@ -114,16 +114,16 @@ func (d *dbImplExec) ResetReplication() error {
 
 func (d *dbImplExec) ReplicationStatus() (ReplicationStatus, string, error) {
 	rows := []*struct {
-		IoState  string `csv:"iostate"`
-		SqlState string `csv:"sqlstate"`
+		IoState  string `csv:"conn_state"`
+		SqlState string `csv:"applier_state"`
 		Host     string `csv:"host"`
 	}{}
 
 	q := fmt.Sprintf(`
         SELECT
-	    connection_status.SERVICE_STATE as iostate,
-	    applier_status.SERVICE_STATE as sqlstate,
-            HOST as host,
+	    connection_status.SERVICE_STATE as conn_state,
+	    applier_status.SERVICE_STATE as applier_state,
+            HOST as host
         FROM replication_connection_status connection_status
         JOIN replication_connection_configuration connection_configuration
             ON connection_status.channel_name = connection_configuration.channel_name
