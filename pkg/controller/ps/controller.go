@@ -366,21 +366,6 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) getCRWithDefaults(
-	ctx context.Context,
-	nn types.NamespacedName,
-) (*apiv1alpha1.PerconaServerMySQL, error) {
-	cr := &apiv1alpha1.PerconaServerMySQL{}
-	if err := r.Client.Get(ctx, nn, cr); err != nil {
-		return nil, errors.Wrapf(err, "get %v", nn.String())
-	}
-	if err := cr.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
-		return cr, errors.Wrapf(err, "check and set defaults for %v", nn.String())
-	}
-
-	return cr, nil
-}
-
 func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQL,
