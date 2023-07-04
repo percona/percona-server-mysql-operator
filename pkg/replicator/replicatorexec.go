@@ -139,14 +139,14 @@ func (d *dbImplExec) ReplicationStatus() (ReplicationStatus, string, error) {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ReplicationStatusNotInitiated, "", nil
 		}
-		return ReplicationStatusActive, "", err
+		return ReplicationStatusError, "", errors.Wrap(err, "scan replication status")
 	}
 
 	if rows[0].IoState == "ON" && rows[0].SqlState == "ON" {
 		return ReplicationStatusActive, rows[0].Host, nil
 	}
 
-	return ReplicationStatusActive, "", err
+	return ReplicationStatusNotInitiated, "", err
 }
 
 func (d *dbImplExec) IsReplica() (bool, error) {
