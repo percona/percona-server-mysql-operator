@@ -109,6 +109,12 @@ func (d *dbExecImpl) DiscardOldPasswords(users []mysql.User) error {
 
 				return err
 			}
+
+			if user.Username == apiv1alpha1.UserOperator {
+				// We need this update because the old pass is discarded,
+				// and we need to run the rest of the operations bellow
+				d.pass = user.Password
+			}
 		}
 	}
 
