@@ -267,6 +267,8 @@ type ProxySpec struct {
 }
 
 type MySQLRouterSpec struct {
+	Enabled bool `json:"enabled,omitempty"`
+
 	Expose ServiceExpose `json:"expose,omitempty"`
 
 	Configuration string `json:"configuration,omitempty"`
@@ -279,8 +281,9 @@ type ToolkitSpec struct {
 }
 
 type HAProxySpec struct {
-	Enabled bool          `json:"enabled,omitempty"`
-	Expose  ServiceExpose `json:"expose,omitempty"`
+	Enabled bool `json:"enabled,omitempty"`
+
+	Expose ServiceExpose `json:"expose,omitempty"`
 
 	PodSpec `json:",inline"`
 }
@@ -801,17 +804,31 @@ func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	return false
 }
 
+func (cr *PerconaServerMySQL) RouterEnabled() bool {
+	if cr.MySQLSpec().IsAsync() {
+		return false
+	}
+
+	return cr.Spec.Proxy.Router != nil && cr.Spec.Proxy.Router.Enabled
+}
+
 func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
-	if !cr.Spec.AllowUnsafeConfig {
+	if cr.MySQLSpec().IsAsync() && !cr.Spec.AllowUnsafeConfig {
 		return true
 	}
+
 	return cr.Spec.Proxy.HAProxy != nil && cr.Spec.Proxy.HAProxy.Enabled
 }
 
 func (cr *PerconaServerMySQL) OrchestratorEnabled() bool {
-	if !cr.Spec.AllowUnsafeConfig {
+	if cr.MySQLSpec().IsGR() {
+		return false
+	}
+
+	if cr.MySQLSpec().IsAsync() && !cr.Spec.AllowUnsafeConfig {
 		return true
 	}
+
 	return cr.Spec.Orchestrator.Enabled
 }
 

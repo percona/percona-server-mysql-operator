@@ -218,9 +218,14 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
 		Resources:       spec.Resources,
-		Env:             []corev1.EnvVar{},
-		Command:         []string{"/opt/percona/haproxy-entrypoint.sh"},
-		Args:            []string{"haproxy"},
+		Env: []corev1.EnvVar{
+			{
+				Name:  "CLUSTER_TYPE",
+				Value: string(cr.Spec.MySQL.ClusterType),
+			},
+		},
+		Command: []string{"/opt/percona/haproxy-entrypoint.sh"},
+		Args:    []string{"haproxy"},
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "mysql",

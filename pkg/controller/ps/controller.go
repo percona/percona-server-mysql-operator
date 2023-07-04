@@ -695,7 +695,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context
 func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileHAProxy")
 
-	if !cr.HAProxyEnabled() || cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR {
+	if !cr.HAProxyEnabled() {
 		return nil
 	}
 
@@ -734,26 +734,27 @@ func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr
 		return errors.Wrap(err, "reconcile MySQL services")
 	}
 
-	if cr.Spec.MySQL.IsAsync() {
+	if cr.OrchestratorEnabled() {
 		if err := r.reconcileOrchestratorServices(ctx, cr); err != nil {
 			return errors.Wrap(err, "reconcile Orchestrator services")
 		}
-		if cr.HAProxyEnabled() {
-			internalSecret := new(corev1.Secret)
-			nn := types.NamespacedName{Name: cr.InternalSecretName(), Namespace: cr.Namespace}
-			err := r.Client.Get(ctx, nn, internalSecret)
-			if client.IgnoreNotFound(err) != nil {
-				return errors.Wrapf(err, "get Secret/%s", nn.Name)
-			}
+	}
 
-			expose := cr.Spec.Proxy.HAProxy.Expose
-			if err := k8s.EnsureService(ctx, r.Client, cr, haproxy.Service(cr, internalSecret), r.Scheme, expose.SaveOldMeta()); err != nil {
-				return errors.Wrap(err, "reconcile HAProxy svc")
-			}
+	if cr.HAProxyEnabled() {
+		internalSecret := new(corev1.Secret)
+		nn := types.NamespacedName{Name: cr.InternalSecretName(), Namespace: cr.Namespace}
+		err := r.Client.Get(ctx, nn, internalSecret)
+		if client.IgnoreNotFound(err) != nil {
+			return errors.Wrapf(err, "get Secret/%s", nn.Name)
+		}
+
+		expose := cr.Spec.Proxy.HAProxy.Expose
+		if err := k8s.EnsureService(ctx, r.Client, cr, haproxy.Service(cr, internalSecret), r.Scheme, expose.SaveOldMeta()); err != nil {
+			return errors.Wrap(err, "reconcile HAProxy svc")
 		}
 	}
 
-	if cr.Spec.MySQL.IsGR() {
+	if cr.RouterEnabled() {
 		expose := cr.Spec.Proxy.Router.Expose
 		if err := k8s.EnsureService(ctx, r.Client, cr, router.Service(cr), r.Scheme, expose.SaveOldMeta()); err != nil {
 			return errors.Wrap(err, "reconcile router svc")
@@ -916,7 +917,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedStatefulSets(ctx context.C
 func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileMySQLRouter")
 
-	if cr.Spec.MySQL.ClusterType != apiv1alpha1.ClusterTypeGR {
+	if !cr.RouterEnabled() {
 		return nil
 	}
 
@@ -1035,7 +1036,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 }
 
 func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
-	log := logf.FromContext(ctx).WithName("GRStatus")
+	log := logf.FromContext(ctx).WithName("groupReplicationStatus")
 	if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
 		return false, nil
 	}
@@ -1062,11 +1063,12 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 		}
 	}
 
+	log.V(1).Info("GR status", "status", status.DefaultReplicaSet.Status, "statusText", status.DefaultReplicaSet.StatusText)
+
 	switch status.DefaultReplicaSet.Status {
 	case innodbcluster.ClusterStatusOK:
 		return true, nil
 	case innodbcluster.ClusterStatusOKPartial, innodbcluster.ClusterStatusOKNoTolerance, innodbcluster.ClusterStatusOKNoTolerancePartial:
-		log.Info("GR status", "status", status.DefaultReplicaSet.Status, "statusText", status.DefaultReplicaSet.StatusText)
 		return true, nil
 	default:
 		return false, nil
@@ -1110,7 +1112,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	cr.Status.Orchestrator = orcStatus
 
 	routerStatus := apiv1alpha1.StatefulAppStatus{}
-	if cr.Spec.MySQL.IsGR() {
+	if cr.RouterEnabled() {
 		routerStatus, err = appStatus(ctx, r.Client, cr.Spec.Proxy.Router.Size, router.MatchLabels(cr), cr.Status.Router.Version)
 		if err != nil {
 			return errors.Wrap(err, "get Router status")
@@ -1119,7 +1121,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	cr.Status.Router = routerStatus
 
 	haproxyStatus := apiv1alpha1.StatefulAppStatus{}
-	if cr.HAProxyEnabled() && cr.Spec.MySQL.IsAsync() {
+	if cr.HAProxyEnabled() {
 		haproxyStatus, err = appStatus(ctx, r.Client, cr.Spec.Proxy.HAProxy.Size, haproxy.MatchLabels(cr), cr.Status.HAProxy.Version)
 		if err != nil {
 			return errors.Wrap(err, "get HAProxy status")
@@ -1127,15 +1129,24 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 	cr.Status.HAProxy = haproxyStatus
 
-	cr.Status.State = apiv1alpha1.StateInitializing
+	cr.Status.State = apiv1alpha1.StateReady
 	if cr.Spec.MySQL.IsAsync() {
-		if !cr.OrchestratorEnabled() || cr.Status.MySQL.State == cr.Status.Orchestrator.State {
-			cr.Status.State = cr.Status.MySQL.State
+		if cr.OrchestratorEnabled() && cr.Status.Orchestrator.State != apiv1alpha1.StateReady {
+			cr.Status.State = cr.Status.Orchestrator.State
 		}
 		if cr.HAProxyEnabled() && cr.Status.HAProxy.State != apiv1alpha1.StateReady {
 			cr.Status.State = cr.Status.HAProxy.State
 		}
-	} else if cr.Spec.MySQL.IsGR() && cr.Status.MySQL.State == cr.Status.Router.State {
+	} else if cr.Spec.MySQL.IsGR() {
+		if cr.RouterEnabled() && cr.Status.Router.State != apiv1alpha1.StateReady {
+			cr.Status.State = cr.Status.Router.State
+		}
+		if cr.HAProxyEnabled() && cr.Status.HAProxy.State != apiv1alpha1.StateReady {
+			cr.Status.State = cr.Status.HAProxy.State
+		}
+	}
+
+	if cr.Status.MySQL.State != apiv1alpha1.StateReady {
 		cr.Status.State = cr.Status.MySQL.State
 	}
 
@@ -1148,6 +1159,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	if err != nil {
 		return errors.Wrap(err, "check load balancers")
 	}
+
 	if !loadBalancersReady {
 		cr.Status.State = apiv1alpha1.StateInitializing
 	}
@@ -1157,6 +1169,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		"mysql", cr.Status.MySQL,
 		"orchestrator", cr.Status.Orchestrator,
 		"router", cr.Status.Router,
+		"haproxy", cr.Status.HAProxy,
 		"host", cr.Status.Host,
 		"loadbalancers", loadBalancersReady,
 		"conditions", cr.Status.Conditions,
@@ -1186,21 +1199,18 @@ func (r *PerconaServerMySQLReconciler) allLoadBalancersReady(ctx context.Context
 
 func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	var serviceName string
-	if cr.Spec.MySQL.IsGR() {
+
+	if cr.RouterEnabled() {
 		serviceName = router.ServiceName(cr)
 		if cr.Spec.Proxy.Router.Expose.Type != corev1.ServiceTypeLoadBalancer {
 			return serviceName + "." + cr.GetNamespace(), nil
 		}
 	}
 
-	if cr.Spec.MySQL.IsAsync() {
-		if cr.HAProxyEnabled() {
-			serviceName = haproxy.ServiceName(cr)
-			if cr.Spec.Proxy.HAProxy.Expose.Type != corev1.ServiceTypeLoadBalancer {
-				return serviceName + "." + cr.GetNamespace(), nil
-			}
-		} else {
-			return mysql.ServiceName(cr) + "." + cr.GetNamespace(), nil
+	if cr.HAProxyEnabled() {
+		serviceName = haproxy.ServiceName(cr)
+		if cr.Spec.Proxy.HAProxy.Expose.Type != corev1.ServiceTypeLoadBalancer {
+			return serviceName + "." + cr.GetNamespace(), nil
 		}
 	}
 
