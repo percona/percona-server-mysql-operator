@@ -1668,23 +1668,21 @@ func getOrcPod(ctx context.Context, cl client.Reader, cr *v1alpha1.PerconaServer
 }
 
 func getPodIndexFromHostname(hostname string) (int, error) {
-	host := "cluster1-mysql-1.cluster1-mysql.ps-test"
+	hh := strings.Split(hostname, ".")
 
-	h := strings.Split(host, ".")
-
-	if len(h) == 0 {
-		return 0, fmt.Errorf("can't get pod index from hostname: %s", h)
+	if len(hh) == 0 {
+		return 0, fmt.Errorf("can't get pod index from hostname: %s", hh)
 	}
 
-	idx := strings.Split(h[0], "-")
-	if len(h) == 0 {
-		return 0, fmt.Errorf("can't get pod index from pod name: %s", h[0])
+	ii := strings.Split(hh[0], "-")
+	if len(hh) == 0 {
+		return 0, fmt.Errorf("can't get pod index from pod name: %s", hh[0])
 	}
 
-	i, err := strconv.Atoi(idx[len(idx)-1])
+	idx, err := strconv.Atoi(ii[len(ii)-1])
 	if err != nil {
 		return 0, err
 	}
 
-	return i, nil
+	return idx, nil
 }
