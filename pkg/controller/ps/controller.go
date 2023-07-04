@@ -1594,7 +1594,16 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 	}
 
 	for _, host := range replicas {
-		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, host, mysql.DefaultAdminPort)
+		idx, err := getPodIndexFromHostname(host)
+		if err != nil {
+			return err
+		}
+
+		pod, err := getMySQLPod(ctx, r.Client, cr, idx)
+		if err != nil {
+			return err
+		}
+		db, err := replicator.NewReplicatorExec(pod, apiv1alpha1.UserOperator, operatorPass, host)
 		if err != nil {
 			return errors.Wrapf(err, "get db connection to %s", hostname)
 		}
@@ -1621,7 +1630,16 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 		return errors.Wrap(err, "get primary member")
 	}
 
-	db, err = replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, primary, mysql.DefaultAdminPort)
+	idx, err := getPodIndexFromHostname(primary)
+	if err != nil {
+		return err
+	}
+
+	pod, err := getMySQLPod(ctx, r.Client, cr, idx)
+	if err != nil {
+		return err
+	}
+	db, err = replicator.NewReplicatorExec(pod, apiv1alpha1.UserOperator, operatorPass, primary)
 	if err != nil {
 		return errors.Wrapf(err, "get db connection to %s", hostname)
 	}
