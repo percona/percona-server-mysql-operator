@@ -376,7 +376,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr).WithObjects(tt.objects...)
+			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr).WithStatusSubresource(tt.cr).WithObjects(tt.objects...)
 			if tt.cluster != nil {
 				cb.WithObjects(tt.cluster, &appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{
