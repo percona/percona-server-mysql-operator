@@ -916,12 +916,16 @@ func (r *PerconaServerMySQLReconciler) reconcileReplicationSemiSync(
 		return errors.Wrap(err, "get operator password")
 	}
 
-	firstPod, err := getMySQLPod(ctx, cl, cr, 0)
+	idx, err := getPodIndexFromHostname(primaryHost)
+	if err != nil {
+		return err
+	}
+	primPod, err := getMySQLPod(ctx, cl, cr, idx)
 	if err != nil {
 		return err
 	}
 
-	db, err := replicator.NewReplicatorExec(firstPod, apiv1alpha1.UserOperator, operatorPass, mysql.FQDN(cr, 0))
+	db, err := replicator.NewReplicatorExec(primPod, apiv1alpha1.UserOperator, operatorPass, mysql.FQDN(cr, 0))
 	if err != nil {
 		return errors.Wrapf(err, "connect to %v", primaryHost)
 	}
@@ -1455,12 +1459,12 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	firstPod, err := getMySQLPod(ctx, r.Client, cr, idx)
+	primPod, err := getMySQLPod(ctx, r.Client, cr, idx)
 	if err != nil {
 		return err
 	}
 
-	db, err := replicator.NewReplicatorExec(firstPod, apiv1alpha1.UserOperator, operatorPass, mysql.FQDN(cr, 0))
+	db, err := replicator.NewReplicatorExec(primPod, apiv1alpha1.UserOperator, operatorPass, mysql.FQDN(cr, idx))
 	if err != nil {
 		return errors.Wrap(err, "open connection to primary")
 	}
@@ -1635,11 +1639,11 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 		return err
 	}
 
-	pod, err := getMySQLPod(ctx, r.Client, cr, idx)
+	primPod, err := getMySQLPod(ctx, r.Client, cr, idx)
 	if err != nil {
 		return err
 	}
-	db, err = replicator.NewReplicatorExec(pod, apiv1alpha1.UserOperator, operatorPass, primary)
+	db, err = replicator.NewReplicatorExec(primPod, apiv1alpha1.UserOperator, operatorPass, primary)
 	if err != nil {
 		return errors.Wrapf(err, "get db connection to %s", hostname)
 	}

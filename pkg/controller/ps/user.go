@@ -153,12 +153,12 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	if err != nil {
 		return err
 	}
-	firstPod, err := getMySQLPod(ctx, r.Client, cr, idx)
+	primPod, err := getMySQLPod(ctx, r.Client, cr, idx)
 	if err != nil {
 		return err
 	}
 
-	um, err := users.NewManagerExec(firstPod, apiv1alpha1.UserOperator, operatorPass, primaryHost)
+	um, err := users.NewManagerExec(primPod, apiv1alpha1.UserOperator, operatorPass, primaryHost)
 	if err != nil {
 		return errors.Wrap(err, "init user manager")
 	}
@@ -238,12 +238,12 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return err
 	}
 
-	firstPod, err = getMySQLPod(ctx, r.Client, cr, idx)
+	primPod, err = getMySQLPod(ctx, r.Client, cr, idx)
 	if err != nil {
 		return err
 	}
 
-	um, err = users.NewManagerExec(firstPod, apiv1alpha1.UserOperator, operatorPass, primaryHost)
+	um, err = users.NewManagerExec(primPod, apiv1alpha1.UserOperator, operatorPass, primaryHost)
 	if err != nil {
 		return errors.Wrap(err, "init user manager")
 	}
