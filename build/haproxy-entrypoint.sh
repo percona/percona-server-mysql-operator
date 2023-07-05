@@ -3,7 +3,7 @@
 set -e
 set -o xtrace
 
-echo "${CLUSTER_TYPE}" > /tmp/cluster_type
+echo "${CLUSTER_TYPE}" >/tmp/cluster_type
 
 if [ "$1" = 'haproxy' ]; then
 	if [ ! -f '/etc/haproxy/mysql/haproxy.cfg' ]; then
