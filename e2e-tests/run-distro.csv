@@ -12,7 +12,6 @@ init-deploy
 monitoring
 one-pod
 scaling
-semi-sync
 service-per-pod
 sidecars
 tls-cert-manager

@@ -49,8 +49,6 @@ type Replicator interface {
 	Clone(donor, user, pass string, port int32) error
 	IsReplica() (bool, error)
 	DumbQuery() error
-	SetSemiSyncSource(enabled bool) error
-	SetSemiSyncSize(size int) error
 	GetGlobal(variable string) (interface{}, error)
 	SetGlobal(variable, value interface{}) error
 	ChangeGroupReplicationPassword(replicaPass string) error
@@ -254,16 +252,6 @@ func (d *dbImpl) Clone(donor, user, pass string, port int32) error {
 func (d *dbImpl) DumbQuery() error {
 	_, err := d.db.Exec("SELECT 1")
 	return errors.Wrap(err, "SELECT 1")
-}
-
-func (d *dbImpl) SetSemiSyncSource(enabled bool) error {
-	_, err := d.db.Exec("SET GLOBAL rpl_semi_sync_master_enabled=?", enabled)
-	return errors.Wrap(err, "set rpl_semi_sync_master_enabled")
-}
-
-func (d *dbImpl) SetSemiSyncSize(size int) error {
-	_, err := d.db.Exec("SET GLOBAL rpl_semi_sync_master_wait_for_slave_count=?", size)
-	return errors.Wrap(err, "set rpl_semi_sync_master_wait_for_slave_count")
 }
 
 func (d *dbImpl) GetGlobal(variable string) (interface{}, error) {

@@ -10,7 +10,6 @@ gr-tls-cert-manager
 haproxy
 init-deploy
 one-pod
-semi-sync
 sidecars
 tls-cert-manager
 users

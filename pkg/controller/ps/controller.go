@@ -366,21 +366,6 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) getCRWithDefaults(
-	ctx context.Context,
-	nn types.NamespacedName,
-) (*apiv1alpha1.PerconaServerMySQL, error) {
-	cr := &apiv1alpha1.PerconaServerMySQL{}
-	if err := r.Client.Get(ctx, nn, cr); err != nil {
-		return nil, errors.Wrapf(err, "get %v", nn.String())
-	}
-	if err := cr.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
-		return cr, errors.Wrapf(err, "check and set defaults for %v", nn.String())
-	}
-
-	return cr, nil
-}
-
 func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQL,
@@ -821,10 +806,6 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return nil
 	}
 
-	if err := reconcileReplicationSemiSync(ctx, r.Client, cr); err != nil {
-		return errors.Wrapf(err, "reconcile %s", cr.MySQLSpec().ClusterType)
-	}
-
 	return nil
 }
 
@@ -869,48 +850,6 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
 		return errors.New("InnoDB cluster is already bootstrapped, but failed to check its status")
 	}
-
-	return nil
-}
-
-func reconcileReplicationSemiSync(
-	ctx context.Context,
-	cl client.Reader,
-	cr *apiv1alpha1.PerconaServerMySQL,
-) error {
-	log := logf.FromContext(ctx).WithName("reconcileReplicationSemiSync")
-
-	primary, err := getPrimaryFromOrchestrator(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "get primary")
-	}
-	primaryHost := primary.Key.Hostname
-
-	log.V(1).Info("Use primary host", "primaryHost", primaryHost, "clusterPrimary", primary)
-
-	operatorPass, err := k8s.UserPassword(ctx, cl, cr, apiv1alpha1.UserOperator)
-	if err != nil {
-		return errors.Wrap(err, "get operator password")
-	}
-
-	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator,
-		operatorPass,
-		primaryHost,
-		mysql.DefaultAdminPort)
-	if err != nil {
-		return errors.Wrapf(err, "connect to %v", primaryHost)
-	}
-	defer db.Close()
-
-	if err := db.SetSemiSyncSource(cr.MySQLSpec().SizeSemiSync.IntValue() > 0); err != nil {
-		return errors.Wrapf(err, "set semi-sync source on %s", primaryHost)
-	}
-	log.V(1).Info("Set semi-sync source", "host", primaryHost)
-
-	if err := db.SetSemiSyncSize(cr.MySQLSpec().SizeSemiSync.IntValue()); err != nil {
-		return errors.Wrapf(err, "set semi-sync size on %s", primaryHost)
-	}
-	log.V(1).Info("Set semi-sync size", "host", primaryHost)
 
 	return nil
 }
@@ -1392,16 +1331,6 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 	if err != nil {
 		return errors.Wrap(err, "get operator password")
-	}
-
-	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, primary.Key.Hostname, mysql.DefaultAdminPort)
-	if err != nil {
-		return errors.Wrap(err, "open connection to primary")
-	}
-
-	// We're disabling semi-sync replication on primary to avoid LockedSemiSyncMaster.
-	if err := db.SetSemiSyncSource(false); err != nil {
-		return errors.Wrap(err, "set semi_sync wait count")
 	}
 
 	g, gCtx := errgroup.WithContext(context.Background())
