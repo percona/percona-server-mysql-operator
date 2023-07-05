@@ -13,7 +13,8 @@
 
 Based on our best practices for deployment and configuration, [Percona Operator for MySQL](https://www.percona.com/doc/kubernetes-operator-for-mysql/ps/index.html) contains everything you need to quickly and consistently deploy and scale MySQL instances in a Kubernetes-based environment on-premises or in the cloud. It provides the following capabilities:
 
-* Deploy asynchronous and semi-sync replication MySQL clusters with Orchestrator on top of it
+* Deploy group replication MySQL clusters with MySQL Router
+* Deploy asynchronous replication MySQL clusters with Orchestrator and HAProxy
 * Expose clusters with regular Kubernetes Services
 * Monitor the cluster with [Percona Monitoring and Management](https://www.percona.com/software/database-tools/percona-monitoring-and-management)
 * Customize MySQL configuration

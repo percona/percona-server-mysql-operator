@@ -85,10 +85,8 @@ func (t ClusterType) isValid() bool {
 }
 
 type MySQLSpec struct {
-	ClusterType  ClusterType            `json:"clusterType,omitempty"`
-	SizeSemiSync intstr.IntOrString     `json:"sizeSemiSync,omitempty"`
-	SemiSyncType string                 `json:"semiSyncType,omitempty"`
-	Expose       ServiceExposeTogglable `json:"expose,omitempty"`
+	ClusterType ClusterType            `json:"clusterType,omitempty"`
+	Expose      ServiceExposeTogglable `json:"expose,omitempty"`
 
 	Sidecars       []corev1.Container `json:"sidecars,omitempty"`
 	SidecarVolumes []corev1.Volume    `json:"sidecarVolumes,omitempty"`
@@ -451,10 +449,6 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 
 	if len(cr.Spec.Backup.Image) == 0 {
 		return errors.New("backup.image can't be empty")
-	}
-
-	if cr.Spec.MySQL.Size != 0 && cr.Spec.MySQL.SizeSemiSync.IntVal >= cr.Spec.MySQL.Size {
-		return errors.New("mysql.sizeSemiSync can't be greater than or equal to mysql.size")
 	}
 
 	if cr.Spec.MySQL.StartupProbe.InitialDelaySeconds == 0 {
