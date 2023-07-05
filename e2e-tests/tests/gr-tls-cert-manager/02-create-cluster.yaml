@@ -10,4 +10,6 @@ commands:
 
       get_cr \
         | yq eval '.spec.mysql.clusterType="group-replication"' - \
+      	| yq eval '.spec.proxy.router.enabled=true' - \
+      	| yq eval '.spec.proxy.haproxy.enabled=false' - \
         | kubectl -n "${NAMESPACE}" apply -f -
