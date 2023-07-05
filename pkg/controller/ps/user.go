@@ -159,7 +159,6 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	um, err := users.NewManagerExec(primPod, apiv1alpha1.UserOperator, operatorPass, primaryHost)
-	// um, err := users.NewManager(apiv1alpha1.UserOperator, operatorPass, primaryHost, mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "init user manager")
 	}
@@ -235,6 +234,9 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	log.V(1).Info("Got primary host", "primary", primaryHost)
 
 	// TODO: handle this differently
+	// Because how currently we implement manager.DiscardOldPasswords,
+	// (as well ass manger.UpdateUserPasswords), we need updated operator user pass
+	// to perform DiscardOldPasswords properly.
 	updatedOperatorPass := operatorPass
 	for _, user := range updatedUsers {
 		if user.Username == apiv1alpha1.UserOperator {
@@ -244,7 +246,6 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	um, err = users.NewManagerExec(primPod, apiv1alpha1.UserOperator, updatedOperatorPass, primaryHost)
-	// um, err = users.NewManager(apiv1alpha1.UserOperator, operatorPass, primaryHost, mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "init user manager")
 	}
