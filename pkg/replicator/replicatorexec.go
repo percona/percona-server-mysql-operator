@@ -77,7 +77,7 @@ func (d *dbImplExec) ChangeReplicationSource(host, replicaPass string, port int3
 			SOURCE_USER='%s',
 			SOURCE_PASSWORD='%s',
 			SOURCE_HOST='%s',
-			SOURCE_PORT='%d',
+			SOURCE_PORT=%d,
 			SOURCE_SSL=1,
 			SOURCE_CONNECTION_AUTO_FAILOVER=1,
 			SOURCE_AUTO_POSITION=1,
