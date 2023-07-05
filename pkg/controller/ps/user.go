@@ -243,7 +243,15 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return err
 	}
 
-	um, err = users.NewManagerExec(primPod, apiv1alpha1.UserOperator, operatorPass, primaryHost)
+	updatedOperatorPass := operatorPass
+	for _, user := range updatedUsers {
+		if user.Username == apiv1alpha1.UserOperator {
+			updatedOperatorPass = user.Password
+			break
+		}
+	}
+
+	um, err = users.NewManagerExec(primPod, apiv1alpha1.UserOperator, updatedOperatorPass, primaryHost)
 	if err != nil {
 		return errors.Wrap(err, "init user manager")
 	}
