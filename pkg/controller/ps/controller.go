@@ -1214,6 +1214,10 @@ func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServe
 		}
 	}
 
+	if !cr.RouterEnabled() && !cr.HAProxyEnabled() {
+		return mysql.ServiceName(cr) + "." + cr.GetNamespace(), nil
+	}
+
 	svc := &corev1.Service{}
 	err := cl.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: serviceName}, svc)
 	if err != nil {
