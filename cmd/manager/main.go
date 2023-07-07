@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	k8sexec "k8s.io/utils/exec"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -117,6 +118,7 @@ func main() {
 		Client:        nsClient,
 		Scheme:        mgr.GetScheme(),
 		ServerVersion: serverVersion,
+		Exec:          k8sexec.New(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ps-controller")
 		os.Exit(1)

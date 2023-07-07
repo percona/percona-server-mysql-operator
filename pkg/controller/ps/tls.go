@@ -2,6 +2,7 @@ package ps
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -11,19 +12,20 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 )
 
-func (r *PerconaServerMySQLReconciler) ensureTLSSecret(
-	ctx context.Context,
-	cr *apiv1alpha1.PerconaServerMySQL,
-) error {
+func (r *PerconaServerMySQLReconciler) ensureTLSSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	log := logf.FromContext(ctx)
+
 	err := r.ensureSSLByCertManager(ctx, cr)
 	if err != nil {
 		if cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
+			log.Error(err, fmt.Sprintf("Failed to ensure certificate by cert-manager. Check `.spec.tls.issuerConf` in PerconaServerMySQL %s/%s", cr.Namespace, cr.Name))
 			return errors.Wrap(err, "create ssl with cert manager")
 		}
 		secret, err := secret.GenerateCertsSecret(ctx, cr)
@@ -34,6 +36,21 @@ func (r *PerconaServerMySQLReconciler) ensureTLSSecret(
 		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, secret, r.Scheme); err != nil {
 			return errors.Wrap(err, "create secret")
 		}
+	}
+
+	return nil
+}
+func (r *PerconaServerMySQLReconciler) checkTLSIssuer(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if cr.Spec.TLS == nil || cr.Spec.TLS.IssuerConf == nil {
+		return nil
+	}
+	isr := &cm.Issuer{}
+	err := r.Get(ctx, types.NamespacedName{
+		Namespace: cr.Namespace,
+		Name:      cr.Spec.TLS.IssuerConf.Name,
+	}, isr)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -49,15 +66,9 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 		issuerName = cr.Spec.TLS.IssuerConf.Name
 		issuerGroup = cr.Spec.TLS.IssuerConf.Group
 
-		isr := &cm.Issuer{}
-		err := r.Get(ctx, types.NamespacedName{
-			Namespace: cr.Namespace,
-			Name:      issuerName,
-		}, isr)
-		if k8serrors.IsNotFound(err) {
+		if err := r.checkTLSIssuer(ctx, cr); err != nil {
 			return err
 		}
-
 	} else {
 		issuerConf := cm.IssuerConfig{
 			SelfSigned: &cm.SelfSignedIssuer{},

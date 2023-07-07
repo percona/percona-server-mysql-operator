@@ -1,6 +1,8 @@
 package router
 
 import (
+	"fmt"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,6 +37,10 @@ const (
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return cr.Name + "-" + componentName
+}
+
+func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
+	return fmt.Sprintf("%s-%d", Name(cr), idx)
 }
 
 func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
