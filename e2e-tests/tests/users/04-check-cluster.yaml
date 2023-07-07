@@ -8,7 +8,7 @@ commands:
 
       source ../../functions
 
-      sleep 20 # wait for cluster status to change to initializing
+      sleep 30 # wait for cluster status to change to initializing
       wait_cluster_consistency_async "${test_name}" "3" "3"
       mysql_args="-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password_updated"
       users=($(get_mysql_users "${mysql_args}"))
@@ -37,7 +37,7 @@ commands:
       kubectl get configmap -n "${NAMESPACE}" 04-check-connections -o yaml
 
       # check replication
-      wait_pod "${test_name}-orc-0"
+      wait_cluster_consistency_async "${test_name}" "3" "3"
       orc_host=$(get_orc_headless_fqdn $(get_cluster_name) 0)
       cluster=$(run_curl "http://${orc_host}:3000/api/clusters/" | jq -r .[0])
 
@@ -49,4 +49,4 @@ commands:
       	| sed 's/ *//')
 
       kubectl create configmap -n "${NAMESPACE}" 04-check-replication --from-literal=replicating="${replicating}"
-    timeout: 200
+    timeout: 300

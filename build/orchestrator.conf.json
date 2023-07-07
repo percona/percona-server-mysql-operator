@@ -55,8 +55,6 @@
   "SQLite3DataFile": "/var/lib/orchestrator/orc.db",
   "UnseenInstanceForgetHours": 1,
   "StatusEndpoint": "/api/status",
-  "DetectSemiSyncEnforcedQuery": "select 1",
-  "EnforceExactSemiSyncReplicas": true,
   "UseSuperReadOnly": true,
   "ReplicationLagQuery": "SELECT CAST((UNIX_TIMESTAMP(NOW()) - UNIX_TIMESTAMP(ts)) AS UNSIGNED INTEGER) AS 'delay' FROM sys_operator.heartbeat ORDER BY ts DESC LIMIT 1",
   "FailMasterPromotionOnLagMinutes": 10
