@@ -170,15 +170,17 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, errors.Wrap(err, "get restore jobs list")
 	}
 	for _, restore := range restoreList.Items {
-		if restore.Spec.ClusterName == cr.Spec.ClusterName && restore.Name != cr.Name {
-			switch restore.Status.State {
-			case apiv1alpha1.RestoreSucceeded, apiv1alpha1.RestoreFailed, apiv1alpha1.RestoreError, apiv1alpha1.RestoreNew:
-			default:
-				status.State = apiv1alpha1.RestoreError
-				status.StateDesc = fmt.Sprintf("PerconaServerMySQLRestore %s is already running", restore.Name)
-				log.Info("PerconaServerMySQLRestore is already running", "restore", restore.Name)
-				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-			}
+		if restore.Spec.ClusterName != cr.Spec.ClusterName || restore.Name == cr.Name {
+			continue
+		}
+
+		switch restore.Status.State {
+		case apiv1alpha1.RestoreSucceeded, apiv1alpha1.RestoreFailed, apiv1alpha1.RestoreError, apiv1alpha1.RestoreNew:
+		default:
+			status.State = apiv1alpha1.RestoreError
+			status.StateDesc = fmt.Sprintf("PerconaServerMySQLRestore %s is already running", restore.Name)
+			log.Info("PerconaServerMySQLRestore is already running", "restore", restore.Name)
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 	}
 	// The above code is to prevent multiple restores from running at the same time. It works only if restore job is created.
