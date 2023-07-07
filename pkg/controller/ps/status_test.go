@@ -47,6 +47,8 @@ func TestReconcileStatusAsync(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	boolTrue := true
+
 	tests := []struct {
 		name     string
 		cr       *apiv1alpha1.PerconaServerMySQL
@@ -159,8 +161,53 @@ func TestReconcileStatusAsync(t *testing.T) {
 			},
 		},
 		{
-			// TODO: this test-case is a reason why we should change behavior of `r.allLoadBalancersReady()`
-			name: "with all ready pods and not ready loadbalancer",
+			name: "with all ready pods and not ready cluster's loadbalancer",
+			cr:   cr,
+			objects: appendSlices(
+				makeFakeReadyPods(cr, 3, "mysql"),
+				makeFakeReadyPods(cr, 3, "haproxy"),
+				makeFakeReadyPods(cr, 3, "orchestrator"),
+				[]client.Object{
+					&corev1.Service{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "cluster-service",
+							Namespace: cr.Namespace,
+							Labels:    cr.Labels(),
+							OwnerReferences: []metav1.OwnerReference{
+								{
+									Name:       cr.GetName(),
+									UID:        cr.GetUID(),
+									Controller: &boolTrue,
+								},
+							},
+						},
+						Spec: corev1.ServiceSpec{
+							Type: corev1.ServiceTypeLoadBalancer,
+						},
+					},
+				}),
+			expected: apiv1alpha1.PerconaServerMySQLStatus{
+				MySQL: apiv1alpha1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1alpha1.StateReady,
+				},
+				Orchestrator: apiv1alpha1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1alpha1.StateReady,
+				},
+				HAProxy: apiv1alpha1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1alpha1.StateReady,
+				},
+				State: apiv1alpha1.StateInitializing,
+				Host:  cr.Name + "-haproxy." + cr.Namespace,
+			},
+		},
+		{
+			name: "with all ready pods and not ready custom loadbalancer",
 			cr:   cr,
 			objects: appendSlices(
 				makeFakeReadyPods(cr, 3, "mysql"),
@@ -195,8 +242,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 					Ready: 3,
 					State: apiv1alpha1.StateReady,
 				},
-				// TODO: this should be `StateReady` because cr doesn't have loadbalancer
-				State: apiv1alpha1.StateInitializing,
+				State: apiv1alpha1.StateReady,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 			},
 		},
