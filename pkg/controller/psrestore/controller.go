@@ -19,6 +19,7 @@ package psrestore
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -51,6 +52,8 @@ type PerconaServerMySQLRestoreReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	ServerVersion *platform.ServerVersion
+
+	sm sync.Map
 }
 
 var ErrWaitingTermination error = errors.New("waiting for MySQL pods to terminate")
@@ -161,6 +164,32 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	case apiv1alpha1.RestoreFailed, apiv1alpha1.RestoreSucceeded:
 		return ctrl.Result{}, nil
 	}
+
+	restoreList := &apiv1alpha1.PerconaServerMySQLRestoreList{}
+	if err := r.List(ctx, restoreList, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "get restore jobs list")
+	}
+	for _, restore := range restoreList.Items {
+		if restore.Spec.ClusterName != cr.Spec.ClusterName || restore.Name == cr.Name {
+			continue
+		}
+
+		switch restore.Status.State {
+		case apiv1alpha1.RestoreSucceeded, apiv1alpha1.RestoreFailed, apiv1alpha1.RestoreError, apiv1alpha1.RestoreNew:
+		default:
+			status.State = apiv1alpha1.RestoreError
+			status.StateDesc = fmt.Sprintf("PerconaServerMySQLRestore %s is already running", restore.Name)
+			log.Info("PerconaServerMySQLRestore is already running", "restore", restore.Name)
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+	}
+	// The above code is to prevent multiple restores from running at the same time. It works only if restore job is created.
+	// But if multiple restores are created at the same time, then the above code will not work, because there are no restore jobs yet.
+	// Therefore, we need to use sync.Map to prevent multiple restores from creating restore jobs at the same time.
+	if _, ok := r.sm.LoadOrStore(cr.Spec.ClusterName, 1); ok {
+		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
+	}
+	defer r.sm.Delete(cr.Spec.ClusterName)
 
 	log.Info("Pausing cluster", "cluster", cluster.Name)
 	if err := r.pauseCluster(ctx, cluster); err != nil {
@@ -308,6 +337,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		if err := r.unpauseCluster(ctx, cluster); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "unpause cluster")
 		}
+		log.Info("PerconaServerMySQLRestore is finished", "restore", cr.Name, "cluster", cluster.Name)
 	}
 
 	return ctrl.Result{}, nil
