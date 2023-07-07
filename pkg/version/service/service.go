@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/pkg/errors"
@@ -20,12 +21,15 @@ const (
 	defaultEndpoint = "https://check.percona.com"
 )
 
-func GetVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.ServerVersion) (DepVersion, error) {
-	endpoint := cr.Spec.UpgradeOptions.VersionServiceEndpoint
-	if endpoint == "" {
-		endpoint = defaultEndpoint
+func GetDefaultVersionServiceEndpoint() string {
+	if endpoint := os.Getenv("PERCONA_VS_FALLBACK_URI"); len(endpoint) > 0 {
+		return endpoint
 	}
 
+	return defaultEndpoint
+}
+
+func GetVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, endpoint string, serverVersion *platform.ServerVersion) (DepVersion, error) {
 	requestURL, err := url.Parse(endpoint)
 	if err != nil {
 		return DepVersion{}, errors.Wrap(err, "url parse")
@@ -47,18 +51,23 @@ func GetVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, serverV
 		CustomResourceUID: &crUID,
 		DatabaseVersion:   &cr.Status.MySQL.Version,
 		KubeVersion:       &serverVersion.Info.GitVersion,
-		NamespaceUID:      new(string),
 		OperatorVersion:   cr.Spec.CRVersion,
 		Platform:          &platformStr,
 		Product:           productName,
 		Context:           ctx,
 		HTTPClient:        &http.Client{Timeout: timeout},
+		PmmVersion:        &cr.Status.PMMVersion,
+		HaproxyVersion:    &cr.Status.HAProxy.Version,
 	}
 	applyParams = applyParams.WithTimeout(timeout)
 
 	resp, err := client.VersionService.VersionServiceApply(applyParams)
 	if err != nil {
 		return DepVersion{}, errors.Wrap(err, "version service apply")
+	}
+
+	if resp.Payload == nil || len(resp.Payload.Versions) == 0 {
+		return DepVersion{}, nil
 	}
 
 	matrix := resp.Payload.Versions[0].Matrix
@@ -88,6 +97,16 @@ func GetVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, serverV
 		return DepVersion{}, errors.Wrap(err, "get router version")
 	}
 
+	haproxyVersion, err := getVersion(matrix.Haproxy)
+	if err != nil {
+		return DepVersion{}, errors.Wrap(err, "get haproxy version")
+	}
+
+	toolkitVersion, err := getVersion(matrix.Toolkit)
+	if err != nil {
+		return DepVersion{}, errors.Wrap(err, "get toolkit version")
+	}
+
 	dv := DepVersion{
 		PSImage:             matrix.Mysql[psVersion].ImagePath,
 		PSVersion:           psVersion,
@@ -99,6 +118,10 @@ func GetVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, serverV
 		RouterVersion:       routerVersion,
 		PMMImage:            matrix.Pmm[pmmVersion].ImagePath,
 		PMMVersion:          pmmVersion,
+		HAProxyImage:        matrix.Haproxy[haproxyVersion].ImagePath,
+		HAProxyVersion:      haproxyVersion,
+		ToolkitImage:        matrix.Toolkit[toolkitVersion].ImagePath,
+		ToolkitVersion:      toolkitVersion,
 	}
 	return dv, nil
 }
@@ -114,6 +137,10 @@ type DepVersion struct {
 	RouterVersion       string `json:"routerVersion,omitempty"`
 	PMMImage            string `json:"pmmImage,omitempty"`
 	PMMVersion          string `json:"pmmVersion,omitempty"`
+	HAProxyImage        string `json:"haproxyImage,omitempty"`
+	HAProxyVersion      string `json:"haproxyVersion,omitempty"`
+	ToolkitImage        string `json:"toolkitImage,omitempty"`
+	ToolkitVersion      string `json:"toolkitVersion,omitempty"`
 }
 
 func getVersion(versions map[string]models.VersionVersion) (string, error) {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"path/filepath"
@@ -19,7 +20,7 @@ func main() {
 	clusterType := os.Getenv("CLUSTER_TYPE")
 	switch clusterType {
 	case "group-replication":
-		if err := bootstrapGroupReplication(); err != nil {
+		if err := bootstrapGroupReplication(context.Background()); err != nil {
 			log.Fatalf("bootstrap failed: %v", err)
 		}
 	case "async":

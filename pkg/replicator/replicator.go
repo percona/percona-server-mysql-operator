@@ -49,8 +49,6 @@ type Replicator interface {
 	Clone(donor, user, pass string, port int32) error
 	IsReplica() (bool, error)
 	DumbQuery() error
-	SetSemiSyncSource(enabled bool) error
-	SetSemiSyncSize(size int) error
 	GetGlobal(variable string) (interface{}, error)
 	SetGlobal(variable, value interface{}) error
 	ChangeGroupReplicationPassword(replicaPass string) error
@@ -61,6 +59,7 @@ type Replicator interface {
 	GetMemberState(host string) (MemberState, error)
 	GetGroupReplicationMembers() ([]string, error)
 	CheckIfDatabaseExists(name string) (bool, error)
+	CheckIfInPrimaryPartition() (bool, error)
 }
 
 type dbImpl struct{ db *sql.DB }
@@ -255,16 +254,6 @@ func (d *dbImpl) DumbQuery() error {
 	return errors.Wrap(err, "SELECT 1")
 }
 
-func (d *dbImpl) SetSemiSyncSource(enabled bool) error {
-	_, err := d.db.Exec("SET GLOBAL rpl_semi_sync_master_enabled=?", enabled)
-	return errors.Wrap(err, "set rpl_semi_sync_master_enabled")
-}
-
-func (d *dbImpl) SetSemiSyncSize(size int) error {
-	_, err := d.db.Exec("SET GLOBAL rpl_semi_sync_master_wait_for_slave_count=?", size)
-	return errors.Wrap(err, "set rpl_semi_sync_master_wait_for_slave_count")
-}
-
 func (d *dbImpl) GetGlobal(variable string) (interface{}, error) {
 	// TODO: check how to do this without being vulnerable to injection
 	var value interface{}
@@ -391,4 +380,40 @@ func (d *dbImpl) CheckIfDatabaseExists(name string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func (d *dbImpl) CheckIfInPrimaryPartition() (bool, error) {
+	var in bool
+
+	err := d.db.QueryRow(`
+	SELECT
+		MEMBER_STATE = 'ONLINE'
+		AND (
+			(
+				SELECT
+					COUNT(*)
+				FROM
+					performance_schema.replication_group_members
+				WHERE
+					MEMBER_STATE NOT IN ('ONLINE', 'RECOVERING')
+			) >= (
+				(
+					SELECT
+						COUNT(*)
+					FROM
+						performance_schema.replication_group_members
+				) / 2
+			) = 0
+		)
+	FROM
+		performance_schema.replication_group_members
+		JOIN performance_schema.replication_group_member_stats USING(member_id)
+	WHERE
+		member_id = @@global.server_uuid;
+	`).Scan(&in)
+	if err != nil {
+		return false, err
+	}
+
+	return in, nil
 }

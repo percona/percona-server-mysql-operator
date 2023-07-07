@@ -64,6 +64,8 @@ spec:
         - name: SERVICE_NAME_UNREADY
           value: limits-no-requests-mysql-unready
         - name: CLUSTER_HASH
+        - name: INNODB_CLUSTER_NAME
+          value: limitsnorequests
         - name: CR_UID
         - name: CLUSTER_TYPE
         imagePullPolicy: Always

@@ -156,6 +156,19 @@ Contributions to the source tree should follow the workflow described below:
 5. When the reviewer makes some comments, address any feedback that comes and update the pull request.
 6. When your contribution is accepted, your pull request will be approved and merged to the main branch.
 
+**Running tests**
+
+1. Unit / integration tests
+
+   Run the command `make test`.
+2. E2E tests
+
+   For e2e test we are using [kuttl](https://kuttl.dev/). To run a single test call:
+
+   `kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test ^<test-name>/$` where the `<test-name>` is the folder inside `e2e-tests/tests`.
+   
+   By default kuttl will delete created test namespace after test is finished, you can add `--skip-delete` flag in order to prevent deletion for potential troubleshooting.
+
 
 ### 2. Contributing to documentation
 

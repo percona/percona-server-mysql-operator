@@ -12,6 +12,7 @@ deploy_operator() {
 	yq eval \
 		"$(printf 'select(documentIndex==1).spec.template.spec.containers[0].image="%s"' "${IMAGE}")" \
 		"${DEPLOY_DIR}/operator.yaml" \
+		| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "true"' \
 		| kubectl -n "${NAMESPACE}" apply -f -
 }
 
@@ -67,14 +68,17 @@ get_pmm_api_key() {
 }
 
 deploy_minio() {
+	accessKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
+	secretKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
+
 	helm uninstall -n "${NAMESPACE}" minio-service || :
 	helm repo remove minio || :
 	helm repo add minio https://helm.min.io/
 	retry 10 60 helm install minio-service \
 		-n "${NAMESPACE}" \
 		--version 8.0.5 \
-		--set accessKey=some-access-key \
-		--set secretKey=some-secret-key \
+		--set accessKey="$(printf '%q' "$accessKey")" \
+		--set secretKey="$(printf '%q' "$secretKey")" \
 		--set service.type=ClusterIP \
 		--set configPathmc=/tmp/.minio/ \
 		--set persistence.size=2G \
@@ -87,8 +91,8 @@ deploy_minio() {
 
 	# create bucket
 	kubectl -n "${NAMESPACE}" run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-		bash -c 'AWS_ACCESS_KEY_ID=some-access-key AWS_SECRET_ACCESS_KEY=some-secret-key AWS_DEFAULT_REGION=us-east-1 \
-        /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing'
+		bash -c "AWS_ACCESS_KEY_ID='$accessKey' AWS_SECRET_ACCESS_KEY='$secretKey' AWS_DEFAULT_REGION=us-east-1 \
+        /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing"
 }
 
 retry() {
@@ -130,16 +134,25 @@ get_cr() {
 		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_PMM}")" - \
 		| if [ -n "${MINIKUBE}" ]; then
 			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) |= "none"' - \
-				| yq eval '.spec.proxy.haproxy.resources.requests.cpu="300m"' -
+				| yq eval '.spec.proxy.haproxy.resources.requests.cpu="400m"' -
 		else
 			yq eval -
 		fi
+}
+
+get_client_pod() {
+	kubectl -n "${NAMESPACE}" get pods \
+		--selector=name=mysql-client \
+		-o 'jsonpath={.items[].metadata.name}'
 }
 
 run_mysql() {
 	local command="$1"
 	local uri="$2"
 	local pod="$3"
+
+	client_pod=$(get_client_pod)
+	wait_pod $client_pod 1>&2
 
 	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
 		bash -c "printf '%s\n' \"${command}\" | mysql -sN $uri" 2>&1 \
@@ -177,6 +190,12 @@ get_mysql_service() {
 	local cluster=$1
 
 	echo "${cluster}-mysql"
+}
+
+get_router_service() {
+	local cluster=$1
+
+	echo "${cluster}-router"
 }
 
 get_haproxy_svc() {
@@ -293,7 +312,7 @@ get_service_ip() {
 	kubectl get service/$service -n "${NAMESPACE}" -o 'jsonpath={.status.loadBalancer.ingress[].hostname}'
 }
 
-wait_cluster_consistency() {
+wait_cluster_consistency_async() {
 	local cluster_name=${1}
 	local cluster_size=${2}
 	local orc_size=${3}
@@ -308,7 +327,27 @@ wait_cluster_consistency() {
 	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.orchestrator.ready}')" == "${orc_size}" &&
 	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.orchestrator.state}')" == "ready" &&
 	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.state}')" == "ready" ]]; do
-		echo 'waiting for cluster readyness'
+		echo 'waiting for cluster readyness (async)'
+		sleep 15
+	done
+}
+
+wait_cluster_consistency_gr() {
+	local cluster_name=${1}
+	local cluster_size=${2}
+	local router_size=${3}
+
+	if [ -z "${router_size}" ]; then
+		router_size=3
+	fi
+
+	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
+	until [[ "$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.mysql.state}')" == "ready" &&
+	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.mysql.ready}')" == "${cluster_size}" &&
+	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.router.ready}')" == "${router_size}" &&
+	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.router.state}')" == "ready" &&
+	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.state}')" == "ready" ]]; do
+		echo 'waiting for cluster readyness (group replication)'
 		sleep 15
 	done
 }
@@ -394,7 +433,7 @@ deploy_version_service() {
 deploy_cert_manager() {
 	kubectl create namespace cert-manager || :
 	kubectl label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
-	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.8.0/cert-manager.yaml --validate=false || : 2>/dev/null
+	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.11.0/cert-manager.yaml --validate=false || : 2>/dev/null
 }
 
 get_primary_from_label() {
@@ -406,4 +445,17 @@ get_primary_from_haproxy() {
 	local haproxy_pod_ip=$(kubectl -n "${NAMESPACE}" get pods ${haproxy_pod} -o jsonpath="{.status.podIP}")
 
 	run_mysql "SHOW VARIABLES LIKE '%hostname%';" "-h ${haproxy_pod_ip} -P3306 -uroot -proot_password" | awk '{print $2}'
+}
+
+verify_certificate_sans() {
+	local certificate=$1
+	local expected_sans=$2
+
+	have=$(mktemp)
+	want=$(mktemp)
+
+	kubectl -n "${NAMESPACE}" get certificate "${certificate}" -o jsonpath='{.spec.dnsNames}' | jq '.' >"${have}"
+	echo "${expected_sans}" | jq '.' >"${want}"
+
+	diff "${have}" "${want}"
 }

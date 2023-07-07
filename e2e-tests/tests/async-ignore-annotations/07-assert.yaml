@@ -48,7 +48,7 @@ spec:
     app.kubernetes.io/part-of: percona-server
     rack: rack-22-test
   sessionAffinity: None
-  type: LoadBalancer
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
@@ -86,6 +86,10 @@ spec:
     port: 3309
     protocol: TCP
     targetPort: 3309
+  - name: mysqlx
+    port: 33060
+    protocol: TCP
+    targetPort: 33060
   selector:
     app.kubernetes.io/component: haproxy
     app.kubernetes.io/instance: async-ignore-annotations
@@ -94,7 +98,7 @@ spec:
     app.kubernetes.io/part-of: percona-server
     rack: rack-22-test
   sessionAffinity: None
-  type: LoadBalancer
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
@@ -137,5 +141,5 @@ spec:
     app.kubernetes.io/part-of: percona-server
     rack: rack-22-test
   sessionAffinity: None
-  type: LoadBalancer
+  type: ClusterIP
 

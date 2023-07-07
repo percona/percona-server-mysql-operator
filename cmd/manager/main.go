@@ -118,7 +118,7 @@ func main() {
 		Scheme:        mgr.GetScheme(),
 		ServerVersion: serverVersion,
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQL")
+		setupLog.Error(err, "unable to create controller", "controller", "ps-controller")
 		os.Exit(1)
 	}
 	if err = (&psbackup.PerconaServerMySQLBackupReconciler{

@@ -64,6 +64,8 @@ spec:
                 type: string
               state:
                 type: string
+              stateDescription:
+                type: string
               storage:
                 properties:
                   affinity:
@@ -853,6 +855,8 @@ spec:
                     type: string
                   state:
                     type: string
+                  stateDescription:
+                    type: string
                   storage:
                     properties:
                       affinity:
@@ -1597,6 +1601,8 @@ spec:
                 format: date-time
                 type: string
               state:
+                type: string
+              stateDescription:
                 type: string
             type: object
         type: object
@@ -3271,8 +3277,6 @@ spec:
                     type: string
                   schedulerName:
                     type: string
-                  semiSyncType:
-                    type: string
                   serviceAccountName:
                     type: string
                   sidecarPVCs:
@@ -4478,6 +4482,19 @@ spec:
                               format: int32
                               type: integer
                           type: object
+                        resizePolicy:
+                          items:
+                            properties:
+                              resourceName:
+                                type: string
+                              restartPolicy:
+                                type: string
+                            required:
+                            - resourceName
+                            - restartPolicy
+                            type: object
+                          type: array
+                          x-kubernetes-list-type: atomic
                         resources:
                           properties:
                             claims:
@@ -4699,11 +4716,6 @@ spec:
                   size:
                     format: int32
                     type: integer
-                  sizeSemiSync:
-                    anyOf:
-                    - type: integer
-                    - type: string
-                    x-kubernetes-int-or-string: true
                   startupProbe:
                     properties:
                       exec:
@@ -8408,6 +8420,8 @@ spec:
                 type: object
               state:
                 type: string
+              toolkitVersion:
+                type: string
             type: object
         type: object
     served: true
@@ -8680,6 +8694,8 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.namespace
+        - name: DISABLE_TELEMETRY
+          value: "false"
         image: perconalab/percona-server-mysql-operator:main
         imagePullPolicy: Always
         livenessProbe:

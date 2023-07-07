@@ -75,6 +75,8 @@ const (
 	ClusterTypeGR    ClusterType = "group-replication"
 	ClusterTypeAsync ClusterType = "async"
 	MinSafeProxySize             = 2
+	MinSafeGRSize                = 3
+	MaxSafeGRSize                = 9
 )
 
 func (t ClusterType) isValid() bool {
@@ -87,10 +89,8 @@ func (t ClusterType) isValid() bool {
 }
 
 type MySQLSpec struct {
-	ClusterType  ClusterType            `json:"clusterType,omitempty"`
-	SizeSemiSync intstr.IntOrString     `json:"sizeSemiSync,omitempty"`
-	SemiSyncType string                 `json:"semiSyncType,omitempty"`
-	Expose       ServiceExposeTogglable `json:"expose,omitempty"`
+	ClusterType ClusterType            `json:"clusterType,omitempty"`
+	Expose      ServiceExposeTogglable `json:"expose,omitempty"`
 
 	Sidecars       []corev1.Container `json:"sidecars,omitempty"`
 	SidecarVolumes []corev1.Volume    `json:"sidecarVolumes,omitempty"`
@@ -217,19 +217,32 @@ type BackupStorageSpec struct {
 }
 
 type BackupStorageS3Spec struct {
-	Bucket            string `json:"bucket"`
-	Prefix            string `json:"prefix,omitempty"`
-	CredentialsSecret string `json:"credentialsSecret"`
-	Region            string `json:"region,omitempty"`
-	EndpointURL       string `json:"endpointUrl,omitempty"`
-	StorageClass      string `json:"storageClass,omitempty"`
+	Bucket            BucketWithPrefix `json:"bucket"`
+	Prefix            string           `json:"prefix,omitempty"`
+	CredentialsSecret string           `json:"credentialsSecret"`
+	Region            string           `json:"region,omitempty"`
+	EndpointURL       string           `json:"endpointUrl,omitempty"`
+	StorageClass      string           `json:"storageClass,omitempty"`
+}
+
+// BucketWithPrefix contains a bucket name with or without a prefix in a format <bucket>/<prefix>
+type BucketWithPrefix string
+
+func (b BucketWithPrefix) Bucket() string {
+	bucket, _, _ := strings.Cut(string(b), "/")
+	return bucket
+}
+
+func (b BucketWithPrefix) Prefix() string {
+	_, prefix, _ := strings.Cut(string(b), "/")
+	return prefix
 }
 
 type BackupStorageGCSSpec struct {
-	Bucket            string `json:"bucket"`
-	Prefix            string `json:"prefix,omitempty"`
-	CredentialsSecret string `json:"credentialsSecret"`
-	EndpointURL       string `json:"endpointUrl,omitempty"`
+	Bucket            BucketWithPrefix `json:"bucket"`
+	Prefix            string           `json:"prefix,omitempty"`
+	CredentialsSecret string           `json:"credentialsSecret"`
+	EndpointURL       string           `json:"endpointUrl,omitempty"`
 
 	// STANDARD, NEARLINE, COLDLINE, ARCHIVE
 	StorageClass string `json:"storageClass,omitempty"`
@@ -237,7 +250,7 @@ type BackupStorageGCSSpec struct {
 
 type BackupStorageAzureSpec struct {
 	// A container name is a valid DNS name that conforms to the Azure naming rules.
-	ContainerName string `json:"containerName"`
+	ContainerName BucketWithPrefix `json:"containerName"`
 
 	// A prefix is a sub-folder to the backups inside the container
 	Prefix string `json:"prefix,omitempty"`
@@ -343,14 +356,15 @@ type StatefulAppStatus struct {
 // PerconaServerMySQLStatus defines the observed state of PerconaServerMySQL
 type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	MySQL         StatefulAppStatus  `json:"mysql,omitempty"`
-	Orchestrator  StatefulAppStatus  `json:"orchestrator,omitempty"`
-	HAProxy       StatefulAppStatus  `json:"haproxy,omitempty"`
-	Router        StatefulAppStatus  `json:"router,omitempty"`
-	State         StatefulAppState   `json:"state,omitempty"`
-	BackupVersion string             `json:"backupVersion,omitempty"`
-	PMMVersion    string             `json:"pmmVersion,omitempty"`
-	Conditions    []metav1.Condition `json:"conditions,omitempty"`
+	MySQL          StatefulAppStatus  `json:"mysql,omitempty"`
+	Orchestrator   StatefulAppStatus  `json:"orchestrator,omitempty"`
+	HAProxy        StatefulAppStatus  `json:"haproxy,omitempty"`
+	Router         StatefulAppStatus  `json:"router,omitempty"`
+	State          StatefulAppState   `json:"state,omitempty"`
+	BackupVersion  string             `json:"backupVersion,omitempty"`
+	PMMVersion     string             `json:"pmmVersion,omitempty"`
+	ToolkitVersion string             `json:"toolkitVersion,omitempty"`
+	Conditions     []metav1.Condition `json:"conditions,omitempty"`
 	// +optional
 	Host string `json:"host"`
 }
@@ -433,12 +447,12 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 
 	cr.SetVersion()
 
-	if len(cr.Spec.Backup.Image) == 0 {
-		return errors.New("backup.image can't be empty")
+	if cr.Spec.Backup == nil {
+		cr.Spec.Backup = new(BackupSpec)
 	}
 
-	if cr.Spec.MySQL.Size != 0 && cr.Spec.MySQL.SizeSemiSync.IntVal >= cr.Spec.MySQL.Size {
-		return errors.New("mysql.sizeSemiSync can't be greater than or equal to mysql.size")
+	if len(cr.Spec.Backup.Image) == 0 {
+		return errors.New("backup.image can't be empty")
 	}
 
 	if cr.Spec.MySQL.StartupProbe.InitialDelaySeconds == 0 {
@@ -487,6 +501,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 	}
 	if cr.Spec.MySQL.ReadinessProbe.TimeoutSeconds == 0 {
 		cr.Spec.MySQL.ReadinessProbe.TimeoutSeconds = 3
+	}
+
+	if cr.Spec.Proxy.Router == nil {
+		cr.Spec.Proxy.Router = new(MySQLRouterSpec)
 	}
 
 	if cr.Spec.Proxy.Router.ReadinessProbe.PeriodSeconds == 0 {
@@ -545,10 +563,28 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		return errors.New("router section is needed for group replication")
 	}
 
+	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && !cr.Spec.AllowUnsafeConfig {
+		if cr.Spec.MySQL.Size < MinSafeGRSize {
+			cr.Spec.MySQL.Size = MinSafeGRSize
+		}
+
+		if cr.Spec.MySQL.Size > MaxSafeGRSize {
+			cr.Spec.MySQL.Size = MaxSafeGRSize
+		}
+
+		if cr.Spec.MySQL.Size%2 == 0 {
+			cr.Spec.MySQL.Size++
+		}
+	}
+
 	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Proxy.Router != nil && !cr.Spec.AllowUnsafeConfig {
 		if cr.Spec.Proxy.Router.Size < MinSafeProxySize {
 			cr.Spec.Proxy.Router.Size = MinSafeProxySize
 		}
+	}
+
+	if cr.Spec.Proxy.HAProxy == nil {
+		cr.Spec.Proxy.HAProxy = new(HAProxySpec)
 	}
 
 	if cr.HAProxyEnabled() && cr.Spec.MySQL.ClusterType != ClusterTypeGR && !cr.Spec.AllowUnsafeConfig {
@@ -569,11 +605,23 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		}
 	}
 
+	if cr.Spec.PMM == nil {
+		cr.Spec.PMM = new(PMMSpec)
+	}
+
+	if cr.Spec.Toolkit == nil {
+		cr.Spec.Toolkit = new(ToolkitSpec)
+	}
+
 	if cr.Spec.Pause {
 		cr.Spec.MySQL.Size = 0
 		cr.Spec.Orchestrator.Size = 0
 		cr.Spec.Proxy.Router.Size = 0
 		cr.Spec.Proxy.HAProxy.Size = 0
+	}
+
+	if cr.Spec.SSLSecretName == "" {
+		cr.Spec.SSLSecretName = cr.Name + "-ssl"
 	}
 
 	return nil
@@ -743,7 +791,7 @@ func (cr *PerconaServerMySQL) InternalSecretName() string {
 }
 
 func (cr *PerconaServerMySQL) PMMEnabled(secret *corev1.Secret) bool {
-	if cr.Spec.PMM != nil && cr.Spec.PMM.Enabled && secret.Data != nil {
+	if cr.Spec.PMM != nil && cr.Spec.PMM.Enabled && secret != nil && secret.Data != nil {
 		return cr.Spec.PMM.HasSecret(secret)
 	}
 	return false
@@ -751,8 +799,8 @@ func (cr *PerconaServerMySQL) PMMEnabled(secret *corev1.Secret) bool {
 
 func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	if secret.Data != nil {
-		_, ok := secret.Data[string(UserPMMServerKey)]
-		return ok
+		v, ok := secret.Data[string(UserPMMServerKey)]
+		return ok && len(v) > 0
 	}
 	return false
 }

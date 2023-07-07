@@ -41,3 +41,4 @@ status:
     ready: 5
     size: 5
     state: ready
+  state: ready

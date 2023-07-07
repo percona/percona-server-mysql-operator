@@ -1,0 +1,15 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      kubectl delete ps -n ${NAMESPACE} gr-bootstrap
+
+      get_cr \
+      	| yq eval '.spec.mysql.clusterType="group-replication"' - \
+      	| kubectl -n "${NAMESPACE}" apply -f -
+    timeout: 120

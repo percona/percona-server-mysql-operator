@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 20
+timeout: 30
 ---
 apiVersion: v1
 kind: Service
@@ -122,5 +122,3 @@ spec:
     rack: rack-22
   sessionAffinity: None
   type: LoadBalancer
-
-

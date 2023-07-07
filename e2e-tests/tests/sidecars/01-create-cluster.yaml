@@ -15,6 +15,4 @@ commands:
       	| yq eval '.spec.mysql.sidecarVolumes = [{"name": "empty-vol", "emptyDir": {"medium": "Memory"}}]' - \
       	| yq eval '.spec.mysql.sidecarPVCs = [{"name": "pvc-vol", "spec": {"resources": {"requests": {"storage": "1G"}}}}]' - \
       	| kubectl -n "${NAMESPACE}" apply -f -
-
-      wait_cluster_consistency "${test_name}" "3" "3"
-    timeout: 240
+    timeout: 30

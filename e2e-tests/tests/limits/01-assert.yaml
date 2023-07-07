@@ -64,6 +64,8 @@ spec:
         - name: SERVICE_NAME_UNREADY
           value: limits-no-limits-mysql-unready
         - name: CLUSTER_HASH
+        - name: INNODB_CLUSTER_NAME
+          value: limitsnolimits
         - name: CR_UID
         - name: CLUSTER_TYPE
         imagePullPolicy: Always

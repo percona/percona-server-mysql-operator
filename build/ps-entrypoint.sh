@@ -160,8 +160,6 @@ create_default_cnf() {
 	sed -i "/\[mysqld\]/a enforce-gtid-consistency=ON" $CFG
 	sed -i "/\[mysqld\]/a log_error_verbosity=3" $CFG
 	sed -i "/\[mysqld\]/a plugin-load-add=clone=mysql_clone.so" $CFG
-	sed -i "/\[mysqld\]/a plugin-load-add=rpl_semi_sync_master=semisync_master.so" $CFG
-	sed -i "/\[mysqld\]/a plugin-load-add=rpl_semi_sync_slave=semisync_slave.so" $CFG
 
 	if [[ -d ${TLS_DIR} ]]; then
 		sed -i "/\[mysqld\]/a ssl_ca=${TLS_DIR}/ca.crt" $CFG
@@ -184,14 +182,6 @@ load_group_replication_plugin() {
 	POD_IP=$(hostname -I | awk '{print $1}')
 
 	sed -i "/\[mysqld\]/a plugin_load_add=group_replication.so" $CFG
-	sed -i "/\[mysqld\]/a group_replication_bootstrap_group=OFF" $CFG
-	sed -i "/\[mysqld\]/a group_replication_start_on_boot=OFF" $CFG
-	sed -i "/\[mysqld\]/a group_replication_consistency=EVENTUAL" $CFG
-	sed -i "/\[mysqld\]/a group_replication_exit_state_action=READ_ONLY" $CFG
-	sed -i "/\[mysqld\]/a group_replication_communication_stack=XCOM" $CFG
-	sed -i "/\[mysqld\]/a group_replication_ip_allowlist=${POD_IP}/16" $CFG
-	sed -i "/\[mysqld\]/a group_replication_ssl_mode=REQUIRED" $CFG
-	sed -i "/\[mysqld\]/a group_replication_recovery_use_ssl=ON" $CFG
 }
 
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
@@ -321,8 +311,12 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			${monitorConnectGrant}
 
 			CREATE USER 'replication'@'%' IDENTIFIED BY '${REPLICATION_PASSWORD}';
-			GRANT SYSTEM_USER, REPLICATION SLAVE, CONNECTION_ADMIN, BACKUP_ADMIN, GROUP_REPLICATION_STREAM, CLONE_ADMIN ON *.* to 'replication'@'%';
+			GRANT DELETE, INSERT, UPDATE ON mysql.* TO 'replication'@'%' WITH GRANT OPTION;
 			GRANT SELECT ON performance_schema.threads to 'replication'@'%';
+			GRANT SYSTEM_USER, REPLICATION SLAVE, BACKUP_ADMIN, GROUP_REPLICATION_STREAM, CLONE_ADMIN, CONNECTION_ADMIN, CREATE USER, EXECUTE, FILE, GROUP_REPLICATION_ADMIN, PERSIST_RO_VARIABLES_ADMIN, PROCESS, RELOAD, REPLICATION CLIENT, REPLICATION_APPLIER, REPLICATION_SLAVE_ADMIN, ROLE_ADMIN, SELECT, SHUTDOWN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'replication'@'%' WITH GRANT OPTION;
+			GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata.* TO 'replication'@'%' WITH GRANT OPTION;
+			GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata_bkp.* TO 'replication'@'%' WITH GRANT OPTION;
+			GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata_previous.* TO 'replication'@'%' WITH GRANT OPTION;
 
 			CREATE USER 'orchestrator'@'%' IDENTIFIED BY '${ORC_TOPOLOGY_PASSWORD}';
 			GRANT SYSTEM_USER, SUPER, PROCESS, REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';

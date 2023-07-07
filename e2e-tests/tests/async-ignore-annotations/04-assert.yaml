@@ -53,7 +53,7 @@ spec:
     rack: rack-22
     rack-test: rack-test-22
   sessionAffinity: None
-  type: LoadBalancer
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
@@ -95,6 +95,10 @@ spec:
     port: 3309
     protocol: TCP
     targetPort: 3309
+  - name: mysqlx
+    port: 33060
+    protocol: TCP
+    targetPort: 33060
   selector:
     app.kubernetes.io/component: haproxy
     app.kubernetes.io/instance: async-ignore-annotations
@@ -104,7 +108,7 @@ spec:
     rack: rack-22
     rack-test: rack-test-22
   sessionAffinity: None
-  type: LoadBalancer
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
@@ -152,4 +156,4 @@ spec:
     rack: rack-22
     rack-test: rack-test-22
   sessionAffinity: None
-  type: LoadBalancer
+  type: ClusterIP

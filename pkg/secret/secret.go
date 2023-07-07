@@ -23,20 +23,7 @@ import (
 var validityNotAfter = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
 
 func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Secret, error) {
-	// TODO: DNS suffix
-	hosts := []string{
-		fmt.Sprintf("*.%s-mysql", cr.Name),
-		fmt.Sprintf("*.%s-mysql.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-mysql.%s.svc.cluster.local", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-orchestrator", cr.Name),
-		fmt.Sprintf("*.%s-orchestrator.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-orchestrator.%s.svc.cluster.local", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-router", cr.Name),
-		fmt.Sprintf("*.%s-router.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-router.%s.svc.cluster.local", cr.Name, cr.Namespace),
-	}
-
-	ca, cert, key, err := issueCerts(hosts)
+	ca, cert, key, err := issueCerts(DNSNames(cr))
 	if err != nil {
 		return nil, errors.Wrap(err, "issue TLS certificates")
 	}
@@ -54,6 +41,24 @@ func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL
 		Type: corev1.SecretTypeTLS,
 	}
 	return secret, nil
+}
+
+func DNSNames(cr *apiv1alpha1.PerconaServerMySQL) []string {
+	hosts := []string{
+		fmt.Sprintf("*.%s-mysql", cr.Name),
+		fmt.Sprintf("*.%s-mysql.%s", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-mysql.%s.svc", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-orchestrator", cr.Name),
+		fmt.Sprintf("*.%s-orchestrator.%s", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-orchestrator.%s.svc", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-router", cr.Name),
+		fmt.Sprintf("*.%s-router.%s", cr.Name, cr.Namespace),
+		fmt.Sprintf("*.%s-router.%s.svc", cr.Name, cr.Namespace),
+	}
+	if cr.Spec.TLS != nil {
+		hosts = append(hosts, cr.Spec.TLS.SANs...)
+	}
+	return hosts
 }
 
 // issueCerts returns CA certificate, TLS certificate and TLS private key
@@ -169,7 +174,7 @@ const (
 		"0123456789"
 )
 
-var secretUsers = [...]apiv1alpha1.SystemUser{
+var SecretUsers = [...]apiv1alpha1.SystemUser{
 	apiv1alpha1.UserHeartbeat,
 	apiv1alpha1.UserMonitor,
 	apiv1alpha1.UserOperator,
@@ -179,24 +184,21 @@ var secretUsers = [...]apiv1alpha1.SystemUser{
 	apiv1alpha1.UserXtraBackup,
 }
 
-func GeneratePasswordsSecret(name, namespace string) (*corev1.Secret, error) {
-	data := make(map[string][]byte)
-	for _, user := range secretUsers {
+func FillPasswordsSecret(secret *corev1.Secret) error {
+	if len(secret.Data) == 0 {
+		secret.Data = make(map[string][]byte, len(SecretUsers))
+	}
+	for _, user := range SecretUsers {
+		if _, ok := secret.Data[string(user)]; ok {
+			continue
+		}
 		pass, err := generatePass()
 		if err != nil {
-			return nil, errors.Wrapf(err, "create %s user password", user)
+			return errors.Wrapf(err, "create %s user password", user)
 		}
-		data[string(user)] = pass
+		secret.Data[string(user)] = pass
 	}
-
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-		Data: data,
-		Type: corev1.SecretTypeOpaque,
-	}, nil
+	return nil
 }
 
 // generatePass generates a random password

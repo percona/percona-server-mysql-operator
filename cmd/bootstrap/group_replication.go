@@ -1,26 +1,196 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"os/exec"
+	"regexp"
 	"strings"
-	"time"
 
 	"github.com/pkg/errors"
 	"github.com/sjmudd/stopwatch"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/apimachinery/pkg/util/wait"
-	k8sretry "k8s.io/client-go/util/retry"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
-	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
+	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
-var ErrNoPrimaryInCluster = errors.New("primary not found in cluster")
+var (
+	errRebootClusterFromCompleteOutage     = errors.New("run dba.rebootClusterFromCompleteOutage() to reboot the cluster from complete outage")
+	errCouldNotDetermineIfClusterIsOffline = errors.New("Could not determine if Cluster is completely OFFLINE")
+	errEmptyGTIDSet                        = errors.New("The target instance has an empty GTID set so it cannot be safely rejoined to the cluster. Please remove it and add it back to the cluster.")
+	errInstanceMissingPurgedTransactions   = errors.New("The instance is missing transactions that were purged from all cluster members.")
+)
 
-func bootstrapGroupReplication() error {
+var sensitiveRegexp = regexp.MustCompile(":.*@")
+
+type mysqlsh struct {
+	clusterName string
+	host        string
+}
+
+func newShell(host string) *mysqlsh {
+	return &mysqlsh{
+		clusterName: os.Getenv("INNODB_CLUSTER_NAME"),
+		host:        host,
+	}
+}
+
+func (m *mysqlsh) getURI() string {
+	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
+	if err != nil {
+		return ""
+	}
+
+	return fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, m.host)
+}
+
+func (m *mysqlsh) run(ctx context.Context, cmd string) (bytes.Buffer, bytes.Buffer, error) {
+	var stdoutb, stderrb bytes.Buffer
+
+	log.Printf("Running %s", sensitiveRegexp.ReplaceAllString(cmd, ":*****@"))
+
+	c := exec.CommandContext(ctx, "mysqlsh", "--no-wizard", "--uri", m.getURI(), "-e", cmd)
+
+	logWriter := util.NewSensitiveWriter(log.Writer(), sensitiveRegexp)
+
+	c.Stdout = io.MultiWriter(logWriter, &stdoutb)
+	c.Stderr = io.MultiWriter(logWriter, &stderrb)
+
+	err := c.Run()
+
+	return stdoutb, stderrb, err
+}
+
+func (m *mysqlsh) clusterStatus(ctx context.Context) (innodbcluster.Status, error) {
+	var stdoutb, stderrb bytes.Buffer
+
+	args := []string{"--result-format", "json", "--uri", m.getURI(), "--cluster", "--", "cluster", "status"}
+
+	c := exec.CommandContext(ctx, "mysqlsh", args...)
+	c.Stdout = &stdoutb
+	c.Stderr = &stderrb
+
+	status := innodbcluster.Status{}
+
+	if err := c.Run(); err != nil {
+		return status, errors.Wrapf(err, "run Cluster.status(), stdout: %s, stderr: %s", stdoutb.String(), stderrb.String())
+	}
+
+	if err := json.Unmarshal(stdoutb.Bytes(), &status); err != nil {
+		return status, errors.Wrap(err, "unmarshal status")
+	}
+
+	return status, nil
+
+}
+
+func (m *mysqlsh) configureLocalInstance(ctx context.Context) error {
+	_, _, err := m.run(ctx, fmt.Sprintf("dba.configureLocalInstance('%s', {'clearReadOnly': true})", m.getURI()))
+	if err != nil {
+		return errors.Wrap(err, "configure local instance")
+	}
+
+	return nil
+}
+
+func (m *mysqlsh) createCluster(ctx context.Context) error {
+	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.createCluster('%s')", m.clusterName))
+	if err != nil {
+		if strings.Contains(stderr.String(), "dba.rebootClusterFromCompleteOutage") {
+			return errRebootClusterFromCompleteOutage
+		}
+		return errors.Wrap(err, "create InnoDB cluster")
+	}
+
+	return nil
+}
+
+func (m *mysqlsh) rebootClusterFromCompleteOutage(ctx context.Context, force bool) error {
+	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.rebootClusterFromCompleteOutage('%s', {'force': %t})", m.clusterName, force))
+	if err != nil {
+		if strings.Contains(stderr.String(), "Could not determine if Cluster is completely OFFLINE") {
+			return errCouldNotDetermineIfClusterIsOffline
+		}
+		return errors.Wrap(err, "reboot cluster from complete outage")
+	}
+
+	return nil
+}
+
+func (m *mysqlsh) addInstance(ctx context.Context, instanceDef string) error {
+	_, _, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'waitRecovery': 3})", m.clusterName, instanceDef))
+	if err != nil {
+		return errors.Wrap(err, "add instance")
+	}
+
+	return nil
+}
+
+func (m *mysqlsh) rejoinInstance(ctx context.Context, instanceDef string) error {
+	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rejoinInstance('%s')", m.clusterName, instanceDef))
+	if err != nil {
+		if strings.Contains(stderr.String(), "empty GTID set") {
+			return errEmptyGTIDSet
+		}
+		if strings.Contains(stderr.String(), "is missing transactions that were purged from all cluster members") {
+			return errInstanceMissingPurgedTransactions
+		}
+		return errors.Wrap(err, "rejoin instance")
+	}
+
+	return nil
+}
+
+func (m *mysqlsh) removeInstance(ctx context.Context, instanceDef string, force bool) error {
+	_, _, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').removeInstance('%s', {'force': %t})", m.clusterName, instanceDef, force))
+	if err != nil {
+		return errors.Wrap(err, "remove instance")
+	}
+
+	return nil
+}
+
+func (m *mysqlsh) rescanCluster(ctx context.Context) error {
+	_, _, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rescan({'addInstances': 'auto', 'removeInstances': 'auto'})", m.clusterName))
+	if err != nil {
+		return errors.Wrap(err, "rescan cluster")
+	}
+
+	return nil
+}
+
+func connectToLocal(ctx context.Context) (*mysqlsh, error) {
+	fqdn, err := getFQDN(os.Getenv("SERVICE_NAME"))
+	if err != nil {
+		return nil, errors.Wrap(err, "get FQDN")
+	}
+
+	return newShell(fqdn), nil
+}
+
+func connectToCluster(ctx context.Context, peers sets.Set[string]) (*mysqlsh, error) {
+	for _, peer := range sets.List(peers) {
+		shell := newShell(peer)
+		stdout, stderr, err := shell.run(ctx, fmt.Sprintf("dba.getCluster('%s')", shell.clusterName))
+		if err != nil {
+			log.Printf("Failed get cluster from peer %s, stdout: %s stderr: %s", peer, stdout.String(), stderr.String())
+			continue
+		}
+
+		return shell, nil
+	}
+
+	return nil, errors.New("failed to open connection to cluster")
+}
+
+func bootstrapGroupReplication(ctx context.Context) error {
 	timer := stopwatch.NewNamedStopwatch()
 	err := timer.Add("total")
 	if err != nil {
@@ -44,270 +214,136 @@ func bootstrapGroupReplication() error {
 		}
 	}
 
-	exists, err = checkFullClusterCrash()
+	log.Println("Bootstrap starting...")
+
+	localShell, err := connectToLocal(ctx)
 	if err != nil {
-		return errors.Wrap(err, "check full cluster crash file")
-	}
-	if exists {
-		log.Printf("/var/lib/mysql/full-cluster-crash exists. exiting...")
-		return nil
+		return errors.Wrap(err, "connect to local")
 	}
 
-	podHostname, err := os.Hostname()
+	err = localShell.configureLocalInstance(ctx)
 	if err != nil {
-		return errors.Wrap(err, "get hostname")
+		return err
+	}
+	log.Printf("Instance (%s) configured to join to the InnoDB cluster", localShell.host)
+
+	podName, err := os.Hostname()
+	if err != nil {
+		return errors.Wrap(err, "get pod hostname")
 	}
 
-	podIp, err := getPodIP(podHostname)
+	peers, err := lookup(os.Getenv("SERVICE_NAME"))
 	if err != nil {
-		return errors.Wrap(err, "get pod IP")
+		return errors.Wrap(err, "lookup")
 	}
-	log.Printf("Pod IP: %s", podIp)
+	log.Printf("peers: %v", sets.List(peers))
 
-	log.Printf("opening connection to %s", podIp)
-	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
+	shell, err := connectToCluster(ctx, peers)
 	if err != nil {
-		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
-	}
+		if peers.Len() == 1 {
+			log.Printf("Creating InnoDB cluster: %s", localShell.clusterName)
 
-	backoff := wait.Backoff{
-		Steps:    10,
-		Duration: 1 * time.Second,
-		Factor:   5.0,
-		Jitter:   5,
-	}
-	var db replicator.Replicator
-	k8sretry.OnError(backoff, func(err error) bool { return true }, func() error {
-		db, err = replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, podIp, mysql.DefaultAdminPort)
-		if err != nil {
-			log.Printf("failed to connect: %v. retrying...", err)
+			err := localShell.createCluster(ctx)
+			if err != nil {
+				if errors.Is(err, errRebootClusterFromCompleteOutage) {
+					log.Printf("Cluster already exists, we need to reboot")
+					err := localShell.rebootClusterFromCompleteOutage(ctx, peers.Len() == 1)
+					if err != nil {
+						return err
+					}
+				} else {
+					return err
+				}
+			}
+
+			shell, err = connectToCluster(ctx, peers)
+			if err != nil {
+				return errors.Wrap(err, "connect to the cluster")
+			}
+		} else if peers.Len() > 1 && strings.HasSuffix(podName, "-0") {
+			log.Printf("Can't connect to any of the peers, we need to reboot")
+			err := localShell.rebootClusterFromCompleteOutage(ctx, false)
+			if err != nil {
+				if errors.Is(err, errCouldNotDetermineIfClusterIsOffline) {
+					err := localShell.rebootClusterFromCompleteOutage(ctx, true)
+					if err != nil {
+						return err
+					}
+				} else {
+					return err
+				}
+			}
+		} else {
+			return errors.Wrap(err, "connect to the cluster")
 		}
-		return err
-	})
-
-	defer db.Close()
-	if err := db.StopGroupReplication(); err != nil {
-		return err
 	}
-	log.Printf("stop group replication")
 
-	crUID := os.Getenv("CR_UID")
-	if err := db.SetGlobal("group_replication_group_name", crUID); err != nil {
-		return err
-	}
-	log.Printf("set group_replication_group_name: %v", crUID)
+	log.Printf("Connected to peer %s", shell.host)
 
-	fqdn, err := getFQDN(os.Getenv("SERVICE_NAME"))
+	status, err := shell.clusterStatus(ctx)
 	if err != nil {
-		return errors.Wrap(err, "get FQDN")
+		return errors.Wrap(err, "get cluster status")
 	}
-	log.Printf("FQDN: %s", fqdn)
 
-	localAddress := fmt.Sprintf("%s:%d", fqdn, mysql.DefaultGRPort)
-	if err := db.SetGlobal("group_replication_local_address", localAddress); err != nil {
-		return err
-	}
-	log.Printf("set group_replication_local_address: %s", localAddress)
+	log.Printf("Cluster status:\n%s", status)
 
-	forceBootstrap, err := checkForceBootstrap()
-	if err != nil {
-		return errors.Wrap(err, "check force bootstrap file")
-	}
-	log.Printf("check if /var/lib/mysql/force-bootstrap exists: %t", forceBootstrap)
+	member, ok := status.DefaultReplicaSet.Topology[fmt.Sprintf("%s:%d", localShell.host, 3306)]
+	if !ok {
+		log.Printf("Adding instance (%s) to InnoDB cluster", localShell.host)
 
-	var seeds []string
-	if forceBootstrap {
-		seeds = []string{fmt.Sprintf("%s:%d", fqdn, mysql.DefaultGRPort)}
-	} else {
-		peers, err := lookup(os.Getenv("SERVICE_NAME"))
-		if err != nil {
-			return errors.Wrap(err, "lookup")
+		if err := shell.addInstance(ctx, localShell.getURI()); err != nil {
+			return err
 		}
-		log.Printf("peers: %v", peers.List())
 
-		seeds, err = getGroupSeeds(peers)
+		log.Printf("Added instance (%s) to InnoDB cluster", localShell.host)
+
+		os.Exit(1)
+	}
+
+	rescanNeeded := false
+	if len(member.InstanceErrors) > 0 {
+		log.Printf("Instance (%s) has errors:", localShell.host)
+		for i, instErr := range member.InstanceErrors {
+			log.Printf("Error %d: %s", i, instErr)
+			rescanNeeded = rescanNeeded || strings.Contains(instErr, "rescan()")
+		}
+	}
+
+	switch member.MemberState {
+	case innodbcluster.MemberStateOnline:
+		log.Printf("Instance (%s) is already in InnoDB Cluster and its state is %s", localShell.host, member.MemberState)
+	case innodbcluster.MemberStateMissing:
+		log.Printf("Instance (%s) is in InnoDB Cluster but its state is %s", localShell.host, member.MemberState)
+		err := shell.rejoinInstance(ctx, localShell.getURI())
 		if err != nil {
-			if errors.Is(err, ErrNoPrimaryInCluster) {
-				log.Printf("CRITICAL: %s, we're in a full cluster crash", ErrNoPrimaryInCluster)
-
-				gtidExecuted, err := db.GetGlobal("GTID_EXECUTED")
+			if errors.Is(err, errEmptyGTIDSet) || errors.Is(err, errInstanceMissingPurgedTransactions) {
+				log.Printf("Removing instance (%s) from cluster", localShell.host)
+				err := shell.removeInstance(ctx, localShell.getURI(), true)
 				if err != nil {
 					return err
 				}
 
-				log.Printf("GTID_EXECUTED: %s", gtidExecuted)
-
-				if err := createFile("/var/lib/mysql/full-cluster-crash", fmt.Sprintf("%s", gtidExecuted)); err != nil {
-					return err
-				}
-
-				return errors.New("full cluster crash")
+				// we deliberately fail the bootstrap after removing instance to add it back
+				os.Exit(1)
 			}
-			return errors.Wrap(err, "get group seeds")
-		}
-	}
-	seedsStr := strings.Join(seeds, ",")
-
-	if err := db.SetGlobal("group_replication_group_seeds", seedsStr); err != nil {
-		return err
-	}
-	log.Printf("set group_replication_group_seeds: %s", seedsStr)
-
-	bootstrap, err := shouldIBootstrap(db, forceBootstrap, seeds)
-	if err != nil {
-		return errors.Wrap(err, "check if I need to bootstrap")
-	}
-
-	if bootstrap {
-		if err := db.SetGlobal("group_replication_bootstrap_group", "ON"); err != nil {
 			return err
 		}
-		log.Println("set group_replication_bootstrap_group: ON")
-	}
 
-	replicationPass, err := getSecret(apiv1alpha1.UserReplication)
-	if err != nil {
-		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserReplication)
-	}
-
-	if err := db.StartGroupReplication(replicationPass); err != nil {
-		return err
-	}
-	log.Printf("started group replication")
-
-	if err := db.SetGlobal("group_replication_bootstrap_group", "OFF"); err != nil {
-		return err
-	}
-	log.Println("set group_replication_bootstrap_group: OFF")
-
-	return nil
-}
-
-func getGroupSeeds(peers sets.String) ([]string, error) {
-	seeds := sets.NewString()
-
-	if peers.Len() == 1 {
-		peer := peers.List()[0]
-		log.Printf("there is only 1 peer: %s", peer)
-		seeds.Insert(fmt.Sprintf("%s:%d", peer, mysql.DefaultGRPort))
-		return seeds.List(), nil
-	}
-
-	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
-	if err != nil {
-		return nil, errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
-	}
-
-	podHostname, err := os.Hostname()
-	if err != nil {
-		return nil, errors.Wrap(err, "get hostname")
-	}
-
-	// Find primary
-	var primary string
-	for _, peer := range peers.List() {
-		if strings.HasPrefix(peer, podHostname) {
-			continue
-		}
-
-		log.Printf("connecting to peer %s", peer)
-		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, peer, mysql.DefaultAdminPort)
-		if err != nil {
-			log.Printf("ERROR: connect to %s: %v", peer, err)
-			continue
-		}
-		defer db.Close()
-
-		p, err := db.GetGroupReplicationPrimary()
-		if err != nil {
-			log.Printf("ERROR: get primary from %s: %v", peer, err)
-			continue
-		}
-
-		log.Printf("found primary: %s", p)
-		primary = p
-		break
-	}
-
-	if primary == "" {
-		return nil, ErrNoPrimaryInCluster
-	}
-
-	log.Printf("connecting to primary %s", primary)
-	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, primary, mysql.DefaultAdminPort)
-	if err != nil {
-		return nil, errors.Wrapf(err, "connect to primary %s", primary)
-	}
-	defer db.Close()
-
-	replicas, err := db.GetGroupReplicationReplicas()
-	if err != nil {
-		return nil, errors.Wrapf(err, "query replicas from %s", primary)
-	}
-
-	seeds.Insert(fmt.Sprintf("%s:%d", primary, mysql.DefaultGRPort))
-	for _, replica := range replicas {
-		seeds.Insert(fmt.Sprintf("%s:%d", replica, mysql.DefaultGRPort))
-	}
-
-	return seeds.List(), nil
-}
-
-func checkFullClusterCrash() (bool, error) {
-	return fileExists("/var/lib/mysql/full-cluster-crash")
-}
-
-func checkForceBootstrap() (bool, error) {
-	return fileExists("/var/lib/mysql/force-bootstrap")
-}
-
-func shouldIBootstrap(db replicator.Replicator, forceBootstrap bool, seeds []string) (bool, error) {
-	podHostname, err := os.Hostname()
-	if err != nil {
-		return false, errors.Wrap(err, "get hostname")
-	}
-
-	alreadyBootstrapped, err := db.CheckIfDatabaseExists("mysql_innodb_cluster_metadata")
-	if err != nil {
-		return false, errors.Wrap(err, "check if database mysql_innodb_cluster_metadata exists")
-	}
-	log.Printf("check if InnoDB Cluster is already bootstrapped: %t", alreadyBootstrapped)
-
-	fqdn, err := getFQDN(os.Getenv("SERVICE_NAME"))
-	if err != nil {
-		return false, errors.Wrap(err, "get FQDN")
-	}
-
-	switch {
-	case forceBootstrap:
-		log.Printf("WARNING: FORCING BOOTSTRAP")
-		if err := os.Remove("/var/lib/mysql/force-bootstrap"); err != nil {
-			log.Printf("ERROR: remove /var/lib/mysql/force-bootstrap: %s", err)
-		}
-		return true, nil
-	case len(seeds) == 1 && seeds[0] == fmt.Sprintf("%s:%d", fqdn, mysql.DefaultGRPort) && strings.HasSuffix(podHostname, "0"):
-		log.Printf("there is only this node as seed: %s, bootstrapping", seeds[0])
-		return true, nil
-	case !alreadyBootstrapped && strings.HasSuffix(podHostname, "0"):
-		log.Printf("group is not bootstrapped yet, bootstrapping")
-		return true, nil
+		log.Printf("Instance (%s) rejoined to InnoDB cluster", localShell.host)
+	case innodbcluster.MemberStateUnreachable:
+		log.Printf("Instance (%s) is in InnoDB Cluster but its state is %s", localShell.host, member.MemberState)
+		os.Exit(1)
 	default:
-		return false, nil
-	}
-}
-
-func createFile(name, content string) error {
-	f, err := os.Create(name)
-	if err != nil {
-		return errors.Wrapf(err, "create %s", name)
+		log.Printf("Instance (%s) state is %s", localShell.host, member.MemberState)
 	}
 
-	n, err := f.WriteString(content)
-	if err != nil {
-		return errors.Wrapf(err, "write to %s", name)
+	if rescanNeeded {
+		err := shell.rescanCluster(ctx)
+		if err != nil {
+			return err
+		}
+		log.Println("Cluster rescanned")
 	}
-
-	log.Printf("written %d bytes to %s", n, name)
 
 	return nil
 }
