@@ -164,9 +164,15 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 	defer um.Close()
 
+	var asyncPrimary *orchestrator.Instance
+
 	if restartReplication {
 		if cr.Spec.MySQL.IsAsync() {
-			if err := r.stopAsyncReplication(ctx, cr); err != nil {
+			asyncPrimary, err = r.getPrimaryFromOrchestrator(ctx, cr)
+			if err != nil {
+				return errors.Wrap(err, "get cluster primary")
+			}
+			if err := r.stopAsyncReplication(ctx, cr, asyncPrimary); err != nil {
 				return errors.Wrap(err, "stop async replication")
 			}
 		}
@@ -186,7 +192,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		}
 
 		if cr.Spec.MySQL.IsAsync() {
-			if err := r.startAsyncReplication(ctx, cr, updatedReplicaPass); err != nil {
+			if err := r.startAsyncReplication(ctx, cr, updatedReplicaPass, asyncPrimary); err != nil {
 				return errors.Wrap(err, "start async replication")
 			}
 		}

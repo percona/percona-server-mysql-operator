@@ -1371,16 +1371,12 @@ func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cr *a
 	return primary.Key.Hostname, nil
 }
 
-func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, primary *orchestrator.Instance) error {
 	log := logf.FromContext(ctx).WithName("stopAsyncReplication")
 
 	orcPod, err := getOrcPod(ctx, r.Client, cr, 0)
 	if err != nil {
 		return err
-	}
-	primary, err := r.getPrimaryFromOrchestrator(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "get cluster primary")
 	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
@@ -1433,16 +1429,12 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 	return errors.Wrap(g.Wait(), "stop replication on replicas")
 }
 
-func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, replicaPass string) error {
+func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, replicaPass string, primary *orchestrator.Instance) error {
 	log := logf.FromContext(ctx).WithName("startAsyncReplication")
 
 	orcPod, err := getOrcPod(ctx, r.Client, cr, 0)
 	if err != nil {
 		return nil
-	}
-	primary, err := r.getPrimaryFromOrchestrator(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "get cluster primary")
 	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
