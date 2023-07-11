@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -13,6 +14,8 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
+
+var sensitiveRegexp = regexp.MustCompile(":.*@")
 
 type dbExecImpl struct {
 	client *clientcmd.Client
@@ -33,16 +36,19 @@ func NewManagerExec(pod *corev1.Pod, user apiv1alpha1.SystemUser, pass, host str
 
 func (d *dbExecImpl) exec(stm string) error {
 
-	cmd := []string{"mysql", "--database", "performance_schema", fmt.Sprintf("-p%s", d.pass), "-u", string(d.user), "-h", d.host, "-e", stm}
+	cmd := []string{"mysql", "--database", "performance_schema", fmt.Sprintf("-p%s", escapePass(d.pass)), "-u", string(d.user), "-h", d.host, "-e", stm}
 
 	var outb, errb bytes.Buffer
 	err := d.client.Exec(context.TODO(), d.pod, "mysql", cmd, nil, &outb, &errb, false)
 	if err != nil {
-		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, outb.String(), errb.String())
+		sout := sensitiveRegexp.ReplaceAllString(outb.String(), ":*****@")
+		serr := sensitiveRegexp.ReplaceAllString(errb.String(), ":*****@")
+		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, sout, serr)
 	}
 
 	if strings.Contains(errb.String(), "ERROR") {
-		return fmt.Errorf("sql error: %s", errb.String())
+		serr := sensitiveRegexp.ReplaceAllString(errb.String(), ":*****@")
+		return fmt.Errorf("sql error: %s", serr)
 	}
 
 	return nil
@@ -57,7 +63,7 @@ func (d *dbExecImpl) UpdateUserPasswords(users []mysql.User) error {
 
 	for _, user := range users {
 		for _, host := range user.Hosts {
-			q := fmt.Sprintf("ALTER USER '%s'@'%s' IDENTIFIED BY '%s' RETAIN CURRENT PASSWORD", user.Username, host, user.Password)
+			q := fmt.Sprintf("ALTER USER '%s'@'%s' IDENTIFIED BY '%s' RETAIN CURRENT PASSWORD", user.Username, host, escapePass(user.Password))
 			err = d.exec(q)
 			if err != nil {
 				err = errors.Wrap(err, "alter user")
@@ -132,4 +138,11 @@ func (d *dbExecImpl) DiscardOldPasswords(users []mysql.User) error {
 
 func (d *dbExecImpl) Close() error {
 	return nil
+}
+
+func escapePass(pass string) string {
+	s := strings.ReplaceAll(pass, `'`, `\'`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	return s
 }

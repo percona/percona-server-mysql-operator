@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
@@ -16,6 +17,8 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 )
+
+var sensitiveRegexp = regexp.MustCompile(":.*@")
 
 type dbImplExec struct {
 	client *clientcmd.Client
@@ -39,7 +42,9 @@ func (d *dbImplExec) exec(stm string, stdout, stderr *bytes.Buffer) error {
 
 	err := d.client.Exec(context.TODO(), d.pod, "mysql", cmd, nil, stdout, stderr, false)
 	if err != nil {
-		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, stdout.String(), stderr.String())
+		sout := sensitiveRegexp.ReplaceAllString(stdout.String(), ":*****@")
+		serr := sensitiveRegexp.ReplaceAllString(stderr.String(), ":*****@")
+		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, sout, serr)
 	}
 
 	if strings.Contains(stderr.String(), "ERROR") {

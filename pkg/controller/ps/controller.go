@@ -1603,7 +1603,7 @@ func getPodIndexFromHostname(hostname string) (int, error) {
 	}
 
 	ii := strings.Split(hh[0], "-")
-	if len(hh) == 0 {
+	if len(ii) == 0 {
 		return 0, fmt.Errorf("can't get pod index from pod name: %s", hh[0])
 	}
 
