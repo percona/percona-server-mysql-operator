@@ -12,6 +12,7 @@ require (
 	github.com/go-openapi/strfmt v0.21.7
 	github.com/go-openapi/swag v0.22.3
 	github.com/go-openapi/validate v0.22.1
+	github.com/gocarina/gocsv v0.0.0-20230616125104-99d496ca653d
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/minio/minio-go/v7 v7.0.56
 	github.com/onsi/ginkgo/v2 v2.9.7
@@ -30,6 +31,7 @@ require (
 )
 
 require (
+	github.com/moby/spdystream v0.2.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20230530153820-e85fd2cbaebc // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230530153820-e85fd2cbaebc // indirect
 )

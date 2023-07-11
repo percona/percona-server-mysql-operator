@@ -149,15 +149,30 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 	log.V(1).Info("Got primary host", "primary", primaryHost)
 
-	um, err := users.NewManager(apiv1alpha1.UserOperator, operatorPass, primaryHost, mysql.DefaultAdminPort)
+	idx, err := getPodIndexFromHostname(primaryHost)
+	if err != nil {
+		return err
+	}
+	primPod, err := getMySQLPod(ctx, r.Client, cr, idx)
+	if err != nil {
+		return err
+	}
+
+	um, err := users.NewManagerExec(primPod, apiv1alpha1.UserOperator, operatorPass, primaryHost)
 	if err != nil {
 		return errors.Wrap(err, "init user manager")
 	}
 	defer um.Close()
 
+	var asyncPrimary *orchestrator.Instance
+
 	if restartReplication {
 		if cr.Spec.MySQL.IsAsync() {
-			if err := r.stopAsyncReplication(ctx, cr); err != nil {
+			asyncPrimary, err = r.getPrimaryFromOrchestrator(ctx, cr)
+			if err != nil {
+				return errors.Wrap(err, "get cluster primary")
+			}
+			if err := r.stopAsyncReplication(ctx, cr, asyncPrimary); err != nil {
 				return errors.Wrap(err, "stop async replication")
 			}
 		}
@@ -177,7 +192,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		}
 
 		if cr.Spec.MySQL.IsAsync() {
-			if err := r.startAsyncReplication(ctx, cr, updatedReplicaPass); err != nil {
+			if err := r.startAsyncReplication(ctx, cr, updatedReplicaPass, asyncPrimary); err != nil {
 				return errors.Wrap(err, "start async replication")
 			}
 		}
@@ -224,7 +239,19 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 	log.V(1).Info("Got primary host", "primary", primaryHost)
 
-	um, err = users.NewManager(apiv1alpha1.UserOperator, operatorPass, primaryHost, mysql.DefaultAdminPort)
+	// TODO: handle this differently
+	// Because how currently we implement manager.DiscardOldPasswords,
+	// (as well ass manger.UpdateUserPasswords), we need updated operator user pass
+	// to perform DiscardOldPasswords properly.
+	updatedOperatorPass := operatorPass
+	for _, user := range updatedUsers {
+		if user.Username == apiv1alpha1.UserOperator {
+			updatedOperatorPass = user.Password
+			break
+		}
+	}
+
+	um, err = users.NewManagerExec(primPod, apiv1alpha1.UserOperator, updatedOperatorPass, primaryHost)
 	if err != nil {
 		return errors.Wrap(err, "init user manager")
 	}
