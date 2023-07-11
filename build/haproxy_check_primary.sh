@@ -33,7 +33,7 @@ check_async() {
 		log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} for backend ${HAPROXY_PROXY_NAME} is OK"
 		exit 0
 	else
-		log ERROR "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} for backend ${HAPROXY_PROXY_NAME} is NOT OK"
+		log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} for backend ${HAPROXY_PROXY_NAME} is NOT OK"
 		exit 1
 	fi
 }
@@ -48,7 +48,7 @@ check_gr() {
 		log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} for backend ${HAPROXY_PROXY_NAME} is OK"
 		exit 0
 	else
-		log ERROR "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} for backend ${HAPROXY_PROXY_NAME} is NOT OK"
+		log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} for backend ${HAPROXY_PROXY_NAME} is NOT OK"
 		exit 1
 	fi
 }
