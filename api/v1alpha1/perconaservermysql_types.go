@@ -576,7 +576,11 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		}
 	}
 
-	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Proxy.Router != nil && !cr.Spec.AllowUnsafeConfig {
+	if cr.RouterEnabled() && cr.HAProxyEnabled() {
+		return errors.New("MySQL Router and HAProxy can't be enabled at the same time")
+	}
+
+	if cr.RouterEnabled() && !cr.Spec.AllowUnsafeConfig {
 		if cr.Spec.Proxy.Router.Size < MinSafeProxySize {
 			cr.Spec.Proxy.Router.Size = MinSafeProxySize
 		}
@@ -586,7 +590,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		cr.Spec.Proxy.HAProxy = new(HAProxySpec)
 	}
 
-	if cr.HAProxyEnabled() && cr.Spec.MySQL.ClusterType != ClusterTypeGR && !cr.Spec.AllowUnsafeConfig {
+	if cr.HAProxyEnabled() && !cr.Spec.AllowUnsafeConfig {
 		if cr.Spec.Proxy.HAProxy.Size < MinSafeProxySize {
 			cr.Spec.Proxy.HAProxy.Size = MinSafeProxySize
 		}
