@@ -27,6 +27,7 @@ const (
 	PortMySQLReplicas  = 3307
 	PortProxyProtocol  = 3309
 	PortMySQLXProtocol = 33060
+	PortAdmin          = 33062
 	PortPMMStats       = 8404
 )
 
@@ -80,6 +81,10 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 		{
 			Name: "mysqlx",
 			Port: int32(PortMySQLXProtocol),
+		},
+		{
+			Name: "mysql-admin",
+			Port: int32(PortAdmin),
 		},
 	}
 
