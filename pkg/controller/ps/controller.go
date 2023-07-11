@@ -906,11 +906,30 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedStatefulSets(ctx context.C
 			return errors.Wrap(err, "failed to delete orchestrator statefulset")
 		}
 	}
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) cleanupProxies(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if !cr.RouterEnabled() {
+		if err := r.Delete(ctx, router.Deployment(cr, "", "")); err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to delete router deployment")
+		}
+
+		if err := r.Delete(ctx, router.Service(cr)); err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to delete router service")
+		}
+	}
+
 	if !cr.HAProxyEnabled() {
 		if err := r.Delete(ctx, haproxy.StatefulSet(cr, "", nil)); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrap(err, "failed to delete haproxy statefulset")
 		}
+
+		if err := r.Delete(ctx, haproxy.Service(cr, nil)); err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to delete haproxy service")
+		}
 	}
+
 	return nil
 }
 
@@ -1029,6 +1048,10 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 	}
 
 	if err := r.cleanupOutdatedStatefulSets(ctx, cr); err != nil {
+		return errors.Wrap(err, "cleanup statefulsets")
+	}
+
+	if err := r.cleanupProxies(ctx, cr); err != nil {
 		return errors.Wrap(err, "cleanup statefulsets")
 	}
 
