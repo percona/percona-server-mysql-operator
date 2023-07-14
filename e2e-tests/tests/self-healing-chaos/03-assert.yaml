@@ -1,0 +1,130 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 360
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  name: self-healing-chaos-mysql
+spec:
+  replicas: 3
+  serviceName: self-healing-chaos-mysql
+  template:
+    spec:
+      containers:
+      - name: mysql
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
+        - mountPath: /etc/mysql/mysql-tls-secret
+          name: tls
+        - mountPath: /etc/mysql/config
+          name: config
+      - name: xtrabackup
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
+        - mountPath: /var/log/xtrabackup
+          name: backup-logs
+      - name: pt-heartbeat
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
+      volumes:
+      - emptyDir: {}
+        name: bin
+      - name: users
+        secret:
+          defaultMode: 420
+          secretName: internal-self-healing-chaos
+      - name: tls
+        secret:
+          defaultMode: 420
+          secretName: test-ssl
+      - name: config
+        projected:
+          defaultMode: 420
+          sources:
+          - configMap:
+              items:
+              - key: my.cnf
+                path: my-config.cnf
+              name: self-healing-chaos-mysql
+              optional: true
+          - configMap:
+              items:
+                - key: my.cnf
+                  path: auto-config.cnf
+              name: auto-self-healing-chaos-mysql
+              optional: true
+          - secret:
+              items:
+              - key: my.cnf
+                path: my-secret.cnf
+              name: self-healing-chaos-mysql
+              optional: true
+      - emptyDir: {}
+        name: backup-logs
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: datadir
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 2G
+      volumeMode: Filesystem
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: self-healing-chaos
+status:
+  haproxy:
+    ready: 3
+    size: 3
+    state: ready
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  orchestrator:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: chaos-pod-kill
+spec:
+  action: pod-kill
+  mode: one
+status:
+  experiment:
+    containerRecords:
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    desiredPhase: Run

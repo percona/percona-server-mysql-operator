@@ -1,0 +1,24 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 120
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      pod=self-healing-chaos-mysql-0
+
+      yq eval '.metadata.name = "chaos-pod-failure" |
+        del(.spec.selector.pods.test-namespace) |
+        .metadata.namespace = "'${NAMESPACE}'" |
+        .spec.selector.pods.'${NAMESPACE}'[0] = "'$pod'"' "${TESTS_CONFIG_DIR}/chaos-pod-failure.yml" \
+        | kubectl apply -f -
+
+      run_mysql \
+      	"INSERT myDB.myTable (id) VALUES (100501)" \
+      	"-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+
+      sleep 60
+    timeout: 120
