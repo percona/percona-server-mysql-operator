@@ -34,7 +34,7 @@ func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr
 	}
 	err := secret.FillPasswordsSecret(userSecret)
 	if err != nil {
-		return errors.Wrap(err, "generate passwords")
+
 	}
 	userSecret.Name = cr.Spec.SecretsName
 	userSecret.Namespace = cr.Namespace
@@ -233,6 +233,15 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return nil
 	}
 
+	internalSecret.Data = secret.DeepCopy().Data
+	if err := r.Client.Update(ctx, internalSecret); err != nil {
+		return errors.Wrapf(err, "update Secret/%s", internalSecret.Name)
+	}
+
+	log.Info("Updated internal secret", "secretName", cr.InternalSecretName())
+
+	// TODO: Wait for pass propagation
+
 	primaryHost, err = r.getPrimaryHost(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "get primary host")
@@ -262,13 +271,6 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	log.Info("Discarded old user passwords")
-
-	internalSecret.Data = secret.DeepCopy().Data
-	if err := r.Client.Update(ctx, internalSecret); err != nil {
-		return errors.Wrapf(err, "update Secret/%s", internalSecret.Name)
-	}
-
-	log.Info("Updated internal secret", "secretName", cr.InternalSecretName())
 
 	return nil
 }
