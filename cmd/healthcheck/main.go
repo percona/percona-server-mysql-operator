@@ -106,6 +106,17 @@ func checkReadinessAsync(ctx context.Context) error {
 }
 
 func checkReadinessGR(ctx context.Context) error {
+	sleep, err := fileExists("/var/lib/mysql/sleep-forever")
+	if err != nil {
+		return err
+	}
+
+	if sleep {
+		log.Printf("Waiting for sleep-forever to be deleted")
+		// return nil
+		os.Exit(0)
+	}
+
 	podIP, err := getPodIP()
 	if err != nil {
 		return errors.Wrap(err, "get pod IP")
