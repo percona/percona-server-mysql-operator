@@ -56,6 +56,7 @@ type Replicator interface {
 	ChangeGroupReplicationPassword(ctx context.Context, replicaPass string) error
 	StartGroupReplication(ctx context.Context, password string) error
 	StopGroupReplication(ctx context.Context) error
+	RestartGroupReplication(password string) error
 	GetGroupReplicationPrimary(ctx context.Context) (string, error)
 	GetGroupReplicationReplicas(ctx context.Context) ([]string, error)
 	GetMemberState(ctx context.Context, host string) (MemberState, error)
@@ -290,8 +291,12 @@ func (d *dbImpl) StopGroupReplication(ctx context.Context) error {
 	return errors.Wrap(err, "stop group replication")
 }
 
+func (d *dbImpl) RestartGroupReplication(password string) error {
+	return nil
+}
+
 func (d *dbImpl) ChangeGroupReplicationPassword(ctx context.Context, replicaPass string) error {
-	_, err := d.db.ExecContext(ctx, `
+	_, err := d.db.Exec(`
             CHANGE REPLICATION SOURCE TO
                 SOURCE_USER=?,
                 SOURCE_PASSWORD=?

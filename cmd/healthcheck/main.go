@@ -160,6 +160,17 @@ func checkLivenessAsync(ctx context.Context) error {
 }
 
 func checkLivenessGR(ctx context.Context) error {
+
+	sleep, err := fileExists("/var/lib/mysql/sleep-forever")
+	if err != nil {
+		return err
+	}
+
+	if sleep {
+		log.Printf("Waiting for sleep-forever to be deleted")
+		return nil
+	}
+
 	podIP, err := getPodIP()
 	if err != nil {
 		return errors.Wrap(err, "get pod IP")

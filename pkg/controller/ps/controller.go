@@ -1148,6 +1148,11 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 		return errors.Wrap(err, "get replicas")
 	}
 
+	cmdCli, err := clientcmd.NewClient()
+	if err != nil {
+		return errors.Wrap(err, "failed to create exec client")
+	}
+
 	for _, host := range replicas {
 		idx, err := getPodIndexFromHostname(host)
 		if err != nil {
@@ -1164,18 +1169,32 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 		}
 		defer db.Close()
 
-		if err := db.StopGroupReplication(ctx); err != nil {
-			return errors.Wrapf(err, "stop group replication on %s", host)
-		}
-		log.V(1).Info("Stopped group replication", "hostname", host)
+		// if err := db.StopGroupReplication(ctx); err != nil {
+		// 	return errors.Wrapf(err, "stop group replication on %s", host)
+		// }
+		// log.V(1).Info("Stopped group replication", "hostname", host)
 
-		if err := db.ChangeGroupReplicationPassword(ctx, replicaPass); err != nil {
-			return errors.Wrapf(err, "change group replication password on %s", host)
-		}
-		log.V(1).Info("Changed group replication password", "hostname", host)
+		// if err := db.ChangeGroupReplicationPassword(ctx, replicaPass); err != nil {
+		// 	return errors.Wrapf(err, "change group replication password on %s", host)
+		// }
+		// log.V(1).Info("Changed group replication password", "hostname", host)
 
-		if err := db.StartGroupReplication(ctx, replicaPass); err != nil {
+		// if err := db.StartGroupReplication(ctx, replicaPass); err != nil {
+		// 	return err
+		// }
+
+		err = enableMaintananceMode(ctx, cmdCli, pod)
+		if err != nil {
+			return errors.Wrapf(err, "enable maintainance mode on %s", host)
+		}
+
+		if err := db.RestartGroupReplication(replicaPass); err != nil {
 			return errors.Wrapf(err, "start group replication on %s", host)
+		}
+
+		err = disableMaintananceMode(ctx, cmdCli, pod)
+		if err != nil {
+			return errors.Wrapf(err, "disable maintainance mode on %s", host)
 		}
 		log.V(1).Info("Started group replication", "hostname", host)
 	}
@@ -1200,20 +1219,34 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 	}
 	defer db.Close()
 
-	if err := db.StopGroupReplication(ctx); err != nil {
-		return errors.Wrapf(err, "stop group replication on %s", primary)
-	}
-	log.V(1).Info("Stopped group replication", "hostname", primary)
+	// if err := db.StopGroupReplication(ctx); err != nil {
+	// 	return errors.Wrapf(err, "stop group replication on %s", primary)
+	// }
+	// log.V(1).Info("Stopped group replication", "hostname", primary)
 
-	if err := db.ChangeGroupReplicationPassword(ctx, replicaPass); err != nil {
-		return errors.Wrapf(err, "change group replication password on %s", primary)
-	}
-	log.V(1).Info("Changed group replication password", "hostname", primary)
+	// if err := db.ChangeGroupReplicationPassword(ctx, replicaPass); err != nil {
+	// 	return errors.Wrapf(err, "change group replication password on %s", primary)
+	// }
+	// log.V(1).Info("Changed group replication password", "hostname", primary)
 
-	if err := db.StartGroupReplication(ctx, replicaPass); err != nil {
+	// if err := db.StartGroupReplication(ctx, replicaPass); err != nil {
+	// 	return nil
+	// }
+
+	err = enableMaintananceMode(ctx, cmdCli, primPod)
+	if err != nil {
+		return errors.Wrapf(err, "enable maintainance mode on %s", primary)
+	}
+
+	if err := db.RestartGroupReplication(replicaPass); err != nil {
 		return errors.Wrapf(err, "start group replication on %s", primary)
 	}
-	log.V(1).Info("Started group replication", "hostname", primary)
+
+	err = disableMaintananceMode(ctx, cmdCli, primPod)
+	if err != nil {
+		return errors.Wrapf(err, "disable maintainance mode on %s", primary)
+	}
+	log.V(1).Info("Started group replication", "hostnaGRStatusme", primary)
 
 	return nil
 }
