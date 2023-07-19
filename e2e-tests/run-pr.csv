@@ -21,3 +21,4 @@ sidecars
 tls-cert-manager
 users
 version-service
+self-healing-chaos
