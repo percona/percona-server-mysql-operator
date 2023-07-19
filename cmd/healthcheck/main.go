@@ -168,7 +168,8 @@ func checkLivenessGR(ctx context.Context) error {
 
 	if sleep {
 		log.Printf("Waiting for sleep-forever to be deleted")
-		return nil
+		// return nil
+		os.Exit(0)
 	}
 
 	podIP, err := getPodIP()
