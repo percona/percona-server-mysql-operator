@@ -50,7 +50,8 @@ func main() {
 	if err != nil {
 		log.Fatalln("Failed to get secret:", err.Error())
 	}
-	t, err := topology.GetAsync(ctx, operatorPass, fqdn)
+	tm := topology.NewTopologyManager(apiv1alpha1.ClusterTypeAsync, operatorPass)
+	t, err := topology.GetAsync(ctx, tm, fqdn)
 	if err != nil {
 		log.Fatalln("Failed to get topology:", err.Error())
 	}

@@ -4,12 +4,16 @@ import (
 	"context"
 	"io"
 
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes/scheme"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/remotecommand"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type Client struct {
@@ -47,18 +51,47 @@ func NewClient() (*Client, error) {
 
 func (c *Client) Exec(
 	ctx context.Context,
-	pod *corev1.Pod,
+	obj client.Object,
 	containerName string,
 	command []string,
 	stdin io.Reader,
 	stdout, stderr io.Writer,
 	tty bool) error {
 
+	var pod *corev1.Pod
+	switch t := obj.(type) {
+	case *corev1.Pod:
+		pod = t
+	case *corev1.Service:
+		clientset, err := corev1client.NewForConfig(c.restconfig)
+		if err != nil {
+			return err
+		}
+		namespace := t.GetNamespace()
+		if t.Spec.Selector == nil || len(t.Spec.Selector) == 0 {
+			return errors.Errorf("invalid service '%s': Service is defined without a selector", t.Name)
+		}
+		selector := labels.SelectorFromSet(t.Spec.Selector)
+
+		podList, err := clientset.Pods(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: selector.String(),
+		})
+		if err != nil {
+			return err
+		}
+		if len(podList.Items) == 0 {
+			return errors.Errorf("invalid service '%s': no pods found", t.Name)
+		}
+		pod = &podList.Items[0]
+	default:
+		return errors.Errorf("invalid object type '%T'", obj)
+	}
+
 	req := c.client.RESTClient().
 		Post().
-		Namespace(pod.Namespace).
+		Namespace(pod.GetNamespace()).
 		Resource("pods").
-		Name(pod.Name).
+		Name(pod.GetName()).
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
 			Container: containerName,

@@ -12,7 +12,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/gocarina/gocsv"
 	"github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
@@ -22,25 +22,25 @@ var sensitiveRegexp = regexp.MustCompile(":.*@")
 
 type dbImplExec struct {
 	client *clientcmd.Client
-	pod    *corev1.Pod
+	obj    client.Object
 	user   apiv1alpha1.SystemUser
 	pass   string
 	host   string
 }
 
-func NewReplicatorExec(pod *corev1.Pod, user apiv1alpha1.SystemUser, pass, host string) (Replicator, error) {
+func NewReplicatorExec(obj client.Object, user apiv1alpha1.SystemUser, pass, host string) (Replicator, error) {
 	c, err := clientcmd.NewClient()
 	if err != nil {
 		return nil, err
 	}
 
-	return &dbImplExec{client: c, pod: pod, user: user, pass: pass, host: host}, nil
+	return &dbImplExec{client: c, obj: obj, user: user, pass: pass, host: host}, nil
 }
 
 func (d *dbImplExec) exec(stm string, stdout, stderr *bytes.Buffer) error {
 	cmd := []string{"mysql", "--database", "performance_schema", fmt.Sprintf("-p%s", d.pass), "-u", string(d.user), "-h", d.host, "-e", stm}
 
-	err := d.client.Exec(context.TODO(), d.pod, "mysql", cmd, nil, stdout, stderr, false)
+	err := d.client.Exec(context.TODO(), d.obj, "mysql", cmd, nil, stdout, stderr, false)
 	if err != nil {
 		sout := sensitiveRegexp.ReplaceAllString(stdout.String(), ":*****@")
 		serr := sensitiveRegexp.ReplaceAllString(stderr.String(), ":*****@")
@@ -465,4 +465,57 @@ func (d *dbImplExec) CheckIfInPrimaryPartition() (bool, error) {
 	}
 
 	return rows[0].In, nil
+}
+
+func (d *dbImplExec) ShowReplicas(ctx context.Context) ([]string, error) {
+	rows := []*struct {
+		ServerID    string `csv:"Server_Id"`
+		Host        string `csv:"Host"`
+		Port        int    `csv:"Port"`
+		SourceID    string `csv:"Source_Id"`
+		ReplicaUUID string `csv:"Replica_UUID"`
+	}{}
+	replicas := make([]string, 0)
+
+	err := d.query("SHOW REPLICAS", &rows)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return replicas, nil
+		}
+		return nil, errors.Wrap(err, "query replicas")
+	}
+
+	for _, row := range rows {
+		replicas = append(replicas, row.Host)
+	}
+
+	return replicas, nil
+}
+
+func (d *dbImplExec) ShowReplicaStatus(ctx context.Context) (map[string]string, error) {
+	rows := []*struct {
+		SourceHost string `csv:"Source_Host"`
+		IoRunning  string `csv:"Replica_IO_Running"`
+		SqlRunning string `csv:"Replica_SQL_Running"`
+	}{}
+	err := d.query("SHOW REPLICA STATUS", &rows)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return make(map[string]string), nil
+		}
+		return nil, err
+	}
+	if len(rows) > 1 {
+		return nil, errors.New("more than one replica status returned")
+	}
+	if len(rows) == 0 {
+		return make(map[string]string), nil
+	}
+	status := map[string]string{
+		"Source_Host":         rows[0].SourceHost,
+		"Replica_IO_Running":  rows[0].IoRunning,
+		"Replica_SQL_Running": rows[0].SqlRunning,
+	}
+
+	return status, nil
 }

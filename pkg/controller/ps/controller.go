@@ -869,7 +869,8 @@ func (r *PerconaServerMySQLReconciler) reconcileLabels(ctx context.Context, cr *
 	if err != nil {
 		return errors.Wrap(err, "get operator password")
 	}
-	t, err := topology.Get(ctx, cr, operatorPass)
+	tm := topology.NewTopologyManagerExec(cr, r.Client, operatorPass)
+	t, err := tm.Get(ctx)
 	if err != nil {
 		return errors.Wrap(err, "get topology")
 	}
@@ -1348,7 +1349,9 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 	if err != nil {
 		return errors.Wrap(err, "get operator password")
 	}
-	topology, err := topology.Get(ctx, cr, operatorPass)
+
+	tm := topology.NewTopologyManagerExec(cr, r.Client, operatorPass)
+	topology, err := tm.Get(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to get topology")
 	}
@@ -1413,7 +1416,8 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 		return errors.Wrap(err, "get operator password")
 	}
 
-	topology, err := topology.Get(ctx, cr, operatorPass)
+	tm := topology.NewTopologyManagerExec(cr, r.Client, operatorPass)
+	topology, err := tm.Get(ctx)
 	if err != nil {
 		return errors.Wrap(err, "get cluster topology")
 	}

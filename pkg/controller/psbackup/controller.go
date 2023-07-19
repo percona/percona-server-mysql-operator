@@ -321,7 +321,8 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 		return "", errors.Wrap(err, "get operator password")
 	}
 
-	top, err := topology.Get(ctx, cluster, operatorPass)
+	tm := topology.NewTopologyManagerExec(cluster, r.Client, operatorPass)
+	top, err := tm.Get(ctx)
 	if err != nil {
 		return "", errors.Wrap(err, "get topology")
 	}

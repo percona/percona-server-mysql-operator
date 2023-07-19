@@ -194,7 +194,8 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 	if err != nil {
 		return "", nil, errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
-	t, err := topology.GetAsync(ctx, operatorPass, sets.List(peers)...)
+	tm := topology.NewTopologyManager(apiv1alpha1.ClusterTypeAsync, operatorPass)
+	t, err := topology.GetAsync(ctx, tm, sets.List(peers)...)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to get topology")
 	}

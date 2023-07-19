@@ -277,7 +277,9 @@ func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cl cl
 	if err != nil {
 		return "", errors.Wrap(err, "get root password")
 	}
-	t, err := topology.Get(ctx, cr, operatorPass)
+
+	tm := topology.NewTopologyManagerExec(cr, r.Client, operatorPass)
+	t, err := tm.Get(ctx)
 	if err != nil {
 		return "", errors.Wrap(err, "discover topology")
 	}

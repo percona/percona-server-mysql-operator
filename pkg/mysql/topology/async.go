@@ -6,15 +6,13 @@ import (
 
 	"github.com/pkg/errors"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
-func GetAsync(ctx context.Context, operatorPass string, hosts ...string) (Topology, error) {
+func GetAsync(ctx context.Context, m Manager, hosts ...string) (Topology, error) {
 	t := new(Topology)
 	for _, host := range hosts {
-		if err := recursiveAsyncDiscover(ctx, host, operatorPass, replicator.ReplicationStatusNotInitiated, t); err != nil {
+		if err := recursiveAsyncDiscover(ctx, m, host, replicator.ReplicationStatusNotInitiated, t); err != nil {
 			return Topology{}, err
 		}
 	}
@@ -29,17 +27,14 @@ func GetAsync(ctx context.Context, operatorPass string, hosts ...string) (Topolo
 	return *t, nil
 }
 
-func recursiveAsyncDiscover(ctx context.Context, host, operatorPass string, replicaStatus replicator.ReplicationStatus, t *Topology) error {
+func recursiveAsyncDiscover(ctx context.Context, m Manager, host string, replicaStatus replicator.ReplicationStatus, t *Topology) error {
 	var readOnly bool
 	var replicas []string
 	var source string
 	var status replicator.ReplicationStatus
 	var failedToConnect bool
 	err := func() error {
-		db, err := replicator.NewReplicator(apiv1alpha1.UserOperator,
-			operatorPass,
-			host,
-			mysql.DefaultAdminPort)
+		db, err := m.Replicator(host)
 		if err != nil {
 			// We should ignore connection errors because function can try to connect to starting pod
 			failedToConnect = true
@@ -99,14 +94,14 @@ func recursiveAsyncDiscover(ctx context.Context, host, operatorPass string, repl
 		if t.HasReplica(replica) {
 			continue
 		}
-		err := recursiveAsyncDiscover(ctx, replica, operatorPass, status, t)
+		err := recursiveAsyncDiscover(ctx, m, replica, status, t)
 		if err != nil {
 			return errors.Wrapf(err, "failed to discover %s", replica)
 		}
 	}
 
 	if source != "" {
-		err = recursiveAsyncDiscover(ctx, source, operatorPass, status, t)
+		err = recursiveAsyncDiscover(ctx, m, source, status, t)
 		return errors.Wrapf(err, "failed to discover %s", source)
 	}
 

@@ -499,13 +499,7 @@ delete_resource_with_finalizer() {
 		return
 	fi
 
-	timeout 30 kubectl patch "${resource}" "${name}" -p '{"metadata":{"finalizers":[]}}' --type=merge
-	set +e
-	timeout 30 kubectl delete "${resource}" "${name}"
-	# if exit status is 124 (timeout exit code), then apply patch again and delete
-	if [ $? -eq 124 ]; then
-		timeout 30 kubectl patch "${resource}" "${name}" -p '{"metadata":{"finalizers":[]}}' --type=merge
-		timeout 30 kubectl delete "${resource}" "${name}"
-	fi
-	set -e
+	kubectl delete "${resource}" "${name}" --wait=false --ignore-not-found=true
+	kubectl patch "${resource}" "${name}" -p '{"metadata":{"finalizers":[]}}' --type=merge || :
+	timeout 60 kubectl delete "${resource}" "${name}" --ignore-not-found=true
 }
