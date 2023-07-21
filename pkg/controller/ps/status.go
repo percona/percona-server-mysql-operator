@@ -133,13 +133,23 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 		return false, errors.Wrap(err, "get operator password")
 	}
 
+	firstPod, err := getMySQLPod(ctx, r.Client, cr, 0)
+	if err != nil {
+		return false, err
+	}
+
 	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
-	mysh := mysqlsh.New(r.Exec, fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri))
-	if !mysh.DoesClusterExist(ctx, cr.InnoDBClusterName()) {
+	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri)
+	mysh, err := mysqlsh.NewWithExec(firstPod, uri)
+	if err != nil {
+		return false, err
+	}
+
+	if !mysh.DoesClusterExistWithExec(ctx, cr.InnoDBClusterName()) {
 		return false, nil
 	}
 
-	status, err := mysh.ClusterStatus(ctx, cr.InnoDBClusterName())
+	status, err := mysh.ClusterStatusWithExec(ctx, cr.InnoDBClusterName())
 	if err != nil {
 		return false, errors.Wrap(err, "get cluster status")
 	}
