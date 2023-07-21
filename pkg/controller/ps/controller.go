@@ -38,13 +38,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	k8sretry "k8s.io/client-go/util/retry"
-	k8sexec "k8s.io/utils/exec"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -62,7 +62,7 @@ type PerconaServerMySQLReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	ServerVersion *platform.ServerVersion
-	Exec          k8sexec.Interface
+	ClientCmd     clientcmd.Client
 }
 
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqls;perconaservermysqls/status;perconaservermysqls/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -190,7 +190,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		}
 
 		log.Info("Ensuring oldest mysql node is the primary")
-		err = orchestrator.EnsureNodeIsPrimaryExec(ctx, orcPod, cr.ClusterHint(), firstPod.GetName(), mysql.DefaultPort)
+		err = orchestrator.EnsureNodeIsPrimaryExec(ctx, r.ClientCmd, orcPod, cr.ClusterHint(), firstPod.GetName(), mysql.DefaultPort)
 		if err != nil {
 			return errors.Wrap(err, "ensure node is primary")
 		}
@@ -203,13 +203,13 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		firstPodFQDN := fmt.Sprintf("%s.%s.%s", firstPod.Name, mysql.ServiceName(cr), cr.Namespace)
 		firstPodUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodFQDN)
 
-		db, err := replicator.NewReplicatorExec(&firstPod, v1alpha1.UserOperator, operatorPass, firstPodFQDN)
+		db, err := replicator.NewReplicatorExec(&firstPod, r.ClientCmd, v1alpha1.UserOperator, operatorPass, firstPodFQDN)
 		if err != nil {
 			return errors.Wrapf(err, "connect to %s", firstPod.Name)
 		}
 		defer db.Close()
 
-		mysh, err := mysqlsh.NewWithExec(&firstPod, firstPodUri)
+		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, &firstPod, firstPodUri)
 		if err != nil {
 			return err
 		}
@@ -668,7 +668,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		for _, peer := range newPeers {
 			p := peer
 			g.Go(func() error {
-				return orchestrator.AddPeerExec(gCtx, orcPod, p)
+				return orchestrator.AddPeerExec(gCtx, r.ClientCmd, orcPod, p)
 			})
 		}
 
@@ -679,7 +679,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		for _, peer := range oldPeers {
 			p := peer
 			g.Go(func() error {
-				return orchestrator.RemovePeerExec(gCtx, orcPod, p)
+				return orchestrator.RemovePeerExec(gCtx, r.ClientCmd, orcPod, p)
 			})
 		}
 
@@ -800,7 +800,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return nil
 	}
 
-	if err := orchestrator.DiscoverExec(ctx, pod, mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
+	if err := orchestrator.DiscoverExec(ctx, r.ClientCmd, pod, mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
 		switch err.Error() {
 		case "Unauthorized":
 			log.Info("mysql is not ready, unauthorized orchestrator discover response. skip")
@@ -812,7 +812,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return errors.Wrap(err, "failed to discover cluster")
 	}
 
-	primary, err := orchestrator.ClusterPrimaryExec(ctx, pod, cr.ClusterHint())
+	primary, err := orchestrator.ClusterPrimaryExec(ctx, r.ClientCmd, pod, cr.ClusterHint())
 	if err != nil {
 		return errors.Wrap(err, "get cluster primary")
 	}
@@ -848,7 +848,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 
 	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, mysql.ServiceName(cr))
 
-	mysh, err := mysqlsh.NewWithExec(firstPod, uri)
+	mysh, err := mysqlsh.NewWithExec(r.ClientCmd, firstPod, uri)
 	if err != nil {
 		return err
 	}
@@ -967,7 +967,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 
 		firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
 		uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri)
-		mysh, err := mysqlsh.NewWithExec(firstPod, uri)
+		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, firstPod, uri)
 		if err != nil {
 			return err
 		}
@@ -1073,7 +1073,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryFromOrchestrator(ctx context.Co
 	if err != nil {
 		return nil, err
 	}
-	primary, err := orchestrator.ClusterPrimaryExec(ctx, pod, cr.ClusterHint())
+	primary, err := orchestrator.ClusterPrimaryExec(ctx, r.ClientCmd, pod, cr.ClusterHint())
 	if err != nil {
 		return nil, errors.Wrap(err, "get cluster primary")
 	}
@@ -1098,7 +1098,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryFromGR(ctx context.Context, cr 
 		return "", err
 	}
 
-	db, err := replicator.NewReplicatorExec(firstPod, apiv1alpha1.UserOperator, operatorPass, fqdn)
+	db, err := replicator.NewReplicatorExec(firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, fqdn)
 	if err != nil {
 		return "", errors.Wrapf(err, "open connection to %s", fqdn)
 	}
@@ -1149,12 +1149,12 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 			if err != nil {
 				return err
 			}
-			repDb, err := replicator.NewReplicatorExec(pod, apiv1alpha1.UserOperator, operatorPass, hostname)
+			repDb, err := replicator.NewReplicatorExec(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, hostname)
 			if err != nil {
 				return errors.Wrapf(err, "connect to replica %s", hostname)
 			}
 
-			if err := orchestrator.StopReplicationExec(gCtx, orcPod, hostname, port); err != nil {
+			if err := orchestrator.StopReplicationExec(gCtx, r.ClientCmd, orcPod, hostname, port); err != nil {
 				return errors.Wrapf(err, "stop replica %s", hostname)
 			}
 
@@ -1206,7 +1206,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 			if err != nil {
 				return err
 			}
-			db, err := replicator.NewReplicatorExec(pod, apiv1alpha1.UserOperator, operatorPass, hostname)
+			db, err := replicator.NewReplicatorExec(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, hostname)
 			if err != nil {
 				return errors.Wrapf(err, "get db connection to %s", hostname)
 			}
@@ -1217,7 +1217,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 				return errors.Wrapf(err, "change replication source on %s", hostname)
 			}
 
-			if err := orchestrator.StartReplicationExec(gCtx, orcPod, hostname, port); err != nil {
+			if err := orchestrator.StartReplicationExec(gCtx, r.ClientCmd, orcPod, hostname, port); err != nil {
 				return errors.Wrapf(err, "start replication on %s", hostname)
 			}
 
@@ -1243,7 +1243,7 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 	if err != nil {
 		return err
 	}
-	db, err := replicator.NewReplicatorExec(firstPod, apiv1alpha1.UserOperator, operatorPass, hostname)
+	db, err := replicator.NewReplicatorExec(firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, hostname)
 	if err != nil {
 		return errors.Wrapf(err, "get db connection to %s", hostname)
 	}
@@ -1264,7 +1264,7 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 		if err != nil {
 			return err
 		}
-		db, err := replicator.NewReplicatorExec(pod, apiv1alpha1.UserOperator, operatorPass, host)
+		db, err := replicator.NewReplicatorExec(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, host)
 		if err != nil {
 			return errors.Wrapf(err, "get db connection to %s", hostname)
 		}
@@ -1300,7 +1300,7 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 	if err != nil {
 		return err
 	}
-	db, err = replicator.NewReplicatorExec(primPod, apiv1alpha1.UserOperator, operatorPass, primary)
+	db, err = replicator.NewReplicatorExec(primPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, primary)
 	if err != nil {
 		return errors.Wrapf(err, "get db connection to %s", hostname)
 	}

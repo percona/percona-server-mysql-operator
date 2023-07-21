@@ -21,20 +21,15 @@ import (
 var sensitiveRegexp = regexp.MustCompile(":.*@")
 
 type dbImplExec struct {
-	client *clientcmd.Client
+	client clientcmd.Client
 	pod    *corev1.Pod
 	user   apiv1alpha1.SystemUser
 	pass   string
 	host   string
 }
 
-func NewReplicatorExec(pod *corev1.Pod, user apiv1alpha1.SystemUser, pass, host string) (Replicator, error) {
-	c, err := clientcmd.NewClient()
-	if err != nil {
-		return nil, err
-	}
-
-	return &dbImplExec{client: c, pod: pod, user: user, pass: pass, host: host}, nil
+func NewReplicatorExec(pod *corev1.Pod, cliCmd clientcmd.Client, user apiv1alpha1.SystemUser, pass, host string) (Replicator, error) {
+	return &dbImplExec{client: cliCmd, pod: pod, user: user, pass: pass, host: host}, nil
 }
 
 func (d *dbImplExec) exec(stm string, stdout, stderr *bytes.Buffer) error {

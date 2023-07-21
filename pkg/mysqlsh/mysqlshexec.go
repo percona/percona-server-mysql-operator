@@ -18,16 +18,12 @@ import (
 
 type mysqlshExec struct {
 	pod    *corev1.Pod
-	client *clientcmd.Client
+	client clientcmd.Client
 	uri    string
 }
 
-func NewWithExec(pod *corev1.Pod, uri string) (*mysqlshExec, error) {
-	c, err := clientcmd.NewClient()
-	if err != nil {
-		return nil, err
-	}
-	return &mysqlshExec{client: c, pod: pod, uri: uri}, nil
+func NewWithExec(cliCmd clientcmd.Client, pod *corev1.Pod, uri string) (*mysqlshExec, error) {
+	return &mysqlshExec{client: cliCmd, pod: pod, uri: uri}, nil
 }
 
 func (m *mysqlshExec) runWithExec(ctx context.Context, cmd string) error {

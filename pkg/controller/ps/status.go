@@ -140,7 +140,7 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 
 	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
 	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri)
-	mysh, err := mysqlsh.NewWithExec(firstPod, uri)
+	mysh, err := mysqlsh.NewWithExec(r.ClientCmd, firstPod, uri)
 	if err != nil {
 		return false, err
 	}

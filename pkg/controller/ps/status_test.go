@@ -4,28 +4,31 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"reflect"
 	"testing"
 
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	restclient "k8s.io/client-go/rest"
+	k8sexec "k8s.io/utils/exec"
+	fakek8sexec "k8s.io/utils/exec/testing"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
-
-	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	k8sexec "k8s.io/utils/exec"
-	fakek8sexec "k8s.io/utils/exec/testing"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestReconcileStatusAsync(t *testing.T) {
@@ -456,7 +459,7 @@ func TestReconcileStatusGR(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := tt.cr.DeepCopy()
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).WithStatusSubresource(cr).WithObjects(tt.objects...).WithStatusSubresource(tt.objects...)
-			ex, err := fakeExec(cr, operatorPass, tt.clusterStatus)
+			cliCmd, err := getFakeClient(cr, operatorPass, tt.clusterStatus)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -466,7 +469,7 @@ func TestReconcileStatusGR(t *testing.T) {
 				ServerVersion: &platform.ServerVersion{
 					Platform: platform.PlatformKubernetes,
 				},
-				Exec: ex,
+				ClientCmd: cliCmd,
 			}
 
 			err = r.reconcileCRStatus(ctx, cr)
@@ -481,6 +484,92 @@ func TestReconcileStatusGR(t *testing.T) {
 			}
 		})
 	}
+}
+
+type fakeClient struct {
+	scripts   []fakeClientScript
+	execCount int
+}
+
+func (c *fakeClient) Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+	if c.execCount >= len(c.scripts) {
+		return errors.Errorf("unexpected exec call")
+	}
+	if !reflect.DeepEqual(c.scripts[c.execCount].cmd, command) {
+		return errors.Errorf("expected command: %v; got %v", c.scripts[c.execCount].cmd, command)
+	}
+	var in []byte
+	var err error
+	if stdin != nil {
+		in, err = io.ReadAll(stdin)
+		if err != nil {
+			return err
+		}
+	}
+	if !reflect.DeepEqual(in, c.scripts[c.execCount].stdin) {
+		return errors.Errorf("expected stdin: %v; got %v", c.scripts[c.execCount].stdin, in)
+	}
+	_, err = stdout.Write(c.scripts[c.execCount].stdout)
+	if err != nil {
+		return err
+	}
+	_, err = stderr.Write(c.scripts[c.execCount].stderr)
+	if err != nil {
+		return err
+	}
+	c.execCount++
+	return nil
+}
+
+func (c *fakeClient) REST() restclient.Interface {
+	return nil
+}
+
+type fakeClientScript struct {
+	cmd    []string
+	stdin  []byte
+	stdout []byte
+	stderr []byte
+}
+
+func getFakeClient(cr *apiv1alpha1.PerconaServerMySQL, operatorPass string, clusterStatus innodbcluster.ClusterStatus) (clientcmd.Client, error) {
+	status, err := json.Marshal(innodbcluster.Status{
+		DefaultReplicaSet: innodbcluster.ReplicaSetStatus{
+			Status: clusterStatus,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	host := fmt.Sprintf("%s.%s.%s", mysql.PodName(cr, 0), mysql.ServiceName(cr), cr.Namespace)
+	return &fakeClient{
+		scripts: []fakeClientScript{
+			{
+				cmd: []string{
+					"mysqlsh",
+					"--no-wizard",
+					"--uri",
+					fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, host),
+					"-e",
+					fmt.Sprintf("dba.getCluster('%s').status()", cr.InnoDBClusterName()),
+				},
+			},
+			{
+				cmd: []string{
+					"mysqlsh",
+					"--result-format",
+					"json",
+					"--uri",
+					fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, host),
+					"--cluster",
+					"--",
+					"cluster",
+					"status",
+				},
+				stdout: status,
+			},
+		},
+	}, nil
 }
 
 func fakeExec(cr *apiv1alpha1.PerconaServerMySQL, operatorPass string, clusterStatus innodbcluster.ClusterStatus) (k8sexec.Interface, error) {

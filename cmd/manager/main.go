@@ -33,13 +33,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	k8sexec "k8s.io/utils/exec"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/ps"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psbackup"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
@@ -103,7 +103,13 @@ func main() {
 
 	nsClient := client.NewNamespacedClient(mgr.GetClient(), ns)
 
-	serverVersion, err := platform.GetServerVersion()
+	cliCmd, err := clientcmd.NewClient()
+	if err != nil {
+		setupLog.Error(err, "unable to create clientcmd")
+		os.Exit(1)
+	}
+
+	serverVersion, err := platform.GetServerVersion(cliCmd)
 	if err != nil {
 		setupLog.Error(err, "unable to get server version")
 		os.Exit(1)
@@ -118,7 +124,7 @@ func main() {
 		Client:        nsClient,
 		Scheme:        mgr.GetScheme(),
 		ServerVersion: serverVersion,
-		Exec:          k8sexec.New(),
+		ClientCmd:     cliCmd,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ps-controller")
 		os.Exit(1)
