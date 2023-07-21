@@ -27,7 +27,11 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
-const WatchNamespaceEnvVar = "WATCH_NAMESPACE"
+const (
+	WatchNamespaceEnvVar = "WATCH_NAMESPACE"
+
+	ExperimentalTopologyEnvVar = "TOPOLOGY_EXPERIMENTAL"
+)
 
 // GetWatchNamespace returns the namespace the operator should be watching for changes
 func GetWatchNamespace() (string, error) {
@@ -36,6 +40,11 @@ func GetWatchNamespace() (string, error) {
 		return "", fmt.Errorf("%s must be set", WatchNamespaceEnvVar)
 	}
 	return ns, nil
+}
+
+func GetExperimetalTopologyOption() bool {
+	v, _ := os.LookupEnv(ExperimentalTopologyEnvVar)
+	return strings.ToLower(v) == "true"
 }
 
 func objectMetaEqual(old, new metav1.Object) bool {

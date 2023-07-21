@@ -47,6 +47,8 @@ spec:
               fieldPath: metadata.namespace
         - name: DISABLE_TELEMETRY
           value: "false"
+        - name: TOPOLOGY_EXPERIMENTAL
+          value: "false"
         image: perconalab/percona-server-mysql-operator:main
         imagePullPolicy: Always
         livenessProbe:

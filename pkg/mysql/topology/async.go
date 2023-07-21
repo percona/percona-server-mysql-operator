@@ -2,14 +2,22 @@ package topology
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
-func GetAsync(ctx context.Context, m Manager, hosts ...string) (Topology, error) {
+func ExperimentalGetAsync(ctx context.Context, m Manager, hosts ...string) (Topology, error) {
 	t := new(Topology)
 	for _, host := range hosts {
 		if err := recursiveAsyncDiscover(ctx, m, host, replicator.ReplicationStatusNotInitiated, t); err != nil {
@@ -25,6 +33,57 @@ func GetAsync(ctx context.Context, m Manager, hosts ...string) (Topology, error)
 		t.SetPrimary(t.Replicas[0]) // this will also delete it from replica slice
 	}
 	return *t, nil
+}
+
+func GetAsync(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, cl client.Reader) (Topology, error) {
+	log := logf.FromContext(ctx).WithName("GetAsync")
+
+	pod, err := getOrcPod(ctx, cl, cr, 0)
+	if err != nil {
+		log.Info("orchestrator pod is not found: " + err.Error() + ". skip")
+		return Topology{}, nil
+	}
+	if err := orchestrator.DiscoverExec(ctx, pod, mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
+		switch err.Error() {
+		case "Unauthorized":
+			log.Info("mysql is not ready, unauthorized orchestrator discover response. skip")
+			return Topology{}, nil
+		case orchestrator.ErrEmptyResponse.Error():
+			log.Info("mysql is not ready, empty orchestrator discover response. skip")
+			return Topology{}, nil
+		}
+		return Topology{}, errors.Wrap(err, "failed to discover cluster")
+	}
+	primary, err := orchestrator.ClusterPrimaryExec(ctx, pod, cr.ClusterHint())
+	if err != nil {
+		return Topology{}, errors.Wrap(err, "get primary")
+	}
+	if primary.Alias == "" {
+		log.Info("mysql is not ready, orchestrator cluster primary alias is empty. skip")
+		return Topology{}, nil
+	}
+	if primary.Key.Hostname == "" {
+		primary.Key.Hostname = fmt.Sprintf("%s.%s.%s", primary.Alias, mysql.ServiceName(cr), cr.Namespace)
+	}
+	replicas := make([]string, 0, len(primary.Replicas))
+	for _, r := range primary.Replicas {
+		replicas = append(replicas, r.Hostname)
+	}
+	return Topology{
+		Primary:  primary.Key.Hostname,
+		Replicas: replicas,
+	}, nil
+}
+
+func getOrcPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
+	pod := &corev1.Pod{}
+
+	nn := types.NamespacedName{Namespace: cr.Namespace, Name: orchestrator.PodName(cr, idx)}
+	if err := cl.Get(ctx, nn, pod); err != nil {
+		return nil, err
+	}
+
+	return pod, nil
 }
 
 func recursiveAsyncDiscover(ctx context.Context, m Manager, host string, replicaStatus replicator.ReplicationStatus, t *Topology) error {

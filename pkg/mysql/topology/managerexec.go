@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 
@@ -75,10 +76,10 @@ func (m *topologyManagerExec) Get(ctx context.Context) (Topology, error) {
 			return Topology{}, errors.Wrap(err, "get group-replication topology")
 		}
 	case apiv1alpha1.ClusterTypeAsync:
-		top, err = GetAsync(ctx, m, mysql.ServiceName(m.cluster))
-		if err != nil {
-			return Topology{}, err
+		if k8s.GetExperimetalTopologyOption() {
+			return ExperimentalGetAsync(ctx, m, mysql.ServiceName(m.cluster))
 		}
+		return GetAsync(ctx, m.cluster, m.cl)
 	default:
 		return Topology{}, errors.New("unknown cluster type")
 	}
