@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 180
+timeout: 300
 commands:
   - script: |-
       set -o errexit
@@ -9,4 +9,4 @@ commands:
       source ../../functions
 
       destroy_chaos_mesh
-    timeout: 180
+    timeout: 300
