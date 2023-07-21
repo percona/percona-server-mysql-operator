@@ -356,7 +356,6 @@ func (d *dbImplExec) GetGroupReplicationPrimary() (string, error) {
 	return rows[0].Host, nil
 }
 
-// TODO: finish implementation
 func (d *dbImplExec) GetGroupReplicationReplicas() ([]string, error) {
 	rows := []*struct {
 		Host string `csv:"host"`
@@ -364,6 +363,9 @@ func (d *dbImplExec) GetGroupReplicationReplicas() ([]string, error) {
 
 	err := d.query("SELECT MEMBER_HOST as host FROM replication_group_members WHERE MEMBER_ROLE='SECONDARY' AND MEMBER_STATE='ONLINE'", &rows)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return []string{}, nil
+		}
 		return nil, errors.Wrap(err, "query replicas")
 	}
 
