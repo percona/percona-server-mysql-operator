@@ -16,8 +16,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	restclient "k8s.io/client-go/rest"
-	k8sexec "k8s.io/utils/exec"
-	fakek8sexec "k8s.io/utils/exec/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -570,67 +568,6 @@ func getFakeClient(cr *apiv1alpha1.PerconaServerMySQL, operatorPass string, clus
 			},
 		},
 	}, nil
-}
-
-func fakeExec(cr *apiv1alpha1.PerconaServerMySQL, operatorPass string, clusterStatus innodbcluster.ClusterStatus) (k8sexec.Interface, error) {
-	status, err := json.Marshal(innodbcluster.Status{
-		DefaultReplicaSet: innodbcluster.ReplicaSetStatus{
-			Status: clusterStatus,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	host := fmt.Sprintf("%s.%s.%s", mysql.PodName(cr, 0), mysql.ServiceName(cr), cr.Namespace)
-	scripts := []struct {
-		cmd    string
-		args   []string
-		stdout []byte
-		stderr []byte
-	}{
-		{
-			cmd: "mysqlsh",
-			args: []string{
-				"--no-wizard",
-				"--uri",
-				fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, host),
-				"-e",
-				fmt.Sprintf("dba.getCluster('%s').status()", cr.InnoDBClusterName()),
-			},
-		},
-		{
-			cmd: "mysqlsh",
-			args: []string{
-				"--result-format",
-				"json",
-				"--uri",
-				fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, host),
-				"--cluster",
-				"--",
-				"cluster",
-				"status",
-			},
-			stdout: status,
-		},
-	}
-	fakeExec := &fakek8sexec.FakeExec{
-		ExactOrder: true,
-	}
-	for _, s := range scripts {
-		fakeCmd := new(fakek8sexec.FakeCmd)
-		stdout, stderr := s.stdout, s.stderr
-		fakeCmd.RunScript = append(fakeCmd.RunScript, func() ([]byte, []byte, error) {
-			return stdout, stderr, nil
-		})
-
-		cmd, args := s.cmd, s.args
-		fakeExec.CommandScript = append(fakeExec.CommandScript, fakek8sexec.FakeCommandAction(
-			func(_ string, _ ...string) k8sexec.Cmd {
-				return fakek8sexec.InitFakeCmd(fakeCmd, cmd, args...)
-			},
-		))
-	}
-	return fakeExec, nil
 }
 
 func makeFakeReadyPods(cr *apiv1alpha1.PerconaServerMySQL, amount int, podType string) []client.Object {
