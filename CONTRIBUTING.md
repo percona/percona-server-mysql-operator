@@ -169,6 +169,11 @@ Contributions to the source tree should follow the workflow described below:
    
    By default kuttl will delete created test namespace after test is finished, you can add `--skip-delete` flag in order to prevent deletion for potential troubleshooting.
 
+**Running the operator locally**
+
+1. Save your changes
+2. Tell the operator which namespace to watch by running `export WATCH_NAMESPACE=my-namespace`
+3. Run the command `make install run`.
 
 ### 2. Contributing to documentation
 
