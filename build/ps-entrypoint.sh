@@ -182,6 +182,12 @@ load_group_replication_plugin() {
 	POD_IP=$(hostname -I | awk '{print $1}')
 
 	sed -i "/\[mysqld\]/a plugin_load_add=group_replication.so" $CFG
+	sed -i "/\[mysqld\]/a group_replication_exit_state_action=ABORT_SERVER" $CFG
+}
+
+ensure_read_only() {
+	sed -i "/\[mysqld\]/a read_only=ON" $CFG
+	sed -i "/\[mysqld\]/a super_read_only=ON" $CFG
 }
 
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
@@ -399,34 +405,24 @@ if [[ -f /var/lib/mysql/full-cluster-crash ]]; then
 	namespace=$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)
 
 	echo "######FULL_CLUSTER_CRASH:${node_name}######"
-	echo "You have full cluster crash. You need to recover the cluster manually. Here are the steps:"
-	echo ""
-	echo "Latest GTID_EXECUTED in this node is ${gtid_executed}"
-	echo "Compare GTIDs in each MySQL pod and select the one with the newest GTID."
-	echo ""
-	echo "Create /var/lib/mysql/force-bootstrap inside the mysql container. For example, if you select ${cluster_name}-mysql-2 to recover from:"
-	echo "$ kubectl -n ${namespace} exec ${cluster_name}-mysql-2 -c mysql -- touch /var/lib/mysql/force-bootstrap"
-	echo ""
-	echo "Remove /var/lib/mysql/full-cluster-crash in this pod to re-bootstrap the group. For example:"
-	echo "$ kubectl -n ${namespace} exec ${cluster_name}-mysql-2 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
-	echo "This will restart the mysql container."
-	echo ""
-	echo "After group is bootstrapped and mysql container is ready, move on to the other pods:"
-	echo "$ kubectl -n ${namespace} exec ${cluster_name}-mysql-1 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
-	echo "Wait until the pod ready"
-	echo ""
-	echo "$ kubectl -n ${namespace} exec ${cluster_name}-mysql-0 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
-	echo "Wait until the pod ready"
-	echo ""
-	echo "Continue to other pods if you have more."
-	echo "#####LAST_LINE:${node_name}:${gtid_executed}"
+	echo "You are in a full cluster crash. Operator will attempt to fix the issue automatically."
+	echo "MySQL pods will be up and running in read only mode."
+	echo "Latest GTID_EXECUTED on this node is ${gtid_executed}"
+	echo "######FULL_CLUSTER_CRASH:${node_name}######"
 
-	for (( ; ; )); do
-		if [[ ! -f /var/lib/mysql/full-cluster-crash ]]; then
-			exit 0
-		fi
-		sleep 5
-	done
+	ensure_read_only
+fi
+
+recovery_file='/var/lib/mysql/sleep-forever'
+if [ -f "${recovery_file}" ]; then
+  set +o xtrace
+  echo "The $recovery_file file is detected, node is going to infinity loop"
+  echo "If you want to exit from infinity loop you need to remove $recovery_file file"
+  for (( ; ; )); do
+    if [ ! -f "${recovery_file}" ]; then
+      exit 0
+    fi
+  done
 fi
 
 exec "$@"
