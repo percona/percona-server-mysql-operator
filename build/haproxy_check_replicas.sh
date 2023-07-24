@@ -40,7 +40,7 @@ check_async() {
 
 check_gr() {
 	READ_ONLY=$(MYSQL_PWD="${MONITOR_PASSWORD}" ${MYSQL_CMDLINE} -e 'SELECT @@super_read_only' | /usr/bin/sed -n -e '2p' | /usr/bin/tr -d '\n')
-	APPLIER_STATUS=$(MYSQL_PWD="${MONITOR_PASSWORD}" ${MYSQL_CMDLINE} -e "SELECT * FROM performance_schema.replication_applier_status WHERE channel_name = 'group_replication_applier'" | /usr/bin/sed -n -e '3p' | /usr/bin/tr -d '\n')
+	APPLIER_STATUS=$(MYSQL_PWD="${MONITOR_PASSWORD}" ${MYSQL_CMDLINE} -e "SELECT SERVICE_STATE FROM performance_schema.replication_connection_status WHERE channel_name = 'group_replication_applier'" | /usr/bin/sed -n -e '2p' | /usr/bin/tr -d '\n')
 
 	log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} @@super_read_only: ${READ_ONLY} Applier: ${APPLIER_STATUS}"
 
