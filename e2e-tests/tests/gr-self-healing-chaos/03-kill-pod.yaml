@@ -1,0 +1,19 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      pod=gr-self-healing-chaos-mysql-0
+
+      yq eval '.metadata.name = "chaos-pod-kill" |
+        del(.spec.selector.pods.test-namespace) |
+        .metadata.namespace = "'${NAMESPACE}'" |
+        .spec.selector.pods.'${NAMESPACE}'[0] = "'$pod'"' "${TESTS_CONFIG_DIR}/chaos-pod-kill.yml" \
+        | kubectl apply -f -
+      sleep 5
+    timeout: 30

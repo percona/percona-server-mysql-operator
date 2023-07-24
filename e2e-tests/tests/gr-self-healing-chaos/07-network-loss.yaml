@@ -1,0 +1,26 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 200
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      pod=gr-self-healing-chaos-mysql-0
+
+      yq eval '.metadata.name = "chaos-pod-network-loss" |
+        del(.spec.selector.pods.test-namespace) |
+        .metadata.namespace = "'${NAMESPACE}'" |
+        .spec.selector.pods.'${NAMESPACE}'[0] = "'$pod'"' "${TESTS_CONFIG_DIR}/chaos-network-loss.yml" \
+        | kubectl apply -f -
+
+      sleep 30
+
+      run_mysql \
+      	"INSERT myDB.myTable (id) VALUES (100502)" \
+      	"-h $(get_mysql_router_service $(get_cluster_name)) -uroot -proot_password"
+
+      sleep 30
+    timeout: 200

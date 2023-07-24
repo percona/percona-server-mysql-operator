@@ -1,0 +1,71 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 360
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: gr-self-healing-chaos-mysql
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: gr-self-healing-chaos-router
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  updatedReplicas: 3
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-self-healing-chaos
+status:
+  conditions:
+  - message: InnoDB cluster successfully bootstrapped with 3 nodes
+    reason: InnoDBClusterBootstrapped
+    status: "True"
+    type: InnoDBClusterBootstrapped
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  router:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: chaos-pod-network-loss
+spec:
+  action: loss
+  direction: to
+  duration: 60s
+  loss:
+    correlation: "100"
+    loss: "100"
+  mode: one
+status:
+  experiment:
+    containerRecords:
+    - events:
+      - operation: Apply
+        type: Succeeded
+      - operation: Recover
+        type: Succeeded
+      injectedCount: 1
+      phase: Not Injected
+      recoveredCount: 1
+      selectorKey: .
+    desiredPhase: Stop
