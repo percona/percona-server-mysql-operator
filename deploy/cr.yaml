@@ -31,6 +31,7 @@ spec:
 
   mysql:
     clusterType: group-replication
+    autoRecovery: true
     image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
 #    initImage: percona/percona-server-mysql-operator:0.5.0

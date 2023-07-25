@@ -85,8 +85,9 @@ func (t ClusterType) isValid() bool {
 }
 
 type MySQLSpec struct {
-	ClusterType ClusterType            `json:"clusterType,omitempty"`
-	Expose      ServiceExposeTogglable `json:"expose,omitempty"`
+	ClusterType  ClusterType            `json:"clusterType,omitempty"`
+	Expose       ServiceExposeTogglable `json:"expose,omitempty"`
+	AutoRecovery bool                   `json:"autoRecovery,omitempty"`
 
 	Sidecars       []corev1.Container `json:"sidecars,omitempty"`
 	SidecarVolumes []corev1.Volume    `json:"sidecarVolumes,omitempty"`

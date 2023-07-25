@@ -59,6 +59,11 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 
 		log.Info("Pod is waiting for recovery", "pod", pod.Name, "gtidExecuted", outb.String())
 
+		if !cr.Spec.MySQL.AutoRecovery {
+			log.Info("Full cluster crash detected but auto recovery is not enabled. Enable .spec.mysql.autoRecovery or recover cluster manually.")
+			continue
+		}
+
 		podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
 		podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
 
