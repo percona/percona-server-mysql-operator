@@ -1202,7 +1202,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		}
 
 		var outb, errb bytes.Buffer
-		cmd := []string{"/bin/bash", "-c", "cat /var/lib/mysql/full-cluster-crash"}
+		cmd := []string{"cat", "/var/lib/mysql/full-cluster-crash"}
 		fullClusterCrash := false
 		for _, pod := range pods {
 			err = cli.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false)

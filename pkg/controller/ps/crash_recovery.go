@@ -46,7 +46,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 	}
 
 	var outb, errb bytes.Buffer
-	cmd := []string{"/bin/bash", "-c", "cat /var/lib/mysql/full-cluster-crash"}
+	cmd := []string{"cat", "/var/lib/mysql/full-cluster-crash"}
 
 	for _, pod := range pods {
 		err = cli.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false)
@@ -96,7 +96,7 @@ func (r *PerconaServerMySQLReconciler) cleanupFullClusterCrashFile(ctx context.C
 	}
 
 	var outb, errb bytes.Buffer
-	cmd := []string{"/bin/bash", "-c", "rm /var/lib/mysql/full-cluster-crash"}
+	cmd := []string{"rm", "/var/lib/mysql/full-cluster-crash"}
 	for _, pod := range pods {
 		err = cli.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false)
 		if err != nil {
