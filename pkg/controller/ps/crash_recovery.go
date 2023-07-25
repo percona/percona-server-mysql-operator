@@ -11,6 +11,7 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
+	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
@@ -70,6 +71,15 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 		mysh, err := mysqlsh.NewWithExec(&pod, podUri)
 		if err != nil {
 			return err
+		}
+
+		status, err := mysh.ClusterStatusWithExec(ctx, cr.InnoDBClusterName())
+		if err == nil && status.DefaultReplicaSet.Status == innodbcluster.ClusterStatusOK {
+			err := r.cleanupFullClusterCrashFile(ctx, cr)
+			if err != nil {
+				log.Error(err, "failed to remove /var/lib/mysql/full-cluster-crash")
+			}
+			continue
 		}
 
 		err = mysh.RebootClusterFromCompleteOutageWithExec(ctx, cr.InnoDBClusterName())
