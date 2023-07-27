@@ -41,6 +41,10 @@ RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     cmd/peer-list/main.go \
     && cp -r build/_output/bin/peer-list /usr/local/bin/peer-list
 RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
+    go build -o build/_output/bin/orc-handler \
+    cmd/orc-handler/main.go \
+    && cp -r build/_output/bin/orc-handler /usr/local/bin/orc-handler
+RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -o build/_output/bin/haproxy-check \
     cmd/haproxy-check/main.go \
     && cp -r build/_output/bin/haproxy-check /usr/local/bin/haproxy-check

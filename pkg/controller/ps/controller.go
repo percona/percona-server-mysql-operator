@@ -780,23 +780,45 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return errors.Wrap(err, "reconcile group replication")
 	}
 
-	if cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR {
+	if cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR || !cr.OrchestratorEnabled() || cr.Spec.Orchestrator.Size <= 0 {
 		return nil
 	}
 
 	sts := &appsv1.StatefulSet{}
 	// no need to set init image since we're just getting obj from API
-	if err := r.Get(ctx, client.ObjectKeyFromObject(mysql.StatefulSet(cr, "", "", new(corev1.Secret))), sts); err != nil {
+	if err := r.Get(ctx, client.ObjectKeyFromObject(orchestrator.StatefulSet(cr, "")), sts); err != nil {
 		return client.IgnoreNotFound(err)
 	}
 
 	if sts.Status.ReadyReplicas == 0 {
-		log.Info("mysql is not ready. skip", "ready", sts.Status.ReadyReplicas)
+		log.Info("orchestrator is not ready. skip", "ready", sts.Status.ReadyReplicas)
 		return nil
 	}
 
-	if err := r.reconcileLabels(ctx, cr); err != nil {
-		return errors.Wrap(err, "failed to reconcile labels")
+	pod, err := getOrcPod(ctx, r.Client, cr, 0)
+	if err != nil {
+		return nil
+	}
+
+	if err := orchestrator.DiscoverExec(ctx, pod, mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
+		switch err.Error() {
+		case "Unauthorized":
+			log.Info("mysql is not ready, unauthorized orchestrator discover response. skip")
+			return nil
+		case orchestrator.ErrEmptyResponse.Error():
+			log.Info("mysql is not ready, empty orchestrator discover response. skip")
+			return nil
+		}
+		return errors.Wrap(err, "failed to discover cluster")
+	}
+
+	primary, err := orchestrator.ClusterPrimaryExec(ctx, pod, cr.ClusterHint())
+	if err != nil {
+		return errors.Wrap(err, "get cluster primary")
+	}
+	if primary.Alias == "" {
+		log.Info("mysql is not ready, orchestrator cluster primary alias is empty. skip")
+		return nil
 	}
 
 	return nil
@@ -851,48 +873,6 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 
 	if !mysh.DoesClusterExistWithExec(ctx, cr.InnoDBClusterName()) {
 		return errors.New("InnoDB cluster is already bootstrapped, but failed to check its status")
-	}
-
-	return nil
-}
-
-func (r *PerconaServerMySQLReconciler) reconcileLabels(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	log := logf.FromContext(ctx).WithName("reconcileLabels")
-	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
-	if err != nil {
-		return errors.Wrap(err, "get pods")
-	}
-	if len(pods) == 0 {
-		return nil
-	}
-	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
-	if err != nil {
-		return errors.Wrap(err, "get operator password")
-	}
-	tm := topology.NewTopologyManagerExec(cr, r.Client, operatorPass)
-	t, err := tm.Get(ctx)
-	if err != nil {
-		return errors.Wrap(err, "get topology")
-	}
-	for i := range pods {
-		pod := pods[i].DeepCopy()
-
-		fqdn := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.Name(cr), cr.Namespace)
-		_, ok := pod.Labels[apiv1alpha1.MySQLPrimaryLabel]
-		if ok && !t.IsPrimary(fqdn) {
-			log.Info("Remove primary label", "fqdn", fqdn)
-			k8s.RemoveLabel(pod, apiv1alpha1.MySQLPrimaryLabel)
-			if err := r.Patch(ctx, pod, client.StrategicMergeFrom(&pods[i])); err != nil {
-				return errors.Wrapf(err, "remove label from old primary pod: %v/%v", pod.GetNamespace(), pod.GetName())
-			}
-		}
-		if !ok && t.IsPrimary(fqdn) {
-			log.Info("Add primary label", "fqdn", fqdn)
-			k8s.AddLabel(pod, apiv1alpha1.MySQLPrimaryLabel, "true")
-			if err := r.Patch(ctx, pod, client.StrategicMergeFrom(&pods[i])); err != nil {
-				return errors.Wrapf(err, "remove label from old primary pod: %v/%v", pod.GetNamespace(), pod.GetName())
-			}
-		}
 	}
 
 	return nil
