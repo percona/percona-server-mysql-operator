@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 	xb "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
@@ -79,15 +80,6 @@ func sanitizeCmd(cmd *exec.Cmd) string {
 	return strings.Join(c, " ")
 }
 
-func getNamespace() (string, error) {
-	ns, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-	if err != nil {
-		return "", errors.Wrap(err, "read namespace file")
-	}
-
-	return string(ns), nil
-}
-
 func xtrabackupArgs(user, pass string) []string {
 	return []string{
 		"--backup",
@@ -112,7 +104,7 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
-	ns, err := getNamespace()
+	ns, err := k8s.DefaultAPINamespace()
 	if err != nil {
 		log.Error(err, "failed to detect namespace")
 		http.Error(w, "backup failed", http.StatusInternalServerError)
@@ -237,7 +229,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	defer status.DoneBackup()
-	ns, err := getNamespace()
+	ns, err := k8s.DefaultAPINamespace()
 	if err != nil {
 		log.Error(err, "failed to detect namespace")
 		http.Error(w, "backup failed", http.StatusInternalServerError)

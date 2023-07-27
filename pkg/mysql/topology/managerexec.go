@@ -77,9 +77,9 @@ func (m *topologyManagerExec) Get(ctx context.Context) (Topology, error) {
 		}
 	case apiv1alpha1.ClusterTypeAsync:
 		if k8s.GetExperimetalTopologyOption() {
-			return ExperimentalGetAsync(ctx, m, mysql.ServiceName(m.cluster))
+			return experimentalGetAsync(ctx, m, mysql.ServiceName(m.cluster))
 		}
-		return GetAsync(ctx, m.cluster, m.cl)
+		return getAsync(ctx, m.cluster, m.cl)
 	default:
 		return Topology{}, errors.New("unknown cluster type")
 	}

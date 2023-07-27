@@ -19,6 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -399,4 +401,33 @@ func GetCRWithDefaults(
 	}
 
 	return cr, nil
+}
+
+func NewNamespacedClient(namespace string) (client.Client, error) {
+	kubeconfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		clientcmd.NewDefaultClientConfigLoadingRules(),
+		&clientcmd.ConfigOverrides{
+			Timeout: "10s",
+		},
+	).ClientConfig()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get client config")
+	}
+
+	scheme := runtime.NewScheme()
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		return nil, errors.Wrap(err, "failed to add to client-go types to scheme")
+	}
+	if err := apiv1alpha1.AddToScheme(scheme); err != nil {
+		return nil, errors.Wrap(err, "failed to add to percona types to scheme")
+	}
+
+	cl, err := client.New(kubeconfig, client.Options{
+		Scheme: scheme,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create client")
+	}
+
+	return client.NewNamespacedClient(cl, namespace), nil
 }

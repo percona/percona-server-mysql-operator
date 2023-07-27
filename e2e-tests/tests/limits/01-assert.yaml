@@ -68,6 +68,9 @@ spec:
           value: limitsnolimits
         - name: CR_UID
         - name: CLUSTER_TYPE
+        - name: CLUSTER_NAME
+          value: limits-no-limits
+        - name: TOPOLOGY_EXPERIMENTAL
         imagePullPolicy: Always
         livenessProbe:
           exec:

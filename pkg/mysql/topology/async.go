@@ -17,7 +17,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
-func ExperimentalGetAsync(ctx context.Context, m Manager, hosts ...string) (Topology, error) {
+func experimentalGetAsync(ctx context.Context, m Manager, hosts ...string) (Topology, error) {
 	t := new(Topology)
 	for _, host := range hosts {
 		if err := recursiveAsyncDiscover(ctx, m, host, replicator.ReplicationStatusNotInitiated, t); err != nil {
@@ -35,7 +35,7 @@ func ExperimentalGetAsync(ctx context.Context, m Manager, hosts ...string) (Topo
 	return *t, nil
 }
 
-func GetAsync(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, cl client.Reader) (Topology, error) {
+func getAsync(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, cl client.Reader) (Topology, error) {
 	log := logf.FromContext(ctx).WithName("GetAsync")
 
 	pod, err := getOrcPod(ctx, cl, cr, 0)

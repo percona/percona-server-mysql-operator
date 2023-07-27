@@ -8,9 +8,11 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/sjmudd/stopwatch"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql/topology"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
@@ -194,8 +196,20 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 	if err != nil {
 		return "", nil, errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
-	tm := topology.NewTopologyManager(apiv1alpha1.ClusterTypeAsync, operatorPass)
-	t, err := topology.ExperimentalGetAsync(ctx, tm, sets.List(peers)...)
+	ns, err := k8s.DefaultAPINamespace()
+	if err != nil {
+		return "", nil, errors.Wrap(err, "failed to get namespace")
+	}
+	tm, err := topology.NewTopologyManager(apiv1alpha1.ClusterTypeAsync, &apiv1alpha1.PerconaServerMySQL{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      os.Getenv("CLUSTER_NAME"),
+			Namespace: ns,
+		},
+	}, nil, operatorPass, sets.List(peers)...)
+	if err != nil {
+		return "", nil, errors.Wrap(err, "failed to create topology manager")
+	}
+	t, err := tm.Get(ctx)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to get topology")
 	}

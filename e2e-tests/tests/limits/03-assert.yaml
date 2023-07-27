@@ -68,6 +68,9 @@ spec:
           value: limitsnorequests
         - name: CR_UID
         - name: CLUSTER_TYPE
+        - name: CLUSTER_NAME
+          value: limits-no-requests
+        - name: TOPOLOGY_EXPERIMENTAL
         imagePullPolicy: Always
         livenessProbe:
           exec:
