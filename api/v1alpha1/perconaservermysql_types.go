@@ -92,8 +92,6 @@ type MySQLSpec struct {
 	SidecarVolumes []corev1.Volume    `json:"sidecarVolumes,omitempty"`
 	SidecarPVCs    []SidecarPVC       `json:"sidecarPVCs,omitempty"`
 
-	Configuration string `json:"configuration,omitempty"`
-
 	PodSpec `json:",inline"`
 }
 
@@ -148,6 +146,8 @@ type PodSpec struct {
 
 	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ServiceAccountName string                     `json:"serviceAccountName,omitempty"`
+
+	Configuration string `json:"configuration,omitempty"`
 
 	ContainerSpec `json:",inline"`
 }
@@ -270,8 +270,6 @@ type MySQLRouterSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 
 	Expose ServiceExpose `json:"expose,omitempty"`
-
-	Configuration string `json:"configuration,omitempty"`
 
 	PodSpec `json:",inline"`
 }

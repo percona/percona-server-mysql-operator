@@ -122,6 +122,16 @@ spec:
 #          memory: 1G
 #          cpu: 700m
 
+#      configuration: |
+#        defaults
+#          default-server init-addr last,libc,none
+#          log global
+#          mode tcp
+#          retries 10
+#          timeout client 28800s
+#          timeout connect 100500
+#          timeout server 28800s
+
       affinity:
         antiAffinityTopologyKey: "kubernetes.io/hostname"
 #        advanced:

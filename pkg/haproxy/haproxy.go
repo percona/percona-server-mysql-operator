@@ -118,9 +118,15 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 	}
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string, secret *corev1.Secret) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string, secret *corev1.Secret) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 
+	annotations := make(map[string]string)
+	if configHash != "" {
+		annotations["percona.com/configuration-hash"] = configHash
+	}
+
+	t := true
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -139,7 +145,8 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string, secret *c
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector: cr.Spec.Proxy.HAProxy.NodeSelector,
@@ -185,6 +192,29 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string, secret *c
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
 									SecretName: cr.Spec.SSLSecretName,
+								},
+							},
+						},
+						{
+							Name: configVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								Projected: &corev1.ProjectedVolumeSource{
+									Sources: []corev1.VolumeProjection{
+										{
+											ConfigMap: &corev1.ConfigMapProjection{
+												LocalObjectReference: corev1.LocalObjectReference{
+													Name: Name(cr),
+												},
+												Items: []corev1.KeyToPath{
+													{
+														Key:  CustomConfigKey,
+														Path: "haproxy.cfg",
+													},
+												},
+												Optional: &t,
+											},
+										},
+									},
 								},
 							},
 						},
@@ -265,6 +295,10 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			{
 				Name:      tlsVolumeName,
 				MountPath: tlsMountPath,
+			},
+			{
+				Name:      configVolumeName,
+				MountPath: configMountPath,
 			},
 		},
 		TerminationMessagePath:   "/dev/termination-log",
