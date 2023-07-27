@@ -248,19 +248,23 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	spec := cr.Spec.Proxy.HAProxy
 
+	env := []corev1.EnvVar{
+		{
+			Name:  "CLUSTER_TYPE",
+			Value: string(cr.Spec.MySQL.ClusterType),
+		},
+	}
+	env = append(env, spec.Env...)
+
 	return corev1.Container{
 		Name:            componentName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
 		Resources:       spec.Resources,
-		Env: []corev1.EnvVar{
-			{
-				Name:  "CLUSTER_TYPE",
-				Value: string(cr.Spec.MySQL.ClusterType),
-			},
-		},
-		Command: []string{"/opt/percona/haproxy-entrypoint.sh"},
-		Args:    []string{"haproxy"},
+		Env:             env,
+		EnvFrom:         spec.EnvFrom,
+		Command:         []string{"/opt/percona/haproxy-entrypoint.sh"},
+		Args:            []string{"haproxy"},
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "mysql",
@@ -310,6 +314,14 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 func mysqlMonitContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	spec := cr.Spec.Proxy.HAProxy
 
+	env := []corev1.EnvVar{
+		{
+			Name:  "MYSQL_SERVICE",
+			Value: mysql.ServiceName(cr),
+		},
+	}
+	env = append(env, spec.Env...)
+
 	return corev1.Container{
 		Name:            "mysql-monit",
 		Image:           spec.Image,
@@ -321,12 +333,8 @@ func mysqlMonitContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			"-on-change=/opt/percona/haproxy_add_mysql_nodes.sh",
 			"-service=$(MYSQL_SERVICE)",
 		},
-		Env: []corev1.EnvVar{
-			{
-				Name:  "MYSQL_SERVICE",
-				Value: mysql.ServiceName(cr),
-			},
-		},
+		Env:     env,
+		EnvFrom: spec.EnvFrom,
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "bin",

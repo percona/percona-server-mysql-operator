@@ -15,7 +15,7 @@ MYSQL_SERVER_PORT='33062'
 MONITOR_USER='monitor'
 MONITOR_PASSWORD=$(/bin/cat /etc/mysql/mysql-users-secret/monitor)
 
-TIMEOUT=${CUSTOM_TIMEOUT:-10}
+TIMEOUT=${HA_CONNECTION_TIMEOUT:-10}
 MYSQL_CMDLINE="/usr/bin/timeout $TIMEOUT /usr/bin/mysql -nNE -u${MONITOR_USER} -h ${MYSQL_SERVER_IP} -P ${MYSQL_SERVER_PORT}"
 
 CLUSTER_TYPE=$(/bin/cat /tmp/cluster_type)

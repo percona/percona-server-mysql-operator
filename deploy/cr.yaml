@@ -14,7 +14,7 @@ spec:
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
     apply: disabled
-  initImage: perconalab/percona-server-mysql-operator:k8sps-283
+  initImage: perconalab/percona-server-mysql-operator:main
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
 #  ignoreLabels:
@@ -135,6 +135,14 @@ spec:
 #        limits:
 #          memory: 1G
 #          cpu: 700m
+
+#      env:
+#      - name: HA_CONNECTION_TIMEOUT
+#        value: "1000"
+#
+#      envFrom:
+#      - secretRef:
+#          name: haproxy-env-secret
 
       readinessProbe:
         timeoutSeconds: 3

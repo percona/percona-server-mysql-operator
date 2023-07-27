@@ -127,6 +127,9 @@ type ContainerSpec struct {
 	LivenessProbe  corev1.Probe `json:"livenessProbe,omitempty"`
 
 	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
+
+	Env     []corev1.EnvVar        `json:"env,omitempty"`
+	EnvFrom []corev1.EnvFromSource `json:"envFrom,omitempty"`
 }
 
 type PodSpec struct {
