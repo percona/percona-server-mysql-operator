@@ -14,7 +14,7 @@ spec:
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
     apply: disabled
-  initImage: perconalab/percona-server-mysql-operator:main
+  initImage: perconalab/percona-server-mysql-operator:k8sps-283
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
 #  ignoreLabels:
@@ -42,6 +42,20 @@ spec:
         memory: 1G
       limits:
         memory: 2G
+
+    readinessProbe:
+      initialDelaySeconds: 30
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 3
+      successThreshold: 1
+
+    livenessProbe:
+      initialDelaySeconds: 15
+      timeoutSeconds: 10
+      periodSeconds: 10
+      failureThreshold: 3
+      successThreshold: 1
 
     affinity:
       antiAffinityTopologyKey: "kubernetes.io/hostname"
@@ -121,6 +135,18 @@ spec:
 #        limits:
 #          memory: 1G
 #          cpu: 700m
+
+      readinessProbe:
+        timeoutSeconds: 3
+        periodSeconds: 5
+        failureThreshold: 3
+        successThreshold: 1
+
+      livenessProbe:
+        timeoutSeconds: 3
+        periodSeconds: 5
+        failureThreshold: 3
+        successThreshold: 1
 
 #      configuration: |
 #        defaults

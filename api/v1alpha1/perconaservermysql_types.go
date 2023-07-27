@@ -517,6 +517,36 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		cr.Spec.Proxy.Router.ReadinessProbe.TimeoutSeconds = 3
 	}
 
+	if cr.Spec.Proxy.HAProxy == nil {
+		cr.Spec.Proxy.HAProxy = new(HAProxySpec)
+	}
+
+	if cr.Spec.Proxy.HAProxy.LivenessProbe.PeriodSeconds == 0 {
+		cr.Spec.Proxy.HAProxy.LivenessProbe.PeriodSeconds = 5
+	}
+	if cr.Spec.Proxy.HAProxy.LivenessProbe.FailureThreshold == 0 {
+		cr.Spec.Proxy.HAProxy.LivenessProbe.FailureThreshold = 3
+	}
+	if cr.Spec.Proxy.HAProxy.LivenessProbe.SuccessThreshold == 0 {
+		cr.Spec.Proxy.HAProxy.LivenessProbe.SuccessThreshold = 1
+	}
+	if cr.Spec.Proxy.HAProxy.LivenessProbe.TimeoutSeconds == 0 {
+		cr.Spec.Proxy.HAProxy.LivenessProbe.TimeoutSeconds = 3
+	}
+
+	if cr.Spec.Proxy.HAProxy.ReadinessProbe.PeriodSeconds == 0 {
+		cr.Spec.Proxy.HAProxy.ReadinessProbe.PeriodSeconds = 5
+	}
+	if cr.Spec.Proxy.HAProxy.ReadinessProbe.FailureThreshold == 0 {
+		cr.Spec.Proxy.HAProxy.ReadinessProbe.FailureThreshold = 3
+	}
+	if cr.Spec.Proxy.HAProxy.ReadinessProbe.SuccessThreshold == 0 {
+		cr.Spec.Proxy.HAProxy.ReadinessProbe.SuccessThreshold = 1
+	}
+	if cr.Spec.Proxy.HAProxy.ReadinessProbe.TimeoutSeconds == 0 {
+		cr.Spec.Proxy.HAProxy.ReadinessProbe.TimeoutSeconds = 3
+	}
+
 	var fsgroup *int64
 	if serverVersion.Platform != platform.PlatformOpenshift {
 		var tp int64 = 1001
