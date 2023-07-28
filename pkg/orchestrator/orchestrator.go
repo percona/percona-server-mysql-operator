@@ -125,6 +125,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.S
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
+			UpdateStrategy: updateStrategy(cr),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
@@ -188,6 +189,21 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.S
 				},
 			},
 		},
+	}
+}
+
+func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrategy {
+	switch cr.Spec.UpdateStrategy {
+	case appsv1.OnDeleteStatefulSetStrategyType:
+		return appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
+	default:
+		var zero int32 = 0
+		return appsv1.StatefulSetUpdateStrategy{
+			Type: appsv1.RollingUpdateStatefulSetStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+				Partition: &zero,
+			},
+		}
 	}
 }
 

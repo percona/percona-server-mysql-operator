@@ -901,6 +901,7 @@ func init() {
 	SchemeBuilder.Register(&PerconaServerMySQL{}, &PerconaServerMySQLList{})
 }
 
+// SmartUpdateStatefulSetStrategyType
 const SmartUpdateStatefulSetStrategyType appsv1.StatefulSetUpdateStrategyType = "SmartUpdate"
 
 type UpgradeOptions struct {
