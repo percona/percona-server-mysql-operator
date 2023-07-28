@@ -415,6 +415,8 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 			apiv1alpha1.UserPMMServerKey), "secrets", cr.Spec.SecretsName, "internalSecrets", cr.InternalSecretName())
 	}
 
+	// TODO: do smart update
+
 	return nil
 }
 

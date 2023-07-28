@@ -29,6 +29,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 
 	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -41,23 +42,24 @@ import (
 
 // PerconaServerMySQLSpec defines the desired state of PerconaServerMySQL
 type PerconaServerMySQLSpec struct {
-	CRVersion             string           `json:"crVersion,omitempty"`
-	Pause                 bool             `json:"pause,omitempty"`
-	SecretsName           string           `json:"secretsName,omitempty"`
-	SSLSecretName         string           `json:"sslSecretName,omitempty"`
-	SSLInternalSecretName string           `json:"sslInternalSecretName,omitempty"`
-	AllowUnsafeConfig     bool             `json:"allowUnsafeConfigurations,omitempty"`
-	InitImage             string           `json:"initImage,omitempty"`
-	IgnoreAnnotations     []string         `json:"ignoreAnnotations,omitempty"`
-	IgnoreLabels          []string         `json:"ignoreLabels,omitempty"`
-	MySQL                 MySQLSpec        `json:"mysql,omitempty"`
-	Orchestrator          OrchestratorSpec `json:"orchestrator,omitempty"`
-	PMM                   *PMMSpec         `json:"pmm,omitempty"`
-	Backup                *BackupSpec      `json:"backup,omitempty"`
-	Proxy                 ProxySpec        `json:"proxy,omitempty"`
-	TLS                   *TLSSpec         `json:"tls,omitempty"`
-	Toolkit               *ToolkitSpec     `json:"toolkit,omitempty"`
-	UpgradeOptions        UpgradeOptions   `json:"upgradeOptions,omitempty"`
+	CRVersion             string                               `json:"crVersion,omitempty"`
+	Pause                 bool                                 `json:"pause,omitempty"`
+	SecretsName           string                               `json:"secretsName,omitempty"`
+	SSLSecretName         string                               `json:"sslSecretName,omitempty"`
+	SSLInternalSecretName string                               `json:"sslInternalSecretName,omitempty"`
+	AllowUnsafeConfig     bool                                 `json:"allowUnsafeConfigurations,omitempty"`
+	InitImage             string                               `json:"initImage,omitempty"`
+	IgnoreAnnotations     []string                             `json:"ignoreAnnotations,omitempty"`
+	IgnoreLabels          []string                             `json:"ignoreLabels,omitempty"`
+	MySQL                 MySQLSpec                            `json:"mysql,omitempty"`
+	Orchestrator          OrchestratorSpec                     `json:"orchestrator,omitempty"`
+	PMM                   *PMMSpec                             `json:"pmm,omitempty"`
+	Backup                *BackupSpec                          `json:"backup,omitempty"`
+	Proxy                 ProxySpec                            `json:"proxy,omitempty"`
+	TLS                   *TLSSpec                             `json:"tls,omitempty"`
+	Toolkit               *ToolkitSpec                         `json:"toolkit,omitempty"`
+	UpgradeOptions        UpgradeOptions                       `json:"upgradeOptions,omitempty"`
+	UpdateStrategy        appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
 }
 
 type TLSSpec struct {
@@ -675,6 +677,11 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		cr.Spec.SSLSecretName = cr.Name + "-ssl"
 	}
 
+	// TODO: We need to have HAProxy or Router enabled
+	if cr.Spec.UpdateStrategy == SmartUpdateStatefulSetStrategyType && !cr.HAProxyEnabled() {
+		return errors.Errorf("ProxySQL or HAProxy should be enabled if SmartUpdate set")
+	}
+
 	return nil
 }
 
@@ -893,6 +900,8 @@ func (cr *PerconaServerMySQL) InnoDBClusterName() string {
 func init() {
 	SchemeBuilder.Register(&PerconaServerMySQL{}, &PerconaServerMySQLList{})
 }
+
+const SmartUpdateStatefulSetStrategyType appsv1.StatefulSetUpdateStrategyType = "SmartUpdate"
 
 type UpgradeOptions struct {
 	VersionServiceEndpoint string `json:"versionServiceEndpoint,omitempty"`
