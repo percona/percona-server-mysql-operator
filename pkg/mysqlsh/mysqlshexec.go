@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -169,12 +168,8 @@ func (m *mysqlshExec) TopologyWithExec(ctx context.Context, clusterName string) 
 	return status.DefaultReplicaSet.Topology, nil
 }
 
-func (m *mysqlshExec) RebootClusterFromCompleteOutageWithExec(ctx context.Context, clusterName string, rejoinInstances []string) error {
-	cmd := fmt.Sprintf(
-		"dba.rebootClusterFromCompleteOutage('%s', {rejoinInstances: ['%s'], removeInstances: []})",
-		clusterName,
-		strings.Join(rejoinInstances, ","),
-	)
+func (m *mysqlshExec) RebootClusterFromCompleteOutageWithExec(ctx context.Context, clusterName string) error {
+	cmd := fmt.Sprintf("dba.rebootClusterFromCompleteOutage('%s')", clusterName)
 
 	if err := m.runWithExec(ctx, cmd); err != nil {
 		return errors.Wrap(err, "reboot cluster from complete outage")

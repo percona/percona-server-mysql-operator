@@ -1,8 +1,10 @@
 package ps
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -88,6 +90,33 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		}
 	} else if cr.Spec.MySQL.IsGR() && cr.Status.MySQL.State == cr.Status.Router.State {
 		cr.Status.State = cr.Status.MySQL.State
+	}
+
+	if cr.Spec.MySQL.IsGR() {
+		pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
+		if err != nil {
+			return errors.Wrap(err, "get pods")
+		}
+
+		var outb, errb bytes.Buffer
+		cmd := []string{"cat", "/var/lib/mysql/full-cluster-crash"}
+		fullClusterCrash := false
+		for _, pod := range pods {
+			err = r.ClientCmd.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false)
+			if err != nil {
+				if strings.Contains(errb.String(), "No such file or directory") {
+					continue
+				}
+				return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, outb.String(), errb.String())
+			}
+
+			fullClusterCrash = true
+		}
+
+		if fullClusterCrash {
+			cr.Status.State = apiv1alpha1.StateError
+			r.Recorder.Event(cr, "Warning", "FullClusterCrashDetected", "Full cluster crash detected")
+		}
 	}
 
 	cr.Status.Host, err = appHost(ctx, r.Client, cr)

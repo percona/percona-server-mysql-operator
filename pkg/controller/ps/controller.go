@@ -37,6 +37,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	k8sretry "k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -62,11 +63,13 @@ type PerconaServerMySQLReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	ServerVersion *platform.ServerVersion
+	Recorder      record.EventRecorder
 	ClientCmd     clientcmd.Client
 }
 
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqls;perconaservermysqls/status;perconaservermysqls/finalizers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=pods;pods/exec;configmaps;services;secrets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups=apps,resources=statefulsets;deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=certmanager.k8s.io;cert-manager.io,resources=issuers;certificates,verbs=get;list;watch;create;update;patch;delete;deletecollection
 
@@ -222,7 +225,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 
 			podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
 
-			state, err := db.GetMemberState(podFQDN)
+			state, err := db.GetMemberState(ctx, podFQDN)
 			if err != nil {
 				return errors.Wrapf(err, "get member state of %s from performance_schema", pod.Name)
 			}
@@ -336,6 +339,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 ) error {
 	log := logf.FromContext(ctx).WithName("doReconcile")
 
+	if err := r.reconcileFullClusterCrash(ctx, cr); err != nil {
+		return errors.Wrap(err, "failed to check full cluster crash")
+	}
 	if err := r.reconcileVersions(ctx, cr); err != nil {
 		log.Error(err, "failed to reconcile versions")
 	}
@@ -1103,7 +1109,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryFromGR(ctx context.Context, cr 
 		return "", errors.Wrapf(err, "open connection to %s", fqdn)
 	}
 
-	return db.GetGroupReplicationPrimary()
+	return db.GetGroupReplicationPrimary(ctx)
 }
 
 func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
@@ -1158,14 +1164,14 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 				return errors.Wrapf(err, "stop replica %s", hostname)
 			}
 
-			status, _, err := repDb.ReplicationStatus()
+			status, _, err := repDb.ReplicationStatus(ctx)
 			if err != nil {
 				return errors.Wrapf(err, "get replication status of %s", hostname)
 			}
 
 			for status == replicator.ReplicationStatusActive {
 				time.Sleep(250 * time.Millisecond)
-				status, _, err = repDb.ReplicationStatus()
+				status, _, err = repDb.ReplicationStatus(ctx)
 				if err != nil {
 					return errors.Wrapf(err, "get replication status of %s", hostname)
 				}
@@ -1213,7 +1219,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 			defer db.Close()
 
 			log.V(1).Info("Change replication source", "primary", primary.Key.Hostname, "replica", hostname)
-			if err := db.ChangeReplicationSource(primary.Key.Hostname, replicaPass, primary.Key.Port); err != nil {
+			if err := db.ChangeReplicationSource(ctx, primary.Key.Hostname, replicaPass, primary.Key.Port); err != nil {
 				return errors.Wrapf(err, "change replication source on %s", hostname)
 			}
 
@@ -1249,7 +1255,7 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 	}
 	defer db.Close()
 
-	replicas, err := db.GetGroupReplicationReplicas()
+	replicas, err := db.GetGroupReplicationReplicas(ctx)
 	if err != nil {
 		return errors.Wrap(err, "get replicas")
 	}
@@ -1270,23 +1276,23 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 		}
 		defer db.Close()
 
-		if err := db.StopGroupReplication(); err != nil {
+		if err := db.StopGroupReplication(ctx); err != nil {
 			return errors.Wrapf(err, "stop group replication on %s", host)
 		}
 		log.V(1).Info("Stopped group replication", "hostname", host)
 
-		if err := db.ChangeGroupReplicationPassword(replicaPass); err != nil {
+		if err := db.ChangeGroupReplicationPassword(ctx, replicaPass); err != nil {
 			return errors.Wrapf(err, "change group replication password on %s", host)
 		}
 		log.V(1).Info("Changed group replication password", "hostname", host)
 
-		if err := db.StartGroupReplication(replicaPass); err != nil {
+		if err := db.StartGroupReplication(ctx, replicaPass); err != nil {
 			return errors.Wrapf(err, "start group replication on %s", host)
 		}
 		log.V(1).Info("Started group replication", "hostname", host)
 	}
 
-	primary, err := db.GetGroupReplicationPrimary()
+	primary, err := db.GetGroupReplicationPrimary(ctx)
 	if err != nil {
 		return errors.Wrap(err, "get primary member")
 	}
@@ -1306,17 +1312,17 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 	}
 	defer db.Close()
 
-	if err := db.StopGroupReplication(); err != nil {
+	if err := db.StopGroupReplication(ctx); err != nil {
 		return errors.Wrapf(err, "stop group replication on %s", primary)
 	}
 	log.V(1).Info("Stopped group replication", "hostname", primary)
 
-	if err := db.ChangeGroupReplicationPassword(replicaPass); err != nil {
+	if err := db.ChangeGroupReplicationPassword(ctx, replicaPass); err != nil {
 		return errors.Wrapf(err, "change group replication password on %s", primary)
 	}
 	log.V(1).Info("Changed group replication password", "hostname", primary)
 
-	if err := db.StartGroupReplication(replicaPass); err != nil {
+	if err := db.StartGroupReplication(ctx, replicaPass); err != nil {
 		return errors.Wrapf(err, "start group replication on %s", primary)
 	}
 	log.V(1).Info("Started group replication", "hostname", primary)

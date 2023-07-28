@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	restclient "k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -363,6 +364,7 @@ func TestReconcileStatusGR(t *testing.T) {
 		clusterStatus innodbcluster.ClusterStatus
 		objects       []client.Object
 		expected      apiv1alpha1.PerconaServerMySQLStatus
+		mysqlReady    bool
 	}{
 		{
 			name: "without pods",
@@ -403,6 +405,7 @@ func TestReconcileStatusGR(t *testing.T) {
 				Host:  cr.Name + "-router." + cr.Namespace,
 			},
 			clusterStatus: innodbcluster.ClusterStatusOK,
+			mysqlReady:    true,
 		},
 		{
 			name: "with all ready pods and offline cluster status",
@@ -451,13 +454,14 @@ func TestReconcileStatusGR(t *testing.T) {
 				Host:  cr.Name + "-router." + cr.Namespace,
 			},
 			clusterStatus: innodbcluster.ClusterStatusOKPartial,
+			mysqlReady:    true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := tt.cr.DeepCopy()
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).WithStatusSubresource(cr).WithObjects(tt.objects...).WithStatusSubresource(tt.objects...)
-			cliCmd, err := getFakeClient(cr, operatorPass, tt.clusterStatus)
+			cliCmd, err := getFakeClient(cr, operatorPass, tt.mysqlReady, tt.clusterStatus)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -468,6 +472,7 @@ func TestReconcileStatusGR(t *testing.T) {
 					Platform: platform.PlatformKubernetes,
 				},
 				ClientCmd: cliCmd,
+				Recorder:  new(record.FakeRecorder),
 			}
 
 			err = r.reconcileCRStatus(ctx, cr)
@@ -516,6 +521,9 @@ func (c *fakeClient) Exec(ctx context.Context, pod *corev1.Pod, containerName st
 		return err
 	}
 	c.execCount++
+	if c.scripts[c.execCount-1].shouldErr {
+		return errors.Errorf("fake error")
+	}
 	return nil
 }
 
@@ -524,13 +532,14 @@ func (c *fakeClient) REST() restclient.Interface {
 }
 
 type fakeClientScript struct {
-	cmd    []string
-	stdin  []byte
-	stdout []byte
-	stderr []byte
+	cmd       []string
+	stdin     []byte
+	stdout    []byte
+	stderr    []byte
+	shouldErr bool
 }
 
-func getFakeClient(cr *apiv1alpha1.PerconaServerMySQL, operatorPass string, clusterStatus innodbcluster.ClusterStatus) (clientcmd.Client, error) {
+func getFakeClient(cr *apiv1alpha1.PerconaServerMySQL, operatorPass string, mysqlReady bool, clusterStatus innodbcluster.ClusterStatus) (clientcmd.Client, error) {
 	status, err := json.Marshal(innodbcluster.Status{
 		DefaultReplicaSet: innodbcluster.ReplicaSetStatus{
 			Status: clusterStatus,
@@ -539,9 +548,10 @@ func getFakeClient(cr *apiv1alpha1.PerconaServerMySQL, operatorPass string, clus
 	if err != nil {
 		return nil, err
 	}
-	host := fmt.Sprintf("%s.%s.%s", mysql.PodName(cr, 0), mysql.ServiceName(cr), cr.Namespace)
-	return &fakeClient{
-		scripts: []fakeClientScript{
+	var scripts []fakeClientScript
+	if mysqlReady {
+		host := fmt.Sprintf("%s.%s.%s", mysql.PodName(cr, 0), mysql.ServiceName(cr), cr.Namespace)
+		scripts = append(scripts, []fakeClientScript{
 			{
 				cmd: []string{
 					"mysqlsh",
@@ -565,8 +575,36 @@ func getFakeClient(cr *apiv1alpha1.PerconaServerMySQL, operatorPass string, clus
 					"status",
 				},
 				stdout: status,
+			}}...)
+	}
+	scripts = append(scripts, []fakeClientScript{
+		{
+			cmd: []string{
+				"cat",
+				"/var/lib/mysql/full-cluster-crash",
 			},
+			stderr:    []byte("No such file or directory"),
+			shouldErr: true,
 		},
+		{
+			cmd: []string{
+				"cat",
+				"/var/lib/mysql/full-cluster-crash",
+			},
+			stderr:    []byte("No such file or directory"),
+			shouldErr: true,
+		},
+		{
+			cmd: []string{
+				"cat",
+				"/var/lib/mysql/full-cluster-crash",
+			},
+			stderr:    []byte("No such file or directory"),
+			shouldErr: true,
+		},
+	}...)
+	return &fakeClient{
+		scripts: scripts,
 	}, nil
 }
 
