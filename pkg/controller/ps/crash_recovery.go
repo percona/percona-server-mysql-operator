@@ -61,7 +61,10 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 		log.Info("Pod is waiting for recovery", "pod", pod.Name, "gtidExecuted", outb.String())
 
 		if !cr.Spec.MySQL.AutoRecovery {
-			log.Info("Full cluster crash detected but auto recovery is not enabled. Enable .spec.mysql.autoRecovery or recover cluster manually.")
+			log.Error(nil, `
+			Full cluster crash detected but auto recovery is not enabled.
+			Enable .spec.mysql.autoRecovery or recover cluster manually
+			(connect to one of the pods using mysql-shell and run 'dba.rebootClusterFromCompleteOutage() and delete /var/lib/mysql/full-cluster-crash in each pod.').`)
 			continue
 		}
 

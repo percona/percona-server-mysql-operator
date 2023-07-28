@@ -405,9 +405,14 @@ if [[ -f /var/lib/mysql/full-cluster-crash ]]; then
 	namespace=$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)
 
 	echo "######FULL_CLUSTER_CRASH:${node_name}######"
-	echo "You are in a full cluster crash. Operator will attempt to fix the issue automatically."
+	echo "You are in a full cluster crash. Operator will attempt to fix the issue automatically if you have spec.mysql.autoRecovery enabled."
 	echo "MySQL pods will be up and running in read only mode."
 	echo "Latest GTID_EXECUTED on this node is ${gtid_executed}"
+	echo "If you have spec.mysql.autoRecovery disabled, wait for all pods to be up and running and connect to one of them using mysql-shell:"
+	echo "kubectl -n ${namespace} exec -it $(hostname) -- mysqlsh root:<password>@localhost"
+	echo "and run the following command to reboot cluster:"
+	echo "dba.rebootClusterFromCompleteOutage()"
+	echo "and delete /var/lib/mysql/full-cluster-crash file in each pod."
 	echo "######FULL_CLUSTER_CRASH:${node_name}######"
 
 	ensure_read_only

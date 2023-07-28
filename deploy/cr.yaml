@@ -14,7 +14,7 @@ spec:
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
     apply: disabled
-  initImage: perconalab/percona-server-mysql-operator:main
+#  initImage: perconalab/percona-server-mysql-operator:main
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
 #  ignoreLabels:
