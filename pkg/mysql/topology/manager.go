@@ -13,7 +13,7 @@ import (
 )
 
 type Manager interface {
-	Replicator(host string) (replicator.Replicator, error)
+	Replicator(ctx context.Context, host string) (replicator.Replicator, error)
 	ClusterType() apiv1alpha1.ClusterType
 	Get(ctx context.Context) (Topology, error)
 }
@@ -43,8 +43,8 @@ func NewTopologyManager(clusterType apiv1alpha1.ClusterType, cluster *apiv1alpha
 	}, nil
 }
 
-func (m *topologyManager) Replicator(hostname string) (replicator.Replicator, error) {
-	return replicator.NewReplicator(apiv1alpha1.UserOperator, m.operatorPass, hostname, mysql.DefaultAdminPort)
+func (m *topologyManager) Replicator(ctx context.Context, hostname string) (replicator.Replicator, error) {
+	return replicator.NewReplicator(ctx, apiv1alpha1.UserOperator, m.operatorPass, hostname, mysql.DefaultAdminPort)
 }
 
 func (m *topologyManager) ClusterType() apiv1alpha1.ClusterType {

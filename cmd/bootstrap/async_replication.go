@@ -72,7 +72,13 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 	}
 	log.Printf("PodIP: %s", podIp)
 
-	donor, err := selectDonor(fqdn, primary, replicas)
+	primaryIp, err := getPodIP(primary)
+	if err != nil {
+		return errors.Wrap(err, "get primary IP")
+	}
+	log.Printf("PrimaryIP: %s", primaryIp)
+
+	donor, err := selectDonor(ctx, fqdn, primary, replicas)
 	if err != nil {
 		return errors.Wrap(err, "select donor")
 	}
@@ -84,33 +90,33 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
 
-	db, err := replicator.NewReplicator("operator", operatorPass, podIp, mysql.DefaultAdminPort)
+	db, err := replicator.NewReplicator(ctx, "operator", operatorPass, podIp, mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
 	defer db.Close()
 
-	if err := db.StopReplication(); err != nil {
+	if err := db.StopReplication(ctx); err != nil {
 		return err
 	}
 
 	switch {
 	case primary == fqdn:
-		if err := db.ResetReplication(); err != nil {
+		if err := db.ResetReplication(ctx); err != nil {
 			return err
 		}
 
 		log.Printf("I'm the primary.")
 		return nil
 	case donor == "":
-		if err := db.ResetReplication(); err != nil {
+		if err := db.ResetReplication(ctx); err != nil {
 			return err
 		}
 
 		log.Printf("Can't find a donor, we're on our own.")
 		return nil
 	case donor == fqdn:
-		if err := db.ResetReplication(); err != nil {
+		if err := db.ResetReplication(ctx); err != nil {
 			return err
 		}
 
@@ -127,7 +133,7 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 	log.Printf("Clone required: %t", requireClone)
 	if requireClone {
 		log.Println("Checking if a clone in progress")
-		inProgress, err := db.CloneInProgress()
+		inProgress, err := db.CloneInProgress(ctx)
 		if err != nil {
 			return errors.Wrap(err, "check if a clone in progress")
 		}
@@ -139,7 +145,7 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 
 		timer.Start("clone")
 		log.Printf("Cloning from %s", donor)
-		err = db.Clone(donor, "operator", operatorPass, mysql.DefaultAdminPort)
+		err = db.Clone(ctx, donor, "operator", operatorPass, mysql.DefaultAdminPort)
 		timer.Stop("clone")
 		if err != nil && !errors.Is(err, replicator.ErrRestartAfterClone) {
 			return errors.Wrapf(err, "clone from donor %s", donor)
@@ -162,7 +168,7 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 		}
 	}
 
-	rStatus, _, err := db.ReplicationStatus()
+	rStatus, _, err := db.ReplicationStatus(ctx)
 	if err != nil {
 		return errors.Wrap(err, "check replication status")
 	}
@@ -175,16 +181,16 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 			return errors.Wrapf(err, "get %s password", apiv1alpha1.UserReplication)
 		}
 
-		if err := db.StopReplication(); err != nil {
+		if err := db.StopReplication(ctx); err != nil {
 			return errors.Wrap(err, "stop replication")
 		}
 
-		if err := db.StartReplication(primary, replicaPass, mysql.DefaultPort); err != nil {
+		if err := db.StartReplication(ctx, primary, replicaPass, mysql.DefaultPort); err != nil {
 			return errors.Wrap(err, "start replication")
 		}
 	}
 
-	if err := db.EnableSuperReadonly(); err != nil {
+	if err := db.EnableSuperReadonly(ctx); err != nil {
 		return errors.Wrap(err, "enable super read only")
 	}
 
@@ -225,7 +231,7 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 	return t.Primary, t.Replicas, nil
 }
 
-func selectDonor(fqdn, primary string, replicas []string) (string, error) {
+func selectDonor(ctx context.Context, fqdn, primary string, replicas []string) (string, error) {
 	donor := ""
 
 	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
@@ -234,7 +240,7 @@ func selectDonor(fqdn, primary string, replicas []string) (string, error) {
 	}
 
 	for _, replica := range replicas {
-		db, err := replicator.NewReplicator("operator", operatorPass, replica, mysql.DefaultAdminPort)
+		db, err := replicator.NewReplicator(ctx, "operator", operatorPass, replica, mysql.DefaultAdminPort)
 		if err != nil {
 			continue
 		}

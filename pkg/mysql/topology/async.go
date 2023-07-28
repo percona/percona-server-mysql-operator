@@ -93,18 +93,18 @@ func recursiveAsyncDiscover(ctx context.Context, m Manager, host string, replica
 	var status replicator.ReplicationStatus
 	var failedToConnect bool
 	err := func() error {
-		db, err := m.Replicator(host)
+		db, err := m.Replicator(ctx, host)
 		if err != nil {
 			// We should ignore connection errors because function can try to connect to starting pod
 			failedToConnect = true
 			return nil
 		}
 		defer db.Close()
-		readOnly, err = db.IsReadonly()
+		readOnly, err = db.IsReadonly(ctx)
 		if err != nil {
 			return errors.Wrap(err, "check readonly")
 		}
-		host, err = db.ReportHost()
+		host, err = db.ReportHost(ctx)
 		if err != nil {
 			return errors.Wrap(err, "failed to get report host")
 		}
@@ -112,7 +112,7 @@ func recursiveAsyncDiscover(ctx context.Context, m Manager, host string, replica
 		if err != nil {
 			return errors.Wrap(err, "get replicas")
 		}
-		status, _, err = db.ReplicationStatus()
+		status, _, err = db.ReplicationStatus(ctx)
 		if err != nil {
 			return errors.Wrap(err, "check replication status")
 		}

@@ -11,6 +11,11 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
+const (
+	fullClusterCrashFile = "/var/lib/mysql/full-cluster-crash"
+	manualRecoveryFile   = "/var/lib/mysql/sleep-forever"
+)
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
@@ -21,6 +26,18 @@ func main() {
 	}
 	defer f.Close()
 	log.SetOutput(f)
+
+	fullClusterCrash, err := fileExists(fullClusterCrashFile)
+	if err == nil && fullClusterCrash {
+		log.Printf("%s exists. exiting...", fullClusterCrashFile)
+		os.Exit(0)
+	}
+
+	manualRecovery, err := fileExists(manualRecoveryFile)
+	if err == nil && manualRecovery {
+		log.Printf("%s exists. exiting...", manualRecoveryFile)
+		os.Exit(0)
+	}
 
 	clusterType := os.Getenv("CLUSTER_TYPE")
 	switch clusterType {

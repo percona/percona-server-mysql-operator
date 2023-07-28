@@ -31,7 +31,7 @@ func NewTopologyManagerExec(cluster *apiv1alpha1.PerconaServerMySQL, cl client.R
 	}
 }
 
-func (m *topologyManagerExec) Replicator(hostname string) (replicator.Replicator, error) {
+func (m *topologyManagerExec) Replicator(ctx context.Context, hostname string) (replicator.Replicator, error) {
 	if hostname == mysql.ServiceName(m.cluster) {
 		return replicator.NewReplicatorExec(mysql.HeadlessService(m.cluster), apiv1alpha1.UserOperator, m.operatorPass, "localhost")
 	}
@@ -71,7 +71,7 @@ func (m *topologyManagerExec) Get(ctx context.Context) (Topology, error) {
 	var top Topology
 	switch m.ClusterType() {
 	case apiv1alpha1.ClusterTypeGR:
-		top, err = getGRTopology(m, mysql.FQDN(m.cluster, 0))
+		top, err = getGRTopology(ctx, m, mysql.FQDN(m.cluster, 0))
 		if err != nil {
 			return Topology{}, errors.Wrap(err, "get group-replication topology")
 		}

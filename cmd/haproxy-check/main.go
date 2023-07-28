@@ -95,7 +95,7 @@ func getHostFQDN(addr string) (string, error) {
 }
 
 func readOnly(ctx context.Context, host, rootPass string) (bool, error) {
-	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator,
+	db, err := replicator.NewReplicator(ctx, apiv1alpha1.UserOperator,
 		rootPass,
 		host,
 		mysql.DefaultAdminPort)
@@ -103,11 +103,11 @@ func readOnly(ctx context.Context, host, rootPass string) (bool, error) {
 		return false, errors.Wrapf(err, "connect to %v", host)
 	}
 	defer db.Close()
-	return db.IsReadonly()
+	return db.IsReadonly(ctx)
 }
 
 func replicationStatus(ctx context.Context, host, rootPass string) (bool, bool, error) {
-	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator,
+	db, err := replicator.NewReplicator(ctx, apiv1alpha1.UserOperator,
 		rootPass,
 		host,
 		mysql.DefaultAdminPort)

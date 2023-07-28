@@ -1,20 +1,24 @@
 package topology
 
-import "github.com/pkg/errors"
+import (
+	"context"
 
-func getGRTopology(m Manager, hostname string) (Topology, error) {
-	db, err := m.Replicator(hostname)
+	"github.com/pkg/errors"
+)
+
+func getGRTopology(ctx context.Context, m Manager, hostname string) (Topology, error) {
+	db, err := m.Replicator(ctx, hostname)
 	if err != nil {
 		return Topology{}, errors.Wrapf(err, "open connection to %s", hostname)
 	}
 	defer db.Close()
 
-	replicas, err := db.GetGroupReplicationReplicas()
+	replicas, err := db.GetGroupReplicationReplicas(ctx)
 	if err != nil {
 		return Topology{}, errors.Wrap(err, "get group-replication replicas")
 	}
 
-	primary, err := db.GetGroupReplicationPrimary()
+	primary, err := db.GetGroupReplicationPrimary(ctx)
 	if err != nil {
 		return Topology{}, errors.Wrap(err, "get group-replication primary")
 	}
