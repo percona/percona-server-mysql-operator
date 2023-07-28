@@ -3,10 +3,11 @@
 set -e
 
 log() {
-	local level=$1
-	local message=$2
+    local level=$1
+    local message=$2
+    local date=$(/usr/bin/date +"%d/%b/%Y:%H:%M:%S.%3N")
 
-	echo "$(/usr/bin/date +%Y-%m-%dT%H:%M:%S%z) [${level}] ${message}"
+    echo "{\"time\":\"${date}\", \"level\": \"${level}\", \"message\": \"${message}\"}"
 }
 
 MYSQL_SERVER_IP=$3
