@@ -4,10 +4,10 @@ set -e
 set -o xtrace
 
 log() {
-    local message=$1
-    local date=$(/usr/bin/date +"%d/%b/%Y:%H:%M:%S.%3N")
+	local message=$1
+	local date=$(/usr/bin/date +"%d/%b/%Y:%H:%M:%S.%3N")
 
-    echo "{\"time\":\"${date}\", \"message\": \"${message}\"}"
+	echo "{\"time\":\"${date}\", \"message\": \"${message}\"}"
 }
 
 echo "${CLUSTER_TYPE}" >/tmp/cluster_type
@@ -40,4 +40,4 @@ if [ "$1" = 'haproxy' ]; then
   fi
 fi
 
-exec "$@" ${haproxy_opt}
+exec "$@" "${haproxy_opt}"
