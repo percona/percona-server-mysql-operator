@@ -95,3 +95,17 @@ func waitLockRemoval() error {
 		}
 	}
 }
+
+func createFile(name, content string) error {
+	f, err := os.Create(name)
+	if err != nil {
+		return errors.Wrapf(err, "create %s", name)
+	}
+
+	_, err = f.WriteString(content)
+	if err != nil {
+		return errors.Wrapf(err, "write to %s", name)
+	}
+
+	return nil
+}

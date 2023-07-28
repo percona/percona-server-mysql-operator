@@ -2905,6 +2905,8 @@ spec:
                     additionalProperties:
                       type: string
                     type: object
+                  autoRecovery:
+                    type: boolean
                   clusterType:
                     type: string
                   configuration:
@@ -8929,6 +8931,13 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
 - apiGroups:
   - ""
   resources:

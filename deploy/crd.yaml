@@ -2905,6 +2905,8 @@ spec:
                     additionalProperties:
                       type: string
                     type: object
+                  autoRecovery:
+                    type: boolean
                   clusterType:
                     type: string
                   configuration:
