@@ -406,7 +406,9 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 		return errors.Wrapf(err, "get Secret/%s", nn.Name)
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.StatefulSet(cr, initImage, configHash, internalSecret), r.Scheme); err != nil {
+	sts := mysql.StatefulSet(cr, initImage, configHash, internalSecret)
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, sts, r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile sts")
 	}
 
@@ -415,7 +417,9 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 			apiv1alpha1.UserPMMServerKey), "secrets", cr.Spec.SecretsName, "internalSecrets", cr.InternalSecretName())
 	}
 
-	// TODO: do smart update
+	if cr.Spec.UpdateStrategy == apiv1alpha1.SmartUpdateStatefulSetStrategyType {
+		return r.smartUpdate(ctx, sts, cr)
+	}
 
 	return nil
 }
