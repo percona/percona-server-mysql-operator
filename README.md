@@ -1,5 +1,6 @@
 # Percona Operator for MySQL
 
+
 ![Percona Kubernetes Operators](kubernetes.svg)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
