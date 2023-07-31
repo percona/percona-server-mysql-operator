@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -16,6 +17,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
 func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *appsv1.StatefulSet, cr *apiv1alpha1.PerconaServerMySQL) error {
@@ -153,10 +157,10 @@ func (r *PerconaServerMySQLReconciler) isBackupRunning(ctx context.Context, cr *
 	return false, nil
 }
 
-func (r *PerconaServerMySQLReconciler) applyNWait(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, sfs *appsv1.StatefulSet, pod *corev1.Pod, waitLimit int32) error {
+func (r *PerconaServerMySQLReconciler) applyNWait(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, sts *appsv1.StatefulSet, pod *corev1.Pod, waitLimit int32) error {
 	log := logf.FromContext(ctx)
 
-	if pod.ObjectMeta.Labels["controller-revision-hash"] == sfs.Status.UpdateRevision {
+	if pod.ObjectMeta.Labels["controller-revision-hash"] == sts.Status.UpdateRevision {
 		log.Info("pod already updated", "pod name", pod.Name)
 	} else {
 		if err := r.Client.Delete(ctx, pod); err != nil {
@@ -164,23 +168,22 @@ func (r *PerconaServerMySQLReconciler) applyNWait(ctx context.Context, cr *apiv1
 		}
 	}
 
-	orderInSts, err := getPodOrderInSts(sfs.Name, pod.Name)
+	orderInSts, err := getPodOrderInSts(sts.Name, pod.Name)
 	if err != nil {
-		return errors.Errorf("compute pod order err, sfs name: %s, pod name: %s", sfs.Name, pod.Name)
+		return errors.Errorf("compute pod order err, sfs name: %s, pod name: %s", sts.Name, pod.Name)
 	}
-	if int32(orderInSts) >= *sfs.Spec.Replicas {
-		log.Info("sfs scaled down, pod will not be started", "sfs", sfs.Name, "pod", pod.Name)
+	if int32(orderInSts) >= *sts.Spec.Replicas {
+		log.Info("sfs scaled down, pod will not be started", "sts", sts.Name, "pod", pod.Name)
 		return nil
 	}
 
-	if err := r.waitPodRestart(ctx, cr, sfs.Status.UpdateRevision, pod, waitLimit); err != nil {
+	if err := r.waitPodRestart(ctx, cr, sts.Status.UpdateRevision, pod, waitLimit); err != nil {
 		return errors.Wrap(err, "failed to wait pod")
 	}
 
-	// TODO: implement is pod online check
-	// if err := r.waitUntilOnline(ctx, cr, sfs.Name, pod, waitLimit); err != nil {
-	// 	return errors.Wrap(err, "failed to wait pxc status")
-	// }
+	if err := r.waitUntilOnline(ctx, cr, pod, waitLimit); err != nil {
+		return errors.Wrap(err, "failed to wait mysql status")
+	}
 
 	return nil
 }
@@ -224,6 +227,51 @@ func (r *PerconaServerMySQLReconciler) waitPodRestart(ctx context.Context, cr *a
 			}
 
 			return false, nil
+		})
+}
+
+func (r *PerconaServerMySQLReconciler) waitUntilOnline(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, pod *corev1.Pod, waitLimit int32) error {
+
+	nn := strings.Split(pod.Name, "-")
+	podIdx, err := strconv.Atoi(nn[len(nn)-1])
+	if err != nil {
+		return err
+	}
+
+	fqdn := mysql.FQDN(cr, podIdx)
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+
+	db, err := replicator.NewReplicatorExec(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, fqdn)
+	if err != nil {
+		return errors.Wrapf(err, "connect to %s", pod.Name)
+	}
+
+	return retry(time.Second*10, time.Duration(waitLimit)*time.Second,
+		func() (bool, error) {
+			if cr.MySQLSpec().IsGR() {
+				state, err := db.GetMemberState(ctx, fqdn)
+				if err != nil {
+					return true, errors.Wrapf(err, "get member state of %s from performance_schema", pod.Name)
+				}
+
+				if state != replicator.MemberStateOnline {
+					return false, nil
+				}
+
+			} else { // Chack async replication
+				status, _, err := db.ReplicationStatus(ctx)
+				if err != nil {
+					return false, errors.Wrap(err, "check replication status")
+				}
+
+				if status != replicator.ReplicationStatusActive {
+					return false, nil
+				}
+
+			}
+
+			logf.FromContext(ctx).Info("pod is online", "pod name", pod.Name)
+			return true, nil
 		})
 }
 
