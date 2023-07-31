@@ -328,7 +328,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 		})
 	}
 }
-func TestReconcileStatusGR(t *testing.T) {
+func TestReconcileStatusHAProxyGR(t *testing.T) {
 	ctx := context.Background()
 
 	cr, err := readDefaultCR("cluster1", "status-1")
@@ -336,6 +336,171 @@ func TestReconcileStatusGR(t *testing.T) {
 		t.Fatal(err)
 	}
 	cr.Spec.MySQL.ClusterType = apiv1alpha1.ClusterTypeGR
+	cr.Spec.Proxy.HAProxy.Enabled = true
+	cr.Spec.Proxy.Router.Enabled = false
+
+	scheme := runtime.NewScheme()
+	err = clientgoscheme.AddToScheme(scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = apiv1alpha1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const operatorPass = "test"
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.InternalSecretName(),
+			Namespace: cr.Namespace,
+		},
+		Data: map[string][]byte{
+			string(apiv1alpha1.UserOperator): []byte(operatorPass),
+		},
+	}
+
+	tests := []struct {
+		name          string
+		cr            *apiv1alpha1.PerconaServerMySQL
+		clusterStatus innodbcluster.ClusterStatus
+		objects       []client.Object
+		expected      apiv1alpha1.PerconaServerMySQLStatus
+		mysqlReady    bool
+	}{
+		{
+			name: "without pods",
+			cr:   cr,
+			expected: apiv1alpha1.PerconaServerMySQLStatus{
+				MySQL: apiv1alpha1.StatefulAppStatus{
+					Size:  3,
+					State: apiv1alpha1.StateInitializing,
+				},
+				HAProxy: apiv1alpha1.StatefulAppStatus{
+					Size:  3,
+					State: apiv1alpha1.StateInitializing,
+				},
+				State: apiv1alpha1.StateInitializing,
+				Host:  cr.Name + "-haproxy." + cr.Namespace,
+			},
+		},
+		{
+			name: "with all ready pods and ok cluster status",
+			cr:   cr,
+			objects: appendSlices(
+				makeFakeReadyPods(cr, 3, "mysql"),
+				makeFakeReadyPods(cr, 3, "haproxy"),
+				[]client.Object{secret},
+			),
+			expected: apiv1alpha1.PerconaServerMySQLStatus{
+				MySQL: apiv1alpha1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1alpha1.StateReady,
+				},
+				HAProxy: apiv1alpha1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1alpha1.StateReady,
+				},
+				State: apiv1alpha1.StateReady,
+				Host:  cr.Name + "-haproxy." + cr.Namespace,
+			},
+			clusterStatus: innodbcluster.ClusterStatusOK,
+			mysqlReady:    true,
+		},
+		{
+			name: "with all ready pods and offline cluster status",
+			cr:   cr,
+			objects: appendSlices(
+				makeFakeReadyPods(cr, 3, "mysql"),
+				makeFakeReadyPods(cr, 3, "haproxy"),
+				[]client.Object{secret},
+			),
+			expected: apiv1alpha1.PerconaServerMySQLStatus{
+				MySQL: apiv1alpha1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1alpha1.StateInitializing,
+				},
+				HAProxy: apiv1alpha1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1alpha1.StateReady,
+				},
+				State: apiv1alpha1.StateInitializing,
+				Host:  cr.Name + "-haproxy." + cr.Namespace,
+			},
+			clusterStatus: innodbcluster.ClusterStatusOffline,
+		},
+		{
+			name: "with all ready pods and partial ok cluster status",
+			cr:   cr,
+			objects: appendSlices(
+				makeFakeReadyPods(cr, 3, "mysql"),
+				makeFakeReadyPods(cr, 3, "haproxy"),
+				[]client.Object{secret},
+			),
+			expected: apiv1alpha1.PerconaServerMySQLStatus{
+				MySQL: apiv1alpha1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1alpha1.StateReady,
+				},
+				HAProxy: apiv1alpha1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1alpha1.StateReady,
+				},
+				State: apiv1alpha1.StateReady,
+				Host:  cr.Name + "-haproxy." + cr.Namespace,
+			},
+			clusterStatus: innodbcluster.ClusterStatusOKPartial,
+			mysqlReady:    true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := tt.cr.DeepCopy()
+			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).WithStatusSubresource(cr).WithObjects(tt.objects...).WithStatusSubresource(tt.objects...)
+			cliCmd, err := getFakeClient(cr, operatorPass, tt.mysqlReady, tt.clusterStatus)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := &PerconaServerMySQLReconciler{
+				Client: cb.Build(),
+				Scheme: scheme,
+				ServerVersion: &platform.ServerVersion{
+					Platform: platform.PlatformKubernetes,
+				},
+				ClientCmd: cliCmd,
+				Recorder:  new(record.FakeRecorder),
+			}
+
+			err = r.reconcileCRStatus(ctx, cr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := r.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, cr); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(cr.Status, tt.expected) {
+				t.Errorf("expected status %v, got %v", tt.expected, cr.Status)
+			}
+		})
+	}
+}
+
+func TestReconcileStatusRouterGR(t *testing.T) {
+	ctx := context.Background()
+
+	cr, err := readDefaultCR("cluster1", "status-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cr.Spec.MySQL.ClusterType = apiv1alpha1.ClusterTypeGR
+	cr.Spec.Proxy.HAProxy.Enabled = false
+	cr.Spec.Proxy.Router.Enabled = true
 
 	scheme := runtime.NewScheme()
 	err = clientgoscheme.AddToScheme(scheme)
