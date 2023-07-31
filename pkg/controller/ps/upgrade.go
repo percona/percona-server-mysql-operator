@@ -15,7 +15,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 )
 
@@ -31,7 +30,10 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		return nil
 	}
 
-	// TODO: check Router like HA proxy is checked
+	if cr.RouterEnabled() && cr.Status.Router.State != apiv1alpha1.StateReady {
+		log.Info("Waiting for MySQL Router to be ready before smart update")
+		return nil
+	}
 
 	// sleep to get new sfs revision
 	time.Sleep(time.Second)
@@ -103,7 +105,10 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		return list.Items[i].Name > list.Items[j].Name
 	})
 
-	waitLimit := cr.Spec.MySQL.LivenessProbe.InitialDelaySeconds
+	// TODO: do this properly
+	waitLimit := int32(2 * 60 * 60) // 2 hours
+	// waitLimit := cr.Spec.MySQL.LivenessProbe.InitialDelaySeconds
+
 	for _, pod := range list.Items {
 		pod := pod
 		if pod.Name == primPod.Name {
@@ -127,7 +132,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 }
 
 func (r *PerconaServerMySQLReconciler) isBackupRunning(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
-	bcpList := v1alpha1.PerconaServerMySQLBackupList{}
+	bcpList := apiv1alpha1.PerconaServerMySQLBackupList{}
 	if err := r.Client.List(ctx, &bcpList, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
 		if k8serrors.IsNotFound(err) {
 			return false, nil
@@ -140,7 +145,7 @@ func (r *PerconaServerMySQLReconciler) isBackupRunning(ctx context.Context, cr *
 			continue
 		}
 
-		if bcp.Status.State == v1alpha1.BackupRunning || bcp.Status.State == v1alpha1.BackupStarting {
+		if bcp.Status.State == apiv1alpha1.BackupRunning || bcp.Status.State == apiv1alpha1.BackupStarting {
 			return true, nil
 		}
 	}
@@ -195,7 +200,7 @@ func (r *PerconaServerMySQLReconciler) waitPodRestart(ctx context.Context, cr *a
 
 			ready := false
 			for _, container := range pod.Status.ContainerStatuses {
-				if container.Name == "pxc" {
+				if container.Name == "mysql" {
 					ready = container.Ready
 
 					if container.State.Waiting != nil {
