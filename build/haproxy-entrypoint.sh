@@ -40,4 +40,4 @@ if [ "$1" = 'haproxy' ]; then
   fi
 fi
 
-exec "$@" "${haproxy_opt}"
+exec "$@" ${haproxy_opt}
