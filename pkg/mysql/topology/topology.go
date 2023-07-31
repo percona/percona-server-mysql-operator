@@ -21,7 +21,7 @@ func Get(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL, operatorP
 	var top Topology
 	switch cluster.Spec.MySQL.ClusterType {
 	case apiv1alpha1.ClusterTypeGR:
-		top, err = getGRTopology(cluster, operatorPass)
+		top, err = getGRTopology(ctx, cluster, operatorPass)
 		if err != nil {
 			return Topology{}, errors.Wrap(err, "get group-replication topology")
 		}
@@ -36,20 +36,20 @@ func Get(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL, operatorP
 	return top, nil
 }
 
-func getGRTopology(cluster *apiv1alpha1.PerconaServerMySQL, operatorPass string) (Topology, error) {
+func getGRTopology(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL, operatorPass string) (Topology, error) {
 	fqdn := mysql.FQDN(cluster, 0)
-	db, err := replicator.NewReplicator(apiv1alpha1.UserOperator, operatorPass, fqdn, mysql.DefaultAdminPort)
+	db, err := replicator.NewReplicator(ctx, apiv1alpha1.UserOperator, operatorPass, fqdn, mysql.DefaultAdminPort)
 	if err != nil {
 		return Topology{}, errors.Wrapf(err, "open connection to %s", fqdn)
 	}
 	defer db.Close()
 
-	replicas, err := db.GetGroupReplicationReplicas()
+	replicas, err := db.GetGroupReplicationReplicas(ctx)
 	if err != nil {
 		return Topology{}, errors.Wrap(err, "get group-replication replicas")
 	}
 
-	primary, err := db.GetGroupReplicationPrimary()
+	primary, err := db.GetGroupReplicationPrimary(ctx)
 	if err != nil {
 		return Topology{}, errors.Wrap(err, "get group-replication primary")
 	}

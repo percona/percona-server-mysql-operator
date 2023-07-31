@@ -85,8 +85,9 @@ func (t ClusterType) isValid() bool {
 }
 
 type MySQLSpec struct {
-	ClusterType ClusterType            `json:"clusterType,omitempty"`
-	Expose      ServiceExposeTogglable `json:"expose,omitempty"`
+	ClusterType  ClusterType            `json:"clusterType,omitempty"`
+	Expose       ServiceExposeTogglable `json:"expose,omitempty"`
+	AutoRecovery bool                   `json:"autoRecovery,omitempty"`
 
 	Sidecars       []corev1.Container `json:"sidecars,omitempty"`
 	SidecarVolumes []corev1.Volume    `json:"sidecarVolumes,omitempty"`
@@ -480,7 +481,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		cr.Spec.MySQL.LivenessProbe.SuccessThreshold = 1
 	}
 	if cr.Spec.MySQL.LivenessProbe.TimeoutSeconds == 0 {
-		cr.Spec.MySQL.LivenessProbe.TimeoutSeconds = 30
+		cr.Spec.MySQL.LivenessProbe.TimeoutSeconds = 10
 	}
 
 	if cr.Spec.MySQL.ReadinessProbe.InitialDelaySeconds == 0 {
