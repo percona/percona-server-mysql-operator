@@ -5,7 +5,7 @@ timeout: 420
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: haproxy-mysql
+  name: gr-haproxy-mysql
 status:
   observedGeneration: 1
   replicas: 3
@@ -17,69 +17,95 @@ status:
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: haproxy-orc
+  name: gr-haproxy-haproxy
 status:
   observedGeneration: 1
   replicas: 3
   readyReplicas: 3
-  currentReplicas: 3
   updatedReplicas: 3
-  collisionCount: 0
----
-kind: StatefulSet
-apiVersion: apps/v1
-metadata:
-  name: haproxy-haproxy
-status:
-  observedGeneration: 1
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
-  collisionCount: 0
 ---
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
-  name: haproxy
+  name: gr-haproxy
   finalizers:
     - delete-mysql-pods-in-order
 status:
-  haproxy:
-    ready: 3
-    size: 3
-    state: ready
   mysql:
     ready: 3
     size: 3
     state: ready
-  orchestrator:
+  haproxy:
     ready: 3
     size: 3
     state: ready
-  router: {}
   state: ready
 ---
 apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app.kubernetes.io/component: haproxy
-    app.kubernetes.io/instance: haproxy
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: gr-haproxy
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
-  name: haproxy-haproxy
+  name: gr-haproxy-mysql
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
-    name: haproxy
+    name: gr-haproxy
 spec:
-  ipFamilies:
-  - IPv4
-  ipFamilyPolicy: SingleStack
+  clusterIP: None
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  - name: mysql-admin
+    port: 33062
+    protocol: TCP
+    targetPort: 33062
+  - name: mysqlx
+    port: 33060
+    protocol: TCP
+    targetPort: 33060
+  - name: http
+    port: 6033
+    protocol: TCP
+    targetPort: 6033
+  - name: mysql-gr
+    port: 33061
+    protocol: TCP
+    targetPort: 33061
+  selector:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: gr-haproxy
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: haproxy
+    app.kubernetes.io/instance: gr-haproxy
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: gr-haproxy-haproxy
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: gr-haproxy
+spec:
   ports:
   - name: mysql
     port: 3306
@@ -103,7 +129,7 @@ spec:
     targetPort: 33062
   selector:
     app.kubernetes.io/component: haproxy
-    app.kubernetes.io/instance: haproxy
+    app.kubernetes.io/instance: gr-haproxy
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server

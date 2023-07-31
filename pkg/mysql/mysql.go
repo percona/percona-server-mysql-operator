@@ -430,42 +430,46 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	spec := cr.MySQLSpec()
 
+	env := []corev1.EnvVar{
+		{
+			Name:  "MONITOR_HOST",
+			Value: "%",
+		},
+		{
+			Name:  "SERVICE_NAME",
+			Value: ServiceName(cr),
+		},
+		{
+			Name:  "SERVICE_NAME_UNREADY",
+			Value: UnreadyServiceName(cr),
+		},
+		{
+			Name:  "CLUSTER_HASH",
+			Value: cr.ClusterHash(),
+		},
+		{
+			Name:  "INNODB_CLUSTER_NAME",
+			Value: cr.InnoDBClusterName(),
+		},
+		{
+			Name:  "CR_UID",
+			Value: string(cr.UID),
+		},
+		{
+			Name:  "CLUSTER_TYPE",
+			Value: string(cr.Spec.MySQL.ClusterType),
+		},
+	}
+	env = append(env, spec.Env...)
+
 	container := corev1.Container{
 		Name:            componentName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
 		Resources:       spec.Resources,
-		Env: []corev1.EnvVar{
-			{
-				Name:  "MONITOR_HOST",
-				Value: "%",
-			},
-			{
-				Name:  "SERVICE_NAME",
-				Value: ServiceName(cr),
-			},
-			{
-				Name:  "SERVICE_NAME_UNREADY",
-				Value: UnreadyServiceName(cr),
-			},
-			{
-				Name:  "CLUSTER_HASH",
-				Value: cr.ClusterHash(),
-			},
-			{
-				Name:  "INNODB_CLUSTER_NAME",
-				Value: cr.InnoDBClusterName(),
-			},
-			{
-				Name:  "CR_UID",
-				Value: string(cr.UID),
-			},
-			{
-				Name:  "CLUSTER_TYPE",
-				Value: string(cr.Spec.MySQL.ClusterType),
-			},
-		},
-		Ports: containerPorts(cr),
+		Ports:           containerPorts(cr),
+		Env:             env,
+		EnvFrom:         spec.EnvFrom,
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      apiv1alpha1.BinVolumeName,

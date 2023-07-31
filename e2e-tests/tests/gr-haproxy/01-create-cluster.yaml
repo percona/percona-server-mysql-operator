@@ -1,5 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
+timeout: 10
 commands:
   - script: |-
       set -o errexit
@@ -7,11 +8,8 @@ commands:
 
       source ../../functions
 
-      kubectl delete ps -n ${NAMESPACE} gr-bootstrap
-
       get_cr \
       	| yq eval '.spec.mysql.clusterType="group-replication"' - \
-      	| yq eval '.spec.proxy.router.enabled=true' - \
-      	| yq eval '.spec.proxy.haproxy.enabled=false' - \
+      	| yq eval '.spec.proxy.router.enabled=false' - \
+      	| yq eval '.spec.proxy.haproxy.enabled=true' - \
       	| kubectl -n "${NAMESPACE}" apply -f -
-    timeout: 120

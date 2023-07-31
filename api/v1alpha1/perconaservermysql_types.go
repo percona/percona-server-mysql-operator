@@ -93,8 +93,6 @@ type MySQLSpec struct {
 	SidecarVolumes []corev1.Volume    `json:"sidecarVolumes,omitempty"`
 	SidecarPVCs    []SidecarPVC       `json:"sidecarPVCs,omitempty"`
 
-	Configuration string `json:"configuration,omitempty"`
-
 	PodSpec `json:",inline"`
 }
 
@@ -130,6 +128,9 @@ type ContainerSpec struct {
 	LivenessProbe  corev1.Probe `json:"livenessProbe,omitempty"`
 
 	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
+
+	Env     []corev1.EnvVar        `json:"env,omitempty"`
+	EnvFrom []corev1.EnvFromSource `json:"envFrom,omitempty"`
 }
 
 type PodSpec struct {
@@ -149,6 +150,8 @@ type PodSpec struct {
 
 	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ServiceAccountName string                     `json:"serviceAccountName,omitempty"`
+
+	Configuration string `json:"configuration,omitempty"`
 
 	ContainerSpec `json:",inline"`
 }
@@ -268,9 +271,9 @@ type ProxySpec struct {
 }
 
 type MySQLRouterSpec struct {
-	Expose ServiceExpose `json:"expose,omitempty"`
+	Enabled bool `json:"enabled,omitempty"`
 
-	Configuration string `json:"configuration,omitempty"`
+	Expose ServiceExpose `json:"expose,omitempty"`
 
 	PodSpec `json:",inline"`
 }
@@ -280,8 +283,9 @@ type ToolkitSpec struct {
 }
 
 type HAProxySpec struct {
-	Enabled bool          `json:"enabled,omitempty"`
-	Expose  ServiceExpose `json:"expose,omitempty"`
+	Enabled bool `json:"enabled,omitempty"`
+
+	Expose ServiceExpose `json:"expose,omitempty"`
 
 	PodSpec `json:",inline"`
 }
@@ -533,6 +537,36 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		cr.Spec.Proxy.Router.ReadinessProbe.TimeoutSeconds = 3
 	}
 
+	if cr.Spec.Proxy.HAProxy == nil {
+		cr.Spec.Proxy.HAProxy = new(HAProxySpec)
+	}
+
+	if cr.Spec.Proxy.HAProxy.LivenessProbe.PeriodSeconds == 0 {
+		cr.Spec.Proxy.HAProxy.LivenessProbe.PeriodSeconds = 5
+	}
+	if cr.Spec.Proxy.HAProxy.LivenessProbe.FailureThreshold == 0 {
+		cr.Spec.Proxy.HAProxy.LivenessProbe.FailureThreshold = 3
+	}
+	if cr.Spec.Proxy.HAProxy.LivenessProbe.SuccessThreshold == 0 {
+		cr.Spec.Proxy.HAProxy.LivenessProbe.SuccessThreshold = 1
+	}
+	if cr.Spec.Proxy.HAProxy.LivenessProbe.TimeoutSeconds == 0 {
+		cr.Spec.Proxy.HAProxy.LivenessProbe.TimeoutSeconds = 3
+	}
+
+	if cr.Spec.Proxy.HAProxy.ReadinessProbe.PeriodSeconds == 0 {
+		cr.Spec.Proxy.HAProxy.ReadinessProbe.PeriodSeconds = 5
+	}
+	if cr.Spec.Proxy.HAProxy.ReadinessProbe.FailureThreshold == 0 {
+		cr.Spec.Proxy.HAProxy.ReadinessProbe.FailureThreshold = 3
+	}
+	if cr.Spec.Proxy.HAProxy.ReadinessProbe.SuccessThreshold == 0 {
+		cr.Spec.Proxy.HAProxy.ReadinessProbe.SuccessThreshold = 1
+	}
+	if cr.Spec.Proxy.HAProxy.ReadinessProbe.TimeoutSeconds == 0 {
+		cr.Spec.Proxy.HAProxy.ReadinessProbe.TimeoutSeconds = 3
+	}
+
 	var fsgroup *int64
 	if serverVersion.Platform != platform.PlatformOpenshift {
 		var tp int64 = 1001
@@ -590,7 +624,11 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		}
 	}
 
-	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Proxy.Router != nil && !cr.Spec.AllowUnsafeConfig {
+	if cr.RouterEnabled() && cr.HAProxyEnabled() {
+		return errors.New("MySQL Router and HAProxy can't be enabled at the same time")
+	}
+
+	if cr.RouterEnabled() && !cr.Spec.AllowUnsafeConfig {
 		if cr.Spec.Proxy.Router.Size < MinSafeProxySize {
 			cr.Spec.Proxy.Router.Size = MinSafeProxySize
 		}
@@ -600,7 +638,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		cr.Spec.Proxy.HAProxy = new(HAProxySpec)
 	}
 
-	if cr.HAProxyEnabled() && cr.Spec.MySQL.ClusterType != ClusterTypeGR && !cr.Spec.AllowUnsafeConfig {
+	if cr.HAProxyEnabled() && !cr.Spec.AllowUnsafeConfig {
 		if cr.Spec.Proxy.HAProxy.Size < MinSafeProxySize {
 			cr.Spec.Proxy.HAProxy.Size = MinSafeProxySize
 		}
@@ -818,17 +856,31 @@ func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	return false
 }
 
+func (cr *PerconaServerMySQL) RouterEnabled() bool {
+	if cr.MySQLSpec().IsAsync() {
+		return false
+	}
+
+	return cr.Spec.Proxy.Router != nil && cr.Spec.Proxy.Router.Enabled
+}
+
 func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
-	if !cr.Spec.AllowUnsafeConfig {
+	if cr.MySQLSpec().IsAsync() && !cr.Spec.AllowUnsafeConfig {
 		return true
 	}
+
 	return cr.Spec.Proxy.HAProxy != nil && cr.Spec.Proxy.HAProxy.Enabled
 }
 
 func (cr *PerconaServerMySQL) OrchestratorEnabled() bool {
-	if !cr.Spec.AllowUnsafeConfig {
+	if cr.MySQLSpec().IsGR() {
+		return false
+	}
+
+	if cr.MySQLSpec().IsAsync() && !cr.Spec.AllowUnsafeConfig {
 		return true
 	}
+
 	return cr.Spec.Orchestrator.Enabled
 }
 
