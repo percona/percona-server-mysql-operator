@@ -14,6 +14,7 @@ install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/orchestrator.conf
 
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/router-entrypoint.sh" "${BINDIR}/router-entrypoint.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/router_readiness_check.sh" "${BINDIR}/router_readiness_check.sh"
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/router_startup_check.sh" "${BINDIR}/router_startup_check.sh"
 
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/bootstrap" "${BINDIR}/bootstrap"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/healthcheck" "${BINDIR}/healthcheck"
