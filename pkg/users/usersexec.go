@@ -18,20 +18,15 @@ import (
 var sensitiveRegexp = regexp.MustCompile(":.*@")
 
 type dbExecImpl struct {
-	client *clientcmd.Client
+	client clientcmd.Client
 	pod    *corev1.Pod
 	user   apiv1alpha1.SystemUser
 	pass   string
 	host   string
 }
 
-func NewManagerExec(pod *corev1.Pod, user apiv1alpha1.SystemUser, pass, host string) (Manager, error) {
-	c, err := clientcmd.NewClient()
-	if err != nil {
-		return nil, err
-	}
-
-	return &dbExecImpl{client: c, pod: pod, user: user, pass: pass, host: host}, nil
+func NewManagerExec(pod *corev1.Pod, cliCmd clientcmd.Client, user apiv1alpha1.SystemUser, pass, host string) (Manager, error) {
+	return &dbExecImpl{client: cliCmd, pod: pod, user: user, pass: pass, host: host}, nil
 }
 
 func (d *dbExecImpl) exec(stm string) error {
