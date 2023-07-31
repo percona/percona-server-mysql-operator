@@ -39,6 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/ps"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psbackup"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
@@ -102,7 +103,13 @@ func main() {
 
 	nsClient := client.NewNamespacedClient(mgr.GetClient(), ns)
 
-	serverVersion, err := platform.GetServerVersion()
+	cliCmd, err := clientcmd.NewClient()
+	if err != nil {
+		setupLog.Error(err, "unable to create clientcmd")
+		os.Exit(1)
+	}
+
+	serverVersion, err := platform.GetServerVersion(cliCmd)
 	if err != nil {
 		setupLog.Error(err, "unable to get server version")
 		os.Exit(1)
@@ -118,6 +125,7 @@ func main() {
 		Scheme:        mgr.GetScheme(),
 		ServerVersion: serverVersion,
 		Recorder:      mgr.GetEventRecorderFor("ps-controller"),
+		ClientCmd:     cliCmd,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ps-controller")
 		os.Exit(1)

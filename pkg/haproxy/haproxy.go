@@ -1,6 +1,7 @@
 package haproxy
 
 import (
+	"fmt"
 	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -43,6 +44,10 @@ func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
 		map[string]string{apiv1alpha1.ComponentLabel: componentName},
 		cr.Labels())
+}
+
+func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
+	return fmt.Sprintf("%s-%d", Name(cr), idx)
 }
 
 func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.Service {

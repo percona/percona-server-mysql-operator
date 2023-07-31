@@ -12,12 +12,17 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-type Client struct {
+type client struct {
 	client     corev1client.CoreV1Interface
 	restconfig *restclient.Config
 }
 
-func NewClient() (*Client, error) {
+type Client interface {
+	Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error
+	REST() restclient.Interface
+}
+
+func NewClient() (Client, error) {
 	// Instantiate loader for kubeconfig file.
 	kubeconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		clientcmd.NewDefaultClientConfigLoadingRules(),
@@ -39,13 +44,13 @@ func NewClient() (*Client, error) {
 		return nil, err
 	}
 
-	return &Client{
+	return &client{
 		client:     cl,
 		restconfig: restconfig,
 	}, nil
 }
 
-func (c *Client) Exec(
+func (c *client) Exec(
 	ctx context.Context,
 	pod *corev1.Pod,
 	containerName string,
@@ -84,6 +89,6 @@ func (c *Client) Exec(
 
 }
 
-func (c *Client) REST() restclient.Interface {
+func (c *client) REST() restclient.Interface {
 	return c.client.RESTClient()
 }
