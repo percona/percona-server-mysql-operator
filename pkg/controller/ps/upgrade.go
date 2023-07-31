@@ -240,6 +240,9 @@ func (r *PerconaServerMySQLReconciler) waitUntilOnline(ctx context.Context, cr *
 
 	fqdn := mysql.FQDN(cr, podIdx)
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+	if err != nil {
+		return err
+	}
 
 	db, err := replicator.NewReplicatorExec(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, fqdn)
 	if err != nil {
