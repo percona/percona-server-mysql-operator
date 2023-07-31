@@ -32,4 +32,6 @@ commands:
       	| yq eval '.spec.backup.storages.azure-blob.azure.credentialsSecret="azure-secret"' - \
       	| yq eval '.spec.backup.storages.azure-blob.azure.prefix="ps"' - \
       	| yq eval '.spec.mysql.clusterType="group-replication"' - \
+      	| yq eval '.spec.proxy.router.enabled=true' - \
+      	| yq eval '.spec.proxy.haproxy.enabled=false' - \
       	| kubectl -n "${NAMESPACE}" apply -f -
