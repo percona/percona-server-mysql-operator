@@ -19,6 +19,7 @@ package ps
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	cmscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
@@ -65,6 +66,19 @@ var _ = BeforeSuite(func() {
 	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
+
+	// This is a hack to ensure clientcmd.NewClient() can get the Kubernetes config in envtest
+	user, err := testEnv.AddUser(envtest.User{Name: "test-user", Groups: []string{"group1"}}, cfg)
+	Expect(err).NotTo(HaveOccurred())
+
+	kubectl, err := user.Kubectl()
+	Expect(err).NotTo(HaveOccurred())
+
+	kubecfg := strings.Split(kubectl.Opts[0], "=")
+	Expect(kubecfg[0]).To(Equal("--kubeconfig"))
+
+	err = os.Setenv("KUBECONFIG", kubecfg[1])
+	Expect(err).NotTo(HaveOccurred())
 
 	err = psv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())

@@ -285,6 +285,16 @@ spec:
         secret:
           defaultMode: 420
           secretName: test-ssl
+      - name: config
+        projected:
+          defaultMode: 420
+          sources:
+          - configMap:
+              items:
+              - key: haproxy.cfg
+                path: haproxy.cfg
+              name: monitoring-haproxy
+              optional: true
   updateStrategy:
     rollingUpdate:
       partition: 0

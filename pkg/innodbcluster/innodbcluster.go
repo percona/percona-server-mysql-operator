@@ -41,14 +41,16 @@ type Member struct {
 }
 
 type Status struct {
-	ClusterName       string `json:"clusterName"`
-	DefaultReplicaSet struct {
-		Primary    string            `json:"primary"`
-		SSL        string            `json:"ssl"`
-		Status     ClusterStatus     `json:"status"`
-		StatusText string            `json:"statusText"`
-		Topology   map[string]Member `json:"topology"`
-	} `json:"defaultReplicaSet"`
+	ClusterName       string           `json:"clusterName"`
+	DefaultReplicaSet ReplicaSetStatus `json:"defaultReplicaSet"`
+}
+
+type ReplicaSetStatus struct {
+	Primary    string            `json:"primary"`
+	SSL        string            `json:"ssl"`
+	Status     ClusterStatus     `json:"status"`
+	StatusText string            `json:"statusText"`
+	Topology   map[string]Member `json:"topology"`
 }
 
 func (s Status) String() string {

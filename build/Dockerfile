@@ -88,6 +88,7 @@ COPY build/ps-entrypoint.sh /opt/percona-server-mysql-operator/ps-entrypoint.sh
 COPY build/heartbeat-entrypoint.sh /opt/percona-server-mysql-operator/heartbeat-entrypoint.sh
 COPY build/router-entrypoint.sh /opt/percona-server-mysql-operator/router-entrypoint.sh
 COPY build/router_readiness_check.sh /opt/percona-server-mysql-operator/router_readiness_check.sh
+COPY build/router_startup_check.sh /opt/percona-server-mysql-operator/router_startup_check.sh
 COPY build/orc-entrypoint.sh /opt/percona-server-mysql-operator/orc-entrypoint.sh
 COPY build/orchestrator.conf.json /opt/percona-server-mysql-operator/orchestrator.conf.json
 COPY build/ps-init-entrypoint.sh /opt/percona-server-mysql-operator/ps-init-entrypoint.sh

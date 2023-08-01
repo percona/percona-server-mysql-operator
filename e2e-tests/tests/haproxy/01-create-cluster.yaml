@@ -11,6 +11,7 @@ commands:
       get_cr \
         | yq eval '.spec.allowUnsafeConfigurations=false' - \
         | yq eval '.spec.mysql.clusterType="async"' - \
+        | yq eval '.spec.orchestrator.enabled=true' - \
         | yq eval '.spec.proxy.haproxy.enabled=true' - \
         | yq eval '.spec.proxy.haproxy.size=3' - \
         | kubectl -n "${NAMESPACE}" apply -f -

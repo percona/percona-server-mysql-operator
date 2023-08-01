@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -18,16 +17,12 @@ import (
 
 type mysqlshExec struct {
 	pod    *corev1.Pod
-	client *clientcmd.Client
+	client clientcmd.Client
 	uri    string
 }
 
-func NewWithExec(pod *corev1.Pod, uri string) (*mysqlshExec, error) {
-	c, err := clientcmd.NewClient()
-	if err != nil {
-		return nil, err
-	}
-	return &mysqlshExec{client: c, pod: pod, uri: uri}, nil
+func NewWithExec(cliCmd clientcmd.Client, pod *corev1.Pod, uri string) (*mysqlshExec, error) {
+	return &mysqlshExec{client: cliCmd, pod: pod, uri: uri}, nil
 }
 
 func (m *mysqlshExec) runWithExec(ctx context.Context, cmd string) error {
@@ -173,12 +168,8 @@ func (m *mysqlshExec) TopologyWithExec(ctx context.Context, clusterName string) 
 	return status.DefaultReplicaSet.Topology, nil
 }
 
-func (m *mysqlshExec) RebootClusterFromCompleteOutageWithExec(ctx context.Context, clusterName string, rejoinInstances []string) error {
-	cmd := fmt.Sprintf(
-		"dba.rebootClusterFromCompleteOutage('%s', {rejoinInstances: ['%s'], removeInstances: []})",
-		clusterName,
-		strings.Join(rejoinInstances, ","),
-	)
+func (m *mysqlshExec) RebootClusterFromCompleteOutageWithExec(ctx context.Context, clusterName string) error {
+	cmd := fmt.Sprintf("dba.rebootClusterFromCompleteOutage('%s')", clusterName)
 
 	if err := m.runWithExec(ctx, cmd); err != nil {
 		return errors.Wrap(err, "reboot cluster from complete outage")

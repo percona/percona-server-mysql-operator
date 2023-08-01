@@ -1,6 +1,7 @@
 package haproxy
 
 import (
+	"fmt"
 	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -27,6 +28,7 @@ const (
 	PortMySQLReplicas  = 3307
 	PortProxyProtocol  = 3309
 	PortMySQLXProtocol = 33060
+	PortAdmin          = 33062
 	PortPMMStats       = 8404
 )
 
@@ -42,6 +44,10 @@ func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
 		map[string]string{apiv1alpha1.ComponentLabel: componentName},
 		cr.Labels())
+}
+
+func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
+	return fmt.Sprintf("%s-%d", Name(cr), idx)
 }
 
 func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.Service {
@@ -81,6 +87,10 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 			Name: "mysqlx",
 			Port: int32(PortMySQLXProtocol),
 		},
+		{
+			Name: "mysql-admin",
+			Port: int32(PortAdmin),
+		},
 	}
 
 	if cr.PMMEnabled(secret) {
@@ -113,9 +123,15 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 	}
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string, secret *corev1.Secret) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string, secret *corev1.Secret) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 
+	annotations := make(map[string]string)
+	if configHash != "" {
+		annotations["percona.com/configuration-hash"] = configHash
+	}
+
+	t := true
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -134,7 +150,8 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string, secret *c
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector: cr.Spec.Proxy.HAProxy.NodeSelector,
@@ -183,6 +200,29 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string, secret *c
 								},
 							},
 						},
+						{
+							Name: configVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								Projected: &corev1.ProjectedVolumeSource{
+									Sources: []corev1.VolumeProjection{
+										{
+											ConfigMap: &corev1.ConfigMapProjection{
+												LocalObjectReference: corev1.LocalObjectReference{
+													Name: Name(cr),
+												},
+												Items: []corev1.KeyToPath{
+													{
+														Key:  CustomConfigKey,
+														Path: "haproxy.cfg",
+													},
+												},
+												Optional: &t,
+											},
+										},
+									},
+								},
+							},
+						},
 					},
 					SecurityContext: cr.Spec.Proxy.HAProxy.PodSecurityContext,
 				},
@@ -213,12 +253,21 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	spec := cr.Spec.Proxy.HAProxy
 
+	env := []corev1.EnvVar{
+		{
+			Name:  "CLUSTER_TYPE",
+			Value: string(cr.Spec.MySQL.ClusterType),
+		},
+	}
+	env = append(env, spec.Env...)
+
 	return corev1.Container{
 		Name:            componentName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
 		Resources:       spec.Resources,
-		Env:             []corev1.EnvVar{},
+		Env:             env,
+		EnvFrom:         spec.EnvFrom,
 		Command:         []string{"/opt/percona/haproxy-entrypoint.sh"},
 		Args:            []string{"haproxy"},
 		Ports: []corev1.ContainerPort{
@@ -256,6 +305,10 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 				Name:      tlsVolumeName,
 				MountPath: tlsMountPath,
 			},
+			{
+				Name:      configVolumeName,
+				MountPath: configMountPath,
+			},
 		},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
@@ -265,6 +318,14 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 
 func mysqlMonitContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	spec := cr.Spec.Proxy.HAProxy
+
+	env := []corev1.EnvVar{
+		{
+			Name:  "MYSQL_SERVICE",
+			Value: mysql.ServiceName(cr),
+		},
+	}
+	env = append(env, spec.Env...)
 
 	return corev1.Container{
 		Name:            "mysql-monit",
@@ -277,12 +338,8 @@ func mysqlMonitContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			"-on-change=/opt/percona/haproxy_add_mysql_nodes.sh",
 			"-service=$(MYSQL_SERVICE)",
 		},
-		Env: []corev1.EnvVar{
-			{
-				Name:  "MYSQL_SERVICE",
-				Value: mysql.ServiceName(cr),
-			},
-		},
+		Env:     env,
+		EnvFrom: spec.EnvFrom,
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "bin",
