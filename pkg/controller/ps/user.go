@@ -196,12 +196,6 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 				return errors.Wrap(err, "start async replication")
 			}
 		}
-
-		if cr.Spec.MySQL.IsGR() {
-			if err := r.restartGroupReplication(ctx, cr, updatedReplicaPass); err != nil {
-				return errors.Wrap(err, "restart group replication")
-			}
-		}
 	}
 
 	if cr.OrchestratorEnabled() && restartOrchestrator {
