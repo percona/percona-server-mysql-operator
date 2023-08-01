@@ -32,7 +32,7 @@ func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr
 	if err := r.Get(ctx, nn, userSecret); client.IgnoreNotFound(err) != nil {
 		return errors.Wrap(err, "get user secret")
 	}
-	err := secret.FillPasswordsSecret(userSecret)
+	err := secret.FillPasswordsSecret(cr, userSecret)
 	if err != nil {
 
 	}

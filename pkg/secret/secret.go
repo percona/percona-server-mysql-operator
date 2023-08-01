@@ -174,17 +174,20 @@ const (
 		"0123456789"
 )
 
-var SecretUsers = [...]apiv1alpha1.SystemUser{
+var SecretUsers = []apiv1alpha1.SystemUser{
 	apiv1alpha1.UserHeartbeat,
 	apiv1alpha1.UserMonitor,
 	apiv1alpha1.UserOperator,
 	apiv1alpha1.UserOrchestrator,
-	apiv1alpha1.UserReplication,
 	apiv1alpha1.UserRoot,
 	apiv1alpha1.UserXtraBackup,
 }
 
-func FillPasswordsSecret(secret *corev1.Secret) error {
+func FillPasswordsSecret(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) error {
+	if cr.MySQLSpec().IsAsync() {
+		SecretUsers = append(SecretUsers, apiv1alpha1.UserReplication)
+	}
+
 	if len(secret.Data) == 0 {
 		secret.Data = make(map[string][]byte, len(SecretUsers))
 	}
