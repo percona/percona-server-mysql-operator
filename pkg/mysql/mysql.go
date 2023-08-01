@@ -138,7 +138,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 			},
 			ServiceName:          ServiceName(cr),
 			VolumeClaimTemplates: volumeClaimTemplates(spec),
-			UpdateStrategy: updateStrategy(cr),
+			UpdateStrategy:       updateStrategy(cr),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
