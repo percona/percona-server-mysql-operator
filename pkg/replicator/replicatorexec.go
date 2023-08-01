@@ -322,30 +322,6 @@ func (d *dbImplExec) StopGroupReplication(ctx context.Context) error {
 	return errors.Wrap(err, "stop group replication")
 }
 
-func (d *dbImplExec) RestartGroupReplication(replicaPass string) error {
-	var errb, outb bytes.Buffer
-	q := fmt.Sprintf("STOP GROUP_REPLICATION; START GROUP_REPLICATION USER='%s', PASSWORD='%s'", apiv1alpha1.UserReplication, replicaPass)
-	err := d.exec(context.TODO(), q, &outb, &errb)
-	return errors.Wrap(err, "restart group replication")
-}
-
-func (d *dbImplExec) ChangeGroupReplicationPassword(ctx context.Context, replicaPass string) error {
-	var errb, outb bytes.Buffer
-	q := fmt.Sprintf(`
-            CHANGE REPLICATION SOURCE TO
-                SOURCE_USER='%s',
-                SOURCE_PASSWORD='%s'
-            FOR CHANNEL 'group_replication_recovery'
-        `, apiv1alpha1.UserReplication, replicaPass)
-
-	err := d.exec(ctx, q, &outb, &errb)
-	if err != nil {
-		return errors.Wrap(err, "exec CHANGE REPLICATION SOURCE TO")
-	}
-
-	return nil
-}
-
 func (d *dbImplExec) GetGroupReplicationPrimary(ctx context.Context) (string, error) {
 	rows := []*struct {
 		Host string `csv:"host"`
