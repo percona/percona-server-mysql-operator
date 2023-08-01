@@ -34,7 +34,7 @@ func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr
 	}
 	err := secret.FillPasswordsSecret(cr, userSecret)
 	if err != nil {
-
+		return errors.Wrap(err, "fill passwords")
 	}
 	userSecret.Name = cr.Spec.SecretsName
 	userSecret.Namespace = cr.Namespace

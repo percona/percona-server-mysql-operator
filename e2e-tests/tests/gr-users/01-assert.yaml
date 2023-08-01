@@ -6,7 +6,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 1
-  name: users-mysql
+  name: gr-users-mysql
 status:
   observedGeneration: 1
   replicas: 3
@@ -16,7 +16,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 1
-  name: users-haproxy
+  name: gr-users-haproxy
 status:
   observedGeneration: 1
   replicas: 3
