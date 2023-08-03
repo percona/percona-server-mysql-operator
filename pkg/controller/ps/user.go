@@ -29,20 +29,18 @@ const (
 	annotationPasswordsUpdated string = "percona.com/passwords-updated"
 )
 
-func allSystemUsers() map[string]mysql.User {
+func allSystemUsers() map[apiv1alpha1.SystemUser]mysql.User {
 	uu := [...]apiv1alpha1.SystemUser{
 		apiv1alpha1.UserHeartbeat,
 		apiv1alpha1.UserMonitor,
 		apiv1alpha1.UserOperator,
 		apiv1alpha1.UserOrchestrator,
-		apiv1alpha1.UserPMMServerKey,
-		apiv1alpha1.UserProxyAdmin,
 		apiv1alpha1.UserReplication,
 		apiv1alpha1.UserRoot,
 		apiv1alpha1.UserXtraBackup,
 	}
 
-	users := make(map[string]mysql.User, len(uu))
+	users := make(map[apiv1alpha1.SystemUser]mysql.User, len(uu))
 	for _, u := range uu {
 		user := mysql.User{
 			Username: u,
@@ -56,7 +54,9 @@ func allSystemUsers() map[string]mysql.User {
 			user.Hosts = []string{"localhost"}
 		}
 
+		users[u] = user
 	}
+
 	return users
 }
 
@@ -128,6 +128,11 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return errors.Wrapf(err, "get secret/%s hash", internalSecret.Name)
 	}
 
+	allUsers := allSystemUsers()
+	if cr.MySQLSpec().IsGR() {
+		delete(allUsers, apiv1alpha1.UserReplication)
+	}
+
 	if hash == internalHash {
 		if v, ok := internalSecret.Annotations[annotationPasswordsUpdated]; ok && v == "false" {
 			operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
@@ -139,7 +144,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 			// Discarding old password is idempotent so it is safe to pass not updated user.
 			// We can improve this by maybe storing updated users in a annotation and reading it here.
 			users := make([]mysql.User, 0)
-			for _, u := range allSystemUsers() {
+			for _, u := range allUsers {
 				users = append(users, u)
 			}
 			return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, users, operatorPass)
@@ -167,7 +172,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 			continue
 		}
 
-		mysqlUser := allSystemUsers()[user]
+		mysqlUser := allUsers[apiv1alpha1.SystemUser(user)]
 		mysqlUser.Password = string(pass)
 
 		switch mysqlUser.Username {

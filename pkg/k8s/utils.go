@@ -56,6 +56,9 @@ func AddLabel(obj client.Object, key, value string) {
 
 func AddAnnotation(obj client.Object, key, value string) {
 	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
 	annotations[key] = value
 	obj.SetAnnotations(annotations)
 }

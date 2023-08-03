@@ -410,7 +410,6 @@ const (
 	UserOperator     SystemUser = "operator"
 	UserOrchestrator SystemUser = "orchestrator"
 	UserPMMServerKey SystemUser = "pmmserverkey"
-	UserProxyAdmin   SystemUser = "proxyadmin"
 	UserReplication  SystemUser = "replication"
 	UserRoot         SystemUser = "root"
 	UserXtraBackup   SystemUser = "xtrabackup"
