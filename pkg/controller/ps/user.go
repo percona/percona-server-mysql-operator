@@ -137,7 +137,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 
 			// At this point we don't know exact updated users and we pass all system users.
 			// Discarding old password is idempotent so it is safe to pass not updated user.
-			// We can imporve this by maybe storing updated users in a annotation and reading it here.
+			// We can improve this by maybe storing updated users in a annotation and reading it here.
 			users := make([]mysql.User, 0)
 			for _, u := range allSystemUsers() {
 				users = append(users, u)
