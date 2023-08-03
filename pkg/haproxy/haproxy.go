@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	componentName   = "haproxy"
+	ComponentName   = "haproxy"
 	credsVolumeName = "users"
-	credsMountPath  = "/etc/mysql/mysql-users-secret"
+	CredsMountPath  = "/etc/mysql/mysql-users-secret"
 	tlsVolumeName   = "tls"
 	tlsMountPath    = "/etc/mysql/mysql-tls-secret"
 )
@@ -33,7 +33,7 @@ const (
 )
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
-	return cr.Name + "-" + componentName
+	return cr.Name + "-" + ComponentName
 }
 
 func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
@@ -42,7 +42,7 @@ func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
-		map[string]string{apiv1alpha1.ComponentLabel: componentName},
+		map[string]string{apiv1alpha1.ComponentLabel: ComponentName},
 		cr.Labels())
 }
 
@@ -158,7 +158,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 					Tolerations:  cr.Spec.Proxy.HAProxy.Tolerations,
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
-							componentName,
+							ComponentName,
 							initImage,
 							cr.Spec.Proxy.HAProxy.ImagePullPolicy,
 							cr.Spec.Proxy.HAProxy.ContainerSecurityContext,
@@ -237,7 +237,7 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 		mysqlMonitContainer(cr),
 	}
 	if cr.PMMEnabled(secret) {
-		pmmC := pmm.Container(cr, secret, componentName)
+		pmmC := pmm.Container(cr, secret, ComponentName)
 
 		pmmC.Env = append(pmmC.Env, corev1.EnvVar{
 			Name:  "PMM_ADMIN_CUSTOM_PARAMS",
@@ -262,7 +262,7 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	env = append(env, spec.Env...)
 
 	return corev1.Container{
-		Name:            componentName,
+		Name:            ComponentName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
 		Resources:       spec.Resources,
@@ -299,7 +299,7 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			},
 			{
 				Name:      credsVolumeName,
-				MountPath: credsMountPath,
+				MountPath: CredsMountPath,
 			},
 			{
 				Name:      tlsVolumeName,
@@ -351,7 +351,7 @@ func mysqlMonitContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			},
 			{
 				Name:      credsVolumeName,
-				MountPath: credsMountPath,
+				MountPath: CredsMountPath,
 			},
 			{
 				Name:      tlsVolumeName,
