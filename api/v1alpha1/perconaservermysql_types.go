@@ -677,9 +677,9 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		cr.Spec.SSLSecretName = cr.Name + "-ssl"
 	}
 
-	if cr.Spec.UpdateStrategy == SmartUpdateStatefulSetStrategyType && 
-	!cr.HAProxyEnabled() &&
-	!cr.RouterEnabled() {
+	if cr.Spec.UpdateStrategy == SmartUpdateStatefulSetStrategyType &&
+		!cr.HAProxyEnabled() &&
+		!cr.RouterEnabled() {
 		return errors.Errorf("MySQL Router or HAProxy should be enabled if SmartUpdate set")
 	}
 
