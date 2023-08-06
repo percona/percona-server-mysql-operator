@@ -310,7 +310,11 @@ func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
 	log := logf.FromContext(ctx)
 
 	err := r.passwordsPropagated(ctx, cr, secrets)
-	if err != nil {
+	if err != nil && err == ErrPassNotPropagated {
+		if err == ErrPassNotPropagated {
+			log.Info("Waiting for passwords to be propagated")
+			return nil
+		}
 		return err
 	}
 
@@ -438,11 +442,6 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 	}
 
 	if err := eg.Wait(); err != nil {
-		if err == ErrPassNotPropagated {
-			log.Info("Waiting for passwords to be propagated")
-			return nil
-		}
-
 		return err
 	}
 
