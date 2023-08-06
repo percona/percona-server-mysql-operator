@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -28,6 +29,8 @@ import (
 const (
 	annotationPasswordsUpdated string = "percona.com/passwords-updated"
 )
+
+var ErrPassNotPropagated = errors.New("password not yet propagated")
 
 func allSystemUsers() map[apiv1alpha1.SystemUser]mysql.User {
 	uu := [...]apiv1alpha1.SystemUser{
@@ -396,7 +399,7 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 		eg.Go(func() error {
 			for i := 0; int32(i) < int32(comp.size); i++ {
 				pod := corev1.Pod{}
-				err := r.Client.Get(context.TODO(),
+				err := r.Client.Get(ctx,
 					types.NamespacedName{
 						Namespace: cr.Namespace,
 						Name:      fmt.Sprintf("%s-%s-%d", cr.Name, comp.name, i),
@@ -415,14 +418,17 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 					var errb, outb bytes.Buffer
 					err = r.ClientCmd.Exec(ctx, &pod, comp.name, cmd, nil, &outb, &errb, false)
 					if err != nil {
+						if strings.Contains(errb.String(), "No such file or directory") {
+							return nil
+						}
 						return errors.Errorf("exec cat on %s-%d: %v / %s / %s", comp.name, i, err, outb.String(), errb.String())
 					}
 					if len(errb.Bytes()) > 0 {
-						return errors.Errorf("cat on %s-%d: %s", comp.name, i, errb.String())
+						return errors.Errorf("cat on %s-%s-%d: %s", cr.Name, comp.name, i, errb.String())
 					}
 
 					if outb.String() != string(pass) {
-						return errors.New("password not propagated")
+						return ErrPassNotPropagated
 					}
 				}
 			}
@@ -432,6 +438,11 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 	}
 
 	if err := eg.Wait(); err != nil {
+		if err == ErrPassNotPropagated {
+			log.Info("Waiting for passwords to be propagated")
+			return nil
+		}
+
 		return err
 	}
 
