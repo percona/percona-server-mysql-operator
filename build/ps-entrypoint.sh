@@ -280,6 +280,19 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			EOSQL
 		fi
 
+		file_env 'MONITOR_HOST' 'localhost'
+		file_env 'MONITOR_PASSWORD' 'monitor' 'monitor'
+		file_env 'XTRABACKUP_PASSWORD' '' 'xtrabackup'
+		file_env 'REPLICATION_PASSWORD' '' 'replication'
+		file_env 'ORC_TOPOLOGY_PASSWORD' '' 'orchestrator'
+		file_env 'OPERATOR_ADMIN_PASSWORD' '' 'operator'
+		file_env 'XTRABACKUP_PASSWORD' '' 'xtrabackup'
+		file_env 'HEARTBEAT_PASSWORD' '' 'heartbeat'
+
+		read -r -d '' monitorConnectGrant <<-EOSQL || true
+			GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
+		EOSQL
+
 		if [ "$CLUSTER_TYPE" == 'async' ]; then
 			read -r -d '' replicationCreate <<-EOSQL || true
 				CREATE USER 'replication'@'%' IDENTIFIED BY '${REPLICATION_PASSWORD}' PASSWORD EXPIRE NEVER;
@@ -289,17 +302,6 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			EOSQL
 		fi
 
-		file_env 'MONITOR_HOST' 'localhost'
-		file_env 'MONITOR_PASSWORD' 'monitor' 'monitor'
-		file_env 'XTRABACKUP_PASSWORD' '' 'xtrabackup'
-		file_env 'REPLICATION_PASSWORD' '' 'replication'
-		file_env 'ORC_TOPOLOGY_PASSWORD' '' 'orchestrator'
-		file_env 'OPERATOR_ADMIN_PASSWORD' '' 'operator'
-		file_env 'XTRABACKUP_PASSWORD' '' 'xtrabackup'
-		file_env 'HEARTBEAT_PASSWORD' '' 'heartbeat'
-		read -r -d '' monitorConnectGrant <<-EOSQL || true
-			GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
-		EOSQL
 		"${mysql[@]}" <<-EOSQL
 			-- What's done in this file shouldn't be replicated
 			--  or products like mysql-fabric won't work
