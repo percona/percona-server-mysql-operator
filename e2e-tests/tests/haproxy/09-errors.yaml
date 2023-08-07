@@ -1,0 +1,9 @@
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: haproxy-haproxy
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: haproxy-haproxy
