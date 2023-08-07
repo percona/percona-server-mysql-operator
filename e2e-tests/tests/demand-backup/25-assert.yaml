@@ -5,20 +5,20 @@ timeout: 30
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 04-delete-data-minio-backup-source-0
+  name: 06-read-data-azure-0
 data:
-  data: ""
+  data: "100500"
 ---
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 04-delete-data-minio-backup-source-1
+  name: 06-read-data-azure-1
 data:
-  data: ""
+  data: "100500"
 ---
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 04-delete-data-minio-backup-source-2
+  name: 06-read-data-azure-2
 data:
-  data: ""
+  data: "100500"
