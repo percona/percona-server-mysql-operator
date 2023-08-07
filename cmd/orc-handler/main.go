@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	perconaClientCmd "github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
@@ -85,7 +86,12 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 		return err
 	}
 
-	serverVersion, err := platform.GetServerVersion()
+	cliCmd, err := perconaClientCmd.NewClient()
+	if err != nil {
+		return err
+	}
+
+	serverVersion, err := platform.GetServerVersion(cliCmd)
 	if err != nil {
 		return err
 	}

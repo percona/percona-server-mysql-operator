@@ -12,6 +12,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
@@ -35,7 +36,7 @@ func experimentalGetAsync(ctx context.Context, m Manager, hosts ...string) (Topo
 	return *t, nil
 }
 
-func getAsync(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, cl client.Reader) (Topology, error) {
+func getAsync(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, cliCmd clientcmd.Client, cl client.Reader) (Topology, error) {
 	log := logf.FromContext(ctx).WithName("GetAsync")
 
 	pod, err := getOrcPod(ctx, cl, cr, 0)
@@ -43,7 +44,7 @@ func getAsync(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, cl client
 		log.Info("orchestrator pod is not found: " + err.Error() + ". skip")
 		return Topology{}, nil
 	}
-	if err := orchestrator.DiscoverExec(ctx, pod, mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
+	if err := orchestrator.DiscoverExec(ctx, cliCmd, pod, mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
 		switch err.Error() {
 		case "Unauthorized":
 			log.Info("mysql is not ready, unauthorized orchestrator discover response. skip")
@@ -54,7 +55,7 @@ func getAsync(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, cl client
 		}
 		return Topology{}, errors.Wrap(err, "failed to discover cluster")
 	}
-	primary, err := orchestrator.ClusterPrimaryExec(ctx, pod, cr.ClusterHint())
+	primary, err := orchestrator.ClusterPrimaryExec(ctx, cliCmd, pod, cr.ClusterHint())
 	if err != nil {
 		return Topology{}, errors.Wrap(err, "get primary")
 	}

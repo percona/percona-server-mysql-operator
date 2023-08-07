@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
@@ -20,20 +21,22 @@ type topologyManagerExec struct {
 	clusterType  apiv1alpha1.ClusterType
 	cluster      *apiv1alpha1.PerconaServerMySQL
 	cl           client.Reader
+	cliCmd       clientcmd.Client
 }
 
-func NewTopologyManagerExec(cluster *apiv1alpha1.PerconaServerMySQL, cl client.Reader, operatorPass string) Manager {
+func NewTopologyManagerExec(cluster *apiv1alpha1.PerconaServerMySQL, cl client.Reader, cliCmd clientcmd.Client, operatorPass string) Manager {
 	return &topologyManagerExec{
 		operatorPass: operatorPass,
 		clusterType:  cluster.Spec.MySQL.ClusterType,
 		cluster:      cluster,
 		cl:           cl,
+		cliCmd:       cliCmd,
 	}
 }
 
 func (m *topologyManagerExec) Replicator(ctx context.Context, hostname string) (replicator.Replicator, error) {
 	if hostname == mysql.ServiceName(m.cluster) {
-		return replicator.NewReplicatorExec(mysql.HeadlessService(m.cluster), apiv1alpha1.UserOperator, m.operatorPass, "localhost")
+		return replicator.NewReplicatorExec(mysql.HeadlessService(m.cluster), m.cliCmd, apiv1alpha1.UserOperator, m.operatorPass, "localhost")
 	}
 
 	pod, err := getPodByFQDN(context.TODO(), m.cl, hostname)
@@ -41,7 +44,7 @@ func (m *topologyManagerExec) Replicator(ctx context.Context, hostname string) (
 		return nil, errors.Wrap(err, "failed to get pod")
 	}
 
-	return replicator.NewReplicatorExec(pod, apiv1alpha1.UserOperator, m.operatorPass, "localhost")
+	return replicator.NewReplicatorExec(pod, m.cliCmd, apiv1alpha1.UserOperator, m.operatorPass, "localhost")
 }
 
 func getPodByFQDN(ctx context.Context, cl client.Reader, fqdn string) (*corev1.Pod, error) {
@@ -79,7 +82,7 @@ func (m *topologyManagerExec) Get(ctx context.Context) (Topology, error) {
 		if k8s.GetExperimetalTopologyOption() {
 			return experimentalGetAsync(ctx, m, mysql.ServiceName(m.cluster))
 		}
-		return getAsync(ctx, m.cluster, m.cl)
+		return getAsync(ctx, m.cluster, m.cliCmd, m.cl)
 	default:
 		return Topology{}, errors.New("unknown cluster type")
 	}

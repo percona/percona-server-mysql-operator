@@ -41,6 +41,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql/topology"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
@@ -53,6 +54,7 @@ type PerconaServerMySQLBackupReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	ServerVersion *platform.ServerVersion
+	ClientCmd     clientcmd.Client
 }
 
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqlbackups;perconaservermysqlbackups/status;perconaservermysqlbackups/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -321,7 +323,7 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 		return "", errors.Wrap(err, "get operator password")
 	}
 
-	tm := topology.NewTopologyManagerExec(cluster, r.Client, operatorPass)
+	tm := topology.NewTopologyManagerExec(cluster, r.Client, r.ClientCmd, operatorPass)
 	top, err := tm.Get(ctx)
 	if err != nil {
 		return "", errors.Wrap(err, "get topology")

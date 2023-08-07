@@ -12,15 +12,9 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 )
 
-func exec(ctx context.Context, pod *corev1.Pod, endpoint string, outb, errb *bytes.Buffer) error {
-	// TODO: init client in a better once, not every time we call `exec`
-	cli, err := clientcmd.NewClient()
-	if err != nil {
-		return err
-	}
-
+func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoint string, outb, errb *bytes.Buffer) error {
 	c := []string{"curl", fmt.Sprintf("localhost:%d/%s", defaultWebPort, endpoint)}
-	err = cli.Exec(ctx, pod, "orc", c, nil, outb, errb, false)
+	err := cliCmd.Exec(ctx, pod, "orc", c, nil, outb, errb, false)
 	if err != nil {
 		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", c, outb, errb)
 	}
@@ -28,11 +22,11 @@ func exec(ctx context.Context, pod *corev1.Pod, endpoint string, outb, errb *byt
 	return nil
 }
 
-func ClusterPrimaryExec(ctx context.Context, pod *corev1.Pod, clusterHint string) (*Instance, error) {
+func ClusterPrimaryExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint string) (*Instance, error) {
 	url := fmt.Sprintf("api/master/%s", clusterHint)
 
 	var res, errb bytes.Buffer
-	err := exec(ctx, pod, url, &res, &errb)
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
 	if err != nil {
 		return nil, err
 	}
@@ -56,11 +50,11 @@ func ClusterPrimaryExec(ctx context.Context, pod *corev1.Pod, clusterHint string
 	return primary, nil
 }
 
-func StopReplicationExec(ctx context.Context, pod *corev1.Pod, host string, port int32) error {
+func StopReplicationExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int32) error {
 	url := fmt.Sprintf("api/stop-replica/%s/%d", host, port)
 
 	var res, errb bytes.Buffer
-	err := exec(ctx, pod, url, &res, &errb)
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
 	if err != nil {
 		return err
 	}
@@ -77,11 +71,11 @@ func StopReplicationExec(ctx context.Context, pod *corev1.Pod, host string, port
 	return nil
 }
 
-func StartReplicationExec(ctx context.Context, pod *corev1.Pod, host string, port int32) error {
+func StartReplicationExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int32) error {
 	url := fmt.Sprintf("api/start-replica/%s/%d", host, port)
 
 	var res, errb bytes.Buffer
-	err := exec(ctx, pod, url, &res, &errb)
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
 	if err != nil {
 		return err
 	}
@@ -98,11 +92,11 @@ func StartReplicationExec(ctx context.Context, pod *corev1.Pod, host string, por
 	return nil
 }
 
-func AddPeerExec(ctx context.Context, pod *corev1.Pod, peer string) error {
+func AddPeerExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, peer string) error {
 	url := fmt.Sprintf("api/raft-add-peer/%s", peer)
 
 	var res, errb bytes.Buffer
-	err := exec(ctx, pod, url, &res, &errb)
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
 	if err != nil {
 		return err
 	}
@@ -127,11 +121,11 @@ func AddPeerExec(ctx context.Context, pod *corev1.Pod, peer string) error {
 	return nil
 }
 
-func RemovePeerExec(ctx context.Context, pod *corev1.Pod, peer string) error {
+func RemovePeerExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, peer string) error {
 	url := fmt.Sprintf("api/raft-remove-peer/%s", peer)
 
 	var res, errb bytes.Buffer
-	err := exec(ctx, pod, url, &res, &errb)
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
 	if err != nil {
 		return err
 	}
@@ -156,8 +150,8 @@ func RemovePeerExec(ctx context.Context, pod *corev1.Pod, peer string) error {
 	return nil
 }
 
-func EnsureNodeIsPrimaryExec(ctx context.Context, pod *corev1.Pod, clusterHint, host string, port int) error {
-	primary, err := ClusterPrimaryExec(ctx, pod, clusterHint)
+func EnsureNodeIsPrimaryExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint, host string, port int) error {
+	primary, err := ClusterPrimaryExec(ctx, cliCmd, pod, clusterHint)
 	if err != nil {
 		return errors.Wrap(err, "get cluster primary")
 	}
@@ -170,7 +164,7 @@ func EnsureNodeIsPrimaryExec(ctx context.Context, pod *corev1.Pod, clusterHint, 
 	url := fmt.Sprintf("api/graceful-master-takeover-auto/%s/%s/%d", clusterHint, host, port)
 
 	var res, errb bytes.Buffer
-	err = exec(ctx, pod, url, &res, &errb)
+	err = exec(ctx, cliCmd, pod, url, &res, &errb)
 	if err != nil {
 		return err
 	}
@@ -192,11 +186,11 @@ func EnsureNodeIsPrimaryExec(ctx context.Context, pod *corev1.Pod, clusterHint, 
 	return nil
 }
 
-func DiscoverExec(ctx context.Context, pod *corev1.Pod, host string, port int) error {
+func DiscoverExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) error {
 	url := fmt.Sprintf("api/discover/%s/%d", host, port)
 
 	var res, errb bytes.Buffer
-	err := exec(ctx, pod, url, &res, &errb)
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
 	if err != nil {
 		return err
 	}

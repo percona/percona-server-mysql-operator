@@ -199,6 +199,26 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 }
 
 func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
+	env := []corev1.EnvVar{
+		{
+			Name:  "ORC_SERVICE",
+			Value: ServiceName(cr),
+		},
+		{
+			Name:  "MYSQL_SERVICE",
+			Value: mysql.ServiceName(cr),
+		},
+		{
+			Name:  "RAFT_ENABLED",
+			Value: "true",
+		},
+		{
+			Name:  "CLUSTER_NAME",
+			Value: cr.Name,
+		},
+	}
+	env = append(env, cr.Spec.Orchestrator.Env...)
+
 	return corev1.Container{
 		Name:            componentName,
 		Image:           cr.Spec.Orchestrator.Image,
@@ -206,24 +226,8 @@ func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		Resources:       cr.Spec.Orchestrator.Resources,
 		Command:         []string{"/opt/percona/orc-entrypoint.sh"},
 		Args:            []string{"/usr/local/orchestrator/orchestrator", "-config", "/etc/orchestrator/orchestrator.conf.json", "http"},
-		Env: []corev1.EnvVar{
-			{
-				Name:  "ORC_SERVICE",
-				Value: ServiceName(cr),
-			},
-			{
-				Name:  "MYSQL_SERVICE",
-				Value: mysql.ServiceName(cr),
-			},
-			{
-				Name:  "RAFT_ENABLED",
-				Value: "true",
-			},
-			{
-				Name:  "CLUSTER_NAME",
-				Value: cr.Name,
-			},
-		},
+		Env:             env,
+		EnvFrom:         cr.Spec.Orchestrator.EnvFrom,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "web",

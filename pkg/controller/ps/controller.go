@@ -17,9 +17,7 @@ limitations under the License.
 package ps
 
 import (
-	"bytes"
 	"context"
-	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -44,12 +42,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
-	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql/topology"
@@ -67,6 +63,7 @@ type PerconaServerMySQLReconciler struct {
 	Scheme        *runtime.Scheme
 	ServerVersion *platform.ServerVersion
 	Recorder      record.EventRecorder
+	ClientCmd     clientcmd.Client
 }
 
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqls;perconaservermysqls/status;perconaservermysqls/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -195,7 +192,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		}
 
 		log.Info("Ensuring oldest mysql node is the primary")
-		err = orchestrator.EnsureNodeIsPrimaryExec(ctx, orcPod, cr.ClusterHint(), firstPod.GetName(), mysql.DefaultPort)
+		err = orchestrator.EnsureNodeIsPrimaryExec(ctx, r.ClientCmd, orcPod, cr.ClusterHint(), firstPod.GetName(), mysql.DefaultPort)
 		if err != nil {
 			return errors.Wrap(err, "ensure node is primary")
 		}
@@ -208,13 +205,13 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		firstPodFQDN := fmt.Sprintf("%s.%s.%s", firstPod.Name, mysql.ServiceName(cr), cr.Namespace)
 		firstPodUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodFQDN)
 
-		db, err := replicator.NewReplicatorExec(&firstPod, v1alpha1.UserOperator, operatorPass, firstPodFQDN)
+		db, err := replicator.NewReplicatorExec(&firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, firstPodFQDN)
 		if err != nil {
 			return errors.Wrapf(err, "connect to %s", firstPod.Name)
 		}
 		defer db.Close()
 
-		mysh, err := mysqlsh.NewWithExec(&firstPod, firstPodUri)
+		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, &firstPod, firstPodUri)
 		if err != nil {
 			return err
 		}
@@ -387,7 +384,8 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 ) error {
 	log := logf.FromContext(ctx).WithName("reconcileDatabase")
 
-	configHash, err := r.reconcileMySQLConfiguration(ctx, cr)
+	configurable := mysql.Configurable(*cr)
+	configHash, err := r.reconcileCustomConfiguration(ctx, cr, &configurable)
 	if err != nil {
 		return errors.Wrap(err, "reconcile MySQL config")
 	}
@@ -469,6 +467,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 
 	return nil
 }
+
 func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileMySQLAutoConfig")
 	var memory *resource.Quantity
@@ -521,89 +520,6 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 		log.Info("ConfigMap updated", "name", configMap.Name, "data", configMap.Data)
 	}
 	return nil
-}
-
-func (r *PerconaServerMySQLReconciler) reconcileMySQLConfiguration(
-	ctx context.Context,
-	cr *apiv1alpha1.PerconaServerMySQL,
-) (string, error) {
-	log := logf.FromContext(ctx).WithName("reconcileMySQLConfiguration")
-
-	cmName := mysql.ConfigMapName(cr)
-	nn := types.NamespacedName{Name: cmName, Namespace: cr.Namespace}
-
-	currCm := &corev1.ConfigMap{}
-	if err := r.Client.Get(ctx, nn, currCm); err != nil && !k8serrors.IsNotFound(err) {
-		return "", errors.Wrapf(err, "get ConfigMap/%s", cmName)
-	}
-
-	if cr.Spec.MySQL.Configuration == "" {
-		exists, err := k8s.ObjectExists(ctx, r.Client, nn, currCm)
-		if err != nil {
-			return "", errors.Wrapf(err, "check if ConfigMap/%s exists", cmName)
-		}
-
-		if !exists {
-			return "", nil
-		}
-
-		if exists && !metav1.IsControlledBy(currCm, cr) {
-			//ConfigMap exists and is created by the user, not the operator
-
-			d := struct{ Data map[string]string }{Data: currCm.Data}
-			data, err := json.Marshal(d)
-			if err != nil {
-				return "", errors.Wrap(err, "marshal configmap data to json")
-			}
-
-			return fmt.Sprintf("%x", md5.Sum(data)), nil
-		}
-
-		if err := r.Client.Delete(ctx, currCm); err != nil {
-			return "", errors.Wrapf(err, "delete ConfigMaps/%s", cmName)
-		}
-
-		log.Info("ConfigMap deleted", "name", cmName)
-
-		return "", nil
-	}
-
-	var memory *resource.Quantity
-	if res := cr.Spec.MySQL.Resources; res.Size() > 0 {
-		if _, ok := res.Requests[corev1.ResourceMemory]; ok {
-			memory = res.Requests.Memory()
-		}
-		if _, ok := res.Limits[corev1.ResourceMemory]; ok {
-			memory = res.Limits.Memory()
-		}
-	}
-
-	if memory != nil {
-		var err error
-		cr.Spec.MySQL.Configuration, err = mysql.ExecuteConfigurationTemplate(cr.Spec.MySQL.Configuration, memory)
-		if err != nil {
-			return "", errors.Wrap(err, "execute configuration template")
-		}
-	} else if strings.Contains(cr.Spec.MySQL.Configuration, "{{") {
-		return "", errors.New("mysql resources.limits[memory] or resources.requests[memory] should be specified for template usage in configuration")
-	}
-
-	cm := k8s.ConfigMap(cmName, cr.Namespace, mysql.CustomConfigKey, cr.Spec.MySQL.Configuration)
-	if !reflect.DeepEqual(currCm.Data, cm.Data) {
-		if err := k8s.EnsureObject(ctx, r.Client, cr, cm, r.Scheme); err != nil {
-			return "", errors.Wrapf(err, "ensure ConfigMap/%s", cmName)
-		}
-
-		log.Info("ConfigMap updated", "name", cmName, "data", cm.Data)
-	}
-
-	d := struct{ Data map[string]string }{Data: cm.Data}
-	data, err := json.Marshal(d)
-	if err != nil {
-		return "", errors.Wrap(err, "marshal configmap data to json")
-	}
-
-	return fmt.Sprintf("%x", md5.Sum(data)), nil
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
@@ -676,7 +592,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		for _, peer := range newPeers {
 			p := peer
 			g.Go(func() error {
-				return orchestrator.AddPeerExec(gCtx, orcPod, p)
+				return orchestrator.AddPeerExec(gCtx, r.ClientCmd, orcPod, p)
 			})
 		}
 
@@ -687,7 +603,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		for _, peer := range oldPeers {
 			p := peer
 			g.Go(func() error {
-				return orchestrator.RemovePeerExec(gCtx, orcPod, p)
+				return orchestrator.RemovePeerExec(gCtx, r.ClientCmd, orcPod, p)
 			})
 		}
 
@@ -713,8 +629,14 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context
 func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileHAProxy")
 
-	if !cr.HAProxyEnabled() || cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeGR {
+	if !cr.HAProxyEnabled() {
 		return nil
+	}
+
+	configurable := haproxy.Configurable(*cr)
+	configHash, err := r.reconcileCustomConfiguration(ctx, cr, &configurable)
+	if err != nil {
+		return errors.Wrap(err, "reconcile HAProxy config")
 	}
 
 	nn := types.NamespacedName{Namespace: cr.Namespace, Name: mysql.PodName(cr, 0)}
@@ -740,7 +662,7 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 		return errors.Wrapf(err, "get Secret/%s", nn.Name)
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, haproxy.StatefulSet(cr, initImage, internalSecret), r.Scheme); err != nil {
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, haproxy.StatefulSet(cr, initImage, configHash, internalSecret), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile StatefulSet")
 	}
 
@@ -752,26 +674,27 @@ func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr
 		return errors.Wrap(err, "reconcile MySQL services")
 	}
 
-	if cr.Spec.MySQL.IsAsync() {
+	if cr.OrchestratorEnabled() {
 		if err := r.reconcileOrchestratorServices(ctx, cr); err != nil {
 			return errors.Wrap(err, "reconcile Orchestrator services")
 		}
-		if cr.HAProxyEnabled() {
-			internalSecret := new(corev1.Secret)
-			nn := types.NamespacedName{Name: cr.InternalSecretName(), Namespace: cr.Namespace}
-			err := r.Client.Get(ctx, nn, internalSecret)
-			if client.IgnoreNotFound(err) != nil {
-				return errors.Wrapf(err, "get Secret/%s", nn.Name)
-			}
+	}
 
-			expose := cr.Spec.Proxy.HAProxy.Expose
-			if err := k8s.EnsureService(ctx, r.Client, cr, haproxy.Service(cr, internalSecret), r.Scheme, expose.SaveOldMeta()); err != nil {
-				return errors.Wrap(err, "reconcile HAProxy svc")
-			}
+	if cr.HAProxyEnabled() {
+		internalSecret := new(corev1.Secret)
+		nn := types.NamespacedName{Name: cr.InternalSecretName(), Namespace: cr.Namespace}
+		err := r.Client.Get(ctx, nn, internalSecret)
+		if client.IgnoreNotFound(err) != nil {
+			return errors.Wrapf(err, "get Secret/%s", nn.Name)
+		}
+
+		expose := cr.Spec.Proxy.HAProxy.Expose
+		if err := k8s.EnsureService(ctx, r.Client, cr, haproxy.Service(cr, internalSecret), r.Scheme, expose.SaveOldMeta()); err != nil {
+			return errors.Wrap(err, "reconcile HAProxy svc")
 		}
 	}
 
-	if cr.Spec.MySQL.IsGR() {
+	if cr.RouterEnabled() {
 		expose := cr.Spec.Proxy.Router.Expose
 		if err := k8s.EnsureService(ctx, r.Client, cr, router.Service(cr), r.Scheme, expose.SaveOldMeta()); err != nil {
 			return errors.Wrap(err, "reconcile router svc")
@@ -808,7 +731,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return nil
 	}
 
-	if err := orchestrator.DiscoverExec(ctx, pod, mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
+	if err := orchestrator.DiscoverExec(ctx, r.ClientCmd, pod, mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
 		switch err.Error() {
 		case "Unauthorized":
 			log.Info("mysql is not ready, unauthorized orchestrator discover response. skip")
@@ -820,7 +743,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return errors.Wrap(err, "failed to discover cluster")
 	}
 
-	primary, err := orchestrator.ClusterPrimaryExec(ctx, pod, cr.ClusterHint())
+	primary, err := orchestrator.ClusterPrimaryExec(ctx, r.ClientCmd, pod, cr.ClusterHint())
 	if err != nil {
 		return errors.Wrap(err, "get cluster primary")
 	}
@@ -856,7 +779,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 
 	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, mysql.ServiceName(cr))
 
-	mysh, err := mysqlsh.NewWithExec(firstPod, uri)
+	mysh, err := mysqlsh.NewWithExec(r.ClientCmd, firstPod, uri)
 	if err != nil {
 		return err
 	}
@@ -937,24 +860,44 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedStatefulSets(ctx context.C
 			return errors.Wrap(err, "failed to delete orchestrator statefulset")
 		}
 	}
-	if !cr.HAProxyEnabled() {
-		if err := r.Delete(ctx, haproxy.StatefulSet(cr, "", nil)); err != nil && !k8serrors.IsNotFound(err) {
-			return errors.Wrap(err, "failed to delete haproxy statefulset")
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) cleanupProxies(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if !cr.RouterEnabled() {
+		if err := r.Delete(ctx, router.Deployment(cr, "", "")); err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to delete router deployment")
+		}
+
+		if err := r.Delete(ctx, router.Service(cr)); err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to delete router service")
 		}
 	}
+
+	if !cr.HAProxyEnabled() {
+		if err := r.Delete(ctx, haproxy.StatefulSet(cr, "", "", nil)); err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to delete haproxy statefulset")
+		}
+
+		if err := r.Delete(ctx, haproxy.Service(cr, nil)); err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrap(err, "failed to delete haproxy service")
+		}
+	}
+
 	return nil
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileMySQLRouter")
 
-	if cr.Spec.MySQL.ClusterType != apiv1alpha1.ClusterTypeGR {
+	if !cr.RouterEnabled() {
 		return nil
 	}
 
-	configHash, err := r.reconcileMySQLRouterConfiguration(ctx, cr)
+	configurable := router.Configurable(*cr)
+	configHash, err := r.reconcileCustomConfiguration(ctx, cr, &configurable)
 	if err != nil {
-		return errors.Wrap(err, "reconcile MySQL config")
+		return errors.Wrap(err, "reconcile Router config")
 	}
 
 	if cr.Spec.Proxy.Router.Size > 0 {
@@ -975,7 +918,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 
 		firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
 		uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri)
-		mysh, err := mysqlsh.NewWithExec(firstPod, uri)
+		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, firstPod, uri)
 		if err != nil {
 			return err
 		}
@@ -998,66 +941,6 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) reconcileMySQLRouterConfiguration(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
-	log := logf.FromContext(ctx).WithName("reconcileMySQLRouterConfiguration")
-
-	cmName := router.Name(cr)
-	nn := types.NamespacedName{Name: cmName, Namespace: cr.Namespace}
-
-	currCm := &corev1.ConfigMap{}
-	if err := r.Client.Get(ctx, nn, currCm); err != nil && !k8serrors.IsNotFound(err) {
-		return "", errors.Wrapf(err, "get ConfigMap/%s", cmName)
-	}
-
-	if cr.Spec.Proxy.Router.Configuration == "" {
-		exists, err := k8s.ObjectExists(ctx, r.Client, nn, currCm)
-		if err != nil {
-			return "", errors.Wrapf(err, "check if ConfigMap/%s exists", cmName)
-		}
-
-		if !exists {
-			return "", nil
-		}
-
-		if exists && !metav1.IsControlledBy(currCm, cr) {
-			//ConfigMap exists and is created by the user, not the operator
-
-			d := struct{ Data map[string]string }{Data: currCm.Data}
-			data, err := json.Marshal(d)
-			if err != nil {
-				return "", errors.Wrap(err, "marshal configmap data to json")
-			}
-
-			return fmt.Sprintf("%x", md5.Sum(data)), nil
-		}
-
-		if err := r.Client.Delete(ctx, currCm); err != nil {
-			return "", errors.Wrapf(err, "delete ConfigMaps/%s", cmName)
-		}
-
-		log.Info("ConfigMap deleted", "name", cmName)
-
-		return "", nil
-	}
-
-	cm := k8s.ConfigMap(cmName, cr.Namespace, router.CustomConfigKey, cr.Spec.Proxy.Router.Configuration)
-	if !reflect.DeepEqual(currCm.Data, cm.Data) {
-		if err := k8s.EnsureObject(ctx, r.Client, cr, cm, r.Scheme); err != nil {
-			return "", errors.Wrapf(err, "ensure ConfigMap/%s", cmName)
-		}
-
-		log.Info("ConfigMap updated", "name", cmName, "data", cm.Data)
-	}
-
-	d := struct{ Data map[string]string }{Data: cm.Data}
-	data, err := json.Marshal(d)
-	if err != nil {
-		return "", errors.Wrap(err, "marshal configmap data to json")
-	}
-
-	return fmt.Sprintf("%x", md5.Sum(data)), nil
-}
-
 func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	mysqlExposer := mysql.Exposer(*cr)
 	if err := r.cleanupOutdatedServices(ctx, cr, &mysqlExposer); err != nil {
@@ -1073,289 +956,11 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 		return errors.Wrap(err, "cleanup statefulsets")
 	}
 
+	if err := r.cleanupProxies(ctx, cr); err != nil {
+		return errors.Wrap(err, "cleanup statefulsets")
+	}
+
 	return nil
-}
-
-func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
-	log := logf.FromContext(ctx).WithName("GRStatus")
-	if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
-		return false, nil
-	}
-
-	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
-	if err != nil {
-		return false, errors.Wrap(err, "get operator password")
-	}
-
-	firstPod, err := getMySQLPod(ctx, r.Client, cr, 0)
-	if err != nil {
-		return false, err
-	}
-
-	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
-	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri)
-	mysh, err := mysqlsh.NewWithExec(firstPod, uri)
-	if err != nil {
-		return false, err
-	}
-
-	if !mysh.DoesClusterExistWithExec(ctx, cr.InnoDBClusterName()) {
-		return false, nil
-	}
-
-	status, err := mysh.ClusterStatusWithExec(ctx, cr.InnoDBClusterName())
-	if err != nil {
-		return false, errors.Wrap(err, "get cluster status")
-	}
-
-	for addr, member := range status.DefaultReplicaSet.Topology {
-		for _, err := range member.InstanceErrors {
-			log.WithName(addr).Info(err)
-		}
-	}
-
-	switch status.DefaultReplicaSet.Status {
-	case innodbcluster.ClusterStatusOK:
-		return true, nil
-	case innodbcluster.ClusterStatusOKPartial, innodbcluster.ClusterStatusOKNoTolerance, innodbcluster.ClusterStatusOKNoTolerancePartial:
-		log.Info("GR status", "status", status.DefaultReplicaSet.Status, "statusText", status.DefaultReplicaSet.StatusText)
-		return true, nil
-	default:
-		return false, nil
-	}
-}
-
-func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
-		return nil
-	}
-	if err := cr.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
-		cr.Status.State = apiv1alpha1.StateError
-		nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
-		return writeStatus(ctx, r.Client, nn, cr.Status)
-	}
-	log := logf.FromContext(ctx).WithName("reconcileCRStatus")
-
-	mysqlStatus, err := appStatus(ctx, r.Client, cr.MySQLSpec().Size, mysql.MatchLabels(cr), cr.Status.MySQL.Version)
-	if err != nil {
-		return errors.Wrap(err, "get MySQL status")
-	}
-
-	if mysqlStatus.State == apiv1alpha1.StateReady && cr.Spec.MySQL.IsGR() {
-		ready, err := r.isGRReady(ctx, cr)
-		if err != nil {
-			return errors.Wrap(err, "check if GR ready")
-		}
-		if !ready {
-			mysqlStatus.State = apiv1alpha1.StateInitializing
-		}
-	}
-	cr.Status.MySQL = mysqlStatus
-
-	orcStatus := apiv1alpha1.StatefulAppStatus{}
-	if cr.OrchestratorEnabled() && cr.Spec.MySQL.IsAsync() {
-		orcStatus, err = appStatus(ctx, r.Client, cr.OrchestratorSpec().Size, orchestrator.MatchLabels(cr), cr.Status.Orchestrator.Version)
-		if err != nil {
-			return errors.Wrap(err, "get Orchestrator status")
-		}
-	}
-	cr.Status.Orchestrator = orcStatus
-
-	routerStatus := apiv1alpha1.StatefulAppStatus{}
-	if cr.Spec.MySQL.IsGR() {
-		routerStatus, err = appStatus(ctx, r.Client, cr.Spec.Proxy.Router.Size, router.MatchLabels(cr), cr.Status.Router.Version)
-		if err != nil {
-			return errors.Wrap(err, "get Router status")
-		}
-	}
-	cr.Status.Router = routerStatus
-
-	haproxyStatus := apiv1alpha1.StatefulAppStatus{}
-	if cr.HAProxyEnabled() && cr.Spec.MySQL.IsAsync() {
-		haproxyStatus, err = appStatus(ctx, r.Client, cr.Spec.Proxy.HAProxy.Size, haproxy.MatchLabels(cr), cr.Status.HAProxy.Version)
-		if err != nil {
-			return errors.Wrap(err, "get HAProxy status")
-		}
-	}
-	cr.Status.HAProxy = haproxyStatus
-
-	cr.Status.State = apiv1alpha1.StateInitializing
-	if cr.Spec.MySQL.IsAsync() {
-		if !cr.OrchestratorEnabled() || cr.Status.MySQL.State == cr.Status.Orchestrator.State {
-			cr.Status.State = cr.Status.MySQL.State
-		}
-		if cr.HAProxyEnabled() && cr.Status.HAProxy.State != apiv1alpha1.StateReady {
-			cr.Status.State = cr.Status.HAProxy.State
-		}
-	} else if cr.Spec.MySQL.IsGR() && cr.Status.MySQL.State == cr.Status.Router.State {
-		cr.Status.State = cr.Status.MySQL.State
-	}
-
-	if cr.Spec.MySQL.IsGR() {
-		cli, err := clientcmd.NewClient()
-		if err != nil {
-			return err
-		}
-
-		pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
-		if err != nil {
-			return errors.Wrap(err, "get pods")
-		}
-
-		var outb, errb bytes.Buffer
-		cmd := []string{"cat", "/var/lib/mysql/full-cluster-crash"}
-		fullClusterCrash := false
-		for _, pod := range pods {
-			err = cli.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false)
-			if err != nil {
-				if strings.Contains(errb.String(), "No such file or directory") {
-					continue
-				}
-				return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, outb.String(), errb.String())
-			}
-
-			fullClusterCrash = true
-		}
-
-		if fullClusterCrash {
-			cr.Status.State = apiv1alpha1.StateError
-			r.Recorder.Event(cr, "Warning", "FullClusterCrashDetected", "Full cluster crash detected")
-		}
-	}
-
-	cr.Status.Host, err = appHost(ctx, r.Client, cr)
-	if err != nil {
-		return errors.Wrap(err, "get app host")
-	}
-
-	loadBalancersReady, err := r.allLoadBalancersReady(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "check load balancers")
-	}
-	if !loadBalancersReady {
-		cr.Status.State = apiv1alpha1.StateInitializing
-	}
-
-	log.V(1).Info(
-		"Writing CR status",
-		"mysql", cr.Status.MySQL,
-		"orchestrator", cr.Status.Orchestrator,
-		"router", cr.Status.Router,
-		"host", cr.Status.Host,
-		"loadbalancers", loadBalancersReady,
-		"conditions", cr.Status.Conditions,
-		"state", cr.Status.State,
-	)
-
-	nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
-	return writeStatus(ctx, r.Client, nn, cr.Status)
-}
-
-func (r *PerconaServerMySQLReconciler) allLoadBalancersReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
-	opts := &client.ListOptions{Namespace: cr.Namespace}
-	svcList := &corev1.ServiceList{}
-	if err := r.Client.List(ctx, svcList, opts); err != nil {
-		return false, errors.Wrap(err, "list services")
-	}
-	for _, svc := range svcList.Items {
-		if svc.Spec.Type != corev1.ServiceTypeLoadBalancer {
-			continue
-		}
-		if svc.Status.LoadBalancer.Ingress == nil {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
-	var serviceName string
-	if cr.Spec.MySQL.IsGR() {
-		serviceName = router.ServiceName(cr)
-		if cr.Spec.Proxy.Router.Expose.Type != corev1.ServiceTypeLoadBalancer {
-			return serviceName + "." + cr.GetNamespace(), nil
-		}
-	}
-
-	if cr.Spec.MySQL.IsAsync() {
-		if cr.HAProxyEnabled() {
-			serviceName = haproxy.ServiceName(cr)
-			if cr.Spec.Proxy.HAProxy.Expose.Type != corev1.ServiceTypeLoadBalancer {
-				return serviceName + "." + cr.GetNamespace(), nil
-			}
-		} else {
-			return mysql.ServiceName(cr) + "." + cr.GetNamespace(), nil
-		}
-	}
-
-	svc := &corev1.Service{}
-	err := cl.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: serviceName}, svc)
-	if err != nil {
-		return "", errors.Wrapf(err, "get %s service", serviceName)
-	}
-
-	var host string
-	for _, i := range svc.Status.LoadBalancer.Ingress {
-		host = i.IP
-		if len(i.Hostname) > 0 {
-			host = i.Hostname
-		}
-	}
-
-	return host, nil
-}
-
-func appStatus(
-	ctx context.Context,
-	cl client.Reader,
-	size int32,
-	labels map[string]string,
-	version string,
-) (apiv1alpha1.StatefulAppStatus, error) {
-	status := apiv1alpha1.StatefulAppStatus{
-		Size:  size,
-		State: apiv1alpha1.StateInitializing,
-	}
-
-	pods, err := k8s.PodsByLabels(ctx, cl, labels)
-	if err != nil {
-		return status, errors.Wrap(err, "get pod list")
-	}
-
-	for i := range pods {
-		if k8s.IsPodReady(pods[i]) {
-			status.Ready++
-		}
-	}
-
-	if status.Ready == status.Size {
-		status.State = apiv1alpha1.StateReady
-	}
-
-	status.Version = version
-
-	return status, nil
-}
-
-func writeStatus(
-	ctx context.Context,
-	cl client.Client,
-	nn types.NamespacedName,
-	status apiv1alpha1.PerconaServerMySQLStatus,
-) error {
-	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
-		cr := &apiv1alpha1.PerconaServerMySQL{}
-		if err := cl.Get(ctx, nn, cr); err != nil {
-			return errors.Wrapf(err, "get %v", nn.String())
-		}
-
-		cr.Status = status
-		if err := cl.Status().Update(ctx, cr); err != nil {
-			return errors.Wrapf(err, "update %v", nn.String())
-		}
-
-		return nil
-	})
 }
 
 func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
@@ -1370,7 +975,7 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 		return errors.Wrap(err, "get operator password")
 	}
 
-	tm := topology.NewTopologyManagerExec(cr, r.Client, operatorPass)
+	tm := topology.NewTopologyManagerExec(cr, r.Client, r.ClientCmd, operatorPass)
 	topology, err := tm.Get(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to get topology")
@@ -1393,12 +998,12 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 			if err != nil {
 				return err
 			}
-			repDb, err := replicator.NewReplicatorExec(pod, apiv1alpha1.UserOperator, operatorPass, hostname)
+			repDb, err := replicator.NewReplicatorExec(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, hostname)
 			if err != nil {
 				return errors.Wrapf(err, "connect to replica %s", hostname)
 			}
 
-			if err := orchestrator.StopReplicationExec(gCtx, orcPod, hostname, mysql.DefaultPort); err != nil {
+			if err := orchestrator.StopReplicationExec(gCtx, r.ClientCmd, orcPod, hostname, mysql.DefaultPort); err != nil {
 				return errors.Wrapf(err, "stop replica %s", hostname)
 			}
 
@@ -1436,7 +1041,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 		return errors.Wrap(err, "get operator password")
 	}
 
-	tm := topology.NewTopologyManagerExec(cr, r.Client, operatorPass)
+	tm := topology.NewTopologyManagerExec(cr, r.Client, r.ClientCmd, operatorPass)
 	topology, err := tm.Get(ctx)
 	if err != nil {
 		return errors.Wrap(err, "get cluster topology")
@@ -1455,7 +1060,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 			if err != nil {
 				return err
 			}
-			db, err := replicator.NewReplicatorExec(pod, apiv1alpha1.UserOperator, operatorPass, hostname)
+			db, err := replicator.NewReplicatorExec(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, hostname)
 			if err != nil {
 				return errors.Wrapf(err, "get db connection to %s", hostname)
 			}
@@ -1466,7 +1071,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 				return errors.Wrapf(err, "change replication source on %s", hostname)
 			}
 
-			if err := orchestrator.StartReplicationExec(gCtx, orcPod, hostname, mysql.DefaultPort); err != nil {
+			if err := orchestrator.StartReplicationExec(gCtx, r.ClientCmd, orcPod, hostname, mysql.DefaultPort); err != nil {
 				return errors.Wrapf(err, "start replication on %s", hostname)
 			}
 
@@ -1492,7 +1097,7 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 	if err != nil {
 		return err
 	}
-	db, err := replicator.NewReplicatorExec(firstPod, apiv1alpha1.UserOperator, operatorPass, hostname)
+	db, err := replicator.NewReplicatorExec(firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, hostname)
 	if err != nil {
 		return errors.Wrapf(err, "get db connection to %s", hostname)
 	}
@@ -1513,7 +1118,7 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 		if err != nil {
 			return err
 		}
-		db, err := replicator.NewReplicatorExec(pod, apiv1alpha1.UserOperator, operatorPass, host)
+		db, err := replicator.NewReplicatorExec(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, host)
 		if err != nil {
 			return errors.Wrapf(err, "get db connection to %s", hostname)
 		}
@@ -1549,7 +1154,7 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 	if err != nil {
 		return err
 	}
-	db, err = replicator.NewReplicatorExec(primPod, apiv1alpha1.UserOperator, operatorPass, primary)
+	db, err = replicator.NewReplicatorExec(primPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, primary)
 	if err != nil {
 		return errors.Wrapf(err, "get db connection to %s", hostname)
 	}
@@ -1573,7 +1178,7 @@ func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Conte
 	return nil
 }
 
-func getMySQLPod(ctx context.Context, cl client.Reader, cr *v1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
+func getMySQLPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
 	pod := &corev1.Pod{}
 
 	nn := types.NamespacedName{Namespace: cr.Namespace, Name: mysql.PodName(cr, idx)}
@@ -1584,7 +1189,7 @@ func getMySQLPod(ctx context.Context, cl client.Reader, cr *v1alpha1.PerconaServ
 	return pod, nil
 }
 
-func getOrcPod(ctx context.Context, cl client.Reader, cr *v1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
+func getOrcPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
 	pod := &corev1.Pod{}
 
 	nn := types.NamespacedName{Namespace: cr.Namespace, Name: orchestrator.PodName(cr, idx)}

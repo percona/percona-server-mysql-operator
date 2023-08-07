@@ -121,6 +121,7 @@ get_cr() {
 	local name_suffix=$1
 
 	yq eval "$(printf '.metadata.name="%s"' "${test_name}${name_suffix:+-$name_suffix}")" "${DEPLOY_DIR}/cr.yaml" \
+		| yq eval "$(printf '.spec.initImage="%s"' "${IMAGE}")" - \
 		| yq eval '.spec.secretsName="test-secrets"' - \
 		| yq eval '.spec.sslSecretName="test-ssl"' - \
 		| yq eval '.spec.upgradeOptions.apply="disabled"' - \
@@ -458,6 +459,43 @@ verify_certificate_sans() {
 	echo "${expected_sans}" | jq '.' >"${want}"
 
 	diff "${have}" "${want}"
+}
+
+check_passwords_leak() {
+
+	secrets=$(kubectl get secrets -o json | jq -r '.items[].data | to_entries | .[] | select(.key | (endswith(".crt") or endswith(".key") or endswith(".pub") or endswith(".pem") or endswith(".p12")) | not) | .value')
+
+	passwords="$(for i in $secrets; do base64 -d <<< $i; echo; done) $secrets"
+	pods=$(kubectl -n "${NAMESPACE}" get pods -o name | awk -F "/" '{print $2}')
+
+	collect_logs() {
+		NS=$1
+		for p in $pods; do
+			containers=$(kubectl -n "$NS" get pod $p -o jsonpath='{.spec.containers[*].name}')
+			for c in $containers; do
+				# temporary, because of: https://jira.percona.com/browse/PMM-8357
+				if [[ ${c} =~ "pmm" ]]; then
+					continue
+				fi
+				kubectl -n "$NS" logs $p -c $c > ${TEMP_DIR}/logs_output-$p-$c.txt
+				echo logs saved in: ${TEMP_DIR}/logs_output-$p-$c.txt
+				for pass in $passwords; do
+					count=$(grep -c --fixed-strings -- "$pass" ${TEMP_DIR}/logs_output-$p-$c.txt || :)
+					if [[ $count != 0 ]]; then
+						echo leaked passwords are found in log ${TEMP_DIR}/logs_output-$p-$c.txt
+						false
+					fi
+				done
+			done
+			echo
+		done
+	}
+
+	collect_logs $NAMESPACE
+	if [ -n "$OPERATOR_NS" ]; then
+		pods=$(kubectl -n "${OPERATOR_NS}" get pods -o name | awk -F "/" '{print $2}')
+		collect_logs $OPERATOR_NS
+	fi
 }
 
 deploy_chaos_mesh() {

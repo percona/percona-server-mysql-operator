@@ -10,7 +10,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -19,11 +18,6 @@ import (
 
 func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("Crash recovery")
-
-	cli, err := clientcmd.NewClient()
-	if err != nil {
-		return err
-	}
 
 	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
 	if err != nil {
@@ -50,7 +44,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 	cmd := []string{"cat", "/var/lib/mysql/full-cluster-crash"}
 
 	for _, pod := range pods {
-		err = cli.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false)
+		err = r.ClientCmd.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false)
 		if err != nil {
 			if strings.Contains(errb.String(), "No such file or directory") {
 				continue
@@ -71,7 +65,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 		podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
 		podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
 
-		mysh, err := mysqlsh.NewWithExec(&pod, podUri)
+		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, &pod, podUri)
 		if err != nil {
 			return err
 		}
@@ -103,11 +97,6 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 func (r *PerconaServerMySQLReconciler) cleanupFullClusterCrashFile(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
-	cli, err := clientcmd.NewClient()
-	if err != nil {
-		return err
-	}
-
 	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
 	if err != nil {
 		return errors.Wrap(err, "get pods")
@@ -116,7 +105,7 @@ func (r *PerconaServerMySQLReconciler) cleanupFullClusterCrashFile(ctx context.C
 	var outb, errb bytes.Buffer
 	cmd := []string{"rm", "/var/lib/mysql/full-cluster-crash"}
 	for _, pod := range pods {
-		err = cli.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false)
+		err = r.ClientCmd.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false)
 		if err != nil {
 			if strings.Contains(errb.String(), "No such file or directory") {
 				continue

@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql/topology"
@@ -206,12 +207,16 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to get namespace")
 	}
+	cliCmd, err := clientcmd.NewClient()
+	if err != nil {
+		return "", nil, errors.Wrap(err, "failed to create clientcmd")
+	}
 	tm, err := topology.NewTopologyManager(apiv1alpha1.ClusterTypeAsync, &apiv1alpha1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      os.Getenv("CLUSTER_NAME"),
 			Namespace: ns,
 		},
-	}, nil, operatorPass, sets.List(peers)...)
+	}, nil, cliCmd, operatorPass, sets.List(peers)...)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to create topology manager")
 	}

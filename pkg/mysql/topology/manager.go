@@ -4,6 +4,7 @@ import (
 	"context"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
@@ -23,10 +24,11 @@ type topologyManager struct {
 	clusterType  apiv1alpha1.ClusterType
 	cluster      *apiv1alpha1.PerconaServerMySQL
 	cl           client.Reader
+	cliCmd       clientcmd.Client
 	hosts        []string
 }
 
-func NewTopologyManager(clusterType apiv1alpha1.ClusterType, cluster *apiv1alpha1.PerconaServerMySQL, cl client.Reader, operatorPass string, hosts ...string) (Manager, error) {
+func NewTopologyManager(clusterType apiv1alpha1.ClusterType, cluster *apiv1alpha1.PerconaServerMySQL, cl client.Reader, cliCmd clientcmd.Client, operatorPass string, hosts ...string) (Manager, error) {
 	var err error
 	if cl == nil {
 		cl, err = k8s.NewNamespacedClient(cluster.Namespace)
@@ -39,6 +41,7 @@ func NewTopologyManager(clusterType apiv1alpha1.ClusterType, cluster *apiv1alpha
 		clusterType:  clusterType,
 		cluster:      cluster,
 		cl:           cl,
+		cliCmd:       cliCmd,
 		hosts:        hosts,
 	}, nil
 }
@@ -61,7 +64,7 @@ func (m *topologyManager) Get(ctx context.Context) (Topology, error) {
 		if k8s.GetExperimetalTopologyOption() {
 			return experimentalGetAsync(ctx, m, m.hosts...)
 		}
-		return getAsync(ctx, m.cluster, m.cl)
+		return getAsync(ctx, m.cluster, m.cliCmd, m.cl)
 	default:
 		return Topology{}, errors.New("unknown cluster type")
 	}

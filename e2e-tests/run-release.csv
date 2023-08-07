@@ -4,6 +4,7 @@ config
 config-router
 demand-backup
 gr-demand-backup
+gr-haproxy
 gr-ignore-annotations
 gr-init-deploy
 gr-one-pod
