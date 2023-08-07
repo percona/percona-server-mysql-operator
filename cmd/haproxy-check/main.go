@@ -14,7 +14,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql/topology"
@@ -141,16 +140,12 @@ func getTopology(ctx context.Context, operatorPass, fqdn string) (topology.Topol
 	if err != nil {
 		return topology.Topology{}, errors.Wrap(err, "failed to get namespace")
 	}
-	cliCmd, err := clientcmd.NewClient()
-	if err != nil {
-		return topology.Topology{}, err
-	}
 	tm, err := topology.NewTopologyManager(apiv1alpha1.ClusterTypeAsync, &apiv1alpha1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      os.Getenv("CLUSTER_NAME"),
 			Namespace: ns,
 		},
-	}, nil, cliCmd, operatorPass, fqdn)
+	}, operatorPass, fqdn).DisableOrchestrator(k8s.GetExperimetalTopologyOption()).Manager()
 	if err != nil {
 		return topology.Topology{}, errors.Wrap(err, "failed to create topology manager")
 	}

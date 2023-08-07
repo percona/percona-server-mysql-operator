@@ -18,7 +18,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
-func experimentalGetAsync(ctx context.Context, m Manager, hosts ...string) (Topology, error) {
+func getAsyncWithoutOrchestrator(ctx context.Context, m Manager, hosts ...string) (Topology, error) {
 	t := new(Topology)
 	for _, host := range hosts {
 		if err := recursiveAsyncDiscover(ctx, m, host, replicator.ReplicationStatusNotInitiated, t); err != nil {

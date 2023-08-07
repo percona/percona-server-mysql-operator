@@ -80,7 +80,7 @@ func (m *topologyManagerExec) Get(ctx context.Context) (Topology, error) {
 		}
 	case apiv1alpha1.ClusterTypeAsync:
 		if k8s.GetExperimetalTopologyOption() {
-			return experimentalGetAsync(ctx, m, mysql.ServiceName(m.cluster))
+			return getAsyncWithoutOrchestrator(ctx, m, mysql.ServiceName(m.cluster))
 		}
 		return getAsync(ctx, m.cluster, m.cliCmd, m.cl)
 	default:

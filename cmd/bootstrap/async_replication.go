@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql/topology"
@@ -72,12 +71,6 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 		return errors.Wrap(err, "get pod IP")
 	}
 	log.Printf("PodIP: %s", podIp)
-
-	primaryIp, err := getPodIP(primary)
-	if err != nil {
-		return errors.Wrap(err, "get primary IP")
-	}
-	log.Printf("PrimaryIP: %s", primaryIp)
 
 	donor, err := selectDonor(ctx, fqdn, primary, replicas)
 	if err != nil {
@@ -207,16 +200,12 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to get namespace")
 	}
-	cliCmd, err := clientcmd.NewClient()
-	if err != nil {
-		return "", nil, errors.Wrap(err, "failed to create clientcmd")
-	}
 	tm, err := topology.NewTopologyManager(apiv1alpha1.ClusterTypeAsync, &apiv1alpha1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      os.Getenv("CLUSTER_NAME"),
 			Namespace: ns,
 		},
-	}, nil, cliCmd, operatorPass, sets.List(peers)...)
+	}, operatorPass, sets.List(peers)...).DisableOrchestrator(true).Manager()
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to create topology manager")
 	}

@@ -2,7 +2,6 @@ package mysql
 
 import (
 	"fmt"
-	"os"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -463,10 +462,6 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		{
 			Name:  "CLUSTER_NAME",
 			Value: string(cr.Name),
-		},
-		{
-			Name:  k8s.ExperimentalTopologyEnvVar,
-			Value: os.Getenv(k8s.ExperimentalTopologyEnvVar),
 		},
 	}
 	env = append(env, spec.Env...)
