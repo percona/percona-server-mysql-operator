@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 120
 commands:
   - script: |-
       set -o errexit
@@ -9,33 +8,23 @@ commands:
       source ../../functions
 
       initialPrimary=$(get_primary_from_haproxy ${test_name}-haproxy-0)
-      echo "AAA: $initialPrimary"
 
       # Upgrade cluster
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
       	--type json \
       	-p '[{"op": "replace", "path": "/spec/mysql/image", "value": "percona/percona-server:8.0.28-20"}]'
 
-      echo "AAA - patched CR and waiting for pods to be ready"
-
       wait_cluster_consistency_async "${test_name}" "3" "3"
-
-      echo "AAA Waiting done"
 
       pods=$(kubectl get pods -n "${NAMESPACE}" --sort-by=.status.startTime --no-headers --selector=app.kubernetes.io/component=mysql -ojson | jq  --raw-output '.items[].metadata.name')
 
-      echo 'AAA got sorted pods: $pods'
-
       lastRestarted=$(echo $pods | awk '{print $NF}')
-      echo "AAA last restarted: $lastRestarted" 
 
       if [ "$lastRestarted" == "$initialPrimary" ]; then
-        echo "aaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         exit 0
       fi
 
-      echo "NNNNNNNNNNNNNOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO"
       echo "last restarted pod is not initial primary"
       exit 1
-
+    timeout: 480
 

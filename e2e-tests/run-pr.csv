@@ -21,4 +21,5 @@ service-per-pod
 sidecars
 tls-cert-manager
 users
+smart-update
 version-service
