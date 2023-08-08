@@ -259,20 +259,6 @@ func (d *dbImplExec) DumbQuery(ctx context.Context) error {
 	return errors.Wrap(err, "SELECT 1")
 }
 
-func (d *dbImplExec) SetSemiSyncSource(ctx context.Context, enabled bool) error {
-	var errb, outb bytes.Buffer
-	q := fmt.Sprintf("SET GLOBAL rpl_semi_sync_master_enabled=%t", enabled)
-	err := d.exec(ctx, q, &outb, &errb)
-	return errors.Wrap(err, "set rpl_semi_sync_master_enabled")
-}
-
-func (d *dbImplExec) SetSemiSyncSize(ctx context.Context, size int) error {
-	var errb, outb bytes.Buffer
-	q := fmt.Sprintf("SET GLOBAL rpl_semi_sync_master_wait_for_slave_count=%d", size)
-	err := d.exec(ctx, q, &outb, &errb)
-	return errors.Wrap(err, "set rpl_semi_sync_master_wait_for_slave_count")
-}
-
 func (d *dbImplExec) GetGlobal(ctx context.Context, variable string) (interface{}, error) {
 	rows := []*struct {
 		Val interface{} `csv:"val"`
