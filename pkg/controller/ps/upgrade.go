@@ -2,6 +2,7 @@ package ps
 
 import (
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -92,14 +93,17 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 			continue
 		}
 
-		log.Info("apply changes to secondary pod", "pod name", pod.Name)
+		log.Info("apply changes to secondary pod", "podName", pod.Name)
 
 		if pod.ObjectMeta.Labels[controllerRevisionHash] == sts.Status.UpdateRevision {
-			log.Info("pod updated updated", "pod name", pod.Name)
+			log.Info("pod updated updated", "podName", pod.Name)
 			continue
 		}
 
-		return r.Client.Delete(ctx, &pod)
+		err = r.Client.Delete(ctx, &pod)
+		// We need to wait to allow sts.Status.ReadyReplicas to be updated after pod deletion
+		time.Sleep(5 * time.Second)
+		return err
 	}
 
 	log.Info("apply changes to primary pod", "pod name", primPod.Name)
@@ -110,7 +114,10 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		return nil
 	}
 
-	return r.Client.Delete(ctx, primPod)
+	err = r.Client.Delete(ctx, primPod)
+	// We need to wait to allow sts.Status.ReadyReplicas to be updated after pod deletion
+	time.Sleep(5 * time.Second)
+	return err
 }
 
 func stsChanged(sts *appsv1.StatefulSet, pods []corev1.Pod) bool {
