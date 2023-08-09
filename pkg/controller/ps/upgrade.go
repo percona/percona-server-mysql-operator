@@ -10,6 +10,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	k8sretry "k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -100,10 +101,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 			continue
 		}
 
-		err = r.Client.Delete(ctx, &pod)
-		// We need to wait to allow sts.Status.ReadyReplicas to be updated after pod deletion
-		time.Sleep(5 * time.Second)
-		return err
+		return deletePod(ctx, r.Client, &pod, currentSet)
 	}
 
 	log.Info("apply changes to primary pod", "pod", primPod.Name)
@@ -114,10 +112,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		return nil
 	}
 
-	err = r.Client.Delete(ctx, primPod)
-	// We need to wait to allow sts.Status.ReadyReplicas to be updated after pod deletion
-	time.Sleep(5 * time.Second)
-	return err
+	return deletePod(ctx, r.Client, primPod, currentSet)
 }
 
 func stsChanged(sts *appsv1.StatefulSet, pods []corev1.Pod) bool {
@@ -153,4 +148,38 @@ func (r *PerconaServerMySQLReconciler) isBackupRunning(ctx context.Context, cr *
 	}
 
 	return false, nil
+}
+
+// deletePod deletes the pod and waits for sts.Status.ReadyReplicas to be updated accordingly
+func deletePod(ctx context.Context, cli client.Client, pod *corev1.Pod, sts *appsv1.StatefulSet) error {
+	err := cli.Delete(ctx, pod)
+	if err != nil {
+		return err
+	}
+
+	retriable := func(err error) bool {
+		return err != nil
+	}
+
+	retry := k8sretry.DefaultRetry
+	retry.Duration = 3 * time.Second
+	retry.Steps = 10
+
+	return k8sretry.OnError(retry, retriable, func() error {
+		s := &appsv1.StatefulSet{}
+		err := cli.Get(ctx, types.NamespacedName{
+			Name:      sts.Name,
+			Namespace: sts.Namespace,
+		}, s)
+		if err != nil {
+			return errors.Wrap(err, "failed to get sfs")
+		}
+
+		if s.Status.ReadyReplicas == s.Status.Replicas {
+			return errors.New("sts.Status.readyReplicas not updated")
+
+		}
+
+		return nil
+	})
 }
