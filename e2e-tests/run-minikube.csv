@@ -12,7 +12,7 @@ haproxy
 init-deploy
 one-pod
 sidecars
+smart-update
 tls-cert-manager
 users
 version-service
-smart-update
