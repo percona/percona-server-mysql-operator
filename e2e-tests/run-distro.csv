@@ -12,6 +12,7 @@ haproxy
 init-deploy
 monitoring
 one-pod
+operator-self-healing
 scaling
 service-per-pod
 sidecars

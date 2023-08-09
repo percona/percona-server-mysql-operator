@@ -50,7 +50,7 @@ deploy_pmm_server() {
 			--set platform="${platform}" \
 			"https://percona-charts.storage.googleapis.com/pmm-server-${PMM_SERVER_VERSION}.tgz"
 	fi
-	SERVICE="postgres"
+	local SERVICE="postgres"
 	until kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "pgrep -x $SERVICE >/dev/null"; do
 		echo "Retry $retry"
 		sleep 5
@@ -63,13 +63,13 @@ deploy_pmm_server() {
 }
 
 get_pmm_api_key() {
-	ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "printenv | grep ADMIN_PASSWORD | cut -d '=' -f2")
+	local ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "printenv | grep ADMIN_PASSWORD | cut -d '=' -f2")
 	echo $(curl --insecure -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://admin:$ADMIN_PASSWORD@"$(get_service_ip monitoring-service)"/graph/api/auth/keys" | jq .key)
 }
 
 deploy_minio() {
-	accessKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
-	secretKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
+	local accessKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
+	local secretKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
 
 	helm uninstall -n "${NAMESPACE}" minio-service || :
 	helm repo remove minio || :
@@ -299,6 +299,7 @@ get_mysql_users() {
 
 get_service_ip() {
 	local service=$1
+
 	while (kubectl get service/$service -n "${NAMESPACE}" -o 'jsonpath={.spec.type}' 2>&1 || :) | grep -q NotFound; do
 		sleep 1
 	done
@@ -379,16 +380,43 @@ wait_pod() {
 	set -o xtrace
 }
 
-check_auto_tuning() {
-	RAM_SIZE=$1
-	RDS_MEM_INSTANCE=12582880
-	CUSTOM_INNODB_SIZE=$2
-	CUSTOM_CONNECTIONS=$3
+wait_deployment() {
+	local name=$1
+	local target_namespace=${2:-"$namespace"}
 
-	INNODB_SIZE=$(run_mysql \
+	sleep 10
+	set +o xtrace
+	retry=0
+	echo -n $name
+	until [ -n "$(kubectl -n ${target_namespace} get deployment $name -o jsonpath='{.status.replicas}')" \
+		-a "$(kubectl -n ${target_namespace} get deployment $name -o jsonpath='{.status.replicas}')" \
+		== "$(kubectl -n ${target_namespace} get deployment $name -o jsonpath='{.status.readyReplicas}')" ]; do
+		sleep 1
+		echo -n .
+		let retry+=1
+		if [ $retry -ge 360 ]; then
+			kubectl logs $(get_operator_pod) -c operator \
+				| grep -v 'level=info' \
+				| grep -v 'level=debug' \
+				| tail -100
+			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+			exit 1
+		fi
+	done
+	echo
+	set -o xtrace
+}
+
+check_auto_tuning() {
+	local RAM_SIZE=$1
+	local RDS_MEM_INSTANCE=12582880
+	local CUSTOM_INNODB_SIZE=$2
+	local CUSTOM_CONNECTIONS=$3
+
+	local INNODB_SIZE=$(run_mysql \
 		'SELECT @@innodb_buffer_pool_size;' \
 		"-h $(get_haproxy_svc "$(get_cluster_name)") -uroot -proot_password")
-	CONNECTIONS=$(run_mysql \
+	local CONNECTIONS=$(run_mysql \
 		'SELECT @@max_connections;' \
 		"-h $(get_haproxy_svc "$(get_cluster_name)") -uroot -proot_password")
 
@@ -451,9 +479,8 @@ get_primary_from_haproxy() {
 verify_certificate_sans() {
 	local certificate=$1
 	local expected_sans=$2
-
-	have=$(mktemp)
-	want=$(mktemp)
+	local have=$(mktemp)
+	local want=$(mktemp)
 
 	kubectl -n "${NAMESPACE}" get certificate "${certificate}" -o jsonpath='{.spec.dnsNames}' | jq '.' >"${have}"
 	echo "${expected_sans}" | jq '.' >"${want}"
@@ -462,21 +489,19 @@ verify_certificate_sans() {
 }
 
 check_passwords_leak() {
-
-	secrets=$(kubectl get secrets -o json | jq -r '.items[].data | to_entries | .[] | select(.key | (endswith(".crt") or endswith(".key") or endswith(".pub") or endswith(".pem") or endswith(".p12")) | not) | .value')
-
-	passwords="$(for i in $secrets; do base64 -d <<< $i; echo; done) $secrets"
-	pods=$(kubectl -n "${NAMESPACE}" get pods -o name | awk -F "/" '{print $2}')
+	local secrets=$(kubectl get secrets -o json | jq -r '.items[].data | to_entries | .[] | select(.key | (endswith(".crt") or endswith(".key") or endswith(".pub") or endswith(".pem") or endswith(".p12")) | not) | .value')
+	local passwords="$(for i in $secrets; do base64 -d <<< $i; echo; done) $secrets"
+	local pods=$(kubectl -n "${NAMESPACE}" get pods -o name | awk -F "/" '{print $2}')
 
 	collect_logs() {
 		NS=$1
 		for p in $pods; do
-			containers=$(kubectl -n "$NS" get pod $p -o jsonpath='{.spec.containers[*].name}')
+			local containers=$(kubectl -n "$NS" get pod $p -o jsonpath='{.spec.containers[*].name}')
 			for c in $containers; do
 				kubectl -n "$NS" logs $p -c $c >${TEMP_DIR}/logs_output-$p-$c.txt
 				echo logs saved in: ${TEMP_DIR}/logs_output-$p-$c.txt
 				for pass in $passwords; do
-					count=$(grep -c --fixed-strings -- "$pass" ${TEMP_DIR}/logs_output-$p-$c.txt || :)
+					local count=$(grep -c --fixed-strings -- "$pass" ${TEMP_DIR}/logs_output-$p-$c.txt || :)
 					if [[ $count != 0 ]]; then
 						echo leaked passwords are found in log ${TEMP_DIR}/logs_output-$p-$c.txt
 						false
@@ -489,7 +514,77 @@ check_passwords_leak() {
 
 	collect_logs $NAMESPACE
 	if [ -n "$OPERATOR_NS" ]; then
-		pods=$(kubectl -n "${OPERATOR_NS}" get pods -o name | awk -F "/" '{print $2}')
+		local pods=$(kubectl -n "${OPERATOR_NS}" get pods -o name | awk -F "/" '{print $2}')
 		collect_logs $OPERATOR_NS
 	fi
+}
+
+deploy_chaos_mesh() {
+	destroy_chaos_mesh
+
+	helm repo add chaos-mesh https://charts.chaos-mesh.org
+	helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 2.5.1
+	sleep 10
+}
+
+destroy_chaos_mesh() {
+	local chaos_mesh_ns=$(helm list --all-namespaces --filter chaos-mesh | tail -n1 | awk -F' ' '{print $2}' | sed 's/NAMESPACE//')
+
+	for i in $(kubectl api-resources | grep chaos-mesh | awk '{print $1}'); do timeout 30 kubectl delete ${i} --all --all-namespaces || :; done
+	if [ -n "${chaos_mesh_ns}" ]; then
+		helm uninstall chaos-mesh --namespace ${chaos_mesh_ns} || :
+	fi
+	timeout 30 kubectl delete crd $(kubectl get crd | grep 'chaos-mesh.org' | awk '{print $1}') || :
+	timeout 30 kubectl delete clusterrolebinding $(kubectl get clusterrolebinding | grep 'chaos-mesh' | awk '{print $1}') || :
+	timeout 30 kubectl delete clusterrole $(kubectl get clusterrole | grep 'chaos-mesh' | awk '{print $1}') || :
+	timeout 30 kubectl delete MutatingWebhookConfiguration $(kubectl get MutatingWebhookConfiguration | grep 'chaos-mesh' | awk '{print $1}') || :
+	timeout 30 kubectl delete ValidatingWebhookConfiguration $(kubectl get ValidatingWebhookConfiguration | grep 'chaos-mesh' | awk '{print $1}') || :
+	timeout 30 kubectl delete ValidatingWebhookConfiguration $(kubectl get ValidatingWebhookConfiguration | grep 'validate-auth' | awk '{print $1}') || :
+}
+
+kill_pods() {
+	local ns=$1
+	local selector=$2
+	local pod_label=$3
+	local label_value=$4
+
+	if [ "${selector}" == "pod" ]; then
+		yq eval '
+			.metadata.name = "chaos-pod-kill-'${RANDOM}'" |
+			del(.spec.selector.pods.test-namespace) |
+			.spec.selector.pods.'${ns}'[0] = "'${pod_label}'"' ${TESTS_CONFIG_DIR}/chaos-pod-kill.yml \
+			| kubectl apply --namespace ${ns} -f -
+	elif [ "${selector}" == "label" ]; then
+		yq eval '
+			.metadata.name = "chaos-kill-label-'${RANDOM}'" |
+			.spec.mode = "all" |
+			del(.spec.selector.pods) |
+			.spec.selector.labelSelectors."'${pod_label}'" = "'${label_value}'"' ${TESTS_CONFIG_DIR}/chaos-pod-kill.yml \
+			| kubectl apply --namespace ${ns} -f -
+	fi
+	sleep 5
+}
+
+failure_pod() {
+	local ns=$1
+	local pod=$2
+
+	yq eval '
+        .metadata.name = "chaos-pod-failure-'${RANDOM}'" |
+        del(.spec.selector.pods.test-namespace) |
+        .spec.selector.pods.'${ns}'[0] = "'${pod}'"' ${TESTS_CONFIG_DIR}/chaos-pod-failure.yml \
+		| kubectl apply --namespace ${ns} -f -
+	sleep 5
+}
+
+network_loss() {
+	local ns=$1
+	local pod=$2
+
+	yq eval '
+        .metadata.name = "chaos-pod-network-loss-'${RANDOM}'" |
+        del(.spec.selector.pods.test-namespace) |
+        .spec.selector.pods.'${ns}'[0] = "'${pod}'"' ${TESTS_CONFIG_DIR}/chaos-network-loss.yml \
+		| kubectl apply --namespace ${ns} -f -
+	sleep 5
 }

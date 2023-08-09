@@ -11,6 +11,7 @@ gr-tls-cert-manager
 haproxy
 init-deploy
 one-pod
+operator-self-healing
 sidecars
 tls-cert-manager
 users
