@@ -11,15 +11,7 @@ data:
   monitor: "success"
   operator: "success"
   orchestrator: "success"
-  replication: "success"
   xtrabackup: "success"
----
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: 04-check-replication
-data:
-  replicating: "2"
 ---
 apiVersion: apps/v1
 kind: StatefulSet

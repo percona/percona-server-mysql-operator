@@ -13,11 +13,12 @@ status:
   readyReplicas: 3
 ---
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   generation: 1
-  name: gr-users-haproxy
+  name: gr-users-router
 status:
   observedGeneration: 1
-  replicas: 3
   readyReplicas: 3
+  replicas: 3
+  updatedReplicas: 3
