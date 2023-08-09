@@ -93,10 +93,10 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 			continue
 		}
 
-		log.Info("apply changes to secondary pod", "podName", pod.Name)
+		log.Info("apply changes to secondary pod", "pod", pod.Name)
 
 		if pod.ObjectMeta.Labels[controllerRevisionHash] == sts.Status.UpdateRevision {
-			log.Info("pod updated updated", "podName", pod.Name)
+			log.Info("pod updated updated", "pod", pod.Name)
 			continue
 		}
 
@@ -106,7 +106,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		return err
 	}
 
-	log.Info("apply changes to primary pod", "pod name", primPod.Name)
+	log.Info("apply changes to primary pod", "pod", primPod.Name)
 
 	if primPod.ObjectMeta.Labels[controllerRevisionHash] == sts.Status.UpdateRevision {
 		log.Info("primary pod updated updated", "primPod name", primPod.Name)
