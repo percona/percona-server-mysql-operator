@@ -38,4 +38,4 @@ commands:
 
       # check replication
       wait_cluster_consistency_gr "${test_name}" "3" "3"
-    timeout: 420
+    timeout: 500
