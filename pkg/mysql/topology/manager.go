@@ -4,11 +4,8 @@ import (
 	"context"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
-	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/pkg/errors"
 )
@@ -23,8 +20,6 @@ type topologyManager struct {
 	operatorPass    string
 	clusterType     apiv1alpha1.ClusterType
 	cluster         *apiv1alpha1.PerconaServerMySQL
-	cl              client.Reader
-	cliCmd          clientcmd.Client
 	hosts           []string
 	useOrchestrator bool
 }
@@ -44,30 +39,7 @@ func (m *topologyManager) DisableOrchestrator(disable bool) *topologyManager {
 	return m
 }
 
-func (m *topologyManager) WithClientCmd(cliCmd clientcmd.Client) *topologyManager {
-	m.cliCmd = cliCmd
-	return m
-}
-
-func (m *topologyManager) WithClient(cl client.Reader) *topologyManager {
-	m.cl = cl
-	return m
-}
-
 func (m *topologyManager) Manager() (Manager, error) {
-	var err error
-	if m.cliCmd == nil {
-		m.cliCmd, err = clientcmd.NewClient()
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to create clientcmd")
-		}
-	}
-	if m.cl == nil {
-		m.cl, err = k8s.NewNamespacedClient(m.cluster.Namespace)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to create client")
-		}
-	}
 	return m, nil
 }
 
@@ -89,7 +61,7 @@ func (m *topologyManager) Get(ctx context.Context) (Topology, error) {
 		if !m.useOrchestrator {
 			return getAsyncWithoutOrchestrator(ctx, m, m.hosts...)
 		}
-		return getAsync(ctx, m.cluster, m.cliCmd, m.cl)
+		return getAsync(ctx, m.cluster, nil, nil)
 	default:
 		return Topology{}, errors.New("unknown cluster type")
 	}

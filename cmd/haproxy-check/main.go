@@ -2,7 +2,8 @@ package main
 
 import (
 	"context"
-	"log"
+	"fmt"
+	//"log"
 	"net"
 	"os"
 	"os/signal"
@@ -12,12 +13,13 @@ import (
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql/topology"
-	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
 const (
@@ -25,55 +27,57 @@ const (
 	backendNameReplica = "mysql-replicas"
 )
 
+var log = logf.Log.WithName("haproxy-check")
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
 
+	opts := zap.Options{
+		Development: true,
+		DestWriter:  os.Stdout,
+	}
+	logf.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
 	args := os.Args[1:]
 	if len(args) < 3 {
-		log.Fatalln("Too few arguments")
+		log.Error(errors.New("too few arguments"), "failed to validate arguments")
+		os.Exit(1)
 	}
 	host := args[2]
 
 	backendName, ok := os.LookupEnv("HAPROXY_PROXY_NAME")
 	if !ok {
-		log.Fatalln("Failed to get backend name from `HAPROXY_PROXY_NAME`")
+		log.Error(errors.New("backend name is not set"), "failed to get backend name from `HAPROXY_PROXY_NAME`")
+		os.Exit(1)
 	}
 	if backendName != backendNamePrimary && backendName != backendNameReplica {
-		log.Fatalln("HAProxy backend name from `HAPROXY_PROXY_NAME` is unknown: " + backendName)
+		log.Error(errors.Errorf("backend name is unknown: %s", backendName), "failed to get backend name from `HAPROXY_PROXY_NAME`")
+		os.Exit(1)
 	}
 
 	fqdn, err := getHostFQDN(host)
 	if err != nil {
-		log.Fatalln("Failed to get MySQL node FQDN: ", err.Error())
+		log.Error(err, "failed to get MySQL node FQDN")
+		os.Exit(1)
 	}
 
 	operatorPass, err := getSecret(string(apiv1alpha1.UserOperator))
 	if err != nil {
-		log.Fatalln("Failed to get secret:", err.Error())
-	}
-	t, err := getTopology(ctx, operatorPass, fqdn)
-	if err != nil {
-		log.Fatalln("Failed to get topology:", err.Error())
-	}
-	ioRunning, sqlRunning, err := replicationStatus(ctx, fqdn, operatorPass)
-	if err != nil {
-		log.Fatalln("Failed to get replication status:", err.Error())
-	}
-	readOnly, err := readOnly(ctx, fqdn, operatorPass)
-	if err != nil {
-		log.Fatalf("Failed to check if host is readonly: %s\n", host)
+		log.Error(err, "failed to get operator password")
+		os.Exit(1)
 	}
 
-	log.Printf("MySQL node %s:%d\n", fqdn, mysql.DefaultAdminPort)
-	log.Printf("read_only: %t\n", readOnly)
-	log.Printf("Replica_IO_Running: %t\n", ioRunning)
-	log.Printf("Replica_SQL_Running: %t\n", sqlRunning)
+	t, err := getTopology(ctx, operatorPass, fqdn, host)
+	if err != nil {
+		log.Error(err, "failed to get topology")
+		os.Exit(1)
+	}
 
 	if (t.IsPrimary(fqdn) && backendName == backendNamePrimary) || (t.HasReplica(fqdn) && backendName == backendNameReplica) {
-		log.Printf("MySQL node %s:%d for backend %s is ok\n", fqdn, mysql.DefaultAdminPort, backendName)
+		log.Info(fmt.Sprintf("MySQL node %s:%d for backend %s is ok", fqdn, mysql.DefaultAdminPort, backendName))
 	} else {
-		log.Printf("MySQL node %s:%d for backend %s is not ok\n", fqdn, mysql.DefaultAdminPort, backendName)
+		log.Info(fmt.Sprintf("MySQL node %s:%d for backend %s is not ok", fqdn, mysql.DefaultAdminPort, backendName))
 		os.Exit(1)
 	}
 }
@@ -94,37 +98,6 @@ func getHostFQDN(addr string) (string, error) {
 	return fqdn, nil
 }
 
-func readOnly(ctx context.Context, host, rootPass string) (bool, error) {
-	db, err := replicator.NewReplicator(ctx, apiv1alpha1.UserOperator,
-		rootPass,
-		host,
-		mysql.DefaultAdminPort)
-	if err != nil {
-		return false, errors.Wrapf(err, "connect to %v", host)
-	}
-	defer db.Close()
-	return db.IsReadonly(ctx)
-}
-
-func replicationStatus(ctx context.Context, host, rootPass string) (bool, bool, error) {
-	db, err := replicator.NewReplicator(ctx, apiv1alpha1.UserOperator,
-		rootPass,
-		host,
-		mysql.DefaultAdminPort)
-	if err != nil {
-		return false, false, errors.Wrapf(err, "connect to %v", host)
-	}
-	defer db.Close()
-
-	status, err := db.ShowReplicaStatus(ctx)
-	if err != nil {
-		return false, false, errors.Wrap(err, "get replica status")
-	}
-	ioRunning := status["Replica_IO_Running"]
-	sqlRunning := status["Replica_SQL_Running"]
-	return ioRunning == "Yes", sqlRunning == "Yes", nil
-}
-
 func getSecret(username string) (string, error) {
 	path := filepath.Join(mysql.CredsMountPath, username)
 	sBytes, err := os.ReadFile(path)
@@ -135,19 +108,72 @@ func getSecret(username string) (string, error) {
 	return strings.TrimSpace(string(sBytes)), nil
 }
 
-func getTopology(ctx context.Context, operatorPass, fqdn string) (topology.Topology, error) {
+func getTopology(ctx context.Context, operatorPass, fqdn, host string) (topology.Topology, error) {
 	ns, err := k8s.DefaultAPINamespace()
 	if err != nil {
 		return topology.Topology{}, errors.Wrap(err, "failed to get namespace")
 	}
-	tm, err := topology.NewTopologyManager(apiv1alpha1.ClusterTypeAsync, &apiv1alpha1.PerconaServerMySQL{
+
+	clusterTypeData, err := getFileValue("/tmp/cluster_type")
+	if err != nil {
+		return topology.Topology{}, errors.Wrap(err, "failed to read cluster type")
+	}
+	clusterType := apiv1alpha1.ClusterType(clusterTypeData)
+	if !clusterType.IsValid() {
+		return topology.Topology{}, errors.Errorf("unknown cluster type: %s", string(clusterType))
+	}
+
+	crName, err := getFileValue("/tmp/cluster_name")
+	if err != nil {
+		return topology.Topology{}, errors.Wrap(err, "failed to get cluster name")
+	}
+	expTopologyOpt, err := getFileValue("/tmp/experimental_topology")
+	if err != nil {
+		return topology.Topology{}, errors.Wrap(err, "failed to experimental topology option")
+	}
+
+	tm, err := topology.NewTopologyManager(clusterType, &apiv1alpha1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      os.Getenv("CLUSTER_NAME"),
+			Name:      crName,
 			Namespace: ns,
 		},
-	}, operatorPass, fqdn).DisableOrchestrator(k8s.GetExperimetalTopologyOption()).Manager()
+	}, operatorPass, fqdn).DisableOrchestrator(expTopologyOpt == "true").Manager()
 	if err != nil {
 		return topology.Topology{}, errors.Wrap(err, "failed to create topology manager")
 	}
+
+	db, err := tm.Replicator(ctx, fqdn)
+	if err != nil {
+		return topology.Topology{}, errors.Wrap(err, "failed to get replicator")
+	}
+	defer db.Close()
+
+	readOnly, err := db.IsReadonly(ctx)
+	if err != nil {
+		return topology.Topology{}, errors.Wrapf(err, "failed to check if host is readonly: %s", host)
+	}
+	switch clusterType {
+	case apiv1alpha1.ClusterTypeAsync:
+		status, err := db.ShowReplicaStatus(ctx)
+		if err != nil {
+			return topology.Topology{}, errors.Wrap(err, "get replica status")
+		}
+		log.Info(fmt.Sprintf("%s:%d super_read_only: %t Replica_IO_Running: %s Replica_SQL_Running: %s", host, mysql.DefaultAdminPort, readOnly, status["Replica_IO_Running"], status["Replica_SQL_Running"]))
+	case apiv1alpha1.ClusterTypeGR:
+		applier, err := db.GetGroupReplicationApplierStatus(ctx)
+		if err != nil {
+			return topology.Topology{}, errors.Wrap(err, "failed to get GR applier status")
+		}
+		log.Info(fmt.Sprintf("%s:%d super_read_only: %t Applier: %s", host, mysql.DefaultAdminPort, readOnly, applier))
+	}
+
 	return tm.Get(ctx)
+}
+
+func getFileValue(filename string) (string, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to read file %s", filename)
+	}
+	return strings.TrimSpace(string(data)), nil
 }

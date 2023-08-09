@@ -39,12 +39,20 @@ func getAsyncWithoutOrchestrator(ctx context.Context, m Manager, hosts ...string
 func getAsync(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, cliCmd clientcmd.Client, cl client.Reader) (Topology, error) {
 	log := logf.FromContext(ctx).WithName("GetAsync")
 
-	pod, err := getOrcPod(ctx, cl, cr, 0)
-	if err != nil {
-		log.Info("orchestrator pod is not found: " + err.Error() + ". skip")
-		return Topology{}, nil
+	var orcPod *corev1.Pod
+	var err error
+	// TODO: create orchestrator client interface, so we can remove this check
+	if cliCmd == nil {
+		err = orchestrator.Discover(ctx, orchestrator.APIHost(cr), mysql.ServiceName(cr), mysql.DefaultPort)
+	} else {
+		orcPod, err = getOrcPod(ctx, cl, cr, 0)
+		if err != nil {
+			log.Info("orchestrator pod is not found: " + err.Error() + ". skip")
+			return Topology{}, nil
+		}
+		err = orchestrator.DiscoverExec(ctx, cliCmd, orcPod, mysql.ServiceName(cr), mysql.DefaultPort)
 	}
-	if err := orchestrator.DiscoverExec(ctx, cliCmd, pod, mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
+	if err != nil {
 		switch err.Error() {
 		case "Unauthorized":
 			log.Info("mysql is not ready, unauthorized orchestrator discover response. skip")
@@ -55,7 +63,12 @@ func getAsync(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, cliCmd cl
 		}
 		return Topology{}, errors.Wrap(err, "failed to discover cluster")
 	}
-	primary, err := orchestrator.ClusterPrimaryExec(ctx, cliCmd, pod, cr.ClusterHint())
+	var primary *orchestrator.Instance
+	if cliCmd == nil {
+		primary, err = orchestrator.ClusterPrimary(ctx, orchestrator.APIHost(cr), cr.ClusterHint())
+	} else {
+		primary, err = orchestrator.ClusterPrimaryExec(ctx, cliCmd, orcPod, cr.ClusterHint())
+	}
 	if err != nil {
 		return Topology{}, errors.Wrap(err, "get primary")
 	}

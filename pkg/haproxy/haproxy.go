@@ -260,6 +260,10 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			Value: string(cr.Spec.MySQL.ClusterType),
 		},
 		{
+			Name:  "CLUSTER_NAME",
+			Value: cr.Name,
+		},
+		{
 			Name:  k8s.ExperimentalTopologyEnvVar,
 			Value: os.Getenv(k8s.ExperimentalTopologyEnvVar),
 		},

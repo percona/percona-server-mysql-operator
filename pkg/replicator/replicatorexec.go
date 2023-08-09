@@ -407,6 +407,23 @@ func (d *dbImplExec) GetGroupReplicationMembers(ctx context.Context) ([]string, 
 	return members, nil
 }
 
+func (d *dbImplExec) GetGroupReplicationApplierStatus(ctx context.Context) (string, error) {
+	rows := []*struct {
+		status string `csv:"state"`
+	}{}
+
+	err := d.query(ctx, "SELECT SERVICE_STATE as state FROM performance_schema.replication_connection_status WHERE channel_name = 'group_replication_applier'", &rows)
+	if err != nil {
+		return "", err
+	}
+
+	if len(rows) != 1 {
+		return "", errors.New("unexpected number of rows")
+	}
+
+	return rows[0].status, nil
+}
+
 func (d *dbImplExec) CheckIfDatabaseExists(ctx context.Context, name string) (bool, error) {
 	rows := []*struct {
 		DB string `csv:"db"`

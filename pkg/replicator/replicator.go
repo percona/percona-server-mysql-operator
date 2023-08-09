@@ -60,6 +60,7 @@ type Replicator interface {
 	GetGroupReplicationReplicas(ctx context.Context) ([]string, error)
 	GetMemberState(ctx context.Context, host string) (MemberState, error)
 	GetGroupReplicationMembers(ctx context.Context) ([]string, error)
+	GetGroupReplicationApplierStatus(ctx context.Context) (string, error)
 	CheckIfDatabaseExists(ctx context.Context, name string) (bool, error)
 	CheckIfInPrimaryPartition(ctx context.Context) (bool, error)
 	CheckIfPrimaryUnreachable(ctx context.Context) (bool, error)
@@ -371,6 +372,17 @@ func (d *dbImpl) GetGroupReplicationMembers(ctx context.Context) ([]string, erro
 	}
 
 	return members, nil
+}
+
+func (d *dbImpl) GetGroupReplicationApplierStatus(ctx context.Context) (string, error) {
+	var status string
+
+	err := d.db.QueryRowContext(ctx, "SELECT SERVICE_STATE FROM performance_schema.replication_connection_status WHERE channel_name = 'group_replication_applier'").Scan(&status)
+	if err != nil {
+		return "", err
+	}
+
+	return status, nil
 }
 
 func (d *dbImpl) CheckIfDatabaseExists(ctx context.Context, name string) (bool, error) {

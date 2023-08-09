@@ -75,7 +75,7 @@ const (
 	MaxSafeGRSize                = 9
 )
 
-func (t ClusterType) isValid() bool {
+func (t ClusterType) IsValid() bool {
 	switch ClusterType(t) {
 	case ClusterTypeGR, ClusterTypeAsync:
 		return true
@@ -442,7 +442,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
 	}
 
-	if valid := cr.Spec.MySQL.ClusterType.isValid(); !valid {
+	if valid := cr.Spec.MySQL.ClusterType.IsValid(); !valid {
 		return errors.Errorf("%s is not a valid clusterType, valid options are %s and %s", cr.Spec.MySQL.ClusterType, ClusterTypeGR, ClusterTypeAsync)
 	}
 
