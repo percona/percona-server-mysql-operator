@@ -38,7 +38,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 	log := logf.FromContext(ctx).WithName("reconcileCRStatus")
 
-	mysqlStatus, err := r.appStatus(ctx, cr, "mysql", cr.MySQLSpec().Size, mysql.MatchLabels(cr), cr.Status.MySQL.Version)
+	mysqlStatus, err := r.appStatus(ctx, cr, mysql.Name(cr), cr.MySQLSpec().Size, mysql.MatchLabels(cr), cr.Status.MySQL.Version)
 	if err != nil {
 		return errors.Wrap(err, "get MySQL status")
 	}
@@ -57,7 +57,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	orcStatus := apiv1alpha1.StatefulAppStatus{}
 	if cr.OrchestratorEnabled() && cr.Spec.MySQL.IsAsync() {
-		orcStatus, err = r.appStatus(ctx, cr, "orc", cr.OrchestratorSpec().Size, orchestrator.MatchLabels(cr), cr.Status.Orchestrator.Version)
+		orcStatus, err = r.appStatus(ctx, cr, orchestrator.Name(cr), cr.OrchestratorSpec().Size, orchestrator.MatchLabels(cr), cr.Status.Orchestrator.Version)
 		if err != nil {
 			return errors.Wrap(err, "get Orchestrator status")
 		}
@@ -66,7 +66,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	routerStatus := apiv1alpha1.StatefulAppStatus{}
 	if cr.RouterEnabled() {
-		routerStatus, err = r.appStatus(ctx, cr, "router", cr.Spec.Proxy.Router.Size, router.MatchLabels(cr), cr.Status.Router.Version)
+		routerStatus, err = r.appStatus(ctx, cr, router.Name(cr), cr.Spec.Proxy.Router.Size, router.MatchLabels(cr), cr.Status.Router.Version)
 		if err != nil {
 			return errors.Wrap(err, "get Router status")
 		}
@@ -75,7 +75,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	haproxyStatus := apiv1alpha1.StatefulAppStatus{}
 	if cr.HAProxyEnabled() {
-		haproxyStatus, err = r.appStatus(ctx, cr, "haproxy", cr.Spec.Proxy.HAProxy.Size, haproxy.MatchLabels(cr), cr.Status.HAProxy.Version)
+		haproxyStatus, err = r.appStatus(ctx, cr, haproxy.Name(cr), cr.Spec.Proxy.HAProxy.Size, haproxy.MatchLabels(cr), cr.Status.HAProxy.Version)
 		if err != nil {
 			return errors.Wrap(err, "get HAProxy status")
 		}
@@ -278,7 +278,7 @@ func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1a
 	}
 
 	sfsObj := &appsv1.StatefulSet{}
-	err := r.Client.Get(ctx, types.NamespacedName{Name: cr.Name + "-" + compName, Namespace: cr.Namespace}, sfsObj)
+	err := r.Client.Get(ctx, types.NamespacedName{Name: compName, Namespace: cr.Namespace}, sfsObj)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return status, err
 	}
