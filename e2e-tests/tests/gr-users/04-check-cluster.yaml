@@ -1,0 +1,38 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o pipefail
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      sleep 30 # wait for cluster status to change to initializing
+      wait_cluster_consistency_gr "${test_name}" "3" "3"
+      mysql_args="-h $(get_router_service $(get_cluster_name)) -uroot -proot_password_updated"
+      users=($(get_mysql_users "${mysql_args}"))
+
+      # check connection
+      args=""
+      set +o errexit
+      for user in "${users[@]}"; do
+      	mysql_args="-h $(get_router_service $(get_cluster_name)) -u${user} -p${user}_password_updated"
+
+      	pod=mysql-client
+      	case $user in
+      		heartbeat | xtrabackup)
+      			mysql_args="-h localhost -u${user} -p${user}_password_updated"
+      			pod="$(get_cluster_name)-mysql-0"
+      			;;
+      	esac
+
+      	run_mysql "SELECT 1" "${mysql_args}" "${pod}"
+
+      	args="${args} --from-literal=${user}=$([ $? -eq 0 ] && echo 'success' || echo 'fail')"
+      done
+      set -o errexit
+
+      kubectl create configmap -n "${NAMESPACE}" 04-check-connections $args
+      kubectl get configmap -n "${NAMESPACE}" 04-check-connections -o yaml
+    timeout: 300

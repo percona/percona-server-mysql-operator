@@ -54,6 +54,15 @@ func AddLabel(obj client.Object, key, value string) {
 	obj.SetLabels(labels)
 }
 
+func AddAnnotation(obj client.Object, key, value string) {
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	annotations[key] = value
+	obj.SetAnnotations(annotations)
+}
+
 func IsPodWithNameReady(ctx context.Context, cl client.Client, nn types.NamespacedName) (bool, error) {
 	pod := &corev1.Pod{}
 
