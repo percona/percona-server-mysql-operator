@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	componentName      = "orc"
+	ComponentName      = "orc"
 	componentShortName = "orc"
 	defaultWebPort     = 3000
 	defaultRaftPort    = 10008
@@ -100,7 +100,7 @@ func Labels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(Labels(cr),
-		map[string]string{apiv1alpha1.ComponentLabel: componentName},
+		map[string]string{apiv1alpha1.ComponentLabel: ComponentName},
 		cr.Labels())
 }
 
@@ -132,7 +132,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.S
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
-							componentName,
+							ComponentName,
 							initImage,
 							spec.ImagePullPolicy,
 							spec.ContainerSecurityContext,
@@ -220,7 +220,7 @@ func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	env = append(env, cr.Spec.Orchestrator.Env...)
 
 	return corev1.Container{
-		Name:            componentName,
+		Name:            ComponentName,
 		Image:           cr.Spec.Orchestrator.Image,
 		ImagePullPolicy: cr.Spec.Orchestrator.ImagePullPolicy,
 		Resources:       cr.Spec.Orchestrator.Resources,

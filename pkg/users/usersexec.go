@@ -51,40 +51,19 @@ func (d *dbExecImpl) exec(stm string) error {
 
 // UpdateUserPasswords updates user passwords but retains the current password using Dual Password feature of MySQL 8
 func (d *dbExecImpl) UpdateUserPasswords(users []mysql.User) error {
-	err := d.exec("START TRANSACTION")
-	if err != nil {
-		return err
-	}
-
 	for _, user := range users {
 		for _, host := range user.Hosts {
 			q := fmt.Sprintf("ALTER USER '%s'@'%s' IDENTIFIED BY '%s' RETAIN CURRENT PASSWORD", user.Username, host, escapePass(user.Password))
-			err = d.exec(q)
+			err := d.exec(q)
 			if err != nil {
-				err = errors.Wrap(err, "alter user")
-
-				if errT := d.exec("ROLLBACK"); errT != nil {
-					return errors.Wrap(errors.Wrap(errT, "rollback"), err.Error())
-				}
-
-				return err
+				return errors.Wrap(err, "alter user")
 			}
 		}
 	}
 
-	err = d.exec("FLUSH PRIVILEGES")
+	err := d.exec("FLUSH PRIVILEGES")
 	if err != nil {
-		err = errors.Wrap(err, "flush privileges")
-
-		if errT := d.exec("ROLLBACK"); errT != nil {
-			return errors.Wrap(errors.Wrap(errT, "rollback"), err.Error())
-		}
-
-		return err
-	}
-
-	if err := d.exec("COMMIT"); err != nil {
-		return errors.Wrap(err, "commit transaction")
+		return errors.Wrap(err, "flush privileges")
 	}
 
 	return nil
@@ -92,40 +71,19 @@ func (d *dbExecImpl) UpdateUserPasswords(users []mysql.User) error {
 
 // DiscardOldPasswords discards old passwords of givens users
 func (d *dbExecImpl) DiscardOldPasswords(users []mysql.User) error {
-	err := d.exec("START TRANSACTION")
-	if err != nil {
-		return err
-	}
-
 	for _, user := range users {
 		for _, host := range user.Hosts {
 			q := fmt.Sprintf("ALTER USER '%s'@'%s' DISCARD OLD PASSWORD", user.Username, host)
-			err = d.exec(q)
+			err := d.exec(q)
 			if err != nil {
-				err = errors.Wrap(err, "discard old password")
-
-				if errT := d.exec("ROLLBACK"); errT != nil {
-					return errors.Wrap(errors.Wrap(errT, "rollback"), err.Error())
-				}
-
-				return err
+				return errors.Wrap(err, "discard old password")
 			}
 		}
 	}
 
-	err = d.exec("FLUSH PRIVILEGES")
+	err := d.exec("FLUSH PRIVILEGES")
 	if err != nil {
-		err = errors.Wrap(err, "flush privileges")
-
-		if errT := d.exec("ROLLBACK"); errT != nil {
-			return errors.Wrap(errors.Wrap(errT, "rollback"), err.Error())
-		}
-
-		return err
-	}
-
-	if err := d.exec("COMMIT"); err != nil {
-		return errors.Wrap(err, "commit transaction")
+		return errors.Wrap(err, "flush privileges")
 	}
 
 	return nil

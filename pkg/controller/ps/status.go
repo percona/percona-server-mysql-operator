@@ -111,6 +111,10 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		cmd := []string{"cat", "/var/lib/mysql/full-cluster-crash"}
 		fullClusterCrash := false
 		for _, pod := range pods {
+			if !k8s.IsPodReady(pod) {
+				continue
+			}
+
 			err = r.ClientCmd.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false)
 			if err != nil {
 				if strings.Contains(errb.String(), "No such file or directory") {
