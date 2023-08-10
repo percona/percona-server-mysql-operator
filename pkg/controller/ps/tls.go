@@ -102,7 +102,7 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 				RenewBefore: &metav1.Duration{Duration: 730 * time.Hour},
 			},
 		}
-		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, caCert, r.Scheme); err != nil {
+		if err := k8s.EnsureObjectWithHash(ctx, r.Client, nil, caCert, r.Scheme); err != nil {
 			return errors.Wrap(err, "ensure CA certificate")
 		}
 
@@ -137,7 +137,7 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 		},
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, kubeCert, r.Scheme); err != nil {
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, nil, kubeCert, r.Scheme); err != nil {
 		return errors.Wrap(err, "ensure certificate")
 	}
 
@@ -155,7 +155,7 @@ func (r *PerconaServerMySQLReconciler) ensureIssuer(ctx context.Context, cr *api
 			IssuerConfig: IssuerConf,
 		},
 	}
-	err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, isr, r.Scheme)
+	err := k8s.EnsureObjectWithHash(ctx, r.Client, nil, isr, r.Scheme)
 	if err != nil {
 		return errors.Wrap(err, "create issuer")
 	}
