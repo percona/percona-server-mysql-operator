@@ -16,5 +16,6 @@ one-pod
 scaling
 service-per-pod
 sidecars
+smart-update
 tls-cert-manager
 users
