@@ -12,6 +12,7 @@ haproxy
 init-deploy
 one-pod
 operator-self-healing
+self-healing
 sidecars
 tls-cert-manager
 users

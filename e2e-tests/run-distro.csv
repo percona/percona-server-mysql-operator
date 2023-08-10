@@ -14,6 +14,7 @@ monitoring
 one-pod
 operator-self-healing
 scaling
+self-healing
 service-per-pod
 sidecars
 tls-cert-manager

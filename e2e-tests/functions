@@ -547,16 +547,17 @@ kill_pods() {
 	local selector=$2
 	local pod_label=$3
 	local label_value=$4
+	local chaos_suffix=$5
 
 	if [ "${selector}" == "pod" ]; then
 		yq eval '
-			.metadata.name = "chaos-pod-kill-'${RANDOM}'" |
+			.metadata.name = "chaos-pod-kill-'${chaos_suffix}'" |
 			del(.spec.selector.pods.test-namespace) |
 			.spec.selector.pods.'${ns}'[0] = "'${pod_label}'"' ${TESTS_CONFIG_DIR}/chaos-pod-kill.yml \
 			| kubectl apply --namespace ${ns} -f -
 	elif [ "${selector}" == "label" ]; then
 		yq eval '
-			.metadata.name = "chaos-kill-label-'${RANDOM}'" |
+			.metadata.name = "chaos-kill-label-'${chaos_suffix}'" |
 			.spec.mode = "all" |
 			del(.spec.selector.pods) |
 			.spec.selector.labelSelectors."'${pod_label}'" = "'${label_value}'"' ${TESTS_CONFIG_DIR}/chaos-pod-kill.yml \
@@ -568,9 +569,10 @@ kill_pods() {
 failure_pod() {
 	local ns=$1
 	local pod=$2
+	local chaos_suffix=$3
 
 	yq eval '
-        .metadata.name = "chaos-pod-failure-'${RANDOM}'" |
+        .metadata.name = "chaos-pod-failure-'${chaos_suffix}'" |
         del(.spec.selector.pods.test-namespace) |
         .spec.selector.pods.'${ns}'[0] = "'${pod}'"' ${TESTS_CONFIG_DIR}/chaos-pod-failure.yml \
 		| kubectl apply --namespace ${ns} -f -
@@ -580,9 +582,10 @@ failure_pod() {
 network_loss() {
 	local ns=$1
 	local pod=$2
+	local chaos_suffix=$3
 
 	yq eval '
-        .metadata.name = "chaos-pod-network-loss-'${RANDOM}'" |
+        .metadata.name = "chaos-pod-network-loss-'${chaos_suffix}'" |
         del(.spec.selector.pods.test-namespace) |
         .spec.selector.pods.'${ns}'[0] = "'${pod}'"' ${TESTS_CONFIG_DIR}/chaos-network-loss.yml \
 		| kubectl apply --namespace ${ns} -f -
