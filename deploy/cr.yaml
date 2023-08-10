@@ -11,6 +11,7 @@ spec:
   crVersion: 0.6.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
+  updateStrategy: SmartUpdate
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
     apply: disabled

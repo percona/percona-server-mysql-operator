@@ -212,7 +212,7 @@ spec:
       - emptyDir: {}
         name: backup-logs
   updateStrategy:
-    type: RollingUpdate
+    type: OnDelete
   volumeClaimTemplates:
   - apiVersion: v1
     kind: PersistentVolumeClaim

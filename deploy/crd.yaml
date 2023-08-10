@@ -8747,6 +8747,8 @@ spec:
                 required:
                 - image
                 type: object
+              updateStrategy:
+                type: string
               upgradeOptions:
                 properties:
                   apply:

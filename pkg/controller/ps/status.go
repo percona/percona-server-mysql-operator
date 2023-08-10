@@ -7,7 +7,9 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -36,7 +38,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 	log := logf.FromContext(ctx).WithName("reconcileCRStatus")
 
-	mysqlStatus, err := appStatus(ctx, r.Client, cr.MySQLSpec().Size, mysql.MatchLabels(cr), cr.Status.MySQL.Version)
+	mysqlStatus, err := r.appStatus(ctx, cr, mysql.Name(cr), cr.MySQLSpec().Size, mysql.MatchLabels(cr), cr.Status.MySQL.Version)
 	if err != nil {
 		return errors.Wrap(err, "get MySQL status")
 	}
@@ -55,7 +57,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	orcStatus := apiv1alpha1.StatefulAppStatus{}
 	if cr.OrchestratorEnabled() && cr.Spec.MySQL.IsAsync() {
-		orcStatus, err = appStatus(ctx, r.Client, cr.OrchestratorSpec().Size, orchestrator.MatchLabels(cr), cr.Status.Orchestrator.Version)
+		orcStatus, err = r.appStatus(ctx, cr, orchestrator.Name(cr), cr.OrchestratorSpec().Size, orchestrator.MatchLabels(cr), cr.Status.Orchestrator.Version)
 		if err != nil {
 			return errors.Wrap(err, "get Orchestrator status")
 		}
@@ -64,7 +66,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	routerStatus := apiv1alpha1.StatefulAppStatus{}
 	if cr.RouterEnabled() {
-		routerStatus, err = appStatus(ctx, r.Client, cr.Spec.Proxy.Router.Size, router.MatchLabels(cr), cr.Status.Router.Version)
+		routerStatus, err = r.appStatus(ctx, cr, router.Name(cr), cr.Spec.Proxy.Router.Size, router.MatchLabels(cr), cr.Status.Router.Version)
 		if err != nil {
 			return errors.Wrap(err, "get Router status")
 		}
@@ -73,7 +75,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	haproxyStatus := apiv1alpha1.StatefulAppStatus{}
 	if cr.HAProxyEnabled() {
-		haproxyStatus, err = appStatus(ctx, r.Client, cr.Spec.Proxy.HAProxy.Size, haproxy.MatchLabels(cr), cr.Status.HAProxy.Version)
+		haproxyStatus, err = r.appStatus(ctx, cr, haproxy.Name(cr), cr.Spec.Proxy.HAProxy.Size, haproxy.MatchLabels(cr), cr.Status.HAProxy.Version)
 		if err != nil {
 			return errors.Wrap(err, "get HAProxy status")
 		}
@@ -273,13 +275,24 @@ func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServe
 	return host, nil
 }
 
-func appStatus(ctx context.Context, cl client.Reader, size int32, labels map[string]string, version string) (apiv1alpha1.StatefulAppStatus, error) {
+func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, compName string, size int32, labels map[string]string, version string) (apiv1alpha1.StatefulAppStatus, error) {
 	status := apiv1alpha1.StatefulAppStatus{
 		Size:  size,
 		State: apiv1alpha1.StateInitializing,
 	}
 
-	pods, err := k8s.PodsByLabels(ctx, cl, labels)
+	sfsObj := &appsv1.StatefulSet{}
+	err := r.Client.Get(ctx, types.NamespacedName{Name: compName, Namespace: cr.Namespace}, sfsObj)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return status, err
+	}
+	if sfsObj.Status.Replicas > sfsObj.Status.UpdatedReplicas {
+		return status, nil
+	}
+
+	sfsObj.Size()
+
+	pods, err := k8s.PodsByLabels(ctx, r.Client, labels)
 	if err != nil {
 		return status, errors.Wrap(err, "get pod list")
 	}
