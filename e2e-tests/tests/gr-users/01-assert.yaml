@@ -1,0 +1,24 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  name: gr-users-mysql
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  generation: 1
+  name: gr-users-router
+status:
+  observedGeneration: 1
+  readyReplicas: 3
+  replicas: 3
+  updatedReplicas: 3

@@ -53,7 +53,6 @@ type Replicator interface {
 	DumbQuery(ctx context.Context) error
 	GetGlobal(ctx context.Context, variable string) (interface{}, error)
 	SetGlobal(ctx context.Context, variable, value interface{}) error
-	ChangeGroupReplicationPassword(ctx context.Context, replicaPass string) error
 	StartGroupReplication(ctx context.Context, password string) error
 	StopGroupReplication(ctx context.Context) error
 	GetGroupReplicationPrimary(ctx context.Context) (string, error)
@@ -288,20 +287,6 @@ func (d *dbImpl) StartGroupReplication(ctx context.Context, password string) err
 func (d *dbImpl) StopGroupReplication(ctx context.Context) error {
 	_, err := d.db.ExecContext(ctx, "STOP GROUP_REPLICATION")
 	return errors.Wrap(err, "stop group replication")
-}
-
-func (d *dbImpl) ChangeGroupReplicationPassword(ctx context.Context, replicaPass string) error {
-	_, err := d.db.ExecContext(ctx, `
-            CHANGE REPLICATION SOURCE TO
-                SOURCE_USER=?,
-                SOURCE_PASSWORD=?
-            FOR CHANNEL 'group_replication_recovery'
-        `, apiv1alpha1.UserReplication, replicaPass)
-	if err != nil {
-		return errors.Wrap(err, "exec CHANGE REPLICATION SOURCE TO")
-	}
-
-	return nil
 }
 
 func (d *dbImpl) GetGroupReplicationPrimary(ctx context.Context) (string, error) {

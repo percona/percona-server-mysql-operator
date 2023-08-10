@@ -87,7 +87,7 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
 
-	db, err := replicator.NewReplicator(ctx, "operator", operatorPass, podIp, mysql.DefaultAdminPort)
+	db, err := replicator.NewReplicator(ctx, apiv1alpha1.UserOperator, operatorPass, podIp, mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
@@ -142,7 +142,7 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 
 		timer.Start("clone")
 		log.Printf("Cloning from %s", donor)
-		err = db.Clone(ctx, donor, "operator", operatorPass, mysql.DefaultAdminPort)
+		err = db.Clone(ctx, donor, string(apiv1alpha1.UserOperator), operatorPass, mysql.DefaultAdminPort)
 		timer.Stop("clone")
 		if err != nil && !errors.Is(err, replicator.ErrRestartAfterClone) {
 			return errors.Wrapf(err, "clone from donor %s", donor)
@@ -204,7 +204,7 @@ func getTopology(ctx context.Context, peers sets.Set[string]) (string, []string,
 	}
 
 	for _, peer := range sets.List(peers) {
-		db, err := replicator.NewReplicator(ctx, "operator", operatorPass, peer, mysql.DefaultAdminPort)
+		db, err := replicator.NewReplicator(ctx, apiv1alpha1.UserOperator, operatorPass, peer, mysql.DefaultAdminPort)
 		if err != nil {
 			return "", nil, errors.Wrapf(err, "connect to %s", peer)
 		}
@@ -251,7 +251,7 @@ func selectDonor(ctx context.Context, fqdn, primary string, replicas []string) (
 	}
 
 	for _, replica := range replicas {
-		db, err := replicator.NewReplicator(ctx, "operator", operatorPass, replica, mysql.DefaultAdminPort)
+		db, err := replicator.NewReplicator(ctx, apiv1alpha1.UserOperator, operatorPass, replica, mysql.DefaultAdminPort)
 		if err != nil {
 			continue
 		}
