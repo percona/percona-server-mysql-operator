@@ -1,0 +1,12 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      run_mysql \
+      	"INSERT myDB.myTable (id) VALUES (100503)" \
+        "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password"
