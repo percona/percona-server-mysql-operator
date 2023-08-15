@@ -1,0 +1,44 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  name: smart-update-mysql
+spec:
+  updateStrategy:
+    type: OnDelete
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  name: smart-update-orc
+spec:
+  updateStrategy:
+    type: RollingUpdate
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: smart-update-haproxy
+spec:
+  updateStrategy:
+    type: RollingUpdate
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0

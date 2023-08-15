@@ -9,6 +9,7 @@ gr-one-pod
 gr-scaling
 gr-self-healing
 gr-tls-cert-manager
+gr-users
 haproxy
 init-deploy
 monitoring
@@ -18,5 +19,6 @@ scaling
 self-healing
 service-per-pod
 sidecars
+smart-update
 tls-cert-manager
 users

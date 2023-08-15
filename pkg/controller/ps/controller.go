@@ -405,13 +405,19 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 		return errors.Wrapf(err, "get Secret/%s", nn.Name)
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, mysql.StatefulSet(cr, initImage, configHash, internalSecret), r.Scheme); err != nil {
+	sts := mysql.StatefulSet(cr, initImage, configHash, internalSecret)
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, sts, r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile sts")
 	}
 
 	if pmm := cr.Spec.PMM; pmm != nil && pmm.Enabled && !pmm.HasSecret(internalSecret) {
 		log.Info(fmt.Sprintf(`Can't enable PMM: either "%s" key doesn't exist in the secrets, or secrets and internal secrets are out of sync`,
 			apiv1alpha1.UserPMMServerKey), "secrets", cr.Spec.SecretsName, "internalSecrets", cr.InternalSecretName())
+	}
+
+	if cr.Spec.UpdateStrategy == apiv1alpha1.SmartUpdateStatefulSetStrategyType {
+		return r.smartUpdate(ctx, sts, cr)
 	}
 
 	return nil
@@ -1122,100 +1128,6 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 	}
 
 	return errors.Wrap(g.Wait(), "start replication on replicas")
-}
-
-func (r *PerconaServerMySQLReconciler) restartGroupReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, replicaPass string) error {
-	log := logf.FromContext(ctx).WithName("restartGroupReplication")
-
-	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
-	if err != nil {
-		return errors.Wrap(err, "get operator password")
-	}
-
-	hostname := mysql.FQDN(cr, 0)
-	firstPod, err := getMySQLPod(ctx, r.Client, cr, 0)
-	if err != nil {
-		return err
-	}
-	db, err := replicator.NewReplicatorExec(firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, hostname)
-	if err != nil {
-		return errors.Wrapf(err, "get db connection to %s", hostname)
-	}
-	defer db.Close()
-
-	replicas, err := db.GetGroupReplicationReplicas(ctx)
-	if err != nil {
-		return errors.Wrap(err, "get replicas")
-	}
-
-	for _, host := range replicas {
-		idx, err := getPodIndexFromHostname(host)
-		if err != nil {
-			return err
-		}
-
-		pod, err := getMySQLPod(ctx, r.Client, cr, idx)
-		if err != nil {
-			return err
-		}
-		db, err := replicator.NewReplicatorExec(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, host)
-		if err != nil {
-			return errors.Wrapf(err, "get db connection to %s", hostname)
-		}
-		defer db.Close()
-
-		if err := db.StopGroupReplication(ctx); err != nil {
-			return errors.Wrapf(err, "stop group replication on %s", host)
-		}
-		log.V(1).Info("Stopped group replication", "hostname", host)
-
-		if err := db.ChangeGroupReplicationPassword(ctx, replicaPass); err != nil {
-			return errors.Wrapf(err, "change group replication password on %s", host)
-		}
-		log.V(1).Info("Changed group replication password", "hostname", host)
-
-		if err := db.StartGroupReplication(ctx, replicaPass); err != nil {
-			return errors.Wrapf(err, "start group replication on %s", host)
-		}
-		log.V(1).Info("Started group replication", "hostname", host)
-	}
-
-	primary, err := db.GetGroupReplicationPrimary(ctx)
-	if err != nil {
-		return errors.Wrap(err, "get primary member")
-	}
-
-	idx, err := getPodIndexFromHostname(primary)
-	if err != nil {
-		return err
-	}
-
-	primPod, err := getMySQLPod(ctx, r.Client, cr, idx)
-	if err != nil {
-		return err
-	}
-	db, err = replicator.NewReplicatorExec(primPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, primary)
-	if err != nil {
-		return errors.Wrapf(err, "get db connection to %s", hostname)
-	}
-	defer db.Close()
-
-	if err := db.StopGroupReplication(ctx); err != nil {
-		return errors.Wrapf(err, "stop group replication on %s", primary)
-	}
-	log.V(1).Info("Stopped group replication", "hostname", primary)
-
-	if err := db.ChangeGroupReplicationPassword(ctx, replicaPass); err != nil {
-		return errors.Wrapf(err, "change group replication password on %s", primary)
-	}
-	log.V(1).Info("Changed group replication password", "hostname", primary)
-
-	if err := db.StartGroupReplication(ctx, replicaPass); err != nil {
-		return errors.Wrapf(err, "start group replication on %s", primary)
-	}
-	log.V(1).Info("Started group replication", "hostname", primary)
-
-	return nil
 }
 
 func getMySQLPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {

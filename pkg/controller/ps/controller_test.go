@@ -397,6 +397,7 @@ var _ = Describe("Reconcile HAProxy", Ordered, func() {
 		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
 		cr.Spec.Proxy.HAProxy.Enabled = true
 		cr.Spec.AllowUnsafeConfig = false
+		cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 		It("should read and create defautl cr.yaml", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())

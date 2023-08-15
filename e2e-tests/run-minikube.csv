@@ -9,12 +9,14 @@ gr-one-pod
 gr-scaling
 gr-self-healing
 gr-tls-cert-manager
+gr-users
 haproxy
 init-deploy
 one-pod
 operator-self-healing
 self-healing
 sidecars
+smart-update
 tls-cert-manager
 users
 version-service

@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	componentName      = "orc"
+	ComponentName      = "orc"
 	componentShortName = "orc"
 	defaultWebPort     = 3000
 	defaultRaftPort    = 10008
@@ -100,7 +100,7 @@ func Labels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(Labels(cr),
-		map[string]string{apiv1alpha1.ComponentLabel: componentName},
+		map[string]string{apiv1alpha1.ComponentLabel: ComponentName},
 		cr.Labels())
 }
 
@@ -125,6 +125,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.S
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
+			UpdateStrategy: updateStrategy(cr),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
@@ -132,7 +133,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.S
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
-							componentName,
+							ComponentName,
 							initImage,
 							spec.ImagePullPolicy,
 							spec.ContainerSecurityContext,
@@ -191,6 +192,21 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.S
 	}
 }
 
+func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrategy {
+	switch cr.Spec.UpdateStrategy {
+	case appsv1.OnDeleteStatefulSetStrategyType:
+		return appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
+	default:
+		var zero int32 = 0
+		return appsv1.StatefulSetUpdateStrategy{
+			Type: appsv1.RollingUpdateStatefulSetStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+				Partition: &zero,
+			},
+		}
+	}
+}
+
 func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 	sidecars := sidecarContainers(cr)
 	containers := make([]corev1.Container, 1, len(sidecars)+1)
@@ -220,7 +236,7 @@ func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	env = append(env, cr.Spec.Orchestrator.Env...)
 
 	return corev1.Container{
-		Name:            componentName,
+		Name:            ComponentName,
 		Image:           cr.Spec.Orchestrator.Image,
 		ImagePullPolicy: cr.Spec.Orchestrator.ImagePullPolicy,
 		Resources:       cr.Spec.Orchestrator.Resources,

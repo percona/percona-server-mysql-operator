@@ -1,0 +1,24 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 360
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 04-check-connections
+data:
+  heartbeat: "success"
+  monitor: "success"
+  operator: "success"
+  orchestrator: "success"
+  xtrabackup: "success"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  name: gr-users-mysql
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3

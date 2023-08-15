@@ -10,6 +10,7 @@ import (
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,6 +39,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 		t.Fatal(err)
 	}
 	cr.Spec.MySQL.ClusterType = apiv1alpha1.ClusterTypeAsync
+	cr.Spec.UpdateStrategy = appsv1.OnDeleteStatefulSetStrategyType
 
 	scheme := runtime.NewScheme()
 	err = clientgoscheme.AddToScheme(scheme)

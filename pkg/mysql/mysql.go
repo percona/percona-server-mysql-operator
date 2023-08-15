@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	componentName    = "mysql"
+	ComponentName    = "mysql"
 	DataVolumeName   = "datadir"
 	DataMountPath    = "/var/lib/mysql"
 	CustomConfigKey  = "my.cnf"
@@ -73,7 +73,7 @@ func (e *Exposer) SaveOldMeta() bool {
 }
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
-	return cr.Name + "-" + componentName
+	return cr.Name + "-" + ComponentName
 }
 
 func NamespacedName(cr *apiv1alpha1.PerconaServerMySQL) types.NamespacedName {
@@ -106,7 +106,7 @@ func FQDN(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
-		map[string]string{apiv1alpha1.ComponentLabel: componentName},
+		map[string]string{apiv1alpha1.ComponentLabel: ComponentName},
 		cr.Labels())
 }
 
@@ -138,9 +138,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 			},
 			ServiceName:          ServiceName(cr),
 			VolumeClaimTemplates: volumeClaimTemplates(spec),
-			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-				Type: appsv1.RollingUpdateStatefulSetStrategyType,
-			},
+			UpdateStrategy:       updateStrategy(cr),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
@@ -149,7 +147,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
-							componentName,
+							ComponentName,
 							initImage,
 							spec.ImagePullPolicy,
 							spec.ContainerSecurityContext,
@@ -258,6 +256,23 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 	}
 }
 
+func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrategy {
+	switch cr.Spec.UpdateStrategy {
+	case appsv1.OnDeleteStatefulSetStrategyType:
+		return appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
+	case apiv1alpha1.SmartUpdateStatefulSetStrategyType:
+		return appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
+	default:
+		var zero int32 = 0
+		return appsv1.StatefulSetUpdateStrategy{
+			Type: appsv1.RollingUpdateStatefulSetStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+				Partition: &zero,
+			},
+		}
+	}
+}
+
 func volumeClaimTemplates(spec *apiv1alpha1.MySQLSpec) []corev1.PersistentVolumeClaim {
 	pvcs := []corev1.PersistentVolumeClaim{
 		k8s.PVC(DataVolumeName, spec.VolumeSpec),
@@ -275,7 +290,7 @@ func volumeClaimTemplates(spec *apiv1alpha1.MySQLSpec) []corev1.PersistentVolume
 func servicePorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ServicePort {
 	ports := []corev1.ServicePort{
 		{
-			Name: componentName,
+			Name: ComponentName,
 			Port: DefaultPort,
 		},
 		{
@@ -293,7 +308,7 @@ func servicePorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ServicePort {
 	}
 
 	if cr.Spec.MySQL.IsGR() {
-		ports = append(ports, corev1.ServicePort{Name: componentName + "-gr", Port: DefaultGRPort})
+		ports = append(ports, corev1.ServicePort{Name: ComponentName + "-gr", Port: DefaultGRPort})
 	}
 
 	return ports
@@ -302,7 +317,7 @@ func servicePorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ServicePort {
 func containerPorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ContainerPort {
 	ports := []corev1.ContainerPort{
 		{
-			Name:          componentName,
+			Name:          ComponentName,
 			ContainerPort: DefaultPort,
 		},
 		{
@@ -316,7 +331,7 @@ func containerPorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ContainerPort {
 	}
 
 	if cr.Spec.MySQL.IsGR() {
-		ports = append(ports, corev1.ContainerPort{Name: componentName + "-gr", ContainerPort: DefaultGRPort})
+		ports = append(ports, corev1.ContainerPort{Name: ComponentName + "-gr", ContainerPort: DefaultGRPort})
 	}
 
 	return ports
@@ -421,7 +436,7 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 	}
 
 	if cr.PMMEnabled(secret) {
-		containers = append(containers, pmm.Container(cr, secret, componentName))
+		containers = append(containers, pmm.Container(cr, secret, ComponentName))
 	}
 
 	return appendUniqueContainers(containers, cr.Spec.MySQL.Sidecars...)
@@ -463,7 +478,7 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	env = append(env, spec.Env...)
 
 	container := corev1.Container{
-		Name:            componentName,
+		Name:            ComponentName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
 		Resources:       spec.Resources,
