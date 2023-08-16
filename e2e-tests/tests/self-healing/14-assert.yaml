@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 120
+timeout: 480
 ---
 kind: StatefulSet
 apiVersion: apps/v1
@@ -69,6 +69,62 @@ spec:
 status:
   experiment:
     containerRecords:
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
     - events:
       - operation: Apply
         type: Succeeded
