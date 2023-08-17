@@ -14,6 +14,7 @@ const (
 	manualRecoveryFile   = "/var/lib/mysql/sleep-forever"
 )
 
+// Entry point that bootstraps the cluster based on type.
 func main() {
 	f, err := os.OpenFile(filepath.Join(mysql.DataMountPath, "bootstrap.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
