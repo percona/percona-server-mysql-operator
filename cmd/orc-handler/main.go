@@ -31,6 +31,7 @@ var (
 	primary = flag.String("primary", "", "Primary hostname")
 )
 
+// main initializes the application and manages label settings.
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
@@ -54,6 +55,7 @@ func main() {
 	}
 }
 
+// getNamespace fetches the current Kubernetes namespace.
 func getNamespace() (string, error) {
 	ns, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
@@ -63,6 +65,7 @@ func getNamespace() (string, error) {
 	return string(ns), nil
 }
 
+// getClusterName fetches the "CLUSTER_NAME" environment variable.
 func getClusterName() (string, error) {
 	value, ok := os.LookupEnv("CLUSTER_NAME")
 	if !ok {
@@ -71,6 +74,7 @@ func getClusterName() (string, error) {
 	return value, nil
 }
 
+// setPrimaryLabel updates the primary label for the designated MySQL pod.
 func setPrimaryLabel(ctx context.Context, primary string) error {
 	log := log.WithName("setPrimaryLabel")
 
@@ -153,6 +157,7 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 	return nil
 }
 
+// newClient creates a namespaced Kubernetes client with necessary schemes.
 func newClient(namespace string) (client.Client, error) {
 	kubeconfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		clientcmd.NewDefaultClientConfigLoadingRules(),
