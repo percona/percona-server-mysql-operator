@@ -55,6 +55,7 @@ var (
 	setupLog  = ctrl.Log.WithName("setup")
 )
 
+// init initializes the scheme with clientgo and custom API definitions.
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
@@ -62,6 +63,7 @@ func init() {
 	//+kubebuilder:scaffold:scheme
 }
 
+// main initializes and starts the Percona MySQL controller manager.
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
@@ -170,6 +172,7 @@ func main() {
 	}
 }
 
+// getLogEncoder returns the appropriate logging encoder based on the "LOG_STRUCTURED" environment variable.
 func getLogEncoder(log logr.Logger) zapcore.Encoder {
 	consoleEnc := zapcore.NewConsoleEncoder(uzap.NewDevelopmentEncoderConfig())
 
@@ -190,6 +193,7 @@ func getLogEncoder(log logr.Logger) zapcore.Encoder {
 	return zapcore.NewJSONEncoder(uzap.NewProductionEncoderConfig())
 }
 
+// getLogLevel retrieves and sets the logging level based on the "LOG_LEVEL" environment variable.
 func getLogLevel(log logr.Logger) zapcore.LevelEnabler {
 	l, found := os.LookupEnv("LOG_LEVEL")
 	if !found {
