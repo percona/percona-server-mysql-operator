@@ -46,6 +46,7 @@ var (
 	domain    = flag.String("domain", "", "The Cluster Domain which is used by the Cluster, if not set it tries to determine it from /etc/resolv.conf file.")
 )
 
+// lookup retrieves the endpoints for a given service name using SRV records.
 func lookup(svcName string) (sets.String, error) {
 	endpoints := sets.NewString()
 	_, srvRecords, err := net.LookupSRV("", "", svcName)
@@ -60,6 +61,7 @@ func lookup(svcName string) (sets.String, error) {
 	return endpoints, nil
 }
 
+// shellOut executes a given script with provided stdin input and logs the results.
 func shellOut(sendStdin, script string) {
 	log.Printf("execing: %v with stdin: %v", script, sendStdin)
 	// TODO: Switch to sending stdin from go
@@ -70,6 +72,7 @@ func shellOut(sendStdin, script string) {
 	log.Print(string(out))
 }
 
+// main handles peer discovery and invokes scripts on peer changes.
 func main() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGUSR1)
