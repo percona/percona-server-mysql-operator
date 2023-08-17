@@ -8,5 +8,5 @@ commands:
 
       source ../../functions
 
-      failure_pod "${OPERATOR_NS:-$NAMESPACE}" "$(get_operator_pod)"
+      failure_pod "${OPERATOR_NS:-$NAMESPACE}" "$(get_operator_pod)" "operator"
       sleep 30 # wait for pod failure to happen

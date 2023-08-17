@@ -8,5 +8,5 @@ commands:
 
       source ../../functions
 
-      network_loss "${OPERATOR_NS:-$NAMESPACE}" "$(get_operator_pod)"
+      network_loss "${OPERATOR_NS:-$NAMESPACE}" "$(get_operator_pod)" "operator"
       sleep 30 # wait for network loss to happen
