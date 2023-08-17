@@ -17,6 +17,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
+// getFQDN generates the Fully Qualified Domain Name from the service name.
 func getFQDN(svcName string) (string, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -31,6 +32,7 @@ func getFQDN(svcName string) (string, error) {
 	return fmt.Sprintf("%s.%s.%s", hostname, svcName, namespace), nil
 }
 
+// getSecret retrieves the secret associated with a given username.
 func getSecret(username apiv1alpha1.SystemUser) (string, error) {
 	path := filepath.Join(mysql.CredsMountPath, string(username))
 	sBytes, err := os.ReadFile(path)
@@ -41,6 +43,7 @@ func getSecret(username apiv1alpha1.SystemUser) (string, error) {
 	return strings.TrimSpace(string(sBytes)), nil
 }
 
+// getPodIP fetches the IP address of a given hostname.
 func getPodIP(hostname string) (string, error) {
 	addrs, err := net.LookupHost(hostname)
 	if err != nil {
@@ -51,6 +54,7 @@ func getPodIP(hostname string) (string, error) {
 	return addrs[0], nil
 }
 
+// lookup resolves a service name to its SRV records, extracting relevant endpoints.
 func lookup(svcName string) (sets.Set[string], error) {
 	endpoints := sets.New[string]()
 	_, srvRecords, err := net.LookupSRV("", "", svcName)
@@ -68,10 +72,12 @@ func lookup(svcName string) (sets.Set[string], error) {
 	return endpoints, nil
 }
 
+// lockExists checks if the bootstrap.lock file exists.
 func lockExists() (bool, error) {
 	return fileExists("/var/lib/mysql/bootstrap.lock")
 }
 
+// fileExists determines if a specified file exists.
 func fileExists(name string) (bool, error) {
 	_, err := os.Stat(name)
 	if err != nil {
@@ -83,6 +89,7 @@ func fileExists(name string) (bool, error) {
 	return true, nil
 }
 
+// waitLockRemoval repeatedly checks for the removal of the bootstrap.lock file.
 func waitLockRemoval() error {
 	for {
 		exists, err := lockExists()
@@ -96,6 +103,7 @@ func waitLockRemoval() error {
 	}
 }
 
+// createFile creates a new file with the specified content.
 func createFile(name, content string) error {
 	f, err := os.Create(name)
 	if err != nil {
