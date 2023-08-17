@@ -65,6 +65,20 @@ function main() {
 		echo "${NODE_LIST_REPL[*]}"
 	) >>"$path_to_haproxy_cfg/haproxy.cfg"
 
+	cat <<-EOF >>"$path_to_haproxy_cfg/haproxy.cfg"
+		    backend mysql-x
+		      mode tcp
+		      option srvtcpka
+		      balance roundrobin
+		      option external-check
+		      external-check command /opt/percona/haproxy_check_replicas.sh
+	EOF
+
+	(
+		IFS=$'\n'
+		echo "${NODE_LIST_REPL[*]}"
+	) >>"$path_to_haproxy_cfg/haproxy.cfg"
+
 	haproxy -c -f /opt/percona/haproxy-global.cfg -f $path_to_haproxy_cfg/haproxy.cfg
 
 	# TODO: Can we do something for maintenance mode?
