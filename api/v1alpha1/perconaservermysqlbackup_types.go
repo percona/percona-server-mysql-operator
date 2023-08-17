@@ -72,6 +72,7 @@ type PerconaServerMySQLBackupList struct {
 	Items           []PerconaServerMySQLBackup `json:"items"`
 }
 
+// Initializes the scheme with PerconaServerMySQLBackup types.
 func init() {
 	SchemeBuilder.Register(&PerconaServerMySQLBackup{}, &PerconaServerMySQLBackupList{})
 }
