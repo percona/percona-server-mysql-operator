@@ -19,7 +19,7 @@ commands:
       # proxy_protocol=$(run_mysql "SELECT count(*) FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -P 3309 -uroot -proot_password")
       # args="${args} --from-literal=proxy_protocol=${proxy_protocol}"
 
-      mysqlx=$(run_mysql "SELECT count(*) FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -P 33060 -uroot -proot_password")
+      mysqlx=$(run_mysqlsh "SELECT count(*) FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -P 33060 -uroot -proot_password")
       args="${args} --from-literal=mysqlx=${mysqlx}"
 
       mysql_admin=$(run_mysql "SELECT count(*) FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -P 33062 -uroot -proot_password")
