@@ -25,6 +25,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
 
+// TestBackupStatusErrStateDesc tests error descriptions in the backup status.
 func TestBackupStatusErrStateDesc(t *testing.T) {
 	namespace := "some-namespace"
 
@@ -132,6 +133,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 	}
 }
 
+// TestCheckFinalizers verifies the behavior of finalizers on PerconaServerMySQLBackup objects.
 func TestCheckFinalizers(t *testing.T) {
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
@@ -304,6 +306,7 @@ func TestCheckFinalizers(t *testing.T) {
 	}
 }
 
+// Loads the default PerconaServerMySQL CR from a file and updates its metadata.
 func readDefaultCR(name, namespace string) (*apiv1alpha1.PerconaServerMySQL, error) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "cr.yaml"))
 	if err != nil {
@@ -321,6 +324,7 @@ func readDefaultCR(name, namespace string) (*apiv1alpha1.PerconaServerMySQL, err
 	return cr, nil
 }
 
+// Loads the default PerconaServerMySQLBackup CR from a file and updates its metadata.
 func readDefaultCRBackup(name, namespace string) (*apiv1alpha1.PerconaServerMySQLBackup, error) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "backup.yaml"))
 	if err != nil {
@@ -338,6 +342,7 @@ func readDefaultCRBackup(name, namespace string) (*apiv1alpha1.PerconaServerMySQ
 	return cr, nil
 }
 
+// Applies a series of update functions to a given resource.
 func updateResource[T any](cr *T, updateFuncs ...func(cr *T)) *T {
 	for _, f := range updateFuncs {
 		f(cr)
