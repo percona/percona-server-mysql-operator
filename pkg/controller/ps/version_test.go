@@ -29,6 +29,8 @@ import (
 	vs "github.com/percona/percona-server-mysql-operator/pkg/version/service"
 )
 
+// TestReconcileVersions tests the reconciliation of
+// Percona MySQL server versions based on different scenarios.
 func TestReconcileVersions(t *testing.T) {
 	ctx := context.Background()
 
@@ -274,6 +276,7 @@ func TestReconcileVersions(t *testing.T) {
 	}
 }
 
+// Tests version retrieval for PerconaServerMySQL CR.
 func TestGetVersion(t *testing.T) {
 	ctx := context.Background()
 
@@ -398,6 +401,7 @@ type fakeVS struct {
 	unimplemented bool
 }
 
+// Handles the application of versions based on provided request data.
 func (vs *fakeVS) Apply(_ context.Context, req any) (any, error) {
 	if vs.unimplemented {
 		return nil, errors.New("unimplemented")
@@ -481,6 +485,7 @@ func (vs *fakeVS) Apply(_ context.Context, req any) (any, error) {
 	}, nil
 }
 
+// Creates a fake version service for testing.
 func fakeVersionService(addr string, gwport int, unimplemented bool) *fakeVS {
 	return &fakeVS{
 		addr:          addr,
@@ -493,13 +498,17 @@ type mockClientConn struct {
 	dialer grpcmock.ContextDialer
 }
 
+// Invokes a unary RPC with mock client connection.
 func (m *mockClientConn) Invoke(ctx context.Context, method string, args, reply any, opts ...grpc.CallOption) error {
 	return grpcmock.InvokeUnary(ctx, method, args, reply, grpcmock.WithInsecure(), grpcmock.WithCallOptions(opts...), grpcmock.WithContextDialer(m.dialer))
 }
+
+// Mock implementation of the NewStream method, returning an "unimplemented" error.
 func (m *mockClientConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 	return nil, errors.New("unimplemented")
 }
 
+// Starts the fake version service with mocked server and client configurations.
 func (vs *fakeVS) Start(t *testing.T) error {
 	_, d := grpcmock.MockServerWithBufConn(
 		grpcmock.RegisterServiceFromInstance("version.VersionService", (*pbVersion.VersionServiceServer)(nil)),
