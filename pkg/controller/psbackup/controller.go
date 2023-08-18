@@ -298,6 +298,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	return rr, nil
 }
 
+// Generates a backup destination path based on storage type, cluster name, and timestamp.
 func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creationTimeStamp string) string {
 	dest := fmt.Sprintf("%s-%s-full", clusterName, creationTimeStamp)
 
@@ -313,6 +314,7 @@ func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creatio
 	return dest
 }
 
+// Determines the optimal source for a backup, either primary or replica.
 func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	log := logf.FromContext(ctx).WithName("getBackupSource")
 
@@ -339,6 +341,7 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 
 const finalizerDeleteBackup = "delete-backup"
 
+// Checks and processes finalizers for a given PerconaServerMySQLBackup resource.
 func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup) {
 	if cr.DeletionTimestamp == nil || cr.Status.State == apiv1alpha1.BackupStarting || cr.Status.State == apiv1alpha1.BackupRunning {
 		return
@@ -378,6 +381,7 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 	cr.Finalizers = finalizers.List()
 }
 
+// Constructs a backup configuration based on the backup resource and associated storage settings.
 func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup) (*xtrabackup.BackupConfig, error) {
 	storage := cr.Status.Storage
 	if storage == nil {
@@ -464,6 +468,7 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 	return conf, nil
 }
 
+// Deletes a backup, either by triggering a deletion job or directly via the sidecar API.
 func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup) (bool, error) {
 	backupConf, err := r.backupConfig(ctx, cr)
 	if err != nil {
