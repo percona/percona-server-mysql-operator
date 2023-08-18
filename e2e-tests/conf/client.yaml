@@ -7,7 +7,7 @@ metadata:
 spec:
   containers:
   - name: mysql-client
-    image: percona/percona-server:8.0.25
+    image: percona/percona-server:8.0.33
     command:
     - sleep
     - infinity
