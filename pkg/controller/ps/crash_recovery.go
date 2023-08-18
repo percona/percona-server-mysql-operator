@@ -16,6 +16,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 )
 
+// reconcileFullClusterCrash handles recovery from a full cluster crash for Percona Server MySQL.
 func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("Crash recovery")
 
@@ -94,6 +95,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 	return nil
 }
 
+// cleanupFullClusterCrashFile removes the crash indicator file from all pods in the Percona Server MySQL cluster.
 func (r *PerconaServerMySQLReconciler) cleanupFullClusterCrashFile(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
