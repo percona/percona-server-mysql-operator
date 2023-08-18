@@ -72,6 +72,7 @@ type PerconaServerMySQLRestoreList struct {
 	Items           []PerconaServerMySQLRestore `json:"items"`
 }
 
+// Registers PerconaServerMySQLRestore types with the SchemeBuilder.
 func init() {
 	SchemeBuilder.Register(&PerconaServerMySQLRestore{}, &PerconaServerMySQLRestoreList{})
 }
