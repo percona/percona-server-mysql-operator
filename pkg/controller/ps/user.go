@@ -32,6 +32,7 @@ const (
 
 var ErrPassNotPropagated = errors.New("password not yet propagated")
 
+// allSystemUsers creates and returns a map of system users and their MySQL configurations.
 func allSystemUsers() map[apiv1alpha1.SystemUser]mysql.User {
 	uu := [...]apiv1alpha1.SystemUser{
 		apiv1alpha1.UserHeartbeat,
@@ -63,6 +64,7 @@ func allSystemUsers() map[apiv1alpha1.SystemUser]mysql.User {
 	return users
 }
 
+// ensureUserSecrets ensures the existence and correctness of user secrets for Percona MySQL Server.
 func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	nn := types.NamespacedName{
 		Namespace: cr.Namespace,
@@ -87,6 +89,7 @@ func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr
 	return nil
 }
 
+// reconcileUsers ensures user secrets are correctly synchronized and updates user passwords if required.
 func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileUsers")
 
@@ -300,6 +303,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, updatedUsers, operatorPass)
 }
 
+// It ensures old user passwords are discarded once new passwords are propagated throughout the system.
 func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQL,
@@ -353,6 +357,7 @@ func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
 	return nil
 }
 
+// passwordsPropagated checks if the updated user passwords have been propagated to all components.
 func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, secrets *corev1.Secret) error {
 	log := logf.FromContext(ctx)
 
