@@ -65,6 +65,7 @@ var _ = Describe("Keep user secrets", Ordered, func() {
 	})
 })
 
+// TestEnsureUserSecrets tests user secret creation and updates.
 func TestEnsureUserSecrets(t *testing.T) {
 	ctx := context.Background()
 	secretsName := "some-secret"
