@@ -19,6 +19,7 @@ import (
 
 const controllerRevisionHash = "controller-revision-hash"
 
+// smartUpdate gracefully updates the StatefulSet pods considering primary and backup states.
 func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *appsv1.StatefulSet, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
@@ -115,6 +116,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	return deletePod(ctx, r.Client, primPod, currentSet)
 }
 
+// stsChanged checks if the StatefulSet's pods have been updated.
 func stsChanged(sts *appsv1.StatefulSet, pods []corev1.Pod) bool {
 	// When https://github.com/kubernetes/kubernetes/issues/73492 bug gets fixed,
 	// we can simply compare sts.Status.UpdateRevision with sts.Status.CurrentRevision
@@ -128,6 +130,7 @@ func stsChanged(sts *appsv1.StatefulSet, pods []corev1.Pod) bool {
 	return false
 }
 
+// isBackupRunning determines if there's an ongoing backup for the PerconaServerMySQL cluster.
 func (r *PerconaServerMySQLReconciler) isBackupRunning(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
 	bcpList := apiv1alpha1.PerconaServerMySQLBackupList{}
 	if err := r.Client.List(ctx, &bcpList, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
