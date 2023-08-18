@@ -19,6 +19,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 )
 
+// ensureTLSSecret ensures that the TLS secret is created either using cert-manager or manually.
 func (r *PerconaServerMySQLReconciler) ensureTLSSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
@@ -40,6 +41,8 @@ func (r *PerconaServerMySQLReconciler) ensureTLSSecret(ctx context.Context, cr *
 
 	return nil
 }
+
+// checkTLSIssuer verifies if the TLS issuer configuration exists in the cluster.
 func (r *PerconaServerMySQLReconciler) checkTLSIssuer(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	if cr.Spec.TLS == nil || cr.Spec.TLS.IssuerConf == nil {
 		return nil
@@ -56,6 +59,7 @@ func (r *PerconaServerMySQLReconciler) checkTLSIssuer(ctx context.Context, cr *a
 	return nil
 }
 
+// ensureSSLByCertManager ensures the SSL certificate using the cert-manager.
 func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	issuerName := cr.Name + "-pso-issuer"
 	caIssuerName := cr.Name + "-pso-ca-issuer"
@@ -144,6 +148,7 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 	return r.waitForCert(ctx, cr.Namespace, certName, cr.Spec.SSLSecretName)
 }
 
+// ensureIssuer creates or updates the cert-manager Issuer with the specified configuration.
 func (r *PerconaServerMySQLReconciler) ensureIssuer(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, issuerName string, IssuerConf cm.IssuerConfig,
 ) error {
 	isr := &cm.Issuer{
@@ -163,6 +168,7 @@ func (r *PerconaServerMySQLReconciler) ensureIssuer(ctx context.Context, cr *api
 	return nil
 }
 
+// waitForCert polls until the specified certificate is ready or a timeout is reached.
 func (r *PerconaServerMySQLReconciler) waitForCert(ctx context.Context, namespace, certName, secretName string) error {
 	ticker := time.NewTicker(3 * time.Second)
 	timeoutTimer := time.NewTimer(30 * time.Second)
