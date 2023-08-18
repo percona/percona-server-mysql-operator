@@ -80,7 +80,7 @@ function main() {
 	) >>"$path_to_haproxy_cfg/haproxy.cfg"
 
 	cat <<-EOF >>"$path_to_haproxy_cfg/haproxy.cfg"
-		    backend mysql-x
+		    backend mysql-admin
 		      mode tcp
 		      option srvtcpka
 		      balance roundrobin
