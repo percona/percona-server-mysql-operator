@@ -21,10 +21,12 @@ type mysqlshExec struct {
 	uri    string
 }
 
+// NewWithExec creates a new MySQL shell execution instance with the provided client command, pod, and URI.
 func NewWithExec(cliCmd clientcmd.Client, pod *corev1.Pod, uri string) (*mysqlshExec, error) {
 	return &mysqlshExec{client: cliCmd, pod: pod, uri: uri}, nil
 }
 
+// runWithExec executes the given command using the client command and captures its output and error messages.
 func (m *mysqlshExec) runWithExec(ctx context.Context, cmd string) error {
 	var errb, outb bytes.Buffer
 
@@ -39,6 +41,7 @@ func (m *mysqlshExec) runWithExec(ctx context.Context, cmd string) error {
 	return nil
 }
 
+// ConfigureInstanceWithExec configures a MySQL instance using the provided instance name.
 func (m *mysqlshExec) ConfigureInstanceWithExec(ctx context.Context, instance string) error {
 	cmd := fmt.Sprintf(
 		"dba.configureInstance('%s', {'interactive': false, 'clearReadOnly': true})",
@@ -52,6 +55,7 @@ func (m *mysqlshExec) ConfigureInstanceWithExec(ctx context.Context, instance st
 	return nil
 }
 
+// AddInstanceWithExec adds a new instance to a MySQL cluster using the provided cluster name.
 func (m *mysqlshExec) AddInstanceWithExec(ctx context.Context, clusterName, instance string) error {
 	opts := struct {
 		Interactive    bool   `json:"interactive"`
@@ -77,6 +81,7 @@ func (m *mysqlshExec) AddInstanceWithExec(ctx context.Context, clusterName, inst
 	return nil
 }
 
+// RejoinInstanceWithExec re-joins a MySQL instance to a cluster using the provided cluster name.
 func (m *mysqlshExec) RejoinInstanceWithExec(ctx context.Context, clusterName, instance string) error {
 	cmd := fmt.Sprintf("dba.getCluster('%s').rejoinInstance('%s', {'interactive': false})", clusterName, instance)
 
@@ -87,6 +92,7 @@ func (m *mysqlshExec) RejoinInstanceWithExec(ctx context.Context, clusterName, i
 	return nil
 }
 
+// RemoveInstanceWithExec removes a MySQL instance from a cluster using the provided cluster name.
 func (m *mysqlshExec) RemoveInstanceWithExec(ctx context.Context, clusterName, instance string) error {
 	cmd := fmt.Sprintf("dba.getCluster('%s').removeInstance('%s', {'interactive': false, 'force': true})", clusterName, instance)
 
@@ -97,6 +103,7 @@ func (m *mysqlshExec) RemoveInstanceWithExec(ctx context.Context, clusterName, i
 	return nil
 }
 
+// CreateClusterWithExec creates a new MySQL cluster using the provided cluster name.
 func (m *mysqlshExec) CreateClusterWithExec(ctx context.Context, clusterName string) error {
 	cmd := fmt.Sprintf("dba.createCluster('%s', {'adoptFromGR': true})", clusterName)
 
@@ -107,6 +114,7 @@ func (m *mysqlshExec) CreateClusterWithExec(ctx context.Context, clusterName str
 	return nil
 }
 
+// DoesClusterExistWithExec checks if a MySQL cluster with the given name exists.
 func (m *mysqlshExec) DoesClusterExistWithExec(ctx context.Context, clusterName string) bool {
 	log := logf.FromContext(ctx)
 
@@ -119,6 +127,7 @@ func (m *mysqlshExec) DoesClusterExistWithExec(ctx context.Context, clusterName 
 	return err == nil
 }
 
+// ClusterStatusWithExec retrieves the status of a MySQL cluster with the provided cluster name.
 func (m *mysqlshExec) ClusterStatusWithExec(ctx context.Context, clusterName string) (innodbcluster.Status, error) {
 	status := innodbcluster.Status{}
 
@@ -141,6 +150,7 @@ func (m *mysqlshExec) ClusterStatusWithExec(ctx context.Context, clusterName str
 	return status, nil
 }
 
+// MemberStateWithExec returns the state of a member within a MySQL cluster.
 func (m *mysqlshExec) MemberStateWithExec(ctx context.Context, clusterName, instance string) (innodbcluster.MemberState, error) {
 	log := logf.FromContext(ctx).WithName("InnoDBCluster").WithValues("cluster", clusterName)
 
@@ -159,6 +169,7 @@ func (m *mysqlshExec) MemberStateWithExec(ctx context.Context, clusterName, inst
 	return member.MemberState, nil
 }
 
+// TopologyWithExec retrieves the topology of a MySQL cluster.
 func (m *mysqlshExec) TopologyWithExec(ctx context.Context, clusterName string) (map[string]innodbcluster.Member, error) {
 	status, err := m.ClusterStatusWithExec(ctx, clusterName)
 	if err != nil {
@@ -168,6 +179,7 @@ func (m *mysqlshExec) TopologyWithExec(ctx context.Context, clusterName string) 
 	return status.DefaultReplicaSet.Topology, nil
 }
 
+// RebootClusterFromCompleteOutageWithExec reboots a MySQL cluster after a complete outage.
 func (m *mysqlshExec) RebootClusterFromCompleteOutageWithExec(ctx context.Context, clusterName string) error {
 	cmd := fmt.Sprintf("dba.rebootClusterFromCompleteOutage('%s')", clusterName)
 
