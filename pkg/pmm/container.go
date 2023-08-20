@@ -7,6 +7,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 )
 
+// Container returns a corev1.Container configuration for the PMM client in a PerconaServerMySQL instance.
 func Container(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret, dbType string) corev1.Container {
 	ports := []corev1.ContainerPort{{ContainerPort: 7777}}
 	for port := 30100; port <= 30105; port++ {
@@ -33,6 +34,7 @@ func Container(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret, dbType
 	}
 }
 
+// pmmEnvs generates environment variables for the PMM client.
 func pmmEnvs(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret, dbType string) []corev1.EnvVar {
 	user := "api_key"
 	passwordKey := string(apiv1alpha1.UserPMMServerKey)
