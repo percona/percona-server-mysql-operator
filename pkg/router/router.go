@@ -35,24 +35,29 @@ const (
 	PortRWAdmin    = 33062
 )
 
+// Name returns the composed name for a component.
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return cr.Name + "-" + ComponentName
 }
 
+// PodName returns the pod name with an index.
 func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
 	return fmt.Sprintf("%s-%d", Name(cr), idx)
 }
 
+// ServiceName returns the service name associated with the component.
 func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
+// MatchLabels returns merged labels for the component.
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
 		map[string]string{apiv1alpha1.ComponentLabel: ComponentName},
 		cr.Labels())
 }
 
+// Service returns the Service configuration for the component.
 func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	expose := cr.Spec.Proxy.Router.Expose
 
@@ -127,6 +132,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
+// Deployment returns the Deployment configuration for the component.
 func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string) *appsv1.Deployment {
 	labels := MatchLabels(cr)
 	spec := cr.Spec.Proxy.Router
@@ -239,10 +245,12 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string
 	}
 }
 
+// containers returns the container configurations for the component.
 func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 	return []corev1.Container{routerContainer(cr)}
 }
 
+// routerContainer returns the container configuration for the router component.
 func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	spec := cr.Spec.Proxy.Router
 
