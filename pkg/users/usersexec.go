@@ -25,10 +25,12 @@ type dbExecImpl struct {
 	host   string
 }
 
+// NewManagerExec creates a new Manager implementation using an exec-based approach.
 func NewManagerExec(pod *corev1.Pod, cliCmd clientcmd.Client, user apiv1alpha1.SystemUser, pass, host string) (Manager, error) {
 	return &dbExecImpl{client: cliCmd, pod: pod, user: user, pass: pass, host: host}, nil
 }
 
+// exec executes the given SQL statement inside the MySQL database on the specified pod.
 func (d *dbExecImpl) exec(stm string) error {
 
 	cmd := []string{"mysql", "--database", "performance_schema", fmt.Sprintf("-p%s", escapePass(d.pass)), "-u", string(d.user), "-h", d.host, "-e", stm}
@@ -89,10 +91,12 @@ func (d *dbExecImpl) DiscardOldPasswords(users []mysql.User) error {
 	return nil
 }
 
+// Close is a no-op function for closing the database connection.
 func (d *dbExecImpl) Close() error {
 	return nil
 }
 
+// escapePass escapes special characters in the provided password string.
 func escapePass(pass string) string {
 	s := strings.ReplaceAll(pass, `'`, `\'`)
 	s = strings.ReplaceAll(s, `"`, `\"`)
