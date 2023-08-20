@@ -28,6 +28,7 @@ type Instance struct {
 	Replicas  []InstanceKey `json:"Replicas"`
 }
 
+// ClusterPrimary retrieves the primary instance of a cluster using the Orchestrator API.ss
 func ClusterPrimary(ctx context.Context, apiHost, clusterHint string) (*Instance, error) {
 	url := fmt.Sprintf("%s/api/master/%s", apiHost, clusterHint)
 
@@ -59,6 +60,7 @@ func ClusterPrimary(ctx context.Context, apiHost, clusterHint string) (*Instance
 	return primary, nil
 }
 
+// StopReplication stops replication on the specified host and port using the Orchestrator API.
 func StopReplication(ctx context.Context, apiHost, host string, port int32) error {
 	url := fmt.Sprintf("%s/api/stop-replica/%s/%d", apiHost, host, port)
 
@@ -80,6 +82,7 @@ func StopReplication(ctx context.Context, apiHost, host string, port int32) erro
 	return nil
 }
 
+// StartReplication starts replication on the specified host and port using the Orchestrator API.
 func StartReplication(ctx context.Context, apiHost, host string, port int32) error {
 	url := fmt.Sprintf("%s/api/start-replica/%s/%d", apiHost, host, port)
 
@@ -101,6 +104,7 @@ func StartReplication(ctx context.Context, apiHost, host string, port int32) err
 	return nil
 }
 
+// AddPeer adds a new peer to a Raft cluster using the Orchestrator API.
 func AddPeer(ctx context.Context, apiHost string, peer string) error {
 	url := fmt.Sprintf("%s/api/raft-add-peer/%s", apiHost, peer)
 
@@ -133,6 +137,7 @@ func AddPeer(ctx context.Context, apiHost string, peer string) error {
 	return nil
 }
 
+// RemovePeer removes a peer from a Raft cluster using the Orchestrator API.
 func RemovePeer(ctx context.Context, apiHost string, peer string) error {
 	url := fmt.Sprintf("%s/api/raft-remove-peer/%s", apiHost, peer)
 
@@ -165,6 +170,7 @@ func RemovePeer(ctx context.Context, apiHost string, peer string) error {
 	return nil
 }
 
+// EnsureNodeIsPrimary ensures that the specified node becomes the primary of the cluster using the Orchestrator API.
 func EnsureNodeIsPrimary(ctx context.Context, apiHost, clusterHint, host string, port int) error {
 	primary, err := ClusterPrimary(ctx, apiHost, clusterHint)
 	if err != nil {
@@ -198,6 +204,7 @@ func EnsureNodeIsPrimary(ctx context.Context, apiHost, clusterHint, host string,
 
 var ErrEmptyResponse = errors.New("empty response")
 
+// Discover triggers discovery of a node using the Orchestrator API.
 func Discover(ctx context.Context, apiHost, host string, port int) error {
 	url := fmt.Sprintf("%s/api/discover/%s/%d", apiHost, host, port)
 
@@ -227,6 +234,7 @@ func Discover(ctx context.Context, apiHost, host string, port int) error {
 	return nil
 }
 
+// doRequest sends an HTTP GET request to the provided URL and returns the response.
 func doRequest(ctx context.Context, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
