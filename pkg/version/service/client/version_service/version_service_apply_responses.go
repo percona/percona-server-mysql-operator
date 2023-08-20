@@ -55,13 +55,17 @@ type VersionServiceApplyOK struct {
 	Payload *models.VersionVersionResponse
 }
 
+// Error formats the VersionServiceApplyOK response as an error string.
 func (o *VersionServiceApplyOK) Error() string {
 	return fmt.Sprintf("[GET /versions/v1/{product}/{operatorVersion}/{apply}][%d] versionServiceApplyOK  %+v", 200, o.Payload)
 }
+
+// GetPayload retrieves the payload of the VersionServiceApplyOK response.
 func (o *VersionServiceApplyOK) GetPayload() *models.VersionVersionResponse {
 	return o.Payload
 }
 
+// readResponse reads and decodes the client response into the VersionServiceApplyOK structure.
 func (o *VersionServiceApplyOK) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
 
 	o.Payload = new(models.VersionVersionResponse)
@@ -97,13 +101,17 @@ func (o *VersionServiceApplyDefault) Code() int {
 	return o._statusCode
 }
 
+// Error formats the VersionServiceApplyDefault response as an error string.
 func (o *VersionServiceApplyDefault) Error() string {
 	return fmt.Sprintf("[GET /versions/v1/{product}/{operatorVersion}/{apply}][%d] VersionService_Apply default  %+v", o._statusCode, o.Payload)
 }
+
+// GetPayload retrieves the payload of the VersionServiceApplyDefault response.
 func (o *VersionServiceApplyDefault) GetPayload() *models.GooglerpcStatus {
 	return o.Payload
 }
 
+// readResponse reads and decodes the client response into the VersionServiceApplyDefault structure.
 func (o *VersionServiceApplyDefault) readResponse(response runtime.ClientResponse, consumer runtime.Consumer, formats strfmt.Registry) error {
 
 	o.Payload = new(models.GooglerpcStatus)
