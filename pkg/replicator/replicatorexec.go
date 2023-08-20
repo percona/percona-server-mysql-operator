@@ -29,10 +29,12 @@ type dbImplExec struct {
 	host   string
 }
 
+// NewReplicatorExec creates a new Replicator instance using the exec-based implementation.
 func NewReplicatorExec(pod *corev1.Pod, cliCmd clientcmd.Client, user apiv1alpha1.SystemUser, pass, host string) (Replicator, error) {
 	return &dbImplExec{client: cliCmd, pod: pod, user: user, pass: pass, host: host}, nil
 }
 
+// exec executes a MySQL command on the target database.
 func (d *dbImplExec) exec(ctx context.Context, stm string, stdout, stderr *bytes.Buffer) error {
 	cmd := []string{"mysql", "--database", "performance_schema", fmt.Sprintf("-p%s", d.pass), "-u", string(d.user), "-h", d.host, "-e", stm}
 
@@ -50,6 +52,7 @@ func (d *dbImplExec) exec(ctx context.Context, stm string, stdout, stderr *bytes
 	return nil
 }
 
+// query executes a MySQL query on the target database.
 func (d *dbImplExec) query(ctx context.Context, query string, out interface{}) error {
 	var errb, outb bytes.Buffer
 	err := d.exec(ctx, query, &outb, &errb)
@@ -71,6 +74,7 @@ func (d *dbImplExec) query(ctx context.Context, query string, out interface{}) e
 	return nil
 }
 
+// ChangeReplicationSource changes the replication source for the database.
 func (d *dbImplExec) ChangeReplicationSource(ctx context.Context, host, replicaPass string, port int32) error {
 	var errb, outb bytes.Buffer
 	q := fmt.Sprintf(`
@@ -94,6 +98,7 @@ func (d *dbImplExec) ChangeReplicationSource(ctx context.Context, host, replicaP
 	return nil
 }
 
+// StartReplication starts the database replication process.
 func (d *dbImplExec) StartReplication(ctx context.Context, host, replicaPass string, port int32) error {
 	if err := d.ChangeReplicationSource(ctx, host, replicaPass, port); err != nil {
 		return errors.Wrap(err, "change replication source")
@@ -104,12 +109,14 @@ func (d *dbImplExec) StartReplication(ctx context.Context, host, replicaPass str
 	return errors.Wrap(err, "start replication")
 }
 
+// StopReplication stops the database replication process.
 func (d *dbImplExec) StopReplication(ctx context.Context) error {
 	var errb, outb bytes.Buffer
 	err := d.exec(ctx, "STOP REPLICA", &outb, &errb)
 	return errors.Wrap(err, "stop replication")
 }
 
+// ResetReplication resets the replication configuration.
 func (d *dbImplExec) ResetReplication(ctx context.Context) error {
 	var errb, outb bytes.Buffer
 	err := d.exec(ctx, "RESET REPLICA ALL", &outb, &errb)
@@ -117,6 +124,7 @@ func (d *dbImplExec) ResetReplication(ctx context.Context) error {
 
 }
 
+// ReplicationStatus retrieves the replication status of the database.
 func (d *dbImplExec) ReplicationStatus(ctx context.Context) (ReplicationStatus, string, error) {
 	rows := []*struct {
 		IoState  string `csv:"conn_state"`
@@ -151,17 +159,20 @@ func (d *dbImplExec) ReplicationStatus(ctx context.Context) (ReplicationStatus, 
 	return ReplicationStatusNotInitiated, "", err
 }
 
+// IsReplica checks if the database is acting as a replica.
 func (d *dbImplExec) IsReplica(ctx context.Context) (bool, error) {
 	status, _, err := d.ReplicationStatus(ctx)
 	return status == ReplicationStatusActive, errors.Wrap(err, "get replication status")
 }
 
+// EnableSuperReadonly sets the global super_read_only parameter to 1.
 func (d *dbImplExec) EnableSuperReadonly(ctx context.Context) error {
 	var errb, outb bytes.Buffer
 	err := d.exec(ctx, "SET GLOBAL SUPER_READ_ONLY=1", &outb, &errb)
 	return errors.Wrap(err, "set global super_read_only param to 1")
 }
 
+// IsReadonly checks if the database is in read-only mode.
 func (d *dbImplExec) IsReadonly(ctx context.Context) (bool, error) {
 	rows := []*struct {
 		Readonly int `csv:"readonly"`
@@ -175,6 +186,7 @@ func (d *dbImplExec) IsReadonly(ctx context.Context) (bool, error) {
 	return rows[0].Readonly == 1, nil
 }
 
+// ReportHost retrieves the report_host parameter value.
 func (d *dbImplExec) ReportHost(ctx context.Context) (string, error) {
 	rows := []*struct {
 		Host string `csv:"host"`
@@ -188,10 +200,12 @@ func (d *dbImplExec) ReportHost(ctx context.Context) (string, error) {
 	return rows[0].Host, nil
 }
 
+// Close closes the database connection.
 func (d *dbImplExec) Close() error {
 	return nil
 }
 
+// CloneInProgress checks if a database clone operation is in progress.
 func (d *dbImplExec) CloneInProgress(ctx context.Context) (bool, error) {
 	rows := []*struct {
 		State string `csv:"state"`
@@ -210,6 +224,7 @@ func (d *dbImplExec) CloneInProgress(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
+// NeedsClone checks if the database needs to be cloned from a donor.
 func (d *dbImplExec) NeedsClone(ctx context.Context, donor string, port int32) (bool, error) {
 	rows := []*struct {
 		Source string `csv:"source"`
@@ -229,6 +244,7 @@ func (d *dbImplExec) NeedsClone(ctx context.Context, donor string, port int32) (
 	return true, nil
 }
 
+// Clone initiates the cloning process for the database.
 func (d *dbImplExec) Clone(ctx context.Context, donor, user, pass string, port int32) error {
 	var errb, outb bytes.Buffer
 	q := fmt.Sprintf("SET GLOBAL clone_valid_donor_list='%s'", fmt.Sprintf("%s:%d", donor, port))
@@ -252,6 +268,7 @@ func (d *dbImplExec) Clone(ctx context.Context, donor, user, pass string, port i
 	return nil
 }
 
+// DumbQuery executes a simple query to check database connectivity.
 func (d *dbImplExec) DumbQuery(ctx context.Context) error {
 	var errb, outb bytes.Buffer
 	err := d.exec(ctx, "SELECT 1", &outb, &errb)
@@ -259,6 +276,7 @@ func (d *dbImplExec) DumbQuery(ctx context.Context) error {
 	return errors.Wrap(err, "SELECT 1")
 }
 
+// GetGlobal retrieves the value of a global database variable.
 func (d *dbImplExec) GetGlobal(ctx context.Context, variable string) (interface{}, error) {
 	rows := []*struct {
 		Val interface{} `csv:"val"`
@@ -273,6 +291,7 @@ func (d *dbImplExec) GetGlobal(ctx context.Context, variable string) (interface{
 	return rows[0].Val, nil
 }
 
+// SetGlobal sets the value of a global database variable.
 func (d *dbImplExec) SetGlobal(ctx context.Context, variable, value interface{}) error {
 	var errb, outb bytes.Buffer
 	q := fmt.Sprintf("SET GLOBAL %s=%s", variable, value)
@@ -284,6 +303,7 @@ func (d *dbImplExec) SetGlobal(ctx context.Context, variable, value interface{})
 	return nil
 }
 
+// StartGroupReplication starts the group replication process.
 func (d *dbImplExec) StartGroupReplication(ctx context.Context, password string) error {
 	var errb, outb bytes.Buffer
 	q := fmt.Sprintf("START GROUP_REPLICATION USER='%s', PASSWORD='%s'", apiv1alpha1.UserReplication, password)
@@ -302,12 +322,14 @@ func (d *dbImplExec) StartGroupReplication(ctx context.Context, password string)
 	return errors.Wrap(err, "start group replication")
 }
 
+// StopGroupReplication stops the group replication process.
 func (d *dbImplExec) StopGroupReplication(ctx context.Context) error {
 	var errb, outb bytes.Buffer
 	err := d.exec(ctx, "STOP GROUP_REPLICATION", &outb, &errb)
 	return errors.Wrap(err, "stop group replication")
 }
 
+// GetGroupReplicationPrimary retrieves the primary host in the group replication.
 func (d *dbImplExec) GetGroupReplicationPrimary(ctx context.Context) (string, error) {
 	rows := []*struct {
 		Host string `csv:"host"`
@@ -340,6 +362,7 @@ func (d *dbImplExec) GetGroupReplicationReplicas(ctx context.Context) ([]string,
 	return replicas, nil
 }
 
+// GetMemberState retrieves the replication state of a member in the group replication.
 func (d *dbImplExec) GetMemberState(ctx context.Context, host string) (MemberState, error) {
 	rows := []*struct {
 		State MemberState `csv:"state"`
@@ -356,6 +379,7 @@ func (d *dbImplExec) GetMemberState(ctx context.Context, host string) (MemberSta
 	return rows[0].State, nil
 }
 
+// GetGroupReplicationMembers retrieves the list of all members in the group replication.
 func (d *dbImplExec) GetGroupReplicationMembers(ctx context.Context) ([]string, error) {
 	rows := []*struct {
 		Member string `csv:"member"`
@@ -374,6 +398,7 @@ func (d *dbImplExec) GetGroupReplicationMembers(ctx context.Context) ([]string, 
 	return members, nil
 }
 
+// CheckIfDatabaseExists checks if a database with the given name exists.
 func (d *dbImplExec) CheckIfDatabaseExists(ctx context.Context, name string) (bool, error) {
 	rows := []*struct {
 		DB string `csv:"db"`
@@ -432,6 +457,7 @@ func (d *dbImplExec) CheckIfInPrimaryPartition(ctx context.Context) (bool, error
 	return rows[0].In, nil
 }
 
+// CheckIfPrimaryUnreachable checks if the primary member in the replication group is unreachable.
 func (d *dbImplExec) CheckIfPrimaryUnreachable(ctx context.Context) (bool, error) {
 	var state string
 
