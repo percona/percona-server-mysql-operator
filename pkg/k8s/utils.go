@@ -38,22 +38,26 @@ func GetWatchNamespace() (string, error) {
 	return ns, nil
 }
 
+// objectMetaEqual checks if two metav1.Object instances have equal labels and annotations.
 func objectMetaEqual(old, new metav1.Object) bool {
 	return util.SSMapEqual(old.GetLabels(), new.GetLabels()) && util.SSMapEqual(old.GetAnnotations(), new.GetAnnotations())
 }
 
+// RemoveLabel removes a label from a client.Object.
 func RemoveLabel(obj client.Object, key string) {
 	labels := obj.GetLabels()
 	delete(obj.GetLabels(), key)
 	obj.SetLabels(labels)
 }
 
+// AddLabel adds a label with the given key and value to a client.Object.
 func AddLabel(obj client.Object, key, value string) {
 	labels := obj.GetLabels()
 	labels[key] = value
 	obj.SetLabels(labels)
 }
 
+// AddAnnotation adds an annotation with the given key and value to a client.Object.
 func AddAnnotation(obj client.Object, key, value string) {
 	annotations := obj.GetAnnotations()
 	if annotations == nil {
@@ -63,6 +67,7 @@ func AddAnnotation(obj client.Object, key, value string) {
 	obj.SetAnnotations(annotations)
 }
 
+// IsPodWithNameReady checks if a pod with the provided name and namespace is ready.
 func IsPodWithNameReady(ctx context.Context, cl client.Client, nn types.NamespacedName) (bool, error) {
 	pod := &corev1.Pod{}
 
@@ -77,6 +82,7 @@ func IsPodWithNameReady(ctx context.Context, cl client.Client, nn types.Namespac
 	return IsPodReady(*pod), nil
 }
 
+// IsPodReady checks if a given pod is ready.
 func IsPodReady(pod corev1.Pod) bool {
 	for _, cond := range pod.Status.Conditions {
 		if cond.Type == corev1.ContainersReady && cond.Status == corev1.ConditionTrue {
@@ -87,6 +93,7 @@ func IsPodReady(pod corev1.Pod) bool {
 	return false
 }
 
+// ObjectExists checks if a client.Object exists in the cluster.
 func ObjectExists(ctx context.Context, cl client.Reader, nn types.NamespacedName, o client.Object) (bool, error) {
 	if err := cl.Get(ctx, nn, o); err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -99,6 +106,7 @@ func ObjectExists(ctx context.Context, cl client.Reader, nn types.NamespacedName
 	return true, nil
 }
 
+// EnsureObject ensures the existence of a client.Object, creating or updating it as needed.
 func EnsureObject(
 	ctx context.Context,
 	cl client.Client,
@@ -138,6 +146,7 @@ func EnsureObject(
 	return nil
 }
 
+// EnsureObjectWithHash ensures the existence of a client.Object with a hash-based comparison for updates.
 func EnsureObjectWithHash(
 	ctx context.Context,
 	cl client.Client,
@@ -234,6 +243,7 @@ func EnsureObjectWithHash(
 	return nil
 }
 
+// EnsureService ensures the existence of a corev1.Service, considering ignored annotations and labels.
 func EnsureService(
 	ctx context.Context,
 	cl client.Client,
@@ -266,6 +276,7 @@ func EnsureService(
 	return EnsureObjectWithHash(ctx, cl, cr, svc, s)
 }
 
+// setIgnoredAnnotations sets ignored annotations on a client.Object.
 func setIgnoredAnnotations(cr *apiv1alpha1.PerconaServerMySQL, obj, oldObject client.Object) {
 	oldAnnotations := oldObject.GetAnnotations()
 	if len(oldAnnotations) == 0 {
@@ -278,6 +289,7 @@ func setIgnoredAnnotations(cr *apiv1alpha1.PerconaServerMySQL, obj, oldObject cl
 	obj.SetAnnotations(annotations)
 }
 
+// setIgnoredLabels sets ignored labels on a client.Object.
 func setIgnoredLabels(cr *apiv1alpha1.PerconaServerMySQL, obj, oldObject client.Object) {
 	oldLabels := oldObject.GetLabels()
 	if len(oldLabels) == 0 {
@@ -290,6 +302,7 @@ func setIgnoredLabels(cr *apiv1alpha1.PerconaServerMySQL, obj, oldObject client.
 	obj.SetLabels(labels)
 }
 
+// ObjectHash calculates the hash for a runtime.Object.
 func ObjectHash(obj runtime.Object) (string, error) {
 	var dataToMarshal interface{}
 
@@ -319,6 +332,7 @@ func ObjectHash(obj runtime.Object) (string, error) {
 	return hex.EncodeToString(hash[:]), nil
 }
 
+// PodsByLabels retrieves a list of corev1.Pods based on the provided labels.
 func PodsByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([]corev1.Pod, error) {
 	podList := &corev1.PodList{}
 
@@ -330,6 +344,7 @@ func PodsByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([
 	return podList.Items, nil
 }
 
+// ServicesByLabels retrieves a list of corev1.Services based on the provided labels.
 func ServicesByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([]corev1.Service, error) {
 	svcList := &corev1.ServiceList{}
 
@@ -341,6 +356,7 @@ func ServicesByLabels(ctx context.Context, cl client.Reader, l map[string]string
 	return svcList.Items, nil
 }
 
+// PVCsByLabels retrieves a list of corev1.PersistentVolumeClaims based on the provided labels.
 func PVCsByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([]corev1.PersistentVolumeClaim, error) {
 	pvcList := &corev1.PersistentVolumeClaimList{}
 
@@ -384,6 +400,7 @@ func RolloutRestart(ctx context.Context, cl client.Client, obj runtime.Object, k
 	}
 }
 
+// GetCRWithDefaults retrieves the PerconaServerMySQL CR with defaults set.
 func GetCRWithDefaults(
 	ctx context.Context,
 	cl client.Client,
