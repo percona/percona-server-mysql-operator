@@ -44,72 +44,88 @@ type User struct {
 
 type Exposer apiv1alpha1.PerconaServerMySQL
 
+// Exposed returns whether the Exposer's MySQL is exposed.
 func (e *Exposer) Exposed() bool {
 	return e.Spec.MySQL.Expose.Enabled
 }
 
+// Name generates a name using the index for the Exposer.
 func (e *Exposer) Name(index string) string {
 	cr := apiv1alpha1.PerconaServerMySQL(*e)
 	return Name(&cr) + "-" + index
 }
 
+// Size returns the size of the Exposer.
 func (e *Exposer) Size() int32 {
 	return e.Spec.MySQL.Size
 }
 
+// Labels returns labels for the Exposer.
 func (e *Exposer) Labels() map[string]string {
 	cr := apiv1alpha1.PerconaServerMySQL(*e)
 	return MatchLabels(&cr)
 }
 
+// Service returns a Service associated with the Exposer and the given name.
 func (e *Exposer) Service(name string) *corev1.Service {
 	cr := apiv1alpha1.PerconaServerMySQL(*e)
 	return PodService(&cr, cr.Spec.MySQL.Expose.Type, name)
 }
 
+// SaveOldMeta returns whether to save old metadata for the Exposer.
 func (e *Exposer) SaveOldMeta() bool {
 	cr := apiv1alpha1.PerconaServerMySQL(*e)
 	return cr.MySQLSpec().Expose.SaveOldMeta()
 }
 
+// Name generates the name for the StatefulSet using the PerconaServerMySQL object.
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return cr.Name + "-" + ComponentName
 }
 
+// NamespacedName generates a NamespacedName for the StatefulSet using the PerconaServerMySQL object.
 func NamespacedName(cr *apiv1alpha1.PerconaServerMySQL) types.NamespacedName {
 	return types.NamespacedName{Name: Name(cr), Namespace: cr.Namespace}
 }
 
+// ServiceName generates the service name using the PerconaServerMySQL object.
 func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
+// UnreadyServiceName generates the unready service name using the PerconaServerMySQL object.
 func UnreadyServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr) + "-unready"
 }
 
+// ConfigMapName generates the ConfigMap name using the PerconaServerMySQL object.
 func ConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
+// AutoConfigMapName generates the auto-config ConfigMap name using the PerconaServerMySQL object.
 func AutoConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return "auto-" + Name(cr)
 }
 
+// PodName generates a Pod name using the PerconaServerMySQL object and index.
 func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
 	return fmt.Sprintf("%s-%d", Name(cr), idx)
 }
 
+// FQDN generates a fully qualified domain name using the PerconaServerMySQL object and index.
 func FQDN(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
 	return fmt.Sprintf("%s.%s.%s", PodName(cr, idx), ServiceName(cr), cr.Namespace)
 }
 
+// MatchLabels generates labels using the PerconaServerMySQL object.
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
 		map[string]string{apiv1alpha1.ComponentLabel: ComponentName},
 		cr.Labels())
 }
 
+// StatefulSet generates a StatefulSet using the PerconaServerMySQL object, initImage, configuration hash, and Secret.
 func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string, secret *corev1.Secret) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 	spec := cr.MySQLSpec()
@@ -256,6 +272,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 	}
 }
 
+// updateStrategy returns the StatefulSet update strategy based on the given PerconaServerMySQL's update strategy.
 func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrategy {
 	switch cr.Spec.UpdateStrategy {
 	case appsv1.OnDeleteStatefulSetStrategyType:
@@ -273,6 +290,7 @@ func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdate
 	}
 }
 
+// volumeClaimTemplates returns a list of PersistentVolumeClaims for the given MySQLSpec.
 func volumeClaimTemplates(spec *apiv1alpha1.MySQLSpec) []corev1.PersistentVolumeClaim {
 	pvcs := []corev1.PersistentVolumeClaim{
 		k8s.PVC(DataVolumeName, spec.VolumeSpec),
@@ -287,6 +305,7 @@ func volumeClaimTemplates(spec *apiv1alpha1.MySQLSpec) []corev1.PersistentVolume
 	return pvcs
 }
 
+// servicePorts returns a list of ServicePorts for the given PerconaServerMySQL.
 func servicePorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ServicePort {
 	ports := []corev1.ServicePort{
 		{
@@ -314,6 +333,7 @@ func servicePorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ServicePort {
 	return ports
 }
 
+// containerPorts returns a list of ContainerPorts for the given PerconaServerMySQL.
 func containerPorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ContainerPort {
 	ports := []corev1.ContainerPort{
 		{
@@ -337,6 +357,7 @@ func containerPorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ContainerPort {
 	return ports
 }
 
+// UnreadyService returns a Service that represents the unready service for the given PerconaServerMySQL.
 func UnreadyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	labels := MatchLabels(cr)
 
@@ -359,6 +380,7 @@ func UnreadyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
+// HeadlessService returns a headless Service for the given PerconaServerMySQL.
 func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	labels := MatchLabels(cr)
 	return &corev1.Service{
@@ -381,6 +403,7 @@ func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
+// PodService returns a Service for the given podName, PerconaServerMySQL, and ServiceType.
 func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podName string) *corev1.Service {
 	expose := cr.Spec.MySQL.Expose
 
@@ -424,6 +447,7 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 	}
 }
 
+// containers returns a list of corev1.Containers based on the PerconaServerMySQL configuration.
 func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []corev1.Container {
 	containers := []corev1.Container{mysqldContainer(cr)}
 
@@ -442,6 +466,7 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 	return appendUniqueContainers(containers, cr.Spec.MySQL.Sidecars...)
 }
 
+// mysqldContainer returns the main MySQL container's configuration based on the PerconaServerMySQL spec.
 func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	spec := cr.MySQLSpec()
 
@@ -520,6 +545,7 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	return container
 }
 
+// backupContainer returns the backup container's configuration based on the PerconaServerMySQL spec.
 func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	return corev1.Container{
 		Name:            "xtrabackup",
@@ -556,6 +582,7 @@ func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	}
 }
 
+// heartbeatContainer returns the heartbeat container's configuration based on the PerconaServerMySQL spec.
 func heartbeatContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	return corev1.Container{
 		Name:            "pt-heartbeat",
@@ -592,6 +619,7 @@ func heartbeatContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	}
 }
 
+// appendUniqueContainers appends unique containers to the existing list of containers.
 func appendUniqueContainers(containers []corev1.Container, more ...corev1.Container) []corev1.Container {
 	if len(more) == 0 {
 		return containers
