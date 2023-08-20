@@ -12,6 +12,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 )
 
+// exec is a utility function to execute an HTTP GET request inside a container using the provided client.
 func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoint string, outb, errb *bytes.Buffer) error {
 	c := []string{"curl", fmt.Sprintf("localhost:%d/%s", defaultWebPort, endpoint)}
 	err := cliCmd.Exec(ctx, pod, "orc", c, nil, outb, errb, false)
@@ -22,6 +23,7 @@ func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoin
 	return nil
 }
 
+// ClusterPrimaryExec retrieves the primary instance of a cluster using the Orchestrator API within a container.
 func ClusterPrimaryExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint string) (*Instance, error) {
 	url := fmt.Sprintf("api/master/%s", clusterHint)
 
@@ -50,6 +52,7 @@ func ClusterPrimaryExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev
 	return primary, nil
 }
 
+// StopReplicationExec stops replication on the specified host and port using the Orchestrator API within a container.
 func StopReplicationExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int32) error {
 	url := fmt.Sprintf("api/stop-replica/%s/%d", host, port)
 
@@ -71,6 +74,7 @@ func StopReplicationExec(ctx context.Context, cliCmd clientcmd.Client, pod *core
 	return nil
 }
 
+// StartReplicationExec starts replication on the specified host and port using the Orchestrator API within a container.
 func StartReplicationExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int32) error {
 	url := fmt.Sprintf("api/start-replica/%s/%d", host, port)
 
@@ -92,6 +96,7 @@ func StartReplicationExec(ctx context.Context, cliCmd clientcmd.Client, pod *cor
 	return nil
 }
 
+// AddPeerExec adds a new peer to a Raft cluster using the Orchestrator API within a container.
 func AddPeerExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, peer string) error {
 	url := fmt.Sprintf("api/raft-add-peer/%s", peer)
 
@@ -121,6 +126,7 @@ func AddPeerExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, 
 	return nil
 }
 
+// RemovePeerExec removes a peer from a Raft cluster using the Orchestrator API within a container.
 func RemovePeerExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, peer string) error {
 	url := fmt.Sprintf("api/raft-remove-peer/%s", peer)
 
@@ -150,6 +156,7 @@ func RemovePeerExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Po
 	return nil
 }
 
+// EnsureNodeIsPrimaryExec ensures that the specified node becomes the primary of the cluster using the Orchestrator API within a container.
 func EnsureNodeIsPrimaryExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint, host string, port int) error {
 	primary, err := ClusterPrimaryExec(ctx, cliCmd, pod, clusterHint)
 	if err != nil {
@@ -186,6 +193,7 @@ func EnsureNodeIsPrimaryExec(ctx context.Context, cliCmd clientcmd.Client, pod *
 	return nil
 }
 
+// DiscoverExec triggers discovery of a node using the Orchestrator API within a container.
 func DiscoverExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) error {
 	url := fmt.Sprintf("api/discover/%s/%d", host, port)
 
