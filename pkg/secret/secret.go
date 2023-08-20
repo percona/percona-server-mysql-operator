@@ -22,6 +22,7 @@ import (
 
 var validityNotAfter = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
 
+// GenerateCertsSecret generates and returns a Secret containing TLS certificates.
 func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Secret, error) {
 	ca, cert, key, err := issueCerts(DNSNames(cr))
 	if err != nil {
@@ -43,6 +44,7 @@ func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL
 	return secret, nil
 }
 
+// DNSNames returns the list of DNS names for the component.
 func DNSNames(cr *apiv1alpha1.PerconaServerMySQL) []string {
 	hosts := []string{
 		fmt.Sprintf("*.%s-mysql", cr.Name),
@@ -183,6 +185,7 @@ var SecretUsers = []apiv1alpha1.SystemUser{
 	apiv1alpha1.UserXtraBackup,
 }
 
+// FillPasswordsSecret fills the Secret with randomly generated passwords.
 func FillPasswordsSecret(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) error {
 	if cr.MySQLSpec().IsAsync() {
 		SecretUsers = append(SecretUsers, apiv1alpha1.UserReplication)
