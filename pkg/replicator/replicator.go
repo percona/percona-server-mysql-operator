@@ -66,6 +66,7 @@ type Replicator interface {
 
 type dbImpl struct{ db *sql.DB }
 
+// NewReplicator creates a new Replicator instance to manage replication operations.
 func NewReplicator(ctx context.Context, user apiv1alpha1.SystemUser, pass, host string, port int32) (Replicator, error) {
 	config := mysql.NewConfig()
 
@@ -94,6 +95,7 @@ func NewReplicator(ctx context.Context, user apiv1alpha1.SystemUser, pass, host 
 	return &dbImpl{db}, nil
 }
 
+// ChangeReplicationSource changes the replication source for the database.
 func (d *dbImpl) ChangeReplicationSource(ctx context.Context, host, replicaPass string, port int32) error {
 	// TODO: Make retries configurable
 	_, err := d.db.ExecContext(ctx, `
@@ -115,6 +117,7 @@ func (d *dbImpl) ChangeReplicationSource(ctx context.Context, host, replicaPass 
 	return nil
 }
 
+// StartReplication starts the database replication process.
 func (d *dbImpl) StartReplication(ctx context.Context, host, replicaPass string, port int32) error {
 	if err := d.ChangeReplicationSource(ctx, host, replicaPass, port); err != nil {
 		return errors.Wrap(err, "change replication source")
@@ -124,16 +127,19 @@ func (d *dbImpl) StartReplication(ctx context.Context, host, replicaPass string,
 	return errors.Wrap(err, "start replication")
 }
 
+// StopReplication stops the database replication process.
 func (d *dbImpl) StopReplication(ctx context.Context) error {
 	_, err := d.db.ExecContext(ctx, "STOP REPLICA")
 	return errors.Wrap(err, "stop replication")
 }
 
+// ResetReplication resets the replication configuration.
 func (d *dbImpl) ResetReplication(ctx context.Context) error {
 	_, err := d.db.ExecContext(ctx, "RESET REPLICA ALL")
 	return errors.Wrap(err, "reset replication")
 }
 
+// ReplicationStatus retrieves the replication status of the database.
 func (d *dbImpl) ReplicationStatus(ctx context.Context) (ReplicationStatus, string, error) {
 	row := d.db.QueryRowContext(ctx, `
         SELECT
@@ -163,32 +169,38 @@ func (d *dbImpl) ReplicationStatus(ctx context.Context) (ReplicationStatus, stri
 	return ReplicationStatusNotInitiated, "", nil
 }
 
+// IsReplica checks if the database is acting as a replica.
 func (d *dbImpl) IsReplica(ctx context.Context) (bool, error) {
 	status, _, err := d.ReplicationStatus(ctx)
 	return status == ReplicationStatusActive, errors.Wrap(err, "get replication status")
 }
 
+// EnableSuperReadonly sets the global super_read_only parameter to 1.
 func (d *dbImpl) EnableSuperReadonly(ctx context.Context) error {
 	_, err := d.db.ExecContext(ctx, "SET GLOBAL SUPER_READ_ONLY=1")
 	return errors.Wrap(err, "set global super_read_only param to 1")
 }
 
+// IsReadonly checks if the database is in read-only mode.
 func (d *dbImpl) IsReadonly(ctx context.Context) (bool, error) {
 	var readonly int
 	err := d.db.QueryRowContext(ctx, "select @@read_only and @@super_read_only").Scan(&readonly)
 	return readonly == 1, errors.Wrap(err, "select global read_only param")
 }
 
+// ReportHost retrieves the report_host parameter value.
 func (d *dbImpl) ReportHost(ctx context.Context) (string, error) {
 	var reportHost string
 	err := d.db.QueryRowContext(ctx, "select @@report_host").Scan(&reportHost)
 	return reportHost, errors.Wrap(err, "select report_host param")
 }
 
+// Close closes the database connection.
 func (d *dbImpl) Close() error {
 	return d.db.Close()
 }
 
+// CloneInProgress checks if a database clone operation is in progress.
 func (d *dbImpl) CloneInProgress(ctx context.Context) (bool, error) {
 	rows, err := d.db.QueryContext(ctx, "SELECT STATE FROM clone_status")
 	if err != nil {
@@ -210,6 +222,7 @@ func (d *dbImpl) CloneInProgress(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
+// NeedsClone checks if the database needs to be cloned from a donor.
 func (d *dbImpl) NeedsClone(ctx context.Context, donor string, port int32) (bool, error) {
 	rows, err := d.db.QueryContext(ctx, "SELECT SOURCE, STATE FROM clone_status")
 	if err != nil {
@@ -230,6 +243,7 @@ func (d *dbImpl) NeedsClone(ctx context.Context, donor string, port int32) (bool
 	return true, nil
 }
 
+// Clone initiates the cloning process for the database.
 func (d *dbImpl) Clone(ctx context.Context, donor, user, pass string, port int32) error {
 	_, err := d.db.ExecContext(ctx, "SET GLOBAL clone_valid_donor_list=?", fmt.Sprintf("%s:%d", donor, port))
 	if err != nil {
@@ -251,11 +265,13 @@ func (d *dbImpl) Clone(ctx context.Context, donor, user, pass string, port int32
 	return nil
 }
 
+// DumbQuery executes a simple query to check database connectivity.
 func (d *dbImpl) DumbQuery(ctx context.Context) error {
 	_, err := d.db.ExecContext(ctx, "SELECT 1")
 	return errors.Wrap(err, "SELECT 1")
 }
 
+// GetGlobal retrieves the value of a global database variable.
 func (d *dbImpl) GetGlobal(ctx context.Context, variable string) (interface{}, error) {
 	// TODO: check how to do this without being vulnerable to injection
 	var value interface{}
@@ -263,11 +279,13 @@ func (d *dbImpl) GetGlobal(ctx context.Context, variable string) (interface{}, e
 	return value, errors.Wrapf(err, "SELECT @@%s", variable)
 }
 
+// SetGlobal sets the value of a global database variable.
 func (d *dbImpl) SetGlobal(ctx context.Context, variable, value interface{}) error {
 	_, err := d.db.ExecContext(ctx, fmt.Sprintf("SET GLOBAL %s=?", variable), value)
 	return errors.Wrapf(err, "SET GLOBAL %s=%s", variable, value)
 }
 
+// StartGroupReplication starts the group replication process.
 func (d *dbImpl) StartGroupReplication(ctx context.Context, password string) error {
 	_, err := d.db.ExecContext(ctx, "START GROUP_REPLICATION USER=?, PASSWORD=?", apiv1alpha1.UserReplication, password)
 
@@ -284,11 +302,13 @@ func (d *dbImpl) StartGroupReplication(ctx context.Context, password string) err
 	return errors.Wrap(err, "start group replication")
 }
 
+// StopGroupReplication stops the group replication process.
 func (d *dbImpl) StopGroupReplication(ctx context.Context) error {
 	_, err := d.db.ExecContext(ctx, "STOP GROUP_REPLICATION")
 	return errors.Wrap(err, "stop group replication")
 }
 
+// GetGroupReplicationPrimary retrieves the primary host in the group replication.
 func (d *dbImpl) GetGroupReplicationPrimary(ctx context.Context) (string, error) {
 	var host string
 
@@ -300,6 +320,7 @@ func (d *dbImpl) GetGroupReplicationPrimary(ctx context.Context) (string, error)
 	return host, nil
 }
 
+// GetGroupReplicationReplicas retrieves the list of secondary hosts in the group replication.
 func (d *dbImpl) GetGroupReplicationReplicas(ctx context.Context) ([]string, error) {
 	replicas := make([]string, 0)
 
@@ -321,6 +342,7 @@ func (d *dbImpl) GetGroupReplicationReplicas(ctx context.Context) ([]string, err
 	return replicas, nil
 }
 
+// GetMemberState retrieves the replication state of a member in the group replication.
 func (d *dbImpl) GetMemberState(ctx context.Context, host string) (MemberState, error) {
 	var state MemberState
 
@@ -335,6 +357,7 @@ func (d *dbImpl) GetMemberState(ctx context.Context, host string) (MemberState, 
 	return state, nil
 }
 
+// GetGroupReplicationMembers retrieves the list of all members in the group replication.
 func (d *dbImpl) GetGroupReplicationMembers(ctx context.Context) ([]string, error) {
 	members := make([]string, 0)
 
@@ -356,6 +379,7 @@ func (d *dbImpl) GetGroupReplicationMembers(ctx context.Context) ([]string, erro
 	return members, nil
 }
 
+// CheckIfDatabaseExists checks if a database with the given name exists.
 func (d *dbImpl) CheckIfDatabaseExists(ctx context.Context, name string) (bool, error) {
 	var db string
 
@@ -370,6 +394,7 @@ func (d *dbImpl) CheckIfDatabaseExists(ctx context.Context, name string) (bool, 
 	return true, nil
 }
 
+// CheckIfInPrimaryPartition checks if the database is in the primary partition.
 func (d *dbImpl) CheckIfInPrimaryPartition(ctx context.Context) (bool, error) {
 	var in bool
 
@@ -406,6 +431,7 @@ func (d *dbImpl) CheckIfInPrimaryPartition(ctx context.Context) (bool, error) {
 	return in, nil
 }
 
+// CheckIfPrimaryUnreachable checks if the primary member in group replication is unreachable.
 func (d *dbImpl) CheckIfPrimaryUnreachable(ctx context.Context) (bool, error) {
 	var state string
 
