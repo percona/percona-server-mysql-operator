@@ -4,6 +4,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// ExecProbe creates a command-based health probe using given parameters.
 func ExecProbe(probe corev1.Probe, cmd []string) *corev1.Probe {
 	return &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
