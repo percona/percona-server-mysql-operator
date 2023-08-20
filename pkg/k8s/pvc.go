@@ -7,6 +7,7 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 )
 
+// PVC creates a PersistentVolumeClaim using the provided name and VolumeSpec.
 func PVC(name string, spec *apiv1alpha1.VolumeSpec) corev1.PersistentVolumeClaim {
 	return corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
