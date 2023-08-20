@@ -21,6 +21,8 @@ const (
 	defaultEndpoint = "https://check.percona.com"
 )
 
+// GetDefaultVersionServiceEndpoint fetches the default endpoint
+// or falls back to the environment variable value.
 func GetDefaultVersionServiceEndpoint() string {
 	if endpoint := os.Getenv("PERCONA_VS_FALLBACK_URI"); len(endpoint) > 0 {
 		return endpoint
@@ -29,6 +31,7 @@ func GetDefaultVersionServiceEndpoint() string {
 	return defaultEndpoint
 }
 
+// GetVersion retrieves the appropriate versions for various components based on the provided context and specifications.
 func GetVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, endpoint string, serverVersion *platform.ServerVersion) (DepVersion, error) {
 	requestURL, err := url.Parse(endpoint)
 	if err != nil {
@@ -143,6 +146,7 @@ type DepVersion struct {
 	ToolkitVersion      string `json:"toolkitVersion,omitempty"`
 }
 
+// getVersion extracts the version from the given map, ensuring there's only one version provided.
 func getVersion(versions map[string]models.VersionVersion) (string, error) {
 	if len(versions) != 1 {
 		return "", errors.New("response has multiple or zero versions")
