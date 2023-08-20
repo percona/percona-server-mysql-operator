@@ -72,6 +72,7 @@ func getServerVersion(cliCmd clientcmd.Client) (*ServerVersion, error) {
 	return version, err
 }
 
+// probeAPI sends a GET request to the API path using the client and returns Kubernetes version info.
 func probeAPI(path string, client rest.Interface) (k8sversion.Info, error) {
 	var vInfo k8sversion.Info
 	vBody, err := client.Get().AbsPath(path).Do(context.TODO()).Raw()
