@@ -353,6 +353,8 @@ type StatefulAppState string
 
 const (
 	StateInitializing StatefulAppState = "initializing"
+	StateStopping     StatefulAppState = "stopping"
+	StatePaused       StatefulAppState = "paused"
 	StateReady        StatefulAppState = "ready"
 	StateError        StatefulAppState = "error"
 )
