@@ -7,8 +7,6 @@ commands:
 
       source ../../functions
 
-      kubectl delete ps -n ${NAMESPACE} gr-recreate
-
       get_cr \
       	| yq eval '.spec.pause=true' - \
       	| yq eval '.spec.mysql.clusterType="group-replication"' - \

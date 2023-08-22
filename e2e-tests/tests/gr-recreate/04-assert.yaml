@@ -7,7 +7,7 @@ apiVersion: apps/v1
 metadata:
   name: gr-recreate-mysql
 status:
-  observedGeneration: 1
+  observedGeneration: 3
   replicas: 3
   readyReplicas: 3
   currentReplicas: 3
@@ -19,7 +19,7 @@ apiVersion: apps/v1
 metadata:
   name: gr-recreate-router
 status:
-  observedGeneration: 1
+  observedGeneration: 3
   replicas: 3
   readyReplicas: 3
   updatedReplicas: 3
