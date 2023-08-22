@@ -5,6 +5,23 @@ timeout: 30
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 02-write-data
+  name: 02-write-data-0
 data:
-  data: "100500"
+  data: |-
+    100500
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 02-write-data-1
+data:
+  data: |-
+    100500
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 02-write-data-2
+data:
+  data: |-
+    100500

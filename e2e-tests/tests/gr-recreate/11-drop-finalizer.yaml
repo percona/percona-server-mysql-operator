@@ -1,5 +1,5 @@
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
-  name: gr-bootstrap
+  name: gr-recreate
   finalizers: []
