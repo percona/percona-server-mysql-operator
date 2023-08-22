@@ -15,6 +15,7 @@ haproxy
 init-deploy
 one-pod
 operator-self-healing
+recreate
 sidecars
 smart-update
 tls-cert-manager

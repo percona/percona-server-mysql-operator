@@ -19,6 +19,7 @@ limits
 monitoring
 one-pod
 operator-self-healing
+recreate
 scaling
 service-per-pod
 sidecars
