@@ -76,7 +76,7 @@ spec:
 #      enabled: false
 #      type: ClusterIP
 #      annotations:
-#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
 #      externalTrafficPolicy: Cluster
 #      internalTrafficPolicy: Cluster
 #      labels:
@@ -211,7 +211,7 @@ spec:
 #      expose:
 #        type: ClusterIP
 #        annotations:
-#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
 #        externalTrafficPolicy: Cluster
 #        internalTrafficPolicy: Cluster
 #        labels:
@@ -255,7 +255,7 @@ spec:
 #      expose:
 #        type: ClusterIP
 #        annotations:
-#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
 #        externalTrafficPolicy: Cluster
 #        internalTrafficPolicy: Cluster
 #        labels:
@@ -290,7 +290,7 @@ spec:
 #    expose:
 #      type: ClusterIP
 #      annotations:
-#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
 #      externalTrafficPolicy: Cluster
 #      internalTrafficPolicy: Cluster
 #      labels:
