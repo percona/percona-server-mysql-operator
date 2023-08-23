@@ -1,13 +1,13 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 420
+timeout: 480
 ---
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: gr-bootstrap-mysql
+  name: gr-recreate-mysql
 status:
-  observedGeneration: 1
+  observedGeneration: 3
   replicas: 3
   readyReplicas: 3
   currentReplicas: 3
@@ -17,9 +17,9 @@ status:
 kind: Deployment
 apiVersion: apps/v1
 metadata:
-  name: gr-bootstrap-router
+  name: gr-recreate-router
 status:
-  observedGeneration: 1
+  observedGeneration: 3
   replicas: 3
   readyReplicas: 3
   updatedReplicas: 3
@@ -27,7 +27,7 @@ status:
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
-  name: gr-bootstrap
+  name: gr-recreate
   finalizers:
     - delete-mysql-pods-in-order
 status:
@@ -46,17 +46,17 @@ kind: Service
 metadata:
   labels:
     app.kubernetes.io/component: mysql
-    app.kubernetes.io/instance: gr-bootstrap
+    app.kubernetes.io/instance: gr-recreate
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
-  name: gr-bootstrap-mysql
+  name: gr-recreate-mysql
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
-    name: gr-bootstrap
+    name: gr-recreate
 spec:
   clusterIP: None
   ports:
@@ -82,7 +82,7 @@ spec:
     targetPort: 33061
   selector:
     app.kubernetes.io/component: mysql
-    app.kubernetes.io/instance: gr-bootstrap
+    app.kubernetes.io/instance: gr-recreate
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
@@ -94,17 +94,17 @@ kind: Service
 metadata:
   labels:
     app.kubernetes.io/component: router
-    app.kubernetes.io/instance: gr-bootstrap
+    app.kubernetes.io/instance: gr-recreate
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
-  name: gr-bootstrap-router
+  name: gr-recreate-router
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
-    name: gr-bootstrap
+    name: gr-recreate
 spec:
   ports:
   - name: http
@@ -137,7 +137,7 @@ spec:
     targetPort: 33062
   selector:
     app.kubernetes.io/component: router
-    app.kubernetes.io/instance: gr-bootstrap
+    app.kubernetes.io/instance: gr-recreate
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server

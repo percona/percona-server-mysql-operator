@@ -1,0 +1,168 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 120
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: recreate
+  finalizers:
+    - delete-mysql-pods-in-order
+status:
+  haproxy:
+    state: paused
+  mysql:
+    state: paused
+  orchestrator:
+    state: paused
+  state: paused
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: recreate-mysql
+status:
+  availableReplicas: 0
+  collisionCount: 0
+  observedGeneration: 2
+  replicas: 0
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: recreate-haproxy
+status:
+  availableReplicas: 0
+  collisionCount: 0
+  observedGeneration: 2
+  replicas: 0
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: recreate-orc
+status:
+  availableReplicas: 0
+  collisionCount: 0
+  observedGeneration: 2
+  replicas: 0
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  finalizers:
+  - kubernetes.io/pvc-protection
+  labels:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: recreate
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: datadir-recreate-mysql-0
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  finalizers:
+  - kubernetes.io/pvc-protection
+  labels:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: recreate
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: datadir-recreate-mysql-1
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  finalizers:
+  - kubernetes.io/pvc-protection
+  labels:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: recreate
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: datadir-recreate-mysql-2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: recreate
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: recreate-mysql
+spec:
+  clusterIP: None
+  clusterIPs:
+  - None
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  - name: mysql-admin
+    port: 33062
+    protocol: TCP
+    targetPort: 33062
+  - name: mysqlx
+    port: 33060
+    protocol: TCP
+    targetPort: 33060
+  - name: http
+    port: 6033
+    protocol: TCP
+    targetPort: 6033
+  selector:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: recreate
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: orc
+    app.kubernetes.io/instance: recreate
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: recreate-orc
+spec:
+  clusterIP: None
+  clusterIPs:
+  - None
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: web
+    port: 3000
+    protocol: TCP
+    targetPort: 3000
+  - name: raft
+    port: 10008
+    protocol: TCP
+    targetPort: 10008
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/component: orc
+    app.kubernetes.io/instance: recreate
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  sessionAffinity: None
+  type: ClusterIP

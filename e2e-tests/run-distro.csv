@@ -6,6 +6,7 @@ gr-demand-backup
 gr-haproxy
 gr-init-deploy
 gr-one-pod
+gr-recreate
 gr-scaling
 gr-self-healing
 gr-tls-cert-manager
@@ -15,6 +16,7 @@ init-deploy
 monitoring
 one-pod
 operator-self-healing
+recreate
 scaling
 service-per-pod
 sidecars
