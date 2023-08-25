@@ -7,6 +7,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -34,6 +35,10 @@ const (
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return cr.Name + "-" + ComponentName
+}
+
+func NamespacedName(cr *apiv1alpha1.PerconaServerMySQL) types.NamespacedName {
+	return types.NamespacedName{Name: Name(cr), Namespace: cr.Namespace}
 }
 
 func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {

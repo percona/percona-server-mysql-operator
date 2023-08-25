@@ -13,6 +13,7 @@ deploy_operator() {
 		"$(printf 'select(documentIndex==1).spec.template.spec.containers[0].image="%s"' "${IMAGE}")" \
 		"${DEPLOY_DIR}/operator.yaml" \
 		| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "true"' \
+		| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG"' \
 		| kubectl -n "${NAMESPACE}" apply -f -
 }
 
@@ -63,8 +64,30 @@ deploy_pmm_server() {
 }
 
 get_pmm_api_key() {
-	local ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "printenv | grep ADMIN_PASSWORD | cut -d '=' -f2")
-	echo $(curl --insecure -X POST -H "Content-Type: application/json" -d '{"name":"operator", "role": "Admin"}' "https://admin:$ADMIN_PASSWORD@"$(get_service_ip monitoring-service)"/graph/api/auth/keys" | jq .key)
+	local key_name=$1
+
+	if [[ -z $key_name ]]; then
+		key_name="operator"
+	fi
+
+	local ADMIN_PASSWORD
+	ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "printenv | grep ADMIN_PASSWORD | cut -d '=' -f2")
+	curl --insecure -X POST -H "Content-Type: application/json" -d "{\"name\":\"$key_name\", \"role\": \"Admin\"}" "https://admin:$ADMIN_PASSWORD@$(get_service_ip monitoring-service)/graph/api/auth/keys" | jq .key
+}
+
+delete_pmm_api_key() {
+	local key_name=$1
+
+	if [[ -z $key_name ]]; then
+		key_name="operator"
+	fi
+
+	local ADMIN_PASSWORD
+	ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "printenv | grep ADMIN_PASSWORD | cut -d '=' -f2")
+
+	local key_id
+	key_id=$(curl --insecure -X GET "https://admin:$ADMIN_PASSWORD@$(get_service_ip monitoring-service)/graph/api/auth/keys" | jq '.[] | select( .name == "operator").id')
+	curl --insecure -X DELETE "https://admin:$ADMIN_PASSWORD@$(get_service_ip monitoring-service)/graph/api/auth/keys/$key_id"
 }
 
 deploy_minio() {
@@ -507,7 +530,10 @@ verify_certificate_sans() {
 
 check_passwords_leak() {
 	local secrets=$(kubectl get secrets -o json | jq -r '.items[].data | to_entries | .[] | select(.key | (endswith(".crt") or endswith(".key") or endswith(".pub") or endswith(".pem") or endswith(".p12")) | not) | .value')
-	local passwords="$(for i in $secrets; do base64 -d <<< $i; echo; done) $secrets"
+	local passwords="$(for i in $secrets; do
+		base64 -d <<<$i
+		echo
+	done) $secrets"
 	local pods=$(kubectl -n "${NAMESPACE}" get pods -o name | awk -F "/" '{print $2}')
 
 	collect_logs() {
