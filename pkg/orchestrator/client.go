@@ -26,6 +26,7 @@ type Instance struct {
 	Alias     string        `json:"InstanceAlias"`
 	MasterKey InstanceKey   `json:"MasterKey"`
 	Replicas  []InstanceKey `json:"Replicas"`
+	ReadOnly  bool          `json:"ReadOnly"`
 }
 
 func ClusterPrimary(ctx context.Context, apiHost, clusterHint string) (*Instance, error) {
