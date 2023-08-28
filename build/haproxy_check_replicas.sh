@@ -32,7 +32,7 @@ check_async() {
 
 	log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} Super_Read_Only: ${SUPER_RO} Read_Only: ${READ_ONLY} Replica_IO_Running: ${REP_IO_STATUS} Replica_SQL_Running: ${REP_SQL_STATUS}"
 
-	if [[ ${SUPER_RO} == '1' ]] && [[ ${READ_ONLY} == '1' ]] && [[ "${REP_IO_STATUS}" == 'ON' ]] && [[ "${REP_SQL_STATUS}" == 'ON' ]]; then
+	if [[ ${SUPER_RO} == '1' ]] && [[ ${READ_ONLY} == '1' ]] && [[ ${REP_IO_STATUS} == 'ON' ]] && [[ ${REP_SQL_STATUS} == 'ON' ]]; then
 		log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} for backend ${HAPROXY_PROXY_NAME} is OK"
 		exit 0
 	else
