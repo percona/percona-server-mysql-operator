@@ -7,6 +7,8 @@ commands:
 
       source ../../functions
 
+      sleep 70 # we should wait more than one minute because `get_metric_values` gets data for the last 60 seconds
+
       API_KEY=$(kubectl get secret internal-monitoring -o jsonpath='{.data.pmmserverkey}' -n "${NAMESPACE}" | base64 --decode)
 
       for i in $(seq 0 2); do
@@ -24,4 +26,4 @@ commands:
           echo "Error: http code is $http_code"
           exit 1
       fi
-    timeout: 120
+    timeout: 300
