@@ -757,6 +757,13 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return nil
 	}
 
+	// orchestrator doesn't attempt to recover from NonWriteableMaster if there's only 1 MySQL pod
+	if cr.MySQLSpec().Size == 1 && primary.ReadOnly {
+		if err := orchestrator.SetWriteableExec(ctx, r.ClientCmd, pod, primary.Key.Hostname, int(primary.Key.Port)); err != nil {
+			return errors.Wrapf(err, "set %s writeable", primary.Key.Hostname)
+		}
+	}
+
 	return nil
 }
 
