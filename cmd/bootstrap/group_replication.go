@@ -141,7 +141,7 @@ func (m *mysqlsh) getGroupSeeds(ctx context.Context) (string, error) {
 }
 
 func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) (string, error) {
-	sql := fmt.Sprintf("SET GLOBAL group_replication_group_seeds = \"%s\"", seeds)
+	sql := fmt.Sprintf("SET PERSIST group_replication_group_seeds = \"%s\"", seeds)
 	_, err := m.runSQL(ctx, sql)
 	if err != nil {
 		return "", err
