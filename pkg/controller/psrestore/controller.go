@@ -90,7 +90,10 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			return
 		}
 
-		err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
+		retriable := func(err error) bool {
+			return err != nil
+		}
+		err := k8sretry.OnError(k8sretry.DefaultRetry, retriable, func() error {
 			cr := &apiv1alpha1.PerconaServerMySQLRestore{}
 			if err := r.Client.Get(ctx, req.NamespacedName, cr); err != nil {
 				return errors.Wrapf(err, "get %v", req.NamespacedName.String())
@@ -99,15 +102,29 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			cr.Status = status
 			log.Info("Updating status", "state", cr.Status.State)
 			if err := r.Client.Status().Update(ctx, cr); err != nil {
-				return errors.Wrapf(err, "update %v", req.NamespacedName.String())
+				return errors.Wrap(err, "update status")
 			}
 
+			if err := r.Client.Get(ctx, req.NamespacedName, cr); err != nil {
+				return errors.Wrapf(err, "get %v", req.NamespacedName.String())
+			}
+			if cr.Status.State != status.State {
+				return errors.Errorf("status %s was not updated to %s", cr.Status.State, status.State)
+			}
 			return nil
 		})
 		if err != nil {
 			log.Error(err, "failed to update status")
+			return
 		}
+
+		log.V(1).Info("status updated", "state", status.State)
 	}()
+
+	switch status.State {
+	case apiv1alpha1.RestoreFailed, apiv1alpha1.RestoreSucceeded:
+		return ctrl.Result{}, nil
+	}
 
 	cluster := &apiv1alpha1.PerconaServerMySQL{}
 	nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
@@ -158,11 +175,6 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	} else {
 		status.State = apiv1alpha1.RestoreError
 		status.StateDesc = "backupName and backupSource are empty"
-		return ctrl.Result{}, nil
-	}
-
-	switch status.State {
-	case apiv1alpha1.RestoreFailed, apiv1alpha1.RestoreSucceeded:
 		return ctrl.Result{}, nil
 	}
 
@@ -302,12 +314,9 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	switch status.State {
-	case apiv1alpha1.RestoreStarting:
+	case apiv1alpha1.RestoreStarting, apiv1alpha1.RestoreRunning:
 		if job.Status.Active > 0 {
 			status.State = apiv1alpha1.RestoreRunning
-		}
-	case apiv1alpha1.RestoreRunning:
-		if job.Status.Active > 0 {
 			return ctrl.Result{}, nil
 		}
 
@@ -358,7 +367,9 @@ func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cl
 		}
 
 		if err := r.Client.Delete(ctx, &pvc); err != nil {
-			log.Error(err, "failed to delete PVC")
+			if !k8serrors.IsNotFound(err) {
+				log.Error(err, "failed to delete PVC")
+			}
 			continue
 		}
 
