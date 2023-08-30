@@ -162,7 +162,8 @@ func updateGroupPeers(ctx context.Context, peers sets.Set[string]) error {
 
 		seeds, err := sh.getGroupSeeds(ctx)
 		if err != nil {
-			return errors.Wrapf(err, "get @@group_replication_group_seeds from %s", peer)
+			log.Printf("ERROR: get @@group_replication_group_seeds from %s: %s", peer, err)
+			continue
 		}
 
 		log.Printf("Got group_replication_group_seeds from peer %s = %s", peer, seeds)
@@ -180,7 +181,8 @@ func updateGroupPeers(ctx context.Context, peers sets.Set[string]) error {
 
 		_, err = sh.setGroupSeeds(ctx, seeds)
 		if err != nil {
-			return errors.Wrapf(err, "set @@group_replication_group_seeds in %s", peer)
+			log.Printf("ERROR: set @@group_replication_group_seeds in %s: %s", peer, err)
+			continue
 		}
 
 		log.Printf("Set group_replication_group_seeds in peer %s = %s", peer, seeds)
