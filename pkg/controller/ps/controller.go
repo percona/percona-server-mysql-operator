@@ -465,6 +465,10 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 		return errors.Wrap(err, "reconcile headless svc")
 	}
 
+	if err := k8s.EnsureService(ctx, r.Client, cr, mysql.ProxyService(cr), r.Scheme, true); err != nil {
+		return errors.Wrap(err, "reconcile proxy svc")
+	}
+
 	exposer := mysql.Exposer(*cr)
 	if err := r.reconcileServicePerPod(ctx, cr, &exposer); err != nil {
 		return errors.Wrap(err, "reconcile service per pod")

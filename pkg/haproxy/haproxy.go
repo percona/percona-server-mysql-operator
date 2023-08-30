@@ -343,7 +343,7 @@ func mysqlMonitContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	env := []corev1.EnvVar{
 		{
 			Name:  "MYSQL_SERVICE",
-			Value: mysql.ServiceName(cr),
+			Value: mysql.ProxyServiceName(cr),
 		},
 	}
 	env = append(env, spec.Env...)
