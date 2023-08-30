@@ -171,10 +171,10 @@ func updateGroupPeers(ctx context.Context, peers sets.Set[string]) error {
 		if len(seeds) > 0 {
 			tmpSeeds = strings.Split(seeds, ",")
 		}
-		seedSet := sets.New[string](tmpSeeds...)
+		seedSet := sets.New(tmpSeeds...)
 		seedSet.Insert(fmt.Sprintf("%s:%d", fqdn, 3306))
 
-		seeds = strings.Join(sets.List[string](seedSet), ",")
+		seeds = strings.Join(sets.List(seedSet), ",")
 
 		_, err = sh.setGroupSeeds(ctx, seeds)
 		if err != nil {
