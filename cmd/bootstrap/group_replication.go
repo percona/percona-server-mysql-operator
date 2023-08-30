@@ -168,16 +168,16 @@ func updateGroupPeers(ctx context.Context, peers sets.Set[string]) error {
 
 		log.Printf("Got group_replication_group_seeds from peer %s = %s", peer, seeds)
 
-		seedSlice := make([]string, 0)
+		tmpSeeds := make([]string, 0)
 		if len(seeds) > 0 {
-			seedSlice = strings.Split(seeds, ",")
+			tmpSeeds = strings.Split(seeds, ",")
 		}
-		seedSet := sets.New[string](seedSlice...)
+		seedSet := sets.New[string](tmpSeeds...)
 		seedSet.Insert(fmt.Sprintf("%s:%d", fqdn, 3306))
 
-		seedSlice = seedSet.UnsortedList()
-		sort.Strings(seedSlice)
-		seeds = strings.Join(seedSlice, ",")
+		tmpSeeds = seedSet.UnsortedList()
+		sort.Strings(tmpSeeds)
+		seeds = strings.Join(tmpSeeds, ",")
 
 		_, err = sh.setGroupSeeds(ctx, seeds)
 		if err != nil {
