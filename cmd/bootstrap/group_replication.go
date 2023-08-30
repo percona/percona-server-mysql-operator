@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -175,9 +174,7 @@ func updateGroupPeers(ctx context.Context, peers sets.Set[string]) error {
 		seedSet := sets.New[string](tmpSeeds...)
 		seedSet.Insert(fmt.Sprintf("%s:%d", fqdn, 3306))
 
-		tmpSeeds = seedSet.UnsortedList()
-		sort.Strings(tmpSeeds)
-		seeds = strings.Join(tmpSeeds, ",")
+		seeds = strings.Join(sets.List[string](seedSet), ",")
 
 		_, err = sh.setGroupSeeds(ctx, seeds)
 		if err != nil {
