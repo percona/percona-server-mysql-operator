@@ -34,6 +34,7 @@ type mysqlsh struct {
 	host        string
 }
 
+// Constructs a new mysqlsh object for running shell commands on the given host.
 func newShell(host string) *mysqlsh {
 	return &mysqlsh{
 		clusterName: os.Getenv("INNODB_CLUSTER_NAME"),
@@ -41,6 +42,7 @@ func newShell(host string) *mysqlsh {
 	}
 }
 
+// Constructs the URI for the mysqlsh command based on the stored host and fetched credentials.
 func (m *mysqlsh) getURI() string {
 	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
 	if err != nil {
@@ -50,6 +52,7 @@ func (m *mysqlsh) getURI() string {
 	return fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, m.host)
 }
 
+// Executes a given command using mysqlsh and returns stdout and stderr.
 func (m *mysqlsh) run(ctx context.Context, cmd string) (bytes.Buffer, bytes.Buffer, error) {
 	var stdoutb, stderrb bytes.Buffer
 
@@ -67,6 +70,7 @@ func (m *mysqlsh) run(ctx context.Context, cmd string) (bytes.Buffer, bytes.Buff
 	return stdoutb, stderrb, err
 }
 
+// Fetches the InnoDB cluster status using mysqlsh and parses the result into a structured format.
 func (m *mysqlsh) clusterStatus(ctx context.Context) (innodbcluster.Status, error) {
 	var stdoutb, stderrb bytes.Buffer
 
@@ -89,6 +93,7 @@ func (m *mysqlsh) clusterStatus(ctx context.Context) (innodbcluster.Status, erro
 	return status, nil
 }
 
+// Executes an SQL command using mysqlsh and returns the GTID_EXECUTED of the operation, if successful.
 func (m *mysqlsh) runSQL(ctx context.Context, sql string) (string, error) {
 	var stdoutb, stderrb bytes.Buffer
 
@@ -119,6 +124,7 @@ func (m *mysqlsh) runSQL(ctx context.Context, sql string) (string, error) {
 	return result.Rows[0]["@@GTID_EXECUTED"], nil
 }
 
+// Configures the local MySQL instance for InnoDB cluster usage using mysqlsh.
 func (m *mysqlsh) configureLocalInstance(ctx context.Context) error {
 	_, _, err := m.run(ctx, fmt.Sprintf("dba.configureLocalInstance('%s', {'clearReadOnly': true})", m.getURI()))
 	if err != nil {
@@ -128,6 +134,7 @@ func (m *mysqlsh) configureLocalInstance(ctx context.Context) error {
 	return nil
 }
 
+// Creates a new InnoDB cluster; returns recovery error if previous cluster detected.
 func (m *mysqlsh) createCluster(ctx context.Context) error {
 	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.createCluster('%s')", m.clusterName))
 	if err != nil {
@@ -140,6 +147,7 @@ func (m *mysqlsh) createCluster(ctx context.Context) error {
 	return nil
 }
 
+// Adds an instance to the InnoDB cluster with recovery via clone.
 func (m *mysqlsh) addInstance(ctx context.Context, instanceDef string) error {
 	_, _, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'waitRecovery': 3})", m.clusterName, instanceDef))
 	if err != nil {
@@ -149,6 +157,7 @@ func (m *mysqlsh) addInstance(ctx context.Context, instanceDef string) error {
 	return nil
 }
 
+// Attempts to rejoin an instance to the cluster, handling specific error cases.
 func (m *mysqlsh) rejoinInstance(ctx context.Context, instanceDef string) error {
 	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rejoinInstance('%s')", m.clusterName, instanceDef))
 	if err != nil {
@@ -164,6 +173,7 @@ func (m *mysqlsh) rejoinInstance(ctx context.Context, instanceDef string) error 
 	return nil
 }
 
+// Removes an instance from the cluster; uses force if specified.
 func (m *mysqlsh) removeInstance(ctx context.Context, instanceDef string, force bool) error {
 	_, _, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').removeInstance('%s', {'force': %t})", m.clusterName, instanceDef, force))
 	if err != nil {
@@ -173,6 +183,7 @@ func (m *mysqlsh) removeInstance(ctx context.Context, instanceDef string, force 
 	return nil
 }
 
+// Rescans the InnoDB cluster to automatically add or remove instances.
 func (m *mysqlsh) rescanCluster(ctx context.Context) error {
 	_, _, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rescan({'addInstances': 'auto', 'removeInstances': 'auto'})", m.clusterName))
 	if err != nil {
@@ -182,6 +193,7 @@ func (m *mysqlsh) rescanCluster(ctx context.Context) error {
 	return nil
 }
 
+// Connects to the local database and returns its shell handle.
 func connectToLocal(ctx context.Context) (*mysqlsh, error) {
 	fqdn, err := getFQDN(os.Getenv("SERVICE_NAME"))
 	if err != nil {
@@ -191,6 +203,7 @@ func connectToLocal(ctx context.Context) (*mysqlsh, error) {
 	return newShell(fqdn), nil
 }
 
+// Connects to the InnoDB cluster by iterating over the provided peers.
 func connectToCluster(ctx context.Context, peers sets.Set[string]) (*mysqlsh, error) {
 	for _, peer := range sets.List(peers) {
 		shell := newShell(peer)
@@ -206,6 +219,7 @@ func connectToCluster(ctx context.Context, peers sets.Set[string]) (*mysqlsh, er
 	return nil, errors.New("failed to open connection to cluster")
 }
 
+// Handles a full cluster crash scenario and retrieves the GTID_EXECUTED.
 func handleFullClusterCrash(ctx context.Context) error {
 	localShell, err := connectToLocal(ctx)
 	if err != nil {
@@ -227,6 +241,7 @@ func handleFullClusterCrash(ctx context.Context) error {
 	return nil
 }
 
+// Bootstraps the group replication with various checks and recovery processes.
 func bootstrapGroupReplication(ctx context.Context) error {
 	timer := stopwatch.NewNamedStopwatch()
 	err := timer.Add("total")

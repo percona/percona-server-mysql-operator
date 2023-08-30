@@ -24,6 +24,7 @@ type storage interface {
 	listObjects(ctx context.Context, prefix string) ([]string, error)
 }
 
+// newStorage initializes a storage interface based on the provided backup configuration type.
 func newStorage(cfg *xtrabackup.BackupConfig) (storage, error) {
 	switch cfg.Type {
 	case apiv1alpha1.BackupStorageAzure:
@@ -81,7 +82,7 @@ func newS3(endpoint, accessKeyID, secretAccessKey, bucketName, region string, ve
 	}, nil
 }
 
-// GetObject return content by given object name
+// getObject return content by given object name
 func (s *s3) getObject(ctx context.Context, objectName string) (io.ReadCloser, error) {
 	oldObj, err := s.client.GetObject(ctx, s.bucketName, objectName, minio.GetObjectOptions{})
 	if err != nil {
@@ -91,6 +92,7 @@ func (s *s3) getObject(ctx context.Context, objectName string) (io.ReadCloser, e
 	return oldObj, nil
 }
 
+// listObjects retrieves a list of object keys from the S3 bucket with the specified prefix.
 func (s *s3) listObjects(ctx context.Context, prefix string) ([]string, error) {
 	opts := minio.ListObjectsOptions{
 		UseV1:  true,
@@ -114,6 +116,7 @@ type azure struct {
 	container string
 }
 
+// newAzure initializes an Azure blob storage client with the given credentials and endpoint.
 func newAzure(storageAccount, accessKey, endpoint, container string) (*azure, error) {
 	credential, err := azblob.NewSharedKeyCredential(storageAccount, accessKey)
 	if err != nil {
@@ -130,6 +133,7 @@ func newAzure(storageAccount, accessKey, endpoint, container string) (*azure, er
 	}, nil
 }
 
+// getObject fetches an object from Azure blob storage based on its name.
 func (a *azure) getObject(ctx context.Context, name string) (io.ReadCloser, error) {
 	resp, err := a.client.DownloadStream(ctx, a.container, url.QueryEscape(name), &azblob.DownloadStreamOptions{})
 	if err != nil {
@@ -138,6 +142,7 @@ func (a *azure) getObject(ctx context.Context, name string) (io.ReadCloser, erro
 	return resp.Body, nil
 }
 
+// listObjects retrieves a list of object names from Azure blob storage with the specified prefix.
 func (a *azure) listObjects(ctx context.Context, prefix string) ([]string, error) {
 	pg := a.client.NewListBlobsFlatPager(a.container, &container.ListBlobsFlatOptions{
 		Prefix: &prefix,

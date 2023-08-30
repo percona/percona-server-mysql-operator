@@ -35,14 +35,17 @@ type Status struct {
 	isRunning atomic.Bool
 }
 
+// TryRunBackup tries to run a backup if it's not already running.
 func (s *Status) TryRunBackup() bool {
 	return s.isRunning.CompareAndSwap(false, true)
 }
 
+// DoneBackup marks the backup process as finished.
 func (s *Status) DoneBackup() {
 	s.isRunning.Store(false)
 }
 
+// main initializes logging, sets up HTTP endpoints, and starts the server.
 func main() {
 	opts := zap.Options{Development: true}
 	logf.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
@@ -59,6 +62,7 @@ func main() {
 	log.Error(http.ListenAndServe(":6033", mux), "http server failed")
 }
 
+// getSecret retrieves the system user's secret.
 func getSecret(username apiv1alpha1.SystemUser) (string, error) {
 	path := filepath.Join(mysql.CredsMountPath, string(username))
 	sBytes, err := os.ReadFile(path)
@@ -69,6 +73,7 @@ func getSecret(username apiv1alpha1.SystemUser) (string, error) {
 	return strings.TrimSpace(string(sBytes)), nil
 }
 
+// sanitizeCmd masks sensitive flags from the command.
 func sanitizeCmd(cmd *exec.Cmd) string {
 	c := []string{cmd.Path}
 
@@ -79,6 +84,7 @@ func sanitizeCmd(cmd *exec.Cmd) string {
 	return strings.Join(c, " ")
 }
 
+// getNamespace retrieves the Kubernetes namespace from the service account.
 func getNamespace() (string, error) {
 	ns, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
@@ -88,6 +94,7 @@ func getNamespace() (string, error) {
 	return string(ns), nil
 }
 
+// xtrabackupArgs generates the xtrabackup command arguments.
 func xtrabackupArgs(user, pass string) []string {
 	return []string{
 		"--backup",
@@ -100,6 +107,7 @@ func xtrabackupArgs(user, pass string) []string {
 	}
 }
 
+// backupHandler handles backup HTTP requests.
 func backupHandler(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case http.MethodPost:
@@ -111,6 +119,7 @@ func backupHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+// deleteBackupHandler processes the HTTP request to delete a backup.
 func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 	ns, err := getNamespace()
 	if err != nil {
@@ -151,6 +160,7 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 	log.Info("Backup deleted successfully", "destination", backupConf.Destination, "storage", backupConf.Type)
 }
 
+// deleteBackup uses the `xbcloud` utility to delete a backup.
 func deleteBackup(ctx context.Context, cfg *xtrabackup.BackupConfig, backupName string) error {
 	logWriter := io.Writer(os.Stderr)
 	if backupName != "" {
@@ -187,6 +197,7 @@ func deleteBackup(ctx context.Context, cfg *xtrabackup.BackupConfig, backupName 
 	return nil
 }
 
+// backupExists checks if a backup exists in the storage.
 func backupExists(ctx context.Context, cfg *xtrabackup.BackupConfig) (bool, error) {
 	storage, err := newStorage(cfg)
 	if err != nil {
@@ -202,6 +213,7 @@ func backupExists(ctx context.Context, cfg *xtrabackup.BackupConfig) (bool, erro
 	return true, nil
 }
 
+// checkBackupMD5Size validates the size of a backup's MD5 file.
 func checkBackupMD5Size(ctx context.Context, cfg *xtrabackup.BackupConfig) error {
 	// xbcloud doesn't create md5 file for azure
 	if cfg.Type == apiv1alpha1.BackupStorageAzure {
@@ -230,6 +242,7 @@ func checkBackupMD5Size(ctx context.Context, cfg *xtrabackup.BackupConfig) error
 	return nil
 }
 
+// createBackupHandler handles the HTTP request to create a new backup.
 func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	if !status.TryRunBackup() {
 		log.Info("backup is already running", "host", req.RemoteAddr)
@@ -388,6 +401,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	log.Info("Backup finished successfully", "destination", backupConf.Destination, "storage", backupConf.Type)
 }
 
+// logHandler retrieves and sends the backup log for a specified backup name in the request URL.
 func logHandler(w http.ResponseWriter, req *http.Request) {
 	path := strings.Split(req.URL.Path, "/")
 	if len(path) < 3 {

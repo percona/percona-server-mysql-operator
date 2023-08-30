@@ -18,6 +18,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
+// main evaluates cluster status and conducts health or replication checks.
 func main() {
 	fullClusterCrash, err := fileExists("/var/lib/mysql/full-cluster-crash")
 	if err != nil {
@@ -70,6 +71,7 @@ func main() {
 	}
 }
 
+// checkReadinessAsync verifies the asynchronous replication readiness of a MySQL pod.
 func checkReadinessAsync(ctx context.Context) error {
 	podIP, err := getPodIP()
 	if err != nil {
@@ -105,6 +107,7 @@ func checkReadinessAsync(ctx context.Context) error {
 	return nil
 }
 
+// checkReadinessGR validates the readiness state of a MySQL pod in group replication.
 func checkReadinessGR(ctx context.Context) error {
 	podIP, err := getPodIP()
 	if err != nil {
@@ -139,6 +142,7 @@ func checkReadinessGR(ctx context.Context) error {
 	return nil
 }
 
+// checkLivenessAsync checks the liveness of an asynchronous MySQL replica.
 func checkLivenessAsync(ctx context.Context) error {
 	podIP, err := getPodIP()
 	if err != nil {
@@ -159,6 +163,7 @@ func checkLivenessAsync(ctx context.Context) error {
 	return db.DumbQuery(ctx)
 }
 
+// checkLivenessGR verifies the liveness of a group replication MySQL instance.
 func checkLivenessGR(ctx context.Context) error {
 	podIP, err := getPodIP()
 	if err != nil {
@@ -190,6 +195,7 @@ func checkLivenessGR(ctx context.Context) error {
 	return nil
 }
 
+// checkReplication validates if the MySQL instance is actively replicating.
 func checkReplication(ctx context.Context) error {
 	podIP, err := getPodIP()
 	if err != nil {
@@ -220,6 +226,7 @@ func checkReplication(ctx context.Context) error {
 	return nil
 }
 
+// getSecret retrieves the secret for a given username from the mounted path.
 func getSecret(username string) (string, error) {
 	path := filepath.Join(mysql.CredsMountPath, username)
 	sBytes, err := os.ReadFile(path)
@@ -230,6 +237,7 @@ func getSecret(username string) (string, error) {
 	return strings.TrimSpace(string(sBytes)), nil
 }
 
+// getPodHostname gets the hostname of the current pod.
 func getPodHostname() (string, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -239,6 +247,7 @@ func getPodHostname() (string, error) {
 	return hostname, nil
 }
 
+// getPodIP fetches the IP address of the current pod.
 func getPodIP() (string, error) {
 	hostname, err := getPodHostname()
 	if err != nil {
@@ -253,6 +262,8 @@ func getPodIP() (string, error) {
 	return addrs[0], nil
 }
 
+// getPodFQDN computes the Fully Qualified Domain Name
+// for the current pod within its service context.
 func getPodFQDN(svcName string) (string, error) {
 	hostname, err := getPodHostname()
 	if err != nil {
@@ -267,6 +278,7 @@ func getPodFQDN(svcName string) (string, error) {
 	return fmt.Sprintf("%s.%s.%s", hostname, svcName, namespace), nil
 }
 
+// fileExists checks if a file exists at the specified path.
 func fileExists(name string) (bool, error) {
 	_, err := os.Stat(name)
 	if err != nil {

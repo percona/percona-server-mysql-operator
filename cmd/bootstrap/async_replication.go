@@ -15,6 +15,8 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
+// Sets up async replication for a MySQL cluster, handling donor selection,
+// cloning, and replication configuration.
 func bootstrapAsyncReplication(ctx context.Context) error {
 	timer := stopwatch.NewNamedStopwatch()
 	err := timer.AddMany([]string{"clone", "total"})
@@ -194,6 +196,8 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 	return nil
 }
 
+// Determines the topology of a MySQL cluster by identifying the primary and
+// its replicas from a set of peers.
 func getTopology(ctx context.Context, peers sets.Set[string]) (string, []string, error) {
 	replicas := sets.New[string]()
 	primary := ""
@@ -242,6 +246,7 @@ func getTopology(ctx context.Context, peers sets.Set[string]) (string, []string,
 	return primary, sets.List(replicas), nil
 }
 
+// Selects a donor node for replication from a list of replicas, prioritizing nodes other than the current node.
 func selectDonor(ctx context.Context, fqdn, primary string, replicas []string) (string, error) {
 	donor := ""
 
@@ -270,6 +275,7 @@ func selectDonor(ctx context.Context, fqdn, primary string, replicas []string) (
 	return donor, nil
 }
 
+// Checks if a clone is required by verifying the existence of a specific file.
 func isCloneRequired(file string) (bool, error) {
 	_, err := os.Stat(file)
 	if err != nil {
@@ -282,11 +288,13 @@ func isCloneRequired(file string) (bool, error) {
 	return false, nil
 }
 
+// Creates a lock file indicating a clone process
 func createCloneLock(file string) error {
 	_, err := os.Create(file)
 	return errors.Wrapf(err, "create %s", file)
 }
 
+// Deletes the clone lock file.
 func deleteCloneLock(file string) error {
 	err := os.Remove(file)
 	return errors.Wrapf(err, "remove %s", file)
