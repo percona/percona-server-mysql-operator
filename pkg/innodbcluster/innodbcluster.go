@@ -53,6 +53,7 @@ type ReplicaSetStatus struct {
 	Topology   map[string]Member `json:"topology"`
 }
 
+// String returns a formatted string representation of the Status struct.
 func (s Status) String() string {
 	status := fmt.Sprintf(`
 ClusterName: %s

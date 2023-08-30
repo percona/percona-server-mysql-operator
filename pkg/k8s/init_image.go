@@ -16,6 +16,7 @@ type ComponentWithInit interface {
 	GetInitImage() string
 }
 
+// InitContainer returns a corev1.Container for initializing a component with the provided parameters.
 func InitContainer(component, image string, pullPolicy corev1.PullPolicy, secCtx *corev1.SecurityContext) corev1.Container {
 	return corev1.Container{
 		Name:            component + "-init",
@@ -47,6 +48,7 @@ func InitImage(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaSer
 	return OperatorImage(ctx, cl)
 }
 
+// OperatorImage returns the image of the operator manager container.
 func OperatorImage(ctx context.Context, cl client.Reader) (string, error) {
 	pod, err := operatorPod(ctx, cl)
 	if err != nil {
@@ -62,6 +64,7 @@ func OperatorImage(ctx context.Context, cl client.Reader) (string, error) {
 	return "", errors.New("manager container not found")
 }
 
+// operatorPod retrieves the pod where the operator is running.
 func operatorPod(ctx context.Context, cl client.Reader) (*corev1.Pod, error) {
 	ns, err := DefaultAPINamespace()
 	if err != nil {

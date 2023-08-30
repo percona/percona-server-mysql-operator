@@ -19,6 +19,7 @@ func SecretKeySelector(name, key string) *corev1.SecretKeySelector {
 	}
 }
 
+// UserPassword retrieves the password for a SystemUser from a Secret.
 func UserPassword(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, username apiv1alpha1.SystemUser) (string, error) {
 	nn := types.NamespacedName{
 		Name:      cr.InternalSecretName(),

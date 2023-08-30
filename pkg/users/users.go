@@ -19,6 +19,7 @@ type Manager interface {
 
 type dbImpl struct{ db *sql.DB }
 
+// NewManager creates a new Manager instance to interact with the MySQL database.
 func NewManager(user apiv1alpha1.SystemUser, pass, host string, port int32) (Manager, error) {
 	config := mysqldriver.NewConfig()
 
@@ -127,6 +128,7 @@ func (d *dbImpl) DiscardOldPasswords(users []mysql.User) error {
 	return nil
 }
 
+// Close closes the database connection.
 func (d *dbImpl) Close() error {
 	return d.db.Close()
 }

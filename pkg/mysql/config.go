@@ -14,25 +14,30 @@ import (
 
 type Configurable apiv1alpha1.PerconaServerMySQL
 
+// GetConfigMapName returns the name of the ConfigMap associated with the Configurable object.
 func (c *Configurable) GetConfigMapName() string {
 	cr := apiv1alpha1.PerconaServerMySQL(*c)
 	return ConfigMapName(&cr)
 }
 
+// GetConfigMapKey returns the key for custom configuration in the Configurable object.
 func (c *Configurable) GetConfigMapKey() string {
 	return CustomConfigKey
 }
 
+// GetConfiguration returns the MySQL configuration from the Configurable object.
 func (c *Configurable) GetConfiguration() string {
 	cr := apiv1alpha1.PerconaServerMySQL(*c)
 	return cr.Spec.MySQL.Configuration
 }
 
+// GetResources returns the resource requirements from the Configurable object.
 func (c *Configurable) GetResources() corev1.ResourceRequirements {
 	cr := apiv1alpha1.PerconaServerMySQL(*c)
 	return cr.Spec.MySQL.Resources
 }
 
+// ExecuteConfigurationTemplate executes a template using the provided input and memory limit.
 func (c *Configurable) ExecuteConfigurationTemplate(input string, memory *resource.Quantity) (string, error) {
 	tmpl, err := pongo2.FromString(input)
 	if err != nil {
@@ -45,6 +50,8 @@ func (c *Configurable) ExecuteConfigurationTemplate(input string, memory *resour
 	return result, nil
 }
 
+// GetAutoTuneParams calculates and returns MySQL auto-tuning parameters
+// based on the given PerconaServerMySQL object and memory quantity.
 func GetAutoTuneParams(cr *apiv1alpha1.PerconaServerMySQL, q *resource.Quantity) (string, error) {
 	autotuneParams := ""
 

@@ -34,30 +34,37 @@ const (
 
 type Exposer apiv1alpha1.PerconaServerMySQL
 
+// Exposed returns whether the exposer is enabled in the PerconaServerMySQL custom resource.
 func (e *Exposer) Exposed() bool {
 	cr := apiv1alpha1.PerconaServerMySQL(*e)
 	return cr.OrchestratorEnabled()
 }
 
+// Name generates the name for the instance using the component name and index.
 func (e *Exposer) Name(index string) string {
 	cr := apiv1alpha1.PerconaServerMySQL(*e)
 	return Name(&cr) + "-" + index
 }
 
+// Size returns the size of the exposer defined in the PerconaServerMySQL custom resource.
 func (e *Exposer) Size() int32 {
 	return e.Spec.Orchestrator.Size
 }
 
+// Labels generates the labels for the exposer instance.
 func (e *Exposer) Labels() map[string]string {
 	cr := apiv1alpha1.PerconaServerMySQL(*e)
 	return MatchLabels(&cr)
 }
 
+// Service generates the Service for the exposer instance.
 func (e *Exposer) Service(name string) *corev1.Service {
 	cr := apiv1alpha1.PerconaServerMySQL(*e)
 	return PodService(&cr, cr.Spec.Orchestrator.Expose.Type, name)
 }
 
+// SaveOldMeta returns whether saving old metadata is
+// enabled in the PerconaServerMySQL custom resource.
 func (e *Exposer) SaveOldMeta() bool {
 	cr := apiv1alpha1.PerconaServerMySQL(*e)
 	return cr.OrchestratorSpec().Expose.SaveOldMeta()
@@ -68,27 +75,34 @@ func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return cr.Name + "-" + componentShortName
 }
 
+// NamespacedName generates the namespaced name based on the PerconaServerMySQL custom resource.
 func NamespacedName(cr *apiv1alpha1.PerconaServerMySQL) types.NamespacedName {
 	return types.NamespacedName{Name: Name(cr), Namespace: cr.Namespace}
 }
 
+// ServiceName generates the service name based on the PerconaServerMySQL custom resource.
 func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
+// ConfigMapName generates the ConfigMap name based on the PerconaServerMySQL custom resource.
 func ConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
+// PodName generates the pod name based on the PerconaServerMySQL custom resource and index.
 func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
 	return fmt.Sprintf("%s-%d", Name(cr), idx)
 }
 
+// FQDN generates the fully qualified domain name based
+// on the PerconaServerMySQL custom resource and index.
 func FQDN(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
 	// TODO: DNS suffix
 	return fmt.Sprintf("%s.%s.svc", PodName(cr, idx), cr.Namespace)
 }
 
+// APIHost generates the API host URL based on the PerconaServerMySQL custom resource.
 func APIHost(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return fmt.Sprintf("http://%s:%d", FQDN(cr, 0), defaultWebPort)
 }
@@ -98,12 +112,14 @@ func Labels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return cr.OrchestratorSpec().Labels
 }
 
+// MatchLabels generates match labels for the PerconaServerMySQL custom resource
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(Labels(cr),
 		map[string]string{apiv1alpha1.ComponentLabel: ComponentName},
 		cr.Labels())
 }
 
+// StatefulSet generates the StatefulSet for the PerconaServerMySQL instance.
 func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 	spec := cr.OrchestratorSpec()
@@ -192,6 +208,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.S
 	}
 }
 
+// updateStrategy generates the update strategy for the PerconaServerMySQL instance.
 func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrategy {
 	switch cr.Spec.UpdateStrategy {
 	case appsv1.OnDeleteStatefulSetStrategyType:
@@ -207,6 +224,7 @@ func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdate
 	}
 }
 
+// containers generates the containers for the PerconaServerMySQL instance.
 func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 	sidecars := sidecarContainers(cr)
 	containers := make([]corev1.Container, 1, len(sidecars)+1)
@@ -214,6 +232,7 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 	return append(containers, sidecars...)
 }
 
+// container generates the main container for the PerconaServerMySQL instance.
 func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	env := []corev1.EnvVar{
 		{
@@ -287,6 +306,7 @@ func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	}
 }
 
+// sidecarContainers generates the sidecar containers for the PerconaServerMySQL instance.
 func sidecarContainers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 	serviceName := mysql.ServiceName(cr)
 
@@ -319,6 +339,7 @@ func sidecarContainers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 	}
 }
 
+// containerMounts generates the volume mounts for the PerconaServerMySQL containers.
 func containerMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{
@@ -341,6 +362,7 @@ func containerMounts() []corev1.VolumeMount {
 	}
 }
 
+// Service generates the Service for the PerconaServerMySQL instance.
 func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -370,6 +392,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
+// PodService generates a Pod-specific Service for the PerconaServerMySQL instance.
 func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podName string) *corev1.Service {
 	expose := cr.Spec.Orchestrator.Expose
 
@@ -422,6 +445,7 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 	}
 }
 
+// ConfigMap generates a ConfigMap for the PerconaServerMySQL instance.
 func ConfigMap(cr *apiv1alpha1.PerconaServerMySQL, data map[string]string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
@@ -436,6 +460,7 @@ func ConfigMap(cr *apiv1alpha1.PerconaServerMySQL, data map[string]string) *core
 	}
 }
 
+// RaftNodes generates a list of Raft nodes for the PerconaServerMySQL instance.
 func RaftNodes(cr *apiv1alpha1.PerconaServerMySQL) []string {
 	nodes := make([]string, cr.Spec.Orchestrator.Size)
 
@@ -446,6 +471,7 @@ func RaftNodes(cr *apiv1alpha1.PerconaServerMySQL) []string {
 	return nodes
 }
 
+// orcConfig generates the Orchestrator configuration JSON for the PerconaServerMySQL instance.
 func orcConfig(cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	config := make(map[string]interface{}, 0)
 
@@ -458,6 +484,7 @@ func orcConfig(cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	return string(configJson), nil
 }
 
+// ConfigMapData generates the data for the ConfigMap of the PerconaServerMySQL instance.
 func ConfigMapData(cr *apiv1alpha1.PerconaServerMySQL) (map[string]string, error) {
 	cmData := make(map[string]string, 0)
 

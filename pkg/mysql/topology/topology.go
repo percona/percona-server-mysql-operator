@@ -16,6 +16,7 @@ type Topology struct {
 	Replicas []string
 }
 
+// Get retrieves the cluster topology based on the specified cluster type.
 func Get(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL, operatorPass string) (Topology, error) {
 	var err error
 	var top Topology
@@ -36,6 +37,7 @@ func Get(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL, operatorP
 	return top, nil
 }
 
+// getGRTopology retrieves the Group Replication topology of a cluster.
 func getGRTopology(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL, operatorPass string) (Topology, error) {
 	fqdn := mysql.FQDN(cluster, 0)
 	db, err := replicator.NewReplicator(ctx, apiv1alpha1.UserOperator, operatorPass, fqdn, mysql.DefaultAdminPort)
@@ -59,6 +61,7 @@ func getGRTopology(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL,
 	}, nil
 }
 
+// getAsyncTopology retrieves the asynchronous replication topology of a cluster.ss
 func getAsyncTopology(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) (Topology, error) {
 	orcHost := orchestrator.APIHost(cluster)
 	primary, err := orchestrator.ClusterPrimary(ctx, orcHost, cluster.ClusterHint())

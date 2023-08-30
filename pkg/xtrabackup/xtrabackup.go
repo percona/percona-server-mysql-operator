@@ -31,38 +31,47 @@ const (
 	backupMountPath    = "/backup"
 )
 
+// Name constructs the name for the PerconaServerMySQLBackup resource.
 func Name(cr *apiv1alpha1.PerconaServerMySQLBackup) string {
 	return componentShortName + "-" + cr.Name + "-" + cr.Spec.StorageName
 }
 
+// RestoreName constructs the restore name for the PerconaServerMySQLRestore resource.
 func RestoreName(cr *apiv1alpha1.PerconaServerMySQLRestore) string {
 	return componentShortName + "-restore-" + cr.Name
 }
 
+// DeleteName constructs the delete name for the PerconaServerMySQLBackup resource.
 func DeleteName(cr *apiv1alpha1.PerconaServerMySQLBackup) string {
 	return componentShortName + "-delete-" + cr.Name
 }
 
+// NamespacedName returns the namespaced name for the PerconaServerMySQLBackup resource.
 func NamespacedName(cr *apiv1alpha1.PerconaServerMySQLBackup) types.NamespacedName {
 	return types.NamespacedName{Name: Name(cr), Namespace: cr.Namespace}
 }
 
+// JobName returns the job name for the PerconaServerMySQLBackup resource.
 func JobName(cr *apiv1alpha1.PerconaServerMySQLBackup) string {
 	return Name(cr)
 }
 
+// RestoreJobName returns the restore job name based on the cluster and restore specifications.
 func RestoreJobName(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerMySQLRestore) string {
 	return RestoreName(cr)
 }
 
+// DeleteJobName returns the delete job name for the PerconaServerMySQLBackup resource.
 func DeleteJobName(cr *apiv1alpha1.PerconaServerMySQLBackup) string {
 	return DeleteName(cr)
 }
 
+// MatchLabels merges the component labels with cluster labels.
 func MatchLabels(cluster *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(map[string]string{apiv1alpha1.ComponentLabel: componentName}, cluster.Labels())
 }
 
+// Job constructs a Job resource for the backup operation.
 func Job(
 	cluster *apiv1alpha1.PerconaServerMySQL,
 	cr *apiv1alpha1.PerconaServerMySQLBackup,
@@ -151,6 +160,7 @@ func Job(
 	}
 }
 
+// xtrabackupContainer constructs a container specification for the xtrabackup operation.
 func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName, destination string, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
 	spec := cluster.Spec.Backup
 
@@ -206,6 +216,7 @@ const (
 	XBCloudActionDelete XBCloudAction = "delete"
 )
 
+// XBCloudArgs constructs the argument list for the XBCloud command based on action and configuration.
 func XBCloudArgs(action XBCloudAction, conf *BackupConfig) []string {
 	args := []string{string(action), "--parallel=10", "--curl-retriable-errors=7"}
 
@@ -263,6 +274,7 @@ func XBCloudArgs(action XBCloudAction, conf *BackupConfig) []string {
 	return args
 }
 
+// deleteContainer constructs a container specification for the delete operation.
 func deleteContainer(image string, conf *BackupConfig, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
 	return corev1.Container{
 		Name:            componentName,
@@ -282,6 +294,7 @@ func deleteContainer(image string, conf *BackupConfig, storage *apiv1alpha1.Back
 	}
 }
 
+// RestoreJob constructs a Job resource for the restore operation.
 func RestoreJob(
 	cluster *apiv1alpha1.PerconaServerMySQL,
 	destination string,
@@ -400,6 +413,7 @@ func RestoreJob(
 	}
 }
 
+// GetDeleteJob constructs a Job resource for the delete operation based on the backup and configuration.
 func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) *batchv1.Job {
 	var one int32 = 1
 	t := true
@@ -453,6 +467,8 @@ func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) 
 		},
 	}
 }
+
+// Constructs a container specification for restoring a Percona MySQL server from backup.
 func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alpha1.PerconaServerMySQLRestore, destination string, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
 	spec := cluster.Spec.Backup
 
@@ -501,6 +517,7 @@ func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alp
 	}
 }
 
+// Generates a PVC specification for storing Percona MySQL backups.
 func PVC(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerMySQLBackup, storage *apiv1alpha1.BackupStorageSpec) *corev1.PersistentVolumeClaim {
 	if len(storage.Volume.PersistentVolumeClaim.AccessModes) == 0 {
 		storage.Volume.PersistentVolumeClaim.AccessModes = []corev1.PersistentVolumeAccessMode{
@@ -521,6 +538,7 @@ func PVC(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerM
 	}
 }
 
+// Sets up the PersistentVolumeClaim for storage in the given job.
 func SetStoragePVC(job *batchv1.Job, pvc *corev1.PersistentVolumeClaim) error {
 	spec := &job.Spec.Template.Spec
 
@@ -543,6 +561,7 @@ func SetStoragePVC(job *batchv1.Job, pvc *corev1.PersistentVolumeClaim) error {
 	return errors.Errorf("no container named %s in Job spec", componentName)
 }
 
+// Configures S3 storage settings for the backup job.
 func SetStorageS3(job *batchv1.Job, s3 *apiv1alpha1.BackupStorageS3Spec) error {
 	spec := &job.Spec.Template.Spec
 
@@ -595,6 +614,7 @@ func SetStorageS3(job *batchv1.Job, s3 *apiv1alpha1.BackupStorageS3Spec) error {
 	return errors.Errorf("no container named %s in Job spec", componentName)
 }
 
+// Configures GCS storage settings for the backup job.
 func SetStorageGCS(job *batchv1.Job, gcs *apiv1alpha1.BackupStorageGCSSpec) error {
 	spec := &job.Spec.Template.Spec
 
@@ -643,6 +663,7 @@ func SetStorageGCS(job *batchv1.Job, gcs *apiv1alpha1.BackupStorageGCSSpec) erro
 	return errors.Errorf("no container named %s in Job spec", componentName)
 }
 
+// Configures Azure storage settings for the backup job.
 func SetStorageAzure(job *batchv1.Job, azure *apiv1alpha1.BackupStorageAzureSpec) error {
 	spec := &job.Spec.Template.Spec
 
@@ -691,6 +712,7 @@ func SetStorageAzure(job *batchv1.Job, azure *apiv1alpha1.BackupStorageAzureSpec
 	return errors.Errorf("no container named %s in Job spec", componentName)
 }
 
+// Sets the source node from which to take the backup in the given job.
 func SetSourceNode(job *batchv1.Job, src string) error {
 	spec := &job.Spec.Template.Spec
 
