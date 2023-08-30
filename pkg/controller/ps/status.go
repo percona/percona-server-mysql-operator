@@ -322,10 +322,6 @@ func writeStatus(ctx context.Context, cl client.Client, nn types.NamespacedName,
 		}
 
 		cr.Status = status
-		if err := cl.Status().Update(ctx, cr); err != nil {
-			return errors.Wrapf(err, "update %v", nn.String())
-		}
-
-		return nil
+		return cl.Status().Update(ctx, cr)
 	})
 }
