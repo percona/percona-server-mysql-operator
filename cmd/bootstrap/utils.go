@@ -31,6 +31,45 @@ func getFQDN(svcName string) (string, error) {
 	return fmt.Sprintf("%s.%s.%s", hostname, svcName, namespace), nil
 }
 
+func getUnreadyFQDN() (string, error) {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "", errors.Wrap(err, "get hostname")
+	}
+
+	podIp, err := getPodIP(hostname)
+	if err != nil {
+		return "", errors.Wrap(err, "get pod IP")
+	}
+
+	fqdn, err := getFQDNWithIPAddr(os.Getenv("SERVICE_NAME_UNREADY"), podIp)
+	if err != nil {
+		return "", errors.Wrap(err, "get FQDN with IP")
+	}
+
+	return fqdn, nil
+}
+
+func getFQDNWithIPAddr(svcName, addr string) (string, error) {
+	_, srvRecords, err := net.LookupSRV("", "", svcName)
+	if err != nil {
+		return "", err
+	}
+
+	for _, srvRecord := range srvRecords {
+		addrs, err := net.LookupHost(srvRecord.Target)
+		if err != nil {
+			return "", err
+		}
+
+		if addrs[0] == addr {
+			return srvRecord.Target, nil
+		}
+	}
+
+	return "", errors.New("target addr not found")
+}
+
 func getSecret(username apiv1alpha1.SystemUser) (string, error) {
 	path := filepath.Join(mysql.CredsMountPath, string(username))
 	sBytes, err := os.ReadFile(path)

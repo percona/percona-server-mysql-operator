@@ -151,7 +151,7 @@ func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) (string, erro
 }
 
 func updateGroupPeers(ctx context.Context, peers sets.Set[string]) error {
-	fqdn, err := getFQDN(os.Getenv("SERVICE_NAME"))
+	fqdn, err := getUnreadyFQDN()
 	if err != nil {
 		return errors.Wrap(err, "get FQDN")
 	}
@@ -200,8 +200,8 @@ func (m *mysqlsh) configureLocalInstance(ctx context.Context) error {
 	return nil
 }
 
-func (m *mysqlsh) createCluster(ctx context.Context) error {
-	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.createCluster('%s')", m.clusterName))
+func (m *mysqlsh) createCluster(ctx context.Context, localAddr string) error {
+	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.createCluster('%s', {'localAddress': '%s'})", m.clusterName, localAddr))
 	if err != nil {
 		if strings.Contains(stderr.String(), "dba.rebootClusterFromCompleteOutage") {
 			return errRebootClusterFromCompleteOutage
@@ -212,8 +212,8 @@ func (m *mysqlsh) createCluster(ctx context.Context) error {
 	return nil
 }
 
-func (m *mysqlsh) addInstance(ctx context.Context, instanceDef string) error {
-	_, _, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'waitRecovery': 3})", m.clusterName, instanceDef))
+func (m *mysqlsh) addInstance(ctx context.Context, instanceDef, localAddr string) error {
+	_, _, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'waitRecovery': 3, 'localAddress': '%s'})", m.clusterName, instanceDef, localAddr))
 	if err != nil {
 		return errors.Wrap(err, "add instance")
 	}
@@ -254,13 +254,8 @@ func (m *mysqlsh) rescanCluster(ctx context.Context) error {
 	return nil
 }
 
-func connectToLocal(ctx context.Context) (*mysqlsh, error) {
-	fqdn, err := getFQDN(os.Getenv("SERVICE_NAME"))
-	if err != nil {
-		return nil, errors.Wrap(err, "get FQDN")
-	}
-
-	return newShell(fqdn), nil
+func connectToMember(ctx context.Context, addr string) (*mysqlsh, error) {
+	return newShell(addr), nil
 }
 
 func connectToCluster(ctx context.Context, peers sets.Set[string]) (*mysqlsh, error) {
@@ -279,7 +274,12 @@ func connectToCluster(ctx context.Context, peers sets.Set[string]) (*mysqlsh, er
 }
 
 func handleFullClusterCrash(ctx context.Context) error {
-	localShell, err := connectToLocal(ctx)
+	fqdn, err := getUnreadyFQDN()
+	if err != nil {
+		return err
+	}
+
+	localShell, err := connectToMember(ctx, fqdn)
 	if err != nil {
 		return errors.Wrap(err, "connect to local")
 	}
@@ -325,7 +325,12 @@ func bootstrapGroupReplication(ctx context.Context) error {
 
 	log.Println("Bootstrap starting...")
 
-	localShell, err := connectToLocal(ctx)
+	fqdn, err := getUnreadyFQDN()
+	if err != nil {
+		return errors.Wrap(err, "get unready service FQDN")
+	}
+
+	localShell, err := connectToMember(ctx, fqdn)
 	if err != nil {
 		return errors.Wrap(err, "connect to local")
 	}
@@ -336,7 +341,7 @@ func bootstrapGroupReplication(ctx context.Context) error {
 	}
 	log.Printf("Instance (%s) configured to join to the InnoDB cluster", localShell.host)
 
-	peers, err := lookup(os.Getenv("SERVICE_NAME"))
+	peers, err := lookup(os.Getenv("SERVICE_NAME_UNREADY"))
 	if err != nil {
 		return errors.Wrap(err, "lookup")
 	}
@@ -348,7 +353,7 @@ func bootstrapGroupReplication(ctx context.Context) error {
 		if peers.Len() == 1 {
 			log.Printf("Creating InnoDB cluster: %s", localShell.clusterName)
 
-			err := localShell.createCluster(ctx)
+			err := localShell.createCluster(ctx, fqdn)
 			if err != nil {
 				if errors.Is(err, errRebootClusterFromCompleteOutage) {
 					log.Printf("Cluster already exists, we need to reboot")
@@ -391,7 +396,7 @@ func bootstrapGroupReplication(ctx context.Context) error {
 	if !ok {
 		log.Printf("Adding instance (%s) to InnoDB cluster", localShell.host)
 
-		if err := shell.addInstance(ctx, localShell.getURI()); err != nil {
+		if err := shell.addInstance(ctx, localShell.getURI(), fqdn); err != nil {
 			return err
 		}
 
