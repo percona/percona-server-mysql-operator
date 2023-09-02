@@ -166,6 +166,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		restartMySQL        bool
 		restartReplication  bool
 		restartOrchestrator bool
+		restartPMM          bool
 	)
 
 	updatedUsers := make([]mysql.User, 0)
@@ -178,11 +179,11 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		mysqlUser := allUsers[apiv1alpha1.SystemUser(user)]
 		mysqlUser.Password = string(pass)
 
-		switch mysqlUser.Username {
+		switch apiv1alpha1.SystemUser(user) {
 		case apiv1alpha1.UserMonitor:
 			restartMySQL = cr.PMMEnabled(internalSecret)
 		case apiv1alpha1.UserPMMServerKey:
-			restartMySQL = cr.PMMEnabled(internalSecret)
+			restartPMM = cr.PMMEnabled(internalSecret)
 			continue // PMM server user credentials are not stored in db
 		case apiv1alpha1.UserReplication:
 			restartReplication = true
@@ -267,12 +268,24 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		}
 	}
 
-	if restartMySQL {
-		log.Info("Monitor user password updated. Restarting MySQL.")
+	if restartMySQL || restartPMM {
+		log.Info("Monitor user password or pmmserverkey updated. Restarting MySQL.")
 
 		sts := &appsv1.StatefulSet{}
 		if err := r.Client.Get(ctx, mysql.NamespacedName(cr), sts); err != nil {
 			return errors.Wrap(err, "get MySQL statefulset")
+		}
+		if err := k8s.RolloutRestart(ctx, r.Client, sts, apiv1alpha1.AnnotationSecretHash, hash); err != nil {
+			return errors.Wrap(err, "restart MySQL")
+		}
+	}
+
+	if cr.HAProxyEnabled() && restartPMM {
+		log.Info("pmmserverkey updated. Restarting HAProxy.")
+
+		sts := new(appsv1.StatefulSet)
+		if err := r.Get(ctx, haproxy.NamespacedName(cr), sts); err != nil {
+			return errors.Wrap(err, "get HAProxy statefulset")
 		}
 		if err := k8s.RolloutRestart(ctx, r.Client, sts, apiv1alpha1.AnnotationSecretHash, hash); err != nil {
 			return errors.Wrap(err, "restart MySQL")

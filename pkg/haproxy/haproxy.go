@@ -7,6 +7,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -35,6 +36,10 @@ const (
 // Name returns the formatted name for the ConfigMap.
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return cr.Name + "-" + ComponentName
+}
+
+func NamespacedName(cr *apiv1alpha1.PerconaServerMySQL) types.NamespacedName {
+	return types.NamespacedName{Name: Name(cr), Namespace: cr.Namespace}
 }
 
 // ServiceName returns the name of the associated service.
@@ -348,7 +353,7 @@ func mysqlMonitContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	env := []corev1.EnvVar{
 		{
 			Name:  "MYSQL_SERVICE",
-			Value: mysql.ServiceName(cr),
+			Value: mysql.ProxyServiceName(cr),
 		},
 	}
 	env = append(env, spec.Env...)

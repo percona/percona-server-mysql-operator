@@ -4,11 +4,14 @@ config
 config-router
 demand-backup
 gr-demand-backup
+gr-demand-backup-haproxy
 gr-haproxy
 gr-ignore-annotations
 gr-init-deploy
 gr-one-pod
+gr-recreate
 gr-scaling
+gr-self-healing
 gr-tls-cert-manager
 gr-users
 haproxy
@@ -16,6 +19,8 @@ init-deploy
 limits
 monitoring
 one-pod
+operator-self-healing
+recreate
 scaling
 service-per-pod
 sidecars

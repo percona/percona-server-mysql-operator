@@ -105,11 +105,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 			cr.Status = status
 			log.Info("Updating status", "state", cr.Status.State)
-			if err := r.Client.Status().Update(ctx, cr); err != nil {
-				return errors.Wrapf(err, "update %v", req.NamespacedName.String())
-			}
-
-			return nil
+			return r.Client.Status().Update(ctx, cr)
 		})
 		if err != nil {
 			log.Error(err, "failed to update status")

@@ -465,6 +465,10 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 		return errors.Wrap(err, "reconcile headless svc")
 	}
 
+	if err := k8s.EnsureService(ctx, r.Client, cr, mysql.ProxyService(cr), r.Scheme, true); err != nil {
+		return errors.Wrap(err, "reconcile proxy svc")
+	}
+
 	exposer := mysql.Exposer(*cr)
 	if err := r.reconcileServicePerPod(ctx, cr, &exposer); err != nil {
 		return errors.Wrap(err, "reconcile service per pod")
@@ -755,6 +759,13 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 	if primary.Alias == "" {
 		log.Info("mysql is not ready, orchestrator cluster primary alias is empty. skip")
 		return nil
+	}
+
+	// orchestrator doesn't attempt to recover from NonWriteableMaster if there's only 1 MySQL pod
+	if cr.MySQLSpec().Size == 1 && primary.ReadOnly {
+		if err := orchestrator.SetWriteableExec(ctx, r.ClientCmd, pod, primary.Key.Hostname, int(primary.Key.Port)); err != nil {
+			return errors.Wrapf(err, "set %s writeable", primary.Key.Hostname)
+		}
 	}
 
 	return nil

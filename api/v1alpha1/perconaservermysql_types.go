@@ -77,6 +77,7 @@ const (
 	MaxSafeGRSize                = 9
 )
 
+// Checks if the provided ClusterType is valid.
 func (t ClusterType) isValid() bool {
 	switch ClusterType(t) {
 	case ClusterTypeGR, ClusterTypeAsync:
@@ -98,10 +99,12 @@ type MySQLSpec struct {
 	PodSpec `json:",inline"`
 }
 
+// Checks if the MySQL cluster type is asynchronous.
 func (m MySQLSpec) IsAsync() bool {
 	return m.ClusterType == ClusterTypeAsync
 }
 
+// Checks if the MySQL cluster type is Group Replication (GR).
 func (m MySQLSpec) IsGR() bool {
 	return m.ClusterType == ClusterTypeGR
 }
@@ -158,6 +161,7 @@ type PodSpec struct {
 	ContainerSpec `json:",inline"`
 }
 
+// Retrieves the initialization image for the pod.
 func (s *PodSpec) GetInitImage() string {
 	return s.InitImage
 }
@@ -185,6 +189,7 @@ type BackupSpec struct {
 	Storages                 map[string]*BackupStorageSpec `json:"storages,omitempty"`
 }
 
+// Retrieves the initialization image for the backup.
 func (s *BackupSpec) GetInitImage() string {
 	return s.InitImage
 }
@@ -230,11 +235,13 @@ type BackupStorageS3Spec struct {
 // BucketWithPrefix contains a bucket name with or without a prefix in a format <bucket>/<prefix>
 type BucketWithPrefix string
 
+// Extracts the bucket name from a combined bucket with prefix string.
 func (b BucketWithPrefix) Bucket() string {
 	bucket, _, _ := strings.Cut(string(b), "/")
 	return bucket
 }
 
+// Extracts the prefix from a combined bucket with prefix string.
 func (b BucketWithPrefix) Prefix() string {
 	_, prefix, _ := strings.Cut(string(b), "/")
 	return prefix
@@ -331,6 +338,7 @@ type ServiceExpose struct {
 	ExternalTrafficPolicy    corev1.ServiceExternalTrafficPolicyType  `json:"externalTrafficPolicy,omitempty"`
 }
 
+// Determines if both annotations and labels of the service expose are empty.
 func (e *ServiceExpose) SaveOldMeta() bool {
 	return len(e.Annotations) == 0 && len(e.Labels) == 0
 }
@@ -345,6 +353,8 @@ type StatefulAppState string
 
 const (
 	StateInitializing StatefulAppState = "initializing"
+	StateStopping     StatefulAppState = "stopping"
+	StatePaused       StatefulAppState = "paused"
 	StateReady        StatefulAppState = "ready"
 	StateError        StatefulAppState = "error"
 )
@@ -417,18 +427,22 @@ const (
 	UserXtraBackup   SystemUser = "xtrabackup"
 )
 
+// MySQLSpec returns the MySQL specification from the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) MySQLSpec() *MySQLSpec {
 	return &cr.Spec.MySQL
 }
 
+// PMMSpec returns the PMM specification from the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) PMMSpec() *PMMSpec {
 	return cr.Spec.PMM
 }
 
+// OrchestratorSpec returns the Orchestrator specification from the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 	return &cr.Spec.Orchestrator
 }
 
+// SetVersion sets the CRVersion to the version value if it's not already set.
 func (cr *PerconaServerMySQL) SetVersion() {
 	if len(cr.Spec.CRVersion) > 0 {
 		return
@@ -437,6 +451,7 @@ func (cr *PerconaServerMySQL) SetVersion() {
 	cr.Spec.CRVersion = version.Version
 }
 
+// CheckNSetDefaults validates and sets default values for the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersion *platform.ServerVersion) error {
 	log := logf.FromContext(ctx).WithName("CheckNSetDefaults")
 	if len(cr.Spec.MySQL.ClusterType) == 0 {
@@ -690,6 +705,7 @@ const (
 	BinVolumePath = "/opt/percona"
 )
 
+// reconcileVol validates and sets default values for a given VolumeSpec, ensuring it is properly defined.
 func reconcileVol(v *VolumeSpec) (*VolumeSpec, error) {
 	if v == nil || v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil {
 		return nil, errors.New("volumeSpec and it's internals should be specified")
@@ -708,6 +724,7 @@ func reconcileVol(v *VolumeSpec) (*VolumeSpec, error) {
 	return v, nil
 }
 
+// defaultPVCSpec sets default access mode for a PersistentVolumeClaimSpec if not already defined.
 func defaultPVCSpec(pvc *corev1.PersistentVolumeClaimSpec) {
 	if pvc == nil {
 		return
@@ -754,6 +771,7 @@ func (p *PodSpec) reconcileAffinityOpts() {
 	}
 }
 
+// GetAffinity derives an Affinity configuration based on the provided PodSpec's affinity settings and labels.
 func (p *PodSpec) GetAffinity(labels map[string]string) *corev1.Affinity {
 	if p.Affinity == nil {
 		return nil
@@ -801,6 +819,7 @@ const (
 	ExposedLabel      = "percona.com/exposed"
 )
 
+// Labels returns a standardized set of labels for the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) Labels() map[string]string {
 	return map[string]string{
 		NameLabel:      "percona-server",
@@ -810,10 +829,13 @@ func (cr *PerconaServerMySQL) Labels() map[string]string {
 	}
 }
 
+// ClusterHint generates a unique identifier for the PerconaServerMySQL
+// cluster using its name and namespace.
 func (cr *PerconaServerMySQL) ClusterHint() string {
 	return fmt.Sprintf("%s.%s", cr.Name, cr.Namespace)
 }
 
+// GetClusterNameFromObject retrieves the cluster's name from the given client object's labels.
 func GetClusterNameFromObject(obj client.Object) (string, error) {
 	labels := obj.GetLabels()
 	instance, ok := labels[InstanceLabel]
@@ -823,6 +845,7 @@ func GetClusterNameFromObject(obj client.Object) (string, error) {
 	return instance, nil
 }
 
+// FNVHash computes a hash of the provided byte slice using the FNV-1a algorithm.
 func FNVHash(p []byte) string {
 	hash := fnv.New32()
 	hash.Write(p)
@@ -844,10 +867,12 @@ func (cr *PerconaServerMySQL) ClusterHash() string {
 	return serverIDHash
 }
 
+// InternalSecretName generates a name for the internal secret based on the PerconaServerMySQL name.
 func (cr *PerconaServerMySQL) InternalSecretName() string {
 	return "internal-" + cr.Name
 }
 
+// PMMEnabled checks if PMM is enabled and if the provided secret contains PMM-specific data.
 func (cr *PerconaServerMySQL) PMMEnabled(secret *corev1.Secret) bool {
 	if cr.Spec.PMM != nil && cr.Spec.PMM.Enabled && secret != nil && secret.Data != nil {
 		return cr.Spec.PMM.HasSecret(secret)
@@ -855,6 +880,7 @@ func (cr *PerconaServerMySQL) PMMEnabled(secret *corev1.Secret) bool {
 	return false
 }
 
+// HasSecret determines if the provided secret contains the necessary PMM server key.
 func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	if secret.Data != nil {
 		v, ok := secret.Data[string(UserPMMServerKey)]
@@ -863,6 +889,7 @@ func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	return false
 }
 
+// RouterEnabled checks if the router is enabled, considering the MySQL configuration.
 func (cr *PerconaServerMySQL) RouterEnabled() bool {
 	if cr.MySQLSpec().IsAsync() {
 		return false
@@ -871,6 +898,7 @@ func (cr *PerconaServerMySQL) RouterEnabled() bool {
 	return cr.Spec.Proxy.Router != nil && cr.Spec.Proxy.Router.Enabled
 }
 
+// HAProxyEnabled verifies if HAProxy is enabled based on MySQL configuration and safety settings.
 func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
 	if cr.MySQLSpec().IsAsync() && !cr.Spec.AllowUnsafeConfig {
 		return true
@@ -879,6 +907,8 @@ func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
 	return cr.Spec.Proxy.HAProxy != nil && cr.Spec.Proxy.HAProxy.Enabled
 }
 
+// OrchestratorEnabled determines if the orchestrator is enabled,
+// considering the MySQL configuration.
 func (cr *PerconaServerMySQL) OrchestratorEnabled() bool {
 	if cr.MySQLSpec().IsGR() {
 		return false
@@ -893,10 +923,12 @@ func (cr *PerconaServerMySQL) OrchestratorEnabled() bool {
 
 var NonAlphaNumeric = regexp.MustCompile("[^a-zA-Z0-9_]+")
 
+// Generates a cluster name by sanitizing the PerconaServerMySQL name.
 func (cr *PerconaServerMySQL) InnoDBClusterName() string {
 	return NonAlphaNumeric.ReplaceAllString(cr.Name, "")
 }
 
+// Registers PerconaServerMySQL types with the SchemeBuilder.
 func init() {
 	SchemeBuilder.Register(&PerconaServerMySQL{}, &PerconaServerMySQLList{})
 }

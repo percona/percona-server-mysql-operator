@@ -286,11 +286,6 @@ func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1a
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return status, err
 	}
-	if sfsObj.Status.Replicas > sfsObj.Status.UpdatedReplicas {
-		return status, nil
-	}
-
-	sfsObj.Size()
 
 	pods, err := k8s.PodsByLabels(ctx, r.Client, labels)
 	if err != nil {
@@ -303,7 +298,14 @@ func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1a
 		}
 	}
 
-	if status.Ready == status.Size {
+	switch {
+	case cr.Spec.Pause && status.Ready > 0:
+		status.State = apiv1alpha1.StateStopping
+	case cr.Spec.Pause && status.Ready == 0:
+		status.State = apiv1alpha1.StatePaused
+	case sfsObj.Status.Replicas > sfsObj.Status.UpdatedReplicas:
+		status.State = apiv1alpha1.StateInitializing
+	case status.Ready == status.Size:
 		status.State = apiv1alpha1.StateReady
 	}
 
@@ -320,10 +322,6 @@ func writeStatus(ctx context.Context, cl client.Client, nn types.NamespacedName,
 		}
 
 		cr.Status = status
-		if err := cl.Status().Update(ctx, cr); err != nil {
-			return errors.Wrapf(err, "update %v", nn.String())
-		}
-
-		return nil
+		return cl.Status().Update(ctx, cr)
 	})
 }

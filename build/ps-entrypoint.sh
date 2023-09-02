@@ -394,6 +394,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 	fi
 
 	load_group_replication_plugin
+	ensure_read_only
 
 	# exit when MYSQL_INIT_ONLY environment variable is set to avoid starting mysqld
 	if [ -n "$MYSQL_INIT_ONLY" ]; then

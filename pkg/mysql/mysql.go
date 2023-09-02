@@ -88,6 +88,10 @@ func UnreadyServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr) + "-unready"
 }
 
+func ProxyServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
+	return Name(cr) + "-proxy"
+}
+
 func ConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
@@ -377,6 +381,28 @@ func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Ports:                    servicePorts(cr),
 			Selector:                 labels,
 			PublishNotReadyAddresses: cr.Spec.MySQL.IsGR(),
+		},
+	}
+}
+
+func ProxyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
+	labels := MatchLabels(cr)
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Service",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ProxyServiceName(cr),
+			Namespace: cr.Namespace,
+			Labels:    labels,
+		},
+		Spec: corev1.ServiceSpec{
+			Type:                     corev1.ServiceTypeClusterIP,
+			ClusterIP:                "None",
+			Ports:                    servicePorts(cr),
+			Selector:                 labels,
+			PublishNotReadyAddresses: false,
 		},
 	}
 }

@@ -89,7 +89,12 @@ func (m *mysqlsh) clusterStatus(ctx context.Context) (innodbcluster.Status, erro
 	return status, nil
 }
 
-func (m *mysqlsh) runSQL(ctx context.Context, sql string) (string, error) {
+type SQLResult struct {
+	Error string              `json:"error,omitempty"`
+	Rows  []map[string]string `json:"rows,omitempty"`
+}
+
+func (m *mysqlsh) runSQL(ctx context.Context, sql string) (SQLResult, error) {
 	var stdoutb, stderrb bytes.Buffer
 
 	cmd := fmt.Sprintf("session.runSql('%s')", sql)
@@ -99,24 +104,88 @@ func (m *mysqlsh) runSQL(ctx context.Context, sql string) (string, error) {
 	c.Stdout = &stdoutb
 	c.Stderr = &stderrb
 
-	var result struct {
-		Error string              `json:"error,omitempty"`
-		Rows  []map[string]string `json:"rows,omitempty"`
-	}
+	var result SQLResult
 
 	if err := c.Run(); err != nil {
-		return "", errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, stdoutb.String(), stderrb.String())
+		return result, errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, stdoutb.String(), stderrb.String())
 	}
 
 	if err := json.Unmarshal(stdoutb.Bytes(), &result); err != nil {
-		return "", errors.Wrap(err, "unmarshal result")
+		return result, errors.Wrap(err, "unmarshal result")
 	}
 
 	if len(result.Error) > 0 {
-		return "", errors.New(result.Error)
+		return result, errors.New(result.Error)
+	}
+
+	return result, nil
+}
+
+func (m *mysqlsh) getGTIDExecuted(ctx context.Context) (string, error) {
+	result, err := m.runSQL(ctx, "SELECT @@GTID_EXECUTED")
+	if err != nil {
+		return "", err
 	}
 
 	return result.Rows[0]["@@GTID_EXECUTED"], nil
+}
+
+func (m *mysqlsh) getGroupSeeds(ctx context.Context) (string, error) {
+	result, err := m.runSQL(ctx, "SELECT @@group_replication_group_seeds")
+	if err != nil {
+		return "", err
+	}
+
+	return result.Rows[0]["@@group_replication_group_seeds"], nil
+}
+
+func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) (string, error) {
+	sql := fmt.Sprintf("SET PERSIST group_replication_group_seeds = \"%s\"", seeds)
+	_, err := m.runSQL(ctx, sql)
+	if err != nil {
+		return "", err
+	}
+
+	return "", nil
+}
+
+func updateGroupPeers(ctx context.Context, peers sets.Set[string]) error {
+	fqdn, err := getFQDN(os.Getenv("SERVICE_NAME"))
+	if err != nil {
+		return errors.Wrap(err, "get FQDN")
+	}
+
+	for _, peer := range peers.UnsortedList() {
+		log.Printf("Connecting to peer %s", peer)
+		sh := newShell(peer)
+
+		seeds, err := sh.getGroupSeeds(ctx)
+		if err != nil {
+			log.Printf("ERROR: get @@group_replication_group_seeds from %s: %s", peer, err)
+			continue
+		}
+
+		log.Printf("Got group_replication_group_seeds from peer %s = %s", peer, seeds)
+
+		tmpSeeds := make([]string, 0)
+		if len(seeds) > 0 {
+			tmpSeeds = strings.Split(seeds, ",")
+		}
+		seedSet := sets.New(tmpSeeds...)
+		seedSet.Insert(fmt.Sprintf("%s:%d", fqdn, 3306))
+
+		seeds = strings.Join(sets.List(seedSet), ",")
+
+		_, err = sh.setGroupSeeds(ctx, seeds)
+		if err != nil {
+			log.Printf("ERROR: set @@group_replication_group_seeds in %s: %s", peer, err)
+			continue
+		}
+
+		log.Printf("Set group_replication_group_seeds in peer %s = %s", peer, seeds)
+	}
+
+	return nil
 }
 
 func (m *mysqlsh) configureLocalInstance(ctx context.Context) error {
@@ -212,7 +281,7 @@ func handleFullClusterCrash(ctx context.Context) error {
 		return errors.Wrap(err, "connect to local")
 	}
 
-	result, err := localShell.runSQL(ctx, "SELECT @@GTID_EXECUTED")
+	result, err := localShell.getGTIDExecuted(ctx)
 	if err != nil {
 		return errors.Wrap(err, "get GTID_EXECUTED")
 	}
@@ -363,6 +432,10 @@ func bootstrapGroupReplication(ctx context.Context) error {
 		os.Exit(1)
 	default:
 		log.Printf("Instance (%s) state is %s", localShell.host, member.MemberState)
+	}
+
+	if err := updateGroupPeers(ctx, peers); err != nil {
+		return err
 	}
 
 	if rescanNeeded {

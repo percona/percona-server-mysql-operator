@@ -211,3 +211,29 @@ func DiscoverExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod,
 	}
 	return nil
 }
+
+func SetWriteableExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) error {
+	url := fmt.Sprintf("api/set-writeable/%s/%d", host, port)
+
+	var res, errb bytes.Buffer
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
+	if err != nil {
+		return err
+	}
+
+	orcResp := new(orcResponse)
+	body := res.Bytes()
+
+	if len(body) == 0 {
+		return ErrEmptyResponse
+	}
+
+	if err := json.Unmarshal(body, orcResp); err != nil {
+		return errors.Wrapf(err, "json decode \"%s\"", string(body))
+	}
+
+	if orcResp.Code == "ERROR" {
+		return errors.New(orcResp.Message)
+	}
+	return nil
+}
