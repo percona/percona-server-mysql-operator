@@ -158,7 +158,7 @@ get_cr() {
 		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_PMM}")" - \
 		| if [ -n "${MINIKUBE}" ]; then
 			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) |= "none"' - \
-				| yq eval '.spec.proxy.haproxy.resources.requests.cpu="400m"' -
+				| yq eval '.spec.proxy.haproxy.resources.requests.cpu="300m"' -
 		else
 			yq eval -
 		fi
@@ -566,7 +566,11 @@ deploy_chaos_mesh() {
 	destroy_chaos_mesh
 
 	helm repo add chaos-mesh https://charts.chaos-mesh.org
-	helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 2.5.1
+	if [ -n "${MINIKUBE}" ]; then
+		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=docker --set dashboard.create=false --version 2.5.1
+	else
+		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 2.5.1
+	fi
 	sleep 10
 }
 
