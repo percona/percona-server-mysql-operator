@@ -162,6 +162,12 @@ func (d *dbImplExec) EnableSuperReadonly(ctx context.Context) error {
 	return errors.Wrap(err, "set global super_read_only param to 1")
 }
 
+func (d *dbImplExec) DisableSuperReadonly(ctx context.Context) error {
+	var errb, outb bytes.Buffer
+	err := d.exec(ctx, "SET GLOBAL SUPER_READ_ONLY=0", &outb, &errb)
+	return errors.Wrap(err, "set global super_read_only param to 0")
+}
+
 func (d *dbImplExec) IsReadonly(ctx context.Context) (bool, error) {
 	rows := []*struct {
 		Readonly int `csv:"readonly"`
