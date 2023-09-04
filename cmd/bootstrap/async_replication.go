@@ -140,6 +140,10 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 			return nil
 		}
 
+		if err := db.DisableSuperReadonly(ctx); err != nil {
+			return errors.Wrap(err, "disable super read only")
+		}
+
 		timer.Start("clone")
 		log.Printf("Cloning from %s", donor)
 		err = db.Clone(ctx, donor, string(apiv1alpha1.UserOperator), operatorPass, mysql.DefaultAdminPort)
