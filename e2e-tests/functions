@@ -529,7 +529,7 @@ verify_certificate_sans() {
 }
 
 check_passwords_leak() {
-	local secrets=$(kubectl get secrets -o json | jq -r '.items[].data | to_entries | .[] | select(.key | (endswith(".crt") or endswith(".key") or endswith(".pub") or endswith(".pem") or endswith(".p12")) | not) | .value')
+	local secrets=$(kubectl get secrets -o json | jq -r '.items[].data | to_entries | .[] | select(.key | (endswith(".crt") or endswith(".key") or endswith(".pub") or endswith(".pem") or endswith(".p12") or test("namespace")) | not) | .value')
 	local passwords="$(for i in $secrets; do
 		base64 -d <<<$i
 		echo
