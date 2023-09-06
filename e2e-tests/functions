@@ -158,7 +158,7 @@ get_cr() {
 		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_PMM}")" - \
 		| if [ -n "${MINIKUBE}" ]; then
 			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) |= "none"' - \
-				| yq eval '.spec.proxy.haproxy.resources.requests.cpu="400m"' -
+				| yq eval '.spec.proxy.haproxy.resources.requests.cpu="300m"' -
 		else
 			yq eval -
 		fi
@@ -498,7 +498,7 @@ deploy_version_service() {
 deploy_cert_manager() {
 	kubectl create namespace cert-manager || :
 	kubectl label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
-	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.11.0/cert-manager.yaml --validate=false || : 2>/dev/null
+	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.3/cert-manager.yaml --validate=false || : 2>/dev/null
 }
 
 get_primary_from_label() {
@@ -529,7 +529,7 @@ verify_certificate_sans() {
 }
 
 check_passwords_leak() {
-	local secrets=$(kubectl get secrets -o json | jq -r '.items[].data | to_entries | .[] | select(.key | (endswith(".crt") or endswith(".key") or endswith(".pub") or endswith(".pem") or endswith(".p12")) | not) | .value')
+	local secrets=$(kubectl get secrets -o json | jq -r '.items[].data | to_entries | .[] | select(.key | (endswith(".crt") or endswith(".key") or endswith(".pub") or endswith(".pem") or endswith(".p12") or test("namespace")) | not) | .value')
 	local passwords="$(for i in $secrets; do
 		base64 -d <<<$i
 		echo
@@ -566,7 +566,11 @@ deploy_chaos_mesh() {
 	destroy_chaos_mesh
 
 	helm repo add chaos-mesh https://charts.chaos-mesh.org
-	helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 2.5.1
+	if [ -n "${MINIKUBE}" ]; then
+		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=docker --set dashboard.create=false --version 2.5.1
+	else
+		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 2.5.1
+	fi
 	sleep 10
 }
 
