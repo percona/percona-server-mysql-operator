@@ -43,6 +43,7 @@ type Replicator interface {
 	ResetReplication(ctx context.Context) error
 	ReplicationStatus(ctx context.Context) (ReplicationStatus, string, error)
 	EnableSuperReadonly(ctx context.Context) error
+	DisableSuperReadonly(ctx context.Context) error
 	IsReadonly(ctx context.Context) (bool, error)
 	ReportHost(ctx context.Context) (string, error)
 	Close() error
@@ -171,6 +172,11 @@ func (d *dbImpl) IsReplica(ctx context.Context) (bool, error) {
 func (d *dbImpl) EnableSuperReadonly(ctx context.Context) error {
 	_, err := d.db.ExecContext(ctx, "SET GLOBAL SUPER_READ_ONLY=1")
 	return errors.Wrap(err, "set global super_read_only param to 1")
+}
+
+func (d *dbImpl) DisableSuperReadonly(ctx context.Context) error {
+	_, err := d.db.ExecContext(ctx, "SET GLOBAL SUPER_READ_ONLY=0")
+	return errors.Wrap(err, "set global super_read_only param to 0")
 }
 
 func (d *dbImpl) IsReadonly(ctx context.Context) (bool, error) {

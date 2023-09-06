@@ -228,7 +228,6 @@ spec:
             value: --query-source=perfschema
           - name: PMM_ADMIN_CUSTOM_PARAMS
             value: --listen-port=8404
-        image: perconalab/pmm-client:dev-latest
         imagePullPolicy: Always
         ports:
           - containerPort: 7777
