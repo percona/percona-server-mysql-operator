@@ -11,9 +11,6 @@ configMapGenerator:
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 images:
-- name: percona/percona-server-mysql-operator
-  newName: percona/percona-server-mysql-operator
-  newTag: 0.6.0
 - name: perconalab/percona-server-mysql-operator
-  newName: percona/percona-server-mysql-operator
-  newTag: 0.6.0
+  newName: perconalab/percona-server-mysql-operator
+  newTag: main

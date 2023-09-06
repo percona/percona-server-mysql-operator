@@ -8,7 +8,7 @@ metadata:
 spec:
   allowUnsafeConfigurations: false
 #  pause: false
-  crVersion: 0.6.0
+  crVersion: 0.7.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
   updateStrategy: SmartUpdate
@@ -33,9 +33,9 @@ spec:
   mysql:
     clusterType: group-replication
     autoRecovery: true
-    image: percona/percona-server:8.0.33-25
+    image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
-#    initImage: percona/percona-server-mysql-operator:0.6.0
+#    initImage: percona/percona-server-mysql-operator:0.7.0
 
     size: 3
 
@@ -127,7 +127,7 @@ spec:
 
       size: 3
 
-      image: percona/haproxy:2.8.1
+      image: perconalab/percona-server-mysql-operator:main-haproxy
       imagePullPolicy: Always
 
       resources:
@@ -221,9 +221,9 @@ spec:
 #          - 10.0.0.0/8
     router:
       enabled: false
-      image: percona/percona-mysql-router:8.0.33
+      image: perconalab/percona-server-mysql-operator:main-router
       imagePullPolicy: Always
-#      initImage: percona/percona-server-mysql-operator:0.6.0
+#      initImage: percona/percona-server-mysql-operator:0.7.0
 
       size: 3
 
@@ -267,10 +267,10 @@ spec:
   orchestrator:
     enabled: false
 
-    image: percona/percona-orchestrator:3.2.6-9
+    image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
-#    initImage: percona/percona-server-mysql-operator:0.6.0
+#    initImage: percona/percona-server-mysql-operator:0.7.0
 
     size: 3
 
@@ -329,9 +329,9 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-xtrabackup:8.0.33-27
+    image: perconalab/percona-server-mysql-operator:main-backup
     imagePullPolicy: Always
-#    initImage: percona/percona-server-mysql-operator:0.6.0
+#    initImage: percona/percona-server-mysql-operator:0.7.0
     storages:
       s3-us-west:
         type: s3
@@ -375,7 +375,7 @@ spec:
 #          prefix: ""
 
   toolkit:
-    image: percona/percona-server-mysql-operator:0.6.0-toolkit
+    image: perconalab/percona-server-mysql-operator:main-toolkit
     imagePullPolicy: Always
 #    resources:
 #      requests:
