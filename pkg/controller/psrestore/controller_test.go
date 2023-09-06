@@ -22,6 +22,8 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
+// TestRestoreStatusErrStateDesc tests the reconciliation logic
+// for error state descriptions in PerconaServerMySQLRestore.
 func TestRestoreStatusErrStateDesc(t *testing.T) {
 	namespace := "some-namespace"
 	clusterName := "cluster1"
@@ -423,6 +425,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 	}
 }
 
+// Reads and parses the default PerconaServerMySQLRestore custom resource definition.
 func readDefaultCRRestore(name, namespace string) (*apiv1alpha1.PerconaServerMySQLRestore, error) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "restore.yaml"))
 	if err != nil {
@@ -440,6 +443,7 @@ func readDefaultCRRestore(name, namespace string) (*apiv1alpha1.PerconaServerMyS
 	return cr, nil
 }
 
+// Updates the given resource with the provided update functions.
 func updateResource[T any](cr *T, updateFuncs ...func(cr *T)) *T {
 	for _, f := range updateFuncs {
 		f(cr)

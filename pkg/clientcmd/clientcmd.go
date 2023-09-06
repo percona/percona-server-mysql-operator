@@ -22,6 +22,7 @@ type Client interface {
 	REST() restclient.Interface
 }
 
+// NewClient initializes a new Kubernetes client.
 func NewClient() (Client, error) {
 	// Instantiate loader for kubeconfig file.
 	kubeconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
@@ -50,6 +51,7 @@ func NewClient() (Client, error) {
 	}, nil
 }
 
+// Exec runs a command in a pod's container.
 func (c *client) Exec(
 	ctx context.Context,
 	pod *corev1.Pod,
@@ -89,6 +91,7 @@ func (c *client) Exec(
 
 }
 
+// REST returns the client's REST interface.
 func (c *client) REST() restclient.Interface {
 	return c.client.RESTClient()
 }

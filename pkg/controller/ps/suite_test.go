@@ -47,6 +47,7 @@ var (
 	testEnv   *envtest.Environment
 )
 
+// Entry point for running the "PS Suite" tests.
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
@@ -97,6 +98,7 @@ var _ = AfterSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 })
 
+// Creates and initializes a new PerconaServerMySQLReconciler.
 func reconciler() *PerconaServerMySQLReconciler {
 	return (&PerconaServerMySQLReconciler{
 		Client: k8sClient,
@@ -107,6 +109,8 @@ func reconciler() *PerconaServerMySQLReconciler {
 	})
 }
 
+// Reads the default PerconaServerMySQL Custom Resource from the specified file
+// and sets given name and namespace.
 func readDefaultCR(name, namespace string) (*psv1alpha1.PerconaServerMySQL, error) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "cr.yaml"))
 	if err != nil {

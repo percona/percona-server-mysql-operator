@@ -12,6 +12,7 @@ import (
 	vs "github.com/percona/percona-server-mysql-operator/pkg/version/service"
 )
 
+// Determines if telemetry is enabled based on the environment variable.
 func telemetryEnabled() bool {
 	value, ok := os.LookupEnv("DISABLE_TELEMETRY")
 	if ok {
@@ -20,12 +21,14 @@ func telemetryEnabled() bool {
 	return true
 }
 
+// Checks if version upgrade is enabled based on the given PerconaServerMySQL spec.
 func versionUpgradeEnabled(cr *apiv1alpha1.PerconaServerMySQL) bool {
 	return cr.Spec.UpgradeOptions.Apply != "" &&
 		cr.Spec.UpgradeOptions.Apply != apiv1alpha1.UpgradeStrategyDisabled &&
 		cr.Spec.UpgradeOptions.Apply != apiv1alpha1.UpgradeStrategyNever
 }
 
+// Reconciles the versions of various components of the PerconaServerMySQL instance.
 func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	if !(versionUpgradeEnabled(cr) || telemetryEnabled()) {
 		return nil

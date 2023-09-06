@@ -123,6 +123,7 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 	return rr, nil
 }
 
+// applyFinalizers handles and applies finalizers for PerconaServerMySQL.
 func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("Finalizer")
 	log.Info("Applying finalizers", "CR", cr)
@@ -160,6 +161,7 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 	})
 }
 
+// deleteMySQLPods gracefully deletes MySQL pods ensuring database consistency.
 func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
@@ -263,6 +265,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 	return psrestore.ErrWaitingTermination
 }
 
+// deleteCerts removes associated SSL certificates, issuers, and secrets for the Percona MySQL instance.
 func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 	log.Info("Deleting SSL certificates")
@@ -331,6 +334,7 @@ func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv
 	return nil
 }
 
+// doReconcile performs the reconciliation steps for the Percona MySQL instance.
 func (r *PerconaServerMySQLReconciler) doReconcile(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQL,
@@ -377,6 +381,7 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	return nil
 }
 
+// reconcileDatabase ensures the MySQL database state aligns with the desired configuration.
 func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQL,
@@ -432,6 +437,7 @@ type Exposer interface {
 	SaveOldMeta() bool
 }
 
+// reconcileServicePerPod ensures individual pod services are aligned with the desired configuration.
 func (r *PerconaServerMySQLReconciler) reconcileServicePerPod(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, exposer Exposer) error {
 	_ = logf.FromContext(ctx).WithName("reconcileServicePerPod")
 
@@ -454,6 +460,7 @@ func (r *PerconaServerMySQLReconciler) reconcileServicePerPod(ctx context.Contex
 	return nil
 }
 
+// reconcileMySQLServices reconciles the MySQL services, including headless and unready services.
 func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	_ = logf.FromContext(ctx).WithName("reconcileMySQLServices")
 
@@ -477,6 +484,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 	return nil
 }
 
+// reconcileMySQLAutoConfig adjusts the MySQL auto-configuration based on available memory resources.
 func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileMySQLAutoConfig")
 	var memory *resource.Quantity
@@ -531,6 +539,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 	return nil
 }
 
+// reconcileOrchestrator ensures the orchestrator components are aligned with the desired configuration.
 func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileOrchestrator")
 
@@ -622,6 +631,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 	return nil
 }
 
+// reconcileOrchestratorServices ensures the orchestrator services match the desired state.
 func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	if err := k8s.EnsureService(ctx, r.Client, cr, orchestrator.Service(cr), r.Scheme, true); err != nil {
 		return errors.Wrap(err, "reconcile Service")
@@ -635,6 +645,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context
 	return nil
 }
 
+// reconcileHAProxy manages the HAProxy components according to the desired configuration.
 func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileHAProxy")
 
@@ -678,6 +689,7 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 	return nil
 }
 
+// reconcileServices synchronizes all the services (MySQL, Orchestrator, HAProxy, Router) with the desired state.
 func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	if err := r.reconcileMySQLServices(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile MySQL services")
@@ -713,6 +725,7 @@ func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr
 	return nil
 }
 
+// reconcileReplication ensures the MySQL replication state is consistent with the desired configuration.
 func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileReplication")
 
@@ -771,6 +784,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 	return nil
 }
 
+// reconcileGroupReplication manages the group replication for the MySQL cluster.
 func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileGroupReplication")
 
@@ -825,6 +839,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	return nil
 }
 
+// cleanupOutdatedServices deletes services that are no longer relevant to the current HAProxy configuration.
 func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, exposer Exposer) error {
 	log := logf.FromContext(ctx).WithName("cleanupOutdatedServices")
 
@@ -870,6 +885,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 	return nil
 }
 
+// cleanupOutdatedStatefulSets removes stateful sets that are not part of the current Orchestrator configuration.
 func (r *PerconaServerMySQLReconciler) cleanupOutdatedStatefulSets(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	if !cr.OrchestratorEnabled() {
 		if err := r.Delete(ctx, orchestrator.StatefulSet(cr, "")); err != nil && !k8serrors.IsNotFound(err) {
@@ -879,6 +895,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedStatefulSets(ctx context.C
 	return nil
 }
 
+// cleanupProxies removes proxy configurations that aren't currently enabled in the PerconaServerMySQL configuration.
 func (r *PerconaServerMySQLReconciler) cleanupProxies(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	if !cr.RouterEnabled() {
 		if err := r.Delete(ctx, router.Deployment(cr, "", "")); err != nil && !k8serrors.IsNotFound(err) {
@@ -903,6 +920,7 @@ func (r *PerconaServerMySQLReconciler) cleanupProxies(ctx context.Context, cr *a
 	return nil
 }
 
+// reconcileMySQLRouter ensures that the MySQL Router state matches the desired configuration in the PerconaServerMySQL CR.
 func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileMySQLRouter")
 
@@ -957,6 +975,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 	return nil
 }
 
+// cleanupOutdated removes outdated services, stateful sets, and proxies based on the current PerconaServerMySQL configuration.
 func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	mysqlExposer := mysql.Exposer(*cr)
 	if err := r.cleanupOutdatedServices(ctx, cr, &mysqlExposer); err != nil {
@@ -979,6 +998,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 	return nil
 }
 
+// getPrimaryFromOrchestrator determines the primary database instance via the Orchestrator.
 func (r *PerconaServerMySQLReconciler) getPrimaryFromOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (*orchestrator.Instance, error) {
 	pod, err := getOrcPod(ctx, r.Client, cr, 0)
 	if err != nil {
@@ -996,6 +1016,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryFromOrchestrator(ctx context.Co
 	return primary, nil
 }
 
+// getPrimaryFromGR fetches the primary database instance from the Group Replication (GR).
 func (r *PerconaServerMySQLReconciler) getPrimaryFromGR(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 	if err != nil {
@@ -1017,6 +1038,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryFromGR(ctx context.Context, cr 
 	return db.GetGroupReplicationPrimary(ctx)
 }
 
+// getPrimaryHost identifies the primary host, using either Group Replication or Orchestrator as appropriate.
 func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	log := logf.FromContext(ctx).WithName("getPrimaryHost")
 
@@ -1033,6 +1055,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cr *a
 	return primary.Key.Hostname, nil
 }
 
+// stopAsyncReplication stops asynchronous replication on all replicas of a primary database instance.
 func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, primary *orchestrator.Instance) error {
 	log := logf.FromContext(ctx).WithName("stopAsyncReplication")
 
@@ -1091,6 +1114,7 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 	return errors.Wrap(g.Wait(), "stop replication on replicas")
 }
 
+// startAsyncReplication initializes asynchronous replication on all replicas for a primary database instance.
 func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, replicaPass string, primary *orchestrator.Instance) error {
 	log := logf.FromContext(ctx).WithName("startAsyncReplication")
 
@@ -1141,6 +1165,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 	return errors.Wrap(g.Wait(), "start replication on replicas")
 }
 
+// getMySQLPod retrieves the specified MySQL pod instance based on the given index.
 func getMySQLPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
 	pod := &corev1.Pod{}
 
@@ -1152,6 +1177,7 @@ func getMySQLPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaS
 	return pod, nil
 }
 
+// getOrcPod retrieves the specified Orchestrator pod instance based on the given index.
 func getOrcPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
 	pod := &corev1.Pod{}
 
@@ -1163,6 +1189,7 @@ func getOrcPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaSer
 	return pod, nil
 }
 
+// getPodIndexFromHostname extracts the pod index from the provided hostname.
 func getPodIndexFromHostname(hostname string) (int, error) {
 	hh := strings.Split(hostname, ".")
 

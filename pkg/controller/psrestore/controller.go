@@ -353,6 +353,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	return ctrl.Result{}, nil
 }
 
+// deletePVCs deletes PVCs associated with the cluster except for the data volume PVC.
 func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
@@ -379,6 +380,7 @@ func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cl
 	return nil
 }
 
+// removeBootstrapCondition removes the InnoDB cluster bootstrap condition from the cluster's status.
 func (r *PerconaServerMySQLRestoreReconciler) removeBootstrapCondition(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
@@ -405,6 +407,7 @@ func (r *PerconaServerMySQLRestoreReconciler) removeBootstrapCondition(ctx conte
 	return err
 }
 
+// pauseCluster pauses the cluster by setting the Pause field in the cluster spec and ensuring the components terminate.
 func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) error {
 	err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		c := &apiv1alpha1.PerconaServerMySQL{}
@@ -472,6 +475,7 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 	return nil
 }
 
+// unpauseCluster unpauses the cluster by setting the Pause field in the cluster spec to false.
 func (r *PerconaServerMySQLRestoreReconciler) unpauseCluster(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) error {
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		c := &apiv1alpha1.PerconaServerMySQL{}

@@ -28,6 +28,7 @@ type Configurable interface {
 	ExecuteConfigurationTemplate(configuration string, memory *resource.Quantity) (string, error)
 }
 
+// reconcileCustomConfiguration manages custom configuration for PerconaServerMySQL.
 func (r *PerconaServerMySQLReconciler) reconcileCustomConfiguration(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, configurable Configurable) (string, error) {
 	log := logf.FromContext(ctx).WithName("reconcileCustomConfiguration")
 

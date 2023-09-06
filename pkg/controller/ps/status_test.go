@@ -31,6 +31,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 )
 
+// TestReconcileStatusAsync tests the status reconciliation for async MySQL clusters.
 func TestReconcileStatusAsync(t *testing.T) {
 	ctx := context.Background()
 
@@ -330,6 +331,8 @@ func TestReconcileStatusAsync(t *testing.T) {
 		})
 	}
 }
+
+// Test the HAProxy group replication status reconciliation.
 func TestReconcileStatusHAProxyGR(t *testing.T) {
 	ctx := context.Background()
 
@@ -493,6 +496,7 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 	}
 }
 
+// Test the Router group replication status reconciliation.
 func TestReconcileStatusRouterGR(t *testing.T) {
 	ctx := context.Background()
 
@@ -661,6 +665,7 @@ type fakeClient struct {
 	execCount int
 }
 
+// Simulate the execution of commands in a pod's container for testing.
 func (c *fakeClient) Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
 	if c.execCount >= len(c.scripts) {
 		return errors.Errorf("unexpected exec call")
@@ -694,6 +699,7 @@ func (c *fakeClient) Exec(ctx context.Context, pod *corev1.Pod, containerName st
 	return nil
 }
 
+// Return a nil REST client interface for the fake client.
 func (c *fakeClient) REST() restclient.Interface {
 	return nil
 }
@@ -706,6 +712,7 @@ type fakeClientScript struct {
 	shouldErr bool
 }
 
+// Create a fake client for testing based on MySQL readiness and cluster status.
 func getFakeClient(cr *apiv1alpha1.PerconaServerMySQL, operatorPass string, mysqlReady bool, clusterStatus innodbcluster.ClusterStatus) (clientcmd.Client, error) {
 	status, err := json.Marshal(innodbcluster.Status{
 		DefaultReplicaSet: innodbcluster.ReplicaSetStatus{
@@ -775,6 +782,7 @@ func getFakeClient(cr *apiv1alpha1.PerconaServerMySQL, operatorPass string, mysq
 	}, nil
 }
 
+// Generate a list of fake pods based on the provided type and amount.
 func makeFakeReadyPods(cr *apiv1alpha1.PerconaServerMySQL, amount int, podType string) []client.Object {
 	fakePod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{},
@@ -820,6 +828,7 @@ func makeFakeReadyPods(cr *apiv1alpha1.PerconaServerMySQL, amount int, podType s
 	return pods
 }
 
+// Update a resource object using the provided update functions.
 func updateResource[T any](obj *T, updateFuncs ...func(obj *T)) *T {
 	for _, f := range updateFuncs {
 		f(obj)
@@ -827,6 +836,7 @@ func updateResource[T any](obj *T, updateFuncs ...func(obj *T)) *T {
 	return obj
 }
 
+// Concatenate multiple slices into a single slice.
 func appendSlices[T any](s ...[]T) []T {
 	var result []T
 	for _, v := range s {

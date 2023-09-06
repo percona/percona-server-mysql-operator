@@ -27,6 +27,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 )
 
+// Reconciles the status of the PerconaServerMySQL custom resource.
 func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
 		return nil
@@ -168,6 +169,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	return writeStatus(ctx, r.Client, nn, cr.Status)
 }
 
+// Checks if the Group Replication of PerconaServerMySQL is ready.
 func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
 	log := logf.FromContext(ctx).WithName("groupReplicationStatus")
 	if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
@@ -219,6 +221,7 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 	}
 }
 
+// Checks if all LoadBalancers are ready for the given PerconaServerMySQL resource.
 func (r *PerconaServerMySQLReconciler) allLoadBalancersReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
 	opts := &client.ListOptions{Namespace: cr.Namespace, LabelSelector: labels.SelectorFromSet(cr.Labels())}
 	svcList := &corev1.ServiceList{}
@@ -237,6 +240,7 @@ func (r *PerconaServerMySQLReconciler) allLoadBalancersReady(ctx context.Context
 	return true, nil
 }
 
+// Retrieves the application host for the provided PerconaServerMySQL resource.
 func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	var serviceName string
 
@@ -275,6 +279,7 @@ func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServe
 	return host, nil
 }
 
+// Retrieves the current application status for the given PerconaServerMySQL component.
 func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, compName string, size int32, labels map[string]string, version string) (apiv1alpha1.StatefulAppStatus, error) {
 	status := apiv1alpha1.StatefulAppStatus{
 		Size:  size,
@@ -314,6 +319,7 @@ func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1a
 	return status, nil
 }
 
+// Updates the status of the PerconaServerMySQL resource in a conflict-resilient manner.
 func writeStatus(ctx context.Context, cl client.Client, nn types.NamespacedName, status apiv1alpha1.PerconaServerMySQLStatus) error {
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		cr := &apiv1alpha1.PerconaServerMySQL{}
