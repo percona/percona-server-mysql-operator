@@ -529,24 +529,28 @@ verify_certificate_sans() {
 }
 
 check_passwords_leak() {
-	local secrets=$(kubectl get secrets -o json | jq -r '.items[].data | to_entries | .[] | select(.key | (endswith(".crt") or endswith(".key") or endswith(".pub") or endswith(".pem") or endswith(".p12") or test("namespace")) | not) | .value')
-	local passwords="$(for i in $secrets; do
+	local secrets
+	local passwords
+	local pods
+
+	secrets=$(kubectl get secrets -o json | jq -r '.items[].data | to_entries | .[] | select(.key | (endswith(".crt") or endswith(".key") or endswith(".pub") or endswith(".pem") or endswith(".p12") or test("namespace")) | not) | .value')
+	passwords="$(for i in $secrets; do
 		base64 -d <<<$i
 		echo
 	done) $secrets"
-	local pods=$(kubectl -n "${NAMESPACE}" get pods -o name | awk -F "/" '{print $2}')
+	pods=$(kubectl -n "${NAMESPACE}" get pods -o name | awk -F "/" '{print $2}')
 
 	collect_logs() {
 		NS=$1
 		for p in $pods; do
 			local containers=$(kubectl -n "$NS" get pod $p -o jsonpath='{.spec.containers[*].name}')
 			for c in $containers; do
-				kubectl -n "$NS" logs $p -c $c >${TEMP_DIR}/logs_output-$p-$c.txt
-				echo logs saved in: ${TEMP_DIR}/logs_output-$p-$c.txt
+				kubectl -n "$NS" logs $p -c $c >${tmp_dir}/logs_output-$p-$c.txt
+				echo logs saved in: ${tmp_dir}/logs_output-$p-$c.txt
 				for pass in $passwords; do
-					local count=$(grep -c --fixed-strings -- "$pass" ${TEMP_DIR}/logs_output-$p-$c.txt || :)
+					local count=$(grep -c --fixed-strings -- "$pass" ${tmp_dir}/logs_output-$p-$c.txt || :)
 					if [[ $count != 0 ]]; then
-						echo leaked passwords are found in log ${TEMP_DIR}/logs_output-$p-$c.txt
+						echo leaked passwords are found in log ${tmp_dir}/logs_output-$p-$c.txt
 						false
 					fi
 				done
