@@ -6,14 +6,15 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"fmt"
-	"github.com/gocarina/gocsv"
 	"strings"
 
+	"github.com/gocarina/gocsv"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
+	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 )
 
 const defaultChannelName = ""
@@ -166,4 +167,39 @@ func (m *ReplicationDBManager) GetMemberState(ctx context.Context, host string) 
 	}
 
 	return rows[0].State, nil
+}
+
+func (m *ReplicationDBManager) GetGroupReplicationMembers(ctx context.Context) ([]innodbcluster.Member, error) {
+	rows := []*struct {
+		Member string `csv:"member"`
+		State  string `csv:"state"`
+	}{}
+
+	err := m.query(ctx, "SELECT MEMBER_HOST as member, MEMBER_STATE as state FROM replication_group_members", &rows)
+	if err != nil {
+		return nil, errors.Wrap(err, "query members")
+	}
+
+	members := make([]innodbcluster.Member, 0)
+	for _, row := range rows {
+		state := innodbcluster.MemberState(row.State)
+		members = append(members, innodbcluster.Member{Address: row.Member, MemberState: state})
+	}
+
+	return members, nil
+}
+
+func (m *ReplicationDBManager) CheckIfDatabaseExists(ctx context.Context, name string) (bool, error) {
+	rows := []*struct {
+		DB string `csv:"db"`
+	}{}
+	q := fmt.Sprintf("SELECT SCHEMA_NAME AS db FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME LIKE '%s'", name)
+	err := m.query(ctx, q, &rows)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
