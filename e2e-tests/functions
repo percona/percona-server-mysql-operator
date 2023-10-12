@@ -35,24 +35,19 @@ apply_s3_storage_secrets() {
 }
 
 deploy_pmm_server() {
-	local platform=kubernetes
-	if [ -n "${OPENSHIFT}" ]; then
-		platform=openshift
-		oc create sa pmm-server -n "${NAMESPACE}" || :
-		oc adm policy add-scc-to-user privileged -z pmm-server -n "${NAMESPACE}" || :
-		oc create rolebinding pmm-ps-operator-namespace-only --role percona-server-for-mysql-operator-role --serviceaccount=${NAMESPACE}:pmm-server -n "${NAMESPACE}" || :
-		oc patch role/percona-server-for-mysql-operator-role --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]' -n "${NAMESPACE}" || :
-		helm install monitoring --set imageTag=$IMAGE_PMM_SERVER_TAG --set imageRepo=$IMAGE_PMM_SERVER_REPO --set platform=$platform --set sa=pmm-server --set supresshttp2=false https://percona-charts.storage.googleapis.com/pmm-server-${PMM_SERVER_VERSION}.tgz -n "${NAMESPACE}"
-	else
-		helm install monitoring \
-			-n "${NAMESPACE}" \
-			--set imageTag=$IMAGE_PMM_SERVER_TAG \
-			--set imageRepo=$IMAGE_PMM_SERVER_REPO \
-			--set platform="${platform}" \
-			"https://percona-charts.storage.googleapis.com/pmm-server-${PMM_SERVER_VERSION}.tgz"
+	if [[ $OPENSHIFT ]]; then
+		oc create sa pmm-server -n $NAMESPACE || :
+		oc adm policy add-scc-to-user privileged -z pmm-server -n $NAMESPACE || :
+		oc create rolebinding pmm-ps-operator-namespace-only --role percona-server-for-mysql-operator-role --serviceaccount=$NAMESPACE:pmm-server -n $NAMESPACE || :
+		oc patch role/percona-server-for-mysql-operator-role --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]' -n $NAMESPACE || :
+
+    local additional_params="--set platform=openshift --set sa=pmm-server --set supresshttp2=false"
 	fi
+
+  helm install monitoring -n $NAMESPACE --set imageTag=${IMAGE_PMM_SERVER#*:} --set imageRepo=${IMAGE_PMM_SERVER%:*} $additional_params https://percona-charts.storage.googleapis.com/pmm-server-$PMM_SERVER_VERSION.tgz
+
 	local SERVICE="postgres"
-	until kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "pgrep -x $SERVICE >/dev/null"; do
+	until kubectl -n $NAMESPACE exec monitoring-0 -- bash -c "pgrep -x $SERVICE >/dev/null"; do
 		echo "Retry $retry"
 		sleep 5
 		let retry+=1
@@ -155,7 +150,7 @@ get_cr() {
 		| yq eval "$(printf '.spec.proxy.router.image="%s"' "${IMAGE_ROUTER}")" - \
 		| yq eval "$(printf '.spec.toolkit.image="%s"' "${IMAGE_TOOLKIT}")" - \
 		| yq eval "$(printf '.spec.proxy.haproxy.image="%s"' "${IMAGE_HAPROXY}")" - \
-		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_PMM}")" - \
+		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_PMM_CLIENT}")" - \
 		| if [ -n "${MINIKUBE}" ]; then
 			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) |= "none"' - \
 				| yq eval '.spec.proxy.haproxy.resources.requests.cpu="300m"' -
