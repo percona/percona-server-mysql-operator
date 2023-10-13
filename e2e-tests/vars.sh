@@ -21,6 +21,8 @@ export PMM_SERVER_VERSION=${PMM_SERVER_VERSION:-"9.9.9"}
 export IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:dev-latest"}
 export IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
 
+date=$(which gdate || which date)
+
 if command -v oc &> /dev/null; then
 	if oc get projects; then
 		export OPENSHIFT=4
