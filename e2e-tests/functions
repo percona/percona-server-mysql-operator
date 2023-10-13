@@ -44,7 +44,7 @@ deploy_pmm_server() {
 		local additional_params="--set platform=openshift --set sa=pmm-server --set supresshttp2=false"
 	fi
 
-  helm install monitoring -n $NAMESPACE --set imageTag=${IMAGE_PMM_SERVER#*:} --set imageRepo=${IMAGE_PMM_SERVER%:*} $additional_params https://percona-charts.storage.googleapis.com/pmm-server-$PMM_SERVER_VERSION.tgz
+	helm install monitoring -n $NAMESPACE --set imageTag=${IMAGE_PMM_SERVER#*:} --set imageRepo=${IMAGE_PMM_SERVER%:*} $additional_params https://percona-charts.storage.googleapis.com/pmm-server-$PMM_SERVER_VERSION.tgz
 
 	local SERVICE="postgres"
 	until kubectl -n $NAMESPACE exec monitoring-0 -- bash -c "pgrep -x $SERVICE >/dev/null"; do
