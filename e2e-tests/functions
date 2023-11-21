@@ -2,8 +2,13 @@
 
 # set root repo relatively to a test dir
 ROOT_REPO=${ROOT_REPO:-$(realpath ../../..)}
-source "${ROOT_REPO}/e2e-tests/vars.sh"
 test_name=$(basename "$(pwd)")
+source "${ROOT_REPO}/e2e-tests/vars.sh"
+
+init_temp_dir() {
+	rm -rf "$TEMP_DIR"
+	mkdir -p "$TEMP_DIR"
+}
 
 deploy_operator() {
 	kubectl -n "${NAMESPACE}" apply --server-side --force-conflicts -f "${DEPLOY_DIR}/crd.yaml"

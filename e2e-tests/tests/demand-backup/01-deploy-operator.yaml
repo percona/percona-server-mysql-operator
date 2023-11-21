@@ -6,6 +6,7 @@ commands:
       set -o xtrace
 
       source ../../functions
+      init_temp_dir # do this only in the first TestStep
 
       kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/cloud-secret.yml"
       deploy_operator
