@@ -11,7 +11,7 @@ require (
 	github.com/go-openapi/runtime v0.25.0
 	github.com/go-openapi/strfmt v0.21.7
 	github.com/go-openapi/swag v0.22.4
-	github.com/go-openapi/validate v0.22.1
+	github.com/go-openapi/validate v0.22.2
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/gocarina/gocsv v0.0.0-20230616125104-99d496ca653d
 	github.com/minio/minio-go/v7 v7.0.64
@@ -53,11 +53,11 @@ require (
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-logr/zapr v1.2.4 // indirect
-	github.com/go-openapi/analysis v0.21.2 // indirect
-	github.com/go-openapi/jsonpointer v0.19.6 // indirect
+	github.com/go-openapi/analysis v0.21.4 // indirect
+	github.com/go-openapi/jsonpointer v0.20.0 // indirect
 	github.com/go-openapi/jsonreference v0.20.2 // indirect
-	github.com/go-openapi/loads v0.21.1 // indirect
-	github.com/go-openapi/spec v0.20.4 // indirect
+	github.com/go-openapi/loads v0.21.2 // indirect
+	github.com/go-openapi/spec v0.20.9 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
@@ -94,11 +94,11 @@ require (
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/afero v1.9.3 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/stretchr/testify v1.8.2 // indirect
+	github.com/stretchr/testify v1.8.4 // indirect
 	github.com/swaggest/assertjson v1.7.0 // indirect
 	github.com/yudai/gojsondiff v1.0.0 // indirect
 	github.com/yudai/golcs v0.0.0-20170316035057-ecda9a501e82 // indirect
-	go.mongodb.org/mongo-driver v1.11.3 // indirect
+	go.mongodb.org/mongo-driver v1.12.0 // indirect
 	go.nhat.io/matcher/v2 v2.0.0 // indirect
 	go.nhat.io/wait v0.1.0 // indirect
 	go.opentelemetry.io/otel v1.15.0 // indirect
