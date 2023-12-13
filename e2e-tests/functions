@@ -90,22 +90,28 @@ delete_pmm_api_key() {
 }
 
 deploy_minio() {
-	local accessKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
-	local secretKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
+	local access_key
+	local secret_key
+	access_key="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
+	secret_key="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
 
 	helm uninstall -n "${NAMESPACE}" minio-service || :
 	helm repo remove minio || :
-	helm repo add minio https://helm.min.io/
+	helm repo add minio https://charts.min.io/
 	retry 10 60 helm install minio-service \
 		-n "${NAMESPACE}" \
-		--version 8.0.5 \
-		--set accessKey="$(printf '%q' "$accessKey")" \
-		--set secretKey="$(printf '%q' "$secretKey")" \
+		--version 5.0.14 \
+		--set replicas=1 \
+		--set mode=standalone \
+		--set resources.requests.memory=256Mi \
+		--set rootUser=rootuser \
+		--set rootPassword=rootpass123 \
+		--set "users[0].accessKey"="$(printf '%q' "$(printf '%q' "$access_key")")" \
+		--set "users[0].secretKey"="$(printf '%q' "$(printf '%q' "$secret_key")")" \
+		--set "users[0].policy"=consoleAdmin \
 		--set service.type=ClusterIP \
 		--set configPathmc=/tmp/.minio/ \
 		--set persistence.size=2G \
-		--set environment.MINIO_REGION=us-east-1 \
-		--set environment.MINIO_HTTP_TRACE=/tmp/trace.log \
 		--set securityContext.enabled=false \
 		minio/minio
 	MINIO_POD=$(kubectl -n "${NAMESPACE}" get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
@@ -113,7 +119,7 @@ deploy_minio() {
 
 	# create bucket
 	kubectl -n "${NAMESPACE}" run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-		bash -c "AWS_ACCESS_KEY_ID='$accessKey' AWS_SECRET_ACCESS_KEY='$secretKey' AWS_DEFAULT_REGION=us-east-1 \
+		bash -c "AWS_ACCESS_KEY_ID='$access_key' AWS_SECRET_ACCESS_KEY='$secret_key' AWS_DEFAULT_REGION=us-east-1 \
         /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing"
 }
 
