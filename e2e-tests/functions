@@ -2,8 +2,13 @@
 
 # set root repo relatively to a test dir
 ROOT_REPO=${ROOT_REPO:-$(realpath ../../..)}
-source "${ROOT_REPO}/e2e-tests/vars.sh"
 test_name=$(basename "$(pwd)")
+source "${ROOT_REPO}/e2e-tests/vars.sh"
+
+init_temp_dir() {
+	rm -rf "$TEMP_DIR"
+	mkdir -p "$TEMP_DIR"
+}
 
 deploy_operator() {
 	kubectl -n "${NAMESPACE}" apply --server-side --force-conflicts -f "${DEPLOY_DIR}/crd.yaml"
@@ -35,24 +40,18 @@ apply_s3_storage_secrets() {
 }
 
 deploy_pmm_server() {
-	local platform=kubernetes
-	if [ -n "${OPENSHIFT}" ]; then
-		platform=openshift
-		oc create sa pmm-server -n "${NAMESPACE}" || :
-		oc adm policy add-scc-to-user privileged -z pmm-server -n "${NAMESPACE}" || :
-		oc create rolebinding pmm-ps-operator-namespace-only --role percona-server-for-mysql-operator-role --serviceaccount=${NAMESPACE}:pmm-server -n "${NAMESPACE}" || :
-		oc patch role/percona-server-for-mysql-operator-role --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]' -n "${NAMESPACE}" || :
-		helm install monitoring --set imageTag=$IMAGE_PMM_SERVER_TAG --set imageRepo=$IMAGE_PMM_SERVER_REPO --set platform=$platform --set sa=pmm-server --set supresshttp2=false https://percona-charts.storage.googleapis.com/pmm-server-${PMM_SERVER_VERSION}.tgz -n "${NAMESPACE}"
-	else
-		helm install monitoring \
-			-n "${NAMESPACE}" \
-			--set imageTag=$IMAGE_PMM_SERVER_TAG \
-			--set imageRepo=$IMAGE_PMM_SERVER_REPO \
-			--set platform="${platform}" \
-			"https://percona-charts.storage.googleapis.com/pmm-server-${PMM_SERVER_VERSION}.tgz"
+	if [[ $OPENSHIFT ]]; then
+		oc create sa pmm-server -n $NAMESPACE || :
+		oc adm policy add-scc-to-user privileged -z pmm-server -n $NAMESPACE || :
+		oc create rolebinding pmm-ps-operator-namespace-only --role percona-server-for-mysql-operator-role --serviceaccount=$NAMESPACE:pmm-server -n $NAMESPACE || :
+		oc patch role/percona-server-for-mysql-operator-role --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]' -n $NAMESPACE || :
+
+		local additional_params="--set platform=openshift --set sa=pmm-server --set supresshttp2=false"
 	fi
-	local SERVICE="postgres"
-	until kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "pgrep -x $SERVICE >/dev/null"; do
+
+	helm install monitoring -n $NAMESPACE --set imageTag=${IMAGE_PMM_SERVER#*:} --set imageRepo=${IMAGE_PMM_SERVER%:*} $additional_params https://percona-charts.storage.googleapis.com/pmm-server-$PMM_SERVER_VERSION.tgz
+
+	until kubectl -n $NAMESPACE exec monitoring-0 -- bash -c "ls -l /proc/*/exe 2>/dev/null| grep postgres >/dev/null"; do
 		echo "Retry $retry"
 		sleep 5
 		let retry+=1
@@ -91,22 +90,28 @@ delete_pmm_api_key() {
 }
 
 deploy_minio() {
-	local accessKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
-	local secretKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
+	local access_key
+	local secret_key
+	access_key="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
+	secret_key="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
 
 	helm uninstall -n "${NAMESPACE}" minio-service || :
 	helm repo remove minio || :
-	helm repo add minio https://helm.min.io/
+	helm repo add minio https://charts.min.io/
 	retry 10 60 helm install minio-service \
 		-n "${NAMESPACE}" \
-		--version 8.0.5 \
-		--set accessKey="$(printf '%q' "$accessKey")" \
-		--set secretKey="$(printf '%q' "$secretKey")" \
+		--version 5.0.14 \
+		--set replicas=1 \
+		--set mode=standalone \
+		--set resources.requests.memory=256Mi \
+		--set rootUser=rootuser \
+		--set rootPassword=rootpass123 \
+		--set "users[0].accessKey"="$(printf '%q' "$(printf '%q' "$access_key")")" \
+		--set "users[0].secretKey"="$(printf '%q' "$(printf '%q' "$secret_key")")" \
+		--set "users[0].policy"=consoleAdmin \
 		--set service.type=ClusterIP \
 		--set configPathmc=/tmp/.minio/ \
 		--set persistence.size=2G \
-		--set environment.MINIO_REGION=us-east-1 \
-		--set environment.MINIO_HTTP_TRACE=/tmp/trace.log \
 		--set securityContext.enabled=false \
 		minio/minio
 	MINIO_POD=$(kubectl -n "${NAMESPACE}" get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
@@ -114,7 +119,7 @@ deploy_minio() {
 
 	# create bucket
 	kubectl -n "${NAMESPACE}" run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-		bash -c "AWS_ACCESS_KEY_ID='$accessKey' AWS_SECRET_ACCESS_KEY='$secretKey' AWS_DEFAULT_REGION=us-east-1 \
+		bash -c "AWS_ACCESS_KEY_ID='$access_key' AWS_SECRET_ACCESS_KEY='$secret_key' AWS_DEFAULT_REGION=us-east-1 \
         /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing"
 }
 
@@ -155,7 +160,7 @@ get_cr() {
 		| yq eval "$(printf '.spec.proxy.router.image="%s"' "${IMAGE_ROUTER}")" - \
 		| yq eval "$(printf '.spec.toolkit.image="%s"' "${IMAGE_TOOLKIT}")" - \
 		| yq eval "$(printf '.spec.proxy.haproxy.image="%s"' "${IMAGE_HAPROXY}")" - \
-		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_PMM}")" - \
+		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_PMM_CLIENT}")" - \
 		| if [ -n "${MINIKUBE}" ]; then
 			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) |= "none"' - \
 				| yq eval '.spec.proxy.haproxy.resources.requests.cpu="300m"' -
@@ -529,22 +534,29 @@ verify_certificate_sans() {
 }
 
 check_passwords_leak() {
-	local secrets=$(kubectl get secrets -o json | jq -r '.items[].data | to_entries | .[] | select(.key | (endswith(".crt") or endswith(".key") or endswith(".pub") or endswith(".pem") or endswith(".p12") or test("namespace")) | not) | .value')
-	local passwords="$(for i in $secrets; do
+	local secrets
+	local passwords
+	local pods
+
+	secrets=$(kubectl get secrets -o json | jq -r '.items[].data | to_entries | .[] | select(.key | (endswith(".crt") or endswith(".key") or endswith(".pub") or endswith(".pem") or endswith(".p12") or test("namespace")) | not) | .value')
+	passwords="$(for i in $secrets; do
 		base64 -d <<<$i
 		echo
 	done) $secrets"
-	local pods=$(kubectl -n "${NAMESPACE}" get pods -o name | awk -F "/" '{print $2}')
+	pods=$(kubectl -n "${NAMESPACE}" get pods -o name | awk -F "/" '{print $2}')
 
 	collect_logs() {
+		local containers
+		local count
+
 		NS=$1
 		for p in $pods; do
-			local containers=$(kubectl -n "$NS" get pod $p -o jsonpath='{.spec.containers[*].name}')
+			containers=$(kubectl -n "$NS" get pod $p -o jsonpath='{.spec.containers[*].name}')
 			for c in $containers; do
 				kubectl -n "$NS" logs $p -c $c >${TEMP_DIR}/logs_output-$p-$c.txt
 				echo logs saved in: ${TEMP_DIR}/logs_output-$p-$c.txt
 				for pass in $passwords; do
-					local count=$(grep -c --fixed-strings -- "$pass" ${TEMP_DIR}/logs_output-$p-$c.txt || :)
+					count=$(grep -c --fixed-strings -- "$pass" ${TEMP_DIR}/logs_output-$p-$c.txt || :)
 					if [[ $count != 0 ]]; then
 						echo leaked passwords are found in log ${TEMP_DIR}/logs_output-$p-$c.txt
 						false
@@ -557,7 +569,7 @@ check_passwords_leak() {
 
 	collect_logs $NAMESPACE
 	if [ -n "$OPERATOR_NS" ]; then
-		local pods=$(kubectl -n "${OPERATOR_NS}" get pods -o name | awk -F "/" '{print $2}')
+		pods=$(kubectl -n "${OPERATOR_NS}" get pods -o name | awk -F "/" '{print $2}')
 		collect_logs $OPERATOR_NS
 	fi
 }
