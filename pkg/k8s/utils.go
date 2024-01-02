@@ -38,6 +38,16 @@ func GetWatchNamespace() (string, error) {
 	return ns, nil
 }
 
+// GetOperatorNamespace returns the namespace of the operator pod
+func GetOperatorNamespace() (string, error) {
+	nsBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(nsBytes)), nil
+}
+
 func objectMetaEqual(old, new metav1.Object) bool {
 	return util.SSMapEqual(old.GetLabels(), new.GetLabels()) && util.SSMapEqual(old.GetAnnotations(), new.GetAnnotations())
 }
