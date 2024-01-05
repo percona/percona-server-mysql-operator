@@ -12,6 +12,27 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 )
 
+type orcResponse struct {
+	Code    string      `json:"Code"`
+	Message string      `json:"Message"`
+	Details interface{} `json:"Details,omitempty"`
+}
+
+type InstanceKey struct {
+	Hostname string `json:"Hostname"`
+	Port     int32  `json:"Port"`
+}
+
+type Instance struct {
+	Key       InstanceKey   `json:"Key"`
+	Alias     string        `json:"InstanceAlias"`
+	MasterKey InstanceKey   `json:"MasterKey"`
+	Replicas  []InstanceKey `json:"Replicas"`
+	ReadOnly  bool          `json:"ReadOnly"`
+}
+
+var ErrEmptyResponse = errors.New("empty response")
+
 func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoint string, outb, errb *bytes.Buffer) error {
 	c := []string{"curl", fmt.Sprintf("localhost:%d/%s", defaultWebPort, endpoint)}
 	err := cliCmd.Exec(ctx, pod, "orc", c, nil, outb, errb, false)

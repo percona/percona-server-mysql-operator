@@ -41,9 +41,12 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysql/topology"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
@@ -53,6 +56,7 @@ type PerconaServerMySQLBackupReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	ServerVersion *platform.ServerVersion
+	ClientCmd     clientcmd.Client
 }
 
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqlbackups;perconaservermysqlbackups/status;perconaservermysqlbackups/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -317,7 +321,7 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 		return "", errors.Wrap(err, "get operator password")
 	}
 
-	top, err := topology.Get(ctx, cluster, operatorPass)
+	top, err := r.getTopology(ctx, cluster, operatorPass)
 	if err != nil {
 		return "", errors.Wrap(err, "get topology")
 	}
@@ -331,6 +335,85 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 	}
 
 	return source, nil
+}
+
+type Topology struct {
+	Primary  string
+	Replicas []string
+}
+
+func (r *PerconaServerMySQLBackupReconciler) getTopology(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL, operatorPass string) (Topology, error) {
+	switch cluster.Spec.MySQL.ClusterType {
+	case apiv1alpha1.ClusterTypeGR:
+		firstPod, err := getMySQLPod(ctx, r.Client, cluster, 0)
+		if err != nil {
+			return Topology{}, err
+		}
+
+		fqdn := mysql.FQDN(cluster, 0)
+
+		db, err := replicator.NewReplicatorExec(firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, fqdn)
+		if err != nil {
+			return Topology{}, errors.Wrapf(err, "open connection to %s", fqdn)
+		}
+
+		replicas, err := db.GetGroupReplicationReplicas(ctx)
+		if err != nil {
+			return Topology{}, errors.Wrap(err, "get group-replication replicas")
+		}
+
+		primary, err := db.GetGroupReplicationPrimary(ctx)
+		if err != nil {
+			return Topology{}, errors.Wrap(err, "get group-replication primary")
+		}
+		return Topology{
+			Primary:  primary,
+			Replicas: replicas,
+		}, nil
+	case apiv1alpha1.ClusterTypeAsync:
+		pod, err := getOrcPod(ctx, r.Client, cluster, 0)
+		if err != nil {
+			return Topology{}, err
+		}
+		primary, err := orchestrator.ClusterPrimaryExec(ctx, r.ClientCmd, pod, cluster.ClusterHint())
+
+		if err != nil {
+			return Topology{}, errors.Wrap(err, "get primary")
+		}
+
+		replicas := make([]string, 0, len(primary.Replicas))
+		for _, r := range primary.Replicas {
+			replicas = append(replicas, r.Hostname)
+		}
+		return Topology{
+			Primary:  primary.Key.Hostname,
+			Replicas: replicas,
+		}, nil
+	default:
+		return Topology{}, errors.New("unknown cluster type")
+	}
+}
+
+func getMySQLPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
+	pod := &corev1.Pod{}
+
+	nn := types.NamespacedName{Namespace: cr.Namespace, Name: mysql.PodName(cr, idx)}
+	if err := cl.Get(ctx, nn, pod); err != nil {
+		return nil, err
+	}
+
+	return pod, nil
+}
+
+func getOrcPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
+	pod := &corev1.Pod{}
+
+	nn := types.NamespacedName{Namespace: cr.Namespace, Name: orchestrator.PodName(cr, idx)}
+	if err := cl.Get(ctx, nn, pod); err != nil {
+		return nil, err
+	}
+
+	return pod, nil
 }
 
 const finalizerDeleteBackup = "delete-backup"
