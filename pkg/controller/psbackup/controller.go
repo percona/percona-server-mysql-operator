@@ -345,8 +345,9 @@ type Topology struct {
 func (r *PerconaServerMySQLBackupReconciler) getTopology(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL, operatorPass string) (Topology, error) {
 	switch cluster.Spec.MySQL.ClusterType {
 	case apiv1alpha1.ClusterTypeGR:
-		firstPod, err := getMySQLPod(ctx, r.Client, cluster, 0)
-		if err != nil {
+		firstPod := &corev1.Pod{}
+		nn := types.NamespacedName{Namespace: cluster.Namespace, Name: mysql.PodName(cluster, 0)}
+		if err := r.Client.Get(ctx, nn, firstPod); err != nil {
 			return Topology{}, err
 		}
 
@@ -368,10 +369,12 @@ func (r *PerconaServerMySQLBackupReconciler) getTopology(ctx context.Context, cl
 			Replicas: replicas,
 		}, nil
 	case apiv1alpha1.ClusterTypeAsync:
-		pod, err := getOrcPod(ctx, r.Client, cluster, 0)
-		if err != nil {
+		pod := &corev1.Pod{}
+		nn := types.NamespacedName{Namespace: cluster.Namespace, Name: orchestrator.PodName(cluster, 0)}
+		if err := r.Client.Get(ctx, nn, pod); err != nil {
 			return Topology{}, err
 		}
+
 		primary, err := orchestrator.ClusterPrimaryExec(ctx, r.ClientCmd, pod, cluster.ClusterHint())
 
 		if err != nil {
@@ -389,28 +392,6 @@ func (r *PerconaServerMySQLBackupReconciler) getTopology(ctx context.Context, cl
 	default:
 		return Topology{}, errors.New("unknown cluster type")
 	}
-}
-
-func getMySQLPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
-	pod := &corev1.Pod{}
-
-	nn := types.NamespacedName{Namespace: cr.Namespace, Name: mysql.PodName(cr, idx)}
-	if err := cl.Get(ctx, nn, pod); err != nil {
-		return nil, err
-	}
-
-	return pod, nil
-}
-
-func getOrcPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
-	pod := &corev1.Pod{}
-
-	nn := types.NamespacedName{Namespace: cr.Namespace, Name: orchestrator.PodName(cr, idx)}
-	if err := cl.Get(ctx, nn, pod); err != nil {
-		return nil, err
-	}
-
-	return pod, nil
 }
 
 const finalizerDeleteBackup = "delete-backup"
