@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
+	"github.com/percona/percona-server-mysql-operator/pkg/db"
 )
 
 const defaultChannelName = ""
@@ -82,7 +82,7 @@ func (d *DB) ResetReplication(ctx context.Context) error {
 	return errors.Wrap(err, "reset replication")
 }
 
-func (d *DB) ReplicationStatus(ctx context.Context) (replicator.ReplicationStatus, string, error) {
+func (d *DB) ReplicationStatus(ctx context.Context) (db.ReplicationStatus, string, error) {
 	row := d.db.QueryRowContext(ctx, `
         SELECT
 	    connection_status.SERVICE_STATE,
@@ -99,21 +99,21 @@ func (d *DB) ReplicationStatus(ctx context.Context) (replicator.ReplicationStatu
 	var ioState, sqlState, host string
 	if err := row.Scan(&ioState, &sqlState, &host); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return replicator.ReplicationStatusNotInitiated, "", nil
+			return db.ReplicationStatusNotInitiated, "", nil
 		}
-		return replicator.ReplicationStatusError, "", errors.Wrap(err, "scan replication status")
+		return db.ReplicationStatusError, "", errors.Wrap(err, "scan replication status")
 	}
 
 	if ioState == "ON" && sqlState == "ON" {
-		return replicator.ReplicationStatusActive, host, nil
+		return db.ReplicationStatusActive, host, nil
 	}
 
-	return replicator.ReplicationStatusNotInitiated, "", nil
+	return db.ReplicationStatusNotInitiated, "", nil
 }
 
 func (d *DB) IsReplica(ctx context.Context) (bool, error) {
 	status, _, err := d.ReplicationStatus(ctx)
-	return status == replicator.ReplicationStatusActive, errors.Wrap(err, "get replication status")
+	return status == db.ReplicationStatusActive, errors.Wrap(err, "get replication status")
 }
 
 func (d *DB) DisableSuperReadonly(ctx context.Context) error {
@@ -184,15 +184,15 @@ func (d *DB) DumbQuery(ctx context.Context) error {
 	return errors.Wrap(err, "SELECT 1")
 }
 
-func (d *DB) GetMemberState(ctx context.Context, host string) (replicator.MemberState, error) {
-	var state replicator.MemberState
+func (d *DB) GetMemberState(ctx context.Context, host string) (db.MemberState, error) {
+	var state db.MemberState
 
 	err := d.db.QueryRowContext(ctx, "SELECT MEMBER_STATE FROM replication_group_members WHERE MEMBER_HOST=?", host).Scan(&state)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return replicator.MemberStateOffline, nil
+			return db.MemberStateOffline, nil
 		}
-		return replicator.MemberStateError, errors.Wrap(err, "query member state")
+		return db.MemberStateError, errors.Wrap(err, "query member state")
 	}
 
 	return state, nil
