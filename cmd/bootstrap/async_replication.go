@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	database "github.com/percona/percona-server-mysql-operator/cmd/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
@@ -87,9 +88,9 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
 
-	db, err := replicator.NewReplicator(ctx, apiv1alpha1.UserOperator, operatorPass, podIp, mysql.DefaultAdminPort)
+	db, err := database.NewDatabase(ctx, apiv1alpha1.UserOperator, operatorPass, podIp, mysql.DefaultAdminPort)
 	if err != nil {
-		return errors.Wrap(err, "connect to db")
+		return errors.Wrap(err, "connect to database")
 	}
 	defer db.Close()
 
@@ -208,7 +209,7 @@ func getTopology(ctx context.Context, peers sets.Set[string]) (string, []string,
 	}
 
 	for _, peer := range sets.List(peers) {
-		db, err := replicator.NewReplicator(ctx, apiv1alpha1.UserOperator, operatorPass, peer, mysql.DefaultAdminPort)
+		db, err := database.NewDatabase(ctx, apiv1alpha1.UserOperator, operatorPass, peer, mysql.DefaultAdminPort)
 		if err != nil {
 			return "", nil, errors.Wrapf(err, "connect to %s", peer)
 		}
@@ -255,7 +256,7 @@ func selectDonor(ctx context.Context, fqdn, primary string, replicas []string) (
 	}
 
 	for _, replica := range replicas {
-		db, err := replicator.NewReplicator(ctx, apiv1alpha1.UserOperator, operatorPass, replica, mysql.DefaultAdminPort)
+		db, err := database.NewDatabase(ctx, apiv1alpha1.UserOperator, operatorPass, replica, mysql.DefaultAdminPort)
 		if err != nil {
 			continue
 		}

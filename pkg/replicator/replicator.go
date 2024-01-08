@@ -1,22 +1,32 @@
 package replicator
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/csv"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/gocarina/gocsv"
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 )
+
+var sensitiveRegexp = regexp.MustCompile(":.*@")
 
 const DefaultChannelName = ""
 
 type ReplicationStatus int8
 
-var ErrRestartAfterClone error = errors.New("Error 3707: Restart server failed (mysqld is not managed by supervisor process).")
+var ErrRestartAfterClone = errors.New("Error 3707: Restart server failed (mysqld is not managed by supervisor process).")
+var ErrGroupReplicationNotReady = errors.New("Error 3092: The server is not configured properly to be an active member of the group.")
 
 const (
 	ReplicationStatusActive ReplicationStatus = iota
@@ -33,8 +43,6 @@ const (
 	MemberStateError       MemberState = "ERROR"
 	MemberStateUnreachable MemberState = "UNREACHABLE"
 )
-
-var ErrGroupReplicationNotReady = errors.New("Error 3092: The server is not configured properly to be an active member of the group.")
 
 type Replicator interface {
 	ChangeReplicationSource(ctx context.Context, host, replicaPass string, port int32) error
@@ -64,51 +72,72 @@ type Replicator interface {
 	CheckIfInPrimaryPartition(ctx context.Context) (bool, error)
 	CheckIfPrimaryUnreachable(ctx context.Context) (bool, error)
 }
-
-type dbImpl struct{ db *sql.DB }
-
-func NewReplicator(ctx context.Context, user apiv1alpha1.SystemUser, pass, host string, port int32) (Replicator, error) {
-	config := mysql.NewConfig()
-
-	config.User = string(user)
-	config.Passwd = pass
-	config.Net = "tcp"
-	config.Addr = fmt.Sprintf("%s:%d", host, port)
-	config.DBName = "performance_schema"
-	config.Params = map[string]string{
-		"interpolateParams": "true",
-		"timeout":           "10s",
-		"readTimeout":       "10s",
-		"writeTimeout":      "10s",
-		"tls":               "preferred",
-	}
-
-	db, err := sql.Open("mysql", config.FormatDSN())
-	if err != nil {
-		return nil, errors.Wrap(err, "connect to MySQL")
-	}
-
-	if err := db.PingContext(ctx); err != nil {
-		return nil, errors.Wrap(err, "ping database")
-	}
-
-	return &dbImpl{db}, nil
+type dbImplExec struct {
+	client clientcmd.Client
+	pod    *corev1.Pod
+	user   apiv1alpha1.SystemUser
+	pass   string
+	host   string
 }
 
-func (d *dbImpl) ChangeReplicationSource(ctx context.Context, host, replicaPass string, port int32) error {
-	// TODO: Make retries configurable
-	_, err := d.db.ExecContext(ctx, `
-            CHANGE REPLICATION SOURCE TO
-                SOURCE_USER=?,
-                SOURCE_PASSWORD=?,
-                SOURCE_HOST=?,
-                SOURCE_PORT=?,
-                SOURCE_SSL=1,
-                SOURCE_CONNECTION_AUTO_FAILOVER=1,
-                SOURCE_AUTO_POSITION=1,
-                SOURCE_RETRY_COUNT=3,
-                SOURCE_CONNECT_RETRY=60
-        `, apiv1alpha1.UserReplication, replicaPass, host, port)
+func NewReplicatorExec(pod *corev1.Pod, cliCmd clientcmd.Client, user apiv1alpha1.SystemUser, pass, host string) (Replicator, error) {
+	return &dbImplExec{client: cliCmd, pod: pod, user: user, pass: pass, host: host}, nil
+}
+
+func (d *dbImplExec) exec(ctx context.Context, stm string, stdout, stderr *bytes.Buffer) error {
+	cmd := []string{"mysql", "--database", "performance_schema", fmt.Sprintf("-p%s", d.pass), "-u", string(d.user), "-h", d.host, "-e", stm}
+
+	err := d.client.Exec(ctx, d.pod, "mysql", cmd, nil, stdout, stderr, false)
+	if err != nil {
+		sout := sensitiveRegexp.ReplaceAllString(stdout.String(), ":*****@")
+		serr := sensitiveRegexp.ReplaceAllString(stderr.String(), ":*****@")
+		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, sout, serr)
+	}
+
+	if strings.Contains(stderr.String(), "ERROR") {
+		return fmt.Errorf("sql error: %s", stderr)
+	}
+
+	return nil
+}
+
+func (d *dbImplExec) query(ctx context.Context, query string, out interface{}) error {
+	var errb, outb bytes.Buffer
+	err := d.exec(ctx, query, &outb, &errb)
+	if err != nil {
+		return err
+	}
+
+	if !strings.Contains(errb.String(), "ERROR") && outb.Len() == 0 {
+		return sql.ErrNoRows
+	}
+
+	r := csv.NewReader(bytes.NewReader(outb.Bytes()))
+	r.Comma = '\t'
+
+	if err = gocsv.UnmarshalCSV(r, out); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (d *dbImplExec) ChangeReplicationSource(ctx context.Context, host, replicaPass string, port int32) error {
+	var errb, outb bytes.Buffer
+	q := fmt.Sprintf(`
+		CHANGE REPLICATION SOURCE TO
+			SOURCE_USER='%s',
+			SOURCE_PASSWORD='%s',
+			SOURCE_HOST='%s',
+			SOURCE_PORT=%d,
+			SOURCE_SSL=1,
+			SOURCE_CONNECTION_AUTO_FAILOVER=1,
+			SOURCE_AUTO_POSITION=1,
+			SOURCE_RETRY_COUNT=3,
+			SOURCE_CONNECT_RETRY=60
+		`, apiv1alpha1.UserReplication, replicaPass, host, port)
+	err := d.exec(ctx, q, &outb, &errb)
+
 	if err != nil {
 		return errors.Wrap(err, "exec CHANGE REPLICATION SOURCE TO")
 	}
@@ -116,99 +145,121 @@ func (d *dbImpl) ChangeReplicationSource(ctx context.Context, host, replicaPass 
 	return nil
 }
 
-func (d *dbImpl) StartReplication(ctx context.Context, host, replicaPass string, port int32) error {
+func (d *dbImplExec) StartReplication(ctx context.Context, host, replicaPass string, port int32) error {
 	if err := d.ChangeReplicationSource(ctx, host, replicaPass, port); err != nil {
 		return errors.Wrap(err, "change replication source")
 	}
 
-	_, err := d.db.ExecContext(ctx, "START REPLICA")
+	var errb, outb bytes.Buffer
+	err := d.exec(ctx, "START REPLICA", &outb, &errb)
 	return errors.Wrap(err, "start replication")
 }
 
-func (d *dbImpl) StopReplication(ctx context.Context) error {
-	_, err := d.db.ExecContext(ctx, "STOP REPLICA")
+func (d *dbImplExec) StopReplication(ctx context.Context) error {
+	var errb, outb bytes.Buffer
+	err := d.exec(ctx, "STOP REPLICA", &outb, &errb)
 	return errors.Wrap(err, "stop replication")
 }
 
-func (d *dbImpl) ResetReplication(ctx context.Context) error {
-	_, err := d.db.ExecContext(ctx, "RESET REPLICA ALL")
+func (d *dbImplExec) ResetReplication(ctx context.Context) error {
+	var errb, outb bytes.Buffer
+	err := d.exec(ctx, "RESET REPLICA ALL", &outb, &errb)
 	return errors.Wrap(err, "reset replication")
+
 }
 
-func (d *dbImpl) ReplicationStatus(ctx context.Context) (ReplicationStatus, string, error) {
-	row := d.db.QueryRowContext(ctx, `
+func (d *dbImplExec) ReplicationStatus(ctx context.Context) (ReplicationStatus, string, error) {
+	rows := []*struct {
+		IoState  string `csv:"conn_state"`
+		SqlState string `csv:"applier_state"`
+		Host     string `csv:"host"`
+	}{}
+
+	q := fmt.Sprintf(`
         SELECT
-	    connection_status.SERVICE_STATE,
-	    applier_status.SERVICE_STATE,
-            HOST
+	    connection_status.SERVICE_STATE as conn_state,
+	    applier_status.SERVICE_STATE as applier_state,
+            HOST as host
         FROM replication_connection_status connection_status
         JOIN replication_connection_configuration connection_configuration
             ON connection_status.channel_name = connection_configuration.channel_name
         JOIN replication_applier_status applier_status
             ON connection_status.channel_name = applier_status.channel_name
-        WHERE connection_status.channel_name = ?
-        `, DefaultChannelName)
-
-	var ioState, sqlState, host string
-	if err := row.Scan(&ioState, &sqlState, &host); err != nil {
+        WHERE connection_status.channel_name = '%s'
+		`, DefaultChannelName)
+	err := d.query(ctx, q, &rows)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ReplicationStatusNotInitiated, "", nil
 		}
 		return ReplicationStatusError, "", errors.Wrap(err, "scan replication status")
 	}
 
-	if ioState == "ON" && sqlState == "ON" {
-		return ReplicationStatusActive, host, nil
+	if rows[0].IoState == "ON" && rows[0].SqlState == "ON" {
+		return ReplicationStatusActive, rows[0].Host, nil
 	}
 
-	return ReplicationStatusNotInitiated, "", nil
+	return ReplicationStatusNotInitiated, "", err
 }
 
-func (d *dbImpl) IsReplica(ctx context.Context) (bool, error) {
+func (d *dbImplExec) IsReplica(ctx context.Context) (bool, error) {
 	status, _, err := d.ReplicationStatus(ctx)
 	return status == ReplicationStatusActive, errors.Wrap(err, "get replication status")
 }
 
-func (d *dbImpl) EnableSuperReadonly(ctx context.Context) error {
-	_, err := d.db.ExecContext(ctx, "SET GLOBAL SUPER_READ_ONLY=1")
+func (d *dbImplExec) EnableSuperReadonly(ctx context.Context) error {
+	var errb, outb bytes.Buffer
+	err := d.exec(ctx, "SET GLOBAL SUPER_READ_ONLY=1", &outb, &errb)
 	return errors.Wrap(err, "set global super_read_only param to 1")
 }
 
-func (d *dbImpl) DisableSuperReadonly(ctx context.Context) error {
-	_, err := d.db.ExecContext(ctx, "SET GLOBAL SUPER_READ_ONLY=0")
+func (d *dbImplExec) DisableSuperReadonly(ctx context.Context) error {
+	var errb, outb bytes.Buffer
+	err := d.exec(ctx, "SET GLOBAL SUPER_READ_ONLY=0", &outb, &errb)
 	return errors.Wrap(err, "set global super_read_only param to 0")
 }
 
-func (d *dbImpl) IsReadonly(ctx context.Context) (bool, error) {
-	var readonly int
-	err := d.db.QueryRowContext(ctx, "select @@read_only and @@super_read_only").Scan(&readonly)
-	return readonly == 1, errors.Wrap(err, "select global read_only param")
+func (d *dbImplExec) IsReadonly(ctx context.Context) (bool, error) {
+	rows := []*struct {
+		Readonly int `csv:"readonly"`
+	}{}
+
+	err := d.query(ctx, "select @@read_only and @@super_read_only as readonly", &rows)
+	if err != nil {
+		return false, err
+	}
+
+	return rows[0].Readonly == 1, nil
 }
 
-func (d *dbImpl) ReportHost(ctx context.Context) (string, error) {
-	var reportHost string
-	err := d.db.QueryRowContext(ctx, "select @@report_host").Scan(&reportHost)
-	return reportHost, errors.Wrap(err, "select report_host param")
+func (d *dbImplExec) ReportHost(ctx context.Context) (string, error) {
+	rows := []*struct {
+		Host string `csv:"host"`
+	}{}
+
+	err := d.query(ctx, "select @@report_host as host", &rows)
+	if err != nil {
+		return "", err
+	}
+
+	return rows[0].Host, nil
 }
 
-func (d *dbImpl) Close() error {
-	return d.db.Close()
+func (d *dbImplExec) Close() error {
+	return nil
 }
 
-func (d *dbImpl) CloneInProgress(ctx context.Context) (bool, error) {
-	rows, err := d.db.QueryContext(ctx, "SELECT STATE FROM clone_status")
+func (d *dbImplExec) CloneInProgress(ctx context.Context) (bool, error) {
+	rows := []*struct {
+		State string `csv:"state"`
+	}{}
+	err := d.query(ctx, "SELECT STATE FROM clone_status as state", &rows)
 	if err != nil {
 		return false, errors.Wrap(err, "fetch clone status")
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var state string
-		if err := rows.Scan(&state); err != nil {
-			return false, errors.Wrap(err, "scan rows")
-		}
-
-		if state != "Completed" && state != "Failed" {
+	for _, row := range rows {
+		if row.State != "Completed" && row.State != "Failed" {
 			return true, nil
 		}
 	}
@@ -216,19 +267,18 @@ func (d *dbImpl) CloneInProgress(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
-func (d *dbImpl) NeedsClone(ctx context.Context, donor string, port int32) (bool, error) {
-	rows, err := d.db.QueryContext(ctx, "SELECT SOURCE, STATE FROM clone_status")
+func (d *dbImplExec) NeedsClone(ctx context.Context, donor string, port int32) (bool, error) {
+	rows := []*struct {
+		Source string `csv:"source"`
+		State  string `csv:"state"`
+	}{}
+	err := d.query(ctx, "SELECT SOURCE as source, STATE as state FROM clone_status", &rows)
 	if err != nil {
 		return false, errors.Wrap(err, "fetch clone status")
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var source, state string
-		if err := rows.Scan(&source, &state); err != nil {
-			return false, errors.Wrap(err, "scan rows")
-		}
-		if source == fmt.Sprintf("%s:%d", donor, port) && state == "Completed" {
+	for _, row := range rows {
+		if row.Source == fmt.Sprintf("%s:%d", donor, port) && row.State == "Completed" {
 			return false, nil
 		}
 	}
@@ -236,46 +286,65 @@ func (d *dbImpl) NeedsClone(ctx context.Context, donor string, port int32) (bool
 	return true, nil
 }
 
-func (d *dbImpl) Clone(ctx context.Context, donor, user, pass string, port int32) error {
-	_, err := d.db.ExecContext(ctx, "SET GLOBAL clone_valid_donor_list=?", fmt.Sprintf("%s:%d", donor, port))
+func (d *dbImplExec) Clone(ctx context.Context, donor, user, pass string, port int32) error {
+	var errb, outb bytes.Buffer
+	q := fmt.Sprintf("SET GLOBAL clone_valid_donor_list='%s'", fmt.Sprintf("%s:%d", donor, port))
+	err := d.exec(ctx, q, &outb, &errb)
 	if err != nil {
 		return errors.Wrap(err, "set clone_valid_donor_list")
 	}
 
-	_, err = d.db.ExecContext(ctx, "CLONE INSTANCE FROM ?@?:? IDENTIFIED BY ?", user, donor, port, pass)
+	q = fmt.Sprintf("CLONE INSTANCE FROM %s@%s:%d IDENTIFIED BY %s", user, donor, port, pass)
+	err = d.exec(ctx, q, &outb, &errb)
 
-	mErr, ok := err.(*mysql.MySQLError)
-	if !ok {
+	if strings.Contains(errb.String(), "ERROR") {
 		return errors.Wrap(err, "clone instance")
 	}
 
 	// Error 3707: Restart server failed (mysqld is not managed by supervisor process).
-	if mErr.Number == uint16(3707) {
+	if strings.Contains(errb.String(), "3707") {
 		return ErrRestartAfterClone
 	}
 
 	return nil
 }
 
-func (d *dbImpl) DumbQuery(ctx context.Context) error {
-	_, err := d.db.ExecContext(ctx, "SELECT 1")
+func (d *dbImplExec) DumbQuery(ctx context.Context) error {
+	var errb, outb bytes.Buffer
+	err := d.exec(ctx, "SELECT 1", &outb, &errb)
+
 	return errors.Wrap(err, "SELECT 1")
 }
 
-func (d *dbImpl) GetGlobal(ctx context.Context, variable string) (interface{}, error) {
+func (d *dbImplExec) GetGlobal(ctx context.Context, variable string) (interface{}, error) {
+	rows := []*struct {
+		Val interface{} `csv:"val"`
+	}{}
+
 	// TODO: check how to do this without being vulnerable to injection
-	var value interface{}
-	err := d.db.QueryRowContext(ctx, fmt.Sprintf("SELECT @@%s", variable)).Scan(&value)
-	return value, errors.Wrapf(err, "SELECT @@%s", variable)
+	err := d.query(ctx, fmt.Sprintf("SELECT @@%s as val", variable), &rows)
+	if err != nil {
+		return nil, errors.Wrapf(err, "SELECT @@%s", variable)
+	}
+
+	return rows[0].Val, nil
 }
 
-func (d *dbImpl) SetGlobal(ctx context.Context, variable, value interface{}) error {
-	_, err := d.db.ExecContext(ctx, fmt.Sprintf("SET GLOBAL %s=?", variable), value)
-	return errors.Wrapf(err, "SET GLOBAL %s=%s", variable, value)
+func (d *dbImplExec) SetGlobal(ctx context.Context, variable, value interface{}) error {
+	var errb, outb bytes.Buffer
+	q := fmt.Sprintf("SET GLOBAL %s=%s", variable, value)
+	err := d.exec(ctx, q, &outb, &errb)
+	if err != nil {
+		return errors.Wrapf(err, "SET GLOBAL %s=%s", variable, value)
+
+	}
+	return nil
 }
 
-func (d *dbImpl) StartGroupReplication(ctx context.Context, password string) error {
-	_, err := d.db.ExecContext(ctx, "START GROUP_REPLICATION USER=?, PASSWORD=?", apiv1alpha1.UserReplication, password)
+func (d *dbImplExec) StartGroupReplication(ctx context.Context, password string) error {
+	var errb, outb bytes.Buffer
+	q := fmt.Sprintf("START GROUP_REPLICATION USER='%s', PASSWORD='%s'", apiv1alpha1.UserReplication, password)
+	err := d.exec(ctx, q, &outb, &errb)
 
 	mErr, ok := err.(*mysql.MySQLError)
 	if !ok {
@@ -290,47 +359,50 @@ func (d *dbImpl) StartGroupReplication(ctx context.Context, password string) err
 	return errors.Wrap(err, "start group replication")
 }
 
-func (d *dbImpl) StopGroupReplication(ctx context.Context) error {
-	_, err := d.db.ExecContext(ctx, "STOP GROUP_REPLICATION")
+func (d *dbImplExec) StopGroupReplication(ctx context.Context) error {
+	var errb, outb bytes.Buffer
+	err := d.exec(ctx, "STOP GROUP_REPLICATION", &outb, &errb)
 	return errors.Wrap(err, "stop group replication")
 }
 
-func (d *dbImpl) GetGroupReplicationPrimary(ctx context.Context) (string, error) {
-	var host string
+func (d *dbImplExec) GetGroupReplicationPrimary(ctx context.Context) (string, error) {
+	rows := []*struct {
+		Host string `csv:"host"`
+	}{}
 
-	err := d.db.QueryRowContext(ctx, "SELECT MEMBER_HOST FROM replication_group_members WHERE MEMBER_ROLE='PRIMARY' AND MEMBER_STATE='ONLINE'").Scan(&host)
+	err := d.query(ctx, "SELECT MEMBER_HOST as host FROM replication_group_members WHERE MEMBER_ROLE='PRIMARY' AND MEMBER_STATE='ONLINE'", &rows)
 	if err != nil {
 		return "", errors.Wrap(err, "query primary member")
 	}
 
-	return host, nil
+	return rows[0].Host, nil
 }
 
-func (d *dbImpl) GetGroupReplicationReplicas(ctx context.Context) ([]string, error) {
-	replicas := make([]string, 0)
+// TODO: finish implementation
+func (d *dbImplExec) GetGroupReplicationReplicas(ctx context.Context) ([]string, error) {
+	rows := []*struct {
+		Host string `csv:"host"`
+	}{}
 
-	rows, err := d.db.QueryContext(ctx, "SELECT MEMBER_HOST FROM replication_group_members WHERE MEMBER_ROLE='SECONDARY' AND MEMBER_STATE='ONLINE'")
+	err := d.query(ctx, "SELECT MEMBER_HOST as host FROM replication_group_members WHERE MEMBER_ROLE='SECONDARY' AND MEMBER_STATE='ONLINE'", &rows)
 	if err != nil {
 		return nil, errors.Wrap(err, "query replicas")
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var host string
-		if err := rows.Scan(&host); err != nil {
-			return nil, errors.Wrap(err, "scan rows")
-		}
-
-		replicas = append(replicas, host)
+	replicas := make([]string, 0)
+	for _, row := range rows {
+		replicas = append(replicas, row.Host)
 	}
 
 	return replicas, nil
 }
 
-func (d *dbImpl) GetMemberState(ctx context.Context, host string) (MemberState, error) {
-	var state MemberState
-
-	err := d.db.QueryRowContext(ctx, "SELECT MEMBER_STATE FROM replication_group_members WHERE MEMBER_HOST=?", host).Scan(&state)
+func (d *dbImplExec) GetMemberState(ctx context.Context, host string) (MemberState, error) {
+	rows := []*struct {
+		State MemberState `csv:"state"`
+	}{}
+	q := fmt.Sprintf(`SELECT MEMBER_STATE as state FROM replication_group_members WHERE MEMBER_HOST='%s'`, host)
+	err := d.query(ctx, q, &rows)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return MemberStateOffline, nil
@@ -338,34 +410,35 @@ func (d *dbImpl) GetMemberState(ctx context.Context, host string) (MemberState, 
 		return MemberStateError, errors.Wrap(err, "query member state")
 	}
 
-	return state, nil
+	return rows[0].State, nil
 }
 
-func (d *dbImpl) GetGroupReplicationMembers(ctx context.Context) ([]string, error) {
-	members := make([]string, 0)
+func (d *dbImplExec) GetGroupReplicationMembers(ctx context.Context) ([]string, error) {
+	rows := []*struct {
+		Member string `csv:"member"`
+	}{}
 
-	rows, err := d.db.QueryContext(ctx, "SELECT MEMBER_HOST FROM replication_group_members")
+	err := d.query(ctx, "SELECT MEMBER_HOST as member FROM replication_group_members", &rows)
 	if err != nil {
 		return nil, errors.Wrap(err, "query members")
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var host string
-		if err := rows.Scan(&host); err != nil {
-			return nil, errors.Wrap(err, "scan rows")
-		}
-
-		members = append(members, host)
+	members := make([]string, 0)
+	for _, row := range rows {
+		members = append(members, row.Member)
 	}
 
 	return members, nil
 }
 
-func (d *dbImpl) CheckIfDatabaseExists(ctx context.Context, name string) (bool, error) {
-	var db string
+func (d *dbImplExec) CheckIfDatabaseExists(ctx context.Context, name string) (bool, error) {
+	rows := []*struct {
+		DB string `csv:"db"`
+	}{}
 
-	err := d.db.QueryRowContext(ctx, "SHOW DATABASES LIKE ?", name).Scan(&db)
+	q := fmt.Sprintf("SELECT SCHEMA_NAME AS db FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME LIKE '%s'", name)
+	err := d.query(ctx, q, &rows)
+
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
@@ -376,10 +449,13 @@ func (d *dbImpl) CheckIfDatabaseExists(ctx context.Context, name string) (bool, 
 	return true, nil
 }
 
-func (d *dbImpl) CheckIfInPrimaryPartition(ctx context.Context) (bool, error) {
-	var in bool
+// TODO: finish implementation
+func (d *dbImplExec) CheckIfInPrimaryPartition(ctx context.Context) (bool, error) {
+	rows := []*struct {
+		In bool `csv:"in"`
+	}{}
 
-	err := d.db.QueryRowContext(ctx, `
+	err := d.query(ctx, `
 	SELECT
 		MEMBER_STATE = 'ONLINE'
 		AND (
@@ -398,31 +474,32 @@ func (d *dbImpl) CheckIfInPrimaryPartition(ctx context.Context) (bool, error) {
 						performance_schema.replication_group_members
 				) / 2
 			) = 0
-		)
+		) as in
 	FROM
 		performance_schema.replication_group_members
 		JOIN performance_schema.replication_group_member_stats USING(member_id)
 	WHERE
-		member_id = @@global.server_uuid;
-	`).Scan(&in)
+		member_id = @@glob, &outb, &errba
+	`, &rows)
+
 	if err != nil {
 		return false, err
 	}
 
-	return in, nil
+	return rows[0].In, nil
 }
 
-func (d *dbImpl) CheckIfPrimaryUnreachable(ctx context.Context) (bool, error) {
+func (d *dbImplExec) CheckIfPrimaryUnreachable(ctx context.Context) (bool, error) {
 	var state string
 
-	err := d.db.QueryRowContext(ctx, `
+	err := d.query(ctx, `
 	SELECT
 		MEMBER_STATE
 	FROM
 		performance_schema.replication_group_members
 	WHERE
 		MEMBER_ROLE = 'PRIMARY'
-	`).Scan(&state)
+	`, &state)
 	if err != nil {
 		return false, err
 	}
