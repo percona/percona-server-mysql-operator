@@ -13,10 +13,10 @@ import (
 	"github.com/pkg/errors"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-	database "github.com/percona/percona-server-mysql-operator/cmd/mysql"
+	database "github.com/percona/percona-server-mysql-operator/cmd/db"
+	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
-	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
 func main() {
@@ -133,7 +133,7 @@ func checkReadinessGR(ctx context.Context) error {
 		return errors.Wrap(err, "get member state")
 	}
 
-	if state != replicator.MemberStateOnline {
+	if state != mysqldb.MemberStateOnline {
 		return errors.Errorf("Member state: %s", state)
 	}
 

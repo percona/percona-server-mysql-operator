@@ -11,9 +11,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-	database "github.com/percona/percona-server-mysql-operator/cmd/mysql"
+	database "github.com/percona/percona-server-mysql-operator/cmd/db"
+	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
-	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
 func bootstrapAsyncReplication(ctx context.Context) error {
@@ -149,7 +149,7 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 		log.Printf("Cloning from %s", donor)
 		err = db.Clone(ctx, donor, string(apiv1alpha1.UserOperator), operatorPass, mysql.DefaultAdminPort)
 		timer.Stop("clone")
-		if err != nil && !errors.Is(err, replicator.ErrRestartAfterClone) {
+		if err != nil && !errors.Is(err, database.ErrRestartAfterClone) {
 			return errors.Wrapf(err, "clone from donor %s", donor)
 		}
 
@@ -175,7 +175,7 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 		return errors.Wrap(err, "check replication status")
 	}
 
-	if rStatus == replicator.ReplicationStatusNotInitiated {
+	if rStatus == mysqldb.ReplicationStatusNotInitiated {
 		log.Println("configuring replication")
 
 		replicaPass, err := getSecret(apiv1alpha1.UserReplication)
@@ -229,7 +229,7 @@ func getTopology(ctx context.Context, peers sets.Set[string]) (string, []string,
 		}
 		replicas.Insert(replicaHost)
 
-		if status == replicator.ReplicationStatusActive {
+		if status == mysqldb.ReplicationStatusActive {
 			primary = source
 		}
 	}
