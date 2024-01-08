@@ -42,11 +42,11 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
+	"github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
-	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
@@ -352,17 +352,14 @@ func (r *PerconaServerMySQLBackupReconciler) getTopology(ctx context.Context, cl
 
 		fqdn := mysql.FQDN(cluster, 0)
 
-		db, err := replicator.NewReplicator(firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, fqdn)
-		if err != nil {
-			return Topology{}, errors.Wrapf(err, "open connection to %s", fqdn)
-		}
+		rm := db.NewReplicationManager(firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, fqdn)
 
-		replicas, err := db.GetGroupReplicationReplicas(ctx)
+		replicas, err := rm.GetGroupReplicationReplicas(ctx)
 		if err != nil {
 			return Topology{}, errors.Wrap(err, "get group-replication replicas")
 		}
 
-		primary, err := db.GetGroupReplicationPrimary(ctx)
+		primary, err := rm.GetGroupReplicationPrimary(ctx)
 		if err != nil {
 			return Topology{}, errors.Wrap(err, "get group-replication primary")
 		}
