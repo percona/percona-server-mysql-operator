@@ -204,11 +204,10 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		firstPodFQDN := fmt.Sprintf("%s.%s.%s", firstPod.Name, mysql.ServiceName(cr), cr.Namespace)
 		firstPodUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodFQDN)
 
-		db, err := replicator.NewReplicatorExec(&firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, firstPodFQDN)
+		db, err := replicator.NewReplicator(&firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, firstPodFQDN)
 		if err != nil {
 			return errors.Wrapf(err, "connect to %s", firstPod.Name)
 		}
-		defer db.Close()
 
 		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, &firstPod, firstPodUri)
 		if err != nil {
@@ -1009,7 +1008,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryFromGR(ctx context.Context, cr 
 		return "", err
 	}
 
-	db, err := replicator.NewReplicatorExec(firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, fqdn)
+	db, err := replicator.NewReplicator(firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, fqdn)
 	if err != nil {
 		return "", errors.Wrapf(err, "open connection to %s", fqdn)
 	}
@@ -1060,7 +1059,7 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 			if err != nil {
 				return err
 			}
-			repDb, err := replicator.NewReplicatorExec(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, hostname)
+			repDb, err := replicator.NewReplicator(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, hostname)
 			if err != nil {
 				return errors.Wrapf(err, "connect to replica %s", hostname)
 			}
@@ -1117,11 +1116,10 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 			if err != nil {
 				return err
 			}
-			db, err := replicator.NewReplicatorExec(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, hostname)
+			db, err := replicator.NewReplicator(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, hostname)
 			if err != nil {
 				return errors.Wrapf(err, "get db connection to %s", hostname)
 			}
-			defer db.Close()
 
 			log.V(1).Info("Change replication source", "primary", primary.Key.Hostname, "replica", hostname)
 			if err := db.ChangeReplicationSource(ctx, primary.Key.Hostname, replicaPass, primary.Key.Port); err != nil {

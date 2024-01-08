@@ -352,7 +352,7 @@ func (r *PerconaServerMySQLBackupReconciler) getTopology(ctx context.Context, cl
 
 		fqdn := mysql.FQDN(cluster, 0)
 
-		db, err := replicator.NewReplicatorExec(firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, fqdn)
+		db, err := replicator.NewReplicator(firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, fqdn)
 		if err != nil {
 			return Topology{}, errors.Wrapf(err, "open connection to %s", fqdn)
 		}

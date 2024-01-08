@@ -12,11 +12,15 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
+const defaultChannelName = ""
+
 var ErrRestartAfterClone = errors.New("Error 3707: Restart server failed (mysqld is not managed by supervisor process).")
 
 type ReplicationStatus int8
 
-type DB struct{ db *sql.DB }
+type DB struct {
+	db *sql.DB
+}
 
 func NewDatabase(ctx context.Context, user apiv1alpha1.SystemUser, pass, host string, port int32) (*DB, error) {
 	config := mysql.NewConfig()
@@ -90,7 +94,7 @@ func (d *DB) ReplicationStatus(ctx context.Context) (replicator.ReplicationStatu
         JOIN replication_applier_status applier_status
             ON connection_status.channel_name = applier_status.channel_name
         WHERE connection_status.channel_name = ?
-        `, replicator.DefaultChannelName)
+        `, defaultChannelName)
 
 	var ioState, sqlState, host string
 	if err := row.Scan(&ioState, &sqlState, &host); err != nil {
