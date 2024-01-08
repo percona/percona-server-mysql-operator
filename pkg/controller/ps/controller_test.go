@@ -198,7 +198,7 @@ var _ = Describe("Sidecars", Ordered, func() {
 			{
 				Name: pvcName,
 				Spec: corev1.PersistentVolumeClaimSpec{
-					Resources: corev1.ResourceRequirements{
+					Resources: corev1.VolumeResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceStorage: resource.Quantity{
 								Format: "1G",
