@@ -76,7 +76,7 @@ func TestReconcileVersions(t *testing.T) {
 						PodSpec: apiv1alpha1.PodSpec{
 							VolumeSpec: &apiv1alpha1.VolumeSpec{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-									Resources: corev1.ResourceRequirements{
+									Resources: corev1.VolumeResourceRequirements{
 										Requests: map[corev1.ResourceName]resource.Quantity{
 											corev1.ResourceStorage: q,
 										},
@@ -110,7 +110,7 @@ func TestReconcileVersions(t *testing.T) {
 						PodSpec: apiv1alpha1.PodSpec{
 							VolumeSpec: &apiv1alpha1.VolumeSpec{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-									Resources: corev1.ResourceRequirements{
+									Resources: corev1.VolumeResourceRequirements{
 										Requests: map[corev1.ResourceName]resource.Quantity{
 											corev1.ResourceStorage: q,
 										},
@@ -144,7 +144,7 @@ func TestReconcileVersions(t *testing.T) {
 						PodSpec: apiv1alpha1.PodSpec{
 							VolumeSpec: &apiv1alpha1.VolumeSpec{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-									Resources: corev1.ResourceRequirements{
+									Resources: corev1.VolumeResourceRequirements{
 										Requests: map[corev1.ResourceName]resource.Quantity{
 											corev1.ResourceStorage: q,
 										},
@@ -179,7 +179,7 @@ func TestReconcileVersions(t *testing.T) {
 						PodSpec: apiv1alpha1.PodSpec{
 							VolumeSpec: &apiv1alpha1.VolumeSpec{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-									Resources: corev1.ResourceRequirements{
+									Resources: corev1.VolumeResourceRequirements{
 										Requests: map[corev1.ResourceName]resource.Quantity{
 											corev1.ResourceStorage: q,
 										},
@@ -311,7 +311,7 @@ func TestGetVersion(t *testing.T) {
 						PodSpec: apiv1alpha1.PodSpec{
 							VolumeSpec: &apiv1alpha1.VolumeSpec{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-									Resources: corev1.ResourceRequirements{
+									Resources: corev1.VolumeResourceRequirements{
 										Requests: map[corev1.ResourceName]resource.Quantity{
 											corev1.ResourceStorage: q,
 										},
