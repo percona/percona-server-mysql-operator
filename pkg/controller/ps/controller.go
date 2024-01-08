@@ -537,15 +537,15 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return nil
 	}
 
-	cm := &corev1.ConfigMap{}
-	err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), cm)
+	cmap := &corev1.ConfigMap{}
+	err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), cmap)
 	if client.IgnoreNotFound(err) != nil {
 		return errors.Wrap(err, "get config map")
 	}
 
 	existingNodes := make([]string, 0)
 	if !k8serrors.IsNotFound(err) {
-		cfg, ok := cm.Data[orchestrator.ConfigFileName]
+		cfg, ok := cmap.Data[orchestrator.ConfigFileName]
 		if !ok {
 			return errors.Errorf("key %s not found in ConfigMap", orchestrator.ConfigFileName)
 		}

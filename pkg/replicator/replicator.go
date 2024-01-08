@@ -24,7 +24,6 @@ const DefaultChannelName = ""
 type ReplicationStatus int8
 
 var ErrRestartAfterClone = errors.New("Error 3707: Restart server failed (mysqld is not managed by supervisor process).")
-var ErrGroupReplicationNotReady = errors.New("Error 3092: The server is not configured properly to be an active member of the group.")
 
 const (
 	ReplicationStatusActive ReplicationStatus = iota
