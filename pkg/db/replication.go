@@ -140,7 +140,7 @@ func (m *ReplicationDBManager) GetGroupReplicationReplicas(ctx context.Context) 
 	}{}
 
 	err := m.query(ctx, "SELECT MEMBER_HOST as host FROM replication_group_members WHERE MEMBER_ROLE='SECONDARY' AND MEMBER_STATE='ONLINE'", &rows)
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, errors.Wrap(err, "query replicas")
 	}
 
