@@ -42,10 +42,7 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
-	"github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
-	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
@@ -321,77 +318,20 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 		return "", errors.Wrap(err, "get operator password")
 	}
 
-	top, err := r.getTopology(ctx, cluster, operatorPass)
+	top, err := getDBTopology(ctx, r.Client, r.ClientCmd, cluster, operatorPass)
 	if err != nil {
 		return "", errors.Wrap(err, "get topology")
 	}
 
 	var source string
-	if len(top.Replicas) < 1 {
-		source = top.Primary
-		log.Info("no replicas found, using primary as the backup source", "primary", top.Primary)
+	if len(top.replicas) < 1 {
+		source = top.primary
+		log.Info("no replicas found, using primary as the backup source", "primary", top.primary)
 	} else {
-		source = top.Replicas[0]
+		source = top.replicas[0]
 	}
 
 	return source, nil
-}
-
-type Topology struct {
-	Primary  string
-	Replicas []string
-}
-
-func (r *PerconaServerMySQLBackupReconciler) getTopology(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL, operatorPass string) (Topology, error) {
-	switch cluster.Spec.MySQL.ClusterType {
-	case apiv1alpha1.ClusterTypeGR:
-		firstPod := &corev1.Pod{}
-		nn := types.NamespacedName{Namespace: cluster.Namespace, Name: mysql.PodName(cluster, 0)}
-		if err := r.Client.Get(ctx, nn, firstPod); err != nil {
-			return Topology{}, err
-		}
-
-		fqdn := mysql.FQDN(cluster, 0)
-
-		rm := db.NewReplicationManager(firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, fqdn)
-
-		replicas, err := rm.GetGroupReplicationReplicas(ctx)
-		if err != nil {
-			return Topology{}, errors.Wrap(err, "get group-replication replicas")
-		}
-
-		primary, err := rm.GetGroupReplicationPrimary(ctx)
-		if err != nil {
-			return Topology{}, errors.Wrap(err, "get group-replication primary")
-		}
-		return Topology{
-			Primary:  primary,
-			Replicas: replicas,
-		}, nil
-	case apiv1alpha1.ClusterTypeAsync:
-		pod := &corev1.Pod{}
-		nn := types.NamespacedName{Namespace: cluster.Namespace, Name: orchestrator.PodName(cluster, 0)}
-		if err := r.Client.Get(ctx, nn, pod); err != nil {
-			return Topology{}, err
-		}
-
-		primary, err := orchestrator.ClusterPrimaryExec(ctx, r.ClientCmd, pod, cluster.ClusterHint())
-
-		if err != nil {
-			return Topology{}, errors.Wrap(err, "get primary")
-		}
-
-		replicas := make([]string, 0, len(primary.Replicas))
-		for _, r := range primary.Replicas {
-			replicas = append(replicas, r.Hostname)
-		}
-		return Topology{
-			Primary:  primary.Key.Hostname,
-			Replicas: replicas,
-		}, nil
-	default:
-		return Topology{}, errors.New("unknown cluster type")
-	}
 }
 
 const finalizerDeleteBackup = "delete-backup"

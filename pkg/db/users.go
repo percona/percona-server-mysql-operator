@@ -13,16 +13,16 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
-type UserDBManager struct {
+type UserManager struct {
 	db *db
 }
 
-func NewUserManager(pod *corev1.Pod, cliCmd clientcmd.Client, user apiv1alpha1.SystemUser, pass, host string) *UserDBManager {
-	return &UserDBManager{db: newDB(pod, cliCmd, user, pass, host)}
+func NewUserManager(pod *corev1.Pod, cliCmd clientcmd.Client, user apiv1alpha1.SystemUser, pass, host string) *UserManager {
+	return &UserManager{db: newDB(pod, cliCmd, user, pass, host)}
 }
 
 // UpdateUserPasswords updates user passwords but retains the current password using Dual Password feature of MySQL 8
-func (m *UserDBManager) UpdateUserPasswords(ctx context.Context, users []mysql.User) error {
+func (m *UserManager) UpdateUserPasswords(ctx context.Context, users []mysql.User) error {
 	for _, user := range users {
 		for _, host := range user.Hosts {
 			q := fmt.Sprintf("ALTER USER '%s'@'%s' IDENTIFIED BY '%s' RETAIN CURRENT PASSWORD", user.Username, host, escapePass(user.Password))
@@ -44,7 +44,7 @@ func (m *UserDBManager) UpdateUserPasswords(ctx context.Context, users []mysql.U
 }
 
 // DiscardOldPasswords discards old passwords of givens users
-func (m *UserDBManager) DiscardOldPasswords(ctx context.Context, users []mysql.User) error {
+func (m *UserManager) DiscardOldPasswords(ctx context.Context, users []mysql.User) error {
 	for _, user := range users {
 		for _, host := range user.Hosts {
 			q := fmt.Sprintf("ALTER USER '%s'@'%s' DISCARD OLD PASSWORD", user.Username, host)
