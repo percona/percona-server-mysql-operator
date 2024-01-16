@@ -315,6 +315,7 @@ func sidecarContainers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 			TerminationMessagePath:   "/dev/termination-log",
 			TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 			SecurityContext:          cr.Spec.Orchestrator.ContainerSecurityContext,
+			Resources:                cr.Spec.Orchestrator.Resources,
 		},
 	}
 }
