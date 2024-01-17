@@ -41,8 +41,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysql/topology"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
@@ -53,6 +53,7 @@ type PerconaServerMySQLBackupReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	ServerVersion *platform.ServerVersion
+	ClientCmd     clientcmd.Client
 }
 
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqlbackups;perconaservermysqlbackups/status;perconaservermysqlbackups/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -317,17 +318,17 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 		return "", errors.Wrap(err, "get operator password")
 	}
 
-	top, err := topology.Get(ctx, cluster, operatorPass)
+	top, err := getDBTopology(ctx, r.Client, r.ClientCmd, cluster, operatorPass)
 	if err != nil {
 		return "", errors.Wrap(err, "get topology")
 	}
 
 	var source string
-	if len(top.Replicas) < 1 {
-		source = top.Primary
-		log.Info("no replicas found, using primary as the backup source", "primary", top.Primary)
+	if len(top.replicas) < 1 {
+		source = top.primary
+		log.Info("no replicas found, using primary as the backup source", "primary", top.primary)
 	} else {
-		source = top.Replicas[0]
+		source = top.replicas[0]
 	}
 
 	return source, nil
