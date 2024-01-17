@@ -348,6 +348,14 @@ func mysqlMonitContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	}
 	env = append(env, spec.Env...)
 
+	proxyProtocolEnabled, err := cr.MySQLConfigHasKey("", "proxy_protocol_networks")
+	if err == nil && proxyProtocolEnabled {
+		env = append(env, corev1.EnvVar{
+			Name:  "IS_PROXY_PROTOCOL",
+			Value: "yes",
+		})
+	}
+
 	return corev1.Container{
 		Name:            "mysql-monit",
 		Image:           spec.Image,

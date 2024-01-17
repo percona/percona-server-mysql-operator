@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	"gopkg.in/ini.v1"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
@@ -947,3 +948,20 @@ const (
 	UpgradeStrategyRecommended = "recommended"
 	UpgradeStrategyLatest      = "latest"
 )
+
+// MySQLConfigHasKey check if cr.Spec.MySQL.Configuration has given key in given section
+func (cr *PerconaServerMySQL) MySQLConfigHasKey(section, key string) (bool, error) {
+	file, err := ini.LoadSources(ini.LoadOptions{AllowBooleanKeys: true}, []byte(cr.Spec.MySQL.Configuration))
+	if err != nil {
+		return false, errors.Wrap(err, "load configuration")
+	}
+
+	s, err := file.GetSection(section)
+	if err != nil && strings.Contains(err.Error(), "does not exist") {
+		return false, nil
+	} else if err != nil {
+		return false, errors.Wrap(err, "get section")
+	}
+
+	return s.HasKey(key), nil
+}
