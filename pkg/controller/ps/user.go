@@ -17,13 +17,13 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
-	"github.com/percona/percona-server-mysql-operator/pkg/users"
 )
 
 const (
@@ -216,11 +216,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return err
 	}
 
-	um, err := users.NewManagerExec(primPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, primaryHost)
-	if err != nil {
-		return errors.Wrap(err, "init user manager")
-	}
-	defer um.Close()
+	um := db.NewUserManager(primPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, primaryHost)
 
 	var asyncPrimary *orchestrator.Instance
 
@@ -236,7 +232,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		}
 	}
 
-	if err := um.UpdateUserPasswords(updatedUsers); err != nil {
+	if err := um.UpdateUserPasswords(ctx, updatedUsers); err != nil {
 		return errors.Wrapf(err, "update passwords")
 	}
 
@@ -346,13 +342,9 @@ func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
 		return err
 	}
 
-	um, err := users.NewManagerExec(primPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, primaryHost)
-	if err != nil {
-		return errors.Wrap(err, "init user manager")
-	}
-	defer um.Close()
+	um := db.NewUserManager(primPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, primaryHost)
 
-	if err := um.DiscardOldPasswords(updatedUsers); err != nil {
+	if err := um.DiscardOldPasswords(ctx, updatedUsers); err != nil {
 		return errors.Wrap(err, "discard old passwords")
 	}
 
