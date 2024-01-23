@@ -9,7 +9,7 @@
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/percona/percona-server-mysql-operator)
 [![Go Report Card](https://goreportcard.com/badge/github.com/percona/percona-server-mysql-operator)](https://goreportcard.com/report/github.com/percona/percona-server-mysql-operator)
 
-[Percona Operator for MySQL](https://docs.percona.com/percona-operator-for-mysql/ps/index.html) automates the creation and management of highly available, enterprise-ready MySQL database clusters on Kubernetes.
+[Percona Operator for MySQL based on Percona Server for MySQL](https://docs.percona.com/percona-operator-for-mysql/ps/index.html) automates the creation and management of highly available, enterprise-ready MySQL database clusters on Kubernetes.
 
 [Percona Operator for MySQL](https://www.percona.com/doc/kubernetes-operator-for-mysql/ps/index.html) is based on our best practices for deployment and configuration of highly-available, fault-tolerant MySQL instances in a Kubernetes-based environment on-premises or in the cloud. It provides the following capabilities:
 
