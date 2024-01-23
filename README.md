@@ -40,6 +40,24 @@ To learn more about the Operator, check the [Percona Operator for MySQL document
 
 Ready to try out the Operator? Check the [Quickstart tutorials](https://docs.percona.com/percona-operator-for-mysql/ps/helm.html) for easy-to follow steps. 
 
+Below is one of the ways to deploy the Operator using `kubectl`.
+
+## kubectl
+
+1. Deploy the Operator from `deploy/bundle.yaml`:
+
+```sh
+kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mysql-operator/main/deploy/bundle.yaml
+```
+
+2. Deploy the database cluster itself from `deploy/cr.yaml`:
+
+```sh
+kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mysql-operator/main/deploy/cr.yaml
+
+```
+
+
 # Contributing
 
 Percona welcomes and encourages community contributions to help improve Percona Operator for MySQL.
