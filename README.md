@@ -11,7 +11,7 @@
 
 [Percona Operator for MySQL based on Percona Server for MySQL](https://docs.percona.com/percona-operator-for-mysql/ps/index.html) automates the creation and management of highly available, enterprise-ready MySQL database clusters on Kubernetes.
 
-[Percona Operator for MySQL](https://www.percona.com/doc/kubernetes-operator-for-mysql/ps/index.html) is based on our best practices for deployment and configuration of highly-available, fault-tolerant MySQL instances in a Kubernetes-based environment on-premises or in the cloud. It provides the following capabilities:
+[Percona Operator for MySQL based on Percona Server for MySQL](https://www.percona.com/doc/kubernetes-operator-for-mysql/ps/index.html) follows our best practices for deployment and configuration of highly-available, fault-tolerant MySQL instances in a Kubernetes-based environment on-premises or in the cloud. It provides the following capabilities:
 
 * Deploy group replication MySQL clusters with MySQL Router
 * Deploy asynchronous replication MySQL clusters with Orchestrator and HAProxy
