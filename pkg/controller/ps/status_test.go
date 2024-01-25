@@ -1,14 +1,17 @@
 package ps
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
+	"database/sql"
+	"encoding/csv"
 	"fmt"
 	"io"
 	"reflect"
 	"testing"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	"github.com/gocarina/gocsv"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -330,6 +333,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 		})
 	}
 }
+
 func TestReconcileStatusHAProxyGR(t *testing.T) {
 	ctx := context.Background()
 
@@ -363,12 +367,12 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		cr            *apiv1alpha1.PerconaServerMySQL
-		clusterStatus innodbcluster.ClusterStatus
-		objects       []client.Object
-		expected      apiv1alpha1.PerconaServerMySQLStatus
-		mysqlReady    bool
+		name              string
+		cr                *apiv1alpha1.PerconaServerMySQL
+		objects           []client.Object
+		expected          apiv1alpha1.PerconaServerMySQLStatus
+		mysqlMemberStates []innodbcluster.MemberState
+		noMetadataDB      bool
 	}{
 		{
 			name: "without pods",
@@ -408,8 +412,40 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				State: apiv1alpha1.StateReady,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 			},
-			clusterStatus: innodbcluster.ClusterStatusOK,
-			mysqlReady:    true,
+			mysqlMemberStates: []innodbcluster.MemberState{
+				innodbcluster.MemberStateOnline,
+				innodbcluster.MemberStateOnline,
+				innodbcluster.MemberStateOnline,
+			},
+		},
+		{
+			name: "with all ready pods, ok cluster status and invalid database",
+			cr:   cr,
+			objects: appendSlices(
+				makeFakeReadyPods(cr, 3, "mysql"),
+				makeFakeReadyPods(cr, 3, "haproxy"),
+				[]client.Object{secret},
+			),
+			expected: apiv1alpha1.PerconaServerMySQLStatus{
+				MySQL: apiv1alpha1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1alpha1.StateInitializing,
+				},
+				HAProxy: apiv1alpha1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1alpha1.StateReady,
+				},
+				State: apiv1alpha1.StateInitializing,
+				Host:  cr.Name + "-haproxy." + cr.Namespace,
+			},
+			mysqlMemberStates: []innodbcluster.MemberState{
+				innodbcluster.MemberStateOnline,
+				innodbcluster.MemberStateOnline,
+				innodbcluster.MemberStateOnline,
+			},
+			noMetadataDB: true,
 		},
 		{
 			name: "with all ready pods and offline cluster status",
@@ -433,7 +469,11 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				State: apiv1alpha1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 			},
-			clusterStatus: innodbcluster.ClusterStatusOffline,
+			mysqlMemberStates: []innodbcluster.MemberState{
+				innodbcluster.MemberStateOffline,
+				innodbcluster.MemberStateOffline,
+				innodbcluster.MemberStateOffline,
+			},
 		},
 		{
 			name: "with all ready pods and partial ok cluster status",
@@ -447,25 +487,28 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				MySQL: apiv1alpha1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1alpha1.StateInitializing,
 				},
 				HAProxy: apiv1alpha1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
 					State: apiv1alpha1.StateReady,
 				},
-				State: apiv1alpha1.StateReady,
+				State: apiv1alpha1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 			},
-			clusterStatus: innodbcluster.ClusterStatusOKPartial,
-			mysqlReady:    true,
+			mysqlMemberStates: []innodbcluster.MemberState{
+				innodbcluster.MemberStateOnline,
+				innodbcluster.MemberStateOnline,
+				innodbcluster.MemberStateOffline,
+			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := tt.cr.DeepCopy()
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).WithStatusSubresource(cr).WithObjects(tt.objects...).WithStatusSubresource(tt.objects...)
-			cliCmd, err := getFakeClient(cr, operatorPass, tt.mysqlReady, tt.clusterStatus)
+			cliCmd, err := getFakeClient(cr, tt.mysqlMemberStates, tt.noMetadataDB)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -526,12 +569,12 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		cr            *apiv1alpha1.PerconaServerMySQL
-		clusterStatus innodbcluster.ClusterStatus
-		objects       []client.Object
-		expected      apiv1alpha1.PerconaServerMySQLStatus
-		mysqlReady    bool
+		name              string
+		cr                *apiv1alpha1.PerconaServerMySQL
+		objects           []client.Object
+		expected          apiv1alpha1.PerconaServerMySQLStatus
+		mysqlMemberStates []innodbcluster.MemberState
+		noMetadataDB      bool
 	}{
 		{
 			name: "without pods",
@@ -571,8 +614,40 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				State: apiv1alpha1.StateReady,
 				Host:  cr.Name + "-router." + cr.Namespace,
 			},
-			clusterStatus: innodbcluster.ClusterStatusOK,
-			mysqlReady:    true,
+			mysqlMemberStates: []innodbcluster.MemberState{
+				innodbcluster.MemberStateOnline,
+				innodbcluster.MemberStateOnline,
+				innodbcluster.MemberStateOnline,
+			},
+		},
+		{
+			name: "with all ready pods, ok cluster status and invalid databaes",
+			cr:   cr,
+			objects: appendSlices(
+				makeFakeReadyPods(cr, 3, "mysql"),
+				makeFakeReadyPods(cr, 3, "router"),
+				[]client.Object{secret},
+			),
+			expected: apiv1alpha1.PerconaServerMySQLStatus{
+				MySQL: apiv1alpha1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1alpha1.StateInitializing,
+				},
+				Router: apiv1alpha1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1alpha1.StateReady,
+				},
+				State: apiv1alpha1.StateInitializing,
+				Host:  cr.Name + "-router." + cr.Namespace,
+			},
+			mysqlMemberStates: []innodbcluster.MemberState{
+				innodbcluster.MemberStateOnline,
+				innodbcluster.MemberStateOnline,
+				innodbcluster.MemberStateOnline,
+			},
+			noMetadataDB: true,
 		},
 		{
 			name: "with all ready pods and offline cluster status",
@@ -596,7 +671,11 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				State: apiv1alpha1.StateInitializing,
 				Host:  cr.Name + "-router." + cr.Namespace,
 			},
-			clusterStatus: innodbcluster.ClusterStatusOffline,
+			mysqlMemberStates: []innodbcluster.MemberState{
+				innodbcluster.MemberStateOffline,
+				innodbcluster.MemberStateOffline,
+				innodbcluster.MemberStateOffline,
+			},
 		},
 		{
 			name: "with all ready pods and partial ok cluster status",
@@ -610,25 +689,28 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				MySQL: apiv1alpha1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1alpha1.StateInitializing,
 				},
 				Router: apiv1alpha1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
 					State: apiv1alpha1.StateReady,
 				},
-				State: apiv1alpha1.StateReady,
+				State: apiv1alpha1.StateInitializing,
 				Host:  cr.Name + "-router." + cr.Namespace,
 			},
-			clusterStatus: innodbcluster.ClusterStatusOKPartial,
-			mysqlReady:    true,
+			mysqlMemberStates: []innodbcluster.MemberState{
+				innodbcluster.MemberStateOnline,
+				innodbcluster.MemberStateOnline,
+				innodbcluster.MemberStateOffline,
+			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := tt.cr.DeepCopy()
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).WithStatusSubresource(cr).WithObjects(tt.objects...).WithStatusSubresource(tt.objects...)
-			cliCmd, err := getFakeClient(cr, operatorPass, tt.mysqlReady, tt.clusterStatus)
+			cliCmd, err := getFakeClient(cr, tt.mysqlMemberStates, tt.noMetadataDB)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -661,7 +743,12 @@ type fakeClient struct {
 	execCount int
 }
 
-func (c *fakeClient) Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+// Exec increments the internal counter `execCount`.
+// It compares the `scripts[execCount].cmd`, `scripts[execCount].stdin` with `command` and stdin parameters.
+// It writes the `scripts[execCount].stdout`, `scripts[execCount].stderr` to `stdin` and `stderr` parameters.
+// It writes the `scripts[execCount].stdout`, `scripts[execCount].stderr` to `stdin` and `stderr` parameters.
+// fakeClient should have the array of fakeClientScript objects in order they are going to be executed in the tested function.
+func (c *fakeClient) Exec(_ context.Context, _ *corev1.Pod, _ string, command []string, stdin io.Reader, stdout, stderr io.Writer, _ bool) error {
 	if c.execCount >= len(c.scripts) {
 		return errors.Errorf("unexpected exec call")
 	}
@@ -688,8 +775,8 @@ func (c *fakeClient) Exec(ctx context.Context, pod *corev1.Pod, containerName st
 		return err
 	}
 	c.execCount++
-	if c.scripts[c.execCount-1].shouldErr {
-		return errors.Errorf("fake error")
+	if c.scripts[c.execCount-1].err != nil {
+		return c.scripts[c.execCount-1].err
 	}
 	return nil
 }
@@ -698,78 +785,89 @@ func (c *fakeClient) REST() restclient.Interface {
 	return nil
 }
 
+// fakeClientScript is an object which contains an info about executed command.
+// cmd, stdin values are compared with the corresponding values in the Exec method.
+// stdin, stdout values are written to the corresponding streams in the Exec method.
+// err is the error which should be returned in the Exec method
 type fakeClientScript struct {
-	cmd       []string
-	stdin     []byte
-	stdout    []byte
-	stderr    []byte
-	shouldErr bool
+	cmd    []string
+	stdin  []byte
+	stdout []byte
+	stderr []byte
+	err    error
 }
 
-func getFakeClient(cr *apiv1alpha1.PerconaServerMySQL, operatorPass string, mysqlReady bool, clusterStatus innodbcluster.ClusterStatus) (clientcmd.Client, error) {
-	status, err := json.Marshal(innodbcluster.Status{
-		DefaultReplicaSet: innodbcluster.ReplicaSetStatus{
-			Status: clusterStatus,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	var scripts []fakeClientScript
-	if mysqlReady {
+// getFakeClient returns a fake clientcmd.Client object with the array of fakeClientScript objects.
+// This array is constructed to cover every possible client call in the reconcileCRStatus function.
+func getFakeClient(cr *apiv1alpha1.PerconaServerMySQL, mysqlMemberStates []innodbcluster.MemberState, noMetadataDB bool) (clientcmd.Client, error) {
+	queryScript := func(query string, out any) fakeClientScript {
+		buf := new(bytes.Buffer)
+		w := csv.NewWriter(buf)
+		w.Comma = '\t'
+		if err := gocsv.MarshalCSV(out, w); err != nil {
+			panic(err)
+		}
 		host := fmt.Sprintf("%s.%s.%s", mysql.PodName(cr, 0), mysql.ServiceName(cr), cr.Namespace)
-		scripts = append(scripts, []fakeClientScript{
-			{
-				cmd: []string{
-					"mysqlsh",
-					"--no-wizard",
-					"--uri",
-					fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, host),
-					"-e",
-					fmt.Sprintf("dba.getCluster('%s').status()", cr.InnoDBClusterName()),
-				},
+
+		return fakeClientScript{
+			cmd: []string{
+				"mysql",
+				"--database",
+				"performance_schema",
+				"-ptest",
+				"-u",
+				"operator",
+				"-h",
+				host,
+				"-e",
+				query,
 			},
-			{
-				cmd: []string{
-					"mysqlsh",
-					"--result-format",
-					"json",
-					"--uri",
-					fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, host),
-					"--cluster",
-					"--",
-					"cluster",
-					"status",
-				},
-				stdout: status,
-			}}...)
+			stdout: buf.Bytes(),
+		}
 	}
-	scripts = append(scripts, []fakeClientScript{
+
+	var scripts []fakeClientScript
+
+	// CheckIfDatabaseExists
+	type db struct {
+		DB string `csv:"db"`
+	}
+	dbs := []*db{
 		{
-			cmd: []string{
-				"cat",
-				"/var/lib/mysql/full-cluster-crash",
-			},
-			stderr:    []byte("No such file or directory"),
-			shouldErr: true,
+			DB: "mysql_innodb_cluster_metadata",
 		},
-		{
-			cmd: []string{
-				"cat",
-				"/var/lib/mysql/full-cluster-crash",
-			},
-			stderr:    []byte("No such file or directory"),
-			shouldErr: true,
+	}
+	s := queryScript("SELECT SCHEMA_NAME AS db FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME LIKE 'mysql_innodb_cluster_metadata'", dbs)
+	if !noMetadataDB {
+	} else {
+		s.err = sql.ErrNoRows
+	}
+	scripts = append(scripts, s)
+
+	// GetGroupReplicationMembers
+	if !noMetadataDB {
+		type member struct {
+			Member string `csv:"member"`
+			State  string `csv:"state"`
+		}
+		var members []*member
+		for _, state := range mysqlMemberStates {
+			members = append(members, &member{
+				Member: cr.Name + "-mysql-0." + cr.Namespace,
+				State:  string(state),
+			})
+		}
+		scripts = append(scripts, queryScript("SELECT MEMBER_HOST as member, MEMBER_STATE as state FROM replication_group_members", members))
+	}
+
+	scripts = append(scripts, fakeClientScript{
+		cmd: []string{
+			"cat",
+			"/var/lib/mysql/full-cluster-crash",
 		},
-		{
-			cmd: []string{
-				"cat",
-				"/var/lib/mysql/full-cluster-crash",
-			},
-			stderr:    []byte("No such file or directory"),
-			shouldErr: true,
-		},
-	}...)
+		stderr: []byte("No such file or directory"),
+		err:    errors.New("fake error"),
+	})
 	return &fakeClient{
 		scripts: scripts,
 	}, nil
