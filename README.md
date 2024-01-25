@@ -9,9 +9,9 @@
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/percona/percona-server-mysql-operator)
 [![Go Report Card](https://goreportcard.com/badge/github.com/percona/percona-server-mysql-operator)](https://goreportcard.com/report/github.com/percona/percona-server-mysql-operator)
 
-[Percona Server for MySQL](https://www.percona.com/software/mysql-database/percona-server) is a free, fully compatible, enhanced, and open source drop-in replacement for any MySQL database. It provides superior performance, scalability, and instrumentation.
+[Percona Operator for MySQL based on Percona Server for MySQL](https://docs.percona.com/percona-operator-for-mysql/ps/index.html) automates the creation and management of highly available, enterprise-ready MySQL database clusters on Kubernetes.
 
-Based on our best practices for deployment and configuration, [Percona Operator for MySQL](https://www.percona.com/doc/kubernetes-operator-for-mysql/ps/index.html) contains everything you need to quickly and consistently deploy and scale MySQL instances in a Kubernetes-based environment on-premises or in the cloud. It provides the following capabilities:
+[Percona Operator for MySQL based on Percona Server for MySQL](https://www.percona.com/doc/kubernetes-operator-for-mysql/ps/index.html) follows our best practices for deployment and configuration of highly-available, fault-tolerant MySQL instances in a Kubernetes-based environment on-premises or in the cloud. It provides the following capabilities:
 
 * Deploy group replication MySQL clusters with MySQL Router
 * Deploy asynchronous replication MySQL clusters with Orchestrator and HAProxy
@@ -20,34 +20,52 @@ Based on our best practices for deployment and configuration, [Percona Operator 
 * Customize MySQL configuration
 * Manage system user passwords
 
+
 ## Status
 
 **This project is in the tech preview state right now. Don't use it on production.**
 
 As of today, we recommend using [Percona Operator for MySQL based on Percona XtraDB Cluster](https://docs.percona.com/percona-operator-for-mysql/pxc/index.html), which is production-ready and contains everything you need to quickly and consistently deploy and scale MySQL clusters in a Kubernetes-based environment, on-premises or in the cloud.
 
-## Roadmap
-
-We have an experimental public roadmap which can be found [here](https://github.com/percona/roadmap/projects/1). Please feel free to contribute and propose new features by following the roadmap [guidelines](https://github.com/percona/roadmap).
-
 ## Architecture
 
 Percona Operators are based on the [Operator SDK](https://github.com/operator-framework/operator-sdk) and leverage Kubernetes primitives to follow best CNCF practices.
 
-## Installation
+## Documentation
 
-It usually takes two steps to deploy Percona Server for MySQL on Kubernetes:
+To learn more about the Operator, check the [Percona Operator for MySQL documentation](https://docs.percona.com/percona-operator-for-mysql/ps/index.html).
 
-* Deploy the operator from `deploy/bundle.yaml`
-* Deploy the database cluster itself from `deploy/cr.yaml`
+# Quickstart installation
 
-See full documentation with examples and various advanced cases on [percona.com](https://www.percona.com/doc/kubernetes-operator-for-mysql/ps/index.html).
+Ready to try out the Operator? Check the [Quickstart tutorials](https://docs.percona.com/percona-operator-for-mysql/ps/helm.html) for easy-to follow steps. 
 
-## Contributing
+Below is one of the ways to deploy the Operator using `kubectl`.
 
-Percona welcomes and encourages community contributions to help improve open source software.
+## kubectl
 
-See the [Contribution Guide](CONTRIBUTING.md) for more information.
+1. Deploy the Operator from `deploy/bundle.yaml`:
+
+```sh
+kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mysql-operator/main/deploy/bundle.yaml
+```
+
+2. Deploy the database cluster itself from `deploy/cr.yaml`:
+
+```sh
+kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mysql-operator/main/deploy/cr.yaml
+
+```
+
+
+# Contributing
+
+Percona welcomes and encourages community contributions to help improve Percona Operator for MySQL.
+
+See the [Contribution Guide](CONTRIBUTING.md) and [Building and Testing Guide](e2e-tests/README.md) for more information on how you can contribute.
+
+## Communication
+
+We would love to hear from you! Reach out to us on [Forum](https://forums.percona.com/c/mysql-mariadb/percona-kubernetes-operator-for-mysql/28) with your questions, feedback and ideas
 
 ## Join Percona Kubernetes Squad!
                                                                               
@@ -70,7 +88,12 @@ See the [Contribution Guide](CONTRIBUTING.md) for more information.
 
 You can get early access to new product features, invite-only ”ask me anything” sessions with Percona Kubernetes experts, and monthly swag raffles. Interested? Fill in the form at [percona.com/k8s](https://www.percona.com/k8s).
 
+## Roadmap
+
+We have an experimental public roadmap which can be found [here](https://github.com/percona/roadmap/projects/1). Please feel free to contribute and propose new features by following the roadmap [guidelines](https://github.com/percona/roadmap).
+
 ## Submitting Bug Reports
 
-If you find a bug in Percona Docker Images or in one of the related projects, please submit a report to that project's [JIRA](https://jira.percona.com/browse/K8SPS) issue tracker. Learn more about submitting bugs, new features ideas and improvements in the [Contribution Guide](CONTRIBUTING.md).
+If you find a bug in Percona Docker Images or in one of the related projects, please submit a report to that project's [JIRA](https://jira.percona.com/browse/K8SPS) issue tracker or [create a GitHub issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/creating-an-issue#creating-an-issue-from-a-repository) in this repository. 
 
+Learn more about submitting bugs, new features ideas and improvements in the [Contribution Guide](CONTRIBUTING.md).
