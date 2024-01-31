@@ -39,69 +39,11 @@ func (m *mysqlshExec) runWithExec(ctx context.Context, cmd string) error {
 	return nil
 }
 
-func (m *mysqlshExec) ConfigureInstanceWithExec(ctx context.Context, instance string) error {
-	cmd := fmt.Sprintf(
-		"dba.configureInstance('%s', {'interactive': false, 'clearReadOnly': true})",
-		instance,
-	)
-
-	if err := m.runWithExec(ctx, cmd); err != nil {
-		return errors.Wrap(err, "configure instance")
-	}
-
-	return nil
-}
-
-func (m *mysqlshExec) AddInstanceWithExec(ctx context.Context, clusterName, instance string) error {
-	opts := struct {
-		Interactive    bool   `json:"interactive"`
-		RecoveryMethod string `json:"recoveryMethod"`
-		WaitRecovery   int    `json:"waitRecovery"`
-	}{
-		Interactive:    false,
-		RecoveryMethod: "clone",
-		WaitRecovery:   0,
-	}
-
-	o, err := json.Marshal(opts)
-	if err != nil {
-		return errors.Wrap(err, "marshal options")
-	}
-
-	cmd := fmt.Sprintf("dba.getCluster('%s').addInstance('%s', %s)", clusterName, instance, string(o))
-
-	if err := m.runWithExec(ctx, cmd); err != nil {
-		return errors.Wrap(err, "add instance")
-	}
-
-	return nil
-}
-
-func (m *mysqlshExec) RejoinInstanceWithExec(ctx context.Context, clusterName, instance string) error {
-	cmd := fmt.Sprintf("dba.getCluster('%s').rejoinInstance('%s', {'interactive': false})", clusterName, instance)
-
-	if err := m.runWithExec(ctx, cmd); err != nil {
-		return errors.Wrap(err, "rejoin instance")
-	}
-
-	return nil
-}
-
 func (m *mysqlshExec) RemoveInstanceWithExec(ctx context.Context, clusterName, instance string) error {
 	cmd := fmt.Sprintf("dba.getCluster('%s').removeInstance('%s', {'interactive': false, 'force': true})", clusterName, instance)
 
 	if err := m.runWithExec(ctx, cmd); err != nil {
 		return errors.Wrap(err, "remove instance")
-	}
-
-	return nil
-}
-
-func (m *mysqlshExec) CreateClusterWithExec(ctx context.Context, clusterName string) error {
-	cmd := fmt.Sprintf("dba.createCluster('%s', {'adoptFromGR': true})", clusterName)
-
-	if err := m.runWithExec(ctx, cmd); err != nil {
-		return errors.Wrap(err, "create cluster")
 	}
 
 	return nil
@@ -139,33 +81,6 @@ func (m *mysqlshExec) ClusterStatusWithExec(ctx context.Context, clusterName str
 	}
 
 	return status, nil
-}
-
-func (m *mysqlshExec) MemberStateWithExec(ctx context.Context, clusterName, instance string) (innodbcluster.MemberState, error) {
-	log := logf.FromContext(ctx).WithName("InnoDBCluster").WithValues("cluster", clusterName)
-
-	status, err := m.ClusterStatusWithExec(ctx, clusterName)
-	if err != nil {
-		return innodbcluster.MemberStateOffline, errors.Wrap(err, "get cluster status")
-	}
-
-	log.V(1).Info("Cluster status", "status", status)
-
-	member, ok := status.DefaultReplicaSet.Topology[instance]
-	if !ok {
-		return innodbcluster.MemberStateOffline, innodbcluster.ErrMemberNotFound
-	}
-
-	return member.MemberState, nil
-}
-
-func (m *mysqlshExec) TopologyWithExec(ctx context.Context, clusterName string) (map[string]innodbcluster.Member, error) {
-	status, err := m.ClusterStatusWithExec(ctx, clusterName)
-	if err != nil {
-		return nil, errors.Wrap(err, "get cluster status")
-	}
-
-	return status.DefaultReplicaSet.Topology, nil
 }
 
 func (m *mysqlshExec) RebootClusterFromCompleteOutageWithExec(ctx context.Context, clusterName string) error {
