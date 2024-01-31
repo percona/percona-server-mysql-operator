@@ -330,7 +330,7 @@ spec:
           name: users
           subPath: orchestrator
       - args:
-        - /usr/bin/peer-list
+        - /opt/percona/peer-list
         - -on-change=/usr/bin/add_mysql_nodes.sh
         - -service=$(MYSQL_SERVICE)
         command:
