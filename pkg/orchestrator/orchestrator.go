@@ -308,13 +308,14 @@ func sidecarContainers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 			VolumeMounts: containerMounts(),
 			Command:      []string{"/opt/percona/orc-entrypoint.sh"},
 			Args: []string{
-				"/usr/bin/peer-list",
+				"/opt/percona/peer-list",
 				"-on-change=/usr/bin/add_mysql_nodes.sh",
 				"-service=$(MYSQL_SERVICE)",
 			},
 			TerminationMessagePath:   "/dev/termination-log",
 			TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 			SecurityContext:          cr.Spec.Orchestrator.ContainerSecurityContext,
+			Resources:                cr.Spec.Orchestrator.Resources,
 		},
 	}
 }

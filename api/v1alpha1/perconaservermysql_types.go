@@ -629,6 +629,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 
 	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && !cr.Spec.AllowUnsafeConfig {
 		if cr.Spec.MySQL.Size < MinSafeGRSize {
+			log.Info("Setting safe defaults, updating MySQL cluster size", "oldSize", cr.Spec.MySQL.Size, "newSafeSize", MinSafeGRSize)
 			cr.Spec.MySQL.Size = MinSafeGRSize
 		}
 
@@ -647,6 +648,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 
 	if cr.RouterEnabled() && !cr.Spec.AllowUnsafeConfig {
 		if cr.Spec.Proxy.Router.Size < MinSafeProxySize {
+			log.Info("Setting safe defaults, updating Router size", "oldSize", cr.Spec.Proxy.Router.Size, "newSafeSize", MinSafeProxySize)
 			cr.Spec.Proxy.Router.Size = MinSafeProxySize
 		}
 	}
@@ -657,6 +659,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 
 	if cr.HAProxyEnabled() && !cr.Spec.AllowUnsafeConfig {
 		if cr.Spec.Proxy.HAProxy.Size < MinSafeProxySize {
+			log.Info("Setting safe defaults, updating HAProxy size", "oldSize", cr.Spec.Proxy.HAProxy.Size, "newSafeSize", MinSafeProxySize)
 			cr.Spec.Proxy.HAProxy.Size = MinSafeProxySize
 		}
 	}

@@ -45,13 +45,13 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
+	database "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
-	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -204,11 +204,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		firstPodFQDN := fmt.Sprintf("%s.%s.%s", firstPod.Name, mysql.ServiceName(cr), cr.Namespace)
 		firstPodUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodFQDN)
 
-		db, err := replicator.NewReplicatorExec(&firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, firstPodFQDN)
-		if err != nil {
-			return errors.Wrapf(err, "connect to %s", firstPod.Name)
-		}
-		defer db.Close()
+		um := database.NewReplicationManager(&firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, firstPodFQDN)
 
 		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, &firstPod, firstPodUri)
 		if err != nil {
@@ -223,12 +219,12 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 
 			podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
 
-			state, err := db.GetMemberState(ctx, podFQDN)
+			state, err := um.GetMemberState(ctx, podFQDN)
 			if err != nil {
 				return errors.Wrapf(err, "get member state of %s from performance_schema", pod.Name)
 			}
 
-			if state == replicator.MemberStateOffline {
+			if state == database.MemberStateOffline {
 				log.Info("Member is not part of GR or already removed", "member", pod.Name, "memberState", state)
 				continue
 			}
@@ -538,15 +534,15 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return nil
 	}
 
-	cm := &corev1.ConfigMap{}
-	err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), cm)
+	cmap := &corev1.ConfigMap{}
+	err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), cmap)
 	if client.IgnoreNotFound(err) != nil {
 		return errors.Wrap(err, "get config map")
 	}
 
 	existingNodes := make([]string, 0)
 	if !k8serrors.IsNotFound(err) {
-		cfg, ok := cm.Data[orchestrator.ConfigFileName]
+		cfg, ok := cmap.Data[orchestrator.ConfigFileName]
 		if !ok {
 			return errors.Errorf("key %s not found in ConfigMap", orchestrator.ConfigFileName)
 		}
@@ -793,16 +789,10 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		return errors.Wrap(err, "get operator password")
 	}
 
-	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, mysql.ServiceName(cr))
-
-	mysh, err := mysqlsh.NewWithExec(r.ClientCmd, firstPod, uri)
-	if err != nil {
-		return err
-	}
-
+	db := database.NewReplicationManager(firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, mysql.ServiceName(cr))
 	cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1alpha1.ConditionInnoDBClusterBootstrapped)
 	if cond == nil || cond.Status == metav1.ConditionFalse {
-		if !mysh.DoesClusterExistWithExec(ctx, cr.InnoDBClusterName()) {
+		if exists, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata"); err != nil || !exists {
 			log.V(1).Info("InnoDB cluster is not created yet")
 			return nil
 		}
@@ -818,7 +808,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 		return nil
 	}
 
-	if !mysh.DoesClusterExistWithExec(ctx, cr.InnoDBClusterName()) {
+	if exists, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata"); err != nil || !exists {
 		return errors.New("InnoDB cluster is already bootstrapped, but failed to check its status")
 	}
 
@@ -933,13 +923,9 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		}
 
 		firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
-		uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri)
-		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, firstPod, uri)
-		if err != nil {
-			return err
-		}
 
-		if !mysh.DoesClusterExistWithExec(ctx, cr.InnoDBClusterName()) {
+		db := database.NewReplicationManager(firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, firstPodUri)
+		if exist, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata"); err != nil || !exist {
 			log.V(1).Info("Waiting for InnoDB Cluster", "cluster", cr.Name)
 			return nil
 		}
@@ -1009,12 +995,9 @@ func (r *PerconaServerMySQLReconciler) getPrimaryFromGR(ctx context.Context, cr 
 		return "", err
 	}
 
-	db, err := replicator.NewReplicatorExec(firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, fqdn)
-	if err != nil {
-		return "", errors.Wrapf(err, "open connection to %s", fqdn)
-	}
+	um := database.NewReplicationManager(firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, fqdn)
 
-	return db.GetGroupReplicationPrimary(ctx)
+	return um.GetGroupReplicationPrimary(ctx)
 }
 
 func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
@@ -1060,10 +1043,7 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 			if err != nil {
 				return err
 			}
-			repDb, err := replicator.NewReplicatorExec(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, hostname)
-			if err != nil {
-				return errors.Wrapf(err, "connect to replica %s", hostname)
-			}
+			repDb := database.NewReplicationManager(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, hostname)
 
 			if err := orchestrator.StopReplicationExec(gCtx, r.ClientCmd, orcPod, hostname, port); err != nil {
 				return errors.Wrapf(err, "stop replica %s", hostname)
@@ -1074,7 +1054,7 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 				return errors.Wrapf(err, "get replication status of %s", hostname)
 			}
 
-			for status == replicator.ReplicationStatusActive {
+			for status == database.ReplicationStatusActive {
 				time.Sleep(250 * time.Millisecond)
 				status, _, err = repDb.ReplicationStatus(ctx)
 				if err != nil {
@@ -1117,14 +1097,10 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 			if err != nil {
 				return err
 			}
-			db, err := replicator.NewReplicatorExec(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, hostname)
-			if err != nil {
-				return errors.Wrapf(err, "get db connection to %s", hostname)
-			}
-			defer db.Close()
+			um := database.NewReplicationManager(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, hostname)
 
 			log.V(1).Info("Change replication source", "primary", primary.Key.Hostname, "replica", hostname)
-			if err := db.ChangeReplicationSource(ctx, primary.Key.Hostname, replicaPass, primary.Key.Port); err != nil {
+			if err := um.ChangeReplicationSource(ctx, primary.Key.Hostname, replicaPass, primary.Key.Port); err != nil {
 				return errors.Wrapf(err, "change replication source on %s", hostname)
 			}
 
