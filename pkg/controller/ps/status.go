@@ -46,11 +46,13 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		return writeStatus(ctx, r.Client, nn, cr.Status)
 	}
 
+	log := logf.FromContext(ctx).WithName("reconcileCRStatus")
+
 	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
 		return nil
 	}
 
-	log := logf.FromContext(ctx).WithName("reconcileCRStatus")
+	cr.Status.Messages = cr.Status.Messages[:0]
 
 	mysqlStatus, err := r.appStatus(ctx, cr, mysql.Name(cr), cr.MySQLSpec().Size, mysql.MatchLabels(cr), cr.Status.MySQL.Version)
 	if err != nil {
