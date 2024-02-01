@@ -49,11 +49,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
 		return nil
 	}
-	if err := cr.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
-		cr.Status.State = apiv1alpha1.StateError
-		nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
-		return writeStatus(ctx, r.Client, nn, cr.Status)
-	}
+
 	log := logf.FromContext(ctx).WithName("reconcileCRStatus")
 
 	mysqlStatus, err := r.appStatus(ctx, cr, mysql.Name(cr), cr.MySQLSpec().Size, mysql.MatchLabels(cr), cr.Status.MySQL.Version)
@@ -147,7 +143,16 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		}
 
 		if fullClusterCrash {
+			meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+				Status:             metav1.ConditionTrue,
+				Type:               string(apiv1alpha1.StateError),
+				Message:            "Full cluster crash detected",
+				Reason:             "FullClusterCrashDetected",
+				LastTransitionTime: metav1.Now(),
+			})
+			cr.Status.Messages = append(cr.Status.Messages, "Error: Full cluster crash detected ")
 			cr.Status.State = apiv1alpha1.StateError
+
 			r.Recorder.Event(cr, "Warning", "FullClusterCrashDetected", "Full cluster crash detected")
 		}
 	}
@@ -164,10 +169,6 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	if !loadBalancersReady {
 		cr.Status.State = apiv1alpha1.StateInitializing
-	}
-
-	if err := r.checkTLSIssuer(ctx, cr); err != nil {
-		cr.Status.State = apiv1alpha1.StateError
 	}
 
 	log.V(1).Info(

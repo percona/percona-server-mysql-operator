@@ -40,6 +40,7 @@ func (r *PerconaServerMySQLReconciler) ensureTLSSecret(ctx context.Context, cr *
 
 	return nil
 }
+
 func (r *PerconaServerMySQLReconciler) checkTLSIssuer(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	if cr.Spec.TLS == nil || cr.Spec.TLS.IssuerConf == nil {
 		return nil

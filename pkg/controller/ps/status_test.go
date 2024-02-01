@@ -320,7 +320,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 					Platform: platform.PlatformKubernetes,
 				},
 			}
-			err := r.reconcileCRStatus(ctx, cr)
+			err := r.reconcileCRStatus(ctx, cr, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -522,7 +522,7 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				Recorder:  new(record.FakeRecorder),
 			}
 
-			err = r.reconcileCRStatus(ctx, cr)
+			err = r.reconcileCRStatus(ctx, cr, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -724,7 +724,7 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				Recorder:  new(record.FakeRecorder),
 			}
 
-			err = r.reconcileCRStatus(ctx, cr)
+			err = r.reconcileCRStatus(ctx, cr, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -736,6 +736,10 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReconcileErrorStatus(t *testing.T) {
+
 }
 
 type fakeClient struct {
