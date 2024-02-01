@@ -9057,6 +9057,10 @@ spec:
                 type: object
               host:
                 type: string
+              message:
+                items:
+                  type: string
+                type: array
               mysql:
                 properties:
                   ready:

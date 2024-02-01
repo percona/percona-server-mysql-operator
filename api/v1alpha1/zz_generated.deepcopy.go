@@ -673,6 +673,11 @@ func (in *PerconaServerMySQLStatus) DeepCopyInto(out *PerconaServerMySQLStatus) 
 	out.Orchestrator = in.Orchestrator
 	out.HAProxy = in.HAProxy
 	out.Router = in.Router
+	if in.Messages != nil {
+		in, out := &in.Messages, &out.Messages
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]metav1.Condition, len(*in))

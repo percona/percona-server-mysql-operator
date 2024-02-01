@@ -97,13 +97,15 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 	rr := ctrl.Result{RequeueAfter: 5 * time.Second}
 
 	var cr *apiv1alpha1.PerconaServerMySQL
+	var err error
+
 	defer func() {
-		if err := r.reconcileCRStatus(ctx, cr); err != nil {
+		if err := r.reconcileCRStatus(ctx, cr, err); err != nil {
 			log.Error(err, "failed to update status")
 		}
 	}()
 
-	cr, err := k8s.GetCRWithDefaults(ctx, r.Client, req.NamespacedName, r.ServerVersion)
+	cr, err = k8s.GetCRWithDefaults(ctx, r.Client, req.NamespacedName, r.ServerVersion)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -116,7 +118,7 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 		return rr, r.applyFinalizers(ctx, cr)
 	}
 
-	if err := r.doReconcile(ctx, cr); err != nil {
+	if err = r.doReconcile(ctx, cr); err != nil {
 		return rr, errors.Wrap(err, "reconcile")
 	}
 

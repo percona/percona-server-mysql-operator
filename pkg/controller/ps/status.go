@@ -9,6 +9,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -26,7 +27,25 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 )
 
-func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, reconcileErr error) error {
+	if reconcileErr != nil {
+		if cr.Status.State != apiv1alpha1.StateError {
+			meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+				Status:             metav1.ConditionTrue,
+				Type:               string(apiv1alpha1.StateError),
+				Message:            reconcileErr.Error(),
+				Reason:             "ErrorReconcile",
+				LastTransitionTime: metav1.Now(),
+			})
+
+			cr.Status.Messages = append(cr.Status.Messages, "Error: "+reconcileErr.Error())
+			cr.Status.State = apiv1alpha1.StateError
+		}
+
+		nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
+		return writeStatus(ctx, r.Client, nn, cr.Status)
+	}
+
 	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
 		return nil
 	}
