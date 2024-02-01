@@ -739,7 +739,72 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 }
 
 func TestReconcileErrorStatus(t *testing.T) {
+	ctx := context.Background()
 
+	cr, err := readDefaultCR("cluster1", "status-err")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cr.Spec.MySQL.ClusterType = apiv1alpha1.ClusterTypeAsync
+	cr.Spec.UpdateStrategy = appsv1.OnDeleteStatefulSetStrategyType
+
+	scheme := runtime.NewScheme()
+	err = clientgoscheme.AddToScheme(scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = apiv1alpha1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	objects := appendSlices(
+		makeFakeReadyPods(cr, 3, "mysql"),
+		makeFakeReadyPods(cr, 3, "haproxy"),
+		makeFakeReadyPods(cr, 3, "orchestrator"),
+	)
+
+	cb := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cr).
+		WithStatusSubresource(cr).
+		WithObjects(objects...).
+		WithStatusSubresource(objects...)
+
+	r := &PerconaServerMySQLReconciler{
+		Client: cb.Build(),
+		Scheme: scheme,
+		ServerVersion: &platform.ServerVersion{
+			Platform: platform.PlatformKubernetes,
+		},
+	}
+
+	reconcileErr := errors.New("reconcile error")
+
+	err = r.reconcileCRStatus(ctx, cr, reconcileErr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, cr); err != nil {
+		t.Fatal(err)
+	}
+	if len(cr.Status.Messages) != 1 {
+		t.Errorf("expected one status message, got %v", len(cr.Status.Messages))
+	}
+	if cr.Status.Messages[0] != "Error: "+reconcileErr.Error() {
+		t.Errorf("expected %s status message, got %s", "Error: "+reconcileErr.Error(), cr.Status.Messages[0])
+	}
+
+	if len(cr.Status.Conditions) != 1 {
+		t.Errorf("expected one status condition, got %v", len(cr.Status.Conditions))
+	}
+	if cr.Status.Conditions[0].Type != string(apiv1alpha1.StateError) {
+		t.Errorf("expected %v condition type, got %s", apiv1alpha1.StateError, cr.Status.Conditions[0].Type)
+	}
+	if cr.Status.Conditions[0].Message != reconcileErr.Error() {
+		t.Errorf("expected %s condition message, got %s", reconcileErr.Error(), cr.Status.Conditions[0].Message)
+	}
 }
 
 type fakeClient struct {
