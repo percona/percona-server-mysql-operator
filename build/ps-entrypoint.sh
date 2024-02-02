@@ -153,6 +153,7 @@ create_default_cnf() {
 	echo '[mysqld]' >$CFG
 	sed -i "/\[mysqld\]/a read_only=ON" $CFG
 	sed -i "/\[mysqld\]/a server_id=${SERVER_ID}" $CFG
+	sed -i "/\[mysqld\]/a bind_address=${POD_IP}" $CFG
 	sed -i "/\[mysqld\]/a admin-address=${POD_IP}" $CFG
 	sed -i "/\[mysqld\]/a report_host=${FQDN}" $CFG
 	sed -i "/\[mysqld\]/a report_port=3306" $CFG
