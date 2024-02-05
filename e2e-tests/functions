@@ -498,6 +498,8 @@ deploy_version_service() {
 		--from-file "${TESTS_CONFIG_DIR}/operator.9.9.9.ps-operator.json"
 
 	kubectl apply -n "${NAMESPACE}" -f "${TESTS_CONFIG_DIR}/vs.yaml"
+	VS_POD_NAME=$(kubectl -n "${NAMESPACE}" get pods --selector=name=percona-version-service -o 'jsonpath={.items[].metadata.name}')
+	wait_pod $VS_POD_NAME
 }
 
 deploy_cert_manager() {
