@@ -845,13 +845,8 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 		return errors.Wrap(err, "get exposed services")
 	}
 
-    log.Info("services list names:", "service", services)
-    log.Info("svcNames", "all services names", svcNames)
-
 	for _, svc := range services {
-	    log.Info("SVC name last:", "service test", svc.Name)
 		if _, ok := svcNames[svc.Name]; ok {
-		    log.Info("svc Name with continue", "service", svc.Name )
 			continue
 		}
 
