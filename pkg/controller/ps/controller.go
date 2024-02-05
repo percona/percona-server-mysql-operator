@@ -817,13 +817,6 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 
 func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, exposer Exposer) error {
 	log := logf.FromContext(ctx).WithName("cleanupOutdatedServices")
-	if !cr.HAProxyEnabled() || (cr.Spec.Proxy.HAProxy.Size == 0 && !cr.Spec.Pause) {
-		svc := haproxy.Service(cr, nil)
-		if err := r.Client.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
-			return errors.Wrapf(err, "delete HAProxy svc %s", svc.Name)
-		}
-	}
-
 	size := int(exposer.Size())
 	svcNames := make(map[string]struct{}, size)
 	for i := 0; i < size; i++ {
@@ -960,7 +953,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 	}
 
 	if err := r.cleanupProxies(ctx, cr); err != nil {
-		return errors.Wrap(err, "cleanup statefulsets")
+		return errors.Wrap(err, "cleanup proxies")
 	}
 
 	return nil
