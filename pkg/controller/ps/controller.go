@@ -943,7 +943,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 }
 
 func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-    if !cr.Spec.Pause {
+	if !cr.Spec.Pause {
 		mysqlExposer := mysql.Exposer(*cr)
 		if err := r.cleanupOutdatedServices(ctx, cr, &mysqlExposer); err != nil {
 			return errors.Wrap(err, "cleanup MySQL services")
