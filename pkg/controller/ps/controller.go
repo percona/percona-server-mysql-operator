@@ -817,8 +817,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 
 func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, exposer Exposer) error {
 	log := logf.FromContext(ctx).WithName("cleanupOutdatedServices")
-
-	if !cr.HAProxyEnabled() || cr.Spec.Proxy.HAProxy.Size == 0 {
+	if !cr.HAProxyEnabled() || (cr.Spec.Proxy.HAProxy.Size == 0 && !cr.Spec.Pause) {
 		svc := haproxy.Service(cr, nil)
 		if err := r.Client.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrapf(err, "delete HAProxy svc %s", svc.Name)
@@ -846,8 +845,13 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 		return errors.Wrap(err, "get exposed services")
 	}
 
+    log.Info("services list names:", "service", services)
+    log.Info("svcNames", "all services names", svcNames)
+
 	for _, svc := range services {
+	    log.Info("SVC name last:", "service test", svc.Name)
 		if _, ok := svcNames[svc.Name]; ok {
+		    log.Info("svc Name with continue", "service", svc.Name )
 			continue
 		}
 
@@ -944,14 +948,16 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 }
 
 func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	mysqlExposer := mysql.Exposer(*cr)
-	if err := r.cleanupOutdatedServices(ctx, cr, &mysqlExposer); err != nil {
-		return errors.Wrap(err, "cleanup MySQL services")
-	}
+    if !cr.Spec.Pause {
+		mysqlExposer := mysql.Exposer(*cr)
+		if err := r.cleanupOutdatedServices(ctx, cr, &mysqlExposer); err != nil {
+			return errors.Wrap(err, "cleanup MySQL services")
+		}
 
-	orcExposer := orchestrator.Exposer(*cr)
-	if err := r.cleanupOutdatedServices(ctx, cr, &orcExposer); err != nil {
-		return errors.Wrap(err, "cleanup Orchestrator services")
+		orcExposer := orchestrator.Exposer(*cr)
+		if err := r.cleanupOutdatedServices(ctx, cr, &orcExposer); err != nil {
+			return errors.Wrap(err, "cleanup Orchestrator services")
+		}
 	}
 
 	if err := r.cleanupOutdatedStatefulSets(ctx, cr); err != nil {
