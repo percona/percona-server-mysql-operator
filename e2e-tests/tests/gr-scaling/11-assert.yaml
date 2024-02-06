@@ -5,6 +5,6 @@ timeout: 30
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 06-check-group-seeds
+  name: 11-read-from-primary
 data:
-  gr-scaling-mysql-0.gr-scaling-mysql: ""
+  data: "100500"

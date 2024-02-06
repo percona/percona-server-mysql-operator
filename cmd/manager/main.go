@@ -84,6 +84,8 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	setupLog.Info("Build info", "GitCommit", GitCommit, "BuildTime", BuildTime)
+
 	namespace, err := k8s.GetWatchNamespace()
 	if err != nil {
 		setupLog.Error(err, "unable to get watch namespace")
