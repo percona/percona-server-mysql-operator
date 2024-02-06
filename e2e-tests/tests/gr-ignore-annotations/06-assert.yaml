@@ -39,9 +39,9 @@ spec:
     protocol: TCP
     targetPort: 33060
   - name: http
-    port: 6033
+    port: 6450
     protocol: TCP
-    targetPort: 6033
+    targetPort: 6450
   - name: mysql-gr
     port: 33061
     protocol: TCP
@@ -103,6 +103,10 @@ spec:
     port: 6449
     protocol: TCP
     targetPort: 6449
+  - name: x-default
+    port: 33060
+    protocol: TCP
+    targetPort: 33060
   - name: rw-admin
     port: 33062
     protocol: TCP
