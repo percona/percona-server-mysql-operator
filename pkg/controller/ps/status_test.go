@@ -132,40 +132,6 @@ func TestReconcileStatusAsync(t *testing.T) {
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 			},
 		},
-		// {
-		// 	name: "with all ready pods and invalid issuer",
-		// 	cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQL) {
-		// 		cr.Spec.TLS = &apiv1alpha1.TLSSpec{
-		// 			IssuerConf: &cmmeta.ObjectReference{
-		// 				Name: "invalid-issuer",
-		// 			},
-		// 		}
-		// 	}),
-		// 	objects: appendSlices(
-		// 		makeFakeReadyPods(cr, 3, "mysql"),
-		// 		makeFakeReadyPods(cr, 3, "haproxy"),
-		// 		makeFakeReadyPods(cr, 3, "orchestrator"),
-		// 	),
-		// 	expected: apiv1alpha1.PerconaServerMySQLStatus{
-		// 		MySQL: apiv1alpha1.StatefulAppStatus{
-		// 			Size:  3,
-		// 			Ready: 3,
-		// 			State: apiv1alpha1.StateReady,
-		// 		},
-		// 		Orchestrator: apiv1alpha1.StatefulAppStatus{
-		// 			Size:  3,
-		// 			Ready: 3,
-		// 			State: apiv1alpha1.StateReady,
-		// 		},
-		// 		HAProxy: apiv1alpha1.StatefulAppStatus{
-		// 			Size:  3,
-		// 			Ready: 3,
-		// 			State: apiv1alpha1.StateReady,
-		// 		},
-		// 		State: apiv1alpha1.StateError,
-		// 		Host:  cr.Name + "-haproxy." + cr.Namespace,
-		// 	},
-		// },
 		{
 			name: "with all ready pods and not ready cluster's loadbalancer",
 			cr:   cr,
