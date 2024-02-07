@@ -135,10 +135,6 @@ spec:
     port: 33060
     protocol: TCP
     targetPort: 33060
-  - name: x-default
-    port: 33060
-    protocol: TCP
-    targetPort: 33060
   - name: rw-admin
     port: 33062
     protocol: TCP
