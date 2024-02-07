@@ -7,6 +7,8 @@ OPERATORDIR="/opt/percona-server-mysql-operator"
 BINDIR="/opt/percona"
 
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/ps-entrypoint.sh" "${BINDIR}/ps-entrypoint.sh"
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/ps-pre-stop.sh" "${BINDIR}/ps-pre-stop.sh"
+
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/heartbeat-entrypoint.sh" "${BINDIR}/heartbeat-entrypoint.sh"
 
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/orc-entrypoint.sh" "${BINDIR}/orc-entrypoint.sh"
