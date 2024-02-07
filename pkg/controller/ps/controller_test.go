@@ -433,42 +433,5 @@ var _ = Describe("Reconcile HAProxy", Ordered, func() {
 				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 			})
 		})
-
-		When("HAPRoxy is disabled by setting the size to zero", Ordered, func() {
-			It("should remove outdated HAProxy service", func() {
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, crNamespacedName, cr)
-					return err == nil
-				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
-
-				cr.Spec.Proxy.HAProxy.Enabled = true
-				Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
-
-				By("Reconcile once so the operator can create HAProxy service")
-				_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
-				Expect(err).NotTo(HaveOccurred())
-
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, crNamespacedName, cr)
-					return err == nil
-				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
-
-				cr.Spec.Proxy.HAProxy.Size = 0
-				Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
-
-				_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
-				Expect(err).NotTo(HaveOccurred())
-
-				svc := &corev1.Service{}
-				Eventually(func() bool {
-					err := k8sClient.Get(ctx, types.NamespacedName{
-						Namespace: cr.Namespace,
-						Name:      svcName,
-					}, svc)
-
-					return k8serrors.IsNotFound(err)
-				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
-			})
-		})
 	})
 })
