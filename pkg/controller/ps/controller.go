@@ -954,12 +954,12 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 
 	if err := r.cleanupMysql(ctx, cr); err != nil {
-        		return errors.Wrap(err, "cleanup mysql")
-    }
+		return errors.Wrap(err, "cleanup mysql")
+	}
 
 	if err := r.cleanupOrchestrator(ctx, cr); err != nil {
-    		return errors.Wrap(err, "cleanup orchestrator")
-    }
+		return errors.Wrap(err, "cleanup orchestrator")
+	}
 
 	if err := r.cleanupProxies(ctx, cr); err != nil {
 		return errors.Wrap(err, "cleanup proxies")
