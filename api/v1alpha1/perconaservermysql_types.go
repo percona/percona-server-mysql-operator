@@ -809,7 +809,8 @@ type AnnotationKey string
 const (
 	AnnotationSpecHash   AnnotationKey = "percona.com/last-applied-spec"
 	AnnotationSecretHash AnnotationKey = "percona.com/last-applied-secret"
-	AnnotationConfigHash AnnotationKey = "percona.com/last-applied-config"
+	AnnotationConfigHash AnnotationKey = "percona.com/configuration-hash"
+	AnnotationTLSHash    AnnotationKey = "percona.com/last-applied-tls"
 )
 
 const (

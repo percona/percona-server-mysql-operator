@@ -127,7 +127,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
-func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string) *appsv1.Deployment {
+func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHash string) *appsv1.Deployment {
 	labels := MatchLabels(cr)
 	spec := cr.Spec.Proxy.Router
 	replicas := spec.Size
@@ -135,7 +135,10 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string
 
 	annotations := make(map[string]string)
 	if configHash != "" {
-		annotations["percona.com/configuration-hash"] = configHash
+		annotations[string(apiv1alpha1.AnnotationConfigHash)] = configHash
+	}
+	if tlsHash != "" {
+		annotations[string(apiv1alpha1.AnnotationTLSHash)] = tlsHash
 	}
 
 	zero := intstr.FromInt(0)
