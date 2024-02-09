@@ -34,8 +34,14 @@ func (r *PerconaServerMySQLReconciler) ensureTLSSecret(ctx context.Context, cr *
 			return errors.Wrap(err, "create SSL manually")
 		}
 
-		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, secret, r.Scheme); err != nil {
-			return errors.Wrap(err, "create secret")
+		if err := r.Get(ctx, client.ObjectKeyFromObject(secret), new(corev1.Secret)); err != nil {
+			if k8serrors.IsNotFound(err) {
+				if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, secret, r.Scheme); err != nil {
+					return errors.Wrap(err, "create secret")
+				}
+				return nil
+			}
+			return errors.Wrap(err, "get secret")
 		}
 	}
 
