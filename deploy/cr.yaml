@@ -71,6 +71,13 @@ spec:
 #                values:
 #                - e2e-az1
 #                - e2e-az2
+#    topologySpreadConstraints:
+#    - labelSelector:
+#        matchLabels:
+#          app.kubernetes.io/name: percona-server
+#      maxSkew: 1
+#      topologyKey: kubernetes.io/hostname
+#      whenUnsatisfiable: DoNotSchedule
 
 #    expose:
 #      enabled: false
@@ -207,6 +214,13 @@ spec:
 #                  values:
 #                  - e2e-az1
 #                  - e2e-az2
+#      topologySpreadConstraints:
+#      - labelSelector:
+#          matchLabels:
+#            app.kubernetes.io/name: percona-server
+#        maxSkew: 1
+#        topologyKey: kubernetes.io/hostname
+#        whenUnsatisfiable: DoNotSchedule
 
 #      expose:
 #        type: ClusterIP
@@ -245,6 +259,13 @@ spec:
 #                  values:
 #                  - e2e-az1
 #                  - e2e-az2
+#      topologySpreadConstraints:
+#      - labelSelector:
+#          matchLabels:
+#            app.kubernetes.io/name: percona-server
+#        maxSkew: 1
+#        topologyKey: kubernetes.io/hostname
+#        whenUnsatisfiable: DoNotSchedule
 
 #      configuration: |
 #        [default]
@@ -286,6 +307,13 @@ spec:
 #                values:
 #                - e2e-az1
 #                - e2e-az2
+#    topologySpreadConstraints:
+#    - labelSelector:
+#        matchLabels:
+#          app.kubernetes.io/name: percona-server
+#      maxSkew: 1
+#      topologyKey: kubernetes.io/hostname
+#      whenUnsatisfiable: DoNotSchedule
 
 #    expose:
 #      type: ClusterIP
@@ -352,6 +380,13 @@ spec:
 #                  operator: In
 #                  values:
 #                  - 'True'
+#        topologySpreadConstraints:
+#        - labelSelector:
+#            matchLabels:
+#              app.kubernetes.io/name: percona-server
+#          maxSkew: 1
+#          topologyKey: kubernetes.io/hostname
+#          whenUnsatisfiable: DoNotSchedule
 #        tolerations:
 #          - key: "backupWorker"
 #            operator: "Equal"
