@@ -754,12 +754,6 @@ func TestReconcileErrorStatus(t *testing.T) {
 	if err := r.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, cr); err != nil {
 		t.Fatal(err)
 	}
-	if len(cr.Status.Messages) != 1 {
-		t.Errorf("expected one status message, got %v", len(cr.Status.Messages))
-	}
-	if cr.Status.Messages[0] != "Error: "+reconcileErr.Error() {
-		t.Errorf("expected %s status message, got %s", "Error: "+reconcileErr.Error(), cr.Status.Messages[0])
-	}
 
 	if len(cr.Status.Conditions) != 1 {
 		t.Errorf("expected one status condition, got %v", len(cr.Status.Conditions))

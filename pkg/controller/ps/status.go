@@ -28,17 +28,21 @@ import (
 )
 
 func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, reconcileErr error) error {
+
+	clusterCondition := metav1.Condition{
+		Status:             metav1.ConditionTrue,
+		Type:               string(apiv1alpha1.StateInitializing),
+		LastTransitionTime: metav1.Now(),
+	}
+
 	if reconcileErr != nil {
 		if cr.Status.State != apiv1alpha1.StateError {
-			meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
-				Status:             metav1.ConditionTrue,
-				Type:               string(apiv1alpha1.StateError),
-				Message:            reconcileErr.Error(),
-				Reason:             "ErrorReconcile",
-				LastTransitionTime: metav1.Now(),
-			})
+			clusterCondition.Type = string(apiv1alpha1.StateError)
+			clusterCondition.Reason = "ErrorReconcile"
+			clusterCondition.Message = reconcileErr.Error()
 
-			cr.Status.Messages = append(cr.Status.Messages, "Error: "+reconcileErr.Error())
+			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
+
 			cr.Status.State = apiv1alpha1.StateError
 		}
 
@@ -51,8 +55,6 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
 		return nil
 	}
-
-	cr.Status.Messages = cr.Status.Messages[:0]
 
 	mysqlStatus, err := r.appStatus(ctx, cr, mysql.Name(cr), cr.MySQLSpec().Size, mysql.MatchLabels(cr), cr.Status.MySQL.Version)
 	if err != nil {
@@ -145,14 +147,12 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		}
 
 		if fullClusterCrash {
-			meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
-				Status:             metav1.ConditionTrue,
-				Type:               string(apiv1alpha1.StateError),
-				Message:            "Full cluster crash detected",
-				Reason:             "FullClusterCrashDetected",
-				LastTransitionTime: metav1.Now(),
-			})
-			cr.Status.Messages = append(cr.Status.Messages, "Error: Full cluster crash detected ")
+			clusterCondition.Type = string(apiv1alpha1.StateError)
+			clusterCondition.Reason = "FullClusterCrashDetected"
+			clusterCondition.Message = "Full cluster crash detected"
+
+			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
+
 			cr.Status.State = apiv1alpha1.StateError
 
 			r.Recorder.Event(cr, "Warning", "FullClusterCrashDetected", "Full cluster crash detected")
@@ -172,6 +172,12 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	if !loadBalancersReady {
 		cr.Status.State = apiv1alpha1.StateInitializing
 	}
+
+	if cr.Status.State != apiv1alpha1.StateError {
+		clusterCondition.Type = string(cr.Status.State)
+		clusterCondition.Reason = string(cr.Status.State)
+	}
+	meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
 
 	log.V(1).Info(
 		"Writing CR status",

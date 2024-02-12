@@ -377,7 +377,6 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	BackupVersion  string             `json:"backupVersion,omitempty"`
 	PMMVersion     string             `json:"pmmVersion,omitempty"`
 	ToolkitVersion string             `json:"toolkitVersion,omitempty"`
-	Messages       []string           `json:"message,omitempty"`
 	Conditions     []metav1.Condition `json:"conditions,omitempty"`
 	// +optional
 	Host string `json:"host"`
