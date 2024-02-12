@@ -819,14 +819,6 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 
 func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, exposer Exposer) error {
 	log := logf.FromContext(ctx).WithName("cleanupOutdatedServices")
-
-	if !cr.HAProxyEnabled() || cr.Spec.Proxy.HAProxy.Size == 0 {
-		svc := haproxy.Service(cr, nil)
-		if err := r.Client.Delete(ctx, svc); err != nil && !k8serrors.IsNotFound(err) {
-			return errors.Wrapf(err, "delete HAProxy svc %s", svc.Name)
-		}
-	}
-
 	size := int(exposer.Size())
 	svcNames := make(map[string]struct{}, size)
 	for i := 0; i < size; i++ {
@@ -862,10 +854,26 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) cleanupOutdatedStatefulSets(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) cleanupMysql(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if !cr.Spec.Pause {
+		mysqlExposer := mysql.Exposer(*cr)
+		if err := r.cleanupOutdatedServices(ctx, cr, &mysqlExposer); err != nil {
+			return errors.Wrap(err, "cleanup MySQL services")
+		}
+	}
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) cleanupOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+
 	if !cr.OrchestratorEnabled() {
 		if err := r.Delete(ctx, orchestrator.StatefulSet(cr, "")); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrap(err, "failed to delete orchestrator statefulset")
+		}
+
+		orcExposer := orchestrator.Exposer(*cr)
+		if err := r.cleanupOutdatedServices(ctx, cr, &orcExposer); err != nil {
+			return errors.Wrap(err, "cleanup Orchestrator services")
 		}
 	}
 	return nil
@@ -946,22 +954,17 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 }
 
 func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	mysqlExposer := mysql.Exposer(*cr)
-	if err := r.cleanupOutdatedServices(ctx, cr, &mysqlExposer); err != nil {
-		return errors.Wrap(err, "cleanup MySQL services")
+
+	if err := r.cleanupMysql(ctx, cr); err != nil {
+		return errors.Wrap(err, "cleanup mysql")
 	}
 
-	orcExposer := orchestrator.Exposer(*cr)
-	if err := r.cleanupOutdatedServices(ctx, cr, &orcExposer); err != nil {
-		return errors.Wrap(err, "cleanup Orchestrator services")
-	}
-
-	if err := r.cleanupOutdatedStatefulSets(ctx, cr); err != nil {
-		return errors.Wrap(err, "cleanup statefulsets")
+	if err := r.cleanupOrchestrator(ctx, cr); err != nil {
+		return errors.Wrap(err, "cleanup orchestrator")
 	}
 
 	if err := r.cleanupProxies(ctx, cr); err != nil {
-		return errors.Wrap(err, "cleanup statefulsets")
+		return errors.Wrap(err, "cleanup proxies")
 	}
 
 	return nil
