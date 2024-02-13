@@ -33,7 +33,7 @@ const (
 	DefaultGRPort    = 33061
 	DefaultAdminPort = 33062
 	DefaultXPort     = 33060
-	SidecarHTTPPort  = 6033
+	SidecarHTTPPort  = 6450
 )
 
 type User struct {
