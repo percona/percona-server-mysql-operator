@@ -15,6 +15,9 @@ spec:
     - gr-labels-to-ignore-router
 status:
   conditions:
+  - reason: Ready
+    status: "True"
+    type: Ready
   - message: InnoDB cluster successfully bootstrapped with 3 nodes
     reason: InnoDBClusterBootstrapped
     status: "True"
