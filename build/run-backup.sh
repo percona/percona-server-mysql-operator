@@ -2,6 +2,8 @@
 
 set -e
 
+SIDECAR_PORT="6450"
+
 request_data() {
 	case "${STORAGE_TYPE}" in
 		"s3")
@@ -73,7 +75,7 @@ request_backup() {
 			-d "$(request_data)" \
 			-H "Content-Type: application/json" \
 			-w "httpcode=%{http_code}" \
-			"http://${SRC_NODE}:6033/backup/${BACKUP_NAME}" \
+			"http://${SRC_NODE}:${SIDECAR_PORT}/backup/${BACKUP_NAME}" \
 			| sed -e 's/.*\httpcode=//'
 	)
 	if [ "${http_code}" -eq 200 ]; then
@@ -96,7 +98,7 @@ request_backup() {
 }
 
 request_logs() {
-	curl -s http://"${SRC_NODE}":6033/logs/"${BACKUP_NAME}"
+	curl -s http://"${SRC_NODE}":${SIDECAR_PORT}/logs/"${BACKUP_NAME}"
 }
 
 main() {

@@ -453,6 +453,7 @@ func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) 
 		},
 	}
 }
+
 func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alpha1.PerconaServerMySQLRestore, destination string, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
 	spec := cluster.Spec.Backup
 
@@ -707,6 +708,7 @@ func SetSourceNode(job *batchv1.Job, src string) error {
 }
 
 type BackupConfig struct {
+	Name        string                        `json:"name"`
 	Destination string                        `json:"destination"`
 	Type        apiv1alpha1.BackupStorageType `json:"type"`
 	VerifyTLS   bool                          `json:"verifyTLS,omitempty"`
