@@ -30,6 +30,9 @@ metadata:
   name: gr-ignore-annotations
 status:
   conditions:
+  - reason: Initializing
+    status: "True"
+    type: Initializing
   - reason: Ready
     status: "True"
     type: Ready

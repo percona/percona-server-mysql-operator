@@ -48,6 +48,10 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
 		return writeStatus(ctx, r.Client, nn, cr.Status)
 	}
+	
+	if cr.Status.Conditions != nil {
+		meta.RemoveStatusCondition(&cr.Status.Conditions, apiv1alpha1.StateError.String())
+	}
 
 	log := logf.FromContext(ctx).WithName("reconcileCRStatus")
 

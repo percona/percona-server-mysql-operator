@@ -15,6 +15,9 @@ spec:
     - gr-labels-to-ignore-router
 status:
   conditions:
+  - reason: Initializing
+    status: "True"
+    type: Initializing
   - reason: Ready
     status: "True"
     type: Ready

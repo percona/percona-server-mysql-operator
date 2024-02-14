@@ -30,6 +30,9 @@ metadata:
   name: gr-demand-backup
 status:
   conditions:
+  - reason: Initializing
+    status: "True"
+    type: Initializing
   - reason: Ready
     status: "True"
     type: Ready
