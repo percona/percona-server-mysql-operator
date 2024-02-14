@@ -473,6 +473,8 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 	return nil
 }
 
+// reconcileMySQLAutoConfig reconciles the ConfigMap for MySQL auto-tuning parameters and 
+// sets read_only=0 for single-node clusters with Orchestrator
 func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileMySQLAutoConfig")
 	var memory *resource.Quantity
@@ -491,10 +493,12 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 		Name:      mysql.AutoConfigMapName(cr),
 		Namespace: cr.Namespace,
 	}
+
 	currentConfigMap := new(corev1.ConfigMap)
 	if err = r.Client.Get(ctx, nn, currentConfigMap); client.IgnoreNotFound(err) != nil {
 		return errors.Wrapf(err, "get ConfigMap/%s", nn.Name)
 	}
+
 	if memory == nil {
 		exists := true
 		if k8serrors.IsNotFound(err) {
@@ -513,10 +517,20 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 
 		return nil
 	}
+
+	config := ""
+
+	// for single-node clusters, we need to set read_only=0 if rchestrator is disabled
+	if cr.MySQLSpec().Size == 1 || !cr.Spec.Orchestrator.Enabled {
+		config = "\nread_only=0"
+	}
+
 	autotuneParams, err := mysql.GetAutoTuneParams(cr, memory)
 	if err != nil {
 		return err
 	}
+	config += autotuneParams
+
 	configMap := k8s.ConfigMap(mysql.AutoConfigMapName(cr), cr.Namespace, mysql.CustomConfigKey, autotuneParams)
 	if !reflect.DeepEqual(currentConfigMap.Data, configMap.Data) {
 		if err := k8s.EnsureObject(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
