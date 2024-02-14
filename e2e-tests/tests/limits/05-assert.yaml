@@ -128,7 +128,7 @@ spec:
         imagePullPolicy: Always
         name: xtrabackup
         ports:
-        - containerPort: 6033
+        - containerPort: 6450
           name: http
           protocol: TCP
         resources: {}
