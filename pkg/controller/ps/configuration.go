@@ -55,8 +55,8 @@ func (r *PerconaServerMySQLReconciler) reconcileCustomConfiguration(ctx context.
 			d := struct{ Data map[string]string }{Data: currCm.Data}
 			data, err := json.Marshal(d)
 
-			if cmName == cr.Name + "-mysql" && currCm.Data[mysql.CustomConfigKey] == "" {
-			    return "", errors.New("Failed to update config map. Please use my.cnf as a config name. Only in this case config map will be applied to the cluster")
+			if cmName == cr.Name+"-mysql" && currCm.Data[mysql.CustomConfigKey] == "" {
+				return "", errors.New("Failed to update config map. Please use my.cnf as a config name. Only in this case config map will be applied to the cluster")
 			}
 
 			if err != nil {
