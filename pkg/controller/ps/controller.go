@@ -522,7 +522,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 
 	// for single-node clusters, we need to set read_only=0 if rchestrator is disabled
 	if cr.MySQLSpec().Size == 1 && !cr.Spec.Orchestrator.Enabled {
-		config = "\nread_only=0"
+		config = "\nsuper_read_only=0\nread_only=0"
 	}
 
 	autotuneParams, err := mysql.GetAutoTuneParams(cr, memory)
