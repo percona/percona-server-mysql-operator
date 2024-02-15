@@ -1,37 +1,33 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 420
----
-kind: StatefulSet
 apiVersion: apps/v1
+kind: StatefulSet
 metadata:
   name: scaling-mysql
 status:
-  observedGeneration: 2
-  replicas: 5
-  readyReplicas: 5
-  currentReplicas: 5
-  updatedReplicas: 5
   collisionCount: 0
+  currentReplicas: 5
+  observedGeneration: 2
+  readyReplicas: 5
+  replicas: 5
+  updatedReplicas: 5
 ---
-kind: StatefulSet
 apiVersion: apps/v1
+kind: StatefulSet
 metadata:
   name: scaling-orc
 status:
-  observedGeneration: 2
-  replicas: 5
-  readyReplicas: 5
-  currentReplicas: 5
-  updatedReplicas: 5
   collisionCount: 0
+  currentReplicas: 5
+  observedGeneration: 2
+  readyReplicas: 5
+  replicas: 5
+  updatedReplicas: 5
 ---
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
-  name: scaling
   finalizers:
-    - delete-mysql-pods-in-order
+  - delete-mysql-pods-in-order
+  name: scaling
 status:
   mysql:
     ready: 5

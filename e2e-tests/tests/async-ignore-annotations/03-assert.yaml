@@ -1,21 +1,16 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 120
----
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
   name: async-ignore-annotations
 spec:
   ignoreAnnotations:
-    - async-annotations-to-ignore-mysql
-    - async-annotations-to-ignore-haproxy
-    - async-annotations-to-ignore-orc
+  - async-annotations-to-ignore-mysql
+  - async-annotations-to-ignore-haproxy
+  - async-annotations-to-ignore-orc
   ignoreLabels:
-    - async-labels-to-ignore-mysql
-    - async-labels-to-ignore-haproxy
-    - async-labels-to-ignore-orc
-
+  - async-labels-to-ignore-mysql
+  - async-labels-to-ignore-haproxy
+  - async-labels-to-ignore-orc
 status:
   haproxy:
     ready: 3

@@ -88,9 +88,5 @@ e2e-tests/conf/cloud-secret.yml
 # Kubernetes Generated files - skip generated files, except for vendored files
 !vendor/**/zz_generated.*
 
-# Kuttl
-kubeconfig
-kind-logs-*/
-
 # Other
 gke_gcloud_auth_plugin_cache

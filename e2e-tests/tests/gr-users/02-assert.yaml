@@ -1,11 +1,4 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 300
----
 apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: 02-check-users
 data:
   heartbeat: |
     GRANT REPLICATION CLIENT ON *.* TO `heartbeat`@`localhost`
@@ -29,3 +22,6 @@ data:
     GRANT SELECT ON `performance_schema`.`keyring_component_status` TO `xtrabackup`@`localhost`
     GRANT SELECT ON `performance_schema`.`log_status` TO `xtrabackup`@`localhost`
     GRANT SELECT ON `performance_schema`.`replication_group_members` TO `xtrabackup`@`localhost`
+kind: ConfigMap
+metadata:
+  name: 02-check-users

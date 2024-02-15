@@ -1,13 +1,9 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 400
----
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
-  name: demand-backup
   finalizers:
-    - delete-mysql-pods-in-order
+  - delete-mysql-pods-in-order
+  name: demand-backup
 status:
   haproxy:
     ready: 3
@@ -23,8 +19,8 @@ status:
     state: ready
   state: ready
 ---
-kind: PerconaServerMySQLRestore
 apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQLRestore
 metadata:
   name: demand-backup-restore-azure
 status:

@@ -1,12 +1,8 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 30
----
-kind: ConfigMap
 apiVersion: v1
+data:
+  gr-scaling-mysql-0.gr-scaling-mysql: gr-scaling-mysql-1.gr-scaling-mysql:3306,gr-scaling-mysql-2.gr-scaling-mysql:3306
+  gr-scaling-mysql-1.gr-scaling-mysql: gr-scaling-mysql-0.gr-scaling-mysql:3306,gr-scaling-mysql-1.gr-scaling-mysql:3306,gr-scaling-mysql-2.gr-scaling-mysql:3306
+  gr-scaling-mysql-2.gr-scaling-mysql: gr-scaling-mysql-0.gr-scaling-mysql:3306,gr-scaling-mysql-1.gr-scaling-mysql:3306,gr-scaling-mysql-2.gr-scaling-mysql:3306
+kind: ConfigMap
 metadata:
   name: 10-check-group-seeds
-data:
-  gr-scaling-mysql-0.gr-scaling-mysql: "gr-scaling-mysql-1.gr-scaling-mysql:3306,gr-scaling-mysql-2.gr-scaling-mysql:3306"
-  gr-scaling-mysql-1.gr-scaling-mysql: "gr-scaling-mysql-0.gr-scaling-mysql:3306,gr-scaling-mysql-1.gr-scaling-mysql:3306,gr-scaling-mysql-2.gr-scaling-mysql:3306"
-  gr-scaling-mysql-2.gr-scaling-mysql: "gr-scaling-mysql-0.gr-scaling-mysql:3306,gr-scaling-mysql-1.gr-scaling-mysql:3306,gr-scaling-mysql-2.gr-scaling-mysql:3306"

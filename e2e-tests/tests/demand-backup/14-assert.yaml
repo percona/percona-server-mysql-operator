@@ -1,12 +1,8 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 300
----
-kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQLBackup
 metadata:
-  name: demand-backup-s3
   finalizers:
-    - delete-backup
+  - delete-backup
+  name: demand-backup-s3
 status:
   state: Succeeded

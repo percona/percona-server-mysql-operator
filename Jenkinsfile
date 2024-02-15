@@ -203,7 +203,7 @@ void runTest(Integer TEST_ID) {
                     export KUBECONFIG=/tmp/$CLUSTER_NAME-$clusterSuffix
                     export PATH="\${KREW_ROOT:-\$HOME/.krew}/bin:\$PATH"
                     set -o pipefail
-                    kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "^${testName}\$" |& tee e2e-tests/logs/${testName}.log
+                    chainsaw test "./e2e-tests/tests/${testName}" |& tee e2e-tests/logs/${testName}.log
                 """
             }
             pushArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName")
@@ -248,9 +248,8 @@ void prepareNode() {
 
         kubectl krew install assert
 
-        # v0.15.0 kuttl version
-        kubectl krew install --manifest-url https://raw.githubusercontent.com/kubernetes-sigs/krew-index/a67f31ecb2e62f15149ca66d096357050f07b77d/plugins/kuttl.yaml
-        echo \$(kubectl kuttl --version) is installed
+        curl -fsSL https://github.com/kyverno/chainsaw/releases/download/v0.1.4/chainsaw_linux_amd64.tar.gz | sudo tar -C /usr/local/bin -xzf - chainsaw
+        echo \$(chainsaw version) is installed
 
         sudo tee /etc/yum.repos.d/google-cloud-sdk.repo << EOF
 [google-cloud-cli]

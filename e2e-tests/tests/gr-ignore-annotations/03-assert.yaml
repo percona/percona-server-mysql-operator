@@ -1,18 +1,14 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 120
----
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
   name: gr-ignore-annotations
 spec:
   ignoreAnnotations:
-    - gr-annotations-to-ignore-mysql
-    - gr-annotations-to-ignore-router
+  - gr-annotations-to-ignore-mysql
+  - gr-annotations-to-ignore-router
   ignoreLabels:
-    - gr-labels-to-ignore-mysql
-    - gr-labels-to-ignore-router
+  - gr-labels-to-ignore-mysql
+  - gr-labels-to-ignore-router
 status:
   conditions:
   - message: InnoDB cluster successfully bootstrapped with 3 nodes

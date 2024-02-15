@@ -91,12 +91,12 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
 
-kuttl-shfmt:
+chainsaw-shfmt:
 	shfmt -bn -ci -s -w e2e-tests/functions
 	find e2e-tests/tests/ -type f -not -name '*-assert.yaml' -name '*.yaml' | xargs ./e2e-tests/format
 
-e2e-test: kuttl-shfmt
-	ROOT_REPO=$(ROOT_REPO) kubectl kuttl test --config e2e-tests/kuttl.yaml
+e2e-test: chainsaw-shfmt
+	ROOT_REPO=$(ROOT_REPO) chainsaw test ./e2e-tests/tests
 
 manifests: kustomize generate
 	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml

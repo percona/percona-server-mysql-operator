@@ -1,0 +1,135 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/main/.schemas/json/test-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  creationTimestamp: null
+  name: haproxy
+spec:
+  steps:
+  - name: step-00
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+          init_temp_dir # do this only in the first TestStep
+
+          deploy_operator
+          deploy_non_tls_cluster_secrets
+          deploy_tls_cluster_secrets
+          deploy_client
+    - assert:
+        file: 00-assert.yaml
+  - name: step-01
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          get_cr \
+            | yq eval '.spec.allowUnsafeConfigurations=false' - \
+            | yq eval '.spec.updateStrategy="RollingUpdate"' - \
+            | yq eval '.spec.mysql.clusterType="async"' - \
+            | yq eval '.spec.orchestrator.enabled=true' - \
+            | yq eval '.spec.proxy.haproxy.enabled=true' - \
+            | yq eval '.spec.proxy.haproxy.size=3' - \
+            | kubectl -n "${NAMESPACE}" apply -f -
+    - assert:
+        file: 01-assert.yaml
+  - name: step-02
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nrun_mysql
+          \\\n\t\"CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable
+          (id int PRIMARY KEY)\" \\\n\t\"-h $(get_haproxy_svc $(get_cluster_name))
+          -uroot -proot_password\"\n\nrun_mysql \\\n\t\"INSERT myDB.myTable (id) VALUES
+          (100500)\" \\\n\t\"-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password\""
+  - name: step-03
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -P3306 -uroot -proot_password")
+
+          kubectl create configmap -n "${NAMESPACE}" 03-read-from-primary --from-literal=data="${data}"
+    - assert:
+        file: 03-assert.yaml
+  - name: step-04
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -P3307 -uroot -proot_password")
+          kubectl create configmap -n "${NAMESPACE}" 04-read-from-replicas --from-literal=${test_name}-haproxy-replicas=${data}
+    - assert:
+        file: 04-assert.yaml
+  - name: step-05
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\ndata=()\nfor
+          i in $(seq 0 2); do\n\tdata+=(\"$(get_primary_from_haproxy ${test_name}-haproxy-$i)\")\ndone\nif
+          [ \"${data[0]}\" != \"${data[1]}\" -o \"${data[1]}\" != \"${data[2]}\" ];
+          then\n  echo \"Not all haproxy pods point to same primary: 0: ${data[0]}
+          1: ${data[1]} 2: ${data[2]}\"\n  exit 1\nfi"
+  - name: step-06
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          primary_pod_from_label="$(get_primary_from_label)"
+          primary_pod_from_haproxy="$(get_primary_from_haproxy ${test_name}-haproxy-0)"
+          if [ "${primary_pod_from_label}" != "${primary_pod_from_haproxy}" ]; then
+            echo "Primary in k8s label (${primary_pod_from_label}) is not set to same pod as in haproxy (${primary_pod_from_haproxy})!"
+            exit 1
+          fi
+  - name: step-07
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nprimary_pod_from_label=\"$(get_primary_from_label)\"\n\nkubectl
+          -n \"${NAMESPACE}\" delete pod ${primary_pod_from_label}\nsleep 3\n\ndata=()\nfor
+          i in $(seq 0 2); do\n\tdata+=(\"$(get_primary_from_haproxy ${test_name}-haproxy-$i)\")\ndone\nif
+          [ \"${data[0]}\" != \"${data[1]}\" -o \"${data[1]}\" != \"${data[2]}\" ];
+          then\n  echo \"Not all haproxy pods point to same primary: 0: ${data[0]}
+          1: ${data[1]} 2: ${data[2]}\"\n  exit 1\nfi\n\nprimary_pod_from_label=\"$(get_primary_from_label)\"\nprimary_pod_from_haproxy=\"$(get_primary_from_haproxy
+          ${test_name}-haproxy-0)\"\nif [ \"${primary_pod_from_label}\" != \"${primary_pod_from_haproxy}\"
+          ]; then\n  echo \"Primary in k8s label (${primary_pod_from_label}) is not
+          set to same pod as in haproxy (${primary_pod_from_haproxy})!\"\n  exit 1\nfi"
+  - name: step-08
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          check_passwords_leak
+  - name: step-09
+    try:
+    - apply:
+        file: 09-disable-haproxy.yaml
+    - assert:
+        file: 09-assert.yaml
+    - error:
+        file: 09-errors.yaml
+  - name: step-99
+    try:
+    - apply:
+        file: 99-drop-finalizer.yaml

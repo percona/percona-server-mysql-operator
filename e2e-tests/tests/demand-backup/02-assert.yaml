@@ -1,49 +1,45 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 420
----
-kind: StatefulSet
 apiVersion: apps/v1
+kind: StatefulSet
 metadata:
   name: demand-backup-mysql
 status:
-  observedGeneration: 1
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
   collisionCount: 0
+  currentReplicas: 3
+  observedGeneration: 1
+  readyReplicas: 3
+  replicas: 3
+  updatedReplicas: 3
 ---
-kind: StatefulSet
 apiVersion: apps/v1
+kind: StatefulSet
 metadata:
   name: demand-backup-orc
 status:
-  observedGeneration: 1
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
   collisionCount: 0
+  currentReplicas: 3
+  observedGeneration: 1
+  readyReplicas: 3
+  replicas: 3
+  updatedReplicas: 3
 ---
-kind: StatefulSet
 apiVersion: apps/v1
+kind: StatefulSet
 metadata:
   name: demand-backup-haproxy
 status:
-  observedGeneration: 1
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
   collisionCount: 0
+  currentReplicas: 3
+  observedGeneration: 1
+  readyReplicas: 3
+  replicas: 3
+  updatedReplicas: 3
 ---
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
-  name: demand-backup
   finalizers:
-    - delete-mysql-pods-in-order
+  - delete-mysql-pods-in-order
+  name: demand-backup
 status:
   haproxy:
     ready: 3

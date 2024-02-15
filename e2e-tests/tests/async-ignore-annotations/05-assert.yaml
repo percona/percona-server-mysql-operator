@@ -1,22 +1,18 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 20
----
 apiVersion: v1
 kind: Service
 metadata:
+  annotations:
+    async-annotations-to-ignore-mysql: "true"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
   labels:
-    async-labels-to-ignore-mysql: "true"
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: async-ignore-annotations
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
+    async-labels-to-ignore-mysql: "true"
     percona.com/exposed: "true"
     rack: rack-22
-  annotations:
-    async-annotations-to-ignore-mysql: "true"
-    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
   name: async-ignore-annotations-mysql-0
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
@@ -55,17 +51,17 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  annotations:
+    async-annotations-to-ignore-haproxy: "true"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
   labels:
-    async-labels-to-ignore-haproxy: "true"
     app.kubernetes.io/component: haproxy
     app.kubernetes.io/instance: async-ignore-annotations
     app.kubernetes.io/managed-by: percona-server-operator
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
+    async-labels-to-ignore-haproxy: "true"
     rack: rack-22
-  annotations:
-    async-annotations-to-ignore-haproxy: "true"
-    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
   name: async-ignore-annotations-haproxy
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1

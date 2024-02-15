@@ -1,37 +1,33 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 360
----
-kind: StatefulSet
 apiVersion: apps/v1
+kind: StatefulSet
 metadata:
   name: service-per-pod-mysql
 status:
-  observedGeneration: 1
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
   collisionCount: 0
+  currentReplicas: 3
+  observedGeneration: 1
+  readyReplicas: 3
+  replicas: 3
+  updatedReplicas: 3
 ---
-kind: StatefulSet
 apiVersion: apps/v1
+kind: StatefulSet
 metadata:
   name: service-per-pod-orc
 status:
-  observedGeneration: 1
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
   collisionCount: 0
+  currentReplicas: 3
+  observedGeneration: 1
+  readyReplicas: 3
+  replicas: 3
+  updatedReplicas: 3
 ---
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
-  name: service-per-pod
   finalizers:
-    - delete-mysql-pods-in-order
+  - delete-mysql-pods-in-order
+  name: service-per-pod
 status:
   mysql:
     ready: 3

@@ -1,7 +1,3 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 420
----
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -12,8 +8,8 @@ spec:
     type: OnDelete
 status:
   observedGeneration: 1
-  replicas: 3
   readyReplicas: 3
+  replicas: 3
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -25,20 +21,20 @@ spec:
     type: RollingUpdate
 status:
   observedGeneration: 1
-  replicas: 3
   readyReplicas: 3
+  replicas: 3
 ---
-kind: StatefulSet
 apiVersion: apps/v1
+kind: StatefulSet
 metadata:
   name: smart-update-haproxy
 spec:
   updateStrategy:
     type: RollingUpdate
 status:
-  observedGeneration: 1
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
   collisionCount: 0
+  currentReplicas: 3
+  observedGeneration: 1
+  readyReplicas: 3
+  replicas: 3
+  updatedReplicas: 3

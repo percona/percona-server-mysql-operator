@@ -1,37 +1,33 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 120
----
-kind: ConfigMap
 apiVersion: v1
-metadata:
-  name: 06-read-data-minio
 data:
   data: "100500"
+kind: ConfigMap
+metadata:
+  name: 06-read-data-minio
 ---
-kind: StatefulSet
 apiVersion: apps/v1
+kind: StatefulSet
 metadata:
   name: one-pod-mysql
 status:
-  observedGeneration: 3
-  replicas: 1
-  readyReplicas: 1
-  currentReplicas: 1
-  updatedReplicas: 1
   collisionCount: 0
+  currentReplicas: 1
+  observedGeneration: 3
+  readyReplicas: 1
+  replicas: 1
+  updatedReplicas: 1
 ---
-kind: StatefulSet
 apiVersion: apps/v1
+kind: StatefulSet
 metadata:
   name: one-pod-orc
 status:
-  observedGeneration: 3
-  replicas: 1
-  readyReplicas: 1
-  currentReplicas: 1
-  updatedReplicas: 1
   collisionCount: 0
+  currentReplicas: 1
+  observedGeneration: 3
+  readyReplicas: 1
+  replicas: 1
+  updatedReplicas: 1
 ---
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL

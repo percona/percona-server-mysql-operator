@@ -1,0 +1,153 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/main/.schemas/json/test-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  creationTimestamp: null
+  name: gr-scaling
+spec:
+  steps:
+  - name: step-00
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+          init_temp_dir # do this only in the first TestStep
+
+          deploy_operator
+          deploy_non_tls_cluster_secrets
+          deploy_tls_cluster_secrets
+          deploy_client
+    - assert:
+        file: 00-assert.yaml
+  - name: step-01
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nget_cr
+          \\\n  | yq eval '.spec.allowUnsafeConfigurations=true' - \\\n  | yq eval
+          '.spec.mysql.clusterType=\"group-replication\"' - \\\n\t| yq eval '.spec.proxy.router.enabled=true'
+          - \\\n\t| yq eval '.spec.proxy.haproxy.enabled=false' - \\\n  | kubectl
+          -n \"${NAMESPACE}\" apply -f -"
+    - assert:
+        file: 01-assert.yaml
+  - name: step-02
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nrun_mysql
+          \\\n\t\"CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable
+          (id int PRIMARY KEY)\" \\\n\t\"-h $(get_mysql_router_service $(get_cluster_name))
+          -uroot -proot_password\"\n\nrun_mysql \\\n\t\"INSERT myDB.myTable (id) VALUES
+          (100500)\" \\\n\t\"-h $(get_mysql_router_service $(get_cluster_name)) -uroot
+          -proot_password\""
+  - name: step-03
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_mysql_router_service $(get_cluster_name)) -uroot -proot_password")
+
+          kubectl create configmap -n "${NAMESPACE}" 03-read-from-primary --from-literal=data="${data}"
+    - assert:
+        file: 03-assert.yaml
+  - name: step-04
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nargs=''\nsize=$(kubectl
+          -n ${NAMESPACE} get ps $(get_cluster_name) -o jsonpath='{.spec.mysql.size}')\nfor
+          i in $(seq 0 $((size - 1))); do\n\thost=$(get_mysql_headless_fqdn $(get_cluster_name)
+          $i)\n\tdata=$(run_mysql \"SELECT * FROM myDB.myTable\" \"-h ${host} -uroot
+          -proot_password\")\n\targs=\"${args} --from-literal=${host}=${data}\"\ndone\n\nkubectl
+          create configmap -n \"${NAMESPACE}\" 04-read-from-replicas ${args}"
+    - assert:
+        file: 04-assert.yaml
+  - name: step-05
+    try:
+    - apply:
+        file: 05-scale-down-mysql.yaml
+    - assert:
+        file: 05-assert.yaml
+  - name: step-06
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nargs=''\nsize=$(kubectl
+          -n ${NAMESPACE} get ps $(get_cluster_name) -o jsonpath='{.spec.mysql.size}')\nfor
+          i in $(seq 0 $((size - 1))); do\n\thost=$(get_mysql_headless_fqdn $(get_cluster_name)
+          $i)\n\tseeds=$(run_mysql \"SELECT @@group_replication_group_seeds\" \"-h
+          ${host} -uroot -proot_password\")\n  echo ${seeds}\n  seeds=$(echo ${seeds}
+          | sed -e \"s/\\.${NAMESPACE}//g\")\n\targs=\"${args} --from-literal=${host}=${seeds}\"\ndone\n\nkubectl
+          create configmap -n \"${NAMESPACE}\" 06-check-group-seeds ${args}"
+    - assert:
+        file: 06-assert.yaml
+  - name: step-07
+    try:
+    - apply:
+        file: 07-scale-down-proxy.yaml
+    - assert:
+        file: 07-assert.yaml
+  - name: step-08
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_mysql_router_service $(get_cluster_name)) -uroot -proot_password")
+
+          kubectl create configmap -n "${NAMESPACE}" 09-read-from-primary --from-literal=data="${data}"
+    - assert:
+        file: 08-assert.yaml
+  - name: step-09
+    try:
+    - apply:
+        file: 09-scale-up-everything.yaml
+    - assert:
+        file: 09-assert.yaml
+  - name: step-10
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nargs=''\nsize=$(kubectl
+          -n ${NAMESPACE} get ps $(get_cluster_name) -o jsonpath='{.spec.mysql.size}')\nfor
+          i in $(seq 0 $((size - 1))); do\n\thost=$(get_mysql_headless_fqdn $(get_cluster_name)
+          $i)\n\tseeds=$(run_mysql \"SELECT @@group_replication_group_seeds\" \"-h
+          ${host} -uroot -proot_password\")\n  echo ${seeds}\n  seeds=$(echo ${seeds}
+          | sed -e \"s/\\.${NAMESPACE}//g\")\n\targs=\"${args} --from-literal=${host}=${seeds}\"\ndone\n\nkubectl
+          create configmap -n \"${NAMESPACE}\" 10-check-group-seeds ${args}"
+    - assert:
+        file: 10-assert.yaml
+  - name: step-11
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_mysql_router_service $(get_cluster_name)) -uroot -proot_password")
+
+          kubectl create configmap -n "${NAMESPACE}" 11-read-from-primary --from-literal=data="${data}"
+    - assert:
+        file: 11-assert.yaml
+  - name: step-12
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nargs=''\nsize=$(kubectl
+          -n ${NAMESPACE} get ps $(get_cluster_name) -o jsonpath='{.spec.mysql.size}')\nfor
+          i in $(seq 0 $((size - 1))); do\n\thost=$(get_mysql_headless_fqdn $(get_cluster_name)
+          $i)\n\tdata=$(run_mysql \"SELECT * FROM myDB.myTable\" \"-h ${host} -uroot
+          -proot_password\")\n\targs=\"${args} --from-literal=${host}=${data}\"\ndone\n\nkubectl
+          create configmap -n \"${NAMESPACE}\" 12-read-from-replicas ${args}"
+    - assert:
+        file: 12-assert.yaml
+  - name: step-99
+    try:
+    - apply:
+        file: 99-drop-finalizer.yaml

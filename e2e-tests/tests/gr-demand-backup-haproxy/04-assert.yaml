@@ -1,34 +1,30 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 300
----
-kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQLBackup
 metadata:
   name: gr-demand-backup-haproxy-minio
 status:
   state: Succeeded
 ---
-kind: StatefulSet
 apiVersion: apps/v1
+kind: StatefulSet
 metadata:
   name: gr-demand-backup-haproxy-mysql
 status:
-  observedGeneration: 1
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
   collisionCount: 0
+  currentReplicas: 3
+  observedGeneration: 1
+  readyReplicas: 3
+  replicas: 3
+  updatedReplicas: 3
 ---
-kind: StatefulSet
 apiVersion: apps/v1
+kind: StatefulSet
 metadata:
   name: gr-demand-backup-haproxy-haproxy
 status:
-  observedGeneration: 1
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
   collisionCount: 0
+  currentReplicas: 3
+  observedGeneration: 1
+  readyReplicas: 3
+  replicas: 3
+  updatedReplicas: 3

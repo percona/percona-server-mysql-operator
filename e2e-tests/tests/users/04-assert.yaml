@@ -1,25 +1,21 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 360
----
-kind: ConfigMap
 apiVersion: v1
+data:
+  heartbeat: success
+  monitor: success
+  operator: success
+  orchestrator: success
+  replication: success
+  xtrabackup: success
+kind: ConfigMap
 metadata:
   name: 04-check-connections
-data:
-  heartbeat: "success"
-  monitor: "success"
-  operator: "success"
-  orchestrator: "success"
-  replication: "success"
-  xtrabackup: "success"
 ---
-kind: ConfigMap
 apiVersion: v1
-metadata:
-  name: 04-check-replication
 data:
   replicating: "2"
+kind: ConfigMap
+metadata:
+  name: 04-check-replication
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -28,8 +24,8 @@ metadata:
   name: users-mysql
 status:
   observedGeneration: 1
-  replicas: 3
   readyReplicas: 3
+  replicas: 3
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -38,17 +34,17 @@ metadata:
   name: users-orc
 status:
   observedGeneration: 2
-  replicas: 3
   readyReplicas: 3
+  replicas: 3
 ---
-kind: StatefulSet
 apiVersion: apps/v1
+kind: StatefulSet
 metadata:
   name: users-haproxy
 status:
-  observedGeneration: 1
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
   collisionCount: 0
+  currentReplicas: 3
+  observedGeneration: 1
+  readyReplicas: 3
+  replicas: 3
+  updatedReplicas: 3
