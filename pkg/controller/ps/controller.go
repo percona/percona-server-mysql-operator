@@ -474,7 +474,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 }
 
 // reconcileMySQLAutoConfig reconciles the ConfigMap for MySQL auto-tuning parameters and 
-// sets read_only=0 for single-node clusters with Orchestrator
+// sets read_only=0 for single-node clusters without Orchestrator
 func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileMySQLAutoConfig")
 	var memory *resource.Quantity
