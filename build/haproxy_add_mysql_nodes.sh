@@ -37,6 +37,11 @@ function main() {
 
 	echo "${#NODE_LIST_REPL[@]}" >$path_to_haproxy_cfg/AVAILABLE_NODES
 
+	haproxy_check_script='haproxy_check_primary.sh'
+	if [ "${#NODE_LIST_REPL[@]}" -gt 1 ]; then
+		haproxy_check_script='haproxy_check_replicas.sh'
+	fi
+
 	cat <<-EOF >"$path_to_haproxy_cfg/haproxy.cfg"
 		    backend mysql-primary
 		      mode tcp
@@ -71,7 +76,7 @@ function main() {
 		      option srvtcpka
 		      balance roundrobin
 		      option external-check
-		      external-check command /opt/percona/haproxy_check_replicas.sh
+		      external-check command /opt/percona/$haproxy_check_script
 	EOF
 
 	(
@@ -85,7 +90,7 @@ function main() {
 		      option srvtcpka
 		      balance roundrobin
 		      option external-check
-		      external-check command /opt/percona/haproxy_check_replicas.sh
+		      external-check command /opt/percona/$haproxy_check_script
 	EOF
 
 	(
