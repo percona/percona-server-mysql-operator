@@ -229,7 +229,6 @@ spec:
           - name: PMM_ADMIN_CUSTOM_PARAMS
             value: --listen-port=8404
         imagePullPolicy: Always
-        name: pmm-client
         ports:
         - containerPort: 7777
           protocol: TCP
