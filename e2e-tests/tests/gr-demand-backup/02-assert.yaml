@@ -31,7 +31,7 @@ metadata:
 status:
   conditions:
   - reason: Initializing
-    status: "True"
+    status: "False"
     type: Initializing
   - reason: Ready
     status: "True"

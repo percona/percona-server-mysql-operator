@@ -48,7 +48,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
 		return writeStatus(ctx, r.Client, nn, cr.Status)
 	}
-	
+
 	if cr.Status.Conditions != nil {
 		meta.RemoveStatusCondition(&cr.Status.Conditions, apiv1alpha1.StateError.String())
 	}
@@ -177,10 +177,35 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 
 	if cr.Status.State != apiv1alpha1.StateError {
-		clusterCondition.Type = cr.Status.State.String()
-		clusterCondition.Reason = cr.Status.State.String()
+		if cr.Status.State == apiv1alpha1.StateInitializing {
+			clusterCondition.Type = apiv1alpha1.StateInitializing.String()
+			clusterCondition.Reason = apiv1alpha1.StateInitializing.String()
+			clusterCondition.Status = metav1.ConditionTrue
+			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
+
+			clusterCondition.Type = apiv1alpha1.StateReady.String()
+			clusterCondition.Reason = apiv1alpha1.StateReady.String()
+			clusterCondition.Status = metav1.ConditionFalse
+			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
+		}
+
+		if cr.Status.State == apiv1alpha1.StateReady {
+			clusterCondition.Type = apiv1alpha1.StateReady.String()
+			clusterCondition.Reason = apiv1alpha1.StateReady.String()
+			clusterCondition.Status = metav1.ConditionTrue
+			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
+
+			clusterCondition.Type = apiv1alpha1.StateInitializing.String()
+			clusterCondition.Reason = apiv1alpha1.StateInitializing.String()
+			clusterCondition.Status = metav1.ConditionFalse
+			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
+		}
+
+		// clusterCondition.Type = cr.Status.State.String()
+		// clusterCondition.Reason = cr.Status.State.String()
+
+		// meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
 	}
-	meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
 
 	log.V(1).Info(
 		"Writing CR status",
