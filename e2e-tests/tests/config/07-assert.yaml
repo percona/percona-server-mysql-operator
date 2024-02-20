@@ -1,11 +1,7 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 60
----
 apiVersion: v1
+data:
+  max_connect_errors: "150"
+  max_connections: "250"
 kind: ConfigMap
 metadata:
   name: 07-check-config
-data:
-  max_connections: "250"
-  max_connect_errors: "150"

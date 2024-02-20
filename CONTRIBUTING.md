@@ -163,11 +163,11 @@ Contributions to the source tree should follow the workflow described below:
    Run the command `make test`.
 2. E2E tests
 
-   For e2e test we are using [kuttl](https://kuttl.dev/). To run a single test call:
+   For e2e test we are using [chainsaw](https://kyverno.github.io/chainsaw/). To run a single test call:
 
-   `kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test ^<test-name>/$` where the `<test-name>` is the folder inside `e2e-tests/tests`.
+   `chainsaw test ./e2e-tests/tests/<test-name>` where the `<test-name>` is the folder inside `e2e-tests/tests`.
    
-   By default kuttl will delete created test namespace after test is finished, you can add `--skip-delete` flag in order to prevent deletion for potential troubleshooting.
+   By default chainsaw will delete created test namespace after test is finished, you can add `--skip-delete` flag in order to prevent deletion for potential troubleshooting.
 
 **Running the Operator locally**
 

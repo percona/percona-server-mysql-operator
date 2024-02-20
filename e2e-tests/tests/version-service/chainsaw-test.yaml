@@ -1,0 +1,115 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/main/.schemas/json/test-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  creationTimestamp: null
+  name: version-service
+spec:
+  steps:
+  - name: step-00
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+          init_temp_dir # do this only in the first TestStep
+
+          deploy_operator
+          deploy_non_tls_cluster_secrets
+          deploy_tls_cluster_secrets
+          deploy_version_service
+          deploy_client
+    - assert:
+        file: 00-assert.yaml
+  - name: step-01
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          get_cr \
+            | yq eval '.spec.mysql.clusterType="async"' - \
+            | yq eval '.metadata.name="cluster-recommended"' - \
+            | yq eval '.spec.upgradeOptions.apply="recommended"' - \
+            | yq eval '.spec.crVersion="9.9.9"' - \
+            | yq eval '.spec.mysql.image="percona/percona-server:8.0.28-19"' - \
+            | yq eval '.spec.backup.enabled=false' - \
+            | yq eval '.spec.upgradeOptions.versionServiceEndpoint="http://percona-version-service:80"' - \
+            | kubectl -n "${NAMESPACE}" apply -f -
+    - assert:
+        file: 01-assert.yaml
+  - name: step-02
+    try:
+    - apply:
+        file: 02-set-upgradeOption-never.yaml
+    - assert:
+        file: 02-assert.yaml
+  - name: step-03
+    try:
+    - apply:
+        file: 03-set-upgradeOption-disabled.yaml
+    - assert:
+        file: 03-assert.yaml
+  - name: step-04
+    try:
+    - delete:
+        ref:
+          apiVersion: ps.percona.com/v1alpha1
+          kind: PerconaServerMySQL
+          name: cluster-recommended
+  - name: step-05
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          get_cr \
+            | yq eval '.spec.mysql.clusterType="async"' - \
+            | yq eval '.metadata.name="cluster-latest"' - \
+            | yq eval '.spec.upgradeOptions.apply="latest"' - \
+            | yq eval '.spec.crVersion="9.9.9"' - \
+            | yq eval '.spec.mysql.image="percona/percona-server:8.0.28-19"' - \
+            | yq eval '.spec.backup.enabled=false' - \
+            | yq eval '.spec.upgradeOptions.versionServiceEndpoint="http://percona-version-service:80"' - \
+            | kubectl -n "${NAMESPACE}" apply -f -
+    - assert:
+        file: 05-assert.yaml
+  - name: step-06
+    try:
+    - delete:
+        ref:
+          apiVersion: ps.percona.com/v1alpha1
+          kind: PerconaServerMySQL
+          name: cluster-latest
+  - name: step-07
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          get_cr \
+            | yq eval '.spec.mysql.clusterType="async"' - \
+            | yq eval '.metadata.name="cluster-exact"' - \
+            | yq eval '.spec.upgradeOptions.apply="8.0.28-19"' - \
+            | yq eval '.spec.crVersion="9.9.9"' - \
+            | yq eval '.spec.mysql.image="percona/percona-server:8.0.28-20"' - \
+            | yq eval '.spec.backup.enabled=false' - \
+            | yq eval '.spec.upgradeOptions.versionServiceEndpoint="http://percona-version-service:80"' - \
+            | kubectl -n "${NAMESPACE}" apply -f -
+    - assert:
+        file: 07-assert.yaml
+  - name: step-99
+    try:
+    - apply:
+        file: 99-drop-finalizer.yaml

@@ -1,17 +1,13 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 300
----
-kind: ConfigMap
 apiVersion: v1
-metadata:
-  name: 07-read-from-replicas
 data:
   scaling-mysql-0.scaling-mysql: "100500"
   scaling-mysql-1.scaling-mysql: "100500"
   scaling-mysql-2.scaling-mysql: "100500"
   scaling-mysql-3.scaling-mysql: "100500"
   scaling-mysql-4.scaling-mysql: "100500"
+kind: ConfigMap
+metadata:
+  name: 07-read-from-replicas
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

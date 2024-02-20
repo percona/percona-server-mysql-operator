@@ -1,13 +1,9 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 120
----
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
-  name: gr-recreate
   finalizers:
-    - delete-mysql-pods-in-order
+  - delete-mysql-pods-in-order
+  name: gr-recreate
 status:
   mysql:
     state: paused
@@ -54,8 +50,8 @@ metadata:
     app.kubernetes.io/part-of: percona-server
   name: datadir-gr-recreate-mysql-2
 ---
-kind: StatefulSet
 apiVersion: apps/v1
+kind: StatefulSet
 metadata:
   name: gr-recreate-mysql
 status:
@@ -64,8 +60,8 @@ status:
   observedGeneration: 2
   replicas: 0
 ---
-kind: Deployment
 apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: gr-recreate-router
 status:

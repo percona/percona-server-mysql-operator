@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/main/.schemas/json/test-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  creationTimestamp: null
+  name: smart-update
+spec:
+  steps:
+  - name: step-00
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+          init_temp_dir # do this only in the first TestStep
+
+          deploy_operator
+          deploy_non_tls_cluster_secrets
+          deploy_tls_cluster_secrets
+          deploy_client
+          deploy_version_service
+    - assert:
+        file: 00-assert.yaml
+  - name: step-01
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          get_cr \
+            | yq eval '.spec.mysql.clusterType="async"' - \
+            | yq eval '.spec.updateStrategy="SmartUpdate"' - \
+            | yq eval '.spec.upgradeOptions.apply="disabled"' - \
+            | yq eval '.spec.mysql.image="percona/percona-server:8.0.28-19"' - \
+            | yq eval '.spec.backup.enabled=false' - \
+            | yq eval '.spec.upgradeOptions.versionServiceEndpoint="http://percona-version-service:80"' - \
+            | kubectl -n "${NAMESPACE}" apply -f -
+    - assert:
+        file: 01-assert.yaml
+  - name: step-02
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\ninitialPrimary=$(get_primary_from_haproxy
+          ${test_name}-haproxy-0)\n\n# Upgrade cluster\nkubectl -n \"${NAMESPACE}\"
+          patch ps \"$(get_cluster_name)\" \\\n\t--type json \\\n\t-p '[{\"op\": \"replace\",
+          \"path\": \"/spec/mysql/image\", \"value\": \"percona/percona-server:8.0.28-20\"}]'\n\nwait_cluster_consistency_async
+          \"${test_name}\" \"3\" \"3\"\n\npods=$(kubectl get pods -n \"${NAMESPACE}\"
+          --sort-by=.status.startTime --no-headers --selector=app.kubernetes.io/component=mysql
+          -ojson | jq  --raw-output '.items[].metadata.name')\n\nlastRestarted=$(echo
+          $pods | awk '{print $NF}')\n\nif [ \"$lastRestarted\" == \"$initialPrimary\"
+          ]; then\n  exit 0\nfi\n\necho \"last restarted pod is not initial primary\"\nexit
+          1"
+  - name: step-99
+    try:
+    - apply:
+        file: 99-drop-finalizer.yaml

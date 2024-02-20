@@ -1,0 +1,166 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/main/.schemas/json/test-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  creationTimestamp: null
+  name: scaling
+spec:
+  steps:
+  - name: step-00
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+          init_temp_dir # do this only in the first TestStep
+
+          deploy_operator
+          deploy_non_tls_cluster_secrets
+          deploy_tls_cluster_secrets
+          deploy_client
+    - assert:
+        file: 00-assert.yaml
+  - name: step-01
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          get_cr \
+            | yq eval '.spec.mysql.clusterType="async"' - \
+            | yq eval '.spec.mysql.affinity.antiAffinityTopologyKey="none"' - \
+            | yq eval '.spec.mysql.size=3' - \
+            | yq eval '.spec.orchestrator.enabled=true' - \
+            | yq eval '.spec.orchestrator.size=3' - \
+            | yq eval '.spec.orchestrator.affinity.antiAffinityTopologyKey="none"' - \
+            | kubectl -n "${NAMESPACE}" apply -f -
+    - assert:
+        file: 01-assert.yaml
+  - name: step-02
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nrun_mysql
+          \\\n\t\"CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable
+          (id int PRIMARY KEY)\" \\\n\t\"-h $(get_haproxy_svc $(get_cluster_name))
+          -uroot -proot_password\"\n\nrun_mysql \\\n\t\"INSERT myDB.myTable (id) VALUES
+          (100500)\" \\\n\t\"-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password\""
+  - name: step-03
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password")
+
+          kubectl create configmap -n "${NAMESPACE}" 03-read-from-primary --from-literal=data="${data}"
+    - assert:
+        file: 03-assert.yaml
+  - name: step-04
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          args=''
+          size=3
+          for i in $(seq 0 $((size - 1))); do
+            host=$(get_mysql_headless_fqdn $(get_cluster_name) $i)
+            data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${host} -uroot -proot_password")
+            args="${args} --from-literal=${host}=${data}"
+          done
+
+          kubectl create configmap -n "${NAMESPACE}" 04-read-from-replicas ${args}
+    - assert:
+        file: 04-assert.yaml
+  - name: step-05
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          orc_host=$(get_orc_headless_fqdn $(get_cluster_name) 0)
+          cluster=$(run_curl "http://${orc_host}:3000/api/clusters/" | jq -r .[0] | sed "s/.${NAMESPACE}//g")
+          args="--from-literal=cluster=${cluster}"
+
+          run_curl "http://${orc_host}:3000/api/cluster/${cluster}/" | jq -r .[].Key.Hostname | sed "s/.${NAMESPACE}//g" >"${TEMP_DIR}/instances"
+          args="${args} --from-file=instances=${TEMP_DIR}/instances"
+
+          kubectl create configmap -n "${NAMESPACE}" 05-check-orchestrator ${args}
+    - assert:
+        file: 05-assert.yaml
+  - name: step-06
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          get_cr \
+            | yq eval '.spec.mysql.affinity.antiAffinityTopologyKey="none"' - \
+            | yq eval '.spec.mysql.size=5' - \
+            | yq eval '.spec.orchestrator.affinity.antiAffinityTopologyKey="none"' - \
+            | yq eval '.spec.orchestrator.enabled=true' - \
+            | yq eval '.spec.orchestrator.size=5' - \
+            | kubectl -n "${NAMESPACE}" apply -f -
+    - assert:
+        file: 06-assert.yaml
+  - name: step-07
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          args=''
+          size=5
+          for i in $(seq 0 $((size - 1))); do
+            host=$(get_mysql_headless_fqdn $(get_cluster_name) $i)
+            data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${host} -uroot -proot_password")
+            args="${args} --from-literal=${host}=${data}"
+          done
+
+          kubectl create configmap -n "${NAMESPACE}" 07-read-from-replicas ${args}
+    - assert:
+        file: 07-assert.yaml
+  - name: step-08
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          get_cr \
+            | yq eval '.spec.mysql.affinity.antiAffinityTopologyKey="none"' - \
+            | yq eval '.spec.mysql.size=3' - \
+            | yq eval '.spec.orchestrator.affinity.antiAffinityTopologyKey="none"' - \
+            | yq eval '.spec.orchestrator.enabled=true' - \
+            | yq eval '.spec.orchestrator.size=3' - \
+            | kubectl -n "${NAMESPACE}" apply -f -
+    - assert:
+        file: 08-assert.yaml
+    - error:
+        file: 08-errors.yaml
+  - name: step-99
+    try:
+    - apply:
+        file: 99-drop-finalizer.yaml

@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/main/.schemas/json/test-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  creationTimestamp: null
+  name: sidecars
+spec:
+  steps:
+  - name: step-00
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+          init_temp_dir # do this only in the first TestStep
+
+          deploy_operator
+          deploy_non_tls_cluster_secrets
+          deploy_tls_cluster_secrets
+    - assert:
+        file: 00-assert.yaml
+  - name: step-01
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nget_cr
+          \\\n  | yq eval '.spec.mysql.clusterType=\"async\"' - \\\n\t| yq eval '.spec.mysql.sidecars
+          = [{\"name\": \"sidecar1\", \"image\": \"busybox\", \"command\": [\"sleep\",
+          \"30d\"], \"volumeMounts\": [{\"name\": \"empty-vol\", \"mountPath\": \"/var/app/empty\"}]}]'
+          - \\\n\t| yq eval '.spec.mysql.sidecars += [{\"name\": \"sidecar2\", \"image\":
+          \"busybox\", \"command\": [\"sleep\", \"30d\"], \"volumeMounts\": [{\"name\":
+          \"pvc-vol\", \"mountPath\": \"/var/app/pvc\"}]}]' - \\\n\t| yq eval '.spec.mysql.sidecarVolumes
+          = [{\"name\": \"empty-vol\", \"emptyDir\": {\"medium\": \"Memory\"}}]' -
+          \\\n\t| yq eval '.spec.mysql.sidecarPVCs = [{\"name\": \"pvc-vol\", \"spec\":
+          {\"resources\": {\"requests\": {\"storage\": \"1G\"}}}}]' - \\\n\t| kubectl
+          -n \"${NAMESPACE}\" apply -f -"
+    - assert:
+        file: 01-assert.yaml
+  - name: step-99
+    try:
+    - apply:
+        file: 99-drop-finalizer.yaml

@@ -1,10 +1,9 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 30
----
 apiVersion: v1
 kind: Service
 metadata:
+  annotations:
+    gr-annotations-to-ignore-mysql: "true"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
   labels:
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: gr-ignore-annotations
@@ -14,9 +13,6 @@ metadata:
     gr-labels-to-ignore-mysql: "true"
     percona.com/exposed: "true"
     rack: rack-22-test
-  annotations:
-    gr-annotations-to-ignore-mysql: "true"
-    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
   name: gr-ignore-annotations-mysql-0
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
@@ -59,6 +55,9 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  annotations:
+    gr-annotations-to-ignore-router: "true"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
   labels:
     app.kubernetes.io/component: router
     app.kubernetes.io/instance: gr-ignore-annotations
@@ -67,9 +66,6 @@ metadata:
     app.kubernetes.io/part-of: percona-server
     gr-labels-to-ignore-router: "true"
     rack: rack-22-test
-  annotations:
-    gr-annotations-to-ignore-router: "true"
-    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
   name: gr-ignore-annotations-router
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1

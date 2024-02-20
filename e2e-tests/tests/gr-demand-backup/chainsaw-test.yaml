@@ -1,0 +1,201 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/main/.schemas/json/test-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  creationTimestamp: null
+  name: gr-demand-backup
+spec:
+  steps:
+  - name: step-00
+    try:
+    - apply:
+        file: 00-minio-secret.yaml
+    - assert:
+        file: 00-assert.yaml
+  - name: step-01
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+          init_temp_dir # do this only in the first TestStep
+
+          kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/cloud-secret.yml"
+          deploy_operator
+          deploy_non_tls_cluster_secrets
+          deploy_tls_cluster_secrets
+          deploy_client
+          deploy_minio
+    - assert:
+        file: 01-assert.yaml
+  - name: step-02
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nget_cr
+          \\\n\t| yq eval '.spec.backup.storages.minio.type=\"s3\"' - \\\n\t| yq eval
+          '.spec.backup.storages.minio.s3.bucket=\"operator-testing\"' - \\\n\t| yq
+          eval '.spec.backup.storages.minio.s3.credentialsSecret=\"minio-secret\"'
+          - \\\n\t| yq eval '.spec.backup.storages.minio.s3.endpointUrl=\"http://minio-service:9000\"'
+          - \\\n\t| yq eval '.spec.backup.storages.minio.s3.region=\"us-east-1\"'
+          - \\\n\t| yq eval '.spec.backup.storages.aws-s3.type=\"s3\"' - \\\n\t| yq
+          eval '.spec.backup.storages.aws-s3.verifyTLS=true' - \\\n\t| yq eval '.spec.backup.storages.aws-s3.s3.bucket=\"operator-testing\"'
+          - \\\n\t| yq eval '.spec.backup.storages.aws-s3.s3.credentialsSecret=\"aws-s3-secret\"'
+          - \\\n\t| yq eval '.spec.backup.storages.aws-s3.s3.region=\"us-east-1\"'
+          - \\\n\t| yq eval '.spec.backup.storages.aws-s3.s3.prefix=\"ps\"' - \\\n\t|
+          yq eval '.spec.backup.storages.gcp-cs.type=\"gcs\"' - \\\n\t| yq eval '.spec.backup.storages.gcp-cs.verifyTLS=true'
+          - \\\n\t| yq eval '.spec.backup.storages.gcp-cs.gcs.bucket=\"operator-testing\"'
+          - \\\n\t| yq eval '.spec.backup.storages.gcp-cs.gcs.credentialsSecret=\"gcp-cs-secret\"'
+          - \\\n\t| yq eval '.spec.backup.storages.gcp-cs.gcs.endpointUrl=\"https://storage.googleapis.com\"'
+          - \\\n\t| yq eval '.spec.backup.storages.gcp-cs.gcs.prefix=\"ps\"' - \\\n\t|
+          yq eval '.spec.backup.storages.azure-blob.type=\"azure\"' - \\\n\t| yq eval
+          '.spec.backup.storages.azure-blob.verifyTLS=true' - \\\n\t| yq eval '.spec.backup.storages.azure-blob.azure.containerName=\"operator-testing\"'
+          - \\\n\t| yq eval '.spec.backup.storages.azure-blob.azure.credentialsSecret=\"azure-secret\"'
+          - \\\n\t| yq eval '.spec.backup.storages.azure-blob.azure.prefix=\"ps\"'
+          - \\\n\t| yq eval '.spec.mysql.clusterType=\"group-replication\"' - \\\n\t|
+          yq eval '.spec.proxy.router.enabled=true' - \\\n\t| yq eval '.spec.proxy.haproxy.enabled=false'
+          - \\\n\t| kubectl -n \"${NAMESPACE}\" apply -f -"
+    - assert:
+        file: 02-assert.yaml
+  - name: step-03
+    try:
+    - script:
+        content: "set -o errexit\nset -o pipefail\nset -o xtrace\n\nsource ../../functions\n\nrun_mysql
+          \\\n\t\"CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable
+          (id int PRIMARY KEY)\" \\\n\t\"-h $(get_mysql_router_service $(get_cluster_name))
+          -uroot -proot_password\"\n\nrun_mysql \\\n\t\"INSERT myDB.myTable (id) VALUES
+          (100500)\" \\\n\t\"-h $(get_mysql_router_service $(get_cluster_name)) -uroot
+          -proot_password\""
+  - name: step-04
+    try:
+    - apply:
+        file: 04-create-backup-minio.yaml
+    - assert:
+        file: 04-assert.yaml
+  - name: step-05
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nrun_mysql
+          \\\n\t\"TRUNCATE TABLE myDB.myTable\" \\\n\t\"-h $(get_mysql_router_service
+          $(get_cluster_name)) -uroot -proot_password\"\n\ncluster_name=$(get_cluster_name)\nfor
+          i in 0 1 2; do\n\tdata=$(run_mysql \"SELECT * FROM myDB.myTable\" \"-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql
+          -uroot -proot_password\")\n\tkubectl create configmap -n \"${NAMESPACE}\"
+          04-delete-data-minio-${i} --from-literal=data=\"${data}\"\ndone"
+    - assert:
+        file: 05-assert.yaml
+  - name: step-06
+    try:
+    - apply:
+        file: 06-restore-from-minio.yaml
+    - assert:
+        file: 06-assert.yaml
+  - name: step-07
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\ncluster_name=$(get_cluster_name)\nfor
+          i in 0 1 2; do\n\tdata=$(run_mysql \"SELECT * FROM myDB.myTable\" \"-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql
+          -uroot -proot_password\")\n\tkubectl create configmap -n \"${NAMESPACE}\"
+          06-read-data-minio-${i} --from-literal=data=\"${data}\"\ndone"
+    - assert:
+        file: 07-assert.yaml
+  - name: step-08
+    try:
+    - apply:
+        file: 08-create-backup-s3.yaml
+    - assert:
+        file: 08-assert.yaml
+  - name: step-09
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nrun_mysql
+          \\\n\t\"TRUNCATE TABLE myDB.myTable\" \\\n\t\"-h $(get_mysql_router_service
+          $(get_cluster_name)) -uroot -proot_password\"\n\ncluster_name=$(get_cluster_name)\nfor
+          i in 0 1 2; do\n\tdata=$(run_mysql \"SELECT * FROM myDB.myTable\" \"-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql
+          -uroot -proot_password\")\n\tkubectl create configmap -n \"${NAMESPACE}\"
+          08-delete-data-s3-${i} --from-literal=data=\"${data}\"\ndone"
+    - assert:
+        file: 09-assert.yaml
+  - name: step-10
+    try:
+    - apply:
+        file: 10-restore-from-s3.yaml
+    - assert:
+        file: 10-assert.yaml
+  - name: step-11
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\ncluster_name=$(get_cluster_name)\nfor
+          i in 0 1 2; do\n\tdata=$(run_mysql \"SELECT * FROM myDB.myTable\" \"-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql
+          -uroot -proot_password\")\n\tkubectl create configmap -n \"${NAMESPACE}\"
+          06-read-data-s3-${i} --from-literal=data=\"${data}\"\ndone"
+    - assert:
+        file: 11-assert.yaml
+  - name: step-12
+    try:
+    - apply:
+        file: 12-create-backup-gcp.yaml
+    - assert:
+        file: 12-assert.yaml
+  - name: step-13
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nrun_mysql
+          \\\n\t\"TRUNCATE TABLE myDB.myTable\" \\\n\t\"-h $(get_mysql_router_service
+          $(get_cluster_name)) -uroot -proot_password\"\n\ncluster_name=$(get_cluster_name)\nfor
+          i in 0 1 2; do\n\tdata=$(run_mysql \"SELECT * FROM myDB.myTable\" \"-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql
+          -uroot -proot_password\")\n\tkubectl create configmap -n \"${NAMESPACE}\"
+          12-delete-data-gcp-${i} --from-literal=data=\"${data}\"\ndone"
+    - assert:
+        file: 13-assert.yaml
+  - name: step-14
+    try:
+    - apply:
+        file: 14-restore-from-gcp.yaml
+    - assert:
+        file: 14-assert.yaml
+  - name: step-15
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\ncluster_name=$(get_cluster_name)\nfor
+          i in 0 1 2; do\n\tdata=$(run_mysql \"SELECT * FROM myDB.myTable\" \"-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql
+          -uroot -proot_password\")\n\tkubectl create configmap -n \"${NAMESPACE}\"
+          06-read-data-gcp-${i} --from-literal=data=\"${data}\"\ndone"
+    - assert:
+        file: 15-assert.yaml
+  - name: step-16
+    try:
+    - apply:
+        file: 16-create-backup-azure.yaml
+    - assert:
+        file: 16-assert.yaml
+  - name: step-17
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nrun_mysql
+          \\\n\t\"TRUNCATE TABLE myDB.myTable\" \\\n\t\"-h $(get_mysql_router_service
+          $(get_cluster_name)) -uroot -proot_password\"\n\ncluster_name=$(get_cluster_name)\nfor
+          i in 0 1 2; do\n\tdata=$(run_mysql \"SELECT * FROM myDB.myTable\" \"-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql
+          -uroot -proot_password\")\n\tkubectl create configmap -n \"${NAMESPACE}\"
+          16-delete-data-azure-${i} --from-literal=data=\"${data}\"\ndone"
+    - assert:
+        file: 17-assert.yaml
+  - name: step-18
+    try:
+    - apply:
+        file: 18-restore-from-azure.yaml
+    - assert:
+        file: 18-assert.yaml
+  - name: step-19
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\ncluster_name=$(get_cluster_name)\nfor
+          i in 0 1 2; do\n\tdata=$(run_mysql \"SELECT * FROM myDB.myTable\" \"-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql
+          -uroot -proot_password\")\n\tkubectl create configmap -n \"${NAMESPACE}\"
+          06-read-data-azure-${i} --from-literal=data=\"${data}\"\ndone"
+    - assert:
+        file: 19-assert.yaml
+  - name: step-99
+    try:
+    - apply:
+        file: 99-drop-finalizer.yaml

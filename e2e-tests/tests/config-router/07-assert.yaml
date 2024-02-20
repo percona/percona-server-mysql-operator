@@ -1,11 +1,4 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 60
----
 apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: config-router-router
 data:
   mysqlrouter.conf: |
     [default]
@@ -13,3 +6,6 @@ data:
 
     [logger]
     level=DEBUG
+kind: ConfigMap
+metadata:
+  name: config-router-router

@@ -1,7 +1,3 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 420
----
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -56,8 +52,8 @@ spec:
               optional: true
           - configMap:
               items:
-                - key: my.cnf
-                  path: auto-config.cnf
+              - key: my.cnf
+                path: auto-config.cnf
               name: auto-config-router-mysql
               optional: true
           - secret:
@@ -70,8 +66,8 @@ spec:
         name: backup-logs
 status:
   observedGeneration: 1
-  replicas: 3
   readyReplicas: 3
+  replicas: 3
 ---
 apiVersion: apps/v1
 kind: Deployment

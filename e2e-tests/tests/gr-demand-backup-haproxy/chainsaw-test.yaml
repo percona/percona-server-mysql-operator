@@ -1,0 +1,89 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/main/.schemas/json/test-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  creationTimestamp: null
+  name: gr-demand-backup-haproxy
+spec:
+  steps:
+  - name: step-00
+    try:
+    - apply:
+        file: 00-minio-secret.yaml
+    - assert:
+        file: 00-assert.yaml
+  - name: step-01
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+          init_temp_dir # do this only in the first TestStep
+
+          deploy_operator
+          deploy_non_tls_cluster_secrets
+          deploy_tls_cluster_secrets
+          deploy_client
+          deploy_minio
+    - assert:
+        file: 01-assert.yaml
+  - name: step-02
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nget_cr
+          \\\n\t| yq eval '.spec.backup.storages.minio.type=\"s3\"' - \\\n\t| yq eval
+          '.spec.backup.storages.minio.s3.bucket=\"operator-testing\"' - \\\n\t| yq
+          eval '.spec.backup.storages.minio.s3.credentialsSecret=\"minio-secret\"'
+          - \\\n\t| yq eval '.spec.backup.storages.minio.s3.endpointUrl=\"http://minio-service:9000\"'
+          - \\\n\t| yq eval '.spec.backup.storages.minio.s3.region=\"us-east-1\"'
+          - \\\n\t| yq eval '.spec.mysql.clusterType=\"group-replication\"' - \\\n\t|
+          yq eval '.spec.proxy.router.enabled=false' - \\\n\t| yq eval '.spec.proxy.haproxy.enabled=true'
+          - \\\n\t| kubectl -n \"${NAMESPACE}\" apply -f -"
+    - assert:
+        file: 02-assert.yaml
+  - name: step-03
+    try:
+    - script:
+        content: "set -o errexit\nset -o pipefail\nset -o xtrace\n\nsource ../../functions\n\nrun_mysql
+          \\\n\t\"CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable
+          (id int PRIMARY KEY)\" \\\n\t\"-h $(get_haproxy_svc $(get_cluster_name))
+          -uroot -proot_password\"\n\nrun_mysql \\\n\t\"INSERT myDB.myTable (id) VALUES
+          (100500)\" \\\n\t\"-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password\""
+  - name: step-04
+    try:
+    - apply:
+        file: 04-create-backup-minio.yaml
+    - assert:
+        file: 04-assert.yaml
+  - name: step-05
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nrun_mysql
+          \\\n\t\"TRUNCATE TABLE myDB.myTable\" \\\n\t\"-h $(get_haproxy_svc $(get_cluster_name))
+          -uroot -proot_password\"\n\ncluster_name=$(get_cluster_name)\nfor i in 0
+          1 2; do\n\tdata=$(run_mysql \"SELECT * FROM myDB.myTable\" \"-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql
+          -uroot -proot_password\")\n\tkubectl create configmap -n \"${NAMESPACE}\"
+          04-delete-data-minio-${i} --from-literal=data=\"${data}\"\ndone"
+    - assert:
+        file: 05-assert.yaml
+  - name: step-06
+    try:
+    - apply:
+        file: 06-restore-from-minio.yaml
+    - assert:
+        file: 06-assert.yaml
+  - name: step-07
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\ncluster_name=$(get_cluster_name)\nfor
+          i in 0 1 2; do\n\tdata=$(run_mysql \"SELECT * FROM myDB.myTable\" \"-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql
+          -uroot -proot_password\")\n\tkubectl create configmap -n \"${NAMESPACE}\"
+          06-read-data-minio-${i} --from-literal=data=\"${data}\"\ndone"
+    - assert:
+        file: 07-assert.yaml
+  - name: step-99
+    try:
+    - apply:
+        file: 99-drop-finalizer.yaml

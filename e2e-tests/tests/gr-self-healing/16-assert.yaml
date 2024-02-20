@@ -1,39 +1,35 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 30
----
-kind: ConfigMap
 apiVersion: v1
+data:
+  data: |-
+    100500
+    100501
+    100502
+    100503
+    100504
+kind: ConfigMap
 metadata:
   name: 16-read-from-replicas-0
+---
+apiVersion: v1
 data:
   data: |-
-     100500
-     100501
-     100502
-     100503
-     100504
----
+    100500
+    100501
+    100502
+    100503
+    100504
 kind: ConfigMap
-apiVersion: v1
 metadata:
   name: 16-read-from-replicas-1
+---
+apiVersion: v1
 data:
   data: |-
-     100500
-     100501
-     100502
-     100503
-     100504
----
+    100500
+    100501
+    100502
+    100503
+    100504
 kind: ConfigMap
-apiVersion: v1
 metadata:
   name: 16-read-from-replicas-2
-data:
-  data: |-
-     100500
-     100501
-     100502
-     100503
-     100504

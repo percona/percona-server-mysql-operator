@@ -1,0 +1,408 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/main/.schemas/json/test-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  creationTimestamp: null
+  name: demand-backup
+spec:
+  steps:
+  - name: step-00
+    try:
+    - apply:
+        file: 00-minio-secret.yaml
+    - assert:
+        file: 00-assert.yaml
+  - name: step-01
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+          init_temp_dir # do this only in the first TestStep
+
+          kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/cloud-secret.yml"
+          deploy_operator
+          deploy_non_tls_cluster_secrets
+          deploy_tls_cluster_secrets
+          deploy_client
+          deploy_minio
+    - assert:
+        file: 01-assert.yaml
+  - name: step-02
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          get_cr \
+            | yq eval '.spec.mysql.clusterType="async"' - \
+            | yq eval '.spec.mysql.size=3' - \
+            | yq eval '.spec.proxy.haproxy.enabled=true' - \
+            | yq eval '.spec.proxy.haproxy.size=3' - \
+            | yq eval '.spec.orchestrator.enabled=true' - \
+            | yq eval '.spec.orchestrator.size=3' - \
+            | yq eval '.spec.backup.storages.minio.type="s3"' - \
+            | yq eval '.spec.backup.storages.minio.s3.bucket="operator-testing"' - \
+            | yq eval '.spec.backup.storages.minio.s3.credentialsSecret="minio-secret"' - \
+            | yq eval '.spec.backup.storages.minio.s3.endpointUrl="http://minio-service:9000"' - \
+            | yq eval '.spec.backup.storages.minio.s3.region="us-east-1"' - \
+            | yq eval '.spec.backup.storages.aws-s3.type="s3"' - \
+            | yq eval '.spec.backup.storages.aws-s3.verifyTLS=true' - \
+            | yq eval '.spec.backup.storages.aws-s3.s3.bucket="operator-testing"' - \
+            | yq eval '.spec.backup.storages.aws-s3.s3.credentialsSecret="aws-s3-secret"' - \
+            | yq eval '.spec.backup.storages.aws-s3.s3.region="us-east-1"' - \
+            | yq eval '.spec.backup.storages.aws-s3.s3.prefix="ps"' - \
+            | yq eval '.spec.backup.storages.gcp-cs.type="gcs"' - \
+            | yq eval '.spec.backup.storages.gcp-cs.verifyTLS=true' - \
+            | yq eval '.spec.backup.storages.gcp-cs.gcs.bucket="operator-testing"' - \
+            | yq eval '.spec.backup.storages.gcp-cs.gcs.credentialsSecret="gcp-cs-secret"' - \
+            | yq eval '.spec.backup.storages.gcp-cs.gcs.endpointUrl="https://storage.googleapis.com"' - \
+            | yq eval '.spec.backup.storages.gcp-cs.gcs.prefix="ps"' - \
+            | yq eval '.spec.backup.storages.azure-blob.type="azure"' - \
+            | yq eval '.spec.backup.storages.azure-blob.verifyTLS=true' - \
+            | yq eval '.spec.backup.storages.azure-blob.azure.containerName="operator-testing"' - \
+            | yq eval '.spec.backup.storages.azure-blob.azure.credentialsSecret="azure-secret"' - \
+            | yq eval '.spec.backup.storages.azure-blob.azure.prefix="ps"' - \
+            | kubectl -n "${NAMESPACE}" apply -f -
+    - assert:
+        file: 02-assert.yaml
+  - name: step-03
+    try:
+    - script:
+        content: "set -o errexit\nset -o xtrace\n\nsource ../../functions\n\nrun_mysql
+          \\\n\t\"CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable
+          (id int PRIMARY KEY)\" \\\n\t\"-h $(get_haproxy_svc $(get_cluster_name))
+          -uroot -proot_password\"\n\nrun_mysql \\\n\t\"INSERT myDB.myTable (id) VALUES
+          (100500)\" \\\n\t\"-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password\""
+  - name: step-04
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          primary_pod_from_label="$(get_primary_from_label)"
+          kubectl delete pod -n ${NAMESPACE} ${primary_pod_from_label}
+          wait_cluster_consistency_async "${test_name}" "3" "3"
+
+          new_primary_pod_from_label="$(get_primary_from_label)"
+          if [ "${primary_pod_from_label}" == "${new_primary_pod_from_label}" ]; then
+              echo "Old (${primary_pod_from_label}) and new (${new_primary_pod_from_label}) primary are the same (the failover didn't happen)!"
+              exit 1
+          fi
+  - name: step-05
+    try:
+    - apply:
+        file: 05-create-backup-minio.yaml
+    - assert:
+        file: 05-assert.yaml
+  - name: step-06
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          check_passwords_leak
+  - name: step-07
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          run_mysql \
+            "TRUNCATE TABLE myDB.myTable" \
+            "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+
+          cluster_name=$(get_cluster_name)
+          for i in 0 1 2; do
+            data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql -uroot -proot_password")
+            kubectl create configmap -n "${NAMESPACE}" 04-delete-data-minio-${i} --from-literal=data="${data}"
+          done
+    - assert:
+        file: 07-assert.yaml
+  - name: step-08
+    try:
+    - apply:
+        file: 08-restore-from-minio.yaml
+    - assert:
+        file: 08-assert.yaml
+  - name: step-09
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          check_passwords_leak
+  - name: step-10
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          cluster_name=$(get_cluster_name)
+          for i in 0 1 2; do
+            data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql -uroot -proot_password")
+            kubectl create configmap -n "${NAMESPACE}" 06-read-data-minio-${i} --from-literal=data="${data}"
+          done
+    - assert:
+        file: 10-assert.yaml
+  - name: step-11
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          run_mysql \
+            "TRUNCATE TABLE myDB.myTable" \
+            "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+
+          cluster_name=$(get_cluster_name)
+          for i in 0 1 2
+          do
+            data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql -uroot -proot_password")
+            kubectl create configmap -n "${NAMESPACE}" 04-delete-data-minio-backup-source-${i} --from-literal=data="${data}"
+          done
+    - assert:
+        file: 11-assert.yaml
+  - name: step-12
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          storage_name="minio"
+          backup_name="demand-backup-minio"
+          restore_name="demand-backup-restore-minio-backup-source"
+          cluster_name="${test_name}${name_suffix:+-$name_suffix}"
+          destination=$(kubectl -n "${NAMESPACE}" get ps-backup "${backup_name}" -o jsonpath='{.status.destination}')
+
+          cat "${DEPLOY_DIR}/restore.yaml" \
+            | yq eval "$(printf '.metadata.name="%s"' "${restore_name}")" - \
+            | yq eval "$(printf '.spec.clusterName="%s"' "${cluster_name}")" - \
+            | yq eval "del(.spec.backupName)" - \
+            | yq eval "$(printf '.spec.backupSource.destination="%s"' "${destination}")" - \
+            | yq eval '.spec.backupSource.storage.type="s3"' - \
+            | yq eval '.spec.backupSource.storage.s3.bucket="operator-testing"' - \
+            | yq eval '.spec.backupSource.storage.s3.credentialsSecret="minio-secret"' - \
+            | yq eval '.spec.backupSource.storage.s3.endpointUrl="http://minio-service:9000"' - \
+            | yq eval '.spec.backupSource.storage.s3.region="us-east-1"' - \
+            | kubectl apply -n "${NAMESPACE}" -f -
+    - assert:
+        file: 12-assert.yaml
+  - name: step-13
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          cluster_name=$(get_cluster_name)
+          for i in 0 1 2
+          do
+            data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql -uroot -proot_password")
+            kubectl create configmap -n "${NAMESPACE}" 09-read-data-minio-backup-source-${i} --from-literal=data="${data}"
+          done
+    - assert:
+        file: 13-assert.yaml
+  - name: step-14
+    try:
+    - apply:
+        file: 14-create-backup-s3.yaml
+    - assert:
+        file: 14-assert.yaml
+  - name: step-15
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          run_mysql \
+            "TRUNCATE TABLE myDB.myTable" \
+            "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+
+          cluster_name=$(get_cluster_name)
+          for i in 0 1 2; do
+            data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql -uroot -proot_password")
+            kubectl create configmap -n "${NAMESPACE}" 08-delete-data-s3-${i} --from-literal=data="${data}"
+          done
+    - assert:
+        file: 15-assert.yaml
+  - name: step-16
+    try:
+    - apply:
+        file: 16-restore-from-s3.yaml
+    - assert:
+        file: 16-assert.yaml
+  - name: step-17
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          cluster_name=$(get_cluster_name)
+          for i in 0 1 2; do
+            data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql -uroot -proot_password")
+            kubectl create configmap -n "${NAMESPACE}" 06-read-data-s3-${i} --from-literal=data="${data}"
+          done
+    - assert:
+        file: 17-assert.yaml
+  - name: step-18
+    try:
+    - apply:
+        file: 18-create-backup-gcp.yaml
+    - assert:
+        file: 18-assert.yaml
+  - name: step-19
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          run_mysql \
+            "TRUNCATE TABLE myDB.myTable" \
+            "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+
+          cluster_name=$(get_cluster_name)
+          for i in 0 1 2; do
+            data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql -uroot -proot_password")
+            kubectl create configmap -n "${NAMESPACE}" 12-delete-data-gcp-${i} --from-literal=data="${data}"
+          done
+    - assert:
+        file: 19-assert.yaml
+  - name: step-20
+    try:
+    - apply:
+        file: 20-restore-from-gcp.yaml
+    - assert:
+        file: 20-assert.yaml
+  - name: step-21
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          cluster_name=$(get_cluster_name)
+          for i in 0 1 2; do
+            data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql -uroot -proot_password")
+            kubectl create configmap -n "${NAMESPACE}" 06-read-data-gcp-${i} --from-literal=data="${data}"
+          done
+    - assert:
+        file: 21-assert.yaml
+  - name: step-22
+    try:
+    - apply:
+        file: 22-create-backup-azure.yaml
+    - assert:
+        file: 22-assert.yaml
+  - name: step-23
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          run_mysql \
+            "TRUNCATE TABLE myDB.myTable" \
+            "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+
+          cluster_name=$(get_cluster_name)
+          for i in 0 1 2; do
+            data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql -uroot -proot_password")
+            kubectl create configmap -n "${NAMESPACE}" 16-delete-data-azure-${i} --from-literal=data="${data}"
+          done
+    - assert:
+        file: 23-assert.yaml
+  - name: step-24
+    try:
+    - apply:
+        file: 24-restore-from-azure.yaml
+    - assert:
+        file: 24-assert.yaml
+  - name: step-25
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          cluster_name=$(get_cluster_name)
+          for i in 0 1 2; do
+            data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql -uroot -proot_password")
+            kubectl create configmap -n "${NAMESPACE}" 06-read-data-azure-${i} --from-literal=data="${data}"
+          done
+    - assert:
+        file: 25-assert.yaml
+  - name: step-26
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          kubectl delete ps-backup --all -n "${NAMESPACE}"
+
+          backup_name_minio="demand-backup-minio"
+
+          accessKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
+          secretKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
+
+          backup_exists=$(
+              kubectl run -n "${NAMESPACE}" -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+                  /usr/bin/env AWS_ACCESS_KEY_ID="${accessKey}" AWS_SECRET_ACCESS_KEY="${secretKey}" AWS_DEFAULT_REGION=us-east-1 \
+                  /usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls 'operator-testing/' | grep -c "${backup_name_minio}/" | cat
+               exit "${PIPESTATUS[0]}"
+          )
+
+          if [[ 1 -eq $backup_exists ]]; then
+            echo "Backup was not removed from bucket -- minio"
+            exit 1
+          fi
+  - name: step-99
+    try:
+    - apply:
+        file: 99-drop-finalizer.yaml

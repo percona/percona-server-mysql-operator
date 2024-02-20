@@ -1,0 +1,113 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/kyverno/chainsaw/main/.schemas/json/test-chainsaw-v1alpha1.json
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  creationTimestamp: null
+  name: tls-cert-manager
+spec:
+  steps:
+  - name: step-00
+    try:
+    - script:
+        content: |-
+          set -o xtrace
+
+          source ../../functions
+          init_temp_dir # do this only in the first TestStep
+
+          deploy_cert_manager
+    - assert:
+        file: 00-assert.yaml
+  - name: step-01
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          deploy_operator
+          deploy_non_tls_cluster_secrets
+          deploy_client
+    - assert:
+        file: 01-assert.yaml
+  - name: step-02
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          get_cr \
+            | yq eval '.spec.mysql.clusterType="async"' - \
+            | kubectl -n "${NAMESPACE}" apply -f -
+    - assert:
+        file: 02-assert.yaml
+  - name: step-03
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          verify_certificate_sans tls-cert-manager-ssl '[
+            "*.tls-cert-manager-mysql",
+            "*.tls-cert-manager-mysql.'"${NAMESPACE}"'",
+            "*.tls-cert-manager-mysql.'"${NAMESPACE}"'.svc",
+            "*.tls-cert-manager-orchestrator",
+            "*.tls-cert-manager-orchestrator.'"${NAMESPACE}"'",
+            "*.tls-cert-manager-orchestrator.'"${NAMESPACE}"'.svc",
+            "*.tls-cert-manager-router",
+            "*.tls-cert-manager-router.'"${NAMESPACE}"'",
+            "*.tls-cert-manager-router.'"${NAMESPACE}"'.svc"
+          ]'
+  - name: step-04
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
+            --type json \
+            -p '[
+                  {
+                    "op": "add",
+                    "path": "/spec/tls",
+                    "value": {"SANs": ["mysql-1.example.com"]},
+                  },
+                ]'
+    - assert:
+        file: 04-assert.yaml
+  - name: step-05
+    try:
+    - script:
+        content: |-
+          set -o errexit
+          set -o xtrace
+
+          source ../../functions
+
+          verify_certificate_sans tls-cert-manager-ssl '[
+            "*.tls-cert-manager-mysql",
+            "*.tls-cert-manager-mysql.'"${NAMESPACE}"'",
+            "*.tls-cert-manager-mysql.'"${NAMESPACE}"'.svc",
+            "*.tls-cert-manager-orchestrator",
+            "*.tls-cert-manager-orchestrator.'"${NAMESPACE}"'",
+            "*.tls-cert-manager-orchestrator.'"${NAMESPACE}"'.svc",
+            "*.tls-cert-manager-router",
+            "*.tls-cert-manager-router.'"${NAMESPACE}"'",
+            "*.tls-cert-manager-router.'"${NAMESPACE}"'.svc",
+            "mysql-1.example.com"
+          ]'
+  - name: step-99
+    try:
+    - apply:
+        file: 99-drop-finalizer.yaml
