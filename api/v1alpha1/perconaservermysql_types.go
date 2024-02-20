@@ -187,6 +187,7 @@ type BackupSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext       `json:"containerSecurityContext,omitempty"`
 	Resources                corev1.ResourceRequirements   `json:"resources,omitempty"`
 	Storages                 map[string]*BackupStorageSpec `json:"storages,omitempty"`
+	BackoffLimit             *int32                        `json:"backoffLimit,omitempty"`
 }
 
 // Retrieves the initialization image for the backup.

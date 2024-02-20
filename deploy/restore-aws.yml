@@ -1,0 +1,16 @@
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: restore-aws-5
+spec:
+  clusterName: cluster1
+  backupName: backup-aws-4
+  backupSource:
+    destination: s3://operator-testing/cluster1-2024-02-14-14:57:42-full
+    storage:
+      s3:
+        bucket: operator-testing
+        credentialsSecret: aws-s3-secret
+        region: us-east-1
+#        endpointUrl: https://s3.amazonaws.com
+      type: s3

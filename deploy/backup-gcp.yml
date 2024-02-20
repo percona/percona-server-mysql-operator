@@ -1,0 +1,9 @@
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: backup-gcp-2
+  finalizers:
+    - delete-s3-backup
+spec:
+  clusterName: cluster1
+  storageName: gcp-cs
