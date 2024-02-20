@@ -14,3 +14,4 @@ commands:
       run_mysql \
       	"INSERT myDB.myTable (id) VALUES (100500)" \
       	"-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+      sleep 5
