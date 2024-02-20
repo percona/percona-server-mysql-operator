@@ -74,9 +74,9 @@ func Job(
 
 	labels := util.SSMapMerge(storage.Labels, MatchLabels(cluster))
 	backoffLimit := int32(10)
-    if cluster.Spec.Backup.BackoffLimit != nil {
-    		backoffLimit = *cluster.Spec.Backup.BackoffLimit
-    }
+	if cluster.Spec.Backup.BackoffLimit != nil {
+		backoffLimit = *cluster.Spec.Backup.BackoffLimit
+	}
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1",
