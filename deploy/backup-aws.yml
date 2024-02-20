@@ -1,9 +1,0 @@
-apiVersion: ps.percona.com/v1alpha1
-kind: PerconaServerMySQLBackup
-metadata:
-  name: backup-aws-4
-  finalizers:
-    - delete-s3-backup
-spec:
-  clusterName: cluster1
-  storageName: aws-s3
