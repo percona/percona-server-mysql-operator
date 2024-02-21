@@ -162,6 +162,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 					NodeSelector:                  cr.Spec.MySQL.NodeSelector,
 					Tolerations:                   cr.Spec.MySQL.Tolerations,
 					Affinity:                      spec.GetAffinity(labels),
+					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(labels),
 					ImagePullSecrets:              spec.ImagePullSecrets,
 					TerminationGracePeriodSeconds: spec.TerminationGracePeriodSeconds,
 					PriorityClassName:             spec.PriorityClassName,
