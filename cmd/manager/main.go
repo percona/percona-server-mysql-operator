@@ -48,6 +48,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -171,9 +172,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&psrestore.PerconaServerMySQLRestoreReconciler{
-		Client:        nsClient,
-		Scheme:        mgr.GetScheme(),
-		ServerVersion: serverVersion,
+		Client:           nsClient,
+		Scheme:           mgr.GetScheme(),
+		ServerVersion:    serverVersion,
+		NewStorageClient: storage.NewClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLRestore")
 		os.Exit(1)

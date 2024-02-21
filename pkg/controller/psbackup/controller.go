@@ -170,7 +170,10 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return rr, errors.Wrap(err, "get operator image")
 		}
 
-		destination := getDestination(storage, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
+		destination, err := getDestination(storage, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
+		if err != nil {
+			return rr, errors.Wrap(err, "get backup destination")
+		}
 		job := xtrabackup.Job(cluster, cr, destination, initImage, storage)
 
 		switch storage.Type {
@@ -193,7 +196,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 				return rr, errors.Wrap(err, "set storage S3")
 			}
 
-			status.Destination = fmt.Sprintf("s3://%s/%s", storage.S3.Bucket, destination)
+			status.Destination = destination
 		case apiv1alpha1.BackupStorageGCS:
 			if storage.GCS == nil {
 				return rr, errors.New("gcs stanza is required in storage")
@@ -213,7 +216,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 				return rr, errors.Wrap(err, "set storage GCS")
 			}
 
-			status.Destination = fmt.Sprintf("gs://%s/%s", storage.GCS.Bucket, destination)
+			status.Destination = destination
 		case apiv1alpha1.BackupStorageAzure:
 			if storage.Azure == nil {
 				return rr, errors.New("azure stanza is required in storage")
@@ -233,7 +236,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 				return rr, errors.Wrap(err, "set storage Azure")
 			}
 
-			status.Destination = fmt.Sprintf("%s/%s", storage.Azure.ContainerName, destination)
+			status.Destination = destination
 		default:
 			return rr, errors.Errorf("storage type %s is not supported", storage.Type)
 		}
@@ -295,19 +298,25 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	return rr, nil
 }
 
-func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creationTimeStamp string) string {
-	dest := fmt.Sprintf("%s-%s-full", clusterName, creationTimeStamp)
+func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creationTimeStamp string) (apiv1alpha1.BackupDestination, error) {
+	backupName := fmt.Sprintf("%s-%s-full", clusterName, creationTimeStamp)
 
+	var d apiv1alpha1.BackupDestination
 	switch storage.Type {
 	case apiv1alpha1.BackupStorageS3:
-		dest = path.Join(storage.S3.Bucket.Prefix(), storage.S3.Prefix, dest)
+		bucket, prefix := storage.S3.BucketAndPrefix()
+		d.SetS3Destination(path.Join(bucket, prefix), backupName)
 	case apiv1alpha1.BackupStorageGCS:
-		dest = path.Join(storage.GCS.Bucket.Prefix(), storage.GCS.Prefix, dest)
+		bucket, prefix := storage.GCS.BucketAndPrefix()
+		d.SetGCSDestination(path.Join(bucket, prefix), backupName)
 	case apiv1alpha1.BackupStorageAzure:
-		dest = path.Join(storage.Azure.ContainerName.Prefix(), storage.Azure.Prefix, dest)
+		container, prefix := storage.Azure.ContainerAndPrefix()
+		d.SetAzureDestination(path.Join(container, prefix), backupName)
+	default:
+		return d, errors.Errorf("storage type %s is not supported", storage.Type)
 	}
 
-	return dest
+	return d, nil
 }
 
 func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) (string, error) {
@@ -384,9 +393,12 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 	if storage.VerifyTLS != nil {
 		verifyTLS = *storage.VerifyTLS
 	}
-	destination := getDestination(storage, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
+	destination, err := getDestination(storage, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
+	if err != nil {
+		return nil, errors.Wrap(err, "get backup destination")
+	}
 	conf := &xtrabackup.BackupConfig{
-		Destination: destination,
+		Destination: destination.PathWithoutBucket(),
 		VerifyTLS:   verifyTLS,
 	}
 	s := new(corev1.Secret)
@@ -408,7 +420,8 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 		if !ok {
 			return nil, errors.Errorf("no credentials for S3 in secret %s", nn.Name)
 		}
-		conf.S3.Bucket = s3.Bucket.Bucket()
+		bucket, _ := s3.BucketAndPrefix()
+		conf.S3.Bucket = bucket
 		conf.S3.Region = s3.Region
 		conf.S3.EndpointURL = s3.EndpointURL
 		conf.S3.StorageClass = s3.StorageClass
@@ -429,7 +442,8 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 		if !ok {
 			return nil, errors.Errorf("no credentials for GCS in secret %s", nn.Name)
 		}
-		conf.GCS.Bucket = gcs.Bucket.Bucket()
+		bucket, _ := gcs.BucketAndPrefix()
+		conf.GCS.Bucket = bucket
 		conf.GCS.EndpointURL = gcs.EndpointURL
 		conf.GCS.StorageClass = gcs.StorageClass
 		conf.GCS.AccessKey = string(accessKey)
@@ -449,7 +463,8 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 		if !ok {
 			return nil, errors.Errorf("no credentials for Azure in secret %s", nn.Name)
 		}
-		conf.Azure.ContainerName = azure.ContainerName.Bucket()
+		container, _ := azure.ContainerAndPrefix()
+		conf.Azure.ContainerName = container
 		conf.Azure.EndpointURL = azure.EndpointURL
 		conf.Azure.StorageClass = azure.StorageClass
 		conf.Azure.StorageAccount = string(storageAccount)

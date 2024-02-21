@@ -16,7 +16,12 @@ limitations under the License.
 
 package v1alpha1
 
-import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+import (
+	"path"
+	"strings"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
 
 // PerconaServerMySQLBackupSpec defines the desired state of PerconaServerMySQLBackup
 type PerconaServerMySQLBackupSpec struct {
@@ -39,10 +44,79 @@ const (
 type PerconaServerMySQLBackupStatus struct {
 	State       BackupState        `json:"state,omitempty"`
 	StateDesc   string             `json:"stateDescription,omitempty"`
-	Destination string             `json:"destination,omitempty"`
+	Destination BackupDestination  `json:"destination,omitempty"`
 	Storage     *BackupStorageSpec `json:"storage,omitempty"`
 	CompletedAt *metav1.Time       `json:"completed,omitempty"`
 	Image       string             `json:"image,omitempty"`
+}
+
+const (
+	AzureBlobStoragePrefix string = ""
+	AwsBlobStoragePrefix   string = "s3://"
+	GCSStoragePrefix       string = "gs://"
+)
+
+type BackupDestination string
+
+func (dest *BackupDestination) set(value string) {
+	if dest == nil {
+		return
+	}
+	*dest = BackupDestination(value)
+}
+
+func (dest *BackupDestination) SetGCSDestination(bucket, backupName string) {
+	dest.set(GCSStoragePrefix + bucket + "/" + backupName)
+}
+
+func (dest *BackupDestination) SetS3Destination(bucket, backupName string) {
+	dest.set(AwsBlobStoragePrefix + bucket + "/" + backupName)
+}
+
+func (dest *BackupDestination) SetAzureDestination(container, backupName string) {
+	dest.set(AzureBlobStoragePrefix + container + "/" + backupName)
+}
+
+func (dest *BackupDestination) String() string {
+	if dest == nil {
+		return ""
+	}
+	return string(*dest)
+}
+
+func (dest *BackupDestination) StorageTypePrefix() string {
+	for _, p := range []string{AwsBlobStoragePrefix, GCSStoragePrefix} {
+		if strings.HasPrefix(dest.String(), p) {
+			return p
+		}
+	}
+	return AzureBlobStoragePrefix
+}
+
+func (dest *BackupDestination) BucketAndPrefix() (string, string) {
+	d := strings.TrimPrefix(dest.String(), dest.StorageTypePrefix())
+	bucket, left, _ := strings.Cut(d, "/")
+
+	spl := strings.Split(left, "/")
+	prefix := ""
+	if len(spl) > 1 {
+		prefix = path.Join(spl[:len(spl)-1]...)
+		prefix = strings.TrimSuffix(prefix, "/")
+		prefix += "/"
+	}
+	return bucket, prefix
+}
+
+func (dest *BackupDestination) PathWithoutBucket() string {
+	_, prefix := dest.BucketAndPrefix()
+	return path.Join(prefix, dest.BackupName())
+}
+
+func (dest *BackupDestination) BackupName() string {
+	bucket, prefix := dest.BucketAndPrefix()
+	backupName := strings.TrimPrefix(dest.String(), dest.StorageTypePrefix()+path.Join(bucket, prefix))
+	backupName = strings.TrimPrefix(backupName, "/")
+	return backupName
 }
 
 // +kubebuilder:object:root=true

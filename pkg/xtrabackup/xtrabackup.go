@@ -3,7 +3,6 @@ package xtrabackup
 import (
 	"fmt"
 	"strconv"
-	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -66,7 +65,7 @@ func MatchLabels(cluster *apiv1alpha1.PerconaServerMySQL) map[string]string {
 func Job(
 	cluster *apiv1alpha1.PerconaServerMySQL,
 	cr *apiv1alpha1.PerconaServerMySQLBackup,
-	destination, initImage string,
+	destination apiv1alpha1.BackupDestination, initImage string,
 	storage *apiv1alpha1.BackupStorageSpec,
 ) *batchv1.Job {
 	var one int32 = 1
@@ -152,7 +151,7 @@ func Job(
 	}
 }
 
-func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName, destination string, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
+func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName string, destination apiv1alpha1.BackupDestination, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
 	spec := cluster.Spec.Backup
 
 	verifyTLS := true
@@ -171,7 +170,7 @@ func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName, de
 			},
 			{
 				Name:  "BACKUP_DEST",
-				Value: destination,
+				Value: destination.PathWithoutBucket(),
 			},
 			{
 				Name:  "VERIFY_TLS",
@@ -285,7 +284,7 @@ func deleteContainer(image string, conf *BackupConfig, storage *apiv1alpha1.Back
 
 func RestoreJob(
 	cluster *apiv1alpha1.PerconaServerMySQL,
-	destination string,
+	destination apiv1alpha1.BackupDestination,
 	restore *apiv1alpha1.PerconaServerMySQLRestore,
 	storage *apiv1alpha1.BackupStorageSpec,
 	initImage string,
@@ -294,15 +293,6 @@ func RestoreJob(
 	one := int32(1)
 
 	labels := util.SSMapMerge(storage.Labels, MatchLabels(cluster))
-
-	switch storage.Type {
-	case apiv1alpha1.BackupStorageAzure:
-		destination = strings.TrimPrefix(destination, string(storage.Azure.ContainerName)+"/")
-	case apiv1alpha1.BackupStorageS3:
-		destination = strings.TrimPrefix(destination, "s3://"+string(storage.S3.Bucket)+"/")
-	case apiv1alpha1.BackupStorageGCS:
-		destination = strings.TrimPrefix(destination, "gs://"+string(storage.GCS.Bucket)+"/")
-	}
 
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -457,7 +447,7 @@ func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) 
 	}
 }
 
-func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alpha1.PerconaServerMySQLRestore, destination string, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
+func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alpha1.PerconaServerMySQLRestore, destination apiv1alpha1.BackupDestination, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
 	spec := cluster.Spec.Backup
 
 	verifyTLS := true
@@ -476,7 +466,7 @@ func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alp
 			},
 			{
 				Name:  "BACKUP_DEST",
-				Value: destination,
+				Value: destination.PathWithoutBucket(),
 			},
 			{
 				Name:  "VERIFY_TLS",
@@ -550,7 +540,7 @@ func SetStoragePVC(job *batchv1.Job, pvc *corev1.PersistentVolumeClaim) error {
 func SetStorageS3(job *batchv1.Job, s3 *apiv1alpha1.BackupStorageS3Spec) error {
 	spec := &job.Spec.Template.Spec
 
-	bucket := s3.Bucket.Bucket()
+	bucket, _ := s3.BucketAndPrefix()
 
 	env := []corev1.EnvVar{
 		{
@@ -602,7 +592,7 @@ func SetStorageS3(job *batchv1.Job, s3 *apiv1alpha1.BackupStorageS3Spec) error {
 func SetStorageGCS(job *batchv1.Job, gcs *apiv1alpha1.BackupStorageGCSSpec) error {
 	spec := &job.Spec.Template.Spec
 
-	bucket := gcs.Bucket.Bucket()
+	bucket, _ := gcs.BucketAndPrefix()
 
 	env := []corev1.EnvVar{
 		{
@@ -650,7 +640,7 @@ func SetStorageGCS(job *batchv1.Job, gcs *apiv1alpha1.BackupStorageGCSSpec) erro
 func SetStorageAzure(job *batchv1.Job, azure *apiv1alpha1.BackupStorageAzureSpec) error {
 	spec := &job.Spec.Template.Spec
 
-	container := azure.ContainerName.Bucket()
+	container, _ := azure.ContainerAndPrefix()
 
 	env := []corev1.EnvVar{
 		{
