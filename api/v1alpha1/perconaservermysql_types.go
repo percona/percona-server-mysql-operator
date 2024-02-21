@@ -145,13 +145,14 @@ type PodSpec struct {
 	VolumeSpec  *VolumeSpec       `json:"volumeSpec,omitempty"`
 	InitImage   string            `json:"initImage,omitempty"`
 
-	Affinity                      *PodAffinity        `json:"affinity,omitempty"`
-	NodeSelector                  map[string]string   `json:"nodeSelector,omitempty"`
-	Tolerations                   []corev1.Toleration `json:"tolerations,omitempty"`
-	PriorityClassName             string              `json:"priorityClassName,omitempty"`
-	TerminationGracePeriodSeconds *int64              `json:"gracePeriod,omitempty"`
-	SchedulerName                 string              `json:"schedulerName,omitempty"`
-	RuntimeClassName              *string             `json:"runtimeClassName,omitempty"`
+	Affinity                      *PodAffinity                      `json:"affinity,omitempty"`
+	TopologySpreadConstraints     []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+	NodeSelector                  map[string]string                 `json:"nodeSelector,omitempty"`
+	Tolerations                   []corev1.Toleration               `json:"tolerations,omitempty"`
+	PriorityClassName             string                            `json:"priorityClassName,omitempty"`
+	TerminationGracePeriodSeconds *int64                            `json:"gracePeriod,omitempty"`
+	SchedulerName                 string                            `json:"schedulerName,omitempty"`
+	RuntimeClassName              *string                           `json:"runtimeClassName,omitempty"`
 
 	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ServiceAccountName string                     `json:"serviceAccountName,omitempty"`
@@ -205,23 +206,24 @@ const (
 )
 
 type BackupStorageSpec struct {
-	Type                     BackupStorageType           `json:"type"`
-	Volume                   *VolumeSpec                 `json:"volumeSpec,omitempty"`
-	S3                       *BackupStorageS3Spec        `json:"s3,omitempty"`
-	GCS                      *BackupStorageGCSSpec       `json:"gcs,omitempty"`
-	Azure                    *BackupStorageAzureSpec     `json:"azure,omitempty"`
-	NodeSelector             map[string]string           `json:"nodeSelector,omitempty"`
-	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
-	Affinity                 *corev1.Affinity            `json:"affinity,omitempty"`
-	Tolerations              []corev1.Toleration         `json:"tolerations,omitempty"`
-	Annotations              map[string]string           `json:"annotations,omitempty"`
-	Labels                   map[string]string           `json:"labels,omitempty"`
-	SchedulerName            string                      `json:"schedulerName,omitempty"`
-	PriorityClassName        string                      `json:"priorityClassName,omitempty"`
-	PodSecurityContext       *corev1.PodSecurityContext  `json:"podSecurityContext,omitempty"`
-	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
-	RuntimeClassName         *string                     `json:"runtimeClassName,omitempty"`
-	VerifyTLS                *bool                       `json:"verifyTLS,omitempty"`
+	Type                      BackupStorageType                 `json:"type"`
+	Volume                    *VolumeSpec                       `json:"volumeSpec,omitempty"`
+	S3                        *BackupStorageS3Spec              `json:"s3,omitempty"`
+	GCS                       *BackupStorageGCSSpec             `json:"gcs,omitempty"`
+	Azure                     *BackupStorageAzureSpec           `json:"azure,omitempty"`
+	NodeSelector              map[string]string                 `json:"nodeSelector,omitempty"`
+	Resources                 corev1.ResourceRequirements       `json:"resources,omitempty"`
+	Affinity                  *corev1.Affinity                  `json:"affinity,omitempty"`
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+	Tolerations               []corev1.Toleration               `json:"tolerations,omitempty"`
+	Annotations               map[string]string                 `json:"annotations,omitempty"`
+	Labels                    map[string]string                 `json:"labels,omitempty"`
+	SchedulerName             string                            `json:"schedulerName,omitempty"`
+	PriorityClassName         string                            `json:"priorityClassName,omitempty"`
+	PodSecurityContext        *corev1.PodSecurityContext        `json:"podSecurityContext,omitempty"`
+	ContainerSecurityContext  *corev1.SecurityContext           `json:"containerSecurityContext,omitempty"`
+	RuntimeClassName          *string                           `json:"runtimeClassName,omitempty"`
+	VerifyTLS                 *bool                             `json:"verifyTLS,omitempty"`
 }
 
 type BackupStorageS3Spec struct {
@@ -803,6 +805,20 @@ func (p *PodSpec) GetAffinity(labels map[string]string) *corev1.Affinity {
 	}
 
 	return nil
+}
+
+func (p *PodSpec) GetTopologySpreadConstraints(ls map[string]string) []corev1.TopologySpreadConstraint {
+	tscs := make([]corev1.TopologySpreadConstraint, 0)
+
+	for _, tsc := range p.TopologySpreadConstraints {
+		if tsc.LabelSelector == nil && tsc.MatchLabelKeys == nil {
+			tsc.LabelSelector = &metav1.LabelSelector{
+				MatchLabels: ls,
+			}
+		}
+		tscs = append(tscs, tsc)
+	}
+	return tscs
 }
 
 type AnnotationKey string

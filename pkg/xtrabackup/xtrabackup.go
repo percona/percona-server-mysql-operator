@@ -111,14 +111,15 @@ func Job(
 					Containers: []corev1.Container{
 						xtrabackupContainer(cluster, cr.Name, destination, storage),
 					},
-					SecurityContext:   storage.PodSecurityContext,
-					Affinity:          storage.Affinity,
-					Tolerations:       storage.Tolerations,
-					NodeSelector:      storage.NodeSelector,
-					SchedulerName:     storage.SchedulerName,
-					PriorityClassName: storage.PriorityClassName,
-					RuntimeClassName:  storage.RuntimeClassName,
-					DNSPolicy:         corev1.DNSClusterFirst,
+					SecurityContext:           storage.PodSecurityContext,
+					Affinity:                  storage.Affinity,
+					TopologySpreadConstraints: storage.TopologySpreadConstraints,
+					Tolerations:               storage.Tolerations,
+					NodeSelector:              storage.NodeSelector,
+					SchedulerName:             storage.SchedulerName,
+					PriorityClassName:         storage.PriorityClassName,
+					RuntimeClassName:          storage.RuntimeClassName,
+					DNSPolicy:                 corev1.DNSClusterFirst,
 					Volumes: []corev1.Volume{
 						{
 							Name: apiv1alpha1.BinVolumeName,
@@ -359,13 +360,14 @@ func RestoreJob(
 					Containers: []corev1.Container{
 						restoreContainer(cluster, restore, destination, storage),
 					},
-					Affinity:          storage.Affinity,
-					Tolerations:       storage.Tolerations,
-					NodeSelector:      storage.NodeSelector,
-					SchedulerName:     storage.SchedulerName,
-					PriorityClassName: storage.PriorityClassName,
-					RuntimeClassName:  storage.RuntimeClassName,
-					DNSPolicy:         corev1.DNSClusterFirst,
+					Affinity:                  storage.Affinity,
+					TopologySpreadConstraints: storage.TopologySpreadConstraints,
+					Tolerations:               storage.Tolerations,
+					NodeSelector:              storage.NodeSelector,
+					SchedulerName:             storage.SchedulerName,
+					PriorityClassName:         storage.PriorityClassName,
+					RuntimeClassName:          storage.RuntimeClassName,
+					DNSPolicy:                 corev1.DNSClusterFirst,
 					Volumes: []corev1.Volume{
 						{
 							Name: apiv1alpha1.BinVolumeName,
@@ -437,14 +439,15 @@ func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) 
 					Containers: []corev1.Container{
 						deleteContainer(cr.Status.Image, conf, storage),
 					},
-					SecurityContext:   storage.PodSecurityContext,
-					Affinity:          storage.Affinity,
-					Tolerations:       storage.Tolerations,
-					NodeSelector:      storage.NodeSelector,
-					SchedulerName:     storage.SchedulerName,
-					PriorityClassName: storage.PriorityClassName,
-					RuntimeClassName:  storage.RuntimeClassName,
-					DNSPolicy:         corev1.DNSClusterFirst,
+					SecurityContext:           storage.PodSecurityContext,
+					Affinity:                  storage.Affinity,
+					TopologySpreadConstraints: storage.TopologySpreadConstraints,
+					Tolerations:               storage.Tolerations,
+					NodeSelector:              storage.NodeSelector,
+					SchedulerName:             storage.SchedulerName,
+					PriorityClassName:         storage.PriorityClassName,
+					RuntimeClassName:          storage.RuntimeClassName,
+					DNSPolicy:                 corev1.DNSClusterFirst,
 					Volumes: []corev1.Volume{
 						{
 							Name: apiv1alpha1.BinVolumeName,
@@ -458,6 +461,7 @@ func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) 
 		},
 	}
 }
+
 func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alpha1.PerconaServerMySQLRestore, destination string, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
 	spec := cluster.Spec.Backup
 
