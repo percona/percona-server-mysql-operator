@@ -319,7 +319,6 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	backupConf.Name = backupName
 	status.SetBackupConfig(backupConf)
 	defer func() {
 		status.RemoveBackupConfig()

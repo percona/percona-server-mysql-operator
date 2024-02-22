@@ -708,7 +708,6 @@ func SetSourceNode(job *batchv1.Job, src string) error {
 }
 
 type BackupConfig struct {
-	Name        string                        `json:"name"`
 	Destination string                        `json:"destination"`
 	Type        apiv1alpha1.BackupStorageType `json:"type"`
 	VerifyTLS   bool                          `json:"verifyTLS,omitempty"`

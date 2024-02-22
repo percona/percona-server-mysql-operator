@@ -216,13 +216,13 @@ func (r *PerconaServerMySQLBackupReconciler) isBackupJobRunning(ctx context.Cont
 	}
 
 	srcNode := ""
-	backupName := ""
+	destination := ""
 	for _, env := range job.Spec.Template.Spec.Containers[0].Env {
 		switch env.Name {
 		case "SRC_NODE":
 			srcNode = env.Value
-		case "BACKUP_NAME":
-			backupName = env.Value
+		case "BACKUP_DEST":
+			destination = env.Value
 		}
 	}
 
@@ -232,7 +232,7 @@ func (r *PerconaServerMySQLBackupReconciler) isBackupJobRunning(ctx context.Cont
 		return false, errors.Wrap(err, "get running backup config")
 	}
 
-	if cfg == nil || cfg.Name != backupName {
+	if cfg == nil || cfg.Destination != destination {
 		return false, nil
 	}
 
