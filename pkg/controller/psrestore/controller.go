@@ -415,12 +415,13 @@ func (r *PerconaServerMySQLRestoreReconciler) validate(ctx context.Context, cr *
 		if storage == nil {
 			return errors.New("backupSource.storage is empty")
 		}
-	}
-	storageName := bcp.Spec.StorageName
-	var ok bool
-	_, ok = cluster.Spec.Backup.Storages[storageName]
-	if !ok {
-		return errors.Errorf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", storageName)
+	} else {
+		storageName := bcp.Spec.StorageName
+		var ok bool
+		_, ok = cluster.Spec.Backup.Storages[storageName]
+		if !ok {
+			return errors.Errorf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", storageName)
+		}
 	}
 	if bcp.Status.Storage == nil {
 		return errors.New("backup's status.storage is empty")

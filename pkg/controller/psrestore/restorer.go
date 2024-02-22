@@ -238,11 +238,9 @@ func getBackup(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaSer
 		}
 		return nil, errors.Wrapf(err, "get backup %s", nn)
 	}
-	storageName := backup.Spec.StorageName
-	storage, ok := cluster.Spec.Backup.Storages[storageName]
-	if !ok {
-		return nil, errors.Errorf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", storageName)
+	storage, ok := cluster.Spec.Backup.Storages[backup.Spec.StorageName]
+	if ok {
+		backup.Status.Storage = storage
 	}
-	backup.Status.Storage = storage
 	return backup, nil
 }
