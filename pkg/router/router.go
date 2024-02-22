@@ -183,6 +183,7 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string
 					NodeSelector:                  cr.Spec.Proxy.Router.NodeSelector,
 					Tolerations:                   cr.Spec.Proxy.Router.Tolerations,
 					Affinity:                      spec.GetAffinity(labels),
+					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(labels),
 					ImagePullSecrets:              spec.ImagePullSecrets,
 					TerminationGracePeriodSeconds: spec.TerminationGracePeriodSeconds,
 					RestartPolicy:                 corev1.RestartPolicyAlways,
