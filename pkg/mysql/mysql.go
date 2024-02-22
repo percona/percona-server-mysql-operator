@@ -33,7 +33,7 @@ const (
 	DefaultGRPort    = 33061
 	DefaultAdminPort = 33062
 	DefaultXPort     = 33060
-	SidecarHTTPPort  = 6033
+	SidecarHTTPPort  = 6450
 )
 
 type User struct {
@@ -165,6 +165,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 					NodeSelector:                  cr.Spec.MySQL.NodeSelector,
 					Tolerations:                   cr.Spec.MySQL.Tolerations,
 					Affinity:                      spec.GetAffinity(labels),
+					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(labels),
 					ImagePullSecrets:              spec.ImagePullSecrets,
 					TerminationGracePeriodSeconds: spec.TerminationGracePeriodSeconds,
 					PriorityClassName:             spec.PriorityClassName,

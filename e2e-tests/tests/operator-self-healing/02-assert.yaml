@@ -58,3 +58,16 @@ status:
     size: 3
     state: ready
   state: ready
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: chaos-daemon
+status:
+  currentNumberScheduled: 3
+  desiredNumberScheduled: 3
+  numberAvailable: 3
+  numberMisscheduled: 0
+  numberReady: 3
+  observedGeneration: 1
+  updatedNumberScheduled: 3

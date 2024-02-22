@@ -32,6 +32,7 @@ const (
 	PortReadOnly   = 6447
 	PortXReadWrite = 6448
 	PortXReadOnly  = 6449
+	PortXDefault   = 33060
 	PortRWAdmin    = 33062
 )
 
@@ -114,6 +115,10 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 					Port: int32(PortXReadOnly),
 				},
 				{
+					Name: "x-default",
+					Port: int32(PortXDefault),
+				},
+				{
 					Name: "rw-admin",
 					Port: int32(PortRWAdmin),
 				},
@@ -181,6 +186,7 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHa
 					NodeSelector:                  cr.Spec.Proxy.Router.NodeSelector,
 					Tolerations:                   cr.Spec.Proxy.Router.Tolerations,
 					Affinity:                      spec.GetAffinity(labels),
+					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(labels),
 					ImagePullSecrets:              spec.ImagePullSecrets,
 					TerminationGracePeriodSeconds: spec.TerminationGracePeriodSeconds,
 					RestartPolicy:                 corev1.RestartPolicyAlways,
@@ -284,6 +290,10 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			{
 				Name:          "x-read-only",
 				ContainerPort: int32(PortXReadOnly),
+			},
+			{
+				Name:          "x-default",
+				ContainerPort: int32(PortXDefault),
 			},
 			{
 				Name:          "rw-admin",
