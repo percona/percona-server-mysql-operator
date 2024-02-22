@@ -87,7 +87,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	defer func() {
-		if status.State == cr.Status.State {
+		if status.State == cr.Status.State && status.StateDesc == cr.Status.StateDesc {
 			return
 		}
 
@@ -138,17 +138,6 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, errors.Wrapf(err, "get cluster %s", nn)
 	}
 
-	restorer, err := r.getRestorer(ctx, cr, cluster)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "get restorer")
-	}
-
-	if err := restorer.Validate(ctx); err != nil {
-		status.State = apiv1alpha1.RestoreError
-		status.StateDesc = err.Error()
-		return ctrl.Result{}, nil
-	}
-
 	restoreList := &apiv1alpha1.PerconaServerMySQLRestoreList{}
 	if err := r.List(ctx, restoreList, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "get restore jobs list")
@@ -167,6 +156,13 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 	}
+
+	if err := r.validate(ctx, cr, cluster); err != nil {
+		status.State = apiv1alpha1.RestoreError
+		status.StateDesc = errors.Cause(err).Error()
+		return ctrl.Result{}, nil
+	}
+
 	// The above code is to prevent multiple restores from running at the same time. It works only if restore job is created.
 	// But if multiple restores are created at the same time, then the above code will not work, because there are no restore jobs yet.
 	// Therefore, we need to use sync.Map to prevent multiple restores from creating restore jobs at the same time.
@@ -200,9 +196,21 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	if k8serrors.IsNotFound(err) {
 		log.Info("Creating restore job", "jobName", nn.Name)
 
-		if err := r.createJob(ctx, cr, cluster); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "failed to create job")
+		restorer, err := r.getRestorer(ctx, cr, cluster)
+		if err != nil {
+			status.State = apiv1alpha1.RestoreError
+			status.StateDesc = err.Error()
+			return ctrl.Result{}, nil
 		}
+		job, err := restorer.Job()
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "get job")
+		}
+
+		if err := r.Create(ctx, job); err != nil {
+			return ctrl.Result{}, errors.Wrapf(err, "create job %s/%s", job.Namespace, job.Name)
+		}
+
 		return ctrl.Result{}, nil
 	}
 
@@ -392,22 +400,37 @@ func (r *PerconaServerMySQLRestoreReconciler) SetupWithManager(mgr ctrl.Manager)
 		Complete(r)
 }
 
-func (r *PerconaServerMySQLRestoreReconciler) createJob(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLRestore, cluster *apiv1alpha1.PerconaServerMySQL) error {
-	log := logf.FromContext(ctx)
+func (r *PerconaServerMySQLRestoreReconciler) validate(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLRestore, cluster *apiv1alpha1.PerconaServerMySQL) error {
+	bcp, err := getBackup(ctx, r.Client, cr, cluster)
+	if err != nil {
+		return err
+	}
 
-	log.Info("Creating restore job", "jobName", xtrabackup.RestoreJobName(cluster, cr))
-
+	if bs := cr.Spec.BackupSource; bs != nil {
+		storage := bs.Storage
+		destination := bs.Destination
+		if destination == "" {
+			return errors.New("backupSource.destination is empty")
+		}
+		if storage == nil {
+			return errors.New("backupSource.storage is empty")
+		}
+	}
+	storageName := bcp.Spec.StorageName
+	var ok bool
+	_, ok = cluster.Spec.Backup.Storages[storageName]
+	if !ok {
+		return errors.Errorf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", storageName)
+	}
+	if bcp.Status.Storage == nil {
+		return errors.New("backup's status.storage is empty")
+	}
 	restorer, err := r.getRestorer(ctx, cr, cluster)
 	if err != nil {
 		return errors.Wrap(err, "get restorer")
 	}
-	job, err := restorer.Job()
-	if err != nil {
-		return errors.Wrap(err, "get job")
-	}
-
-	if err := r.Create(ctx, job); err != nil {
-		return errors.Wrapf(err, "create job %s/%s", job.Namespace, job.Name)
+	if err := restorer.Validate(ctx); err != nil {
+		return err
 	}
 
 	return nil

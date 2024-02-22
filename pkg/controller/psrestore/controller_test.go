@@ -13,8 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	controllerruntime "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -35,7 +33,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 		name          string
 		cr            *apiv1alpha1.PerconaServerMySQLRestore
 		cluster       *apiv1alpha1.PerconaServerMySQL
-		objects       []client.Object
+		objects       []runtime.Object
 		stateDesc     string
 		shouldSucceed bool
 	}{
@@ -109,7 +107,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 		{
 			name: "without backup storage in cluster",
 			cr:   cr,
-			objects: []client.Object{
+			objects: []runtime.Object{
 				&apiv1alpha1.PerconaServerMySQLBackup{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      backupName,
@@ -137,7 +135,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 		{
 			name: "without secret",
 			cr:   cr,
-			objects: []client.Object{
+			objects: []runtime.Object{
 				&apiv1alpha1.PerconaServerMySQLBackup{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      backupName,
@@ -168,12 +166,12 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 					},
 				},
 			},
-			stateDesc: "secret aws-secret is not found",
+			stateDesc: "secrets aws-secret not found",
 		},
 		{
 			name: "should succeed",
 			cr:   cr,
-			objects: []client.Object{
+			objects: []runtime.Object{
 				&apiv1alpha1.PerconaServerMySQLBackup{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      backupName,
@@ -201,6 +199,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 						Storages: map[string]*apiv1alpha1.BackupStorageSpec{
 							storageName: {
 								S3: &apiv1alpha1.BackupStorageS3Spec{
+									Bucket:            "some-bucket",
 									CredentialsSecret: "aws-secret",
 								},
 								Type: apiv1alpha1.BackupStorageS3,
@@ -216,7 +215,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 		{
 			name: "with running restore",
 			cr:   cr,
-			objects: []client.Object{
+			objects: []runtime.Object{
 				&apiv1alpha1.PerconaServerMySQLBackup{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      backupName,
@@ -266,12 +265,12 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 				},
 			},
 			stateDesc:     "PerconaServerMySQLRestore running-restore is already running",
-			shouldSucceed: false,
+			shouldSucceed: true,
 		},
 		{
 			name: "with new, failed, errored and succeeded restore",
 			cr:   cr,
-			objects: []client.Object{
+			objects: []runtime.Object{
 				&apiv1alpha1.PerconaServerMySQLBackup{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      backupName,
@@ -348,6 +347,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 							storageName: {
 								S3: &apiv1alpha1.BackupStorageS3Spec{
 									CredentialsSecret: "aws-secret",
+									Bucket:            "some-bucket",
 								},
 								Type: apiv1alpha1.BackupStorageS3,
 							},
@@ -373,19 +373,29 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr).WithStatusSubresource(tt.cr).WithObjects(tt.objects...)
+			tt.objects = append(tt.objects, tt.cr)
 			if tt.cluster != nil {
-				cb.WithObjects(tt.cluster, &appsv1.StatefulSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      mysql.Name(tt.cluster),
-						Namespace: namespace,
-					},
-				})
+				if tt.cluster.Spec.Backup == nil {
+					tt.cluster.Spec.Backup = &apiv1alpha1.BackupSpec{}
+				}
+				tt.cluster.Spec.Backup.InitImage = "operator-image"
+				tt.objects = append(tt.objects, tt.cluster)
+				tt.objects = append(tt.objects,
+					&appsv1.StatefulSet{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      mysql.Name(tt.cluster),
+							Namespace: namespace,
+						},
+					})
 			}
-
-			r := PerconaServerMySQLRestoreReconciler{
-				Client: cb.Build(),
-				Scheme: scheme,
+			cl := buildFakeClient(t, tt.objects...)
+			r := reconciler(cl)
+			r.NewStorageClient = func(_ context.Context, opts storage.Options) (storage.Storage, error) {
+				defaultFakeClient, err := fakestorage.NewFakeClient(ctx, opts)
+				if err != nil {
+					return nil, err
+				}
+				return &fakeStorageClient{Storage: defaultFakeClient}, nil
 			}
 			_, err := r.Reconcile(ctx, controllerruntime.Request{
 				NamespacedName: types.NamespacedName{
@@ -420,7 +430,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 	}
 }
 
-func TestValidate(t *testing.T) {
+func TestRestorerValidate(t *testing.T) {
 	ctx := context.Background()
 
 	const clusterName = "test-cluster"
@@ -441,11 +451,12 @@ func TestValidate(t *testing.T) {
 	}
 	cluster.Spec.Backup.Storages["gcs"] = &apiv1alpha1.BackupStorageSpec{
 		Type: apiv1alpha1.BackupStorageGCS,
-		Azure: &apiv1alpha1.BackupStorageAzureSpec{
-			ContainerName:     "some-bucket",
+		GCS: &apiv1alpha1.BackupStorageGCSSpec{
+			Bucket:            "some-bucket",
 			CredentialsSecret: gcsSecretName,
 		},
 	}
+	cluster.Spec.Backup.Storages["s3-us-west"].S3.CredentialsSecret = s3SecretName
 
 	s3Bcp := readDefaultBackup(t, backupName, namespace)
 	s3Bcp.Spec.StorageName = "s3-us-west"
@@ -468,7 +479,7 @@ func TestValidate(t *testing.T) {
 	azureBcp.Status.Storage.Type = apiv1alpha1.BackupStorageAzure
 
 	gcsBcp := readDefaultBackup(t, backupName, namespace)
-	gcsBcp.Spec.StorageName = "gcs-blob"
+	gcsBcp.Spec.StorageName = "gcs"
 	gcsBcp.Status.Destination.SetAzureDestination("some-dest", "dest")
 	gcsBcp.Status.Storage.GCS = &apiv1alpha1.BackupStorageGCSSpec{
 		Bucket:            "some-bucket",
@@ -496,7 +507,7 @@ func TestValidate(t *testing.T) {
 			name:    "s3",
 			cr:      cr.DeepCopy(),
 			cluster: cluster.DeepCopy(),
-			bcp:     s3Bcp,
+			bcp:     s3Bcp.DeepCopy(),
 			objects: []runtime.Object{
 				s3Secret,
 			},
@@ -505,17 +516,17 @@ func TestValidate(t *testing.T) {
 			name:        "s3 without secrets",
 			cr:          cr.DeepCopy(),
 			cluster:     cluster.DeepCopy(),
-			bcp:         s3Bcp,
+			bcp:         s3Bcp.DeepCopy(),
 			expectedErr: "failed to validate job: secrets my-cluster-name-backup-s3 not found",
 		},
 		{
 			name: "s3 without credentialsSecret",
 			cr:   cr.DeepCopy(),
-			bcp:  s3Bcp,
+			bcp:  s3Bcp.DeepCopy(),
 			objects: []runtime.Object{
 				s3Secret,
 			},
-			cluster: updateResource(cluster, func(cluster *apiv1alpha1.PerconaServerMySQL) {
+			cluster: updateResource(cluster.DeepCopy(), func(cluster *apiv1alpha1.PerconaServerMySQL) {
 				cluster.Spec.Backup.Storages["s3-us-west"].S3.CredentialsSecret = ""
 			}),
 			expectedErr: "",
@@ -524,7 +535,7 @@ func TestValidate(t *testing.T) {
 			name:        "s3 with failing storage client",
 			cr:          cr.DeepCopy(),
 			cluster:     cluster.DeepCopy(),
-			bcp:         s3Bcp,
+			bcp:         s3Bcp.DeepCopy(),
 			expectedErr: "failed to list objects: failListObjects",
 			objects: []runtime.Object{
 				s3Secret,
@@ -556,7 +567,7 @@ func TestValidate(t *testing.T) {
 			name:        "s3 with empty bucket",
 			cr:          cr.DeepCopy(),
 			cluster:     cluster.DeepCopy(),
-			bcp:         s3Bcp,
+			bcp:         s3Bcp.DeepCopy(),
 			expectedErr: "backup not found",
 			objects: []runtime.Object{
 				s3Secret,
@@ -569,7 +580,7 @@ func TestValidate(t *testing.T) {
 			name:    "gcs",
 			cr:      cr.DeepCopy(),
 			cluster: cluster.DeepCopy(),
-			bcp:     gcsBcp,
+			bcp:     gcsBcp.DeepCopy(),
 			objects: []runtime.Object{
 				gcsSecret,
 			},
@@ -578,14 +589,14 @@ func TestValidate(t *testing.T) {
 			name:        "gcs without secrets",
 			cr:          cr.DeepCopy(),
 			cluster:     cluster.DeepCopy(),
-			bcp:         gcsBcp,
+			bcp:         gcsBcp.DeepCopy(),
 			expectedErr: "failed to validate job: secrets my-cluster-name-backup-gcs not found",
 		},
 		{
 			name:        "gcs with failing storage client",
 			cr:          cr.DeepCopy(),
 			cluster:     cluster.DeepCopy(),
-			bcp:         gcsBcp,
+			bcp:         gcsBcp.DeepCopy(),
 			expectedErr: "failed to list objects: failListObjects",
 			objects: []runtime.Object{
 				gcsSecret,
@@ -617,7 +628,7 @@ func TestValidate(t *testing.T) {
 			name:        "gcs with empty bucket",
 			cr:          cr.DeepCopy(),
 			cluster:     cluster.DeepCopy(),
-			bcp:         gcsBcp,
+			bcp:         gcsBcp.DeepCopy(),
 			expectedErr: "backup not found",
 			objects: []runtime.Object{
 				gcsSecret,

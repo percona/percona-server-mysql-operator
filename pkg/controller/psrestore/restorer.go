@@ -76,7 +76,7 @@ func (r *PerconaServerMySQLRestoreReconciler) getRestorer(
 	if err != nil {
 		return nil, errors.Wrap(err, "get operator image")
 	}
-	bcp, err := getBackup(ctx, r.Client, cr)
+	bcp, err := getBackup(ctx, r.Client, cr, cluster)
 	if err != nil {
 		return nil, errors.Wrap(err, "get backup")
 	}
@@ -109,14 +109,23 @@ func (s *restorerOptions) Job() (*batchv1.Job, error) {
 	job := xtrabackup.RestoreJob(s.cluster, s.bcp.Status.Destination, s.cr, storage, s.initImage, pvcName)
 	switch storage.Type {
 	case apiv1alpha1.BackupStorageS3:
+		if storage.S3 == nil {
+			return nil, errors.New("s3 storage is not set")
+		}
 		if err := xtrabackup.SetStorageS3(job, storage.S3); err != nil {
 			return nil, errors.Wrap(err, "set storage s3")
 		}
 	case apiv1alpha1.BackupStorageGCS:
+		if storage.GCS == nil {
+			return nil, errors.New("gcs storage is not set")
+		}
 		if err := xtrabackup.SetStorageGCS(job, storage.GCS); err != nil {
 			return nil, errors.Wrap(err, "set storage GCS")
 		}
 	case apiv1alpha1.BackupStorageAzure:
+		if storage.Azure == nil {
+			return nil, errors.New("azure storage is not set")
+		}
 		if err := xtrabackup.SetStorageAzure(job, storage.Azure); err != nil {
 			return nil, errors.Wrap(err, "set storage Azure")
 		}
@@ -131,6 +140,9 @@ func (s *restorerOptions) Job() (*batchv1.Job, error) {
 }
 
 func (opts *restorerOptions) Validate(ctx context.Context) error {
+	if opts.bcp.Status.Storage == nil {
+		return errors.New("backup storage is not set")
+	}
 	job, err := opts.Job()
 	if err != nil {
 		return errors.Wrap(err, "get job")
@@ -198,7 +210,7 @@ func (opts *restorerOptions) validateJob(ctx context.Context, job *batchv1.Job) 
 	return nil
 }
 
-func getBackup(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQLRestore) (*apiv1alpha1.PerconaServerMySQLBackup, error) {
+func getBackup(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQLRestore, cluster *apiv1alpha1.PerconaServerMySQL) (*apiv1alpha1.PerconaServerMySQLBackup, error) {
 	if cr.Spec.BackupSource != nil {
 		status := cr.Spec.BackupSource.DeepCopy()
 		status.State = apiv1alpha1.BackupSucceeded
@@ -210,7 +222,6 @@ func getBackup(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaSer
 			},
 			Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
 				ClusterName: cr.Spec.ClusterName,
-				// StorageName: cr.Spec.BackupSource.StorageName,
 			},
 			Status: *status,
 		}, nil
@@ -222,7 +233,16 @@ func getBackup(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaSer
 	backup := &apiv1alpha1.PerconaServerMySQLBackup{}
 	nn := types.NamespacedName{Name: cr.Spec.BackupName, Namespace: cr.Namespace}
 	if err := cl.Get(ctx, nn, backup); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil, errors.Errorf("PerconaServerMySQLBackup %s in namespace %s is not found", nn.Name, nn.Namespace)
+		}
 		return nil, errors.Wrapf(err, "get backup %s", nn)
 	}
+	storageName := backup.Spec.StorageName
+	storage, ok := cluster.Spec.Backup.Storages[storageName]
+	if !ok {
+		return nil, errors.Errorf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", storageName)
+	}
+	backup.Status.Storage = storage
 	return backup, nil
 }
