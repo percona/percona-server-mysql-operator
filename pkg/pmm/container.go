@@ -156,6 +156,10 @@ func pmmEnvs(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret, dbType s
 			Value: "5",
 		},
 		{
+			Name:  "PMM_AGENT_PATHS_TEMPDIR",
+			Value: "/tmp",
+		},
+		{
 			Name:  "DB_CLUSTER",
 			Value: cr.Name,
 		},
