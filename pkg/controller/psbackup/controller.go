@@ -49,6 +49,8 @@ type PerconaServerMySQLBackupReconciler struct {
 	Scheme        *runtime.Scheme
 	ServerVersion *platform.ServerVersion
 	ClientCmd     clientcmd.Client
+
+	NewSidecarClient xtrabackup.NewSidecarClientFunc
 }
 
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqlbackups;perconaservermysqlbackups/status;perconaservermysqlbackups/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -226,7 +228,7 @@ func (r *PerconaServerMySQLBackupReconciler) isBackupJobRunning(ctx context.Cont
 		}
 	}
 
-	sc := xtrabackup.NewSidecarClient(srcNode)
+	sc := r.NewSidecarClient(srcNode)
 	cfg, err := sc.GetRunningBackupConfig(ctx)
 	if err != nil {
 		return false, errors.Wrap(err, "get running backup config")
@@ -552,7 +554,7 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 	if err != nil {
 		return false, errors.Wrap(err, "get backup source node")
 	}
-	sc := xtrabackup.NewSidecarClient(src)
+	sc := r.NewSidecarClient(src)
 	if err := sc.DeleteBackup(ctx, cr.Name, *backupConf); err != nil {
 		return false, errors.Wrap(err, "delete backup")
 	}

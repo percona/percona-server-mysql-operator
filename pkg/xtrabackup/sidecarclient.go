@@ -13,19 +13,26 @@ import (
 	"github.com/pkg/errors"
 )
 
-type SidecarClient struct {
+type SidecarClient interface {
+	GetRunningBackupConfig(ctx context.Context) (*BackupConfig, error)
+	DeleteBackup(ctx context.Context, name string, cfg BackupConfig) error
+}
+
+type NewSidecarClientFunc func(srcNode string) SidecarClient
+
+type sidecarClient struct {
 	srcNode string
 }
 
-func NewSidecarClient(srcNode string) *SidecarClient {
-	return &SidecarClient{srcNode: srcNode}
+func NewSidecarClient(srcNode string) SidecarClient {
+	return &sidecarClient{srcNode: srcNode}
 }
 
-func (c *SidecarClient) port() string {
+func (c *sidecarClient) port() string {
 	return strconv.Itoa(mysql.SidecarHTTPPort)
 }
 
-func (c *SidecarClient) GetRunningBackupConfig(ctx context.Context) (*BackupConfig, error) {
+func (c *sidecarClient) GetRunningBackupConfig(ctx context.Context) (*BackupConfig, error) {
 	sidecarURL := url.URL{
 		Host:   c.srcNode + ":" + c.port(),
 		Scheme: "http",
@@ -59,7 +66,7 @@ func (c *SidecarClient) GetRunningBackupConfig(ctx context.Context) (*BackupConf
 	return backupConf, nil
 }
 
-func (c *SidecarClient) DeleteBackup(ctx context.Context, name string, cfg BackupConfig) error {
+func (c *sidecarClient) DeleteBackup(ctx context.Context, name string, cfg BackupConfig) error {
 	sidecarURL := url.URL{
 		Host:   c.srcNode + ":" + c.port(),
 		Scheme: "http",
