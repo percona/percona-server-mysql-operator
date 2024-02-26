@@ -72,7 +72,10 @@ func Job(
 	t := true
 
 	labels := util.SSMapMerge(storage.Labels, MatchLabels(cluster))
-
+	backoffLimit := int32(10)
+	if cluster.Spec.Backup.BackoffLimit != nil {
+		backoffLimit = *cluster.Spec.Backup.BackoffLimit
+	}
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1",
@@ -85,8 +88,9 @@ func Job(
 			Annotations: storage.Annotations,
 		},
 		Spec: batchv1.JobSpec{
-			Parallelism: &one,
-			Completions: &one,
+			Parallelism:  &one,
+			Completions:  &one,
+			BackoffLimit: &backoffLimit,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
@@ -388,6 +392,7 @@ func RestoreJob(
 					},
 				},
 			},
+			BackoffLimit: func(i int32) *int32 { return &i }(4),
 		},
 	}
 }
