@@ -13,8 +13,6 @@ commands:
       current_generation_mysql=$(kubectl -n ${NAMESPACE} get sts gr-tls-cert-manager-mysql -o jsonpath='{.metadata.generation}')
       current_generation_router=$(kubectl -n ${NAMESPACE} get deployment gr-tls-cert-manager-router -o jsonpath='{.metadata.generation}')
 
-      sleep 10
-
       renew_certificate "gr-tls-cert-manager-ssl"
 
       sleep 10

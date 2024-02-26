@@ -14,8 +14,6 @@ commands:
       current_generation_haproxy=$(kubectl -n ${NAMESPACE} get sts tls-cert-manager-haproxy -o jsonpath='{.metadata.generation}')
       current_generation_orc=$(kubectl -n ${NAMESPACE} get sts tls-cert-manager-orc -o jsonpath='{.metadata.generation}')
 
-      sleep 10
-
       renew_certificate "tls-cert-manager-ssl"
 
       sleep 10
