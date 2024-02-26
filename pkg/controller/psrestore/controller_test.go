@@ -536,7 +536,7 @@ func TestRestorerValidate(t *testing.T) {
 			cr:          cr.DeepCopy(),
 			cluster:     cluster.DeepCopy(),
 			bcp:         s3Bcp.DeepCopy(),
-			expectedErr: "failed to list objects: failListObjects",
+			expectedErr: "failed to validate storage: failed to list objects: failListObjects",
 			objects: []runtime.Object{
 				s3Secret,
 			},
@@ -568,7 +568,7 @@ func TestRestorerValidate(t *testing.T) {
 			cr:          cr.DeepCopy(),
 			cluster:     cluster.DeepCopy(),
 			bcp:         s3Bcp.DeepCopy(),
-			expectedErr: "backup not found",
+			expectedErr: "failed to validate storage: backup not found",
 			objects: []runtime.Object{
 				s3Secret,
 			},
@@ -597,7 +597,7 @@ func TestRestorerValidate(t *testing.T) {
 			cr:          cr.DeepCopy(),
 			cluster:     cluster.DeepCopy(),
 			bcp:         gcsBcp.DeepCopy(),
-			expectedErr: "failed to list objects: failListObjects",
+			expectedErr: "failed to validate storage: failed to list objects: failListObjects",
 			objects: []runtime.Object{
 				gcsSecret,
 			},
@@ -629,7 +629,7 @@ func TestRestorerValidate(t *testing.T) {
 			cr:          cr.DeepCopy(),
 			cluster:     cluster.DeepCopy(),
 			bcp:         gcsBcp.DeepCopy(),
-			expectedErr: "backup not found",
+			expectedErr: "failed to validate storage: backup not found",
 			objects: []runtime.Object{
 				gcsSecret,
 			},
@@ -658,7 +658,7 @@ func TestRestorerValidate(t *testing.T) {
 			cr:          cr.DeepCopy(),
 			cluster:     cluster.DeepCopy(),
 			bcp:         azureBcp,
-			expectedErr: "failed to list objects: failListObjects",
+			expectedErr: "failed to validate storage: failed to list objects: failListObjects",
 			objects: []runtime.Object{
 				azureSecret,
 			},
@@ -690,7 +690,7 @@ func TestRestorerValidate(t *testing.T) {
 			cr:          cr.DeepCopy(),
 			cluster:     cluster.DeepCopy(),
 			bcp:         azureBcp,
-			expectedErr: "backup not found",
+			expectedErr: "failed to validate storage: backup not found",
 			objects: []runtime.Object{
 				azureSecret,
 			},

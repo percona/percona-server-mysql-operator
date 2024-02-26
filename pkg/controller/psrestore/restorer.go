@@ -40,7 +40,35 @@ func (s *s3) Validate(ctx context.Context) error {
 		return nil
 	}
 
-	return s.restorerOptions.Validate(ctx)
+	job, err := s.Job()
+	if err != nil {
+		return errors.Wrap(err, "get job")
+	}
+	if err := s.validateJob(ctx, job); err != nil {
+		return errors.Wrap(err, "failed to validate job")
+	}
+	if err := s.validateStorage(ctx); err != nil {
+		return errors.Wrap(err, "failed to validate storage")
+	}
+
+	return nil
+}
+
+func (s *s3) Job() (*batchv1.Job, error) {
+	job, err := s.job()
+	if err != nil {
+		return nil, err
+	}
+
+	storage := s.bcp.Status.Storage
+	if storage == nil || storage.S3 == nil {
+		return nil, errors.New("s3 storage is not set")
+	}
+	if err := xtrabackup.SetStorageS3(job, storage.S3); err != nil {
+		return nil, errors.Wrap(err, "set storage s3")
+	}
+
+	return job, nil
 }
 
 var _ Restorer = new(s3)
@@ -49,10 +77,72 @@ type gcs struct {
 	*restorerOptions
 }
 
+func (g *gcs) Validate(ctx context.Context) error {
+	job, err := g.Job()
+	if err != nil {
+		return errors.Wrap(err, "get job")
+	}
+	if err := g.validateJob(ctx, job); err != nil {
+		return errors.Wrap(err, "failed to validate job")
+	}
+	if err := g.validateStorage(ctx); err != nil {
+		return errors.Wrap(err, "failed to validate storage")
+	}
+	return nil
+}
+
+func (g *gcs) Job() (*batchv1.Job, error) {
+	job, err := g.job()
+	if err != nil {
+		return nil, err
+	}
+
+	storage := g.bcp.Status.Storage
+	if storage == nil || storage.GCS == nil {
+		return nil, errors.New("gcs storage is not set")
+	}
+	if err := xtrabackup.SetStorageGCS(job, storage.GCS); err != nil {
+		return nil, errors.Wrap(err, "set storage GCS")
+	}
+
+	return job, nil
+}
+
 var _ Restorer = new(gcs)
 
 type azure struct {
 	*restorerOptions
+}
+
+func (a *azure) Validate(ctx context.Context) error {
+	job, err := a.Job()
+	if err != nil {
+		return errors.Wrap(err, "get job")
+	}
+	if err := a.validateJob(ctx, job); err != nil {
+		return errors.Wrap(err, "failed to validate job")
+	}
+	if err := a.validateStorage(ctx); err != nil {
+		return errors.Wrap(err, "failed to validate storage")
+	}
+	return nil
+}
+
+func (a *azure) Job() (*batchv1.Job, error) {
+	job, err := a.job()
+	if err != nil {
+		return nil, err
+	}
+
+	storage := a.bcp.Status.Storage
+	if storage == nil || storage.Azure == nil {
+		return nil, errors.New("azure storage is not set")
+	}
+	if err := xtrabackup.SetStorageAzure(job, storage.Azure); err != nil {
+		return nil, errors.Wrap(err, "set storage Azure")
+	}
+
+	return job, nil
 }
 
 var _ Restorer = new(azure)
@@ -103,54 +193,17 @@ func (r *PerconaServerMySQLRestoreReconciler) getRestorer(
 	return nil, errors.Errorf("unknown backup storage type")
 }
 
-func (s *restorerOptions) Job() (*batchv1.Job, error) {
+func (s *restorerOptions) job() (*batchv1.Job, error) {
 	pvcName := fmt.Sprintf("%s-%s-mysql-0", mysql.DataVolumeName, s.cluster.Name)
 	storage := s.bcp.Status.Storage
 	job := xtrabackup.RestoreJob(s.cluster, s.bcp.Status.Destination, s.cr, storage, s.initImage, pvcName)
-	switch storage.Type {
-	case apiv1alpha1.BackupStorageS3:
-		if storage.S3 == nil {
-			return nil, errors.New("s3 storage is not set")
-		}
-		if err := xtrabackup.SetStorageS3(job, storage.S3); err != nil {
-			return nil, errors.Wrap(err, "set storage s3")
-		}
-	case apiv1alpha1.BackupStorageGCS:
-		if storage.GCS == nil {
-			return nil, errors.New("gcs storage is not set")
-		}
-		if err := xtrabackup.SetStorageGCS(job, storage.GCS); err != nil {
-			return nil, errors.Wrap(err, "set storage GCS")
-		}
-	case apiv1alpha1.BackupStorageAzure:
-		if storage.Azure == nil {
-			return nil, errors.New("azure storage is not set")
-		}
-		if err := xtrabackup.SetStorageAzure(job, storage.Azure); err != nil {
-			return nil, errors.Wrap(err, "set storage Azure")
-		}
-	default:
-		return nil, errors.Errorf("storage type %s is not supported", storage.Type)
-	}
-
 	if err := controllerutil.SetControllerReference(s.cr, job, s.scheme); err != nil {
 		return nil, errors.Wrapf(err, "set controller reference to Job %s/%s", job.Namespace, job.Name)
 	}
 	return job, nil
 }
 
-func (opts *restorerOptions) Validate(ctx context.Context) error {
-	if opts.bcp.Status.Storage == nil {
-		return errors.New("backup storage is not set")
-	}
-	job, err := opts.Job()
-	if err != nil {
-		return errors.Wrap(err, "get job")
-	}
-	if err := opts.validateJob(ctx, job); err != nil {
-		return errors.Wrap(err, "failed to validate job")
-	}
-
+func (opts *restorerOptions) validateStorage(ctx context.Context) error {
 	storageOpts, err := storage.GetOptionsFromBackup(ctx, opts.k8sClient, opts.cluster, opts.bcp)
 	if err != nil {
 		return errors.Wrap(err, "failed to get storage options")
