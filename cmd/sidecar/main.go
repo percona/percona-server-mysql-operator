@@ -11,7 +11,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"golang.org/x/sync/errgroup"
@@ -34,7 +36,10 @@ var (
 var status Status
 
 type Status struct {
-	isRunning atomic.Bool
+	isRunning         atomic.Bool
+	currentBackupConf *xb.BackupConfig
+
+	mu sync.Mutex
 }
 
 func (s *Status) TryRunBackup() bool {
@@ -43,6 +48,25 @@ func (s *Status) TryRunBackup() bool {
 
 func (s *Status) DoneBackup() {
 	s.isRunning.Store(false)
+}
+
+func (s *Status) SetBackupConfig(conf xb.BackupConfig) {
+	s.mu.Lock()
+	s.currentBackupConf = &conf
+	s.mu.Unlock()
+}
+
+func (s *Status) RemoveBackupConfig() {
+	s.mu.Lock()
+	s.currentBackupConf = nil
+	s.mu.Unlock()
+}
+
+func (s *Status) GetBackupConfig() *xb.BackupConfig {
+	s.mu.Lock()
+	cfg := *s.currentBackupConf
+	s.mu.Unlock()
+	return &cfg
 }
 
 func main() {
@@ -58,7 +82,7 @@ func main() {
 	mux.HandleFunc("/logs/", logHandler)
 
 	log.Info("starting http server")
-	log.Error(http.ListenAndServe(":6033", mux), "http server failed")
+	log.Error(http.ListenAndServe(":"+strconv.Itoa(mysql.SidecarHTTPPort), mux), "http server failed")
 }
 
 func getSecret(username apiv1alpha1.SystemUser) (string, error) {
@@ -104,12 +128,37 @@ func xtrabackupArgs(user, pass string) []string {
 
 func backupHandler(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
+	case http.MethodGet:
+		getBackupHandler(w, req)
 	case http.MethodPost:
 		createBackupHandler(w, req)
 	case http.MethodDelete:
 		deleteBackupHandler(w, req)
 	default:
 		http.Error(w, "method not supported", http.StatusMethodNotAllowed)
+	}
+}
+
+func getBackupHandler(w http.ResponseWriter, req *http.Request) {
+	defer req.Body.Close()
+
+	if !status.isRunning.Load() {
+		http.Error(w, "backup is not running", http.StatusNotFound)
+		return
+	}
+
+	data, err := json.Marshal(status.GetBackupConfig())
+	if err != nil {
+		log.Error(err, "failed to marshal data")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
+		return
+	}
+
+	_, err = w.Write(data)
+	if err != nil {
+		log.Error(err, "failed to write data")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -247,6 +296,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	defer status.DoneBackup()
+
 	ns, err := getNamespace()
 	if err != nil {
 		log.Error(err, "failed to detect namespace")
@@ -276,6 +326,11 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "backup failed", http.StatusBadRequest)
 		return
 	}
+
+	status.SetBackupConfig(backupConf)
+	defer func() {
+		status.RemoveBackupConfig()
+	}()
 	log.V(1).Info("Checking if backup exists")
 	exists, err := backupExists(req.Context(), &backupConf)
 	if err != nil {
