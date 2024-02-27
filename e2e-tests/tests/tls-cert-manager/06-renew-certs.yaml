@@ -8,8 +8,6 @@ commands:
 
       source ../../functions
 
-      deploy_cmctl
-
       current_generation_mysql=$(kubectl -n ${NAMESPACE} get sts tls-cert-manager-mysql -o jsonpath='{.metadata.generation}')
       current_generation_haproxy=$(kubectl -n ${NAMESPACE} get sts tls-cert-manager-haproxy -o jsonpath='{.metadata.generation}')
       current_generation_orc=$(kubectl -n ${NAMESPACE} get sts tls-cert-manager-orc -o jsonpath='{.metadata.generation}')
