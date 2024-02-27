@@ -358,6 +358,7 @@ spec:
   backup:
     enabled: true
     image: perconalab/percona-server-mysql-operator:main-backup
+#    backoffLimit: 6
     imagePullPolicy: Always
 #    initImage: percona/percona-server-mysql-operator:0.7.0
     storages:
