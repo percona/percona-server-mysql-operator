@@ -28,6 +28,10 @@ apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
   name: gr-demand-backup
+spec:
+  allowUnsafeConfigurations: false
+  backup:
+    backoffLimit: 3
 status:
   conditions:
   - reason: Initializing
@@ -49,3 +53,4 @@ status:
     size: 3
     state: ready
   state: ready
+

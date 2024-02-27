@@ -1834,6 +1834,9 @@ spec:
                 type: boolean
               backup:
                 properties:
+                  backoffLimit:
+                    format: int32
+                    type: integer
                   containerSecurityContext:
                     properties:
                       allowPrivilegeEscalation:
