@@ -478,6 +478,8 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 	return nil
 }
 
+// reconcileMySQLAutoConfig reconciles the ConfigMap for MySQL auto-tuning parameters and
+// sets read_only=0 for single-node clusters without Orchestrator
 func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileMySQLAutoConfig")
 	var memory *resource.Quantity
@@ -496,11 +498,15 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 		Name:      mysql.AutoConfigMapName(cr),
 		Namespace: cr.Namespace,
 	}
+
 	currentConfigMap := new(corev1.ConfigMap)
 	if err = r.Client.Get(ctx, nn, currentConfigMap); client.IgnoreNotFound(err) != nil {
 		return errors.Wrapf(err, "get ConfigMap/%s", nn.Name)
 	}
-	if memory == nil {
+
+	setWriteMode := cr.MySQLSpec().Size == 1 && !cr.Spec.Orchestrator.Enabled
+
+	if memory == nil && !setWriteMode {
 		exists := true
 		if k8serrors.IsNotFound(err) {
 			exists = false
@@ -518,11 +524,23 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 
 		return nil
 	}
-	autotuneParams, err := mysql.GetAutoTuneParams(cr, memory)
-	if err != nil {
-		return err
+
+	config := ""
+
+	// for single-node clusters, we need to set read_only=0 if orchestrator is disabled
+	if setWriteMode {
+		config = "\nsuper_read_only=0\nread_only=0"
 	}
-	configMap := k8s.ConfigMap(mysql.AutoConfigMapName(cr), cr.Namespace, mysql.CustomConfigKey, autotuneParams)
+
+	if memory != nil {
+		autotuneParams, err := mysql.GetAutoTuneParams(cr, memory)
+		if err != nil {
+			return err
+		}
+		config += autotuneParams
+	}
+
+	configMap := k8s.ConfigMap(mysql.AutoConfigMapName(cr), cr.Namespace, mysql.CustomConfigKey, config)
 	if !reflect.DeepEqual(currentConfigMap.Data, configMap.Data) {
 		if err := k8s.EnsureObject(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
 			return errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
