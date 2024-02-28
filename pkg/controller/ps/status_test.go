@@ -158,14 +158,14 @@ func TestReconcileStatusAsync(t *testing.T) {
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateReady.String(),
-						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateReady.String(),
-					},
-					{
 						Type:   apiv1alpha1.StateInitializing.String(),
 						Status: metav1.ConditionFalse,
 						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateReady.String(),
 					},
 				},
 			},
@@ -268,14 +268,14 @@ func TestReconcileStatusAsync(t *testing.T) {
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateReady.String(),
-						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateReady.String(),
-					},
-					{
 						Type:   apiv1alpha1.StateInitializing.String(),
 						Status: metav1.ConditionFalse,
 						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateReady.String(),
 					},
 				},
 			},
@@ -308,14 +308,14 @@ func TestReconcileStatusAsync(t *testing.T) {
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateReady.String(),
-						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateReady.String(),
-					},
-					{
 						Type:   apiv1alpha1.StateInitializing.String(),
 						Status: metav1.ConditionFalse,
 						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateReady.String(),
 					},
 				},
 			},
@@ -346,14 +346,14 @@ func TestReconcileStatusAsync(t *testing.T) {
 				Host:  cr.Name + "-mysql." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateReady.String(),
-						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateReady.String(),
-					},
-					{
 						Type:   apiv1alpha1.StateInitializing.String(),
 						Status: metav1.ConditionFalse,
 						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateReady.String(),
 					},
 				},
 			},
@@ -479,14 +479,14 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateReady.String(),
-						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateReady.String(),
-					},
-					{
 						Type:   apiv1alpha1.StateInitializing.String(),
 						Status: metav1.ConditionFalse,
 						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateReady.String(),
 					},
 				},
 			},
@@ -743,14 +743,14 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				Host:  cr.Name + "-router." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateReady.String(),
-						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateReady.String(),
-					},
-					{
 						Type:   apiv1alpha1.StateInitializing.String(),
 						Status: metav1.ConditionFalse,
 						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateReady.String(),
 					},
 				},
 			},

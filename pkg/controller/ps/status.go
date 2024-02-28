@@ -176,35 +176,18 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		cr.Status.State = apiv1alpha1.StateInitializing
 	}
 
-	if cr.Status.State != apiv1alpha1.StateError {
-		if cr.Status.State == apiv1alpha1.StateInitializing {
-			clusterCondition.Type = apiv1alpha1.StateInitializing.String()
-			clusterCondition.Reason = apiv1alpha1.StateInitializing.String()
-			clusterCondition.Status = metav1.ConditionTrue
-			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
-
-			clusterCondition.Type = apiv1alpha1.StateReady.String()
-			clusterCondition.Reason = apiv1alpha1.StateReady.String()
-			clusterCondition.Status = metav1.ConditionFalse
-			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
-		}
-
-		if cr.Status.State == apiv1alpha1.StateReady {
-			clusterCondition.Type = apiv1alpha1.StateReady.String()
-			clusterCondition.Reason = apiv1alpha1.StateReady.String()
-			clusterCondition.Status = metav1.ConditionTrue
-			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
-
-			clusterCondition.Type = apiv1alpha1.StateInitializing.String()
-			clusterCondition.Reason = apiv1alpha1.StateInitializing.String()
-			clusterCondition.Status = metav1.ConditionFalse
+	switch cr.Status.State {
+	case apiv1alpha1.StateInitializing, apiv1alpha1.StateReady:
+		for _, appState := range []apiv1alpha1.StatefulAppState{apiv1alpha1.StateInitializing, apiv1alpha1.StateReady} {
+			clusterCondition.Type = appState.String()
+			clusterCondition.Reason = appState.String()
+			if cr.Status.State == appState {
+				clusterCondition.Status = metav1.ConditionTrue
+			} else {
+				clusterCondition.Status = metav1.ConditionFalse
+			}
 			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
 		}
-
-		// clusterCondition.Type = cr.Status.State.String()
-		// clusterCondition.Reason = cr.Status.State.String()
-
-		// meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
 	}
 
 	log.V(1).Info(
