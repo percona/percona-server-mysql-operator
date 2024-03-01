@@ -24,8 +24,8 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
-	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 	xb "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
+	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 )
 
 var (
@@ -202,7 +202,7 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 	log.Info("Backup deleted successfully", "destination", backupConf.Destination, "storage", backupConf.Type)
 }
 
-func deleteBackup(ctx context.Context, cfg *xtrabackup.BackupConfig, backupName string) error {
+func deleteBackup(ctx context.Context, cfg *xb.BackupConfig, backupName string) error {
 	logWriter := io.Writer(os.Stderr)
 	if backupName != "" {
 		backupLog, err := os.OpenFile(filepath.Join(mysql.BackupLogDir, backupName+".log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
@@ -238,12 +238,16 @@ func deleteBackup(ctx context.Context, cfg *xtrabackup.BackupConfig, backupName 
 	return nil
 }
 
-func backupExists(ctx context.Context, cfg *xtrabackup.BackupConfig) (bool, error) {
-	storage, err := newStorage(cfg)
+func backupExists(ctx context.Context, cfg *xb.BackupConfig) (bool, error) {
+	opts, err := storage.GetOptionsFromBackupConfig(cfg)
+	if err != nil {
+		return false, errors.Wrap(err, "get options from backup config")
+	}
+	storage, err := storage.NewClient(ctx, opts)
 	if err != nil {
 		return false, errors.Wrap(err, "new storage")
 	}
-	objects, err := storage.listObjects(ctx, cfg.Destination)
+	objects, err := storage.ListObjects(ctx, cfg.Destination)
 	if err != nil {
 		return false, errors.Wrap(err, "list objects")
 	}
@@ -253,17 +257,21 @@ func backupExists(ctx context.Context, cfg *xtrabackup.BackupConfig) (bool, erro
 	return true, nil
 }
 
-func checkBackupMD5Size(ctx context.Context, cfg *xtrabackup.BackupConfig) error {
+func checkBackupMD5Size(ctx context.Context, cfg *xb.BackupConfig) error {
 	// xbcloud doesn't create md5 file for azure
 	if cfg.Type == apiv1alpha1.BackupStorageAzure {
 		return nil
 	}
 
-	storage, err := newStorage(cfg)
+	opts, err := storage.GetOptionsFromBackupConfig(cfg)
+	if err != nil {
+		return errors.Wrap(err, "get options from backup config")
+	}
+	storage, err := storage.NewClient(ctx, opts)
 	if err != nil {
 		return errors.Wrap(err, "new storage")
 	}
-	r, err := storage.getObject(ctx, cfg.Destination+".md5")
+	r, err := storage.GetObject(ctx, cfg.Destination+".md5")
 	if err != nil {
 		return errors.Wrap(err, "get object")
 	}
