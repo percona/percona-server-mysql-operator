@@ -40,6 +40,11 @@ func GetWatchNamespace() (string, error) {
 
 // GetOperatorNamespace returns the namespace of the operator pod
 func GetOperatorNamespace() (string, error) {
+	ns, found := os.LookupEnv("OPERATOR_NAMESPACE")
+	if found {
+		return ns, nil
+	}
+
 	nsBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
 		return "", err

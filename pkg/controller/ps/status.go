@@ -9,6 +9,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -26,16 +27,37 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 )
 
-func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
-		return nil
+func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, reconcileErr error) error {
+	clusterCondition := metav1.Condition{
+		Status:             metav1.ConditionTrue,
+		Type:               apiv1alpha1.StateInitializing.String(),
+		LastTransitionTime: metav1.Now(),
 	}
-	if err := cr.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
-		cr.Status.State = apiv1alpha1.StateError
+
+	if reconcileErr != nil {
+		if cr.Status.State != apiv1alpha1.StateError {
+			clusterCondition.Type = apiv1alpha1.StateError.String()
+			clusterCondition.Reason = "ErrorReconcile"
+			clusterCondition.Message = reconcileErr.Error()
+
+			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
+
+			cr.Status.State = apiv1alpha1.StateError
+		}
+
 		nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
 		return writeStatus(ctx, r.Client, nn, cr.Status)
 	}
+
+	if cr.Status.Conditions != nil {
+		meta.RemoveStatusCondition(&cr.Status.Conditions, apiv1alpha1.StateError.String())
+	}
+
 	log := logf.FromContext(ctx).WithName("reconcileCRStatus")
+
+	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
+		return nil
+	}
 
 	mysqlStatus, err := r.appStatus(ctx, cr, mysql.Name(cr), cr.MySQLSpec().Size, mysql.MatchLabels(cr), cr.Status.MySQL.Version)
 	if err != nil {
@@ -128,7 +150,14 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		}
 
 		if fullClusterCrash {
+			clusterCondition.Type = apiv1alpha1.StateError.String()
+			clusterCondition.Reason = "FullClusterCrashDetected"
+			clusterCondition.Message = "Full cluster crash detected"
+
+			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
+
 			cr.Status.State = apiv1alpha1.StateError
+
 			r.Recorder.Event(cr, "Warning", "FullClusterCrashDetected", "Full cluster crash detected")
 		}
 	}
@@ -147,8 +176,18 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		cr.Status.State = apiv1alpha1.StateInitializing
 	}
 
-	if err := r.checkTLSIssuer(ctx, cr); err != nil {
-		cr.Status.State = apiv1alpha1.StateError
+	switch cr.Status.State {
+	case apiv1alpha1.StateInitializing, apiv1alpha1.StateReady:
+		for _, appState := range []apiv1alpha1.StatefulAppState{apiv1alpha1.StateInitializing, apiv1alpha1.StateReady} {
+			clusterCondition.Type = appState.String()
+			clusterCondition.Reason = appState.String()
+			if cr.Status.State == appState {
+				clusterCondition.Status = metav1.ConditionTrue
+			} else {
+				clusterCondition.Status = metav1.ConditionFalse
+			}
+			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
+		}
 	}
 
 	log.V(1).Info(

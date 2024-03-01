@@ -32,6 +32,12 @@ metadata:
   name: gr-demand-backup-haproxy
 status:
   conditions:
+  - reason: Initializing
+    status: "False"
+    type: Initializing
+  - reason: Ready
+    status: "True"
+    type: Ready
   - message: InnoDB cluster successfully bootstrapped with 3 nodes
     reason: InnoDBClusterBootstrapped
     status: "True"

@@ -10,8 +10,9 @@ import (
 	"reflect"
 	"testing"
 
-	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/gocarina/gocsv"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -81,6 +82,18 @@ func TestReconcileStatusAsync(t *testing.T) {
 				},
 				State: apiv1alpha1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1alpha1.StateInitializing.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1alpha1.StateReady.String(),
+					},
+				},
 			},
 		},
 		{
@@ -103,6 +116,18 @@ func TestReconcileStatusAsync(t *testing.T) {
 				},
 				State: apiv1alpha1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1alpha1.StateInitializing.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1alpha1.StateReady.String(),
+					},
+				},
 			},
 		},
 		{
@@ -131,40 +156,18 @@ func TestReconcileStatusAsync(t *testing.T) {
 				},
 				State: apiv1alpha1.StateReady,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
-			},
-		},
-		{
-			name: "with all ready pods and invalid issuer",
-			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQL) {
-				cr.Spec.TLS = &apiv1alpha1.TLSSpec{
-					IssuerConf: &cmmeta.ObjectReference{
-						Name: "invalid-issuer",
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1alpha1.StateInitializing.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1alpha1.StateInitializing.String(),
 					},
-				}
-			}),
-			objects: appendSlices(
-				makeFakeReadyPods(cr, 3, "mysql"),
-				makeFakeReadyPods(cr, 3, "haproxy"),
-				makeFakeReadyPods(cr, 3, "orchestrator"),
-			),
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
-					Size:  3,
-					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateReady.String(),
+					},
 				},
-				Orchestrator: apiv1alpha1.StatefulAppStatus{
-					Size:  3,
-					Ready: 3,
-					State: apiv1alpha1.StateReady,
-				},
-				HAProxy: apiv1alpha1.StatefulAppStatus{
-					Size:  3,
-					Ready: 3,
-					State: apiv1alpha1.StateReady,
-				},
-				State: apiv1alpha1.StateError,
-				Host:  cr.Name + "-haproxy." + cr.Namespace,
 			},
 		},
 		{
@@ -211,6 +214,18 @@ func TestReconcileStatusAsync(t *testing.T) {
 				},
 				State: apiv1alpha1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1alpha1.StateInitializing.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1alpha1.StateReady.String(),
+					},
+				},
 			},
 		},
 		{
@@ -251,6 +266,18 @@ func TestReconcileStatusAsync(t *testing.T) {
 				},
 				State: apiv1alpha1.StateReady,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1alpha1.StateInitializing.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateReady.String(),
+					},
+				},
 			},
 		},
 		{
@@ -279,6 +306,18 @@ func TestReconcileStatusAsync(t *testing.T) {
 				},
 				State: apiv1alpha1.StateReady,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1alpha1.StateInitializing.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateReady.String(),
+					},
+				},
 			},
 		},
 		{
@@ -305,9 +344,22 @@ func TestReconcileStatusAsync(t *testing.T) {
 				},
 				State: apiv1alpha1.StateReady,
 				Host:  cr.Name + "-mysql." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1alpha1.StateInitializing.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateReady.String(),
+					},
+				},
 			},
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := tt.cr.DeepCopy()
@@ -320,15 +372,17 @@ func TestReconcileStatusAsync(t *testing.T) {
 					Platform: platform.PlatformKubernetes,
 				},
 			}
-			err := r.reconcileCRStatus(ctx, cr)
+			err := r.reconcileCRStatus(ctx, cr, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if err := r.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, cr); err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(cr.Status, tt.expected) {
-				t.Errorf("expected status %v, got %v", tt.expected, cr.Status)
+
+			opt := cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime", "Message")
+			if diff := cmp.Diff(cr.Status, tt.expected, opt); diff != "" {
+				t.Errorf("expected status %v, got %v, diff: %s", tt.expected, cr.Status, diff)
 			}
 		})
 	}
@@ -388,6 +442,18 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				},
 				State: apiv1alpha1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1alpha1.StateInitializing.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1alpha1.StateReady.String(),
+					},
+				},
 			},
 		},
 		{
@@ -411,6 +477,18 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				},
 				State: apiv1alpha1.StateReady,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1alpha1.StateInitializing.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateReady.String(),
+					},
+				},
 			},
 			mysqlMemberStates: []innodbcluster.MemberState{
 				innodbcluster.MemberStateOnline,
@@ -439,6 +517,18 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				},
 				State: apiv1alpha1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1alpha1.StateInitializing.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1alpha1.StateReady.String(),
+					},
+				},
 			},
 			mysqlMemberStates: []innodbcluster.MemberState{
 				innodbcluster.MemberStateOnline,
@@ -468,6 +558,18 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				},
 				State: apiv1alpha1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1alpha1.StateInitializing.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1alpha1.StateReady.String(),
+					},
+				},
 			},
 			mysqlMemberStates: []innodbcluster.MemberState{
 				innodbcluster.MemberStateOffline,
@@ -496,6 +598,18 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				},
 				State: apiv1alpha1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1alpha1.StateInitializing.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1alpha1.StateReady.String(),
+					},
+				},
 			},
 			mysqlMemberStates: []innodbcluster.MemberState{
 				innodbcluster.MemberStateOnline,
@@ -522,15 +636,17 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				Recorder:  new(record.FakeRecorder),
 			}
 
-			err = r.reconcileCRStatus(ctx, cr)
+			err = r.reconcileCRStatus(ctx, cr, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if err := r.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, cr); err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(cr.Status, tt.expected) {
-				t.Errorf("expected status %v, got %v", tt.expected, cr.Status)
+
+			opt := cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime", "Message")
+			if diff := cmp.Diff(cr.Status, tt.expected, opt); diff != "" {
+				t.Errorf("expected status %v, got %v, diff: %s", tt.expected, cr.Status, diff)
 			}
 		})
 	}
@@ -590,6 +706,18 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				},
 				State: apiv1alpha1.StateInitializing,
 				Host:  cr.Name + "-router." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1alpha1.StateInitializing.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1alpha1.StateReady.String(),
+					},
+				},
 			},
 		},
 		{
@@ -613,6 +741,18 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				},
 				State: apiv1alpha1.StateReady,
 				Host:  cr.Name + "-router." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1alpha1.StateInitializing.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateReady.String(),
+					},
+				},
 			},
 			mysqlMemberStates: []innodbcluster.MemberState{
 				innodbcluster.MemberStateOnline,
@@ -640,7 +780,19 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 					State: apiv1alpha1.StateReady,
 				},
 				State: apiv1alpha1.StateInitializing,
-				Host:  cr.Name + "-router." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1alpha1.StateInitializing.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1alpha1.StateReady.String(),
+					},
+				},
+				Host: cr.Name + "-router." + cr.Namespace,
 			},
 			mysqlMemberStates: []innodbcluster.MemberState{
 				innodbcluster.MemberStateOnline,
@@ -670,6 +822,18 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				},
 				State: apiv1alpha1.StateInitializing,
 				Host:  cr.Name + "-router." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1alpha1.StateInitializing.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1alpha1.StateReady.String(),
+					},
+				},
 			},
 			mysqlMemberStates: []innodbcluster.MemberState{
 				innodbcluster.MemberStateOffline,
@@ -698,6 +862,18 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				},
 				State: apiv1alpha1.StateInitializing,
 				Host:  cr.Name + "-router." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1alpha1.StateInitializing.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1alpha1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1alpha1.StateReady.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1alpha1.StateReady.String(),
+					},
+				},
 			},
 			mysqlMemberStates: []innodbcluster.MemberState{
 				innodbcluster.MemberStateOnline,
@@ -724,17 +900,93 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				Recorder:  new(record.FakeRecorder),
 			}
 
-			err = r.reconcileCRStatus(ctx, cr)
+			err = r.reconcileCRStatus(ctx, cr, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if err := r.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, cr); err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(cr.Status, tt.expected) {
-				t.Errorf("expected status %v, got %v", tt.expected, cr.Status)
+
+			opt := cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime", "Message")
+			if diff := cmp.Diff(cr.Status, tt.expected, opt); diff != "" {
+				t.Errorf("expected status %v, got %v, diff: %s", tt.expected, cr.Status, diff)
 			}
 		})
+	}
+}
+
+func TestReconcileErrorStatus(t *testing.T) {
+	ctx := context.Background()
+
+	cr, err := readDefaultCR("cluster1", "status-err")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cr.Spec.MySQL.ClusterType = apiv1alpha1.ClusterTypeAsync
+	cr.Spec.UpdateStrategy = appsv1.OnDeleteStatefulSetStrategyType
+
+	scheme := runtime.NewScheme()
+	err = clientgoscheme.AddToScheme(scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = apiv1alpha1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	objects := appendSlices(
+		makeFakeReadyPods(cr, 3, "mysql"),
+		makeFakeReadyPods(cr, 3, "haproxy"),
+		makeFakeReadyPods(cr, 3, "orchestrator"),
+	)
+
+	cb := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cr).
+		WithStatusSubresource(cr).
+		WithObjects(objects...).
+		WithStatusSubresource(objects...)
+
+	r := &PerconaServerMySQLReconciler{
+		Client: cb.Build(),
+		Scheme: scheme,
+		ServerVersion: &platform.ServerVersion{
+			Platform: platform.PlatformKubernetes,
+		},
+	}
+
+	reconcileErr := errors.New("reconcile error")
+
+	err = r.reconcileCRStatus(ctx, cr, reconcileErr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, cr); err != nil {
+		t.Fatal(err)
+	}
+
+	expected := apiv1alpha1.PerconaServerMySQLStatus{
+		State: apiv1alpha1.StateError,
+		Conditions: []metav1.Condition{
+			{
+				Type:    apiv1alpha1.StateError.String(),
+				Status:  metav1.ConditionTrue,
+				Reason:  "ErrorReconcile",
+				Message: reconcileErr.Error(),
+			},
+		},
+	}
+
+	opt := cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime")
+	if diff := cmp.Diff(cr.Status.Conditions, expected.Conditions, opt); diff != "" {
+		t.Errorf("unexpected conditions (-want +got):\n%s", diff)
+	}
+
+	if diff := cmp.Diff(cr.Status.State, expected.State); diff != "" {
+		t.Errorf("unexpected state (-want +got):\n%s", diff)
 	}
 }
 

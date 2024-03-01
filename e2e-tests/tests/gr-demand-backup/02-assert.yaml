@@ -34,6 +34,12 @@ spec:
     backoffLimit: 3
 status:
   conditions:
+  - reason: Initializing
+    status: "False"
+    type: Initializing
+  - reason: Ready
+    status: "True"
+    type: Ready
   - message: InnoDB cluster successfully bootstrapped with 3 nodes
     reason: InnoDBClusterBootstrapped
     status: "True"

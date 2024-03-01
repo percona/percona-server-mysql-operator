@@ -28,6 +28,8 @@ import (
 
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -402,6 +404,10 @@ type ServiceExposeTogglable struct {
 }
 
 type StatefulAppState string
+
+func (s StatefulAppState) String() string {
+	return cases.Title(language.English).String(string(s))
+}
 
 const (
 	StateInitializing StatefulAppState = "initializing"
