@@ -176,7 +176,7 @@ Starting from the version 0.6.0 you can run the Operator on your system without 
 When you have kubectl on your system set up and configured to control a Kubernetes cluster, you can run the Operator locally as follows:
 
 1. Export `WATCH_NAMESPACE=<desired_namespace>` environment variable to let the Operator know which Kubernetes namespace it should work with
-1. Export `OPERATOR_NAMESPACE=<desired_namespace>` environment variable to tell the Operator in which namespaci it is running
+1. Export `OPERATOR_NAMESPACE=<desired_namespace>` environment variable to tell the Operator in which namespace it is running
 2. Uncomment the `initImage` key in your `deploy/cr.yaml`
 3. Execute `make install` command to have the runnable local version of the Operator
 4. Execute `make run` to actually run it
