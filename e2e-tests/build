@@ -13,7 +13,6 @@ GIT_COMMIT=$(git rev-parse HEAD)
 IMAGE=${IMAGE/#percona\//perconalab/}
 DOCKER_DEFAULT_PLATFORM=${DOCKER_DEFAULT_PLATFORM:-"linux/amd64"}
 
-
 build_options='--squash'
 if [[ ${DOCKER_SQUASH} == 0 ]]; then
 	build_options=''
