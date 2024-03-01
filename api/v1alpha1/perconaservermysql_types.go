@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"path"
 	"regexp"
 	"strings"
 
@@ -27,6 +28,8 @@ import (
 
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -235,17 +238,33 @@ type BackupStorageS3Spec struct {
 	StorageClass      string           `json:"storageClass,omitempty"`
 }
 
+// BucketAndPrefix returns bucket name and backup prefix from Bucket concatenated with Prefix.
+// BackupStorageS3Spec.Bucket can contain backup path in format `<bucket-name>/<backup-prefix>`.
+func (b *BackupStorageS3Spec) BucketAndPrefix() (string, string) {
+	bucket := b.Bucket.bucket()
+	prefix := b.Bucket.prefix()
+	if b.Prefix != "" {
+		prefix = path.Join(prefix, b.Prefix)
+	}
+	if prefix != "" {
+		prefix = strings.TrimSuffix(prefix, "/")
+		prefix += "/"
+	}
+
+	return bucket, prefix
+}
+
 // BucketWithPrefix contains a bucket name with or without a prefix in a format <bucket>/<prefix>
 type BucketWithPrefix string
 
 // Extracts the bucket name from a combined bucket with prefix string.
-func (b BucketWithPrefix) Bucket() string {
+func (b BucketWithPrefix) bucket() string {
 	bucket, _, _ := strings.Cut(string(b), "/")
 	return bucket
 }
 
 // Extracts the prefix from a combined bucket with prefix string.
-func (b BucketWithPrefix) Prefix() string {
+func (b BucketWithPrefix) prefix() string {
 	_, prefix, _ := strings.Cut(string(b), "/")
 	return prefix
 }
@@ -258,6 +277,22 @@ type BackupStorageGCSSpec struct {
 
 	// STANDARD, NEARLINE, COLDLINE, ARCHIVE
 	StorageClass string `json:"storageClass,omitempty"`
+}
+
+// BucketAndPrefix returns bucket name and backup prefix from Bucket concatenated with Prefix.
+// BackupStorageGCSSpec.Bucket can contain backup path in format `<bucket-name>/<backup-prefix>`.
+func (b *BackupStorageGCSSpec) BucketAndPrefix() (string, string) {
+	bucket := b.Bucket.bucket()
+	prefix := b.Bucket.prefix()
+	if b.Prefix != "" {
+		prefix = path.Join(prefix, b.Prefix)
+	}
+	if prefix != "" {
+		prefix = strings.TrimSuffix(prefix, "/")
+		prefix += "/"
+	}
+
+	return bucket, prefix
 }
 
 type BackupStorageAzureSpec struct {
@@ -275,6 +310,22 @@ type BackupStorageAzureSpec struct {
 
 	// Hot (Frequently accessed or modified data), Cool (Infrequently accessed or modified data), Archive (Rarely accessed or modified data)
 	StorageClass string `json:"storageClass,omitempty"`
+}
+
+// ContainerAndPrefix returns container name from ContainerName and backup prefix from ContainerName concatenated with Prefix.
+// BackupStorageAzureSpec.ContainerName can contain backup path in format `<container-name>/<backup-prefix>`.
+func (b *BackupStorageAzureSpec) ContainerAndPrefix() (string, string) {
+	container := b.ContainerName.bucket()
+	prefix := b.ContainerName.prefix()
+	if b.Prefix != "" {
+		prefix = path.Join(prefix, b.Prefix)
+	}
+	if prefix != "" {
+		prefix = strings.TrimSuffix(prefix, "/")
+		prefix += "/"
+	}
+
+	return container, prefix
 }
 
 type ProxySpec struct {
@@ -353,6 +404,10 @@ type ServiceExposeTogglable struct {
 }
 
 type StatefulAppState string
+
+func (s StatefulAppState) String() string {
+	return cases.Title(language.English).String(string(s))
+}
 
 const (
 	StateInitializing StatefulAppState = "initializing"

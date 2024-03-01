@@ -346,7 +346,7 @@ func TestRunningState(t *testing.T) {
 			cluster: cluster.DeepCopy(),
 			state:   apiv1alpha1.BackupStarting,
 			sidecarClient: &fakeSidecarClient{
-				destination: "other-dest",
+				destination: "other-container",
 			},
 		},
 		{
@@ -355,7 +355,7 @@ func TestRunningState(t *testing.T) {
 			cluster: cluster.DeepCopy(),
 			state:   apiv1alpha1.BackupRunning,
 			sidecarClient: &fakeSidecarClient{
-				destination: "dest",
+				destination: "container",
 			},
 		},
 	}
@@ -366,7 +366,7 @@ func TestRunningState(t *testing.T) {
 			if !ok {
 				t.Fatal("storage not found")
 			}
-			job := xtrabackup.Job(tt.cluster, tt.cr, "dest", "init-image", storage)
+			job := xtrabackup.Job(tt.cluster, tt.cr, "s3://bucket/container", "init-image", storage)
 			job.Status.Active = 1
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr, tt.cluster, job).WithStatusSubresource(tt.cr, tt.cluster, job)
 
@@ -396,7 +396,7 @@ func TestRunningState(t *testing.T) {
 				t.Fatal(err, "failed to get backup")
 			}
 			if cr.Status.State != tt.state {
-				t.Fatalf("expected state %s, got %s", apiv1alpha1.RestoreError, cr.Status.State)
+				t.Fatalf("expected state %s, got %s", tt.state, cr.Status.State)
 			}
 		})
 	}
