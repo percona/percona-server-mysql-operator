@@ -218,8 +218,11 @@ get_mysqlsh_uri() {
 
 get_gr_status() {
 	local uri="$1"
+	local pod="$2"
 
-	kubectl -n "${NAMESPACE}" exec $(get_operator_pod) -- mysqlsh --uri $uri --cluster --result-format json -- cluster status \
+	client_pod=$(get_client_pod)
+
+	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- mysqlsh --uri $uri --cluster --result-format json -- cluster status \
 		| sed -e 's/mysql: //' \
 		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
 }
