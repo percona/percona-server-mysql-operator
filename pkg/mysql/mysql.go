@@ -114,7 +114,7 @@ func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 		cr.Labels())
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string, secret *corev1.Secret) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHash string, secret *corev1.Secret) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 	spec := cr.MySQLSpec()
 	replicas := spec.Size
@@ -122,7 +122,10 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 
 	annotations := make(map[string]string)
 	if configHash != "" {
-		annotations["percona.com/configuration-hash"] = configHash
+		annotations[string(apiv1alpha1.AnnotationConfigHash)] = configHash
+	}
+	if tlsHash != "" {
+		annotations[string(apiv1alpha1.AnnotationTLSHash)] = tlsHash
 	}
 
 	return &appsv1.StatefulSet{

@@ -387,6 +387,11 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 		return errors.Wrap(err, "reconcile MySQL config")
 	}
 
+	tlsHash, err := getTLSHash(ctx, r.Client, cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to get tls hash")
+	}
+
 	if err = r.reconcileMySQLAutoConfig(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile MySQL auto-config")
 	}
@@ -403,7 +408,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 		return errors.Wrapf(err, "get Secret/%s", nn.Name)
 	}
 
-	sts := mysql.StatefulSet(cr, initImage, configHash, internalSecret)
+	sts := mysql.StatefulSet(cr, initImage, configHash, tlsHash, internalSecret)
 
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, sts, r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile sts")
@@ -596,7 +601,12 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return errors.Wrap(err, "get init image")
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.StatefulSet(cr, initImage), r.Scheme); err != nil {
+	tlsHash, err := getTLSHash(ctx, r.Client, cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to get tls hash")
+	}
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.StatefulSet(cr, initImage, tlsHash), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile StatefulSet")
 	}
 
@@ -664,6 +674,11 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 		return errors.Wrap(err, "reconcile HAProxy config")
 	}
 
+	tlsHash, err := getTLSHash(ctx, r.Client, cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to get tls hash")
+	}
+
 	nn := types.NamespacedName{Namespace: cr.Namespace, Name: mysql.PodName(cr, 0)}
 	firstMySQLPodReady, err := k8s.IsPodWithNameReady(ctx, r.Client, nn)
 	if err != nil {
@@ -687,7 +702,7 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 		return errors.Wrapf(err, "get Secret/%s", nn.Name)
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, haproxy.StatefulSet(cr, initImage, configHash, internalSecret), r.Scheme); err != nil {
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, haproxy.StatefulSet(cr, initImage, configHash, tlsHash, internalSecret), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile StatefulSet")
 	}
 
@@ -742,7 +757,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 
 	sts := &appsv1.StatefulSet{}
 	// no need to set init image since we're just getting obj from API
-	if err := r.Get(ctx, client.ObjectKeyFromObject(orchestrator.StatefulSet(cr, "")), sts); err != nil {
+	if err := r.Get(ctx, client.ObjectKeyFromObject(orchestrator.StatefulSet(cr, "", "")), sts); err != nil {
 		return client.IgnoreNotFound(err)
 	}
 
@@ -885,7 +900,7 @@ func (r *PerconaServerMySQLReconciler) cleanupMysql(ctx context.Context, cr *api
 func (r *PerconaServerMySQLReconciler) cleanupOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 
 	if !cr.OrchestratorEnabled() {
-		if err := r.Delete(ctx, orchestrator.StatefulSet(cr, "")); err != nil && !k8serrors.IsNotFound(err) {
+		if err := r.Delete(ctx, orchestrator.StatefulSet(cr, "", "")); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrap(err, "failed to delete orchestrator statefulset")
 		}
 
@@ -899,7 +914,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOrchestrator(ctx context.Context, 
 
 func (r *PerconaServerMySQLReconciler) cleanupProxies(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	if !cr.RouterEnabled() {
-		if err := r.Delete(ctx, router.Deployment(cr, "", "")); err != nil && !k8serrors.IsNotFound(err) {
+		if err := r.Delete(ctx, router.Deployment(cr, "", "", "")); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrap(err, "failed to delete router deployment")
 		}
 
@@ -909,7 +924,7 @@ func (r *PerconaServerMySQLReconciler) cleanupProxies(ctx context.Context, cr *a
 	}
 
 	if !cr.HAProxyEnabled() {
-		if err := r.Delete(ctx, haproxy.StatefulSet(cr, "", "", nil)); err != nil && !k8serrors.IsNotFound(err) {
+		if err := r.Delete(ctx, haproxy.StatefulSet(cr, "", "", "", nil)); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrap(err, "failed to delete haproxy statefulset")
 		}
 
@@ -932,6 +947,11 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 	configHash, err := r.reconcileCustomConfiguration(ctx, cr, &configurable)
 	if err != nil {
 		return errors.Wrap(err, "reconcile Router config")
+	}
+
+	tlsHash, err := getTLSHash(ctx, r.Client, cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to get tls hash")
 	}
 
 	if cr.Spec.Proxy.Router.Size > 0 {
@@ -964,7 +984,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		return errors.Wrap(err, "get init image")
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Deployment(cr, initImage, configHash), r.Scheme); err != nil {
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Deployment(cr, initImage, configHash, tlsHash), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile Deployment")
 	}
 

@@ -104,10 +104,15 @@ func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 		cr.Labels())
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, tlsHash string) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 	spec := cr.OrchestratorSpec()
 	Replicas := spec.Size
+
+	annotations := make(map[string]string, 0)
+	if tlsHash != "" {
+		annotations[string(apiv1alpha1.AnnotationTLSHash)] = tlsHash
+	}
 
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
@@ -128,7 +133,8 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.S
 			UpdateStrategy: updateStrategy(cr),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{

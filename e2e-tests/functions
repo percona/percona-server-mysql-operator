@@ -131,7 +131,7 @@ retry() {
 
 	until "$@"; do
 		if [[ $n -ge $max ]]; then
-			echo "The command '$@' has failed after $n attempts."
+			echo "The command ${*} has failed after $n attempts."
 			exit 1
 		fi
 		((n++))
@@ -663,4 +663,35 @@ network_loss() {
         .spec.selector.pods.'${ns}'[0] = "'${pod}'"' ${TESTS_CONFIG_DIR}/chaos-network-loss.yml \
 		| kubectl apply --namespace ${ns} -f -
 	sleep 5
+}
+
+renew_certificate() {
+	certificate="$1"
+
+	local pod_name
+	pod_name=$(kubectl get -n "${NAMESPACE}" pods --selector=name=cmctl -o 'jsonpath={.items[].metadata.name}')
+
+	local revision
+	revision=$(kubectl get -n "${NAMESPACE}" certificate "$certificate" -o 'jsonpath={.status.revision}')
+
+	kubectl exec -n "${NAMESPACE}" "$pod_name" -- /tmp/cmctl renew "$certificate"
+
+	# wait for new revision
+	for i in {1..10}; do
+		local new_revision
+		new_revision=$(kubectl get -n "${NAMESPACE}" certificate "$certificate" -o 'jsonpath={.status.revision}')
+		if [ "$((revision + 1))" == "$new_revision" ]; then
+			break
+		fi
+		sleep 1
+	done
+}
+
+deploy_cmctl() {
+	local service_account="cmctl"
+
+	sed -e "s/percona-server-mysql-operator/$service_account/g" "${DEPLOY_DIR}/rbac.yaml" \
+		| yq '(select(.rules).rules[] | select(contains({"apiGroups": ["cert-manager.io"]}))).resources += "certificates/status"' \
+		| kubectl apply -n "${NAMESPACE}" -f -
+	kubectl apply -n "${NAMESPACE}" -f "${TESTS_CONFIG_DIR}/cmctl.yml"
 }
