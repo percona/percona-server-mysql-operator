@@ -3,6 +3,7 @@ package ps
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -12,11 +13,13 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
+	"github.com/percona/percona-server-mysql-operator/pkg/tls"
 )
 
 func (r *PerconaServerMySQLReconciler) ensureTLSSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
@@ -28,17 +31,66 @@ func (r *PerconaServerMySQLReconciler) ensureTLSSecret(ctx context.Context, cr *
 			log.Error(err, fmt.Sprintf("Failed to ensure certificate by cert-manager. Check `.spec.tls.issuerConf` in PerconaServerMySQL %s/%s", cr.Namespace, cr.Name))
 			return errors.Wrap(err, "create ssl with cert manager")
 		}
-		secret, err := secret.GenerateCertsSecret(ctx, cr)
-		if err != nil {
-			return errors.Wrap(err, "create SSL manually")
-		}
-
-		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, secret, r.Scheme); err != nil {
-			return errors.Wrap(err, "create secret")
+		if err := r.ensureManualTLS(ctx, cr); err != nil {
+			return errors.Wrap(err, "ensure manual TLS")
 		}
 	}
 
 	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) ensureManualTLS(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	secret, err := secret.GenerateCertsSecret(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "create SSL manually")
+	}
+
+	newDNSNames, err := tls.DNSNamesFromCert(secret.Data["tls.crt"])
+	if err != nil {
+		return errors.Wrap(err, "get DNS names from new certificate")
+	}
+
+	currentSecret := new(corev1.Secret)
+	if err = r.Get(ctx, client.ObjectKeyFromObject(secret), currentSecret); client.IgnoreNotFound(err) != nil {
+		return errors.Wrap(err, "get secret")
+	}
+	var currentDNSNames []string
+	if len(currentSecret.Data["tls.crt"]) > 0 {
+		var err error
+		currentDNSNames, err = tls.DNSNamesFromCert(currentSecret.Data["tls.crt"])
+		if err != nil {
+			return errors.Wrap(err, "get DNS names from current certificate")
+		}
+	}
+
+	// We should update the secret only if the DNS names have changed
+	if k8serrors.IsNotFound(err) || !slices.Equal(currentDNSNames, newDNSNames) {
+		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, secret, r.Scheme); err != nil {
+			return errors.Wrap(err, "create secret")
+		}
+	}
+	return nil
+}
+
+func getTLSHash(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
+	secret := new(corev1.Secret)
+	err := cl.Get(ctx, types.NamespacedName{
+		Name:      cr.Spec.SSLSecretName,
+		Namespace: cr.Namespace,
+	}, secret)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return "", nil
+		}
+		return "", errors.Wrap(err, "get secret")
+	}
+
+	hash, err := k8s.ObjectHash(secret)
+	if err != nil {
+		return "", errors.Wrap(err, "get secret hash")
+	}
+
+	return hash, nil
 }
 
 func (r *PerconaServerMySQLReconciler) checkTLSIssuer(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
@@ -128,7 +180,7 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 		},
 		Spec: cm.CertificateSpec{
 			SecretName: cr.Spec.SSLSecretName,
-			DNSNames:   secret.DNSNames(cr),
+			DNSNames:   tls.DNSNames(cr),
 			IsCA:       false,
 			IssuerRef: cmmeta.ObjectReference{
 				Name:  issuerName,
