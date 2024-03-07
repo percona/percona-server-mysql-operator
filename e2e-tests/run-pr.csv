@@ -5,6 +5,7 @@ config-router
 demand-backup
 gr-demand-backup
 gr-demand-backup-haproxy
+gr-finalizer
 gr-haproxy
 gr-ignore-annotations
 gr-init-deploy
