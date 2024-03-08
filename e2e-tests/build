@@ -34,10 +34,10 @@ build_operator() {
 	build_command='build'
 	if echo "$DOCKER_DEFAULT_PLATFORM" | grep -q ','; then
 		build_command='buildx build'
-		if [[ ${DOCKER_PUSH:-1} == 1 ]]; then
-			build_options="$build_options --push=true"
-		else
-			build_options="$build_options --load"
+		build_options="$build_options --push=true"
+		if [ "${DOCKER_PUSH:-1}" = 0 ]; then
+			echo "'docker $build_command' doesn't support DOCKER_PUSH=0 option in case of multi-arch builds, please use DOCKER_PUSH=1"
+			exit 1
 		fi
 	fi
 
