@@ -1,0 +1,7 @@
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: gr-security-context-restore-minio
+spec:
+  clusterName: gr-security-context
+  backupName: gr-security-context-minio
