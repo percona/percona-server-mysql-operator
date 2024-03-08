@@ -36,7 +36,7 @@ build_operator() {
 		build_command='buildx build'
 		build_options="$build_options --push=true"
 		if [ "${DOCKER_PUSH:-1}" = 0 ]; then
-			echo "'docker $build_command' doesn't support '--load' option in case of multi-arch builds, please use DOCKER_PUSH=1"
+			echo "'docker $build_command' doesn't support DOCKER_PUSH=0 option in case of multi-arch builds, please use DOCKER_PUSH=1"
 			exit 1
 		fi
 	fi
