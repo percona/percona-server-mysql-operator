@@ -3,7 +3,7 @@ module github.com/percona/percona-server-mysql-operator
 go 1.21
 
 require (
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.0
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.1
 	github.com/cert-manager/cert-manager v1.14.3
 	github.com/flosch/pongo2 v0.0.0-20200913210552-0d938eb266f3
 	github.com/go-logr/logr v1.4.1
