@@ -33,7 +33,7 @@ func (m *mysqlshExec) runWithExec(ctx context.Context, cmd string) error {
 	if err != nil {
 		sout := sensitiveRegexp.ReplaceAllString(outb.String(), ":*****@")
 		serr := sensitiveRegexp.ReplaceAllString(errb.String(), ":*****@")
-		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, sout, serr)
+		return errors.Wrapf(err, "stdout: %s, stderr: %s", sout, serr)
 	}
 
 	return nil
@@ -73,7 +73,7 @@ func (m *mysqlshExec) ClusterStatusWithExec(ctx context.Context, clusterName str
 	if err != nil {
 		sout := sensitiveRegexp.ReplaceAllString(stdoutBuffer.String(), ":*****@")
 		serr := sensitiveRegexp.ReplaceAllString(stderrBuffer.String(), ":*****@")
-		return status, errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", c, sout, serr)
+		return status, errors.Wrapf(err, "stdout: %s, stderr: %s", sout, serr)
 	}
 
 	if err := json.Unmarshal(stdoutBuffer.Bytes(), &status); err != nil {
