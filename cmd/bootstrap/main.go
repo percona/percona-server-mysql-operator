@@ -9,6 +9,11 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
+var (
+	GitCommit string
+	BuildTime string
+)
+
 const (
 	fullClusterCrashFile = "/var/lib/mysql/full-cluster-crash"
 	manualRecoveryFile   = "/var/lib/mysql/sleep-forever"
@@ -21,6 +26,8 @@ func main() {
 	}
 	defer f.Close()
 	log.SetOutput(f)
+
+	log.Printf("starting bootstrap... GitCommit: %s BuildTime: %s", GitCommit, BuildTime)
 
 	fullClusterCrash, err := fileExists(fullClusterCrashFile)
 	if err == nil && fullClusterCrash {

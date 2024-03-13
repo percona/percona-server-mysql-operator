@@ -31,6 +31,7 @@ require (
 )
 
 require (
+	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/google/gnostic-models v0.6.8 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
