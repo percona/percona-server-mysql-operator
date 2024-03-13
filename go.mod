@@ -7,9 +7,9 @@ require (
 	github.com/cert-manager/cert-manager v1.14.3
 	github.com/flosch/pongo2 v0.0.0-20200913210552-0d938eb266f3
 	github.com/go-logr/logr v1.4.1
-	github.com/go-openapi/errors v0.21.1
+	github.com/go-openapi/errors v0.22.0
 	github.com/go-openapi/runtime v0.27.2
-	github.com/go-openapi/strfmt v0.22.2
+	github.com/go-openapi/strfmt v0.23.0
 	github.com/go-openapi/swag v0.22.10
 	github.com/go-openapi/validate v0.23.2
 	github.com/go-sql-driver/mysql v1.7.1
