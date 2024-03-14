@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.1
-	github.com/cert-manager/cert-manager v1.14.3
+	github.com/cert-manager/cert-manager v1.14.4
 	github.com/flosch/pongo2 v0.0.0-20200913210552-0d938eb266f3
 	github.com/go-logr/logr v1.4.1
 	github.com/go-openapi/errors v0.22.0
@@ -119,7 +119,7 @@ require (
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto v0.0.0-20240123012728-ef4313101c80 // indirect
-	google.golang.org/protobuf v1.32.0 // indirect
+	google.golang.org/protobuf v1.33.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
