@@ -72,7 +72,7 @@ func Job(
 	t := true
 
 	labels := util.SSMapMerge(storage.Labels, MatchLabels(cluster))
-	backoffLimit := int32(10)
+	backoffLimit := int32(6)
 	if cluster.Spec.Backup.BackoffLimit != nil {
 		backoffLimit = *cluster.Spec.Backup.BackoffLimit
 	}
