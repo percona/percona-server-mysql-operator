@@ -33,7 +33,7 @@ spec:
   mysql:
     clusterType: group-replication
     autoRecovery: true
-    image: percona/percona-server-mysql-operator:8.2.0-1
+    image: percona/percona-server:8.0.36-28
     imagePullPolicy: Always
 #    initImage: percona/percona-server-mysql-operator:0.7.0
 
@@ -139,7 +139,7 @@ spec:
 
       size: 3
 
-      image: percona/percona-server-mysql-operator:2.8.1-haproxy
+      image: percona/haproxy:2.8.5
       imagePullPolicy: Always
 
       resources:
@@ -246,7 +246,7 @@ spec:
 
     router:
       enabled: false
-      image: percona/percona-server-mysql-operator:8.0.33-router
+      image: percona/percona-mysql-router:8.0.36
       imagePullPolicy: Always
 #      initImage: percona/percona-server-mysql-operator:0.7.0
 
@@ -299,7 +299,7 @@ spec:
   orchestrator:
     enabled: false
 
-    image: percona/percona-server-mysql-operator:3.2.6-9-orchestrator
+    image: percona/percona-orchestrator:3.2.6-12
     imagePullPolicy: Always
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
 #    initImage: percona/percona-server-mysql-operator:0.7.0
@@ -368,7 +368,7 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-server-mysql-operator:8.0.33-27-backup
+    image: percona/percona-xtrabackup:8.0.35-30
 #    backoffLimit: 6
     imagePullPolicy: Always
 #    initImage: percona/percona-server-mysql-operator:0.7.0
@@ -422,7 +422,7 @@ spec:
 #          prefix: ""
 
   toolkit:
-    image: percona/percona-server-mysql-operator:0.6.0-toolkit
+    image: percona/percona-server-mysql-operator:0.7.0-toolkit
     imagePullPolicy: Always
 #    resources:
 #      requests:

@@ -47,7 +47,7 @@ spec:
               fieldPath: metadata.namespace
         - name: DISABLE_TELEMETRY
           value: "false"
-        image: percona/percona-server-mysql-operator:0.6.0
+        image: percona/percona-server-mysql-operator:0.7.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
