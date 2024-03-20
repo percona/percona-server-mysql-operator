@@ -61,3 +61,33 @@ status:
   observedGeneration: 1
   replicas: 3
   readyReplicas: 3
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: tls-cert-manager
+  finalizers:
+    - delete-mysql-pods-in-order
+  generation: 1
+spec:
+  mysql:
+    clusterType: async
+  proxy:
+    haproxy:
+      enabled: true
+  orchestrator:
+    enabled: false
+status:
+  haproxy:
+    ready: 3
+    size: 3
+    state: ready
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  orchestrator:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
