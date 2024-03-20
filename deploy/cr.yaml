@@ -422,7 +422,7 @@ spec:
 #          prefix: ""
 
   toolkit:
-    image: percona/percona-server-mysql-operator:0.7.0-toolkit
+    image: percona/percona-toolkit:3.5.7
     imagePullPolicy: Always
 #    resources:
 #      requests:
