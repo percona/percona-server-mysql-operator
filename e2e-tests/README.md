@@ -13,7 +13,7 @@ You need to install a number of software packages on your system to satisfy the 
 * [krew](https://github.com/kubernetes-sigs/krew) - package manager for kubectl plugins
 * [assert](https://github.com/morningspace/kubeassert) kubectl plugin
 * [kuttl](https://kuttl.dev/) Kubernetes test framework
-* [gcloud](https://cloud.google.com/sdk/gcloud) - Google Cloud command-line tool
+* [gcloud](https://cloud.google.com/sdk/gcloud) - Google Cloud command-line tool (if the ability to run tests on Google Cloud is needed)
 
 ### CentOS
 
@@ -77,15 +77,7 @@ Use the following script to build the image:
 ./e2e-tests/build
 ```
 
-Running all tests at once can be done with the following command:
-
-```
-kubectl kuttl test --config e2e-tests/kuttl.yaml --test "^test-name\$"
-```
-
-(see how to configure the testing infrastructure [here](#using-environment-variables-to-customize-the-testing-process)).
-
-Tests can also be run one-by-one as follows:
+Tests can be run one-by-one as follows:
 
 ```
 kubectl kuttl test --config e2e-tests/kuttl.yaml --test "^test-name\$"
@@ -118,7 +110,7 @@ You can use environment variables to re-declare all default docker images used f
 full list of variables is the following one:
 
 * `IMAGE` - the Operator, `perconalab/percona-server-mysql-operator:main` by default,
-* `IMAGE_MYSQL` - Percona XtraDB Cluster, `perconalab/percona-server:main` by default,
+* `IMAGE_MYSQL` - Percona Distribution for MySQL, `perconalab/percona-server:main` by default,
 * `IMAGE_PMM_CLIENT` - Percona Monitoring and Management (PMM) client, `perconalab/pmm-client:dev-latest` by default,
 * `IMAGE_PROXY` - ProxySQL, `perconalab/percona-xtradb-cluster-operator:main-proxysql` by default,
 * `IMAGE_HAPROXY` - HA Proxy, `perconalab/haproxy:main` by default,
@@ -126,6 +118,7 @@ full list of variables is the following one:
 * `IMAGE_ORCHESTRATOR` - Orchestrator, `perconalab/percona-orchestrator:main` by default,
 * `IMAGE_ROUTER` - Router, `perconalab/percona-mysql-router:main` by default,
 * `IMAGE_TOOLKIT` - Percona Toolkit, `perconalab/percona-toolkit:main` by default,
+* `DEBUG_TESTS` - can be set to `1` for more verbose outout.
 
 ### Using automatic clean-up after testing
 
