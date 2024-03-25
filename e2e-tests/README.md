@@ -122,15 +122,13 @@ full list of variables is the following one:
 
 ### Using automatic clean-up after testing
 
-By default, each test creates its own namespace and does not clean up objects in case of failure.
+By default, each test creates its own namespace and does full clean up after it finishes.
 
-To avoid manual deletion of such leftovers, you can run tests on a separate cluster and use the following environment variable to make the ultimate clean-up:
+You can avoid automatic deletion of such leftovers as follows:
 
 ```
-export CLEAN_NAMESPACE=1
+kubectl kuttl test --config e2e-tests/kuttl.yaml --test "^test-name\$" --skip-delete
 ```
-
-**Note:** this will cause **deleting all namespaces** except default and system ones!
 
 ### Skipping backup tests on S3-compatible storage
 
