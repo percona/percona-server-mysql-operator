@@ -118,7 +118,8 @@ full list of variables is the following one:
 * `IMAGE_ORCHESTRATOR` - Orchestrator, `perconalab/percona-orchestrator:main` by default,
 * `IMAGE_ROUTER` - Router, `perconalab/percona-mysql-router:main` by default,
 * `IMAGE_TOOLKIT` - Percona Toolkit, `perconalab/percona-toolkit:main` by default,
-* `DEBUG_TESTS` - can be set to `1` for more verbose outout.
+
+Also, you can set `DEBUG_TESTS` environment variable to `1` for more verbose outout.
 
 ### Using automatic clean-up after testing
 
@@ -129,14 +130,3 @@ You can avoid automatic deletion of such leftovers as follows:
 ```
 kubectl kuttl test --config e2e-tests/kuttl.yaml --test "^test-name\$" --skip-delete
 ```
-
-### Skipping backup tests on S3-compatible storage
-
-Making backups [on S3-compatible storage](https://www.percona.com/doc/kubernetes-operator-for-pxc/backups.html#making-scheduled-backups) needs creating Secrets to have the access to the S3 buckets. There is an environment variable enabled by default, which skips all tests requiring such Secrets:
-
-```
-SKIP_REMOTE_BACKUPS=1
-```
-
-The backups tests will use only [MinIO](https://min.io/) if this variable is declared,
-which is enough for local testing.
