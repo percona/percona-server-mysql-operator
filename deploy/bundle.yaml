@@ -9725,6 +9725,10 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: percona-server-mysql-operator
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
   template:
     metadata:
       labels:
@@ -9747,7 +9751,7 @@ spec:
               fieldPath: metadata.namespace
         - name: DISABLE_TELEMETRY
           value: "false"
-        image: perconalab/percona-server-mysql-operator:main
+        image: percona/percona-server-mysql-operator:0.7.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
