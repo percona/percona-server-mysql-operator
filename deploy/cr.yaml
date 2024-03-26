@@ -8,7 +8,7 @@ metadata:
 spec:
   allowUnsafeConfigurations: false
 #  pause: false
-  crVersion: 0.7.0
+  crVersion: 0.8.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
   updateStrategy: SmartUpdate
@@ -35,7 +35,7 @@ spec:
     autoRecovery: true
     image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
-#    initImage: percona/percona-server-mysql-operator:0.7.0
+#    initImage: percona/percona-server-mysql-operator:0.8.0
 
     size: 3
 
@@ -248,7 +248,7 @@ spec:
       enabled: false
       image: perconalab/percona-server-mysql-operator:main-router
       imagePullPolicy: Always
-#      initImage: percona/percona-server-mysql-operator:0.7.0
+#      initImage: percona/percona-server-mysql-operator:0.8.0
 
       size: 3
 
@@ -302,7 +302,7 @@ spec:
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
-#    initImage: percona/percona-server-mysql-operator:0.7.0
+#    initImage: percona/percona-server-mysql-operator:0.8.0
 
     size: 3
 
@@ -371,7 +371,7 @@ spec:
     image: perconalab/percona-server-mysql-operator:main-backup
 #    backoffLimit: 6
     imagePullPolicy: Always
-#    initImage: percona/percona-server-mysql-operator:0.7.0
+#    initImage: percona/percona-server-mysql-operator:0.8.0
     storages:
       s3-us-west:
         type: s3
