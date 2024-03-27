@@ -8,7 +8,7 @@ metadata:
 spec:
   allowUnsafeConfigurations: false
 #  pause: false
-  crVersion: 0.7.0
+  crVersion: 0.8.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
   updateStrategy: SmartUpdate
@@ -33,9 +33,9 @@ spec:
   mysql:
     clusterType: group-replication
     autoRecovery: true
-    image: percona/percona-server:8.0.36-28
+    image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
-#    initImage: percona/percona-server-mysql-operator:0.7.0
+#    initImage: percona/percona-server-mysql-operator:0.8.0
 
     size: 3
 
@@ -139,7 +139,7 @@ spec:
 
       size: 3
 
-      image: percona/haproxy:2.8.5
+      image: perconalab/percona-server-mysql-operator:main-haproxy
       imagePullPolicy: Always
 
       resources:
@@ -246,9 +246,9 @@ spec:
 
     router:
       enabled: false
-      image: percona/percona-mysql-router:8.0.36
+      image: perconalab/percona-server-mysql-operator:main-router
       imagePullPolicy: Always
-#      initImage: percona/percona-server-mysql-operator:0.7.0
+#      initImage: percona/percona-server-mysql-operator:0.8.0
 
       size: 3
 
@@ -299,10 +299,10 @@ spec:
   orchestrator:
     enabled: false
 
-    image: percona/percona-orchestrator:3.2.6-12
+    image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
-#    initImage: percona/percona-server-mysql-operator:0.7.0
+#    initImage: percona/percona-server-mysql-operator:0.8.0
 
     size: 3
 
@@ -352,7 +352,7 @@ spec:
   pmm:
     enabled: false
 
-    image: percona/pmm-client:2.41.1
+    image: percona/pmm-client:2.41.2
     imagePullPolicy: Always
 
     resources:
@@ -368,10 +368,10 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-xtrabackup:8.0.35-30
+    image: perconalab/percona-server-mysql-operator:main-backup
 #    backoffLimit: 6
     imagePullPolicy: Always
-#    initImage: percona/percona-server-mysql-operator:0.7.0
+#    initImage: percona/percona-server-mysql-operator:0.8.0
     storages:
       s3-us-west:
         type: s3
@@ -422,7 +422,7 @@ spec:
 #          prefix: ""
 
   toolkit:
-    image: percona/percona-toolkit:3.5.7
+    image: perconalab/percona-server-mysql-operator:main-toolkit
     imagePullPolicy: Always
 #    resources:
 #      requests:
