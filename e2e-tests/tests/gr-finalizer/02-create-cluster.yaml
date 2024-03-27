@@ -1,0 +1,16 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      get_cr \
+      	| yq eval '.spec.mysql.clusterType="group-replication"' - \
+      	| yq eval '.spec.proxy.router.enabled=false' - \
+      	| yq eval '.spec.proxy.haproxy.enabled=true' - \
+      	| yq eval '.metadata.finalizers |= ["delete-mysql-pods-in-order", "delete-ssl"]' - \
+      	| kubectl -n "${NAMESPACE}" apply -f -

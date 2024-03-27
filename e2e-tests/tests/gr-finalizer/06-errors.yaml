@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gr-finalizer-mysql-0
+status:
+  phase: Running
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gr-finalizer-mysql-2
+status:
+  phase: Running
