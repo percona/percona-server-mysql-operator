@@ -229,3 +229,24 @@ catalog-build: opm ## Build a catalog image.
 .PHONY: catalog-push
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
+
+# Prepare release
+CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
+release: manifests
+	sed -i "/CERT_MANAGER_VER/s/CERT_MANAGER_VER=\".*/CERT_MANAGER_VER=\"$(CERT_MANAGER_VER)\"/" e2e-tests/vars.sh
+
+# Prepare main branch after release
+MAJOR_VER := $(shell grep "Version =" pkg/version/version.go|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f1)
+MINOR_VER := $(shell grep "Version =" pkg/version/version.go|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f2)
+PATCH_VER := $(shell grep "Version =" pkg/version/version.go|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f3)
+NEXT_VER ?= $(MAJOR_VER).$$(($(MINOR_VER) + 1)).$(PATCH_VER)
+after-release: manifests
+	sed -i "/const Version = \"/s/Version = \".*/Version = \"$(NEXT_VER)\"/" pkg/version/version.go
+	yq -i eval ".spec.crVersion = \"$(NEXT_VER)\"" deploy/cr.yaml
+	yq -i eval '.spec.mysql.image = "perconalab/percona-server-mysql-operator:main-psmysql"' deploy/cr.yaml
+	yq -i eval '.spec.proxy.haproxy.image = "perconalab/percona-server-mysql-operator:main-haproxy"' deploy/cr.yaml
+	yq -i eval '.spec.proxy.router.image = "perconalab/percona-server-mysql-operator:main-router"' deploy/cr.yaml
+	yq -i eval '.spec.orchestrator.image = "perconalab/percona-server-mysql-operator:main-orchestrator"' deploy/cr.yaml
+	yq -i eval '.spec.backup.image = "perconalab/percona-server-mysql-operator:main-backup"' deploy/cr.yaml
+	yq -i eval '.spec.toolkit.image = "perconalab/percona-server-mysql-operator:main-toolkit"' deploy/cr.yaml
+	sed -i "s/initImage: .*/initImage: perconalab\/percona-server-mysql-operator:$(NEXT_VER)/g" deploy/cr.yaml
