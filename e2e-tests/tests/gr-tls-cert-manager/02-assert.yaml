@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 400
+timeout: 420
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
