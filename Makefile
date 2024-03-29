@@ -234,6 +234,13 @@ catalog-push: ## Push a catalog image.
 CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
 release: manifests
 	sed -i "/CERT_MANAGER_VER/s/CERT_MANAGER_VER=\".*/CERT_MANAGER_VER=\"$(CERT_MANAGER_VER)\"/" e2e-tests/vars.sh
+	sed -i "/^  mysql:/,/^    image:/{s/image: .*/image: percona\/percona-server:@@SET_TAG@@/}" deploy/cr.yaml
+	sed -i "/^    haproxy:/,/^      image:/{s/image: .*/image: percona\/haproxy:@@SET_TAG@@/}" deploy/cr.yaml
+	sed -i "/^    router:/,/^      image:/{s/image: .*/image: percona\/percona-mysql-router:@@SET_TAG@@/}" deploy/cr.yaml
+	sed -i "/^  orchestrator:/,/^    image:/{s/image: .*/image: percona\/percona-orchestrator:@@SET_TAG@@/}" deploy/cr.yaml
+	sed -i "/^  backup:/,/^    image:/{s/image: .*/image: percona\/percona-xtrabackup:@@SET_TAG@@/}" deploy/cr.yaml
+	sed -i "/^  toolkit:/,/^    image:/{s/image: .*/image: percona\/percona-toolkit:@@SET_TAG@@/}" deploy/cr.yaml
+	sed -i "/^  pmm:/,/^    image:/{s/image: .*/image: percona\/pmm-client:@@SET_TAG@@/}" deploy/cr.yaml
 
 # Prepare main branch after release
 MAJOR_VER := $(shell grep "Version =" pkg/version/version.go|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f1)
@@ -250,3 +257,4 @@ after-release: manifests
 	sed -i "/^  backup:/,/^    image:/{s/image: .*/image: perconalab\/percona-server-mysql-operator:main-backup/}" deploy/cr.yaml
 	sed -i "/^  toolkit:/,/^    image:/{s/image: .*/image: perconalab\/percona-server-mysql-operator:main-toolkit/}" deploy/cr.yaml
 	sed -i "s/initImage: .*/initImage: perconalab\/percona-server-mysql-operator:$(NEXT_VER)/g" deploy/cr.yaml
+	sed -i "/^  pmm:/,/^    image:/{s/image: .*/image: perconalab\/pmm-client:dev-latest/}" deploy/cr.yaml
