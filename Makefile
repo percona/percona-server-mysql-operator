@@ -242,11 +242,11 @@ PATCH_VER := $(shell grep "Version =" pkg/version/version.go|grep -Eo "[0-9]+\.[
 NEXT_VER ?= $(MAJOR_VER).$$(($(MINOR_VER) + 1)).$(PATCH_VER)
 after-release: manifests
 	sed -i "/const Version = \"/s/Version = \".*/Version = \"$(NEXT_VER)\"/" pkg/version/version.go
-	yq -i eval ".spec.crVersion = \"$(NEXT_VER)\"" deploy/cr.yaml
-	yq -i eval '.spec.mysql.image = "perconalab/percona-server-mysql-operator:main-psmysql"' deploy/cr.yaml
-	yq -i eval '.spec.proxy.haproxy.image = "perconalab/percona-server-mysql-operator:main-haproxy"' deploy/cr.yaml
-	yq -i eval '.spec.proxy.router.image = "perconalab/percona-server-mysql-operator:main-router"' deploy/cr.yaml
-	yq -i eval '.spec.orchestrator.image = "perconalab/percona-server-mysql-operator:main-orchestrator"' deploy/cr.yaml
-	yq -i eval '.spec.backup.image = "perconalab/percona-server-mysql-operator:main-backup"' deploy/cr.yaml
-	yq -i eval '.spec.toolkit.image = "perconalab/percona-server-mysql-operator:main-toolkit"' deploy/cr.yaml
+	sed -i "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(NEXT_VER)/}" deploy/cr.yaml
+	sed -i "/^  mysql:/,/^    image:/{s/image: .*/image: perconalab\/percona-server-mysql-operator:main-psmysql/}" deploy/cr.yaml
+	sed -i "/^    haproxy:/,/^      image:/{s/image: .*/image: perconalab\/percona-server-mysql-operator:main-haproxy/}" deploy/cr.yaml
+	sed -i "/^    router:/,/^      image:/{s/image: .*/image: perconalab\/percona-server-mysql-operator:main-router/}" deploy/cr.yaml
+	sed -i "/^  orchestrator:/,/^    image:/{s/image: .*/image: perconalab\/percona-server-mysql-operator:main-orchestrator/}" deploy/cr.yaml
+	sed -i "/^  backup:/,/^    image:/{s/image: .*/image: perconalab\/percona-server-mysql-operator:main-backup/}" deploy/cr.yaml
+	sed -i "/^  toolkit:/,/^    image:/{s/image: .*/image: perconalab\/percona-server-mysql-operator:main-toolkit/}" deploy/cr.yaml
 	sed -i "s/initImage: .*/initImage: perconalab\/percona-server-mysql-operator:$(NEXT_VER)/g" deploy/cr.yaml
