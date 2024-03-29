@@ -234,7 +234,8 @@ catalog-push: ## Push a catalog image.
 CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
 release: manifests
 	sed -i "/CERT_MANAGER_VER/s/CERT_MANAGER_VER=\".*/CERT_MANAGER_VER=\"$(CERT_MANAGER_VER)\"/" e2e-tests/vars.sh
-	sed -i -e "/^  mysql:/,/^    image:/{s/image: .*/image: percona\/percona-server:@@SET_TAG@@/}" \
+	sed -i \
+		-e "/^  mysql:/,/^    image:/{s/image: .*/image: percona\/percona-server:@@SET_TAG@@/}" \
 		-e "/^    haproxy:/,/^      image:/{s/image: .*/image: percona\/haproxy:@@SET_TAG@@/}" \
 		-e "/^    router:/,/^      image:/{s/image: .*/image: percona\/percona-mysql-router:@@SET_TAG@@/}" \
 		-e "/^  orchestrator:/,/^    image:/{s/image: .*/image: percona\/percona-orchestrator:@@SET_TAG@@/}" \
@@ -249,7 +250,8 @@ PATCH_VER := $(shell grep "Version =" pkg/version/version.go|grep -Eo "[0-9]+\.[
 NEXT_VER ?= $(MAJOR_VER).$$(($(MINOR_VER) + 1)).$(PATCH_VER)
 after-release: manifests
 	sed -i "/const Version = \"/s/Version = \".*/Version = \"$(NEXT_VER)\"/" pkg/version/version.go
-	sed -i -e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(NEXT_VER)/}" \
+	sed -i \
+		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(NEXT_VER)/}" \
 		-e "/^  mysql:/,/^    image:/{s/image: .*/image: perconalab\/percona-server-mysql-operator:main-psmysql/}" \
 		-e "/^    haproxy:/,/^      image:/{s/image: .*/image: perconalab\/percona-server-mysql-operator:main-haproxy/}" \
 		-e "/^    router:/,/^      image:/{s/image: .*/image: perconalab\/percona-server-mysql-operator:main-router/}" \
