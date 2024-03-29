@@ -229,3 +229,34 @@ catalog-build: opm ## Build a catalog image.
 .PHONY: catalog-push
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
+
+# Prepare release
+CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
+release: manifests
+	sed -i "/CERT_MANAGER_VER/s/CERT_MANAGER_VER=\".*/CERT_MANAGER_VER=\"$(CERT_MANAGER_VER)\"/" e2e-tests/vars.sh
+	sed -i \
+		-e "/^  mysql:/,/^    image:/{s/image: .*/image: percona\/percona-server:@@SET_TAG@@/}" \
+		-e "/^    haproxy:/,/^      image:/{s/image: .*/image: percona\/haproxy:@@SET_TAG@@/}" \
+		-e "/^    router:/,/^      image:/{s/image: .*/image: percona\/percona-mysql-router:@@SET_TAG@@/}" \
+		-e "/^  orchestrator:/,/^    image:/{s/image: .*/image: percona\/percona-orchestrator:@@SET_TAG@@/}" \
+		-e "/^  backup:/,/^    image:/{s/image: .*/image: percona\/percona-xtrabackup:@@SET_TAG@@/}" \
+		-e "/^  toolkit:/,/^    image:/{s/image: .*/image: percona\/percona-toolkit:@@SET_TAG@@/}" \
+		-e "/^  pmm:/,/^    image:/{s/image: .*/image: percona\/pmm-client:@@SET_TAG@@/}" deploy/cr.yaml
+
+# Prepare main branch after release
+MAJOR_VER := $(shell grep "Version =" pkg/version/version.go|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f1)
+MINOR_VER := $(shell grep "Version =" pkg/version/version.go|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f2)
+PATCH_VER := $(shell grep "Version =" pkg/version/version.go|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f3)
+NEXT_VER ?= $(MAJOR_VER).$$(($(MINOR_VER) + 1)).$(PATCH_VER)
+after-release: manifests
+	sed -i "/const Version = \"/s/Version = \".*/Version = \"$(NEXT_VER)\"/" pkg/version/version.go
+	sed -i \
+		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(NEXT_VER)/}" \
+		-e "/^  mysql:/,/^    image:/{s/image: .*/image: perconalab\/percona-server-mysql-operator:main-psmysql/}" \
+		-e "/^    haproxy:/,/^      image:/{s/image: .*/image: perconalab\/percona-server-mysql-operator:main-haproxy/}" \
+		-e "/^    router:/,/^      image:/{s/image: .*/image: perconalab\/percona-server-mysql-operator:main-router/}" \
+		-e "/^  orchestrator:/,/^    image:/{s/image: .*/image: perconalab\/percona-server-mysql-operator:main-orchestrator/}" \
+		-e "/^  backup:/,/^    image:/{s/image: .*/image: perconalab\/percona-server-mysql-operator:main-backup/}" \
+		-e "/^  toolkit:/,/^    image:/{s/image: .*/image: perconalab\/percona-server-mysql-operator:main-toolkit/}" \
+		-e "s/initImage: .*/initImage: perconalab\/percona-server-mysql-operator:$(NEXT_VER)/g" \
+		-e "/^  pmm:/,/^    image:/{s/image: .*/image: perconalab\/pmm-client:dev-latest/}" deploy/cr.yaml
