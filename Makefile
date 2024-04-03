@@ -234,13 +234,16 @@ catalog-push: ## Push a catalog image.
 CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
 release: manifests
 	sed -i "/CERT_MANAGER_VER/s/CERT_MANAGER_VER=\".*/CERT_MANAGER_VER=\"$(CERT_MANAGER_VER)\"/" e2e-tests/vars.sh
+	sed -i "/const Version = \"/s/Version = \".*/Version = \"$(VERSION)\"/" pkg/version/version.go
 	sed -i \
+		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(VERSION)/}" \
 		-e "/^  mysql:/,/^    image:/{s#image: .*#image: percona/percona-server:@@SET_TAG@@#}" \
 		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: percona/haproxy:@@SET_TAG@@#}" \
 		-e "/^    router:/,/^      image:/{s#image: .*#image: percona/percona-mysql-router:@@SET_TAG@@#}" \
 		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: percona/percona-orchestrator:@@SET_TAG@@#}" \
 		-e "/^  backup:/,/^    image:/{s#image: .*#image: percona/percona-xtrabackup:@@SET_TAG@@#}" \
 		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: percona/percona-toolkit:@@SET_TAG@@#}" \
+		-e "s#initImage: .*#initImage: percona/percona-server-mysql-operator:$(VERSION)#g" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: percona/pmm-client:@@SET_TAG@@#}" deploy/cr.yaml
 
 # Prepare main branch after release
@@ -257,5 +260,5 @@ after-release: manifests
 		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-orchestrator#}" \
 		-e "/^  backup:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-backup#}" \
 		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-toolkit#}" \
-		-e "s#initImage: .*#initImage: perconalab/percona-server-mysql-operator:$(NEXT_VER)#g" \
+		-e "s#initImage: .*#initImage: perconalab/percona-server-mysql-operator:main#g" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: perconalab/pmm-client:dev-latest#}" deploy/cr.yaml
