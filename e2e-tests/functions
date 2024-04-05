@@ -508,7 +508,7 @@ deploy_version_service() {
 deploy_cert_manager() {
 	kubectl create namespace cert-manager || :
 	kubectl label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
-	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.3/cert-manager.yaml --validate=false || : 2>/dev/null
+	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml --validate=false || : 2>/dev/null
 }
 
 get_primary_from_label() {

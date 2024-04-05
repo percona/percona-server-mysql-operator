@@ -68,3 +68,38 @@ status:
   updatedReplicas: 3
   readyReplicas: 3
   availableReplicas: 3
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-tls-cert-manager
+  generation: 1
+spec:
+  mysql:
+    clusterType: group-replication
+  proxy:
+    haproxy:
+      enabled: false
+    router:
+      enabled: true
+status:
+  conditions:
+  - reason: Initializing
+    status: "False"
+    type: Initializing
+  - reason: Ready
+    status: "True"
+    type: Ready
+  - message: InnoDB cluster successfully bootstrapped with 3 nodes
+    reason: InnoDBClusterBootstrapped
+    status: "True"
+    type: InnoDBClusterBootstrapped
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  router:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready

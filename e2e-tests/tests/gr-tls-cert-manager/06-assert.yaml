@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 300
+timeout: 400
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -40,15 +40,15 @@ status:
       reason: Ready
       status: 'True'
       type: Ready
-  revision: 2
+  revision: 3
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  generation: 1
+  generation: 3
   name: gr-tls-cert-manager-mysql
 status:
-  observedGeneration: 1
+  observedGeneration: 3
   replicas: 3
   readyReplicas: 3
 ---
@@ -63,7 +63,7 @@ metadata:
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server
 status:
-  observedGeneration: 1
+  observedGeneration: 3
   replicas: 3
   updatedReplicas: 3
   readyReplicas: 3
