@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,8 +15,8 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -100,7 +101,7 @@ func Labels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(Labels(cr),
-		map[string]string{apiv1alpha1.ComponentLabel: ComponentName},
+		map[string]string{naming.ComponentLabel: ComponentName},
 		cr.Labels())
 }
 
@@ -111,7 +112,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, tlsHash string) 
 
 	annotations := make(map[string]string, 0)
 	if tlsHash != "" {
-		annotations[string(apiv1alpha1.AnnotationTLSHash)] = tlsHash
+		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}
 
 	return &appsv1.StatefulSet{
@@ -382,7 +383,7 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 	expose := cr.Spec.Orchestrator.Expose
 
 	labels := MatchLabels(cr)
-	labels[apiv1alpha1.ExposedLabel] = "true"
+	labels[naming.ExposedLabel] = "true"
 	labels = util.SSMapMerge(expose.Labels, labels)
 
 	selector := MatchLabels(cr)

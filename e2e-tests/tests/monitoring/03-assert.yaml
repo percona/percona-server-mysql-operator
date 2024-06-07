@@ -122,7 +122,7 @@ kind: PerconaServerMySQL
 metadata:
   name: monitoring
   finalizers:
-    - delete-mysql-pods-in-order
+    - percona.com/delete-mysql-pods-in-order
 status:
   mysql:
     ready: 3

@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -173,7 +174,7 @@ func EnsureObjectWithHash(
 	}
 
 	objAnnotations := obj.GetAnnotations()
-	delete(objAnnotations, "percona.com/last-config-hash")
+	delete(objAnnotations, naming.AnnotationLastConfigHash.String())
 	obj.SetAnnotations(objAnnotations)
 
 	hash, err := ObjectHash(obj)
@@ -182,7 +183,7 @@ func EnsureObjectWithHash(
 	}
 
 	objAnnotations = obj.GetAnnotations()
-	objAnnotations["percona.com/last-config-hash"] = hash
+	objAnnotations[naming.AnnotationLastConfigHash.String()] = hash
 	obj.SetAnnotations(objAnnotations)
 
 	val := reflect.ValueOf(obj)
@@ -220,7 +221,7 @@ func EnsureObjectWithHash(
 		obj.SetAnnotations(annotations)
 	}
 
-	if oldObject.GetAnnotations()["percona.com/last-config-hash"] != hash ||
+	if oldObject.GetAnnotations()[naming.AnnotationLastConfigHash.String()] != hash ||
 		!objectMetaEqual(obj, oldObject) {
 
 		obj.SetResourceVersion(oldObject.GetResourceVersion())
@@ -379,7 +380,7 @@ func DefaultAPINamespace() (string, error) {
 }
 
 // RolloutRestart restarts pods owned by object by updating the pod template with passed annotation key-value.
-func RolloutRestart(ctx context.Context, cl client.Client, obj runtime.Object, key apiv1alpha1.AnnotationKey, value string) error {
+func RolloutRestart(ctx context.Context, cl client.Client, obj runtime.Object, key naming.AnnotationKey, value string) error {
 	switch obj := obj.(type) {
 	case *appsv1.StatefulSet:
 		orig := obj.DeepCopy()

@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
@@ -55,7 +56,8 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 				NamespacedName: types.NamespacedName{
 					Namespace: cr.Namespace,
 					Name:      cr.Name,
-				}}
+				},
+			}
 			_, err := reconciler().Reconcile(ctx, req)
 			Expect(err).Should(Succeed())
 		})
@@ -101,7 +103,8 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 				NamespacedName: types.NamespacedName{
 					Namespace: cr.Namespace,
 					Name:      cr.Name,
-				}}
+				},
+			}
 			_, err := reconciler().Reconcile(ctx, req)
 			Expect(err).Should(Succeed())
 		})
@@ -186,7 +189,7 @@ var _ = Describe("Finalizer delete-ssl", Ordered, func() {
 
 	Context("delete-ssl finalizer specified", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
-		cr.Finalizers = append(cr.Finalizers, "delete-ssl")
+		cr.Finalizers = append(cr.Finalizers, naming.FinalizerDeleteSSL)
 		It("should read and create defautl cr.yaml", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
@@ -225,7 +228,6 @@ var _ = Describe("Finalizer delete-ssl", Ordered, func() {
 			It("controller should delete issuers and certificates", func() {
 				issuers := &cm.IssuerList{}
 				Eventually(func() bool {
-
 					opts := &client.ListOptions{Namespace: cr.Namespace}
 					err := k8sClient.List(ctx, issuers, opts)
 
@@ -236,7 +238,6 @@ var _ = Describe("Finalizer delete-ssl", Ordered, func() {
 
 				certs := &cm.CertificateList{}
 				Eventually(func() bool {
-
 					opts := &client.ListOptions{Namespace: cr.Namespace}
 					err := k8sClient.List(ctx, certs, opts)
 

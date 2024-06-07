@@ -50,6 +50,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
@@ -134,9 +135,9 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 	finalizers := []string{}
 	for _, f := range cr.GetFinalizers() {
 		switch f {
-		case "delete-mysql-pods-in-order":
+		case naming.FinalizerDeletePodsInOrder:
 			err = r.deleteMySQLPods(ctx, cr)
-		case "delete-ssl":
+		case naming.FinalizerDeleteSSL:
 			err = r.deleteCerts(ctx, cr)
 		}
 
@@ -867,7 +868,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 	}
 
 	svcLabels := exposer.Labels()
-	svcLabels[apiv1alpha1.ExposedLabel] = "true"
+	svcLabels[naming.LabelExposed] = "true"
 	services, err := k8s.ServicesByLabels(ctx, r.Client, svcLabels)
 	if err != nil {
 		return errors.Wrap(err, "get exposed services")
@@ -898,7 +899,6 @@ func (r *PerconaServerMySQLReconciler) cleanupMysql(ctx context.Context, cr *api
 }
 
 func (r *PerconaServerMySQLReconciler) cleanupOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-
 	if !cr.OrchestratorEnabled() {
 		if err := r.Delete(ctx, orchestrator.StatefulSet(cr, "", "")); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrap(err, "failed to delete orchestrator statefulset")
@@ -992,7 +992,6 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 }
 
 func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-
 	if err := r.cleanupMysql(ctx, cr); err != nil {
 		return errors.Wrap(err, "cleanup mysql")
 	}
