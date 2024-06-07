@@ -252,8 +252,8 @@ void prepareNode() {
 
         kubectl krew install assert
 
-        # v0.15.0 kuttl version
-        kubectl krew install --manifest-url https://raw.githubusercontent.com/kubernetes-sigs/krew-index/a67f31ecb2e62f15149ca66d096357050f07b77d/plugins/kuttl.yaml
+        # v0.16.0 kuttl version
+        kubectl krew install --manifest-url https://raw.githubusercontent.com/kubernetes-sigs/krew-index/e450fd06ebe9ce200355726b81d13e5e59b9bf47/plugins/kuttl.yaml
         echo \$(kubectl kuttl --version) is installed
 
         curl -fsSL https://github.com/kyverno/chainsaw/releases/download/v0.1.7/chainsaw_linux_amd64.tar.gz | sudo tar -C /usr/local/bin -xzf - chainsaw
