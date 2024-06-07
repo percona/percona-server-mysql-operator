@@ -520,6 +520,10 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 }
 
 func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup) (bool, error) {
+	if cr.Status.State != apiv1alpha1.BackupSucceeded {
+		return true, nil
+	}
+
 	backupConf, err := r.backupConfig(ctx, cr)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to create sidecar backup config")
