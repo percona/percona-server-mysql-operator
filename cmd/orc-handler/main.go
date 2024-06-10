@@ -123,8 +123,8 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 			continue
 		}
 		pod := pods[i].DeepCopy()
-		if pod.GetLabels()[naming.MySQLPrimaryLabel] == "true" {
-			k8s.RemoveLabel(pod, naming.MySQLPrimaryLabel)
+		if pod.GetLabels()[naming.LabelMySQLPrimary] == "true" {
+			k8s.RemoveLabel(pod, naming.LabelMySQLPrimary)
 			if err := cl.Patch(ctx, pod, client.StrategicMergeFrom(&pods[i])); err != nil {
 				return errors.Wrapf(err, "remove label from old primary pod: %v/%v", pod.GetNamespace(), pod.GetName())
 			}
@@ -137,13 +137,13 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 		return errors.Wrapf(err, "primary pod %s not found %s", primaryName, primary)
 	}
 
-	if primaryPod.GetLabels()[naming.MySQLPrimaryLabel] == "true" {
+	if primaryPod.GetLabels()[naming.LabelMySQLPrimary] == "true" {
 		log.Info("Primary pod is not changed, skipping", "pod", primaryName)
 		return nil
 	}
 
 	pod := primaryPod.DeepCopy()
-	k8s.AddLabel(pod, naming.MySQLPrimaryLabel, "true")
+	k8s.AddLabel(pod, naming.LabelMySQLPrimary, "true")
 	if err := cl.Patch(ctx, pod, client.StrategicMergeFrom(primaryPod)); err != nil {
 		return errors.Wrapf(err, "add label to new primary pod %v/%v", pod.GetNamespace(), pod.GetName())
 	}

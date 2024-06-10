@@ -59,7 +59,7 @@ func DeleteJobName(cr *apiv1alpha1.PerconaServerMySQLBackup) string {
 }
 
 func MatchLabels(cluster *apiv1alpha1.PerconaServerMySQL) map[string]string {
-	return util.SSMapMerge(map[string]string{naming.ComponentLabel: componentName}, cluster.Labels())
+	return util.SSMapMerge(map[string]string{naming.LabelComponent: componentName}, cluster.Labels())
 }
 
 func Job(
@@ -402,7 +402,7 @@ func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) 
 	t := true
 
 	storage := cr.Status.Storage
-	labels := util.SSMapMerge(storage.Labels, cr.Labels, map[string]string{naming.ComponentLabel: componentName})
+	labels := util.SSMapMerge(storage.Labels, cr.Labels, map[string]string{naming.LabelComponent: componentName})
 
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
