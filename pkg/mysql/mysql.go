@@ -108,6 +108,10 @@ func FQDN(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
 	return fmt.Sprintf("%s.%s.%s", PodName(cr, idx), ServiceName(cr), cr.Namespace)
 }
 
+func PodFQDN(cr *apiv1alpha1.PerconaServerMySQL, pod *corev1.Pod) string {
+	return fmt.Sprintf("%s.%s.%s", pod.Name, ServiceName(cr), cr.Namespace)
+}
+
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
 		map[string]string{apiv1alpha1.ComponentLabel: ComponentName},
