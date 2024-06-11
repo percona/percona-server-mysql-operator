@@ -21,6 +21,8 @@ const (
 const (
 	FinalizerDeleteSSL         = annotationPrefix + "delete-ssl"
 	FinalizerDeletePodsInOrder = annotationPrefix + "delete-mysql-pods-in-order"
+
+	FinalizerDeleteBackup = annotationPrefix + "delete-backup"
 )
 
 type AnnotationKey string
