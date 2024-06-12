@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: gr-finalizer-mysql-0
+  name: gr-finalizer-mysql-1
 status:
   phase: Running
 ---
