@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/pkg/errors"
-
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -59,7 +59,7 @@ func DeleteJobName(cr *apiv1alpha1.PerconaServerMySQLBackup) string {
 }
 
 func MatchLabels(cluster *apiv1alpha1.PerconaServerMySQL) map[string]string {
-	return util.SSMapMerge(map[string]string{apiv1alpha1.ComponentLabel: componentName}, cluster.Labels())
+	return util.SSMapMerge(map[string]string{naming.LabelComponent: componentName}, cluster.Labels())
 }
 
 func Job(
@@ -402,7 +402,7 @@ func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) 
 	t := true
 
 	storage := cr.Status.Storage
-	labels := util.SSMapMerge(storage.Labels, cr.Labels, map[string]string{apiv1alpha1.ComponentLabel: componentName})
+	labels := util.SSMapMerge(storage.Labels, cr.Labels, map[string]string{naming.LabelComponent: componentName})
 
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{

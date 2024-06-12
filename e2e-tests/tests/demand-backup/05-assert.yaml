@@ -7,6 +7,6 @@ apiVersion: ps.percona.com/v1alpha1
 metadata:
   name: demand-backup-minio
   finalizers:
-    - delete-backup
+    - percona.com/delete-backup
 status:
   state: Succeeded

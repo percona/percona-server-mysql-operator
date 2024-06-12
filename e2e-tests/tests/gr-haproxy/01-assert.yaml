@@ -29,7 +29,7 @@ kind: PerconaServerMySQL
 metadata:
   name: gr-haproxy
   finalizers:
-    - delete-mysql-pods-in-order
+    - percona.com/delete-mysql-pods-in-order
 status:
   mysql:
     ready: 3
