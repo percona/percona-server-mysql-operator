@@ -3,7 +3,7 @@ kind: PerconaServerMySQLBackup
 metadata:
   name: demand-backup-gcp
   finalizers:
-    - delete-backup
+    - percona.com/delete-backup
 spec:
   clusterName: demand-backup
   storageName: gcp-cs

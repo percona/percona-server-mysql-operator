@@ -11,6 +11,7 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
@@ -50,7 +51,7 @@ func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
-		map[string]string{apiv1alpha1.ComponentLabel: ComponentName},
+		map[string]string{naming.LabelComponent: ComponentName},
 		cr.Labels())
 }
 
@@ -140,10 +141,10 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHa
 
 	annotations := make(map[string]string)
 	if configHash != "" {
-		annotations[string(apiv1alpha1.AnnotationConfigHash)] = configHash
+		annotations[string(naming.AnnotationConfigHash)] = configHash
 	}
 	if tlsHash != "" {
-		annotations[string(apiv1alpha1.AnnotationTLSHash)] = tlsHash
+		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}
 
 	zero := intstr.FromInt(0)
