@@ -68,8 +68,8 @@ apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
   finalizers:
-    - delete-mysql-pods-in-order
-    - delete-ssl
+    - percona.com/delete-mysql-pods-in-order
+    - percona.com/delete-ssl
   generation: 1
   name: gr-finalizer
 status:
