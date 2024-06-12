@@ -25,19 +25,19 @@ import (
 	"strings"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
-
-	"github.com/percona/percona-server-mysql-operator/pkg/platform"
-	"github.com/percona/percona-server-mysql-operator/pkg/version"
+	"github.com/pkg/errors"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
-
-	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -876,32 +876,13 @@ func (p *PodSpec) GetTopologySpreadConstraints(ls map[string]string) []corev1.To
 	return tscs
 }
 
-type AnnotationKey string
-
-const (
-	AnnotationSpecHash   AnnotationKey = "percona.com/last-applied-spec"
-	AnnotationSecretHash AnnotationKey = "percona.com/last-applied-secret"
-	AnnotationConfigHash AnnotationKey = "percona.com/configuration-hash"
-	AnnotationTLSHash    AnnotationKey = "percona.com/last-applied-tls"
-)
-
-const (
-	NameLabel         = "app.kubernetes.io/name"
-	InstanceLabel     = "app.kubernetes.io/instance"
-	ManagedByLabel    = "app.kubernetes.io/managed-by"
-	PartOfLabel       = "app.kubernetes.io/part-of"
-	ComponentLabel    = "app.kubernetes.io/component"
-	MySQLPrimaryLabel = "mysql.percona.com/primary"
-	ExposedLabel      = "percona.com/exposed"
-)
-
 // Labels returns a standardized set of labels for the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) Labels() map[string]string {
 	return map[string]string{
-		NameLabel:      "percona-server",
-		InstanceLabel:  cr.Name,
-		ManagedByLabel: "percona-server-operator",
-		PartOfLabel:    "percona-server",
+		naming.LabelName:      "percona-server",
+		naming.LabelInstance:  cr.Name,
+		naming.LabelManagedBy: "percona-server-operator",
+		naming.LabelPartOf:    "percona-server",
 	}
 }
 
@@ -914,9 +895,9 @@ func (cr *PerconaServerMySQL) ClusterHint() string {
 // GetClusterNameFromObject retrieves the cluster's name from the given client object's labels.
 func GetClusterNameFromObject(obj client.Object) (string, error) {
 	labels := obj.GetLabels()
-	instance, ok := labels[InstanceLabel]
+	instance, ok := labels[naming.LabelInstance]
 	if !ok {
-		return "", errors.Errorf("label %s doesn't exist", InstanceLabel)
+		return "", errors.Errorf("label %s doesn't exist", naming.LabelInstance)
 	}
 	return instance, nil
 }
