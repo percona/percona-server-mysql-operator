@@ -240,11 +240,8 @@ void prepareNode() {
 
         curl -fsSL https://get.helm.sh/helm-v3.12.3-linux-amd64.tar.gz | sudo tar -C /usr/local/bin --strip-components 1 -xzf - linux-amd64/helm
 
-        sudo sh -c "curl -s -L https://github.com/mikefarah/yq/releases/download/v4.35.1/yq_linux_amd64 > /usr/local/bin/yq"
-        sudo chmod +x /usr/local/bin/yq
-
-        sudo sh -c "curl -s -L https://github.com/jqlang/jq/releases/download/jq-1.6/jq-linux64 > /usr/local/bin/jq"
-        sudo chmod +x /usr/local/bin/jq
+        sudo curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.44.1/yq_linux_amd64 -o /usr/local/bin/yq && sudo chmod +x /usr/local/bin/yq
+        sudo curl -fsSL https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux64 -o /usr/local/bin/jq && sudo chmod +x /usr/local/bin/jq
 
         curl -fsSL https://github.com/kubernetes-sigs/krew/releases/latest/download/krew-linux_amd64.tar.gz | tar -xzf -
         ./krew-linux_amd64 install krew
@@ -252,8 +249,8 @@ void prepareNode() {
 
         kubectl krew install assert
 
-        # v0.15.0 kuttl version
-        kubectl krew install --manifest-url https://raw.githubusercontent.com/kubernetes-sigs/krew-index/a67f31ecb2e62f15149ca66d096357050f07b77d/plugins/kuttl.yaml
+        # v0.16.0 kuttl version
+        kubectl krew install --manifest-url https://raw.githubusercontent.com/kubernetes-sigs/krew-index/e450fd06ebe9ce200355726b81d13e5e59b9bf47/plugins/kuttl.yaml
         echo \$(kubectl kuttl --version) is installed
 
         curl -fsSL https://github.com/kyverno/chainsaw/releases/download/v0.1.7/chainsaw_linux_amd64.tar.gz | sudo tar -C /usr/local/bin -xzf - chainsaw
@@ -372,7 +369,7 @@ pipeline {
                                     -w /go/src/github.com/percona/percona-server-mysql-operator \
                                     -e GOFLAGS='-buildvcs=false' \
                                     -e GO111MODULE=on \
-                                    golang:1.21 sh -c '
+                                    golang:1.22 sh -c '
                                         go install github.com/google/go-licenses@latest;
                                         /go/bin/go-licenses csv github.com/percona/percona-server-mysql-operator/cmd/manager \
                                             | cut -d , -f 3 \
@@ -396,7 +393,7 @@ pipeline {
                                     -w /go/src/github.com/percona/percona-server-mysql-operator \
                                     -e GOFLAGS='-buildvcs=false' \
                                     -e GO111MODULE=on \
-                                    golang:1.21 sh -c 'go build -v -o percona-server-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
+                                    golang:1.22 sh -c 'go build -v -o percona-server-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
                             "
                         '''
 
