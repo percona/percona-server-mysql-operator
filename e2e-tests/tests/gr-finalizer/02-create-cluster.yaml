@@ -12,5 +12,5 @@ commands:
       	| yq eval '.spec.mysql.clusterType="group-replication"' - \
       	| yq eval '.spec.proxy.router.enabled=false' - \
       	| yq eval '.spec.proxy.haproxy.enabled=true' - \
-      	| yq eval '.metadata.finalizers |= ["delete-mysql-pods-in-order", "delete-ssl"]' - \
+      	| yq eval '.metadata.finalizers |= ["percona.com/delete-mysql-pods-in-order", "percona.com/delete-ssl"]' - \
       	| kubectl -n "${NAMESPACE}" apply -f -
