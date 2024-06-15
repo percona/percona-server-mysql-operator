@@ -3,8 +3,8 @@ kind: PerconaServerMySQL
 metadata:
   name: cluster1
   finalizers:
-    - delete-mysql-pods-in-order
-    # - delete-ssl
+    - percona.com/delete-mysql-pods-in-order
+    # - percona.com/delete-ssl
 spec:
   allowUnsafeConfigurations: false
 #  pause: false

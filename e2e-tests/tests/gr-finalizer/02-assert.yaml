@@ -1,0 +1,126 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  generation: 1
+  name: gr-finalizer-ca-cert
+spec:
+  commonName: gr-finalizer-ca
+  duration: 8760h0m0s
+  isCA: true
+  issuerRef:
+    kind: Issuer
+    name: gr-finalizer-pso-ca-issuer
+  renewBefore: 730h0m0s
+  secretName: gr-finalizer-ca-cert
+status:
+  conditions:
+    - message: Certificate is up to date and has not expired
+      observedGeneration: 1
+      reason: Ready
+      status: 'True'
+      type: Ready
+  revision: 1
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  generation: 1
+  name: gr-finalizer-ssl
+spec:
+  issuerRef:
+    kind: Issuer
+    name: gr-finalizer-pso-issuer
+  secretName: test-ssl
+status:
+  conditions:
+    - message: Certificate is up to date and has not expired
+      observedGeneration: 1
+      reason: Ready
+      status: 'True'
+      type: Ready
+  revision: 1
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  name: gr-finalizer-mysql
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-finalizer-haproxy
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  updatedReplicas: 3
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+    - percona.com/delete-ssl
+  generation: 1
+  name: gr-finalizer
+status:
+  haproxy:
+    ready: 3
+    size: 3
+    state: ready
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    cert-manager.io/certificate-name: gr-finalizer-ca-cert
+    cert-manager.io/common-name: gr-finalizer-ca
+    cert-manager.io/issuer-kind: Issuer
+    cert-manager.io/issuer-name: gr-finalizer-pso-ca-issuer
+  labels:
+    controller.cert-manager.io/fao: "true"
+  name: gr-finalizer-ca-cert
+type: kubernetes.io/tls
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    cert-manager.io/certificate-name: gr-finalizer-ssl
+    cert-manager.io/issuer-kind: Issuer
+    cert-manager.io/issuer-name: gr-finalizer-pso-issuer
+  labels:
+    controller.cert-manager.io/fao: "true"
+  name: test-ssl
+type: kubernetes.io/tls
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  generation: 1
+  name: gr-finalizer-pso-ca-issuer
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  generation: 1
+  name: gr-finalizer-pso-issuer
+spec:
+  ca:
+    secretName: gr-finalizer-ca-cert
