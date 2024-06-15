@@ -1,0 +1,37 @@
+
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 30
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      state=$(kubectl -n ${NAMESPACE} get ps $(get_cluster_name) -o jsonpath='{.status.state}')
+      if [[ "$state" != "ready"  ]]; then
+        echo "Status state should be ready, but is $state."
+        exit 1
+      fi
+
+
+      run_mysqlsh "STOP SLAVE;" "-h localhost -P 33060 -uroot -proot_password" "init-deploy-mysql-2"
+
+      sleep 10
+
+      state=$(kubectl -n ${NAMESPACE} get ps $(get_cluster_name) -o jsonpath='{.status.state}')
+      if [[ "$state" != "initializing"  ]]; then
+        echo "Status state should be initializing, but is $state."
+        exit 1
+      fi
+
+      run_mysqlsh "START SLAVE;" "-h localhost -P 33060 -uroot -proot_password" "init-deploy-mysql-2"
+
+      sleep 10
+
+      state=$(kubectl -n ${NAMESPACE} get ps $(get_cluster_name) -o jsonpath='{.status.state}')
+      if [[ "$state" != "ready"  ]]; then
+        echo "Status state should be ready, but is $state."
+        exit 1
+      fi
