@@ -43,7 +43,7 @@ func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoin
 	return nil
 }
 
-func ClusterPrimaryExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint string) (*Instance, error) {
+func ClusterPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint string) (*Instance, error) {
 	url := fmt.Sprintf("api/master/%s", clusterHint)
 
 	var res, errb bytes.Buffer
@@ -71,7 +71,7 @@ func ClusterPrimaryExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev
 	return primary, nil
 }
 
-func StopReplicationExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int32) error {
+func StopReplication(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int32) error {
 	url := fmt.Sprintf("api/stop-replica/%s/%d", host, port)
 
 	var res, errb bytes.Buffer
@@ -92,7 +92,7 @@ func StopReplicationExec(ctx context.Context, cliCmd clientcmd.Client, pod *core
 	return nil
 }
 
-func StartReplicationExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int32) error {
+func StartReplication(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int32) error {
 	url := fmt.Sprintf("api/start-replica/%s/%d", host, port)
 
 	var res, errb bytes.Buffer
@@ -113,7 +113,7 @@ func StartReplicationExec(ctx context.Context, cliCmd clientcmd.Client, pod *cor
 	return nil
 }
 
-func AddPeerExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, peer string) error {
+func AddPeer(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, peer string) error {
 	url := fmt.Sprintf("api/raft-add-peer/%s", peer)
 
 	var res, errb bytes.Buffer
@@ -142,7 +142,7 @@ func AddPeerExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, 
 	return nil
 }
 
-func RemovePeerExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, peer string) error {
+func RemovePeer(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, peer string) error {
 	url := fmt.Sprintf("api/raft-remove-peer/%s", peer)
 
 	var res, errb bytes.Buffer
@@ -171,8 +171,8 @@ func RemovePeerExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Po
 	return nil
 }
 
-func EnsureNodeIsPrimaryExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint, host string, port int) error {
-	primary, err := ClusterPrimaryExec(ctx, cliCmd, pod, clusterHint)
+func EnsureNodeIsPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint, host string, port int) error {
+	primary, err := ClusterPrimary(ctx, cliCmd, pod, clusterHint)
 	if err != nil {
 		return errors.Wrap(err, "get cluster primary")
 	}
@@ -181,7 +181,6 @@ func EnsureNodeIsPrimaryExec(ctx context.Context, cliCmd clientcmd.Client, pod *
 		return nil
 	}
 
-	// /api/graceful-master-takeover-auto/cluster1.default/cluster1-mysql-0/3306
 	url := fmt.Sprintf("api/graceful-master-takeover-auto/%s/%s/%d", clusterHint, host, port)
 
 	var res, errb bytes.Buffer
@@ -196,9 +195,6 @@ func EnsureNodeIsPrimaryExec(ctx context.Context, cliCmd clientcmd.Client, pod *
 	if err := json.Unmarshal(body, orcResp); err != nil {
 		return errors.Wrapf(err, "json decode \"%s\"", string(body))
 	}
-	// if err := json.NewDecoder(res.Bytes()).Decode(orcResp); err != nil {
-	// 	return errors.Wrap(err, "json decode")
-	// }
 
 	if orcResp.Code == "ERROR" {
 		return errors.New(orcResp.Message)
@@ -207,7 +203,7 @@ func EnsureNodeIsPrimaryExec(ctx context.Context, cliCmd clientcmd.Client, pod *
 	return nil
 }
 
-func DiscoverExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) error {
+func Discover(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) error {
 	url := fmt.Sprintf("api/discover/%s/%d", host, port)
 
 	var res, errb bytes.Buffer
@@ -233,7 +229,7 @@ func DiscoverExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod,
 	return nil
 }
 
-func SetWriteableExec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) error {
+func SetWriteable(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) error {
 	url := fmt.Sprintf("api/set-writeable/%s/%d", host, port)
 
 	var res, errb bytes.Buffer

@@ -276,7 +276,7 @@ func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *api
 		return false, err
 	}
 
-	p, err := orchestrator.ClusterPrimaryExec(ctx, r.ClientCmd, pod, cr.ClusterHint())
+	p, err := orchestrator.ClusterPrimary(ctx, r.ClientCmd, pod, cr.ClusterHint())
 	if err != nil {
 		return false, err
 	}
