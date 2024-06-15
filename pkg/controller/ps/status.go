@@ -65,13 +65,25 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 	cr.Status.MySQL = mysqlStatus
 
-	if mysqlStatus.State == apiv1alpha1.StateReady && cr.Spec.MySQL.IsGR() {
-		ready, err := r.isGRReady(ctx, cr)
-		if err != nil {
-			return errors.Wrap(err, "check if GR ready")
+	if mysqlStatus.State == apiv1alpha1.StateReady {
+		if cr.Spec.MySQL.IsGR() {
+			ready, err := r.isGRReady(ctx, cr)
+			if err != nil {
+				return errors.Wrap(err, "check if GR is ready")
+			}
+			if !ready {
+				mysqlStatus.State = apiv1alpha1.StateInitializing
+			}
 		}
-		if !ready {
-			mysqlStatus.State = apiv1alpha1.StateInitializing
+
+		if cr.Spec.MySQL.IsAsync() {
+			ready, err := r.isAsyncReady(ctx, cr)
+			if err != nil {
+				return errors.Wrap(err, "check if async is ready")
+			}
+			if !ready {
+				mysqlStatus.State = apiv1alpha1.StateInitializing
+			}
 		}
 	}
 	cr.Status.MySQL = mysqlStatus
@@ -254,6 +266,24 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 	}
 
 	log.V(1).Info("GR is ready")
+
+	return true, nil
+}
+
+func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
+	pod, err := getOrcPod(ctx, r.Client, cr, 0)
+	if err != nil {
+		return false, err
+	}
+
+	p, err := orchestrator.ClusterPrimaryExec(ctx, r.ClientCmd, pod, cr.ClusterHint())
+	if err != nil {
+		return false, err
+	}
+
+	if len(p.Replicas) < int(cr.Spec.MySQL.Size)-1 {
+		return false, nil
+	}
 
 	return true, nil
 }
