@@ -10,7 +10,7 @@ commands:
 
       get_cr \
         | yq eval '.spec.mysql.clusterType="async"' - \
-        | yq eval '.spec.allowUnsafeConfigurations=true' - \
+        | yq eval '.spec.unsafeFlags.mysqlSize=true' - \
         | yq eval '.spec.mysql.size=1' - \
         | yq eval '.spec.proxy.haproxy.enabled=true' - \
         | yq eval '.spec.proxy.haproxy.size=1' - \
