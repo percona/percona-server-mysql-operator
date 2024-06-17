@@ -10,6 +10,7 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/pmm"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -114,7 +115,7 @@ func PodFQDN(cr *apiv1alpha1.PerconaServerMySQL, pod *corev1.Pod) string {
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
-		map[string]string{apiv1alpha1.ComponentLabel: ComponentName},
+		map[string]string{naming.LabelComponent: ComponentName},
 		cr.Labels())
 }
 
@@ -126,10 +127,10 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 
 	annotations := make(map[string]string)
 	if configHash != "" {
-		annotations[string(apiv1alpha1.AnnotationConfigHash)] = configHash
+		annotations[string(naming.AnnotationConfigHash)] = configHash
 	}
 	if tlsHash != "" {
-		annotations[string(apiv1alpha1.AnnotationTLSHash)] = tlsHash
+		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}
 
 	return &appsv1.StatefulSet{
@@ -419,7 +420,7 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 	expose := cr.Spec.MySQL.Expose
 
 	labels := MatchLabels(cr)
-	labels[apiv1alpha1.ExposedLabel] = "true"
+	labels[naming.LabelExposed] = "true"
 	labels = util.SSMapMerge(expose.Labels, labels)
 
 	selector := MatchLabels(cr)
@@ -594,6 +595,7 @@ func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		Command:                  []string{"/opt/percona/sidecar"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+		SecurityContext:          cr.Spec.Backup.ContainerSecurityContext,
 	}
 }
 

@@ -21,13 +21,10 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
-)
-
-const (
-	annotationPasswordsUpdated string = "percona.com/passwords-updated"
 )
 
 var ErrPassNotPropagated = errors.New("password not yet propagated")
@@ -137,7 +134,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	if hash == internalHash {
-		if v, ok := internalSecret.Annotations[annotationPasswordsUpdated]; ok && v == "false" {
+		if v, ok := internalSecret.Annotations[naming.AnnotationPasswordsUpdated.String()]; ok && v == "false" {
 			operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 			if err != nil {
 				return errors.Wrap(err, "get operator password")
@@ -259,7 +256,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		if err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), sts); err != nil {
 			return errors.Wrap(err, "get Orchestrator statefulset")
 		}
-		if err := k8s.RolloutRestart(ctx, r.Client, sts, apiv1alpha1.AnnotationSecretHash, hash); err != nil {
+		if err := k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationSecretHash, hash); err != nil {
 			return errors.Wrap(err, "restart orchestrator")
 		}
 	}
@@ -271,7 +268,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		if err := r.Client.Get(ctx, mysql.NamespacedName(cr), sts); err != nil {
 			return errors.Wrap(err, "get MySQL statefulset")
 		}
-		if err := k8s.RolloutRestart(ctx, r.Client, sts, apiv1alpha1.AnnotationSecretHash, hash); err != nil {
+		if err := k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationSecretHash, hash); err != nil {
 			return errors.Wrap(err, "restart MySQL")
 		}
 	}
@@ -283,7 +280,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		if err := r.Get(ctx, haproxy.NamespacedName(cr), sts); err != nil {
 			return errors.Wrap(err, "get HAProxy statefulset")
 		}
-		if err := k8s.RolloutRestart(ctx, r.Client, sts, apiv1alpha1.AnnotationSecretHash, hash); err != nil {
+		if err := k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationSecretHash, hash); err != nil {
 			return errors.Wrap(err, "restart MySQL")
 		}
 	}
@@ -300,7 +297,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 
 	log.Info("Updated internal secret", "secretName", cr.InternalSecretName())
 
-	k8s.AddAnnotation(internalSecret, string(annotationPasswordsUpdated), "false")
+	k8s.AddAnnotation(internalSecret, naming.AnnotationPasswordsUpdated.String(), "false")
 	err = r.Client.Update(ctx, internalSecret)
 	if err != nil {
 		return errors.Wrap(err, "update internal sys users secret annotation")
@@ -314,8 +311,8 @@ func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
 	cr *apiv1alpha1.PerconaServerMySQL,
 	secrets *corev1.Secret,
 	updatedUsers []mysql.User,
-	operatorPass string) error {
-
+	operatorPass string,
+) error {
 	log := logf.FromContext(ctx)
 
 	err := r.passwordsPropagated(ctx, cr, secrets)
@@ -350,7 +347,7 @@ func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
 
 	log.Info("Discarded old user passwords")
 
-	k8s.AddAnnotation(secrets, annotationPasswordsUpdated, "true")
+	k8s.AddAnnotation(secrets, naming.AnnotationPasswordsUpdated.String(), "true")
 	err = r.Client.Update(ctx, secrets)
 	if err != nil {
 		return errors.Wrap(err, "update internal sys users secret annotation")

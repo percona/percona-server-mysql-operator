@@ -50,6 +50,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
@@ -134,9 +135,9 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 	finalizers := []string{}
 	for _, f := range cr.GetFinalizers() {
 		switch f {
-		case "delete-mysql-pods-in-order":
+		case naming.FinalizerDeletePodsInOrder:
 			err = r.deleteMySQLPods(ctx, cr)
-		case "delete-ssl":
+		case naming.FinalizerDeleteSSL:
 			err = r.deleteCerts(ctx, cr)
 		}
 
@@ -163,7 +164,7 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 }
 
 func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	log := logf.FromContext(ctx)
+	log := logf.FromContext(ctx).WithName("deleteMySQLPods")
 
 	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
 	if err != nil {
@@ -212,6 +213,25 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			return err
 		}
 
+		clusterStatus, err := mysh.ClusterStatusWithExec(ctx, cr.InnoDBClusterName())
+		if err != nil {
+			return errors.Wrap(err, "get cluster status")
+		}
+
+		log.Info("Got primary", "primary", clusterStatus.DefaultReplicaSet.Primary)
+
+		if !strings.HasPrefix(clusterStatus.DefaultReplicaSet.Primary, firstPodFQDN) {
+			log.Info("Primary is not pod-0", "primary", clusterStatus.DefaultReplicaSet.Primary)
+
+			log.Info("Ensuring pod-0 is the primary")
+			err := mysh.SetPrimaryInstanceWithExec(ctx, cr.InnoDBClusterName(), firstPodFQDN)
+			if err != nil {
+				return errors.Wrap(err, "set primary instance")
+			}
+
+			return psrestore.ErrWaitingTermination
+		}
+
 		log.Info("Removing instances from GR")
 		for _, pod := range pods {
 			if pod.Name == firstPod.Name {
@@ -245,7 +265,6 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 	if err := r.Client.Get(ctx, mysql.NamespacedName(cr), sts); err != nil {
 		return errors.Wrap(err, "get MySQL statefulset")
 	}
-	log.V(1).Info("Got statefulset", "sts", sts, "spec", sts.Spec)
 
 	if sts.Spec.Replicas == nil || *sts.Spec.Replicas != 1 {
 		dscaleTo := int32(1)
@@ -254,7 +273,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		if err != nil {
 			return errors.Wrap(err, "downscale StatefulSet")
 		}
-		log.Info("sts replicaset downscaled", "sts", sts)
+		log.Info("Statefulset downscaled", "sts", sts)
 	}
 
 	return psrestore.ErrWaitingTermination
@@ -866,7 +885,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 	}
 
 	svcLabels := exposer.Labels()
-	svcLabels[apiv1alpha1.ExposedLabel] = "true"
+	svcLabels[naming.LabelExposed] = "true"
 	services, err := k8s.ServicesByLabels(ctx, r.Client, svcLabels)
 	if err != nil {
 		return errors.Wrap(err, "get exposed services")

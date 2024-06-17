@@ -3,7 +3,7 @@ kind: PerconaServerMySQL
 metadata:
   name: gr-scaling
   finalizers:
-    - delete-mysql-pods-in-order
+    - percona.com/delete-mysql-pods-in-order
 spec:
   mysql:
     size: 1

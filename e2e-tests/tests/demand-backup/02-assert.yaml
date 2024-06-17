@@ -43,7 +43,7 @@ kind: PerconaServerMySQL
 metadata:
   name: demand-backup
   finalizers:
-    - delete-mysql-pods-in-order
+    - percona.com/delete-mysql-pods-in-order
 status:
   haproxy:
     ready: 3
