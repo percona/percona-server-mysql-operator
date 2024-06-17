@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"reflect"
@@ -97,9 +98,12 @@ func TestReconcileStatusAsync(t *testing.T) {
 			},
 		},
 		{
-			name:    "with 3 ready mysql pods",
-			cr:      cr,
-			objects: makeFakeReadyPods(cr, 3, "mysql"),
+			name: "with 3 ready mysql pods",
+			cr:   cr,
+			objects: appendSlices(
+				makeFakeReadyPods(cr, 3, "mysql"),
+				makeFakeReadyPods(cr, 3, "orchestrator"),
+			),
 			expected: apiv1alpha1.PerconaServerMySQLStatus{
 				MySQL: apiv1alpha1.StatefulAppStatus{
 					Size:  3,
@@ -108,7 +112,8 @@ func TestReconcileStatusAsync(t *testing.T) {
 				},
 				Orchestrator: apiv1alpha1.StatefulAppStatus{
 					Size:  3,
-					State: apiv1alpha1.StateInitializing,
+					Ready: 3,
+					State: apiv1alpha1.StateReady,
 				},
 				HAProxy: apiv1alpha1.StatefulAppStatus{
 					Size:  3,
@@ -365,14 +370,21 @@ func TestReconcileStatusAsync(t *testing.T) {
 			cr := tt.cr.DeepCopy()
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).WithStatusSubresource(cr).WithObjects(tt.objects...).WithStatusSubresource(tt.objects...)
 
+			cliCmd, err := getFakeOrchestratorClient(cr)
+			if err != nil {
+				t.Fatal(err)
+			}
+
 			r := &PerconaServerMySQLReconciler{
-				Client: cb.Build(),
-				Scheme: scheme,
+				Client:    cb.Build(),
+				Scheme:    scheme,
+				ClientCmd: cliCmd,
 				ServerVersion: &platform.ServerVersion{
 					Platform: platform.PlatformKubernetes,
 				},
 			}
-			err := r.reconcileCRStatus(ctx, cr, nil)
+
+			err = r.reconcileCRStatus(ctx, cr, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1120,6 +1132,43 @@ func getFakeClient(cr *apiv1alpha1.PerconaServerMySQL, mysqlMemberStates []innod
 		stderr: []byte("No such file or directory"),
 		err:    errors.New("fake error"),
 	})
+
+	return &fakeClient{
+		scripts: scripts,
+	}, nil
+}
+
+func getFakeOrchestratorClient(cr *apiv1alpha1.PerconaServerMySQL) (clientcmd.Client, error) {
+	var scripts []fakeClientScript
+
+	// Get async cluster primary from Orchestrator
+	orcRequestScript := func() fakeClientScript {
+		instance := &orchestrator.Instance{
+			Replicas: []orchestrator.InstanceKey{
+				{
+					Hostname: "mysql-host-1",
+				},
+				{
+					Hostname: "mysql-host-2",
+				},
+			},
+		}
+		res, err := json.Marshal(instance)
+		if err != nil {
+			panic(err)
+		}
+
+		return fakeClientScript{
+			cmd: []string{
+				"curl",
+				fmt.Sprintf("localhost:%d/%s", 3000, fmt.Sprintf("api/master/%s", cr.Name+"."+cr.Namespace)),
+			},
+			stdout: res,
+		}
+	}
+
+	scripts = append(scripts, orcRequestScript())
+
 	return &fakeClient{
 		scripts: scripts,
 	}, nil

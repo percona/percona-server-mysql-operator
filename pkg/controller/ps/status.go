@@ -76,7 +76,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 			}
 		}
 
-		if cr.Spec.MySQL.IsAsync() {
+		if cr.Spec.MySQL.IsAsync() && cr.OrchestratorEnabled() {
 			ready, err := r.isAsyncReady(ctx, cr)
 			if err != nil {
 				return errors.Wrap(err, "check if async is ready")
