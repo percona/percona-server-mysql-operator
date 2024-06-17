@@ -372,6 +372,8 @@ spec:
 #    backoffLimit: 6
     imagePullPolicy: Always
 #    initImage: percona/percona-server-mysql-operator:0.8.0
+#    containerSecurityContext:
+#      privileged: true
     storages:
       s3-us-west:
         type: s3
