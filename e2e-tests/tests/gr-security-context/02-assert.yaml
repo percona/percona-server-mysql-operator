@@ -20,6 +20,8 @@ spec:
       - command:
         - /opt/percona/sidecar
         name: xtrabackup
+        securityContext:
+          privileged: false
       initContainers:
       - command:
         - /opt/percona-server-mysql-operator/ps-init-entrypoint.sh
