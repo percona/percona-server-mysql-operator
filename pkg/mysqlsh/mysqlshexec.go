@@ -92,3 +92,13 @@ func (m *mysqlshExec) RebootClusterFromCompleteOutageWithExec(ctx context.Contex
 
 	return nil
 }
+
+func (m *mysqlshExec) SetPrimaryInstanceWithExec(ctx context.Context, clusterName, instance string) error {
+	cmd := fmt.Sprintf("dba.getCluster('%s').setPrimaryInstance('%s')", clusterName, instance)
+
+	if err := m.runWithExec(ctx, cmd); err != nil {
+		return errors.Wrap(err, "set primary instance")
+	}
+
+	return nil
+}

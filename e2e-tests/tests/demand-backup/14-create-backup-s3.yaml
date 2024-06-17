@@ -3,7 +3,7 @@ kind: PerconaServerMySQLBackup
 metadata:
   name: demand-backup-s3
   finalizers:
-    - delete-backup
+    - percona.com/delete-backup
 spec:
   clusterName: demand-backup
   storageName: aws-s3
