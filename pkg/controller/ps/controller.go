@@ -220,11 +220,11 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 
 		log.Info("Got primary", "primary", clusterStatus.DefaultReplicaSet.Primary)
 
-		if !strings.HasPrefix(clusterStatus.DefaultReplicaSet.Primary, firstPodFQDN) {
+		if !strings.HasPrefix(clusterStatus.DefaultReplicaSet.Primary, mysql.PodFQDN(cr, &firstPod)) {
 			log.Info("Primary is not pod-0", "primary", clusterStatus.DefaultReplicaSet.Primary)
 
 			log.Info("Ensuring pod-0 is the primary")
-			err := mysh.SetPrimaryInstanceWithExec(ctx, cr.InnoDBClusterName(), firstPodFQDN)
+			err := mysh.SetPrimaryInstanceWithExec(ctx, cr.InnoDBClusterName(), mysql.PodFQDN(cr, &firstPod))
 			if err != nil {
 				return errors.Wrap(err, "set primary instance")
 			}
