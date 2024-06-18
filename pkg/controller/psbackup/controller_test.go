@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
@@ -164,23 +165,23 @@ func TestCheckFinalizers(t *testing.T) {
 		{
 			name: "with finalizer and starting state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupStarting
 			}),
-			expectedFinalizers: []string{finalizerDeleteBackup},
+			expectedFinalizers: []string{naming.FinalizerDeleteBackup},
 		},
 		{
 			name: "with finalizer and running state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupRunning
 			}),
-			expectedFinalizers: []string{finalizerDeleteBackup},
+			expectedFinalizers: []string{naming.FinalizerDeleteBackup},
 		},
 		{
 			name: "with finalizer and error state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupError
 			}),
 			expectedFinalizers: nil,
@@ -188,7 +189,7 @@ func TestCheckFinalizers(t *testing.T) {
 		{
 			name: "with finalizer and new state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupNew
 			}),
 			expectedFinalizers: nil,
@@ -196,16 +197,16 @@ func TestCheckFinalizers(t *testing.T) {
 		{
 			name: "with failing finalizer and succeeded state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupSucceeded
 			}),
 			finalizerJobFail:   true,
-			expectedFinalizers: []string{finalizerDeleteBackup},
+			expectedFinalizers: []string{naming.FinalizerDeleteBackup},
 		},
 		{
 			name: "with successful finalizer and succeeded state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupSucceeded
 			}),
 			expectedFinalizers: []string{},
@@ -213,7 +214,7 @@ func TestCheckFinalizers(t *testing.T) {
 		{
 			name: "with successful finalizer, unknown finalizer and succeeded state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup, "unknown-finalizer"}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup, "unknown-finalizer"}
 				cr.Status.State = apiv1alpha1.BackupSucceeded
 			}),
 			expectedFinalizers: []string{"unknown-finalizer"},
@@ -221,7 +222,7 @@ func TestCheckFinalizers(t *testing.T) {
 		{
 			name: "with failing finalizer and failed state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupFailed
 			}),
 			finalizerJobFail:   true,
@@ -230,7 +231,7 @@ func TestCheckFinalizers(t *testing.T) {
 		{
 			name: "with successful finalizer and failed state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupFailed
 			}),
 			expectedFinalizers: []string{},
@@ -238,7 +239,7 @@ func TestCheckFinalizers(t *testing.T) {
 		{
 			name: "with successful finalizer, unknown finalizer and failed state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup, "unknown-finalizer"}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup, "unknown-finalizer"}
 				cr.Status.State = apiv1alpha1.BackupFailed
 			}),
 			expectedFinalizers: []string{"unknown-finalizer"},

@@ -18,6 +18,7 @@ commands:
       	| yq eval '.spec.backup.storages.minio.containerSecurityContext.privileged=true' - \
       	| yq eval '.spec.backup.storages.minio.podSecurityContext.fsGroup=1001' - \
       	| yq eval '.spec.backup.storages.minio.podSecurityContext.supplementalGroups |= [1001, 1002, 1003]' - \
+      	| yq eval '.spec.backup.containerSecurityContext.privileged=false' - \
       	| yq eval '.spec.mysql.clusterType="group-replication"' - \
       	| yq eval '.spec.mysql.containerSecurityContext.privileged=true' - \
       	| yq eval '.spec.mysql.podSecurityContext.fsGroup=1001' - \

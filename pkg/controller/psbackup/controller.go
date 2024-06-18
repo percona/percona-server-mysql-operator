@@ -38,6 +38,7 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
@@ -386,8 +387,6 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 	return source, nil
 }
 
-const finalizerDeleteBackup = "delete-backup"
-
 func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup) {
 	if cr.DeletionTimestamp == nil || cr.Status.State == apiv1alpha1.BackupStarting || cr.Status.State == apiv1alpha1.BackupRunning {
 		return
@@ -410,7 +409,7 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 	for _, finalizer := range cr.GetFinalizers() {
 		var err error
 		switch finalizer {
-		case finalizerDeleteBackup:
+		case naming.FinalizerDeleteBackup:
 			var ok bool
 			ok, err = r.deleteBackup(ctx, cr)
 			if !ok {
