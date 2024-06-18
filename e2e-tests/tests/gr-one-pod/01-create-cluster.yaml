@@ -13,6 +13,7 @@ commands:
       	| yq eval '.spec.proxy.router.enabled=true' - \
       	| yq eval '.spec.proxy.haproxy.enabled=false' - \
         | yq eval '.spec.unsafeFlags.mysqlSize=true' - \
+        | yq eval '.spec.unsafeFlags.proxySize=true' - \
         | yq eval '.spec.mysql.size=1' - \
         | yq eval '.spec.proxy.haproxy.enabled=false' - \
         | yq eval '.spec.proxy.router.size=1' - \
