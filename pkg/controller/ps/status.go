@@ -3,6 +3,7 @@ package ps
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -77,12 +78,15 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		}
 
 		if cr.Spec.MySQL.IsAsync() && cr.OrchestratorEnabled() {
-			ready, err := r.isAsyncReady(ctx, cr)
+			ready, msg, err := r.isAsyncReady(ctx, cr)
 			if err != nil {
 				return errors.Wrap(err, "check if async is ready")
 			}
 			if !ready {
 				mysqlStatus.State = apiv1alpha1.StateInitializing
+
+				r.Recorder.Event(cr, "Warning", "AsyncReplicationNotReady", msg)
+
 			}
 		}
 	}
@@ -270,22 +274,39 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 	return true, nil
 }
 
-func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
+func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, string, error) {
 	pod, err := getOrcPod(ctx, r.Client, cr, 0)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 
-	p, err := orchestrator.ClusterPrimary(ctx, r.ClientCmd, pod, cr.ClusterHint())
+	instances, err := orchestrator.Cluster(ctx, r.ClientCmd, pod, cr.ClusterHint())
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 
-	if len(p.Replicas) < int(cr.Spec.MySQL.Size)-1 {
-		return false, nil
+	problems := make(map[string][]string)
+
+	for _, i := range instances {
+		if len(i.Problems) > 0 {
+			problems[i.Alias] = i.Problems
+		}
 	}
 
-	return true, nil
+	// formatMessage formats a map of problems to a message like
+	// 'cluster1-mysql-1:[not_replicating, replication_lag], cluster1-mysql-2:[not_replicating]'
+	formatMessage := func(problems map[string][]string) string {
+		var sb strings.Builder
+		for k, v := range problems {
+			joinedValues := strings.Join(v, ", ")
+			sb.WriteString(fmt.Sprintf("%s: [%s], ", k, joinedValues))
+		}
+
+		return strings.TrimRight(sb.String(), ", ")
+	}
+
+	msg := formatMessage(problems)
+	return msg == "", msg, nil
 }
 
 func (r *PerconaServerMySQLReconciler) allLoadBalancersReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {

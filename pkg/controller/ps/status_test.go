@@ -1141,19 +1141,24 @@ func getFakeClient(cr *apiv1alpha1.PerconaServerMySQL, mysqlMemberStates []innod
 func getFakeOrchestratorClient(cr *apiv1alpha1.PerconaServerMySQL) (clientcmd.Client, error) {
 	var scripts []fakeClientScript
 
-	// Get async cluster primary from Orchestrator
-	orcRequestScript := func() fakeClientScript {
-		instance := &orchestrator.Instance{
-			Replicas: []orchestrator.InstanceKey{
-				{
-					Hostname: "mysql-host-1",
-				},
-				{
-					Hostname: "mysql-host-2",
-				},
+	// Get async cluster from Orchestrator
+	orcClusterScript := func() fakeClientScript {
+		instances := []*orchestrator.Instance{
+			{
+				Alias:    "mysql-host-0",
+				Problems: []string{},
+			},
+			{
+				Alias:    "mysql-host-1",
+				Problems: []string{},
+			},
+			{
+				Alias:    "mysql-host-2",
+				Problems: []string{},
 			},
 		}
-		res, err := json.Marshal(instance)
+
+		res, err := json.Marshal(&instances)
 		if err != nil {
 			panic(err)
 		}
@@ -1161,13 +1166,13 @@ func getFakeOrchestratorClient(cr *apiv1alpha1.PerconaServerMySQL) (clientcmd.Cl
 		return fakeClientScript{
 			cmd: []string{
 				"curl",
-				fmt.Sprintf("localhost:%d/%s", 3000, fmt.Sprintf("api/master/%s", cr.Name+"."+cr.Namespace)),
+				fmt.Sprintf("localhost:%d/%s", 3000, fmt.Sprintf("api/cluster/%s", cr.Name+"."+cr.Namespace)),
 			},
 			stdout: res,
 		}
 	}
 
-	scripts = append(scripts, orcRequestScript())
+	scripts = append(scripts, orcClusterScript())
 
 	return &fakeClient{
 		scripts: scripts,

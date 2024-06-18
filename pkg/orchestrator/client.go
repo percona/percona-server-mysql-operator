@@ -29,6 +29,7 @@ type Instance struct {
 	MasterKey InstanceKey   `json:"MasterKey"`
 	Replicas  []InstanceKey `json:"Replicas"`
 	ReadOnly  bool          `json:"ReadOnly"`
+	Problems  []string      `json:"Problems"`
 }
 
 var ErrEmptyResponse = errors.New("empty response")
@@ -253,4 +254,32 @@ func SetWriteable(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod,
 		return errors.New(orcResp.Message)
 	}
 	return nil
+}
+
+func Cluster(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint string) ([]*Instance, error) {
+	url := fmt.Sprintf("api/cluster/%s", clusterHint)
+
+	var res, errb bytes.Buffer
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
+	if err != nil {
+		return nil, err
+	}
+
+	body := res.Bytes()
+
+	instances := []*Instance{}
+	if err := json.Unmarshal(body, &instances); err == nil {
+		return instances, nil
+	}
+
+	orcResp := &orcResponse{}
+	if err := json.Unmarshal(body, orcResp); err != nil {
+		return nil, errors.Wrap(err, "json decode")
+	}
+
+	if orcResp.Code == "ERROR" {
+		return nil, errors.New(orcResp.Message)
+	}
+
+	return instances, nil
 }
