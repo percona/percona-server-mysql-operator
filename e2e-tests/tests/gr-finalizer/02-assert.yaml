@@ -13,7 +13,7 @@ spec:
   isCA: true
   issuerRef:
     kind: Issuer
-    name: gr-finalizer-pso-ca-issuer
+    name: gr-finalizer-ps-ca-issuer
   renewBefore: 730h0m0s
   secretName: gr-finalizer-ca-cert
 status:
@@ -33,7 +33,7 @@ metadata:
 spec:
   issuerRef:
     kind: Issuer
-    name: gr-finalizer-pso-issuer
+    name: gr-finalizer-ps-issuer
   secretName: test-ssl
 status:
   conditions:
@@ -90,7 +90,7 @@ metadata:
     cert-manager.io/certificate-name: gr-finalizer-ca-cert
     cert-manager.io/common-name: gr-finalizer-ca
     cert-manager.io/issuer-kind: Issuer
-    cert-manager.io/issuer-name: gr-finalizer-pso-ca-issuer
+    cert-manager.io/issuer-name: gr-finalizer-ps-ca-issuer
   labels:
     controller.cert-manager.io/fao: "true"
   name: gr-finalizer-ca-cert
@@ -102,7 +102,7 @@ metadata:
   annotations:
     cert-manager.io/certificate-name: gr-finalizer-ssl
     cert-manager.io/issuer-kind: Issuer
-    cert-manager.io/issuer-name: gr-finalizer-pso-issuer
+    cert-manager.io/issuer-name: gr-finalizer-ps-issuer
   labels:
     controller.cert-manager.io/fao: "true"
   name: test-ssl
@@ -112,7 +112,7 @@ apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
   generation: 1
-  name: gr-finalizer-pso-ca-issuer
+  name: gr-finalizer-ps-ca-issuer
 spec:
   selfSigned: {}
 ---
@@ -120,7 +120,7 @@ apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
   generation: 1
-  name: gr-finalizer-pso-issuer
+  name: gr-finalizer-ps-issuer
 spec:
   ca:
     secretName: gr-finalizer-ca-cert
