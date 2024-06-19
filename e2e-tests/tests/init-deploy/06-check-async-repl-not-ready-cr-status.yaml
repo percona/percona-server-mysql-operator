@@ -18,7 +18,7 @@ commands:
 
       run_mysqlsh "STOP SLAVE;" "-h localhost -P 33060 -uroot -proot_password" "init-deploy-mysql-2"
 
-      sleep 10
+      sleep 20
 
       state=$(kubectl -n ${NAMESPACE} get ps $(get_cluster_name) -o jsonpath='{.status.state}')
       if [[ "$state" != "initializing"  ]]; then
@@ -28,7 +28,7 @@ commands:
 
       run_mysqlsh "START SLAVE;" "-h localhost -P 33060 -uroot -proot_password" "init-deploy-mysql-2"
 
-      sleep 10
+      sleep 20
 
       state=$(kubectl -n ${NAMESPACE} get ps $(get_cluster_name) -o jsonpath='{.status.state}')
       if [[ "$state" != "ready"  ]]; then
