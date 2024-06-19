@@ -10126,7 +10126,7 @@ rules:
   - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
   name: percona-server-mysql-operator
 rules:
@@ -10273,12 +10273,12 @@ subjects:
   name: percona-server-mysql-operator-orchestrator
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
   name: percona-server-mysql-operator
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
+  kind: ClusterRole
   name: percona-server-mysql-operator
 subjects:
 - kind: ServiceAccount
@@ -10331,10 +10331,7 @@ spec:
         - name: LOG_LEVEL
           value: INFO
         - name: WATCH_NAMESPACE
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: metadata.namespace
+          valuse: ""
         - name: DISABLE_TELEMETRY
           value: "false"
         image: perconalab/percona-server-mysql-operator:main
