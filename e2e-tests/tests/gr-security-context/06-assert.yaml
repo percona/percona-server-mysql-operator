@@ -2,24 +2,84 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 500
 ---
-apiVersion: ps.percona.com/v1alpha1
-kind: PerconaServerMySQL
+apiVersion: batch/v1
+kind: Job
 metadata:
-  name: gr-security-context
+  annotations:
+    batch.kubernetes.io/job-tracking: ""
+  generation: 1
+  labels:
+    app.kubernetes.io/component: xtrabackup
+    app.kubernetes.io/instance: gr-security-context
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: xb-restore-gr-security-context-restore-minio
+spec:
+  backoffLimit: 4
+  completionMode: NonIndexed
+  completions: 1
+  parallelism: 1
+  suspend: false
+  template:
+    spec:
+      containers:
+      - command:
+        - /opt/percona/run-restore.sh
+        image: perconalab/percona-server-mysql-operator:main-backup
+        imagePullPolicy: Always
+        name: xtrabackup
+        resources: {}
+        securityContext:
+          privileged: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-tls-secret
+          name: tls
+      dnsPolicy: ClusterFirst
+      initContainers:
+      - command:
+        - /opt/percona-server-mysql-operator/ps-init-entrypoint.sh
+        imagePullPolicy: Always
+        name: xtrabackup-init
+        resources: {}
+        securityContext:
+          privileged: false
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
+        - mountPath: /etc/mysql/mysql-tls-secret
+          name: tls
+      restartPolicy: Never
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - emptyDir: {}
+        name: bin
+      - name: datadir
+        persistentVolumeClaim:
+          claimName: datadir-gr-security-context-mysql-0
+      - name: users
+        secret:
+          defaultMode: 420
+          secretName: test-secrets
+      - name: tls
+        secret:
+          defaultMode: 420
+          secretName: test-ssl
 status:
-  haproxy:
-    ready: 3
-    size: 3
-    state: ready
-  mysql:
-    ready: 3
-    size: 3
-    state: ready
-  state: ready
----
-kind: PerconaServerMySQLRestore
-apiVersion: ps.percona.com/v1alpha1
-metadata:
-  name: gr-security-context-restore-minio
-status:
-  state: Succeeded
+  active: 1
+  ready: 0
+  uncountedTerminatedPods: {}

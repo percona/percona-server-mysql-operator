@@ -322,7 +322,7 @@ func RestoreJob(
 						{
 							Name:            componentName + "-init",
 							Image:           initImage,
-							ImagePullPolicy: cluster.Spec.MySQL.ImagePullPolicy,
+							ImagePullPolicy: cluster.Spec.Backup.ImagePullPolicy,
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      apiv1alpha1.BinVolumeName,
@@ -344,7 +344,7 @@ func RestoreJob(
 							Command:                  []string{"/opt/percona-server-mysql-operator/ps-init-entrypoint.sh"},
 							TerminationMessagePath:   "/dev/termination-log",
 							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-							SecurityContext:          cluster.Spec.MySQL.ContainerSecurityContext,
+							SecurityContext:          cluster.Spec.Backup.ContainerSecurityContext,
 						},
 					},
 					Containers: []corev1.Container{
