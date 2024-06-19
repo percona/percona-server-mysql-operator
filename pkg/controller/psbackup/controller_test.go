@@ -226,7 +226,7 @@ func TestCheckFinalizers(t *testing.T) {
 				cr.Status.State = apiv1alpha1.BackupFailed
 			}),
 			finalizerJobFail:   true,
-			expectedFinalizers: []string{naming.FinalizerDeleteBackup},
+			expectedFinalizers: []string{},
 		},
 		{
 			name: "with successful finalizer and failed state",
