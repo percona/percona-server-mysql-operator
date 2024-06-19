@@ -188,7 +188,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 	}
 
 	if cr.Spec.MySQL.IsAsync() {
-		orcPod, err := getOrcPod(ctx, r.Client, cr, 0)
+		orcPod, err := getReadyOrcPod(ctx, r.Client, cr)
 		if err != nil {
 			return nil
 		}
@@ -633,7 +633,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return nil
 	}
 
-	orcPod, err := getOrcPod(ctx, r.Client, cr, 0)
+	orcPod, err := getReadyOrcPod(ctx, r.Client, cr)
 	if err != nil {
 		return nil
 	}
@@ -784,7 +784,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return nil
 	}
 
-	pod, err := getOrcPod(ctx, r.Client, cr, 0)
+	pod, err := getReadyOrcPod(ctx, r.Client, cr)
 	if err != nil {
 		return nil
 	}
@@ -1023,7 +1023,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 }
 
 func (r *PerconaServerMySQLReconciler) getPrimaryFromOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (*orchestrator.Instance, error) {
-	pod, err := getOrcPod(ctx, r.Client, cr, 0)
+	pod, err := getReadyOrcPod(ctx, r.Client, cr)
 	if err != nil {
 		return nil, err
 	}
@@ -1074,7 +1074,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cr *a
 func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, primary *orchestrator.Instance) error {
 	log := logf.FromContext(ctx).WithName("stopAsyncReplication")
 
-	orcPod, err := getOrcPod(ctx, r.Client, cr, 0)
+	orcPod, err := getReadyOrcPod(ctx, r.Client, cr)
 	if err != nil {
 		return err
 	}
@@ -1129,7 +1129,7 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, replicaPass string, primary *orchestrator.Instance) error {
 	log := logf.FromContext(ctx).WithName("startAsyncReplication")
 
-	orcPod, err := getOrcPod(ctx, r.Client, cr, 0)
+	orcPod, err := getReadyOrcPod(ctx, r.Client, cr)
 	if err != nil {
 		return nil
 	}
@@ -1197,15 +1197,18 @@ func getMySQLPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaS
 	return pod, nil
 }
 
-func getOrcPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
-	pod := &corev1.Pod{}
-
-	nn := types.NamespacedName{Namespace: cr.Namespace, Name: orchestrator.PodName(cr, idx)}
-	if err := cl.Get(ctx, nn, pod); err != nil {
-		return nil, err
+func getReadyOrcPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Pod, error) {
+	pods, err := k8s.PodsByLabels(ctx, cl, orchestrator.MatchLabels(cr))
+	if err != nil {
+		return nil, errors.Wrap(err, "get pods")
 	}
 
-	return pod, nil
+	for i, pod := range pods {
+		if k8s.IsPodReady(pod) {
+			return &pods[i], nil
+		}
+	}
+	return nil, errors.New("no ready pods")
 }
 
 func getPodIndexFromHostname(hostname string) (int, error) {
