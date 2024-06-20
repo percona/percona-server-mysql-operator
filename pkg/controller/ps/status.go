@@ -274,7 +274,7 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 }
 
 func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, string, error) {
-	pod, err := getOrcPod(ctx, r.Client, cr, 0)
+	pod, err := getReadyOrcPod(ctx, r.Client, cr)
 	if err != nil {
 		return false, "", err
 	}
