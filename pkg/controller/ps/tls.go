@@ -110,8 +110,8 @@ func (r *PerconaServerMySQLReconciler) checkTLSIssuer(ctx context.Context, cr *a
 }
 
 func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	issuerName := cr.Name + "-pso-issuer"
-	caIssuerName := cr.Name + "-pso-ca-issuer"
+	issuerName := cr.Name + "-ps-issuer"
+	caIssuerName := cr.Name + "-ps-ca-issuer"
 	issuerKind := "Issuer"
 	issuerGroup := ""
 	if cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {

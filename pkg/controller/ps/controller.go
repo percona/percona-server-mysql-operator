@@ -284,8 +284,8 @@ func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv
 	log.Info("Deleting SSL certificates")
 
 	issuers := []string{
-		cr.Name + "-pso-ca-issuer",
-		cr.Name + "-pso-issuer",
+		cr.Name + "-ps-ca-issuer",
+		cr.Name + "-ps-issuer",
 	}
 	for _, issuerName := range issuers {
 		issuer := &cm.Issuer{}
