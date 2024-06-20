@@ -26,7 +26,7 @@ commands:
         exit 1
       fi
 
-      run_mysqlsh "START SLAVE;" "-h localhost -P 33060 -uroot -proot_password" "init-deploy-mysql-2"
+      run_mysqlsh "START REPLICA;" "-h localhost -P 33060 -uroot -proot_password" "init-deploy-mysql-2"
 
       sleep 20
 
