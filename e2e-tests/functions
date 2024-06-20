@@ -35,20 +35,20 @@ deploy_operator() {
 }
 
 deploy_non_tls_cluster_secrets() {
-	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/secrets.yaml"
+	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/secrets.yaml"
 }
 
 deploy_tls_cluster_secrets() {
-	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/ssl-secret.yaml"
+	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/ssl-secret.yaml"
 }
 
 deploy_client() {
-	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/client.yaml"
+	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/client.yaml"
 }
 
 apply_s3_storage_secrets() {
-	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/minio-secret.yml"
-	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/cloud-secret.yml"
+	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/minio-secret.yml"
+	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/cloud-secret.yml"
 }
 
 deploy_pmm_server() {
@@ -182,7 +182,7 @@ get_cr() {
 }
 
 get_client_pod() {
-	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" get pods \
+	kubectl -n "${NAMESPACE}" get pods \
 		--selector=name=mysql-client \
 		-o 'jsonpath={.items[].metadata.name}'
 }
@@ -195,7 +195,7 @@ run_mysql() {
 	client_pod=$(get_client_pod)
 	wait_pod $client_pod 1>&2
 
-	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" exec "${pod:-mysql-client}" -- \
+	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
 		bash -c "printf '%s\n' \"${command}\" | mysql -sN $uri" 2>&1 \
 		| sed -e 's/mysql: //' \
 		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
@@ -209,13 +209,13 @@ run_mysqlsh() {
 	client_pod=$(get_client_pod)
 	wait_pod $client_pod 1>&2
 
-	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" exec "${pod:-mysql-client}" -- \
+	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
 		bash -c "printf '%s\n' \"${command}\" | mysqlsh --sql --quiet-start=2 $uri" 2>&1 \
 		| tail -n +2
 }
 
 run_curl() {
-	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" exec mysql-client -- bash -c "curl -s -k $*"
+	kubectl -n "${NAMESPACE}" exec mysql-client -- bash -c "curl -s -k $*"
 }
 
 get_innodb_cluster_name() {
@@ -234,13 +234,13 @@ get_gr_status() {
 
 	client_pod=$(get_client_pod)
 
-	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" exec "${pod:-mysql-client}" -- mysqlsh --uri $uri --cluster --result-format json -- cluster status \
+	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- mysqlsh --uri $uri --cluster --result-format json -- cluster status \
 		| sed -e 's/mysql: //' \
 		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
 }
 
 get_cluster_name() {
-	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" get ps -o jsonpath='{.items[0].metadata.name}'
+	kubectl -n "${NAMESPACE}" get ps -o jsonpath='{.items[0].metadata.name}'
 }
 
 get_mysql_service() {
@@ -340,11 +340,11 @@ EOF
 }
 
 get_mysql_pods() {
-	kubectl get pod -n "${OPERATOR_NS:-$NAMESPACE}" --no-headers --selector=app.kubernetes.io/component=mysql | awk '{print $1}'
+	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/component=mysql | awk '{print $1}'
 }
 
 get_router_pods() {
-	kubectl get pod -n "${OPERATOR_NS:-$NAMESPACE}" --no-headers --selector=app.kubernetes.io/component=router | awk '{print $1}'
+	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/component=router | awk '{print $1}'
 }
 
 get_mysql_users() {
@@ -356,18 +356,18 @@ get_mysql_users() {
 get_service_ip() {
 	local service=$1
 
-	while (kubectl get service/$service -n "${OPERATOR_NS:-$NAMESPACE}" -o 'jsonpath={.spec.type}' 2>&1 || :) | grep -q NotFound; do
+	while (kubectl get service/$service -n "${NAMESPACE}" -o 'jsonpath={.spec.type}' 2>&1 || :) | grep -q NotFound; do
 		sleep 1
 	done
-	if [ "$(kubectl get service/$service -n "${OPERATOR_NS:-$NAMESPACE}" -o 'jsonpath={.spec.type}')" = "ClusterIP" ]; then
-		kubectl get service/$service -n "${OPERATOR_NS:-$NAMESPACE}" -o 'jsonpath={.spec.clusterIP}'
+	if [ "$(kubectl get service/$service -n "${NAMESPACE}" -o 'jsonpath={.spec.type}')" = "ClusterIP" ]; then
+		kubectl get service/$service -n "${NAMESPACE}" -o 'jsonpath={.spec.clusterIP}'
 		return
 	fi
-	until kubectl get service/$service -n "${OPERATOR_NS:-$NAMESPACE}" -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | egrep -q "hostname|ip"; do
+	until kubectl get service/$service -n "${NAMESPACE}" -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | egrep -q "hostname|ip"; do
 		sleep 1
 	done
-	kubectl get service/$service -n "${OPERATOR_NS:-$NAMESPACE}" -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
-	kubectl get service/$service -n "${OPERATOR_NS:-$NAMESPACE}" -o 'jsonpath={.status.loadBalancer.ingress[].hostname}'
+	kubectl get service/$service -n "${NAMESPACE}" -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
+	kubectl get service/$service -n "${NAMESPACE}" -o 'jsonpath={.status.loadBalancer.ingress[].hostname}'
 }
 
 wait_cluster_consistency_async() {
@@ -380,11 +380,11 @@ wait_cluster_consistency_async() {
 	fi
 
 	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
-	until [[ "$(kubectl get ps "${cluster_name}" -n "${OPERATOR_NS:-$NAMESPACE}" -o jsonpath='{.status.mysql.state}')" == "ready" &&
-	"$(kubectl get ps "${cluster_name}" -n "${OPERATOR_NS:-$NAMESPACE}" -o jsonpath='{.status.mysql.ready}')" == "${cluster_size}" &&
-	"$(kubectl get ps "${cluster_name}" -n "${OPERATOR_NS:-$NAMESPACE}" -o jsonpath='{.status.orchestrator.ready}')" == "${orc_size}" &&
-	"$(kubectl get ps "${cluster_name}" -n "${OPERATOR_NS:-$NAMESPACE}" -o jsonpath='{.status.orchestrator.state}')" == "ready" &&
-	"$(kubectl get ps "${cluster_name}" -n "${OPERATOR_NS:-$NAMESPACE}" -o jsonpath='{.status.state}')" == "ready" ]]; do
+	until [[ "$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.mysql.state}')" == "ready" &&
+	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.mysql.ready}')" == "${cluster_size}" &&
+	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.orchestrator.ready}')" == "${orc_size}" &&
+	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.orchestrator.state}')" == "ready" &&
+	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.state}')" == "ready" ]]; do
 		echo 'waiting for cluster readyness (async)'
 		sleep 15
 	done
@@ -400,11 +400,11 @@ wait_cluster_consistency_gr() {
 	fi
 
 	sleep 7 # wait for two reconcile loops ;)  3 sec x 2 times + 1 sec = 7 seconds
-	until [[ "$(kubectl get ps "${cluster_name}" -n "${OPERATOR_NS:-$NAMESPACE}" -o jsonpath='{.status.mysql.state}')" == "ready" &&
-	"$(kubectl get ps "${cluster_name}" -n "${OPERATOR_NS:-$NAMESPACE}" -o jsonpath='{.status.mysql.ready}')" == "${cluster_size}" &&
-	"$(kubectl get ps "${cluster_name}" -n "${OPERATOR_NS:-$NAMESPACE}" -o jsonpath='{.status.router.ready}')" == "${router_size}" &&
-	"$(kubectl get ps "${cluster_name}" -n "${OPERATOR_NS:-$NAMESPACE}" -o jsonpath='{.status.router.state}')" == "ready" &&
-	"$(kubectl get ps "${cluster_name}" -n "${OPERATOR_NS:-$NAMESPACE}" -o jsonpath='{.status.state}')" == "ready" ]]; do
+	until [[ "$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.mysql.state}')" == "ready" &&
+	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.mysql.ready}')" == "${cluster_size}" &&
+	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.router.ready}')" == "${router_size}" &&
+	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.router.state}')" == "ready" &&
+	"$(kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o jsonpath='{.status.state}')" == "ready" ]]; do
 		echo 'waiting for cluster readyness (group replication)'
 		sleep 15
 	done
@@ -524,12 +524,12 @@ deploy_cert_manager() {
 }
 
 get_primary_from_label() {
-	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" get pods -l mysql.percona.com/primary=true -ojsonpath="{.items[0].metadata.name}"
+	kubectl -n "${NAMESPACE}" get pods -l mysql.percona.com/primary=true -ojsonpath="{.items[0].metadata.name}"
 }
 
 get_primary_from_haproxy() {
 	local haproxy_pod=$1
-	local haproxy_pod_ip=$(kubectl -n "${OPERATOR_NS:-$NAMESPACE}" get pods ${haproxy_pod} -o jsonpath="{.status.podIP}")
+	local haproxy_pod_ip=$(kubectl -n "${NAMESPACE}" get pods ${haproxy_pod} -o jsonpath="{.status.podIP}")
 
 	run_mysql "SHOW VARIABLES LIKE '%hostname%';" "-h ${haproxy_pod_ip} -P3306 -uroot -proot_password" | awk '{print $2}'
 }
