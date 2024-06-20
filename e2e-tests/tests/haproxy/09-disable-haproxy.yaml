@@ -7,7 +7,8 @@ kind: PerconaServerMySQL
 metadata:
   name: haproxy
 spec:
-  allowUnsafeConfigurations: true
+  unsafeFlags:
+    proxy: true
   proxy:
     haproxy:
       enabled: false

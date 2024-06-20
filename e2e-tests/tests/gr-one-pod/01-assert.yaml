@@ -39,7 +39,8 @@ kind: PerconaServerMySQL
 metadata:
   name: gr-one-pod
 spec:
-  allowUnsafeConfigurations: true
+  unsafeFlags:
+    mysqlSize: true
   mysql:
     clusterType: group-replication
     size: 1

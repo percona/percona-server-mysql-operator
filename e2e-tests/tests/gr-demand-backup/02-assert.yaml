@@ -29,7 +29,6 @@ kind: PerconaServerMySQL
 metadata:
   name: gr-demand-backup
 spec:
-  allowUnsafeConfigurations: false
   backup:
     backoffLimit: 3
 status:

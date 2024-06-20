@@ -9,7 +9,6 @@ commands:
       source ../../functions
 
       get_cr \
-        | yq eval '.spec.allowUnsafeConfigurations=false' - \
         | yq eval '.spec.updateStrategy="RollingUpdate"' - \
         | yq eval '.spec.mysql.clusterType="async"' - \
         | yq eval '.spec.orchestrator.enabled=true' - \

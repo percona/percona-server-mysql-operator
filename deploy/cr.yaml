@@ -6,7 +6,12 @@ metadata:
     - percona.com/delete-mysql-pods-in-order
     # - percona.com/delete-ssl
 spec:
-  allowUnsafeConfigurations: false
+#  unsafeFlags:
+#    mysqlSize: false
+#    orchestrator: false
+#    orchestratorSize: false
+#    proxy: false
+#    proxySize: false
 #  pause: false
   crVersion: 0.8.0
   secretsName: cluster1-secrets
