@@ -1,24 +1,25 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 30
+timeout: 300
 ---
-kind: ConfigMap
-apiVersion: v1
+kind: PerconaServerMySQLBackup
+apiVersion: ps.percona.com/v1alpha1
 metadata:
-  name: 04-delete-data-minio-0
-data:
-  data: ""
----
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: 04-delete-data-minio-1
-data:
-  data: ""
----
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: 04-delete-data-minio-2
-data:
-  data: ""
+  name: gr-security-context-minio
+status:
+  state: Succeeded
+  storage:
+    containerSecurityContext:
+      privileged: true
+    podSecurityContext:
+      fsGroup: 1001
+      supplementalGroups:
+      - 1001
+      - 1002
+      - 1003
+    s3:
+      bucket: operator-testing
+      credentialsSecret: minio-secret
+      endpointUrl: http://minio-service:9000
+      region: us-east-1
+    type: s3
