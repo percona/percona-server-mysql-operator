@@ -108,7 +108,7 @@ manifests: kustomize generate
 	echo "---" >> $(DEPLOYDIR)/operator.yaml
 	cat $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/rbac.yaml $(DEPLOYDIR)/operator.yaml > $(DEPLOYDIR)/bundle.yaml
 
-	$(KUSTOMIZE) build config/rbac/ > $(DEPLOYDIR)/cw-rbac.yaml
+	$(KUSTOMIZE) build config/rbac/cluster/ > $(DEPLOYDIR)/cw-rbac.yaml
 	echo "---" >> $(DEPLOYDIR)/cw-rbac.yaml
 	cd config/manager/cluster && $(KUSTOMIZE) edit set image perconalab/percona-server-mysql-operator=$(IMAGE)
 	$(KUSTOMIZE) build config/manager/cluster/ > $(DEPLOYDIR)/cw-operator.yaml
