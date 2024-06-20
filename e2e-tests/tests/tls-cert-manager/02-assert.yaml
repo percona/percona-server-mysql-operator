@@ -12,7 +12,7 @@ spec:
   isCA: true
   issuerRef:
     kind: Issuer
-    name: tls-cert-manager-pso-ca-issuer
+    name: tls-cert-manager-ps-ca-issuer
   renewBefore: 730h0m0s
   secretName: tls-cert-manager-ca-cert
 status:
@@ -31,7 +31,7 @@ metadata:
 spec:
   issuerRef:
     kind: Issuer
-    name: tls-cert-manager-pso-issuer
+    name: tls-cert-manager-ps-issuer
   secretName: test-ssl
 status:
   conditions:
