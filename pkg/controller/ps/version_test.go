@@ -74,6 +74,7 @@ func TestReconcileVersions(t *testing.T) {
 					},
 					MySQL: apiv1alpha1.MySQLSpec{
 						PodSpec: apiv1alpha1.PodSpec{
+							Size: 3,
 							VolumeSpec: &apiv1alpha1.VolumeSpec{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 									Resources: corev1.VolumeResourceRequirements{
@@ -82,6 +83,13 @@ func TestReconcileVersions(t *testing.T) {
 										},
 									},
 								},
+							},
+						},
+					},
+					Proxy: apiv1alpha1.ProxySpec{
+						HAProxy: &apiv1alpha1.HAProxySpec{
+							PodSpec: apiv1alpha1.PodSpec{
+								Size: 2,
 							},
 						},
 					},
@@ -108,6 +116,7 @@ func TestReconcileVersions(t *testing.T) {
 					},
 					MySQL: apiv1alpha1.MySQLSpec{
 						PodSpec: apiv1alpha1.PodSpec{
+							Size: 3,
 							VolumeSpec: &apiv1alpha1.VolumeSpec{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 									Resources: corev1.VolumeResourceRequirements{
@@ -116,6 +125,13 @@ func TestReconcileVersions(t *testing.T) {
 										},
 									},
 								},
+							},
+						},
+					},
+					Proxy: apiv1alpha1.ProxySpec{
+						HAProxy: &apiv1alpha1.HAProxySpec{
+							PodSpec: apiv1alpha1.PodSpec{
+								Size: 2,
 							},
 						},
 					},
@@ -142,6 +158,7 @@ func TestReconcileVersions(t *testing.T) {
 					},
 					MySQL: apiv1alpha1.MySQLSpec{
 						PodSpec: apiv1alpha1.PodSpec{
+							Size: 3,
 							VolumeSpec: &apiv1alpha1.VolumeSpec{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 									Resources: corev1.VolumeResourceRequirements{
@@ -150,6 +167,13 @@ func TestReconcileVersions(t *testing.T) {
 										},
 									},
 								},
+							},
+						},
+					},
+					Proxy: apiv1alpha1.ProxySpec{
+						HAProxy: &apiv1alpha1.HAProxySpec{
+							PodSpec: apiv1alpha1.PodSpec{
+								Size: 2,
 							},
 						},
 					},
@@ -177,6 +201,7 @@ func TestReconcileVersions(t *testing.T) {
 					},
 					MySQL: apiv1alpha1.MySQLSpec{
 						PodSpec: apiv1alpha1.PodSpec{
+							Size: 3,
 							VolumeSpec: &apiv1alpha1.VolumeSpec{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 									Resources: corev1.VolumeResourceRequirements{
@@ -185,6 +210,13 @@ func TestReconcileVersions(t *testing.T) {
 										},
 									},
 								},
+							},
+						},
+					},
+					Proxy: apiv1alpha1.ProxySpec{
+						HAProxy: &apiv1alpha1.HAProxySpec{
+							PodSpec: apiv1alpha1.PodSpec{
+								Size: 2,
 							},
 						},
 					},
@@ -309,6 +341,7 @@ func TestGetVersion(t *testing.T) {
 					},
 					MySQL: apiv1alpha1.MySQLSpec{
 						PodSpec: apiv1alpha1.PodSpec{
+							Size: 3,
 							VolumeSpec: &apiv1alpha1.VolumeSpec{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 									Resources: corev1.VolumeResourceRequirements{
@@ -317,6 +350,13 @@ func TestGetVersion(t *testing.T) {
 										},
 									},
 								},
+							},
+						},
+					},
+					Proxy: apiv1alpha1.ProxySpec{
+						HAProxy: &apiv1alpha1.HAProxySpec{
+							PodSpec: apiv1alpha1.PodSpec{
+								Size: 2,
 							},
 						},
 					},
