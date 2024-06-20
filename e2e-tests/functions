@@ -12,14 +12,26 @@ init_temp_dir() {
 
 deploy_operator() {
 	kubectl -n "${NAMESPACE}" apply --server-side --force-conflicts -f "${DEPLOY_DIR}/crd.yaml"
-	kubectl -n "${NAMESPACE}" apply -f "${DEPLOY_DIR}/rbac.yaml"
 
-	yq eval \
-		"$(printf 'select(documentIndex==1).spec.template.spec.containers[0].image="%s"' "${IMAGE}")" \
-		"${DEPLOY_DIR}/operator.yaml" \
-		| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "true"' \
-		| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG"' \
-		| kubectl -n "${NAMESPACE}" apply -f -
+	if [ -n "$OPERATOR_NS" ]; then
+		kubectl -n "${NAMESPACE}" apply -f "${DEPLOY_DIR}/cw-rbac.yaml"
+
+		yq eval \
+			"$(printf 'select(documentIndex==1).spec.template.spec.containers[0].image="%s"' "${IMAGE}")" \
+			"${DEPLOY_DIR}/cw-operator.yaml" \
+			| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "true"' \
+			| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG"' \
+			| kubectl -n "${NAMESPACE}" apply -f -
+	else
+		kubectl -n "${NAMESPACE}" apply -f "${DEPLOY_DIR}/rbac.yaml"
+
+		yq eval \
+			"$(printf 'select(documentIndex==1).spec.template.spec.containers[0].image="%s"' "${IMAGE}")" \
+			"${DEPLOY_DIR}/operator.yaml" \
+			| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "true"' \
+			| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG"' \
+			| kubectl -n "${NAMESPACE}" apply -f -
+	fi
 }
 
 deploy_non_tls_cluster_secrets() {
