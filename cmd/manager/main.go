@@ -134,7 +134,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	nsClient := client.NewNamespacedClient(mgr.GetClient(), namespace)
+	// nsClient := client.NewNamespacedClient(mgr.GetClient(), namespace)
+	nsClient := mgr.GetClient()
 
 	cliCmd, err := clientcmd.NewClient()
 	if err != nil {
