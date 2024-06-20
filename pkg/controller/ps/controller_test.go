@@ -273,71 +273,53 @@ var _ = Describe("Unsafe configurations", Ordered, func() {
 	})
 
 	Context("Unsafe configurations are disabled", func() {
-		Specify("controller should set minimum safe number of replicas to MySQL statefulset", func() {
-			cr.Spec.AllowUnsafeConfig = false
+		Specify("controller shouldn't allow setting less than minimum safe size", func() {
+			cr.Spec.Unsafe.MySQLSize = false
 			cr.MySQLSpec().ClusterType = psv1alpha1.ClusterTypeGR
 			cr.MySQLSpec().Size = 1
 			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
 
 			_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
-			Expect(err).NotTo(HaveOccurred())
+			Expect(err).To(HaveOccurred())
 
-			sts := &appsv1.StatefulSet{}
-
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts)
-				return err == nil
-			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
-
-			Expect(*sts.Spec.Replicas).Should(Equal(int32(psv1alpha1.MinSafeGRSize)))
+			Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+			Expect(cr.Status.State).Should(Equal(psv1alpha1.StateError))
 		})
 
-		Specify("controller should set maximum safe number of replicas to MySQL statefulset", func() {
+		Specify("controller shouldn't allow setting more than maximum safe size", func() {
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, crNamespacedName, cr)
 				return err == nil
 			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 
-			cr.Spec.AllowUnsafeConfig = false
+			cr.Spec.Unsafe.MySQLSize = false
 			cr.MySQLSpec().ClusterType = psv1alpha1.ClusterTypeGR
 			cr.MySQLSpec().Size = 11
 			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
 
 			_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
-			Expect(err).NotTo(HaveOccurred())
+			Expect(err).To(HaveOccurred())
 
-			sts := &appsv1.StatefulSet{}
-
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts)
-				return err == nil
-			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
-
-			Expect(*sts.Spec.Replicas).Should(Equal(int32(psv1alpha1.MaxSafeGRSize)))
+			Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+			Expect(cr.Status.State).Should(Equal(psv1alpha1.StateError))
 		})
 
-		Specify("controller should set even number of replicas to MySQL statefulset", func() {
+		Specify("controller should't allow setting even number of nodes for MySQL", func() {
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, crNamespacedName, cr)
 				return err == nil
 			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 
-			cr.Spec.AllowUnsafeConfig = false
+			cr.Spec.Unsafe.MySQLSize = false
 			cr.MySQLSpec().ClusterType = psv1alpha1.ClusterTypeGR
 			cr.MySQLSpec().Size = 4
 			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
 
 			_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
-			Expect(err).NotTo(HaveOccurred())
+			Expect(err).To(HaveOccurred())
 
-			sts := &appsv1.StatefulSet{}
-
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts)
-				return err == nil
-			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
-
-			Expect(*sts.Spec.Replicas).Should(Equal(int32(5)))
+			Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
+			Expect(cr.Status.State).Should(Equal(psv1alpha1.StateError))
 		})
 	})
 
@@ -348,7 +330,7 @@ var _ = Describe("Unsafe configurations", Ordered, func() {
 				return err == nil
 			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 
-			cr.Spec.AllowUnsafeConfig = true
+			cr.Spec.Unsafe.MySQLSize = true
 			cr.MySQLSpec().ClusterType = psv1alpha1.ClusterTypeGR
 			cr.MySQLSpec().Size = 1
 			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
@@ -396,7 +378,6 @@ var _ = Describe("Reconcile HAProxy", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
 		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
 		cr.Spec.Proxy.HAProxy.Enabled = true
-		cr.Spec.AllowUnsafeConfig = false
 		cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 		It("should read and create defautl cr.yaml", func() {
 			Expect(err).NotTo(HaveOccurred())
@@ -416,7 +397,7 @@ var _ = Describe("Reconcile HAProxy", Ordered, func() {
 				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 
 				cr.Spec.Proxy.HAProxy.Enabled = false
-				cr.Spec.AllowUnsafeConfig = true
+				cr.Spec.Unsafe.Proxy = true
 				Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
 
 				_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})

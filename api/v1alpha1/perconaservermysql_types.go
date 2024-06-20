@@ -50,7 +50,7 @@ type PerconaServerMySQLSpec struct {
 	SecretsName           string                               `json:"secretsName,omitempty"`
 	SSLSecretName         string                               `json:"sslSecretName,omitempty"`
 	SSLInternalSecretName string                               `json:"sslInternalSecretName,omitempty"`
-	AllowUnsafeConfig     bool                                 `json:"allowUnsafeConfigurations,omitempty"`
+	Unsafe                UnsafeFlags                          `json:"unsafeFlags,omitempty"`
 	InitImage             string                               `json:"initImage,omitempty"`
 	IgnoreAnnotations     []string                             `json:"ignoreAnnotations,omitempty"`
 	IgnoreLabels          []string                             `json:"ignoreLabels,omitempty"`
@@ -63,6 +63,21 @@ type PerconaServerMySQLSpec struct {
 	Toolkit               *ToolkitSpec                         `json:"toolkit,omitempty"`
 	UpgradeOptions        UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	UpdateStrategy        appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+}
+
+type UnsafeFlags struct {
+	// MySQLSize allows to set MySQL size to a value less than the minimum safe size or higher than the maximum safe size.
+	MySQLSize bool `json:"mysqlSize,omitempty"`
+
+	// Proxy allows to disable proxy.
+	Proxy bool `json:"proxy,omitempty"`
+	// ProxySize allows to set proxy (HAProxy / Router) size to a value less than the minimum safe size.
+	ProxySize bool `json:"proxySize,omitempty"`
+
+	// Orchestrator allows to disable Orchestrator.
+	Orchestrator bool `json:"orchestrator,omitempty"`
+	// OrchestratorSize allows to set Orchestrator size to a value less than the minimum safe size.
+	OrchestratorSize bool `json:"orchestratorSize,omitempty"`
 }
 
 type TLSSpec struct {
@@ -676,26 +691,25 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 	cr.Spec.MySQL.reconcileAffinityOpts()
 	cr.Spec.Orchestrator.reconcileAffinityOpts()
 
-	if oSize := int(cr.Spec.Orchestrator.Size); cr.OrchestratorEnabled() && (oSize < 3 || oSize%2 == 0) && oSize != 0 && !cr.Spec.AllowUnsafeConfig {
-		return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup")
+	if oSize := int(cr.Spec.Orchestrator.Size); cr.OrchestratorEnabled() && (oSize < 3 || oSize%2 == 0) && oSize != 0 && !cr.Spec.Unsafe.OrchestratorSize {
+		return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup. Enable spec.unsafeFlags.orchestratorSize to bypass this check")
 	}
 
 	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Proxy.Router == nil {
 		return errors.New("router section is needed for group replication")
 	}
 
-	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && !cr.Spec.AllowUnsafeConfig {
+	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && !cr.Spec.Unsafe.MySQLSize {
 		if cr.Spec.MySQL.Size < MinSafeGRSize {
-			log.Info("Setting safe defaults, updating MySQL cluster size", "oldSize", cr.Spec.MySQL.Size, "newSafeSize", MinSafeGRSize)
-			cr.Spec.MySQL.Size = MinSafeGRSize
+			return errors.Errorf("MySQL size should be %d or greater for Group Replication. Enable spec.unsafeFlags.mysqlSize to set a lower size", MinSafeGRSize)
 		}
 
 		if cr.Spec.MySQL.Size > MaxSafeGRSize {
-			cr.Spec.MySQL.Size = MaxSafeGRSize
+			return errors.Errorf("MySQL size should be %d or lower for Group Replication. Enable spec.unsafeFlags.mysqlSize to set a higher size", MaxSafeGRSize)
 		}
 
 		if cr.Spec.MySQL.Size%2 == 0 {
-			cr.Spec.MySQL.Size++
+			return errors.New("MySQL size should be an odd number for Group Replication. Enable spec.unsafeFlags.mysqlSize to set an even number")
 		}
 	}
 
@@ -703,10 +717,9 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		return errors.New("MySQL Router and HAProxy can't be enabled at the same time")
 	}
 
-	if cr.RouterEnabled() && !cr.Spec.AllowUnsafeConfig {
+	if cr.RouterEnabled() && !cr.Spec.Unsafe.ProxySize {
 		if cr.Spec.Proxy.Router.Size < MinSafeProxySize {
-			log.Info("Setting safe defaults, updating Router size", "oldSize", cr.Spec.Proxy.Router.Size, "newSafeSize", MinSafeProxySize)
-			cr.Spec.Proxy.Router.Size = MinSafeProxySize
+			return errors.Errorf("Router size should be %d or greater. Enable spec.unsafeFlags.proxySize to set a lower size", MinSafeProxySize)
 		}
 	}
 
@@ -714,10 +727,9 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		cr.Spec.Proxy.HAProxy = new(HAProxySpec)
 	}
 
-	if cr.HAProxyEnabled() && !cr.Spec.AllowUnsafeConfig {
+	if cr.HAProxyEnabled() && !cr.Spec.Unsafe.ProxySize {
 		if cr.Spec.Proxy.HAProxy.Size < MinSafeProxySize {
-			log.Info("Setting safe defaults, updating HAProxy size", "oldSize", cr.Spec.Proxy.HAProxy.Size, "newSafeSize", MinSafeProxySize)
-			cr.Spec.Proxy.HAProxy.Size = MinSafeProxySize
+			return errors.Errorf("HAProxy size should be %d or greater. Enable spec.unsafeFlags.proxySize to set a lower size", MinSafeProxySize)
 		}
 	}
 
@@ -957,7 +969,7 @@ func (cr *PerconaServerMySQL) RouterEnabled() bool {
 
 // HAProxyEnabled verifies if HAProxy is enabled based on MySQL configuration and safety settings.
 func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
-	if cr.MySQLSpec().IsAsync() && !cr.Spec.AllowUnsafeConfig {
+	if cr.MySQLSpec().IsAsync() && !cr.Spec.Unsafe.Proxy {
 		return true
 	}
 
@@ -971,7 +983,7 @@ func (cr *PerconaServerMySQL) OrchestratorEnabled() bool {
 		return false
 	}
 
-	if cr.MySQLSpec().IsAsync() && !cr.Spec.AllowUnsafeConfig {
+	if cr.MySQLSpec().IsAsync() && !cr.Spec.Unsafe.Orchestrator {
 		return true
 	}
 
