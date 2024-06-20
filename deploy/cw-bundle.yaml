@@ -10147,6 +10147,18 @@ rules:
   - update
   - watch
 - apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
   - ""
   resources:
   - events
@@ -10283,6 +10295,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: percona-server-mysql-operator
+  namespace: ps-operator
 ---
 apiVersion: v1
 data:
