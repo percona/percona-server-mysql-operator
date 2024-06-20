@@ -217,13 +217,12 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 		return false, errors.Wrap(err, "get operator password")
 	}
 
-	firstPod, err := getMySQLPod(ctx, r.Client, cr, 0)
+	pod, err := getReadyMySQLPod(ctx, r.Client, cr)
 	if err != nil {
-		return false, err
+		return false, errors.Wrap(err, "get ready mysql pod")
 	}
 
-	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
-	db := database.NewReplicationManager(firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, firstPodUri)
+	db := database.NewReplicationManager(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
 
 	dbExists, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata")
 	if err != nil {
