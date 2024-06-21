@@ -116,7 +116,6 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 			return err
 		}
 	}
-	
 	backoff := wait.Backoff{
 		Steps:    5,
 		Duration: 500 * time.Millisecond,
