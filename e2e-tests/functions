@@ -82,7 +82,7 @@ get_pmm_api_key() {
 	fi
 
 	local ADMIN_PASSWORD
-	ADMIN_PASSWORD=$(kubectl -n "$NAMESPACE}" exec monitoring-0 -- bash -c "printenv | grep ADMIN_PASSWORD | cut -d '=' -f2")
+	ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "printenv | grep ADMIN_PASSWORD | cut -d '=' -f2")
 	curl --insecure -X POST -H "Content-Type: application/json" -d "{\"name\":\"$key_name\", \"role\": \"Admin\"}" "https://admin:$ADMIN_PASSWORD@$(get_service_ip monitoring-service)/graph/api/auth/keys" | jq .key
 }
 
@@ -94,7 +94,7 @@ delete_pmm_api_key() {
 	fi
 
 	local ADMIN_PASSWORD
-	ADMIN_PASSWORD=$(kubectl -n "$NAMESPACE}" exec monitoring-0 -- bash -c "printenv | grep ADMIN_PASSWORD | cut -d '=' -f2")
+	ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "printenv | grep ADMIN_PASSWORD | cut -d '=' -f2")
 
 	local key_id
 	key_id=$(curl --insecure -X GET "https://admin:$ADMIN_PASSWORD@$(get_service_ip monitoring-service)/graph/api/auth/keys" | jq '.[] | select( .name == "operator").id')
@@ -104,14 +104,14 @@ delete_pmm_api_key() {
 deploy_minio() {
 	local access_key
 	local secret_key
-	access_key="$(kubectl -n "$NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
-	secret_key="$(kubectl -n "$NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
+	access_key="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
+	secret_key="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
 
-	helm uninstall -n "$NAMESPACE}" minio-service || :
+	helm uninstall -n "${NAMESPACE}" minio-service || :
 	helm repo remove minio || :
 	helm repo add minio https://charts.min.io/
 	retry 10 60 helm install minio-service \
-		-n "$NAMESPACE}" \
+		-n "${NAMESPACE}" \
 		--version 5.0.14 \
 		--set replicas=1 \
 		--set mode=standalone \
@@ -126,11 +126,11 @@ deploy_minio() {
 		--set persistence.size=2G \
 		--set securityContext.enabled=false \
 		minio/minio
-	MINIO_POD=$(kubectl -n "$NAMESPACE}" get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
+	MINIO_POD=$(kubectl -n "${NAMESPACE}" get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
 	wait_pod $MINIO_POD
 
 	# create bucket
-	kubectl -n "$NAMESPACE}" run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+	kubectl -n "${NAMESPACE}" run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 		bash -c "AWS_ACCESS_KEY_ID='$access_key' AWS_SECRET_ACCESS_KEY='$secret_key' AWS_DEFAULT_REGION=us-east-1 \
         /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing"
 }
