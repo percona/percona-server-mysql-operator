@@ -115,7 +115,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 			return err
 		}
 	}
-	
+
 	backoff := wait.Backoff{
 		Steps:    5,
 		Duration: 500 * time.Millisecond,
@@ -135,11 +135,11 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	})
 
 	if err != nil {
-		log.Info("smart update of  primary pod did not finish correctly after 10 retries")
+		log.Info("smart update of  primary pod did not finish correctly after 5 retries")
 		return err
 	}
 
-	log.Info("primary pod updated", "primPod name", primPod.Name)
+	log.Info("primary pod updated", "pod", primPod.Name)
 	log.Info("smart update finished")
 	return nil
 
