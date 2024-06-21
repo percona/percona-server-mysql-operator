@@ -97,7 +97,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		log.Info("apply changes to secondary pod", "pod", pod.Name)
 
 		if pod.ObjectMeta.Labels[controllerRevisionHash] == sts.Status.UpdateRevision {
-			log.Info("pod updated updated", "pod", pod.Name)
+			log.Info("pod updated", "pod", pod.Name)
 			continue
 		}
 
@@ -106,13 +106,46 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 
 	log.Info("apply changes to primary pod", "pod", primPod.Name)
 
-	if primPod.ObjectMeta.Labels[controllerRevisionHash] == sts.Status.UpdateRevision {
-		log.Info("primary pod updated updated", "primPod name", primPod.Name)
-		log.Info("smart update finished")
+	if primPod.ObjectMeta.Labels[controllerRevisionHash] != sts.Status.UpdateRevision {
+		log.Info("primary pod was deleted", "pod", primPod.Name)
+		err = deletePod(ctx, r.Client, primPod, currentSet)
+
+		if err != nil {
+			log.Info("primary pod deletion error", "pod", primPod.Name)
+			return err
+		}
+	}
+
+	retriable := func(err error) bool {
+		return err != nil
+	}
+
+	retry := k8sretry.DefaultRetry
+	retry.Duration = 5 * time.Second
+	retry.Steps = 10
+
+	err = k8sretry.OnError(retry, retriable, func() error {
+
+		primPod, err := getMySQLPod(ctx, r.Client, cr, idx)
+		if err != nil {
+			return errors.Wrap(err, "get primary pod")
+		}
+
+		if primPod.ObjectMeta.Labels[controllerRevisionHash] != sts.Status.UpdateRevision {
+			return errors.New("primary pod controllerRevisionHash not equal sts.Status.UpdateRevision")
+		}
+		return nil
+	})
+
+	if err != nil {
+		log.Info("smart update of  primary pod did not finish correctly after 10 retries")
 		return nil
 	}
 
-	return deletePod(ctx, r.Client, primPod, currentSet)
+	log.Info("primary pod updated", "primPod name", primPod.Name)
+	log.Info("smart update finished")
+	return nil
+
 }
 
 func stsChanged(sts *appsv1.StatefulSet, pods []corev1.Pod) bool {
