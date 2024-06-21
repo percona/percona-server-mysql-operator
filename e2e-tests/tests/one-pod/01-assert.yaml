@@ -43,7 +43,8 @@ kind: PerconaServerMySQL
 metadata:
   name: one-pod
 spec:
-  allowUnsafeConfigurations: true
+  unsafeFlags:
+    mysqlSize: true
   mysql:
     clusterType: async
     size: 1

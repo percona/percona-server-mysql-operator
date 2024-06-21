@@ -88,8 +88,6 @@ apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
   name: gr-security-context
-spec:
-  allowUnsafeConfigurations: false
 status:
   conditions:
   - reason: Initializing

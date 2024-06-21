@@ -6,7 +6,12 @@ metadata:
     - percona.com/delete-mysql-pods-in-order
     # - percona.com/delete-ssl
 spec:
-  allowUnsafeConfigurations: false
+#  unsafeFlags:
+#    mysqlSize: false
+#    orchestrator: false
+#    orchestratorSize: false
+#    proxy: false
+#    proxySize: false
 #  pause: false
   crVersion: 0.8.0
   secretsName: cluster1-secrets
@@ -84,6 +89,7 @@ spec:
 #      type: ClusterIP
 #      annotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+#        service.beta.kubernetes.io/aws-load-balancer-type: nlb
 #      externalTrafficPolicy: Cluster
 #      internalTrafficPolicy: Cluster
 #      labels:
@@ -231,6 +237,7 @@ spec:
 #        type: ClusterIP
 #        annotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+#          service.beta.kubernetes.io/aws-load-balancer-type: nlb
 #        externalTrafficPolicy: Cluster
 #        internalTrafficPolicy: Cluster
 #        labels:
@@ -288,6 +295,7 @@ spec:
 #        type: ClusterIP
 #        annotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+#          service.beta.kubernetes.io/aws-load-balancer-type: nlb
 #        externalTrafficPolicy: Cluster
 #        internalTrafficPolicy: Cluster
 #        labels:
@@ -330,6 +338,7 @@ spec:
 #      type: ClusterIP
 #      annotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+#        service.beta.kubernetes.io/aws-load-balancer-type: nlb
 #      externalTrafficPolicy: Cluster
 #      internalTrafficPolicy: Cluster
 #      labels:

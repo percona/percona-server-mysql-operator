@@ -36,12 +36,12 @@ metadata:
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
-  name: gr-finalizer-pso-ca-issuer
+  name: gr-finalizer-ps-ca-issuer
 ---
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
-  name: gr-finalizer-pso-issuer
+  name: gr-finalizer-ps-issuer
 ---
 apiVersion: apps/v1
 kind: StatefulSet

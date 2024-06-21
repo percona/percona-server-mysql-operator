@@ -283,8 +283,9 @@ func TestReconcileStatusAsync(t *testing.T) {
 		{
 			name: "with all ready pods without orchestrator",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQL) {
+				cr.Spec.Unsafe.Orchestrator = true
+				cr.Spec.Unsafe.MySQLSize = true
 				cr.Spec.Orchestrator.Enabled = false
-				cr.Spec.AllowUnsafeConfig = true
 				cr.Spec.Proxy.HAProxy.Enabled = true
 				cr.Spec.MySQL.Size = 1
 				cr.Generation = 1
@@ -324,7 +325,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 			name: "with all ready pods without haproxy",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQL) {
 				cr.Spec.Orchestrator.Enabled = true
-				cr.Spec.AllowUnsafeConfig = true
+				cr.Spec.Unsafe.Proxy = true
 				cr.Spec.Proxy.HAProxy.Enabled = false
 			}),
 			objects: appendSlices(
@@ -1138,6 +1139,7 @@ func makeFakeReadyPods(cr *apiv1alpha1.PerconaServerMySQL, amount int, podType s
 			},
 		},
 		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
 			Conditions: []corev1.PodCondition{
 				{
 					Type:   corev1.ContainersReady,
