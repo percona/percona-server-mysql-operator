@@ -2,6 +2,7 @@ package ps
 
 import (
 	"context"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"time"
 
 	"github.com/pkg/errors"
@@ -115,16 +116,14 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 			return err
 		}
 	}
-
-	retriable := func(err error) bool {
-		return err != nil
+	
+	backoff := wait.Backoff{
+		Steps:    5,
+		Duration: 500 * time.Millisecond,
+		Factor:   5.0,
+		Jitter:   0.1,
 	}
-
-	retry := k8sretry.DefaultRetry
-	retry.Duration = 5 * time.Second
-	retry.Steps = 10
-
-	err = k8sretry.OnError(retry, retriable, func() error {
+	err = k8sretry.OnError(backoff, func(err error) bool { return err != nil }, func() error {
 
 		primPod, err := getMySQLPod(ctx, r.Client, cr, idx)
 		if err != nil {
@@ -139,7 +138,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 
 	if err != nil {
 		log.Info("smart update of  primary pod did not finish correctly after 10 retries")
-		return nil
+		return err
 	}
 
 	log.Info("primary pod updated", "primPod name", primPod.Name)
