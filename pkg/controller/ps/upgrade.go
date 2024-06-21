@@ -123,7 +123,6 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		Jitter:   0.1,
 	}
 	err = k8sretry.OnError(backoff, func(err error) bool { return err != nil }, func() error {
-
 		primPod, err := getMySQLPod(ctx, r.Client, cr, idx)
 		if err != nil {
 			return errors.Wrap(err, "get primary pod")
