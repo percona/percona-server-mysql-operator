@@ -2,6 +2,7 @@ package ps
 
 import (
 	"context"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"time"
 
 	"github.com/pkg/errors"
@@ -97,7 +98,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		log.Info("apply changes to secondary pod", "pod", pod.Name)
 
 		if pod.ObjectMeta.Labels[controllerRevisionHash] == sts.Status.UpdateRevision {
-			log.Info("pod updated updated", "pod", pod.Name)
+			log.Info("pod updated", "pod", pod.Name)
 			continue
 		}
 
@@ -106,13 +107,42 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 
 	log.Info("apply changes to primary pod", "pod", primPod.Name)
 
-	if primPod.ObjectMeta.Labels[controllerRevisionHash] == sts.Status.UpdateRevision {
-		log.Info("primary pod updated updated", "primPod name", primPod.Name)
-		log.Info("smart update finished")
-		return nil
+	if primPod.ObjectMeta.Labels[controllerRevisionHash] != sts.Status.UpdateRevision {
+		log.Info("primary pod was deleted", "pod", primPod.Name)
+		err = deletePod(ctx, r.Client, primPod, currentSet)
+		if err != nil {
+			log.Info("primary pod deletion error", "pod", primPod.Name)
+			return err
+		}
 	}
 
-	return deletePod(ctx, r.Client, primPod, currentSet)
+	backoff := wait.Backoff{
+		Steps:    5,
+		Duration: 500 * time.Millisecond,
+		Factor:   5.0,
+		Jitter:   0.1,
+	}
+	err = k8sretry.OnError(backoff, func(err error) bool { return err != nil }, func() error {
+		primPod, err := getMySQLPod(ctx, r.Client, cr, idx)
+		if err != nil {
+			return errors.Wrap(err, "get primary pod")
+		}
+
+		if primPod.ObjectMeta.Labels[controllerRevisionHash] != sts.Status.UpdateRevision {
+			return errors.New("primary pod controllerRevisionHash not equal sts.Status.UpdateRevision")
+		}
+		return nil
+	})
+
+	if err != nil {
+		log.Info("smart update of  primary pod did not finish correctly after 5 retries")
+		return err
+	}
+
+	log.Info("primary pod updated", "pod", primPod.Name)
+	log.Info("smart update finished")
+	return nil
+
 }
 
 func stsChanged(sts *appsv1.StatefulSet, pods []corev1.Pod) bool {
