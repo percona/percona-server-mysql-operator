@@ -110,12 +110,12 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	if primPod.ObjectMeta.Labels[controllerRevisionHash] != sts.Status.UpdateRevision {
 		log.Info("primary pod was deleted", "pod", primPod.Name)
 		err = deletePod(ctx, r.Client, primPod, currentSet)
-
 		if err != nil {
 			log.Info("primary pod deletion error", "pod", primPod.Name)
 			return err
 		}
 	}
+	
 	backoff := wait.Backoff{
 		Steps:    5,
 		Duration: 500 * time.Millisecond,
