@@ -817,6 +817,38 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		}
 	}
 
+	clusterInstances, err := orchestrator.Cluster(ctx, r.ClientCmd, pod, cr.ClusterHint())
+	if err != nil {
+		return errors.Wrap(err, "get cluster instances")
+	}
+
+	// In the case of a cluster downscale, we need to forget replicas that are not part of the cluster
+	if len(clusterInstances) > int(cr.MySQLSpec().Size) {
+		mysqlPods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
+		if err != nil {
+			return errors.Wrap(err, "get mysql pods")
+		}
+
+		podSet := make(map[string]struct{}, len(mysqlPods))
+		for _, p := range mysqlPods {
+			podSet[p.Name] = struct{}{}
+		}
+
+		log.Info("AAAAAAAAAA podSet", "podSet", podSet)
+
+		for _, instance := range clusterInstances {
+			if _, ok := podSet[instance.Alias]; ok {
+				continue
+			}
+
+			log.Info("BBBBBBBBBBBBBBB Forget replica", "replica", instance.Alias)
+			err := orchestrator.ForgetInstance(ctx, r.ClientCmd, pod, instance.Alias, int(instance.Key.Port))
+			if err != nil {
+				return errors.Wrapf(err, "forget replica %s", instance.Alias)
+			}
+		}
+	}
+
 	return nil
 }
 
