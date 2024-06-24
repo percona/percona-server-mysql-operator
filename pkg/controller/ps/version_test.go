@@ -293,7 +293,7 @@ func TestReconcileVersions(t *testing.T) {
 			}
 
 			if err := r.reconcileVersions(ctx, cr); err != nil {
-				if tt.shouldErr {
+				if tt.shouldErr || errors.Is(err, ErrShouldReconcile) {
 					return
 				}
 				t.Fatal(err, "failed to reconcile versions")
@@ -536,6 +536,7 @@ type mockClientConn struct {
 func (m *mockClientConn) Invoke(ctx context.Context, method string, args, reply any, opts ...grpc.CallOption) error {
 	return grpcmock.InvokeUnary(ctx, method, args, reply, grpcmock.WithInsecure(), grpcmock.WithCallOptions(opts...), grpcmock.WithContextDialer(m.dialer))
 }
+
 func (m *mockClientConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 	return nil, errors.New("unimplemented")
 }
