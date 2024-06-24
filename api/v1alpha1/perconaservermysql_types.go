@@ -558,7 +558,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		cr.Spec.MySQL.StartupProbe.SuccessThreshold = 1
 	}
 	if cr.Spec.MySQL.StartupProbe.TimeoutSeconds == 0 {
-		cr.Spec.MySQL.StartupProbe.TimeoutSeconds = 300
+		cr.Spec.MySQL.StartupProbe.TimeoutSeconds = 12 * 60 * 60
 	}
 
 	if cr.Spec.MySQL.LivenessProbe.InitialDelaySeconds == 0 {
