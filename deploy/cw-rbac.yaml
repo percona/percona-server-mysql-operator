@@ -65,7 +65,7 @@ rules:
   - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
   name: percona-server-mysql-operator
 rules:
@@ -85,6 +85,18 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
 - apiGroups:
   - ""
   resources:
@@ -212,14 +224,15 @@ subjects:
   name: percona-server-mysql-operator-orchestrator
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
   name: percona-server-mysql-operator
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
+  kind: ClusterRole
   name: percona-server-mysql-operator
 subjects:
 - kind: ServiceAccount
   name: percona-server-mysql-operator
+  namespace: ps-operator
 ---

@@ -35,7 +35,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsServer "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -134,7 +133,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	nsClient := client.NewNamespacedClient(mgr.GetClient(), namespace)
+	nsClient := mgr.GetClient()
 
 	cliCmd, err := clientcmd.NewClient()
 	if err != nil {
