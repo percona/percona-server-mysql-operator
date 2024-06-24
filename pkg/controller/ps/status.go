@@ -3,6 +3,7 @@ package ps
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -65,13 +66,28 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 	cr.Status.MySQL = mysqlStatus
 
-	if mysqlStatus.State == apiv1alpha1.StateReady && cr.Spec.MySQL.IsGR() {
-		ready, err := r.isGRReady(ctx, cr)
-		if err != nil {
-			return errors.Wrap(err, "check if GR ready")
+	if mysqlStatus.State == apiv1alpha1.StateReady {
+		if cr.Spec.MySQL.IsGR() {
+			ready, err := r.isGRReady(ctx, cr)
+			if err != nil {
+				return errors.Wrap(err, "check if GR is ready")
+			}
+			if !ready {
+				mysqlStatus.State = apiv1alpha1.StateInitializing
+			}
 		}
-		if !ready {
-			mysqlStatus.State = apiv1alpha1.StateInitializing
+
+		if cr.Spec.MySQL.IsAsync() && cr.OrchestratorEnabled() {
+			ready, msg, err := r.isAsyncReady(ctx, cr)
+			if err != nil {
+				return errors.Wrap(err, "check if async is ready")
+			}
+			if !ready {
+				mysqlStatus.State = apiv1alpha1.StateInitializing
+
+				r.Recorder.Event(cr, "Warning", "AsyncReplicationNotReady", msg)
+
+			}
 		}
 	}
 	cr.Status.MySQL = mysqlStatus
@@ -255,6 +271,41 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 	log.V(1).Info("GR is ready")
 
 	return true, nil
+}
+
+func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, string, error) {
+	pod, err := getReadyOrcPod(ctx, r.Client, cr)
+	if err != nil {
+		return false, "", err
+	}
+
+	instances, err := orchestrator.Cluster(ctx, r.ClientCmd, pod, cr.ClusterHint())
+	if err != nil {
+		return false, "", err
+	}
+
+	problems := make(map[string][]string)
+
+	for _, i := range instances {
+		if len(i.Problems) > 0 {
+			problems[i.Alias] = i.Problems
+		}
+	}
+
+	// formatMessage formats a map of problems to a message like
+	// 'cluster1-mysql-1:[not_replicating, replication_lag], cluster1-mysql-2:[not_replicating]'
+	formatMessage := func(problems map[string][]string) string {
+		var sb strings.Builder
+		for k, v := range problems {
+			joinedValues := strings.Join(v, ", ")
+			sb.WriteString(fmt.Sprintf("%s: [%s], ", k, joinedValues))
+		}
+
+		return strings.TrimRight(sb.String(), ", ")
+	}
+
+	msg := formatMessage(problems)
+	return msg == "", msg, nil
 }
 
 func (r *PerconaServerMySQLReconciler) allLoadBalancersReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
