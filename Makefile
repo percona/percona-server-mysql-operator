@@ -108,6 +108,13 @@ manifests: kustomize generate
 	echo "---" >> $(DEPLOYDIR)/operator.yaml
 	cat $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/rbac.yaml $(DEPLOYDIR)/operator.yaml > $(DEPLOYDIR)/bundle.yaml
 
+	$(KUSTOMIZE) build config/rbac/cluster/ > $(DEPLOYDIR)/cw-rbac.yaml
+	echo "---" >> $(DEPLOYDIR)/cw-rbac.yaml
+	cd config/manager/cluster && $(KUSTOMIZE) edit set image perconalab/percona-server-mysql-operator=$(IMAGE)
+	$(KUSTOMIZE) build config/manager/cluster/ > $(DEPLOYDIR)/cw-operator.yaml
+	echo "---" >> $(DEPLOYDIR)/cw-operator.yaml
+	cat $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/cw-rbac.yaml $(DEPLOYDIR)/cw-operator.yaml > $(DEPLOYDIR)/cw-bundle.yaml
+
 gen-versionservice-client: swagger
 	rm pkg/version/service/version.swagger.yaml
 	curl https://raw.githubusercontent.com/Percona-Lab/percona-version-service/main/api/version.swagger.yaml --output pkg/version/service/version.swagger.yaml

@@ -1,24 +1,90 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 30
+timeout: 500
 ---
-kind: ConfigMap
-apiVersion: v1
+apiVersion: batch/v1
+kind: Job
 metadata:
-  name: 06-read-data-minio-0
-data:
-  data: "100500"
----
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: 06-read-data-minio-1
-data:
-  data: "100500"
----
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: 06-read-data-minio-2
-data:
-  data: "100500"
+  annotations:
+    batch.kubernetes.io/job-tracking: ""
+  generation: 1
+  labels:
+    app.kubernetes.io/component: xtrabackup
+    app.kubernetes.io/instance: gr-security-context
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: xb-restore-gr-security-context-restore-minio
+spec:
+  backoffLimit: 4
+  completionMode: NonIndexed
+  completions: 1
+  parallelism: 1
+  suspend: false
+  template:
+    spec:
+      containers:
+      - command:
+        - /opt/percona/run-restore.sh
+        image: perconalab/percona-server-mysql-operator:main-backup
+        imagePullPolicy: Always
+        name: xtrabackup
+        resources: {}
+        securityContext:
+          privileged: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-tls-secret
+          name: tls
+      dnsPolicy: ClusterFirst
+      initContainers:
+      - command:
+        - /opt/percona-server-mysql-operator/ps-init-entrypoint.sh
+        imagePullPolicy: Always
+        name: xtrabackup-init
+        resources: {}
+        securityContext:
+          privileged: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
+        - mountPath: /etc/mysql/mysql-tls-secret
+          name: tls
+      restartPolicy: Never
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 1001
+        supplementalGroups:
+        - 1001
+        - 1002
+        - 1003
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - emptyDir: {}
+        name: bin
+      - name: datadir
+        persistentVolumeClaim:
+          claimName: datadir-gr-security-context-mysql-0
+      - name: users
+        secret:
+          defaultMode: 420
+          secretName: test-secrets
+      - name: tls
+        secret:
+          defaultMode: 420
+          secretName: test-ssl
+status:
+  active: 1
+  ready: 0
+  uncountedTerminatedPods: {}

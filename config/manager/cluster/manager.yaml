@@ -1,0 +1,61 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: percona-server-mysql-operator
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: percona-server-mysql-operator
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: percona-server-mysql-operator
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - command:
+        - /usr/local/bin/percona-server-mysql-operator
+        args:
+        - --leader-elect
+        env:
+        - name: LOG_STRUCTURED
+          value: 'false'
+        - name: LOG_LEVEL
+          value: INFO
+        - name: WATCH_NAMESPACE
+          value: ""
+        - name: DISABLE_TELEMETRY
+          value: "false"
+        image: perconalab/percona-server-mysql-operator:main
+        imagePullPolicy: Always
+        name: manager
+        securityContext:
+          allowPrivilegeEscalation: false
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 200m
+            memory: 100Mi
+          requests:
+            cpu: 100m
+            memory: 20Mi
+      serviceAccountName: percona-server-mysql-operator
+      terminationGracePeriodSeconds: 10
