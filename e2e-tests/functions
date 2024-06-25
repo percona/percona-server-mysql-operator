@@ -10,7 +10,34 @@ init_temp_dir() {
 	mkdir -p "$TEMP_DIR"
 }
 
+create_namespace() {
+	local namespace=$1
+
+	if [[ $OPENSHIFT ]]; then
+		set -o pipefail
+		if [[ $OPERATOR_NS ]] && (oc get project "$OPERATOR_NS" -o json >/dev/null 2>&1 | jq -r '.metadata.name' >/dev/null 2>&1); then
+			oc delete --grace-period=0 --force=true project "$namespace" && sleep 120 || :
+		else
+			oc delete project "$namespace" && sleep 40 || :
+		fi
+		wait_for_delete "project/$namespace"
+
+		oc new-project "$namespace"
+		oc project "$namespace"
+		oc adm policy add-scc-to-user hostaccess -z default || :
+	else
+		kubectl delete namespace $namespace --ignore-not-found || :
+		kubectl wait --for=delete namespace "$namespace" || :
+		kubectl create namespace $namespace
+	fi
+}
+
 deploy_operator() {
+
+	if [[ $OPERATOR_NS ]]; then
+		create_namespace "${OPERATOR_NS}"
+	fi
+
 	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply --server-side --force-conflicts -f "${DEPLOY_DIR}/crd.yaml"
 
 	if [ -n "$OPERATOR_NS" ]; then
