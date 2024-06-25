@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	k8sretry "k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -52,83 +53,19 @@ func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr
 		return errors.Wrap(err, "failed to get versions")
 	}
 
-	printedMsg := false
-	shouldUpdate := false
+	updated := updateImages(cr, version, log, true)
+	if !updated {
+		return nil
+	}
+
 	nn := client.ObjectKeyFromObject(cr)
 	err = k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		cr, err := k8s.GetCRWithDefaults(ctx, r.Client, nn, r.ServerVersion)
 		if err != nil {
 			return errors.Wrap(err, "get cr with defaults")
 		}
-		logMsg := func(msg string, keysAndValues ...any) {
-			if printedMsg {
-				return
-			}
-			shouldUpdate = true
-			log.Info(msg, keysAndValues...)
-		}
 
-		if cr.Spec.MySQL.Image != version.PSImage {
-			if cr.Status.MySQL.Version == "" {
-				logMsg("set MySQL version to " + version.PSVersion)
-			} else {
-				logMsg("update MySQL version", "old version", cr.Status.MySQL.Version, "new version", version.PSVersion)
-			}
-			cr.Spec.MySQL.Image = version.PSImage
-		}
-		if cr.Spec.Backup.Image != version.BackupImage {
-			if cr.Status.BackupVersion == "" {
-				logMsg("set backup version to " + version.BackupVersion)
-			} else {
-				logMsg("update backup version", "old version", cr.Status.BackupVersion, "new version", version.BackupVersion)
-			}
-			cr.Spec.Backup.Image = version.BackupImage
-		}
-		if cr.Spec.Orchestrator.Image != version.OrchestratorImage {
-			if cr.Status.Orchestrator.Version == "" {
-				logMsg("set orchestrator version to " + version.OrchestratorVersion)
-			} else {
-				logMsg("update orchestrator version", "old version", cr.Status.Orchestrator.Version, "new version", version.OrchestratorVersion)
-			}
-			cr.Spec.Orchestrator.Image = version.OrchestratorImage
-		}
-		if cr.Spec.Proxy.Router.Image != version.RouterImage {
-			if cr.Status.Router.Version == "" {
-				logMsg("set MySQL router version to " + version.RouterVersion)
-			} else {
-				logMsg("update MySQL router version", "old version", cr.Status.Router.Version, "new version", version.RouterVersion)
-			}
-			cr.Spec.Proxy.Router.Image = version.RouterImage
-		}
-		if cr.Spec.PMM.Image != version.PMMImage {
-			if cr.Status.PMMVersion == "" {
-				logMsg("set PMM version to " + version.PMMVersion)
-			} else {
-				logMsg("update PMM version", "old version", cr.Status.PMMVersion, "new version", version.PMMVersion)
-			}
-			cr.Spec.PMM.Image = version.PMMImage
-		}
-		if cr.Spec.Proxy.HAProxy.Image != version.HAProxyImage {
-			if cr.Status.HAProxy.Version == "" {
-				logMsg("set HAProxy version to " + version.HAProxyVersion)
-			} else {
-				logMsg("update HAProxy version", "old version", cr.Status.HAProxy.Version, "new version", version.HAProxyVersion)
-			}
-			cr.Spec.Proxy.HAProxy.Image = version.HAProxyImage
-		}
-		if cr.Spec.Toolkit.Image != version.ToolkitImage {
-			if cr.Status.ToolkitVersion == "" {
-				logMsg("set Percona Toolkit version to " + version.ToolkitVersion)
-			} else {
-				logMsg("update Percona Toolkit version", "old version", cr.Status.ToolkitVersion, "new version", version.ToolkitVersion)
-			}
-			cr.Spec.Toolkit.Image = version.ToolkitImage
-		}
-
-		printedMsg = true
-		if !shouldUpdate {
-			return nil
-		}
+		_ = updateImages(cr, version, log, false)
 
 		return r.Client.Update(ctx, cr)
 	})
@@ -137,16 +74,83 @@ func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr
 		return errors.Wrap(err, "failed to update CR")
 	}
 
-	cr.Status.MySQL.Version = version.PSVersion
-	cr.Status.BackupVersion = version.BackupVersion
-	cr.Status.Orchestrator.Version = version.OrchestratorVersion
-	cr.Status.Router.Version = version.RouterVersion
-	cr.Status.PMMVersion = version.PMMVersion
-	cr.Status.HAProxy.Version = version.HAProxyVersion
-	cr.Status.ToolkitVersion = version.ToolkitVersion
+	return ErrShouldReconcile
+}
 
-	if shouldUpdate {
-		return ErrShouldReconcile
+func updateImages(cr *apiv1alpha1.PerconaServerMySQL, version vs.DepVersion, log logr.Logger, updateStatus bool) bool {
+	type ptrStr struct {
+		currentImage   *string
+		currentVersion *string
+
+		newImage   string
+		newVersion string
 	}
-	return nil
+
+	m := map[string]ptrStr{
+		"MySQL": {
+			&cr.Spec.MySQL.Image,
+			&cr.Status.MySQL.Version,
+			version.PSImage,
+			version.PSVersion,
+		},
+		"backup": {
+			&cr.Spec.Backup.Image,
+			&cr.Status.BackupVersion,
+			version.BackupImage,
+			version.BackupVersion,
+		},
+		"orchestrator": {
+			&cr.Spec.Orchestrator.Image,
+			&cr.Status.Orchestrator.Version,
+			version.OrchestratorImage,
+			version.OrchestratorVersion,
+		},
+		"MySQL Router": {
+			&cr.Spec.Proxy.Router.Image,
+			&cr.Status.Router.Version,
+			version.RouterImage,
+			version.RouterVersion,
+		},
+		"PMM": {
+			&cr.Spec.Proxy.Router.Image,
+			&cr.Status.Router.Version,
+			version.RouterImage,
+			version.RouterVersion,
+		},
+		"HAProxy": {
+			&cr.Spec.Proxy.HAProxy.Image,
+			&cr.Status.HAProxy.Version,
+			version.HAProxyImage,
+			version.HAProxyVersion,
+		},
+		"Percona Toolkit": {
+			&cr.Spec.Toolkit.Image,
+			&cr.Status.ToolkitVersion,
+			version.ToolkitImage,
+			version.ToolkitVersion,
+		},
+	}
+
+	updated := false
+	for name, s := range m {
+		if *s.currentImage == s.newImage {
+			continue
+		}
+
+		updated = true
+		*s.currentImage = s.newImage
+
+		if !updateStatus {
+			continue
+		}
+
+		if *s.currentVersion == "" {
+			log.Info("set " + name + " version to " + s.newVersion)
+		} else {
+			log.Info("update "+name+" version", "old version", *s.currentVersion, "new version", s.newVersion)
+		}
+		*s.currentVersion = s.newVersion
+	}
+
+	return updated
 }
