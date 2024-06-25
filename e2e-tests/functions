@@ -515,7 +515,6 @@ deploy_version_service() {
 	kubectl apply -n "${OPERATOR_NS:-$NAMESPACE}" -f "${TESTS_CONFIG_DIR}/vs.yaml"
 	VS_POD_NAME=$(kubectl -n "${OPERATOR_NS:-$NAMESPACE}" get pods --selector=name=percona-version-service -o 'jsonpath={.items[].metadata.name}')
 	wait_pod $VS_POD_NAME
-	sleep 5
 }
 
 deploy_cert_manager() {
