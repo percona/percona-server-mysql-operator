@@ -230,7 +230,7 @@ metadata:
   name: percona-server-mysql-operator-orchestrator
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
+  kind: ClusterRole
   name: percona-server-mysql-operator-orchestrator
 subjects:
 - kind: ServiceAccount
