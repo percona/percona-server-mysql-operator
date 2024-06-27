@@ -596,7 +596,7 @@ check_passwords_leak() {
 		base64 -d <<<$i
 		echo
 	done) $secrets"
-	pods=$(kubectl -n "${OPERATOR_NS:-$NAMESPACE}" get pods -o name | awk -F "/" '{print $2}')
+	pods=$(kubectl -n "${NAMESPACE}" get pods -o name | awk -F "/" '{print $2}')
 
 	collect_logs() {
 		local containers
