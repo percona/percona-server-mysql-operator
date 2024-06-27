@@ -79,7 +79,7 @@ help: ## Display this help.
 ##@ Development
 
 generate: controller-gen
-	$(CONTROLLER_GEN) crd:maxDescLen=0 rbac:roleName=$(NAME) webhook paths="./..." output:crd:artifacts:config=config/crd/bases  ## Generate WebhookConfiguration, Role and CustomResourceDefinition objects.
+	$(CONTROLLER_GEN) crd:maxDescLen=0 rbac:roleName=generated webhook paths="./..." output:crd:artifacts:config=config/crd/bases  ## Generate WebhookConfiguration, Role and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) object:headerFile="LICENSE-HEADER" paths="./..." ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 
 fmt: ## Run go fmt against code.
@@ -101,7 +101,7 @@ e2e-test: kuttl-shfmt
 manifests: kustomize generate
 	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml
 	echo "---" >> $(DEPLOYDIR)/crd.yaml
-	$(KUSTOMIZE) build config/rbac/ | sed 's/ClusterRole/Role/g' > $(DEPLOYDIR)/rbac.yaml
+	$(KUSTOMIZE) build config/rbac/namespace/ > $(DEPLOYDIR)/rbac.yaml
 	echo "---" >> $(DEPLOYDIR)/rbac.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image perconalab/percona-server-mysql-operator=$(IMAGE)
 	$(KUSTOMIZE) build config/manager/ > $(DEPLOYDIR)/operator.yaml
