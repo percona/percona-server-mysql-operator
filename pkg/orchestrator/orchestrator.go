@@ -488,10 +488,10 @@ func RBAC(cr *apiv1alpha1.PerconaServerMySQL) (*rbacv1.Role, *rbacv1.RoleBinding
 	}
 
 	account := &corev1.ServiceAccount{ObjectMeta: meta}
-	// account.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("ServiceAccount"))
+	account.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("ServiceAccount"))
 
 	role := &rbacv1.Role{ObjectMeta: meta}
-	// role.SetGroupVersionKind(rbacv1.SchemeGroupVersion.WithKind("Role"))
+	role.SetGroupVersionKind(rbacv1.SchemeGroupVersion.WithKind("Role"))
 	role.Rules = []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{corev1.SchemeGroupVersion.Group},
@@ -506,7 +506,7 @@ func RBAC(cr *apiv1alpha1.PerconaServerMySQL) (*rbacv1.Role, *rbacv1.RoleBinding
 	}
 
 	binding := &rbacv1.RoleBinding{ObjectMeta: meta}
-	// binding.SetGroupVersionKind(rbacv1.SchemeGroupVersion.WithKind("RoleBinding"))
+	binding.SetGroupVersionKind(rbacv1.SchemeGroupVersion.WithKind("RoleBinding"))
 	// t := true
 	// account.AutomountServiceAccountToken = &t
 	binding.RoleRef = rbacv1.RoleRef{
