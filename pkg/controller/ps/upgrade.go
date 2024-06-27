@@ -33,7 +33,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		Namespace: sts.Namespace,
 	}, currentSet)
 	if err != nil {
-		return errors.Wrap(err, "failed to get current sfs")
+		return errors.Wrap(err, "failed to get current sts")
 	}
 
 	pods := corev1.PodList{}
