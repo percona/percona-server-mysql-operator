@@ -577,6 +577,17 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return nil
 	}
 
+	role, binding, sa := orchestrator.RBAC(cr)
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, role, r.Scheme); err != nil {
+		return errors.Wrap(err, "reconcile ConfigMap")
+	}
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, sa, r.Scheme); err != nil {
+		return errors.Wrap(err, "reconcile ConfigMap")
+	}
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, binding, r.Scheme); err != nil {
+		return errors.Wrap(err, "reconcile ConfigMap")
+	}
+
 	cmap := &corev1.ConfigMap{}
 	err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), cmap)
 	if client.IgnoreNotFound(err) != nil {
