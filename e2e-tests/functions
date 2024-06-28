@@ -543,12 +543,12 @@ get_mysql_router_service() {
 }
 
 deploy_version_service() {
-	kubectl create configmap -n "${OPERATOR_NS:-$NAMESPACE}" versions \
+	kubectl create configmap -n "${NAMESPACE}" versions \
 		--from-file "${TESTS_CONFIG_DIR}/operator.9.9.9.ps-operator.dep.json" \
 		--from-file "${TESTS_CONFIG_DIR}/operator.9.9.9.ps-operator.json"
 
-	kubectl apply -n "${OPERATOR_NS:-$NAMESPACE}" -f "${TESTS_CONFIG_DIR}/vs.yaml"
-	VS_POD_NAME=$(kubectl -n "${OPERATOR_NS:-$NAMESPACE}" get pods --selector=name=percona-version-service -o 'jsonpath={.items[].metadata.name}')
+	kubectl apply -n "${NAMESPACE}" -f "${TESTS_CONFIG_DIR}/vs.yaml"
+	VS_POD_NAME=$(kubectl -n "${NAMESPACE}" get pods --selector=name=percona-version-service -o 'jsonpath={.items[].metadata.name}')
 	wait_pod $VS_POD_NAME
 	sleep 5
 }
@@ -580,7 +580,7 @@ verify_certificate_sans() {
 	local have=$(mktemp)
 	local want=$(mktemp)
 
-	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" get certificate "${certificate}" -o jsonpath='{.spec.dnsNames}' | jq '.' >"${have}"
+	kubectl -n "${NAMESPACE}" get certificate "${certificate}" -o jsonpath='{.spec.dnsNames}' | jq '.' >"${have}"
 	echo "${expected_sans}" | jq '.' >"${want}"
 
 	diff "${have}" "${want}"
@@ -717,17 +717,17 @@ renew_certificate() {
 	certificate="$1"
 
 	local pod_name
-	pod_name=$(kubectl get -n "${OPERATOR_NS:-$NAMESPACE}" pods --selector=name=cmctl -o 'jsonpath={.items[].metadata.name}')
+	pod_name=$(kubectl get -n "${NAMESPACE}" pods --selector=name=cmctl -o 'jsonpath={.items[].metadata.name}')
 
 	local revision
-	revision=$(kubectl get -n "${OPERATOR_NS:-$NAMESPACE}" certificate "$certificate" -o 'jsonpath={.status.revision}')
+	revision=$(kubectl get -n "${NAMESPACE}" certificate "$certificate" -o 'jsonpath={.status.revision}')
 
-	kubectl exec -n "${OPERATOR_NS:-$NAMESPACE}" "$pod_name" -- /tmp/cmctl renew "$certificate"
+	kubectl exec -n "${NAMESPACE}" "$pod_name" -- /tmp/cmctl renew "$certificate"
 
 	# wait for new revision
 	for i in {1..10}; do
 		local new_revision
-		new_revision=$(kubectl get -n "${OPERATOR_NS:-$NAMESPACE}" certificate "$certificate" -o 'jsonpath={.status.revision}')
+		new_revision=$(kubectl get -n "${NAMESPACE}" certificate "$certificate" -o 'jsonpath={.status.revision}')
 		if [ "$((revision + 1))" == "$new_revision" ]; then
 			break
 		fi
@@ -740,6 +740,6 @@ deploy_cmctl() {
 
 	sed -e "s/percona-server-mysql-operator/$service_account/g" "${DEPLOY_DIR}/rbac.yaml" \
 		| yq '(select(.rules).rules[] | select(contains({"apiGroups": ["cert-manager.io"]}))).resources += "certificates/status"' \
-		| kubectl apply -n "${OPERATOR_NS:-$NAMESPACE}" -f -
-	kubectl apply -n "${OPERATOR_NS:-$NAMESPACE}" -f "${TESTS_CONFIG_DIR}/cmctl.yml"
+		| kubectl apply -n "${NAMESPACE}" -f -
+	kubectl apply -n "${NAMESPACE}" -f "${TESTS_CONFIG_DIR}/cmctl.yml"
 }
