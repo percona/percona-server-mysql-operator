@@ -120,6 +120,10 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 	}
 
 	if err = r.doReconcile(ctx, cr); err != nil {
+		if errors.Is(err, ErrShouldReconcile) {
+			err = nil
+			return rr, nil
+		}
 		return rr, errors.Wrap(err, "reconcile")
 	}
 
@@ -347,6 +351,8 @@ func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv
 	return nil
 }
 
+var ErrShouldReconcile = errors.New("should reconcile")
+
 func (r *PerconaServerMySQLReconciler) doReconcile(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQL,
@@ -357,6 +363,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 		return errors.Wrap(err, "failed to check full cluster crash")
 	}
 	if err := r.reconcileVersions(ctx, cr); err != nil {
+		if errors.Is(err, ErrShouldReconcile) {
+			return err
+		}
 		log.Error(err, "failed to reconcile versions")
 	}
 	if err := r.ensureUserSecrets(ctx, cr); err != nil {
