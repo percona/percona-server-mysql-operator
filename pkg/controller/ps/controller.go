@@ -71,6 +71,9 @@ type PerconaServerMySQLReconciler struct {
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups=apps,resources=statefulsets;deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=certmanager.k8s.io;cert-manager.io,resources=issuers;certificates,verbs=get;list;watch;create;update;patch;delete;deletecollection
+//+kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;patch
+//+kubebuilder:rbac:groups="",resources=rolebindings,verbs=get;list;watch;create;patch
+//+kubebuilder:rbac:groups="",resources=roles,verbs=get;list;watch;create;patch
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PerconaServerMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -577,6 +580,17 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return nil
 	}
 
+	role, binding, sa := orchestrator.RBAC(cr)
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, role, r.Scheme); err != nil {
+		return errors.Wrap(err, "create role")
+	}
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, sa, r.Scheme); err != nil {
+		return errors.Wrap(err, "create service account")
+	}
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, binding, r.Scheme); err != nil {
+		return errors.Wrap(err, "create role binding")
+	}
+
 	cmap := &corev1.ConfigMap{}
 	err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), cmap)
 	if client.IgnoreNotFound(err) != nil {
@@ -897,7 +911,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, exposer Exposer) error {
+func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Context, exposer Exposer) error {
 	log := logf.FromContext(ctx).WithName("cleanupOutdatedServices")
 	size := int(exposer.Size())
 	svcNames := make(map[string]struct{}, size)
@@ -937,7 +951,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 func (r *PerconaServerMySQLReconciler) cleanupMysql(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	if !cr.Spec.Pause {
 		mysqlExposer := mysql.Exposer(*cr)
-		if err := r.cleanupOutdatedServices(ctx, cr, &mysqlExposer); err != nil {
+		if err := r.cleanupOutdatedServices(ctx, &mysqlExposer); err != nil {
 			return errors.Wrap(err, "cleanup MySQL services")
 		}
 	}
@@ -951,7 +965,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOrchestrator(ctx context.Context, 
 		}
 
 		orcExposer := orchestrator.Exposer(*cr)
-		if err := r.cleanupOutdatedServices(ctx, cr, &orcExposer); err != nil {
+		if err := r.cleanupOutdatedServices(ctx, &orcExposer); err != nil {
 			return errors.Wrap(err, "cleanup Orchestrator services")
 		}
 	}

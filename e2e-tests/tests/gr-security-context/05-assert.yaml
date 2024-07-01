@@ -20,6 +20,5 @@ status:
     s3:
       bucket: operator-testing
       credentialsSecret: minio-secret
-      endpointUrl: http://minio-service:9000
       region: us-east-1
     type: s3

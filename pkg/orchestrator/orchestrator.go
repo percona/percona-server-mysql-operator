@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -478,4 +479,43 @@ func ConfigMapData(cr *apiv1alpha1.PerconaServerMySQL) (map[string]string, error
 	cmData[ConfigFileName] = config
 
 	return cmData, nil
+}
+
+func RBAC(cr *apiv1alpha1.PerconaServerMySQL) (*rbacv1.Role, *rbacv1.RoleBinding, *corev1.ServiceAccount) {
+	meta := metav1.ObjectMeta{
+		Namespace: cr.Namespace,
+		Name:      "percona-server-mysql-operator-orchestrator",
+	}
+
+	account := &corev1.ServiceAccount{ObjectMeta: meta}
+	account.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("ServiceAccount"))
+
+	role := &rbacv1.Role{ObjectMeta: meta}
+	role.SetGroupVersionKind(rbacv1.SchemeGroupVersion.WithKind("Role"))
+	role.Rules = []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{corev1.SchemeGroupVersion.Group},
+			Resources: []string{"pods"},
+			Verbs:     []string{"list", "patch"},
+		},
+		{
+			APIGroups: []string{cr.GroupVersionKind().Group},
+			Resources: []string{"perconaservermysqls"},
+			Verbs:     []string{"get"},
+		},
+	}
+
+	binding := &rbacv1.RoleBinding{ObjectMeta: meta}
+	binding.SetGroupVersionKind(rbacv1.SchemeGroupVersion.WithKind("RoleBinding"))
+	binding.RoleRef = rbacv1.RoleRef{
+		APIGroup: rbacv1.SchemeGroupVersion.Group,
+		Kind:     role.Kind,
+		Name:     role.Name,
+	}
+	binding.Subjects = []rbacv1.Subject{{
+		Kind: account.Kind,
+		Name: account.Name,
+	}}
+
+	return role, binding, account
 }
