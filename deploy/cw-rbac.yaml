@@ -3,11 +3,6 @@ kind: ServiceAccount
 metadata:
   name: percona-server-mysql-operator
 ---
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: percona-server-mysql-operator-orchestrator
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -46,29 +41,20 @@ rules:
   - patch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: percona-server-mysql-operator-orchestrator
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - list
-  - patch
-- apiGroups:
-  - ps.percona.com
-  resources:
-  - perconaservermysqls
-  verbs:
-  - get
----
-apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: percona-server-mysql-operator
 rules:
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - watch
 - apiGroups:
   - ""
   resources:
@@ -198,6 +184,17 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -210,18 +207,6 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: percona-server-mysql-operator
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: percona-server-mysql-operator-orchestrator
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: percona-server-mysql-operator-orchestrator
-subjects:
-- kind: ServiceAccount
-  name: percona-server-mysql-operator-orchestrator
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

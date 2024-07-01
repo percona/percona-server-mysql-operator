@@ -10,7 +10,35 @@ init_temp_dir() {
 	mkdir -p "$TEMP_DIR"
 }
 
+create_namespace() {
+	local namespace=$1
+
+	if [[ $OPENSHIFT ]]; then
+		set -o pipefail
+		if [[ $OPERATOR_NS ]] && (oc get project "$OPERATOR_NS" -o json >/dev/null 2>&1 | jq -r '.metadata.name' >/dev/null 2>&1); then
+			oc delete --grace-period=0 --force=true project "$namespace" && sleep 120 || :
+		else
+			oc delete project "$namespace" && sleep 40 || :
+		fi
+		wait_for_delete "project/$namespace"
+
+		oc new-project "$namespace"
+		oc project "$namespace"
+		oc adm policy add-scc-to-user hostaccess -z default || :
+	else
+		kubectl delete namespace $namespace --ignore-not-found || :
+		kubectl wait --for=delete namespace "$namespace" || :
+		kubectl create namespace $namespace
+	fi
+}
+
 deploy_operator() {
+	destroy_operator
+
+	if [[ $OPERATOR_NS ]]; then
+		create_namespace "${OPERATOR_NS}"
+	fi
+
 	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply --server-side --force-conflicts -f "${DEPLOY_DIR}/crd.yaml"
 
 	if [ -n "$OPERATOR_NS" ]; then
@@ -31,6 +59,13 @@ deploy_operator() {
 			| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "true"' \
 			| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG"' \
 			| kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f -
+	fi
+}
+
+destroy_operator() {
+	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" delete deployment percona-server-mysql-operator --force --grace-period=0 || true
+	if [[ $OPERATOR_NS ]]; then
+		kubectl delete namespace $OPERATOR_NS --force --grace-period=0 || true
 	fi
 }
 
@@ -513,8 +548,7 @@ deploy_version_service() {
 		--from-file "${TESTS_CONFIG_DIR}/operator.9.9.9.ps-operator.json"
 
 	kubectl apply -n "${OPERATOR_NS:-$NAMESPACE}" -f "${TESTS_CONFIG_DIR}/vs.yaml"
-	VS_POD_NAME=$(kubectl -n "${OPERATOR_NS:-$NAMESPACE}" get pods --selector=name=percona-version-service -o 'jsonpath={.items[].metadata.name}')
-	wait_pod $VS_POD_NAME
+
 	sleep 5
 }
 
@@ -545,7 +579,7 @@ verify_certificate_sans() {
 	local have=$(mktemp)
 	local want=$(mktemp)
 
-	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" get certificate "${certificate}" -o jsonpath='{.spec.dnsNames}' | jq '.' >"${have}"
+	kubectl -n "${NAMESPACE}" get certificate "${certificate}" -o jsonpath='{.spec.dnsNames}' | jq '.' >"${have}"
 	echo "${expected_sans}" | jq '.' >"${want}"
 
 	diff "${have}" "${want}"
@@ -561,7 +595,7 @@ check_passwords_leak() {
 		base64 -d <<<$i
 		echo
 	done) $secrets"
-	pods=$(kubectl -n "${OPERATOR_NS:-$NAMESPACE}" get pods -o name | awk -F "/" '{print $2}')
+	pods=$(kubectl -n "${NAMESPACE}" get pods -o name | awk -F "/" '{print $2}')
 
 	collect_logs() {
 		local containers
@@ -682,17 +716,17 @@ renew_certificate() {
 	certificate="$1"
 
 	local pod_name
-	pod_name=$(kubectl get -n "${OPERATOR_NS:-$NAMESPACE}" pods --selector=name=cmctl -o 'jsonpath={.items[].metadata.name}')
+	pod_name=$(kubectl get -n "${NAMESPACE}" pods --selector=name=cmctl -o 'jsonpath={.items[].metadata.name}')
 
 	local revision
-	revision=$(kubectl get -n "${OPERATOR_NS:-$NAMESPACE}" certificate "$certificate" -o 'jsonpath={.status.revision}')
+	revision=$(kubectl get -n "${NAMESPACE}" certificate "$certificate" -o 'jsonpath={.status.revision}')
 
-	kubectl exec -n "${OPERATOR_NS:-$NAMESPACE}" "$pod_name" -- /tmp/cmctl renew "$certificate"
+	kubectl exec -n "${NAMESPACE}" "$pod_name" -- /tmp/cmctl renew "$certificate"
 
 	# wait for new revision
 	for i in {1..10}; do
 		local new_revision
-		new_revision=$(kubectl get -n "${OPERATOR_NS:-$NAMESPACE}" certificate "$certificate" -o 'jsonpath={.status.revision}')
+		new_revision=$(kubectl get -n "${NAMESPACE}" certificate "$certificate" -o 'jsonpath={.status.revision}')
 		if [ "$((revision + 1))" == "$new_revision" ]; then
 			break
 		fi
@@ -705,6 +739,6 @@ deploy_cmctl() {
 
 	sed -e "s/percona-server-mysql-operator/$service_account/g" "${DEPLOY_DIR}/rbac.yaml" \
 		| yq '(select(.rules).rules[] | select(contains({"apiGroups": ["cert-manager.io"]}))).resources += "certificates/status"' \
-		| kubectl apply -n "${OPERATOR_NS:-$NAMESPACE}" -f -
-	kubectl apply -n "${OPERATOR_NS:-$NAMESPACE}" -f "${TESTS_CONFIG_DIR}/cmctl.yml"
+		| kubectl apply -n "${NAMESPACE}" -f -
+	kubectl apply -n "${NAMESPACE}" -f "${TESTS_CONFIG_DIR}/cmctl.yml"
 }

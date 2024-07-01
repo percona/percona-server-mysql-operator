@@ -85,6 +85,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 			if !ready {
 				mysqlStatus.State = apiv1alpha1.StateInitializing
 
+				log.Info(fmt.Sprintf("Async replication not ready: %s", msg))
 				r.Recorder.Event(cr, "Warning", "AsyncReplicationNotReady", msg)
 
 			}
