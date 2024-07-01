@@ -33,7 +33,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
@@ -93,6 +92,7 @@ const (
 	MinSafeProxySize             = 2
 	MinSafeGRSize                = 3
 	MaxSafeGRSize                = 9
+	MinSafeAsyncSize             = 2
 )
 
 // Checks if the provided ClusterType is valid.
@@ -526,7 +526,6 @@ func (cr *PerconaServerMySQL) SetVersion() {
 
 // CheckNSetDefaults validates and sets default values for the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersion *platform.ServerVersion) error {
-	log := logf.FromContext(ctx).WithName("CheckNSetDefaults")
 	if len(cr.Spec.MySQL.ClusterType) == 0 {
 		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
 	}
@@ -691,36 +690,61 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 	cr.Spec.MySQL.reconcileAffinityOpts()
 	cr.Spec.Orchestrator.reconcileAffinityOpts()
 
-	if oSize := int(cr.Spec.Orchestrator.Size); cr.OrchestratorEnabled() && (oSize < 3 || oSize%2 == 0) && oSize != 0 && !cr.Spec.Unsafe.OrchestratorSize {
-		return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup. Enable spec.unsafeFlags.orchestratorSize to bypass this check")
+	if cr.Spec.MySQL.ClusterType == ClusterTypeGR {
+		if !cr.Spec.Proxy.Router.Enabled && !cr.Spec.Proxy.HAProxy.Enabled && !cr.Spec.Unsafe.Proxy {
+			return errors.New("MySQL Router or HAProxy must be enabled for Group Replication. Enable spec.unsafeFlags.proxy to bypass this check")
+		}
+
+		if cr.RouterEnabled() && !cr.Spec.Unsafe.ProxySize {
+			if cr.Spec.Proxy.Router.Size < MinSafeProxySize {
+				return errors.Errorf("Router size should be %d or greater. Enable spec.unsafeFlags.proxySize to set a lower size", MinSafeProxySize)
+			}
+		}
+
+		if !cr.Spec.Unsafe.MySQLSize {
+			if cr.Spec.MySQL.Size < MinSafeGRSize {
+				return errors.Errorf("MySQL size should be %d or greater for Group Replication. Enable spec.unsafeFlags.mysqlSize to set a lower size", MinSafeGRSize)
+			}
+
+			if cr.Spec.MySQL.Size > MaxSafeGRSize {
+				return errors.Errorf("MySQL size should be %d or lower for Group Replication. Enable spec.unsafeFlags.mysqlSize to set a higher size", MaxSafeGRSize)
+			}
+
+			if cr.Spec.MySQL.Size%2 == 0 {
+				return errors.New("MySQL size should be an odd number for Group Replication. Enable spec.unsafeFlags.mysqlSize to set an even number")
+			}
+		}
 	}
 
-	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Proxy.Router == nil {
-		return errors.New("router section is needed for group replication")
+	if cr.Spec.MySQL.ClusterType == ClusterTypeAsync {
+		if !cr.Spec.Unsafe.MySQLSize && cr.Spec.MySQL.Size < MinSafeAsyncSize {
+			return errors.Errorf("MySQL size should be %d or greater for asynchronous replication. Enable spec.unsafeFlags.mysqlSize to set a lower size", MinSafeAsyncSize)
+		}
+
+		if !cr.Spec.Unsafe.Orchestrator && !cr.Spec.Orchestrator.Enabled {
+			return errors.New("Orchestrator must be enabled for asynchronous replication. Enable spec.unsafeFlags.orchestrator to bypass this check")
+		}
+
+		if oSize := int(cr.Spec.Orchestrator.Size); cr.OrchestratorEnabled() && (oSize < 3 || oSize%2 == 0) && oSize != 0 && !cr.Spec.Unsafe.OrchestratorSize {
+			return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup. Enable spec.unsafeFlags.orchestratorSize to bypass this check")
+		}
+
+		if !cr.Spec.Orchestrator.Enabled && cr.Spec.UpdateStrategy == SmartUpdateStatefulSetStrategyType {
+			return errors.Errorf("Orchestrator must be enabled to use SmartUpdate. Either enable Orchestrator or set spec.updateStrategy to %s", appsv1.RollingUpdateStatefulSetStrategyType)
+		}
+
+		if !cr.Spec.Unsafe.Proxy && !cr.HAProxyEnabled() {
+			return errors.New("HAProxy must be enabled for asynchronous replication. Enable spec.unsafeFlags.proxy to bypass this check")
+		}
+
 	}
 
-	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && !cr.Spec.Unsafe.MySQLSize {
-		if cr.Spec.MySQL.Size < MinSafeGRSize {
-			return errors.Errorf("MySQL size should be %d or greater for Group Replication. Enable spec.unsafeFlags.mysqlSize to set a lower size", MinSafeGRSize)
-		}
-
-		if cr.Spec.MySQL.Size > MaxSafeGRSize {
-			return errors.Errorf("MySQL size should be %d or lower for Group Replication. Enable spec.unsafeFlags.mysqlSize to set a higher size", MaxSafeGRSize)
-		}
-
-		if cr.Spec.MySQL.Size%2 == 0 {
-			return errors.New("MySQL size should be an odd number for Group Replication. Enable spec.unsafeFlags.mysqlSize to set an even number")
-		}
+	if cr.Spec.MySQL.ClusterType == ClusterTypeAsync && cr.RouterEnabled() {
+		return errors.New("MySQL Router can't be enabled for asynchronous replication")
 	}
 
 	if cr.RouterEnabled() && cr.HAProxyEnabled() {
 		return errors.New("MySQL Router and HAProxy can't be enabled at the same time")
-	}
-
-	if cr.RouterEnabled() && !cr.Spec.Unsafe.ProxySize {
-		if cr.Spec.Proxy.Router.Size < MinSafeProxySize {
-			return errors.Errorf("Router size should be %d or greater. Enable spec.unsafeFlags.proxySize to set a lower size", MinSafeProxySize)
-		}
 	}
 
 	if cr.Spec.Proxy.HAProxy == nil {
@@ -730,18 +754,6 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 	if cr.HAProxyEnabled() && !cr.Spec.Unsafe.ProxySize {
 		if cr.Spec.Proxy.HAProxy.Size < MinSafeProxySize {
 			return errors.Errorf("HAProxy size should be %d or greater. Enable spec.unsafeFlags.proxySize to set a lower size", MinSafeProxySize)
-		}
-	}
-
-	if cr.Spec.MySQL.ClusterType != ClusterTypeGR && !cr.OrchestratorEnabled() {
-		switch cr.Generation {
-		case 1:
-			if cr.Spec.MySQL.Size > 1 {
-				return errors.New("mysql size should be 1 when orchestrator is disabled")
-			}
-		default:
-			cr.Spec.Orchestrator.Enabled = true
-			log.Info("orchestrator can't be disabled on an existing cluster")
 		}
 	}
 
@@ -762,12 +774,6 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 
 	if cr.Spec.SSLSecretName == "" {
 		cr.Spec.SSLSecretName = cr.Name + "-ssl"
-	}
-
-	if cr.Spec.UpdateStrategy == SmartUpdateStatefulSetStrategyType &&
-		!cr.HAProxyEnabled() &&
-		!cr.RouterEnabled() {
-		return errors.Errorf("MySQL Router or HAProxy should be enabled if SmartUpdate set")
 	}
 
 	return nil
