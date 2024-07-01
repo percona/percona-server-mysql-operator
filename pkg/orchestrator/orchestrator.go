@@ -507,8 +507,6 @@ func RBAC(cr *apiv1alpha1.PerconaServerMySQL) (*rbacv1.Role, *rbacv1.RoleBinding
 
 	binding := &rbacv1.RoleBinding{ObjectMeta: meta}
 	binding.SetGroupVersionKind(rbacv1.SchemeGroupVersion.WithKind("RoleBinding"))
-	// t := true
-	// account.AutomountServiceAccountToken = &t
 	binding.RoleRef = rbacv1.RoleRef{
 		APIGroup: rbacv1.SchemeGroupVersion.Group,
 		Kind:     role.Kind,

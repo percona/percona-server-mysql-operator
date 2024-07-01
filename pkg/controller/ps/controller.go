@@ -582,13 +582,13 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 
 	role, binding, sa := orchestrator.RBAC(cr)
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, role, r.Scheme); err != nil {
-		return errors.Wrap(err, "reconcile ConfigMap")
+		return errors.Wrap(err, "create role")
 	}
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, sa, r.Scheme); err != nil {
-		return errors.Wrap(err, "reconcile ConfigMap")
+		return errors.Wrap(err, "create service account")
 	}
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, binding, r.Scheme); err != nil {
-		return errors.Wrap(err, "reconcile ConfigMap")
+		return errors.Wrap(err, "create role binding")
 	}
 
 	cmap := &corev1.ConfigMap{}
