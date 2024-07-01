@@ -17,93 +17,31 @@ spec:
     singular: perconaservermysql
   scope: Namespaced
 ---
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
 metadata:
-  name: percona-server-mysql-operator
-status:
-  availableReplicas: 1
-  observedGeneration: 1
-  readyReplicas: 1
-  replicas: 1
-  updatedReplicas: 1
+  name: check-operator-deploy-status
+timeout: 120
+commands:
+  - script: kubectl assert exist-enhanced deployment percona-server-mysql-operator -n ${OPERATOR_NS:-$NAMESPACE} --field-selector status.readyReplicas=1
 ---
 apiVersion: v1
 kind: Pod
 metadata:
   name: mysql-client
 ---
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
 metadata:
-  name: percona-version-service
-spec:
-  progressDeadlineSeconds: 600
-  replicas: 1
-  revisionHistoryLimit: 10
-  selector:
-    matchLabels:
-      name: percona-version-service
-  strategy:
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 1
-    type: RollingUpdate
-  template:
-    metadata:
-      labels:
-        name: percona-version-service
-    spec:
-      containers:
-        - env:
-            - name: SERVE_HTTP
-              value: "true"
-          imagePullPolicy: Always
-          name: percona-version-service
-          ports:
-            - containerPort: 11000
-              name: http
-              protocol: TCP
-          resources: {}
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
-          volumeMounts:
-            - mountPath: /sources/operator.9.9.9.ps-operator.dep.json
-              name: versions
-              subPath: operator.9.9.9.ps-operator.dep.json
-            - mountPath: /sources/operator.9.9.9.ps-operator.json
-              name: versions
-              subPath: operator.9.9.9.ps-operator.json
-      dnsPolicy: ClusterFirst
-      restartPolicy: Always
-      schedulerName: default-scheduler
-      securityContext: {}
-      terminationGracePeriodSeconds: 30
-      volumes:
-        - configMap:
-            defaultMode: 420
-            name: versions
-          name: versions
-status:
-  readyReplicas: 1
+  name: check-version-service-svc-status
+timeout: 120
+commands:
+  - script: kubectl assert exist-enhanced service percona-version-service -n ${OPERATOR_NS:-$NAMESPACE}
 ---
-apiVersion: v1
-kind: Service
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
 metadata:
-  labels:
-    name: percona-version-service
-  name: percona-version-service
-spec:
-  ipFamilies:
-    - IPv4
-  ipFamilyPolicy: SingleStack
-  ports:
-    - port: 80
-      protocol: TCP
-      targetPort: 11000
-  selector:
-    name: percona-version-service
-  sessionAffinity: None
-  type: ClusterIP
-status:
-  loadBalancer: {}
+  name: check-version-service-deploy-status
+timeout: 120
+commands:
+  - script: kubectl assert exist-enhanced deployment percona-version-service -n ${OPERATOR_NS:-$NAMESPACE} --field-selector status.readyReplicas=1
