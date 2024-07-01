@@ -101,6 +101,7 @@ e2e-test: kuttl-shfmt
 manifests: kustomize generate
 	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml
 	echo "---" >> $(DEPLOYDIR)/crd.yaml
+
 	$(KUSTOMIZE) build config/rbac/ | sed 's/ClusterRole/Role/g' > $(DEPLOYDIR)/rbac.yaml
 	echo "---" >> $(DEPLOYDIR)/rbac.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image perconalab/percona-server-mysql-operator=$(IMAGE)
