@@ -73,6 +73,7 @@ func TestReconcileVersions(t *testing.T) {
 						Image: "some-image",
 					},
 					MySQL: apiv1alpha1.MySQLSpec{
+						ClusterType: apiv1alpha1.ClusterTypeGR,
 						PodSpec: apiv1alpha1.PodSpec{
 							Size: 3,
 							VolumeSpec: &apiv1alpha1.VolumeSpec{
@@ -88,6 +89,7 @@ func TestReconcileVersions(t *testing.T) {
 					},
 					Proxy: apiv1alpha1.ProxySpec{
 						HAProxy: &apiv1alpha1.HAProxySpec{
+							Enabled: true,
 							PodSpec: apiv1alpha1.PodSpec{
 								Size: 2,
 							},
@@ -115,6 +117,7 @@ func TestReconcileVersions(t *testing.T) {
 						Image: "some-image",
 					},
 					MySQL: apiv1alpha1.MySQLSpec{
+						ClusterType: apiv1alpha1.ClusterTypeGR,
 						PodSpec: apiv1alpha1.PodSpec{
 							Size: 3,
 							VolumeSpec: &apiv1alpha1.VolumeSpec{
@@ -130,6 +133,7 @@ func TestReconcileVersions(t *testing.T) {
 					},
 					Proxy: apiv1alpha1.ProxySpec{
 						HAProxy: &apiv1alpha1.HAProxySpec{
+							Enabled: true,
 							PodSpec: apiv1alpha1.PodSpec{
 								Size: 2,
 							},
@@ -157,6 +161,7 @@ func TestReconcileVersions(t *testing.T) {
 						Image: "some-image",
 					},
 					MySQL: apiv1alpha1.MySQLSpec{
+						ClusterType: apiv1alpha1.ClusterTypeGR,
 						PodSpec: apiv1alpha1.PodSpec{
 							Size: 3,
 							VolumeSpec: &apiv1alpha1.VolumeSpec{
@@ -172,6 +177,7 @@ func TestReconcileVersions(t *testing.T) {
 					},
 					Proxy: apiv1alpha1.ProxySpec{
 						HAProxy: &apiv1alpha1.HAProxySpec{
+							Enabled: true,
 							PodSpec: apiv1alpha1.PodSpec{
 								Size: 2,
 							},
@@ -200,6 +206,7 @@ func TestReconcileVersions(t *testing.T) {
 						Image: "some-image",
 					},
 					MySQL: apiv1alpha1.MySQLSpec{
+						ClusterType: apiv1alpha1.ClusterTypeGR,
 						PodSpec: apiv1alpha1.PodSpec{
 							Size: 3,
 							VolumeSpec: &apiv1alpha1.VolumeSpec{
@@ -215,6 +222,7 @@ func TestReconcileVersions(t *testing.T) {
 					},
 					Proxy: apiv1alpha1.ProxySpec{
 						HAProxy: &apiv1alpha1.HAProxySpec{
+							Enabled: true,
 							PodSpec: apiv1alpha1.PodSpec{
 								Size: 2,
 							},
@@ -340,6 +348,7 @@ func TestGetVersion(t *testing.T) {
 						Image: "some-image",
 					},
 					MySQL: apiv1alpha1.MySQLSpec{
+						ClusterType: apiv1alpha1.ClusterTypeGR,
 						PodSpec: apiv1alpha1.PodSpec{
 							Size: 3,
 							VolumeSpec: &apiv1alpha1.VolumeSpec{
@@ -355,6 +364,7 @@ func TestGetVersion(t *testing.T) {
 					},
 					Proxy: apiv1alpha1.ProxySpec{
 						HAProxy: &apiv1alpha1.HAProxySpec{
+							Enabled: true,
 							PodSpec: apiv1alpha1.PodSpec{
 								Size: 2,
 							},
