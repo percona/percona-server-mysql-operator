@@ -558,6 +558,11 @@ deploy_cert_manager() {
 	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml --validate=false || : 2>/dev/null
 }
 
+destroy_cert_manager() {
+	kubectl delete -f https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml --validate=false || : 2>/dev/null
+    kubectl delete --grace-period=0 --force=true namespace cert-manager
+}
+
 get_primary_from_label() {
 	kubectl -n "${NAMESPACE}" get pods -l mysql.percona.com/primary=true -ojsonpath="{.items[0].metadata.name}"
 }
