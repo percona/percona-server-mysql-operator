@@ -378,6 +378,7 @@ var _ = Describe("Reconcile HAProxy", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
 		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
 		cr.Spec.Proxy.HAProxy.Enabled = true
+		cr.Spec.Orchestrator.Enabled = true
 		cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 		It("should read and create defautl cr.yaml", func() {
 			Expect(err).NotTo(HaveOccurred())
