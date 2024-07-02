@@ -12,5 +12,6 @@ commands:
 
       source ../../functions
 
+      destroy_cert_manager
       destroy_operator
     timeout: 60
