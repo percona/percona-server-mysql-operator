@@ -737,10 +737,9 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 			return errors.New("HAProxy must be enabled for asynchronous replication. Enable spec.unsafeFlags.proxy to bypass this check")
 		}
 
-	}
-
-	if cr.Spec.MySQL.ClusterType == ClusterTypeAsync && cr.RouterEnabled() {
-		return errors.New("MySQL Router can't be enabled for asynchronous replication")
+		if cr.RouterEnabled() {
+			return errors.New("MySQL Router can't be enabled for asynchronous replication")
+		}
 	}
 
 	if cr.RouterEnabled() && cr.HAProxyEnabled() {
@@ -966,19 +965,11 @@ func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 
 // RouterEnabled checks if the router is enabled, considering the MySQL configuration.
 func (cr *PerconaServerMySQL) RouterEnabled() bool {
-	if cr.MySQLSpec().IsAsync() {
-		return false
-	}
-
 	return cr.Spec.Proxy.Router != nil && cr.Spec.Proxy.Router.Enabled
 }
 
 // HAProxyEnabled verifies if HAProxy is enabled based on MySQL configuration and safety settings.
 func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
-	if cr.MySQLSpec().IsAsync() && !cr.Spec.Unsafe.Proxy {
-		return true
-	}
-
 	return cr.Spec.Proxy.HAProxy != nil && cr.Spec.Proxy.HAProxy.Enabled
 }
 
