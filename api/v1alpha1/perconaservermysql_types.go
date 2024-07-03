@@ -690,6 +690,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 	cr.Spec.MySQL.reconcileAffinityOpts()
 	cr.Spec.Orchestrator.reconcileAffinityOpts()
 
+	if cr.Spec.MySQL.Size == 1 {
+		cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+	}
+
 	if cr.Spec.MySQL.ClusterType == ClusterTypeGR {
 		if !cr.Spec.Proxy.Router.Enabled && !cr.Spec.Proxy.HAProxy.Enabled && !cr.Spec.Unsafe.Proxy {
 			return errors.New("MySQL Router or HAProxy must be enabled for Group Replication. Enable spec.unsafeFlags.proxy to bypass this check")
