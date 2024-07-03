@@ -29,6 +29,10 @@ import (
 )
 
 func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, reconcileErr error) error {
+	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
+		return nil
+	}
+
 	clusterCondition := metav1.Condition{
 		Status:             metav1.ConditionTrue,
 		Type:               apiv1alpha1.StateInitializing.String(),
@@ -55,10 +59,6 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 
 	log := logf.FromContext(ctx).WithName("reconcileCRStatus")
-
-	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
-		return nil
-	}
 
 	mysqlStatus, err := r.appStatus(ctx, cr, mysql.Name(cr), cr.MySQLSpec().Size, mysql.MatchLabels(cr), cr.Status.MySQL.Version)
 	if err != nil {
