@@ -142,7 +142,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 
 	if cr.Spec.MySQL.IsGR() {
-		pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
+		pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
 		if err != nil {
 			return errors.Wrap(err, "get pods")
 		}
@@ -377,7 +377,7 @@ func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1a
 		return status, err
 	}
 
-	pods, err := k8s.PodsByLabels(ctx, r.Client, labels)
+	pods, err := k8s.PodsByLabels(ctx, r.Client, labels, cr.Namespace)
 	if err != nil {
 		return status, errors.Wrap(err, "get pod list")
 	}

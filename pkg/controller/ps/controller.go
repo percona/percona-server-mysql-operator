@@ -169,7 +169,7 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("deleteMySQLPods")
 
-	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
+	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "get pods")
 	}
@@ -838,7 +838,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 
 	// In the case of a cluster downscale, we need to forget replicas that are not part of the cluster
 	if len(clusterInstances) > int(cr.MySQLSpec().Size) {
-		mysqlPods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
+		mysqlPods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
 		if err != nil {
 			return errors.Wrap(err, "get mysql pods")
 		}
@@ -911,7 +911,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Context, exposer Exposer) error {
+func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Context, exposer Exposer, ns string) error {
 	log := logf.FromContext(ctx).WithName("cleanupOutdatedServices")
 	size := int(exposer.Size())
 	svcNames := make(map[string]struct{}, size)
@@ -929,7 +929,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 
 	svcLabels := exposer.Labels()
 	svcLabels[naming.LabelExposed] = "true"
-	services, err := k8s.ServicesByLabels(ctx, r.Client, svcLabels)
+	services, err := k8s.ServicesByLabels(ctx, r.Client, svcLabels, ns)
 	if err != nil {
 		return errors.Wrap(err, "get exposed services")
 	}
@@ -951,7 +951,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 func (r *PerconaServerMySQLReconciler) cleanupMysql(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	if !cr.Spec.Pause {
 		mysqlExposer := mysql.Exposer(*cr)
-		if err := r.cleanupOutdatedServices(ctx, &mysqlExposer); err != nil {
+		if err := r.cleanupOutdatedServices(ctx, &mysqlExposer, cr.Namespace); err != nil {
 			return errors.Wrap(err, "cleanup MySQL services")
 		}
 	}
@@ -965,7 +965,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOrchestrator(ctx context.Context, 
 		}
 
 		orcExposer := orchestrator.Exposer(*cr)
-		if err := r.cleanupOutdatedServices(ctx, &orcExposer); err != nil {
+		if err := r.cleanupOutdatedServices(ctx, &orcExposer, cr.Namespace); err != nil {
 			return errors.Wrap(err, "cleanup Orchestrator services")
 		}
 	}
@@ -1216,7 +1216,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 }
 
 func getReadyMySQLPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Pod, error) {
-	pods, err := k8s.PodsByLabels(ctx, cl, mysql.MatchLabels(cr))
+	pods, err := k8s.PodsByLabels(ctx, cl, mysql.MatchLabels(cr), cr.Namespace)
 	if err != nil {
 		return nil, errors.Wrap(err, "get pods")
 	}
@@ -1241,7 +1241,7 @@ func getMySQLPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaS
 }
 
 func getReadyOrcPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Pod, error) {
-	pods, err := k8s.PodsByLabels(ctx, cl, orchestrator.MatchLabels(cr))
+	pods, err := k8s.PodsByLabels(ctx, cl, orchestrator.MatchLabels(cr), cr.Namespace)
 	if err != nil {
 		return nil, errors.Wrap(err, "get pods")
 	}
