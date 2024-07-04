@@ -257,7 +257,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
-	pvcs, err := k8s.PVCsByLabels(ctx, r.Client, mysql.MatchLabels(cluster))
+	pvcs, err := k8s.PVCsByLabels(ctx, r.Client, mysql.MatchLabels(cluster), cluster.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "get PVC list")
 	}
