@@ -33,7 +33,6 @@ spec:
       containers:
       - command:
         - /opt/percona/run-backup.sh
-        image: perconalab/percona-server-mysql-operator:main-backup
         imagePullPolicy: Always
         name: xtrabackup
         resources: {}
