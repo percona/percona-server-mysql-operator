@@ -433,7 +433,7 @@ spec:
 #          prefix: ""
 
   toolkit:
-    image: percona/percona-toolkit:3.5.7
+    image: percona/percona-toolkit:3.6.0
     imagePullPolicy: Always
 #    resources:
 #      requests:
