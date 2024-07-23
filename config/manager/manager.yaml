@@ -8,6 +8,10 @@ spec:
     matchLabels:
       app.kubernetes.io/name: percona-server-mysql-operator
   replicas: 1
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
   template:
     metadata:
       labels:

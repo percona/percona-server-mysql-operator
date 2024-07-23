@@ -11,8 +11,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	database "github.com/percona/percona-server-mysql-operator/cmd/db"
+	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
-	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
 func bootstrapAsyncReplication(ctx context.Context) error {
@@ -87,9 +88,9 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
 
-	db, err := replicator.NewReplicator(ctx, apiv1alpha1.UserOperator, operatorPass, podIp, mysql.DefaultAdminPort)
+	db, err := database.NewDatabase(ctx, apiv1alpha1.UserOperator, operatorPass, podIp, mysql.DefaultAdminPort)
 	if err != nil {
-		return errors.Wrap(err, "connect to db")
+		return errors.Wrap(err, "connect to database")
 	}
 	defer db.Close()
 
@@ -140,11 +141,15 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 			return nil
 		}
 
+		if err := db.DisableSuperReadonly(ctx); err != nil {
+			return errors.Wrap(err, "disable super read only")
+		}
+
 		timer.Start("clone")
 		log.Printf("Cloning from %s", donor)
 		err = db.Clone(ctx, donor, string(apiv1alpha1.UserOperator), operatorPass, mysql.DefaultAdminPort)
 		timer.Stop("clone")
-		if err != nil && !errors.Is(err, replicator.ErrRestartAfterClone) {
+		if err != nil && !errors.Is(err, database.ErrRestartAfterClone) {
 			return errors.Wrapf(err, "clone from donor %s", donor)
 		}
 
@@ -170,7 +175,7 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 		return errors.Wrap(err, "check replication status")
 	}
 
-	if rStatus == replicator.ReplicationStatusNotInitiated {
+	if rStatus == mysqldb.ReplicationStatusNotInitiated {
 		log.Println("configuring replication")
 
 		replicaPass, err := getSecret(apiv1alpha1.UserReplication)
@@ -204,7 +209,7 @@ func getTopology(ctx context.Context, peers sets.Set[string]) (string, []string,
 	}
 
 	for _, peer := range sets.List(peers) {
-		db, err := replicator.NewReplicator(ctx, apiv1alpha1.UserOperator, operatorPass, peer, mysql.DefaultAdminPort)
+		db, err := database.NewDatabase(ctx, apiv1alpha1.UserOperator, operatorPass, peer, mysql.DefaultAdminPort)
 		if err != nil {
 			return "", nil, errors.Wrapf(err, "connect to %s", peer)
 		}
@@ -224,7 +229,7 @@ func getTopology(ctx context.Context, peers sets.Set[string]) (string, []string,
 		}
 		replicas.Insert(replicaHost)
 
-		if status == replicator.ReplicationStatusActive {
+		if status == mysqldb.ReplicationStatusActive {
 			primary = source
 		}
 	}
@@ -251,7 +256,7 @@ func selectDonor(ctx context.Context, fqdn, primary string, replicas []string) (
 	}
 
 	for _, replica := range replicas {
-		db, err := replicator.NewReplicator(ctx, apiv1alpha1.UserOperator, operatorPass, replica, mysql.DefaultAdminPort)
+		db, err := database.NewDatabase(ctx, apiv1alpha1.UserOperator, operatorPass, replica, mysql.DefaultAdminPort)
 		if err != nil {
 			continue
 		}

@@ -33,25 +33,27 @@ import (
 	k8sretry "k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/pkg/errors"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
+	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 )
 
 // PerconaServerMySQLRestoreReconciler reconciles a PerconaServerMySQLRestore object
 type PerconaServerMySQLRestoreReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	ServerVersion *platform.ServerVersion
+	Scheme           *runtime.Scheme
+	ServerVersion    *platform.ServerVersion
+	NewStorageClient storage.NewClientFunc
 
 	sm sync.Map
 }
@@ -85,11 +87,14 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	defer func() {
-		if status.State == cr.Status.State {
+		if status.State == cr.Status.State && status.StateDesc == cr.Status.StateDesc {
 			return
 		}
 
-		err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
+		retriable := func(err error) bool {
+			return err != nil
+		}
+		err := k8sretry.OnError(k8sretry.DefaultRetry, retriable, func() error {
 			cr := &apiv1alpha1.PerconaServerMySQLRestore{}
 			if err := r.Client.Get(ctx, req.NamespacedName, cr); err != nil {
 				return errors.Wrapf(err, "get %v", req.NamespacedName.String())
@@ -98,15 +103,29 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			cr.Status = status
 			log.Info("Updating status", "state", cr.Status.State)
 			if err := r.Client.Status().Update(ctx, cr); err != nil {
-				return errors.Wrapf(err, "update %v", req.NamespacedName.String())
+				return errors.Wrap(err, "update status")
 			}
 
+			if err := r.Client.Get(ctx, req.NamespacedName, cr); err != nil {
+				return errors.Wrapf(err, "get %v", req.NamespacedName.String())
+			}
+			if cr.Status.State != status.State {
+				return errors.Errorf("status %s was not updated to %s", cr.Status.State, status.State)
+			}
 			return nil
 		})
 		if err != nil {
 			log.Error(err, "failed to update status")
+			return
 		}
+
+		log.V(1).Info("status updated", "state", status.State)
 	}()
+
+	switch status.State {
+	case apiv1alpha1.RestoreFailed, apiv1alpha1.RestoreSucceeded:
+		return ctrl.Result{}, nil
+	}
 
 	cluster := &apiv1alpha1.PerconaServerMySQL{}
 	nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
@@ -117,52 +136,6 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, errors.Wrapf(err, "get cluster %s", nn)
-	}
-
-	var destination string
-	var storage *apiv1alpha1.BackupStorageSpec
-	if cr.Spec.BackupName != "" {
-		backup := &apiv1alpha1.PerconaServerMySQLBackup{}
-		nn := types.NamespacedName{Name: cr.Spec.BackupName, Namespace: cr.Namespace}
-		if err := r.Client.Get(ctx, nn, backup); err != nil {
-			if k8serrors.IsNotFound(err) {
-				status.State = apiv1alpha1.RestoreError
-				status.StateDesc = fmt.Sprintf("PerconaServerMySQLBackup %s in namespace %s is not found", cr.Spec.BackupName, cr.Namespace)
-				return ctrl.Result{}, nil
-			}
-			return ctrl.Result{}, errors.Wrapf(err, "get backup %s", nn)
-		}
-		destination = backup.Status.Destination
-		storageName := backup.Spec.StorageName
-		var ok bool
-		storage, ok = cluster.Spec.Backup.Storages[storageName]
-		if !ok {
-			status.State = apiv1alpha1.RestoreError
-			status.StateDesc = fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", storageName)
-			return ctrl.Result{}, nil
-		}
-	} else if cr.Spec.BackupSource != nil {
-		storage = cr.Spec.BackupSource.Storage
-		destination = cr.Spec.BackupSource.Destination
-		if destination == "" {
-			status.State = apiv1alpha1.RestoreError
-			status.StateDesc = "backupSource.destination is empty"
-			return ctrl.Result{}, nil
-		}
-		if storage == nil {
-			status.State = apiv1alpha1.RestoreError
-			status.StateDesc = "backupSource.storage is empty"
-			return ctrl.Result{}, nil
-		}
-	} else {
-		status.State = apiv1alpha1.RestoreError
-		status.StateDesc = "backupName and backupSource are empty"
-		return ctrl.Result{}, nil
-	}
-
-	switch status.State {
-	case apiv1alpha1.RestoreFailed, apiv1alpha1.RestoreSucceeded:
-		return ctrl.Result{}, nil
 	}
 
 	restoreList := &apiv1alpha1.PerconaServerMySQLRestoreList{}
@@ -177,12 +150,19 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		switch restore.Status.State {
 		case apiv1alpha1.RestoreSucceeded, apiv1alpha1.RestoreFailed, apiv1alpha1.RestoreError, apiv1alpha1.RestoreNew:
 		default:
-			status.State = apiv1alpha1.RestoreError
+			status.State = apiv1alpha1.RestoreNew
 			status.StateDesc = fmt.Sprintf("PerconaServerMySQLRestore %s is already running", restore.Name)
 			log.Info("PerconaServerMySQLRestore is already running", "restore", restore.Name)
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 	}
+
+	if err := r.validate(ctx, cr, cluster); err != nil {
+		status.State = apiv1alpha1.RestoreError
+		status.StateDesc = errors.Cause(err).Error()
+		return ctrl.Result{}, nil
+	}
+
 	// The above code is to prevent multiple restores from running at the same time. It works only if restore job is created.
 	// But if multiple restores are created at the same time, then the above code will not work, because there are no restore jobs yet.
 	// Therefore, we need to use sync.Map to prevent multiple restores from creating restore jobs at the same time.
@@ -216,84 +196,18 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	if k8serrors.IsNotFound(err) {
 		log.Info("Creating restore job", "jobName", nn.Name)
 
-		initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
+		restorer, err := r.getRestorer(ctx, cr, cluster)
 		if err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "get operator image")
+			status.State = apiv1alpha1.RestoreError
+			status.StateDesc = err.Error()
+			return ctrl.Result{}, nil
+		}
+		job, err := restorer.Job()
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "get job")
 		}
 
-		pvcName := fmt.Sprintf("%s-%s-mysql-0", mysql.DataVolumeName, cluster.Name)
-		job := xtrabackup.RestoreJob(cluster, destination, cr, storage, initImage, pvcName)
-
-		switch storage.Type {
-		case apiv1alpha1.BackupStorageS3:
-			if storage.S3 == nil {
-				return ctrl.Result{}, errors.New("s3 stanza is required in storage")
-			}
-
-			nn := types.NamespacedName{Name: storage.S3.CredentialsSecret, Namespace: cr.Namespace}
-			exists, err := k8s.ObjectExists(ctx, r.Client, nn, &corev1.Secret{})
-			if err != nil {
-				return ctrl.Result{}, errors.Wrapf(err, "check %s exists", nn)
-			}
-
-			if !exists {
-				status.State = apiv1alpha1.RestoreError
-				status.StateDesc = fmt.Sprintf("secret %s is not found", storage.S3.CredentialsSecret)
-				return ctrl.Result{}, errors.Wrapf(err, "secret %s not found", nn)
-			}
-
-			if err := xtrabackup.SetStorageS3(job, storage.S3); err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "set storage s3")
-			}
-		case apiv1alpha1.BackupStorageGCS:
-			if storage.GCS == nil {
-				return ctrl.Result{}, errors.New("gcs stanza is required in storage")
-			}
-
-			nn := types.NamespacedName{Name: storage.GCS.CredentialsSecret, Namespace: cr.Namespace}
-			exists, err := k8s.ObjectExists(ctx, r.Client, nn, &corev1.Secret{})
-			if err != nil {
-				return ctrl.Result{}, errors.Wrapf(err, "check %s exists", nn)
-			}
-
-			if !exists {
-				status.State = apiv1alpha1.RestoreError
-				status.StateDesc = fmt.Sprintf("secret %s is not found", storage.GCS.CredentialsSecret)
-				return ctrl.Result{}, errors.Wrapf(err, "secret %s not found", nn)
-			}
-
-			if err := xtrabackup.SetStorageGCS(job, storage.GCS); err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "set storage GCS")
-			}
-		case apiv1alpha1.BackupStorageAzure:
-			if storage.Azure == nil {
-				return ctrl.Result{}, errors.New("azure stanza is required in storage")
-			}
-
-			nn := types.NamespacedName{Name: storage.Azure.CredentialsSecret, Namespace: cr.Namespace}
-			exists, err := k8s.ObjectExists(ctx, r.Client, nn, &corev1.Secret{})
-			if err != nil {
-				return ctrl.Result{}, errors.Wrapf(err, "check %s exists", nn)
-			}
-
-			if !exists {
-				status.State = apiv1alpha1.RestoreError
-				status.StateDesc = fmt.Sprintf("secret %s is not found", storage.Azure.CredentialsSecret)
-				return ctrl.Result{}, errors.Wrapf(err, "secret %s not found", nn)
-			}
-
-			if err := xtrabackup.SetStorageAzure(job, storage.Azure); err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "set storage Azure")
-			}
-		default:
-			return ctrl.Result{}, errors.Errorf("Storage type %s is not supported", storage.Type)
-		}
-
-		if err := controllerutil.SetControllerReference(cr, job, r.Scheme); err != nil {
-			return ctrl.Result{}, errors.Wrapf(err, "set controller reference to Job %s/%s", job.Namespace, job.Name)
-		}
-
-		if err := r.Client.Create(ctx, job); err != nil {
+		if err := r.Create(ctx, job); err != nil {
 			return ctrl.Result{}, errors.Wrapf(err, "create job %s/%s", job.Namespace, job.Name)
 		}
 
@@ -301,12 +215,9 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	switch status.State {
-	case apiv1alpha1.RestoreStarting:
+	case apiv1alpha1.RestoreStarting, apiv1alpha1.RestoreRunning:
 		if job.Status.Active > 0 {
 			status.State = apiv1alpha1.RestoreRunning
-		}
-	case apiv1alpha1.RestoreRunning:
-		if job.Status.Active > 0 {
 			return ctrl.Result{}, nil
 		}
 
@@ -346,7 +257,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
-	pvcs, err := k8s.PVCsByLabels(ctx, r.Client, mysql.MatchLabels(cluster))
+	pvcs, err := k8s.PVCsByLabels(ctx, r.Client, mysql.MatchLabels(cluster), cluster.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "get PVC list")
 	}
@@ -357,7 +268,9 @@ func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cl
 		}
 
 		if err := r.Client.Delete(ctx, &pvc); err != nil {
-			log.Error(err, "failed to delete PVC")
+			if !k8serrors.IsNotFound(err) {
+				log.Error(err, "failed to delete PVC")
+			}
 			continue
 		}
 
@@ -434,13 +347,26 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 			return ErrWaitingTermination
 		}
 	case apiv1alpha1.ClusterTypeGR:
-		deployment := new(appsv1.Deployment)
-		nn = types.NamespacedName{Name: router.Name(cluster), Namespace: cluster.Namespace}
-		if err := r.Client.Get(ctx, nn, deployment); err != nil {
-			return errors.Wrapf(err, "get deployment %s", nn)
+		if cluster.HAProxyEnabled() {
+			sts := new(appsv1.StatefulSet)
+			nn = types.NamespacedName{Name: haproxy.Name(cluster), Namespace: cluster.Namespace}
+			if err := r.Client.Get(ctx, nn, sts); err != nil {
+				return errors.Wrapf(err, "get deployment %s", nn)
+			}
+			if sts.Status.Replicas != 0 {
+				return ErrWaitingTermination
+			}
 		}
-		if deployment.Status.Replicas != 0 {
-			return ErrWaitingTermination
+
+		if cluster.RouterEnabled() {
+			deployment := new(appsv1.Deployment)
+			nn = types.NamespacedName{Name: router.Name(cluster), Namespace: cluster.Namespace}
+			if err := r.Client.Get(ctx, nn, deployment); err != nil {
+				return errors.Wrapf(err, "get deployment %s", nn)
+			}
+			if deployment.Status.Replicas != 0 {
+				return ErrWaitingTermination
+			}
 		}
 	}
 
@@ -472,4 +398,41 @@ func (r *PerconaServerMySQLRestoreReconciler) SetupWithManager(mgr ctrl.Manager)
 		Named("psrestore-controller").
 		Owns(&batchv1.Job{}).
 		Complete(r)
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) validate(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLRestore, cluster *apiv1alpha1.PerconaServerMySQL) error {
+	bcp, err := getBackup(ctx, r.Client, cr, cluster)
+	if err != nil {
+		return err
+	}
+
+	if bs := cr.Spec.BackupSource; bs != nil {
+		storage := bs.Storage
+		destination := bs.Destination
+		if destination == "" {
+			return errors.New("backupSource.destination is empty")
+		}
+		if storage == nil {
+			return errors.New("backupSource.storage is empty")
+		}
+	} else {
+		storageName := bcp.Spec.StorageName
+		var ok bool
+		_, ok = cluster.Spec.Backup.Storages[storageName]
+		if !ok {
+			return errors.Errorf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", storageName)
+		}
+	}
+	if bcp.Status.Storage == nil {
+		return errors.New("backup's status.storage is empty")
+	}
+	restorer, err := r.getRestorer(ctx, cr, cluster)
+	if err != nil {
+		return errors.Wrap(err, "get restorer")
+	}
+	if err := restorer.Validate(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }

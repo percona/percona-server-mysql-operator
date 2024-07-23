@@ -1,4 +1,4 @@
-FROM golang:1.20 AS go_builder
+FROM --platform=${BUILDPLATFORM} golang:1.22 AS go_builder
 WORKDIR /go/src/github.com/percona/percona-server-mysql-operator
 
 COPY go.mod go.sum ./
@@ -9,66 +9,46 @@ ARG BUILD_TIME
 ARG BUILD_TIME
 ARG GO_LDFLAGS
 ARG GOOS=linux
-ARG GOARCH=amd64
+ARG TARGETARCH
 ARG CGO_ENABLED=0
 
 COPY . .
 
 RUN mkdir -p build/_output/bin \
-    && GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
+    && GOOS=$GOOS GOARCH=$TARGETARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
     -o build/_output/bin/percona-server-mysql-operator \
     cmd/manager/main.go \
     && cp -r build/_output/bin/percona-server-mysql-operator /usr/local/bin/percona-server-mysql-operator
-RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
+RUN GOOS=$GOOS GOARCH=$TARGETARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
     -o build/_output/bin/bootstrap \
     ./cmd/bootstrap/ \
     && cp -r build/_output/bin/bootstrap /usr/local/bin/bootstrap
-RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
+RUN GOOS=$GOOS GOARCH=$TARGETARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
     -o build/_output/bin/healthcheck \
     cmd/healthcheck/main.go \
     && cp -r build/_output/bin/healthcheck /usr/local/bin/healthcheck
-RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
+RUN GOOS=$GOOS GOARCH=$TARGETARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
     -o build/_output/bin/sidecar \
     ./cmd/sidecar \
     && cp -r build/_output/bin/sidecar /usr/local/bin/sidecar
-RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
+RUN GOOS=$GOOS GOARCH=$TARGETARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
     -o build/_output/bin/peer-list \
     cmd/peer-list/main.go \
     && cp -r build/_output/bin/peer-list /usr/local/bin/peer-list
-RUN GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
+RUN GOOS=$GOOS GOARCH=$TARGETARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
     -o build/_output/bin/orc-handler \
     cmd/orc-handler/main.go \
     && cp -r build/_output/bin/orc-handler /usr/local/bin/orc-handler
 
 FROM redhat/ubi9-minimal AS ubi9
+RUN microdnf -y update && microdnf clean all
 
-# check repository package signature in secure way
-RUN export GNUPGHOME="$(mktemp -d)" \
-    && microdnf install -y findutils \
-    && gpg --keyserver keyserver.ubuntu.com --recv-keys 430BDF5C56E7C94E848EE60C1C4CBDCDCD2EFD2A \
-    && gpg --export --armor 430BDF5C56E7C94E848EE60C1C4CBDCDCD2EFD2A > ${GNUPGHOME}/RPM-GPG-KEY-Percona \
-    && rpmkeys --import ${GNUPGHOME}/RPM-GPG-KEY-Percona \
-    && curl -Lf -o /tmp/percona-release.rpm https://repo.percona.com/yum/percona-release-latest.noarch.rpm \
-    && rpmkeys --checksig /tmp/percona-release.rpm \
-    && rpm -i /tmp/percona-release.rpm \
-    && rm -rf "$GNUPGHOME" /tmp/percona-release.rpm \
-    && rpm --import /etc/pki/rpm-gpg/PERCONA-PACKAGING-KEY \
-    && percona-release setup pdps-8.0
-
-RUN set -ex; \
-    microdnf -y update; \
-    microdnf install -y glibc-langpack-en percona-mysql-shell; \
-    microdnf clean all; \
-    rm -rf /var/cache; \
-    rm -rf /usr/lib/debug/usr/bin;
-
-RUN mkdir /sbin/.mysqlsh && chown 2:2 /sbin/.mysqlsh
 RUN mkdir /opt/percona-server-mysql-operator
 
 LABEL name="Percona Distribution for MySQL Operator" \
@@ -85,6 +65,7 @@ COPY --from=go_builder /usr/local/bin/sidecar /opt/percona-server-mysql-operator
 COPY --from=go_builder /usr/local/bin/peer-list /opt/percona-server-mysql-operator/peer-list
 COPY --from=go_builder /usr/local/bin/orc-handler /opt/percona-server-mysql-operator/orc-handler
 COPY build/ps-entrypoint.sh /opt/percona-server-mysql-operator/ps-entrypoint.sh
+COPY build/ps-pre-stop.sh /opt/percona-server-mysql-operator/ps-pre-stop.sh
 COPY build/heartbeat-entrypoint.sh /opt/percona-server-mysql-operator/heartbeat-entrypoint.sh
 COPY build/router-entrypoint.sh /opt/percona-server-mysql-operator/router-entrypoint.sh
 COPY build/router_readiness_check.sh /opt/percona-server-mysql-operator/router_readiness_check.sh

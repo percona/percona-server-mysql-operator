@@ -10,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -18,24 +19,45 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	database "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 )
 
-func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, reconcileErr error) error {
 	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
 		return nil
 	}
-	if err := cr.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
-		cr.Status.State = apiv1alpha1.StateError
+
+	clusterCondition := metav1.Condition{
+		Status:             metav1.ConditionTrue,
+		Type:               apiv1alpha1.StateInitializing.String(),
+		LastTransitionTime: metav1.Now(),
+	}
+
+	if reconcileErr != nil {
+		if cr.Status.State != apiv1alpha1.StateError {
+			clusterCondition.Type = apiv1alpha1.StateError.String()
+			clusterCondition.Reason = "ErrorReconcile"
+			clusterCondition.Message = reconcileErr.Error()
+
+			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
+
+			cr.Status.State = apiv1alpha1.StateError
+		}
+
 		nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
 		return writeStatus(ctx, r.Client, nn, cr.Status)
 	}
+
+	if cr.Status.Conditions != nil {
+		meta.RemoveStatusCondition(&cr.Status.Conditions, apiv1alpha1.StateError.String())
+	}
+
 	log := logf.FromContext(ctx).WithName("reconcileCRStatus")
 
 	mysqlStatus, err := r.appStatus(ctx, cr, mysql.Name(cr), cr.MySQLSpec().Size, mysql.MatchLabels(cr), cr.Status.MySQL.Version)
@@ -44,13 +66,29 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 	cr.Status.MySQL = mysqlStatus
 
-	if mysqlStatus.State == apiv1alpha1.StateReady && cr.Spec.MySQL.IsGR() {
-		ready, err := r.isGRReady(ctx, cr)
-		if err != nil {
-			return errors.Wrap(err, "check if GR ready")
+	if mysqlStatus.State == apiv1alpha1.StateReady {
+		if cr.Spec.MySQL.IsGR() {
+			ready, err := r.isGRReady(ctx, cr)
+			if err != nil {
+				return errors.Wrap(err, "check if GR is ready")
+			}
+			if !ready {
+				mysqlStatus.State = apiv1alpha1.StateInitializing
+			}
 		}
-		if !ready {
-			mysqlStatus.State = apiv1alpha1.StateInitializing
+
+		if cr.Spec.MySQL.IsAsync() && cr.OrchestratorEnabled() {
+			ready, msg, err := r.isAsyncReady(ctx, cr)
+			if err != nil {
+				return errors.Wrap(err, "check if async is ready")
+			}
+			if !ready {
+				mysqlStatus.State = apiv1alpha1.StateInitializing
+
+				log.Info(fmt.Sprintf("Async replication not ready: %s", msg))
+				r.Recorder.Event(cr, "Warning", "AsyncReplicationNotReady", msg)
+
+			}
 		}
 	}
 	cr.Status.MySQL = mysqlStatus
@@ -104,7 +142,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 
 	if cr.Spec.MySQL.IsGR() {
-		pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
+		pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
 		if err != nil {
 			return errors.Wrap(err, "get pods")
 		}
@@ -129,7 +167,14 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		}
 
 		if fullClusterCrash {
+			clusterCondition.Type = apiv1alpha1.StateError.String()
+			clusterCondition.Reason = "FullClusterCrashDetected"
+			clusterCondition.Message = "Full cluster crash detected"
+
+			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
+
 			cr.Status.State = apiv1alpha1.StateError
+
 			r.Recorder.Event(cr, "Warning", "FullClusterCrashDetected", "Full cluster crash detected")
 		}
 	}
@@ -148,8 +193,18 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		cr.Status.State = apiv1alpha1.StateInitializing
 	}
 
-	if err := r.checkTLSIssuer(ctx, cr); err != nil {
-		cr.Status.State = apiv1alpha1.StateError
+	switch cr.Status.State {
+	case apiv1alpha1.StateInitializing, apiv1alpha1.StateReady:
+		for _, appState := range []apiv1alpha1.StatefulAppState{apiv1alpha1.StateInitializing, apiv1alpha1.StateReady} {
+			clusterCondition.Type = appState.String()
+			clusterCondition.Reason = appState.String()
+			if cr.Status.State == appState {
+				clusterCondition.Status = metav1.ConditionTrue
+			} else {
+				clusterCondition.Status = metav1.ConditionFalse
+			}
+			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
+		}
 	}
 
 	log.V(1).Info(
@@ -179,44 +234,79 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 		return false, errors.Wrap(err, "get operator password")
 	}
 
-	firstPod, err := getMySQLPod(ctx, r.Client, cr, 0)
+	pod, err := getReadyMySQLPod(ctx, r.Client, cr)
+	if err != nil {
+		return false, errors.Wrap(err, "get ready mysql pod")
+	}
+
+	db := database.NewReplicationManager(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
+
+	dbExists, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata")
 	if err != nil {
 		return false, err
 	}
 
-	firstPodUri := mysql.PodName(cr, 0) + "." + mysql.ServiceName(cr) + "." + cr.Namespace
-	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, firstPodUri)
-	mysh, err := mysqlsh.NewWithExec(r.ClientCmd, firstPod, uri)
-	if err != nil {
-		return false, err
-	}
-
-	if !mysh.DoesClusterExistWithExec(ctx, cr.InnoDBClusterName()) {
+	if !dbExists {
 		return false, nil
 	}
 
-	status, err := mysh.ClusterStatusWithExec(ctx, cr.InnoDBClusterName())
+	members, err := db.GetGroupReplicationMembers(ctx)
 	if err != nil {
-		return false, errors.Wrap(err, "get cluster status")
+		return false, err
 	}
 
-	for addr, member := range status.DefaultReplicaSet.Topology {
-		for _, err := range member.InstanceErrors {
-			log.WithName(addr).Info(err)
+	onlineMembers := 0
+	for _, member := range members {
+		if member.MemberState != innodbcluster.MemberStateOnline {
+			log.WithName(member.Address).Info("Member is not ONLINE", "state", member.MemberState)
+			return false, nil
+		}
+		onlineMembers++
+	}
+
+	if onlineMembers < int(cr.Spec.MySQL.Size) {
+		log.V(1).Info("Not enough ONLINE members", "onlineMembers", onlineMembers, "size", cr.Spec.MySQL.Size)
+		return false, nil
+	}
+
+	log.V(1).Info("GR is ready")
+
+	return true, nil
+}
+
+func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, string, error) {
+	pod, err := getReadyOrcPod(ctx, r.Client, cr)
+	if err != nil {
+		return false, "", err
+	}
+
+	instances, err := orchestrator.Cluster(ctx, r.ClientCmd, pod, cr.ClusterHint())
+	if err != nil {
+		return false, "", err
+	}
+
+	problems := make(map[string][]string)
+
+	for _, i := range instances {
+		if len(i.Problems) > 0 {
+			problems[i.Alias] = i.Problems
 		}
 	}
 
-	log.V(1).Info("GR status", "status", status.DefaultReplicaSet.Status, "statusText", status.DefaultReplicaSet.StatusText)
+	// formatMessage formats a map of problems to a message like
+	// 'cluster1-mysql-1:[not_replicating, replication_lag], cluster1-mysql-2:[not_replicating]'
+	formatMessage := func(problems map[string][]string) string {
+		var sb strings.Builder
+		for k, v := range problems {
+			joinedValues := strings.Join(v, ", ")
+			sb.WriteString(fmt.Sprintf("%s: [%s], ", k, joinedValues))
+		}
 
-	switch status.DefaultReplicaSet.Status {
-	case innodbcluster.ClusterStatusOK:
-		return true, nil
-	case innodbcluster.ClusterStatusOKPartial, innodbcluster.ClusterStatusOKNoTolerance, innodbcluster.ClusterStatusOKNoTolerancePartial:
-		log.Info("GR status", "status", status.DefaultReplicaSet.Status, "statusText", status.DefaultReplicaSet.StatusText)
-		return true, nil
-	default:
-		return false, nil
+		return strings.TrimRight(sb.String(), ", ")
 	}
+
+	msg := formatMessage(problems)
+	return msg == "", msg, nil
 }
 
 func (r *PerconaServerMySQLReconciler) allLoadBalancersReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
@@ -286,13 +376,8 @@ func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1a
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return status, err
 	}
-	if sfsObj.Status.Replicas > sfsObj.Status.UpdatedReplicas {
-		return status, nil
-	}
 
-	sfsObj.Size()
-
-	pods, err := k8s.PodsByLabels(ctx, r.Client, labels)
+	pods, err := k8s.PodsByLabels(ctx, r.Client, labels, cr.Namespace)
 	if err != nil {
 		return status, errors.Wrap(err, "get pod list")
 	}
@@ -303,7 +388,14 @@ func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1a
 		}
 	}
 
-	if status.Ready == status.Size {
+	switch {
+	case cr.Spec.Pause && status.Ready > 0:
+		status.State = apiv1alpha1.StateStopping
+	case cr.Spec.Pause && status.Ready == 0:
+		status.State = apiv1alpha1.StatePaused
+	case sfsObj.Status.Replicas > sfsObj.Status.UpdatedReplicas:
+		status.State = apiv1alpha1.StateInitializing
+	case status.Ready == status.Size:
 		status.State = apiv1alpha1.StateReady
 	}
 
@@ -320,10 +412,6 @@ func writeStatus(ctx context.Context, cl client.Client, nn types.NamespacedName,
 		}
 
 		cr.Status = status
-		if err := cl.Status().Update(ctx, cr); err != nil {
-			return errors.Wrapf(err, "update %v", nn.String())
-		}
-
-		return nil
+		return cl.Status().Update(ctx, cr)
 	})
 }

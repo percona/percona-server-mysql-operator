@@ -31,7 +31,7 @@ kind: PerconaServerMySQL
 metadata:
   name: service-per-pod
   finalizers:
-    - delete-mysql-pods-in-order
+    - percona.com/delete-mysql-pods-in-order
 status:
   mysql:
     ready: 3
@@ -75,9 +75,9 @@ spec:
     protocol: TCP
     targetPort: 33060
   - name: http
-    port: 6033
+    port: 6450
     protocol: TCP
-    targetPort: 6033
+    targetPort: 6450
   selector:
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: service-per-pod
@@ -119,9 +119,9 @@ spec:
     protocol: TCP
     targetPort: 33060
   - name: http
-    port: 6033
+    port: 6450
     protocol: TCP
-    targetPort: 6033
+    targetPort: 6450
   publishNotReadyAddresses: true
   selector:
     app.kubernetes.io/component: mysql
@@ -164,9 +164,9 @@ spec:
     protocol: TCP
     targetPort: 33060
   - name: http
-    port: 6033
+    port: 6450
     protocol: TCP
-    targetPort: 6033
+    targetPort: 6450
   selector:
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: service-per-pod
@@ -209,9 +209,9 @@ spec:
     protocol: TCP
     targetPort: 33060
   - name: http
-    port: 6033
+    port: 6450
     protocol: TCP
-    targetPort: 6033
+    targetPort: 6450
   selector:
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: service-per-pod
@@ -254,9 +254,9 @@ spec:
     protocol: TCP
     targetPort: 33060
   - name: http
-    port: 6033
+    port: 6450
     protocol: TCP
-    targetPort: 6033
+    targetPort: 6450
   selector:
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: service-per-pod

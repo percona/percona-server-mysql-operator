@@ -1,0 +1,17 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 30
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gr-finalizer-mysql-0
+status:
+  phase: Running
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gr-finalizer-mysql-1
+status:
+  phase: Running

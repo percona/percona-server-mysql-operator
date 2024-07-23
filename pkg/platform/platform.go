@@ -29,7 +29,7 @@ var (
 	mx       sync.Mutex
 )
 
-// Server returns server version and platform (k8s|oc)
+// GetServerVersion returns server version and platform (k8s|oc)
 // it performs API requests for the first invocation and then returns "cached" value
 func GetServerVersion(cliCmd clientcmd.Client) (*ServerVersion, error) {
 	mx.Lock()

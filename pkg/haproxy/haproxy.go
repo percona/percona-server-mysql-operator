@@ -7,10 +7,12 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/pmm"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -36,13 +38,17 @@ func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return cr.Name + "-" + ComponentName
 }
 
+func NamespacedName(cr *apiv1alpha1.PerconaServerMySQL) types.NamespacedName {
+	return types.NamespacedName{Name: Name(cr), Namespace: cr.Namespace}
+}
+
 func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
-		map[string]string{apiv1alpha1.ComponentLabel: ComponentName},
+		map[string]string{naming.LabelComponent: ComponentName},
 		cr.Labels())
 }
 
@@ -123,12 +129,15 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 	}
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string, secret *corev1.Secret) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHash string, secret *corev1.Secret) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 
 	annotations := make(map[string]string)
 	if configHash != "" {
-		annotations["percona.com/configuration-hash"] = configHash
+		annotations[string(naming.AnnotationConfigHash)] = configHash
+	}
+	if tlsHash != "" {
+		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}
 
 	t := true
@@ -165,9 +174,10 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 							cr.Spec.Proxy.HAProxy.ContainerSecurityContext,
 						),
 					},
-					Containers:       containers(cr, secret),
-					Affinity:         cr.Spec.Proxy.HAProxy.GetAffinity(labels),
-					ImagePullSecrets: cr.Spec.Proxy.HAProxy.ImagePullSecrets,
+					Containers:                containers(cr, secret),
+					Affinity:                  cr.Spec.Proxy.HAProxy.GetAffinity(labels),
+					TopologySpreadConstraints: cr.Spec.Proxy.HAProxy.GetTopologySpreadConstraints(labels),
+					ImagePullSecrets:          cr.Spec.Proxy.HAProxy.ImagePullSecrets,
 					// TerminationGracePeriodSeconds: 30,
 					RestartPolicy: corev1.RestartPolicyAlways,
 					SchedulerName: "default-scheduler",
@@ -338,7 +348,7 @@ func mysqlMonitContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	env := []corev1.EnvVar{
 		{
 			Name:  "MYSQL_SERVICE",
-			Value: mysql.ServiceName(cr),
+			Value: mysql.ProxyServiceName(cr),
 		},
 	}
 	env = append(env, spec.Env...)

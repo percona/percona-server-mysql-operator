@@ -10,6 +10,7 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/pmm"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -33,7 +34,7 @@ const (
 	DefaultGRPort    = 33061
 	DefaultAdminPort = 33062
 	DefaultXPort     = 33060
-	SidecarHTTPPort  = 6033
+	SidecarHTTPPort  = 6450
 )
 
 type User struct {
@@ -88,6 +89,10 @@ func UnreadyServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr) + "-unready"
 }
 
+func ProxyServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
+	return Name(cr) + "-proxy"
+}
+
 func ConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
@@ -104,13 +109,17 @@ func FQDN(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
 	return fmt.Sprintf("%s.%s.%s", PodName(cr, idx), ServiceName(cr), cr.Namespace)
 }
 
+func PodFQDN(cr *apiv1alpha1.PerconaServerMySQL, pod *corev1.Pod) string {
+	return fmt.Sprintf("%s.%s.%s", pod.Name, ServiceName(cr), cr.Namespace)
+}
+
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
-		map[string]string{apiv1alpha1.ComponentLabel: ComponentName},
+		map[string]string{naming.LabelComponent: ComponentName},
 		cr.Labels())
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string, secret *corev1.Secret) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHash string, secret *corev1.Secret) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 	spec := cr.MySQLSpec()
 	replicas := spec.Size
@@ -118,7 +127,10 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 
 	annotations := make(map[string]string)
 	if configHash != "" {
-		annotations["percona.com/configuration-hash"] = configHash
+		annotations[string(naming.AnnotationConfigHash)] = configHash
+	}
+	if tlsHash != "" {
+		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}
 
 	return &appsv1.StatefulSet{
@@ -158,6 +170,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 					NodeSelector:                  cr.Spec.MySQL.NodeSelector,
 					Tolerations:                   cr.Spec.MySQL.Tolerations,
 					Affinity:                      spec.GetAffinity(labels),
+					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(labels),
 					ImagePullSecrets:              spec.ImagePullSecrets,
 					TerminationGracePeriodSeconds: spec.TerminationGracePeriodSeconds,
 					PriorityClassName:             spec.PriorityClassName,
@@ -381,11 +394,33 @@ func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
+func ProxyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
+	labels := MatchLabels(cr)
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Service",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ProxyServiceName(cr),
+			Namespace: cr.Namespace,
+			Labels:    labels,
+		},
+		Spec: corev1.ServiceSpec{
+			Type:                     corev1.ServiceTypeClusterIP,
+			ClusterIP:                "None",
+			Ports:                    servicePorts(cr),
+			Selector:                 labels,
+			PublishNotReadyAddresses: false,
+		},
+	}
+}
+
 func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podName string) *corev1.Service {
 	expose := cr.Spec.MySQL.Expose
 
 	labels := MatchLabels(cr)
-	labels[apiv1alpha1.ExposedLabel] = "true"
+	labels[naming.LabelExposed] = "true"
 	labels = util.SSMapMerge(expose.Labels, labels)
 
 	selector := MatchLabels(cr)
@@ -515,6 +550,13 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		LivenessProbe:            k8s.ExecProbe(spec.LivenessProbe, []string{"/opt/percona/healthcheck", "liveness"}),
 		ReadinessProbe:           k8s.ExecProbe(spec.ReadinessProbe, []string{"/opt/percona/healthcheck", "readiness"}),
 		StartupProbe:             k8s.ExecProbe(spec.StartupProbe, []string{"/opt/percona/bootstrap"}),
+		Lifecycle: &corev1.Lifecycle{
+			PreStop: &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/opt/percona/ps-pre-stop.sh"},
+				},
+			},
+		},
 	}
 
 	return container
@@ -553,6 +595,7 @@ func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		Command:                  []string{"/opt/percona/sidecar"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+		SecurityContext:          cr.Spec.Backup.ContainerSecurityContext,
 	}
 }
 

@@ -1,0 +1,10 @@
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-scaling
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+spec:
+  proxy:
+    router:
+      size: 1

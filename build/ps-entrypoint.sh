@@ -331,6 +331,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 
 			CREATE USER 'orchestrator'@'%' IDENTIFIED BY '${ORC_TOPOLOGY_PASSWORD}' PASSWORD EXPIRE NEVER;
 			GRANT SYSTEM_USER, SUPER, PROCESS, REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';
+			GRANT SELECT ON performance_schema.replication_group_members TO 'orchestrator'@'%';
 			GRANT SELECT ON mysql.slave_master_info TO 'orchestrator'@'%';
 			GRANT SELECT ON sys_operator.* TO 'orchestrator'@'%';
 
@@ -394,6 +395,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 	fi
 
 	load_group_replication_plugin
+	ensure_read_only
 
 	# exit when MYSQL_INIT_ONLY environment variable is set to avoid starting mysqld
 	if [ -n "$MYSQL_INIT_ONLY" ]; then

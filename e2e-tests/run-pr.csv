@@ -3,13 +3,16 @@ auto-config
 config
 config-router
 demand-backup
-gr-bootstrap
 gr-demand-backup
+gr-demand-backup-haproxy
+gr-finalizer
 gr-haproxy
 gr-ignore-annotations
 gr-init-deploy
 gr-one-pod
+gr-recreate
 gr-scaling
+gr-security-context
 gr-self-healing
 gr-tls-cert-manager
 gr-users
@@ -19,6 +22,7 @@ limits
 monitoring
 one-pod
 operator-self-healing
+recreate
 scaling
 self-healing
 service-per-pod

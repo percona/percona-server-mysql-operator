@@ -1,0 +1,179 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 120
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-recreate
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+status:
+  mysql:
+    state: paused
+  router:
+    state: paused
+  state: paused
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  finalizers:
+  - kubernetes.io/pvc-protection
+  labels:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: gr-recreate
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: datadir-gr-recreate-mysql-0
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  finalizers:
+  - kubernetes.io/pvc-protection
+  labels:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: gr-recreate
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: datadir-gr-recreate-mysql-1
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  finalizers:
+  - kubernetes.io/pvc-protection
+  labels:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: gr-recreate
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: datadir-gr-recreate-mysql-2
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-recreate-mysql
+status:
+  availableReplicas: 0
+  collisionCount: 0
+  observedGeneration: 2
+  replicas: 0
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: gr-recreate-router
+status:
+  observedGeneration: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: gr-recreate
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: gr-recreate-mysql
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: gr-recreate
+spec:
+  clusterIP: None
+  ports:
+  - name: mysql
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  - name: mysql-admin
+    port: 33062
+    protocol: TCP
+    targetPort: 33062
+  - name: mysqlx
+    port: 33060
+    protocol: TCP
+    targetPort: 33060
+  - name: http
+    port: 6450
+    protocol: TCP
+    targetPort: 6450
+  - name: mysql-gr
+    port: 33061
+    protocol: TCP
+    targetPort: 33061
+  selector:
+    app.kubernetes.io/component: mysql
+    app.kubernetes.io/instance: gr-recreate
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: router
+    app.kubernetes.io/instance: gr-recreate
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: gr-recreate-router
+  ownerReferences:
+  - apiVersion: ps.percona.com/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMySQL
+    name: gr-recreate
+spec:
+  ports:
+  - name: http
+    port: 8443
+    protocol: TCP
+    targetPort: 8443
+  - name: rw-default
+    port: 3306
+    protocol: TCP
+    targetPort: 6446
+  - name: read-write
+    port: 6446
+    protocol: TCP
+    targetPort: 6446
+  - name: read-only
+    port: 6447
+    protocol: TCP
+    targetPort: 6447
+  - name: x-read-write
+    port: 6448
+    protocol: TCP
+    targetPort: 6448
+  - name: x-read-only
+    port: 6449
+    protocol: TCP
+    targetPort: 6449
+  - name: x-default
+    port: 33060
+    protocol: TCP
+    targetPort: 33060
+  - name: rw-admin
+    port: 33062
+    protocol: TCP
+    targetPort: 33062
+  selector:
+    app.kubernetes.io/component: router
+    app.kubernetes.io/instance: gr-recreate
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  sessionAffinity: None
+  type: ClusterIP

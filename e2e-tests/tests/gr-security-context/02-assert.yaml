@@ -1,0 +1,111 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-security-context-mysql
+spec:
+  template:
+    spec:
+      containers:
+      - args:
+        - mysqld
+        command:
+        - /opt/percona/ps-entrypoint.sh
+        name: mysql
+        securityContext:
+          privileged: true
+      - command:
+        - /opt/percona/sidecar
+        name: xtrabackup
+        securityContext:
+          privileged: false
+      initContainers:
+      - command:
+        - /opt/percona-server-mysql-operator/ps-init-entrypoint.sh
+        name: mysql-init
+        securityContext:
+          privileged: true
+      securityContext:
+        fsGroup: 1001
+        supplementalGroups:
+        - 1001
+        - 1002
+        - 1003
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-security-context-haproxy
+spec:
+  template:
+    spec:
+      containers:
+      - args:
+        - haproxy
+        command:
+        - /opt/percona/haproxy-entrypoint.sh
+        name: haproxy
+        securityContext:
+          privileged: true
+      - args:
+        - /opt/percona/peer-list
+        - -on-change=/opt/percona/haproxy_add_mysql_nodes.sh
+        - -service=$(MYSQL_SERVICE)
+        name: mysql-monit
+        securityContext:
+          privileged: true
+      initContainers:
+      - command:
+        - /opt/percona-server-mysql-operator/ps-init-entrypoint.sh
+        name: haproxy-init
+        securityContext:
+          privileged: true
+      securityContext:
+        fsGroup: 1001
+        supplementalGroups:
+        - 1001
+        - 1002
+        - 1003
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-security-context
+status:
+  conditions:
+  - reason: Initializing
+    status: "False"
+    type: Initializing
+  - reason: Ready
+    status: "True"
+    type: Ready
+  - message: InnoDB cluster successfully bootstrapped with 3 nodes
+    reason: InnoDBClusterBootstrapped
+    status: "True"
+    type: InnoDBClusterBootstrapped
+  haproxy:
+    ready: 3
+    size: 3
+    state: ready
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready

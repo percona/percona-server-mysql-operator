@@ -3,9 +3,11 @@ config
 config-router
 demand-backup
 gr-demand-backup
+gr-demand-backup-haproxy
 gr-haproxy
 gr-init-deploy
 gr-one-pod
+gr-recreate
 gr-scaling
 gr-self-healing
 gr-tls-cert-manager
@@ -14,7 +16,7 @@ haproxy
 init-deploy
 one-pod
 operator-self-healing
-self-healing
+recreate
 sidecars
 smart-update
 tls-cert-manager

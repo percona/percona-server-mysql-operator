@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -36,6 +37,21 @@ func GetWatchNamespace() (string, error) {
 		return "", fmt.Errorf("%s must be set", WatchNamespaceEnvVar)
 	}
 	return ns, nil
+}
+
+// GetOperatorNamespace returns the namespace of the operator pod
+func GetOperatorNamespace() (string, error) {
+	ns, found := os.LookupEnv("OPERATOR_NAMESPACE")
+	if found {
+		return ns, nil
+	}
+
+	nsBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(nsBytes)), nil
 }
 
 func objectMetaEqual(old, new metav1.Object) bool {
@@ -78,6 +94,9 @@ func IsPodWithNameReady(ctx context.Context, cl client.Client, nn types.Namespac
 }
 
 func IsPodReady(pod corev1.Pod) bool {
+	if pod.Status.Phase != corev1.PodRunning || pod.DeletionTimestamp != nil {
+		return false
+	}
 	for _, cond := range pod.Status.Conditions {
 		if cond.Type == corev1.ContainersReady && cond.Status == corev1.ConditionTrue {
 			return true
@@ -158,7 +177,7 @@ func EnsureObjectWithHash(
 	}
 
 	objAnnotations := obj.GetAnnotations()
-	delete(objAnnotations, "percona.com/last-config-hash")
+	delete(objAnnotations, naming.AnnotationLastConfigHash.String())
 	obj.SetAnnotations(objAnnotations)
 
 	hash, err := ObjectHash(obj)
@@ -167,7 +186,7 @@ func EnsureObjectWithHash(
 	}
 
 	objAnnotations = obj.GetAnnotations()
-	objAnnotations["percona.com/last-config-hash"] = hash
+	objAnnotations[naming.AnnotationLastConfigHash.String()] = hash
 	obj.SetAnnotations(objAnnotations)
 
 	val := reflect.ValueOf(obj)
@@ -205,7 +224,7 @@ func EnsureObjectWithHash(
 		obj.SetAnnotations(annotations)
 	}
 
-	if oldObject.GetAnnotations()["percona.com/last-config-hash"] != hash ||
+	if oldObject.GetAnnotations()[naming.AnnotationLastConfigHash.String()] != hash ||
 		!objectMetaEqual(obj, oldObject) {
 
 		obj.SetResourceVersion(oldObject.GetResourceVersion())
@@ -319,10 +338,13 @@ func ObjectHash(obj runtime.Object) (string, error) {
 	return hex.EncodeToString(hash[:]), nil
 }
 
-func PodsByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([]corev1.Pod, error) {
+func PodsByLabels(ctx context.Context, cl client.Reader, l map[string]string, namespace string) ([]corev1.Pod, error) {
 	podList := &corev1.PodList{}
 
-	opts := &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)}
+	opts := &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(l),
+		Namespace:     namespace,
+	}
 	if err := cl.List(ctx, podList, opts); err != nil {
 		return nil, err
 	}
@@ -330,10 +352,13 @@ func PodsByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([
 	return podList.Items, nil
 }
 
-func ServicesByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([]corev1.Service, error) {
+func ServicesByLabels(ctx context.Context, cl client.Reader, l map[string]string, namespace string) ([]corev1.Service, error) {
 	svcList := &corev1.ServiceList{}
 
-	opts := &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)}
+	opts := &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(l),
+		Namespace:     namespace,
+	}
 	if err := cl.List(ctx, svcList, opts); err != nil {
 		return nil, err
 	}
@@ -341,10 +366,13 @@ func ServicesByLabels(ctx context.Context, cl client.Reader, l map[string]string
 	return svcList.Items, nil
 }
 
-func PVCsByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([]corev1.PersistentVolumeClaim, error) {
+func PVCsByLabels(ctx context.Context, cl client.Reader, l map[string]string, namespace string) ([]corev1.PersistentVolumeClaim, error) {
 	pvcList := &corev1.PersistentVolumeClaimList{}
 
-	opts := &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)}
+	opts := &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(l),
+		Namespace:     namespace,
+	}
 	if err := cl.List(ctx, pvcList, opts); err != nil {
 		return nil, err
 	}
@@ -364,7 +392,7 @@ func DefaultAPINamespace() (string, error) {
 }
 
 // RolloutRestart restarts pods owned by object by updating the pod template with passed annotation key-value.
-func RolloutRestart(ctx context.Context, cl client.Client, obj runtime.Object, key apiv1alpha1.AnnotationKey, value string) error {
+func RolloutRestart(ctx context.Context, cl client.Client, obj runtime.Object, key naming.AnnotationKey, value string) error {
 	switch obj := obj.(type) {
 	case *appsv1.StatefulSet:
 		orig := obj.DeepCopy()

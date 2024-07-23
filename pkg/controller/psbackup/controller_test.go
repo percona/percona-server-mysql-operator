@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
@@ -164,23 +165,23 @@ func TestCheckFinalizers(t *testing.T) {
 		{
 			name: "with finalizer and starting state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupStarting
 			}),
-			expectedFinalizers: []string{finalizerDeleteBackup},
+			expectedFinalizers: []string{naming.FinalizerDeleteBackup},
 		},
 		{
 			name: "with finalizer and running state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupRunning
 			}),
-			expectedFinalizers: []string{finalizerDeleteBackup},
+			expectedFinalizers: []string{naming.FinalizerDeleteBackup},
 		},
 		{
 			name: "with finalizer and error state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupError
 			}),
 			expectedFinalizers: nil,
@@ -188,7 +189,7 @@ func TestCheckFinalizers(t *testing.T) {
 		{
 			name: "with finalizer and new state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupNew
 			}),
 			expectedFinalizers: nil,
@@ -196,16 +197,16 @@ func TestCheckFinalizers(t *testing.T) {
 		{
 			name: "with failing finalizer and succeeded state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupSucceeded
 			}),
 			finalizerJobFail:   true,
-			expectedFinalizers: []string{finalizerDeleteBackup},
+			expectedFinalizers: []string{naming.FinalizerDeleteBackup},
 		},
 		{
 			name: "with successful finalizer and succeeded state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupSucceeded
 			}),
 			expectedFinalizers: []string{},
@@ -213,7 +214,7 @@ func TestCheckFinalizers(t *testing.T) {
 		{
 			name: "with successful finalizer, unknown finalizer and succeeded state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup, "unknown-finalizer"}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup, "unknown-finalizer"}
 				cr.Status.State = apiv1alpha1.BackupSucceeded
 			}),
 			expectedFinalizers: []string{"unknown-finalizer"},
@@ -221,16 +222,16 @@ func TestCheckFinalizers(t *testing.T) {
 		{
 			name: "with failing finalizer and failed state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupFailed
 			}),
 			finalizerJobFail:   true,
-			expectedFinalizers: []string{finalizerDeleteBackup},
+			expectedFinalizers: []string{},
 		},
 		{
 			name: "with successful finalizer and failed state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupFailed
 			}),
 			expectedFinalizers: []string{},
@@ -238,7 +239,7 @@ func TestCheckFinalizers(t *testing.T) {
 		{
 			name: "with successful finalizer, unknown finalizer and failed state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
-				cr.Finalizers = []string{finalizerDeleteBackup, "unknown-finalizer"}
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup, "unknown-finalizer"}
 				cr.Status.State = apiv1alpha1.BackupFailed
 			}),
 			expectedFinalizers: []string{"unknown-finalizer"},
@@ -302,6 +303,121 @@ func TestCheckFinalizers(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRunningState(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		t.Fatal(err, "failed to add client-go scheme")
+	}
+	if err := apiv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err, "failed to add apis scheme")
+	}
+	namespace := "some-namespace"
+
+	cr, err := readDefaultCRBackup("some-name", namespace)
+	if err != nil {
+		t.Fatal(err, "failed to read default backup")
+	}
+	cr.Status.State = apiv1alpha1.BackupStarting
+	cr.Spec.StorageName = "s3-us-west"
+	cluster, err := readDefaultCR("cluster1", namespace)
+	if err != nil {
+		t.Fatal(err, "failed to read default cr")
+	}
+	cluster.Status.MySQL.State = apiv1alpha1.StateReady
+	tests := []struct {
+		name          string
+		cr            *apiv1alpha1.PerconaServerMySQLBackup
+		cluster       *apiv1alpha1.PerconaServerMySQL
+		sidecarClient *fakeSidecarClient
+		state         apiv1alpha1.BackupState
+	}{
+		{
+			name:          "not running",
+			cr:            cr.DeepCopy(),
+			cluster:       cluster.DeepCopy(),
+			state:         apiv1alpha1.BackupStarting,
+			sidecarClient: &fakeSidecarClient{},
+		},
+		{
+			name:    "other backup is running",
+			cr:      cr.DeepCopy(),
+			cluster: cluster.DeepCopy(),
+			state:   apiv1alpha1.BackupStarting,
+			sidecarClient: &fakeSidecarClient{
+				destination: "other-container",
+			},
+		},
+		{
+			name:    "running",
+			cr:      cr.DeepCopy(),
+			cluster: cluster.DeepCopy(),
+			state:   apiv1alpha1.BackupRunning,
+			sidecarClient: &fakeSidecarClient{
+				destination: "container",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			storage, ok := tt.cluster.Spec.Backup.Storages["s3-us-west"]
+			if !ok {
+				t.Fatal("storage not found")
+			}
+			job := xtrabackup.Job(tt.cluster, tt.cr, "s3://bucket/container", "init-image", storage)
+			job.Status.Active = 1
+			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr, tt.cluster, job).WithStatusSubresource(tt.cr, tt.cluster, job)
+
+			r := PerconaServerMySQLBackupReconciler{
+				Client:        cb.Build(),
+				Scheme:        scheme,
+				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				NewSidecarClient: func(srcNode string) xtrabackup.SidecarClient {
+					return tt.sidecarClient
+				},
+			}
+			_, err := r.Reconcile(ctx, controllerruntime.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      tt.cr.Name,
+					Namespace: tt.cr.Namespace,
+				},
+			})
+			if err != nil {
+				t.Fatal(err, "failed to reconcile")
+			}
+			cr := &apiv1alpha1.PerconaServerMySQLBackup{}
+			err = r.Get(ctx, types.NamespacedName{
+				Name:      tt.cr.Name,
+				Namespace: tt.cr.Namespace,
+			}, cr)
+			if err != nil {
+				t.Fatal(err, "failed to get backup")
+			}
+			if cr.Status.State != tt.state {
+				t.Fatalf("expected state %s, got %s", tt.state, cr.Status.State)
+			}
+		})
+	}
+}
+
+type fakeSidecarClient struct {
+	destination string
+}
+
+func (f *fakeSidecarClient) GetRunningBackupConfig(ctx context.Context) (*xtrabackup.BackupConfig, error) {
+	if f.destination == "" {
+		return nil, nil
+	}
+	return &xtrabackup.BackupConfig{
+		Destination: f.destination,
+	}, nil
+}
+
+func (f *fakeSidecarClient) DeleteBackup(ctx context.Context, name string, cfg xtrabackup.BackupConfig) error {
+	return nil
 }
 
 func readDefaultCR(name, namespace string) (*apiv1alpha1.PerconaServerMySQL, error) {

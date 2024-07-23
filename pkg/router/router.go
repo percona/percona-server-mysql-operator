@@ -11,6 +11,7 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
@@ -32,6 +33,7 @@ const (
 	PortReadOnly   = 6447
 	PortXReadWrite = 6448
 	PortXReadOnly  = 6449
+	PortXDefault   = 33060
 	PortRWAdmin    = 33062
 )
 
@@ -49,7 +51,7 @@ func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
-		map[string]string{apiv1alpha1.ComponentLabel: ComponentName},
+		map[string]string{naming.LabelComponent: ComponentName},
 		cr.Labels())
 }
 
@@ -114,6 +116,10 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 					Port: int32(PortXReadOnly),
 				},
 				{
+					Name: "x-default",
+					Port: int32(PortXDefault),
+				},
+				{
 					Name: "rw-admin",
 					Port: int32(PortRWAdmin),
 				},
@@ -127,7 +133,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
-func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string) *appsv1.Deployment {
+func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHash string) *appsv1.Deployment {
 	labels := MatchLabels(cr)
 	spec := cr.Spec.Proxy.Router
 	replicas := spec.Size
@@ -135,7 +141,10 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string
 
 	annotations := make(map[string]string)
 	if configHash != "" {
-		annotations["percona.com/configuration-hash"] = configHash
+		annotations[string(naming.AnnotationConfigHash)] = configHash
+	}
+	if tlsHash != "" {
+		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}
 
 	zero := intstr.FromInt(0)
@@ -178,6 +187,7 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string
 					NodeSelector:                  cr.Spec.Proxy.Router.NodeSelector,
 					Tolerations:                   cr.Spec.Proxy.Router.Tolerations,
 					Affinity:                      spec.GetAffinity(labels),
+					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(labels),
 					ImagePullSecrets:              spec.ImagePullSecrets,
 					TerminationGracePeriodSeconds: spec.TerminationGracePeriodSeconds,
 					RestartPolicy:                 corev1.RestartPolicyAlways,
@@ -281,6 +291,10 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			{
 				Name:          "x-read-only",
 				ContainerPort: int32(PortXReadOnly),
+			},
+			{
+				Name:          "x-default",
+				ContainerPort: int32(PortXDefault),
 			},
 			{
 				Name:          "rw-admin",

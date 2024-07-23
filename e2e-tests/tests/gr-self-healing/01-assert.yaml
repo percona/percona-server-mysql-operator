@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 120
+timeout: 240
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -24,4 +24,5 @@ status:
   numberAvailable: 3
   numberMisscheduled: 0
   numberReady: 3
+  observedGeneration: 1
   updatedNumberScheduled: 3

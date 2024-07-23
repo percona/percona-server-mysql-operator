@@ -1,0 +1,9 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 150
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-secret
+type: Opaque

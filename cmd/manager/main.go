@@ -34,9 +34,11 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsServer "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	ctrlWebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
@@ -45,6 +47,8 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
+	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -81,27 +85,55 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	ns, err := k8s.GetWatchNamespace()
+	setupLog.Info("Build info", "GitCommit", GitCommit, "BuildTime", BuildTime)
+
+	namespace, err := k8s.GetWatchNamespace()
 	if err != nil {
 		setupLog.Error(err, "unable to get watch namespace")
 		os.Exit(1)
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
+	operatorNamespace, err := k8s.GetOperatorNamespace()
+	if err != nil {
+		setupLog.Error(err, "failed to get operators' namespace")
+		os.Exit(1)
+	}
+	options := ctrl.Options{
+		Scheme: scheme,
+		Metrics: metricsServer.Options{
+			BindAddress: metricsAddr,
+		},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "08db2feb.percona.com",
-		Namespace:              ns,
-	})
+
+		WebhookServer: ctrlWebhook.NewServer(ctrlWebhook.Options{
+			Port: 9443,
+		}),
+	}
+
+	// Add support for MultiNamespace set in WATCH_NAMESPACE
+	if len(namespace) > 0 {
+		namespaces := make(map[string]cache.Config)
+		for _, ns := range append(strings.Split(namespace, ","), operatorNamespace) {
+			namespaces[ns] = cache.Config{}
+		}
+		options.Cache.DefaultNamespaces = namespaces
+	}
+
+	// Get a config to talk to the apiserver
+	config, err := ctrl.GetConfig()
+	if err != nil {
+		setupLog.Error(err, "")
+		os.Exit(1)
+	}
+	mgr, err := ctrl.NewManager(config, options)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
 
-	nsClient := client.NewNamespacedClient(mgr.GetClient(), ns)
+	nsClient := mgr.GetClient()
 
 	cliCmd, err := clientcmd.NewClient()
 	if err != nil {
@@ -131,17 +163,20 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&psbackup.PerconaServerMySQLBackupReconciler{
-		Client:        nsClient,
-		Scheme:        mgr.GetScheme(),
-		ServerVersion: serverVersion,
+		Client:           nsClient,
+		Scheme:           mgr.GetScheme(),
+		ServerVersion:    serverVersion,
+		ClientCmd:        cliCmd,
+		NewSidecarClient: xtrabackup.NewSidecarClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLBackup")
 		os.Exit(1)
 	}
 	if err = (&psrestore.PerconaServerMySQLRestoreReconciler{
-		Client:        nsClient,
-		Scheme:        mgr.GetScheme(),
-		ServerVersion: serverVersion,
+		Client:           nsClient,
+		Scheme:           mgr.GetScheme(),
+		ServerVersion:    serverVersion,
+		NewStorageClient: storage.NewClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLRestore")
 		os.Exit(1)

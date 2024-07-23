@@ -3,7 +3,12 @@ kind: PerconaServerMySQL
 metadata:
   name: cluster1
 spec:
-  allowUnsafeConfigurations: false
+  unsafeFlags:
+    mysqlSize: false
+    orchestrator: false
+    orchestratorSize: false
+    proxy: false
+    proxySize: false
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
   mysql:
@@ -83,7 +88,7 @@ spec:
             storage: 1G
     affinity:
       antiAffinityTopologyKey: "none"
-    
+
   pmm:
     enabled: false
     image: percona/pmm-client:2.12.0

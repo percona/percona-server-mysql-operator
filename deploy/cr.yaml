@@ -3,12 +3,17 @@ kind: PerconaServerMySQL
 metadata:
   name: cluster1
   finalizers:
-    - delete-mysql-pods-in-order
-    # - delete-ssl
+    - percona.com/delete-mysql-pods-in-order
+    # - percona.com/delete-ssl
 spec:
-  allowUnsafeConfigurations: false
+#  unsafeFlags:
+#    mysqlSize: false
+#    orchestrator: false
+#    orchestratorSize: false
+#    proxy: false
+#    proxySize: false
 #  pause: false
-  crVersion: 0.6.0
+  crVersion: 0.9.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
   updateStrategy: SmartUpdate
@@ -35,7 +40,7 @@ spec:
     autoRecovery: true
     image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
-#    initImage: percona/percona-server-mysql-operator:0.5.0
+#    initImage: perconalab/percona-server-mysql-operator:main
 
     size: 3
 
@@ -71,12 +76,20 @@ spec:
 #                values:
 #                - e2e-az1
 #                - e2e-az2
+#    topologySpreadConstraints:
+#    - labelSelector:
+#        matchLabels:
+#          app.kubernetes.io/name: percona-server
+#      maxSkew: 1
+#      topologyKey: kubernetes.io/hostname
+#      whenUnsatisfiable: DoNotSchedule
 
 #    expose:
 #      enabled: false
 #      type: ClusterIP
 #      annotations:
-#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+#        service.beta.kubernetes.io/aws-load-balancer-type: nlb
 #      externalTrafficPolicy: Cluster
 #      internalTrafficPolicy: Cluster
 #      labels:
@@ -120,6 +133,11 @@ spec:
 #        resources:
 #          requests:
 #            storage: 1G
+#    containerSecurityContext:
+#      privileged: true
+#    podSecurityContext:
+#      fsGroup: 1001
+#      supplementalGroups: [1001, 1002, 1003]
 
   proxy:
     haproxy:
@@ -207,11 +225,19 @@ spec:
 #                  values:
 #                  - e2e-az1
 #                  - e2e-az2
+#      topologySpreadConstraints:
+#      - labelSelector:
+#          matchLabels:
+#            app.kubernetes.io/name: percona-server
+#        maxSkew: 1
+#        topologyKey: kubernetes.io/hostname
+#        whenUnsatisfiable: DoNotSchedule
 
 #      expose:
 #        type: ClusterIP
 #        annotations:
-#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+#          service.beta.kubernetes.io/aws-load-balancer-type: nlb
 #        externalTrafficPolicy: Cluster
 #        internalTrafficPolicy: Cluster
 #        labels:
@@ -219,11 +245,17 @@ spec:
 #        loadBalancerIP: 127.0.0.1
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
+#      containerSecurityContext:
+#        privileged: true
+#      podSecurityContext:
+#        fsGroup: 1001
+#        supplementalGroups: [1001, 1002, 1003]
+
     router:
       enabled: false
       image: perconalab/percona-server-mysql-operator:main-router
       imagePullPolicy: Always
-#      initImage: percona/percona-server-mysql-operator:0.5.0
+#      initImage: perconalab/percona-server-mysql-operator:main
 
       size: 3
 
@@ -245,6 +277,13 @@ spec:
 #                  values:
 #                  - e2e-az1
 #                  - e2e-az2
+#      topologySpreadConstraints:
+#      - labelSelector:
+#          matchLabels:
+#            app.kubernetes.io/name: percona-server
+#        maxSkew: 1
+#        topologyKey: kubernetes.io/hostname
+#        whenUnsatisfiable: DoNotSchedule
 
 #      configuration: |
 #        [default]
@@ -255,7 +294,8 @@ spec:
 #      expose:
 #        type: ClusterIP
 #        annotations:
-#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+#          service.beta.kubernetes.io/aws-load-balancer-type: nlb
 #        externalTrafficPolicy: Cluster
 #        internalTrafficPolicy: Cluster
 #        labels:
@@ -265,12 +305,12 @@ spec:
 #          - 10.0.0.0/8
 
   orchestrator:
-    enabled: false
+    enabled: true
 
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
-#    initImage: percona/percona-server-mysql-operator:0.5.0
+#    initImage: perconalab/percona-server-mysql-operator:main
 
     size: 3
 
@@ -286,11 +326,19 @@ spec:
 #                values:
 #                - e2e-az1
 #                - e2e-az2
+#    topologySpreadConstraints:
+#    - labelSelector:
+#        matchLabels:
+#          app.kubernetes.io/name: percona-server
+#      maxSkew: 1
+#      topologyKey: kubernetes.io/hostname
+#      whenUnsatisfiable: DoNotSchedule
 
 #    expose:
 #      type: ClusterIP
 #      annotations:
-#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+#        service.beta.kubernetes.io/aws-load-balancer-type: nlb
 #      externalTrafficPolicy: Cluster
 #      internalTrafficPolicy: Cluster
 #      labels:
@@ -313,7 +361,7 @@ spec:
   pmm:
     enabled: false
 
-    image: percona/pmm-client:2.36.0
+    image: perconalab/pmm-client:dev-latest
     imagePullPolicy: Always
 
     resources:
@@ -330,8 +378,11 @@ spec:
   backup:
     enabled: true
     image: perconalab/percona-server-mysql-operator:main-backup
+#    backoffLimit: 6
     imagePullPolicy: Always
-#    initImage: percona/percona-server-mysql-operator:0.5.0
+#    initImage: perconalab/percona-server-mysql-operator:main
+#    containerSecurityContext:
+#      privileged: true
     storages:
       s3-us-west:
         type: s3
@@ -352,6 +403,13 @@ spec:
 #                  operator: In
 #                  values:
 #                  - 'True'
+#        topologySpreadConstraints:
+#        - labelSelector:
+#            matchLabels:
+#              app.kubernetes.io/name: percona-server
+#          maxSkew: 1
+#          topologyKey: kubernetes.io/hostname
+#          whenUnsatisfiable: DoNotSchedule
 #        tolerations:
 #          - key: "backupWorker"
 #            operator: "Equal"

@@ -17,17 +17,14 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
-	"github.com/percona/percona-server-mysql-operator/pkg/users"
-)
-
-const (
-	annotationPasswordsUpdated string = "percona.com/passwords-updated"
 )
 
 var ErrPassNotPropagated = errors.New("password not yet propagated")
@@ -137,7 +134,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	if hash == internalHash {
-		if v, ok := internalSecret.Annotations[annotationPasswordsUpdated]; ok && v == "false" {
+		if v, ok := internalSecret.Annotations[naming.AnnotationPasswordsUpdated.String()]; ok && v == "false" {
 			operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 			if err != nil {
 				return errors.Wrap(err, "get operator password")
@@ -166,6 +163,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		restartMySQL        bool
 		restartReplication  bool
 		restartOrchestrator bool
+		restartPMM          bool
 	)
 
 	updatedUsers := make([]mysql.User, 0)
@@ -178,11 +176,11 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		mysqlUser := allUsers[apiv1alpha1.SystemUser(user)]
 		mysqlUser.Password = string(pass)
 
-		switch mysqlUser.Username {
+		switch apiv1alpha1.SystemUser(user) {
 		case apiv1alpha1.UserMonitor:
 			restartMySQL = cr.PMMEnabled(internalSecret)
 		case apiv1alpha1.UserPMMServerKey:
-			restartMySQL = cr.PMMEnabled(internalSecret)
+			restartPMM = cr.PMMEnabled(internalSecret)
 			continue // PMM server user credentials are not stored in db
 		case apiv1alpha1.UserReplication:
 			restartReplication = true
@@ -215,11 +213,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return err
 	}
 
-	um, err := users.NewManagerExec(primPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, primaryHost)
-	if err != nil {
-		return errors.Wrap(err, "init user manager")
-	}
-	defer um.Close()
+	um := db.NewUserManager(primPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, primaryHost)
 
 	var asyncPrimary *orchestrator.Instance
 
@@ -235,7 +229,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		}
 	}
 
-	if err := um.UpdateUserPasswords(updatedUsers); err != nil {
+	if err := um.UpdateUserPasswords(ctx, updatedUsers); err != nil {
 		return errors.Wrapf(err, "update passwords")
 	}
 
@@ -262,19 +256,31 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		if err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), sts); err != nil {
 			return errors.Wrap(err, "get Orchestrator statefulset")
 		}
-		if err := k8s.RolloutRestart(ctx, r.Client, sts, apiv1alpha1.AnnotationSecretHash, hash); err != nil {
+		if err := k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationSecretHash, hash); err != nil {
 			return errors.Wrap(err, "restart orchestrator")
 		}
 	}
 
-	if restartMySQL {
-		log.Info("Monitor user password updated. Restarting MySQL.")
+	if restartMySQL || restartPMM {
+		log.Info("Monitor user password or pmmserverkey updated. Restarting MySQL.")
 
 		sts := &appsv1.StatefulSet{}
 		if err := r.Client.Get(ctx, mysql.NamespacedName(cr), sts); err != nil {
 			return errors.Wrap(err, "get MySQL statefulset")
 		}
-		if err := k8s.RolloutRestart(ctx, r.Client, sts, apiv1alpha1.AnnotationSecretHash, hash); err != nil {
+		if err := k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationSecretHash, hash); err != nil {
+			return errors.Wrap(err, "restart MySQL")
+		}
+	}
+
+	if cr.HAProxyEnabled() && restartPMM {
+		log.Info("pmmserverkey updated. Restarting HAProxy.")
+
+		sts := new(appsv1.StatefulSet)
+		if err := r.Get(ctx, haproxy.NamespacedName(cr), sts); err != nil {
+			return errors.Wrap(err, "get HAProxy statefulset")
+		}
+		if err := k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationSecretHash, hash); err != nil {
 			return errors.Wrap(err, "restart MySQL")
 		}
 	}
@@ -291,7 +297,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 
 	log.Info("Updated internal secret", "secretName", cr.InternalSecretName())
 
-	k8s.AddAnnotation(internalSecret, string(annotationPasswordsUpdated), "false")
+	k8s.AddAnnotation(internalSecret, naming.AnnotationPasswordsUpdated.String(), "false")
 	err = r.Client.Update(ctx, internalSecret)
 	if err != nil {
 		return errors.Wrap(err, "update internal sys users secret annotation")
@@ -305,8 +311,8 @@ func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
 	cr *apiv1alpha1.PerconaServerMySQL,
 	secrets *corev1.Secret,
 	updatedUsers []mysql.User,
-	operatorPass string) error {
-
+	operatorPass string,
+) error {
 	log := logf.FromContext(ctx)
 
 	err := r.passwordsPropagated(ctx, cr, secrets)
@@ -333,19 +339,15 @@ func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
 		return err
 	}
 
-	um, err := users.NewManagerExec(primPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, primaryHost)
-	if err != nil {
-		return errors.Wrap(err, "init user manager")
-	}
-	defer um.Close()
+	um := db.NewUserManager(primPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, primaryHost)
 
-	if err := um.DiscardOldPasswords(updatedUsers); err != nil {
+	if err := um.DiscardOldPasswords(ctx, updatedUsers); err != nil {
 		return errors.Wrap(err, "discard old passwords")
 	}
 
 	log.Info("Discarded old user passwords")
 
-	k8s.AddAnnotation(secrets, annotationPasswordsUpdated, "true")
+	k8s.AddAnnotation(secrets, naming.AnnotationPasswordsUpdated.String(), "true")
 	err = r.Client.Update(ctx, secrets)
 	if err != nil {
 		return errors.Wrap(err, "update internal sys users secret annotation")

@@ -1,0 +1,24 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+---
+kind: PerconaServerMySQLBackup
+apiVersion: ps.percona.com/v1alpha1
+metadata:
+  name: gr-security-context-minio
+status:
+  state: Succeeded
+  storage:
+    containerSecurityContext:
+      privileged: true
+    podSecurityContext:
+      fsGroup: 1001
+      supplementalGroups:
+      - 1001
+      - 1002
+      - 1003
+    s3:
+      bucket: operator-testing
+      credentialsSecret: minio-secret
+      region: us-east-1
+    type: s3

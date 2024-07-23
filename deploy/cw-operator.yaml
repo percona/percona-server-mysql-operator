@@ -1,0 +1,79 @@
+apiVersion: v1
+data:
+  controller_manager_config.yaml: |
+    apiVersion: controller-runtime.sigs.k8s.io/v1alpha1
+    kind: ControllerManagerConfig
+    health:
+      healthProbeBindAddress: :8081
+    metrics:
+      bindAddress: 127.0.0.1:8080
+    webhook:
+      port: 9443
+    leaderElection:
+      leaderElect: true
+      resourceName: 08db2feb.percona.com
+kind: ConfigMap
+metadata:
+  name: percona-server-mysql-operator-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: percona-server-mysql-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: percona-server-mysql-operator
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: percona-server-mysql-operator
+    spec:
+      containers:
+      - args:
+        - --leader-elect
+        command:
+        - /usr/local/bin/percona-server-mysql-operator
+        env:
+        - name: LOG_STRUCTURED
+          value: "false"
+        - name: LOG_LEVEL
+          value: INFO
+        - name: WATCH_NAMESPACE
+          value: ""
+        - name: DISABLE_TELEMETRY
+          value: "false"
+        image: perconalab/percona-server-mysql-operator:main
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 200m
+            memory: 100Mi
+          requests:
+            cpu: 100m
+            memory: 20Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: percona-server-mysql-operator
+      terminationGracePeriodSeconds: 10
+---

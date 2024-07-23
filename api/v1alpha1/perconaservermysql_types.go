@@ -20,21 +20,23 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"path"
 	"regexp"
 	"strings"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
-
-	"github.com/percona/percona-server-mysql-operator/pkg/platform"
-	"github.com/percona/percona-server-mysql-operator/pkg/version"
-
 	"github.com/pkg/errors"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -47,7 +49,7 @@ type PerconaServerMySQLSpec struct {
 	SecretsName           string                               `json:"secretsName,omitempty"`
 	SSLSecretName         string                               `json:"sslSecretName,omitempty"`
 	SSLInternalSecretName string                               `json:"sslInternalSecretName,omitempty"`
-	AllowUnsafeConfig     bool                                 `json:"allowUnsafeConfigurations,omitempty"`
+	Unsafe                UnsafeFlags                          `json:"unsafeFlags,omitempty"`
 	InitImage             string                               `json:"initImage,omitempty"`
 	IgnoreAnnotations     []string                             `json:"ignoreAnnotations,omitempty"`
 	IgnoreLabels          []string                             `json:"ignoreLabels,omitempty"`
@@ -60,6 +62,21 @@ type PerconaServerMySQLSpec struct {
 	Toolkit               *ToolkitSpec                         `json:"toolkit,omitempty"`
 	UpgradeOptions        UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	UpdateStrategy        appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+}
+
+type UnsafeFlags struct {
+	// MySQLSize allows to set MySQL size to a value less than the minimum safe size or higher than the maximum safe size.
+	MySQLSize bool `json:"mysqlSize,omitempty"`
+
+	// Proxy allows to disable proxy.
+	Proxy bool `json:"proxy,omitempty"`
+	// ProxySize allows to set proxy (HAProxy / Router) size to a value less than the minimum safe size.
+	ProxySize bool `json:"proxySize,omitempty"`
+
+	// Orchestrator allows to disable Orchestrator.
+	Orchestrator bool `json:"orchestrator,omitempty"`
+	// OrchestratorSize allows to set Orchestrator size to a value less than the minimum safe size.
+	OrchestratorSize bool `json:"orchestratorSize,omitempty"`
 }
 
 type TLSSpec struct {
@@ -75,8 +92,10 @@ const (
 	MinSafeProxySize             = 2
 	MinSafeGRSize                = 3
 	MaxSafeGRSize                = 9
+	MinSafeAsyncSize             = 2
 )
 
+// Checks if the provided ClusterType is valid.
 func (t ClusterType) isValid() bool {
 	switch ClusterType(t) {
 	case ClusterTypeGR, ClusterTypeAsync:
@@ -98,10 +117,12 @@ type MySQLSpec struct {
 	PodSpec `json:",inline"`
 }
 
+// Checks if the MySQL cluster type is asynchronous.
 func (m MySQLSpec) IsAsync() bool {
 	return m.ClusterType == ClusterTypeAsync
 }
 
+// Checks if the MySQL cluster type is Group Replication (GR).
 func (m MySQLSpec) IsGR() bool {
 	return m.ClusterType == ClusterTypeGR
 }
@@ -142,13 +163,14 @@ type PodSpec struct {
 	VolumeSpec  *VolumeSpec       `json:"volumeSpec,omitempty"`
 	InitImage   string            `json:"initImage,omitempty"`
 
-	Affinity                      *PodAffinity        `json:"affinity,omitempty"`
-	NodeSelector                  map[string]string   `json:"nodeSelector,omitempty"`
-	Tolerations                   []corev1.Toleration `json:"tolerations,omitempty"`
-	PriorityClassName             string              `json:"priorityClassName,omitempty"`
-	TerminationGracePeriodSeconds *int64              `json:"gracePeriod,omitempty"`
-	SchedulerName                 string              `json:"schedulerName,omitempty"`
-	RuntimeClassName              *string             `json:"runtimeClassName,omitempty"`
+	Affinity                      *PodAffinity                      `json:"affinity,omitempty"`
+	TopologySpreadConstraints     []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+	NodeSelector                  map[string]string                 `json:"nodeSelector,omitempty"`
+	Tolerations                   []corev1.Toleration               `json:"tolerations,omitempty"`
+	PriorityClassName             string                            `json:"priorityClassName,omitempty"`
+	TerminationGracePeriodSeconds *int64                            `json:"gracePeriod,omitempty"`
+	SchedulerName                 string                            `json:"schedulerName,omitempty"`
+	RuntimeClassName              *string                           `json:"runtimeClassName,omitempty"`
 
 	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ServiceAccountName string                     `json:"serviceAccountName,omitempty"`
@@ -158,6 +180,7 @@ type PodSpec struct {
 	ContainerSpec `json:",inline"`
 }
 
+// Retrieves the initialization image for the pod.
 func (s *PodSpec) GetInitImage() string {
 	return s.InitImage
 }
@@ -183,8 +206,10 @@ type BackupSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext       `json:"containerSecurityContext,omitempty"`
 	Resources                corev1.ResourceRequirements   `json:"resources,omitempty"`
 	Storages                 map[string]*BackupStorageSpec `json:"storages,omitempty"`
+	BackoffLimit             *int32                        `json:"backoffLimit,omitempty"`
 }
 
+// Retrieves the initialization image for the backup.
 func (s *BackupSpec) GetInitImage() string {
 	return s.InitImage
 }
@@ -199,23 +224,24 @@ const (
 )
 
 type BackupStorageSpec struct {
-	Type                     BackupStorageType           `json:"type"`
-	Volume                   *VolumeSpec                 `json:"volumeSpec,omitempty"`
-	S3                       *BackupStorageS3Spec        `json:"s3,omitempty"`
-	GCS                      *BackupStorageGCSSpec       `json:"gcs,omitempty"`
-	Azure                    *BackupStorageAzureSpec     `json:"azure,omitempty"`
-	NodeSelector             map[string]string           `json:"nodeSelector,omitempty"`
-	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
-	Affinity                 *corev1.Affinity            `json:"affinity,omitempty"`
-	Tolerations              []corev1.Toleration         `json:"tolerations,omitempty"`
-	Annotations              map[string]string           `json:"annotations,omitempty"`
-	Labels                   map[string]string           `json:"labels,omitempty"`
-	SchedulerName            string                      `json:"schedulerName,omitempty"`
-	PriorityClassName        string                      `json:"priorityClassName,omitempty"`
-	PodSecurityContext       *corev1.PodSecurityContext  `json:"podSecurityContext,omitempty"`
-	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
-	RuntimeClassName         *string                     `json:"runtimeClassName,omitempty"`
-	VerifyTLS                *bool                       `json:"verifyTLS,omitempty"`
+	Type                      BackupStorageType                 `json:"type"`
+	Volume                    *VolumeSpec                       `json:"volumeSpec,omitempty"`
+	S3                        *BackupStorageS3Spec              `json:"s3,omitempty"`
+	GCS                       *BackupStorageGCSSpec             `json:"gcs,omitempty"`
+	Azure                     *BackupStorageAzureSpec           `json:"azure,omitempty"`
+	NodeSelector              map[string]string                 `json:"nodeSelector,omitempty"`
+	Resources                 corev1.ResourceRequirements       `json:"resources,omitempty"`
+	Affinity                  *corev1.Affinity                  `json:"affinity,omitempty"`
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+	Tolerations               []corev1.Toleration               `json:"tolerations,omitempty"`
+	Annotations               map[string]string                 `json:"annotations,omitempty"`
+	Labels                    map[string]string                 `json:"labels,omitempty"`
+	SchedulerName             string                            `json:"schedulerName,omitempty"`
+	PriorityClassName         string                            `json:"priorityClassName,omitempty"`
+	PodSecurityContext        *corev1.PodSecurityContext        `json:"podSecurityContext,omitempty"`
+	ContainerSecurityContext  *corev1.SecurityContext           `json:"containerSecurityContext,omitempty"`
+	RuntimeClassName          *string                           `json:"runtimeClassName,omitempty"`
+	VerifyTLS                 *bool                             `json:"verifyTLS,omitempty"`
 }
 
 type BackupStorageS3Spec struct {
@@ -227,15 +253,33 @@ type BackupStorageS3Spec struct {
 	StorageClass      string           `json:"storageClass,omitempty"`
 }
 
+// BucketAndPrefix returns bucket name and backup prefix from Bucket concatenated with Prefix.
+// BackupStorageS3Spec.Bucket can contain backup path in format `<bucket-name>/<backup-prefix>`.
+func (b *BackupStorageS3Spec) BucketAndPrefix() (string, string) {
+	bucket := b.Bucket.bucket()
+	prefix := b.Bucket.prefix()
+	if b.Prefix != "" {
+		prefix = path.Join(prefix, b.Prefix)
+	}
+	if prefix != "" {
+		prefix = strings.TrimSuffix(prefix, "/")
+		prefix += "/"
+	}
+
+	return bucket, prefix
+}
+
 // BucketWithPrefix contains a bucket name with or without a prefix in a format <bucket>/<prefix>
 type BucketWithPrefix string
 
-func (b BucketWithPrefix) Bucket() string {
+// Extracts the bucket name from a combined bucket with prefix string.
+func (b BucketWithPrefix) bucket() string {
 	bucket, _, _ := strings.Cut(string(b), "/")
 	return bucket
 }
 
-func (b BucketWithPrefix) Prefix() string {
+// Extracts the prefix from a combined bucket with prefix string.
+func (b BucketWithPrefix) prefix() string {
 	_, prefix, _ := strings.Cut(string(b), "/")
 	return prefix
 }
@@ -248,6 +292,22 @@ type BackupStorageGCSSpec struct {
 
 	// STANDARD, NEARLINE, COLDLINE, ARCHIVE
 	StorageClass string `json:"storageClass,omitempty"`
+}
+
+// BucketAndPrefix returns bucket name and backup prefix from Bucket concatenated with Prefix.
+// BackupStorageGCSSpec.Bucket can contain backup path in format `<bucket-name>/<backup-prefix>`.
+func (b *BackupStorageGCSSpec) BucketAndPrefix() (string, string) {
+	bucket := b.Bucket.bucket()
+	prefix := b.Bucket.prefix()
+	if b.Prefix != "" {
+		prefix = path.Join(prefix, b.Prefix)
+	}
+	if prefix != "" {
+		prefix = strings.TrimSuffix(prefix, "/")
+		prefix += "/"
+	}
+
+	return bucket, prefix
 }
 
 type BackupStorageAzureSpec struct {
@@ -265,6 +325,22 @@ type BackupStorageAzureSpec struct {
 
 	// Hot (Frequently accessed or modified data), Cool (Infrequently accessed or modified data), Archive (Rarely accessed or modified data)
 	StorageClass string `json:"storageClass,omitempty"`
+}
+
+// ContainerAndPrefix returns container name from ContainerName and backup prefix from ContainerName concatenated with Prefix.
+// BackupStorageAzureSpec.ContainerName can contain backup path in format `<container-name>/<backup-prefix>`.
+func (b *BackupStorageAzureSpec) ContainerAndPrefix() (string, string) {
+	container := b.ContainerName.bucket()
+	prefix := b.ContainerName.prefix()
+	if b.Prefix != "" {
+		prefix = path.Join(prefix, b.Prefix)
+	}
+	if prefix != "" {
+		prefix = strings.TrimSuffix(prefix, "/")
+		prefix += "/"
+	}
+
+	return container, prefix
 }
 
 type ProxySpec struct {
@@ -331,6 +407,7 @@ type ServiceExpose struct {
 	ExternalTrafficPolicy    corev1.ServiceExternalTrafficPolicyType  `json:"externalTrafficPolicy,omitempty"`
 }
 
+// Determines if both annotations and labels of the service expose are empty.
 func (e *ServiceExpose) SaveOldMeta() bool {
 	return len(e.Annotations) == 0 && len(e.Labels) == 0
 }
@@ -343,8 +420,14 @@ type ServiceExposeTogglable struct {
 
 type StatefulAppState string
 
+func (s StatefulAppState) String() string {
+	return cases.Title(language.English).String(string(s))
+}
+
 const (
 	StateInitializing StatefulAppState = "initializing"
+	StateStopping     StatefulAppState = "stopping"
+	StatePaused       StatefulAppState = "paused"
 	StateReady        StatefulAppState = "ready"
 	StateError        StatefulAppState = "error"
 )
@@ -417,18 +500,22 @@ const (
 	UserXtraBackup   SystemUser = "xtrabackup"
 )
 
+// MySQLSpec returns the MySQL specification from the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) MySQLSpec() *MySQLSpec {
 	return &cr.Spec.MySQL
 }
 
+// PMMSpec returns the PMM specification from the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) PMMSpec() *PMMSpec {
 	return cr.Spec.PMM
 }
 
+// OrchestratorSpec returns the Orchestrator specification from the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 	return &cr.Spec.Orchestrator
 }
 
+// SetVersion sets the CRVersion to the version value if it's not already set.
 func (cr *PerconaServerMySQL) SetVersion() {
 	if len(cr.Spec.CRVersion) > 0 {
 		return
@@ -437,8 +524,8 @@ func (cr *PerconaServerMySQL) SetVersion() {
 	cr.Spec.CRVersion = version.Version
 }
 
+// CheckNSetDefaults validates and sets default values for the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersion *platform.ServerVersion) error {
-	log := logf.FromContext(ctx).WithName("CheckNSetDefaults")
 	if len(cr.Spec.MySQL.ClusterType) == 0 {
 		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
 	}
@@ -470,7 +557,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		cr.Spec.MySQL.StartupProbe.SuccessThreshold = 1
 	}
 	if cr.Spec.MySQL.StartupProbe.TimeoutSeconds == 0 {
-		cr.Spec.MySQL.StartupProbe.TimeoutSeconds = 300
+		cr.Spec.MySQL.StartupProbe.TimeoutSeconds = 12 * 60 * 60
 	}
 
 	if cr.Spec.MySQL.LivenessProbe.InitialDelaySeconds == 0 {
@@ -603,25 +690,59 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 	cr.Spec.MySQL.reconcileAffinityOpts()
 	cr.Spec.Orchestrator.reconcileAffinityOpts()
 
-	if oSize := int(cr.Spec.Orchestrator.Size); cr.OrchestratorEnabled() && (oSize < 3 || oSize%2 == 0) && oSize != 0 && !cr.Spec.AllowUnsafeConfig {
-		return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup")
+	if cr.Spec.MySQL.Size == 1 {
+		cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 	}
 
-	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && cr.Spec.Proxy.Router == nil {
-		return errors.New("router section is needed for group replication")
+	if cr.Spec.MySQL.ClusterType == ClusterTypeGR {
+		if !cr.Spec.Proxy.Router.Enabled && !cr.Spec.Proxy.HAProxy.Enabled && !cr.Spec.Unsafe.Proxy {
+			return errors.New("MySQL Router or HAProxy must be enabled for Group Replication. Enable spec.unsafeFlags.proxy to bypass this check")
+		}
+
+		if cr.RouterEnabled() && !cr.Spec.Unsafe.ProxySize {
+			if cr.Spec.Proxy.Router.Size < MinSafeProxySize {
+				return errors.Errorf("Router size should be %d or greater. Enable spec.unsafeFlags.proxySize to set a lower size", MinSafeProxySize)
+			}
+		}
+
+		if !cr.Spec.Unsafe.MySQLSize {
+			if cr.Spec.MySQL.Size < MinSafeGRSize {
+				return errors.Errorf("MySQL size should be %d or greater for Group Replication. Enable spec.unsafeFlags.mysqlSize to set a lower size", MinSafeGRSize)
+			}
+
+			if cr.Spec.MySQL.Size > MaxSafeGRSize {
+				return errors.Errorf("MySQL size should be %d or lower for Group Replication. Enable spec.unsafeFlags.mysqlSize to set a higher size", MaxSafeGRSize)
+			}
+
+			if cr.Spec.MySQL.Size%2 == 0 {
+				return errors.New("MySQL size should be an odd number for Group Replication. Enable spec.unsafeFlags.mysqlSize to set an even number")
+			}
+		}
 	}
 
-	if cr.Spec.MySQL.ClusterType == ClusterTypeGR && !cr.Spec.AllowUnsafeConfig {
-		if cr.Spec.MySQL.Size < MinSafeGRSize {
-			cr.Spec.MySQL.Size = MinSafeGRSize
+	if cr.Spec.MySQL.ClusterType == ClusterTypeAsync {
+		if !cr.Spec.Unsafe.MySQLSize && cr.Spec.MySQL.Size < MinSafeAsyncSize {
+			return errors.Errorf("MySQL size should be %d or greater for asynchronous replication. Enable spec.unsafeFlags.mysqlSize to set a lower size", MinSafeAsyncSize)
 		}
 
-		if cr.Spec.MySQL.Size > MaxSafeGRSize {
-			cr.Spec.MySQL.Size = MaxSafeGRSize
+		if !cr.Spec.Unsafe.Orchestrator && !cr.Spec.Orchestrator.Enabled {
+			return errors.New("Orchestrator must be enabled for asynchronous replication. Enable spec.unsafeFlags.orchestrator to bypass this check")
 		}
 
-		if cr.Spec.MySQL.Size%2 == 0 {
-			cr.Spec.MySQL.Size++
+		if oSize := int(cr.Spec.Orchestrator.Size); cr.OrchestratorEnabled() && (oSize < 3 || oSize%2 == 0) && oSize != 0 && !cr.Spec.Unsafe.OrchestratorSize {
+			return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup. Enable spec.unsafeFlags.orchestratorSize to bypass this check")
+		}
+
+		if !cr.Spec.Orchestrator.Enabled && cr.Spec.UpdateStrategy == SmartUpdateStatefulSetStrategyType {
+			return errors.Errorf("Orchestrator must be enabled to use SmartUpdate. Either enable Orchestrator or set spec.updateStrategy to %s", appsv1.RollingUpdateStatefulSetStrategyType)
+		}
+
+		if !cr.Spec.Unsafe.Proxy && !cr.HAProxyEnabled() {
+			return errors.New("HAProxy must be enabled for asynchronous replication. Enable spec.unsafeFlags.proxy to bypass this check")
+		}
+
+		if cr.RouterEnabled() {
+			return errors.New("MySQL Router can't be enabled for asynchronous replication")
 		}
 	}
 
@@ -629,31 +750,13 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		return errors.New("MySQL Router and HAProxy can't be enabled at the same time")
 	}
 
-	if cr.RouterEnabled() && !cr.Spec.AllowUnsafeConfig {
-		if cr.Spec.Proxy.Router.Size < MinSafeProxySize {
-			cr.Spec.Proxy.Router.Size = MinSafeProxySize
-		}
-	}
-
 	if cr.Spec.Proxy.HAProxy == nil {
 		cr.Spec.Proxy.HAProxy = new(HAProxySpec)
 	}
 
-	if cr.HAProxyEnabled() && !cr.Spec.AllowUnsafeConfig {
+	if cr.HAProxyEnabled() && !cr.Spec.Unsafe.ProxySize {
 		if cr.Spec.Proxy.HAProxy.Size < MinSafeProxySize {
-			cr.Spec.Proxy.HAProxy.Size = MinSafeProxySize
-		}
-	}
-
-	if cr.Spec.MySQL.ClusterType != ClusterTypeGR && !cr.OrchestratorEnabled() {
-		switch cr.Generation {
-		case 1:
-			if cr.Spec.MySQL.Size > 1 {
-				return errors.New("mysql size should be 1 when orchestrator is disabled")
-			}
-		default:
-			cr.Spec.Orchestrator.Enabled = true
-			log.Info("orchestrator can't be disabled on an existing cluster")
+			return errors.Errorf("HAProxy size should be %d or greater. Enable spec.unsafeFlags.proxySize to set a lower size", MinSafeProxySize)
 		}
 	}
 
@@ -676,12 +779,6 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		cr.Spec.SSLSecretName = cr.Name + "-ssl"
 	}
 
-	if cr.Spec.UpdateStrategy == SmartUpdateStatefulSetStrategyType &&
-		!cr.HAProxyEnabled() &&
-		!cr.RouterEnabled() {
-		return errors.Errorf("MySQL Router or HAProxy should be enabled if SmartUpdate set")
-	}
-
 	return nil
 }
 
@@ -690,6 +787,7 @@ const (
 	BinVolumePath = "/opt/percona"
 )
 
+// reconcileVol validates and sets default values for a given VolumeSpec, ensuring it is properly defined.
 func reconcileVol(v *VolumeSpec) (*VolumeSpec, error) {
 	if v == nil || v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil {
 		return nil, errors.New("volumeSpec and it's internals should be specified")
@@ -708,6 +806,7 @@ func reconcileVol(v *VolumeSpec) (*VolumeSpec, error) {
 	return v, nil
 }
 
+// defaultPVCSpec sets default access mode for a PersistentVolumeClaimSpec if not already defined.
 func defaultPVCSpec(pvc *corev1.PersistentVolumeClaimSpec) {
 	if pvc == nil {
 		return
@@ -754,6 +853,7 @@ func (p *PodSpec) reconcileAffinityOpts() {
 	}
 }
 
+// GetAffinity derives an Affinity configuration based on the provided PodSpec's affinity settings and labels.
 func (p *PodSpec) GetAffinity(labels map[string]string) *corev1.Affinity {
 	if p.Affinity == nil {
 		return nil
@@ -783,46 +883,47 @@ func (p *PodSpec) GetAffinity(labels map[string]string) *corev1.Affinity {
 	return nil
 }
 
-type AnnotationKey string
+func (p *PodSpec) GetTopologySpreadConstraints(ls map[string]string) []corev1.TopologySpreadConstraint {
+	tscs := make([]corev1.TopologySpreadConstraint, 0)
 
-const (
-	AnnotationSpecHash   AnnotationKey = "percona.com/last-applied-spec"
-	AnnotationSecretHash AnnotationKey = "percona.com/last-applied-secret"
-	AnnotationConfigHash AnnotationKey = "percona.com/last-applied-config"
-)
+	for _, tsc := range p.TopologySpreadConstraints {
+		if tsc.LabelSelector == nil && tsc.MatchLabelKeys == nil {
+			tsc.LabelSelector = &metav1.LabelSelector{
+				MatchLabels: ls,
+			}
+		}
+		tscs = append(tscs, tsc)
+	}
+	return tscs
+}
 
-const (
-	NameLabel         = "app.kubernetes.io/name"
-	InstanceLabel     = "app.kubernetes.io/instance"
-	ManagedByLabel    = "app.kubernetes.io/managed-by"
-	PartOfLabel       = "app.kubernetes.io/part-of"
-	ComponentLabel    = "app.kubernetes.io/component"
-	MySQLPrimaryLabel = "mysql.percona.com/primary"
-	ExposedLabel      = "percona.com/exposed"
-)
-
+// Labels returns a standardized set of labels for the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) Labels() map[string]string {
 	return map[string]string{
-		NameLabel:      "percona-server",
-		InstanceLabel:  cr.Name,
-		ManagedByLabel: "percona-server-operator",
-		PartOfLabel:    "percona-server",
+		naming.LabelName:      "percona-server",
+		naming.LabelInstance:  cr.Name,
+		naming.LabelManagedBy: "percona-server-operator",
+		naming.LabelPartOf:    "percona-server",
 	}
 }
 
+// ClusterHint generates a unique identifier for the PerconaServerMySQL
+// cluster using its name and namespace.
 func (cr *PerconaServerMySQL) ClusterHint() string {
 	return fmt.Sprintf("%s.%s", cr.Name, cr.Namespace)
 }
 
+// GetClusterNameFromObject retrieves the cluster's name from the given client object's labels.
 func GetClusterNameFromObject(obj client.Object) (string, error) {
 	labels := obj.GetLabels()
-	instance, ok := labels[InstanceLabel]
+	instance, ok := labels[naming.LabelInstance]
 	if !ok {
-		return "", errors.Errorf("label %s doesn't exist", InstanceLabel)
+		return "", errors.Errorf("label %s doesn't exist", naming.LabelInstance)
 	}
 	return instance, nil
 }
 
+// FNVHash computes a hash of the provided byte slice using the FNV-1a algorithm.
 func FNVHash(p []byte) string {
 	hash := fnv.New32()
 	hash.Write(p)
@@ -844,10 +945,12 @@ func (cr *PerconaServerMySQL) ClusterHash() string {
 	return serverIDHash
 }
 
+// InternalSecretName generates a name for the internal secret based on the PerconaServerMySQL name.
 func (cr *PerconaServerMySQL) InternalSecretName() string {
 	return "internal-" + cr.Name
 }
 
+// PMMEnabled checks if PMM is enabled and if the provided secret contains PMM-specific data.
 func (cr *PerconaServerMySQL) PMMEnabled(secret *corev1.Secret) bool {
 	if cr.Spec.PMM != nil && cr.Spec.PMM.Enabled && secret != nil && secret.Data != nil {
 		return cr.Spec.PMM.HasSecret(secret)
@@ -855,6 +958,7 @@ func (cr *PerconaServerMySQL) PMMEnabled(secret *corev1.Secret) bool {
 	return false
 }
 
+// HasSecret determines if the provided secret contains the necessary PMM server key.
 func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	if secret.Data != nil {
 		v, ok := secret.Data[string(UserPMMServerKey)]
@@ -863,28 +967,24 @@ func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	return false
 }
 
+// RouterEnabled checks if the router is enabled, considering the MySQL configuration.
 func (cr *PerconaServerMySQL) RouterEnabled() bool {
-	if cr.MySQLSpec().IsAsync() {
-		return false
-	}
-
 	return cr.Spec.Proxy.Router != nil && cr.Spec.Proxy.Router.Enabled
 }
 
+// HAProxyEnabled verifies if HAProxy is enabled based on MySQL configuration and safety settings.
 func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
-	if cr.MySQLSpec().IsAsync() && !cr.Spec.AllowUnsafeConfig {
-		return true
-	}
-
 	return cr.Spec.Proxy.HAProxy != nil && cr.Spec.Proxy.HAProxy.Enabled
 }
 
+// OrchestratorEnabled determines if the orchestrator is enabled,
+// considering the MySQL configuration.
 func (cr *PerconaServerMySQL) OrchestratorEnabled() bool {
 	if cr.MySQLSpec().IsGR() {
 		return false
 	}
 
-	if cr.MySQLSpec().IsAsync() && !cr.Spec.AllowUnsafeConfig {
+	if cr.MySQLSpec().IsAsync() && !cr.Spec.Unsafe.Orchestrator {
 		return true
 	}
 
@@ -893,10 +993,12 @@ func (cr *PerconaServerMySQL) OrchestratorEnabled() bool {
 
 var NonAlphaNumeric = regexp.MustCompile("[^a-zA-Z0-9_]+")
 
+// Generates a cluster name by sanitizing the PerconaServerMySQL name.
 func (cr *PerconaServerMySQL) InnoDBClusterName() string {
 	return NonAlphaNumeric.ReplaceAllString(cr.Name, "")
 }
 
+// Registers PerconaServerMySQL types with the SchemeBuilder.
 func init() {
 	SchemeBuilder.Register(&PerconaServerMySQL{}, &PerconaServerMySQLList{})
 }
