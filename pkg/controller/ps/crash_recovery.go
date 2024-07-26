@@ -19,7 +19,7 @@ import (
 func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("Crash recovery")
 
-	if cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeAsync || cr.OrchestratorEnabled() {
+	if cr.Spec.MySQL.IsAsync() {
 		return nil
 	}
 
