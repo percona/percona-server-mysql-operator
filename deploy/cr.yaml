@@ -13,14 +13,14 @@ spec:
 #    proxy: false
 #    proxySize: false
 #  pause: false
-  crVersion: 0.8.0
+  crVersion: 0.9.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
   updateStrategy: SmartUpdate
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
     apply: disabled
-#  initImage: percona/percona-server-mysql-operator:0.8.0
+#  initImage: perconalab/percona-server-mysql-operator:main
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
 #  ignoreLabels:
@@ -40,7 +40,7 @@ spec:
     autoRecovery: true
     image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
-#    initImage: percona/percona-server-mysql-operator:0.8.0
+#    initImage: perconalab/percona-server-mysql-operator:main
 
     size: 3
 
@@ -255,7 +255,7 @@ spec:
       enabled: false
       image: perconalab/percona-server-mysql-operator:main-router
       imagePullPolicy: Always
-#      initImage: percona/percona-server-mysql-operator:0.8.0
+#      initImage: perconalab/percona-server-mysql-operator:main
 
       size: 3
 
@@ -305,12 +305,12 @@ spec:
 #          - 10.0.0.0/8
 
   orchestrator:
-    enabled: false
+    enabled: true
 
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
-#    initImage: percona/percona-server-mysql-operator:0.8.0
+#    initImage: perconalab/percona-server-mysql-operator:main
 
     size: 3
 
@@ -361,7 +361,7 @@ spec:
   pmm:
     enabled: false
 
-    image: percona/pmm-client:2.41.2
+    image: perconalab/pmm-client:dev-latest
     imagePullPolicy: Always
 
     resources:
@@ -380,7 +380,7 @@ spec:
     image: perconalab/percona-server-mysql-operator:main-backup
 #    backoffLimit: 6
     imagePullPolicy: Always
-#    initImage: percona/percona-server-mysql-operator:0.8.0
+#    initImage: perconalab/percona-server-mysql-operator:main
 #    containerSecurityContext:
 #      privileged: true
     storages:

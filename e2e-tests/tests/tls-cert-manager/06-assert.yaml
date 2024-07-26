@@ -76,7 +76,7 @@ spec:
     haproxy:
       enabled: true
   orchestrator:
-    enabled: false
+    enabled: true
 status:
   haproxy:
     ready: 3

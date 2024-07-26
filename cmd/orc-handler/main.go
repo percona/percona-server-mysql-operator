@@ -107,7 +107,7 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 
 	primaryName := strings.TrimSuffix(strings.TrimSuffix(primary, "."+ns), "."+mysql.ServiceName(cr))
 
-	pods, err := k8s.PodsByLabels(ctx, cl, mysql.MatchLabels(cr))
+	pods, err := k8s.PodsByLabels(ctx, cl, mysql.MatchLabels(cr), cr.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "get MySQL pods")
 	}

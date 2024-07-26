@@ -5,8 +5,6 @@ timeout: 500
 apiVersion: batch/v1
 kind: Job
 metadata:
-  annotations:
-    batch.kubernetes.io/job-tracking: ""
   generation: 1
   labels:
     app.kubernetes.io/component: xtrabackup
@@ -26,7 +24,6 @@ spec:
       containers:
       - command:
         - /opt/percona/run-restore.sh
-        image: perconalab/percona-server-mysql-operator:main-backup
         imagePullPolicy: Always
         name: xtrabackup
         resources: {}
