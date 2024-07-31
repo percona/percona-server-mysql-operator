@@ -984,16 +984,17 @@ func (r *PerconaServerMySQLReconciler) cleanupOrchestrator(ctx context.Context, 
 		return nil
 	}
 
-	forDeletion := make(map[string]struct{}, int(orcExposer.Size()))
+	outdatedSvcs := make(map[string]struct{}, int(orcExposer.Size()))
 	for i := len(services) - 1; i >= int(orcExposer.Size()); i-- {
-		forDeletion[orchestrator.PodName(cr, i)] = struct{}{}
+		outdatedSvcs[orchestrator.PodName(cr, i)] = struct{}{}
 	}
 
 	for _, svc := range services {
-		if _, ok := forDeletion[svc.Name]; !ok {
+		if _, ok := outdatedSvcs[svc.Name]; !ok {
 			continue
 		}
 
+		logf.FromContext(ctx).Info("Deleting outdated orchestrator service", "service", svc.Name)
 		if err := r.Client.Delete(ctx, &svc); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrapf(err, "delete Service/%s", svc.Name)
 		}
