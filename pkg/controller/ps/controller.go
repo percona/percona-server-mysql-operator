@@ -959,16 +959,46 @@ func (r *PerconaServerMySQLReconciler) cleanupMysql(ctx context.Context, cr *api
 }
 
 func (r *PerconaServerMySQLReconciler) cleanupOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	orcExposer := orchestrator.Exposer(*cr)
+
 	if !cr.OrchestratorEnabled() {
 		if err := r.Delete(ctx, orchestrator.StatefulSet(cr, "", "")); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrap(err, "failed to delete orchestrator statefulset")
 		}
 
-		orcExposer := orchestrator.Exposer(*cr)
 		if err := r.cleanupOutdatedServices(ctx, &orcExposer, cr.Namespace); err != nil {
 			return errors.Wrap(err, "cleanup Orchestrator services")
 		}
+
+		return nil
 	}
+
+	svcLabels := orcExposer.Labels()
+	svcLabels[naming.LabelExposed] = "true"
+	services, err := k8s.ServicesByLabels(ctx, r.Client, svcLabels, cr.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "get exposed services")
+	}
+
+	if len(services) == int(orcExposer.Size()) {
+		return nil
+	}
+
+	forDeletion := make(map[string]struct{}, int(orcExposer.Size()))
+	for i := len(services) - 1; i >= int(orcExposer.Size()); i-- {
+		forDeletion[orchestrator.PodName(cr, i)] = struct{}{}
+	}
+
+	for _, svc := range services {
+		if _, ok := forDeletion[svc.Name]; !ok {
+			continue
+		}
+
+		if err := r.Client.Delete(ctx, &svc); err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrapf(err, "delete Service/%s", svc.Name)
+		}
+	}
+
 	return nil
 }
 
