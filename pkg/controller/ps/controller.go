@@ -973,6 +973,10 @@ func (r *PerconaServerMySQLReconciler) cleanupOrchestrator(ctx context.Context, 
 		return nil
 	}
 
+	if cr.Spec.Pause {
+		return nil
+	}
+
 	svcLabels := orcExposer.Labels()
 	svcLabels[naming.LabelExposed] = "true"
 	services, err := k8s.ServicesByLabels(ctx, r.Client, svcLabels, cr.Namespace)
@@ -984,7 +988,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOrchestrator(ctx context.Context, 
 		return nil
 	}
 
-	outdatedSvcs := make(map[string]struct{}, int(orcExposer.Size()))
+	outdatedSvcs := make(map[string]struct{}, len(services))
 	for i := len(services) - 1; i >= int(orcExposer.Size()); i-- {
 		outdatedSvcs[orchestrator.PodName(cr, i)] = struct{}{}
 	}
