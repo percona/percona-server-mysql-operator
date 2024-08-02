@@ -1,9 +1,0 @@
-apiVersion: ps.percona.com/v1alpha1
-kind: PerconaServerMySQLBackup
-metadata:
-  name: demand-backup-s3
-  finalizers:
-    - delete-backup
-spec:
-  clusterName: demand-backup
-  storageName: aws-s3

@@ -1,0 +1,17 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+delete:
+- apiVersion: ps.percona.com/v1alpha1
+  kind: PerconaServerMySQL
+  metadata:
+    name: gr-tls-cert-manager
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      destroy_cert_manager
+      destroy_operator
+    timeout: 60

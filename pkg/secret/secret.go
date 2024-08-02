@@ -1,14 +1,8 @@
 package secret
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
-	"fmt"
 	"math/big"
 	mrand "math/rand"
 	"time"
@@ -18,12 +12,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/tls"
 )
 
 var validityNotAfter = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
 
 func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Secret, error) {
-	ca, cert, key, err := issueCerts(DNSNames(cr))
+	ca, cert, key, err := tls.IssueCerts(tls.DNSNames(cr))
 	if err != nil {
 		return nil, errors.Wrap(err, "issue TLS certificates")
 	}
@@ -43,129 +38,6 @@ func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL
 	return secret, nil
 }
 
-func DNSNames(cr *apiv1alpha1.PerconaServerMySQL) []string {
-	hosts := []string{
-		fmt.Sprintf("*.%s-mysql", cr.Name),
-		fmt.Sprintf("*.%s-mysql.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-mysql.%s.svc", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-orchestrator", cr.Name),
-		fmt.Sprintf("*.%s-orchestrator.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-orchestrator.%s.svc", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-router", cr.Name),
-		fmt.Sprintf("*.%s-router.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("*.%s-router.%s.svc", cr.Name, cr.Namespace),
-	}
-	if cr.Spec.TLS != nil {
-		hosts = append(hosts, cr.Spec.TLS.SANs...)
-	}
-	return hosts
-}
-
-// issueCerts returns CA certificate, TLS certificate and TLS private key
-func issueCerts(hosts []string) (caCert, tlsCert, tlsKey []byte, err error) {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "generate rsa key")
-	}
-
-	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
-	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "generate serial number for root")
-	}
-
-	caTemplate := x509.Certificate{
-		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			Organization: []string{"Root CA"},
-		},
-		NotBefore: time.Now(),
-		NotAfter:  validityNotAfter,
-		KeyUsage:  x509.KeyUsageCertSign,
-		ExtKeyUsage: []x509.ExtKeyUsage{
-			x509.ExtKeyUsageServerAuth,
-			x509.ExtKeyUsageClientAuth,
-		},
-		BasicConstraintsValid: true,
-		IsCA:                  true,
-	}
-
-	derBytes, err := x509.CreateCertificate(rand.Reader,
-		&caTemplate,
-		&caTemplate,
-		&privateKey.PublicKey,
-		privateKey)
-	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "generate CA certificate")
-	}
-
-	certOut := &bytes.Buffer{}
-	err = pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "encode CA certificate")
-	}
-	caCert = certOut.Bytes()
-
-	serialNumber, err = rand.Int(rand.Reader, serialNumberLimit)
-	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "generate serial number for client")
-	}
-
-	tlsTemplate := x509.Certificate{
-		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			Organization: []string{"PS"},
-		},
-		Issuer: pkix.Name{
-			Organization: []string{"Root CA"},
-		},
-		NotBefore: time.Now(),
-		NotAfter:  validityNotAfter,
-		DNSNames:  hosts,
-		KeyUsage:  x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage: []x509.ExtKeyUsage{
-			x509.ExtKeyUsageServerAuth,
-			x509.ExtKeyUsageClientAuth,
-		},
-		BasicConstraintsValid: true,
-		IsCA:                  false,
-	}
-
-	clientKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "generate client key")
-	}
-
-	tlsDerBytes, err := x509.CreateCertificate(rand.Reader,
-		&tlsTemplate,
-		&caTemplate,
-		&clientKey.PublicKey,
-		privateKey)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	tlsCertOut := &bytes.Buffer{}
-	err = pem.Encode(tlsCertOut, &pem.Block{Type: "CERTIFICATE", Bytes: tlsDerBytes})
-	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "encode TLS  certificate")
-	}
-	tlsCert = tlsCertOut.Bytes()
-
-	keyOut := &bytes.Buffer{}
-	block := &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(clientKey),
-	}
-	err = pem.Encode(keyOut, block)
-	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "encode RSA private key")
-	}
-	tlsKey = keyOut.Bytes()
-
-	return
-}
-
 const (
 	passwordMaxLen = 20
 	passwordMinLen = 16
@@ -174,17 +46,20 @@ const (
 		"0123456789"
 )
 
-var SecretUsers = [...]apiv1alpha1.SystemUser{
+var SecretUsers = []apiv1alpha1.SystemUser{
 	apiv1alpha1.UserHeartbeat,
 	apiv1alpha1.UserMonitor,
 	apiv1alpha1.UserOperator,
 	apiv1alpha1.UserOrchestrator,
-	apiv1alpha1.UserReplication,
 	apiv1alpha1.UserRoot,
 	apiv1alpha1.UserXtraBackup,
 }
 
-func FillPasswordsSecret(secret *corev1.Secret) error {
+func FillPasswordsSecret(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) error {
+	if cr.MySQLSpec().IsAsync() {
+		SecretUsers = append(SecretUsers, apiv1alpha1.UserReplication)
+	}
+
 	if len(secret.Data) == 0 {
 		secret.Data = make(map[string][]byte, len(SecretUsers))
 	}

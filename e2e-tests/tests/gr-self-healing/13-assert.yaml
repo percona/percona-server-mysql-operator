@@ -1,0 +1,52 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 30
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-self-healing
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+status:
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  router:
+    ready: 3
+    size: 3
+    state: ready
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 13-read-from-replicas-0
+data:
+  data: |2-
+    100500
+    100501
+    100502
+    100503
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 13-read-from-replicas-1
+data:
+  data: |2-
+    100500
+    100501
+    100502
+    100503
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 13-read-from-replicas-2
+data:
+  data: |2-
+    100500
+    100501
+    100502
+    100503

@@ -1,6 +1,8 @@
 package router
 
 import (
+	"fmt"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -9,13 +11,14 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
 const (
-	componentName    = "router"
+	ComponentName    = "router"
 	credsVolumeName  = "users"
-	credsMountPath   = "/etc/mysql/mysql-users-secret"
+	CredsMountPath   = "/etc/mysql/mysql-users-secret"
 	tlsVolumeName    = "tls"
 	tlsMountPath     = "/etc/mysql/mysql-tls-secret"
 	configVolumeName = "config"
@@ -30,11 +33,16 @@ const (
 	PortReadOnly   = 6447
 	PortXReadWrite = 6448
 	PortXReadOnly  = 6449
+	PortXDefault   = 33060
 	PortRWAdmin    = 33062
 )
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
-	return cr.Name + "-" + componentName
+	return cr.Name + "-" + ComponentName
+}
+
+func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
+	return fmt.Sprintf("%s-%d", Name(cr), idx)
 }
 
 func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
@@ -43,7 +51,7 @@ func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
-		map[string]string{apiv1alpha1.ComponentLabel: componentName},
+		map[string]string{naming.LabelComponent: ComponentName},
 		cr.Labels())
 }
 
@@ -108,6 +116,10 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 					Port: int32(PortXReadOnly),
 				},
 				{
+					Name: "x-default",
+					Port: int32(PortXDefault),
+				},
+				{
 					Name: "rw-admin",
 					Port: int32(PortRWAdmin),
 				},
@@ -121,7 +133,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
-func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string) *appsv1.Deployment {
+func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHash string) *appsv1.Deployment {
 	labels := MatchLabels(cr)
 	spec := cr.Spec.Proxy.Router
 	replicas := spec.Size
@@ -129,7 +141,10 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string
 
 	annotations := make(map[string]string)
 	if configHash != "" {
-		annotations["percona.com/configuration-hash"] = configHash
+		annotations[string(naming.AnnotationConfigHash)] = configHash
+	}
+	if tlsHash != "" {
+		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}
 
 	zero := intstr.FromInt(0)
@@ -162,7 +177,7 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
-							componentName,
+							ComponentName,
 							initImage,
 							spec.ImagePullPolicy,
 							spec.ContainerSecurityContext,
@@ -172,6 +187,7 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string
 					NodeSelector:                  cr.Spec.Proxy.Router.NodeSelector,
 					Tolerations:                   cr.Spec.Proxy.Router.Tolerations,
 					Affinity:                      spec.GetAffinity(labels),
+					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(labels),
 					ImagePullSecrets:              spec.ImagePullSecrets,
 					TerminationGracePeriodSeconds: spec.TerminationGracePeriodSeconds,
 					RestartPolicy:                 corev1.RestartPolicyAlways,
@@ -240,17 +256,21 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	spec := cr.Spec.Proxy.Router
 
+	env := []corev1.EnvVar{
+		{
+			Name:  "MYSQL_SERVICE_NAME",
+			Value: mysql.ServiceName(cr),
+		},
+	}
+	env = append(env, spec.Env...)
+
 	return corev1.Container{
-		Name:            componentName,
+		Name:            ComponentName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
 		Resources:       spec.Resources,
-		Env: []corev1.EnvVar{
-			{
-				Name:  "MYSQL_SERVICE_NAME",
-				Value: mysql.ServiceName(cr),
-			},
-		},
+		Env:             env,
+		EnvFrom:         spec.EnvFrom,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "http",
@@ -273,6 +293,10 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 				ContainerPort: int32(PortXReadOnly),
 			},
 			{
+				Name:          "x-default",
+				ContainerPort: int32(PortXDefault),
+			},
+			{
 				Name:          "rw-admin",
 				ContainerPort: int32(PortRWAdmin),
 			},
@@ -284,7 +308,7 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			},
 			{
 				Name:      credsVolumeName,
-				MountPath: credsMountPath,
+				MountPath: CredsMountPath,
 			},
 			{
 				Name:      tlsVolumeName,
@@ -300,6 +324,7 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          spec.ContainerSecurityContext,
+		StartupProbe:             k8s.ExecProbe(spec.StartupProbe, []string{"/opt/percona/router_startup_check.sh"}),
 		ReadinessProbe:           k8s.ExecProbe(spec.ReadinessProbe, []string{"/opt/percona/router_readiness_check.sh"}),
 	}
 }

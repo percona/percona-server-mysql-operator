@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cmctl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: cmctl
+  template:
+    metadata:
+      labels:
+        name: cmctl
+    spec:
+      serviceAccountName: cmctl
+      containers:
+        - name: cmctl
+          image: curlimages/curl
+          imagePullPolicy: Always
+          command:
+          - /bin/sh
+          - -c
+          - |
+            curl -fsSL -o /tmp/cmctl https://github.com/cert-manager/cmctl/releases/download/v2.0.0/cmctl_linux_amd64 \
+            && chmod +x /tmp/cmctl \
+            && sleep 100500
+      restartPolicy: Always

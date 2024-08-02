@@ -19,16 +19,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	perconaClientCmd "github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 )
 
 var log = logf.Log.WithName("orc-handler")
 
-var (
-	primary = flag.String("primary", "", "Primary hostname")
-)
+var primary = flag.String("primary", "", "Primary hostname")
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
@@ -88,7 +88,12 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 		return err
 	}
 
-	serverVersion, err := platform.GetServerVersion()
+	cliCmd, err := perconaClientCmd.NewClient()
+	if err != nil {
+		return err
+	}
+
+	serverVersion, err := platform.GetServerVersion(cliCmd)
 	if err != nil {
 		return err
 	}
@@ -102,7 +107,7 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 
 	primaryName := strings.TrimSuffix(strings.TrimSuffix(primary, "."+ns), "."+mysql.ServiceName(cr))
 
-	pods, err := k8s.PodsByLabels(ctx, cl, mysql.MatchLabels(cr))
+	pods, err := k8s.PodsByLabels(ctx, cl, mysql.MatchLabels(cr), cr.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "get MySQL pods")
 	}
@@ -118,8 +123,8 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 			continue
 		}
 		pod := pods[i].DeepCopy()
-		if pod.GetLabels()[apiv1alpha1.MySQLPrimaryLabel] == "true" {
-			k8s.RemoveLabel(pod, apiv1alpha1.MySQLPrimaryLabel)
+		if pod.GetLabels()[naming.LabelMySQLPrimary] == "true" {
+			k8s.RemoveLabel(pod, naming.LabelMySQLPrimary)
 			if err := cl.Patch(ctx, pod, client.StrategicMergeFrom(&pods[i])); err != nil {
 				return errors.Wrapf(err, "remove label from old primary pod: %v/%v", pod.GetNamespace(), pod.GetName())
 			}
@@ -132,13 +137,13 @@ func setPrimaryLabel(ctx context.Context, primary string) error {
 		return errors.Wrapf(err, "primary pod %s not found %s", primaryName, primary)
 	}
 
-	if primaryPod.GetLabels()[apiv1alpha1.MySQLPrimaryLabel] == "true" {
+	if primaryPod.GetLabels()[naming.LabelMySQLPrimary] == "true" {
 		log.Info("Primary pod is not changed, skipping", "pod", primaryName)
 		return nil
 	}
 
 	pod := primaryPod.DeepCopy()
-	k8s.AddLabel(pod, apiv1alpha1.MySQLPrimaryLabel, "true")
+	k8s.AddLabel(pod, naming.LabelMySQLPrimary, "true")
 	if err := cl.Patch(ctx, pod, client.StrategicMergeFrom(primaryPod)); err != nil {
 		return errors.Wrapf(err, "add label to new primary pod %v/%v", pod.GetNamespace(), pod.GetName())
 	}

@@ -6,6 +6,9 @@ commands:
       set -o xtrace
 
       source ../../functions
+      init_temp_dir # do this only in the first TestStep
 
       deploy_cert_manager
+      deploy_cmctl
+
 

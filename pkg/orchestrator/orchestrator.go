@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -14,12 +16,12 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
-	"github.com/pkg/errors"
 )
 
 const (
-	componentName      = "orc"
+	ComponentName      = "orc"
 	componentShortName = "orc"
 	defaultWebPort     = 3000
 	defaultRaftPort    = 10008
@@ -100,14 +102,19 @@ func Labels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(Labels(cr),
-		map[string]string{apiv1alpha1.ComponentLabel: componentName},
+		map[string]string{naming.LabelComponent: ComponentName},
 		cr.Labels())
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, tlsHash string) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 	spec := cr.OrchestratorSpec()
 	Replicas := spec.Size
+
+	annotations := make(map[string]string, 0)
+	if tlsHash != "" {
+		annotations[string(naming.AnnotationTLSHash)] = tlsHash
+	}
 
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
@@ -125,14 +132,16 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.S
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
+			UpdateStrategy: updateStrategy(cr),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
-							componentName,
+							ComponentName,
 							initImage,
 							spec.ImagePullPolicy,
 							spec.ContainerSecurityContext,
@@ -142,6 +151,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.S
 					Tolerations:                   cr.Spec.Orchestrator.Tolerations,
 					Containers:                    containers(cr),
 					Affinity:                      spec.GetAffinity(labels),
+					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(labels),
 					ImagePullSecrets:              spec.ImagePullSecrets,
 					TerminationGracePeriodSeconds: spec.TerminationGracePeriodSeconds,
 					PriorityClassName:             spec.PriorityClassName,
@@ -191,6 +201,21 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string) *appsv1.S
 	}
 }
 
+func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrategy {
+	switch cr.Spec.UpdateStrategy {
+	case appsv1.OnDeleteStatefulSetStrategyType:
+		return appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
+	default:
+		var zero int32 = 0
+		return appsv1.StatefulSetUpdateStrategy{
+			Type: appsv1.RollingUpdateStatefulSetStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+				Partition: &zero,
+			},
+		}
+	}
+}
+
 func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 	sidecars := sidecarContainers(cr)
 	containers := make([]corev1.Container, 1, len(sidecars)+1)
@@ -199,31 +224,35 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 }
 
 func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
+	env := []corev1.EnvVar{
+		{
+			Name:  "ORC_SERVICE",
+			Value: ServiceName(cr),
+		},
+		{
+			Name:  "MYSQL_SERVICE",
+			Value: mysql.ServiceName(cr),
+		},
+		{
+			Name:  "RAFT_ENABLED",
+			Value: "true",
+		},
+		{
+			Name:  "CLUSTER_NAME",
+			Value: cr.Name,
+		},
+	}
+	env = append(env, cr.Spec.Orchestrator.Env...)
+
 	return corev1.Container{
-		Name:            componentName,
+		Name:            ComponentName,
 		Image:           cr.Spec.Orchestrator.Image,
 		ImagePullPolicy: cr.Spec.Orchestrator.ImagePullPolicy,
 		Resources:       cr.Spec.Orchestrator.Resources,
 		Command:         []string{"/opt/percona/orc-entrypoint.sh"},
 		Args:            []string{"/usr/local/orchestrator/orchestrator", "-config", "/etc/orchestrator/orchestrator.conf.json", "http"},
-		Env: []corev1.EnvVar{
-			{
-				Name:  "ORC_SERVICE",
-				Value: ServiceName(cr),
-			},
-			{
-				Name:  "MYSQL_SERVICE",
-				Value: mysql.ServiceName(cr),
-			},
-			{
-				Name:  "RAFT_ENABLED",
-				Value: "true",
-			},
-			{
-				Name:  "CLUSTER_NAME",
-				Value: cr.Name,
-			},
-		},
+		Env:             env,
+		EnvFrom:         cr.Spec.Orchestrator.EnvFrom,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "web",
@@ -288,13 +317,14 @@ func sidecarContainers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 			VolumeMounts: containerMounts(),
 			Command:      []string{"/opt/percona/orc-entrypoint.sh"},
 			Args: []string{
-				"/usr/bin/peer-list",
+				"/opt/percona/peer-list",
 				"-on-change=/usr/bin/add_mysql_nodes.sh",
 				"-service=$(MYSQL_SERVICE)",
 			},
 			TerminationMessagePath:   "/dev/termination-log",
 			TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 			SecurityContext:          cr.Spec.Orchestrator.ContainerSecurityContext,
+			Resources:                cr.Spec.Orchestrator.Resources,
 		},
 	}
 }
@@ -354,7 +384,7 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 	expose := cr.Spec.Orchestrator.Expose
 
 	labels := MatchLabels(cr)
-	labels[apiv1alpha1.ExposedLabel] = "true"
+	labels[naming.LabelExposed] = "true"
 	labels = util.SSMapMerge(expose.Labels, labels)
 
 	selector := MatchLabels(cr)
@@ -449,4 +479,43 @@ func ConfigMapData(cr *apiv1alpha1.PerconaServerMySQL) (map[string]string, error
 	cmData[ConfigFileName] = config
 
 	return cmData, nil
+}
+
+func RBAC(cr *apiv1alpha1.PerconaServerMySQL) (*rbacv1.Role, *rbacv1.RoleBinding, *corev1.ServiceAccount) {
+	meta := metav1.ObjectMeta{
+		Namespace: cr.Namespace,
+		Name:      "percona-server-mysql-operator-orchestrator",
+	}
+
+	account := &corev1.ServiceAccount{ObjectMeta: meta}
+	account.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("ServiceAccount"))
+
+	role := &rbacv1.Role{ObjectMeta: meta}
+	role.SetGroupVersionKind(rbacv1.SchemeGroupVersion.WithKind("Role"))
+	role.Rules = []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{corev1.SchemeGroupVersion.Group},
+			Resources: []string{"pods"},
+			Verbs:     []string{"list", "patch"},
+		},
+		{
+			APIGroups: []string{cr.GroupVersionKind().Group},
+			Resources: []string{"perconaservermysqls"},
+			Verbs:     []string{"get"},
+		},
+	}
+
+	binding := &rbacv1.RoleBinding{ObjectMeta: meta}
+	binding.SetGroupVersionKind(rbacv1.SchemeGroupVersion.WithKind("RoleBinding"))
+	binding.RoleRef = rbacv1.RoleRef{
+		APIGroup: rbacv1.SchemeGroupVersion.Group,
+		Kind:     role.Kind,
+		Name:     role.Name,
+	}
+	binding.Subjects = []rbacv1.Subject{{
+		Kind: account.Kind,
+		Name: account.Name,
+	}}
+
+	return role, binding, account
 }

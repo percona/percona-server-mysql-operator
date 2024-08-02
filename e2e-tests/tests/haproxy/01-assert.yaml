@@ -43,7 +43,7 @@ kind: PerconaServerMySQL
 metadata:
   name: haproxy
   finalizers:
-    - delete-mysql-pods-in-order
+    - percona.com/delete-mysql-pods-in-order
 status:
   haproxy:
     ready: 3
@@ -97,6 +97,10 @@ spec:
     port: 33060
     protocol: TCP
     targetPort: 33060
+  - name: mysql-admin
+    port: 33062
+    protocol: TCP
+    targetPort: 33062
   selector:
     app.kubernetes.io/component: haproxy
     app.kubernetes.io/instance: haproxy

@@ -68,8 +68,8 @@ func lookup(svcName string) (sets.Set[string], error) {
 	return endpoints, nil
 }
 
-func lockExists() (bool, error) {
-	return fileExists("/var/lib/mysql/bootstrap.lock")
+func lockExists(lockName string) (bool, error) {
+	return fileExists(fmt.Sprintf("/var/lib/mysql/%s.lock", lockName))
 }
 
 func fileExists(name string) (bool, error) {
@@ -83,9 +83,9 @@ func fileExists(name string) (bool, error) {
 	return true, nil
 }
 
-func waitLockRemoval() error {
+func waitLockRemoval(lockName string) error {
 	for {
-		exists, err := lockExists()
+		exists, err := lockExists(lockName)
 		if err != nil {
 			return err
 		}
@@ -94,4 +94,18 @@ func waitLockRemoval() error {
 			return nil
 		}
 	}
+}
+
+func createFile(name, content string) error {
+	f, err := os.Create(name)
+	if err != nil {
+		return errors.Wrapf(err, "create %s", name)
+	}
+
+	_, err = f.WriteString(content)
+	if err != nil {
+		return errors.Wrapf(err, "write to %s", name)
+	}
+
+	return nil
 }

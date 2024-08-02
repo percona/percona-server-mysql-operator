@@ -3,17 +3,16 @@ package xtrabackup
 import (
 	"fmt"
 	"strconv"
-	"strings"
 
+	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/pkg/errors"
-
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -60,20 +59,23 @@ func DeleteJobName(cr *apiv1alpha1.PerconaServerMySQLBackup) string {
 }
 
 func MatchLabels(cluster *apiv1alpha1.PerconaServerMySQL) map[string]string {
-	return util.SSMapMerge(map[string]string{apiv1alpha1.ComponentLabel: componentName}, cluster.Labels())
+	return util.SSMapMerge(map[string]string{naming.LabelComponent: componentName}, cluster.Labels())
 }
 
 func Job(
 	cluster *apiv1alpha1.PerconaServerMySQL,
 	cr *apiv1alpha1.PerconaServerMySQLBackup,
-	destination, initImage string,
+	destination apiv1alpha1.BackupDestination, initImage string,
 	storage *apiv1alpha1.BackupStorageSpec,
 ) *batchv1.Job {
 	var one int32 = 1
 	t := true
 
 	labels := util.SSMapMerge(storage.Labels, MatchLabels(cluster))
-
+	backoffLimit := int32(6)
+	if cluster.Spec.Backup.BackoffLimit != nil {
+		backoffLimit = *cluster.Spec.Backup.BackoffLimit
+	}
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1",
@@ -86,8 +88,9 @@ func Job(
 			Annotations: storage.Annotations,
 		},
 		Spec: batchv1.JobSpec{
-			Parallelism: &one,
-			Completions: &one,
+			Parallelism:  &one,
+			Completions:  &one,
+			BackoffLimit: &backoffLimit,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
@@ -101,20 +104,21 @@ func Job(
 							componentName,
 							initImage,
 							cluster.Spec.Backup.ImagePullPolicy,
-							cluster.Spec.Backup.ContainerSecurityContext,
+							storage.ContainerSecurityContext,
 						),
 					},
 					Containers: []corev1.Container{
 						xtrabackupContainer(cluster, cr.Name, destination, storage),
 					},
-					SecurityContext:   storage.PodSecurityContext,
-					Affinity:          storage.Affinity,
-					Tolerations:       storage.Tolerations,
-					NodeSelector:      storage.NodeSelector,
-					SchedulerName:     storage.SchedulerName,
-					PriorityClassName: storage.PriorityClassName,
-					RuntimeClassName:  storage.RuntimeClassName,
-					DNSPolicy:         corev1.DNSClusterFirst,
+					SecurityContext:           storage.PodSecurityContext,
+					Affinity:                  storage.Affinity,
+					TopologySpreadConstraints: storage.TopologySpreadConstraints,
+					Tolerations:               storage.Tolerations,
+					NodeSelector:              storage.NodeSelector,
+					SchedulerName:             storage.SchedulerName,
+					PriorityClassName:         storage.PriorityClassName,
+					RuntimeClassName:          storage.RuntimeClassName,
+					DNSPolicy:                 corev1.DNSClusterFirst,
 					Volumes: []corev1.Volume{
 						{
 							Name: apiv1alpha1.BinVolumeName,
@@ -151,7 +155,7 @@ func Job(
 	}
 }
 
-func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName, destination string, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
+func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName string, destination apiv1alpha1.BackupDestination, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
 	spec := cluster.Spec.Backup
 
 	verifyTLS := true
@@ -170,7 +174,7 @@ func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName, de
 			},
 			{
 				Name:  "BACKUP_DEST",
-				Value: destination,
+				Value: destination.PathWithoutBucket(),
 			},
 			{
 				Name:  "VERIFY_TLS",
@@ -284,7 +288,7 @@ func deleteContainer(image string, conf *BackupConfig, storage *apiv1alpha1.Back
 
 func RestoreJob(
 	cluster *apiv1alpha1.PerconaServerMySQL,
-	destination string,
+	destination apiv1alpha1.BackupDestination,
 	restore *apiv1alpha1.PerconaServerMySQLRestore,
 	storage *apiv1alpha1.BackupStorageSpec,
 	initImage string,
@@ -293,15 +297,6 @@ func RestoreJob(
 	one := int32(1)
 
 	labels := util.SSMapMerge(storage.Labels, MatchLabels(cluster))
-
-	switch storage.Type {
-	case apiv1alpha1.BackupStorageAzure:
-		destination = strings.TrimPrefix(destination, string(storage.Azure.ContainerName)+"/")
-	case apiv1alpha1.BackupStorageS3:
-		destination = strings.TrimPrefix(destination, "s3://"+string(storage.S3.Bucket)+"/")
-	case apiv1alpha1.BackupStorageGCS:
-		destination = strings.TrimPrefix(destination, "gs://"+string(storage.GCS.Bucket)+"/")
-	}
 
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -327,7 +322,7 @@ func RestoreJob(
 						{
 							Name:            componentName + "-init",
 							Image:           initImage,
-							ImagePullPolicy: cluster.Spec.MySQL.ImagePullPolicy,
+							ImagePullPolicy: cluster.Spec.Backup.ImagePullPolicy,
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      apiv1alpha1.BinVolumeName,
@@ -349,19 +344,21 @@ func RestoreJob(
 							Command:                  []string{"/opt/percona-server-mysql-operator/ps-init-entrypoint.sh"},
 							TerminationMessagePath:   "/dev/termination-log",
 							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-							SecurityContext:          cluster.Spec.MySQL.ContainerSecurityContext,
+							SecurityContext:          storage.ContainerSecurityContext,
 						},
 					},
 					Containers: []corev1.Container{
 						restoreContainer(cluster, restore, destination, storage),
 					},
-					Affinity:          storage.Affinity,
-					Tolerations:       storage.Tolerations,
-					NodeSelector:      storage.NodeSelector,
-					SchedulerName:     storage.SchedulerName,
-					PriorityClassName: storage.PriorityClassName,
-					RuntimeClassName:  storage.RuntimeClassName,
-					DNSPolicy:         corev1.DNSClusterFirst,
+					Affinity:                  storage.Affinity,
+					TopologySpreadConstraints: storage.TopologySpreadConstraints,
+					Tolerations:               storage.Tolerations,
+					NodeSelector:              storage.NodeSelector,
+					SchedulerName:             storage.SchedulerName,
+					PriorityClassName:         storage.PriorityClassName,
+					RuntimeClassName:          storage.RuntimeClassName,
+					DNSPolicy:                 corev1.DNSClusterFirst,
+					SecurityContext:           storage.PodSecurityContext,
 					Volumes: []corev1.Volume{
 						{
 							Name: apiv1alpha1.BinVolumeName,
@@ -396,6 +393,7 @@ func RestoreJob(
 					},
 				},
 			},
+			BackoffLimit: func(i int32) *int32 { return &i }(4),
 		},
 	}
 }
@@ -405,7 +403,7 @@ func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) 
 	t := true
 
 	storage := cr.Status.Storage
-	labels := util.SSMapMerge(storage.Labels, cr.Labels, map[string]string{apiv1alpha1.ComponentLabel: componentName})
+	labels := util.SSMapMerge(storage.Labels, cr.Labels, map[string]string{naming.LabelComponent: componentName})
 
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -432,14 +430,15 @@ func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) 
 					Containers: []corev1.Container{
 						deleteContainer(cr.Status.Image, conf, storage),
 					},
-					SecurityContext:   storage.PodSecurityContext,
-					Affinity:          storage.Affinity,
-					Tolerations:       storage.Tolerations,
-					NodeSelector:      storage.NodeSelector,
-					SchedulerName:     storage.SchedulerName,
-					PriorityClassName: storage.PriorityClassName,
-					RuntimeClassName:  storage.RuntimeClassName,
-					DNSPolicy:         corev1.DNSClusterFirst,
+					SecurityContext:           storage.PodSecurityContext,
+					Affinity:                  storage.Affinity,
+					TopologySpreadConstraints: storage.TopologySpreadConstraints,
+					Tolerations:               storage.Tolerations,
+					NodeSelector:              storage.NodeSelector,
+					SchedulerName:             storage.SchedulerName,
+					PriorityClassName:         storage.PriorityClassName,
+					RuntimeClassName:          storage.RuntimeClassName,
+					DNSPolicy:                 corev1.DNSClusterFirst,
 					Volumes: []corev1.Volume{
 						{
 							Name: apiv1alpha1.BinVolumeName,
@@ -453,7 +452,8 @@ func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) 
 		},
 	}
 }
-func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alpha1.PerconaServerMySQLRestore, destination string, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
+
+func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alpha1.PerconaServerMySQLRestore, destination apiv1alpha1.BackupDestination, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
 	spec := cluster.Spec.Backup
 
 	verifyTLS := true
@@ -472,7 +472,7 @@ func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alp
 			},
 			{
 				Name:  "BACKUP_DEST",
-				Value: destination,
+				Value: destination.PathWithoutBucket(),
 			},
 			{
 				Name:  "VERIFY_TLS",
@@ -546,7 +546,7 @@ func SetStoragePVC(job *batchv1.Job, pvc *corev1.PersistentVolumeClaim) error {
 func SetStorageS3(job *batchv1.Job, s3 *apiv1alpha1.BackupStorageS3Spec) error {
 	spec := &job.Spec.Template.Spec
 
-	bucket := s3.Bucket.Bucket()
+	bucket, _ := s3.BucketAndPrefix()
 
 	env := []corev1.EnvVar{
 		{
@@ -598,7 +598,7 @@ func SetStorageS3(job *batchv1.Job, s3 *apiv1alpha1.BackupStorageS3Spec) error {
 func SetStorageGCS(job *batchv1.Job, gcs *apiv1alpha1.BackupStorageGCSSpec) error {
 	spec := &job.Spec.Template.Spec
 
-	bucket := gcs.Bucket.Bucket()
+	bucket, _ := gcs.BucketAndPrefix()
 
 	env := []corev1.EnvVar{
 		{
@@ -646,7 +646,7 @@ func SetStorageGCS(job *batchv1.Job, gcs *apiv1alpha1.BackupStorageGCSSpec) erro
 func SetStorageAzure(job *batchv1.Job, azure *apiv1alpha1.BackupStorageAzureSpec) error {
 	spec := &job.Spec.Template.Spec
 
-	container := azure.ContainerName.Bucket()
+	container, _ := azure.ContainerAndPrefix()
 
 	env := []corev1.EnvVar{
 		{

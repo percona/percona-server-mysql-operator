@@ -79,6 +79,8 @@ spec:
             value: "true"
           - name: PMM_AGENT_SIDECAR_SLEEP
             value: "5"
+          - name: PMM_AGENT_PATHS_TEMPDIR
+            value: "/tmp"
           - name: DB_CLUSTER
             value: monitoring
           - name: DB_TYPE
@@ -121,7 +123,7 @@ kind: PerconaServerMySQL
 metadata:
   name: monitoring
   finalizers:
-    - delete-mysql-pods-in-order
+    - percona.com/delete-mysql-pods-in-order
 status:
   mysql:
     ready: 3
@@ -209,6 +211,8 @@ spec:
             value: "true"
           - name: PMM_AGENT_SIDECAR_SLEEP
             value: "5"
+          - name: PMM_AGENT_PATHS_TEMPDIR
+            value: "/tmp"
           - name: DB_CLUSTER
             value: monitoring
           - name: DB_TYPE
@@ -228,7 +232,6 @@ spec:
             value: --query-source=perfschema
           - name: PMM_ADMIN_CUSTOM_PARAMS
             value: --listen-port=8404
-        image: perconalab/pmm-client:dev-latest
         imagePullPolicy: Always
         ports:
           - containerPort: 7777
@@ -285,6 +288,16 @@ spec:
         secret:
           defaultMode: 420
           secretName: test-ssl
+      - name: config
+        projected:
+          defaultMode: 420
+          sources:
+          - configMap:
+              items:
+              - key: haproxy.cfg
+                path: haproxy.cfg
+              name: monitoring-haproxy
+              optional: true
   updateStrategy:
     rollingUpdate:
       partition: 0

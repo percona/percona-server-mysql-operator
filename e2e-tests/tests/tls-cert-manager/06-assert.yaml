@@ -1,0 +1,93 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 400
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: tls-cert-manager-ca-cert
+spec:
+  commonName: tls-cert-manager-ca
+  duration: 8760h0m0s
+  isCA: true
+  issuerRef:
+    kind: Issuer
+    name: tls-cert-manager-ps-ca-issuer
+  renewBefore: 730h0m0s
+  secretName: tls-cert-manager-ca-cert
+status:
+  conditions:
+    - message: Certificate is up to date and has not expired
+      observedGeneration: 1
+      reason: Ready
+      status: 'True'
+      type: Ready
+  revision: 1
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: tls-cert-manager-ssl
+spec:
+  issuerRef:
+    kind: Issuer
+    name: tls-cert-manager-ps-issuer
+  secretName: test-ssl
+status:
+  conditions:
+    - message: Certificate is up to date and has not expired
+      observedGeneration: 2
+      reason: Ready
+      status: 'True'
+      type: Ready
+  revision: 3
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 3
+  name: tls-cert-manager-mysql
+status:
+  observedGeneration: 3
+  replicas: 3
+  readyReplicas: 3
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 3
+  name: tls-cert-manager-orc
+status:
+  observedGeneration: 3
+  replicas: 3
+  readyReplicas: 3
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: tls-cert-manager
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+  generation: 2
+spec:
+  mysql:
+    clusterType: async
+  proxy:
+    haproxy:
+      enabled: true
+  orchestrator:
+    enabled: true
+status:
+  haproxy:
+    ready: 3
+    size: 3
+    state: ready
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  orchestrator:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready

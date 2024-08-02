@@ -78,7 +78,7 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 10
           successThreshold: 1
-          timeoutSeconds: 30
+          timeoutSeconds: 10
         name: mysql
         ports:
         - containerPort: 3306
@@ -109,7 +109,7 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 10
           successThreshold: 1
-          timeoutSeconds: 300
+          timeoutSeconds: 43200
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -128,7 +128,7 @@ spec:
         imagePullPolicy: Always
         name: xtrabackup
         ports:
-        - containerPort: 6033
+        - containerPort: 6450
           name: http
           protocol: TCP
         resources: {}
@@ -212,7 +212,7 @@ spec:
       - emptyDir: {}
         name: backup-logs
   updateStrategy:
-    type: RollingUpdate
+    type: OnDelete
   volumeClaimTemplates:
   - apiVersion: v1
     kind: PersistentVolumeClaim
@@ -330,7 +330,7 @@ spec:
           name: users
           subPath: orchestrator
       - args:
-        - /usr/bin/peer-list
+        - /opt/percona/peer-list
         - -on-change=/usr/bin/add_mysql_nodes.sh
         - -service=$(MYSQL_SERVICE)
         command:

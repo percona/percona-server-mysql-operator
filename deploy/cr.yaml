@@ -3,17 +3,24 @@ kind: PerconaServerMySQL
 metadata:
   name: cluster1
   finalizers:
-    - delete-mysql-pods-in-order
-    # - delete-ssl
+    - percona.com/delete-mysql-pods-in-order
+    # - percona.com/delete-ssl
 spec:
-  allowUnsafeConfigurations: false
+#  unsafeFlags:
+#    mysqlSize: false
+#    orchestrator: false
+#    orchestratorSize: false
+#    proxy: false
+#    proxySize: false
 #  pause: false
-  crVersion: 0.6.0
+  crVersion: 0.9.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
+  updateStrategy: SmartUpdate
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
     apply: disabled
+#  initImage: perconalab/percona-server-mysql-operator:main
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
 #  ignoreLabels:
@@ -27,13 +34,13 @@ spec:
 #      name: special-selfsigned-issuer
 #      kind: ClusterIssuer
 #      group: cert-manager.io
-#  initImage: percona/percona-server-mysql-operator:0.5.0
 
   mysql:
     clusterType: group-replication
+    autoRecovery: true
     image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
-#    initImage: percona/percona-server-mysql-operator:0.5.0
+#    initImage: perconalab/percona-server-mysql-operator:main
 
     size: 3
 
@@ -42,6 +49,20 @@ spec:
         memory: 1G
       limits:
         memory: 2G
+
+#    readinessProbe:
+#      initialDelaySeconds: 30
+#      timeoutSeconds: 10
+#      periodSeconds: 10
+#      failureThreshold: 3
+#      successThreshold: 1
+#
+#    livenessProbe:
+#      initialDelaySeconds: 15
+#      timeoutSeconds: 10
+#      periodSeconds: 10
+#      failureThreshold: 3
+#      successThreshold: 1
 
     affinity:
       antiAffinityTopologyKey: "kubernetes.io/hostname"
@@ -55,12 +76,20 @@ spec:
 #                values:
 #                - e2e-az1
 #                - e2e-az2
+#    topologySpreadConstraints:
+#    - labelSelector:
+#        matchLabels:
+#          app.kubernetes.io/name: percona-server
+#      maxSkew: 1
+#      topologyKey: kubernetes.io/hostname
+#      whenUnsatisfiable: DoNotSchedule
 
 #    expose:
 #      enabled: false
 #      type: ClusterIP
 #      annotations:
-#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+#        service.beta.kubernetes.io/aws-load-balancer-type: nlb
 #      externalTrafficPolicy: Cluster
 #      internalTrafficPolicy: Cluster
 #      labels:
@@ -104,10 +133,15 @@ spec:
 #        resources:
 #          requests:
 #            storage: 1G
+#    containerSecurityContext:
+#      privileged: true
+#    podSecurityContext:
+#      fsGroup: 1001
+#      supplementalGroups: [1001, 1002, 1003]
 
   proxy:
     haproxy:
-      enabled: false
+      enabled: true
 
       size: 3
 
@@ -122,6 +156,63 @@ spec:
 #          memory: 1G
 #          cpu: 700m
 
+#      env:
+#      - name: HA_CONNECTION_TIMEOUT
+#        value: "1000"
+#
+#      envFrom:
+#      - secretRef:
+#          name: haproxy-env-secret
+
+#      readinessProbe:
+#        timeoutSeconds: 3
+#        periodSeconds: 5
+#        failureThreshold: 3
+#        successThreshold: 1
+#
+#      livenessProbe:
+#        timeoutSeconds: 3
+#        periodSeconds: 5
+#        failureThreshold: 3
+#        successThreshold: 1
+
+#      configuration: |
+#
+#      the actual default configuration file can be found here https://github.com/percona/percona-server-mysql-operator/blob/main/build/haproxy-global.cfg
+#
+#        global
+#          maxconn 2048
+#          external-check
+#          insecure-fork-wanted
+#          stats socket /etc/haproxy/mysql/haproxy.sock mode 600 expose-fd listeners level admin
+#
+#        defaults
+#          default-server init-addr last,libc,none
+#          log global
+#          mode tcp
+#          retries 10
+#          timeout client 28800s
+#          timeout connect 100500
+#          timeout server 28800s
+#
+#        frontend mysql-primary-in
+#          bind *:3309 accept-proxy
+#          bind *:3306
+#          mode tcp
+#          option clitcpka
+#          default_backend mysql-primary
+#
+#        frontend mysql-replicas-in
+#          bind *:3307
+#          mode tcp
+#          option clitcpka
+#          default_backend mysql-replicas
+#
+#        frontend stats
+#          bind *:8404
+#          mode http
+#          http-request use-service prometheus-exporter if { path /metrics }
+
       affinity:
         antiAffinityTopologyKey: "kubernetes.io/hostname"
 #        advanced:
@@ -134,11 +225,19 @@ spec:
 #                  values:
 #                  - e2e-az1
 #                  - e2e-az2
+#      topologySpreadConstraints:
+#      - labelSelector:
+#          matchLabels:
+#            app.kubernetes.io/name: percona-server
+#        maxSkew: 1
+#        topologyKey: kubernetes.io/hostname
+#        whenUnsatisfiable: DoNotSchedule
 
 #      expose:
 #        type: ClusterIP
 #        annotations:
-#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+#          service.beta.kubernetes.io/aws-load-balancer-type: nlb
 #        externalTrafficPolicy: Cluster
 #        internalTrafficPolicy: Cluster
 #        labels:
@@ -146,10 +245,17 @@ spec:
 #        loadBalancerIP: 127.0.0.1
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
+#      containerSecurityContext:
+#        privileged: true
+#      podSecurityContext:
+#        fsGroup: 1001
+#        supplementalGroups: [1001, 1002, 1003]
+
     router:
+      enabled: false
       image: perconalab/percona-server-mysql-operator:main-router
       imagePullPolicy: Always
-#      initImage: percona/percona-server-mysql-operator:0.5.0
+#      initImage: perconalab/percona-server-mysql-operator:main
 
       size: 3
 
@@ -171,6 +277,13 @@ spec:
 #                  values:
 #                  - e2e-az1
 #                  - e2e-az2
+#      topologySpreadConstraints:
+#      - labelSelector:
+#          matchLabels:
+#            app.kubernetes.io/name: percona-server
+#        maxSkew: 1
+#        topologyKey: kubernetes.io/hostname
+#        whenUnsatisfiable: DoNotSchedule
 
 #      configuration: |
 #        [default]
@@ -181,7 +294,8 @@ spec:
 #      expose:
 #        type: ClusterIP
 #        annotations:
-#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+#          service.beta.kubernetes.io/aws-load-balancer-type: nlb
 #        externalTrafficPolicy: Cluster
 #        internalTrafficPolicy: Cluster
 #        labels:
@@ -191,12 +305,12 @@ spec:
 #          - 10.0.0.0/8
 
   orchestrator:
-    enabled: false
+    enabled: true
 
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
-#    initImage: percona/percona-server-mysql-operator:0.5.0
+#    initImage: perconalab/percona-server-mysql-operator:main
 
     size: 3
 
@@ -212,11 +326,19 @@ spec:
 #                values:
 #                - e2e-az1
 #                - e2e-az2
+#    topologySpreadConstraints:
+#    - labelSelector:
+#        matchLabels:
+#          app.kubernetes.io/name: percona-server
+#      maxSkew: 1
+#      topologyKey: kubernetes.io/hostname
+#      whenUnsatisfiable: DoNotSchedule
 
 #    expose:
 #      type: ClusterIP
 #      annotations:
-#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+#        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+#        service.beta.kubernetes.io/aws-load-balancer-type: nlb
 #      externalTrafficPolicy: Cluster
 #      internalTrafficPolicy: Cluster
 #      labels:
@@ -239,7 +361,7 @@ spec:
   pmm:
     enabled: false
 
-    image: percona/pmm-client:2.36.0
+    image: perconalab/pmm-client:dev-latest
     imagePullPolicy: Always
 
     resources:
@@ -256,8 +378,11 @@ spec:
   backup:
     enabled: true
     image: perconalab/percona-server-mysql-operator:main-backup
+#    backoffLimit: 6
     imagePullPolicy: Always
-#    initImage: percona/percona-server-mysql-operator:0.5.0
+#    initImage: perconalab/percona-server-mysql-operator:main
+#    containerSecurityContext:
+#      privileged: true
     storages:
       s3-us-west:
         type: s3
@@ -278,6 +403,13 @@ spec:
 #                  operator: In
 #                  values:
 #                  - 'True'
+#        topologySpreadConstraints:
+#        - labelSelector:
+#            matchLabels:
+#              app.kubernetes.io/name: percona-server
+#          maxSkew: 1
+#          topologyKey: kubernetes.io/hostname
+#          whenUnsatisfiable: DoNotSchedule
 #        tolerations:
 #          - key: "backupWorker"
 #            operator: "Equal"

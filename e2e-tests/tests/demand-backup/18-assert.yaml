@@ -1,31 +1,12 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 400
+timeout: 300
 ---
+kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1alpha1
-kind: PerconaServerMySQL
 metadata:
-  name: demand-backup
+  name: demand-backup-gcp
   finalizers:
-    - delete-mysql-pods-in-order
-status:
-  haproxy:
-    ready: 3
-    size: 3
-    state: ready
-  mysql:
-    ready: 3
-    size: 3
-    state: ready
-  orchestrator:
-    ready: 3
-    size: 3
-    state: ready
-  state: ready
----
-kind: PerconaServerMySQLRestore
-apiVersion: ps.percona.com/v1alpha1
-metadata:
-  name: demand-backup-restore-gcp
+    - percona.com/delete-backup
 status:
   state: Succeeded

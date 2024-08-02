@@ -3,7 +3,6 @@ package platform
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"sync"
 
 	k8sversion "k8s.io/apimachinery/pkg/version"
@@ -30,16 +29,16 @@ var (
 	mx       sync.Mutex
 )
 
-// Server returns server version and platform (k8s|oc)
+// GetServerVersion returns server version and platform (k8s|oc)
 // it performs API requests for the first invocation and then returns "cached" value
-func GetServerVersion() (*ServerVersion, error) {
+func GetServerVersion(cliCmd clientcmd.Client) (*ServerVersion, error) {
 	mx.Lock()
 	defer mx.Unlock()
 	if cVersion != nil {
 		return cVersion, nil
 	}
 
-	v, err := getServerVersion()
+	v, err := getServerVersion(cliCmd)
 	if err != nil {
 		return nil, err
 	}
@@ -50,12 +49,9 @@ func GetServerVersion() (*ServerVersion, error) {
 }
 
 // GetServer make request to platform server and returns server version and platform (k8s|oc)
-func getServerVersion() (*ServerVersion, error) {
-	cl, err := clientcmd.NewClient()
-	if err != nil {
-		return nil, fmt.Errorf("create REST client: %v", err)
-	}
-	client := cl.REST()
+func getServerVersion(cliCmd clientcmd.Client) (*ServerVersion, error) {
+	var err error
+	client := cliCmd.REST()
 
 	version := &ServerVersion{}
 	// openshift 4.0

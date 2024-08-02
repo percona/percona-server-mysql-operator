@@ -1,23 +1,26 @@
 package haproxy
 
 import (
+	"fmt"
 	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/pmm"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
 const (
-	componentName   = "haproxy"
+	ComponentName   = "haproxy"
 	credsVolumeName = "users"
-	credsMountPath  = "/etc/mysql/mysql-users-secret"
+	CredsMountPath  = "/etc/mysql/mysql-users-secret"
 	tlsVolumeName   = "tls"
 	tlsMountPath    = "/etc/mysql/mysql-tls-secret"
 )
@@ -27,11 +30,16 @@ const (
 	PortMySQLReplicas  = 3307
 	PortProxyProtocol  = 3309
 	PortMySQLXProtocol = 33060
+	PortAdmin          = 33062
 	PortPMMStats       = 8404
 )
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
-	return cr.Name + "-" + componentName
+	return cr.Name + "-" + ComponentName
+}
+
+func NamespacedName(cr *apiv1alpha1.PerconaServerMySQL) types.NamespacedName {
+	return types.NamespacedName{Name: Name(cr), Namespace: cr.Namespace}
 }
 
 func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
@@ -40,8 +48,12 @@ func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
-		map[string]string{apiv1alpha1.ComponentLabel: componentName},
+		map[string]string{naming.LabelComponent: ComponentName},
 		cr.Labels())
+}
+
+func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
+	return fmt.Sprintf("%s-%d", Name(cr), idx)
 }
 
 func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.Service {
@@ -81,6 +93,10 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 			Name: "mysqlx",
 			Port: int32(PortMySQLXProtocol),
 		},
+		{
+			Name: "mysql-admin",
+			Port: int32(PortAdmin),
+		},
 	}
 
 	if cr.PMMEnabled(secret) {
@@ -113,9 +129,18 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 	}
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string, secret *corev1.Secret) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHash string, secret *corev1.Secret) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 
+	annotations := make(map[string]string)
+	if configHash != "" {
+		annotations[string(naming.AnnotationConfigHash)] = configHash
+	}
+	if tlsHash != "" {
+		annotations[string(naming.AnnotationTLSHash)] = tlsHash
+	}
+
+	t := true
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -132,24 +157,27 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string, secret *c
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
+			UpdateStrategy: updateStrategy(cr),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector: cr.Spec.Proxy.HAProxy.NodeSelector,
 					Tolerations:  cr.Spec.Proxy.HAProxy.Tolerations,
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
-							componentName,
+							ComponentName,
 							initImage,
 							cr.Spec.Proxy.HAProxy.ImagePullPolicy,
 							cr.Spec.Proxy.HAProxy.ContainerSecurityContext,
 						),
 					},
-					Containers:       containers(cr, secret),
-					Affinity:         cr.Spec.Proxy.HAProxy.GetAffinity(labels),
-					ImagePullSecrets: cr.Spec.Proxy.HAProxy.ImagePullSecrets,
+					Containers:                containers(cr, secret),
+					Affinity:                  cr.Spec.Proxy.HAProxy.GetAffinity(labels),
+					TopologySpreadConstraints: cr.Spec.Proxy.HAProxy.GetTopologySpreadConstraints(labels),
+					ImagePullSecrets:          cr.Spec.Proxy.HAProxy.ImagePullSecrets,
 					// TerminationGracePeriodSeconds: 30,
 					RestartPolicy: corev1.RestartPolicyAlways,
 					SchedulerName: "default-scheduler",
@@ -183,11 +211,49 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage string, secret *c
 								},
 							},
 						},
+						{
+							Name: configVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								Projected: &corev1.ProjectedVolumeSource{
+									Sources: []corev1.VolumeProjection{
+										{
+											ConfigMap: &corev1.ConfigMapProjection{
+												LocalObjectReference: corev1.LocalObjectReference{
+													Name: Name(cr),
+												},
+												Items: []corev1.KeyToPath{
+													{
+														Key:  CustomConfigKey,
+														Path: "haproxy.cfg",
+													},
+												},
+												Optional: &t,
+											},
+										},
+									},
+								},
+							},
+						},
 					},
 					SecurityContext: cr.Spec.Proxy.HAProxy.PodSecurityContext,
 				},
 			},
 		},
+	}
+}
+
+func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrategy {
+	switch cr.Spec.UpdateStrategy {
+	case appsv1.OnDeleteStatefulSetStrategyType:
+		return appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
+	default:
+		var zero int32 = 0
+		return appsv1.StatefulSetUpdateStrategy{
+			Type: appsv1.RollingUpdateStatefulSetStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+				Partition: &zero,
+			},
+		}
 	}
 }
 
@@ -197,7 +263,7 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 		mysqlMonitContainer(cr),
 	}
 	if cr.PMMEnabled(secret) {
-		pmmC := pmm.Container(cr, secret, componentName)
+		pmmC := pmm.Container(cr, secret, ComponentName)
 
 		pmmC.Env = append(pmmC.Env, corev1.EnvVar{
 			Name:  "PMM_ADMIN_CUSTOM_PARAMS",
@@ -213,12 +279,21 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	spec := cr.Spec.Proxy.HAProxy
 
+	env := []corev1.EnvVar{
+		{
+			Name:  "CLUSTER_TYPE",
+			Value: string(cr.Spec.MySQL.ClusterType),
+		},
+	}
+	env = append(env, spec.Env...)
+
 	return corev1.Container{
-		Name:            componentName,
+		Name:            ComponentName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
 		Resources:       spec.Resources,
-		Env:             []corev1.EnvVar{},
+		Env:             env,
+		EnvFrom:         spec.EnvFrom,
 		Command:         []string{"/opt/percona/haproxy-entrypoint.sh"},
 		Args:            []string{"haproxy"},
 		Ports: []corev1.ContainerPort{
@@ -250,11 +325,15 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			},
 			{
 				Name:      credsVolumeName,
-				MountPath: credsMountPath,
+				MountPath: CredsMountPath,
 			},
 			{
 				Name:      tlsVolumeName,
 				MountPath: tlsMountPath,
+			},
+			{
+				Name:      configVolumeName,
+				MountPath: configMountPath,
 			},
 		},
 		TerminationMessagePath:   "/dev/termination-log",
@@ -265,6 +344,14 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 
 func mysqlMonitContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	spec := cr.Spec.Proxy.HAProxy
+
+	env := []corev1.EnvVar{
+		{
+			Name:  "MYSQL_SERVICE",
+			Value: mysql.ProxyServiceName(cr),
+		},
+	}
+	env = append(env, spec.Env...)
 
 	return corev1.Container{
 		Name:            "mysql-monit",
@@ -277,12 +364,8 @@ func mysqlMonitContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			"-on-change=/opt/percona/haproxy_add_mysql_nodes.sh",
 			"-service=$(MYSQL_SERVICE)",
 		},
-		Env: []corev1.EnvVar{
-			{
-				Name:  "MYSQL_SERVICE",
-				Value: mysql.ServiceName(cr),
-			},
-		},
+		Env:     env,
+		EnvFrom: spec.EnvFrom,
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "bin",
@@ -294,7 +377,7 @@ func mysqlMonitContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			},
 			{
 				Name:      credsVolumeName,
-				MountPath: credsMountPath,
+				MountPath: CredsMountPath,
 			},
 			{
 				Name:      tlsVolumeName,

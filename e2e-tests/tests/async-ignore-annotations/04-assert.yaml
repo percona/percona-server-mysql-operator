@@ -41,9 +41,9 @@ spec:
     protocol: TCP
     targetPort: 33060
   - name: http
-    port: 6033
+    port: 6450
     protocol: TCP
-    targetPort: 6033
+    targetPort: 6450
   selector:
     app.kubernetes.io/component: mysql
     app.kubernetes.io/instance: async-ignore-annotations
@@ -99,6 +99,10 @@ spec:
     port: 33060
     protocol: TCP
     targetPort: 33060
+  - name: mysql-admin
+    port: 33062
+    protocol: TCP
+    targetPort: 33062
   selector:
     app.kubernetes.io/component: haproxy
     app.kubernetes.io/instance: async-ignore-annotations

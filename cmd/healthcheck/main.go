@@ -1,19 +1,22 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	database "github.com/percona/percona-server-mysql-operator/cmd/db"
+	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
-	"github.com/percona/percona-server-mysql-operator/pkg/replicator"
 )
 
 func main() {
@@ -25,31 +28,42 @@ func main() {
 		os.Exit(0)
 	}
 
+	manualRecovery, err := fileExists("/var/lib/mysql/sleep-forever")
+	if err != nil {
+		log.Fatalf("check /var/lib/mysql/sleep-forever: %s", err)
+	}
+	if manualRecovery {
+		os.Exit(0)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	switch os.Args[1] {
 	case "readiness":
 		switch os.Getenv("CLUSTER_TYPE") {
 		case "async":
-			if err := checkReadinessAsync(); err != nil {
+			if err := checkReadinessAsync(ctx); err != nil {
 				log.Fatalf("readiness check failed: %v", err)
 			}
 		case "group-replication":
-			if err := checkReadinessGR(); err != nil {
+			if err := checkReadinessGR(ctx); err != nil {
 				log.Fatalf("readiness check failed: %v", err)
 			}
 		}
 	case "liveness":
 		switch os.Getenv("CLUSTER_TYPE") {
 		case "async":
-			if err := checkLivenessAsync(); err != nil {
-				log.Fatalf("readiness check failed: %v", err)
+			if err := checkLivenessAsync(ctx); err != nil {
+				log.Fatalf("liveness check failed: %v", err)
 			}
 		case "group-replication":
-			if err := checkLivenessGR(); err != nil {
-				log.Fatalf("readiness check failed: %v", err)
+			if err := checkLivenessGR(ctx); err != nil {
+				log.Fatalf("liveness check failed: %v", err)
 			}
 		}
 	case "replication":
-		if err := checkReplication(); err != nil {
+		if err := checkReplication(ctx); err != nil {
 			log.Fatalf("replication check failed: %v", err)
 		}
 	default:
@@ -57,7 +71,7 @@ func main() {
 	}
 }
 
-func checkReadinessAsync() error {
+func checkReadinessAsync(ctx context.Context) error {
 	podIP, err := getPodIP()
 	if err != nil {
 		return errors.Wrap(err, "get pod IP")
@@ -68,19 +82,19 @@ func checkReadinessAsync() error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := replicator.NewReplicator(apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
+	db, err := database.NewDatabase(ctx, apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
 	defer db.Close()
 
-	readOnly, err := db.IsReadonly()
+	readOnly, err := db.IsReadonly(ctx)
 	if err != nil {
 		return errors.Wrap(err, "check read only status")
 	}
 
 	// if isReplica is true, replication is active
-	isReplica, err := db.IsReplica()
+	isReplica, err := db.IsReplica(ctx)
 	if err != nil {
 		return errors.Wrap(err, "check replica status")
 	}
@@ -92,7 +106,7 @@ func checkReadinessAsync() error {
 	return nil
 }
 
-func checkReadinessGR() error {
+func checkReadinessGR(ctx context.Context) error {
 	podIP, err := getPodIP()
 	if err != nil {
 		return errors.Wrap(err, "get pod IP")
@@ -103,7 +117,7 @@ func checkReadinessGR() error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := replicator.NewReplicator(apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
+	db, err := database.NewDatabase(ctx, apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
@@ -114,19 +128,19 @@ func checkReadinessGR() error {
 		return errors.Wrap(err, "get pod hostname")
 	}
 
-	state, err := db.GetMemberState(fqdn)
+	state, err := db.GetMemberState(ctx, fqdn)
 	if err != nil {
 		return errors.Wrap(err, "get member state")
 	}
 
-	if state != replicator.MemberStateOnline {
+	if state != mysqldb.MemberStateOnline {
 		return errors.Errorf("Member state: %s", state)
 	}
 
 	return nil
 }
 
-func checkLivenessAsync() error {
+func checkLivenessAsync(ctx context.Context) error {
 	podIP, err := getPodIP()
 	if err != nil {
 		return errors.Wrap(err, "get pod IP")
@@ -137,16 +151,16 @@ func checkLivenessAsync() error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := replicator.NewReplicator(apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
+	db, err := database.NewDatabase(ctx, apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
 	defer db.Close()
 
-	return db.DumbQuery()
+	return db.DumbQuery(ctx)
 }
 
-func checkLivenessGR() error {
+func checkLivenessGR(ctx context.Context) error {
 	podIP, err := getPodIP()
 	if err != nil {
 		return errors.Wrap(err, "get pod IP")
@@ -157,13 +171,13 @@ func checkLivenessGR() error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := replicator.NewReplicator(apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
+	db, err := database.NewDatabase(ctx, apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
 	defer db.Close()
 
-	in, err := db.CheckIfInPrimaryPartition()
+	in, err := db.CheckIfInPrimaryPartition(ctx)
 	if err != nil {
 		return errors.Wrap(err, "check if member in primary partition")
 	}
@@ -177,7 +191,7 @@ func checkLivenessGR() error {
 	return nil
 }
 
-func checkReplication() error {
+func checkReplication(ctx context.Context) error {
 	podIP, err := getPodIP()
 	if err != nil {
 		return errors.Wrap(err, "get pod IP")
@@ -188,14 +202,14 @@ func checkReplication() error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := replicator.NewReplicator(apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
+	db, err := database.NewDatabase(ctx, apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
 	defer db.Close()
 
 	// if isReplica is true, replication is active
-	isReplica, err := db.IsReplica()
+	isReplica, err := db.IsReplica(ctx)
 	if err != nil {
 		return errors.Wrap(err, "check replica status")
 	}

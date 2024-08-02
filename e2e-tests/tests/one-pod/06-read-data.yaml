@@ -8,5 +8,6 @@ commands:
 
       source ../../functions
 
+      sleep 5
       data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password")
       kubectl create configmap -n "${NAMESPACE}" 06-read-data-minio --from-literal=data="${data}"

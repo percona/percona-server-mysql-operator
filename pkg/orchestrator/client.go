@@ -1,13 +1,15 @@
 package orchestrator
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
+
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 )
 
 type orcResponse struct {
@@ -26,21 +28,32 @@ type Instance struct {
 	Alias     string        `json:"InstanceAlias"`
 	MasterKey InstanceKey   `json:"MasterKey"`
 	Replicas  []InstanceKey `json:"Replicas"`
+	ReadOnly  bool          `json:"ReadOnly"`
+	Problems  []string      `json:"Problems"`
 }
 
-func ClusterPrimary(ctx context.Context, apiHost, clusterHint string) (*Instance, error) {
-	url := fmt.Sprintf("%s/api/master/%s", apiHost, clusterHint)
+var ErrEmptyResponse = errors.New("empty response")
 
-	resp, err := doRequest(ctx, url)
+func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoint string, outb, errb *bytes.Buffer) error {
+	c := []string{"curl", fmt.Sprintf("localhost:%d/%s", defaultWebPort, endpoint)}
+	err := cliCmd.Exec(ctx, pod, "orc", c, nil, outb, errb, false)
 	if err != nil {
-		return nil, errors.Wrapf(err, "do request to %s", url)
+		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", c, outb, errb)
 	}
-	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	return nil
+}
+
+func ClusterPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint string) (*Instance, error) {
+	url := fmt.Sprintf("api/master/%s", clusterHint)
+
+	var res, errb bytes.Buffer
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
 	if err != nil {
-		return nil, errors.Wrap(err, "read response body")
+		return nil, err
 	}
+
+	body := res.Bytes()
 
 	primary := &Instance{}
 	if err := json.Unmarshal(body, primary); err == nil {
@@ -59,17 +72,17 @@ func ClusterPrimary(ctx context.Context, apiHost, clusterHint string) (*Instance
 	return primary, nil
 }
 
-func StopReplication(ctx context.Context, apiHost, host string, port int32) error {
-	url := fmt.Sprintf("%s/api/stop-replica/%s/%d", apiHost, host, port)
+func StopReplication(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int32) error {
+	url := fmt.Sprintf("api/stop-replica/%s/%d", host, port)
 
-	resp, err := doRequest(ctx, url)
+	var res, errb bytes.Buffer
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
 	if err != nil {
-		return errors.Wrapf(err, "do request to %s", url)
+		return err
 	}
-	defer resp.Body.Close()
 
 	orcResp := &orcResponse{}
-	if err := json.NewDecoder(resp.Body).Decode(orcResp); err != nil {
+	if err := json.Unmarshal(res.Bytes(), &orcResp); err != nil {
 		return errors.Wrap(err, "json decode")
 	}
 
@@ -80,17 +93,17 @@ func StopReplication(ctx context.Context, apiHost, host string, port int32) erro
 	return nil
 }
 
-func StartReplication(ctx context.Context, apiHost, host string, port int32) error {
-	url := fmt.Sprintf("%s/api/start-replica/%s/%d", apiHost, host, port)
+func StartReplication(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int32) error {
+	url := fmt.Sprintf("api/start-replica/%s/%d", host, port)
 
-	resp, err := doRequest(ctx, url)
+	var res, errb bytes.Buffer
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
 	if err != nil {
-		return errors.Wrapf(err, "do request to %s", url)
+		return err
 	}
-	defer resp.Body.Close()
 
 	orcResp := &orcResponse{}
-	if err := json.NewDecoder(resp.Body).Decode(orcResp); err != nil {
+	if err := json.Unmarshal(res.Bytes(), &orcResp); err != nil {
 		return errors.Wrap(err, "json decode")
 	}
 
@@ -101,19 +114,16 @@ func StartReplication(ctx context.Context, apiHost, host string, port int32) err
 	return nil
 }
 
-func AddPeer(ctx context.Context, apiHost string, peer string) error {
-	url := fmt.Sprintf("%s/api/raft-add-peer/%s", apiHost, peer)
+func AddPeer(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, peer string) error {
+	url := fmt.Sprintf("api/raft-add-peer/%s", peer)
 
-	resp, err := doRequest(ctx, url)
+	var res, errb bytes.Buffer
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
 	if err != nil {
-		return errors.Wrapf(err, "do request to %s", url)
+		return err
 	}
-	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return errors.Wrap(err, "read response body")
-	}
+	body := res.Bytes()
 
 	// Orchestrator returns peer IP as string on success
 	o := ""
@@ -133,19 +143,16 @@ func AddPeer(ctx context.Context, apiHost string, peer string) error {
 	return nil
 }
 
-func RemovePeer(ctx context.Context, apiHost string, peer string) error {
-	url := fmt.Sprintf("%s/api/raft-remove-peer/%s", apiHost, peer)
+func RemovePeer(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, peer string) error {
+	url := fmt.Sprintf("api/raft-remove-peer/%s", peer)
 
-	resp, err := doRequest(ctx, url)
+	var res, errb bytes.Buffer
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
 	if err != nil {
-		return errors.Wrapf(err, "do request to %s", url)
+		return err
 	}
-	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return errors.Wrap(err, "read response body")
-	}
+	body := res.Bytes()
 
 	// Orchestrator returns peer IP as string on success
 	o := ""
@@ -165,8 +172,8 @@ func RemovePeer(ctx context.Context, apiHost string, peer string) error {
 	return nil
 }
 
-func EnsureNodeIsPrimary(ctx context.Context, apiHost, clusterHint, host string, port int) error {
-	primary, err := ClusterPrimary(ctx, apiHost, clusterHint)
+func EnsureNodeIsPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint, host string, port int) error {
+	primary, err := ClusterPrimary(ctx, cliCmd, pod, clusterHint)
 	if err != nil {
 		return errors.Wrap(err, "get cluster primary")
 	}
@@ -175,18 +182,19 @@ func EnsureNodeIsPrimary(ctx context.Context, apiHost, clusterHint, host string,
 		return nil
 	}
 
-	// /api/graceful-master-takeover-auto/cluster1.default/cluster1-mysql-0/3306
-	url := fmt.Sprintf("%s/api/graceful-master-takeover-auto/%s/%s/%d", apiHost, clusterHint, host, port)
+	url := fmt.Sprintf("api/graceful-master-takeover-auto/%s/%s/%d", clusterHint, host, port)
 
-	resp, err := doRequest(ctx, url)
+	var res, errb bytes.Buffer
+	err = exec(ctx, cliCmd, pod, url, &res, &errb)
 	if err != nil {
-		return errors.Wrapf(err, "do request to %s", url)
+		return err
 	}
-	defer resp.Body.Close()
+
+	body := res.Bytes()
 
 	orcResp := &orcResponse{}
-	if err := json.NewDecoder(resp.Body).Decode(orcResp); err != nil {
-		return errors.Wrap(err, "json decode")
+	if err := json.Unmarshal(body, orcResp); err != nil {
+		return errors.Wrapf(err, "json decode \"%s\"", string(body))
 	}
 
 	if orcResp.Code == "ERROR" {
@@ -196,29 +204,24 @@ func EnsureNodeIsPrimary(ctx context.Context, apiHost, clusterHint, host string,
 	return nil
 }
 
-var ErrEmptyResponse = errors.New("empty response")
+func Discover(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) error {
+	url := fmt.Sprintf("api/discover/%s/%d", host, port)
 
-func Discover(ctx context.Context, apiHost, host string, port int) error {
-	url := fmt.Sprintf("%s/api/discover/%s/%d", apiHost, host, port)
-
-	resp, err := doRequest(ctx, url)
+	var res, errb bytes.Buffer
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
 	if err != nil {
-		return errors.Wrapf(err, "do request to %s", url)
+		return err
 	}
-	defer resp.Body.Close()
 
 	orcResp := new(orcResponse)
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return errors.Wrap(err, "read response body")
-	}
+	body := res.Bytes()
 
-	if len(data) == 0 {
+	if len(body) == 0 {
 		return ErrEmptyResponse
 	}
 
-	if err := json.Unmarshal(data, orcResp); err != nil {
-		return errors.Wrapf(err, "json decode \"%s\"", string(data))
+	if err := json.Unmarshal(body, orcResp); err != nil {
+		return errors.Wrapf(err, "json decode \"%s\"", string(body))
 	}
 
 	if orcResp.Code == "ERROR" {
@@ -227,15 +230,82 @@ func Discover(ctx context.Context, apiHost, host string, port int) error {
 	return nil
 }
 
-func doRequest(ctx context.Context, url string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func SetWriteable(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) error {
+	url := fmt.Sprintf("api/set-writeable/%s/%d", host, port)
+
+	var res, errb bytes.Buffer
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
 	if err != nil {
-		return nil, errors.Wrap(err, "make request")
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, errors.Wrap(err, "do request")
+		return err
 	}
 
-	return resp, nil
+	orcResp := new(orcResponse)
+	body := res.Bytes()
+
+	if len(body) == 0 {
+		return ErrEmptyResponse
+	}
+
+	if err := json.Unmarshal(body, orcResp); err != nil {
+		return errors.Wrapf(err, "json decode \"%s\"", string(body))
+	}
+
+	if orcResp.Code == "ERROR" {
+		return errors.New(orcResp.Message)
+	}
+	return nil
+}
+
+func Cluster(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint string) ([]*Instance, error) {
+	url := fmt.Sprintf("api/cluster/%s", clusterHint)
+
+	var res, errb bytes.Buffer
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
+	if err != nil {
+		return nil, err
+	}
+
+	body := res.Bytes()
+
+	instances := []*Instance{}
+	if err := json.Unmarshal(body, &instances); err == nil {
+		return instances, nil
+	}
+
+	orcResp := &orcResponse{}
+	if err := json.Unmarshal(body, orcResp); err != nil {
+		return nil, errors.Wrap(err, "json decode")
+	}
+
+	if orcResp.Code == "ERROR" {
+		return nil, errors.New(orcResp.Message)
+	}
+
+	return instances, nil
+}
+
+func ForgetInstance(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) error {
+	url := fmt.Sprintf("api/forget/%s/%d", host, port)
+
+	var res, errb bytes.Buffer
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
+	if err != nil {
+		return err
+	}
+
+	orcResp := new(orcResponse)
+	body := res.Bytes()
+
+	if len(body) == 0 {
+		return ErrEmptyResponse
+	}
+
+	if err := json.Unmarshal(body, orcResp); err != nil {
+		return errors.Wrapf(err, "json decode \"%s\"", string(body))
+	}
+
+	if orcResp.Code == "ERROR" {
+		return errors.New(orcResp.Message)
+	}
+	return nil
 }

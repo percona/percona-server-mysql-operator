@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gr-finalizer-mysql-0
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gr-finalizer-mysql-1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gr-finalizer-mysql-2
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: gr-finalizer-ca-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: gr-finalizer-ssl
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gr-finalizer-ca-cert
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: test-ssl
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: gr-finalizer-ps-ca-issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: gr-finalizer-ps-issuer
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: gr-finalizer-mysql
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-finalizer-haproxy
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-finalizer

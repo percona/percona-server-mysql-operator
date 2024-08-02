@@ -182,6 +182,12 @@ load_group_replication_plugin() {
 	POD_IP=$(hostname -I | awk '{print $1}')
 
 	sed -i "/\[mysqld\]/a plugin_load_add=group_replication.so" $CFG
+	sed -i "/\[mysqld\]/a group_replication_exit_state_action=ABORT_SERVER" $CFG
+}
+
+ensure_read_only() {
+	sed -i "/\[mysqld\]/a read_only=ON" $CFG
+	sed -i "/\[mysqld\]/a super_read_only=ON" $CFG
 }
 
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
@@ -269,7 +275,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			# no, we don't care if read finds a terminating character in this heredoc
 			# https://unix.stackexchange.com/questions/265149/why-is-set-o-errexit-breaking-this-read-heredoc-expression/265151#265151
 			read -r -d '' rootCreate <<-EOSQL || true
-				CREATE USER 'root'@'${MYSQL_ROOT_HOST}' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}' ;
+				CREATE USER 'root'@'${MYSQL_ROOT_HOST}' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}' PASSWORD EXPIRE NEVER;
 				GRANT ALL ON *.* TO 'root'@'${MYSQL_ROOT_HOST}' WITH GRANT OPTION ;
 			EOSQL
 		fi
@@ -282,9 +288,20 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		file_env 'OPERATOR_ADMIN_PASSWORD' '' 'operator'
 		file_env 'XTRABACKUP_PASSWORD' '' 'xtrabackup'
 		file_env 'HEARTBEAT_PASSWORD' '' 'heartbeat'
+
 		read -r -d '' monitorConnectGrant <<-EOSQL || true
 			GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
 		EOSQL
+
+		if [ "$CLUSTER_TYPE" == 'async' ]; then
+			read -r -d '' replicationCreate <<-EOSQL || true
+				CREATE USER 'replication'@'%' IDENTIFIED BY '${REPLICATION_PASSWORD}' PASSWORD EXPIRE NEVER;
+				GRANT DELETE, INSERT, UPDATE ON mysql.* TO 'replication'@'%' WITH GRANT OPTION;
+				GRANT SELECT ON performance_schema.threads to 'replication'@'%';
+				GRANT SYSTEM_USER, REPLICATION SLAVE, BACKUP_ADMIN, GROUP_REPLICATION_STREAM, CLONE_ADMIN, CONNECTION_ADMIN, CREATE USER, EXECUTE, FILE, GROUP_REPLICATION_ADMIN, PERSIST_RO_VARIABLES_ADMIN, PROCESS, RELOAD, REPLICATION CLIENT, REPLICATION_APPLIER, REPLICATION_SLAVE_ADMIN, ROLE_ADMIN, SELECT, SHUTDOWN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'replication'@'%' WITH GRANT OPTION;
+			EOSQL
+		fi
+
 		"${mysql[@]}" <<-EOSQL
 			-- What's done in this file shouldn't be replicated
 			--  or products like mysql-fabric won't work
@@ -296,35 +313,30 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			${rootCreate}
 			/*!80016 REVOKE SYSTEM_USER ON *.* FROM root */;
 
-			CREATE USER 'operator'@'${MYSQL_ROOT_HOST}' IDENTIFIED BY '${OPERATOR_ADMIN_PASSWORD}' ;
+			CREATE USER 'operator'@'${MYSQL_ROOT_HOST}' IDENTIFIED BY '${OPERATOR_ADMIN_PASSWORD}' PASSWORD EXPIRE NEVER;
 			GRANT ALL ON *.* TO 'operator'@'${MYSQL_ROOT_HOST}' WITH GRANT OPTION ;
 
-			CREATE USER 'xtrabackup'@'localhost' IDENTIFIED BY '${XTRABACKUP_PASSWORD}';
+			CREATE USER 'xtrabackup'@'localhost' IDENTIFIED BY '${XTRABACKUP_PASSWORD}' PASSWORD EXPIRE NEVER;
 			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.replication_group_members TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.log_status TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.keyring_component_status TO 'xtrabackup'@'localhost';
 
-			CREATE USER 'monitor'@'${MONITOR_HOST}' IDENTIFIED BY '${MONITOR_PASSWORD}' WITH MAX_USER_CONNECTIONS 100;
+			CREATE USER 'monitor'@'${MONITOR_HOST}' IDENTIFIED BY '${MONITOR_PASSWORD}' WITH MAX_USER_CONNECTIONS 100 PASSWORD EXPIRE NEVER;
 			GRANT SYSTEM_USER, SELECT, PROCESS, SUPER, REPLICATION CLIENT, RELOAD, BACKUP_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
 			GRANT SELECT ON performance_schema.* TO 'monitor'@'${MONITOR_HOST}';
 			${monitorConnectGrant}
 
-			CREATE USER 'replication'@'%' IDENTIFIED BY '${REPLICATION_PASSWORD}';
-			GRANT DELETE, INSERT, UPDATE ON mysql.* TO 'replication'@'%' WITH GRANT OPTION;
-			GRANT SELECT ON performance_schema.threads to 'replication'@'%';
-			GRANT SYSTEM_USER, REPLICATION SLAVE, BACKUP_ADMIN, GROUP_REPLICATION_STREAM, CLONE_ADMIN, CONNECTION_ADMIN, CREATE USER, EXECUTE, FILE, GROUP_REPLICATION_ADMIN, PERSIST_RO_VARIABLES_ADMIN, PROCESS, RELOAD, REPLICATION CLIENT, REPLICATION_APPLIER, REPLICATION_SLAVE_ADMIN, ROLE_ADMIN, SELECT, SHUTDOWN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'replication'@'%' WITH GRANT OPTION;
-			GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata.* TO 'replication'@'%' WITH GRANT OPTION;
-			GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata_bkp.* TO 'replication'@'%' WITH GRANT OPTION;
-			GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata_previous.* TO 'replication'@'%' WITH GRANT OPTION;
+			${replicationCreate}
 
-			CREATE USER 'orchestrator'@'%' IDENTIFIED BY '${ORC_TOPOLOGY_PASSWORD}';
+			CREATE USER 'orchestrator'@'%' IDENTIFIED BY '${ORC_TOPOLOGY_PASSWORD}' PASSWORD EXPIRE NEVER;
 			GRANT SYSTEM_USER, SUPER, PROCESS, REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';
+			GRANT SELECT ON performance_schema.replication_group_members TO 'orchestrator'@'%';
 			GRANT SELECT ON mysql.slave_master_info TO 'orchestrator'@'%';
 			GRANT SELECT ON sys_operator.* TO 'orchestrator'@'%';
 
 			CREATE DATABASE IF NOT EXISTS sys_operator;
-			CREATE USER 'heartbeat'@'localhost' IDENTIFIED BY '${HEARTBEAT_PASSWORD}';
+			CREATE USER 'heartbeat'@'localhost' IDENTIFIED BY '${HEARTBEAT_PASSWORD}' PASSWORD EXPIRE NEVER;
 			GRANT SYSTEM_USER, REPLICATION CLIENT ON *.* TO 'heartbeat'@'localhost';
 			GRANT SELECT, CREATE, DELETE, UPDATE, INSERT ON sys_operator.heartbeat TO 'heartbeat'@'localhost';
 
@@ -383,6 +395,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 	fi
 
 	load_group_replication_plugin
+	ensure_read_only
 
 	# exit when MYSQL_INIT_ONLY environment variable is set to avoid starting mysqld
 	if [ -n "$MYSQL_INIT_ONLY" ]; then
@@ -399,34 +412,29 @@ if [[ -f /var/lib/mysql/full-cluster-crash ]]; then
 	namespace=$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)
 
 	echo "######FULL_CLUSTER_CRASH:${node_name}######"
-	echo "You have full cluster crash. You need to recover the cluster manually. Here are the steps:"
-	echo ""
-	echo "Latest GTID_EXECUTED in this node is ${gtid_executed}"
-	echo "Compare GTIDs in each MySQL pod and select the one with the newest GTID."
-	echo ""
-	echo "Create /var/lib/mysql/force-bootstrap inside the mysql container. For example, if you select ${cluster_name}-mysql-2 to recover from:"
-	echo "$ kubectl -n ${namespace} exec ${cluster_name}-mysql-2 -c mysql -- touch /var/lib/mysql/force-bootstrap"
-	echo ""
-	echo "Remove /var/lib/mysql/full-cluster-crash in this pod to re-bootstrap the group. For example:"
-	echo "$ kubectl -n ${namespace} exec ${cluster_name}-mysql-2 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
-	echo "This will restart the mysql container."
-	echo ""
-	echo "After group is bootstrapped and mysql container is ready, move on to the other pods:"
-	echo "$ kubectl -n ${namespace} exec ${cluster_name}-mysql-1 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
-	echo "Wait until the pod ready"
-	echo ""
-	echo "$ kubectl -n ${namespace} exec ${cluster_name}-mysql-0 -c mysql -- rm /var/lib/mysql/full-cluster-crash"
-	echo "Wait until the pod ready"
-	echo ""
-	echo "Continue to other pods if you have more."
-	echo "#####LAST_LINE:${node_name}:${gtid_executed}"
+	echo "You are in a full cluster crash. Operator will attempt to fix the issue automatically if you have spec.mysql.autoRecovery enabled."
+	echo "MySQL pods will be up and running in read only mode."
+	echo "Latest GTID_EXECUTED on this node is ${gtid_executed}"
+	echo "If you have spec.mysql.autoRecovery disabled, wait for all pods to be up and running and connect to one of them using mysql-shell:"
+	echo "kubectl -n ${namespace} exec -it $(hostname) -- mysqlsh root:<password>@localhost"
+	echo "and run the following command to reboot cluster:"
+	echo "dba.rebootClusterFromCompleteOutage()"
+	echo "and delete /var/lib/mysql/full-cluster-crash file in each pod."
+	echo "######FULL_CLUSTER_CRASH:${node_name}######"
 
-	for (( ; ; )); do
-		if [[ ! -f /var/lib/mysql/full-cluster-crash ]]; then
-			exit 0
-		fi
-		sleep 5
-	done
+	ensure_read_only
+fi
+
+recovery_file='/var/lib/mysql/sleep-forever'
+if [ -f "${recovery_file}" ]; then
+  set +o xtrace
+  echo "The $recovery_file file is detected, node is going to infinity loop"
+  echo "If you want to exit from infinity loop you need to remove $recovery_file file"
+  for (( ; ; )); do
+    if [ ! -f "${recovery_file}" ]; then
+      exit 0
+    fi
+  done
 fi
 
 exec "$@"
