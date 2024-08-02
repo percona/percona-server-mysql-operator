@@ -1,0 +1,11 @@
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-scheduled-backup
+spec:
+  backup:
+    schedule:
+    - keep: 3
+      name: minio
+      schedule: ''
+      storageName: minio
