@@ -1,3 +1,4 @@
+version-service
 async-ignore-annotations
 auto-config
 config
@@ -31,4 +32,3 @@ sidecars
 smart-update
 tls-cert-manager
 users
-version-service
