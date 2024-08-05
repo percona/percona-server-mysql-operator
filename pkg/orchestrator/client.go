@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"bytes"
 	"context"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -19,6 +20,25 @@ type orcResponse struct {
 	Details interface{} `json:"Details,omitempty"`
 }
 
+func (r *orcResponse) Error() error {
+	if r.Code != "ERROR" {
+		return nil
+	}
+	if strings.Contains(r.Message, "Unable to determine cluster name") {
+		return ErrUnableToGetClusterName
+	}
+	if r.Message == "Unauthorized" {
+		return ErrUnauthorized
+	}
+	if r.Message == driver.ErrBadConn.Error() {
+		return ErrBadConn
+	}
+	if strings.Contains(r.Message, "no such host") {
+		return ErrNoSuchHost
+	}
+	return errors.New(r.Message)
+}
+
 type InstanceKey struct {
 	Hostname string `json:"Hostname"`
 	Port     int32  `json:"Port"`
@@ -33,9 +53,13 @@ type Instance struct {
 	Problems  []string      `json:"Problems"`
 }
 
-var ErrEmptyResponse = errors.New("empty response")
-
-var ErrUnableToGetClusterName = errors.New("unable to determine cluster name")
+var (
+	ErrEmptyResponse          = errors.New("empty response")
+	ErrUnableToGetClusterName = errors.New("unable to determine cluster name")
+	ErrUnauthorized           = errors.New("unauthorized")
+	ErrBadConn                = errors.New("bad connection")
+	ErrNoSuchHost             = errors.New("mysql host not found")
+)
 
 func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoint string, outb, errb *bytes.Buffer) error {
 	c := []string{"curl", fmt.Sprintf("localhost:%d/%s", defaultWebPort, endpoint)}
@@ -68,8 +92,8 @@ func ClusterPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Po
 		return nil, errors.Wrap(err, "json decode")
 	}
 
-	if orcResp.Code == "ERROR" {
-		return nil, errors.New(orcResp.Message)
+	if err := orcResp.Error(); err != nil {
+		return nil, err
 	}
 
 	return primary, nil
@@ -89,11 +113,7 @@ func StopReplication(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.P
 		return errors.Wrap(err, "json decode")
 	}
 
-	if orcResp.Code == "ERROR" {
-		return errors.New(orcResp.Message)
-	}
-
-	return nil
+	return orcResp.Error()
 }
 
 func StartReplication(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int32) error {
@@ -110,11 +130,7 @@ func StartReplication(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.
 		return errors.Wrap(err, "json decode")
 	}
 
-	if orcResp.Code == "ERROR" {
-		return errors.New(orcResp.Message)
-	}
-
-	return nil
+	return orcResp.Error()
 }
 
 func AddPeer(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, peer string) error {
@@ -139,11 +155,7 @@ func AddPeer(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, peer
 		return errors.Wrap(err, "json decode")
 	}
 
-	if orcResp.Code == "ERROR" {
-		return errors.New(orcResp.Message)
-	}
-
-	return nil
+	return orcResp.Error()
 }
 
 func RemovePeer(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, peer string) error {
@@ -168,11 +180,7 @@ func RemovePeer(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, p
 		return errors.Wrap(err, "json decode")
 	}
 
-	if orcResp.Code == "ERROR" {
-		return errors.New(orcResp.Message)
-	}
-
-	return nil
+	return orcResp.Error()
 }
 
 func EnsureNodeIsPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint, host string, port int) error {
@@ -200,11 +208,7 @@ func EnsureNodeIsPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *core
 		return errors.Wrapf(err, "json decode \"%s\"", string(body))
 	}
 
-	if orcResp.Code == "ERROR" {
-		return errors.New(orcResp.Message)
-	}
-
-	return nil
+	return orcResp.Error()
 }
 
 func Discover(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) error {
@@ -227,10 +231,7 @@ func Discover(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, hos
 		return errors.Wrapf(err, "json decode \"%s\"", string(body))
 	}
 
-	if orcResp.Code == "ERROR" {
-		return errors.New(orcResp.Message)
-	}
-	return nil
+	return orcResp.Error()
 }
 
 func SetWriteable(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) error {
@@ -253,10 +254,7 @@ func SetWriteable(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod,
 		return errors.Wrapf(err, "json decode \"%s\"", string(body))
 	}
 
-	if orcResp.Code == "ERROR" {
-		return errors.New(orcResp.Message)
-	}
-	return nil
+	return orcResp.Error()
 }
 
 func Cluster(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint string) ([]*Instance, error) {
@@ -283,11 +281,8 @@ func Cluster(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clus
 		return nil, errors.Wrap(err, "json decode")
 	}
 
-	if orcResp.Code == "ERROR" {
-		if strings.Contains(orcResp.Message, "Unable to determine cluster name") {
-			return nil, ErrUnableToGetClusterName
-		}
-		return nil, errors.New(orcResp.Message)
+	if err := orcResp.Error(); err != nil {
+		return nil, err
 	}
 
 	return instances, nil
@@ -313,8 +308,5 @@ func ForgetInstance(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Po
 		return errors.Wrapf(err, "json decode \"%s\"", string(body))
 	}
 
-	if orcResp.Code == "ERROR" {
-		return errors.New(orcResp.Message)
-	}
-	return nil
+	return orcResp.Error()
 }
