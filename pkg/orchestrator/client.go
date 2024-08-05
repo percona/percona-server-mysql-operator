@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -33,6 +34,8 @@ type Instance struct {
 }
 
 var ErrEmptyResponse = errors.New("empty response")
+
+var ErrUnableToGetClusterName = errors.New("unable to determine cluster name")
 
 func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoint string, outb, errb *bytes.Buffer) error {
 	c := []string{"curl", fmt.Sprintf("localhost:%d/%s", defaultWebPort, endpoint)}
@@ -266,6 +269,9 @@ func Cluster(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clus
 	}
 
 	body := res.Bytes()
+	if len(body) == 0 {
+		return nil, ErrEmptyResponse
+	}
 
 	instances := []*Instance{}
 	if err := json.Unmarshal(body, &instances); err == nil {
@@ -278,6 +284,9 @@ func Cluster(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clus
 	}
 
 	if orcResp.Code == "ERROR" {
+		if strings.Contains(orcResp.Message, "Unable to determine cluster name") {
+			return nil, ErrUnableToGetClusterName
+		}
 		return nil, errors.New(orcResp.Message)
 	}
 
