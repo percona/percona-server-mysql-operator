@@ -11199,15 +11199,26 @@ spec:
                 type: object
             type: object
             x-kubernetes-validations:
-            - message: HAProxy can not be enabled with 'group-replication' clusterType
-              rule: 'self.mysql.clusterType==''group-replication'' ? !self.proxy.haproxy.enabled
+            - message: MySQL Router or HAProxy must be enabled for Group Replication.
+                Enable spec.unsafeFlags.proxy to bypass this check
+              rule: 'self.mysql.clusterType==''group-replication'' ? (self.proxy.router.enabled
+                || self.unsafeFlags.proxy) || (self.proxy.haproxy.enabled || self.unsafeFlags.proxy)
                 : true'
-            - message: HAProxy and Orchestrator must be enabled with 'async' clusterType
-              rule: 'self.mysql.clusterType==''async'' ? self.proxy.haproxy.enabled
-                && self.orchestrator.enabled : true'
-            - message: Orchestrator can't be enabled with 'group-replication' clusterType
+            - message: Orchestrator can't be enabled with Group Replication
               rule: 'self.mysql.clusterType==''group-replication'' ? !self.orchestrator.enabled
                 : true'
+            - message: MySQL Router can't be enabled for asynchronous replication
+              rule: 'self.mysql.clusterType==''async'' ? !self.proxy.router.enabled
+                : true'
+            - message: Haproxy must be enabled for asynchronous replication. Enable
+                spec.unsafeFlags.proxy to bypass this check
+              rule: 'self.mysql.clusterType==''async'' ? self.proxy.haproxy.enabled
+                || (!self.proxy.haproxy.enabled && self.unsafeFlags.proxy) : true'
+            - message: Orchestrator must be enabled for asynchronous replication.
+                Enable spec.unsafeFlags.orchestrator to bypass this check
+              rule: 'self.mysql.clusterType==''async'' ? self.orchestrator.enabled
+                || (!self.orchestrator.enabled && self.unsafeFlags.orchestrator) :
+                true'
           status:
             properties:
               backupVersion:
