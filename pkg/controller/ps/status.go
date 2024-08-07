@@ -282,6 +282,9 @@ func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *api
 
 	instances, err := orchestrator.Cluster(ctx, r.ClientCmd, pod, cr.ClusterHint())
 	if err != nil {
+		if errors.Is(err, orchestrator.ErrEmptyResponse) || errors.Is(err, orchestrator.ErrUnableToGetClusterName) {
+			return false, errors.Wrap(err, "orchestrator").Error(), nil
+		}
 		return false, "", err
 	}
 
