@@ -309,17 +309,6 @@ func bootstrapGroupReplication(ctx context.Context) error {
 		log.Printf("bootstrap finished in %f seconds", timer.ElapsedSeconds("total"))
 	}()
 
-	exists, err := lockExists()
-	if err != nil {
-		return errors.Wrap(err, "lock file check")
-	}
-	if exists {
-		log.Printf("Waiting for bootstrap.lock to be deleted")
-		if err = waitLockRemoval(); err != nil {
-			return errors.Wrap(err, "wait lock removal")
-		}
-	}
-
 	log.Println("Bootstrap starting...")
 
 	localShell, err := connectToLocal(ctx)
@@ -393,8 +382,6 @@ func bootstrapGroupReplication(ctx context.Context) error {
 		}
 
 		log.Printf("Added instance (%s) to InnoDB cluster", localShell.host)
-
-		os.Exit(1)
 	}
 
 	rescanNeeded := false

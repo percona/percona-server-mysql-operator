@@ -19,6 +19,10 @@ import (
 func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("Crash recovery")
 
+	if cr.Spec.MySQL.IsAsync() {
+		return nil
+	}
+
 	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "get pods")

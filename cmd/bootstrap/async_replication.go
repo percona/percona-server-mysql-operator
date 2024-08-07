@@ -37,16 +37,6 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 	}
 	log.Printf("Peers: %v", sets.List(peers))
 
-	exists, err := lockExists()
-	if err != nil {
-		return errors.Wrap(err, "lock file check")
-	}
-	if exists {
-		log.Printf("Waiting for bootstrap.lock to be deleted")
-		if err = waitLockRemoval(); err != nil {
-			return errors.Wrap(err, "wait lock removal")
-		}
-	}
 	primary, replicas, err := getTopology(ctx, peers)
 	if err != nil {
 		return errors.Wrap(err, "select donor")
