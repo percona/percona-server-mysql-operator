@@ -807,12 +807,18 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 	}
 
 	if err := orchestrator.Discover(ctx, r.ClientCmd, pod, mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
-		switch err.Error() {
-		case "Unauthorized":
+		switch {
+		case errors.Is(err, orchestrator.ErrUnauthorized):
 			log.Info("mysql is not ready, unauthorized orchestrator discover response. skip")
 			return nil
-		case orchestrator.ErrEmptyResponse.Error():
+		case errors.Is(err, orchestrator.ErrEmptyResponse):
 			log.Info("mysql is not ready, empty orchestrator discover response. skip")
+			return nil
+		case errors.Is(err, orchestrator.ErrBadConn):
+			log.Info("mysql is not ready, bad connection. skip")
+			return nil
+		case errors.Is(err, orchestrator.ErrNoSuchHost):
+			log.Info("mysql is not ready, host not found. skip")
 			return nil
 		}
 		return errors.Wrap(err, "failed to discover cluster")
