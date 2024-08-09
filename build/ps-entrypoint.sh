@@ -191,6 +191,7 @@ ensure_read_only() {
 }
 
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
+MYSQL_MINOR_VERSION=$(echo "$MYSQL_VERSION" | awk -F'.' '{print $2}')
 
 if [ "$MYSQL_VERSION" != '8.0' ]; then
 	echo "Percona Distribution for MySQL Operator does not support $MYSQL_VERSION"
@@ -226,7 +227,14 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		echo 'Initializing database'
 		# we initialize database into $TMPDIR because "--initialize-insecure" option does not work if directory is not empty
 		# in some cases storage driver creates unremovable artifacts (see K8SPXC-286), so $DATADIR cleanup is not possible
-		"$@" --initialize-insecure --skip-ssl --datadir="$TMPDIR"
+		init_args=(--initialize-insecure --datadir="$TMPDIR")
+		# --skip-ssl was removed in 8.4
+		if [ "$MYSQL_MINOR_VERSION" -lt 4 ]; then
+			init_args+=(
+				"--skip-ssl"
+			)
+		fi
+		"$@" "${init_args[@]}"
 		mv "$TMPDIR"/* "$DATADIR/"
 		rm -rfv "$TMPDIR"
 		echo 'Database initialized'
@@ -427,14 +435,14 @@ fi
 
 recovery_file='/var/lib/mysql/sleep-forever'
 if [ -f "${recovery_file}" ]; then
-  set +o xtrace
-  echo "The $recovery_file file is detected, node is going to infinity loop"
-  echo "If you want to exit from infinity loop you need to remove $recovery_file file"
-  for (( ; ; )); do
-    if [ ! -f "${recovery_file}" ]; then
-      exit 0
-    fi
-  done
+	set +o xtrace
+	echo "The $recovery_file file is detected, node is going to infinity loop"
+	echo "If you want to exit from infinity loop you need to remove $recovery_file file"
+	for (( ; ; )); do
+		if [ ! -f "${recovery_file}" ]; then
+			exit 0
+		fi
+	done
 fi
 
 exec "$@"
