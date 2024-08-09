@@ -1,0 +1,11 @@
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: scheduled-backup
+spec:
+  backup:
+    schedule:
+    - keep: 3
+      name: azure
+      schedule: ''
+      storageName: azure-blob

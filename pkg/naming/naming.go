@@ -1,8 +1,8 @@
 package naming
 
 const (
-	annotationPrefix      = "percona.com/"
-	annotationPrefixMysql = "mysql.percona.com/"
+	perconaPrefix      = "percona.com/"
+	mysqlPerconaPrefix = "mysql.percona.com/"
 )
 
 const (
@@ -14,15 +14,24 @@ const (
 )
 
 const (
-	LabelMySQLPrimary = annotationPrefixMysql + "primary"
-	LabelExposed      = annotationPrefix + "exposed"
+	LabelCluster = perconaPrefix + "cluster"
 )
 
 const (
-	FinalizerDeleteSSL         = annotationPrefix + "delete-ssl"
-	FinalizerDeletePodsInOrder = annotationPrefix + "delete-mysql-pods-in-order"
+	LabelMySQLPrimary = mysqlPerconaPrefix + "primary"
+	LabelExposed      = perconaPrefix + "exposed"
+)
 
-	FinalizerDeleteBackup = annotationPrefix + "delete-backup"
+const (
+	LabelBackupType     = perconaPrefix + "backup-type"
+	LabelBackupAncestor = perconaPrefix + "backup-ancestor"
+)
+
+const (
+	FinalizerDeleteSSL         = perconaPrefix + "delete-ssl"
+	FinalizerDeletePodsInOrder = perconaPrefix + "delete-mysql-pods-in-order"
+
+	FinalizerDeleteBackup = perconaPrefix + "delete-backup"
 )
 
 type AnnotationKey string
@@ -32,9 +41,9 @@ func (s AnnotationKey) String() string {
 }
 
 const (
-	AnnotationSecretHash       AnnotationKey = annotationPrefix + "last-applied-secret"
-	AnnotationConfigHash       AnnotationKey = annotationPrefix + "configuration-hash"
-	AnnotationTLSHash          AnnotationKey = annotationPrefix + "last-applied-tls"
-	AnnotationPasswordsUpdated AnnotationKey = annotationPrefix + "passwords-updated"
-	AnnotationLastConfigHash   AnnotationKey = annotationPrefix + "last-config-hash"
+	AnnotationSecretHash       AnnotationKey = perconaPrefix + "last-applied-secret"
+	AnnotationConfigHash       AnnotationKey = perconaPrefix + "configuration-hash"
+	AnnotationTLSHash          AnnotationKey = perconaPrefix + "last-applied-tls"
+	AnnotationPasswordsUpdated AnnotationKey = perconaPrefix + "passwords-updated"
+	AnnotationLastConfigHash   AnnotationKey = perconaPrefix + "last-config-hash"
 )

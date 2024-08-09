@@ -1,0 +1,48 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQLBackup
+metadata:
+  finalizers:
+  - percona.com/delete-backup
+  generation: 1
+  labels:
+    percona.com/backup-type: cron
+    percona.com/cluster: scheduled-backup
+spec:
+  clusterName: scheduled-backup
+  storageName: gcp-cs
+status:
+  state: Running
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQLBackup
+metadata:
+  finalizers:
+  - percona.com/delete-backup
+  generation: 1
+  labels:
+    percona.com/backup-type: cron
+    percona.com/cluster: scheduled-backup
+spec:
+  clusterName: scheduled-backup
+  storageName: aws-s3
+status:
+  state: Succeeded
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQLBackup
+metadata:
+  finalizers:
+  - percona.com/delete-backup
+  generation: 1
+  labels:
+    percona.com/backup-type: cron
+    percona.com/cluster: scheduled-backup
+spec:
+  clusterName: scheduled-backup
+  storageName: minio
+status:
+  state: Succeeded
