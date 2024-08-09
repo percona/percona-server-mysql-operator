@@ -53,13 +53,10 @@ var SecretUsers = []apiv1alpha1.SystemUser{
 	apiv1alpha1.UserOrchestrator,
 	apiv1alpha1.UserRoot,
 	apiv1alpha1.UserXtraBackup,
+	apiv1alpha1.UserReplication,
 }
 
 func FillPasswordsSecret(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) error {
-	if cr.MySQLSpec().IsAsync() {
-		SecretUsers = append(SecretUsers, apiv1alpha1.UserReplication)
-	}
-
 	if len(secret.Data) == 0 {
 		secret.Data = make(map[string][]byte, len(SecretUsers))
 	}
