@@ -1,0 +1,135 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 480
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: self-healing-mysql
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: self-healing-orc
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: self-healing-haproxy
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: self-healing
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+status:
+  haproxy:
+    ready: 3
+    size: 3
+    state: ready
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  orchestrator:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: chaos-kill-label-cluster-crash
+spec:
+  action: pod-kill
+  mode: all
+status:
+  experiment:
+    containerRecords:
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    desiredPhase: Run
