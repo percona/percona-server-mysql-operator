@@ -43,6 +43,12 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // PerconaServerMySQLSpec defines the desired state of PerconaServerMySQL
+
+// +kubebuilder:validation:XValidation:message="MySQL Router or HAProxy must be enabled for Group Replication. Enable spec.unsafeFlags.proxy to bypass this check", rule="self.mysql.clusterType=='group-replication' ? !self.proxy.router.enabled && !self.proxy.haproxy.enabled && !self.unsafeFlags.proxy : true"
+// +kubebuilder:validation:XValidation:message="Orchestrator can't be enabled with Group Replication", rule="self.mysql.clusterType=='group-replication' ? !self.orchestrator.enabled : true"
+// +kubebuilder:validation:XValidation:message="Orchestrator must be enabled for asynchronous replication. Enable spec.unsafeFlags.orchestrator to bypass this check", rule="self.mysql.clusterType=='async' ? !self.orchestrator.enabled && !self.unsafeFlags.orchestrator : true"
+// +kubebuilder:validation:XValidation:message="Haproxy must be enabled for asynchronous replication. Enable spec.unsafeFlags.proxy to bypass this check", rule="self.mysql.clusterType=='async' ? !self.haproxy.enabled && !self.unsafeFlags.proxy : true"
+// +kubebuilder:validation:XValidation:message="MySQL Router can't be enabled for asynchronous replication", rule="self.mysql.clusterType=='async' ? self.proxy.router.enabled : true"
 type PerconaServerMySQLSpec struct {
 	CRVersion             string                               `json:"crVersion,omitempty"`
 	Pause                 bool                                 `json:"pause,omitempty"`
