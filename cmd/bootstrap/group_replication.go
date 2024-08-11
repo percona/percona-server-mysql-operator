@@ -172,7 +172,7 @@ func updateGroupPeers(ctx context.Context, peers sets.Set[string]) error {
 			tmpSeeds = strings.Split(seeds, ",")
 		}
 		seedSet := sets.New(tmpSeeds...)
-		seedSet.Insert(fmt.Sprintf("%s:%d", fqdn, 3306))
+		seedSet.Insert(fmt.Sprintf("%s:%d", fqdn, 33061))
 
 		seeds = strings.Join(sets.List(seedSet), ",")
 
