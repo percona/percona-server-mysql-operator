@@ -21,6 +21,7 @@ const (
 const (
 	FinalizerDeleteSSL         = annotationPrefix + "delete-ssl"
 	FinalizerDeletePodsInOrder = annotationPrefix + "delete-mysql-pods-in-order"
+	FinalizerDeleteMySQLPvc    = annotationPrefix + "delete-mysql-pvc"
 
 	FinalizerDeleteBackup = annotationPrefix + "delete-backup"
 )

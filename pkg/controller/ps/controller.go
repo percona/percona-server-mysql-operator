@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -142,6 +143,8 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 			err = r.deleteMySQLPods(ctx, cr)
 		case naming.FinalizerDeleteSSL:
 			err = r.deleteCerts(ctx, cr)
+		case naming.FinalizerDeleteMySQLPvc:
+			err = r.deleteMySQLPvc(ctx, cr)
 		}
 
 		if err != nil {
@@ -344,6 +347,32 @@ func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv
 			&client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &secret.UID}})
 		if err != nil {
 			return errors.Wrapf(err, "delete secret %s", secretName)
+		}
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) deleteMySQLPvc(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	mysqlExposer := mysql.Exposer(*cr)
+
+	list := corev1.PersistentVolumeClaimList{}
+
+	err := r.Client.List(ctx,
+		&list,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(mysqlExposer.Labels()),
+		},
+	)
+	if err != nil {
+		return errors.Wrap(err, "get PVC list")
+	}
+
+	for _, pvc := range list.Items {
+		err := r.Client.Delete(ctx, &pvc, &client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &pvc.UID}})
+		if err != nil {
+			return errors.Wrapf(err, "delete PVC %s", pvc.Name)
 		}
 	}
 
