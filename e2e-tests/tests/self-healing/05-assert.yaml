@@ -1,11 +1,11 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 420
+timeout: 120
 ---
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: operator-self-healing-mysql
+  name: self-healing-mysql
 status:
   observedGeneration: 1
   replicas: 3
@@ -17,7 +17,7 @@ status:
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: operator-self-healing-orc
+  name: self-healing-orc
 status:
   observedGeneration: 1
   replicas: 3
@@ -29,7 +29,7 @@ status:
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: operator-self-healing-haproxy
+  name: self-healing-haproxy
 status:
   observedGeneration: 1
   replicas: 3
@@ -41,7 +41,7 @@ status:
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
-  name: operator-self-healing
+  name: self-healing
   finalizers:
     - percona.com/delete-mysql-pods-in-order
 status:
@@ -58,3 +58,22 @@ status:
     size: 3
     state: ready
   state: ready
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: chaos-pod-kill-primary
+spec:
+  action: pod-kill
+  mode: one
+status:
+  experiment:
+    containerRecords:
+    - events:
+      - operation: Apply
+        type: Succeeded
+      injectedCount: 1
+      phase: Injected
+      recoveredCount: 0
+      selectorKey: .
+    desiredPhase: Run

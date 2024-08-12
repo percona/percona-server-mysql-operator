@@ -5,7 +5,7 @@ timeout: 420
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: operator-self-healing-mysql
+  name: self-healing-mysql
 status:
   observedGeneration: 1
   replicas: 3
@@ -17,7 +17,7 @@ status:
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: operator-self-healing-orc
+  name: self-healing-orc
 status:
   observedGeneration: 1
   replicas: 3
@@ -29,7 +29,7 @@ status:
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: operator-self-healing-haproxy
+  name: self-healing-haproxy
 status:
   observedGeneration: 1
   replicas: 3
@@ -41,7 +41,7 @@ status:
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
-  name: operator-self-healing
+  name: self-healing
   finalizers:
     - percona.com/delete-mysql-pods-in-order
 status:

@@ -25,6 +25,7 @@ one-pod
 operator-self-healing
 recreate
 scaling
+self-healing
 service-per-pod
 sidecars
 smart-update

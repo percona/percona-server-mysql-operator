@@ -1,0 +1,13 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 90
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      network_loss "${NAMESPACE}" "$(get_primary_from_haproxy ${test_name}-haproxy-0)" "primary"
+      sleep 30 # wait for new master to get elected
+    timeout: 90
