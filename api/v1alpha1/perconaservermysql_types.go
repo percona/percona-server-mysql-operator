@@ -44,24 +44,23 @@ import (
 
 // PerconaServerMySQLSpec defines the desired state of PerconaServerMySQL
 type PerconaServerMySQLSpec struct {
-	CRVersion             string                               `json:"crVersion,omitempty"`
-	Pause                 bool                                 `json:"pause,omitempty"`
-	SecretsName           string                               `json:"secretsName,omitempty"`
-	SSLSecretName         string                               `json:"sslSecretName,omitempty"`
-	SSLInternalSecretName string                               `json:"sslInternalSecretName,omitempty"`
-	Unsafe                UnsafeFlags                          `json:"unsafeFlags,omitempty"`
-	InitImage             string                               `json:"initImage,omitempty"`
-	IgnoreAnnotations     []string                             `json:"ignoreAnnotations,omitempty"`
-	IgnoreLabels          []string                             `json:"ignoreLabels,omitempty"`
-	MySQL                 MySQLSpec                            `json:"mysql,omitempty"`
-	Orchestrator          OrchestratorSpec                     `json:"orchestrator,omitempty"`
-	PMM                   *PMMSpec                             `json:"pmm,omitempty"`
-	Backup                *BackupSpec                          `json:"backup,omitempty"`
-	Proxy                 ProxySpec                            `json:"proxy,omitempty"`
-	TLS                   *TLSSpec                             `json:"tls,omitempty"`
-	Toolkit               *ToolkitSpec                         `json:"toolkit,omitempty"`
-	UpgradeOptions        UpgradeOptions                       `json:"upgradeOptions,omitempty"`
-	UpdateStrategy        appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	CRVersion         string                               `json:"crVersion,omitempty"`
+	Pause             bool                                 `json:"pause,omitempty"`
+	SecretsName       string                               `json:"secretsName,omitempty"`
+	SSLSecretName     string                               `json:"sslSecretName,omitempty"`
+	Unsafe            UnsafeFlags                          `json:"unsafeFlags,omitempty"`
+	InitImage         string                               `json:"initImage,omitempty"`
+	IgnoreAnnotations []string                             `json:"ignoreAnnotations,omitempty"`
+	IgnoreLabels      []string                             `json:"ignoreLabels,omitempty"`
+	MySQL             MySQLSpec                            `json:"mysql,omitempty"`
+	Orchestrator      OrchestratorSpec                     `json:"orchestrator,omitempty"`
+	PMM               *PMMSpec                             `json:"pmm,omitempty"`
+	Backup            *BackupSpec                          `json:"backup,omitempty"`
+	Proxy             ProxySpec                            `json:"proxy,omitempty"`
+	TLS               *TLSSpec                             `json:"tls,omitempty"`
+	Toolkit           *ToolkitSpec                         `json:"toolkit,omitempty"`
+	UpgradeOptions    UpgradeOptions                       `json:"upgradeOptions,omitempty"`
+	UpdateStrategy    appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
 }
 
 type UnsafeFlags struct {
