@@ -7583,8 +7583,6 @@ spec:
                 type: object
               secretsName:
                 type: string
-              sslInternalSecretName:
-                type: string
               sslSecretName:
                 type: string
               tls:
