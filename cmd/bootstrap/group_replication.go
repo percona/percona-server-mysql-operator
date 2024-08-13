@@ -373,6 +373,19 @@ func bootstrapGroupReplication(ctx context.Context) error {
 
 	log.Printf("Cluster status:\n%s", status)
 
+	for _, member := range status.DefaultReplicaSet.Topology {
+		if member.MemberRole == innodbcluster.MemberRolePrimary && member.MemberState != innodbcluster.MemberStateOnline {
+			log.Printf("Primary (%s) is not ONLINE. Starting full cluster crash recovery...", member.Address)
+
+			if err := handleFullClusterCrash(ctx); err != nil {
+				return errors.Wrap(err, "handle full cluster crash")
+			}
+
+			// force restart container
+			os.Exit(1)
+		}
+	}
+
 	member, ok := status.DefaultReplicaSet.Topology[fmt.Sprintf("%s:%d", localShell.host, 3306)]
 	if !ok {
 		log.Printf("Adding instance (%s) to InnoDB cluster", localShell.host)
