@@ -3298,6 +3298,19 @@ spec:
                           x-kubernetes-int-or-string: true
                         type: object
                     type: object
+                  schedule:
+                    items:
+                      properties:
+                        keep:
+                          type: integer
+                        name:
+                          type: string
+                        schedule:
+                          type: string
+                        storageName:
+                          type: string
+                      type: object
+                    type: array
                   serviceAccountName:
                     type: string
                   storages:
@@ -10689,8 +10702,6 @@ spec:
                     type: object
                 type: object
               secretsName:
-                type: string
-              sslInternalSecretName:
                 type: string
               sslSecretName:
                 type: string

@@ -226,7 +226,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		echo 'Initializing database'
 		# we initialize database into $TMPDIR because "--initialize-insecure" option does not work if directory is not empty
 		# in some cases storage driver creates unremovable artifacts (see K8SPXC-286), so $DATADIR cleanup is not possible
-		"$@" --initialize-insecure --skip-ssl --datadir="$TMPDIR"
+		"$@" --initialize-insecure --datadir="$TMPDIR"
 		mv "$TMPDIR"/* "$DATADIR/"
 		rm -rfv "$TMPDIR"
 		echo 'Database initialized'
@@ -421,14 +421,14 @@ fi
 
 recovery_file='/var/lib/mysql/sleep-forever'
 if [ -f "${recovery_file}" ]; then
-  set +o xtrace
-  echo "The $recovery_file file is detected, node is going to infinity loop"
-  echo "If you want to exit from infinity loop you need to remove $recovery_file file"
-  for (( ; ; )); do
-    if [ ! -f "${recovery_file}" ]; then
-      exit 0
-    fi
-  done
+	set +o xtrace
+	echo "The $recovery_file file is detected, node is going to infinity loop"
+	echo "If you want to exit from infinity loop you need to remove $recovery_file file"
+	for (( ; ; )); do
+		if [ ! -f "${recovery_file}" ]; then
+			exit 0
+		fi
+	done
 fi
 
 exec "$@"

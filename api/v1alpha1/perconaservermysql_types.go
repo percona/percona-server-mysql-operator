@@ -26,6 +26,7 @@ import (
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/pkg/errors"
+	"github.com/robfig/cron/v3"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	appsv1 "k8s.io/api/apps/v1"
@@ -44,24 +45,23 @@ import (
 
 // PerconaServerMySQLSpec defines the desired state of PerconaServerMySQL
 type PerconaServerMySQLSpec struct {
-	CRVersion             string                               `json:"crVersion,omitempty"`
-	Pause                 bool                                 `json:"pause,omitempty"`
-	SecretsName           string                               `json:"secretsName,omitempty"`
-	SSLSecretName         string                               `json:"sslSecretName,omitempty"`
-	SSLInternalSecretName string                               `json:"sslInternalSecretName,omitempty"`
-	Unsafe                UnsafeFlags                          `json:"unsafeFlags,omitempty"`
-	InitImage             string                               `json:"initImage,omitempty"`
-	IgnoreAnnotations     []string                             `json:"ignoreAnnotations,omitempty"`
-	IgnoreLabels          []string                             `json:"ignoreLabels,omitempty"`
-	MySQL                 MySQLSpec                            `json:"mysql,omitempty"`
-	Orchestrator          OrchestratorSpec                     `json:"orchestrator,omitempty"`
-	PMM                   *PMMSpec                             `json:"pmm,omitempty"`
-	Backup                *BackupSpec                          `json:"backup,omitempty"`
-	Proxy                 ProxySpec                            `json:"proxy,omitempty"`
-	TLS                   *TLSSpec                             `json:"tls,omitempty"`
-	Toolkit               *ToolkitSpec                         `json:"toolkit,omitempty"`
-	UpgradeOptions        UpgradeOptions                       `json:"upgradeOptions,omitempty"`
-	UpdateStrategy        appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	CRVersion         string                               `json:"crVersion,omitempty"`
+	Pause             bool                                 `json:"pause,omitempty"`
+	SecretsName       string                               `json:"secretsName,omitempty"`
+	SSLSecretName     string                               `json:"sslSecretName,omitempty"`
+	Unsafe            UnsafeFlags                          `json:"unsafeFlags,omitempty"`
+	InitImage         string                               `json:"initImage,omitempty"`
+	IgnoreAnnotations []string                             `json:"ignoreAnnotations,omitempty"`
+	IgnoreLabels      []string                             `json:"ignoreLabels,omitempty"`
+	MySQL             MySQLSpec                            `json:"mysql,omitempty"`
+	Orchestrator      OrchestratorSpec                     `json:"orchestrator,omitempty"`
+	PMM               *PMMSpec                             `json:"pmm,omitempty"`
+	Backup            *BackupSpec                          `json:"backup,omitempty"`
+	Proxy             ProxySpec                            `json:"proxy,omitempty"`
+	TLS               *TLSSpec                             `json:"tls,omitempty"`
+	Toolkit           *ToolkitSpec                         `json:"toolkit,omitempty"`
+	UpgradeOptions    UpgradeOptions                       `json:"upgradeOptions,omitempty"`
+	UpdateStrategy    appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
 }
 
 type UnsafeFlags struct {
@@ -208,6 +208,17 @@ type BackupSpec struct {
 	Storages                 map[string]*BackupStorageSpec `json:"storages,omitempty"`
 	BackoffLimit             *int32                        `json:"backoffLimit,omitempty"`
 	PiTR                     PiTRSpec                      `json:"pitr,omitempty"`
+	Schedule                 []BackupSchedule              `json:"schedule,omitempty"`
+}
+
+type BackupSchedule struct {
+	// +kubebuilder:validation:Required
+	Name string `json:"name,omitempty"`
+	// +kubebuilder:validation:Required
+	Schedule string `json:"schedule,omitempty"`
+	Keep     int    `json:"keep,omitempty"`
+	// +kubebuilder:validation:Required
+	StorageName string `json:"storageName,omitempty"`
 }
 
 // Retrieves the initialization image for the backup.
@@ -571,6 +582,24 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 
 	if len(cr.Spec.Backup.Image) == 0 {
 		return errors.New("backup.image can't be empty")
+	}
+
+	scheduleNames := make(map[string]struct{}, len(cr.Spec.Backup.Schedule))
+	for _, sch := range cr.Spec.Backup.Schedule {
+		if _, ok := scheduleNames[sch.Name]; ok {
+			return errors.Errorf("scheduled backups should have different names: %s name is used by multiple schedules", sch.Name)
+		}
+		scheduleNames[sch.Name] = struct{}{}
+		_, ok := cr.Spec.Backup.Storages[sch.StorageName]
+		if !ok {
+			return errors.Errorf("storage %s doesn't exist", sch.StorageName)
+		}
+		if sch.Schedule != "" {
+			_, err := cron.ParseStandard(sch.Schedule)
+			if err != nil {
+				return errors.Wrap(err, "invalid schedule format")
+			}
+		}
 	}
 
 	if cr.Spec.MySQL.StartupProbe.InitialDelaySeconds == 0 {
