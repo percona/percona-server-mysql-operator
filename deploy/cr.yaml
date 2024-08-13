@@ -392,26 +392,6 @@ spec:
 #    initImage: perconalab/percona-server-mysql-operator:main
 #    containerSecurityContext:
 #      privileged: true
-#    pitr:
-#      enabled: false
-#      binlogServer:
-#        size: 1
-#        image: perconalab/percona-server-mysql-operator:binlog-server
-#        connectTimeout: 20
-#        writeTimeout: 20
-#        readTimeout: 20
-#        serverId: 42
-#        idleTime: 60
-#        storage:
-#          s3:
-#            bucket: S3-BACKUP-BUCKET-NAME-HERE
-#            credentialsSecret: cluster1-s3-credentials
-#            region: us-west-2
-#        resources:
-#          limits:
-#            memory: 1G
-#          requests:
-#            memory: 500M
     storages:
       s3-us-west:
         type: s3
