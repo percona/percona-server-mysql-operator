@@ -1130,9 +1130,9 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 	accessKey := s3Secret.Data[secret.CredentialsAWSAccessKey]
 	secretKey := s3Secret.Data[secret.CredentialsAWSSecretKey]
 
-	uri := fmt.Sprintf("s3://%s:%s@%s.%s", accessKey, secretKey, s3.Bucket, s3.Region)
+	s3Uri := fmt.Sprintf("s3://%s:%s@%s.%s", accessKey, secretKey, s3.Bucket, s3.Region)
 	if len(s3.Prefix) > 0 {
-		uri += fmt.Sprintf("/%s", s3.Prefix)
+		s3Uri += fmt.Sprintf("/%s", s3.Prefix)
 	}
 
 	replPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserReplication)
@@ -1154,7 +1154,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 			File:  "/dev/stdout",
 		},
 		Connection: binlogserver.Connection{
-			Host:           cr.Status.Host,
+			Host:           mysql.FQDN(cr, 0),
 			Port:           3306,
 			User:           string(apiv1alpha1.UserReplication),
 			Password:       replPass,
@@ -1167,7 +1167,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 			IdleTime: cr.Spec.Backup.PiTR.BinlogServer.IdleTime,
 		},
 		Storage: binlogserver.Storage{
-			URI: uri,
+			URI: s3Uri,
 		},
 	}
 
