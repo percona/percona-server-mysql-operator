@@ -423,7 +423,7 @@ var _ = Describe("Reconcile HAProxy", Ordered, func() {
 		})
 	})
 })
-var _ = FDescribe("Finalizer delete-mysql-pvc", Ordered, func() {
+var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 	ctx := context.Background()
 
 	const crName = "del-mysql-pvc-fnlz"
