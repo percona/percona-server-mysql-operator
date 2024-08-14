@@ -86,6 +86,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 			continue
 		}
 
+		log.Info("Attempting to reboot cluster from complete outage")
 		err = mysh.RebootClusterFromCompleteOutageWithExec(ctx, cr.InnoDBClusterName())
 		if err == nil {
 			log.Info("Cluster was successfully rebooted")
@@ -103,6 +104,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 			err := r.Client.DeleteAllOf(ctx, &corev1.Pod{}, &client.DeleteAllOfOptions{
 				ListOptions: client.ListOptions{
 					LabelSelector: labels.SelectorFromSet(mysql.MatchLabels(cr)),
+					Namespace:     cr.Namespace,
 				},
 			})
 			if err != nil {
