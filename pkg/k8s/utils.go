@@ -428,3 +428,24 @@ func GetCRWithDefaults(
 
 	return cr, nil
 }
+
+func DeleteSecrets(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQL, secretNames []string) error {
+	for _, secretName := range secretNames {
+		secret := &corev1.Secret{}
+		err := cl.Get(ctx, types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      secretName,
+		}, secret)
+		if err != nil {
+			continue
+		}
+
+		err = cl.Delete(ctx, secret,
+			&client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &secret.UID}})
+		if err != nil {
+			return errors.Wrapf(err, "delete secret %s", secretName)
+		}
+	}
+
+	return nil
+}

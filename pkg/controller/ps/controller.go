@@ -282,6 +282,21 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			return errors.Wrap(err, "downscale StatefulSet")
 		}
 		log.Info("Statefulset downscaled", "sts", sts)
+
+		// If `delete-mysql-pvc` finalizer is also applied we need to remove all the secrets,
+		// but we need to do it here since there are needed to apply this finalizer.
+		if cr.FinalizerApplied(naming.FinalizerDeleteMySQLPvc) {
+			secretNames := []string{
+				cr.Spec.SecretsName,
+				"internal-" + cr.Name,
+			}
+
+			err := k8s.DeleteSecrets(ctx, r.Client, cr, secretNames)
+			if err != nil {
+				return errors.Wrap(err, "delete secrets")
+			}
+			log.Info("Removed secrets", "secrets", secretNames)
+		}
 	}
 
 	return psrestore.ErrWaitingTermination
@@ -356,6 +371,10 @@ func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv
 }
 
 func (r *PerconaServerMySQLReconciler) deleteMySQLPvc(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	log := logf.FromContext(ctx)
+
+	log.Info(fmt.Sprintf("Applying %s finalizer", naming.FinalizerDeleteMySQLPvc))
+
 	exposer := mysql.Exposer(*cr)
 
 	list := corev1.PersistentVolumeClaimList{}
@@ -376,28 +395,24 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPvc(ctx context.Context, cr *a
 		if err != nil {
 			return errors.Wrapf(err, "delete PVC %s", pvc.Name)
 		}
+		log.Info("Removed MySQL PVC", "pvc", pvc.Name)
+	}
+
+	// If `delete-mysql-in-order` finalizer is applied, we will let that handler
+	// remove all the secrets, since they are needed to remove pods in order.
+	if cr.FinalizerApplied(naming.FinalizerDeletePodsInOrder) {
+		return nil
 	}
 
 	secretNames := []string{
 		cr.Spec.SecretsName,
 		"internal-" + cr.Name,
 	}
-	for _, secretName := range secretNames {
-		secret := &corev1.Secret{}
-		err := r.Client.Get(ctx, types.NamespacedName{
-			Namespace: cr.Namespace,
-			Name:      secretName,
-		}, secret)
-		if err != nil {
-			continue
-		}
-
-		err = r.Client.Delete(ctx, secret,
-			&client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &secret.UID}})
-		if err != nil {
-			return errors.Wrapf(err, "delete secret %s", secretName)
-		}
+	err = k8s.DeleteSecrets(ctx, r.Client, cr, secretNames)
+	if err != nil {
+		return errors.Wrap(err, "delete secrets")
 	}
+	log.Info("Removed secrets", "secrets", secretNames)
 
 	return nil
 }
