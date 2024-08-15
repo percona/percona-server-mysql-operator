@@ -207,6 +207,7 @@ type BackupSpec struct {
 	Resources                corev1.ResourceRequirements   `json:"resources,omitempty"`
 	Storages                 map[string]*BackupStorageSpec `json:"storages,omitempty"`
 	BackoffLimit             *int32                        `json:"backoffLimit,omitempty"`
+	PiTR                     PiTRSpec                      `json:"pitr,omitempty"`
 	Schedule                 []BackupSchedule              `json:"schedule,omitempty"`
 }
 
@@ -352,6 +353,34 @@ func (b *BackupStorageAzureSpec) ContainerAndPrefix() (string, string) {
 	}
 
 	return container, prefix
+}
+
+type PiTRSpec struct {
+	Enabled bool `json:"enabled,omitempty"`
+
+	BinlogServer BinlogServerSpec `json:"binlogServer,omitempty"`
+}
+
+type BinlogServerStorageSpec struct {
+	S3 *BackupStorageS3Spec `json:"s3,omitempty"`
+}
+
+type BinlogServerSpec struct {
+	Storage BinlogServerStorageSpec `json:"storage"`
+
+	// The number of seconds the MySQL client library will wait to establish a connection with a remote host
+	ConnectTimeout int32 `json:"connectTimeout,omitempty"`
+	// The number of seconds the MySQL client library will wait to read data from a remote server.
+	ReadTimeout int32 `json:"readTimeout,omitempty"`
+	// The number of seconds the MySQL client library will wait to write data to a remote server.
+	WriteTimeout int32 `json:"writeTimeout,omitempty"`
+
+	// Specifies the server ID that the utility will be using when connecting to a remote MySQL server
+	ServerID int32 `json:"serverId,omitempty"`
+	// The number of seconds the utility will spend in disconnected mode between reconnection attempts.
+	IdleTime int32 `json:"idleTime,omitempty"`
+
+	PodSpec `json:",inline"`
 }
 
 type ProxySpec struct {
