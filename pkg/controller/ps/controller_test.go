@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	psv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -414,6 +415,106 @@ var _ = Describe("Reconcile HAProxy", Ordered, func() {
 					return k8serrors.IsNotFound(err)
 				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 			})
+		})
+	})
+})
+
+var _ = Describe("Reconcile Binlog Server", Ordered, func() {
+	ctx := context.Background()
+
+	crName := "binlog-server"
+	ns := crName
+	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      crName,
+			Namespace: ns,
+		},
+	}
+
+	BeforeAll(func() {
+		By("Creating the Namespace to perform the tests")
+		err := k8sClient.Create(ctx, namespace)
+		Expect(err).To(Not(HaveOccurred()))
+	})
+
+	AfterAll(func() {
+		By("Deleting the Namespace to perform the tests")
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	Context("Deploy Binlog Server", Ordered, func() {
+		cr, err := readDefaultCR(crName, ns)
+
+		cr.Spec.Backup.PiTR.Enabled = true
+		cr.Spec.Backup.PiTR.BinlogServer = psv1alpha1.BinlogServerSpec{
+			ConnectTimeout: 20,
+			WriteTimeout:   20,
+			ReadTimeout:    20,
+			ServerID:       42,
+			IdleTime:       60,
+			Storage: psv1alpha1.BinlogServerStorageSpec{
+				S3: &psv1alpha1.BackupStorageS3Spec{
+					Bucket:            "s3-test-bucket",
+					Region:            "us-west-1",
+					EndpointURL:       "s3.amazonaws.com",
+					CredentialsSecret: "s3-test-credentials",
+				},
+			},
+			PodSpec: psv1alpha1.PodSpec{
+				Size: 1,
+				ContainerSpec: psv1alpha1.ContainerSpec{
+					Image: "perconalab/percona-server-mysql-operator:binlog-server",
+				},
+			},
+		}
+
+		It("should create s3 credentials secret", func() {
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "s3-test-credentials",
+					Namespace: cr.Namespace,
+				},
+			}
+
+			err := k8sClient.Create(ctx, secret)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should read and create default cr.yaml", func() {
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+
+			_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should create secret for Binlog Server configuration", func() {
+			_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cr.Name + "-binlog-server-config",
+					Namespace: cr.Namespace,
+				},
+			}
+
+			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(secret), secret)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should create statefulset for Binlog Server", func() {
+			sts := &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cr.Name + "-binlog-server",
+					Namespace: cr.Namespace,
+				},
+			}
+
+			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(sts), sts)
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })
