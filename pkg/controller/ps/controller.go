@@ -184,6 +184,21 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 	if len(pods) <= 1 {
 		time.Sleep(time.Second * 3)
 		log.Info("Cluster deleted")
+
+		// If `delete-mysql-pvc` finalizer is also applied we need to remove all the secrets,
+		// but we need to do it here since there are needed to apply this finalizer.
+		if cr.FinalizerApplied(naming.FinalizerDeleteMySQLPvc) {
+			secretNames := []string{
+				cr.Spec.SecretsName,
+				"internal-" + cr.Name,
+			}
+
+			err := k8s.DeleteSecrets(ctx, r.Client, cr, secretNames)
+			if err != nil {
+				return errors.Wrap(err, "delete secrets")
+			}
+			log.Info("Removed secrets", "secrets", secretNames)
+		}
 		return nil
 	}
 
@@ -282,21 +297,6 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			return errors.Wrap(err, "downscale StatefulSet")
 		}
 		log.Info("Statefulset downscaled", "sts", sts)
-
-		// If `delete-mysql-pvc` finalizer is also applied we need to remove all the secrets,
-		// but we need to do it here since there are needed to apply this finalizer.
-		if cr.FinalizerApplied(naming.FinalizerDeleteMySQLPvc) {
-			secretNames := []string{
-				cr.Spec.SecretsName,
-				"internal-" + cr.Name,
-			}
-
-			err := k8s.DeleteSecrets(ctx, r.Client, cr, secretNames)
-			if err != nil {
-				return errors.Wrap(err, "delete secrets")
-			}
-			log.Info("Removed secrets", "secrets", secretNames)
-		}
 	}
 
 	return psrestore.ErrWaitingTermination
