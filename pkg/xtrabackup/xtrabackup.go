@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -42,20 +43,55 @@ func DeleteName(cr *apiv1alpha1.PerconaServerMySQLBackup) string {
 	return componentShortName + "-delete-" + cr.Name
 }
 
-func NamespacedName(cr *apiv1alpha1.PerconaServerMySQLBackup) types.NamespacedName {
-	return types.NamespacedName{Name: Name(cr), Namespace: cr.Namespace}
+func JobNamespacedName(cr *apiv1alpha1.PerconaServerMySQLBackup) types.NamespacedName {
+	return types.NamespacedName{Name: JobName(cr), Namespace: cr.Namespace}
 }
 
 func JobName(cr *apiv1alpha1.PerconaServerMySQLBackup) string {
-	return Name(cr)
+	return trimJobName(Name(cr))
 }
 
 func RestoreJobName(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerMySQLRestore) string {
-	return RestoreName(cr)
+	return trimJobName(RestoreName(cr))
 }
 
 func DeleteJobName(cr *apiv1alpha1.PerconaServerMySQLBackup) string {
-	return DeleteName(cr)
+	return trimJobName(DeleteName(cr))
+}
+
+// trimJobName trims the provided string to ensure it stays within the 63-character limit.
+// The job name will be included in the "batch.kubernetes.io/job-name" label in the ".spec.template" section of the job.
+// Labels have a maximum length of 63 characters, so this function ensures the job name fits within that limit.
+// Also it ensures that
+func trimJobName(name string) string {
+	trimLeft := func(name string) string {
+		for i := 0; i < len(name); i++ {
+			if (name[i] < 'a' || name[i] > 'z') && (name[i] < '0' || name[i] > '9') {
+				continue
+			}
+			return name[i:]
+		}
+		return ""
+	}
+
+	trimRight := func(name string) string {
+		for i := len(name) - 1; i >= 0; i-- {
+			if (name[i] < 'a' || name[i] > 'z') && (name[i] < '0' || name[i] > '9') {
+				continue
+			}
+			return name[:i+1]
+		}
+		return ""
+	}
+
+	name = trimLeft(name)
+	name = trimRight(name)
+	if len(name) > validation.DNS1035LabelMaxLength {
+		name = name[:validation.DNS1035LabelMaxLength]
+		name = trimRight(name)
+	}
+
+	return name
 }
 
 func MatchLabels(cluster *apiv1alpha1.PerconaServerMySQL) map[string]string {

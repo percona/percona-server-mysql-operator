@@ -18,6 +18,7 @@ package ps
 
 import (
 	"context"
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -43,6 +44,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	database "github.com/percona/percona-server-mysql-operator/pkg/db"
@@ -54,6 +56,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
+	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
@@ -64,6 +67,8 @@ type PerconaServerMySQLReconciler struct {
 	ServerVersion *platform.ServerVersion
 	Recorder      record.EventRecorder
 	ClientCmd     clientcmd.Client
+
+	Crons cronRegistry
 }
 
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqls;perconaservermysqls/status;perconaservermysqls/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -389,6 +394,12 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcileMySQLRouter(ctx, cr); err != nil {
 		return errors.Wrap(err, "MySQL router")
 	}
+	if err := r.reconcileBinlogServer(ctx, cr); err != nil {
+		return errors.Wrap(err, "binlog server")
+	}
+	if err := r.reconcileScheduledBackup(ctx, cr); err != nil {
+		return errors.Wrap(err, "scheduled backup")
+	}
 	if err := r.cleanupOutdated(ctx, cr); err != nil {
 		return errors.Wrap(err, "cleanup outdated")
 	}
@@ -396,10 +407,7 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) reconcileDatabase(
-	ctx context.Context,
-	cr *apiv1alpha1.PerconaServerMySQL,
-) error {
+func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileDatabase")
 
 	configurable := mysql.Configurable(*cr)
@@ -1085,6 +1093,102 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Deployment(cr, initImage, configHash, tlsHash), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile Deployment")
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if !cr.Spec.Backup.PiTR.Enabled {
+		return nil
+	}
+
+	logger := logf.FromContext(ctx)
+
+	if len(cr.Status.Host) == 0 {
+		logger.V(1).Info("Waiting for .status.host to be populated")
+		return nil
+	}
+
+	s3 := cr.Spec.Backup.PiTR.BinlogServer.Storage.S3
+
+	if s3 != nil && len(s3.CredentialsSecret) == 0 {
+		logger.Info("You need to set spec.backup.pitr.binlogServer.s3.credentialsSecret to upload binlogs to s3")
+		return nil
+	}
+
+	s3Secret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Spec.Backup.PiTR.BinlogServer.Storage.S3.CredentialsSecret,
+			Namespace: cr.Namespace,
+		},
+	}
+	if err := r.Client.Get(ctx, client.ObjectKeyFromObject(&s3Secret), &s3Secret); err != nil {
+		return errors.Wrap(err, "get s3 credentials secret")
+	}
+
+	accessKey := s3Secret.Data[secret.CredentialsAWSAccessKey]
+	secretKey := s3Secret.Data[secret.CredentialsAWSSecretKey]
+
+	s3Uri := fmt.Sprintf("s3://%s:%s@%s.%s", accessKey, secretKey, s3.Bucket, s3.Region)
+	if len(s3.Prefix) > 0 {
+		s3Uri += fmt.Sprintf("/%s", s3.Prefix)
+	}
+
+	replPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserReplication)
+	if err != nil {
+		return errors.Wrap(err, "get replication password")
+	}
+
+	configSecret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      binlogserver.ConfigSecretName(cr),
+			Namespace: cr.Namespace,
+		},
+	}
+	configSecret.Data = make(map[string][]byte)
+
+	config := binlogserver.Configuration{
+		Logger: binlogserver.Logger{
+			Level: "debug",
+			File:  "/dev/stdout",
+		},
+		Connection: binlogserver.Connection{
+			Host:           mysql.FQDN(cr, 0),
+			Port:           3306,
+			User:           string(apiv1alpha1.UserReplication),
+			Password:       replPass,
+			ConnectTimeout: cr.Spec.Backup.PiTR.BinlogServer.ConnectTimeout,
+			WriteTimeout:   cr.Spec.Backup.PiTR.BinlogServer.WriteTimeout,
+			ReadTimeout:    cr.Spec.Backup.PiTR.BinlogServer.ReadTimeout,
+		},
+		Replication: binlogserver.Replication{
+			ServerID: cr.Spec.Backup.PiTR.BinlogServer.ServerID,
+			IdleTime: cr.Spec.Backup.PiTR.BinlogServer.IdleTime,
+		},
+		Storage: binlogserver.Storage{
+			URI: s3Uri,
+		},
+	}
+
+	configBytes, err := json.Marshal(config)
+	if err != nil {
+		return errors.Wrap(err, "marshal binlog server config")
+	}
+
+	configSecret.Data[binlogserver.ConfigKey] = configBytes
+	if err := k8s.EnsureObject(ctx, r.Client, cr, &configSecret, r.Scheme); err != nil {
+		return errors.Wrap(err, "reconcile secret")
+	}
+
+	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Backup.PiTR.BinlogServer.PodSpec)
+	if err != nil {
+		return errors.Wrap(err, "get init image")
+	}
+
+	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, binlogserver.StatefulSet(cr, initImage, fmt.Sprintf("%x", md5.Sum(configBytes))), r.Scheme)
+	if err != nil {
+		return errors.Wrap(err, "reconcile statefulset")
 	}
 
 	return nil
