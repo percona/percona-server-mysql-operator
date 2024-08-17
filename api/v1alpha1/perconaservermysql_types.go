@@ -45,15 +45,17 @@ import (
 
 // PerconaServerMySQLSpec defines the desired state of PerconaServerMySQL
 
-
-
-
-// +kubebuilder:validation:XValidation:message="MySQL Router or HAProxy must be enabled for Group Replication. Enable spec.unsafeFlags.proxy to bypass this check", rule="self.mysql.clusterType=='group-replication' ? (self.proxy.router.enabled || self.unsafeFlags.proxy) || (self.proxy.haproxy.enabled || self.unsafeFlags.proxy) : true"
+// +kubebuilder:validation:XValidation:message="MySQL Router or HAProxy must be enabled for Group Replication. Enable spec.unsafeFlags.proxy to bypass this check", rule="self.mysql.clusterType=='group-replication' ? (self.proxy.router.enabled || self.proxy.haproxy.enabled) || self.unsafeFlags.proxy : true"
 // +kubebuilder:validation:XValidation:message="Orchestrator can't be enabled with Group Replication", rule="self.mysql.clusterType=='group-replication' ? !self.orchestrator.enabled : true"
+// +kubebuilder:validation:XValidation:message="Router size should be 2 or greater. Enable spec.unsafeFlags.proxySize to set a lower size", rule="self.mysql.clusterType=='group-replication' ? self.proxy.router.enabled && self.proxy.router.size < 2 && !self.unsafeFlags.proxySize : true"
+// +kubebuilder:validation:XValidation:message="MySQL size should be 3 or greater for Group Replication. Enable spec.unsafeFlags.mysqlSize to set a lower size", rule="self.mysql.clusterType=='group-replication' ? self.mysql.size < 3 && !self.unsafeFlags.mysqlSize : true"
+// +kubebuilder:validation:XValidation:message="MySQL size should be 9 or lower for Group Replication. Enable spec.unsafeFlags.mysqlSize to set a higher size", rule="self.mysql.clusterType=='group-replication' ? self.mysql.size > 9 && !self.unsafeFlags.mysqlSize : true"
 
-// +kubebuilder:validation:XValidation:message="MySQL Router can't be enabled for asynchronous replication", rule="self.mysql.clusterType=='async' ? !self.proxy.router.enabled : true"
-// +kubebuilder:validation:XValidation:message="Haproxy must be enabled for asynchronous replication. Enable spec.unsafeFlags.proxy to bypass this check", rule="self.mysql.clusterType=='async' ? self.proxy.haproxy.enabled || (!self.proxy.haproxy.enabled && self.unsafeFlags.proxy) : true"
+// +kubebuilder:validation:XValidation:message="MySQL size should be %d or greater for asynchronous replication. Enable spec.unsafeFlags.mysqlSize to set a lower size", rule="self.mysql.clusterType=='async' ? self.mysql.size < 2 && !self.unsafeFlags.mysqlSize : true"
 // +kubebuilder:validation:XValidation:message="Orchestrator must be enabled for asynchronous replication. Enable spec.unsafeFlags.orchestrator to bypass this check", rule="self.mysql.clusterType=='async' ? self.orchestrator.enabled || (!self.orchestrator.enabled && self.unsafeFlags.orchestrator) : true"
+// +kubebuilder:validation:XValidation:message="Orchestrator must be enabled to use SmartUpdate. Either enable Orchestrator or set spec.updateStrategy to %s", rule="self.mysql.clusterType=='async' ? !self.orchestrator.enabled && self.updateStrategy == 'SmartUpdate'  : true"
+// +kubebuilder:validation:XValidation:message="Haproxy must be enabled for asynchronous replication. Enable spec.unsafeFlags.proxy to bypass this check", rule="self.mysql.clusterType=='async' ? self.proxy.haproxy.enabled || (!self.proxy.haproxy.enabled && self.unsafeFlags.proxy) : true"
+// +kubebuilder:validation:XValidation:message="MySQL Router can't be enabled for asynchronous replication", rule="self.mysql.clusterType=='async' ? !self.proxy.router.enabled : true"
 type PerconaServerMySQLSpec struct {
 	CRVersion         string                               `json:"crVersion,omitempty"`
 	Pause             bool                                 `json:"pause,omitempty"`
