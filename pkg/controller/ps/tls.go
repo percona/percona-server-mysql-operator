@@ -25,17 +25,21 @@ import (
 func (r *PerconaServerMySQLReconciler) ensureTLSSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
-	secret := &corev1.Secret{}
-	err := r.Client.Get(ctx, types.NamespacedName{
-		Namespace: cr.Namespace,
-		Name:      cr.Spec.SSLSecretName,
-	}, secret)
+	secretObj := corev1.Secret{}
+	errSecret := r.Client.Get(context.TODO(),
+		types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      cr.Spec.SSLSecretName,
+		},
+		&secretObj,
+	)
 
-	if cr.Spec.SSLSecretName != "" && err == nil {
+	// don't create secret ssl-internal if secret ssl is not created by operator
+	if errSecret == nil && !metav1.IsControlledBy(&secretObj, cr) {
 		return nil
 	}
 
-	err = r.ensureSSLByCertManager(ctx, cr)
+	err := r.ensureSSLByCertManager(ctx, cr)
 	if err != nil {
 		if cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
 			log.Error(err, fmt.Sprintf("Failed to ensure certificate by cert-manager. Check `.spec.tls.issuerConf` in PerconaServerMySQL %s/%s", cr.Namespace, cr.Name))
