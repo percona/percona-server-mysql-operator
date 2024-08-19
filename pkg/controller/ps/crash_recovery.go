@@ -7,6 +7,9 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
@@ -83,6 +86,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 			continue
 		}
 
+		log.Info("Attempting to reboot cluster from complete outage")
 		err = mysh.RebootClusterFromCompleteOutageWithExec(ctx, cr.InnoDBClusterName())
 		if err == nil {
 			log.Info("Cluster was successfully rebooted")
@@ -93,6 +97,23 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 			}
 			break
 		}
+
+		if strings.Contains(err.Error(), "The Cluster is ONLINE") {
+			log.Info("Tried to reboot the cluster but MySQL says the cluster is already online")
+			log.Info("Deleting all MySQL pods")
+			err := r.Client.DeleteAllOf(ctx, &corev1.Pod{}, &client.DeleteAllOfOptions{
+				ListOptions: client.ListOptions{
+					LabelSelector: labels.SelectorFromSet(mysql.MatchLabels(cr)),
+					Namespace:     cr.Namespace,
+				},
+			})
+			if err != nil {
+				return errors.Wrap(err, "failed to delete MySQL pods")
+			}
+			break
+		}
+
+		log.Error(err, "failed to reboot cluster from complete outage")
 	}
 
 	return nil
