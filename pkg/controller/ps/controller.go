@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -142,9 +143,10 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 
 	var err error
 
-	finalizers := []string{}
-	for _, f := range cr.GetFinalizers() {
-		switch f {
+	finalizers := cr.GetFinalizers()
+
+	for _, finalizer := range cr.GetFinalizers() {
+		switch finalizer {
 		case naming.FinalizerDeletePodsInOrder:
 			err = r.deleteMySQLPods(ctx, cr)
 		case naming.FinalizerDeleteSSL:
@@ -154,14 +156,22 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 		}
 
 		if err != nil {
-			switch err {
-			case psrestore.ErrWaitingTermination:
-				log.Info("waiting for pods to be deleted", "finalizer", f)
-			default:
-				log.Error(err, "failed to run finalizer", "finalizer", f)
-			}
-			finalizers = append(finalizers, f)
+			// switch err {
+			// case psrestore.ErrWaitingTermination:
+			// 	log.Info("waiting for pods to be deleted", "finalizer", finalizer)
+			// default:
+			// 	log.Error(err, "failed to run finalizer", "finalizer", finalizer)
+			// }
+			return err
+			// finalizers = append(finalizers, f)
 		}
+
+		finalizers = slices.DeleteFunc(finalizers, func(f string) bool {
+			if f == finalizer {
+				return true
+			}
+			return false
+		})
 	}
 
 	cr.SetFinalizers(finalizers)
@@ -191,18 +201,18 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 
 		// If `delete-mysql-pvc` finalizer is also applied we need to remove all the secrets,
 		// but we need to do it here since there are needed to apply this finalizer.
-		if controllerutil.ContainsFinalizer(cr, naming.FinalizerDeleteMySQLPvc) {
-			secretNames := []string{
-				cr.Spec.SecretsName,
-				"internal-" + cr.Name,
-			}
-
-			err := k8s.DeleteSecrets(ctx, r.Client, cr, secretNames)
-			if err != nil {
-				return errors.Wrap(err, "delete secrets")
-			}
-			log.Info("Removed secrets", "secrets", secretNames)
-		}
+		// if controllerutil.ContainsFinalizer(cr, naming.FinalizerDeleteMySQLPvc) {
+		// 	secretNames := []string{
+		// 		cr.Spec.SecretsName,
+		// 		"internal-" + cr.Name,
+		// 	}
+		//
+		// 	err := k8s.DeleteSecrets(ctx, r.Client, cr, secretNames)
+		// 	if err != nil {
+		// 		return errors.Wrap(err, "delete secrets")
+		// 	}
+		// 	log.Info("Removed secrets", "secrets", secretNames)
+		// }
 		return nil
 	}
 
@@ -404,9 +414,9 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPvc(ctx context.Context, cr *a
 
 	// If `delete-mysql-in-order` finalizer is applied, we will let that handler
 	// remove all the secrets, since they are needed to remove pods in order.
-	if controllerutil.ContainsFinalizer(cr, naming.FinalizerDeleteMySQLPvc) {
-		return nil
-	}
+	// if controllerutil.ContainsFinalizer(cr, naming.FinalizerDeleteMySQLPvc) {
+	// 	return nil
+	// }
 
 	secretNames := []string{
 		cr.Spec.SecretsName,
