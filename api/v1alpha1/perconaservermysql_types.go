@@ -840,16 +840,6 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 	return nil
 }
 
-func (cr *PerconaServerMySQL) FinalizerApplied(finalizer string) bool {
-	for _, f := range cr.GetFinalizers() {
-		if f == finalizer {
-			return true
-		}
-	}
-
-	return false
-}
-
 const (
 	BinVolumeName = "bin"
 	BinVolumePath = "/opt/percona"
