@@ -37,17 +37,17 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 	}
 	log.Printf("Peers: %v", sets.List(peers))
 
-	primary, replicas, err := getTopology(ctx, peers)
-	if err != nil {
-		return errors.Wrap(err, "select donor")
-	}
-	log.Printf("Primary: %s Replicas: %v", primary, replicas)
-
 	fqdn, err := getFQDN(mysqlSvc)
 	if err != nil {
 		return errors.Wrap(err, "get FQDN")
 	}
 	log.Printf("FQDN: %s", fqdn)
+
+	primary, replicas, err := getTopology(ctx, fqdn, peers)
+	if err != nil {
+		return errors.Wrap(err, "select donor")
+	}
+	log.Printf("Primary: %s Replicas: %v", primary, replicas)
 
 	podHostname, err := os.Hostname()
 	if err != nil {
@@ -189,7 +189,7 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 	return nil
 }
 
-func getTopology(ctx context.Context, peers sets.Set[string]) (string, []string, error) {
+func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (string, []string, error) {
 	replicas := sets.New[string]()
 	primary := ""
 
@@ -227,7 +227,15 @@ func getTopology(ctx context.Context, peers sets.Set[string]) (string, []string,
 	if primary == "" && peers.Len() == 1 {
 		primary = sets.List(peers)[0]
 	} else if primary == "" {
-		primary = sets.List(replicas)[0]
+		for _, r := range sets.List(replicas) {
+			// We should set primary to the first replica, which is not the bootstrapped pod.
+			// The bootstrapped pod can't be a primary.
+			// Even if it was a primary before, orchestrator will promote another replica "as result of DeadMaster".
+			if r != fqdn {
+				primary = r
+				break
+			}
+		}
 	}
 
 	if replicas.Len() > 0 {

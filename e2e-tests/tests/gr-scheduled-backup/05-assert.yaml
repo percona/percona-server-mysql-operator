@@ -1,0 +1,14 @@
+
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+---
+kind: PerconaServerMySQLBackup
+apiVersion: ps.percona.com/v1alpha1
+status:
+  state: Running
+---
+kind: PerconaServerMySQLBackup
+apiVersion: ps.percona.com/v1alpha1
+status:
+  state: Succeeded
