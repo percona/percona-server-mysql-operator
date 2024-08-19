@@ -58,9 +58,21 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - configmaps
   - pods
   - pods/exec
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
   - secrets
   - services
   verbs:
