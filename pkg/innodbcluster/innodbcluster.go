@@ -34,8 +34,16 @@ const (
 	MemberStateMissing     MemberState = "(MISSING)"
 )
 
+type MemberRole string
+
+const (
+	MemberRolePrimary   MemberRole = "PRIMARY"
+	MemberRoleSecondary MemberRole = "SECONDARY"
+)
+
 type Member struct {
 	Address        string      `json:"address"`
+	MemberRole     MemberRole  `json:"memberRole"`
 	MemberState    MemberState `json:"status"`
 	InstanceErrors []string    `json:"instanceErrors"`
 }
