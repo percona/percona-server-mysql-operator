@@ -30,8 +30,8 @@ const (
 const (
 	FinalizerDeleteSSL         = perconaPrefix + "delete-ssl"
 	FinalizerDeletePodsInOrder = perconaPrefix + "delete-mysql-pods-in-order"
-
-	FinalizerDeleteBackup = perconaPrefix + "delete-backup"
+	FinalizerDeleteBackup      = perconaPrefix + "delete-backup"
+	FinalizerDeleteMySQLPvc    = perconaPrefix + "delete-mysql-pvc"
 )
 
 type AnnotationKey string

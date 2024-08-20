@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -35,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -141,34 +143,33 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 
 	var err error
 
-	finalizers := []string{}
-	for _, f := range cr.GetFinalizers() {
-		switch f {
+	// Sorting finalizers to make sure that delete-mysql-pods-in-order runs before
+	// delete-mysql-pvc since the latter removes secrets needed for the former.
+	slices.Sort(cr.GetFinalizers())
+
+	for _, finalizer := range cr.GetFinalizers() {
+		switch finalizer {
 		case naming.FinalizerDeletePodsInOrder:
 			err = r.deleteMySQLPods(ctx, cr)
 		case naming.FinalizerDeleteSSL:
 			err = r.deleteCerts(ctx, cr)
+		case naming.FinalizerDeleteMySQLPvc:
+			err = r.deleteMySQLPvc(ctx, cr)
 		}
-
 		if err != nil {
-			switch err {
-			case psrestore.ErrWaitingTermination:
-				log.Info("waiting for pods to be deleted", "finalizer", f)
-			default:
-				log.Error(err, "failed to run finalizer", "finalizer", f)
-			}
-			finalizers = append(finalizers, f)
+			return err
 		}
 	}
 
-	cr.SetFinalizers(finalizers)
-
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
-		err = r.Client.Update(ctx, cr)
+		c := new(apiv1alpha1.PerconaServerMySQL)
+		err := r.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
 		if err != nil {
-			log.Error(err, "Client.Update failed")
+			return errors.Wrap(err, "get cr")
 		}
-		return err
+
+		c.SetFinalizers([]string{})
+		return r.Client.Update(ctx, c)
 	})
 }
 
@@ -352,6 +353,51 @@ func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv
 			return errors.Wrapf(err, "delete secret %s", secretName)
 		}
 	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) deleteMySQLPvc(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	log := logf.FromContext(ctx)
+
+	log.Info(fmt.Sprintf("Applying %s finalizer", naming.FinalizerDeleteMySQLPvc))
+
+	exposer := mysql.Exposer(*cr)
+
+	list := corev1.PersistentVolumeClaimList{}
+
+	err := r.Client.List(ctx,
+		&list,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(exposer.Labels()),
+		},
+	)
+	if err != nil {
+		return errors.Wrap(err, "get PVC list")
+	}
+
+	if list.Size() == 0 {
+		return nil
+	}
+
+	for _, pvc := range list.Items {
+		err := r.Client.Delete(ctx, &pvc, &client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &pvc.UID}})
+		if err != nil {
+			return errors.Wrapf(err, "delete PVC %s", pvc.Name)
+		}
+		log.Info("Removed MySQL PVC", "pvc", pvc.Name)
+	}
+
+	secretNames := []string{
+		cr.Spec.SecretsName,
+		"internal-" + cr.Name,
+	}
+	err = k8s.DeleteSecrets(ctx, r.Client, cr, secretNames)
+	if err != nil {
+		return errors.Wrap(err, "delete secrets")
+	}
+	log.Info("Removed secrets", "secrets", secretNames)
 
 	return nil
 }
