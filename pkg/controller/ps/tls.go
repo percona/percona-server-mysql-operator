@@ -25,7 +25,21 @@ import (
 func (r *PerconaServerMySQLReconciler) ensureTLSSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
-	err := r.ensureSSLByCertManager(ctx, cr)
+	secretObj := corev1.Secret{}
+	err := r.Client.Get(context.TODO(),
+		types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      cr.Spec.SSLSecretName,
+		},
+		&secretObj,
+	)
+
+	// don't create ssl secret if it is created by customer not by operator
+	if err == nil && !metav1.IsControlledBy(&secretObj, cr) {
+		return nil
+	}
+
+	err = r.ensureSSLByCertManager(ctx, cr)
 	if err != nil {
 		if cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
 			log.Error(err, fmt.Sprintf("Failed to ensure certificate by cert-manager. Check `.spec.tls.issuerConf` in PerconaServerMySQL %s/%s", cr.Namespace, cr.Name))
