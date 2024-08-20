@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 30
 commands:
   - script: |-
       set -o errexit
@@ -10,3 +9,4 @@ commands:
 
       kill_pods "${NAMESPACE}" "label" "app.kubernetes.io/instance" "gr-self-healing" "cluster-crash"
       sleep 30 # wait for crash
+    timeout: 40

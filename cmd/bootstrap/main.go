@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -20,7 +21,8 @@ func main() {
 		log.Fatalf("error opening file: %v", err)
 	}
 	defer f.Close()
-	log.SetOutput(f)
+
+	log.SetOutput(io.MultiWriter(os.Stderr, f))
 
 	fullClusterCrash, err := fileExists(fullClusterCrashFile)
 	if err == nil && fullClusterCrash {
