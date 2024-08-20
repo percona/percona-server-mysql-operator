@@ -155,14 +155,7 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 		}
 
 		if err != nil {
-			// switch err {
-			// case psrestore.ErrWaitingTermination:
-			// 	log.Info("waiting for pods to be deleted", "finalizer", finalizer)
-			// default:
-			// 	log.Error(err, "failed to run finalizer", "finalizer", finalizer)
-			// }
 			return err
-			// finalizers = append(finalizers, f)
 		}
 
 		finalizers = slices.DeleteFunc(finalizers, func(f string) bool {
@@ -197,21 +190,6 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 	if len(pods) <= 1 {
 		time.Sleep(time.Second * 3)
 		log.Info("Cluster deleted")
-
-		// If `delete-mysql-pvc` finalizer is also applied we need to remove all the secrets,
-		// but we need to do it here since there are needed to apply this finalizer.
-		// if controllerutil.ContainsFinalizer(cr, naming.FinalizerDeleteMySQLPvc) {
-		// 	secretNames := []string{
-		// 		cr.Spec.SecretsName,
-		// 		"internal-" + cr.Name,
-		// 	}
-		//
-		// 	err := k8s.DeleteSecrets(ctx, r.Client, cr, secretNames)
-		// 	if err != nil {
-		// 		return errors.Wrap(err, "delete secrets")
-		// 	}
-		// 	log.Info("Removed secrets", "secrets", secretNames)
-		// }
 		return nil
 	}
 
@@ -410,12 +388,6 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPvc(ctx context.Context, cr *a
 		}
 		log.Info("Removed MySQL PVC", "pvc", pvc.Name)
 	}
-
-	// If `delete-mysql-in-order` finalizer is applied, we will let that handler
-	// remove all the secrets, since they are needed to remove pods in order.
-	// if controllerutil.ContainsFinalizer(cr, naming.FinalizerDeleteMySQLPvc) {
-	// 	return nil
-	// }
 
 	secretNames := []string{
 		cr.Spec.SecretsName,
