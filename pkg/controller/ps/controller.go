@@ -143,7 +143,9 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 
 	var err error
 
-	finalizers := cr.GetFinalizers()
+	// Sorting finalizers to make sure that delete-mysql-pods-in-order runs before
+	// delete-mysql-pvc since the latter removes secrets needed for the former.
+	slices.Sort(cr.GetFinalizers())
 
 	for _, finalizer := range cr.GetFinalizers() {
 		switch finalizer {
@@ -154,27 +156,20 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 		case naming.FinalizerDeleteMySQLPvc:
 			err = r.deleteMySQLPvc(ctx, cr)
 		}
-
 		if err != nil {
 			return err
 		}
-
-		finalizers = slices.DeleteFunc(finalizers, func(f string) bool {
-			if f == finalizer {
-				return true
-			}
-			return false
-		})
 	}
 
-	cr.SetFinalizers(finalizers)
-
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
-		err = r.Client.Update(ctx, cr)
+		c := new(apiv1alpha1.PerconaServerMySQL)
+		err := r.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
 		if err != nil {
-			log.Error(err, "Client.Update failed")
+			return errors.Wrap(err, "get cr")
 		}
-		return err
+
+		c.SetFinalizers([]string{})
+		return r.Client.Update(ctx, c)
 	})
 }
 
@@ -380,6 +375,10 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPvc(ctx context.Context, cr *a
 	)
 	if err != nil {
 		return errors.Wrap(err, "get PVC list")
+	}
+
+	if list.Size() == 0 {
+		return nil
 	}
 
 	for _, pvc := range list.Items {
