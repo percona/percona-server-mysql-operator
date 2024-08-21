@@ -22,7 +22,7 @@ require (
 	github.com/onsi/gomega v1.34.1
 	github.com/pkg/errors v0.9.1
 	github.com/sjmudd/stopwatch v0.1.1
-	go.nhat.io/grpcmock v0.26.0
+	go.nhat.io/grpcmock v0.27.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/sync v0.8.0
 	golang.org/x/text v0.17.0
