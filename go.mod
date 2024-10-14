@@ -25,7 +25,7 @@ require (
 	go.nhat.io/grpcmock v0.28.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/sync v0.8.0
-	golang.org/x/text v0.18.0
+	golang.org/x/text v0.19.0
 	google.golang.org/grpc v1.66.2
 	k8s.io/api v0.31.1
 	k8s.io/apimachinery v0.31.1
