@@ -17,7 +17,6 @@ gr-tls-cert-manager
 gr-users
 haproxy
 init-deploy
-monitoring
 one-pod
 operator-self-healing
 recreate
