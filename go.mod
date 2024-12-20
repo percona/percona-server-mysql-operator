@@ -17,7 +17,7 @@ require (
 	github.com/google/go-cmp v0.6.0
 	github.com/minio/minio-go/v7 v7.0.78
 	github.com/onsi/ginkgo/v2 v2.21.0
-	github.com/onsi/gomega v1.35.1
+	github.com/onsi/gomega v1.36.1
 	github.com/pkg/errors v0.9.1
 	github.com/sjmudd/stopwatch v0.1.1
 	go.nhat.io/grpcmock v0.28.0
