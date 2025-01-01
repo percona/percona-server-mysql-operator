@@ -16,8 +16,8 @@ require (
 	github.com/gocarina/gocsv v0.0.0-20230616125104-99d496ca653d
 	github.com/google/go-cmp v0.6.0
 	github.com/minio/minio-go/v7 v7.0.78
-	github.com/onsi/ginkgo/v2 v2.22.1
-	github.com/onsi/gomega v1.36.1
+	github.com/onsi/ginkgo/v2 v2.22.2
+	github.com/onsi/gomega v1.36.2
 	github.com/pkg/errors v0.9.1
 	github.com/sjmudd/stopwatch v0.1.1
 	go.nhat.io/grpcmock v0.28.0
@@ -118,7 +118,7 @@ require (
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20241219192143-6b3ec007d9bb // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241219192143-6b3ec007d9bb // indirect
-	google.golang.org/protobuf v1.36.0 // indirect
+	google.golang.org/protobuf v1.36.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
