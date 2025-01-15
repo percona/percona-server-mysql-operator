@@ -29,6 +29,10 @@ import (
 )
 
 func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, reconcileErr error) error {
+	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
+		return nil
+	}
+
 	clusterCondition := metav1.Condition{
 		Status:             metav1.ConditionTrue,
 		Type:               apiv1alpha1.StateInitializing.String(),
@@ -56,10 +60,6 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	log := logf.FromContext(ctx).WithName("reconcileCRStatus")
 
-	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
-		return nil
-	}
-
 	mysqlStatus, err := r.appStatus(ctx, cr, mysql.Name(cr), cr.MySQLSpec().Size, mysql.MatchLabels(cr), cr.Status.MySQL.Version)
 	if err != nil {
 		return errors.Wrap(err, "get MySQL status")
@@ -85,6 +85,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 			if !ready {
 				mysqlStatus.State = apiv1alpha1.StateInitializing
 
+				log.Info(fmt.Sprintf("Async replication not ready: %s", msg))
 				r.Recorder.Event(cr, "Warning", "AsyncReplicationNotReady", msg)
 
 			}
@@ -141,7 +142,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 
 	if cr.Spec.MySQL.IsGR() {
-		pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr))
+		pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
 		if err != nil {
 			return errors.Wrap(err, "get pods")
 		}
@@ -281,6 +282,9 @@ func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *api
 
 	instances, err := orchestrator.Cluster(ctx, r.ClientCmd, pod, cr.ClusterHint())
 	if err != nil {
+		if errors.Is(err, orchestrator.ErrEmptyResponse) || errors.Is(err, orchestrator.ErrUnableToGetClusterName) {
+			return false, errors.Wrap(err, "orchestrator").Error(), nil
+		}
 		return false, "", err
 	}
 
@@ -376,7 +380,7 @@ func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1a
 		return status, err
 	}
 
-	pods, err := k8s.PodsByLabels(ctx, r.Client, labels)
+	pods, err := k8s.PodsByLabels(ctx, r.Client, labels, cr.Namespace)
 	if err != nil {
 		return status, errors.Wrap(err, "get pod list")
 	}

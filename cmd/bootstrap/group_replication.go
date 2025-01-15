@@ -172,7 +172,7 @@ func updateGroupPeers(ctx context.Context, peers sets.Set[string]) error {
 			tmpSeeds = strings.Split(seeds, ",")
 		}
 		seedSet := sets.New(tmpSeeds...)
-		seedSet.Insert(fmt.Sprintf("%s:%d", fqdn, 3306))
+		seedSet.Insert(fmt.Sprintf("%s:%d", fqdn, 33061))
 
 		seeds = strings.Join(sets.List(seedSet), ",")
 
@@ -309,17 +309,6 @@ func bootstrapGroupReplication(ctx context.Context) error {
 		log.Printf("bootstrap finished in %f seconds", timer.ElapsedSeconds("total"))
 	}()
 
-	exists, err := lockExists()
-	if err != nil {
-		return errors.Wrap(err, "lock file check")
-	}
-	if exists {
-		log.Printf("Waiting for bootstrap.lock to be deleted")
-		if err = waitLockRemoval(); err != nil {
-			return errors.Wrap(err, "wait lock removal")
-		}
-	}
-
 	log.Println("Bootstrap starting...")
 
 	localShell, err := connectToLocal(ctx)
@@ -384,6 +373,19 @@ func bootstrapGroupReplication(ctx context.Context) error {
 
 	log.Printf("Cluster status:\n%s", status)
 
+	for _, member := range status.DefaultReplicaSet.Topology {
+		if member.MemberRole == innodbcluster.MemberRolePrimary && member.MemberState != innodbcluster.MemberStateOnline {
+			log.Printf("Primary (%s) is not ONLINE. Starting full cluster crash recovery...", member.Address)
+
+			if err := handleFullClusterCrash(ctx); err != nil {
+				return errors.Wrap(err, "handle full cluster crash")
+			}
+
+			// force restart container
+			os.Exit(1)
+		}
+	}
+
 	member, ok := status.DefaultReplicaSet.Topology[fmt.Sprintf("%s:%d", localShell.host, 3306)]
 	if !ok {
 		log.Printf("Adding instance (%s) to InnoDB cluster", localShell.host)
@@ -393,8 +395,6 @@ func bootstrapGroupReplication(ctx context.Context) error {
 		}
 
 		log.Printf("Added instance (%s) to InnoDB cluster", localShell.host)
-
-		os.Exit(1)
 	}
 
 	rescanNeeded := false

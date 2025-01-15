@@ -101,6 +101,7 @@ e2e-test: kuttl-shfmt
 manifests: kustomize generate
 	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml
 	echo "---" >> $(DEPLOYDIR)/crd.yaml
+
 	$(KUSTOMIZE) build config/rbac/ | sed 's/ClusterRole/Role/g' > $(DEPLOYDIR)/rbac.yaml
 	echo "---" >> $(DEPLOYDIR)/rbac.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image perconalab/percona-server-mysql-operator=$(IMAGE)
@@ -153,11 +154,11 @@ undeploy: manifests ## Undeploy operator
 
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
 controller-gen: ## Download controller-gen locally if necessary.
-	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.14.0)
+	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.16.3)
 
 KUSTOMIZE = $(shell pwd)/bin/kustomize
 kustomize: ## Download kustomize locally if necessary.
-	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v4@v4.5.3)
+	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5@v5.4.3 )
 
 ENVTEST = $(shell pwd)/bin/setup-envtest
 envtest: ## Download envtest-setup locally if necessary.

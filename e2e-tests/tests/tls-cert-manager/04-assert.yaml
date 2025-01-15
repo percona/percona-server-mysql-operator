@@ -36,11 +36,11 @@ spec:
 status:
   conditions:
     - message: Certificate is up to date and has not expired
-      observedGeneration: 2
+      observedGeneration: 1
       reason: Ready
       status: 'True'
       type: Ready
-  revision: 2
+  revision: 1
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -76,7 +76,7 @@ spec:
     haproxy:
       enabled: true
   orchestrator:
-    enabled: false
+    enabled: true
 status:
   haproxy:
     ready: 3

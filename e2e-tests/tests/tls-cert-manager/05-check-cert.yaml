@@ -17,6 +17,5 @@ commands:
         "*.tls-cert-manager-orchestrator.'"${NAMESPACE}"'.svc",
         "*.tls-cert-manager-router",
         "*.tls-cert-manager-router.'"${NAMESPACE}"'",
-        "*.tls-cert-manager-router.'"${NAMESPACE}"'.svc",
-        "mysql-1.example.com"
+        "*.tls-cert-manager-router.'"${NAMESPACE}"'.svc"
       ]'

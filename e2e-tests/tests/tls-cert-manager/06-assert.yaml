@@ -36,29 +36,29 @@ spec:
 status:
   conditions:
     - message: Certificate is up to date and has not expired
-      observedGeneration: 2
+      observedGeneration: 1
       reason: Ready
       status: 'True'
       type: Ready
-  revision: 3
+  revision: 2
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  generation: 3
+  generation: 2
   name: tls-cert-manager-mysql
 status:
-  observedGeneration: 3
+  observedGeneration: 2
   replicas: 3
   readyReplicas: 3
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  generation: 3
+  generation: 2
   name: tls-cert-manager-orc
 status:
-  observedGeneration: 3
+  observedGeneration: 2
   replicas: 3
   readyReplicas: 3
 ---
@@ -76,7 +76,7 @@ spec:
     haproxy:
       enabled: true
   orchestrator:
-    enabled: false
+    enabled: true
 status:
   haproxy:
     ready: 3

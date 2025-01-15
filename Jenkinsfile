@@ -13,7 +13,7 @@ void createCluster(String CLUSTER_SUFFIX, String SUBNETWORK = CLUSTER_SUFFIX) {
                 gcloud auth activate-service-account --key-file $CLIENT_SECRET_FILE
                 gcloud config set project $GCP_PROJECT
                 gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone $region --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $region --quiet || true
-                gcloud container clusters create --zone $region $CLUSTER_NAME-${CLUSTER_SUFFIX} --cluster-version=1.26 --machine-type=n1-standard-4 --preemptible --num-nodes=\$NODES_NUM --network=jenkins-ps-vpc --subnetwork=jenkins-ps-${SUBNETWORK} --no-enable-autoupgrade --cluster-ipv4-cidr=/21  --labels delete-cluster-after-hours=6 && \
+                gcloud container clusters create --zone $region $CLUSTER_NAME-${CLUSTER_SUFFIX} --cluster-version=1.28 --machine-type=n1-standard-4 --preemptible --num-nodes=\$NODES_NUM --network=jenkins-ps-vpc --subnetwork=jenkins-ps-${SUBNETWORK} --no-enable-autoupgrade --cluster-ipv4-cidr=/21  --labels delete-cluster-after-hours=6 && \
                 kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"$GCP_PROJECT".iam.gserviceaccount.com || ret_val=\$?
                 if [ \${ret_val} -eq 0 ]; then break; fi
                 ret_num=\$((ret_num + 1))
@@ -249,8 +249,8 @@ void prepareNode() {
 
         kubectl krew install assert
 
-        # v0.16.0 kuttl version
-        kubectl krew install --manifest-url https://raw.githubusercontent.com/kubernetes-sigs/krew-index/e450fd06ebe9ce200355726b81d13e5e59b9bf47/plugins/kuttl.yaml
+        # v0.17.0 kuttl version
+        kubectl krew install --manifest-url https://raw.githubusercontent.com/kubernetes-sigs/krew-index/336ef83542fd2f783bfa2c075b24599e834dcc77/plugins/kuttl.yaml
         echo \$(kubectl kuttl --version) is installed
 
         curl -fsSL https://github.com/kyverno/chainsaw/releases/download/v0.1.7/chainsaw_linux_amd64.tar.gz | sudo tar -C /usr/local/bin -xzf - chainsaw
@@ -280,6 +280,7 @@ pipeline {
     environment {
         CLOUDSDK_CORE_DISABLE_PROMPTS = 1
         CLEAN_NAMESPACE = 1
+        OPERATOR_NS = 'ps-operator'
         GIT_SHORT_COMMIT = sh(script: 'git rev-parse --short HEAD', , returnStdout: true).trim()
         VERSION = "${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}"
         CLUSTER_NAME = sh(script: "echo jen-ps-${env.CHANGE_ID}-${GIT_SHORT_COMMIT}-${env.BUILD_NUMBER} | tr '[:upper:]' '[:lower:]'", , returnStdout: true).trim()
@@ -370,7 +371,7 @@ pipeline {
                                     -w /go/src/github.com/percona/percona-server-mysql-operator \
                                     -e GOFLAGS='-buildvcs=false' \
                                     -e GO111MODULE=on \
-                                    golang:1.22 sh -c '
+                                    golang:1.23 sh -c '
                                         go install github.com/google/go-licenses@latest;
                                         /go/bin/go-licenses csv github.com/percona/percona-server-mysql-operator/cmd/manager \
                                             | cut -d , -f 3 \
@@ -394,7 +395,7 @@ pipeline {
                                     -w /go/src/github.com/percona/percona-server-mysql-operator \
                                     -e GOFLAGS='-buildvcs=false' \
                                     -e GO111MODULE=on \
-                                    golang:1.22 sh -c 'go build -v -o percona-server-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
+                                    golang:1.23 sh -c 'go build -v -o percona-server-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
                             "
                         '''
 

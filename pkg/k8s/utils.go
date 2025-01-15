@@ -338,10 +338,13 @@ func ObjectHash(obj runtime.Object) (string, error) {
 	return hex.EncodeToString(hash[:]), nil
 }
 
-func PodsByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([]corev1.Pod, error) {
+func PodsByLabels(ctx context.Context, cl client.Reader, l map[string]string, namespace string) ([]corev1.Pod, error) {
 	podList := &corev1.PodList{}
 
-	opts := &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)}
+	opts := &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(l),
+		Namespace:     namespace,
+	}
 	if err := cl.List(ctx, podList, opts); err != nil {
 		return nil, err
 	}
@@ -349,10 +352,13 @@ func PodsByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([
 	return podList.Items, nil
 }
 
-func ServicesByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([]corev1.Service, error) {
+func ServicesByLabels(ctx context.Context, cl client.Reader, l map[string]string, namespace string) ([]corev1.Service, error) {
 	svcList := &corev1.ServiceList{}
 
-	opts := &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)}
+	opts := &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(l),
+		Namespace:     namespace,
+	}
 	if err := cl.List(ctx, svcList, opts); err != nil {
 		return nil, err
 	}
@@ -360,10 +366,13 @@ func ServicesByLabels(ctx context.Context, cl client.Reader, l map[string]string
 	return svcList.Items, nil
 }
 
-func PVCsByLabels(ctx context.Context, cl client.Reader, l map[string]string) ([]corev1.PersistentVolumeClaim, error) {
+func PVCsByLabels(ctx context.Context, cl client.Reader, l map[string]string, namespace string) ([]corev1.PersistentVolumeClaim, error) {
 	pvcList := &corev1.PersistentVolumeClaimList{}
 
-	opts := &client.ListOptions{LabelSelector: labels.SelectorFromSet(l)}
+	opts := &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(l),
+		Namespace:     namespace,
+	}
 	if err := cl.List(ctx, pvcList, opts); err != nil {
 		return nil, err
 	}
@@ -418,4 +427,25 @@ func GetCRWithDefaults(
 	}
 
 	return cr, nil
+}
+
+func DeleteSecrets(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQL, secretNames []string) error {
+	for _, secretName := range secretNames {
+		secret := &corev1.Secret{}
+		err := cl.Get(ctx, types.NamespacedName{
+			Namespace: cr.Namespace,
+			Name:      secretName,
+		}, secret)
+		if err != nil {
+			continue
+		}
+
+		err = cl.Delete(ctx, secret,
+			&client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &secret.UID}})
+		if err != nil {
+			return errors.Wrapf(err, "delete secret %s", secretName)
+		}
+	}
+
+	return nil
 }

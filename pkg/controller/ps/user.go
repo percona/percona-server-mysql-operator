@@ -129,10 +129,6 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	allUsers := allSystemUsers()
-	if cr.MySQLSpec().IsGR() {
-		delete(allUsers, apiv1alpha1.UserReplication)
-	}
-
 	if hash == internalHash {
 		if v, ok := internalSecret.Annotations[naming.AnnotationPasswordsUpdated.String()]; ok && v == "false" {
 			operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)

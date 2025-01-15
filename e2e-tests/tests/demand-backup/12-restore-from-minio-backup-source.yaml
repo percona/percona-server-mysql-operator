@@ -21,6 +21,6 @@ commands:
         | yq eval '.spec.backupSource.storage.type="s3"' - \
         | yq eval '.spec.backupSource.storage.s3.bucket="operator-testing"' - \
         | yq eval '.spec.backupSource.storage.s3.credentialsSecret="minio-secret"' - \
-        | yq eval '.spec.backupSource.storage.s3.endpointUrl="http://minio-service:9000"' - \
+        | yq eval "$(printf '.spec.backupSource.storage.s3.endpointUrl="http://minio-service.%s:9000"' "${NAMESPACE}")" - \
         | yq eval '.spec.backupSource.storage.s3.region="us-east-1"' - \
         | kubectl apply -n "${NAMESPACE}" -f -

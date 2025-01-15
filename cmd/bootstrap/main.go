@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -20,7 +21,8 @@ func main() {
 		log.Fatalf("error opening file: %v", err)
 	}
 	defer f.Close()
-	log.SetOutput(f)
+
+	log.SetOutput(io.MultiWriter(os.Stderr, f))
 
 	fullClusterCrash, err := fileExists(fullClusterCrashFile)
 	if err == nil && fullClusterCrash {
@@ -32,6 +34,17 @@ func main() {
 	if err == nil && manualRecovery {
 		log.Printf("%s exists. exiting...", manualRecoveryFile)
 		os.Exit(0)
+	}
+
+	exists, err := lockExists("bootstrap")
+	if err != nil {
+		log.Fatalf("failed to check bootstrap.lock: %s", err)
+	}
+	if exists {
+		log.Printf("Waiting for bootstrap.lock to be deleted")
+		if err = waitLockRemoval("bootstrap"); err != nil {
+			log.Fatalf("failed to wait for bootstrap.lock: %s", err)
+		}
 	}
 
 	clusterType := os.Getenv("CLUSTER_TYPE")
