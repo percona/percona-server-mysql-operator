@@ -192,7 +192,7 @@ ensure_read_only() {
 
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
 
-if ! [[ "$MYSQL_VERSION" =~ ^(8\.0|8\.3|8\.4)$ ]]; then
+if ! [[ "$MYSQL_VERSION" =~ ^(8\.0|8\.4)$ ]]; then
 	echo "Percona Distribution for MySQL Operator does not support $MYSQL_VERSION"
 	exit 1
 fi
