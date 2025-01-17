@@ -1,0 +1,13 @@
+.github/**
+docs/**
+examples/**
+licenses/**
+.editorconfig
+code-of-conduct.md
+CONTRIBUTING.md
+kubernetes.svg
+LICENSE
+LICENSE-HEADER
+README.md
+.gitignore
+release_versions
