@@ -22,7 +22,6 @@ const (
 	configVolumeName       = "config"
 	configMountPath        = "/etc/binlog_server/config"
 	storageCredsVolumeName = "storage"
-	storageCredsMountPath  = "/etc/binlog_server/storage"
 	ConfigKey              = "config.json"
 	CustomConfigKey        = "custom.json"
 )
@@ -87,6 +86,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 							spec.ImagePullPolicy,
 							spec.ContainerSecurityContext,
 							spec.Resources,
+							nil,
 						),
 					},
 					Containers:                    containers(cr),

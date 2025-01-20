@@ -142,6 +142,7 @@ func Job(
 							cluster.Spec.Backup.ImagePullPolicy,
 							storage.ContainerSecurityContext,
 							cluster.Spec.Backup.Resources,
+							nil,
 						),
 					},
 					Containers: []corev1.Container{

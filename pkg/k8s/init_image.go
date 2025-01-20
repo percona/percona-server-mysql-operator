@@ -16,22 +16,34 @@ type ComponentWithInit interface {
 	GetInitImage() string
 }
 
-func InitContainer(component, image string, pullPolicy corev1.PullPolicy, secCtx *corev1.SecurityContext, resList corev1.ResourceRequirements) corev1.Container {
-	return corev1.Container{
-		Name:            component + "-init",
-		Image:           image,
-		ImagePullPolicy: pullPolicy,
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      apiv1alpha1.BinVolumeName,
-				MountPath: apiv1alpha1.BinVolumePath,
-			},
+func InitContainer(component, image string,
+	pullPolicy corev1.PullPolicy,
+	secCtx *corev1.SecurityContext,
+	resources corev1.ResourceRequirements,
+	extraVolumeMounts []corev1.VolumeMount,
+) corev1.Container {
+
+	volumeMounts := []corev1.VolumeMount{
+		{
+			Name:      apiv1alpha1.BinVolumeName,
+			MountPath: apiv1alpha1.BinVolumePath,
 		},
+	}
+
+	if len(extraVolumeMounts) > 0 {
+		volumeMounts = append(volumeMounts, extraVolumeMounts...)
+	}
+
+	return corev1.Container{
+		Name:                     component + "-init",
+		Image:                    image,
+		ImagePullPolicy:          pullPolicy,
+		VolumeMounts:             volumeMounts,
 		Command:                  []string{"/opt/percona-server-mysql-operator/ps-init-entrypoint.sh"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          secCtx,
-		Resources:                resList,
+		Resources:                resources,
 	}
 }
 
