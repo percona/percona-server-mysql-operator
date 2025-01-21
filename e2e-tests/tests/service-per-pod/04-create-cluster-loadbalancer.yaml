@@ -8,8 +8,8 @@ commands:
       source ../../functions
 
       get_cr \
-        | yq eval '.spec.mysql.clusterType="async"' - \
-      	| yq eval '.spec.mysql.expose.enabled = true' - \
-      	| yq eval '.spec.mysql.expose.type = "LoadBalancer"' - \
-      	| kubectl -n "${NAMESPACE}" apply -f -
+          | yq eval '.spec.mysql.clusterType="async"' - \
+          | yq eval '.spec.mysql.expose.enabled = true' - \
+          | yq eval '.spec.mysql.expose.type = "LoadBalancer"' - \
+          | kubectl -n "${NAMESPACE}" apply -f -
     timeout: 10

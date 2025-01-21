@@ -19,5 +19,5 @@ commands:
       max_connect_errors=$(run_mysql "SELECT @@max_connect_errors" "${mysql_args}")
 
       kubectl create configmap -n "${NAMESPACE}" 07-check-config \
-      	--from-literal=max_connections="${max_connections}" \
-      	--from-literal=max_connect_errors="${max_connect_errors}"
+          --from-literal=max_connections="${max_connections}" \
+          --from-literal=max_connect_errors="${max_connect_errors}"

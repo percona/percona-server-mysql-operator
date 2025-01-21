@@ -9,8 +9,8 @@ commands:
       source ../../functions
 
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
-        --type json \
-        -p '[
+          --type json \
+          -p '[
               {
                 "op": "add",
                 "path": "/spec/tls",

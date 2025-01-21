@@ -9,13 +9,13 @@ commands:
       source ../../functions
 
       get_cr \
-        | yq eval '.spec.mysql.clusterType="async"' - \
-        | yq eval '.spec.mysql.size=3' - \
-        | yq eval '.spec.mysql.affinity.antiAffinityTopologyKey="none"' - \
-        | yq eval '.spec.proxy.haproxy.enabled=true' - \
-        | yq eval '.spec.proxy.haproxy.size=5' - \
-        | yq eval '.spec.proxy.haproxy.affinity.antiAffinityTopologyKey="none"' - \
-        | yq eval '.spec.orchestrator.enabled=true' - \
-        | yq eval '.spec.orchestrator.size=3' - \
-        | yq eval '.spec.orchestrator.affinity.antiAffinityTopologyKey="none"' - \
-        | kubectl -n "${NAMESPACE}" apply -f -
+          | yq eval '.spec.mysql.clusterType="async"' - \
+          | yq eval '.spec.mysql.size=3' - \
+          | yq eval '.spec.mysql.affinity.antiAffinityTopologyKey="none"' - \
+          | yq eval '.spec.proxy.haproxy.enabled=true' - \
+          | yq eval '.spec.proxy.haproxy.size=5' - \
+          | yq eval '.spec.proxy.haproxy.affinity.antiAffinityTopologyKey="none"' - \
+          | yq eval '.spec.orchestrator.enabled=true' - \
+          | yq eval '.spec.orchestrator.size=3' - \
+          | yq eval '.spec.orchestrator.affinity.antiAffinityTopologyKey="none"' - \
+          | kubectl -n "${NAMESPACE}" apply -f -

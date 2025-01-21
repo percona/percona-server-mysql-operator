@@ -10,20 +10,19 @@ commands:
       source ../../functions
 
       state=$(kubectl -n ${NAMESPACE} get ps $(get_cluster_name) -o jsonpath='{.status.state}')
-      if [[ "$state" != "ready"  ]]; then
-        echo "Status state should be ready, but is $state."
-        exit 1
+      if [[ $state != "ready" ]]; then
+          echo "Status state should be ready, but is $state."
+          exit 1
       fi
-
 
       run_mysqlsh "STOP REPLICA;" "-h localhost -P 33060 -uroot -proot_password" "init-deploy-mysql-2"
 
       sleep 20
 
       state=$(kubectl -n ${NAMESPACE} get ps $(get_cluster_name) -o jsonpath='{.status.state}')
-      if [[ "$state" != "initializing"  ]]; then
-        echo "Status state should be initializing, but is $state."
-        exit 1
+      if [[ $state != "initializing" ]]; then
+          echo "Status state should be initializing, but is $state."
+          exit 1
       fi
 
       run_mysqlsh "START REPLICA;" "-h localhost -P 33060 -uroot -proot_password" "init-deploy-mysql-2"
@@ -31,7 +30,7 @@ commands:
       sleep 20
 
       state=$(kubectl -n ${NAMESPACE} get ps $(get_cluster_name) -o jsonpath='{.status.state}')
-      if [[ "$state" != "ready"  ]]; then
-        echo "Status state should be ready, but is $state."
-        exit 1
+      if [[ $state != "ready" ]]; then
+          echo "Status state should be ready, but is $state."
+          exit 1
       fi

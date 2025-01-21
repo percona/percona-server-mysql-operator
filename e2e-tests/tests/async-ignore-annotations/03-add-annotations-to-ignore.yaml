@@ -8,11 +8,10 @@ commands:
       source ../../functions
 
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
-        --type json \
-        -p '[{"op": "add", "path": "/spec/ignoreAnnotations", "value": ["async-annotations-to-ignore-mysql","async-annotations-to-ignore-haproxy", "async-annotations-to-ignore-orc"] }]'
+          --type json \
+          -p '[{"op": "add", "path": "/spec/ignoreAnnotations", "value": ["async-annotations-to-ignore-mysql","async-annotations-to-ignore-haproxy", "async-annotations-to-ignore-orc"] }]'
 
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
-        --type json \
-        -p '[{"op": "add", "path": "/spec/ignoreLabels", "value": ["async-labels-to-ignore-mysql","async-labels-to-ignore-haproxy","async-labels-to-ignore-orc" ] }]'
-
+          --type json \
+          -p '[{"op": "add", "path": "/spec/ignoreLabels", "value": ["async-labels-to-ignore-mysql","async-labels-to-ignore-haproxy","async-labels-to-ignore-orc" ] }]'
     timeout: 30

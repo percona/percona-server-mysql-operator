@@ -12,15 +12,15 @@ commands:
       restore_name="demand-backup-restore-minio-backup-source"
       cluster_name="${test_name}${name_suffix:+-$name_suffix}"
       destination=$(kubectl -n "${NAMESPACE}" get ps-backup "${backup_name}" -o jsonpath='{.status.destination}')
-      
+
       cat "${DEPLOY_DIR}/restore.yaml" \
-        | yq eval "$(printf '.metadata.name="%s"' "${restore_name}")" - \
-        | yq eval "$(printf '.spec.clusterName="%s"' "${cluster_name}")" - \
-        | yq eval "del(.spec.backupName)" - \
-        | yq eval "$(printf '.spec.backupSource.destination="%s"' "${destination}")" - \
-        | yq eval '.spec.backupSource.storage.type="s3"' - \
-        | yq eval '.spec.backupSource.storage.s3.bucket="operator-testing"' - \
-        | yq eval '.spec.backupSource.storage.s3.credentialsSecret="minio-secret"' - \
-        | yq eval "$(printf '.spec.backupSource.storage.s3.endpointUrl="http://minio-service.%s:9000"' "${NAMESPACE}")" - \
-        | yq eval '.spec.backupSource.storage.s3.region="us-east-1"' - \
-        | kubectl apply -n "${NAMESPACE}" -f -
+          | yq eval "$(printf '.metadata.name="%s"' "${restore_name}")" - \
+          | yq eval "$(printf '.spec.clusterName="%s"' "${cluster_name}")" - \
+          | yq eval "del(.spec.backupName)" - \
+          | yq eval "$(printf '.spec.backupSource.destination="%s"' "${destination}")" - \
+          | yq eval '.spec.backupSource.storage.type="s3"' - \
+          | yq eval '.spec.backupSource.storage.s3.bucket="operator-testing"' - \
+          | yq eval '.spec.backupSource.storage.s3.credentialsSecret="minio-secret"' - \
+          | yq eval "$(printf '.spec.backupSource.storage.s3.endpointUrl="http://minio-service.%s:9000"' "${NAMESPACE}")" - \
+          | yq eval '.spec.backupSource.storage.s3.region="us-east-1"' - \
+          | kubectl apply -n "${NAMESPACE}" -f -

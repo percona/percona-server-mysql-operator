@@ -1,10 +1,10 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 delete:
-- apiVersion: ps.percona.com/v1alpha1
-  kind: PerconaServerMySQL
-  metadata:
-    name: version-service
+  - apiVersion: ps.percona.com/v1alpha1
+    kind: PerconaServerMySQL
+    metadata:
+      name: version-service
 commands:
   - script: |-
       set -o errexit

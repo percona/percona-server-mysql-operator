@@ -10,9 +10,9 @@ commands:
 
       data=()
       for i in $(seq 0 2); do
-      	data+=("$(get_primary_from_haproxy ${test_name}-haproxy-$i)")
+          data+=("$(get_primary_from_haproxy ${test_name}-haproxy-$i)")
       done
       if [ "${data[0]}" != "${data[1]}" -o "${data[1]}" != "${data[2]}" ]; then
-        echo "Not all haproxy pods point to same primary: 0: ${data[0]} 1: ${data[1]} 2: ${data[2]}"
-        exit 1
+          echo "Not all haproxy pods point to same primary: 0: ${data[0]} 1: ${data[1]} 2: ${data[2]}"
+          exit 1
       fi

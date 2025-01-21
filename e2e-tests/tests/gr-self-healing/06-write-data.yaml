@@ -8,6 +8,6 @@ commands:
       source ../../functions
 
       run_mysql \
-      	"INSERT myDB.myTable (id) VALUES (100501)" \
-        "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password"
+          "INSERT myDB.myTable (id) VALUES (100501)" \
+          "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password"
       sleep 5
