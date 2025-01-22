@@ -226,7 +226,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		echo 'Initializing database'
 		# we initialize database into $TMPDIR because "--initialize-insecure" option does not work if directory is not empty
 		# in some cases storage driver creates unremovable artifacts (see K8SPXC-286), so $DATADIR cleanup is not possible
-		"$@" --initialize-insecure --skip-ssl --datadir="$TMPDIR"
+		"$@" --initialize-insecure --datadir="$TMPDIR"
 		mv "$TMPDIR"/* "$DATADIR/"
 		rm -rfv "$TMPDIR"
 		echo 'Database initialized'
@@ -293,15 +293,6 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
 		EOSQL
 
-		if [ "$CLUSTER_TYPE" == 'async' ]; then
-			read -r -d '' replicationCreate <<-EOSQL || true
-				CREATE USER 'replication'@'%' IDENTIFIED BY '${REPLICATION_PASSWORD}' PASSWORD EXPIRE NEVER;
-				GRANT DELETE, INSERT, UPDATE ON mysql.* TO 'replication'@'%' WITH GRANT OPTION;
-				GRANT SELECT ON performance_schema.threads to 'replication'@'%';
-				GRANT SYSTEM_USER, REPLICATION SLAVE, BACKUP_ADMIN, GROUP_REPLICATION_STREAM, CLONE_ADMIN, CONNECTION_ADMIN, CREATE USER, EXECUTE, FILE, GROUP_REPLICATION_ADMIN, PERSIST_RO_VARIABLES_ADMIN, PROCESS, RELOAD, REPLICATION CLIENT, REPLICATION_APPLIER, REPLICATION_SLAVE_ADMIN, ROLE_ADMIN, SELECT, SHUTDOWN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'replication'@'%' WITH GRANT OPTION;
-			EOSQL
-		fi
-
 		"${mysql[@]}" <<-EOSQL
 			-- What's done in this file shouldn't be replicated
 			--  or products like mysql-fabric won't work
@@ -327,7 +318,10 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			GRANT SELECT ON performance_schema.* TO 'monitor'@'${MONITOR_HOST}';
 			${monitorConnectGrant}
 
-			${replicationCreate}
+      CREATE USER 'replication'@'%' IDENTIFIED BY '${REPLICATION_PASSWORD}' PASSWORD EXPIRE NEVER;
+      GRANT DELETE, INSERT, UPDATE ON mysql.* TO 'replication'@'%' WITH GRANT OPTION;
+      GRANT SELECT ON performance_schema.threads to 'replication'@'%';
+      GRANT SYSTEM_USER, REPLICATION SLAVE, BACKUP_ADMIN, GROUP_REPLICATION_STREAM, CLONE_ADMIN, CONNECTION_ADMIN, CREATE USER, EXECUTE, FILE, GROUP_REPLICATION_ADMIN, PERSIST_RO_VARIABLES_ADMIN, PROCESS, RELOAD, REPLICATION CLIENT, REPLICATION_APPLIER, REPLICATION_SLAVE_ADMIN, ROLE_ADMIN, SELECT, SHUTDOWN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'replication'@'%' WITH GRANT OPTION;
 
 			CREATE USER 'orchestrator'@'%' IDENTIFIED BY '${ORC_TOPOLOGY_PASSWORD}' PASSWORD EXPIRE NEVER;
 			GRANT SYSTEM_USER, SUPER, PROCESS, REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';
@@ -427,14 +421,14 @@ fi
 
 recovery_file='/var/lib/mysql/sleep-forever'
 if [ -f "${recovery_file}" ]; then
-  set +o xtrace
-  echo "The $recovery_file file is detected, node is going to infinity loop"
-  echo "If you want to exit from infinity loop you need to remove $recovery_file file"
-  for (( ; ; )); do
-    if [ ! -f "${recovery_file}" ]; then
-      exit 0
-    fi
-  done
+	set +o xtrace
+	echo "The $recovery_file file is detected, node is going to infinity loop"
+	echo "If you want to exit from infinity loop you need to remove $recovery_file file"
+	for (( ; ; )); do
+		if [ ! -f "${recovery_file}" ]; then
+			exit 0
+		fi
+	done
 fi
 
 exec "$@"

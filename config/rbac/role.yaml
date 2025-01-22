@@ -8,8 +8,7 @@ rules:
   - ""
   resources:
   - configmaps
-  - pods
-  - pods/exec
+  - persistentvolumeclaims
   - secrets
   - services
   verbs:
@@ -30,10 +29,12 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - persistentvolumeclaims
+  - pods
+  - pods/exec
   verbs:
   - create
   - delete
+  - deletecollection
   - get
   - list
   - patch
@@ -95,31 +96,9 @@ rules:
   - perconaservermysqlbackups
   - perconaservermysqlbackups/finalizers
   - perconaservermysqlbackups/status
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ps.percona.com
-  resources:
   - perconaservermysqlrestores
   - perconaservermysqlrestores/finalizers
   - perconaservermysqlrestores/status
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ps.percona.com
-  resources:
   - perconaservermysqls
   - perconaservermysqls/finalizers
   - perconaservermysqls/status
@@ -135,15 +114,6 @@ rules:
   - rbac.authorization.k8s.io
   resources:
   - rolebindings
-  verbs:
-  - create
-  - get
-  - list
-  - patch
-  - watch
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
   - roles
   verbs:
   - create

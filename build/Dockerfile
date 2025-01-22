@@ -1,4 +1,4 @@
-FROM --platform=${BUILDPLATFORM} golang:1.22 AS go_builder
+FROM --platform=${BUILDPLATFORM} golang:1.23 AS go_builder
 WORKDIR /go/src/github.com/percona/percona-server-mysql-operator
 
 COPY go.mod go.sum ./
@@ -84,5 +84,6 @@ COPY build/haproxy_readiness_check.sh /opt/percona-server-mysql-operator/haproxy
 COPY build/haproxy.cfg /opt/percona-server-mysql-operator/haproxy.cfg
 COPY build/haproxy-global.cfg /opt/percona-server-mysql-operator/haproxy-global.cfg
 COPY build/pmm-prerun.sh /opt/percona-server-mysql-operator/pmm-prerun.sh
+COPY build/binlog-server-entrypoint.sh /opt/percona-server-mysql-operator/binlog-server-entrypoint.sh
 
 USER 2

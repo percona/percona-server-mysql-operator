@@ -18,9 +18,11 @@ package ps
 
 import (
 	"context"
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -34,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -43,6 +46,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	database "github.com/percona/percona-server-mysql-operator/pkg/db"
@@ -54,6 +58,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
+	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
@@ -64,10 +69,13 @@ type PerconaServerMySQLReconciler struct {
 	ServerVersion *platform.ServerVersion
 	Recorder      record.EventRecorder
 	ClientCmd     clientcmd.Client
+
+	Crons cronRegistry
 }
 
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqls;perconaservermysqls/status;perconaservermysqls/finalizers,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups="",resources=pods;pods/exec;configmaps;services;secrets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=configmaps;services;secrets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=pods;pods/exec,verbs=get;list;watch;create;update;patch;delete;deletecollection
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups=apps,resources=statefulsets;deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=certmanager.k8s.io;cert-manager.io,resources=issuers;certificates,verbs=get;list;watch;create;update;patch;delete;deletecollection
@@ -135,34 +143,33 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 
 	var err error
 
-	finalizers := []string{}
-	for _, f := range cr.GetFinalizers() {
-		switch f {
+	// Sorting finalizers to make sure that delete-mysql-pods-in-order runs before
+	// delete-mysql-pvc since the latter removes secrets needed for the former.
+	slices.Sort(cr.GetFinalizers())
+
+	for _, finalizer := range cr.GetFinalizers() {
+		switch finalizer {
 		case naming.FinalizerDeletePodsInOrder:
 			err = r.deleteMySQLPods(ctx, cr)
 		case naming.FinalizerDeleteSSL:
 			err = r.deleteCerts(ctx, cr)
+		case naming.FinalizerDeleteMySQLPvc:
+			err = r.deleteMySQLPvc(ctx, cr)
 		}
-
 		if err != nil {
-			switch err {
-			case psrestore.ErrWaitingTermination:
-				log.Info("waiting for pods to be deleted", "finalizer", f)
-			default:
-				log.Error(err, "failed to run finalizer", "finalizer", f)
-			}
-			finalizers = append(finalizers, f)
+			return err
 		}
 	}
 
-	cr.SetFinalizers(finalizers)
-
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
-		err = r.Client.Update(ctx, cr)
+		c := new(apiv1alpha1.PerconaServerMySQL)
+		err := r.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
 		if err != nil {
-			log.Error(err, "Client.Update failed")
+			return errors.Wrap(err, "get cr")
 		}
-		return err
+
+		c.SetFinalizers([]string{})
+		return r.Client.Update(ctx, c)
 	})
 }
 
@@ -350,6 +357,51 @@ func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv
 	return nil
 }
 
+func (r *PerconaServerMySQLReconciler) deleteMySQLPvc(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	log := logf.FromContext(ctx)
+
+	log.Info(fmt.Sprintf("Applying %s finalizer", naming.FinalizerDeleteMySQLPvc))
+
+	exposer := mysql.Exposer(*cr)
+
+	list := corev1.PersistentVolumeClaimList{}
+
+	err := r.Client.List(ctx,
+		&list,
+		&client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: labels.SelectorFromSet(exposer.Labels()),
+		},
+	)
+	if err != nil {
+		return errors.Wrap(err, "get PVC list")
+	}
+
+	if list.Size() == 0 {
+		return nil
+	}
+
+	for _, pvc := range list.Items {
+		err := r.Client.Delete(ctx, &pvc, &client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &pvc.UID}})
+		if err != nil {
+			return errors.Wrapf(err, "delete PVC %s", pvc.Name)
+		}
+		log.Info("Removed MySQL PVC", "pvc", pvc.Name)
+	}
+
+	secretNames := []string{
+		cr.Spec.SecretsName,
+		"internal-" + cr.Name,
+	}
+	err = k8s.DeleteSecrets(ctx, r.Client, cr, secretNames)
+	if err != nil {
+		return errors.Wrap(err, "delete secrets")
+	}
+	log.Info("Removed secrets", "secrets", secretNames)
+
+	return nil
+}
+
 func (r *PerconaServerMySQLReconciler) doReconcile(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQL,
@@ -389,6 +441,12 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcileMySQLRouter(ctx, cr); err != nil {
 		return errors.Wrap(err, "MySQL router")
 	}
+	if err := r.reconcileBinlogServer(ctx, cr); err != nil {
+		return errors.Wrap(err, "binlog server")
+	}
+	if err := r.reconcileScheduledBackup(ctx, cr); err != nil {
+		return errors.Wrap(err, "scheduled backup")
+	}
 	if err := r.cleanupOutdated(ctx, cr); err != nil {
 		return errors.Wrap(err, "cleanup outdated")
 	}
@@ -396,10 +454,7 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) reconcileDatabase(
-	ctx context.Context,
-	cr *apiv1alpha1.PerconaServerMySQL,
-) error {
+func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileDatabase")
 
 	configurable := mysql.Configurable(*cr)
@@ -804,12 +859,18 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 	}
 
 	if err := orchestrator.Discover(ctx, r.ClientCmd, pod, mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
-		switch err.Error() {
-		case "Unauthorized":
+		switch {
+		case errors.Is(err, orchestrator.ErrUnauthorized):
 			log.Info("mysql is not ready, unauthorized orchestrator discover response. skip")
 			return nil
-		case orchestrator.ErrEmptyResponse.Error():
+		case errors.Is(err, orchestrator.ErrEmptyResponse):
 			log.Info("mysql is not ready, empty orchestrator discover response. skip")
+			return nil
+		case errors.Is(err, orchestrator.ErrBadConn):
+			log.Info("mysql is not ready, bad connection. skip")
+			return nil
+		case errors.Is(err, orchestrator.ErrNoSuchHost):
+			log.Info("mysql is not ready, host not found. skip")
 			return nil
 		}
 		return errors.Wrap(err, "failed to discover cluster")
@@ -959,16 +1020,51 @@ func (r *PerconaServerMySQLReconciler) cleanupMysql(ctx context.Context, cr *api
 }
 
 func (r *PerconaServerMySQLReconciler) cleanupOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	orcExposer := orchestrator.Exposer(*cr)
+
 	if !cr.OrchestratorEnabled() {
 		if err := r.Delete(ctx, orchestrator.StatefulSet(cr, "", "")); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrap(err, "failed to delete orchestrator statefulset")
 		}
 
-		orcExposer := orchestrator.Exposer(*cr)
 		if err := r.cleanupOutdatedServices(ctx, &orcExposer, cr.Namespace); err != nil {
 			return errors.Wrap(err, "cleanup Orchestrator services")
 		}
+
+		return nil
 	}
+
+	if cr.Spec.Pause {
+		return nil
+	}
+
+	svcLabels := orcExposer.Labels()
+	svcLabels[naming.LabelExposed] = "true"
+	services, err := k8s.ServicesByLabels(ctx, r.Client, svcLabels, cr.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "get exposed services")
+	}
+
+	if len(services) == int(orcExposer.Size()) {
+		return nil
+	}
+
+	outdatedSvcs := make(map[string]struct{}, len(services))
+	for i := len(services) - 1; i >= int(orcExposer.Size()); i-- {
+		outdatedSvcs[orchestrator.PodName(cr, i)] = struct{}{}
+	}
+
+	for _, svc := range services {
+		if _, ok := outdatedSvcs[svc.Name]; !ok {
+			continue
+		}
+
+		logf.FromContext(ctx).Info("Deleting outdated orchestrator service", "service", svc.Name)
+		if err := r.Client.Delete(ctx, &svc); err != nil && !k8serrors.IsNotFound(err) {
+			return errors.Wrapf(err, "delete Service/%s", svc.Name)
+		}
+	}
+
 	return nil
 }
 
@@ -1044,6 +1140,102 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Deployment(cr, initImage, configHash, tlsHash), r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile Deployment")
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if !cr.Spec.Backup.PiTR.Enabled {
+		return nil
+	}
+
+	logger := logf.FromContext(ctx)
+
+	if len(cr.Status.Host) == 0 {
+		logger.V(1).Info("Waiting for .status.host to be populated")
+		return nil
+	}
+
+	s3 := cr.Spec.Backup.PiTR.BinlogServer.Storage.S3
+
+	if s3 != nil && len(s3.CredentialsSecret) == 0 {
+		logger.Info("You need to set spec.backup.pitr.binlogServer.s3.credentialsSecret to upload binlogs to s3")
+		return nil
+	}
+
+	s3Secret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Spec.Backup.PiTR.BinlogServer.Storage.S3.CredentialsSecret,
+			Namespace: cr.Namespace,
+		},
+	}
+	if err := r.Client.Get(ctx, client.ObjectKeyFromObject(&s3Secret), &s3Secret); err != nil {
+		return errors.Wrap(err, "get s3 credentials secret")
+	}
+
+	accessKey := s3Secret.Data[secret.CredentialsAWSAccessKey]
+	secretKey := s3Secret.Data[secret.CredentialsAWSSecretKey]
+
+	s3Uri := fmt.Sprintf("s3://%s:%s@%s.%s", accessKey, secretKey, s3.Bucket, s3.Region)
+	if len(s3.Prefix) > 0 {
+		s3Uri += fmt.Sprintf("/%s", s3.Prefix)
+	}
+
+	replPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserReplication)
+	if err != nil {
+		return errors.Wrap(err, "get replication password")
+	}
+
+	configSecret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      binlogserver.ConfigSecretName(cr),
+			Namespace: cr.Namespace,
+		},
+	}
+	configSecret.Data = make(map[string][]byte)
+
+	config := binlogserver.Configuration{
+		Logger: binlogserver.Logger{
+			Level: "debug",
+			File:  "/dev/stdout",
+		},
+		Connection: binlogserver.Connection{
+			Host:           mysql.FQDN(cr, 0),
+			Port:           3306,
+			User:           string(apiv1alpha1.UserReplication),
+			Password:       replPass,
+			ConnectTimeout: cr.Spec.Backup.PiTR.BinlogServer.ConnectTimeout,
+			WriteTimeout:   cr.Spec.Backup.PiTR.BinlogServer.WriteTimeout,
+			ReadTimeout:    cr.Spec.Backup.PiTR.BinlogServer.ReadTimeout,
+		},
+		Replication: binlogserver.Replication{
+			ServerID: cr.Spec.Backup.PiTR.BinlogServer.ServerID,
+			IdleTime: cr.Spec.Backup.PiTR.BinlogServer.IdleTime,
+		},
+		Storage: binlogserver.Storage{
+			URI: s3Uri,
+		},
+	}
+
+	configBytes, err := json.Marshal(config)
+	if err != nil {
+		return errors.Wrap(err, "marshal binlog server config")
+	}
+
+	configSecret.Data[binlogserver.ConfigKey] = configBytes
+	if err := k8s.EnsureObject(ctx, r.Client, cr, &configSecret, r.Scheme); err != nil {
+		return errors.Wrap(err, "reconcile secret")
+	}
+
+	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Backup.PiTR.BinlogServer.PodSpec)
+	if err != nil {
+		return errors.Wrap(err, "get init image")
+	}
+
+	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, binlogserver.StatefulSet(cr, initImage, fmt.Sprintf("%x", md5.Sum(configBytes))), r.Scheme)
+	if err != nil {
+		return errors.Wrap(err, "reconcile statefulset")
 	}
 
 	return nil
