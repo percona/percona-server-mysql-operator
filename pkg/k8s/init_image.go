@@ -16,7 +16,7 @@ type ComponentWithInit interface {
 	GetInitImage() string
 }
 
-func InitContainer(component, image string, pullPolicy corev1.PullPolicy, secCtx *corev1.SecurityContext) corev1.Container {
+func InitContainer(component, image string, pullPolicy corev1.PullPolicy, secCtx *corev1.SecurityContext, resList corev1.ResourceRequirements) corev1.Container {
 	return corev1.Container{
 		Name:            component + "-init",
 		Image:           image,
@@ -31,6 +31,7 @@ func InitContainer(component, image string, pullPolicy corev1.PullPolicy, secCtx
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          secCtx,
+		Resources:                resList,
 	}
 }
 
