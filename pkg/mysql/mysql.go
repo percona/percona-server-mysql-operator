@@ -163,6 +163,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 							initImage,
 							spec.ImagePullPolicy,
 							spec.ContainerSecurityContext,
+							spec.Resources,
 						),
 					},
 					Containers:                    containers(cr, secret),
@@ -596,6 +597,7 @@ func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          cr.Spec.Backup.ContainerSecurityContext,
+		Resources:                cr.Spec.Backup.Resources,
 	}
 }
 

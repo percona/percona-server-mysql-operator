@@ -145,6 +145,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, tlsHash string) 
 							initImage,
 							spec.ImagePullPolicy,
 							spec.ContainerSecurityContext,
+							spec.Resources,
 						),
 					},
 					NodeSelector:                  cr.Spec.Orchestrator.NodeSelector,
