@@ -86,6 +86,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 							initImage,
 							spec.ImagePullPolicy,
 							spec.ContainerSecurityContext,
+							spec.Resources,
 						),
 					},
 					Containers:                    containers(cr),
