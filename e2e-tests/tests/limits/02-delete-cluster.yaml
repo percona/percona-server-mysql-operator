@@ -8,5 +8,5 @@ commands:
       source ../../functions
 
       get_cr "no-limits" \
-      	| kubectl -n "${NAMESPACE}" delete -f -
+          | kubectl -n "${NAMESPACE}" delete -f -
     timeout: 180

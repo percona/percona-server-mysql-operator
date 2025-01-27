@@ -9,8 +9,8 @@ commands:
       source ../../functions
 
       get_cr \
-      	| yq eval '.spec.mysql.clusterType="group-replication"' - \
-      	| yq eval '.spec.proxy.router.enabled=false' - \
-      	| yq eval '.spec.proxy.haproxy.enabled=true' - \
-      	| yq eval '.metadata.finalizers |= ["percona.com/delete-mysql-pods-in-order", "percona.com/delete-ssl"]' - \
-      	| kubectl -n "${NAMESPACE}" apply -f -
+          | yq eval '.spec.mysql.clusterType="group-replication"' - \
+          | yq eval '.spec.proxy.router.enabled=false' - \
+          | yq eval '.spec.proxy.haproxy.enabled=true' - \
+          | yq eval '.metadata.finalizers |= ["percona.com/delete-mysql-pods-in-order", "percona.com/delete-ssl"]' - \
+          | kubectl -n "${NAMESPACE}" apply -f -

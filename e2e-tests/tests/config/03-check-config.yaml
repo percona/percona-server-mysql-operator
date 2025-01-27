@@ -11,4 +11,4 @@ commands:
       max_connections=$(run_mysql "SELECT @@max_connections" "${mysql_args}")
 
       kubectl create configmap -n "${NAMESPACE}" 03-check-config \
-      	--from-literal=max_connections="${max_connections}"
+          --from-literal=max_connections="${max_connections}"

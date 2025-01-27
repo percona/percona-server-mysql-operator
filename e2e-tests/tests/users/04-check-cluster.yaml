@@ -17,19 +17,19 @@ commands:
       args=""
       set +o errexit
       for user in "${users[@]}"; do
-      	mysql_args="-h $(get_haproxy_svc $(get_cluster_name)) -u${user} -p${user}_password_updated"
+          mysql_args="-h $(get_haproxy_svc $(get_cluster_name)) -u${user} -p${user}_password_updated"
 
-      	pod=mysql-client
-      	case $user in
-      		heartbeat | xtrabackup)
-      			mysql_args="-h localhost -u${user} -p${user}_password_updated"
-      			pod="$(get_cluster_name)-mysql-0"
-      			;;
-      	esac
+          pod=mysql-client
+          case $user in
+              heartbeat | xtrabackup)
+                  mysql_args="-h localhost -u${user} -p${user}_password_updated"
+                  pod="$(get_cluster_name)-mysql-0"
+                  ;;
+          esac
 
-      	run_mysql "SELECT 1" "${mysql_args}" "${pod}"
+          run_mysql "SELECT 1" "${mysql_args}" "${pod}"
 
-      	args="${args} --from-literal=${user}=$([ $? -eq 0 ] && echo 'success' || echo 'fail')"
+          args="${args} --from-literal=${user}=$([ $? -eq 0 ] && echo 'success' || echo 'fail')"
       done
       set -o errexit
 
@@ -42,11 +42,11 @@ commands:
       cluster=$(run_curl "http://${orc_host}:3000/api/clusters/" | jq -r .[0])
 
       replicating=$(run_curl "http://${orc_host}:3000/api/cluster/${cluster}/" \
-      	| tee \
-      	| jq -r '.[] | "\(.ReplicationSQLThreadRuning) \(.ReplicationIOThreadRuning)"' \
-      	| grep "true" \
-      	| wc -l \
-      	| sed 's/ *//')
+          | tee \
+          | jq -r '.[] | "\(.ReplicationSQLThreadRuning) \(.ReplicationIOThreadRuning)"' \
+          | grep "true" \
+          | wc -l \
+          | sed 's/ *//')
 
       kubectl create configmap -n "${NAMESPACE}" 04-check-replication --from-literal=replicating="${replicating}"
     timeout: 300

@@ -11,11 +11,11 @@ commands:
       jobs_count=$(kubectl get job -n ${NAMESPACE} -o yaml | yq '.items | length')
       bcp_count=$(kubectl get ps-backup -n ${NAMESPACE} -o yaml | yq '.items | length')
       if [[ $jobs_count != 1 ]]; then
-      	echo "There are $jobs_count jobs but should be 1"
-      	exit 1
+          echo "There are $jobs_count jobs but should be 1"
+          exit 1
       fi
       if [[ $bcp_count != 1 ]]; then
-      	echo "There are $bcp_count ps-backups but should be 1"
-      	exit 1
+          echo "There are $bcp_count ps-backups but should be 1"
+          exit 1
       fi
     timeout: 180

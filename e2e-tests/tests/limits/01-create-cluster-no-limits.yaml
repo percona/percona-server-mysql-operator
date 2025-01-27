@@ -9,8 +9,8 @@ commands:
 
       suffix="no-limits"
       get_cr "${suffix}" \
-        | yq eval '.spec.mysql.clusterType="async"' - \
-        | yq eval 'del(.spec."*".resources.limits)' - \
-      	| kubectl -n "${NAMESPACE}" apply -f -
+          | yq eval '.spec.mysql.clusterType="async"' - \
+          | yq eval 'del(.spec."*".resources.limits)' - \
+          | kubectl -n "${NAMESPACE}" apply -f -
       wait_pod "${test_name}-${suffix}-mysql-0"
     timeout: 180
