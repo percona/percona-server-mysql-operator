@@ -4,10 +4,10 @@ metadata:
   name: init-deploy-resource-quota
 spec:
   hard:
-    requests.cpu: "4"
-    requests.memory: "6Gi"
-    limits.cpu: "6"
-    limits.memory: "16Gi"
+    requests.cpu: "10"
+    requests.memory: "14Gi"
+    limits.cpu: "12"
+    limits.memory: "14Gi"
 ---
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
