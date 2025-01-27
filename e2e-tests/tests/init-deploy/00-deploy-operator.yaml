@@ -5,9 +5,9 @@ metadata:
 spec:
   hard:
     requests.cpu: "2"
-    requests.memory: "2Gi"
+    requests.memory: "4Gi"
     limits.cpu: "4"
-    limits.memory: "3Gi"
+    limits.memory: "6Gi"
 ---
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
