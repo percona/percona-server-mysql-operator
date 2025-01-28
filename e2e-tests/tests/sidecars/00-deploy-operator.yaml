@@ -12,4 +12,3 @@ commands:
       deploy_operator
       deploy_non_tls_cluster_secrets
       deploy_tls_cluster_secrets
-      

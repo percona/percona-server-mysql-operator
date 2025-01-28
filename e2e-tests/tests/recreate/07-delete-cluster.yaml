@@ -8,5 +8,4 @@ commands:
       source ../../functions
 
       kubectl delete ps -n ${NAMESPACE} recreate
-
     timeout: 120

@@ -10,19 +10,18 @@ commands:
       haproxy_svc=$(get_haproxy_svc async-ignore-annotations)
       orc_svc=$(get_orc_svc async-ignore-annotations)
 
-      kubectl get svc  $mysql_svc-0 -o yaml -n "${NAMESPACE}" \
-      	| yq eval '.metadata.annotations += {"async-annotations-to-ignore-mysql": "true", "async-annotations-not-to-ignore-mysql": "true" }' - \
-      	| yq eval '.metadata.labels += {"async-labels-to-ignore-mysql": "true", "async-labels-not-to-ignore-mysql": "true"}' - \
-        | kubectl -n "${NAMESPACE}" apply -f -
+      kubectl get svc $mysql_svc-0 -o yaml -n "${NAMESPACE}" \
+          | yq eval '.metadata.annotations += {"async-annotations-to-ignore-mysql": "true", "async-annotations-not-to-ignore-mysql": "true" }' - \
+          | yq eval '.metadata.labels += {"async-labels-to-ignore-mysql": "true", "async-labels-not-to-ignore-mysql": "true"}' - \
+          | kubectl -n "${NAMESPACE}" apply -f -
 
-      kubectl get svc  $haproxy_svc -o yaml -n "${NAMESPACE}"\
-        | yq eval '.metadata.annotations += {"async-annotations-to-ignore-haproxy": "true", "async-annotations-not-to-ignore-haproxy": "true" }' - \
-        | yq eval '.metadata.labels += {"async-labels-to-ignore-haproxy": "true", "async-labels-not-to-ignore-haproxy": "true"}' - \
-        | kubectl -n "${NAMESPACE}" apply -f -
+      kubectl get svc $haproxy_svc -o yaml -n "${NAMESPACE}" \
+          | yq eval '.metadata.annotations += {"async-annotations-to-ignore-haproxy": "true", "async-annotations-not-to-ignore-haproxy": "true" }' - \
+          | yq eval '.metadata.labels += {"async-labels-to-ignore-haproxy": "true", "async-labels-not-to-ignore-haproxy": "true"}' - \
+          | kubectl -n "${NAMESPACE}" apply -f -
 
-      kubectl get svc  $orc_svc-0 -o yaml -n "${NAMESPACE}"\
-        | yq eval  '.metadata.annotations += {"async-annotations-to-ignore-orc": "true", "async-annotations-not-to-ignore-orc": "true" }' - \
-        | yq eval '.metadata.labels += {"async-labels-to-ignore-orc": "true", "async-labels-not-to-ignore-orc": "true" }' - \
-        | kubectl -n "${NAMESPACE}" apply -f -
-
+      kubectl get svc $orc_svc-0 -o yaml -n "${NAMESPACE}" \
+          | yq eval '.metadata.annotations += {"async-annotations-to-ignore-orc": "true", "async-annotations-not-to-ignore-orc": "true" }' - \
+          | yq eval '.metadata.labels += {"async-labels-to-ignore-orc": "true", "async-labels-not-to-ignore-orc": "true" }' - \
+          | kubectl -n "${NAMESPACE}" apply -f -
     timeout: 100

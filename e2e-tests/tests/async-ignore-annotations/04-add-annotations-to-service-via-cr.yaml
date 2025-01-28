@@ -8,15 +8,14 @@ commands:
       source ../../functions
 
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
-        --type json \
-        -p '[{"op": "add", "path": "/spec/mysql/expose", "value": {"enabled": true, "type": ClusterIP,"annotations": {"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "http","service.beta.kubernetes.io/aws-load-balancer-backend": "test-type"}, "labels": {"rack": "rack-22","rack-test": "rack-test-22"}}}]'
+          --type json \
+          -p '[{"op": "add", "path": "/spec/mysql/expose", "value": {"enabled": true, "type": ClusterIP,"annotations": {"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "http","service.beta.kubernetes.io/aws-load-balancer-backend": "test-type"}, "labels": {"rack": "rack-22","rack-test": "rack-test-22"}}}]'
 
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
-        --type json \
-        -p '[{"op": "add", "path": "/spec/proxy/haproxy/expose", "value": {"type": ClusterIP ,"annotations": {"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "http","service.beta.kubernetes.io/aws-load-balancer-backend": "test-type"}, "labels": {"rack": "rack-22","rack-test": "rack-test-22"}}}]'
+          --type json \
+          -p '[{"op": "add", "path": "/spec/proxy/haproxy/expose", "value": {"type": ClusterIP ,"annotations": {"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "http","service.beta.kubernetes.io/aws-load-balancer-backend": "test-type"}, "labels": {"rack": "rack-22","rack-test": "rack-test-22"}}}]'
 
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
-        --type json \
-        -p '[{"op": "add", "path": "/spec/orchestrator/expose", "value": {"type": ClusterIP ,"annotations": {"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "http","service.beta.kubernetes.io/aws-load-balancer-backend": "test-type"}, "labels": {"rack": "rack-22","rack-test": "rack-test-22"}}}]'
-
+          --type json \
+          -p '[{"op": "add", "path": "/spec/orchestrator/expose", "value": {"type": ClusterIP ,"annotations": {"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "http","service.beta.kubernetes.io/aws-load-balancer-backend": "test-type"}, "labels": {"rack": "rack-22","rack-test": "rack-test-22"}}}]'
     timeout: 30

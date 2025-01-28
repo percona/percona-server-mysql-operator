@@ -10,10 +10,10 @@ commands:
       args=''
       size=$(kubectl -n ${NAMESPACE} get ps ${test_name} -o jsonpath='{.spec.mysql.size}')
       for i in $(seq 0 $((size - 1))); do
-      	ip=$(get_service_ip ${test_name}-mysql-${i})
-      	host=$(get_mysql_headless_fqdn ${test_name} $i)
-      	data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${ip} -uroot -proot_password")
-      	args="${args} --from-literal=${host}=${data}"
+          ip=$(get_service_ip ${test_name}-mysql-${i})
+          host=$(get_mysql_headless_fqdn ${test_name} $i)
+          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${ip} -uroot -proot_password")
+          args="${args} --from-literal=${host}=${data}"
       done
 
       kubectl create configmap -n "${NAMESPACE}" 04-read-from-clusterip ${args}

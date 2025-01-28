@@ -8,15 +8,15 @@ commands:
       source ../../functions
 
       run_mysql \
-      	"CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable (id int PRIMARY KEY)" \
-      	"-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password"
+          "CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable (id int PRIMARY KEY)" \
+          "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password"
 
       run_mysql \
-      	"INSERT myDB.myTable (id) VALUES (100500)" \
-      	"-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password"
+          "INSERT myDB.myTable (id) VALUES (100500)" \
+          "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password"
 
       for i in 0 1 2; do
-        host=$(get_mysql_headless_fqdn $(get_cluster_name) $i)
-        data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${host} -uroot -proot_password")
-        kubectl create configmap -n "${NAMESPACE}" 02-write-data-${i} --from-literal=data="${data}"
+          host=$(get_mysql_headless_fqdn $(get_cluster_name) $i)
+          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${host} -uroot -proot_password")
+          kubectl create configmap -n "${NAMESPACE}" 02-write-data-${i} --from-literal=data="${data}"
       done

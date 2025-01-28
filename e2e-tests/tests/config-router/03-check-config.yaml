@@ -11,7 +11,7 @@ commands:
 
       echo "$pod"
 
-      if ! kubectl -n "${NAMESPACE}" exec -it $pod -- bash -c 'cat /tmp/router/log/mysqlrouter.log' | grep -q 'DEBUG' ; then
-        echo "Failed to find necessary logs in $pod, expected logs in /tmp/router/log/mysqlrouter.log"
-        exit 1
+      if ! kubectl -n "${NAMESPACE}" exec -it $pod -- bash -c 'cat /tmp/router/log/mysqlrouter.log' | grep -q 'DEBUG'; then
+          echo "Failed to find necessary logs in $pod, expected logs in /tmp/router/log/mysqlrouter.log"
+          exit 1
       fi

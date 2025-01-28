@@ -10,6 +10,6 @@ commands:
 
       cluster_name=$(get_cluster_name)
       for i in 0 1 2; do
-      	data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql -uroot -proot_password")
-      	kubectl create configmap -n "${NAMESPACE}" 06-read-data-gcp-${i} --from-literal=data="${data}"
+          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql -uroot -proot_password")
+          kubectl create configmap -n "${NAMESPACE}" 06-read-data-gcp-${i} --from-literal=data="${data}"
       done
