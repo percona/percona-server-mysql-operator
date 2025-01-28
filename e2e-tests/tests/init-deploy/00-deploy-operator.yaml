@@ -1,3 +1,14 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: init-deploy-resource-quota
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: "10Gi"
+    limits.cpu: "10"
+    limits.memory: "12Gi"
+---
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 timeout: 10
