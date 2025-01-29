@@ -3282,8 +3282,13 @@ spec:
                             format: int32
                             type: integer
                         required:
+                        - connectTimeout
+                        - idleTime
                         - image
+                        - readTimeout
+                        - serverId
                         - storage
+                        - writeTimeout
                         type: object
                       enabled:
                         type: boolean
