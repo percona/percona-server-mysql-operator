@@ -8,9 +8,9 @@ commands:
       source ../../functions
 
       get_cr \
-        | yq eval '.spec.mysql.affinity.antiAffinityTopologyKey="none"' - \
-        | yq eval '.spec.mysql.size=5' - \
-        | yq eval '.spec.orchestrator.affinity.antiAffinityTopologyKey="none"' - \
-        | yq eval '.spec.orchestrator.enabled=true' - \
-        | yq eval '.spec.orchestrator.size=5' - \
-        | kubectl -n "${NAMESPACE}" apply -f -
+          | yq eval '.spec.mysql.affinity.antiAffinityTopologyKey="none"' - \
+          | yq eval '.spec.mysql.size=5' - \
+          | yq eval '.spec.orchestrator.affinity.antiAffinityTopologyKey="none"' - \
+          | yq eval '.spec.orchestrator.enabled=true' - \
+          | yq eval '.spec.orchestrator.size=5' - \
+          | kubectl -n "${NAMESPACE}" apply -f -

@@ -9,23 +9,23 @@ commands:
       source ../../functions
 
       get_cr \
-      	| yq eval ".spec.backup.storages.minio.type=\"s3\"" - \
-      	| yq eval ".spec.backup.storages.minio.type=\"s3\"" - \
-      	| yq eval ".spec.backup.storages.minio.s3.bucket=\"operator-testing\"" - \
-      	| yq eval ".spec.backup.storages.minio.s3.credentialsSecret=\"minio-secret\"" - \
-      	| yq eval ".spec.backup.storages.minio.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
-      	| yq eval ".spec.backup.storages.minio.s3.region=\"us-east-1\"" - \
-      	| yq eval ".spec.backup.storages.minio.containerSecurityContext.privileged=true" - \
-      	| yq eval ".spec.backup.storages.minio.podSecurityContext.fsGroup=1001" - \
-      	| yq eval ".spec.backup.storages.minio.podSecurityContext.supplementalGroups |= [1001, 1002, 1003]" - \
-      	| yq eval ".spec.backup.containerSecurityContext.privileged=false" - \
-      	| yq eval ".spec.mysql.clusterType=\"group-replication\"" - \
-      	| yq eval ".spec.mysql.containerSecurityContext.privileged=true" - \
-      	| yq eval ".spec.mysql.podSecurityContext.fsGroup=1001" - \
-      	| yq eval ".spec.mysql.podSecurityContext.supplementalGroups |= [1001, 1002, 1003]" - \
-      	| yq eval ".spec.proxy.router.enabled=false" - \
-      	| yq eval ".spec.proxy.haproxy.enabled=true" - \
-      	| yq eval ".spec.proxy.haproxy.containerSecurityContext.privileged=true" - \
-      	| yq eval ".spec.proxy.haproxy.podSecurityContext.fsGroup=1001" - \
-      	| yq eval ".spec.proxy.haproxy.podSecurityContext.supplementalGroups |= [1001, 1002, 1003]" - \
-      	| kubectl -n "${NAMESPACE}" apply -f -
+          | yq eval '.spec.backup.storages.minio.type="s3"' - \
+          | yq eval '.spec.backup.storages.minio.type="s3"' - \
+          | yq eval '.spec.backup.storages.minio.s3.bucket="operator-testing"' - \
+          | yq eval '.spec.backup.storages.minio.s3.credentialsSecret="minio-secret"' - \
+          | yq eval ".spec.backup.storages.minio.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
+          | yq eval '.spec.backup.storages.minio.s3.region="us-east-1"' - \
+          | yq eval ".spec.backup.storages.minio.containerSecurityContext.privileged=true" - \
+          | yq eval ".spec.backup.storages.minio.podSecurityContext.fsGroup=1001" - \
+          | yq eval ".spec.backup.storages.minio.podSecurityContext.supplementalGroups |= [1001, 1002, 1003]" - \
+          | yq eval ".spec.backup.containerSecurityContext.privileged=false" - \
+          | yq eval '.spec.mysql.clusterType="group-replication"' - \
+          | yq eval ".spec.mysql.containerSecurityContext.privileged=true" - \
+          | yq eval ".spec.mysql.podSecurityContext.fsGroup=1001" - \
+          | yq eval ".spec.mysql.podSecurityContext.supplementalGroups |= [1001, 1002, 1003]" - \
+          | yq eval ".spec.proxy.router.enabled=false" - \
+          | yq eval ".spec.proxy.haproxy.enabled=true" - \
+          | yq eval ".spec.proxy.haproxy.containerSecurityContext.privileged=true" - \
+          | yq eval ".spec.proxy.haproxy.podSecurityContext.fsGroup=1001" - \
+          | yq eval ".spec.proxy.haproxy.podSecurityContext.supplementalGroups |= [1001, 1002, 1003]" - \
+          | kubectl -n "${NAMESPACE}" apply -f -

@@ -19,10 +19,10 @@ commands:
           kubectl run -n "${NAMESPACE}" -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
               /usr/bin/env AWS_ACCESS_KEY_ID="${accessKey}" AWS_SECRET_ACCESS_KEY="${secretKey}" AWS_DEFAULT_REGION=us-east-1 \
               /usr/bin/aws --endpoint-url http://minio-service:9000 s3 ls 'operator-testing/' | grep -c "${backup_name_minio}/" | cat
-           exit "${PIPESTATUS[0]}"
+          exit "${PIPESTATUS[0]}"
       )
 
       if [[ 1 -eq $backup_exists ]]; then
-        echo "Backup was not removed from bucket -- minio"
-        exit 1
+          echo "Backup was not removed from bucket -- minio"
+          exit 1
       fi

@@ -7,7 +7,7 @@ for f in "${@}"; do
 	echo "Formatting ${f}"
 
 	yq eval '.commands[0].script' "${f}" >"${TMP}"
-	shfmt -bn -ci -s -w $TMP
+	shfmt -bn -ci -s -i 4 -w $TMP
 
 	SHFILE=$(cat ${TMP}) yq eval '.commands[0].script=strenv(SHFILE)' --inplace "${f}"
 done

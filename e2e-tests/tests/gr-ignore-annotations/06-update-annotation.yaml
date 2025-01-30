@@ -8,11 +8,10 @@ commands:
       source ../../functions
 
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
-        --type json \
-        -p '[{"op": "replace", "path": "/spec/mysql/expose", "value": {"enabled": true, "type": LoadBalancer,"annotations": {"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "http-test"}, "labels": {"rack": "rack-22-test"}}}]'
+          --type json \
+          -p '[{"op": "replace", "path": "/spec/mysql/expose", "value": {"enabled": true, "type": LoadBalancer,"annotations": {"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "http-test"}, "labels": {"rack": "rack-22-test"}}}]'
 
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
-        --type json \
-        -p '[{"op": "replace", "path": "/spec/proxy/router/expose", "value": {"type": LoadBalancer ,"annotations": {"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "http-test"}, "labels": {"rack": "rack-22-test"}}}]'
-
+          --type json \
+          -p '[{"op": "replace", "path": "/spec/proxy/router/expose", "value": {"type": LoadBalancer ,"annotations": {"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "http-test"}, "labels": {"rack": "rack-22-test"}}}]'
     timeout: 30

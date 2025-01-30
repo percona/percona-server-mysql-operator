@@ -14,6 +14,6 @@ commands:
       wait_deployment percona-server-mysql-operator "${OPERATOR_NS:-$NAMESPACE}"
 
       if [ "$init_pod" == "$(get_operator_pod)" ]; then
-        echo "operator pod was not killed! something went wrong."
-        exit 1
+          echo "operator pod was not killed! something went wrong."
+          exit 1
       fi

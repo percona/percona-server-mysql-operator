@@ -9,10 +9,10 @@ commands:
       source ../../functions
 
       get_cr \
-        | yq eval '.spec.mysql.clusterType="group-replication"' - \
-      	| yq eval '.spec.proxy.router.enabled=true' - \
-      	| yq eval '.spec.proxy.haproxy.enabled=false' - \
-        | yq eval '.spec.mysql.expose.enabled=true' - \
-        | yq eval '.spec.mysql.expose.type="LoadBalancer"' - \
-        | yq eval '.spec.proxy.router.expose.type="LoadBalancer"' - \
-        | kubectl -n "${NAMESPACE}" apply -f -
+          | yq eval '.spec.mysql.clusterType="group-replication"' - \
+          | yq eval '.spec.proxy.router.enabled=true' - \
+          | yq eval '.spec.proxy.haproxy.enabled=false' - \
+          | yq eval '.spec.mysql.expose.enabled=true' - \
+          | yq eval '.spec.mysql.expose.type="LoadBalancer"' - \
+          | yq eval '.spec.proxy.router.expose.type="LoadBalancer"' - \
+          | kubectl -n "${NAMESPACE}" apply -f -

@@ -8,11 +8,10 @@ commands:
       source ../../functions
 
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
-        --type json \
-        -p '[{"op": "add", "path": "/spec/ignoreAnnotations", "value": ["gr-annotations-to-ignore-mysql","gr-annotations-to-ignore-router"] }]'
+          --type json \
+          -p '[{"op": "add", "path": "/spec/ignoreAnnotations", "value": ["gr-annotations-to-ignore-mysql","gr-annotations-to-ignore-router"] }]'
 
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
-        --type json \
-        -p '[{"op": "add", "path": "/spec/ignoreLabels", "value": ["gr-labels-to-ignore-mysql","gr-labels-to-ignore-router"] }]'
-
+          --type json \
+          -p '[{"op": "add", "path": "/spec/ignoreLabels", "value": ["gr-labels-to-ignore-mysql","gr-labels-to-ignore-router"] }]'
     timeout: 30

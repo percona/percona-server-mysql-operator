@@ -9,9 +9,9 @@ commands:
 
       suffix="no-requests"
       get_cr "${suffix}" \
-        | yq eval '.spec.mysql.clusterType="async"' - \
-        | yq eval 'del(.spec."*".resources.requests)' - \
-      	| kubectl -n "${NAMESPACE}" apply -f -
+          | yq eval '.spec.mysql.clusterType="async"' - \
+          | yq eval 'del(.spec."*".resources.requests)' - \
+          | kubectl -n "${NAMESPACE}" apply -f -
 
       wait_pod "${test_name}-${suffix}-mysql-0"
     timeout: 180

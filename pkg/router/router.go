@@ -182,6 +182,7 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHa
 							spec.ImagePullPolicy,
 							spec.ContainerSecurityContext,
 							spec.Resources,
+							nil,
 						),
 					},
 					Containers:                    containers(cr),

@@ -142,6 +142,7 @@ func Job(
 							cluster.Spec.Backup.ImagePullPolicy,
 							storage.ContainerSecurityContext,
 							cluster.Spec.Backup.Resources,
+							nil,
 						),
 					},
 					Containers: []corev1.Container{
@@ -356,15 +357,11 @@ func RestoreJob(
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,
 					InitContainers: []corev1.Container{
-						{
-							Name:            componentName + "-init",
-							Image:           initImage,
-							ImagePullPolicy: cluster.Spec.Backup.ImagePullPolicy,
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      apiv1alpha1.BinVolumeName,
-									MountPath: apiv1alpha1.BinVolumePath,
-								},
+						k8s.InitContainer(componentName, initImage,
+							cluster.Spec.Backup.ImagePullPolicy,
+							storage.ContainerSecurityContext,
+							cluster.Spec.Backup.Resources,
+							[]corev1.VolumeMount{
 								{
 									Name:      dataVolumeName,
 									MountPath: dataMountPath,
@@ -377,12 +374,7 @@ func RestoreJob(
 									Name:      tlsVolumeName,
 									MountPath: tlsMountPath,
 								},
-							},
-							Command:                  []string{"/opt/percona-server-mysql-operator/ps-init-entrypoint.sh"},
-							TerminationMessagePath:   "/dev/termination-log",
-							TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-							SecurityContext:          storage.ContainerSecurityContext,
-						},
+							}),
 					},
 					Containers: []corev1.Container{
 						restoreContainer(cluster, restore, destination, storage),
