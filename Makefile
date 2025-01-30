@@ -246,14 +246,14 @@ release: manifests
 	sed -i "/const Version = \"/s/Version = \".*/Version = \"$(VERSION)\"/" pkg/version/version.go
 	sed -i \
 		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(VERSION)/}" \
-		-e "/^  mysql:/,/^    image:/{s#image: .*#image: percona/percona-server:$(IMAGE_MYSQL80)#}" \
-		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: percona/haproxy:$(IMAGE_HAPROXY)#}" \
-		-e "/^    router:/,/^      image:/{s#image: .*#image: percona/percona-mysql-router:$(IMAGE_ROUTER80)#}" \
-		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: percona/percona-orchestrator:$(IMAGE_ORCHESTRATOR)#}" \
-		-e "/^  backup:/,/^    image:/{s#image: .*#image: percona/percona-xtrabackup:$(IMAGE_BACKUP80)#}" \
-		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: percona/percona-toolkit:$(IMAGE_TOOLKIT)#}" \
+		-e "/^  mysql:/,/^    image:/{s#image: .*#image: $(IMAGE_MYSQL80)#}" \
+		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: $(IMAGE_HAPROXY)#}" \
+		-e "/^    router:/,/^      image:/{s#image: .*#image: $(IMAGE_ROUTER80)#}" \
+		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: $(IMAGE_ORCHESTRATOR)#}" \
+		-e "/^  backup:/,/^    image:/{s#image: .*#image: $(IMAGE_BACKUP80)#}" \
+		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: $(IMAGE_TOOLKIT)#}" \
 		-e "s#initImage: .*#initImage: percona/percona-server-mysql-operator:$(VERSION)#g" \
-		-e "/^  pmm:/,/^    image:/{s#image: .*#image: percona/pmm-client:$(IMAGE_PMM_CLIENT)#}" deploy/cr.yaml
+		-e "/^  pmm:/,/^    image:/{s#image: .*#image: $(IMAGE_PMM_CLIENT)#}" deploy/cr.yaml
 
 # Prepare main branch after release
 MAJOR_VER := $(shell grep "Version =" pkg/version/version.go|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f1)
