@@ -8,11 +8,10 @@ commands:
       source ../../functions
 
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
-        --type json \
-        -p '[{"op": "replace", "path": "/spec/ignoreAnnotations", "value": [] }]'
+          --type json \
+          -p '[{"op": "replace", "path": "/spec/ignoreAnnotations", "value": [] }]'
 
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
-        --type json \
-        -p '[{"op": "replace", "path": "/spec/ignoreLabels", "value": [] }]'
-
+          --type json \
+          -p '[{"op": "replace", "path": "/spec/ignoreLabels", "value": [] }]'
     timeout: 30

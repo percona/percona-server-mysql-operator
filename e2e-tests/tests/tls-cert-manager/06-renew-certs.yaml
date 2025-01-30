@@ -20,17 +20,17 @@ commands:
       new_generation_haproxy=$(kubectl -n ${NAMESPACE} get sts tls-cert-manager-haproxy -o jsonpath='{.metadata.generation}')
       new_generation_orc=$(kubectl -n ${NAMESPACE} get sts tls-cert-manager-orc -o jsonpath='{.metadata.generation}')
 
-      if [[ "${current_generation_mysql}" == "${new_generation_mysql}" ]]; then
-        echo "Certificate renewal failed for mysql"
-        exit 1
+      if [[ ${current_generation_mysql} == "${new_generation_mysql}" ]]; then
+          echo "Certificate renewal failed for mysql"
+          exit 1
       fi
 
-      if [[ "${current_generation_haproxy}" == "${new_generation_haproxy}" ]]; then
-        echo "Certificate renewal failed for haproxy"
-        exit 1
+      if [[ ${current_generation_haproxy} == "${new_generation_haproxy}" ]]; then
+          echo "Certificate renewal failed for haproxy"
+          exit 1
       fi
 
-      if [[ "${current_generation_orc}" == "${new_generation_orc}" ]]; then
-        echo "Certificate renewal failed for orchestrator"
-        exit 1
+      if [[ ${current_generation_orc} == "${new_generation_orc}" ]]; then
+          echo "Certificate renewal failed for orchestrator"
+          exit 1
       fi

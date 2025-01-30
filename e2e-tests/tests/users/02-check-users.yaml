@@ -12,19 +12,19 @@ commands:
 
       args=''
       for user in "${users[@]}"; do
-      	host="%"
-      	case $user in
-      		heartbeat | xtrabackup)
-      			host="localhost"
-      			;;
-      	esac
-      	query="SHOW GRANTS FOR '${user}'@'${host}';"
+          host="%"
+          case $user in
+              heartbeat | xtrabackup)
+                  host="localhost"
+                  ;;
+          esac
+          query="SHOW GRANTS FOR '${user}'@'${host}';"
 
-      	run_mysql "${query}" "${mysql_args}" \
-      		| sed -E "s/'(10|192)[.][0-9][^']*'//; s/'[^']*[.]internal'//" \
-      			>"${TEMP_DIR}/${user}.sql"
+          run_mysql "${query}" "${mysql_args}" \
+              | sed -E "s/'(10|192)[.][0-9][^']*'//; s/'[^']*[.]internal'//" \
+                  >"${TEMP_DIR}/${user}.sql"
 
-      	args="${args} --from-file=${user}=${TEMP_DIR}/${user}.sql"
+          args="${args} --from-file=${user}=${TEMP_DIR}/${user}.sql"
       done
 
       kubectl create configmap -n "${NAMESPACE}" 02-check-users $args

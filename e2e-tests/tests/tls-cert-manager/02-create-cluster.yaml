@@ -9,5 +9,5 @@ commands:
       source ../../functions
 
       get_cr \
-        | yq eval '.spec.mysql.clusterType="async"' - \
-        | kubectl -n "${NAMESPACE}" apply -f -
+          | yq eval '.spec.mysql.clusterType="async"' - \
+          | kubectl -n "${NAMESPACE}" apply -f -

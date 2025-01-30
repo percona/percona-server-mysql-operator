@@ -14,6 +14,7 @@ You need to install a number of software packages on your system to satisfy the 
 * [assert](https://github.com/morningspace/kubeassert) kubectl plugin
 * [kuttl](https://kuttl.dev/) Kubernetes test framework
 * [gcloud](https://cloud.google.com/sdk/gcloud) - Google Cloud command-line tool (if the ability to run tests on Google Cloud is needed)
+* [shfmt](https://github.com/mvdan/sh) - A shell parser, formatter, and interpreter
 
 ### CentOS
 

@@ -14,5 +14,25 @@ commands:
         | yq eval '.spec.proxy.haproxy.enabled=true' - \
         | yq eval '.spec.proxy.haproxy.size=3' - \
         | yq eval '.spec.orchestrator.enabled=true' - \
+        | yq eval '.spec.mysql.resources.limits.cpu="500m"' - \
+        | yq eval '.spec.mysql.resources.limits.memory="1G"' - \
+        | yq eval '.spec.mysql.resources.requests.cpu="400m"' - \
+        | yq eval '.spec.mysql.resources.requests.memory="1G"' - \
+        | yq eval '.spec.backup.resources.limits.cpu="200m"' - \
+        | yq eval '.spec.backup.resources.limits.memory="256Mi"' - \
+        | yq eval '.spec.backup.resources.requests.cpu="100m"' - \
+        | yq eval '.spec.backup.resources.requests.memory="128Mi"' - \
+        | yq eval '.spec.toolkit.resources.limits.cpu="150m"' - \
+        | yq eval '.spec.toolkit.resources.limits.memory="256Mi"' - \
+        | yq eval '.spec.toolkit.resources.requests.cpu="100m"' - \
+        | yq eval '.spec.toolkit.resources.requests.memory="128Mi"' - \
+        | yq eval '.spec.proxy.haproxy.resources.limits.cpu="600m"' - \
+        | yq eval '.spec.proxy.haproxy.resources.limits.memory="512Mi"' - \
+        | yq eval '.spec.proxy.haproxy.resources.requests.cpu="500m"' - \
+        | yq eval '.spec.proxy.haproxy.resources.requests.memory="256Mi"' - \
+        | yq eval '.spec.orchestrator.resources.limits.cpu="200m"' - \
+        | yq eval '.spec.orchestrator.resources.limits.memory="256Mi"' - \
+        | yq eval '.spec.orchestrator.resources.requests.cpu="100m"' - \
+        | yq eval '.spec.orchestrator.resources.requests.memory="128Mi"' - \
         | yq eval '.spec.orchestrator.size=3' - \
         | kubectl -n "${NAMESPACE}" apply -f -

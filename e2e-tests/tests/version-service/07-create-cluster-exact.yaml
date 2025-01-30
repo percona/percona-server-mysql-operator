@@ -9,11 +9,11 @@ commands:
       source ../../functions
 
       get_cr \
-        | yq eval '.spec.mysql.clusterType="async"' - \
-        | yq eval '.metadata.name="cluster-exact"' - \
-        | yq eval '.spec.upgradeOptions.apply="8.0.28-19"' - \
-        | yq eval '.spec.crVersion="9.9.9"' - \
-        | yq eval '.spec.mysql.image="percona/percona-server:8.0.28-20"' - \
-        | yq eval '.spec.backup.enabled=false' - \
-        | yq eval '.spec.upgradeOptions.versionServiceEndpoint="http://percona-version-service:80"' - \
-        | kubectl -n "${NAMESPACE}" apply -f -
+          | yq eval '.spec.mysql.clusterType="async"' - \
+          | yq eval '.metadata.name="cluster-exact"' - \
+          | yq eval '.spec.upgradeOptions.apply="8.0.28-19"' - \
+          | yq eval '.spec.crVersion="9.9.9"' - \
+          | yq eval '.spec.mysql.image="percona/percona-server:8.0.28-20"' - \
+          | yq eval '.spec.backup.enabled=false' - \
+          | yq eval '.spec.upgradeOptions.versionServiceEndpoint="http://percona-version-service:80"' - \
+          | kubectl -n "${NAMESPACE}" apply -f -

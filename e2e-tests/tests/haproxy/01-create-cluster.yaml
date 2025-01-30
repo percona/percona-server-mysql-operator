@@ -9,9 +9,9 @@ commands:
       source ../../functions
 
       get_cr \
-        | yq eval '.spec.updateStrategy="RollingUpdate"' - \
-        | yq eval '.spec.mysql.clusterType="async"' - \
-        | yq eval '.spec.orchestrator.enabled=true' - \
-        | yq eval '.spec.proxy.haproxy.enabled=true' - \
-        | yq eval '.spec.proxy.haproxy.size=3' - \
-        | kubectl -n "${NAMESPACE}" apply -f -
+          | yq eval '.spec.updateStrategy="RollingUpdate"' - \
+          | yq eval '.spec.mysql.clusterType="async"' - \
+          | yq eval '.spec.orchestrator.enabled=true' - \
+          | yq eval '.spec.proxy.haproxy.enabled=true' - \
+          | yq eval '.spec.proxy.haproxy.size=3' - \
+          | kubectl -n "${NAMESPACE}" apply -f -

@@ -9,18 +9,18 @@ commands:
       source ../../functions
 
       get_cr \
-        | yq eval ".spec.mysql.clusterType=\"async\"" - \
-        | yq eval ".spec.unsafeFlags.mysqlSize=true" - \
-        | yq eval ".spec.unsafeFlags.proxySize=true" - \
-        | yq eval ".spec.unsafeFlags.orchestratorSize=true" - \
-        | yq eval ".spec.mysql.size=1" - \
-        | yq eval ".spec.proxy.haproxy.enabled=true" - \
-        | yq eval ".spec.proxy.haproxy.size=1" - \
-        | yq eval ".spec.orchestrator.enabled=true" - \
-        | yq eval ".spec.orchestrator.size=1" - \
-        | yq eval ".spec.backup.storages.minio.type=\"s3\"" - \
-        | yq eval ".spec.backup.storages.minio.s3.bucket=\"operator-testing\"" - \
-        | yq eval ".spec.backup.storages.minio.s3.credentialsSecret=\"minio-secret\"" - \
-        | yq eval ".spec.backup.storages.minio.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
-        | yq eval ".spec.backup.storages.minio.s3.region=\"us-east-1\"" - \
-        | kubectl -n "${NAMESPACE}" apply -f -
+          | yq eval '.spec.mysql.clusterType="async"' - \
+          | yq eval ".spec.unsafeFlags.mysqlSize=true" - \
+          | yq eval ".spec.unsafeFlags.proxySize=true" - \
+          | yq eval ".spec.unsafeFlags.orchestratorSize=true" - \
+          | yq eval ".spec.mysql.size=1" - \
+          | yq eval ".spec.proxy.haproxy.enabled=true" - \
+          | yq eval ".spec.proxy.haproxy.size=1" - \
+          | yq eval ".spec.orchestrator.enabled=true" - \
+          | yq eval ".spec.orchestrator.size=1" - \
+          | yq eval '.spec.backup.storages.minio.type="s3"' - \
+          | yq eval '.spec.backup.storages.minio.s3.bucket="operator-testing"' - \
+          | yq eval '.spec.backup.storages.minio.s3.credentialsSecret="minio-secret"' - \
+          | yq eval ".spec.backup.storages.minio.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
+          | yq eval '.spec.backup.storages.minio.s3.region="us-east-1"' - \
+          | kubectl -n "${NAMESPACE}" apply -f -
