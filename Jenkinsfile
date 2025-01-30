@@ -98,17 +98,6 @@ void pushArtifactFile(String FILE_NAME) {
     }
 }
 
-void popArtifactFile(String FILE_NAME) {
-    echo "Try to get $FILE_NAME file from S3!"
-
-    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
-        sh """
-            S3_PATH=s3://percona-jenkins-artifactory/\$JOB_NAME/\$(git rev-parse --short HEAD)
-            aws s3 cp --quiet \$S3_PATH/${FILE_NAME} ${FILE_NAME} || :
-        """
-    }
-}
-
 void initTests() {
     echo "Populating tests into the tests array!"
 
@@ -424,11 +413,13 @@ pipeline {
                         }
                     }
                 }
-                withCredentials([file(credentialsId: 'cloud-secret-file', variable: 'CLOUD_SECRET_FILE')]) {
+                withCredentials([file(credentialsId: 'cloud-secret-file-ps', variable: 'CLOUD_SECRET_FILE')]) {
                     sh '''
                         cp $CLOUD_SECRET_FILE e2e-tests/conf/cloud-secret.yml
+                        chmod 600 e2e-tests/conf/cloud-secret.yml
                     '''
                 }
+                stash includes: "**", name: "sourceFILES"
                 deleteOldClusters("jen-ps-$CHANGE_ID")
             }
         }
@@ -533,37 +524,107 @@ pipeline {
             }
             parallel {
                 stage('cluster1') {
+                    when {
+                        expression {
+                            isPRJob && needToRunTests
+                        }
+                    }
+                    agent {
+                        label 'docker'
+                    }
                     steps {
+                        prepareNode()
+                        unstash "sourceFILES"
                         clusterRunner('cluster1')
                     }
                 }
                 stage('cluster2') {
+                    when {
+                        expression {
+                            isPRJob && needToRunTests
+                        }
+                    }
+                    agent {
+                        label 'docker'
+                    }
                     steps {
+                        prepareNode()
+                        unstash "sourceFILES"
                         clusterRunner('cluster2')
                     }
                 }
                 stage('cluster3') {
+                    when {
+                        expression {
+                            isPRJob && needToRunTests
+                        }
+                    }
+                    agent {
+                        label 'docker'
+                    }
                     steps {
+                        prepareNode()
+                        unstash "sourceFILES"
                         clusterRunner('cluster3')
                     }
                 }
                 stage('cluster4') {
+                    when {
+                        expression {
+                            isPRJob && needToRunTests
+                        }
+                    }
+                    agent {
+                        label 'docker'
+                    }
                     steps {
+                        prepareNode()
+                        unstash "sourceFILES"
                         clusterRunner('cluster4')
                     }
                 }
                 stage('cluster5') {
+                    when {
+                        expression {
+                            isPRJob && needToRunTests
+                        }
+                    }
+                    agent {
+                        label 'docker'
+                    }
                     steps {
+                        prepareNode()
+                        unstash "sourceFILES"
                         clusterRunner('cluster5')
                     }
                 }
                 stage('cluster6') {
+                    when {
+                        expression {
+                            isPRJob && needToRunTests
+                        }
+                    }
+                    agent {
+                        label 'docker'
+                    }
                     steps {
+                        prepareNode()
+                        unstash "sourceFILES"
                         clusterRunner('cluster6')
                     }
                 }
                 stage('cluster7') {
+                    when {
+                        expression {
+                            isPRJob && needToRunTests
+                        }
+                    }
+                    agent {
+                        label 'docker'
+                    }
                     steps {
+                        prepareNode()
+                        unstash "sourceFILES"
                         clusterRunner('cluster7')
                     }
                 }
