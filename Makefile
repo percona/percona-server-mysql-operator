@@ -239,20 +239,21 @@ catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
 
 # Prepare release
+include e2e-tests/release_versions
 CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
 release: manifests
 	sed -i "/CERT_MANAGER_VER/s/CERT_MANAGER_VER=\".*/CERT_MANAGER_VER=\"$(CERT_MANAGER_VER)\"/" e2e-tests/vars.sh
 	sed -i "/const Version = \"/s/Version = \".*/Version = \"$(VERSION)\"/" pkg/version/version.go
 	sed -i \
 		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(VERSION)/}" \
-		-e "/^  mysql:/,/^    image:/{s#image: .*#image: percona/percona-server:@@SET_TAG@@#}" \
-		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: percona/haproxy:@@SET_TAG@@#}" \
-		-e "/^    router:/,/^      image:/{s#image: .*#image: percona/percona-mysql-router:@@SET_TAG@@#}" \
-		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: percona/percona-orchestrator:@@SET_TAG@@#}" \
-		-e "/^  backup:/,/^    image:/{s#image: .*#image: percona/percona-xtrabackup:@@SET_TAG@@#}" \
-		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: percona/percona-toolkit:@@SET_TAG@@#}" \
+		-e "/^  mysql:/,/^    image:/{s#image: .*#image: percona/percona-server:$(IMAGE_MYSQL80)#}" \
+		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: percona/haproxy:$(IMAGE_HAPROXY)#}" \
+		-e "/^    router:/,/^      image:/{s#image: .*#image: percona/percona-mysql-router:$(IMAGE_ROUTER80)#}" \
+		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: percona/percona-orchestrator:$(IMAGE_ORCHESTRATOR)#}" \
+		-e "/^  backup:/,/^    image:/{s#image: .*#image: percona/percona-xtrabackup:$(IMAGE_BACKUP80)#}" \
+		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: percona/percona-toolkit:$(IMAGE_TOOLKIT)#}" \
 		-e "s#initImage: .*#initImage: percona/percona-server-mysql-operator:$(VERSION)#g" \
-		-e "/^  pmm:/,/^    image:/{s#image: .*#image: percona/pmm-client:@@SET_TAG@@#}" deploy/cr.yaml
+		-e "/^  pmm:/,/^    image:/{s#image: .*#image: percona/pmm-client:$(IMAGE_PMM_CLIENT)#}" deploy/cr.yaml
 
 # Prepare main branch after release
 MAJOR_VER := $(shell grep "Version =" pkg/version/version.go|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f1)
