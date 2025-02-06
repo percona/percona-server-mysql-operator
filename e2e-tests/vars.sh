@@ -24,11 +24,7 @@ export CERT_MANAGER_VER="1.16.3"
 
 date=$(which gdate || which date)
 
-if command -v oc &> /dev/null; then
-	if oc get projects; then
-		export OPENSHIFT=4
-	fi
-fi
+oc get projects &> /dev/null && export OPENSHIFT=4 || :
 
 if kubectl get nodes | grep "^minikube" >/dev/null; then
 	export MINIKUBE=1
