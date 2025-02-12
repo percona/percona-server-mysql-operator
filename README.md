@@ -13,7 +13,7 @@
 
 [Percona Operator for MySQL based on Percona Server for MySQL](https://www.percona.com/doc/kubernetes-operator-for-mysql/ps/index.html) follows our best practices for deployment and configuration of highly-available, fault-tolerant MySQL instances in a Kubernetes-based environment on-premises or in the cloud. It provides the following capabilities:
 
-* Deploy group replication MySQL clusters with MySQL Router
+* Deploy group replication MySQL clusters with HAProxy or MySQL Router
 * Deploy asynchronous replication MySQL clusters with Orchestrator and HAProxy
 * Expose clusters with regular Kubernetes Services
 * Monitor the cluster with [Percona Monitoring and Management](https://www.percona.com/software/database-tools/percona-monitoring-and-management)
