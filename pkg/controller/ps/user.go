@@ -77,6 +77,7 @@ func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr
 	}
 	userSecret.Name = cr.Spec.SecretsName
 	userSecret.Namespace = cr.Namespace
+	userSecret.Labels = cr.Labels()
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, nil, userSecret, r.Scheme); err != nil {
 		return errors.Wrap(err, "ensure user secret")
 	}
@@ -109,6 +110,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		internalSecret.ObjectMeta = metav1.ObjectMeta{
 			Name:      cr.InternalSecretName(),
 			Namespace: cr.Namespace,
+			Labels:    cr.Labels(),
 		}
 
 		if err = r.Client.Create(ctx, internalSecret); err != nil {
