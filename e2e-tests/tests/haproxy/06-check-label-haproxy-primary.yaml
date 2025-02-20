@@ -11,6 +11,6 @@ commands:
       primary_pod_from_label="$(get_primary_from_label)"
       primary_pod_from_haproxy="$(get_primary_from_haproxy ${test_name}-haproxy-0)"
       if [ "${primary_pod_from_label}" != "${primary_pod_from_haproxy}" ]; then
-        echo "Primary in k8s label (${primary_pod_from_label}) is not set to same pod as in haproxy (${primary_pod_from_haproxy})!"
-        exit 1
+          echo "Primary in k8s label (${primary_pod_from_label}) is not set to same pod as in haproxy (${primary_pod_from_haproxy})!"
+          exit 1
       fi

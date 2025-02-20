@@ -470,7 +470,7 @@ var _ = Describe("Reconcile Binlog Server", Ordered, func() {
 			PodSpec: psv1alpha1.PodSpec{
 				Size: 1,
 				ContainerSpec: psv1alpha1.ContainerSpec{
-					Image: "perconalab/percona-server-mysql-operator:binlog-server",
+					Image: "binlog-server-image",
 				},
 			},
 		}

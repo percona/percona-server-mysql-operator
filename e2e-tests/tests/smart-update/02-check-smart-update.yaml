@@ -12,8 +12,8 @@ commands:
 
       # Upgrade cluster
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
-        --type json \
-        -p "[{"op": "replace", "path": "/spec/mysql/image", "value": "${newMysqlImage}"}]"
+          --type json \
+          -p "[{"op": "replace", "path": "/spec/mysql/image", "value": "${newMysqlImage}"}]"
 
       until [[ "$(kubectl -n "${NAMESPACE}" get sts "$(get_cluster_name)-mysql" -o jsonpath='{.spec.template.spec.containers[0].image}')" == "${newMysqlImage}" ]]; do
           echo "waiting for cluster new image"
@@ -21,15 +21,14 @@ commands:
 
       wait_cluster_consistency_async "${test_name}" "3" "3"
 
-      pods=$(kubectl get pods -n "${NAMESPACE}" --sort-by=.status.startTime --no-headers --selector=app.kubernetes.io/component=mysql -ojson | jq  --raw-output '.items[].metadata.name')
+      pods=$(kubectl get pods -n "${NAMESPACE}" --sort-by=.status.startTime --no-headers --selector=app.kubernetes.io/component=mysql -ojson | jq --raw-output '.items[].metadata.name')
 
       lastRestarted=$(echo $pods | awk '{print $NF}')
 
       if [ "$lastRestarted" == "$initialPrimary" ]; then
-        exit 0
+          exit 0
       fi
 
       echo "last restarted pod is not initial primary"
       exit 1
     timeout: 480
-

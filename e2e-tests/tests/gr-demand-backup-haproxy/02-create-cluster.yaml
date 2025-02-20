@@ -9,12 +9,12 @@ commands:
       source ../../functions
 
       get_cr \
-      	| yq eval ".spec.backup.storages.minio.type=\"s3\"" - \
-      	| yq eval ".spec.backup.storages.minio.s3.bucket=\"operator-testing\"" - \
-      	| yq eval ".spec.backup.storages.minio.s3.credentialsSecret=\"minio-secret\"" - \
-      	| yq eval ".spec.backup.storages.minio.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
-      	| yq eval ".spec.backup.storages.minio.s3.region=\"us-east-1\"" - \
-      	| yq eval ".spec.mysql.clusterType=\"group-replication\"" - \
-      	| yq eval ".spec.proxy.router.enabled=false" - \
-      	| yq eval ".spec.proxy.haproxy.enabled=true" - \
-      	| kubectl -n "${NAMESPACE}" apply -f -
+          | yq eval '.spec.backup.storages.minio.type="s3"' - \
+          | yq eval '.spec.backup.storages.minio.s3.bucket="operator-testing"' - \
+          | yq eval '.spec.backup.storages.minio.s3.credentialsSecret="minio-secret"' - \
+          | yq eval ".spec.backup.storages.minio.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
+          | yq eval '.spec.backup.storages.minio.s3.region="us-east-1"' - \
+          | yq eval '.spec.mysql.clusterType="group-replication"' - \
+          | yq eval ".spec.proxy.router.enabled=false" - \
+          | yq eval ".spec.proxy.haproxy.enabled=true" - \
+          | kubectl -n "${NAMESPACE}" apply -f -

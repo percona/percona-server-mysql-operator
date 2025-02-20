@@ -13,6 +13,6 @@ commands:
       sleep 10 # wait a bit for pod to be killed
 
       if [ "$init_pod" == "$(get_primary_from_group_replication)" ]; then
-        echo "primary pod was not killed! something went wrong."
-        exit 1
+          echo "primary pod was not killed! something went wrong."
+          exit 1
       fi
