@@ -10,6 +10,7 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/db"
+	defs "github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
 const defaultChannelName = ""
@@ -22,23 +23,48 @@ type DB struct {
 	db *sql.DB
 }
 
-func NewDatabase(ctx context.Context, user apiv1alpha1.SystemUser, pass, host string, port int32) (*DB, error) {
+type DBParams struct {
+	User apiv1alpha1.SystemUser
+	Pass string
+	Host string
+	Port int32
+
+	ReadTimeout uint32 // in seconds
+}
+
+func (p *DBParams) setDefaults() {
+	if p.Port == 0 {
+		p.Port = defs.DefaultAdminPort
+	}
+
+	if p.ReadTimeout == 0 {
+		p.ReadTimeout = 10
+	}
+}
+
+func (p *DBParams) DSN() string {
+	p.setDefaults()
+
 	config := mysql.NewConfig()
 
-	config.User = string(user)
-	config.Passwd = pass
+	config.User = string(p.User)
+	config.Passwd = p.Pass
 	config.Net = "tcp"
-	config.Addr = fmt.Sprintf("%s:%d", host, port)
+	config.Addr = fmt.Sprintf("%s:%d", p.Host, p.Port)
 	config.DBName = "performance_schema"
 	config.Params = map[string]string{
 		"interpolateParams": "true",
 		"timeout":           "10s",
-		"readTimeout":       "10s",
+		"readTimeout":       fmt.Sprintf("%ds", p.ReadTimeout),
 		"writeTimeout":      "10s",
 		"tls":               "preferred",
 	}
 
-	db, err := sql.Open("mysql", config.FormatDSN())
+	return config.FormatDSN()
+}
+
+func NewDatabase(ctx context.Context, params DBParams) (*DB, error) {
+	db, err := sql.Open("mysql", params.DSN())
 	if err != nil {
 		return nil, errors.Wrap(err, "connect to MySQL")
 	}
