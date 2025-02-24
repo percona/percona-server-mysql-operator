@@ -8,10 +8,10 @@ commands:
       source ../../functions
 
       run_mysql \
-      	"CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable (id int PRIMARY KEY)" \
-        "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password"
+          "CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable (id int PRIMARY KEY)" \
+          "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password"
 
       run_mysql \
-      	"INSERT myDB.myTable (id) VALUES (100500)" \
-        "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password"
+          "INSERT myDB.myTable (id) VALUES (100500)" \
+          "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password"
       sleep 5

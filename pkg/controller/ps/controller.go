@@ -1160,7 +1160,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 	s3 := cr.Spec.Backup.PiTR.BinlogServer.Storage.S3
 
 	if s3 != nil && len(s3.CredentialsSecret) == 0 {
-		logger.Info("You need to set spec.backup.pitr.binlogServer.s3.credentialsSecret to upload binlogs to s3")
+		logger.Info("setting spec.backup.pitr.binlogServer.s3.credentialsSecret is required to upload binlogs to s3")
 		return nil
 	}
 

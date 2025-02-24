@@ -10,7 +10,7 @@ commands:
 
       primary=$(get_primary_from_group_replication)
       a_replica=$(run_mysql \
-        "SELECT MEMBER_HOST FROM performance_schema.replication_group_members WHERE MEMBER_ROLE='SECONDARY' LIMIT 1;" \
-        "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password" | cut -d'.' -f1)
+          "SELECT MEMBER_HOST FROM performance_schema.replication_group_members WHERE MEMBER_ROLE='SECONDARY' LIMIT 1;" \
+          "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password" | cut -d'.' -f1)
 
       kubectl -n ${NAMESPACE} delete pod ${primary} ${a_replica} --force --grace-period=0

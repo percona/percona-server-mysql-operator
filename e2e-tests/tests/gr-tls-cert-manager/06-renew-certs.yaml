@@ -18,12 +18,12 @@ commands:
       new_generation_mysql=$(kubectl -n ${NAMESPACE} get sts gr-tls-cert-manager-mysql -o jsonpath='{.metadata.generation}')
       new_generation_router=$(kubectl -n ${NAMESPACE} get deployment gr-tls-cert-manager-router -o jsonpath='{.metadata.generation}')
 
-      if [[ "${current_generation_mysql}" == "${new_generation_mysql}" ]]; then
-        echo "Certificate renewal failed for mysql"
-        exit 1
+      if [[ ${current_generation_mysql} == "${new_generation_mysql}" ]]; then
+          echo "Certificate renewal failed for mysql"
+          exit 1
       fi
 
-      if [[ "${current_generation_router}" == "${new_generation_router}" ]]; then
-        echo "Certificate renewal failed for router"
-        exit 1
+      if [[ ${current_generation_router} == "${new_generation_router}" ]]; then
+          echo "Certificate renewal failed for router"
+          exit 1
       fi

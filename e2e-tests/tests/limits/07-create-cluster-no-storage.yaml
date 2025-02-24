@@ -9,8 +9,7 @@ commands:
 
       suffix="no-storage"
       get_cr "${suffix}" \
-        | yq eval '.spec.mysql.clusterType="async"' - \
-        | yq eval 'del(.spec."*".volumeSpec)' - \
-      	| kubectl -n "${NAMESPACE}" apply -f -
-
+          | yq eval '.spec.mysql.clusterType="async"' - \
+          | yq eval 'del(.spec."*".volumeSpec)' - \
+          | kubectl -n "${NAMESPACE}" apply -f -
     timeout: 180

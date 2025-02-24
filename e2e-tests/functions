@@ -576,9 +576,9 @@ get_primary_from_haproxy() {
 
 get_primary_from_group_replication() {
 	run_mysql \
-    "SELECT MEMBER_HOST FROM performance_schema.replication_group_members where MEMBER_ROLE='PRIMARY';" \
-    "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password" \
-      | cut -d'.' -f1
+		"SELECT MEMBER_HOST FROM performance_schema.replication_group_members where MEMBER_ROLE='PRIMARY';" \
+		"-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password" \
+		| cut -d'.' -f1
 }
 
 verify_certificate_sans() {

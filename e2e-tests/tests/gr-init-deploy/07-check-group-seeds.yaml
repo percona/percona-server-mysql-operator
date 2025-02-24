@@ -12,8 +12,8 @@ commands:
 
       args=""
       for pod in "${pods[@]}"; do
-      	seeds=$(run_mysql "SELECT @@group_replication_group_seeds" "-h ${pod}.$(get_mysql_service gr-init-deploy).${NAMESPACE} -uroot -proot_password")
-      	args="${args} --from-literal=${pod}=$(echo ${seeds} | sed "s/${NAMESPACE}/NAMESPACE/g")"
+          seeds=$(run_mysql "SELECT @@group_replication_group_seeds" "-h ${pod}.$(get_mysql_service gr-init-deploy).${NAMESPACE} -uroot -proot_password")
+          args="${args} --from-literal=${pod}=$(echo ${seeds} | sed "s/${NAMESPACE}/NAMESPACE/g")"
       done
 
       kubectl create configmap -n "${NAMESPACE}" 07-check-group-seeds $args

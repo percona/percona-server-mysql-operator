@@ -10,14 +10,14 @@ commands:
 
       cluster_status=$(get_gr_status "$(get_mysqlsh_uri)")
       status=$(echo ${cluster_status} | jq -r .defaultReplicaSet.status)
-      echo ${cluster_status} | jq -r .defaultReplicaSet.topology[].address | sed "s/.${NAMESPACE}//g" > ${TEMP_DIR}/members
+      echo ${cluster_status} | jq -r .defaultReplicaSet.topology[].address | sed "s/.${NAMESPACE}//g" >${TEMP_DIR}/members
       online_members=$(echo ${cluster_status} | jq -r .defaultReplicaSet.topology[].status | grep ONLINE | wc -l | sed 's/^ *//')
       primary=$(echo ${cluster_status} | jq -r .defaultReplicaSet.topology[].memberRole | grep PRIMARY | wc -l | sed 's/^ *//')
       secondary=$(echo ${cluster_status} | jq -r .defaultReplicaSet.topology[].memberRole | grep SECONDARY | wc -l | sed 's/^ *//')
 
       kubectl create configmap -n "${NAMESPACE}" 02-check-topology \
-        --from-file=members=${TEMP_DIR}/members \
-        --from-literal=status=${status} \
-        --from-literal=online_members=${online_members} \
-        --from-literal=primary_count=${primary} \
-        --from-literal=secondary_count=${secondary}
+          --from-file=members=${TEMP_DIR}/members \
+          --from-literal=status=${status} \
+          --from-literal=online_members=${online_members} \
+          --from-literal=primary_count=${primary} \
+          --from-literal=secondary_count=${secondary}

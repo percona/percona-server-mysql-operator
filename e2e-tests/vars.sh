@@ -20,15 +20,11 @@ export IMAGE_HAPROXY=${IMAGE_HAPROXY:-"perconalab/percona-server-mysql-operator:
 export PMM_SERVER_VERSION=${PMM_SERVER_VERSION:-"9.9.9"}
 export IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:dev-latest"}
 export IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:dev-latest"}
-export CERT_MANAGER_VER="1.15.1"
+export CERT_MANAGER_VER="1.16.3"
 
 date=$(which gdate || which date)
 
-if command -v oc &> /dev/null; then
-	if oc get projects; then
-		export OPENSHIFT=4
-	fi
-fi
+oc get projects &> /dev/null && export OPENSHIFT=4 || :
 
 if kubectl get nodes | grep "^minikube" >/dev/null; then
 	export MINIKUBE=1

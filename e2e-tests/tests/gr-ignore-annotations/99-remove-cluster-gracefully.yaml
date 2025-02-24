@@ -1,10 +1,10 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 delete:
-- apiVersion: ps.percona.com/v1alpha1
-  kind: PerconaServerMySQL
-  metadata:
-    name: gr-ignore-annotations
+  - apiVersion: ps.percona.com/v1alpha1
+    kind: PerconaServerMySQL
+    metadata:
+      name: gr-ignore-annotations
 commands:
   - script: |-
       set -o errexit
