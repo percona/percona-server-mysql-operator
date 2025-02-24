@@ -13,7 +13,7 @@
 
 [Percona Operator for MySQL based on Percona Server for MySQL](https://www.percona.com/doc/kubernetes-operator-for-mysql/ps/index.html) follows our best practices for deployment and configuration of highly-available, fault-tolerant MySQL instances in a Kubernetes-based environment on-premises or in the cloud. It provides the following capabilities:
 
-* Deploy group replication MySQL clusters with MySQL Router
+* Deploy group replication MySQL clusters with HAProxy or MySQL Router
 * Deploy asynchronous replication MySQL clusters with Orchestrator and HAProxy
 * Expose clusters with regular Kubernetes Services
 * Monitor the cluster with [Percona Monitoring and Management](https://www.percona.com/software/database-tools/percona-monitoring-and-management)
@@ -56,37 +56,19 @@ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mysql-
 
 ```
 
+# Need help?
+
+**Commercial Support**  | **Community Support** |
+:-: | :-: |
+| <br/>Enterprise-grade assistance for your mission-critical MySQL deployments in Kubernetes. Get expert guidance for complex tasks like multi-cloud replication, database migration and building platforms.<br/><br/>  | <br/>Connect with our engineers and fellow users for general questions, troubleshooting, and sharing feedback and ideas.<br/><br/>  | 
+| **[Get Percona Support](https://hubs.ly/Q02ZTHb-0)** | **[Visit our Forum](https://forums.percona.com/c/mysql-mariadb/percona-kubernetes-operator-for-mysql/28)** |
+
 
 # Contributing
 
 Percona welcomes and encourages community contributions to help improve Percona Operator for MySQL.
 
 See the [Contribution Guide](CONTRIBUTING.md) and [Building and Testing Guide](e2e-tests/README.md) for more information on how you can contribute.
-
-## Communication
-
-We would love to hear from you! Reach out to us on [Forum](https://forums.percona.com/c/mysql-mariadb/percona-kubernetes-operator-for-mysql/28) with your questions, feedback and ideas
-
-## Join Percona Kubernetes Squad!
-                                                                              
-```                                                                                     
-                    %                        _____                
-                   %%%                      |  __ \                                          
-                 ###%%%%%%%%%%%%*           | |__) |__ _ __ ___ ___  _ __   __ _             
-                ###  ##%%      %%%%         |  ___/ _ \ '__/ __/ _ \| '_ \ / _` |            
-              ####     ##%       %%%%       | |  |  __/ | | (_| (_) | | | | (_| |            
-             ###        ####      %%%       |_|   \___|_|  \___\___/|_| |_|\__,_|           
-           ,((###         ###     %%%        _      _          _____                       _
-          (((( (###        ####  %%%%       | |   / _ \       / ____|                     | | 
-         (((     ((#         ######         | | _| (_) |___  | (___   __ _ _   _  __ _  __| | 
-       ((((       (((#        ####          | |/ /> _ </ __|  \___ \ / _` | | | |/ _` |/ _` |
-      /((          ,(((        *###         |   <| (_) \__ \  ____) | (_| | |_| | (_| | (_| |
-    ////             (((         ####       |_|\_\\___/|___/ |_____/ \__, |\__,_|\__,_|\__,_|
-   ///                ((((        ####                                  | |                  
- /////////////(((((((((((((((((########                                 |_|   Join @ percona.com/k8s   
-```
-
-You can get early access to new product features, invite-only ”ask me anything” sessions with Percona Kubernetes experts, and monthly swag raffles. Interested? Fill in the form at [percona.com/k8s](https://www.percona.com/k8s).
 
 ## Roadmap
 

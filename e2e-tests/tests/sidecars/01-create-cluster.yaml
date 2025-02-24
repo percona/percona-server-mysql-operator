@@ -9,10 +9,10 @@ commands:
       source ../../functions
 
       get_cr \
-        | yq eval '.spec.mysql.clusterType="async"' - \
-      	| yq eval '.spec.mysql.sidecars = [{"name": "sidecar1", "image": "busybox", "command": ["sleep", "30d"], "volumeMounts": [{"name": "empty-vol", "mountPath": "/var/app/empty"}]}]' - \
-      	| yq eval '.spec.mysql.sidecars += [{"name": "sidecar2", "image": "busybox", "command": ["sleep", "30d"], "volumeMounts": [{"name": "pvc-vol", "mountPath": "/var/app/pvc"}]}]' - \
-      	| yq eval '.spec.mysql.sidecarVolumes = [{"name": "empty-vol", "emptyDir": {"medium": "Memory"}}]' - \
-      	| yq eval '.spec.mysql.sidecarPVCs = [{"name": "pvc-vol", "spec": {"resources": {"requests": {"storage": "1G"}}}}]' - \
-      	| kubectl -n "${NAMESPACE}" apply -f -
+          | yq eval '.spec.mysql.clusterType="async"' - \
+          | yq eval '.spec.mysql.sidecars = [{"name": "sidecar1", "image": "busybox", "command": ["sleep", "30d"], "volumeMounts": [{"name": "empty-vol", "mountPath": "/var/app/empty"}]}]' - \
+          | yq eval '.spec.mysql.sidecars += [{"name": "sidecar2", "image": "busybox", "command": ["sleep", "30d"], "volumeMounts": [{"name": "pvc-vol", "mountPath": "/var/app/pvc"}]}]' - \
+          | yq eval '.spec.mysql.sidecarVolumes = [{"name": "empty-vol", "emptyDir": {"medium": "Memory"}}]' - \
+          | yq eval '.spec.mysql.sidecarPVCs = [{"name": "pvc-vol", "spec": {"resources": {"requests": {"storage": "1G"}}}}]' - \
+          | kubectl -n "${NAMESPACE}" apply -f -
     timeout: 30
