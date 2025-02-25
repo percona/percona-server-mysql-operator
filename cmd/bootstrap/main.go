@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	fullClusterCrashFile = "/var/lib/mysql/full-cluster-crash"
+	noBootstrapFile      = "/var/lib/mysql/no-bootstrap"
 	manualRecoveryFile   = "/var/lib/mysql/sleep-forever"
+	fullClusterCrashFile = "/var/lib/mysql/full-cluster-crash"
 )
 
 func main() {
@@ -24,16 +25,17 @@ func main() {
 
 	log.SetOutput(io.MultiWriter(os.Stderr, f))
 
-	fullClusterCrash, err := fileExists(fullClusterCrashFile)
-	if err == nil && fullClusterCrash {
-		log.Printf("%s exists. exiting...", fullClusterCrashFile)
-		os.Exit(0)
+	recoveryFiles := []string{
+		noBootstrapFile,
+		manualRecoveryFile,
+		fullClusterCrashFile,
 	}
-
-	manualRecovery, err := fileExists(manualRecoveryFile)
-	if err == nil && manualRecovery {
-		log.Printf("%s exists. exiting...", manualRecoveryFile)
-		os.Exit(0)
+	for _, rFile := range recoveryFiles {
+		recovery, err := fileExists(rFile)
+		if err == nil && recovery {
+			log.Printf("%s exists. exiting...", rFile)
+			os.Exit(0)
+		}
 	}
 
 	exists, err := lockExists("bootstrap")

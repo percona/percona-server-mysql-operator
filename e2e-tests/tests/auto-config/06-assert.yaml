@@ -14,9 +14,9 @@ spec:
       - name: mysql
         resources:
           limits:
-            memory: 1Gi
+            memory: 4Gi
           requests:
-            memory: 512M
+            memory: 1Gi
       - name: xtrabackup
       - name: pt-heartbeat
 status:
