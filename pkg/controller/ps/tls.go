@@ -173,7 +173,7 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 			return errors.Wrap(err, "ensure CA certificate")
 		}
 
-		if err := r.waitForCert(ctx, cr.Namespace, certName, secretName); err != nil {
+		if err := r.waitForCert(ctx, cr, certName, secretName); err != nil {
 			return err
 		}
 
@@ -208,7 +208,7 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 		return errors.Wrap(err, "ensure certificate")
 	}
 
-	return r.waitForCert(ctx, cr.Namespace, certName, cr.Spec.SSLSecretName)
+	return r.waitForCert(ctx, cr, certName, cr.Spec.SSLSecretName)
 }
 
 func (r *PerconaServerMySQLReconciler) ensureIssuer(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, issuerName string, IssuerConf cm.IssuerConfig,
@@ -230,7 +230,7 @@ func (r *PerconaServerMySQLReconciler) ensureIssuer(ctx context.Context, cr *api
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) waitForCert(ctx context.Context, namespace, certName, secretName string) error {
+func (r *PerconaServerMySQLReconciler) waitForCert(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, certName, secretName string) error {
 	ticker := time.NewTicker(3 * time.Second)
 	timeoutTimer := time.NewTimer(30 * time.Second)
 	defer timeoutTimer.Stop()
@@ -244,11 +244,11 @@ func (r *PerconaServerMySQLReconciler) waitForCert(ctx context.Context, namespac
 			}
 			return errors.Errorf("timeout: tls certificate from certmanager is not ready: %s", secretName)
 		case <-ticker.C:
-			err := r.Get(ctx, types.NamespacedName{
+			secret := new(corev1.Secret)
+			if err := r.Get(ctx, types.NamespacedName{
 				Name:      secretName,
-				Namespace: namespace,
-			}, new(corev1.Secret))
-			if err != nil {
+				Namespace: cr.Namespace,
+			}, secret); err != nil {
 				if k8serrors.IsNotFound(err) {
 					continue
 				}
@@ -256,12 +256,27 @@ func (r *PerconaServerMySQLReconciler) waitForCert(ctx context.Context, namespac
 			}
 			secretFound = true
 
+			shouldUpdateSecret := false
+			if secret.Labels == nil {
+				secret.Labels = make(map[string]string)
+			}
+			for k, v := range cr.Labels() {
+				if secret.Labels[k] != v {
+					secret.Labels[k] = v
+					shouldUpdateSecret = true
+				}
+			}
+			if shouldUpdateSecret {
+				if err := r.Client.Update(ctx, secret); err != nil {
+					return errors.Wrap(err, "failed to update secret labels")
+				}
+			}
+
 			cert := new(cm.Certificate)
-			err = r.Get(ctx, types.NamespacedName{
+			if err := r.Get(ctx, types.NamespacedName{
 				Name:      certName,
-				Namespace: namespace,
-			}, cert)
-			if err != nil {
+				Namespace: cr.Namespace,
+			}, cert); err != nil {
 				return errors.Wrap(err, "failed to get certificate")
 			}
 			for _, cond := range cert.Status.Conditions {
