@@ -1,16 +1,87 @@
 package ps
 
 import (
+	"bytes"
 	"context"
 	"os"
+	"regexp"
 
+	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	vs "github.com/percona/percona-server-mysql-operator/pkg/version/service"
 )
+
+func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if err := r.reconcileMySQLVersion(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile mysql version")
+	}
+
+	if err := r.upgradeVersions(ctx, cr); err != nil {
+		return errors.Wrap(err, "upgrade versions")
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileMySQLVersion(
+	ctx context.Context,
+	cr *apiv1alpha1.PerconaServerMySQL,
+) error {
+	log := logf.FromContext(ctx)
+
+	pod, err := getReadyMySQLPod(ctx, r.Client, cr)
+	if err != nil {
+		if errors.Is(err, ErrNoReadyPods) {
+			return nil
+		}
+		return errors.Wrap(err, "get ready mysql pod")
+	}
+
+	imageId, err := k8s.GetImageIDFromPod(pod, mysql.ComponentName)
+	if err != nil {
+		return errors.Wrapf(err, "get MySQL image id from %s", pod.Name)
+	}
+
+	if len(cr.Status.MySQL.Version) > 0 && cr.Status.MySQL.ImageID == imageId {
+		return nil
+	}
+
+	re, err := regexp.Compile(`Ver (\d+\.\d+\.\d+)`)
+	if err != nil {
+		return err
+	}
+
+	var stdoutb, stderrb bytes.Buffer
+
+	err = r.ClientCmd.Exec(ctx, pod, mysql.ComponentName, []string{"mysqld", "--version"}, nil, &stdoutb, &stderrb, false)
+	if err != nil {
+		return errors.Wrapf(err, "run mysqld --version (stdout: %s, stderr: %s)", stdoutb.String(), stderrb.String())
+	}
+
+	f := re.FindSubmatch(stdoutb.Bytes())
+	if f == nil || len(f) < 1 {
+		return errors.Errorf(
+			"couldn't extract version information from mysqld --version (stdout: %s, stderr: %s)",
+			stdoutb.String(), stderrb.String())
+	}
+
+	version, err := v.NewVersion(string(f[1]))
+	if err != nil {
+		return errors.Wrap(err, "parse version")
+	}
+
+	cr.Status.MySQL.ImageID = imageId
+	cr.Status.MySQL.Version = version.String()
+	log.V(1).Info("MySQL Server Version: " + cr.Status.MySQL.Version)
+
+	return nil
+}
 
 func telemetryEnabled() bool {
 	value, ok := os.LookupEnv("DISABLE_TELEMETRY")
@@ -26,7 +97,7 @@ func versionUpgradeEnabled(cr *apiv1alpha1.PerconaServerMySQL) bool {
 		cr.Spec.UpgradeOptions.Apply != apiv1alpha1.UpgradeStrategyNever
 }
 
-func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) upgradeVersions(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	if !(versionUpgradeEnabled(cr) || telemetryEnabled()) {
 		return nil
 	}
