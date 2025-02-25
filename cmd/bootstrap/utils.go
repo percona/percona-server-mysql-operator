@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 func getFQDN(svcName string) (string, error) {
@@ -29,6 +31,22 @@ func getFQDN(svcName string) (string, error) {
 	}
 
 	return fmt.Sprintf("%s.%s.%s", hostname, svcName, namespace), nil
+}
+
+func getReadTimeout() (uint32, error) {
+	s, ok := os.LookupEnv(naming.EnvBootstrapReadTimeout)
+	if !ok {
+		return 0, nil
+	}
+	readTimeout, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to parse BOOTSTRAP_READ_TIMEOUT")
+	}
+	if readTimeout < 0 {
+		return 0, errors.New("BOOTSTRAP_READ_TIMEOUT should be a positive value")
+	}
+
+	return uint32(readTimeout), nil
 }
 
 func getSecret(username apiv1alpha1.SystemUser) (string, error) {
