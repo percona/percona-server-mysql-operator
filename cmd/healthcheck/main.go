@@ -13,10 +13,12 @@ import (
 	"github.com/pkg/errors"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-	database "github.com/percona/percona-server-mysql-operator/cmd/db"
+	database "github.com/percona/percona-server-mysql-operator/cmd/internal/db"
+	state "github.com/percona/percona-server-mysql-operator/cmd/internal/naming"
 	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 func main() {
@@ -36,11 +38,24 @@ func main() {
 		os.Exit(0)
 	}
 
+	stateFilePath, ok := os.LookupEnv(naming.EnvMySQLStateFile)
+	if !ok {
+		log.Fatalln("MYSQL_STATE_FILE env variable is required")
+	}
+	mysqlState, err := os.ReadFile(stateFilePath)
+	if err != nil {
+		log.Fatalf("read mysql state: %s", err)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	switch os.Args[1] {
 	case "readiness":
+		if string(mysqlState) != string(state.MySQLReady) {
+			log.Println("MySQL state is not ready...")
+			os.Exit(0)
+		}
 		switch os.Getenv("CLUSTER_TYPE") {
 		case "async":
 			if err := checkReadinessAsync(ctx); err != nil {
@@ -52,6 +67,11 @@ func main() {
 			}
 		}
 	case "liveness":
+		if string(mysqlState) == string(state.MySQLStartup) {
+			log.Println("MySQL is starting up, not killing it...")
+			os.Exit(0)
+		}
+
 		switch os.Getenv("CLUSTER_TYPE") {
 		case "async":
 			if err := checkLivenessAsync(ctx); err != nil {

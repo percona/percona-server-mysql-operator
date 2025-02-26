@@ -68,6 +68,10 @@ spec:
           value: limitsnorequests
         - name: CR_UID
         - name: CLUSTER_TYPE
+        - name: NOTIFY_SOCKET
+          value: /var/lib/mysql/notify.sock
+        - name: MYSQL_STATE_FILE
+          value: /var/lib/mysql/mysql.state
         imagePullPolicy: Always
         livenessProbe:
           exec:
