@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 
 	state "github.com/percona/percona-server-mysql-operator/cmd/internal/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -77,7 +78,7 @@ func main() {
 	defer conn.Close()
 
 	sigterm := make(chan os.Signal, 1)
-	signal.Notify(sigterm, os.Interrupt, os.Kill)
+	signal.Notify(sigterm, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
 		sig := <-sigterm
