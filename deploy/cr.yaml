@@ -360,9 +360,9 @@ spec:
             storage: 1G
 
   pmm:
-    enabled: false
+    enabled: true
 
-    image: perconalab/pmm-client:dev-latest
+    image: perconalab/pmm-client:3-dev-latest
     imagePullPolicy: Always
 
     resources:

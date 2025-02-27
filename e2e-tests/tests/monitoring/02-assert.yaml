@@ -42,15 +42,6 @@ spec:
               secretKeyRef:
                 key: pmmserverkey
                 name: internal-monitoring
-          - name: PMM_SERVER
-            value: monitoring-service
-          - name: PMM_USER
-            value: api_key
-          - name: PMM_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                key: pmmserverkey
-                name: internal-monitoring
           - name: PMM_AGENT_LISTEN_PORT
             value: "7777"
           - name: PMM_AGENT_PORTS_MIN
@@ -58,7 +49,7 @@ spec:
           - name: PMM_AGENT_PORTS_MAX
             value: "30105"
           - name: PMM_AGENT_CONFIG_FILE
-            value: /usr/local/percona/pmm2/config/pmm-agent.yaml
+            value: /usr/local/percona/pmm/config/pmm-agent.yaml
           - name: PMM_AGENT_SERVER_INSECURE_TLS
             value: "1"
           - name: PMM_AGENT_LISTEN_ADDRESS
@@ -73,8 +64,6 @@ spec:
             value: "1"
           - name: PMM_AGENT_SETUP_NODE_TYPE
             value: container
-          - name: PMM_AGENT_PRERUN_SCRIPT
-            value: /opt/percona/pmm-prerun.sh
           - name: PMM_AGENT_SIDECAR
             value: "true"
           - name: PMM_AGENT_SIDECAR_SLEEP
@@ -174,15 +163,6 @@ spec:
               secretKeyRef:
                 key: pmmserverkey
                 name: internal-monitoring
-          - name: PMM_SERVER
-            value: monitoring-service
-          - name: PMM_USER
-            value: api_key
-          - name: PMM_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                key: pmmserverkey
-                name: internal-monitoring
           - name: PMM_AGENT_LISTEN_PORT
             value: "7777"
           - name: PMM_AGENT_PORTS_MIN
@@ -190,7 +170,7 @@ spec:
           - name: PMM_AGENT_PORTS_MAX
             value: "30105"
           - name: PMM_AGENT_CONFIG_FILE
-            value: /usr/local/percona/pmm2/config/pmm-agent.yaml
+            value: /usr/local/percona/pmm/config/pmm-agent.yaml
           - name: PMM_AGENT_SERVER_INSECURE_TLS
             value: "1"
           - name: PMM_AGENT_LISTEN_ADDRESS
@@ -205,8 +185,6 @@ spec:
             value: "1"
           - name: PMM_AGENT_SETUP_NODE_TYPE
             value: container
-          - name: PMM_AGENT_PRERUN_SCRIPT
-            value: /opt/percona/pmm-prerun.sh
           - name: PMM_AGENT_SIDECAR
             value: "true"
           - name: PMM_AGENT_SIDECAR_SLEEP
