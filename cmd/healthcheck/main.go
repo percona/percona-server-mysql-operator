@@ -54,7 +54,7 @@ func main() {
 	case "readiness":
 		if string(mysqlState) != string(state.MySQLReady) {
 			log.Println("MySQL state is not ready...")
-			os.Exit(0)
+			os.Exit(1)
 		}
 		switch os.Getenv("CLUSTER_TYPE") {
 		case "async":
