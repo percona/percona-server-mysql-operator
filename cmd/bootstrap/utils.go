@@ -13,8 +13,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	state "github.com/percona/percona-server-mysql-operator/cmd/internal/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 func getFQDN(svcName string) (string, error) {
@@ -93,6 +95,24 @@ func waitLockRemoval(lockName string) error {
 		if !exists {
 			return nil
 		}
+	}
+}
+
+func waitForMySQLReadyState() error {
+	stateFilePath, ok := os.LookupEnv(naming.EnvMySQLStateFile)
+	if !ok {
+		return errors.New("env var MYSQL_STATE_FILE is required")
+	}
+
+	for {
+		mysqlState, err := os.ReadFile(stateFilePath)
+		if err != nil {
+			return errors.Wrap(err, "read mysql state")
+		}
+		if string(mysqlState) == string(state.MySQLReady) {
+			return nil
+		}
+		time.Sleep(time.Second)
 	}
 }
 

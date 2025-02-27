@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-	database "github.com/percona/percona-server-mysql-operator/cmd/db"
+	database "github.com/percona/percona-server-mysql-operator/cmd/internal/db"
 	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
