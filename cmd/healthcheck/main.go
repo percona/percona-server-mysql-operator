@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/cmd/db"
 	database "github.com/percona/percona-server-mysql-operator/cmd/db"
 	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -82,7 +83,12 @@ func checkReadinessAsync(ctx context.Context) error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := database.NewDatabase(ctx, apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
+	params := db.DBParams{
+		User: apiv1alpha1.UserMonitor,
+		Pass: monitorPass,
+		Host: podIP,
+	}
+	db, err := database.NewDatabase(ctx, params)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
@@ -117,7 +123,12 @@ func checkReadinessGR(ctx context.Context) error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := database.NewDatabase(ctx, apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
+	params := db.DBParams{
+		User: apiv1alpha1.UserMonitor,
+		Pass: monitorPass,
+		Host: podIP,
+	}
+	db, err := database.NewDatabase(ctx, params)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
@@ -151,7 +162,12 @@ func checkLivenessAsync(ctx context.Context) error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := database.NewDatabase(ctx, apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
+	params := db.DBParams{
+		User: apiv1alpha1.UserMonitor,
+		Pass: monitorPass,
+		Host: podIP,
+	}
+	db, err := database.NewDatabase(ctx, params)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
@@ -171,7 +187,12 @@ func checkLivenessGR(ctx context.Context) error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := database.NewDatabase(ctx, apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
+	params := db.DBParams{
+		User: apiv1alpha1.UserMonitor,
+		Pass: monitorPass,
+		Host: podIP,
+	}
+	db, err := database.NewDatabase(ctx, params)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
@@ -202,7 +223,12 @@ func checkReplication(ctx context.Context) error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := database.NewDatabase(ctx, apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
+	params := db.DBParams{
+		User: apiv1alpha1.UserMonitor,
+		Pass: monitorPass,
+		Host: podIP,
+	}
+	db, err := database.NewDatabase(ctx, params)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
