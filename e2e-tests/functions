@@ -96,7 +96,16 @@ deploy_pmm_server() {
 		local additional_params="--set platform=openshift --set sa=pmm-server --set supresshttp2=false"
 	fi
 
-	helm install monitoring -n "${NAMESPACE}" --set imageTag=${IMAGE_PMM_SERVER#*:} --set imageRepo=${IMAGE_PMM_SERVER%:*} $additional_params https://percona-charts.storage.googleapis.com/pmm-server-$PMM_SERVER_VERSION.tgz
+	kubectl delete clusterrole monitoring --ignore-not-found
+	kubectl delete clusterrolebinding monitoring --ignore-not-found
+
+	helm install monitoring percona/pmm -n "${NAMESPACE}" \
+		--set fullnameOverride=monitoring \
+		--version ${PMM_SERVER_VERSION} \
+		--set imageTag=${IMAGE_PMM_SERVER#*:} \
+		--set imageRepo=${IMAGE_PMM_SERVER%:*} \
+		--set service.type=LoadBalancer \
+		--force
 
 	until kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "ls -l /proc/*/exe 2>/dev/null| grep postgres >/dev/null"; do
 		echo "Retry $retry"
@@ -117,8 +126,30 @@ get_pmm_api_key() {
 	fi
 
 	local ADMIN_PASSWORD
-	ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "printenv | grep ADMIN_PASSWORD | cut -d '=' -f2")
-	curl --insecure -X POST -H "Content-Type: application/json" -d "{\"name\":\"$key_name\", \"role\": \"Admin\"}" "https://admin:$ADMIN_PASSWORD@$(get_service_ip monitoring-service)/graph/api/auth/keys" | jq .key
+	ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" get secret pmm-secret -o jsonpath="{.data.PMM_ADMIN_PASSWORD}" | base64 --decode)
+
+	if [[ -z $ADMIN_PASSWORD ]]; then
+		echo "Error: ADMIN_PASSWORD is empty or not found!" >&2
+		return 1
+	fi
+
+	local response status_code json_response
+	response=$(curl --insecure -s -X POST -H 'Content-Type: application/json' \
+		-d "{\"name\":\"${key_name}\", \"role\": \"Admin\"}" \
+		--user "admin:${ADMIN_PASSWORD}" \
+		"https://$(get_service_ip monitoring-service)/graph/api/auth/keys" \
+		-w "\n%{http_code}")
+
+	status_code=$(echo "$response" | tail -n1)
+	json_response=$(echo "$response" | sed '$ d')
+
+	if [[ $status_code -eq 200 ]]; then
+		echo "$json_response" | jq -r '.key'
+	else
+		echo "Error: Failed to get API key with HTTP status code: $status_code)" >&2
+		echo "Response: $json_response" >&2
+		return 1
+	fi
 }
 
 delete_pmm_api_key() {
@@ -129,11 +160,14 @@ delete_pmm_api_key() {
 	fi
 
 	local ADMIN_PASSWORD
-	ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "printenv | grep ADMIN_PASSWORD | cut -d '=' -f2")
+	ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" get secret pmm-secret -o jsonpath="{.data.PMM_ADMIN_PASSWORD}" | base64 --decode)
+
+	local user_credentials="admin:${ADMIN_PASSWORD}"
 
 	local key_id
-	key_id=$(curl --insecure -X GET "https://admin:$ADMIN_PASSWORD@$(get_service_ip monitoring-service)/graph/api/auth/keys" | jq '.[] | select( .name == "operator").id')
-	curl --insecure -X DELETE "https://admin:$ADMIN_PASSWORD@$(get_service_ip monitoring-service)/graph/api/auth/keys/$key_id"
+	key_id=$(curl --insecure -X GET --user "${user_credentials}" "https://$(get_service_ip monitoring-service)/graph/api/auth/keys" | jq '.[] | select( .name == "operator").id')
+
+	curl --insecure -X DELETE --user "${user_credentials}" "https://$(get_service_ip monitoring-service)/graph/api/auth/keys/$key_id"
 }
 
 deploy_minio() {
@@ -370,7 +404,7 @@ get_qan20_values() {
 EOF
 	)
 
-	run_curl -XPOST -d "'$(echo ${payload} | sed 's/\n//g')'" "https://${user_pass}@${endpoint}/v0/qan/GetReport" \
+	run_curl -XPOST -d "'$(echo ${payload} | sed 's/\n//g')'" "https://${user_pass}@${endpoint}/v1/qan/metrics:getReport" \
 		| jq '.rows[].fingerprint'
 }
 
