@@ -6,8 +6,8 @@ updates:
       interval: monthly
       day: "wednesday"
       time: "01:00"
-    reviewers: 
-      - hors 
+    reviewers:
+      - hors
       - egegunes
     commit-message:
       prefix: "CLOUD-727"
@@ -38,7 +38,7 @@ updates:
     reviewers:
       - hors
       - egegunes
-      - inelpandzic
+      - gkech
     labels:
       - "dependencies"
     schedule:
