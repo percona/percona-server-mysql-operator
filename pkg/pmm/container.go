@@ -86,20 +86,6 @@ func pmmEnvs(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret, dbType s
 			},
 		},
 		{
-			Name:  "PMM_SERVER",
-			Value: pmmSpec.ServerHost,
-		},
-		{
-			Name:  "PMM_USER",
-			Value: user,
-		},
-		{
-			Name: "PMM_PASSWORD",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: k8s.SecretKeySelector(secret.Name, passwordKey),
-			},
-		},
-		{
 			Name:  "PMM_AGENT_LISTEN_PORT",
 			Value: "7777",
 		},
@@ -113,7 +99,7 @@ func pmmEnvs(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret, dbType s
 		},
 		{
 			Name:  "PMM_AGENT_CONFIG_FILE",
-			Value: "/usr/local/percona/pmm2/config/pmm-agent.yaml",
+			Value: "/usr/local/percona/pmm/config/pmm-agent.yaml",
 		},
 		{
 			Name:  "PMM_AGENT_SERVER_INSECURE_TLS",
@@ -142,10 +128,6 @@ func pmmEnvs(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret, dbType s
 		{
 			Name:  "PMM_AGENT_SETUP_NODE_TYPE",
 			Value: "container",
-		},
-		{
-			Name:  "PMM_AGENT_PRERUN_SCRIPT",
-			Value: "/opt/percona/pmm-prerun.sh",
 		},
 		{
 			Name:  "PMM_AGENT_SIDECAR",

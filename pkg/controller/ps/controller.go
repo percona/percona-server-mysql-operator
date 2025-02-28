@@ -391,7 +391,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPvc(ctx context.Context, cr *a
 
 	secretNames := []string{
 		cr.Spec.SecretsName,
-		"internal-" + cr.Name,
+		cr.InternalSecretName(),
 	}
 	err = k8s.DeleteSecrets(ctx, r.Client, cr, secretNames)
 	if err != nil {
