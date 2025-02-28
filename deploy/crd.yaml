@@ -4,6 +4,8 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
   name: perconaservermysqlbackups.ps.percona.com
+  labels:
+    mysql.percona.com/version: v0.10.0
 spec:
   group: ps.percona.com
   names:
