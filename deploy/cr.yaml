@@ -243,7 +243,6 @@ spec:
 #        internalTrafficPolicy: Cluster
 #        labels:
 #          rack: rack-22
-#        loadBalancerIP: 127.0.0.1
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
 #      containerSecurityContext:
@@ -301,7 +300,6 @@ spec:
 #        internalTrafficPolicy: Cluster
 #        labels:
 #          rack: rack-22
-#        loadBalancerIP: 127.0.0.1
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
 
