@@ -96,9 +96,12 @@ deploy_pmm_server() {
 		local additional_params="--set platform=openshift --set sa=pmm-server --set supresshttp2=false"
 	fi
 
+	helm uninstall -n "${NAMESPACE}" monitoring || :
+	helm repo remove percona || :
 	kubectl delete clusterrole monitoring --ignore-not-found
 	kubectl delete clusterrolebinding monitoring --ignore-not-found
 
+	helm repo add percona https://percona.github.io/percona-helm-charts/
 	helm install monitoring percona/pmm -n "${NAMESPACE}" \
 		--set fullnameOverride=monitoring \
 		--version ${PMM_SERVER_VERSION} \
