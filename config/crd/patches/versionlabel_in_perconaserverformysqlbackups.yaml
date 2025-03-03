@@ -1,0 +1,7 @@
+# The following patch enables a conversion webhook for the CRD
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: perconaservermysqlbackups.ps.percona.com
+  labels:
+    mysql.percona.com/version: v0.10.0
