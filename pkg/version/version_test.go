@@ -1,6 +1,7 @@
 package version_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -25,13 +26,19 @@ func TestCRDVersionLabel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read file: %s", err.Error())
 	}
-	crd := new(v1.CustomResourceDefinition)
-	if err := yaml.Unmarshal(data, crd); err != nil {
-		t.Fatalf("Failed to unmarshal crd: %s", err.Error())
-	}
-
-	expected := "v" + version.Version
-	if crd.Labels[naming.LabelOperatorVersion] != expected {
-		t.Fatalf("invalid version is specified in %s label of crd.yaml: expected: %s", naming.LabelOperatorVersion, expected)
+	yamlDocs := bytes.Split(data, []byte("\n---\n"))
+	for _, doc := range yamlDocs {
+		if len(doc) == 0 {
+			continue
+		}
+		crd := new(v1.CustomResourceDefinition)
+		if err := yaml.Unmarshal(doc, crd); err != nil {
+			t.Fatalf("Failed to unmarshal crd: %s", err.Error())
+		}
+		expected := "v" + version.Version
+		if crd.Labels[naming.LabelOperatorVersion] != expected {
+			t.Logf("invalid version is specified in %s label of %s CustomResourceDefinition: expected: %s", naming.LabelOperatorVersion, crd.Name, expected)
+			t.Fail()
+		}
 	}
 }
