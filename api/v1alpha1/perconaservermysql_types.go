@@ -601,15 +601,6 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		}
 	}
 
-	if !cr.Spec.Pause && cr.Spec.MySQL.Size == 0 && cr.Spec.Unsafe.MySQLSize {
-		switch cr.Spec.MySQL.ClusterType {
-		case ClusterTypeGR:
-			cr.Spec.MySQL.Size = MinSafeGRSize
-		case ClusterTypeAsync:
-			cr.Spec.MySQL.Size = MinSafeAsyncSize
-		}
-	}
-
 	if cr.Spec.MySQL.StartupProbe.InitialDelaySeconds == 0 {
 		cr.Spec.MySQL.StartupProbe.InitialDelaySeconds = 15
 	}
