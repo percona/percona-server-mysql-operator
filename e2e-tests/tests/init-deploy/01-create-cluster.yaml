@@ -1,3 +1,14 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: init-deploy-resource-quota
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: "16Gi"
+    limits.cpu: "10"
+    limits.memory: "24Gi"
+---
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 timeout: 10
@@ -14,10 +25,10 @@ commands:
         | yq eval '.spec.proxy.haproxy.enabled=true' - \
         | yq eval '.spec.proxy.haproxy.size=3' - \
         | yq eval '.spec.orchestrator.enabled=true' - \
-        | yq eval '.spec.mysql.resources.limits.cpu="500m"' - \
-        | yq eval '.spec.mysql.resources.limits.memory="1G"' - \
+        | yq eval '.spec.mysql.resources.limits.cpu="1000m"' - \
+        | yq eval '.spec.mysql.resources.limits.memory="4G"' - \
         | yq eval '.spec.mysql.resources.requests.cpu="400m"' - \
-        | yq eval '.spec.mysql.resources.requests.memory="1G"' - \
+        | yq eval '.spec.mysql.resources.requests.memory="2G"' - \
         | yq eval '.spec.backup.resources.limits.cpu="200m"' - \
         | yq eval '.spec.backup.resources.limits.memory="256Mi"' - \
         | yq eval '.spec.backup.resources.requests.cpu="100m"' - \

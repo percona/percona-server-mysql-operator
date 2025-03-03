@@ -78,7 +78,8 @@ deploy_tls_cluster_secrets() {
 }
 
 deploy_client() {
-	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/client.yaml"
+  yq eval "$(printf '.spec.containers[0].image="%s"' "${IMAGE_MYSQL}")" "${TESTS_CONFIG_DIR}/client.yaml" | \
+    kubectl -n "${NAMESPACE}" apply -f -
 }
 
 apply_s3_storage_secrets() {
@@ -269,7 +270,7 @@ get_gr_status() {
 
 	client_pod=$(get_client_pod)
 
-	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- mysqlsh --uri $uri --cluster --result-format json -- cluster status \
+	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- mysqlsh --js --uri $uri --cluster --result-format json -- cluster status \
 		| sed -e 's/mysql: //' \
 		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
 }
