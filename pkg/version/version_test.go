@@ -35,9 +35,10 @@ func TestCRDVersionLabel(t *testing.T) {
 		if err := yaml.Unmarshal(doc, crd); err != nil {
 			t.Fatalf("Failed to unmarshal crd: %s", err.Error())
 		}
-		expected := "v" + version.Version
+		expected := "v" + version.Version()
 		if crd.Labels[naming.LabelOperatorVersion] != expected {
-			t.Logf("invalid version is specified in %s label of %s CustomResourceDefinition: expected: %s", naming.LabelOperatorVersion, crd.Name, expected)
+			t.Logf("invalid version is specified in %s label of %s CustomResourceDefinition: have: %s, expected: %s", naming.LabelOperatorVersion, crd.Name, crd.Labels[naming.LabelOperatorVersion], expected)
+			t.Log([]byte(crd.Labels[naming.LabelOperatorVersion]), []byte(expected))
 			t.Fail()
 		}
 	}
