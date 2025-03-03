@@ -157,6 +157,7 @@ type ContainerSpec struct {
 }
 
 type PodSpec struct {
+	// +kubebuilder:validation:Required
 	Size        int32             `json:"size,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
