@@ -29,7 +29,7 @@ type DBParams struct {
 	Host string
 	Port int32
 
-	ReadTimeout uint32 // in seconds
+	ReadTimeoutSeconds uint32
 }
 
 func (p *DBParams) setDefaults() {
@@ -37,8 +37,8 @@ func (p *DBParams) setDefaults() {
 		p.Port = defs.DefaultAdminPort
 	}
 
-	if p.ReadTimeout == 0 {
-		p.ReadTimeout = 10
+	if p.ReadTimeoutSeconds == 0 {
+		p.ReadTimeoutSeconds = 10
 	}
 }
 
@@ -55,7 +55,7 @@ func (p *DBParams) DSN() string {
 	config.Params = map[string]string{
 		"interpolateParams": "true",
 		"timeout":           "10s",
-		"readTimeout":       fmt.Sprintf("%ds", p.ReadTimeout),
+		"readTimeout":       fmt.Sprintf("%ds", p.ReadTimeoutSeconds),
 		"writeTimeout":      "10s",
 		"tls":               "preferred",
 	}

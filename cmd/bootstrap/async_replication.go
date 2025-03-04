@@ -87,7 +87,7 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "get read timeout")
 	}
-	params.ReadTimeout = readTimeout
+	params.ReadTimeoutSeconds = readTimeout
 
 	db, err := database.NewDatabase(ctx, params)
 	if err != nil {
@@ -219,7 +219,7 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 		if err != nil {
 			return "", nil, errors.Wrap(err, "get read timeout")
 		}
-		params.ReadTimeout = readTimeout
+		params.ReadTimeoutSeconds = readTimeout
 
 		db, err := database.NewDatabase(ctx, params)
 		if err != nil {
@@ -285,7 +285,7 @@ func selectDonor(ctx context.Context, fqdn, primary string, replicas []string) (
 		if err != nil {
 			return "", errors.Wrap(err, "get read timeout")
 		}
-		params.ReadTimeout = readTimeout
+		params.ReadTimeoutSeconds = readTimeout
 
 		db, err := database.NewDatabase(ctx, params)
 		if err != nil {
