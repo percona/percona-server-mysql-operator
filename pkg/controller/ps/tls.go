@@ -256,20 +256,8 @@ func (r *PerconaServerMySQLReconciler) waitForCert(ctx context.Context, cr *apiv
 			}
 			secretFound = true
 
-			shouldUpdateSecret := false
-			if secret.Labels == nil {
-				secret.Labels = make(map[string]string)
-			}
-			for k, v := range cr.Labels() {
-				if secret.Labels[k] != v {
-					secret.Labels[k] = v
-					shouldUpdateSecret = true
-				}
-			}
-			if shouldUpdateSecret {
-				if err := r.Client.Update(ctx, secret); err != nil {
-					return errors.Wrap(err, "failed to update secret labels")
-				}
+			if err := r.updateObjectLabels(ctx, secret, cr); err != nil {
+				return errors.Wrap(err, "update object labels")
 			}
 
 			cert := new(cm.Certificate)
@@ -286,4 +274,25 @@ func (r *PerconaServerMySQLReconciler) waitForCert(ctx context.Context, cr *apiv
 			}
 		}
 	}
+}
+
+func (r *PerconaServerMySQLReconciler) updateObjectLabels(ctx context.Context, obj client.Object, cr *apiv1alpha1.PerconaServerMySQL) error {
+	objLabels := obj.GetLabels()
+	if objLabels == nil {
+		objLabels = make(map[string]string)
+	}
+	shouldUpdate := false
+	for k, v := range cr.Labels() {
+		if objLabels[k] != v {
+			objLabels[k] = v
+			shouldUpdate = true
+		}
+	}
+	obj.SetLabels(objLabels)
+	if shouldUpdate {
+		if err := r.Client.Update(ctx, obj); err != nil {
+			return errors.Wrap(err, "failed to update secret labels")
+		}
+	}
+	return nil
 }
