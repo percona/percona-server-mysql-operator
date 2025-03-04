@@ -122,14 +122,14 @@ rules:
   - patch
   - watch
 - apiGroups:
-  - admissionregistration.k8s.io
+    - admissionregistration.k8s.io
   resources:
-  - validatingwebhookconfigurations
+    - validatingwebhookconfigurations
   verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
