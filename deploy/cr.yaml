@@ -360,7 +360,7 @@ spec:
   pmm:
     enabled: false
 
-    image: perconalab/pmm-client:dev-latest
+    image: perconalab/pmm-client:3-dev-latest
     imagePullPolicy: Always
 
     resources:

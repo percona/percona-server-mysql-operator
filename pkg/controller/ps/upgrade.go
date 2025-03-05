@@ -2,7 +2,6 @@ package ps
 
 import (
 	"context"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"time"
 
 	"github.com/pkg/errors"
@@ -11,6 +10,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	k8sretry "k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -33,6 +33,9 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		Namespace: sts.Namespace,
 	}, currentSet)
 	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
 		return errors.Wrap(err, "failed to get current sts")
 	}
 
@@ -133,7 +136,6 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		}
 		return nil
 	})
-
 	if err != nil {
 		log.Info("smart update of  primary pod did not finish correctly after 5 retries")
 		return err
@@ -142,7 +144,6 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	log.Info("primary pod updated", "pod", primPod.Name)
 	log.Info("smart update finished")
 	return nil
-
 }
 
 func stsChanged(sts *appsv1.StatefulSet, pods []corev1.Pod) bool {
@@ -151,7 +152,6 @@ func stsChanged(sts *appsv1.StatefulSet, pods []corev1.Pod) bool {
 	for _, pod := range pods {
 		if pod.ObjectMeta.Labels["controller-revision-hash"] != sts.Status.UpdateRevision {
 			return true
-
 		}
 	}
 
@@ -207,7 +207,6 @@ func deletePod(ctx context.Context, cli client.Client, pod *corev1.Pod, sts *app
 
 		if s.Status.ReadyReplicas == s.Status.Replicas {
 			return errors.New("sts.Status.readyReplicas not updated")
-
 		}
 
 		return nil
