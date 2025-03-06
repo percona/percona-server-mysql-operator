@@ -355,7 +355,7 @@ var _ = Describe("Unsafe configurations", Ordered, func() {
 	})
 })
 
-var _ = Describe("Reconcile HAProxy", Ordered, func() {
+var _ = Describe("Reconcile HAProxy when async cluster type", Ordered, func() {
 	ctx := context.Background()
 
 	crName := "reconcile-haproxy"
@@ -383,10 +383,8 @@ var _ = Describe("Reconcile HAProxy", Ordered, func() {
 	Context("Cleanup outdated HAProxy service", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
 		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
-		cr.Spec.Proxy.HAProxy.Enabled = true
-		cr.Spec.Orchestrator.Enabled = true
 		cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
-		It("should read and create defautl cr.yaml", func() {
+		It("should read and create default cr.yaml", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 		})
