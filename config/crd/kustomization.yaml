@@ -8,19 +8,9 @@ resources:
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:
-# [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
-# patches here are for enabling the conversion webhook for each CRD
-#- patches/webhook_in_perconaservermysqls.yaml
-#- patches/webhook_in_perconaservermysqlbackups.yaml
-#- patches/webhook_in_perconaservermysqlrestores.yaml
-#+kubebuilder:scaffold:crdkustomizewebhookpatch
-
-# [CERTMANAGER] To enable cert-manager, uncomment all the sections with [CERTMANAGER] prefix.
-# patches here are for enabling the CA injection for each CRD
-#- patches/cainjection_in_perconaservermysqls.yaml
-#- patches/cainjection_in_perconaservermysqlbackups.yaml
-#- patches/cainjection_in_perconaservermysqlrestores.yaml
-#+kubebuilder:scaffold:crdkustomizecainjectionpatch
+- patches/versionlabel_in_perconaserverformysql.yaml
+- patches/versionlabel_in_perconaserverformysqlbackups.yaml
+- patches/versionlabel_in_perconaserverformysqlrestores.yaml
 
 # the following config is for teaching kustomize how to do kustomization for CRDs.
 configurations:

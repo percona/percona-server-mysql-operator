@@ -475,7 +475,7 @@ func (vs *fakeVS) Apply(_ context.Context, req any) (any, error) {
 		CustomResourceUid: "custom-resource-uid",
 		DatabaseVersion:   "database-version",
 		KubeVersion:       "kube-version",
-		OperatorVersion:   version.Version,
+		OperatorVersion:   version.Version(),
 		Product:           "ps-operator",
 		Platform:          string(platform.PlatformKubernetes),
 		HaproxyVersion:    "haproxy-version",
@@ -546,6 +546,7 @@ type mockClientConn struct {
 func (m *mockClientConn) Invoke(ctx context.Context, method string, args, reply any, opts ...grpc.CallOption) error {
 	return grpcmock.InvokeUnary(ctx, method, args, reply, grpcmock.WithInsecure(), grpcmock.WithCallOptions(opts...), grpcmock.WithContextDialer(m.dialer))
 }
+
 func (m *mockClientConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 	return nil, errors.New("unimplemented")
 }
