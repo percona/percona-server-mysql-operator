@@ -44,6 +44,9 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // PerconaServerMySQLSpec defines the desired state of PerconaServerMySQL
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.orchestrator || self.orchestrator.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'orchestrator.enabled' must be true unless 'unsafeFlags.orchestrator' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.proxy || self.proxy.haproxy.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.haproxy.enabled' must be true unless 'unsafeFlags.proxy' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.proxy.router == null || !has(self.proxy.router.enabled) || !self.proxy.router.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.router.enabled' must be disabled"
 type PerconaServerMySQLSpec struct {
 	CRVersion         string                               `json:"crVersion,omitempty"`
 	Pause             bool                                 `json:"pause,omitempty"`
@@ -229,10 +232,9 @@ func (s *BackupSpec) GetInitImage() string {
 type BackupStorageType string
 
 const (
-	BackupStorageFilesystem BackupStorageType = "filesystem"
-	BackupStorageS3         BackupStorageType = "s3"
-	BackupStorageGCS        BackupStorageType = "gcs"
-	BackupStorageAzure      BackupStorageType = "azure"
+	BackupStorageS3    BackupStorageType = "s3"
+	BackupStorageGCS   BackupStorageType = "gcs"
+	BackupStorageAzure BackupStorageType = "azure"
 )
 
 type BackupStorageSpec struct {
