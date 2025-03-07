@@ -11310,6 +11310,10 @@ spec:
                 is enabled'
               rule: '!(self.mysql.clusterType == ''async'') || self.unsafeFlags.proxy
                 || self.proxy.haproxy.enabled'
+            - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
+                ''async'', ''proxy.router.enabled'' must be disabled'
+              rule: '!(self.mysql.clusterType == ''async'') || self.proxy.router ==
+                null || !has(self.proxy.router.enabled) || !self.proxy.router.enabled'
           status:
             properties:
               backupVersion:
