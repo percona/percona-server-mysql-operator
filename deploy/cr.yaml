@@ -45,6 +45,9 @@ spec:
 
     size: 3
 
+#    env:
+#    - name: BOOTSTRAP_READ_TIMEOUT
+#      value: "600"
     resources:
       requests:
         memory: 1G
