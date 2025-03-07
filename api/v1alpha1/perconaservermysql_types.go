@@ -440,7 +440,6 @@ type VolumeSpec struct {
 
 type ServiceExpose struct {
 	Type                     corev1.ServiceType                       `json:"type,omitempty"`
-	LoadBalancerIP           string                                   `json:"loadBalancerIP,omitempty"`
 	LoadBalancerSourceRanges []string                                 `json:"loadBalancerSourceRanges,omitempty"`
 	Annotations              map[string]string                        `json:"annotations,omitempty"`
 	Labels                   map[string]string                        `json:"labels,omitempty"`
