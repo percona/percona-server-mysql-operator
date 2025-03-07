@@ -123,15 +123,18 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 			return ctrl.Result{}, nil
 		}
 
-		return rr, errors.Wrap(err, "get CR")
+		return ctrl.Result{}, errors.Wrap(err, "get CR")
 	}
 
 	if cr.ObjectMeta.DeletionTimestamp != nil {
-		return rr, r.applyFinalizers(ctx, cr)
+		if err := r.applyFinalizers(ctx, cr); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "apply finalizers")
+		}
+		return rr, nil
 	}
 
 	if err = r.doReconcile(ctx, cr); err != nil {
-		return rr, errors.Wrap(err, "reconcile")
+		return ctrl.Result{}, errors.Wrap(err, "reconcile")
 	}
 
 	return rr, nil
@@ -391,7 +394,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPvc(ctx context.Context, cr *a
 
 	secretNames := []string{
 		cr.Spec.SecretsName,
-		"internal-" + cr.Name,
+		cr.InternalSecretName(),
 	}
 	err = k8s.DeleteSecrets(ctx, r.Client, cr, secretNames)
 	if err != nil {
