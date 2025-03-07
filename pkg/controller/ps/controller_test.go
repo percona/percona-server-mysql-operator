@@ -422,6 +422,92 @@ var _ = Describe("Reconcile HAProxy when async cluster type", Ordered, func() {
 	})
 })
 
+var _ = Describe("CR validations", Ordered, func() {
+	ctx := context.Background()
+
+	ns := "validate"
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ns,
+			Namespace: ns,
+		},
+	}
+
+	BeforeAll(func() {
+		By("Creating the Namespace to perform the tests")
+		err := k8sClient.Create(ctx, namespace)
+		Expect(err).To(Not(HaveOccurred()))
+	})
+
+	AfterAll(func() {
+		By("Deleting the Namespace to perform the tests")
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	Context("cr creation based on mysql cluster configuration", Ordered, func() {
+		When("the cr is configured using default values and async cluster type", Ordered, func() {
+			cr, err := readDefaultCR("cr-validation-1", ns)
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			It("should read and create default cr.yaml", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("cluster type is async and the orchestrator is disabled but unsafe flag enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-2", ns)
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.Orchestrator.Enabled = false
+			cr.Spec.Unsafe.Orchestrator = true
+			It("should read and create default cr.yaml", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("cluster type is async and the orchestrator is disabled with unsafe flag disabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-3", ns)
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.Orchestrator.Enabled = false
+			It("the creation of the cluster should fail with error message", func() {
+				Expect(err).NotTo(HaveOccurred())
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("'orchestrator.enabled' must be true unless 'unsafeFlags.orchestrator' is enabled"))
+			})
+		})
+
+		When("cluster type is async and HAProxy is disabled but unsafe flag enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-4", ns)
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.Proxy.HAProxy.Enabled = false
+			cr.Spec.Unsafe.Proxy = true
+			It("should read and create default cr.yaml", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("cluster type is async and HAProxy is disabled with unsafe flag disabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-5", ns)
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.Proxy.HAProxy.Enabled = false
+			It("the creation of the cluster should fail with error message", func() {
+				Expect(err).NotTo(HaveOccurred())
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("'proxy.haproxy.enabled' must be true unless 'unsafeFlags.proxy' is enabled"))
+			})
+		})
+	})
+})
+
 var _ = Describe("Reconcile Binlog Server", Ordered, func() {
 	ctx := context.Background()
 
