@@ -100,7 +100,7 @@ const (
 
 // Checks if the provided ClusterType is valid.
 func (t ClusterType) isValid() bool {
-	switch ClusterType(t) {
+	switch t {
 	case ClusterTypeGR, ClusterTypeAsync:
 		return true
 	}
@@ -565,9 +565,9 @@ func (cr *PerconaServerMySQL) SetVersion() {
 }
 
 // CheckNSetDefaults validates and sets default values for the PerconaServerMySQL custom resource.
-func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersion *platform.ServerVersion) error {
+func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion *platform.ServerVersion) error {
 	if len(cr.Spec.MySQL.ClusterType) == 0 {
-		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
+		cr.Spec.MySQL.ClusterType = ClusterTypeGR
 	}
 
 	if valid := cr.Spec.MySQL.ClusterType.isValid(); !valid {

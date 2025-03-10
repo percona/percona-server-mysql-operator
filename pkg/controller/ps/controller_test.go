@@ -383,6 +383,7 @@ var _ = Describe("Reconcile HAProxy when async cluster type", Ordered, func() {
 	Context("Cleanup outdated HAProxy service", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
 		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+		cr.Spec.Orchestrator.Enabled = true
 		cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 		It("should read and create default cr.yaml", func() {
 			Expect(err).NotTo(HaveOccurred())
@@ -451,6 +452,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 			It("should read and create default cr.yaml", func() {
 				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
@@ -489,6 +491,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-4", ns)
 			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.Proxy.HAProxy.Enabled = false
 			cr.Spec.Unsafe.Proxy = true
 			It("should read and create default cr.yaml", func() {
@@ -502,6 +505,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 			cr.Spec.Proxy.HAProxy.Enabled = false
 			It("the creation of the cluster should fail with error message", func() {
