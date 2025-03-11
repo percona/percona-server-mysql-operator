@@ -265,6 +265,10 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			log.Info("Removing member from GR", "member", pod.Name, "memberState", state)
 			err = mysh.RemoveInstanceWithExec(ctx, cr.InnoDBClusterName(), podUri)
 			if err != nil {
+				// member already removed from metadata
+				if strings.Contains(err.Error(), "MYSQLSH 51104") {
+					continue
+				}
 				return errors.Wrapf(err, "remove instance %s", pod.Name)
 			}
 			log.Info("Member removed from GR", "member", pod.Name)

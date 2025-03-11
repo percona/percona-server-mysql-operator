@@ -71,7 +71,7 @@ func (m *mysqlsh) run(ctx context.Context, cmd string) (bytes.Buffer, bytes.Buff
 
 	err := c.Run()
 
-	return stdoutb, stderrb, err
+	return stdoutb, stderrb, errors.Wrapf(err, "stderr: %s", stderrb.String())
 }
 
 func (m *mysqlsh) clusterStatus(ctx context.Context) (innodbcluster.Status, error) {
@@ -277,22 +277,6 @@ func (m *mysqlsh) removeInstance(ctx context.Context, instanceDef string, force 
 	return nil
 }
 
-func (m *mysqlsh) rescanCluster(ctx context.Context) error {
-	var err error
-
-	if m.compareVersionWith("8.4") >= 0 {
-		_, _, err = m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rescan({'addUnmanaged': true, 'removeObsolete': true})", m.clusterName))
-	} else {
-		_, _, err = m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rescan({'addInstances': 'auto', 'removeInstances': 'auto'})", m.clusterName))
-	}
-
-	if err != nil {
-		return errors.Wrap(err, "rescan cluster")
-	}
-
-	return nil
-}
-
 func connectToLocal(ctx context.Context, version *v.Version) (*mysqlsh, error) {
 	fqdn, err := getFQDN(os.Getenv("SERVICE_NAME"))
 	if err != nil {
@@ -386,7 +370,7 @@ func bootstrapGroupReplication(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "get mysqlsh version")
 	}
-	log.Println("mysql shell version")
+	log.Println("mysql-shell version:", mysqlshVer)
 
 	localShell, err := connectToLocal(ctx, mysqlshVer)
 	if err != nil {
@@ -474,15 +458,6 @@ func bootstrapGroupReplication(ctx context.Context) error {
 		log.Printf("Added instance (%s) to InnoDB cluster", localShell.host)
 	}
 
-	rescanNeeded := false
-	if len(member.InstanceErrors) > 0 {
-		log.Printf("Instance (%s) has errors:", localShell.host)
-		for i, instErr := range member.InstanceErrors {
-			log.Printf("Error %d: %s", i, instErr)
-			rescanNeeded = rescanNeeded || strings.Contains(instErr, "rescan()")
-		}
-	}
-
 	switch member.MemberState {
 	case innodbcluster.MemberStateOnline:
 		log.Printf("Instance (%s) is already in InnoDB Cluster and its state is %s", localShell.host, member.MemberState)
@@ -513,14 +488,6 @@ func bootstrapGroupReplication(ctx context.Context) error {
 
 	if err := updateGroupPeers(ctx, peers, mysqlshVer); err != nil {
 		return err
-	}
-
-	if rescanNeeded {
-		err := shell.rescanCluster(ctx)
-		if err != nil {
-			return err
-		}
-		log.Println("Cluster rescanned")
 	}
 
 	return nil

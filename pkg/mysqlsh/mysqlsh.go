@@ -31,7 +31,7 @@ func New(e k8sexec.Interface, uri string) *mysqlsh {
 func (m *mysqlsh) run(ctx context.Context, cmd string) error {
 	var errb, outb bytes.Buffer
 
-	args := []string{"--no-wizard", "--uri", m.uri, "-e", cmd}
+	args := []string{"--no-wizard", "--js", "--uri", m.uri, "-e", cmd}
 
 	c := m.exec.CommandContext(ctx, "mysqlsh", args...)
 	c.SetStdout(&outb)
@@ -129,7 +129,7 @@ func (m *mysqlsh) DoesClusterExist(ctx context.Context, clusterName string) bool
 func (m *mysqlsh) ClusterStatus(ctx context.Context, clusterName string) (innodbcluster.Status, error) {
 	var errb, outb bytes.Buffer
 
-	args := []string{"--result-format", "json", "--uri", m.uri, "--cluster", "--", "cluster", "status"}
+	args := []string{"--result-format", "json", "--js", "--uri", m.uri, "-e", "dba.getCluster().status()"}
 
 	c := m.exec.CommandContext(ctx, "mysqlsh", args...)
 	c.SetStdout(&outb)

@@ -28,7 +28,7 @@ func NewWithExec(cliCmd clientcmd.Client, pod *corev1.Pod, uri string) (*mysqlsh
 func (m *mysqlshExec) runWithExec(ctx context.Context, cmd string) error {
 	var errb, outb bytes.Buffer
 
-	c := []string{"mysqlsh", "--no-wizard", "--uri", m.uri, "-e", cmd}
+	c := []string{"mysqlsh", "--js", "--no-wizard", "--uri", m.uri, "-e", cmd}
 	err := m.client.Exec(ctx, m.pod, "mysql", c, nil, &outb, &errb, false)
 	if err != nil {
 		sout := sensitiveRegexp.ReplaceAllString(outb.String(), ":*****@")
@@ -40,7 +40,7 @@ func (m *mysqlshExec) runWithExec(ctx context.Context, cmd string) error {
 }
 
 func (m *mysqlshExec) RemoveInstanceWithExec(ctx context.Context, clusterName, instance string) error {
-	cmd := fmt.Sprintf("dba.getCluster('%s').removeInstance('%s', {'interactive': false, 'force': true})", clusterName, instance)
+	cmd := fmt.Sprintf("dba.getCluster('%s').removeInstance('%s', {'force': true})", clusterName, instance)
 
 	if err := m.runWithExec(ctx, cmd); err != nil {
 		return errors.Wrap(err, "remove instance")
@@ -67,7 +67,7 @@ func (m *mysqlshExec) ClusterStatusWithExec(ctx context.Context, clusterName str
 	stdoutBuffer := bytes.Buffer{}
 	stderrBuffer := bytes.Buffer{}
 
-	c := []string{"mysqlsh", "--result-format", "json", "--uri", m.uri, "--cluster", "--", "cluster", "status"}
+	c := []string{"mysqlsh", "--result-format", "json", "--js", "--uri", m.uri, "--cluster", "--", "cluster", "status"}
 
 	err := m.client.Exec(ctx, m.pod, "mysql", c, nil, &stdoutBuffer, &stderrBuffer, false)
 	if err != nil {
