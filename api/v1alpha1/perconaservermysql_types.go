@@ -561,7 +561,7 @@ func (cr *PerconaServerMySQL) SetVersion() {
 		return
 	}
 
-	cr.Spec.CRVersion = version.Version
+	cr.Spec.CRVersion = version.Version()
 }
 
 // CheckNSetDefaults validates and sets default values for the PerconaServerMySQL custom resource.
