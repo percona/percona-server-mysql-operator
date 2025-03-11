@@ -27,6 +27,7 @@ func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cr.Spec.SSLSecretName,
 			Namespace: cr.Namespace,
+			Labels:    cr.Labels(),
 		},
 		Data: map[string][]byte{
 			"ca.crt":  ca,
