@@ -28,6 +28,10 @@ const (
 )
 
 const (
+	LabelOperatorVersion = mysqlPerconaPrefix + "version"
+)
+
+const (
 	FinalizerDeleteSSL         = perconaPrefix + "delete-ssl"
 	FinalizerDeletePodsInOrder = perconaPrefix + "delete-mysql-pods-in-order"
 	FinalizerDeleteBackup      = perconaPrefix + "delete-backup"
