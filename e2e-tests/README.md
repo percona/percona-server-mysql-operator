@@ -112,7 +112,7 @@ full list of variables is the following one:
 
 * `IMAGE` - the Operator, `perconalab/percona-server-mysql-operator:main` by default,
 * `IMAGE_MYSQL` - Percona Distribution for MySQL, `perconalab/percona-server:main` by default,
-* `IMAGE_PMM_CLIENT` - Percona Monitoring and Management (PMM) client, `perconalab/pmm-client:dev-latest` by default,
+* `IMAGE_PMM_CLIENT` - Percona Monitoring and Management (PMM) client, `perconalab/pmm-client:3-dev-latest` by default,
 * `IMAGE_PROXY` - ProxySQL, `perconalab/percona-xtradb-cluster-operator:main-proxysql` by default,
 * `IMAGE_HAPROXY` - HA Proxy, `perconalab/haproxy:main` by default,
 * `IMAGE_BACKUP` - backups, `perconalab/percona-xtrabackup:main` by default,

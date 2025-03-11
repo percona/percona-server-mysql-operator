@@ -27,26 +27,11 @@ spec:
                 fieldPath: metadata.namespace
           - name: CLUSTER_NAME
             value: monitoring
-          - name: CLIENT_PORT_LISTEN
-            value: "7777"
-          - name: CLIENT_PORT_MIN
-            value: "30100"
-          - name: CLIENT_PORT_MAX
-            value: "30105"
           - name: PMM_AGENT_SERVER_ADDRESS
             value: monitoring-service
           - name: PMM_AGENT_SERVER_USERNAME
             value: api_key
           - name: PMM_AGENT_SERVER_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                key: pmmserverkey
-                name: internal-monitoring
-          - name: PMM_SERVER
-            value: monitoring-service
-          - name: PMM_USER
-            value: api_key
-          - name: PMM_PASSWORD
             valueFrom:
               secretKeyRef:
                 key: pmmserverkey
@@ -58,7 +43,7 @@ spec:
           - name: PMM_AGENT_PORTS_MAX
             value: "30105"
           - name: PMM_AGENT_CONFIG_FILE
-            value: /usr/local/percona/pmm2/config/pmm-agent.yaml
+            value: /usr/local/percona/pmm/config/pmm-agent.yaml
           - name: PMM_AGENT_SERVER_INSECURE_TLS
             value: "1"
           - name: PMM_AGENT_LISTEN_ADDRESS
@@ -73,14 +58,14 @@ spec:
             value: "1"
           - name: PMM_AGENT_SETUP_NODE_TYPE
             value: container
-          - name: PMM_AGENT_PRERUN_SCRIPT
-            value: /opt/percona/pmm-prerun.sh
           - name: PMM_AGENT_SIDECAR
             value: "true"
           - name: PMM_AGENT_SIDECAR_SLEEP
             value: "5"
           - name: PMM_AGENT_PATHS_TEMPDIR
             value: "/tmp"
+          - name: PMM_AGENT_PRERUN_SCRIPT
+            value: "/opt/percona/pmm-prerun.sh"
           - name: DB_CLUSTER
             value: monitoring
           - name: DB_TYPE
@@ -159,26 +144,11 @@ spec:
                 fieldPath: metadata.namespace
           - name: CLUSTER_NAME
             value: monitoring
-          - name: CLIENT_PORT_LISTEN
-            value: "7777"
-          - name: CLIENT_PORT_MIN
-            value: "30100"
-          - name: CLIENT_PORT_MAX
-            value: "30105"
           - name: PMM_AGENT_SERVER_ADDRESS
             value: monitoring-service
           - name: PMM_AGENT_SERVER_USERNAME
             value: api_key
           - name: PMM_AGENT_SERVER_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                key: pmmserverkey
-                name: internal-monitoring
-          - name: PMM_SERVER
-            value: monitoring-service
-          - name: PMM_USER
-            value: api_key
-          - name: PMM_PASSWORD
             valueFrom:
               secretKeyRef:
                 key: pmmserverkey
@@ -190,7 +160,7 @@ spec:
           - name: PMM_AGENT_PORTS_MAX
             value: "30105"
           - name: PMM_AGENT_CONFIG_FILE
-            value: /usr/local/percona/pmm2/config/pmm-agent.yaml
+            value: /usr/local/percona/pmm/config/pmm-agent.yaml
           - name: PMM_AGENT_SERVER_INSECURE_TLS
             value: "1"
           - name: PMM_AGENT_LISTEN_ADDRESS
@@ -205,14 +175,14 @@ spec:
             value: "1"
           - name: PMM_AGENT_SETUP_NODE_TYPE
             value: container
-          - name: PMM_AGENT_PRERUN_SCRIPT
-            value: /opt/percona/pmm-prerun.sh
           - name: PMM_AGENT_SIDECAR
             value: "true"
           - name: PMM_AGENT_SIDECAR_SLEEP
             value: "5"
           - name: PMM_AGENT_PATHS_TEMPDIR
             value: "/tmp"
+          - name: PMM_AGENT_PRERUN_SCRIPT
+            value: "/opt/percona/pmm-prerun.sh"
           - name: DB_CLUSTER
             value: monitoring
           - name: DB_TYPE

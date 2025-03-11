@@ -61,10 +61,8 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	labels := util.SSMapMerge(expose.Labels, MatchLabels(cr))
 
 	var loadBalancerSourceRanges []string
-	var loadBalancerIP string
 	if expose.Type == corev1.ServiceTypeLoadBalancer {
 		loadBalancerSourceRanges = expose.LoadBalancerSourceRanges
-		loadBalancerIP = expose.LoadBalancerIP
 	}
 
 	var externalTrafficPolicy corev1.ServiceExternalTrafficPolicyType
@@ -125,7 +123,6 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 				},
 			},
 			Selector:                 labels,
-			LoadBalancerIP:           loadBalancerIP,
 			LoadBalancerSourceRanges: loadBalancerSourceRanges,
 			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
 			ExternalTrafficPolicy:    externalTrafficPolicy,

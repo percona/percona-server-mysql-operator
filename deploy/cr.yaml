@@ -45,6 +45,9 @@ spec:
 
     size: 3
 
+#    env:
+#    - name: BOOTSTRAP_READ_TIMEOUT
+#      value: "600"
     resources:
       requests:
         memory: 1G
@@ -243,7 +246,6 @@ spec:
 #        internalTrafficPolicy: Cluster
 #        labels:
 #          rack: rack-22
-#        loadBalancerIP: 127.0.0.1
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
 #      containerSecurityContext:
@@ -301,12 +303,11 @@ spec:
 #        internalTrafficPolicy: Cluster
 #        labels:
 #          rack: rack-22
-#        loadBalancerIP: 127.0.0.1
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
 
   orchestrator:
-    enabled: true
+    enabled: false
 
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
@@ -362,7 +363,7 @@ spec:
   pmm:
     enabled: false
 
-    image: perconalab/pmm-client:dev-latest
+    image: perconalab/pmm-client:3-dev-latest
     imagePullPolicy: Always
 
     resources:
