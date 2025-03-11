@@ -78,7 +78,18 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
 
-	db, err := database.NewDatabase(ctx, apiv1alpha1.UserOperator, operatorPass, podIp, mysql.DefaultAdminPort)
+	params := database.DBParams{
+		User: apiv1alpha1.UserOperator,
+		Pass: operatorPass,
+		Host: podIp,
+	}
+	readTimeout, err := getReadTimeout()
+	if err != nil {
+		return errors.Wrap(err, "get read timeout")
+	}
+	params.ReadTimeoutSeconds = readTimeout
+
+	db, err := database.NewDatabase(ctx, params)
 	if err != nil {
 		return errors.Wrap(err, "connect to database")
 	}
@@ -199,7 +210,18 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 	}
 
 	for _, peer := range sets.List(peers) {
-		db, err := database.NewDatabase(ctx, apiv1alpha1.UserOperator, operatorPass, peer, mysql.DefaultAdminPort)
+		params := database.DBParams{
+			User: apiv1alpha1.UserOperator,
+			Pass: operatorPass,
+			Host: peer,
+		}
+		readTimeout, err := getReadTimeout()
+		if err != nil {
+			return "", nil, errors.Wrap(err, "get read timeout")
+		}
+		params.ReadTimeoutSeconds = readTimeout
+
+		db, err := database.NewDatabase(ctx, params)
 		if err != nil {
 			return "", nil, errors.Wrapf(err, "connect to %s", peer)
 		}
@@ -254,7 +276,18 @@ func selectDonor(ctx context.Context, fqdn, primary string, replicas []string) (
 	}
 
 	for _, replica := range replicas {
-		db, err := database.NewDatabase(ctx, apiv1alpha1.UserOperator, operatorPass, replica, mysql.DefaultAdminPort)
+		params := database.DBParams{
+			User: apiv1alpha1.UserOperator,
+			Pass: operatorPass,
+			Host: replica,
+		}
+		readTimeout, err := getReadTimeout()
+		if err != nil {
+			return "", errors.Wrap(err, "get read timeout")
+		}
+		params.ReadTimeoutSeconds = readTimeout
+
+		db, err := database.NewDatabase(ctx, params)
 		if err != nil {
 			continue
 		}

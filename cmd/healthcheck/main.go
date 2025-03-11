@@ -102,7 +102,12 @@ func checkReadinessAsync(ctx context.Context) error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := database.NewDatabase(ctx, apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
+	params := database.DBParams{
+		User: apiv1alpha1.UserMonitor,
+		Pass: monitorPass,
+		Host: podIP,
+	}
+	db, err := database.NewDatabase(ctx, params)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
@@ -137,7 +142,12 @@ func checkReadinessGR(ctx context.Context) error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := database.NewDatabase(ctx, apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
+	params := database.DBParams{
+		User: apiv1alpha1.UserMonitor,
+		Pass: monitorPass,
+		Host: podIP,
+	}
+	db, err := database.NewDatabase(ctx, params)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
@@ -171,7 +181,12 @@ func checkLivenessAsync(ctx context.Context) error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := database.NewDatabase(ctx, apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
+	params := database.DBParams{
+		User: apiv1alpha1.UserMonitor,
+		Pass: monitorPass,
+		Host: podIP,
+	}
+	db, err := database.NewDatabase(ctx, params)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
@@ -191,7 +206,12 @@ func checkLivenessGR(ctx context.Context) error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := database.NewDatabase(ctx, apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
+	params := database.DBParams{
+		User: apiv1alpha1.UserMonitor,
+		Pass: monitorPass,
+		Host: podIP,
+	}
+	db, err := database.NewDatabase(ctx, params)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}
@@ -222,7 +242,12 @@ func checkReplication(ctx context.Context) error {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
 	}
 
-	db, err := database.NewDatabase(ctx, apiv1alpha1.UserMonitor, monitorPass, podIP, mysql.DefaultAdminPort)
+	params := database.DBParams{
+		User: apiv1alpha1.UserMonitor,
+		Pass: monitorPass,
+		Host: podIP,
+	}
+	db, err := database.NewDatabase(ctx, params)
 	if err != nil {
 		return errors.Wrap(err, "connect to db")
 	}

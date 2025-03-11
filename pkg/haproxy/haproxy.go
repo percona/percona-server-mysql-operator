@@ -65,10 +65,8 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 	serviceType := cr.Spec.Proxy.HAProxy.Expose.Type
 
 	var loadBalancerSourceRanges []string
-	var loadBalancerIP string
 	if serviceType == corev1.ServiceTypeLoadBalancer {
 		loadBalancerSourceRanges = expose.LoadBalancerSourceRanges
-		loadBalancerIP = expose.LoadBalancerIP
 	}
 
 	var externalTrafficPolicy corev1.ServiceExternalTrafficPolicyType
@@ -121,7 +119,6 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 			Type:                     serviceType,
 			Ports:                    ports,
 			Selector:                 labels,
-			LoadBalancerIP:           loadBalancerIP,
 			LoadBalancerSourceRanges: loadBalancerSourceRanges,
 			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
 			ExternalTrafficPolicy:    externalTrafficPolicy,

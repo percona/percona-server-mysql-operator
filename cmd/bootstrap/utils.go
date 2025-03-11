@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,6 +32,22 @@ func getFQDN(svcName string) (string, error) {
 	}
 
 	return fmt.Sprintf("%s.%s.%s", hostname, svcName, namespace), nil
+}
+
+func getReadTimeout() (uint32, error) {
+	s, ok := os.LookupEnv(naming.EnvBootstrapReadTimeout)
+	if !ok {
+		return 0, nil
+	}
+	readTimeout, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to parse BOOTSTRAP_READ_TIMEOUT")
+	}
+	if readTimeout < 0 {
+		return 0, errors.New("BOOTSTRAP_READ_TIMEOUT should be a positive value")
+	}
+
+	return uint32(readTimeout), nil
 }
 
 func getSecret(username apiv1alpha1.SystemUser) (string, error) {
