@@ -39,7 +39,6 @@ import (
 	psv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
-	//+kubebuilder:scaffold:imports
 )
 
 var _ = Describe("Sidecars", Ordered, func() {
@@ -140,7 +139,8 @@ var _ = Describe("Sidecars", Ordered, func() {
 						Medium: corev1.StorageMediumMemory,
 					},
 				},
-			}}
+			},
+		}
 
 		Specify("CR should be updated", func() {
 			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
@@ -212,7 +212,8 @@ var _ = Describe("Sidecars", Ordered, func() {
 						},
 					},
 				},
-			}}
+			},
+		}
 
 		Specify("CR should be updated", func() {
 			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
@@ -468,7 +469,6 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr.Spec.Orchestrator.Enabled = false
 			cr.Spec.Unsafe.Orchestrator = true
 			It("should read and create default cr.yaml", func() {
-
 				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 			})
 		})
@@ -560,7 +560,7 @@ var _ = Describe("Reconcile Binlog Server", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
 
 		cr.Spec.Backup.PiTR.Enabled = true
-		cr.Spec.Backup.PiTR.BinlogServer = psv1alpha1.BinlogServerSpec{
+		cr.Spec.Backup.PiTR.BinlogServer = &psv1alpha1.BinlogServerSpec{
 			ConnectTimeout: 20,
 			WriteTimeout:   20,
 			ReadTimeout:    20,
@@ -659,7 +659,6 @@ var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 	})
 
 	Context("delete-mysql-pvc finalizer specified", Ordered, func() {
-
 		cr, err := readDefaultCR(crName, ns)
 
 		It("should read default cr.yaml", func() {
@@ -682,7 +681,6 @@ var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 		})
 
 		It("Should create mysql sts", func() {
-
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      cr.Name + "-mysql",
 				Namespace: cr.Namespace,
@@ -770,7 +768,6 @@ var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 
 					return k8serrors.IsNotFound(err)
 				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
-
 			})
 		})
 	})

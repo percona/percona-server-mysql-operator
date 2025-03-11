@@ -361,7 +361,7 @@ func (b *BackupStorageAzureSpec) ContainerAndPrefix() (string, string) {
 type PiTRSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 
-	BinlogServer BinlogServerSpec `json:"binlogServer,omitempty"`
+	BinlogServer *BinlogServerSpec `json:"binlogServer,omitempty"`
 }
 
 type BinlogServerStorageSpec struct {
@@ -825,6 +825,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 
 	if cr.Spec.Toolkit == nil {
 		cr.Spec.Toolkit = new(ToolkitSpec)
+	}
+
+	if cr.Spec.Backup.PiTR.Enabled && cr.Spec.Backup.PiTR.BinlogServer == nil {
+		cr.Spec.Backup.PiTR.BinlogServer = new(BinlogServerSpec)
 	}
 
 	if cr.Spec.Pause {
