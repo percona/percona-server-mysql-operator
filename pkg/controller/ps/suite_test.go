@@ -97,14 +97,14 @@ var _ = AfterSuite(func() {
 })
 
 func reconciler() *PerconaServerMySQLReconciler {
-	return (&PerconaServerMySQLReconciler{
+	return &PerconaServerMySQLReconciler{
 		Client: k8sClient,
 		Scheme: k8sClient.Scheme(),
 		ServerVersion: &platform.ServerVersion{
 			Platform: platform.PlatformKubernetes,
 		},
 		Crons: NewCronRegistry(),
-	})
+	}
 }
 
 func readDefaultCR(name, namespace string) (*psv1alpha1.PerconaServerMySQL, error) {

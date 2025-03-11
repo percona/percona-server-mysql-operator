@@ -246,7 +246,6 @@ spec:
 #        internalTrafficPolicy: Cluster
 #        labels:
 #          rack: rack-22
-#        loadBalancerIP: 127.0.0.1
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
 #      containerSecurityContext:
@@ -304,12 +303,11 @@ spec:
 #        internalTrafficPolicy: Cluster
 #        labels:
 #          rack: rack-22
-#        loadBalancerIP: 127.0.0.1
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
 
   orchestrator:
-    enabled: true
+    enabled: false
 
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
