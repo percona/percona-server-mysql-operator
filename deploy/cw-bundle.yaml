@@ -3,6 +3,8 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
+  labels:
+    mysql.percona.com/version: v0.10.0
   name: perconaservermysqlbackups.ps.percona.com
 spec:
   group: ps.percona.com
@@ -958,6 +960,8 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
+  labels:
+    mysql.percona.com/version: v0.10.0
   name: perconaservermysqlrestores.ps.percona.com
 spec:
   group: ps.percona.com
@@ -1912,6 +1916,8 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
+  labels:
+    mysql.percona.com/version: v0.10.0
   name: perconaservermysqls.ps.percona.com
 spec:
   group: ps.percona.com
@@ -4879,8 +4885,6 @@ spec:
                         additionalProperties:
                           type: string
                         type: object
-                      loadBalancerIP:
-                        type: string
                       loadBalancerSourceRanges:
                         items:
                           type: string
@@ -7655,8 +7659,6 @@ spec:
                         additionalProperties:
                           type: string
                         type: object
-                      loadBalancerIP:
-                        type: string
                       loadBalancerSourceRanges:
                         items:
                           type: string
@@ -8998,8 +9000,6 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
-                          loadBalancerIP:
-                            type: string
                           loadBalancerSourceRanges:
                             items:
                               type: string
@@ -10215,8 +10215,6 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
-                          loadBalancerIP:
-                            type: string
                           loadBalancerSourceRanges:
                             items:
                               type: string
@@ -11304,6 +11302,21 @@ spec:
                     type: string
                 type: object
             type: object
+            x-kubernetes-validations:
+            - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
+                ''async'', ''orchestrator.enabled'' must be true unless ''unsafeFlags.orchestrator''
+                is enabled'
+              rule: '!(self.mysql.clusterType == ''async'') || self.unsafeFlags.orchestrator
+                || self.orchestrator.enabled'
+            - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
+                ''async'', ''proxy.haproxy.enabled'' must be true unless ''unsafeFlags.proxy''
+                is enabled'
+              rule: '!(self.mysql.clusterType == ''async'') || self.unsafeFlags.proxy
+                || self.proxy.haproxy.enabled'
+            - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
+                ''async'', ''proxy.router.enabled'' must be disabled'
+              rule: '!(self.mysql.clusterType == ''async'') || self.proxy.router ==
+                null || !has(self.proxy.router.enabled) || !self.proxy.router.enabled'
           status:
             properties:
               backupVersion:
@@ -11461,13 +11474,25 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - serviceaccounts
+  - configmaps
+  - persistentvolumeclaims
+  - secrets
+  - services
   verbs:
   - create
+  - delete
   - get
   - list
   - patch
+  - update
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
 - apiGroups:
   - ""
   resources:
@@ -11485,47 +11510,12 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - configmaps
-  - secrets
-  - services
+  - serviceaccounts
   verbs:
   - create
-  - delete
   - get
   - list
   - patch
-  - update
-  - watch
-- apiGroups:
-  - admissionregistration.k8s.io
-  resources:
-  - validatingwebhookconfigurations
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - ""
-  resources:
-  - events
-  verbs:
-  - create
-  - patch
-- apiGroups:
-  - ""
-  resources:
-  - persistentvolumeclaims
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - apps
@@ -11573,31 +11563,9 @@ rules:
   - perconaservermysqlbackups
   - perconaservermysqlbackups/finalizers
   - perconaservermysqlbackups/status
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ps.percona.com
-  resources:
   - perconaservermysqlrestores
   - perconaservermysqlrestores/finalizers
   - perconaservermysqlrestores/status
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ps.percona.com
-  resources:
   - perconaservermysqls
   - perconaservermysqls/finalizers
   - perconaservermysqls/status
@@ -11620,6 +11588,18 @@ rules:
   - list
   - patch
   - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
