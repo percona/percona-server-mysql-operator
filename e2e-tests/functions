@@ -121,7 +121,7 @@ deploy_pmm_server() {
 	done
 }
 
-get_pmm_api_key() {
+get_pmm_server_token() {
 	local key_name=$1
 
 	if [[ -z $key_name ]]; then
@@ -136,26 +136,50 @@ get_pmm_api_key() {
 		return 1
 	fi
 
-	local response status_code json_response
-	response=$(curl --insecure -s -X POST -H 'Content-Type: application/json' \
-		-d "{\"name\":\"${key_name}\", \"role\": \"Admin\"}" \
+	local create_response create_status_code create_json_response
+	create_response=$(curl --insecure -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' \
+		-d "{\"name\":\"${key_name}\", \"role\":\"Admin\", \"isDisabled\":false}" \
 		--user "admin:${ADMIN_PASSWORD}" \
-		"https://$(get_service_ip monitoring-service)/graph/api/auth/keys" \
+		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts" \
 		-w "\n%{http_code}")
 
-	status_code=$(echo "$response" | tail -n1)
-	json_response=$(echo "$response" | sed '$ d')
+	create_status_code=$(echo "$create_response" | tail -n1)
+	create_json_response=$(echo "$create_response" | sed '$ d')
 
-	if [[ $status_code -eq 200 ]]; then
-		echo "$json_response" | jq -r '.key'
-	else
-		echo "Error: Failed to get API key with HTTP status code: $status_code)" >&2
-		echo "Response: $json_response" >&2
+	if [[ $create_status_code -ne 201 ]]; then
+		echo "Error: Failed to create PMM service account. HTTP Status: $create_status_code" >&2
+		echo "Response: $create_json_response" >&2
 		return 1
 	fi
+
+	local service_account_id
+	service_account_id=$(echo "$create_json_response" | jq -r '.id')
+
+	if [[ -z $service_account_id || $service_account_id == "null" ]]; then
+		echo "Error: Failed to extract service account ID!" >&2
+		return 1
+	fi
+
+	local token_response token_status_code token_json_response
+	token_response=$(curl --insecure -s -X POST -H 'Content-Type: application/json' \
+		-d "{\"name\":\"${key_name}\"}" \
+		--user "admin:${ADMIN_PASSWORD}" \
+		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens" \
+		-w "\n%{http_code}")
+
+	token_status_code=$(echo "$token_response" | tail -n1)
+	token_json_response=$(echo "$token_response" | sed '$ d')
+
+	if [[ $token_status_code -ne 200 ]]; then
+		echo "Error: Failed to create token. HTTP Status: $token_status_code" >&2
+		echo "Response: $token_json_response" >&2
+		return 1
+	fi
+
+	echo "$token_json_response" | jq -r '.key'
 }
 
-delete_pmm_api_key() {
+delete_pmm_server_token() {
 	local key_name=$1
 
 	if [[ -z $key_name ]]; then
@@ -165,12 +189,69 @@ delete_pmm_api_key() {
 	local ADMIN_PASSWORD
 	ADMIN_PASSWORD=$(kubectl -n "${NAMESPACE}" get secret pmm-secret -o jsonpath="{.data.PMM_ADMIN_PASSWORD}" | base64 --decode)
 
+	if [[ -z $ADMIN_PASSWORD ]]; then
+		echo "Error: ADMIN_PASSWORD is empty or not found!" >&2
+		return 1
+	fi
+
 	local user_credentials="admin:${ADMIN_PASSWORD}"
 
-	local key_id
-	key_id=$(curl --insecure -X GET --user "${user_credentials}" "https://$(get_service_ip monitoring-service)/graph/api/auth/keys" | jq '.[] | select( .name == "operator").id')
+	local service_accounts_response service_accounts_status
+	service_accounts_response=$(curl --insecure -s -X GET --user "${user_credentials}" \
+		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts/search" \
+		-w "\n%{http_code}")
 
-	curl --insecure -X DELETE --user "${user_credentials}" "https://$(get_service_ip monitoring-service)/graph/api/auth/keys/$key_id"
+	service_accounts_status=$(echo "$service_accounts_response" | tail -n1)
+	service_accounts_json=$(echo "$service_accounts_response" | sed '$ d')
+
+	if [[ $service_accounts_status -ne 200 ]]; then
+		echo "Error: Failed to fetch service accounts. HTTP Status: $service_accounts_status" >&2
+		echo "Response: $service_accounts_json" >&2
+		return 1
+	fi
+
+	local service_account_id
+	service_account_id=$(echo "$service_accounts_json" | jq -r ".serviceAccounts[] | select(.name == \"${key_name}\").id")
+
+	if [[ -z $service_account_id || $service_account_id == "null" ]]; then
+		echo "Service account '${key_name}' not found."
+		return 1
+	fi
+
+	local tokens_response tokens_status tokens_json
+	tokens_response=$(curl --insecure -s -X GET --user "${user_credentials}" \
+		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens" \
+		-w "\n%{http_code}")
+
+	tokens_status=$(echo "$tokens_response" | tail -n1)
+	tokens_json=$(echo "$tokens_response" | sed '$ d')
+
+	if [[ $tokens_status -ne 200 ]]; then
+		echo "Error: Failed to fetch tokens. HTTP Status: $tokens_status" >&2
+		echo "Response: $tokens_json" >&2
+		return 1
+	fi
+
+	local token_id
+	token_id=$(echo "$tokens_json" | jq -r ".[] | select(.name == \"${key_name}\").id")
+
+	if [[ -z $token_id || $token_id == "null" ]]; then
+		echo "Token for service account '${key_name}' not found."
+		return 1
+	fi
+
+	local delete_response delete_status
+	delete_response=$(curl --insecure -s -X DELETE --user "${user_credentials}" \
+		"https://$(get_service_ip monitoring-service)/graph/api/serviceaccounts/${service_account_id}/tokens/${token_id}" \
+		-w "\n%{http_code}")
+
+	delete_status=$(echo "$delete_response" | tail -n1)
+
+	if [[ $delete_status -ne 200 ]]; then
+		echo "Error: Failed to delete token. HTTP Status: $delete_status" >&2
+		echo "Response: $delete_response" >&2
+		return 1
+	fi
 }
 
 deploy_minio() {
@@ -356,13 +437,13 @@ get_orc_headless_fqdn() {
 get_metric_values() {
 	local metric=$1
 	local instance=$2
-	local user_pass=$3
+	local token=$3
 	local start=$($date -u "+%s" -d "-1 minute")
 	local end=$($date -u "+%s")
 
 	set +o xtrace
 	retry=0
-	until run_curl "https://${user_pass}@monitoring-service/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28$metric%7Bnode_name%3D%7E%22$instance%22%7d%20or%20$metric%7Bnode_name%3D%7E%22$instance%22%7D%29&start=$start&end=$end&step=60" | jq '.data.result[0].values[][1]' | grep '^"[0-9]*"$'; do
+	until run_curl "-H 'Authorization: Bearer ${token}'" "https://monitoring-service/graph/api/datasources/proxy/1/api/v1/query_range?query=min%28$metric%7Bnode_name%3D%7E%22$instance%22%7d%20or%20$metric%7Bnode_name%3D%7E%22$instance%22%7D%29&start=$start&end=$end&step=60" | jq '.data.result[0].values[][1]' | grep '^"[0-9]*"$'; do
 		sleep 1
 		let retry+=1
 		if [ $retry -ge 30 ]; then

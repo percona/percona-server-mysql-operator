@@ -9,16 +9,16 @@ commands:
 
       sleep 70 # we should wait more than one minute because `get_metric_values` gets data for the last 60 seconds
 
-      API_KEY=$(kubectl get secret internal-monitoring -o jsonpath='{.data.pmmserverkey}' -n "${NAMESPACE}" | base64 --decode)
+      TOKEN=$(kubectl get secret internal-monitoring -o jsonpath='{.data.pmmservertoken}' -n "${NAMESPACE}" | base64 --decode)
 
       for i in $(seq 0 2); do
-          get_metric_values node_boot_time_seconds ${NAMESPACE}-$(get_cluster_name)-mysql-${i} api_key:$API_KEY
-          get_metric_values mysql_global_status_uptime ${NAMESPACE}-$(get_cluster_name)-mysql-${i} api_key:$API_KEY
+          get_metric_values node_boot_time_seconds ${NAMESPACE}-$(get_cluster_name)-mysql-${i} $TOKEN
+          get_metric_values mysql_global_status_uptime ${NAMESPACE}-$(get_cluster_name)-mysql-${i} $TOKEN
       done
 
       sleep 90 # wait for QAN
 
-      get_qan20_values monitoring-mysql-0 api_key:$API_KEY
+      get_qan20_values monitoring-mysql-0 $TOKEN
 
       haproxy_svc=$(get_service_ip "monitoring-haproxy")
       http_code=$(curl -s -o /dev/null -w "%{http_code}" http://${haproxy_svc}:8404/metrics)
