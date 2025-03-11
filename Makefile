@@ -80,6 +80,8 @@ help: ## Display this help.
 
 generate: controller-gen
 	$(CONTROLLER_GEN) crd:maxDescLen=0 rbac:roleName=$(NAME) webhook paths="./..." output:crd:artifacts:config=config/crd/bases  ## Generate WebhookConfiguration, Role and CustomResourceDefinition objects.
+	$(CONTROLLER_GEN) crd:maxDescLen=0 rbac:roleName=$(NAME) webhook paths="./..." output:rbac:artifacts:config=config/rbac/cluster
+	yq eval '.rules' config/rbac/cluster/clusterrole_additional.yaml >> config/rbac/cluster/role.yaml
 	$(CONTROLLER_GEN) object:headerFile="LICENSE-HEADER" paths="./..." ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 
 fmt: ## Run go fmt against code.

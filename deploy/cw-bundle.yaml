@@ -11448,13 +11448,25 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - serviceaccounts
+  - configmaps
+  - persistentvolumeclaims
+  - secrets
+  - services
   verbs:
   - create
+  - delete
   - get
   - list
   - patch
+  - update
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
 - apiGroups:
   - ""
   resources:
@@ -11472,47 +11484,12 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - configmaps
-  - secrets
-  - services
+  - serviceaccounts
   verbs:
   - create
-  - delete
   - get
   - list
   - patch
-  - update
-  - watch
-- apiGroups:
-  - admissionregistration.k8s.io
-  resources:
-  - validatingwebhookconfigurations
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - ""
-  resources:
-  - events
-  verbs:
-  - create
-  - patch
-- apiGroups:
-  - ""
-  resources:
-  - persistentvolumeclaims
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - apps
@@ -11560,31 +11537,9 @@ rules:
   - perconaservermysqlbackups
   - perconaservermysqlbackups/finalizers
   - perconaservermysqlbackups/status
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ps.percona.com
-  resources:
   - perconaservermysqlrestores
   - perconaservermysqlrestores/finalizers
   - perconaservermysqlrestores/status
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ps.percona.com
-  resources:
   - perconaservermysqls
   - perconaservermysqls/finalizers
   - perconaservermysqls/status
@@ -11607,6 +11562,18 @@ rules:
   - list
   - patch
   - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
