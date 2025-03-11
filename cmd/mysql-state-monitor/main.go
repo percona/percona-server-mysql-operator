@@ -77,29 +77,33 @@ func main() {
 	}
 	defer conn.Close()
 
+	run(conn, stateFilePath)
+}
+
+func run(conn *net.UnixConn, stateFilePath string) {
 	sigterm := make(chan os.Signal, 1)
 	signal.Notify(sigterm, os.Interrupt, syscall.SIGTERM)
 
-	go func() {
-		sig := <-sigterm
-		log.Printf("Received signal %v. Exiting mysql-state-monitor", sig)
-		os.Exit(0)
-	}()
-
 	buf := make([]byte, 256)
 	for {
-		n, _, err := conn.ReadFromUnix(buf)
-		if err != nil {
-			log.Printf("Failed to read from unix socket: %s", err)
-			continue
-		}
-		datum := string(buf[:n])
-		mysqlState := parseDatum(datum)
+		select {
+		case sig := <-sigterm:
+			log.Printf("Received signal %v. Exiting mysql-state-monitor", sig)
+			return
+		default:
+			n, _, err := conn.ReadFromUnix(buf)
+			if err != nil {
+				log.Printf("Failed to read from unix socket: %s", err)
+				continue
+			}
+			datum := string(buf[:n])
+			mysqlState := parseDatum(datum)
 
-		log.Printf("MySQLState: %s\nReceived: %s", mysqlState, datum)
+			log.Printf("MySQLState: %s\nReceived: %s", mysqlState, datum)
 
-		if err := os.WriteFile(stateFilePath, []byte(mysqlState), 0666); err != nil {
-			log.Printf("Failed to write to state file: %s", err)
+			if err := os.WriteFile(stateFilePath, []byte(mysqlState), 0666); err != nil {
+				log.Printf("Failed to write to state file: %s", err)
+			}
 		}
 	}
 }
