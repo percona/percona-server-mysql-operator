@@ -431,6 +431,9 @@ if [ -f "${recovery_file}" ]; then
 	done
 fi
 
-nohup /opt/percona/mysql-state-monitor >/var/lib/mysql/mysql-state-monitor.log 2>&1 </dev/null &
+if [[ -n ${MYSQL_NOTIFY_SOCKET} ]]; then
+	export NOTIFY_SOCKET=${MYSQL_NOTIFY_SOCKET}
+	nohup /opt/percona/mysql-state-monitor >/var/lib/mysql/mysql-state-monitor.log 2>&1 </dev/null &
+fi
 
 exec "$@"
