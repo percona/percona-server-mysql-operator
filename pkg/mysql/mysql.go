@@ -16,17 +16,19 @@ import (
 )
 
 const (
-	ComponentName    = "mysql"
-	DataVolumeName   = "datadir"
-	DataMountPath    = "/var/lib/mysql"
-	CustomConfigKey  = "my.cnf"
-	configVolumeName = "config"
-	configMountPath  = "/etc/mysql/config"
-	credsVolumeName  = "users"
-	CredsMountPath   = "/etc/mysql/mysql-users-secret"
-	tlsVolumeName    = "tls"
-	tlsMountPath     = "/etc/mysql/mysql-tls-secret"
-	BackupLogDir     = "/var/log/xtrabackup"
+	ComponentName     = "mysql"
+	DataVolumeName    = "datadir"
+	DataMountPath     = "/var/lib/mysql"
+	CustomConfigKey   = "my.cnf"
+	configVolumeName  = "config"
+	configMountPath   = "/etc/mysql/config"
+	credsVolumeName   = "users"
+	CredsMountPath    = "/etc/mysql/mysql-users-secret"
+	mysqlshVolumeName = "mysqlsh"
+	mysqlshMountPath  = "/.mysqlsh"
+	tlsVolumeName     = "tls"
+	tlsMountPath      = "/etc/mysql/mysql-tls-secret"
+	BackupLogDir      = "/var/log/xtrabackup"
 )
 
 const (
@@ -184,6 +186,12 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 						[]corev1.Volume{
 							{
 								Name: apiv1alpha1.BinVolumeName,
+								VolumeSource: corev1.VolumeSource{
+									EmptyDir: &corev1.EmptyDirVolumeSource{},
+								},
+							},
+							{
+								Name: mysqlshVolumeName,
 								VolumeSource: corev1.VolumeSource{
 									EmptyDir: &corev1.EmptyDirVolumeSource{},
 								},
@@ -530,6 +538,10 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			{
 				Name:      DataVolumeName,
 				MountPath: DataMountPath,
+			},
+			{
+				Name:      mysqlshVolumeName,
+				MountPath: mysqlshMountPath,
 			},
 			{
 				Name:      credsVolumeName,

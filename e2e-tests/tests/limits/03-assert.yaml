@@ -330,6 +330,8 @@ spec:
           name: tls
         - mountPath: /etc/orchestrator/config
           name: config
+        - mountPath: /etc/orchestrator/mysql
+          name: mysql
         - mountPath: /etc/orchestrator/orchestrator-users-secret/orchestrator
           name: users
           subPath: orchestrator
@@ -356,6 +358,8 @@ spec:
           name: tls
         - mountPath: /etc/orchestrator/config
           name: config
+        - mountPath: /etc/orchestrator/mysql
+          name: mysql
         - mountPath: /etc/orchestrator/orchestrator-users-secret/orchestrator
           name: users
           subPath: orchestrator
@@ -383,6 +387,8 @@ spec:
       volumes:
       - emptyDir: {}
         name: bin
+      - emptyDir: { }
+        name: mysql
       - name: users
         secret:
           defaultMode: 420

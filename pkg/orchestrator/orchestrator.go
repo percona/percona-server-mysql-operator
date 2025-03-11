@@ -26,6 +26,8 @@ const (
 	defaultWebPort     = 3000
 	defaultRaftPort    = 10008
 	configVolumeName   = "config"
+	mysqlVolumeName    = "mysql"
+	mysqlMountPath     = "/etc/orchestrator/mysql"
 	configMountPath    = "/etc/orchestrator/config"
 	ConfigFileName     = "orchestrator.conf.json"
 	credsVolumeName    = "users"
@@ -170,6 +172,12 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, tlsHash string) 
 							},
 						},
 						{
+							Name: mysqlVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
+							},
+						},
+						{
 							Name: credsVolumeName,
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
@@ -252,7 +260,7 @@ func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		ImagePullPolicy: cr.Spec.Orchestrator.ImagePullPolicy,
 		Resources:       cr.Spec.Orchestrator.Resources,
 		Command:         []string{"/opt/percona/orc-entrypoint.sh"},
-		Args:            []string{"/usr/local/orchestrator/orchestrator", "-config", "/etc/orchestrator/orchestrator.conf.json", "http"},
+		Args:            []string{"/usr/local/orchestrator/orchestrator", "-config", "/etc/orchestrator/mysql/orchestrator.conf.json", "http"},
 		Env:             env,
 		EnvFrom:         cr.Spec.Orchestrator.EnvFrom,
 		Ports: []corev1.ContainerPort{
@@ -344,6 +352,10 @@ func containerMounts() []corev1.VolumeMount {
 		{
 			Name:      configVolumeName,
 			MountPath: configMountPath,
+		},
+		{
+			Name:      mysqlVolumeName,
+			MountPath: mysqlMountPath,
 		},
 		{
 			Name:      credsVolumeName,
