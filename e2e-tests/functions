@@ -319,6 +319,7 @@ get_cr() {
 		| yq eval '.spec.sslSecretName="test-ssl"' - \
 		| yq eval '.spec.upgradeOptions.apply="disabled"' - \
 		| yq eval '.spec.mysql.clusterType="async"' - \
+		| yq eval '.spec.orchestrator.enabled=true' - \
 		| yq eval "$(printf '.spec.mysql.image="%s"' "${IMAGE_MYSQL}")" - \
 		| yq eval "$(printf '.spec.backup.image="%s"' "${IMAGE_BACKUP}")" - \
 		| yq eval "$(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}")" - \
