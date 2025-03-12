@@ -531,14 +531,14 @@ type PerconaServerMySQLList struct {
 type SystemUser string
 
 const (
-	UserHeartbeat    SystemUser = "heartbeat"
-	UserMonitor      SystemUser = "monitor"
-	UserOperator     SystemUser = "operator"
-	UserOrchestrator SystemUser = "orchestrator"
-	UserPMMServerKey SystemUser = "pmmserverkey"
-	UserReplication  SystemUser = "replication"
-	UserRoot         SystemUser = "root"
-	UserXtraBackup   SystemUser = "xtrabackup"
+	UserHeartbeat      SystemUser = "heartbeat"
+	UserMonitor        SystemUser = "monitor"
+	UserOperator       SystemUser = "operator"
+	UserOrchestrator   SystemUser = "orchestrator"
+	UserPMMServerToken SystemUser = "pmmservertoken"
+	UserReplication    SystemUser = "replication"
+	UserRoot           SystemUser = "root"
+	UserXtraBackup     SystemUser = "xtrabackup"
 )
 
 // MySQLSpec returns the MySQL specification from the PerconaServerMySQL custom resource.
@@ -1024,7 +1024,7 @@ func (cr *PerconaServerMySQL) PMMEnabled(secret *corev1.Secret) bool {
 // HasSecret determines if the provided secret contains the necessary PMM server key.
 func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	if secret.Data != nil {
-		v, ok := secret.Data[string(UserPMMServerKey)]
+		v, ok := secret.Data[string(UserPMMServerToken)]
 		return ok && len(v) > 0
 	}
 	return false

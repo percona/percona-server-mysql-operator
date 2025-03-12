@@ -34,8 +34,8 @@ func Container(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret, dbType
 }
 
 func pmmEnvs(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret, dbType string) []corev1.EnvVar {
-	user := "api_key"
-	passwordKey := string(apiv1alpha1.UserPMMServerKey)
+	user := "service_token"
+	token := string(apiv1alpha1.UserPMMServerToken)
 	pmmSpec := cr.PMMSpec()
 
 	return []corev1.EnvVar{
@@ -70,7 +70,7 @@ func pmmEnvs(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret, dbType s
 		{
 			Name: "PMM_AGENT_SERVER_PASSWORD",
 			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: k8s.SecretKeySelector(secret.Name, passwordKey),
+				SecretKeyRef: k8s.SecretKeySelector(secret.Name, token),
 			},
 		},
 		{
