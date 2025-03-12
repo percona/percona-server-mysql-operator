@@ -177,7 +177,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		switch apiv1alpha1.SystemUser(user) {
 		case apiv1alpha1.UserMonitor:
 			restartMySQL = cr.PMMEnabled(internalSecret)
-		case apiv1alpha1.UserPMMServerKey:
+		case apiv1alpha1.UserPMMServerToken:
 			restartPMM = cr.PMMEnabled(internalSecret)
 			continue // PMM server user credentials are not stored in db
 		case apiv1alpha1.UserReplication:
@@ -260,7 +260,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	if restartMySQL || restartPMM {
-		log.Info("Monitor user password or pmmserverkey updated. Restarting MySQL.")
+		log.Info("Monitor user password or pmmservertoken updated. Restarting MySQL.")
 
 		sts := &appsv1.StatefulSet{}
 		if err := r.Client.Get(ctx, mysql.NamespacedName(cr), sts); err != nil {
@@ -272,7 +272,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	if cr.HAProxyEnabled() && restartPMM {
-		log.Info("pmmserverkey updated. Restarting HAProxy.")
+		log.Info("pmmservertoken updated. Restarting HAProxy.")
 
 		sts := new(appsv1.StatefulSet)
 		if err := r.Get(ctx, haproxy.NamespacedName(cr), sts); err != nil {
