@@ -22,7 +22,7 @@ require (
 	github.com/sjmudd/stopwatch v0.1.1
 	go.nhat.io/grpcmock v0.28.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/sync v0.11.0
+	golang.org/x/sync v0.12.0
 	golang.org/x/text v0.22.0
 	google.golang.org/grpc v1.71.0
 	k8s.io/api v0.32.2
