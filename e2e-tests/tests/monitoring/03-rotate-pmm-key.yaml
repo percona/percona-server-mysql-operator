@@ -8,10 +8,10 @@ commands:
       source ../../functions
 
       # add new PMM API key to secret
-      API_KEY_NEW=$(get_pmm_api_key "operator-new")
-      kubectl patch -n "${NAMESPACE}" secret test-secrets --type merge --patch "$(jq -n --arg key "$API_KEY_NEW" '{"stringData": {"pmmserverkey": $key}}')"
+      NEW_TOKEN=$(get_pmm_server_token "operator-new")
+      kubectl patch -n "${NAMESPACE}" secret test-secrets --type merge --patch "$(jq -n --arg token "$NEW_TOKEN" '{"stringData": {"pmmservertoken": $token}}')"
 
       # delete old PMM key
-      delete_pmm_api_key "operator"
+      delete_pmm_server_token "operator"
       sleep 10
     timeout: 120

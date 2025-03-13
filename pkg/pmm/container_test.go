@@ -23,8 +23,8 @@ func TestContainer(t *testing.T) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-secret"},
 		Data: map[string][]byte{
-			string(apiv1alpha1.UserPMMServerKey): []byte("password"),
-			string(apiv1alpha1.UserMonitor):      []byte("monitor-pass"),
+			string(apiv1alpha1.UserPMMServerToken): []byte("token"),
+			string(apiv1alpha1.UserMonitor):        []byte("monitor-pass"),
 		},
 	}
 
