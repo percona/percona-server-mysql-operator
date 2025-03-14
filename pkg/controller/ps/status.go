@@ -24,6 +24,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 )
@@ -250,26 +251,39 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 		return false, nil
 	}
 
-	members, err := db.GetGroupReplicationMembers(ctx)
+	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
+
+	msh, err := mysqlsh.NewWithExec(r.ClientCmd, pod, uri)
 	if err != nil {
 		return false, err
 	}
 
-	onlineMembers := 0
-	for _, member := range members {
-		if member.MemberState != innodbcluster.MemberStateOnline {
-			log.WithName(member.Address).Info("Member is not ONLINE", "state", member.MemberState)
-			return false, nil
-		}
-		onlineMembers++
+	status, err := msh.ClusterStatusWithExec(ctx, cr.InnoDBClusterName())
+	if err != nil {
+		return false, err
 	}
 
-	if onlineMembers < int(cr.Spec.MySQL.Size) {
-		log.V(1).Info("Not enough ONLINE members", "onlineMembers", onlineMembers, "size", cr.Spec.MySQL.Size)
+	switch status.DefaultReplicaSet.Status {
+	case innodbcluster.ClusterStatusOK,
+		innodbcluster.ClusterStatusOKPartial,
+		innodbcluster.ClusterStatusOKNoTolerance,
+		innodbcluster.ClusterStatusOKNoTolerancePartial:
+	default:
+		log.Info("Cluster status is not OK", "status", status.DefaultReplicaSet.Status)
 		return false, nil
 	}
 
-	log.V(1).Info("GR is ready")
+	for _, member := range status.DefaultReplicaSet.Topology {
+		for _, instErr := range member.InstanceErrors {
+			log.WithName(member.Address).Info(instErr)
+		}
+
+		if member.MemberState != innodbcluster.MemberStateOnline {
+			log.WithName(member.Address).Info("Member is not ONLINE", "state", member.MemberState)
+		}
+	}
+
+	log.V(1).Info("Group replication is ready", "primary", status.DefaultReplicaSet.Primary, "status", status.DefaultReplicaSet.Status)
 
 	return true, nil
 }
