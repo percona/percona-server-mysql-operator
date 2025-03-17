@@ -102,3 +102,29 @@ func (m *mysqlshExec) SetPrimaryInstanceWithExec(ctx context.Context, clusterNam
 
 	return nil
 }
+
+func (m *mysqlshExec) Rescan80WithExec(ctx context.Context, clusterName string) error {
+	cmd := fmt.Sprintf(
+		"dba.getCluster('%s').rescan({'addInstances': 'auto', 'removeInstances': 'auto', 'repairMetadata': true})",
+		clusterName,
+	)
+
+	if err := m.runWithExec(ctx, cmd); err != nil {
+		return errors.Wrap(err, "8.0: rescan cluster")
+	}
+
+	return nil
+}
+
+func (m *mysqlshExec) Rescan84WithExec(ctx context.Context, clusterName string) error {
+	cmd := fmt.Sprintf(
+		"dba.getCluster('%s').rescan({'addUnmanaged': true, 'removeObsolete': true, 'repairMetadata': true})",
+		clusterName,
+	)
+
+	if err := m.runWithExec(ctx, cmd); err != nil {
+		return errors.Wrap(err, "8.4: rescan cluster")
+	}
+
+	return nil
+}

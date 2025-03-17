@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
 	"golang.org/x/text/cases"
@@ -481,17 +482,23 @@ type StatefulAppStatus struct {
 // PerconaServerMySQLStatus defines the observed state of PerconaServerMySQL
 type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	MySQL          StatefulAppStatus  `json:"mysql,omitempty"`
-	Orchestrator   StatefulAppStatus  `json:"orchestrator,omitempty"`
-	HAProxy        StatefulAppStatus  `json:"haproxy,omitempty"`
-	Router         StatefulAppStatus  `json:"router,omitempty"`
-	State          StatefulAppState   `json:"state,omitempty"`
-	BackupVersion  string             `json:"backupVersion,omitempty"`
-	PMMVersion     string             `json:"pmmVersion,omitempty"`
-	ToolkitVersion string             `json:"toolkitVersion,omitempty"`
-	Conditions     []metav1.Condition `json:"conditions,omitempty"`
+	MySQL             StatefulAppStatus  `json:"mysql,omitempty"`
+	Orchestrator      StatefulAppStatus  `json:"orchestrator,omitempty"`
+	HAProxy           StatefulAppStatus  `json:"haproxy,omitempty"`
+	Router            StatefulAppStatus  `json:"router,omitempty"`
+	State             StatefulAppState   `json:"state,omitempty"`
+	MySQLImageID      string             `json:"mysqlImageID,omitempty"`
+	MySQLShellVersion string             `json:"mysqlShellVersion,omitempty"`
+	BackupVersion     string             `json:"backupVersion,omitempty"`
+	PMMVersion        string             `json:"pmmVersion,omitempty"`
+	ToolkitVersion    string             `json:"toolkitVersion,omitempty"`
+	Conditions        []metav1.Condition `json:"conditions,omitempty"`
 	// +optional
 	Host string `json:"host"`
+}
+
+func (s *PerconaServerMySQLStatus) CompareMySQLShellVersion(ver string) int {
+	return v.Must(v.NewVersion(s.MySQLShellVersion)).Compare(v.Must(v.NewVersion(ver)))
 }
 
 const ConditionInnoDBClusterBootstrapped string = "InnoDBClusterBootstrapped"

@@ -25,6 +25,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 )
@@ -260,7 +261,40 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 
 	status, err := msh.ClusterStatusWithExec(ctx, cr.InnoDBClusterName())
 	if err != nil {
-		return false, err
+		return false, errors.Wrapf(err, "check cluster status from %s", pod.Name)
+	}
+
+	rescanNeeded := false
+	var onlineMembers int32
+	for _, member := range status.DefaultReplicaSet.Topology {
+		for _, instErr := range member.InstanceErrors {
+			log.WithName(member.Address).Info(instErr)
+			if strings.Contains(instErr, "rescan") {
+				log.Info("Cluster rescan is needed")
+				rescanNeeded = true
+			}
+		}
+
+		if member.MemberState != innodbcluster.MemberStateOnline {
+			log.WithName(member.Address).Info("Member is not ONLINE", "state", member.MemberState)
+			continue
+		}
+
+		onlineMembers++
+	}
+
+	if rescanNeeded {
+		err := k8s.AnnotateObject(ctx, r.Client, cr, map[string]string{
+			string(naming.AnnotationRescanNeeded): "true",
+		})
+		if err != nil {
+			return false, errors.Wrap(err, "add rescan-needed annotation")
+		}
+	}
+
+	if onlineMembers < cr.Spec.MySQL.Size {
+		log.Info("Not all members are online", "online", onlineMembers, "size", cr.Spec.MySQL.Size)
+		return false, nil
 	}
 
 	switch status.DefaultReplicaSet.Status {
@@ -271,16 +305,6 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 	default:
 		log.Info("Cluster status is not OK", "status", status.DefaultReplicaSet.Status)
 		return false, nil
-	}
-
-	for _, member := range status.DefaultReplicaSet.Topology {
-		for _, instErr := range member.InstanceErrors {
-			log.WithName(member.Address).Info(instErr)
-		}
-
-		if member.MemberState != innodbcluster.MemberStateOnline {
-			log.WithName(member.Address).Info("Member is not ONLINE", "state", member.MemberState)
-		}
 	}
 
 	log.V(1).Info("Group replication is ready", "primary", status.DefaultReplicaSet.Primary, "status", status.DefaultReplicaSet.Status)

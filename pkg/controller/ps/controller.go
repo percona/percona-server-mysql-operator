@@ -17,17 +17,20 @@ limitations under the License.
 package ps
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
@@ -40,6 +43,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/retry"
 	k8sretry "k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -929,11 +933,27 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	log := logf.FromContext(ctx).WithName("reconcileGroupReplication")
-
 	if cr.Spec.MySQL.ClusterType != apiv1alpha1.ClusterTypeGR {
 		return nil
 	}
+
+	if err := r.reconcileMySQLShellVersion(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile mysql shell version")
+	}
+
+	if err := r.reconcileBootstrapStatus(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile bootstrap status")
+	}
+
+	if err := r.rescanClusterIfNeeded(ctx, cr); err != nil {
+		return errors.Wrap(err, "rescan cluster if needed")
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	log := logf.FromContext(ctx)
 
 	if cr.Status.MySQL.Ready == 0 || cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
 		log.V(1).Info("Waiting for MySQL pods to be ready")
@@ -971,6 +991,106 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 
 	if exists, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata"); err != nil || !exists {
 		return errors.Wrap(err, "InnoDB cluster is already bootstrapped, but failed to check its status")
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileMySQLShellVersion(
+	ctx context.Context,
+	cr *apiv1alpha1.PerconaServerMySQL,
+) error {
+	log := logf.FromContext(ctx)
+
+	pod, err := getReadyMySQLPod(ctx, r.Client, cr)
+	if err != nil {
+		if errors.Is(err, ErrNoReadyPods) {
+			return nil
+		}
+		return errors.Wrap(err, "get ready mysql pod")
+	}
+
+	imageId, err := k8s.GetImageIDFromPod(pod, mysql.ComponentName)
+	if err != nil {
+		return errors.Wrapf(err, "get MySQL image id from %s", pod.Name)
+	}
+
+	if len(cr.Status.MySQLShellVersion) > 0 && cr.Status.MySQLImageID == imageId {
+		return nil
+	}
+
+	re, err := regexp.Compile(`MySQL (\d+\.\d+\.\d+)`)
+	if err != nil {
+		return err
+	}
+
+	var stdoutb, stderrb bytes.Buffer
+
+	err = r.ClientCmd.Exec(ctx, pod, mysql.ComponentName, []string{"mysqlsh", "--version"}, nil, &stdoutb, &stderrb, false)
+	if err != nil {
+		return errors.Wrapf(err, "run mysqlsh --version (stdout: %s, stderr: %s)", stdoutb.String(), stderrb.String())
+	}
+
+	f := re.FindSubmatch(stdoutb.Bytes())
+	if f == nil || len(f) < 1 {
+		return errors.Errorf(
+			"couldn't extract version information from mysqlsh --version (stdout: %s, stderr: %s)",
+			stdoutb.String(), stderrb.String())
+	}
+
+	version, err := v.NewVersion(string(f[1]))
+	if err != nil {
+		return errors.Wrap(err, "parse version")
+	}
+
+	cr.Status.MySQLImageID = imageId
+	cr.Status.MySQLShellVersion = version.String()
+	log.V(1).Info("MySQL Shell Version: " + cr.Status.MySQLShellVersion)
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) rescanClusterIfNeeded(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	_, ok := cr.Annotations[string(naming.AnnotationRescanNeeded)]
+	if !ok {
+		return nil
+	}
+
+	log := logf.FromContext(ctx)
+
+	pod, err := getReadyMySQLPod(ctx, r.Client, cr)
+	if err != nil {
+		return errors.Wrap(err, "get ready mysql pod")
+	}
+
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+
+	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
+
+	msh, err := mysqlsh.NewWithExec(r.ClientCmd, pod, uri)
+	if err != nil {
+		return err
+	}
+
+	err = retry.OnError(retry.DefaultBackoff, func(err error) bool { return true }, func() error {
+		if cr.Status.CompareMySQLShellVersion("8.4") < 0 {
+			return msh.Rescan80WithExec(ctx, cr.InnoDBClusterName())
+		}
+
+		return msh.Rescan84WithExec(ctx, cr.InnoDBClusterName())
+	})
+	if err != nil {
+		return errors.Wrap(err, "start rescan")
+	}
+
+	log.Info("Cluster rescan started", "pod", pod.Name, "cluster", cr.InnoDBClusterName())
+
+	err = k8s.DeannotateObject(ctx, r.Client, cr, string(naming.AnnotationRescanNeeded))
+	if err != nil {
+		return errors.Wrap(err, "remove rescan-needed annotation")
 	}
 
 	return nil
@@ -1422,7 +1542,7 @@ func getReadyMySQLPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.Per
 			return &pods[i], nil
 		}
 	}
-	return nil, errors.New("no ready pods")
+	return nil, ErrNoReadyPods
 }
 
 func getMySQLPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
@@ -1447,7 +1567,7 @@ func getReadyOrcPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.Perco
 			return &pods[i], nil
 		}
 	}
-	return nil, errors.New("no ready pods")
+	return nil, ErrNoReadyPods
 }
 
 func getPodIndexFromHostname(hostname string) (int, error) {
