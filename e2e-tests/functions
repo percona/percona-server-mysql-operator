@@ -5,6 +5,10 @@ ROOT_REPO=${ROOT_REPO:-$(realpath ../../..)}
 test_name=$(basename "$(pwd)")
 source "${ROOT_REPO}/e2e-tests/vars.sh"
 
+if oc get projects 2>/dev/null; then
+	OPENSHIFT=4
+fi
+
 init_temp_dir() {
 	rm -rf "$TEMP_DIR"
 	mkdir -p "$TEMP_DIR"
@@ -312,6 +316,10 @@ get_operator_pod() {
 
 get_cr() {
 	local name_suffix=$1
+
+  if [[ $OPENSHIFT ]]; then
+    yq eval -i '.spec.openshift = true' ${DEPLOY_DIR}/cr.yaml
+  fi
 
 	yq eval "$(printf '.metadata.name="%s"' "${test_name}${name_suffix:+-$name_suffix}")" "${DEPLOY_DIR}/cr.yaml" \
 		| yq eval "$(printf '.spec.initImage="%s"' "${IMAGE}")" - \
@@ -763,7 +771,10 @@ deploy_chaos_mesh() {
 	else
 		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 2.5.1
 	fi
-	sleep 10
+	if [[ $OPENSHIFT ]]; then
+  		oc adm policy add-scc-to-user privileged -z chaos-daemon --namespace=${NAMESPACE}
+  fi
+  sleep 10
 }
 
 destroy_chaos_mesh() {
