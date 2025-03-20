@@ -121,6 +121,8 @@ spec:
           name: bin
         - mountPath: /var/lib/mysql
           name: datadir
+        - mountPath: /.mysqlsh
+          name: mysqlsh
         - mountPath: /etc/mysql/mysql-users-secret
           name: users
         - mountPath: /etc/mysql/mysql-tls-secret
@@ -183,6 +185,8 @@ spec:
       volumes:
       - emptyDir: {}
         name: bin
+      - emptyDir: { }
+        name: mysqlsh
       - name: users
         secret:
           defaultMode: 420
@@ -330,6 +334,8 @@ spec:
           name: tls
         - mountPath: /etc/orchestrator/config
           name: config
+        - mountPath: /etc/orchestrator/mysql
+          name: mysql
         - mountPath: /etc/orchestrator/orchestrator-users-secret/orchestrator
           name: users
           subPath: orchestrator
@@ -356,6 +362,8 @@ spec:
           name: tls
         - mountPath: /etc/orchestrator/config
           name: config
+        - mountPath: /etc/orchestrator/mysql
+          name: mysql
         - mountPath: /etc/orchestrator/orchestrator-users-secret/orchestrator
           name: users
           subPath: orchestrator
@@ -383,6 +391,8 @@ spec:
       volumes:
       - emptyDir: {}
         name: bin
+      - emptyDir: { }
+        name: mysql
       - name: users
         secret:
           defaultMode: 420
