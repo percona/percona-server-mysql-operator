@@ -24,7 +24,7 @@ create_namespace() {
 		else
 			oc delete project "$namespace" && sleep 40 || :
 		fi
-		wait_for_delete "project/$namespace"
+		wait_for_delete "project/$namespace" || :
 
 		oc new-project "$namespace"
 		oc project "$namespace"
@@ -91,38 +91,37 @@ apply_s3_storage_secrets() {
 }
 
 deploy_pmm_server() {
-	if [[ $OPENSHIFT ]]; then
-		oc create sa pmm-server -n "${NAMESPACE}" || :
-		oc adm policy add-scc-to-user privileged -z pmm-server -n "${NAMESPACE}" || :
-		oc create rolebinding pmm-ps-operator-namespace-only --role percona-server-for-mysql-operator-role --serviceaccount=$NAMESPACE:pmm-server -n "${NAMESPACE}" || :
-		oc patch role/percona-server-for-mysql-operator-role --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]' -n "${NAMESPACE}" || :
-
-		local additional_params="--set platform=openshift --set sa=pmm-server --set supresshttp2=false"
-	fi
-
 	helm uninstall -n "${NAMESPACE}" monitoring || :
 	helm repo remove percona || :
 	kubectl delete clusterrole monitoring --ignore-not-found
 	kubectl delete clusterrolebinding monitoring --ignore-not-found
-
 	helm repo add percona https://percona.github.io/percona-helm-charts/
-	helm install monitoring percona/pmm -n "${NAMESPACE}" \
-		--set fullnameOverride=monitoring \
-		--version ${PMM_SERVER_VERSION} \
-		--set imageTag=${IMAGE_PMM_SERVER#*:} \
-		--set imageRepo=${IMAGE_PMM_SERVER%:*} \
-		--set service.type=LoadBalancer \
-		--force
+	helm repo update
 
-	until kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "ls -l /proc/*/exe 2>/dev/null| grep postgres >/dev/null"; do
-		echo "Retry $retry"
-		sleep 5
-		let retry+=1
-		if [ $retry -ge 20 ]; then
-			echo "Max retry count $retry reached. Pmm-server can't start"
-			exit 1
-		fi
-	done
+	if [[ $OPENSHIFT ]]; then
+    platform=openshift
+    oc create sa pmm-server -n "${NAMESPACE}" || :
+    oc adm policy add-scc-to-user privileged -z pmm-server -n "${NAMESPACE}" || :
+
+    if [[ $OPERATOR_NS ]]; then
+      timeout 30 oc delete clusterrolebinding $(kubectl get clusterrolebinding | grep 'pmm-ps-operator-' | awk '{print $1}') || :
+      oc create clusterrolebinding pmm-ps-operator-cluster-wide --clusterrole=percona-server-mysql-operator --serviceaccount=$NAMESPACE:pmm-server -n "$NAMESPACE"
+      oc patch clusterrole/percona-server-mysql-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]' ${OPERATOR_NS:+-n $OPERATOR_NS} || :
+    else
+      oc create rolebinding pmm-ps-operator-namespace-only --role percona-server-mysql-operator --serviceaccount=$NAMESPACE:pmm-server -n "${NAMESPACE}"
+      oc patch role/percona-server-mysql-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]' -n "$NAMESPACE" || :
+    fi
+    local additional_params="--set platform=openshift --set sa=pmm-server --set supresshttp2=false"
+  fi
+  retry 10 60 helm install monitoring percona/pmm -n "${NAMESPACE}" \
+        --set fullnameOverride=monitoring \
+        --version ${PMM_SERVER_VERSION} \
+        --set imageTag=${IMAGE_PMM_SERVER#*:} \
+        --set imageRepo=${IMAGE_PMM_SERVER%:*} \
+        --set service.type=LoadBalancer \
+        $additional_params \
+        --force
+
 }
 
 get_pmm_server_token() {
@@ -316,10 +315,6 @@ get_operator_pod() {
 
 get_cr() {
 	local name_suffix=$1
-
-  if [[ $OPENSHIFT ]]; then
-    yq eval -i '.spec.openshift = true' ${DEPLOY_DIR}/cr.yaml
-  fi
 
 	yq eval "$(printf '.metadata.name="%s"' "${test_name}${name_suffix:+-$name_suffix}")" "${DEPLOY_DIR}/cr.yaml" \
 		| yq eval "$(printf '.spec.initImage="%s"' "${IMAGE}")" - \

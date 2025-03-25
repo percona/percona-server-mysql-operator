@@ -174,7 +174,6 @@ spec:
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext:
-        fsGroup: 1001
         supplementalGroups:
         - 1001
       terminationGracePeriodSeconds: 30
@@ -378,7 +377,6 @@ spec:
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext:
-        fsGroup: 1001
         supplementalGroups:
         - 1001
       serviceAccount: percona-server-mysql-operator-orchestrator
