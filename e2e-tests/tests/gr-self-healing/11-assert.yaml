@@ -146,29 +146,3 @@ spec:
     app.kubernetes.io/part-of: percona-server
   sessionAffinity: None
   type: ClusterIP
----
-apiVersion: chaos-mesh.org/v1alpha1
-kind: NetworkChaos
-metadata:
-  name: chaos-pod-network-loss-primary
-spec:
-  action: loss
-  direction: to
-  duration: 60s
-  loss:
-    correlation: "100"
-    loss: "100"
-  mode: one
-status:
-  experiment:
-    containerRecords:
-    - events:
-      - operation: Apply
-        type: Succeeded
-      - operation: Recover
-        type: Succeeded
-      injectedCount: 1
-      phase: Not Injected
-      recoveredCount: 1
-      selectorKey: .
-    desiredPhase: Stop
