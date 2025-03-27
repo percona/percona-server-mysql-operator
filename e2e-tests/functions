@@ -17,7 +17,7 @@ init_temp_dir() {
 create_namespace() {
 	local namespace=$1
 
-	if [[ $OPENSHIFT ]]; then
+	if [[ -n $OPENSHIFT ]]; then
 		set -o pipefail
 		if [[ $OPERATOR_NS ]] && (oc get project "$OPERATOR_NS" -o json >/dev/null 2>&1 | jq -r '.metadata.name' >/dev/null 2>&1); then
 			oc delete --grace-period=0 --force=true project "$namespace" && sleep 120 || :
@@ -98,7 +98,7 @@ deploy_pmm_server() {
 	helm repo add percona https://percona.github.io/percona-helm-charts/
 	helm repo update
 
-	if [[ $OPENSHIFT ]]; then
+	if [[ -n $OPENSHIFT ]]; then
     platform=openshift
     oc create sa pmm-server -n "${NAMESPACE}" || :
     oc adm policy add-scc-to-user privileged -z pmm-server -n "${NAMESPACE}" || :
@@ -108,19 +108,12 @@ deploy_pmm_server() {
       oc create clusterrolebinding pmm-ps-operator-cluster-wide --clusterrole=percona-server-mysql-operator --serviceaccount=$NAMESPACE:pmm-server -n "$NAMESPACE"
       oc patch clusterrole/percona-server-mysql-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]' ${OPERATOR_NS:+-n $OPERATOR_NS} || :
     else
-      oc create rolebinding pmm-ps-operator-namespace-only --role percona-server-mysql-operator --serviceaccount=$NAMESPACE:pmm-server -n "${NAMESPACE}"
+      oc create rolebinding pmm-ps-operator-namespace-only --role percona-server-mysql-operator --serviceaccount=$NAMESPACE:pmm-server -n "$NAMESPACE"
       oc patch role/percona-server-mysql-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]' -n "$NAMESPACE" || :
     fi
     local additional_params="--set platform=openshift --set sa=pmm-server --set supresshttp2=false"
   fi
-  retry 10 60 helm install monitoring percona/pmm -n "${NAMESPACE}" \
-        --set fullnameOverride=monitoring \
-        --version ${PMM_SERVER_VERSION} \
-        --set imageTag=${IMAGE_PMM_SERVER#*:} \
-        --set imageRepo=${IMAGE_PMM_SERVER%:*} \
-        --set service.type=LoadBalancer \
-        $additional_params \
-        --force
+  retry 10 60 helm install monitoring --set imageTag=${IMAGE_PMM_SERVER#*:} --set imageRepo=${IMAGE_PMM_SERVER%:*} $additional_params https://percona-charts.storage.googleapis.com/pmm-server-${PMM_SERVER_VERSION}.tgz -n "$NAMESPACE"
 
 }
 
@@ -766,7 +759,7 @@ deploy_chaos_mesh() {
 	else
 		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 2.5.1
 	fi
-	if [[ $OPENSHIFT ]]; then
+	if [[ -n $OPENSHIFT ]]; then
   		oc adm policy add-scc-to-user privileged -z chaos-daemon --namespace=${NAMESPACE}
   fi
   sleep 10
