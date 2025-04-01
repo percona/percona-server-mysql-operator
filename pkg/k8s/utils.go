@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -77,6 +78,52 @@ func AddAnnotation(obj client.Object, key, value string) {
 	}
 	annotations[key] = value
 	obj.SetAnnotations(annotations)
+}
+
+// AnnotateObject adds the specified annotations to the object
+func AnnotateObject(ctx context.Context, c client.Client, obj client.Object, annotations map[string]string) error {
+	o := obj.DeepCopyObject().(client.Object)
+
+	err := c.Get(ctx, client.ObjectKeyFromObject(obj), o)
+	if err != nil {
+		return err
+	}
+
+	orig := o.DeepCopyObject().(client.Object)
+
+	a := o.GetAnnotations()
+	if a == nil {
+		a = make(map[string]string)
+	}
+
+	for k, v := range annotations {
+		a[k] = v
+	}
+	o.SetAnnotations(a)
+
+	return c.Patch(ctx, o, client.MergeFrom(orig))
+}
+
+// DeannotateObject removes the specified annotation from the object
+func DeannotateObject(ctx context.Context, c client.Client, obj client.Object, annotation string) error {
+	o := obj.DeepCopyObject().(client.Object)
+
+	err := c.Get(ctx, client.ObjectKeyFromObject(obj), o)
+	if err != nil {
+		return err
+	}
+
+	orig := o.DeepCopyObject().(client.Object)
+
+	a := o.GetAnnotations()
+	if a == nil {
+		a = make(map[string]string)
+	}
+
+	delete(a, annotation)
+	o.SetAnnotations(a)
+
+	return c.Patch(ctx, o, client.MergeFrom(orig))
 }
 
 func IsPodWithNameReady(ctx context.Context, cl client.Client, nn types.NamespacedName) (bool, error) {
@@ -448,4 +495,16 @@ func DeleteSecrets(ctx context.Context, cl client.Client, cr *apiv1alpha1.Percon
 	}
 
 	return nil
+}
+
+func GetImageIDFromPod(pod *corev1.Pod, containerName string) (string, error) {
+	idx := slices.IndexFunc(pod.Status.ContainerStatuses, func(s corev1.ContainerStatus) bool {
+		return s.Name == containerName
+	})
+
+	if idx == -1 {
+		return "", errors.Errorf("%s not found in pod", containerName)
+	}
+
+	return pod.Status.ContainerStatuses[idx].ImageID, nil
 }
