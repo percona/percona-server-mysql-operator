@@ -2,11 +2,11 @@ package mysql
 
 import (
 	"fmt"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"os"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -16,19 +16,19 @@ import (
 )
 
 const (
-	ComponentName     = "mysql"
-	DataVolumeName    = "datadir"
-	DataMountPath     = "/var/lib/mysql"
-	CustomConfigKey   = "my.cnf"
-	configVolumeName  = "config"
-	configMountPath   = "/etc/mysql/config"
-	credsVolumeName   = "users"
-	CredsMountPath    = "/etc/mysql/mysql-users-secret"
-	mysqlshVolumeName = "mysqlsh"
-	mysqlshMountPath  = "/.mysqlsh"
-	tlsVolumeName     = "tls"
-	tlsMountPath      = "/etc/mysql/mysql-tls-secret"
-	BackupLogDir      = "/var/log/xtrabackup"
+	ComponentName           = "mysql"
+	DataVolumeName          = "datadir"
+	DataMountPath           = "/var/lib/mysql"
+	CustomConfigKey         = "my.cnf"
+	configVolumeName        = "config"
+	configMountPath         = "/etc/mysql/config"
+	credsVolumeName         = "users"
+	CredsMountPath          = "/etc/mysql/mysql-users-secret"
+	mysqlshVolumeName       = "mysqlsh"
+	mysqlshMountPathDefault = "/.mysqlsh"
+	tlsVolumeName           = "tls"
+	tlsMountPath            = "/etc/mysql/mysql-tls-secret"
+	BackupLogDir            = "/var/log/xtrabackup"
 )
 
 const (
@@ -489,6 +489,13 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 
 func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	spec := cr.MySQLSpec()
+
+	// In OpenShift, we should use emptyDir for ./mysqlsh to avoid permission issues.
+	mysqlshMountPath := mysqlshMountPathDefault
+
+	if customPath, exists := os.LookupEnv(naming.EnvMysqlshUserConfigHome); exists && customPath != "" {
+		mysqlshMountPath = customPath
+	}
 
 	env := []corev1.EnvVar{
 		{

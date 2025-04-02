@@ -5,9 +5,9 @@ set -o xtrace
 
 OPERATOR_BINDIR=/opt/percona
 ORC_CONF_PATH=${ORC_CONF_PATH:-/etc/orchestrator}
-ORC_CONF_FILE=${ORC_CONF_FILE:-"${ORC_CONF_PATH}/mysql/orchestrator.conf.json"}
+ORC_CONF_FILE=${ORC_CONF_FILE:-"${ORC_CONF_PATH}/config/orchestrator.conf.json"}
 TOPOLOGY_USER=${ORC_TOPOLOGY_USER:-orchestrator}
-CUSTOM_CONF_FILE=${ORC_CONF_PATH}/config/orchestrator.conf.json
+CUSTOM_CONF_FILE=${ORC_CONF_PATH}/custom/orchestrator.conf.json
 
 if [ -f ${OPERATOR_BINDIR}/orchestrator.conf.json ]; then
 	cp "${OPERATOR_BINDIR}/orchestrator.conf.json" "${ORC_CONF_FILE}"
@@ -43,7 +43,7 @@ set +o xtrace
 temp=$(mktemp)
 sed -r "s|^[#]?user=.*$|user=${TOPOLOGY_USER}|" "${ORC_CONF_PATH}/orc-topology.cnf" >"${temp}"
 sed -r "s|^[#]?password=.*$|password=${TOPOLOGY_PASSWORD:-$ORC_TOPOLOGY_PASSWORD}|" "${ORC_CONF_PATH}/orc-topology.cnf" >"${temp}"
-cat "${temp}" >"${ORC_CONF_PATH}/mysql/orc-topology.cnf"
+cat "${temp}" >"${ORC_CONF_PATH}/config/orc-topology.cnf"
 rm "${temp}"
 set -o xtrace
 

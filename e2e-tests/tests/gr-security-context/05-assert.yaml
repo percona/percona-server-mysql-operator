@@ -11,9 +11,9 @@ status:
   storage:
     podSecurityContext:
       supplementalGroups:
-        - 1001
-        - 1002
-        - 1003
+      - 1001
+      - 1002
+      - 1003
     s3:
       bucket: operator-testing
       credentialsSecret: minio-secret

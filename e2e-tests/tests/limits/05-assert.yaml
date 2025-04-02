@@ -327,10 +327,10 @@ spec:
           name: bin
         - mountPath: /etc/orchestrator/ssl
           name: tls
+        - mountPath: /etc/orchestrator/custom
+          name: custom
         - mountPath: /etc/orchestrator/config
           name: config
-        - mountPath: /etc/orchestrator/mysql
-          name: mysql
         - mountPath: /etc/orchestrator/orchestrator-users-secret/orchestrator
           name: users
           subPath: orchestrator
@@ -355,10 +355,10 @@ spec:
           name: bin
         - mountPath: /etc/orchestrator/ssl
           name: tls
+        - mountPath: /etc/orchestrator/custom
+          name: custom
         - mountPath: /etc/orchestrator/config
           name: config
-        - mountPath: /etc/orchestrator/mysql
-          name: mysql
         - mountPath: /etc/orchestrator/orchestrator-users-secret/orchestrator
           name: users
           subPath: orchestrator
@@ -386,7 +386,7 @@ spec:
       - emptyDir: {}
         name: bin
       - emptyDir: { }
-        name: mysql
+        name: config
       - name: users
         secret:
           defaultMode: 420
@@ -398,7 +398,7 @@ spec:
       - configMap:
           defaultMode: 420
           name: limits-no-resources-orc
-        name: config
+        name: custom
   updateStrategy:
     rollingUpdate:
       partition: 0

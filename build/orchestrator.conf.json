@@ -12,7 +12,7 @@
   "ListenAddress": ":3000",
   "MasterFailoverDetachReplicaMasterHost": true,
   "MySQLHostnameResolveMethod": "@@report_host",
-  "MySQLTopologyCredentialsConfigFile": "/etc/orchestrator/mysql/orc-topology.cnf",
+  "MySQLTopologyCredentialsConfigFile": "/etc/orchestrator/config/orc-topology.cnf",
   "OnFailureDetectionProcesses": [
     "echo 'Detected {failureType} on {failureCluster}. Affected replicas: {countSlaves}'"
   ],
@@ -37,7 +37,7 @@
   "ProcessesShellCommand": "sh",
   "RaftAdvertise": "127.0.0.1",
   "RaftBind": "0.0.0.0",
-  "RaftDataDir": "/etc/orchestrator/mysql",
+  "RaftDataDir": "/etc/orchestrator/config",
   "RaftEnabled": true,
   "RaftNodes": [
     "127.0.0.1"
@@ -52,7 +52,7 @@
   "RecoveryIgnoreHostnameFilters": [],
   "RecoveryPeriodBlockSeconds": 5,
   "RemoveTextFromHostnameDisplay": ":3306",
-  "SQLite3DataFile": "/etc/orchestrator/mysql/orc.db",
+  "SQLite3DataFile": "/etc/orchestrator/config/orc.db",
   "UnseenInstanceForgetHours": 1,
   "StatusEndpoint": "/api/status",
   "UseSuperReadOnly": true,
