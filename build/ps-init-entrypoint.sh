@@ -23,6 +23,7 @@ install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/healthcheck" "${B
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/sidecar" "${BINDIR}/sidecar"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/peer-list" "${BINDIR}/peer-list"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/orc-handler" "${BINDIR}/orc-handler"
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/mysql-state-monitor" "${BINDIR}/mysql-state-monitor"
 
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/run-backup.sh" "${BINDIR}/run-backup.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/run-restore.sh" "${BINDIR}/run-restore.sh"

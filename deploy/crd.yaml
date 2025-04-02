@@ -3293,6 +3293,7 @@ spec:
                         - image
                         - readTimeout
                         - serverId
+                        - size
                         - storage
                         - writeTimeout
                         type: object
@@ -7025,6 +7026,7 @@ spec:
                     type: object
                 required:
                 - image
+                - size
                 type: object
               orchestrator:
                 properties:
@@ -8239,6 +8241,7 @@ spec:
                     type: object
                 required:
                 - image
+                - size
                 type: object
               pause:
                 type: boolean
@@ -9579,6 +9582,7 @@ spec:
                         type: object
                     required:
                     - image
+                    - size
                     type: object
                   router:
                     properties:
@@ -10793,6 +10797,7 @@ spec:
                         type: object
                     required:
                     - image
+                    - size
                     type: object
                 type: object
               secretsName:
