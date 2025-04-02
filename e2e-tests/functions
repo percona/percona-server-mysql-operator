@@ -5,6 +5,10 @@ ROOT_REPO=${ROOT_REPO:-$(realpath ../../..)}
 test_name=$(basename "$(pwd)")
 source "${ROOT_REPO}/e2e-tests/vars.sh"
 
+if oc get projects 2>/dev/null; then
+	OPENSHIFT=4
+fi
+
 init_temp_dir() {
 	rm -rf "$TEMP_DIR"
 	mkdir -p "$TEMP_DIR"
@@ -13,14 +17,14 @@ init_temp_dir() {
 create_namespace() {
 	local namespace=$1
 
-	if [[ $OPENSHIFT ]]; then
+	if [[ -n $OPENSHIFT ]]; then
 		set -o pipefail
 		if [[ $OPERATOR_NS ]] && (oc get project "$OPERATOR_NS" -o json >/dev/null 2>&1 | jq -r '.metadata.name' >/dev/null 2>&1); then
 			oc delete --grace-period=0 --force=true project "$namespace" && sleep 120 || :
 		else
 			oc delete project "$namespace" && sleep 40 || :
 		fi
-		wait_for_delete "project/$namespace"
+		wait_for_delete "project/$namespace" || :
 
 		oc new-project "$namespace"
 		oc project "$namespace"
@@ -87,38 +91,37 @@ apply_s3_storage_secrets() {
 }
 
 deploy_pmm_server() {
-	if [[ $OPENSHIFT ]]; then
-		oc create sa pmm-server -n "${NAMESPACE}" || :
-		oc adm policy add-scc-to-user privileged -z pmm-server -n "${NAMESPACE}" || :
-		oc create rolebinding pmm-ps-operator-namespace-only --role percona-server-for-mysql-operator-role --serviceaccount=$NAMESPACE:pmm-server -n "${NAMESPACE}" || :
-		oc patch role/percona-server-for-mysql-operator-role --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]' -n "${NAMESPACE}" || :
-
-		local additional_params="--set platform=openshift --set sa=pmm-server --set supresshttp2=false"
-	fi
-
 	helm uninstall -n "${NAMESPACE}" monitoring || :
 	helm repo remove percona || :
 	kubectl delete clusterrole monitoring --ignore-not-found
 	kubectl delete clusterrolebinding monitoring --ignore-not-found
-
 	helm repo add percona https://percona.github.io/percona-helm-charts/
-	helm install monitoring percona/pmm -n "${NAMESPACE}" \
+	helm repo update
+
+	if [[ -n $OPENSHIFT ]]; then
+		platform=openshift
+		oc create sa pmm-server -n "${NAMESPACE}" || :
+		oc adm policy add-scc-to-user privileged -z pmm-server -n "${NAMESPACE}" || :
+
+		if [[ $OPERATOR_NS ]]; then
+			timeout 30 oc delete clusterrolebinding $(kubectl get clusterrolebinding | grep 'pmm-ps-operator-' | awk '{print $1}') || :
+			oc create clusterrolebinding pmm-ps-operator-cluster-wide --clusterrole=percona-server-mysql-operator --serviceaccount=$NAMESPACE:pmm-server -n "$NAMESPACE"
+			oc patch clusterrole/percona-server-mysql-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]' ${OPERATOR_NS:+-n $OPERATOR_NS} || :
+		else
+			oc create rolebinding pmm-ps-operator-namespace-only --role percona-server-mysql-operator --serviceaccount=$NAMESPACE:pmm-server -n "$NAMESPACE"
+			oc patch role/percona-server-mysql-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]' -n "$NAMESPACE" || :
+		fi
+		local additional_params="--set platform=openshift --set supresshttp2=false --set serviceAccount.create=false --set serviceAccount.name=pmm-server"
+	fi
+
+	retry 10 120 helm install monitoring percona/pmm -n "${NAMESPACE}" \
 		--set fullnameOverride=monitoring \
 		--version ${PMM_SERVER_VERSION} \
 		--set imageTag=${IMAGE_PMM_SERVER#*:} \
 		--set imageRepo=${IMAGE_PMM_SERVER%:*} \
 		--set service.type=LoadBalancer \
+		$additional_params \
 		--force
-
-	until kubectl -n "${NAMESPACE}" exec monitoring-0 -- bash -c "ls -l /proc/*/exe 2>/dev/null| grep postgres >/dev/null"; do
-		echo "Retry $retry"
-		sleep 5
-		let retry+=1
-		if [ $retry -ge 20 ]; then
-			echo "Max retry count $retry reached. Pmm-server can't start"
-			exit 1
-		fi
-	done
 }
 
 get_pmm_server_token() {
@@ -736,6 +739,7 @@ check_passwords_leak() {
 				echo logs saved in: ${TEMP_DIR}/logs_output-$p-$c.txt
 				for pass in $passwords; do
 					count=$(grep -c --fixed-strings -- "$pass" ${TEMP_DIR}/logs_output-$p-$c.txt || :)
+					count=$(echo "$count" | awk '{if ($1 ~ /^[0-9]+$/) print $1; else print 0}')
 					if [[ $count != 0 ]]; then
 						echo leaked passwords are found in log ${TEMP_DIR}/logs_output-$p-$c.txt
 						false
@@ -761,6 +765,9 @@ deploy_chaos_mesh() {
 		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=docker --set dashboard.create=false --version 2.5.1
 	else
 		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 2.5.1
+	fi
+	if [[ -n $OPENSHIFT ]]; then
+		oc adm policy add-scc-to-user privileged -z chaos-daemon --namespace=${NAMESPACE}
 	fi
 	sleep 10
 }

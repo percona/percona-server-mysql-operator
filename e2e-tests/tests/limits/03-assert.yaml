@@ -123,6 +123,8 @@ spec:
           name: bin
         - mountPath: /var/lib/mysql
           name: datadir
+        - mountPath: /.mysqlsh
+          name: mysqlsh
         - mountPath: /etc/mysql/mysql-users-secret
           name: users
         - mountPath: /etc/mysql/mysql-tls-secret
@@ -178,13 +180,14 @@ spec:
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext:
-        fsGroup: 1001
         supplementalGroups:
         - 1001
       terminationGracePeriodSeconds: 30
       volumes:
       - emptyDir: {}
         name: bin
+      - emptyDir: { }
+        name: mysqlsh
       - name: users
         secret:
           defaultMode: 420
@@ -332,6 +335,8 @@ spec:
           name: bin
         - mountPath: /etc/orchestrator/ssl
           name: tls
+        - mountPath: /etc/orchestrator/custom
+          name: custom
         - mountPath: /etc/orchestrator/config
           name: config
         - mountPath: /etc/orchestrator/orchestrator-users-secret/orchestrator
@@ -358,6 +363,8 @@ spec:
           name: bin
         - mountPath: /etc/orchestrator/ssl
           name: tls
+        - mountPath: /etc/orchestrator/custom
+          name: custom
         - mountPath: /etc/orchestrator/config
           name: config
         - mountPath: /etc/orchestrator/orchestrator-users-secret/orchestrator
@@ -378,7 +385,6 @@ spec:
       restartPolicy: Always
       schedulerName: default-scheduler
       securityContext:
-        fsGroup: 1001
         supplementalGroups:
         - 1001
       serviceAccount: percona-server-mysql-operator-orchestrator
@@ -387,6 +393,8 @@ spec:
       volumes:
       - emptyDir: {}
         name: bin
+      - emptyDir: { }
+        name: config
       - name: users
         secret:
           defaultMode: 420
@@ -398,7 +406,7 @@ spec:
       - configMap:
           defaultMode: 420
           name: limits-no-requests-orc
-        name: config
+        name: custom
   updateStrategy:
     rollingUpdate:
       partition: 0

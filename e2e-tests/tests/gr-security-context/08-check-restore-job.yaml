@@ -1,0 +1,27 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o pipefail
+      set -o xtrace
+
+      source ../../functions
+      JOB_NAME="xb-restore-gr-security-context-restore-minio"
+      sleep 50
+      if [[ -z $OPENSHIFT ]]; then
+        FS_GROUP=$(kubectl get job "$JOB_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.securityContext.fsGroup}')
+        if [[ "$FS_GROUP" != "1001" ]]; then
+          echo "Test Failed: fsGroup is not set to 1001 (found: $FS_GROUP)."
+          exit 1
+        fi
+
+        PRIVILEGED_CONTAINERS=$(kubectl get job "$JOB_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[*].securityContext.privileged}')
+        PRIVILEGED_INIT_CONTAINERS=$(kubectl get job "$JOB_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.initContainers[*].securityContext.privileged}')
+
+        if [[ "$PRIVILEGED_CONTAINERS" != "true" && "$PRIVILEGED_INIT_CONTAINERS" != "true" ]]; then
+          echo "Test Failed: Some containers are missing privileged: true."
+          exit 1
+        fi
+      fi
+    timeout: 100
