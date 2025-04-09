@@ -6,6 +6,5 @@ const (
 
 	EnvMySQLNotifySocketInternal = "NOTIFY_SOCKET" // should only be set in the entrypoint
 
-	EnvBootstrapReadTimeout  = "BOOTSTRAP_READ_TIMEOUT"
-	EnvMysqlshUserConfigHome = "MYSQLSH_USER_CONFIG_HOME"
+	EnvBootstrapReadTimeout = "BOOTSTRAP_READ_TIMEOUT"
 )
