@@ -47,8 +47,6 @@ spec:
 #    env:
 #    - name: BOOTSTRAP_READ_TIMEOUT
 #      value: "600"
-#    - name: MYSQLSH_USER_CONFIG_HOME
-#      value: "/tmp"
     resources:
       requests:
         memory: 1G
