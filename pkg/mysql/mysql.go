@@ -517,6 +517,14 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			Name:  "CLUSTER_TYPE",
 			Value: string(cr.Spec.MySQL.ClusterType),
 		},
+		{
+			Name:  naming.EnvMySQLNotifySocket,
+			Value: filepath.Join(DataMountPath, "notify.sock"),
+		},
+		{
+			Name:  naming.EnvMySQLStateFile,
+			Value: filepath.Join(DataMountPath, "mysql.state"),
+		},
 	}
 	env = append(env, spec.Env...)
 
