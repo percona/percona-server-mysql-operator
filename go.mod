@@ -1,6 +1,7 @@
 module github.com/percona/percona-server-mysql-operator
 
 go 1.23.4
+
 toolchain go1.24.1
 
 require (
@@ -23,7 +24,7 @@ require (
 	github.com/sjmudd/stopwatch v0.1.1
 	go.nhat.io/grpcmock v0.29.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/sync v0.12.0
+	golang.org/x/sync v0.13.0
 	golang.org/x/text v0.23.0
 	google.golang.org/grpc v1.71.0
 	k8s.io/api v0.32.3
