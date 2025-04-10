@@ -42,7 +42,6 @@ spec:
     image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
 #    initImage: perconalab/percona-server-mysql-operator:main
-
     size: 3
 
 #    env:

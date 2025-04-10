@@ -17,6 +17,8 @@ spec:
           name: bin
         - mountPath: /var/lib/mysql
           name: datadir
+        - mountPath: /.mysqlsh
+          name: mysqlsh
         - mountPath: /etc/mysql/mysql-users-secret
           name: users
         - mountPath: /etc/mysql/mysql-tls-secret
@@ -36,6 +38,8 @@ spec:
       volumes:
       - emptyDir: {}
         name: bin
+      - emptyDir: { }
+        name: mysqlsh
       - name: users
         secret:
           defaultMode: 420
