@@ -36,8 +36,6 @@ spec:
         imagePullPolicy: Always
         name: xtrabackup
         resources: {}
-        securityContext:
-          privileged: true
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -54,8 +52,6 @@ spec:
         imagePullPolicy: Always
         name: xtrabackup-init
         resources: {}
-        securityContext:
-          privileged: true
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -64,7 +60,6 @@ spec:
       restartPolicy: Never
       schedulerName: default-scheduler
       securityContext:
-        fsGroup: 1001
         supplementalGroups:
         - 1001
         - 1002
