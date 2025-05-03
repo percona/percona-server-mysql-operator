@@ -117,8 +117,8 @@ deploy_pmm_server() {
 	retry 10 120 helm install monitoring percona/pmm -n "${NAMESPACE}" \
 		--set fullnameOverride=monitoring \
 		--version ${PMM_SERVER_VERSION} \
-		--set imageTag=${IMAGE_PMM_SERVER#*:} \
-		--set imageRepo=${IMAGE_PMM_SERVER%:*} \
+		--set image.tag=${IMAGE_PMM_SERVER#*:} \
+		--set image.repository=${IMAGE_PMM_SERVER%:*} \
 		--set service.type=LoadBalancer \
 		$additional_params \
 		--force
