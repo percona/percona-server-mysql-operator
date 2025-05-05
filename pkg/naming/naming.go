@@ -3,14 +3,18 @@ package naming
 const (
 	perconaPrefix      = "percona.com/"
 	mysqlPerconaPrefix = "mysql.percona.com/"
+
+	kubernetesPrefix = "app.kubernetes.io/"
 )
 
 const (
-	LabelName      = "app.kubernetes.io/name"
-	LabelInstance  = "app.kubernetes.io/instance"
-	LabelManagedBy = "app.kubernetes.io/managed-by"
-	LabelPartOf    = "app.kubernetes.io/part-of"
-	LabelComponent = "app.kubernetes.io/component"
+	LabelName      = kubernetesPrefix + "name"
+	LabelInstance  = kubernetesPrefix + "instance"
+	LabelManagedBy = kubernetesPrefix + "managed-by"
+	LabelPartOf    = kubernetesPrefix + "part-of"
+	LabelComponent = kubernetesPrefix + "component"
+
+	LabelOperatorVersion = kubernetesPrefix + "version"
 )
 
 const (
@@ -25,10 +29,6 @@ const (
 const (
 	LabelBackupType     = perconaPrefix + "backup-type"
 	LabelBackupAncestor = perconaPrefix + "backup-ancestor"
-)
-
-const (
-	LabelOperatorVersion = mysqlPerconaPrefix + "version"
 )
 
 const (

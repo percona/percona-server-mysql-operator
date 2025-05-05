@@ -3,4 +3,4 @@ kind: CustomResourceDefinition
 metadata:
   name: perconaservermysqlrestores.ps.percona.com
   labels:
-    mysql.percona.com/version: v0.10.0
+    app.kubernetes.io/version: v0.10.0
