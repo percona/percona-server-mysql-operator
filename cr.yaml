@@ -1,0 +1,98 @@
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: cluster1
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+spec:
+  crVersion: 0.10.0
+  secretsName: cluster1-secrets
+  sslSecretName: cluster1-ssl
+  updateStrategy: SmartUpdate
+  upgradeOptions:
+    versionServiceEndpoint: https://check-dev.percona.com
+    apply: disabled
+  mysql:
+    clusterType: group-replication
+    autoRecovery: true
+    image: percona/percona-server:8.4.4-4
+    imagePullPolicy: Always
+    size: 3
+    resources:
+      requests:
+        memory: 3G
+      limits:
+        memory: 4G
+    affinity:
+      antiAffinityTopologyKey: "none"
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 2G
+  proxy:
+    haproxy:
+      enabled: true
+      size: 3
+      image: perconalab/percona-server-mysql-operator:main-haproxy
+      imagePullPolicy: Always
+      resources:
+        requests:
+          memory: 1G
+          cpu: 600m
+      affinity:
+        antiAffinityTopologyKey: "none"
+    router:
+      enabled: false
+      image: perconalab/percona-server-mysql-operator:main-router
+      imagePullPolicy: Always
+      size: 3
+      resources:
+        requests:
+          memory: 256M
+        limits:
+          memory: 256M
+      affinity:
+        antiAffinityTopologyKey: "none"
+  orchestrator:
+    enabled: false
+    image: perconalab/percona-server-mysql-operator:main-orchestrator
+    imagePullPolicy: Always
+    size: 3
+    affinity:
+      antiAffinityTopologyKey: "none"
+    resources:
+      requests:
+        memory: 128M
+      limits:
+        memory: 256M
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1G
+  pmm:
+    enabled: false
+    image: perconalab/pmm-client:3-dev-latest
+    imagePullPolicy: Always
+    resources:
+      requests:
+        memory: 150M
+        cpu: 300m
+    serverHost: monitoring-service
+    serverUser: admin
+  backup:
+    enabled: true
+    image: percona/percona-xtrabackup:8.4
+    imagePullPolicy: Always
+    storages:
+      s3-us-west:
+        type: s3
+        verifyTLS: true
+        s3:
+          bucket: S3-BACKUP-BUCKET-NAME-HERE
+          credentialsSecret: cluster1-s3-credentials
+          region: us-west-2
+  toolkit:
+    image: perconalab/percona-server-mysql-operator:main-toolkit
+    imagePullPolicy: Always

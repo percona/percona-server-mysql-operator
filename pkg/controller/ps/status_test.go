@@ -1076,16 +1076,11 @@ func getFakeClient(cr *apiv1alpha1.PerconaServerMySQL, mysqlMemberStates []innod
 
 		return fakeClientScript{
 			cmd: []string{
-				"mysql",
-				"--database",
-				"performance_schema",
-				"-ptest",
-				"-u",
-				"operator",
-				"-h",
-				host,
-				"-e",
-				query,
+				"mysqlsh",
+				"--result-format", "json",
+				"--js",
+				"--uri", fmt.Sprintf("operator:test@%s", host),
+				"--cluster", "--", "cluster", "status",
 			},
 			stdout: buf.Bytes(),
 		}
