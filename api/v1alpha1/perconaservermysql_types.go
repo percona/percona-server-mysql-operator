@@ -962,12 +962,10 @@ func (p *PodSpec) GetTopologySpreadConstraints(ls map[string]string) []corev1.To
 
 // Labels returns a standardized set of labels for the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) Labels() map[string]string {
-	return map[string]string{
-		naming.LabelName:      "percona-server",
-		naming.LabelInstance:  cr.Name,
-		naming.LabelManagedBy: "percona-server-operator",
-		naming.LabelPartOf:    "percona-server",
-	}
+	l := naming.Labels()
+	l[naming.LabelInstance] = cr.Name
+	l[naming.LabelManagedBy] = "percona-server-operator"
+	return l
 }
 
 // ClusterHint generates a unique identifier for the PerconaServerMySQL
