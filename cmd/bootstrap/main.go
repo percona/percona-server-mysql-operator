@@ -47,6 +47,12 @@ func main() {
 		}
 	}
 
+	log.Println("Waiting for MySQL ready state")
+	if err := waitForMySQLReadyState(); err != nil {
+		log.Fatalf("Failed to wait for ready MySQL state: %s", err)
+	}
+	log.Println("MySQL is ready")
+
 	clusterType := os.Getenv("CLUSTER_TYPE")
 	switch clusterType {
 	case "group-replication":

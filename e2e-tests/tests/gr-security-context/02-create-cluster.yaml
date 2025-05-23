@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 10
 commands:
   - script: |-
       set -o errexit
@@ -10,22 +9,64 @@ commands:
 
       get_cr \
           | yq eval '.spec.backup.storages.minio.type="s3"' - \
-          | yq eval '.spec.backup.storages.minio.type="s3"' - \
           | yq eval '.spec.backup.storages.minio.s3.bucket="operator-testing"' - \
           | yq eval '.spec.backup.storages.minio.s3.credentialsSecret="minio-secret"' - \
           | yq eval ".spec.backup.storages.minio.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
           | yq eval '.spec.backup.storages.minio.s3.region="us-east-1"' - \
-          | yq eval ".spec.backup.storages.minio.containerSecurityContext.privileged=true" - \
-          | yq eval ".spec.backup.storages.minio.podSecurityContext.fsGroup=1001" - \
           | yq eval ".spec.backup.storages.minio.podSecurityContext.supplementalGroups |= [1001, 1002, 1003]" - \
-          | yq eval ".spec.backup.containerSecurityContext.privileged=false" - \
           | yq eval '.spec.mysql.clusterType="group-replication"' - \
-          | yq eval ".spec.mysql.containerSecurityContext.privileged=true" - \
-          | yq eval ".spec.mysql.podSecurityContext.fsGroup=1001" - \
           | yq eval ".spec.mysql.podSecurityContext.supplementalGroups |= [1001, 1002, 1003]" - \
           | yq eval ".spec.proxy.router.enabled=false" - \
           | yq eval ".spec.proxy.haproxy.enabled=true" - \
-          | yq eval ".spec.proxy.haproxy.containerSecurityContext.privileged=true" - \
-          | yq eval ".spec.proxy.haproxy.podSecurityContext.fsGroup=1001" - \
           | yq eval ".spec.proxy.haproxy.podSecurityContext.supplementalGroups |= [1001, 1002, 1003]" - \
+          | (
+          if [[ -z $OPENSHIFT ]]; then
+            yq eval ".spec.backup.storages.minio.containerSecurityContext.privileged=true" - \
+            | yq eval ".spec.backup.storages.minio.podSecurityContext.fsGroup=1001" - \
+            | yq eval ".spec.backup.containerSecurityContext.privileged=false" - \
+            | yq eval ".spec.mysql.containerSecurityContext.privileged=true" - \
+            | yq eval ".spec.mysql.podSecurityContext.fsGroup=1001" - \
+            | yq eval ".spec.proxy.haproxy.containerSecurityContext.privileged=true" - \
+            | yq eval ".spec.proxy.haproxy.podSecurityContext.fsGroup=1001" -
+          else
+            cat -
+          fi
+          ) \
           | kubectl -n "${NAMESPACE}" apply -f -
+
+      sleep 100
+
+      if [[ -z $OPENSHIFT ]]; then
+        # For Haproxy
+        FS_GROUP_HAPROXY=$(kubectl get statefulset gr-security-context-haproxy -n "${NAMESPACE}" -o jsonpath='{.spec.template.spec.securityContext.fsGroup}')
+        if [[ "$FS_GROUP_HAPROXY" != "1001" ]]; then
+          echo "Test Failed: fsGroup is not set to 1001 (found: $FS_GROUP_HAPROXY)."
+          exit 1
+        fi
+
+        # Check if all containers (including initContainers) have privileged: true
+        PRIVILEGED_CONTAINERS_HAPROXY=$(kubectl get statefulset gr-security-context-haproxy -n "${NAMESPACE}" -o jsonpath='{.spec.template.spec.containers[*].securityContext.privileged}')
+        PRIVILEGED_INIT_CONTAINERS_HAPROXY=$(kubectl get statefulset gr-security-context-haproxy -n "${NAMESPACE}" -o jsonpath='{.spec.template.spec.initContainers[*].securityContext.privileged}')
+
+        if [[ "$PRIVILEGED_CONTAINERS_HAPROXY" != "true true" || "$PRIVILEGED_INIT_CONTAINERS_HAPROXY" != "true" ]]; then
+          echo "Test Failed: Some containers are missing privileged: true."
+          exit 1
+        fi
+
+        # For mysql
+        FS_GROUP_MYSQL=$(kubectl get statefulset gr-security-context-mysql -n "${NAMESPACE}" -o jsonpath='{.spec.template.spec.securityContext.fsGroup}')
+        if [[ "$FS_GROUP_MYSQL" != "1001" ]]; then
+          echo "Test Failed: fsGroup is not set to 1001 (found: $FS_GROUP_MYSQL)."
+          exit 1
+        fi
+
+        # Check if all containers (including initContainers) have privileged: true
+        PRIVILEGED_CONTAINERS_MYSQL=$(kubectl get statefulset gr-security-context-mysql -n "${NAMESPACE}" -o jsonpath='{.spec.template.spec.containers[*].securityContext.privileged}')
+        PRIVILEGED_INIT_CONTAINERS_MYSQL=$(kubectl get statefulset gr-security-context-mysql -n "${NAMESPACE}" -o jsonpath='{.spec.template.spec.initContainers[*].securityContext.privileged}')
+
+        if [[ "$PRIVILEGED_CONTAINERS_MYSQL" != "true false" || "$PRIVILEGED_INIT_CONTAINERS_MYSQL" != "true" ]]; then
+          echo "Test Failed: Some containers are missing privileged: true."
+          exit 1
+        fi
+      fi
+    timeout: 120

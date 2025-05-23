@@ -3,6 +3,8 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
+  labels:
+    mysql.percona.com/version: v0.10.0
   name: perconaservermysqlbackups.ps.percona.com
 spec:
   group: ps.percona.com
@@ -958,6 +960,8 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
+  labels:
+    mysql.percona.com/version: v0.10.0
   name: perconaservermysqlrestores.ps.percona.com
 spec:
   group: ps.percona.com
@@ -1912,6 +1916,8 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
+  labels:
+    mysql.percona.com/version: v0.10.0
   name: perconaservermysqls.ps.percona.com
 spec:
   group: ps.percona.com
@@ -3287,6 +3293,7 @@ spec:
                         - image
                         - readTimeout
                         - serverId
+                        - size
                         - storage
                         - writeTimeout
                         type: object
@@ -6306,6 +6313,8 @@ spec:
                                   - port
                                   type: object
                               type: object
+                            stopSignal:
+                              type: string
                           type: object
                         livenessProbe:
                           properties:
@@ -7019,6 +7028,7 @@ spec:
                     type: object
                 required:
                 - image
+                - size
                 type: object
               orchestrator:
                 properties:
@@ -8233,6 +8243,7 @@ spec:
                     type: object
                 required:
                 - image
+                - size
                 type: object
               pause:
                 type: boolean
@@ -9573,6 +9584,7 @@ spec:
                         type: object
                     required:
                     - image
+                    - size
                     type: object
                   router:
                     properties:
@@ -10787,6 +10799,7 @@ spec:
                         type: object
                     required:
                     - image
+                    - size
                     type: object
                 type: object
               secretsName:
@@ -11291,6 +11304,21 @@ spec:
                     type: string
                 type: object
             type: object
+            x-kubernetes-validations:
+            - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
+                ''async'', ''orchestrator.enabled'' must be true unless ''unsafeFlags.orchestrator''
+                is enabled'
+              rule: '!(self.mysql.clusterType == ''async'') || self.unsafeFlags.orchestrator
+                || self.orchestrator.enabled'
+            - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
+                ''async'', ''proxy.haproxy.enabled'' must be true unless ''unsafeFlags.proxy''
+                is enabled'
+              rule: '!(self.mysql.clusterType == ''async'') || self.unsafeFlags.proxy
+                || self.proxy.haproxy.enabled'
+            - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
+                ''async'', ''proxy.router.enabled'' must be disabled'
+              rule: '!(self.mysql.clusterType == ''async'') || self.proxy.router ==
+                null || !has(self.proxy.router.enabled) || !self.proxy.router.enabled'
           status:
             properties:
               backupVersion:

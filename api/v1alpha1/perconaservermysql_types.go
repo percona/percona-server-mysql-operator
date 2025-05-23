@@ -44,6 +44,9 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // PerconaServerMySQLSpec defines the desired state of PerconaServerMySQL
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.orchestrator || self.orchestrator.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'orchestrator.enabled' must be true unless 'unsafeFlags.orchestrator' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.proxy || self.proxy.haproxy.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.haproxy.enabled' must be true unless 'unsafeFlags.proxy' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.proxy.router == null || !has(self.proxy.router.enabled) || !self.proxy.router.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.router.enabled' must be disabled"
 type PerconaServerMySQLSpec struct {
 	CRVersion         string                               `json:"crVersion,omitempty"`
 	Pause             bool                                 `json:"pause,omitempty"`
@@ -97,7 +100,7 @@ const (
 
 // Checks if the provided ClusterType is valid.
 func (t ClusterType) isValid() bool {
-	switch ClusterType(t) {
+	switch t {
 	case ClusterTypeGR, ClusterTypeAsync:
 		return true
 	}
@@ -157,6 +160,7 @@ type ContainerSpec struct {
 }
 
 type PodSpec struct {
+	// +kubebuilder:validation:Required
 	Size        int32             `json:"size,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
@@ -229,10 +233,9 @@ func (s *BackupSpec) GetInitImage() string {
 type BackupStorageType string
 
 const (
-	BackupStorageFilesystem BackupStorageType = "filesystem"
-	BackupStorageS3         BackupStorageType = "s3"
-	BackupStorageGCS        BackupStorageType = "gcs"
-	BackupStorageAzure      BackupStorageType = "azure"
+	BackupStorageS3    BackupStorageType = "s3"
+	BackupStorageGCS   BackupStorageType = "gcs"
+	BackupStorageAzure BackupStorageType = "azure"
 )
 
 type BackupStorageSpec struct {
@@ -358,7 +361,7 @@ func (b *BackupStorageAzureSpec) ContainerAndPrefix() (string, string) {
 type PiTRSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 
-	BinlogServer BinlogServerSpec `json:"binlogServer,omitempty"`
+	BinlogServer *BinlogServerSpec `json:"binlogServer,omitempty"`
 }
 
 type BinlogServerStorageSpec struct {
@@ -528,14 +531,14 @@ type PerconaServerMySQLList struct {
 type SystemUser string
 
 const (
-	UserHeartbeat    SystemUser = "heartbeat"
-	UserMonitor      SystemUser = "monitor"
-	UserOperator     SystemUser = "operator"
-	UserOrchestrator SystemUser = "orchestrator"
-	UserPMMServerKey SystemUser = "pmmserverkey"
-	UserReplication  SystemUser = "replication"
-	UserRoot         SystemUser = "root"
-	UserXtraBackup   SystemUser = "xtrabackup"
+	UserHeartbeat      SystemUser = "heartbeat"
+	UserMonitor        SystemUser = "monitor"
+	UserOperator       SystemUser = "operator"
+	UserOrchestrator   SystemUser = "orchestrator"
+	UserPMMServerToken SystemUser = "pmmservertoken"
+	UserReplication    SystemUser = "replication"
+	UserRoot           SystemUser = "root"
+	UserXtraBackup     SystemUser = "xtrabackup"
 )
 
 // MySQLSpec returns the MySQL specification from the PerconaServerMySQL custom resource.
@@ -559,13 +562,13 @@ func (cr *PerconaServerMySQL) SetVersion() {
 		return
 	}
 
-	cr.Spec.CRVersion = version.Version
+	cr.Spec.CRVersion = version.Version()
 }
 
 // CheckNSetDefaults validates and sets default values for the PerconaServerMySQL custom resource.
-func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersion *platform.ServerVersion) error {
+func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion *platform.ServerVersion) error {
 	if len(cr.Spec.MySQL.ClusterType) == 0 {
-		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
+		cr.Spec.MySQL.ClusterType = ClusterTypeGR
 	}
 
 	if valid := cr.Spec.MySQL.ClusterType.isValid(); !valid {
@@ -824,6 +827,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(ctx context.Context, serverVersi
 		cr.Spec.Toolkit = new(ToolkitSpec)
 	}
 
+	if cr.Spec.Backup.PiTR.Enabled && cr.Spec.Backup.PiTR.BinlogServer == nil {
+		cr.Spec.Backup.PiTR.BinlogServer = new(BinlogServerSpec)
+	}
+
 	if cr.Spec.Pause {
 		cr.Spec.MySQL.Size = 0
 		cr.Spec.Orchestrator.Size = 0
@@ -1017,7 +1024,7 @@ func (cr *PerconaServerMySQL) PMMEnabled(secret *corev1.Secret) bool {
 // HasSecret determines if the provided secret contains the necessary PMM server key.
 func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
 	if secret.Data != nil {
-		v, ok := secret.Data[string(UserPMMServerKey)]
+		v, ok := secret.Data[string(UserPMMServerToken)]
 		return ok && len(v) > 0
 	}
 	return false

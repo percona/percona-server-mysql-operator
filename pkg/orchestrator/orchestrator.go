@@ -21,17 +21,19 @@ import (
 )
 
 const (
-	ComponentName      = "orc"
-	componentShortName = "orc"
-	defaultWebPort     = 3000
-	defaultRaftPort    = 10008
-	configVolumeName   = "config"
-	configMountPath    = "/etc/orchestrator/config"
-	ConfigFileName     = "orchestrator.conf.json"
-	credsVolumeName    = "users"
-	CredsMountPath     = "/etc/orchestrator/orchestrator-users-secret"
-	tlsVolumeName      = "tls"
-	tlsMountPath       = "/etc/orchestrator/ssl"
+	ComponentName          = "orc"
+	componentShortName     = "orc"
+	defaultWebPort         = 3000
+	defaultRaftPort        = 10008
+	customConfigVolumeName = "custom"
+	configVolumeName       = "config"
+	configMountPath        = "/etc/orchestrator/config"
+	customConfigMountPath  = "/etc/orchestrator/custom"
+	ConfigFileName         = "orchestrator.conf.json"
+	credsVolumeName        = "users"
+	CredsMountPath         = "/etc/orchestrator/orchestrator-users-secret"
+	tlsVolumeName          = "tls"
+	tlsMountPath           = "/etc/orchestrator/ssl"
 )
 
 type Exposer apiv1alpha1.PerconaServerMySQL
@@ -170,6 +172,12 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, tlsHash string) 
 							},
 						},
 						{
+							Name: configVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
+							},
+						},
+						{
 							Name: credsVolumeName,
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
@@ -186,7 +194,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, tlsHash string) 
 							},
 						},
 						{
-							Name: configVolumeName,
+							Name: customConfigVolumeName,
 							VolumeSource: corev1.VolumeSource{
 								ConfigMap: &corev1.ConfigMapVolumeSource{
 									LocalObjectReference: corev1.LocalObjectReference{
@@ -252,7 +260,7 @@ func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		ImagePullPolicy: cr.Spec.Orchestrator.ImagePullPolicy,
 		Resources:       cr.Spec.Orchestrator.Resources,
 		Command:         []string{"/opt/percona/orc-entrypoint.sh"},
-		Args:            []string{"/usr/local/orchestrator/orchestrator", "-config", "/etc/orchestrator/orchestrator.conf.json", "http"},
+		Args:            []string{"/usr/local/orchestrator/orchestrator", "-config", "/etc/orchestrator/config/orchestrator.conf.json", "http"},
 		Env:             env,
 		EnvFrom:         cr.Spec.Orchestrator.EnvFrom,
 		Ports: []corev1.ContainerPort{
@@ -340,6 +348,10 @@ func containerMounts() []corev1.VolumeMount {
 		{
 			Name:      tlsVolumeName,
 			MountPath: tlsMountPath,
+		},
+		{
+			Name:      customConfigVolumeName,
+			MountPath: customConfigMountPath,
 		},
 		{
 			Name:      configVolumeName,

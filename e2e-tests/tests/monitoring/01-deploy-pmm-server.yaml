@@ -8,8 +8,8 @@ commands:
       source ../../functions
 
       deploy_pmm_server
-      sleep 30 # wait for PMM Server to start
+      sleep 60 # wait for PMM Server to start
 
-      API_KEY=$(get_pmm_api_key)
-      kubectl patch -n "${NAMESPACE}" secret test-secrets --type merge --patch "$(jq -n --arg key "$API_KEY" '{"stringData": {"pmmserverkey": $key}}')"
+      TOKEN=$(get_pmm_server_token)
+      kubectl patch -n "${NAMESPACE}" secret test-secrets --type merge --patch "$(jq -n --arg token "$TOKEN" '{"stringData": {"pmmservertoken": $token}}')"
     timeout: 120

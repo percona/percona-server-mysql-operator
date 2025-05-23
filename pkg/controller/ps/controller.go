@@ -495,7 +495,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 
 	if pmm := cr.Spec.PMM; pmm != nil && pmm.Enabled && !pmm.HasSecret(internalSecret) {
 		log.Info(fmt.Sprintf(`Can't enable PMM: either "%s" key doesn't exist in the secrets, or secrets and internal secrets are out of sync`,
-			apiv1alpha1.UserPMMServerKey), "secrets", cr.Spec.SecretsName, "internalSecrets", cr.InternalSecretName())
+			apiv1alpha1.UserPMMServerToken), "secrets", cr.Spec.SecretsName, "internalSecrets", cr.InternalSecretName())
 	}
 
 	if cr.Spec.UpdateStrategy == apiv1alpha1.SmartUpdateStatefulSetStrategyType {
@@ -1162,7 +1162,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 
 	s3 := cr.Spec.Backup.PiTR.BinlogServer.Storage.S3
 
-	if s3 != nil && len(s3.CredentialsSecret) == 0 {
+	if s3 == nil || len(s3.CredentialsSecret) == 0 {
 		logger.Info("setting spec.backup.pitr.binlogServer.s3.credentialsSecret is required to upload binlogs to s3")
 		return nil
 	}

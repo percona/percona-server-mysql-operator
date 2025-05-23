@@ -39,7 +39,6 @@ import (
 	psv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
-	//+kubebuilder:scaffold:imports
 )
 
 var _ = Describe("Sidecars", Ordered, func() {
@@ -140,7 +139,8 @@ var _ = Describe("Sidecars", Ordered, func() {
 						Medium: corev1.StorageMediumMemory,
 					},
 				},
-			}}
+			},
+		}
 
 		Specify("CR should be updated", func() {
 			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
@@ -212,7 +212,8 @@ var _ = Describe("Sidecars", Ordered, func() {
 						},
 					},
 				},
-			}}
+			},
+		}
 
 		Specify("CR should be updated", func() {
 			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
@@ -355,7 +356,7 @@ var _ = Describe("Unsafe configurations", Ordered, func() {
 	})
 })
 
-var _ = Describe("Reconcile HAProxy", Ordered, func() {
+var _ = Describe("Reconcile HAProxy when async cluster type", Ordered, func() {
 	ctx := context.Background()
 
 	crName := "reconcile-haproxy"
@@ -383,10 +384,9 @@ var _ = Describe("Reconcile HAProxy", Ordered, func() {
 	Context("Cleanup outdated HAProxy service", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
 		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
-		cr.Spec.Proxy.HAProxy.Enabled = true
 		cr.Spec.Orchestrator.Enabled = true
 		cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
-		It("should read and create defautl cr.yaml", func() {
+		It("should read and create default cr.yaml", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 		})
@@ -424,6 +424,113 @@ var _ = Describe("Reconcile HAProxy", Ordered, func() {
 	})
 })
 
+var _ = Describe("CR validations", Ordered, func() {
+	ctx := context.Background()
+
+	ns := "validate"
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ns,
+			Namespace: ns,
+		},
+	}
+
+	BeforeAll(func() {
+		By("Creating the Namespace to perform the tests")
+		err := k8sClient.Create(ctx, namespace)
+		Expect(err).To(Not(HaveOccurred()))
+	})
+
+	AfterAll(func() {
+		By("Deleting the Namespace to perform the tests")
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	Context("cr creation based on mysql cluster configuration", Ordered, func() {
+		When("the cr is configured using default values and async cluster type", Ordered, func() {
+			cr, err := readDefaultCR("cr-validation-1", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			It("should read and create default cr.yaml", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("cluster type is async and the orchestrator is disabled but unsafe flag enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-2", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.Orchestrator.Enabled = false
+			cr.Spec.Unsafe.Orchestrator = true
+			It("should read and create default cr.yaml", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("cluster type is async and the orchestrator is disabled with unsafe flag disabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-3", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.Orchestrator.Enabled = false
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("'orchestrator.enabled' must be true unless 'unsafeFlags.orchestrator' is enabled"))
+			})
+		})
+
+		When("cluster type is async and HAProxy is disabled but unsafe flag enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-4", ns)
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.Proxy.HAProxy.Enabled = false
+			cr.Spec.Unsafe.Proxy = true
+			It("should read and create default cr.yaml", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("cluster type is async and HAProxy is disabled with unsafe flag disabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-5", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.Proxy.HAProxy.Enabled = false
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("'proxy.haproxy.enabled' must be true unless 'unsafeFlags.proxy' is enabled"))
+			})
+		})
+
+		When("cluster type is async and router is enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-6", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+			cr.Spec.Proxy.Router.Enabled = true
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("'mysql.clusterType' is set to 'async', 'proxy.router.enabled' must be disabled"))
+			})
+		})
+	})
+})
+
 var _ = Describe("Reconcile Binlog Server", Ordered, func() {
 	ctx := context.Background()
 
@@ -453,7 +560,7 @@ var _ = Describe("Reconcile Binlog Server", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
 
 		cr.Spec.Backup.PiTR.Enabled = true
-		cr.Spec.Backup.PiTR.BinlogServer = psv1alpha1.BinlogServerSpec{
+		cr.Spec.Backup.PiTR.BinlogServer = &psv1alpha1.BinlogServerSpec{
 			ConnectTimeout: 20,
 			WriteTimeout:   20,
 			ReadTimeout:    20,
@@ -552,7 +659,6 @@ var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 	})
 
 	Context("delete-mysql-pvc finalizer specified", Ordered, func() {
-
 		cr, err := readDefaultCR(crName, ns)
 
 		It("should read default cr.yaml", func() {
@@ -575,7 +681,6 @@ var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 		})
 
 		It("Should create mysql sts", func() {
-
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      cr.Name + "-mysql",
 				Namespace: cr.Namespace,
@@ -663,7 +768,6 @@ var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 
 					return k8serrors.IsNotFound(err)
 				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
-
 			})
 		})
 	})
