@@ -20,7 +20,9 @@ export IMAGE_HAPROXY=${IMAGE_HAPROXY:-"perconalab/percona-server-mysql-operator:
 export PMM_SERVER_VERSION=${PMM_SERVER_VERSION:-"1.4.3"}
 export IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:3-dev-latest"}
 export IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:3-dev-latest"}
-export CERT_MANAGER_VER="1.16.3"
+export CERT_MANAGER_VER="1.17.2"
+export MINIO_VER="5.4.0"
+export CHAOS_MESH_VER="2.7.2"
 
 date=$(which gdate || which date)
 
