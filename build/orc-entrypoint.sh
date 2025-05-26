@@ -17,14 +17,14 @@ sleep 10 # give time for SRV records to update
 
 NAMESPACE=$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)
 jq -M \
-  --arg HTTPAdvertise "http://$HOSTNAME.$NAMESPACE:3000" \
-  --arg RaftAdvertise "$HOSTNAME.$NAMESPACE" \
-  --arg RaftBind "$HOSTNAME.$ORC_SERVICE.$NAMESPACE" \
-  --arg MySQLTopologySSLPrivateKeyFile "$ORC_CONF_PATH/ssl/tls.key" \
-  --arg MySQLTopologySSLCertFile "$ORC_CONF_PATH/ssl/tls.crt" \
-  --arg MySQLTopologySSLCAFile "$ORC_CONF_PATH/ssl/ca.crt" \
-  --argjson RaftEnabled "${RAFT_ENABLED:-true}" \
-  '. + {
+	--arg HTTPAdvertise "http://$HOSTNAME.$NAMESPACE:3000" \
+	--arg RaftAdvertise "$HOSTNAME.$NAMESPACE" \
+	--arg RaftBind "$HOSTNAME.$ORC_SERVICE.$NAMESPACE" \
+	--arg MySQLTopologySSLPrivateKeyFile "$ORC_CONF_PATH/ssl/tls.key" \
+	--arg MySQLTopologySSLCertFile "$ORC_CONF_PATH/ssl/tls.crt" \
+	--arg MySQLTopologySSLCAFile "$ORC_CONF_PATH/ssl/ca.crt" \
+	--argjson RaftEnabled "${RAFT_ENABLED:-true}" \
+	'. + {
     HTTPAdvertise: $HTTPAdvertise,
     RaftAdvertise: $RaftAdvertise,
     RaftBind: $RaftBind,
@@ -35,7 +35,7 @@ jq -M \
     MySQLTopologySSLCertFile: $MySQLTopologySSLCertFile,
     MySQLTopologySSLCAFile: $MySQLTopologySSLCAFile,
     RaftNodes: []
-  }' "$ORC_CONF_FILE" > "${ORC_CONF_FILE}.tmp" && mv "${ORC_CONF_FILE}.tmp" "$ORC_CONF_FILE"
+  }' "$ORC_CONF_FILE" >"${ORC_CONF_FILE}.tmp" && mv "${ORC_CONF_FILE}.tmp" "$ORC_CONF_FILE"
 
 if [ -f "${CUSTOM_CONF_FILE}" ]; then
 	jq -M -s ".[0] * .[1]" "${ORC_CONF_FILE}" "${CUSTOM_CONF_FILE}" 1<>"${ORC_CONF_FILE}"
