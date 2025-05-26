@@ -5,4 +5,5 @@ metadata:
   labels:
     app.kubernetes.io/version: v0.10.0
     app.kubernetes.io/name: percona-server
-    app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/part-of: percona-server-mysql-operator
+    app.kubernetes.io/component: crd

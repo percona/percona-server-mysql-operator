@@ -38,6 +38,10 @@ func TestCRDVersionLabel(t *testing.T) {
 		expectedVersion := "v" + version.Version()
 		expectedLabels := naming.Labels()
 		expectedLabels[naming.LabelOperatorVersion] = expectedVersion
+		expectedLabels[naming.LabelComponent] = "crd"
+
+		// TODO: remove this line after https://perconadev.atlassian.net/browse/K8SPS-442 implementation
+		expectedLabels[naming.LabelPartOf] = "percona-server-mysql-operator"
 
 		for k, expectedValue := range expectedLabels {
 			if crd.Labels[k] == expectedValue {

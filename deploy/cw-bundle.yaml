@@ -4,8 +4,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
   labels:
+    app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server
-    app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/part-of: percona-server-mysql-operator
     app.kubernetes.io/version: v0.10.0
   name: perconaservermysqlbackups.ps.percona.com
 spec:
@@ -963,8 +964,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
   labels:
+    app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server
-    app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/part-of: percona-server-mysql-operator
     app.kubernetes.io/version: v0.10.0
   name: perconaservermysqlrestores.ps.percona.com
 spec:
@@ -1921,8 +1923,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.3
   labels:
+    app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server
-    app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/part-of: percona-server-mysql-operator
     app.kubernetes.io/version: v0.10.0
   name: perconaservermysqls.ps.percona.com
 spec:
