@@ -45,6 +45,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 	var outb, errb bytes.Buffer
 	cmd := []string{"cat", "/var/lib/mysql/full-cluster-crash"}
 
+	clusterCrashRecovered := false
 	for _, pod := range pods {
 		err = r.ClientCmd.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false)
 		if err != nil {
@@ -79,7 +80,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 
 		status, err := mysh.ClusterStatusWithExec(ctx, cr.InnoDBClusterName())
 		if err == nil && status.DefaultReplicaSet.Status == innodbcluster.ClusterStatusOK {
-			err := r.cleanupFullClusterCrashFile(ctx, cr)
+			err := r.cleanupFullClusterCrashFile(ctx, cr, &pod)
 			if err != nil {
 				log.Error(err, "failed to remove /var/lib/mysql/full-cluster-crash")
 			}
@@ -90,8 +91,8 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 		err = mysh.RebootClusterFromCompleteOutageWithExec(ctx, cr.InnoDBClusterName())
 		if err == nil {
 			log.Info("Cluster was successfully rebooted")
-			r.Recorder.Event(cr, "Normal", "FullClusterCrashRecovered", "Cluster recovered from full cluster crash")
-			err := r.cleanupFullClusterCrashFile(ctx, cr)
+			clusterCrashRecovered = true
+			err := r.cleanupFullClusterCrashFile(ctx, cr, &pod)
 			if err != nil {
 				log.Error(err, "failed to remove /var/lib/mysql/full-cluster-crash")
 			}
@@ -115,30 +116,26 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 
 		log.Error(err, "failed to reboot cluster from complete outage")
 	}
+	if clusterCrashRecovered {
+		r.Recorder.Event(cr, "Normal", "FullClusterCrashRecovered", "Cluster recovered from full cluster crash")
+	}
 
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) cleanupFullClusterCrashFile(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) cleanupFullClusterCrashFile(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, pod *corev1.Pod) error {
 	log := logf.FromContext(ctx)
-
-	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
-	if err != nil {
-		return errors.Wrap(err, "get pods")
-	}
 
 	var outb, errb bytes.Buffer
 	cmd := []string{"rm", "/var/lib/mysql/full-cluster-crash"}
-	for _, pod := range pods {
-		err = r.ClientCmd.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false)
-		if err != nil {
-			if strings.Contains(errb.String(), "No such file or directory") {
-				continue
-			}
-			return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, outb.String(), errb.String())
+	err := r.ClientCmd.Exec(ctx, pod, "mysql", cmd, nil, &outb, &errb, false)
+	if err != nil {
+		if strings.Contains(errb.String(), "No such file or directory") {
+			return nil
 		}
-		log.V(1).Info("Removed /var/lib/mysql/full-cluster-crash", "pod", pod.Name)
+		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, outb.String(), errb.String())
 	}
+	log.V(1).Info("Removed /var/lib/mysql/full-cluster-crash", "pod", pod.Name)
 
 	return nil
 }
