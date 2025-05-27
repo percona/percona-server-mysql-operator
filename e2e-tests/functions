@@ -52,7 +52,6 @@ wait_for_delete() {
 			exit 1
 		fi
 	done
-	set_debug
 }
 
 deploy_operator() {
