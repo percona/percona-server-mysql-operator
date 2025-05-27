@@ -36,6 +36,24 @@ create_namespace() {
 	fi
 }
 
+wait_for_delete() {
+	local res="$1"
+
+	echo -n "waiting for $res to be deleted"
+	set +o xtrace
+	retry=0
+	until (kubectl get $res || :) 2>&1 | grep NotFound; do
+		sleep 1
+		echo -n .
+		let retry+=1
+		if [ $retry -ge 120 ]; then
+			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod)
+			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+			exit 1
+		fi
+	done
+}
+
 deploy_operator() {
 	destroy_operator
 
