@@ -22,6 +22,7 @@ import (
 	"hash/fnv"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
@@ -802,6 +803,19 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 
 		if cr.RouterEnabled() {
 			return errors.New("MySQL Router can't be enabled for asynchronous replication")
+		}
+
+		for _, env := range cr.Spec.MySQL.Env {
+			if env.Name != naming.EnvBootstrapReadTimeout {
+				continue
+			}
+			readTimeout, err := strconv.Atoi(env.Value)
+			if err != nil {
+				return errors.Wrap(err, "failed to parse BOOTSTRAP_READ_TIMEOUT")
+			}
+			if readTimeout < 0 {
+				return errors.New("BOOTSTRAP_READ_TIMEOUT should be a positive value")
+			}
 		}
 	}
 
