@@ -35,10 +35,20 @@ func TestCRDVersionLabel(t *testing.T) {
 		if err := yaml.Unmarshal(doc, crd); err != nil {
 			t.Fatalf("Failed to unmarshal crd: %s", err.Error())
 		}
-		expected := "v" + version.Version()
-		if crd.Labels[naming.LabelOperatorVersion] != expected {
-			t.Logf("invalid version is specified in %s label of %s CustomResourceDefinition: have: %s, expected: %s", naming.LabelOperatorVersion, crd.Name, crd.Labels[naming.LabelOperatorVersion], expected)
-			t.Log([]byte(crd.Labels[naming.LabelOperatorVersion]), []byte(expected))
+		expectedVersion := "v" + version.Version()
+		expectedLabels := naming.Labels()
+		expectedLabels[naming.LabelOperatorVersion] = expectedVersion
+		expectedLabels[naming.LabelComponent] = "crd"
+
+		// TODO: remove this line after https://perconadev.atlassian.net/browse/K8SPS-442 implementation
+		expectedLabels[naming.LabelPartOf] = "percona-server-mysql-operator"
+
+		for k, expectedValue := range expectedLabels {
+			if crd.Labels[k] == expectedValue {
+				continue
+			}
+			t.Logf("invalid value is specified in %s label of %s CustomResourceDefinition: have: %s, expected: %s", k, crd.Name, crd.Labels[k], expectedValue)
+			t.Log([]byte(crd.Labels[k]), []byte(expectedValue))
 			t.Fail()
 		}
 	}
