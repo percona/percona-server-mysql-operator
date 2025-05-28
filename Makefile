@@ -249,7 +249,7 @@ include e2e-tests/release_versions
 CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
 release: manifests
 	$(SED) -i "/CERT_MANAGER_VER/s/CERT_MANAGER_VER=\".*/CERT_MANAGER_VER=\"$(CERT_MANAGER_VER)\"/" e2e-tests/vars.sh
-	$(SED) -i "/const Version = \"/s/Version = \".*/Version = \"$(VERSION)\"/" pkg/version/version.go
+	echo $(VERSION) > pkg/version/version.txt
 	$(SED) -i \
 		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(VERSION)/}" \
 		-e "/^  mysql:/,/^    image:/{s#image: .*#image: $(IMAGE_MYSQL80)#}" \
@@ -262,18 +262,18 @@ release: manifests
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: $(IMAGE_PMM_CLIENT)#}" \
 		deploy/cr.yaml
 	$(SED) -i \
-		-e "s|image: perconalab/percona-server-mysql-operator:main|image: $(IMAGE_OPERATOR)|g" \
+		-e "s|image: .*|image: $(IMAGE_OPERATOR)|g" \
 		config/manager/manager.yaml config/manager/cluster/manager.yaml
 	$(SED) -i \
-		-e "s|cr.Spec.InitImage = perconalab/percona-server-mysql-operator:main|cr.Spec.InitImage = \"$(IMAGE_OPERATOR)\"|g" \
+		-e "s|cr.Spec.InitImage = .*|cr.Spec.InitImage = \"$(IMAGE_OPERATOR)\"|g" \
 		pkg/controller/ps/suite_test.go
 
 # Prepare main branch after release
-MAJOR_VER := $(shell grep "Version =" pkg/version/version.go|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f1)
-MINOR_VER := $(shell grep "Version =" pkg/version/version.go|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f2)
+MAJOR_VER := $(shell grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" pkg/version/version.txt|cut -d'.' -f1)
+MINOR_VER := $(shell grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" pkg/version/version.txt|cut -d'.' -f2)
 NEXT_VER ?= $(MAJOR_VER).$$(($(MINOR_VER) + 1)).0
 after-release: manifests
-	$(SED) -i "/const Version = \"/s/Version = \".*/Version = \"$(NEXT_VER)\"/" pkg/version/version.go
+	$(SED) -i "/const Version = \"/s/Version = \".*/Version = \"$(NEXT_VER)\"/" pkg/version/version.txt
 	$(SED) -i \
 		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(NEXT_VER)/}" \
 		-e "/^  mysql:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-psmysql#}" \
@@ -283,7 +283,7 @@ after-release: manifests
 		-e "/^  backup:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-backup#}" \
 		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-toolkit#}" \
 		-e "s#initImage: .*#initImage: perconalab/percona-server-mysql-operator:main#g" \
-		-e "/^  pmm:/,/^    image:/{s#image: .*#image: perconalab/pmm-client:dev-latest#}" \
+		-e "/^  pmm:/,/^    image:/{s#image: .*#image: perconalab/pmm-client:3-dev-latest#}" \
 		deploy/cr.yaml
 	$(SED) -i \
 		-e "s|$(IMAGE_OPERATOR)|perconalab/percona-server-mysql-operator:main|g" \
