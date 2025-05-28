@@ -273,7 +273,7 @@ MAJOR_VER := $(shell grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" pkg/version/version.txt|c
 MINOR_VER := $(shell grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" pkg/version/version.txt|cut -d'.' -f2)
 NEXT_VER ?= $(MAJOR_VER).$$(($(MINOR_VER) + 1)).0
 after-release: manifests
-	$(SED) -i "/const Version = \"/s/Version = \".*/Version = \"$(NEXT_VER)\"/" pkg/version/version.txt
+	echo $(NEXT_VER) > pkg/version/version.txt
 	$(SED) -i \
 		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(NEXT_VER)/}" \
 		-e "/^  mysql:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-psmysql#}" \
