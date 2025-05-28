@@ -287,7 +287,7 @@ after-release: manifests
 		deploy/cr.yaml
 	$(SED) -i \
 		-e "s|$(IMAGE_OPERATOR)|perconalab/percona-server-mysql-operator:main|g" \
-		config/manager/manager.yaml config/manager/cluster/manager.yaml
+		config/manager/manager.yaml config/manager/cluster/manager.yaml deploy/bundle.yaml deploy/cw-bundle.yaml deploy/operator.yaml deploy/cw-operator.yaml
 	$(SED) -i \
 		-e "s|$(IMAGE_OPERATOR)|perconalab/percona-server-mysql-operator:main|g" \
 		pkg/controller/ps/suite_test.go
