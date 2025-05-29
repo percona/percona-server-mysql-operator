@@ -90,6 +90,42 @@ deploy_operator() {
 	fi
 }
 
+upgrade_operator_image() {
+	local image=$1
+
+	kubectl -n ${OPERATOR_NS:-$NAMESPACE} set image deployment/percona-server-mysql-operator manager=${image}
+}
+
+deploy_operator_gh() {
+	local git_tag=$1
+
+	echo "applying ${git_tag}/deploy/crd.yaml"
+	kubectl apply \
+		--server-side \
+		--force-conflicts \
+		-f "https://raw.githubusercontent.com/percona/percona-server-mysql-operator/${git_tag}/deploy/crd.yaml"
+
+	local rbac="rbac"
+	local operator="operator"
+	if [ -n "${OPERATOR_NS}" ]; then
+		rbac="cw-rbac"
+		operator="cw-operator"
+
+		create_namespace "${OPERATOR_NS}"
+	fi
+
+	echo "applying ${git_tag}/deploy/${rbac}.yaml"
+	kubectl apply \
+		-n "${OPERATOR_NS:-$NAMESPACE}" \
+		-f "https://raw.githubusercontent.com/percona/percona-server-mysql-operator/${git_tag}/deploy/${rbac}.yaml"
+
+	echo "applying ${git_tag}/deploy/${operator}.yaml"
+	curl -s "https://raw.githubusercontent.com/percona/percona-server-mysql-operator/${git_tag}/deploy/${operator}.yaml" \
+		| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "true"' \
+		| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG"' \
+		| kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f -
+}
+
 destroy_operator() {
 	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" delete deployment percona-server-mysql-operator --force --grace-period=0 || true
 	if [[ $OPERATOR_NS ]]; then
@@ -571,8 +607,21 @@ get_operator_pod() {
 		-o 'jsonpath={.items[].metadata.name}'
 }
 
+get_operator_image() {
+	kubectl get pods -n "${OPERATOR_NS:-$NAMESPACE}" \
+		--selector=app.kubernetes.io/name=percona-server-mysql-operator \
+		-o 'jsonpath={.items[].spec.containers[].image}'
+}
+
 get_cr() {
 	local name_suffix=$1
+	local image_mysql=${2:-${IMAGE_MYSQL}}
+	local image_backup=${3:-${IMAGE_BACKUP}}
+	local image_orchestrator=${4:-${IMAGE_ORCHESTRATOR}}
+	local image_router=${5:-${IMAGE_ROUTER}}
+	local image_toolkit=${6:-${IMAGE_TOOLKIT}}
+	local image_haproxy=${7:-${IMAGE_HAPROXY}}
+	local image_pmm_client=${8:-${IMAGE_PMM_CLIENT}}
 
 	yq eval "$(printf '.metadata.name="%s"' "${test_name}${name_suffix:+-$name_suffix}")" "${DEPLOY_DIR}/cr.yaml" \
 		| yq eval "$(printf '.spec.initContainer.image="%s"' "${IMAGE}")" - \
@@ -582,19 +631,29 @@ get_cr() {
 		| yq eval '.spec.mysql.clusterType="async"' - \
 		| yq eval '.spec.mysql.gracePeriod=30' - \
 		| yq eval '.spec.orchestrator.enabled=true' - \
-		| yq eval "$(printf '.spec.mysql.image="%s"' "${IMAGE_MYSQL}")" - \
-		| yq eval "$(printf '.spec.backup.image="%s"' "${IMAGE_BACKUP}")" - \
-		| yq eval "$(printf '.spec.orchestrator.image="%s"' "${IMAGE_ORCHESTRATOR}")" - \
-		| yq eval "$(printf '.spec.proxy.router.image="%s"' "${IMAGE_ROUTER}")" - \
-		| yq eval "$(printf '.spec.toolkit.image="%s"' "${IMAGE_TOOLKIT}")" - \
-		| yq eval "$(printf '.spec.proxy.haproxy.image="%s"' "${IMAGE_HAPROXY}")" - \
-		| yq eval "$(printf '.spec.pmm.image="%s"' "${IMAGE_PMM_CLIENT}")" - \
+		| yq eval "$(printf '.spec.mysql.image="%s"' "${image_mysql}")" - \
+		| yq eval "$(printf '.spec.backup.image="%s"' "${image_backup}")" - \
+		| yq eval "$(printf '.spec.orchestrator.image="%s"' "${image_orchestrator}")" - \
+		| yq eval "$(printf '.spec.proxy.router.image="%s"' "${image_router}")" - \
+		| yq eval "$(printf '.spec.toolkit.image="%s"' "${image_toolkit}")" - \
+		| yq eval "$(printf '.spec.proxy.haproxy.image="%s"' "${image_haproxy}")" - \
+		| yq eval "$(printf '.spec.pmm.image="%s"' "${image_pmm_client}")" - \
 		| if [ -n "${MINIKUBE}" ]; then
 			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) |= "none"' - \
 				| yq eval '.spec.proxy.haproxy.resources.requests.cpu="300m"' -
 		else
 			yq eval -
 		fi
+}
+
+get_cr_gh() {
+	local name_suffix=$1
+
+	curl -s "https://raw.githubusercontent.com/percona/percona-server-mysql-operator/${git_tag}/deploy/cr.yaml" \
+		| yq eval "$(printf '.metadata.name="%s"' "${test_name}${name_suffix:+-$name_suffix}")" - \
+		| yq eval '.spec.secretsName="test-secrets"' - \
+		| yq eval '.spec.sslSecretName="test-ssl"' - \
+		| yq eval '.spec.upgradeOptions.apply="disabled"' -
 }
 
 get_client_pod() {
@@ -1399,4 +1458,43 @@ check_scheduled_backup_labels() {
 		echo "Label percona.com/backup-ancestor is missing"
 		exit 1
 	fi
+
+latest_operator_version_in_vs() {
+	local latest=$(curl -s https://check.percona.com/versions/v1/ps-operator | jq -r '.versions[].operator' | sort -V | tail -n1)
+
+	# if testing on release branch and version service is already updated with new operator images
+	# use the older version of operator as initial point for test
+	if [[ ${latest} == "${OPERATOR_VERSION}" ]]; then
+		latest=$(curl -s https://check.percona.com/versions/v1/ps-operator | jq -r '.versions[].operator' | sort -V | tail -n2 | head -n1)
+	fi
+
+	echo ${latest}
+}
+
+latest_operator_image_in_vs() {
+	local version=$(latest_operator_version_in_vs)
+
+	curl -s https://check.percona.com/versions/v1/ps-operator/${version}/latest | jq -r '.versions[].matrix.operator[].imagePath'
+}
+
+get_cr_with_latest_versions_in_vs() {
+	local version=$(latest_operator_version_in_vs)
+	local latest_versions=$(curl -s https://check.percona.com/versions/v1/ps-operator/${version}/latest)
+
+	local image_mysql=$(echo ${latest_versions} | jq -r '.versions[].matrix.mysql[].imagePath')
+	local image_backup=$(echo ${latest_versions} | jq -r '.versions[].matrix.backup[].imagePath')
+	local image_orchestrator=$(echo ${latest_versions} | jq -r '.versions[].matrix.orchestrator[].imagePath')
+	local image_router=$(echo ${latest_versions} | jq -r '.versions[].matrix.orchestrator[].imagePath')
+	local image_toolkit=$(echo ${latest_versions} | jq -r '.versions[].matrix.toolkit[].imagePath')
+	local image_haproxy=$(echo ${latest_versions} | jq -r '.versions[].matrix.haproxy[].imagePath')
+	local image_pmm_client=$(echo ${latest_versions} | jq -r '.versions[].matrix.pmm[].imagePath')
+
+	get_cr "" \
+		${image_mysql} \
+		${image_backup} \
+		${image_orchestrator} \
+		${image_router} \
+		${image_toolkit} \
+		${image_haproxy} \
+		${image_pmm_client}
 }

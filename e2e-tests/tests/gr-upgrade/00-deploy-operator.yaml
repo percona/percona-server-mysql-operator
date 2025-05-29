@@ -1,0 +1,15 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+      init_temp_dir # do this only in the first TestStep
+
+      git_tag="v$(latest_operator_version_in_vs)"
+      deploy_operator_gh ${git_tag}
+      deploy_non_tls_cluster_secrets
+      deploy_tls_cluster_secrets
+      deploy_client

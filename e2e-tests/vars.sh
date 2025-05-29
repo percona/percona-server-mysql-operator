@@ -9,6 +9,7 @@ export TEMP_DIR="/tmp/kuttl/ps/${test_name}"
 
 export GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 export VERSION=${VERSION:-$(echo "${GIT_BRANCH}" | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')}
+export OPERATOR_VERSION="$(<realpath $(dirname ${BASH_SOURCE[0]})/../pkg/version/version.txt)"
 
 export IMAGE=${IMAGE:-"perconalab/percona-server-mysql-operator:${VERSION}"}
 export MYSQL_VERSION=${MYSQL_VERSION:-"8.0"}
