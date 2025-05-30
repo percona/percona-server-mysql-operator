@@ -41,6 +41,9 @@ spec:
     autoRecovery: true
     image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
+#    imagePullSecrets:
+#    - "secret-1"
+#    - "secret-2"
 #    initImage: perconalab/percona-server-mysql-operator:main
     size: 3
 
@@ -150,6 +153,9 @@ spec:
 
       image: perconalab/percona-server-mysql-operator:main-haproxy
       imagePullPolicy: Always
+#      imagePullSecrets:
+#      - "secret-1"
+#      - "secret-2"
 
       resources:
         requests:
@@ -257,6 +263,9 @@ spec:
       enabled: false
       image: perconalab/percona-server-mysql-operator:main-router
       imagePullPolicy: Always
+#      imagePullSecrets:
+#      - "secret-1"
+#      - "secret-2"
 #      initImage: perconalab/percona-server-mysql-operator:main
 
       size: 3
@@ -310,6 +319,9 @@ spec:
 
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
+#    imagePullSecrets:
+#    - "secret-1"
+#    - "secret-2"
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
 #    initImage: perconalab/percona-server-mysql-operator:main
 
@@ -390,6 +402,9 @@ spec:
 #        storageName: s3
 #    backoffLimit: 6
     imagePullPolicy: Always
+#    imagePullSecrets:
+#    - "secret-1"
+#    - "secret-2"
 #    initImage: perconalab/percona-server-mysql-operator:main
 #    containerSecurityContext:
 #      privileged: true
@@ -445,6 +460,9 @@ spec:
   toolkit:
     image: perconalab/percona-server-mysql-operator:main-toolkit
     imagePullPolicy: Always
+#    imagePullSecrets:
+#    - "secret-1"
+#    - "secret-2"
 #    resources:
 #      requests:
 #        memory: 150M
