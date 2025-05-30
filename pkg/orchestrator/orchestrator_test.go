@@ -61,6 +61,24 @@ func TestStatefulset(t *testing.T) {
 			tlsHash:     "tls-hash",
 			compareFile: "runtime-class-name-sts.yaml",
 		},
+		{
+			name: "default cr with tolerations",
+			cluster: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQL) {
+				i := int64(1000)
+				cr.Spec.Orchestrator.Tolerations = []corev1.Toleration{
+					{
+						Key:               "node.alpha.kubernetes.io/unreachable",
+						Operator:          "Exists",
+						Value:             "value",
+						Effect:            "NoExecute",
+						TolerationSeconds: &i,
+					},
+				}
+			}),
+			configHash:  "config-hash",
+			tlsHash:     "tls-hash",
+			compareFile: "tolerations-sts.yaml",
+		},
 	}
 
 	for _, tt := range tests {

@@ -65,6 +65,25 @@ func TestDeployment(t *testing.T) {
 			tlsHash:     "tls-hash",
 			compareFile: "runtime-class-name.yaml",
 		},
+		{
+			name: "default cr with tolerations",
+			cluster: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQL) {
+				i := int64(1000)
+				cr.Spec.Proxy.Router.Tolerations = []corev1.Toleration{
+					{
+						Key:               "node.alpha.kubernetes.io/unreachable",
+						Operator:          "Exists",
+						Value:             "value",
+						Effect:            "NoExecute",
+						TolerationSeconds: &i,
+					},
+				}
+			}),
+			initImage:   "init-image",
+			configHash:  "config-hash",
+			tlsHash:     "tls-hash",
+			compareFile: "tolerations-deployment.yaml",
+		},
 	}
 
 	for _, tt := range tests {

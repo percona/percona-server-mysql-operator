@@ -42,6 +42,11 @@ spec:
     image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
 #    runtimeClassName: image-rc
+#    tolerations:
+#    - key: "node.alpha.kubernetes.io/unreachable"
+#      operator: "Exists"
+#      effect: "NoExecute"
+#      tolerationSeconds: 6000
 #    imagePullSecrets:
 #    - "secret-1"
 #    - "secret-2"
@@ -155,6 +160,11 @@ spec:
       image: perconalab/percona-server-mysql-operator:main-haproxy
       imagePullPolicy: Always
 #      runtimeClassName: image-rc
+#      tolerations:
+#      - key: "node.alpha.kubernetes.io/unreachable"
+#        operator: "Exists"
+#        effect: "NoExecute"
+#        tolerationSeconds: 6000
 #      imagePullSecrets:
 #      - "secret-1"
 #      - "secret-2"
@@ -266,6 +276,11 @@ spec:
       image: perconalab/percona-server-mysql-operator:main-router
       imagePullPolicy: Always
 #      runtimeClassName: image-rc
+#      tolerations:
+#      - key: "node.alpha.kubernetes.io/unreachable"
+#        operator: "Exists"
+#        effect: "NoExecute"
+#        tolerationSeconds: 6000
 #      imagePullSecrets:
 #      - "secret-1"
 #      - "secret-2"
@@ -323,6 +338,11 @@ spec:
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 #    runtimeClassName: image-rc
+#    tolerations:
+#    - key: "node.alpha.kubernetes.io/unreachable"
+#      operator: "Exists"
+#      effect: "NoExecute"
+#      tolerationSeconds: 6000
 #    imagePullSecrets:
 #    - "secret-1"
 #    - "secret-2"

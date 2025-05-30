@@ -77,6 +77,26 @@ func TestStatefulset(t *testing.T) {
 			secret:      secret.DeepCopy(),
 			compareFile: "runtime-class-name-sts.yaml",
 		},
+		{
+			name:      "default cr with tolerations",
+			initImage: "init-image",
+			cluster: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQL) {
+				i := int64(1000)
+				cr.Spec.Proxy.HAProxy.Tolerations = []corev1.Toleration{
+					{
+						Key:               "node.alpha.kubernetes.io/unreachable",
+						Operator:          "Exists",
+						Value:             "value",
+						Effect:            "NoExecute",
+						TolerationSeconds: &i,
+					},
+				}
+			}),
+			configHash:  "config-hash",
+			tlsHash:     "tls-hash",
+			secret:      secret.DeepCopy(),
+			compareFile: "tolerations-sts.yaml",
+		},
 	}
 
 	for _, tt := range tests {
