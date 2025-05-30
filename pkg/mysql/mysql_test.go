@@ -65,6 +65,18 @@ func TestStatefulset(t *testing.T) {
 			secret:      secret.DeepCopy(),
 			compareFile: "image-pull-secrets-sts.yaml",
 		},
+		{
+			name:      "default cr with runtime class name",
+			initImage: "init-image",
+			cluster: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQL) {
+				n := "runtime-class-name"
+				cr.Spec.MySQL.RuntimeClassName = &n
+			}),
+			configHash:  "config-hash",
+			tlsHash:     "tls-hash",
+			secret:      secret.DeepCopy(),
+			compareFile: "runtime-class-name-sts.yaml",
+		},
 	}
 
 	for _, tt := range tests {

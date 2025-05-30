@@ -54,6 +54,17 @@ func TestDeployment(t *testing.T) {
 			tlsHash:     "tls-hash",
 			compareFile: "image-pull-secrets-deployment.yaml",
 		},
+		{
+			name: "default cr with runtime class name",
+			cluster: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQL) {
+				n := "runtime-class-name"
+				cr.Spec.Proxy.Router.RuntimeClassName = &n
+			}),
+			initImage:   "init-image",
+			configHash:  "config-hash",
+			tlsHash:     "tls-hash",
+			compareFile: "runtime-class-name.yaml",
+		},
 	}
 
 	for _, tt := range tests {

@@ -16,10 +16,11 @@ import (
 
 func TestJob(t *testing.T) {
 	const ns = "job-ns"
+	const storageName = "some-storage"
 
 	cr := updateResource(readDefaultCluster(t, "cluster", ns), func(cr *apiv1alpha1.PerconaServerMySQL) {
 		cr.Spec.Backup.Storages = map[string]*apiv1alpha1.BackupStorageSpec{
-			"some-storage": {
+			storageName: {
 				Type: apiv1alpha1.BackupStorageS3,
 				S3: &apiv1alpha1.BackupStorageS3Spec{
 					Bucket:            "bucket",
@@ -67,16 +68,22 @@ func TestJob(t *testing.T) {
 			initImage:   "init-image",
 			compareFile: "backup-job/image-pull-secrets-job.yaml",
 		},
+		{
+			name: "default cr with runtime class name",
+			cluster: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQL) {
+				n := "runtime-class-name"
+				cr.Spec.Backup.Storages[storageName].RuntimeClassName = &n
+			}),
+			cr:          readDefaultBackup(t, "backup", ns),
+			destination: "prefix/destination",
+			initImage:   "init-image",
+			compareFile: "backup-job/runtime-class-name-job.yaml",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var storage *apiv1alpha1.BackupStorageSpec
-			for _, v := range tt.cluster.Spec.Backup.Storages {
-				storage = v
-				break
-			}
-			j := Job(tt.cluster, tt.cr, tt.destination, tt.initImage, storage)
+			j := Job(tt.cluster, tt.cr, tt.destination, tt.initImage, tt.cluster.Spec.Backup.Storages[storageName])
 			compareObj(t, j, expectedObject[*batchv1.Job](t, tt.compareFile))
 		})
 	}

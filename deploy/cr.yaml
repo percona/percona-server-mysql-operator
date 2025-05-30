@@ -41,6 +41,7 @@ spec:
     autoRecovery: true
     image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
+#    runtimeClassName: image-rc
 #    imagePullSecrets:
 #    - "secret-1"
 #    - "secret-2"
@@ -153,6 +154,7 @@ spec:
 
       image: perconalab/percona-server-mysql-operator:main-haproxy
       imagePullPolicy: Always
+#      runtimeClassName: image-rc
 #      imagePullSecrets:
 #      - "secret-1"
 #      - "secret-2"
@@ -263,6 +265,7 @@ spec:
       enabled: false
       image: perconalab/percona-server-mysql-operator:main-router
       imagePullPolicy: Always
+#      runtimeClassName: image-rc
 #      imagePullSecrets:
 #      - "secret-1"
 #      - "secret-2"
@@ -319,6 +322,7 @@ spec:
 
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
+#    runtimeClassName: image-rc
 #    imagePullSecrets:
 #    - "secret-1"
 #    - "secret-2"
@@ -451,6 +455,7 @@ spec:
 #        podSecurityContext:
 #          fsGroup: 1001
 #          supplementalGroups: [1001, 1002, 1003]
+#        runtimeClassName: image-rc
         s3:
           bucket: S3-BACKUP-BUCKET-NAME-HERE
           credentialsSecret: cluster1-s3-credentials

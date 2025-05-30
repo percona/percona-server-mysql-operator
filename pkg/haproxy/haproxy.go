@@ -161,8 +161,9 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector: cr.Spec.Proxy.HAProxy.NodeSelector,
-					Tolerations:  cr.Spec.Proxy.HAProxy.Tolerations,
+					NodeSelector:     cr.Spec.Proxy.HAProxy.NodeSelector,
+					Tolerations:      cr.Spec.Proxy.HAProxy.Tolerations,
+					RuntimeClassName: cr.Spec.Proxy.HAProxy.RuntimeClassName,
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
 							ComponentName,

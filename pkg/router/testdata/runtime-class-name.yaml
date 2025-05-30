@@ -1,0 +1,139 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app.kubernetes.io/component: router
+    app.kubernetes.io/instance: cluster
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: cluster-router
+  namespace: router-ns
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: router
+      app.kubernetes.io/instance: cluster
+      app.kubernetes.io/managed-by: percona-server-operator
+      app.kubernetes.io/name: percona-server
+      app.kubernetes.io/part-of: percona-server
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        percona.com/configuration-hash: config-hash
+        percona.com/last-applied-tls: tls-hash
+      creationTimestamp: null
+      labels:
+        app.kubernetes.io/component: router
+        app.kubernetes.io/instance: cluster
+        app.kubernetes.io/managed-by: percona-server-operator
+        app.kubernetes.io/name: percona-server
+        app.kubernetes.io/part-of: percona-server
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: router
+                app.kubernetes.io/instance: cluster
+                app.kubernetes.io/managed-by: percona-server-operator
+                app.kubernetes.io/name: percona-server
+                app.kubernetes.io/part-of: percona-server
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - args:
+        - mysqlrouter
+        - -c
+        - /tmp/router/mysqlrouter.conf
+        command:
+        - /opt/percona/router-entrypoint.sh
+        env:
+        - name: MYSQL_SERVICE_NAME
+          value: cluster-mysql
+        image: perconalab/percona-server-mysql-operator:main-router
+        imagePullPolicy: Always
+        name: router
+        ports:
+        - containerPort: 8443
+          name: http
+        - containerPort: 6446
+          name: read-write
+        - containerPort: 6447
+          name: read-only
+        - containerPort: 6448
+          name: x-read-write
+        - containerPort: 6449
+          name: x-read-only
+        - containerPort: 33060
+          name: x-default
+        - containerPort: 33062
+          name: rw-admin
+        readinessProbe:
+          exec:
+            command:
+            - /opt/percona/router_readiness_check.sh
+        resources:
+          limits:
+            memory: 256M
+          requests:
+            memory: 256M
+        startupProbe:
+          exec:
+            command:
+            - /opt/percona/router_startup_check.sh
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
+        - mountPath: /etc/mysql/mysql-tls-secret
+          name: tls
+        - mountPath: /etc/mysql/config
+          name: config
+      dnsPolicy: ClusterFirst
+      initContainers:
+      - command:
+        - /opt/percona-server-mysql-operator/ps-init-entrypoint.sh
+        image: init-image
+        imagePullPolicy: Always
+        name: router-init
+        resources:
+          limits:
+            memory: 256M
+          requests:
+            memory: 256M
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+      restartPolicy: Always
+      runtimeClassName: runtime-class-name
+      volumes:
+      - emptyDir: {}
+        name: bin
+      - name: users
+        secret:
+          secretName: internal-cluster
+      - name: tls
+        secret:
+          secretName: cluster1-ssl
+      - name: config
+        projected:
+          sources:
+          - configMap:
+              items:
+              - key: mysqlrouter.conf
+                path: mysqlrouter.conf
+              name: cluster-router
+              optional: true
+status: {}
