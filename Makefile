@@ -3,8 +3,9 @@
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
+SED := $(shell which gsed || which sed)
 NAME ?= percona-server-mysql-operator
-VERSION ?= $(shell git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')
+VERSION ?= $(shell git rev-parse --abbrev-ref HEAD | $(SED) -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')
 ROOT_REPO ?= ${PWD}
 
 # CHANNELS define the bundle channels used in the bundle.
@@ -106,7 +107,7 @@ manifests: kustomize generate
 	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml
 	echo "---" >> $(DEPLOYDIR)/crd.yaml
 
-	$(KUSTOMIZE) build config/rbac/ | sed 's/ClusterRole/Role/g' > $(DEPLOYDIR)/rbac.yaml
+	$(KUSTOMIZE) build config/rbac/ | $(SED) 's/ClusterRole/Role/g' > $(DEPLOYDIR)/rbac.yaml
 	echo "---" >> $(DEPLOYDIR)/rbac.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image perconalab/percona-server-mysql-operator=$(IMAGE)
 	$(KUSTOMIZE) build config/manager/ > $(DEPLOYDIR)/operator.yaml
@@ -146,11 +147,11 @@ uninstall: manifests ## Uninstall CRDs, rbac
 	kubectl delete -f $(DEPLOYDIR)/crd.yaml
 	kubectl delete -f $(DEPLOYDIR)/rbac.yaml
 
+.PHONY: deploy
 deploy: manifests ## Deploy operator
 	yq eval \
-		'(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG"' \
-		$(DEPLOYDIR)/operator.yaml \
-		| kubectl apply -f -
+		'(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG" | (select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "true"' \
+		$(DEPLOYDIR)/operator.yaml | kubectl apply -f -
 
 undeploy: manifests ## Undeploy operator
 	kubectl delete -f $(DEPLOYDIR)/operator.yaml
@@ -243,28 +244,36 @@ catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
 
 # Prepare release
+include e2e-tests/release_versions
 CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
 release: manifests
-	sed -i "/CERT_MANAGER_VER/s/CERT_MANAGER_VER=\".*/CERT_MANAGER_VER=\"$(CERT_MANAGER_VER)\"/" e2e-tests/vars.sh
-	sed -i "/const Version = \"/s/Version = \".*/Version = \"$(VERSION)\"/" pkg/version/version.go
-	sed -i \
+	$(SED) -i "/CERT_MANAGER_VER/s/CERT_MANAGER_VER=\".*/CERT_MANAGER_VER=\"$(CERT_MANAGER_VER)\"/" e2e-tests/vars.sh
+	echo $(VERSION) > pkg/version/version.txt
+	$(SED) -i \
 		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(VERSION)/}" \
-		-e "/^  mysql:/,/^    image:/{s#image: .*#image: percona/percona-server:@@SET_TAG@@#}" \
-		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: percona/haproxy:@@SET_TAG@@#}" \
-		-e "/^    router:/,/^      image:/{s#image: .*#image: percona/percona-mysql-router:@@SET_TAG@@#}" \
-		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: percona/percona-orchestrator:@@SET_TAG@@#}" \
-		-e "/^  backup:/,/^    image:/{s#image: .*#image: percona/percona-xtrabackup:@@SET_TAG@@#}" \
-		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: percona/percona-toolkit:@@SET_TAG@@#}" \
+		-e "/^  mysql:/,/^    image:/{s#image: .*#image: $(IMAGE_MYSQL80)#}" \
+		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: $(IMAGE_HAPROXY)#}" \
+		-e "/^    router:/,/^      image:/{s#image: .*#image: $(IMAGE_ROUTER80)#}" \
+		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: $(IMAGE_ORCHESTRATOR)#}" \
+		-e "/^  backup:/,/^    image:/{s#image: .*#image: $(IMAGE_BACKUP80)#}" \
+		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: $(IMAGE_TOOLKIT)#}" \
 		-e "s#initImage: .*#initImage: percona/percona-server-mysql-operator:$(VERSION)#g" \
-		-e "/^  pmm:/,/^    image:/{s#image: .*#image: percona/pmm-client:@@SET_TAG@@#}" deploy/cr.yaml
+		-e "/^  pmm:/,/^    image:/{s#image: .*#image: $(IMAGE_PMM_CLIENT)#}" \
+		deploy/cr.yaml
+	$(SED) -i \
+		-e "s|image: .*|image: $(IMAGE_OPERATOR)|g" \
+		config/manager/manager.yaml config/manager/cluster/manager.yaml
+	$(SED) -i \
+		-e "s|cr.Spec.InitImage = .*|cr.Spec.InitImage = \"$(IMAGE_OPERATOR)\"|g" \
+		pkg/controller/ps/suite_test.go
 
 # Prepare main branch after release
-MAJOR_VER := $(shell grep "Version =" pkg/version/version.go|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f1)
-MINOR_VER := $(shell grep "Version =" pkg/version/version.go|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+"|cut -d'.' -f2)
+MAJOR_VER := $(shell grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" pkg/version/version.txt|cut -d'.' -f1)
+MINOR_VER := $(shell grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" pkg/version/version.txt|cut -d'.' -f2)
 NEXT_VER ?= $(MAJOR_VER).$$(($(MINOR_VER) + 1)).0
 after-release: manifests
-	sed -i "/const Version = \"/s/Version = \".*/Version = \"$(NEXT_VER)\"/" pkg/version/version.go
-	sed -i \
+	echo $(NEXT_VER) > pkg/version/version.txt
+	$(SED) -i \
 		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(NEXT_VER)/}" \
 		-e "/^  mysql:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-psmysql#}" \
 		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-haproxy#}" \
@@ -273,4 +282,11 @@ after-release: manifests
 		-e "/^  backup:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-backup#}" \
 		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-toolkit#}" \
 		-e "s#initImage: .*#initImage: perconalab/percona-server-mysql-operator:main#g" \
-		-e "/^  pmm:/,/^    image:/{s#image: .*#image: perconalab/pmm-client:dev-latest#}" deploy/cr.yaml
+		-e "/^  pmm:/,/^    image:/{s#image: .*#image: perconalab/pmm-client:3-dev-latest#}" \
+		deploy/cr.yaml
+	$(SED) -i \
+		-e "s|$(IMAGE_OPERATOR)|perconalab/percona-server-mysql-operator:main|g" \
+		config/manager/manager.yaml config/manager/cluster/manager.yaml deploy/bundle.yaml deploy/cw-bundle.yaml deploy/operator.yaml deploy/cw-operator.yaml
+	$(SED) -i \
+		-e "s|$(IMAGE_OPERATOR)|perconalab/percona-server-mysql-operator:main|g" \
+		pkg/controller/ps/suite_test.go
