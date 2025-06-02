@@ -104,6 +104,8 @@ deploy_operator_gh() {
   if [ -n "${OPERATOR_NS}" ]; then
     rbac="cw-rbac"
     operator="cw-operator"
+
+    create_namespace "${OPERATOR_NS}"
   fi
 
   echo "applying ${git_tag}/deploy/${rbac}.yaml"
