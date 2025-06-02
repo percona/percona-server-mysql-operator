@@ -22,6 +22,7 @@ import (
 	"hash/fnv"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
@@ -803,6 +804,19 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		if cr.RouterEnabled() {
 			return errors.New("MySQL Router can't be enabled for asynchronous replication")
 		}
+
+		for _, env := range cr.Spec.MySQL.Env {
+			if env.Name != naming.EnvBootstrapReadTimeout {
+				continue
+			}
+			readTimeout, err := strconv.Atoi(env.Value)
+			if err != nil {
+				return errors.Wrap(err, "failed to parse BOOTSTRAP_READ_TIMEOUT")
+			}
+			if readTimeout < 0 {
+				return errors.New("BOOTSTRAP_READ_TIMEOUT should be a positive value")
+			}
+		}
 	}
 
 	if cr.RouterEnabled() && cr.HAProxyEnabled() {
@@ -962,12 +976,10 @@ func (p *PodSpec) GetTopologySpreadConstraints(ls map[string]string) []corev1.To
 
 // Labels returns a standardized set of labels for the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) Labels() map[string]string {
-	return map[string]string{
-		naming.LabelName:      "percona-server",
-		naming.LabelInstance:  cr.Name,
-		naming.LabelManagedBy: "percona-server-operator",
-		naming.LabelPartOf:    "percona-server",
-	}
+	l := naming.Labels()
+	l[naming.LabelInstance] = cr.Name
+	l[naming.LabelManagedBy] = "percona-server-operator"
+	return l
 }
 
 // ClusterHint generates a unique identifier for the PerconaServerMySQL

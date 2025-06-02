@@ -36,6 +36,24 @@ create_namespace() {
 	fi
 }
 
+wait_for_delete() {
+	local res="$1"
+
+	echo -n "waiting for $res to be deleted"
+	set +o xtrace
+	retry=0
+	until (kubectl get $res || :) 2>&1 | grep NotFound; do
+		sleep 1
+		echo -n .
+		let retry+=1
+		if [ $retry -ge 120 ]; then
+			kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod)
+			echo max retry count $retry reached. something went wrong with operator or kubernetes cluster
+			exit 1
+		fi
+	done
+}
+
 deploy_operator() {
 	destroy_operator
 
@@ -302,7 +320,7 @@ deploy_minio() {
 	helm repo add minio https://charts.min.io/
 	retry 10 60 helm install minio-service \
 		-n "${NAMESPACE}" \
-		--version 5.0.14 \
+		--version "${MINIO_VER}" \
 		--set replicas=1 \
 		--set mode=standalone \
 		--set resources.requests.memory=256Mi \
@@ -819,9 +837,9 @@ deploy_chaos_mesh() {
 
 	helm repo add chaos-mesh https://charts.chaos-mesh.org
 	if [ -n "${MINIKUBE}" ]; then
-		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=docker --set dashboard.create=false --version 2.5.1
+		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=docker --set dashboard.create=false --version ${CHAOS_MESH_VER}
 	else
-		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version 2.5.1
+		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version ${CHAOS_MESH_VER}
 	fi
 	if [[ -n $OPENSHIFT ]]; then
 		oc adm policy add-scc-to-user privileged -z chaos-daemon --namespace=${NAMESPACE}

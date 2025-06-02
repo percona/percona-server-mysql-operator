@@ -14,8 +14,9 @@ if [ -f ${OPERATOR_BINDIR}/orchestrator.conf.json ]; then
 fi
 
 sleep 10 # give time for SRV records to update
-
 NAMESPACE=$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)
+
+tmp=$(mktemp)
 jq -M ". + {
         HTTPAdvertise:\"http://$HOSTNAME.$NAMESPACE:3000\",
         RaftAdvertise:\"$HOSTNAME.$NAMESPACE\",
@@ -27,7 +28,8 @@ jq -M ". + {
         MySQLTopologySSLCertFile:\"${ORC_CONF_PATH}/ssl/tls.crt\",
         MySQLTopologySSLCAFile:\"${ORC_CONF_PATH}/ssl/ca.crt\",
         RaftNodes:[]
-    }" "${ORC_CONF_FILE}" 1<>"${ORC_CONF_FILE}"
+    }" "$ORC_CONF_FILE" > "$tmp"
+    cat "$tmp" > "$ORC_CONF_FILE"
 
 if [ -f "${CUSTOM_CONF_FILE}" ]; then
 	jq -M -s ".[0] * .[1]" "${ORC_CONF_FILE}" "${CUSTOM_CONF_FILE}" 1<>"${ORC_CONF_FILE}"
