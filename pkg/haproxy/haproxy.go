@@ -137,7 +137,6 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}
 
-	t := true
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -178,63 +177,69 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 					TopologySpreadConstraints: cr.Spec.Proxy.HAProxy.GetTopologySpreadConstraints(labels),
 					ImagePullSecrets:          cr.Spec.Proxy.HAProxy.ImagePullSecrets,
 					// TerminationGracePeriodSeconds: 30,
-					RestartPolicy: corev1.RestartPolicyAlways,
-					SchedulerName: "default-scheduler",
-					DNSPolicy:     corev1.DNSClusterFirst,
-					Volumes: []corev1.Volume{
+					RestartPolicy:   corev1.RestartPolicyAlways,
+					SchedulerName:   "default-scheduler",
+					DNSPolicy:       corev1.DNSClusterFirst,
+					Volumes:         volumes(cr),
+					SecurityContext: cr.Spec.Proxy.HAProxy.PodSecurityContext,
+				},
+			},
+		},
+	}
+}
+
+func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
+	t := true
+
+	return []corev1.Volume{
+		{
+			Name: "bin",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: "haproxy-config",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: credsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cr.InternalSecretName(),
+				},
+			},
+		},
+		{
+			Name: tlsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cr.Spec.SSLSecretName,
+				},
+			},
+		},
+		{
+			Name: configVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Projected: &corev1.ProjectedVolumeSource{
+					Sources: []corev1.VolumeProjection{
 						{
-							Name: "bin",
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
-						},
-						{
-							Name: "haproxy-config",
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
-						},
-						{
-							Name: credsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cr.InternalSecretName(),
+							ConfigMap: &corev1.ConfigMapProjection{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: Name(cr),
 								},
-							},
-						},
-						{
-							Name: tlsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cr.Spec.SSLSecretName,
-								},
-							},
-						},
-						{
-							Name: configVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Projected: &corev1.ProjectedVolumeSource{
-									Sources: []corev1.VolumeProjection{
-										{
-											ConfigMap: &corev1.ConfigMapProjection{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: Name(cr),
-												},
-												Items: []corev1.KeyToPath{
-													{
-														Key:  CustomConfigKey,
-														Path: "haproxy.cfg",
-													},
-												},
-												Optional: &t,
-											},
-										},
+								Items: []corev1.KeyToPath{
+									{
+										Key:  CustomConfigKey,
+										Path: "haproxy.cfg",
 									},
 								},
+								Optional: &t,
 							},
 						},
 					},
-					SecurityContext: cr.Spec.Proxy.HAProxy.PodSecurityContext,
 				},
 			},
 		},
