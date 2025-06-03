@@ -126,7 +126,6 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 	labels := MatchLabels(cr)
 	spec := cr.MySQLSpec()
 	replicas := spec.Size
-	t := true
 
 	annotations := make(map[string]string)
 	if configHash != "" {
@@ -184,97 +183,103 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 					SchedulerName:                 spec.SchedulerName,
 					DNSPolicy:                     corev1.DNSClusterFirst,
 					Volumes: append(
-						[]corev1.Volume{
-							{
-								Name: apiv1alpha1.BinVolumeName,
-								VolumeSource: corev1.VolumeSource{
-									EmptyDir: &corev1.EmptyDirVolumeSource{},
-								},
-							},
-							{
-								Name: mysqlshVolumeName, // In OpenShift, we should use emptyDir for ./mysqlsh to avoid permission issues.
-								VolumeSource: corev1.VolumeSource{
-									EmptyDir: &corev1.EmptyDirVolumeSource{},
-								},
-							},
-							{
-								Name: credsVolumeName,
-								VolumeSource: corev1.VolumeSource{
-									Secret: &corev1.SecretVolumeSource{
-										SecretName: cr.InternalSecretName(),
-									},
-								},
-							},
-							{
-								Name: tlsVolumeName,
-								VolumeSource: corev1.VolumeSource{
-									Secret: &corev1.SecretVolumeSource{
-										SecretName: cr.Spec.SSLSecretName,
-									},
-								},
-							},
-							{
-								Name: configVolumeName,
-								VolumeSource: corev1.VolumeSource{
-									Projected: &corev1.ProjectedVolumeSource{
-										Sources: []corev1.VolumeProjection{
-											{
-												ConfigMap: &corev1.ConfigMapProjection{
-													LocalObjectReference: corev1.LocalObjectReference{
-														Name: ConfigMapName(cr),
-													},
-													Items: []corev1.KeyToPath{
-														{
-															Key:  CustomConfigKey,
-															Path: "my-config.cnf",
-														},
-													},
-													Optional: &t,
-												},
-											},
-											{
-												ConfigMap: &corev1.ConfigMapProjection{
-													LocalObjectReference: corev1.LocalObjectReference{
-														Name: AutoConfigMapName(cr),
-													},
-													Items: []corev1.KeyToPath{
-														{
-															Key:  CustomConfigKey,
-															Path: "auto-config.cnf",
-														},
-													},
-													Optional: &t,
-												},
-											},
-											{
-												Secret: &corev1.SecretProjection{
-													LocalObjectReference: corev1.LocalObjectReference{
-														Name: ConfigMapName(cr),
-													},
-													Items: []corev1.KeyToPath{
-														{
-															Key:  CustomConfigKey,
-															Path: "my-secret.cnf",
-														},
-													},
-													Optional: &t,
-												},
-											},
-										},
-									},
-								},
-							},
-							{
-								Name: "backup-logs",
-								VolumeSource: corev1.VolumeSource{
-									EmptyDir: &corev1.EmptyDirVolumeSource{},
-								},
-							},
-						},
+						volumes(cr),
 						spec.SidecarVolumes...,
 					),
 					SecurityContext: spec.PodSecurityContext,
 				},
+			},
+		},
+	}
+}
+
+func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
+	t := true
+	return []corev1.Volume{
+
+		{
+			Name: apiv1alpha1.BinVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: mysqlshVolumeName, // In OpenShift, we should use emptyDir for ./mysqlsh to avoid permission issues.
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: credsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cr.InternalSecretName(),
+				},
+			},
+		},
+		{
+			Name: tlsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cr.Spec.SSLSecretName,
+				},
+			},
+		},
+		{
+			Name: configVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Projected: &corev1.ProjectedVolumeSource{
+					Sources: []corev1.VolumeProjection{
+						{
+							ConfigMap: &corev1.ConfigMapProjection{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: ConfigMapName(cr),
+								},
+								Items: []corev1.KeyToPath{
+									{
+										Key:  CustomConfigKey,
+										Path: "my-config.cnf",
+									},
+								},
+								Optional: &t,
+							},
+						},
+						{
+							ConfigMap: &corev1.ConfigMapProjection{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: AutoConfigMapName(cr),
+								},
+								Items: []corev1.KeyToPath{
+									{
+										Key:  CustomConfigKey,
+										Path: "auto-config.cnf",
+									},
+								},
+								Optional: &t,
+							},
+						},
+						{
+							Secret: &corev1.SecretProjection{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: ConfigMapName(cr),
+								},
+								Items: []corev1.KeyToPath{
+									{
+										Key:  CustomConfigKey,
+										Path: "my-secret.cnf",
+									},
+								},
+								Optional: &t,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Name: "backup-logs",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
 	}
