@@ -1309,6 +1309,25 @@ func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cr *a
 	return primary.Key.Hostname, nil
 }
 
+func (r *PerconaServerMySQLReconciler) getPrimaryPod(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Pod, error) {
+	primaryHost, err := r.getPrimaryHost(ctx, cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "get primary host")
+	}
+
+	idx, err := getPodIndexFromHostname(primaryHost)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get pod index from %s", primaryHost)
+	}
+
+	primPod, err := getMySQLPod(ctx, r.Client, cr, idx)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get primary pod by index %d", idx)
+	}
+
+	return primPod, nil
+}
+
 func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, primary *orchestrator.Instance) error {
 	log := logf.FromContext(ctx).WithName("stopAsyncReplication")
 
