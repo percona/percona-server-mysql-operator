@@ -52,11 +52,12 @@ metadata:
   finalizers:
   - kubernetes.io/pvc-protection
   labels:
-    app.kubernetes.io/component: mysql
+    app.kubernetes.io/component: database
     app.kubernetes.io/instance: scaling
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   name: datadir-scaling-mysql-3
 spec:
   accessModes:
@@ -81,11 +82,12 @@ metadata:
   finalizers:
   - kubernetes.io/pvc-protection
   labels:
-    app.kubernetes.io/component: mysql
+    app.kubernetes.io/component: database
     app.kubernetes.io/instance: scaling
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   name: datadir-scaling-mysql-4
 spec:
   accessModes:

@@ -8,11 +8,12 @@ metadata:
   labels:
     gr-labels-to-ignore-mysql: "true"
     gr-labels-not-to-ignore-mysql: "true"
-    app.kubernetes.io/component: mysql
+    app.kubernetes.io/component: database
     app.kubernetes.io/instance: gr-ignore-annotations
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   annotations:
     gr-annotations-to-ignore-mysql: "true"
     gr-annotations-not-to-ignore-mysql: "true"
@@ -46,11 +47,12 @@ spec:
     protocol: TCP
     targetPort: 33061
   selector:
-    app.kubernetes.io/component: mysql
+    app.kubernetes.io/component: database
     app.kubernetes.io/instance: gr-ignore-annotations
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   sessionAffinity: None
   type: LoadBalancer
 ---
@@ -60,11 +62,12 @@ metadata:
   labels:
     gr-labels-to-ignore-router: "true"
     gr-labels-not-to-ignore-router: "true"
-    app.kubernetes.io/component: router
+    app.kubernetes.io/component: proxy
     app.kubernetes.io/instance: gr-ignore-annotations
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: router
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   annotations:
     gr-annotations-to-ignore-router: "true"
     gr-annotations-not-to-ignore-router: "true"
@@ -110,10 +113,11 @@ spec:
     protocol: TCP
     targetPort: 33062
   selector:
-    app.kubernetes.io/component: router
+    app.kubernetes.io/component: proxy
     app.kubernetes.io/instance: gr-ignore-annotations
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: router
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   sessionAffinity: None
   type: LoadBalancer

@@ -10,9 +10,10 @@ metadata:
   labels:
     app.kubernetes.io/component: xtrabackup
     app.kubernetes.io/instance: gr-scheduled-backup
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: backup
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
     blockOwnerDeletion: true
@@ -30,9 +31,10 @@ spec:
       labels:
         app.kubernetes.io/component: xtrabackup
         app.kubernetes.io/instance: gr-scheduled-backup
-        app.kubernetes.io/managed-by: percona-server-operator
-        app.kubernetes.io/name: percona-server
+        app.kubernetes.io/managed-by: percona-server-mysql-operator
+        app.kubernetes.io/name: backup
         app.kubernetes.io/part-of: percona-server
+        app.kubernetes.io/version: v0.10.0
 status:
   ready: 0
   succeeded: 1
@@ -45,9 +47,10 @@ metadata:
   labels:
     app.kubernetes.io/component: xtrabackup
     app.kubernetes.io/instance: gr-scheduled-backup
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: backup
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
     blockOwnerDeletion: true
@@ -65,9 +68,10 @@ spec:
       labels:
         app.kubernetes.io/component: xtrabackup
         app.kubernetes.io/instance: gr-scheduled-backup
-        app.kubernetes.io/managed-by: percona-server-operator
-        app.kubernetes.io/name: percona-server
+        app.kubernetes.io/managed-by: percona-server-mysql-operator
+        app.kubernetes.io/name: backup
         app.kubernetes.io/part-of: percona-server
+        app.kubernetes.io/version: v0.10.0
 status:
   ready: 0
   succeeded: 1

@@ -7,11 +7,12 @@ kind: Service
 metadata:
   labels:
     async-labels-to-ignore-mysql: "true"
-    app.kubernetes.io/component: mysql
+    app.kubernetes.io/component: database
     app.kubernetes.io/instance: async-ignore-annotations
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
     percona.com/exposed: "true"
     rack: rack-22-test
   annotations:
@@ -43,10 +44,10 @@ spec:
     protocol: TCP
     targetPort: 6450
   selector:
-    app.kubernetes.io/component: mysql
+    app.kubernetes.io/component: database
     app.kubernetes.io/instance: async-ignore-annotations
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
     rack: rack-22-test
   sessionAffinity: None
@@ -57,11 +58,12 @@ kind: Service
 metadata:
   labels:
     async-labels-to-ignore-haproxy: "true"
-    app.kubernetes.io/component: haproxy
+    app.kubernetes.io/component: proxy
     app.kubernetes.io/instance: async-ignore-annotations
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: haproxy
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
     rack: rack-22-test
   annotations:
     async-annotations-to-ignore-haproxy: "true"
@@ -99,11 +101,12 @@ spec:
     protocol: TCP
     targetPort: 33062
   selector:
-    app.kubernetes.io/component: haproxy
+    app.kubernetes.io/component: proxy
     app.kubernetes.io/instance: async-ignore-annotations
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: haproxy
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
     rack: rack-22-test
   sessionAffinity: None
   type: ClusterIP
@@ -115,11 +118,12 @@ metadata:
     async-annotations-to-ignore-orc: "true"
     service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
   labels:
-    app.kubernetes.io/component: orc
+    app.kubernetes.io/component: orchestrator
     app.kubernetes.io/instance: async-ignore-annotations
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
     async-labels-to-ignore-orc: "true"
     percona.com/exposed: "true"
     rack: rack-22-test
@@ -144,11 +148,12 @@ spec:
     protocol: TCP
     targetPort: 10008
   selector:
-    app.kubernetes.io/component: orc
+    app.kubernetes.io/component: orchestrator
     app.kubernetes.io/instance: async-ignore-annotations
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
     rack: rack-22-test
   sessionAffinity: None
   type: ClusterIP

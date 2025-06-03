@@ -53,11 +53,12 @@ metadata:
   finalizers:
   - kubernetes.io/pvc-protection
   labels:
-    app.kubernetes.io/component: mysql
+    app.kubernetes.io/component: database
     app.kubernetes.io/instance: recreate
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   name: datadir-recreate-mysql-0
 ---
 apiVersion: v1
@@ -66,11 +67,12 @@ metadata:
   finalizers:
   - kubernetes.io/pvc-protection
   labels:
-    app.kubernetes.io/component: mysql
+    app.kubernetes.io/component: database
     app.kubernetes.io/instance: recreate
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   name: datadir-recreate-mysql-1
 ---
 apiVersion: v1
@@ -79,22 +81,24 @@ metadata:
   finalizers:
   - kubernetes.io/pvc-protection
   labels:
-    app.kubernetes.io/component: mysql
+    app.kubernetes.io/component: database
     app.kubernetes.io/instance: recreate
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   name: datadir-recreate-mysql-2
 ---
 apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app.kubernetes.io/component: mysql
+    app.kubernetes.io/component: database
     app.kubernetes.io/instance: recreate
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   name: recreate-mysql
 spec:
   clusterIP: None
@@ -122,11 +126,12 @@ spec:
     protocol: TCP
     targetPort: 6450
   selector:
-    app.kubernetes.io/component: mysql
+    app.kubernetes.io/component: database
     app.kubernetes.io/instance: recreate
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   sessionAffinity: None
   type: ClusterIP
 ---
@@ -134,11 +139,12 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app.kubernetes.io/component: orc
+    app.kubernetes.io/component: orchestrator
     app.kubernetes.io/instance: recreate
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   name: recreate-orc
 spec:
   clusterIP: None
@@ -159,11 +165,12 @@ spec:
     targetPort: 10008
   publishNotReadyAddresses: true
   selector:
-    app.kubernetes.io/component: orc
+    app.kubernetes.io/component: orchestrator
     app.kubernetes.io/instance: recreate
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   sessionAffinity: None
   type: ClusterIP
 ---
@@ -171,11 +178,12 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app.kubernetes.io/component: orc
+    app.kubernetes.io/component: orchestrator
     app.kubernetes.io/instance: recreate
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
     percona.com/exposed: "true"
   name: recreate-orc-1
 spec:
@@ -193,11 +201,12 @@ spec:
       protocol: TCP
       targetPort: 10008
   selector:
-    app.kubernetes.io/component: orc
+    app.kubernetes.io/component: orchestrator
     app.kubernetes.io/instance: recreate
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
     statefulset.kubernetes.io/pod-name: recreate-orc-1
   sessionAffinity: None
   type: ClusterIP
@@ -206,11 +215,12 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app.kubernetes.io/component: haproxy
+    app.kubernetes.io/component: proxy
     app.kubernetes.io/instance: recreate
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: haproxy
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   name: recreate-haproxy
 spec:
   internalTrafficPolicy: Cluster
@@ -239,10 +249,11 @@ spec:
       protocol: TCP
       targetPort: 33062
   selector:
-    app.kubernetes.io/component: haproxy
+    app.kubernetes.io/component: proxy
     app.kubernetes.io/instance: recreate
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: haproxy
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   sessionAffinity: None
   type: ClusterIP
