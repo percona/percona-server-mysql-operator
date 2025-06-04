@@ -356,7 +356,7 @@ func getMySQLShellVersion(ctx context.Context) (*v.Version, error) {
 	}
 
 	f := re.FindSubmatch(stdoutb.Bytes())
-	if f == nil || len(f) < 1 {
+	if len(f) < 1 {
 		return nil, errors.Errorf("couldn't extract version information from mysqlsh --version (stdout: %s, stderr: %s)", stdoutb.String(), stderrb.String())
 	}
 

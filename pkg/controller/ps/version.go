@@ -65,7 +65,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLVersion(
 	}
 
 	f := re.FindSubmatch(stdoutb.Bytes())
-	if f == nil || len(f) < 1 {
+	if len(f) < 1 {
 		return errors.Errorf(
 			"couldn't extract version information from mysqld --version (stdout: %s, stderr: %s)",
 			stdoutb.String(), stderrb.String())

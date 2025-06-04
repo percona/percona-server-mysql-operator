@@ -40,7 +40,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/client-go/util/retry"
 	k8sretry "k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -1017,7 +1016,7 @@ func (r *PerconaServerMySQLReconciler) rescanClusterIfNeeded(ctx context.Context
 		return err
 	}
 
-	err = retry.OnError(retry.DefaultBackoff, func(err error) bool { return true }, func() error {
+	err = k8sretry.OnError(k8sretry.DefaultBackoff, func(err error) bool { return true }, func() error {
 		if cr.Status.CompareMySQLVersion("8.4") < 0 {
 			return msh.Rescan80WithExec(ctx, cr.InnoDBClusterName())
 		}
