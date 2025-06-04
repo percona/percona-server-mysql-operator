@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -103,7 +104,8 @@ func reconciler() *PerconaServerMySQLReconciler {
 		ServerVersion: &platform.ServerVersion{
 			Platform: platform.PlatformKubernetes,
 		},
-		Crons: NewCronRegistry(),
+		Crons:    NewCronRegistry(),
+		Recorder: new(record.FakeRecorder),
 	}
 }
 
