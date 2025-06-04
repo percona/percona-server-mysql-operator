@@ -1,0 +1,258 @@
+package mysql
+
+import (
+	appsv1 "k8s.io/api/apps/v1"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+)
+
+func TestStatefulSet(t *testing.T) {
+	configHash := "123abc"
+	tlsHash := "123abc"
+	initImage := "percona/init:latest"
+
+	tests := map[string]struct {
+		mysqlSpec           apiv1alpha1.MySQLSpec
+		expectedStatefulSet appsv1.StatefulSet
+	}{
+		"pvc configured": {
+			mysqlSpec: apiv1alpha1.MySQLSpec{
+				PodSpec: apiv1alpha1.PodSpec{
+					Size:                          3,
+					TerminationGracePeriodSeconds: pointerInt64(30),
+					VolumeSpec: &apiv1alpha1.VolumeSpec{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+							Resources: corev1.VolumeResourceRequirements{
+								Requests: map[corev1.ResourceName]resource.Quantity{
+									corev1.ResourceStorage: resource.MustParse("1Gi"),
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedStatefulSet: appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster1",
+					Namespace: "test-ns",
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Replicas: pointerInt32(3),
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Annotations: map[string]string{
+								string(naming.AnnotationTLSHash):    tlsHash,
+								string(naming.AnnotationConfigHash): configHash,
+							},
+						},
+						Spec: corev1.PodSpec{
+							InitContainers: []corev1.Container{
+								{
+									Image: initImage,
+								},
+							},
+							TerminationGracePeriodSeconds: pointerInt64(30),
+						},
+					},
+					VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: "datadir",
+							},
+							Spec: corev1.PersistentVolumeClaimSpec{
+								Resources: corev1.VolumeResourceRequirements{
+									Requests: corev1.ResourceList{
+										"storage": resource.MustParse("1Gi"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		"entry dir and host path configured": {
+			mysqlSpec: apiv1alpha1.MySQLSpec{
+				PodSpec: apiv1alpha1.PodSpec{
+					Size:                          3,
+					TerminationGracePeriodSeconds: pointerInt64(30),
+					VolumeSpec: &apiv1alpha1.VolumeSpec{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+						HostPath: &corev1.HostPathVolumeSource{},
+					},
+				},
+			},
+			expectedStatefulSet: appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster1-mysql",
+					Namespace: "test-ns",
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Replicas: pointerInt32(3),
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Annotations: map[string]string{
+								string(naming.AnnotationTLSHash):    tlsHash,
+								string(naming.AnnotationConfigHash): configHash,
+							},
+						},
+						Spec: corev1.PodSpec{
+							InitContainers: []corev1.Container{
+								{
+									Image: initImage,
+								},
+							},
+							TerminationGracePeriodSeconds: pointerInt64(30),
+							Volumes: []corev1.Volume{
+								{
+									Name: "bin",
+									VolumeSource: corev1.VolumeSource{
+										EmptyDir: &corev1.EmptyDirVolumeSource{},
+									},
+								},
+								{
+									Name: "mysqlsh",
+									VolumeSource: corev1.VolumeSource{
+										EmptyDir: &corev1.EmptyDirVolumeSource{},
+									},
+								},
+								{
+									Name: "users",
+									VolumeSource: corev1.VolumeSource{
+										Secret: &corev1.SecretVolumeSource{
+											SecretName: "internal-cluster1",
+										},
+									},
+								},
+								{
+									Name: "tls",
+									VolumeSource: corev1.VolumeSource{
+										Secret: &corev1.SecretVolumeSource{
+											SecretName: "",
+										},
+									},
+								},
+								{
+									Name: "config",
+									VolumeSource: corev1.VolumeSource{
+										Projected: &corev1.ProjectedVolumeSource{
+											Sources: []corev1.VolumeProjection{
+												{
+													ConfigMap: &corev1.ConfigMapProjection{
+														LocalObjectReference: corev1.LocalObjectReference{
+															Name: "cluster1-mysql",
+														},
+														Items: []corev1.KeyToPath{
+															{
+																Key:  "my.cnf",
+																Path: "my-config.cnf",
+															},
+														},
+														Optional: pointerBoolean(true),
+													},
+												},
+												{
+													ConfigMap: &corev1.ConfigMapProjection{
+														LocalObjectReference: corev1.LocalObjectReference{
+															Name: "auto-cluster1-mysql",
+														},
+														Items: []corev1.KeyToPath{
+															{
+																Key:  "my.cnf",
+																Path: "auto-config.cnf",
+															},
+														},
+														Optional: pointerBoolean(true),
+													},
+												},
+												{
+													ConfigMap: &corev1.ConfigMapProjection{
+														LocalObjectReference: corev1.LocalObjectReference{
+															Name: "cluster1-mysql",
+														},
+														Items: []corev1.KeyToPath{
+															{
+																Key:  "my.cnf",
+																Path: "my-secret.cnf",
+															},
+														},
+														Optional: pointerBoolean(true),
+													},
+												},
+											},
+										},
+									},
+								},
+								{
+									Name: "backup-logs",
+									VolumeSource: corev1.VolumeSource{
+										EmptyDir: &corev1.EmptyDirVolumeSource{},
+									},
+								},
+								{
+									Name: "datadir",
+									VolumeSource: corev1.VolumeSource{
+										EmptyDir: &corev1.EmptyDirVolumeSource{},
+										HostPath: &corev1.HostPathVolumeSource{},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &apiv1alpha1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster1",
+					Namespace: "test-ns",
+				},
+				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+					MySQL: tt.mysqlSpec,
+				},
+			}
+
+			sts := StatefulSet(cr, initImage, configHash, tlsHash, nil)
+
+			assert.NotNil(t, sts)
+			assert.Equal(t, tt.expectedStatefulSet.Name, sts.Name)
+			assert.Equal(t, tt.expectedStatefulSet.Namespace, sts.Namespace)
+			assert.Equal(t, tt.expectedStatefulSet.Spec.Replicas, sts.Spec.Replicas)
+
+			assert.Equal(t, tt.expectedStatefulSet.Spec.Template.Annotations, sts.Spec.Template.Annotations)
+
+			assert.Equal(t, tt.expectedStatefulSet.Spec.Template.Spec.Volumes, sts.Spec.Template.Spec.Volumes)
+
+			initContainers := sts.Spec.Template.Spec.InitContainers
+			assert.Len(t, initContainers, 1)
+			assert.Equal(t, initImage, initContainers[0].Image)
+
+			assert.Equal(t, pointerInt64(30), sts.Spec.Template.Spec.TerminationGracePeriodSeconds)
+
+			assert.Equal(t, tt.expectedStatefulSet.Spec.VolumeClaimTemplates, sts.Spec.VolumeClaimTemplates)
+		})
+	}
+}
+
+func pointerInt64(i int64) *int64 {
+	return &i
+}
+
+func pointerInt32(i int32) *int32 {
+	return &i
+}
+
+func pointerBoolean(b bool) *bool {
+	return &b
+}

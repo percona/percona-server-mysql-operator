@@ -738,7 +738,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 	}
 
 	var err error
-	cr.Spec.MySQL.VolumeSpec, err = reconcileVol(cr.Spec.MySQL.VolumeSpec)
+	cr.Spec.MySQL.VolumeSpec, err = cr.Spec.MySQL.VolumeSpec.validateVolume()
 	if err != nil {
 		return errors.Wrap(err, "reconcile mysql volumeSpec")
 	}
@@ -864,13 +864,15 @@ const (
 	BinVolumePath = "/opt/percona"
 )
 
-// reconcileVol validates and sets default values for a given VolumeSpec, ensuring it is properly defined.
-func reconcileVol(v *VolumeSpec) (*VolumeSpec, error) {
+// validateVolume validates and sets default values for a given VolumeSpec, ensuring it is properly defined.
+func (v *VolumeSpec) validateVolume() (*VolumeSpec, error) {
 	if v == nil || v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil {
 		return nil, errors.New("volumeSpec and it's internals should be specified")
 	}
+
+	// if no PVC is defined, the following validations can be skipped.
 	if v.PersistentVolumeClaim == nil {
-		return nil, errors.New("pvc should be specified")
+		return v, nil
 	}
 	_, limits := v.PersistentVolumeClaim.Resources.Limits[corev1.ResourceStorage]
 	_, requests := v.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]

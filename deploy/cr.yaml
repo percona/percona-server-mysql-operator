@@ -101,7 +101,13 @@ spec:
 #        - 10.0.0.0/8
 
     volumeSpec:
+#      emptyDir: { }
+#      hostPath:
+#        path: /data
+#        type: Directory
       persistentVolumeClaim:
+#        storageClassName: standard
+#        accessModes: [ "ReadWriteOnce" ]
         resources:
           requests:
             storage: 2G
@@ -352,12 +358,6 @@ spec:
         memory: 128M
       limits:
         memory: 256M
-
-    volumeSpec:
-      persistentVolumeClaim:
-        resources:
-          requests:
-            storage: 1G
 
   pmm:
     enabled: false
