@@ -356,7 +356,8 @@ func RestoreJob(
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyNever,
+					RestartPolicy:    corev1.RestartPolicyNever,
+					ImagePullSecrets: cluster.Spec.Backup.ImagePullSecrets,
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(componentName, initImage,
 							cluster.Spec.Backup.ImagePullPolicy,

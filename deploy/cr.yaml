@@ -485,9 +485,6 @@ spec:
   toolkit:
     image: perconalab/percona-server-mysql-operator:main-toolkit
     imagePullPolicy: Always
-#    imagePullSecrets:
-#    - "secret-1"
-#    - "secret-2"
 #    resources:
 #      requests:
 #        memory: 150M
