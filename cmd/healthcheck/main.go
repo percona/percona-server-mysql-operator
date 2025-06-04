@@ -21,21 +21,24 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
-func main() {
-	fullClusterCrash, err := fileExists("/var/lib/mysql/full-cluster-crash")
-	if err != nil {
-		log.Fatalf("check /var/lib/mysql/full-cluster-crash: %s", err)
-	}
-	if fullClusterCrash {
-		os.Exit(0)
-	}
+const (
+	noBootstrapFile      = "/var/lib/mysql/no-bootstrap"
+	manualRecoveryFile   = "/var/lib/mysql/sleep-forever"
+	fullClusterCrashFile = "/var/lib/mysql/full-cluster-crash"
+)
 
-	manualRecovery, err := fileExists("/var/lib/mysql/sleep-forever")
-	if err != nil {
-		log.Fatalf("check /var/lib/mysql/sleep-forever: %s", err)
+func main() {
+	recoveryFiles := []string{
+		noBootstrapFile,
+		manualRecoveryFile,
+		fullClusterCrashFile,
 	}
-	if manualRecovery {
-		os.Exit(0)
+	for _, rFile := range recoveryFiles {
+		recovery, err := fileExists(rFile)
+		if err == nil && recovery {
+			log.Printf("%s exists. exiting...", rFile)
+			os.Exit(0)
+		}
 	}
 
 	stateFilePath, ok := os.LookupEnv(naming.EnvMySQLStateFile)

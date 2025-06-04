@@ -8,8 +8,8 @@ commands:
 
       source ../../functions
 
-      RAM_SIZE=1073741824 # 1Gi
+      RAM_SIZE_BYTES=4294967296 # 4Gi
       CUSTOM_INNODB_SIZE=2147483648
       CUSTOM_CONNECTIONS=200
 
-      check_auto_tuning ${RAM_SIZE} ${CUSTOM_INNODB_SIZE} ${CUSTOM_CONNECTIONS}
+      check_auto_tuning ${RAM_SIZE_BYTES} ${CUSTOM_INNODB_SIZE} ${CUSTOM_CONNECTIONS}
