@@ -77,11 +77,13 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	cr := &apiv1alpha1.PerconaServerMySQLRestore{}
 	err := r.Client.Get(ctx, req.NamespacedName, cr)
 	if err != nil {
+		log.Error(err, "Failed to get PerconaServerMySQLRestore resource")
 		return ctrl.Result{}, errors.Wrapf(err, "get CR %s", req.NamespacedName)
 	}
 
 	status := cr.Status
 	if status.State == apiv1alpha1.RestoreError {
+		log.Info("Resetting status from RestoreError to RestoreNew")
 		status.State = apiv1alpha1.RestoreNew
 		status.StateDesc = ""
 	}
@@ -97,33 +99,37 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		err := k8sretry.OnError(k8sretry.DefaultRetry, retriable, func() error {
 			cr := &apiv1alpha1.PerconaServerMySQLRestore{}
 			if err := r.Client.Get(ctx, req.NamespacedName, cr); err != nil {
+				log.Error(err, "Failed to get resource for status update")
 				return errors.Wrapf(err, "get %v", req.NamespacedName.String())
 			}
 
 			cr.Status = status
 			log.Info("Updating status", "state", cr.Status.State)
 			if err := r.Client.Status().Update(ctx, cr); err != nil {
+				log.Error(err, "Failed to update status")
 				return errors.Wrap(err, "update status")
 			}
 
 			if err := r.Client.Get(ctx, req.NamespacedName, cr); err != nil {
+				log.Error(err, "Failed to get resource after status update")
 				return errors.Wrapf(err, "get %v", req.NamespacedName.String())
 			}
 			if cr.Status.State != status.State {
+				log.Error(nil, "Status was not updated as expected", "expected", status.State, "actual", cr.Status.State)
 				return errors.Errorf("status %s was not updated to %s", cr.Status.State, status.State)
 			}
 			return nil
 		})
 		if err != nil {
-			log.Error(err, "failed to update status")
+			log.Error(err, "Failed to update status after reconciliation")
 			return
 		}
-
-		log.V(1).Info("status updated", "state", status.State)
+		log.V(1).Info("Status updated", "state", status.State)
 	}()
 
 	switch status.State {
 	case apiv1alpha1.RestoreFailed, apiv1alpha1.RestoreSucceeded:
+		log.V(1).Info("Restore already completed, skipping", "state", status.State)
 		return ctrl.Result{}, nil
 	}
 
@@ -133,13 +139,16 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		if k8serrors.IsNotFound(err) {
 			status.State = apiv1alpha1.RestoreError
 			status.StateDesc = fmt.Sprintf("PerconaServerMySQL %s in namespace %s is not found", cr.Spec.ClusterName, cr.Namespace)
+			log.Error(err, "PerconaServerMySQL cluster not found", "cluster", cr.Spec.ClusterName)
 			return ctrl.Result{}, nil
 		}
+		log.Error(err, "Failed to get PerconaServerMySQL cluster", "cluster", cr.Spec.ClusterName)
 		return ctrl.Result{}, errors.Wrapf(err, "get cluster %s", nn)
 	}
 
 	restoreList := &apiv1alpha1.PerconaServerMySQLRestoreList{}
 	if err := r.List(ctx, restoreList, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
+		log.Error(err, "Failed to list restore jobs")
 		return ctrl.Result{}, errors.Wrap(err, "get restore jobs list")
 	}
 	for _, restore := range restoreList.Items {
@@ -152,12 +161,13 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		default:
 			status.State = apiv1alpha1.RestoreNew
 			status.StateDesc = fmt.Sprintf("PerconaServerMySQLRestore %s is already running", restore.Name)
-			log.Info("PerconaServerMySQLRestore is already running", "restore", restore.Name)
+			log.V(1).Info("PerconaServerMySQLRestore is already running", "restore", restore.Name)
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 	}
 
 	if err := r.validate(ctx, cr, cluster); err != nil {
+		log.Error(err, "Restore validation failed")
 		status.State = apiv1alpha1.RestoreError
 		status.StateDesc = errors.Cause(err).Error()
 		return ctrl.Result{}, nil
@@ -167,6 +177,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	// But if multiple restores are created at the same time, then the above code will not work, because there are no restore jobs yet.
 	// Therefore, we need to use sync.Map to prevent multiple restores from creating restore jobs at the same time.
 	if _, ok := r.sm.LoadOrStore(cr.Spec.ClusterName, 1); ok {
+		log.Info("Another restore is initializing for this cluster, requeuing", "cluster", cr.Spec.ClusterName)
 		return ctrl.Result{RequeueAfter: time.Second * 5}, nil
 	}
 	defer r.sm.Delete(cr.Spec.ClusterName)
@@ -174,14 +185,17 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	log.Info("Pausing cluster", "cluster", cluster.Name)
 	if err := r.pauseCluster(ctx, cluster); err != nil {
 		if errors.Is(err, ErrWaitingTermination) {
+			log.Info("Waiting for cluster termination before pausing", "cluster", cluster.Name)
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
+		log.Error(err, "Failed to pause cluster", "cluster", cluster.Name)
 		return ctrl.Result{}, errors.Wrap(err, "pause cluster")
 	}
 	log.Info("Cluster paused", "cluster", cluster.Name)
 
 	if cluster.Spec.MySQL.IsGR() {
 		if err := r.removeBootstrapCondition(ctx, cluster); err != nil {
+			log.Error(err, "Failed to remove bootstrap condition", "cluster", cluster.Name)
 			return ctrl.Result{}, errors.Wrap(err, "remove bootstrap condition")
 		}
 	}
@@ -190,6 +204,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	nn = types.NamespacedName{Name: xtrabackup.RestoreJobName(cluster, cr), Namespace: req.Namespace}
 	err = r.Client.Get(ctx, nn, job)
 	if client.IgnoreNotFound(err) != nil {
+		log.Error(err, "Failed to get restore job", "job", nn.Name)
 		return ctrl.Result{}, errors.Wrapf(err, "get job %s", nn)
 	}
 
@@ -198,25 +213,30 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 
 		restorer, err := r.getRestorer(ctx, cr, cluster)
 		if err != nil {
+			log.Error(err, "Failed to get restorer")
 			status.State = apiv1alpha1.RestoreError
 			status.StateDesc = err.Error()
 			return ctrl.Result{}, nil
 		}
 		job, err := restorer.Job()
 		if err != nil {
+			log.Error(err, "Failed to generate restore job manifest")
 			return ctrl.Result{}, errors.Wrap(err, "get job")
 		}
 
 		if err := r.Create(ctx, job); err != nil {
+			log.Error(err, "Failed to create restore job", "job", job.Name)
 			return ctrl.Result{}, errors.Wrapf(err, "create job %s/%s", job.Namespace, job.Name)
 		}
 
+		log.V(1).Info("Restore job created", "job", job.Name)
 		return ctrl.Result{}, nil
 	}
 
 	switch status.State {
 	case apiv1alpha1.RestoreStarting, apiv1alpha1.RestoreRunning:
 		if job.Status.Active > 0 {
+			log.V(1).Info("Restore job is running", "job", job.Name)
 			status.State = apiv1alpha1.RestoreRunning
 			return ctrl.Result{}, nil
 		}
@@ -228,24 +248,32 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 
 			switch cond.Type {
 			case batchv1.JobFailed:
+				log.V(1).Info("Restore job failed", "job", job.Name)
 				status.State = apiv1alpha1.RestoreFailed
 			case batchv1.JobComplete:
+				log.V(1).Info("Restore job completed successfully", "job", job.Name)
 				status.State = apiv1alpha1.RestoreSucceeded
 			}
 		}
 	case apiv1alpha1.RestoreFailed, apiv1alpha1.RestoreSucceeded:
+		log.V(1).Info("Restore already completed, skipping", "state", status.State)
 		return ctrl.Result{}, nil
 	default:
+		log.V(1).Info("Starting restore process")
 		status.State = apiv1alpha1.RestoreStarting
 	}
 
 	if status.State == apiv1alpha1.RestoreSucceeded {
 		if cluster.Spec.MySQL.IsGR() {
+			log.Info("Deleting PVCs after successful restore for GR cluster", "cluster", cluster.Name)
 			if err := r.deletePVCs(ctx, cluster); err != nil {
+				log.Error(err, "Failed to delete PVCs after restore", "cluster", cluster.Name)
 				return ctrl.Result{}, errors.Wrap(err, "delete PVCs")
 			}
 		}
+		log.Info("Unpausing cluster after successful restore", "cluster", cluster.Name)
 		if err := r.unpauseCluster(ctx, cluster); err != nil {
+			log.Error(err, "Failed to unpause cluster after restore", "cluster", cluster.Name)
 			return ctrl.Result{}, errors.Wrap(err, "unpause cluster")
 		}
 		log.Info("PerconaServerMySQLRestore is finished", "restore", cr.Name, "cluster", cluster.Name)
@@ -255,21 +283,27 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) error {
-	log := logf.FromContext(ctx)
+	log := logf.FromContext(ctx).WithName("deletePVCs").WithValues("cluster", cluster.Name, "namespace", cluster.Namespace)
 
+	log.Info("Listing PVCs to delete after restore")
 	pvcs, err := k8s.PVCsByLabels(ctx, r.Client, mysql.MatchLabels(cluster), cluster.Namespace)
 	if err != nil {
+		log.Error(err, "Failed to list PVCs")
 		return errors.Wrap(err, "get PVC list")
 	}
 
 	for _, pvc := range pvcs {
 		if pvc.Name == fmt.Sprintf("%s-%s-mysql-0", mysql.DataVolumeName, cluster.Name) {
+			log.V(1).Info("Skipping PVC for primary pod", "pvc", pvc.Name)
 			continue
 		}
 
+		log.Info("Deleting PVC", "pvc", pvc.Name)
 		if err := r.Client.Delete(ctx, &pvc); err != nil {
 			if !k8serrors.IsNotFound(err) {
-				log.Error(err, "failed to delete PVC")
+				log.Error(err, "Failed to delete PVC", "pvc", pvc.Name)
+			} else {
+				log.V(1).Info("PVC already deleted", "pvc", pvc.Name)
 			}
 			continue
 		}
@@ -277,16 +311,20 @@ func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cl
 		log.Info("Deleted PVC after restore", "pvc", pvc.Name)
 	}
 
+	log.Info("Completed PVC deletion after restore")
 	return nil
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) removeBootstrapCondition(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) error {
-	log := logf.FromContext(ctx)
+	log := logf.FromContext(ctx).WithName("removeBootstrapCondition").WithValues("cluster", cluster.Name, "namespace", cluster.Namespace)
+
+	log.Info("Starting to remove InnoDB cluster bootstrap condition")
 
 	err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		c := &apiv1alpha1.PerconaServerMySQL{}
 		nn := types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}
 		if err := r.Client.Get(ctx, nn, c); err != nil {
+			log.Error(err, "Failed to get PerconaServerMySQL resource during condition removal")
 			return err
 		}
 
@@ -307,32 +345,42 @@ func (r *PerconaServerMySQLRestoreReconciler) removeBootstrapCondition(ctx conte
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) error {
+	log := logf.FromContext(ctx).WithName("pauseCluster").WithValues("cluster", cluster.Name, "namespace", cluster.Namespace)
+
+	log.Info("Starting cluster pause operation")
+
 	err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		c := &apiv1alpha1.PerconaServerMySQL{}
 		nn := types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}
 		if err := r.Client.Get(ctx, nn, c); err != nil {
+			log.Error(err, "Failed to get PerconaServerMySQL resource for patching")
 			return err
 		}
 
 		c.Spec.Pause = true
 
 		if err := r.Client.Patch(ctx, c, client.MergeFrom(cluster)); err != nil {
+			log.Error(err, "Failed to patch PerconaServerMySQL resource with pause=true")
 			return err
 		}
 
+		log.V(1).Info("Patched PerconaServerMySQL with pause=true")
 		return nil
 	})
 	if err != nil {
+		log.Error(err, "Failed to patch cluster to pause state")
 		return errors.Wrapf(err, "patch cluster %s/%s", cluster.Namespace, cluster.Name)
 	}
 
 	sts := &appsv1.StatefulSet{}
 	nn := types.NamespacedName{Name: mysql.Name(cluster), Namespace: cluster.Namespace}
 	if err := r.Client.Get(ctx, nn, sts); err != nil {
+		log.Error(err, "Failed to get MySQL StatefulSet", "statefulset", nn.Name)
 		return errors.Wrapf(err, "get statefulset %s", nn)
 	}
 
 	if sts.Status.Replicas != 0 {
+		log.Info("Waiting for MySQL StatefulSet to scale down", "replicas", sts.Status.Replicas)
 		return ErrWaitingTermination
 	}
 
@@ -341,9 +389,11 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 		nn = types.NamespacedName{Name: orchestrator.Name(cluster), Namespace: cluster.Namespace}
 		err := r.Client.Get(ctx, nn, sts)
 		if client.IgnoreNotFound(err) != nil {
+			log.Error(err, "Failed to get Orchestrator StatefulSet", "statefulset", nn.Name)
 			return errors.Wrapf(err, "get statefulset %s", nn)
 		}
 		if !k8serrors.IsNotFound(err) && sts.Status.Replicas != 0 {
+			log.Info("Waiting for Orchestrator StatefulSet to scale down", "replicas", sts.Status.Replicas)
 			return ErrWaitingTermination
 		}
 	case apiv1alpha1.ClusterTypeGR:
@@ -351,9 +401,11 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 			sts := new(appsv1.StatefulSet)
 			nn = types.NamespacedName{Name: haproxy.Name(cluster), Namespace: cluster.Namespace}
 			if err := r.Client.Get(ctx, nn, sts); err != nil {
+				log.Error(err, "Failed to get HAProxy StatefulSet", "statefulset", nn.Name)
 				return errors.Wrapf(err, "get deployment %s", nn)
 			}
 			if sts.Status.Replicas != 0 {
+				log.Info("Waiting for HAProxy StatefulSet to scale down", "replicas", sts.Status.Replicas)
 				return ErrWaitingTermination
 			}
 		}
@@ -362,14 +414,17 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 			deployment := new(appsv1.Deployment)
 			nn = types.NamespacedName{Name: router.Name(cluster), Namespace: cluster.Namespace}
 			if err := r.Client.Get(ctx, nn, deployment); err != nil {
+				log.Error(err, "Failed to get Router Deployment", "deployment", nn.Name)
 				return errors.Wrapf(err, "get deployment %s", nn)
 			}
 			if deployment.Status.Replicas != 0 {
+				log.Info("Waiting for Router Deployment to scale down", "replicas", deployment.Status.Replicas)
 				return ErrWaitingTermination
 			}
 		}
 	}
 
+	log.Info("Cluster successfully paused")
 	return nil
 }
 

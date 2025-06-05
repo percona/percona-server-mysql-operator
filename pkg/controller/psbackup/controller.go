@@ -83,6 +83,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	cr := &apiv1alpha1.PerconaServerMySQLBackup{}
 	if err := r.Client.Get(ctx, req.NamespacedName, cr); err != nil {
 		if k8serrors.IsNotFound(err) {
+			log.Info("Backup CR not found, skipping", "backup", req.NamespacedName)
 			return rr, nil
 		}
 
@@ -107,7 +108,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return r.Client.Status().Update(ctx, cr)
 		})
 		if err != nil {
-			log.Error(err, "failed to update status")
+			log.Error(err, "Failed to update backup status")
 		}
 	}()
 
@@ -115,6 +116,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 	switch cr.Status.State {
 	case apiv1alpha1.BackupFailed, apiv1alpha1.BackupSucceeded:
+		log.V(1).Info("Backup already finished", "state", cr.Status.State)
 		return rr, nil
 	}
 
@@ -126,10 +128,12 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			status.StateDesc = fmt.Sprintf("PerconaServerMySQL %s in namespace %s is not found", cr.Spec.ClusterName, cr.Namespace)
 			return rr, nil
 		}
+		log.Error(err, "Failed to get PerconaServerMySQL cluster")
 		return rr, errors.Wrapf(err, "get %v", nn.String())
 	}
 
 	if err := cluster.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
+		log.Error(err, "Check and set defaults failed")
 		return rr, errors.Wrapf(err, "check and set defaults for %v", nn.String())
 	}
 
@@ -157,6 +161,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	nn = xtrabackup.JobNamespacedName(cr)
 	err := r.Client.Get(ctx, nn, job)
 	if err != nil && !k8serrors.IsNotFound(err) {
+		log.Error(err, "Failed to get backup job")
 		return rr, errors.Wrapf(err, "get job %v", nn.String())
 	}
 
@@ -164,6 +169,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		log.Info("Creating backup job", "jobName", nn.Name)
 
 		if err := r.createBackupJob(ctx, cr, cluster, storage, &status); err != nil {
+			log.Error(err, "Failed to create backup job")
 			return rr, errors.Wrap(err, "failed to create backup job")
 		}
 
@@ -177,8 +183,10 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 		switch cond.Type {
 		case batchv1.JobFailed:
+			log.V(1).Info("Backup job failed", "job", job.Name)
 			status.State = apiv1alpha1.BackupFailed
 		case batchv1.JobComplete:
+			log.V(1).Info("Backup job completed", "job", job.Name)
 			status.State = apiv1alpha1.BackupSucceeded
 		}
 
@@ -193,14 +201,17 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 		running, err := r.isBackupJobRunning(ctx, job)
 		if err != nil {
+			log.Error(err, "Failed to check if job is running")
 			return rr, errors.Wrap(err, "check if backup job is running")
 		}
 
 		if running {
+			log.Info("Backup job is running", "job", job.Name)
 			status.State = apiv1alpha1.BackupRunning
 		}
 	case apiv1alpha1.BackupRunning:
 		if job.Status.Active > 0 {
+			log.V(1).Info("Backup still running", "job", job.Name)
 			return rr, nil
 		}
 	case apiv1alpha1.BackupFailed, apiv1alpha1.BackupSucceeded:
@@ -208,13 +219,17 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	default:
 		status.State = apiv1alpha1.BackupStarting
 		status.StateDesc = ""
+		log.V(1).Info("Setting backup state to starting", "job", job.Name)
 	}
 
 	return rr, nil
 }
 
 func (r *PerconaServerMySQLBackupReconciler) isBackupJobRunning(ctx context.Context, job *batchv1.Job) (bool, error) {
+	log := logf.FromContext(ctx).WithName("isBackupJobRunning")
+
 	if len(job.Spec.Template.Spec.Containers) == 0 {
+		log.V(1).Info("No containers found in job spec")
 		return false, nil
 	}
 
@@ -232,30 +247,43 @@ func (r *PerconaServerMySQLBackupReconciler) isBackupJobRunning(ctx context.Cont
 	sc := r.NewSidecarClient(srcNode)
 	cfg, err := sc.GetRunningBackupConfig(ctx)
 	if err != nil {
+		log.Error(err, "Failed to get running backup config from sidecar")
 		return false, errors.Wrap(err, "get running backup config")
 	}
 
 	if cfg == nil || cfg.Destination != destination {
+		log.Info("Running backup destination does not match expected or config is nil", "expected destination", destination)
 		return false, nil
 	}
 
 	return true, nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup, cluster *apiv1alpha1.PerconaServerMySQL, storage *apiv1alpha1.BackupStorageSpec, status *apiv1alpha1.PerconaServerMySQLBackupStatus) error {
+func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
+	ctx context.Context,
+	cr *apiv1alpha1.PerconaServerMySQLBackup,
+	cluster *apiv1alpha1.PerconaServerMySQL,
+	storage *apiv1alpha1.BackupStorageSpec,
+	status *apiv1alpha1.PerconaServerMySQLBackupStatus,
+) error {
+	log := logf.FromContext(ctx).WithName("createBackupJob")
+
 	initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
 	if err != nil {
+		log.Error(err, "Failed to get operator init image")
 		return errors.Wrap(err, "get operator image")
 	}
 
 	destination, err := getDestination(storage, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
 	if err != nil {
+		log.Error(err, "Failed to get backup destination")
 		return errors.Wrap(err, "get backup destination")
 	}
 	job := xtrabackup.Job(cluster, cr, destination, initImage, storage)
 
 	switch storage.Type {
 	case apiv1alpha1.BackupStorageS3:
+		log.V(1).Info("Setting up S3 backup")
 		if storage.S3 == nil {
 			return errors.New("s3 stanza is required in storage")
 		}
@@ -271,11 +299,13 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context
 		}
 
 		if err := xtrabackup.SetStorageS3(job, storage.S3); err != nil {
+			log.Error(err, "Failed to configure S3 storage")
 			return errors.Wrap(err, "set storage S3")
 		}
 
 		status.Destination = destination
 	case apiv1alpha1.BackupStorageGCS:
+		log.V(1).Info("Setting up GCS backup")
 		if storage.GCS == nil {
 			return errors.New("gcs stanza is required in storage")
 		}
@@ -291,11 +321,13 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context
 		}
 
 		if err := xtrabackup.SetStorageGCS(job, storage.GCS); err != nil {
+			log.Error(err, "Failed to configure GCS storage")
 			return errors.Wrap(err, "set storage GCS")
 		}
 
 		status.Destination = destination
 	case apiv1alpha1.BackupStorageAzure:
+		log.V(1).Info("Setting up Azure backup")
 		if storage.Azure == nil {
 			return errors.New("azure stanza is required in storage")
 		}
@@ -311,6 +343,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context
 		}
 
 		if err := xtrabackup.SetStorageAzure(job, storage.Azure); err != nil {
+			log.Error(err, "Failed to configure Azure storage")
 			return errors.Wrap(err, "set storage Azure")
 		}
 
@@ -322,20 +355,26 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context
 	status.Image = cluster.Spec.Backup.Image
 	status.Storage = storage
 
+	log.V(1).Info("Getting backup source node")
 	src, err := r.getBackupSource(ctx, cluster)
 	if err != nil {
+		log.Error(err, "Failed to get backup source node")
 		return errors.Wrap(err, "get backup source node")
 	}
 
 	if err := xtrabackup.SetSourceNode(job, src); err != nil {
+		log.Error(err, "Failed to set backup source node")
 		return errors.Wrap(err, "set backup source node")
 	}
 
 	if err := controllerutil.SetControllerReference(cr, job, r.Scheme); err != nil {
+		log.Error(err, "Failed to set controller reference", "job", job.Name)
 		return errors.Wrapf(err, "set controller reference to Job %s/%s", job.Namespace, job.Name)
 	}
 
+	log.V(1).Info("Creating backup job", "job", job.Name)
 	if err := r.Client.Create(ctx, job); err != nil {
+		log.Error(err, "Failed to create backup job", "job", job.Name)
 		return errors.Wrapf(err, "create job %s/%s", job.Namespace, job.Name)
 	}
 
@@ -519,12 +558,16 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 }
 
 func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup) (bool, error) {
+	log := logf.FromContext(ctx).WithName("deleteBackup")
+
 	if cr.Status.State != apiv1alpha1.BackupSucceeded {
+		log.Info("Skipping delete: backup is not succeeded", "state", cr.Status.State)
 		return true, nil
 	}
 
 	backupConf, err := r.backupConfig(ctx, cr)
 	if err != nil {
+		log.Error(err, "Failed to create sidecar backup config")
 		return false, errors.Wrap(err, "failed to create sidecar backup config")
 	}
 
@@ -532,22 +575,28 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 	nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
 	err = r.Client.Get(ctx, nn, cluster)
 	if client.IgnoreNotFound(err) != nil {
+		log.Error(err, "Failed to get cluster", "cluster", nn)
 		return false, errors.Wrapf(err, "get cluster %s", nn)
 	}
 	if k8serrors.IsNotFound(err) {
+		log.Info("Cluster not found, fallback to delete Job", "cluster", cr.Spec.ClusterName)
 		job := &batchv1.Job{}
 		nn = types.NamespacedName{Name: xtrabackup.DeleteJobName(cr), Namespace: cr.Namespace}
 		err = r.Client.Get(ctx, nn, job)
 		if client.IgnoreNotFound(err) != nil {
+			log.Error(err, "Failed to get delete job", "job", nn)
 			return false, errors.Wrapf(err, "get job %s", nn)
 		}
 		if k8serrors.IsNotFound(err) {
+			log.Info("Delete job not found, creating new one", "job", nn.Name)
 			job = xtrabackup.GetDeleteJob(cr, backupConf)
 			if err := controllerutil.SetControllerReference(cr, job, r.Scheme); err != nil {
+				log.Error(err, "Failed to set controller reference", "job", job.Name)
 				return false, errors.Wrapf(err, "set controller reference to Job %s/%s", job.Namespace, job.Name)
 			}
 
 			if err := r.Client.Create(ctx, job); err != nil {
+				log.Error(err, "Failed to create delete job", "job", job.Name)
 				return false, errors.Wrapf(err, "create job %s/%s", job.Namespace, job.Name)
 			}
 			return false, nil
@@ -561,20 +610,28 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 
 			switch cond.Type {
 			case batchv1.JobFailed:
+				log.Error(errors.New("job failed"), "Delete job failed", "job", job.Name)
 				return false, errors.New("job failed")
 			case batchv1.JobComplete:
+				log.Info("Delete job completed", "job", job.Name)
 				complete = true
 			}
 		}
 		return complete, nil
 	}
+
+	log.Info("Cluster found, deleting backup via sidecar", "cluster", cluster.Name)
 	src, err := r.getBackupSource(ctx, cluster)
 	if err != nil {
+		log.Error(err, "Failed to get backup source")
 		return false, errors.Wrap(err, "get backup source node")
 	}
 	sc := r.NewSidecarClient(src)
 	if err := sc.DeleteBackup(ctx, cr.Name, *backupConf); err != nil {
+		log.Error(err, "Failed to delete backup via sidecar")
 		return false, errors.Wrap(err, "delete backup")
 	}
+
+	log.Info("Backup successfully deleted via sidecar", "backup", cr.Name)
 	return true, nil
 }

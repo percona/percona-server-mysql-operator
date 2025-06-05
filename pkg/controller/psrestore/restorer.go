@@ -3,6 +3,7 @@ package psrestore
 import (
 	"context"
 	"fmt"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sort"
 	"strings"
 
@@ -226,9 +227,13 @@ func (opts *restorerOptions) validateStorage(ctx context.Context) error {
 }
 
 func (opts *restorerOptions) validateJob(ctx context.Context, job *batchv1.Job) error {
+	log := logf.FromContext(ctx).WithName("validateJob")
+
 	cl := opts.k8sClient
 
 	secrets := []string{}
+
+	log.V(1).Info("Collecting referenced secrets from job")
 	for _, container := range job.Spec.Template.Spec.Containers {
 		for _, env := range container.Env {
 			if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil && env.ValueFrom.SecretKeyRef.Name != "" {
@@ -237,6 +242,7 @@ func (opts *restorerOptions) validateJob(ctx context.Context, job *batchv1.Job) 
 		}
 	}
 
+	log.V(1).Info("Validating existence of secrets", "secrets", secrets)
 	notExistingSecrets := make(map[string]struct{})
 	for _, secret := range secrets {
 		err := cl.Get(ctx, types.NamespacedName{
@@ -245,26 +251,34 @@ func (opts *restorerOptions) validateJob(ctx context.Context, job *batchv1.Job) 
 		}, new(corev1.Secret))
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
+				log.V(1).Info("Secret not found", "secret", secret)
 				notExistingSecrets[secret] = struct{}{}
 				continue
 			}
+			log.Error(err, "Failed to get secret", "secret", secret)
 			return err
 		}
 	}
+
 	if len(notExistingSecrets) > 0 {
 		secrets := make([]string, 0, len(notExistingSecrets))
 		for k := range notExistingSecrets {
 			secrets = append(secrets, k)
 		}
 		sort.StringSlice(secrets).Sort()
+		log.Error(nil, "Some secrets not found", "missingSecrets", secrets)
 		return errors.Errorf("secrets %s not found", strings.Join(secrets, ", "))
 	}
 
+	log.V(1).Info("All secrets are present")
 	return nil
 }
 
 func getBackup(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQLRestore, cluster *apiv1alpha1.PerconaServerMySQL) (*apiv1alpha1.PerconaServerMySQLBackup, error) {
+	log := logf.FromContext(ctx).WithName("getBackup")
+
 	if cr.Spec.BackupSource != nil {
+		log.V(1).Info("Using inline BackupSource from Restore spec", "restore", cr.Name)
 		status := cr.Spec.BackupSource.DeepCopy()
 		status.State = apiv1alpha1.BackupSucceeded
 		status.CompletedAt = nil
@@ -279,21 +293,31 @@ func getBackup(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaSer
 			Status: *status,
 		}, nil
 	}
+
 	if cr.Spec.BackupName == "" {
+		log.Error(nil, "Neither backupName nor backupSource specified in restore CR", "restore", cr.Name)
 		return nil, errors.New("backupName and backupSource are empty")
 	}
 
 	backup := &apiv1alpha1.PerconaServerMySQLBackup{}
 	nn := types.NamespacedName{Name: cr.Spec.BackupName, Namespace: cr.Namespace}
+	log.V(1).Info("Fetching backup by name", "backupName", nn.Name, "namespace", nn.Namespace)
+
 	if err := cl.Get(ctx, nn, backup); err != nil {
 		if k8serrors.IsNotFound(err) {
+			log.Error(err, "Backup not found", "backupName", nn.Name, "namespace", nn.Namespace)
 			return nil, errors.Errorf("PerconaServerMySQLBackup %s in namespace %s is not found", nn.Name, nn.Namespace)
 		}
+		log.Error(err, "Failed to get backup", "backupName", nn.Name)
 		return nil, errors.Wrapf(err, "get backup %s", nn)
 	}
+
 	storage, ok := cluster.Spec.Backup.Storages[backup.Spec.StorageName]
 	if ok {
+		log.V(1).Info("Populating backup status with storage spec", "storageName", backup.Spec.StorageName)
 		backup.Status.Storage = storage
+	} else {
+		log.V(1).Info("Storage not found in cluster spec", "storageName", backup.Spec.StorageName)
 	}
 	return backup, nil
 }
