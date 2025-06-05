@@ -82,6 +82,8 @@ type PerconaServerMySQLReconciler struct {
 //+kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=rolebindings,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=roles,verbs=get;list;watch;create;patch
+//+kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;patch
+//+kubebuilder:rbac:groups="events.k8s.io",resources=events,verbs=get;list;watch;create;patch
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PerconaServerMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -429,6 +431,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcileServices(ctx, cr); err != nil {
 		return errors.Wrap(err, "services")
 	}
+	if err := r.reconcilePersistentVolumes(ctx, cr); err != nil {
+		return errors.Wrap(err, "persistent volumes")
+	}
 	if err := r.reconcileDatabase(ctx, cr); err != nil {
 		return errors.Wrap(err, "database")
 	}
@@ -485,6 +490,11 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 	err = r.Client.Get(ctx, nn, internalSecret)
 	if client.IgnoreNotFound(err) != nil {
 		return errors.Wrapf(err, "get Secret/%s", nn.Name)
+	}
+
+	if cr.PVCResizeInProgress() {
+		log.V(1).Info("PVC resize in progress, skipping MySQL reconciliation")
+		return nil
 	}
 
 	sts := mysql.StatefulSet(cr, initImage, configHash, tlsHash, internalSecret)
