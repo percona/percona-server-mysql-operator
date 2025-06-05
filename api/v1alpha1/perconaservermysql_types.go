@@ -328,7 +328,7 @@ func (b *BackupStorageGCSSpec) BucketAndPrefix() (string, string) {
 
 type BackupStorageAzureSpec struct {
 	// A container name is a valid DNS name that conforms to the Azure naming rules.
-	ContainerName BucketWithPrefix `json:"containerName"`
+	ContainerName BucketWithPrefix `json:"container"`
 
 	// A prefix is a sub-folder to the backups inside the container
 	Prefix string `json:"prefix,omitempty"`

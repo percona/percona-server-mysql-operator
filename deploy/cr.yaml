@@ -394,6 +394,13 @@ spec:
 #    containerSecurityContext:
 #      privileged: true
     storages:
+#      azure-blob:
+#        type: azure
+#        azure:
+#          container: CONTAINER-NAME
+#          prefix: PREFIX-NAME
+#          endpointUrl: https://accountName.blob.core.windows.net
+#          credentialsSecret: SECRET-NAME
       s3-us-west:
         type: s3
         verifyTLS: true
