@@ -7,10 +7,10 @@ kind: Job
 metadata:
   generation: 1
   labels:
-    app.kubernetes.io/component: xtrabackup
+    app.kubernetes.io/component: backup
     app.kubernetes.io/instance: gr-security-context
     app.kubernetes.io/managed-by: percona-server-mysql-operator
-    app.kubernetes.io/name: backup
+    app.kubernetes.io/name: xtrabackup
     app.kubernetes.io/part-of: percona-server
     app.kubernetes.io/version: v0.10.0
   name: xb-gr-security-context-minio-minio
@@ -24,10 +24,10 @@ spec:
     metadata:
       creationTimestamp: null
       labels:
-        app.kubernetes.io/component: xtrabackup
+        app.kubernetes.io/component: backup
         app.kubernetes.io/instance: gr-security-context
         app.kubernetes.io/managed-by: percona-server-mysql-operator
-        app.kubernetes.io/name: backup
+        app.kubernetes.io/name: xtrabackup
         app.kubernetes.io/part-of: percona-server
         app.kubernetes.io/version: v0.10.0
         job-name: xb-gr-security-context-minio-minio

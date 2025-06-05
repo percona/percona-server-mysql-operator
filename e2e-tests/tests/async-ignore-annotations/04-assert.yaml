@@ -129,7 +129,7 @@ metadata:
     app.kubernetes.io/component: orchestrator
     app.kubernetes.io/instance: async-ignore-annotations
     app.kubernetes.io/managed-by: percona-server-mysql-operator
-    app.kubernetes.io/name: mysql
+    app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
     app.kubernetes.io/version: v0.10.0
     async-labels-to-ignore-orc: "true"
@@ -160,7 +160,7 @@ spec:
     app.kubernetes.io/component: orchestrator
     app.kubernetes.io/instance: async-ignore-annotations
     app.kubernetes.io/managed-by: percona-server-mysql-operator
-    app.kubernetes.io/name: mysql
+    app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
     app.kubernetes.io/version: v0.10.0
     rack: rack-22

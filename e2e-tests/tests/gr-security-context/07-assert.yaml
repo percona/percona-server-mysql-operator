@@ -7,7 +7,7 @@ kind: Job
 metadata:
   generation: 1
   labels:
-    app.kubernetes.io/component: xtrabackup
+    app.kubernetes.io/component: backup
     app.kubernetes.io/instance: gr-security-context
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: restore

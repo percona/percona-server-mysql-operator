@@ -181,7 +181,7 @@ metadata:
     app.kubernetes.io/component: orchestrator
     app.kubernetes.io/instance: recreate
     app.kubernetes.io/managed-by: percona-server-mysql-operator
-    app.kubernetes.io/name: mysql
+    app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
     app.kubernetes.io/version: v0.10.0
     percona.com/exposed: "true"
@@ -204,7 +204,7 @@ spec:
     app.kubernetes.io/component: orchestrator
     app.kubernetes.io/instance: recreate
     app.kubernetes.io/managed-by: percona-server-mysql-operator
-    app.kubernetes.io/name: mysql
+    app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
     app.kubernetes.io/version: v0.10.0
     statefulset.kubernetes.io/pod-name: recreate-orc-1
