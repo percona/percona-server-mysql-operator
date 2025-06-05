@@ -608,8 +608,8 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 
 	exposer := mysql.Exposer(*cr)
 	if err := r.reconcileServicePerPod(ctx, cr, &exposer); err != nil {
-		log.Error(err, "Failed to reconcile service-per-pod", "exposer", exposer.Name)
-		return errors.Wrapf(err, "reconcile service per pod for %s", exposer.Name)
+		log.Error(err, "Failed to reconcile service-per-pod")
+		return errors.Wrapf(err, "reconcile service per pod")
 	}
 
 	return nil
@@ -717,7 +717,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 
 	cmap := &corev1.ConfigMap{}
 	cmapName := orchestrator.NamespacedName(cr)
-	err := r.Client.Get(ctx, cmapName, cmap)
+	err := r.Get(ctx, cmapName, cmap)
 	if client.IgnoreNotFound(err) != nil {
 		log.Error(err, "Failed to get ConfigMap", "configMap", cmapName.Name)
 		return errors.Wrapf(err, "get config map %s", cmapName.Name)
