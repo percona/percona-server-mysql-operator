@@ -18,6 +18,26 @@ func TestStatefulSet(t *testing.T) {
 	tlsHash := "123abc"
 	initImage := "percona/init:latest"
 
+	expectedAnnotations := map[string]string{
+		string(naming.AnnotationTLSHash):    tlsHash,
+		string(naming.AnnotationConfigHash): configHash,
+	}
+
+	expectedPVCs := []corev1.PersistentVolumeClaim{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "datadir",
+			},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						"storage": resource.MustParse("1Gi"),
+					},
+				},
+			},
+		},
+	}
+
 	tests := map[string]struct {
 		mysqlSpec           apiv1alpha1.MySQLSpec
 		expectedStatefulSet appsv1.StatefulSet
@@ -40,17 +60,14 @@ func TestStatefulSet(t *testing.T) {
 			},
 			expectedStatefulSet: appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster1",
+					Name:      "cluster1-mysql",
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
 					Replicas: pointerInt32(3),
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
-							Annotations: map[string]string{
-								string(naming.AnnotationTLSHash):    tlsHash,
-								string(naming.AnnotationConfigHash): configHash,
-							},
+							Annotations: expectedAnnotations,
 						},
 						Spec: corev1.PodSpec{
 							InitContainers: []corev1.Container{
@@ -59,22 +76,10 @@ func TestStatefulSet(t *testing.T) {
 								},
 							},
 							TerminationGracePeriodSeconds: pointerInt64(30),
+							Volumes:                       expectedVolumes(),
 						},
 					},
-					VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-						{
-							ObjectMeta: metav1.ObjectMeta{
-								Name: "datadir",
-							},
-							Spec: corev1.PersistentVolumeClaimSpec{
-								Resources: corev1.VolumeResourceRequirements{
-									Requests: corev1.ResourceList{
-										"storage": resource.MustParse("1Gi"),
-									},
-								},
-							},
-						},
-					},
+					VolumeClaimTemplates: expectedPVCs,
 				},
 			},
 		},
@@ -98,10 +103,7 @@ func TestStatefulSet(t *testing.T) {
 					Replicas: pointerInt32(3),
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
-							Annotations: map[string]string{
-								string(naming.AnnotationTLSHash):    tlsHash,
-								string(naming.AnnotationConfigHash): configHash,
-							},
+							Annotations: expectedAnnotations,
 						},
 						Spec: corev1.PodSpec{
 							InitContainers: []corev1.Container{
@@ -110,100 +112,15 @@ func TestStatefulSet(t *testing.T) {
 								},
 							},
 							TerminationGracePeriodSeconds: pointerInt64(30),
-							Volumes: []corev1.Volume{
-								{
-									Name: "bin",
-									VolumeSource: corev1.VolumeSource{
-										EmptyDir: &corev1.EmptyDirVolumeSource{},
-									},
-								},
-								{
-									Name: "mysqlsh",
-									VolumeSource: corev1.VolumeSource{
-										EmptyDir: &corev1.EmptyDirVolumeSource{},
-									},
-								},
-								{
-									Name: "users",
-									VolumeSource: corev1.VolumeSource{
-										Secret: &corev1.SecretVolumeSource{
-											SecretName: "internal-cluster1",
-										},
-									},
-								},
-								{
-									Name: "tls",
-									VolumeSource: corev1.VolumeSource{
-										Secret: &corev1.SecretVolumeSource{
-											SecretName: "",
-										},
-									},
-								},
-								{
-									Name: "config",
-									VolumeSource: corev1.VolumeSource{
-										Projected: &corev1.ProjectedVolumeSource{
-											Sources: []corev1.VolumeProjection{
-												{
-													ConfigMap: &corev1.ConfigMapProjection{
-														LocalObjectReference: corev1.LocalObjectReference{
-															Name: "cluster1-mysql",
-														},
-														Items: []corev1.KeyToPath{
-															{
-																Key:  "my.cnf",
-																Path: "my-config.cnf",
-															},
-														},
-														Optional: pointerBoolean(true),
-													},
-												},
-												{
-													ConfigMap: &corev1.ConfigMapProjection{
-														LocalObjectReference: corev1.LocalObjectReference{
-															Name: "auto-cluster1-mysql",
-														},
-														Items: []corev1.KeyToPath{
-															{
-																Key:  "my.cnf",
-																Path: "auto-config.cnf",
-															},
-														},
-														Optional: pointerBoolean(true),
-													},
-												},
-												{
-													ConfigMap: &corev1.ConfigMapProjection{
-														LocalObjectReference: corev1.LocalObjectReference{
-															Name: "cluster1-mysql",
-														},
-														Items: []corev1.KeyToPath{
-															{
-																Key:  "my.cnf",
-																Path: "my-secret.cnf",
-															},
-														},
-														Optional: pointerBoolean(true),
-													},
-												},
-											},
-										},
-									},
-								},
-								{
-									Name: "backup-logs",
-									VolumeSource: corev1.VolumeSource{
-										EmptyDir: &corev1.EmptyDirVolumeSource{},
-									},
-								},
-								{
+							Volumes: append(expectedVolumes(),
+								corev1.Volume{
 									Name: "datadir",
 									VolumeSource: corev1.VolumeSource{
 										EmptyDir: &corev1.EmptyDirVolumeSource{},
 										HostPath: &corev1.HostPathVolumeSource{},
 									},
 								},
-							},
+							),
 						},
 					},
 				},
@@ -238,10 +155,100 @@ func TestStatefulSet(t *testing.T) {
 			assert.Len(t, initContainers, 1)
 			assert.Equal(t, initImage, initContainers[0].Image)
 
-			assert.Equal(t, pointerInt64(30), sts.Spec.Template.Spec.TerminationGracePeriodSeconds)
+			assert.Equal(t, tt.expectedStatefulSet.Spec.Template.Spec.TerminationGracePeriodSeconds, sts.Spec.Template.Spec.TerminationGracePeriodSeconds)
 
 			assert.Equal(t, tt.expectedStatefulSet.Spec.VolumeClaimTemplates, sts.Spec.VolumeClaimTemplates)
 		})
+	}
+}
+
+func expectedVolumes() []corev1.Volume {
+	return []corev1.Volume{
+		{
+			Name: "bin",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: "mysqlsh",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: "users",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "internal-cluster1",
+				},
+			},
+		},
+		{
+			Name: "tls",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "",
+				},
+			},
+		},
+		{
+			Name: "config",
+			VolumeSource: corev1.VolumeSource{
+				Projected: &corev1.ProjectedVolumeSource{
+					Sources: []corev1.VolumeProjection{
+						{
+							ConfigMap: &corev1.ConfigMapProjection{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "cluster1-mysql",
+								},
+								Items: []corev1.KeyToPath{
+									{
+										Key:  "my.cnf",
+										Path: "my-config.cnf",
+									},
+								},
+								Optional: pointerBoolean(true),
+							},
+						},
+						{
+							ConfigMap: &corev1.ConfigMapProjection{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "auto-cluster1-mysql",
+								},
+								Items: []corev1.KeyToPath{
+									{
+										Key:  "my.cnf",
+										Path: "auto-config.cnf",
+									},
+								},
+								Optional: pointerBoolean(true),
+							},
+						},
+						{
+							Secret: &corev1.SecretProjection{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "cluster1-mysql",
+								},
+								Items: []corev1.KeyToPath{
+									{
+										Key:  "my.cnf",
+										Path: "my-secret.cnf",
+									},
+								},
+								Optional: pointerBoolean(true),
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Name: "backup-logs",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
 	}
 }
 
