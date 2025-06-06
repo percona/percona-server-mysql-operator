@@ -956,3 +956,48 @@ check_backup_job_labels() {
 		exit 1
 	fi
 }
+
+check_scheduled_backup_labels() {
+	local psbackup
+	psbackup=$1
+
+	local labels
+	labels=$(kubectl get ps-backup "$psbackup" -n "$NAMESPACE" -o json | jq -r '.metadata.labels')
+
+	local cluster_name
+	cluster_name=$(kubectl get ps-backup -n "$NAMESPACE" "${psbackup}" -o jsonpath='{.spec.clusterName}')
+
+	local expected_labels
+	expected_labels=(
+		"app.kubernetes.io/managed-by=percona-server-mysql-operator"
+		"app.kubernetes.io/name=percona-server-backup"
+		"app.kubernetes.io/part-of=percona-server"
+		"app.kubernetes.io/version=$(get_operator_version)"
+		"percona.com/backup-type=cron"
+		"percona.com/cluster=${cluster_name}"
+	)
+
+	local all_match
+	all_match=true
+
+	for entry in "${expected_labels[@]}"; do
+		key="${entry%%=*}"
+		expected_value="${entry#*=}"
+		actual_value=$(echo "$labels" | jq -r --arg key "$key" '.[$key]')
+
+		if [ "$actual_value" != "$expected_value" ]; then
+			echo "Label mismatch: $key (expected: $expected_value, found: $actual_value)"
+			all_match=false
+		fi
+	done
+
+	if [ "$all_match" != true ]; then
+		exit 1
+	fi
+
+	backup_ancestor_label=$(kubectl get ps-backup -n "$NAMESPACE" "${psbackup}" -o jsonpath='{.metadata.labels.percona\.com/backup-ancestor}')
+	if [ -z "$backup_ancestor_label" ]; then
+		echo "Label percona.com/backup-ancestor is missing"
+		exit 1
+	fi
+}

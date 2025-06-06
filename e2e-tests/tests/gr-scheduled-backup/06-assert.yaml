@@ -12,7 +12,10 @@ commands:
       source ../../functions
 
       list=$(kubectl get ps-backup -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}')
-      for name in $list; do check_backup_job_labels "$name"; done
+      for name in $list; do
+        check_backup_job_labels "$name"
+        check_scheduled_backup_labels "$name"
+      done
     timeout: 60
 ---
 apiVersion: batch/v1
