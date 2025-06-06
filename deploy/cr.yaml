@@ -101,16 +101,16 @@ spec:
 #        - 10.0.0.0/8
 
     volumeSpec:
-      emptyDir: { }
+#      emptyDir: { }
 #      hostPath:
-#        path: /datadir
+#        path: /data
 #        type: Directory
-#      persistentVolumeClaim:
+      persistentVolumeClaim:
 #        storageClassName: standard
 #        accessModes: [ "ReadWriteOnce" ]
-#        resources:
-#          requests:
-#            storage: 2G
+        resources:
+          requests:
+            storage: 2G
 
 #    configuration: |
 #      max_connections=250
