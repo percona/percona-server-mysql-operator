@@ -187,7 +187,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "cluster-service",
 							Namespace: cr.Namespace,
-							Labels:    cr.Labels(),
+							Labels:    cr.Labels("mysql", "database"),
 							OwnerReferences: []metav1.OwnerReference{
 								{
 									Name:       cr.GetName(),

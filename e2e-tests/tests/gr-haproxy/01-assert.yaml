@@ -45,11 +45,12 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app.kubernetes.io/component: mysql
+    app.kubernetes.io/component: database
     app.kubernetes.io/instance: gr-haproxy
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   name: gr-haproxy-mysql
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
@@ -81,11 +82,12 @@ spec:
     protocol: TCP
     targetPort: 33061
   selector:
-    app.kubernetes.io/component: mysql
+    app.kubernetes.io/component: database
     app.kubernetes.io/instance: gr-haproxy
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   sessionAffinity: None
   type: ClusterIP
 ---
@@ -93,11 +95,12 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app.kubernetes.io/component: haproxy
+    app.kubernetes.io/component: proxy
     app.kubernetes.io/instance: gr-haproxy
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: haproxy
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   name: gr-haproxy-haproxy
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
@@ -128,10 +131,11 @@ spec:
     protocol: TCP
     targetPort: 33062
   selector:
-    app.kubernetes.io/component: haproxy
+    app.kubernetes.io/component: proxy
     app.kubernetes.io/instance: gr-haproxy
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: haproxy
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.10.0
   sessionAffinity: None
   type: ClusterIP
