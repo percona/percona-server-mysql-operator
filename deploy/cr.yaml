@@ -361,10 +361,9 @@ spec:
 
   pmm:
     enabled: false
-
     image: perconalab/pmm-client:3-dev-latest
     imagePullPolicy: Always
-
+#    mysqlParams: "--disable-tablestats-limit=2000"
     resources:
       requests:
         memory: 150M
