@@ -6413,6 +6413,8 @@ spec:
                     type: string
                   imagePullPolicy:
                     type: string
+                  mysqlParams:
+                    type: string
                   resources:
                     properties:
                       claims:

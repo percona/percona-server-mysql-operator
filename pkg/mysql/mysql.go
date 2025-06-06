@@ -2,12 +2,11 @@ package mysql
 
 import (
 	"fmt"
-	"path/filepath"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"path/filepath"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -482,7 +481,15 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 	}
 
 	if cr.PMMEnabled(secret) {
-		containers = append(containers, pmm.Container(cr, secret, ComponentName))
+
+		pmmC := pmm.Container(cr, secret, ComponentName)
+
+		pmmC.Env = append(pmmC.Env, corev1.EnvVar{
+			Name:  "PMM_ADMIN_CUSTOM_PARAMS",
+			Value: cr.Spec.PMM.MysqlParams,
+		})
+
+		containers = append(containers, pmmC)
 	}
 
 	return appendUniqueContainers(containers, cr.Spec.MySQL.Sidecars...)

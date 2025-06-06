@@ -193,6 +193,7 @@ func (s *PodSpec) GetInitImage() string {
 type PMMSpec struct {
 	Enabled                  bool                        `json:"enabled,omitempty"`
 	Image                    string                      `json:"image"`
+	MysqlParams              string                      `json:"mysqlParams,omitempty"`
 	ServerHost               string                      `json:"serverHost,omitempty"`
 	ServerUser               string                      `json:"serverUser,omitempty"`
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
