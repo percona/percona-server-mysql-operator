@@ -715,7 +715,7 @@ var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 					&client.ListOptions{
 						Namespace: cr.Namespace,
 						LabelSelector: labels.SelectorFromSet(map[string]string{
-							"app.kubernetes.io/component": "mysql",
+							"app.kubernetes.io/name": "mysql",
 						}),
 					})
 				return err == nil
@@ -737,7 +737,7 @@ var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 					err := k8sClient.List(ctx, &pvcList, &client.ListOptions{
 						Namespace: cr.Namespace,
 						LabelSelector: labels.SelectorFromSet(map[string]string{
-							"app.kubernetes.io/component": "mysql",
+							"app.kubernetes.io/name": "mysql",
 						}),
 					})
 					return err == nil
