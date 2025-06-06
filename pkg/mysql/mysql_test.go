@@ -168,7 +168,7 @@ func TestStatefulSet(t *testing.T) {
 				},
 			},
 		},
-		"entry dir and host path configured - host path is only configured due to priority": {
+		"both entry dir and host path provided - only host path is actually configured due to higher priority": {
 			mysqlSpec: apiv1alpha1.MySQLSpec{
 				PodSpec: apiv1alpha1.PodSpec{
 					Size:                          3,
