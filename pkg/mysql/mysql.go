@@ -283,15 +283,26 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 		return sts
 	}
 
-	if cr.Spec.MySQL.VolumeSpec.HostPath != nil && cr.Spec.MySQL.VolumeSpec.EmptyDir != nil {
+	if cr.Spec.MySQL.VolumeSpec.HostPath != nil {
 		sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes,
 			corev1.Volume{
 				Name: DataVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					HostPath: spec.VolumeSpec.HostPath,
+				},
+			})
+		return sts
+	}
+
+	if cr.Spec.MySQL.VolumeSpec.EmptyDir != nil {
+		sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes,
+			corev1.Volume{
+				Name: DataVolumeName,
+				VolumeSource: corev1.VolumeSource{
 					EmptyDir: spec.VolumeSpec.EmptyDir,
 				},
 			})
+		return sts
 	}
 
 	return sts

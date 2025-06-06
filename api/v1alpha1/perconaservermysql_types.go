@@ -866,8 +866,27 @@ const (
 
 // validateVolume validates and sets default values for a given VolumeSpec, ensuring it is properly defined.
 func (v *VolumeSpec) validateVolume() (*VolumeSpec, error) {
-	if v == nil || v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil {
-		return nil, errors.New("volumeSpec and it's internals should be specified")
+	if v == nil {
+		return nil, errors.New("volumeSpec provided is nil")
+	}
+
+	count := 0
+	if v.EmptyDir != nil {
+		count++
+	}
+	if v.HostPath != nil {
+		count++
+	}
+	if v.PersistentVolumeClaim != nil {
+		count++
+	}
+
+	if count == 0 {
+		return nil, errors.New("volumeSpec must specify at least one volume source")
+	}
+
+	if count > 1 {
+		return nil, errors.New("volumeSpec must specify at most one volume source — multiple sources set")
 	}
 
 	// if no PVC is defined, the following validations can be skipped.

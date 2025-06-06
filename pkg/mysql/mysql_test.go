@@ -80,10 +80,95 @@ func TestStatefulSet(t *testing.T) {
 						},
 					},
 					VolumeClaimTemplates: expectedPVCs,
+					ServiceName:          "cluster1-mysql",
 				},
 			},
 		},
-		"entry dir and host path configured": {
+		"host path configured": {
+			mysqlSpec: apiv1alpha1.MySQLSpec{
+				PodSpec: apiv1alpha1.PodSpec{
+					Size:                          3,
+					TerminationGracePeriodSeconds: pointerInt64(30),
+					VolumeSpec: &apiv1alpha1.VolumeSpec{
+						HostPath: &corev1.HostPathVolumeSource{},
+					},
+				},
+			},
+			expectedStatefulSet: appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster1-mysql",
+					Namespace: "test-ns",
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Replicas: pointerInt32(3),
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Annotations: expectedAnnotations,
+						},
+						Spec: corev1.PodSpec{
+							InitContainers: []corev1.Container{
+								{
+									Image: initImage,
+								},
+							},
+							TerminationGracePeriodSeconds: pointerInt64(30),
+							Volumes: append(expectedVolumes(),
+								corev1.Volume{
+									Name: "datadir",
+									VolumeSource: corev1.VolumeSource{
+										HostPath: &corev1.HostPathVolumeSource{},
+									},
+								},
+							),
+						},
+					},
+					ServiceName: "cluster1-mysql",
+				},
+			},
+		},
+		"entry dir configured": {
+			mysqlSpec: apiv1alpha1.MySQLSpec{
+				PodSpec: apiv1alpha1.PodSpec{
+					Size:                          3,
+					TerminationGracePeriodSeconds: pointerInt64(30),
+					VolumeSpec: &apiv1alpha1.VolumeSpec{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+			},
+			expectedStatefulSet: appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster1-mysql",
+					Namespace: "test-ns",
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Replicas: pointerInt32(3),
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Annotations: expectedAnnotations,
+						},
+						Spec: corev1.PodSpec{
+							InitContainers: []corev1.Container{
+								{
+									Image: initImage,
+								},
+							},
+							TerminationGracePeriodSeconds: pointerInt64(30),
+							Volumes: append(expectedVolumes(),
+								corev1.Volume{
+									Name: "datadir",
+									VolumeSource: corev1.VolumeSource{
+										EmptyDir: &corev1.EmptyDirVolumeSource{},
+									},
+								},
+							),
+						},
+					},
+					ServiceName: "cluster1-mysql",
+				},
+			},
+		},
+		"entry dir and host path configured - host path is only configured due to priority": {
 			mysqlSpec: apiv1alpha1.MySQLSpec{
 				PodSpec: apiv1alpha1.PodSpec{
 					Size:                          3,
@@ -116,13 +201,13 @@ func TestStatefulSet(t *testing.T) {
 								corev1.Volume{
 									Name: "datadir",
 									VolumeSource: corev1.VolumeSource{
-										EmptyDir: &corev1.EmptyDirVolumeSource{},
 										HostPath: &corev1.HostPathVolumeSource{},
 									},
 								},
 							),
 						},
 					},
+					ServiceName: "cluster1-mysql",
 				},
 			},
 		},
@@ -148,6 +233,8 @@ func TestStatefulSet(t *testing.T) {
 			assert.Equal(t, tt.expectedStatefulSet.Spec.Replicas, sts.Spec.Replicas)
 
 			assert.Equal(t, tt.expectedStatefulSet.Spec.Template.Annotations, sts.Spec.Template.Annotations)
+
+			assert.Equal(t, tt.expectedStatefulSet.Spec.ServiceName, sts.Spec.ServiceName)
 
 			assert.Equal(t, tt.expectedStatefulSet.Spec.Template.Spec.Volumes, sts.Spec.Template.Spec.Volumes)
 

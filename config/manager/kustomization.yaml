@@ -16,4 +16,4 @@ images:
   newTag: main
 - name: perconalab/percona-server-mysql-operator
   newName: perconalab/percona-server-mysql-operator
-  newTag: main
+  newTag: K8SPS-336-1

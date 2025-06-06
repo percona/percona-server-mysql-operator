@@ -14,11 +14,18 @@ func TestValidateVolume(t *testing.T) {
 		expectedErr string
 	}{
 		"nil volume": {
-			expectedErr: "volumeSpec and it's internals should be specified",
+			expectedErr: "volumeSpec provided is nil",
 		},
 		"empty volume": {
 			input:       &VolumeSpec{},
-			expectedErr: "volumeSpec and it's internals should be specified",
+			expectedErr: "volumeSpec must specify at least one volume source",
+		},
+		"multiple volumes provided": {
+			input: &VolumeSpec{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+				HostPath: &corev1.HostPathVolumeSource{},
+			},
+			expectedErr: "volumeSpec must specify at most one volume source — multiple sources set",
 		},
 		"valid emptyDir volume": {
 			input:    &VolumeSpec{EmptyDir: &corev1.EmptyDirVolumeSource{}},
