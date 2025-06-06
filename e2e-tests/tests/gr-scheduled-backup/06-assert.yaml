@@ -2,18 +2,23 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 420
+commands:
+  - script: |-
+      #!/usr/bin/env bash
+      set -o errexit
+      set -o xtrace
+      set -euo pipefail
+
+      source ../../functions
+
+      list=$(kubectl get ps-backup -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}')
+      for name in $list; do check_backup_job_labels "$name"; done
+    timeout: 60
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
   generation: 1
-  labels:
-    app.kubernetes.io/component: backup
-    app.kubernetes.io/instance: gr-scheduled-backup
-    app.kubernetes.io/managed-by: percona-server-mysql-operator
-    app.kubernetes.io/name: xtrabackup
-    app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.10.0
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
     blockOwnerDeletion: true
@@ -25,16 +30,6 @@ spec:
   completions: 1
   parallelism: 1
   suspend: false
-  template:
-    metadata:
-      creationTimestamp: null
-      labels:
-        app.kubernetes.io/component: backup
-        app.kubernetes.io/instance: gr-scheduled-backup
-        app.kubernetes.io/managed-by: percona-server-mysql-operator
-        app.kubernetes.io/name: xtrabackup
-        app.kubernetes.io/part-of: percona-server
-        app.kubernetes.io/version: v0.10.0
 status:
   ready: 0
   succeeded: 1
@@ -44,13 +39,6 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   generation: 1
-  labels:
-    app.kubernetes.io/component: backup
-    app.kubernetes.io/instance: gr-scheduled-backup
-    app.kubernetes.io/managed-by: percona-server-mysql-operator
-    app.kubernetes.io/name: xtrabackup
-    app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.10.0
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
     blockOwnerDeletion: true
@@ -62,16 +50,6 @@ spec:
   completions: 1
   parallelism: 1
   suspend: false
-  template:
-    metadata:
-      creationTimestamp: null
-      labels:
-        app.kubernetes.io/component: backup
-        app.kubernetes.io/instance: gr-scheduled-backup
-        app.kubernetes.io/managed-by: percona-server-mysql-operator
-        app.kubernetes.io/name: xtrabackup
-        app.kubernetes.io/part-of: percona-server
-        app.kubernetes.io/version: v0.10.0
 status:
   ready: 0
   succeeded: 1
