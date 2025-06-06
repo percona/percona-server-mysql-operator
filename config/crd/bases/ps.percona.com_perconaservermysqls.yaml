@@ -6450,8 +6450,6 @@ spec:
                     type: string
                   serverHost:
                     type: string
-                  serverUser:
-                    type: string
                 required:
                 - image
                 type: object

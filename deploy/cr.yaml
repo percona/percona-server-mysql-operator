@@ -374,7 +374,6 @@ spec:
 #        cpu: 400m
 
     serverHost: monitoring-service
-    serverUser: admin
 
   backup:
     enabled: true
