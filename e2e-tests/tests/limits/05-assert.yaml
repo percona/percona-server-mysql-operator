@@ -313,7 +313,7 @@ spec:
           periodSeconds: 5
           successThreshold: 1
           timeoutSeconds: 3
-        name: orc
+        name: orchestrator
         ports:
         - containerPort: 3000
           name: web
@@ -379,7 +379,7 @@ spec:
       - command:
         - /opt/percona-server-mysql-operator/ps-init-entrypoint.sh
         imagePullPolicy: Always
-        name: orc-init
+        name: orchestrator-init
         resources: {}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
