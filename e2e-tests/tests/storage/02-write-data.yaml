@@ -16,3 +16,11 @@ commands:
       run_mysql \
           "INSERT myDB.myTable (id) VALUES (100500)" \
           "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+
+      mysql_data=$(kubectl exec -n "${NAMESPACE}" "$test_name"-mysql-0 -- \
+      find /var/lib/mysql/myDB -type f -size +0)
+
+      if [[ -z "$mysql_data" ]]; then
+        echo "No data files found — test failed"
+        exit 1
+      fi
