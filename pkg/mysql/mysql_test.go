@@ -1,10 +1,10 @@
 package mysql
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -126,7 +126,7 @@ func TestStatefulSet(t *testing.T) {
 				},
 			},
 		},
-		"entry dir configured": {
+		"empty dir configured": {
 			mysqlSpec: apiv1alpha1.MySQLSpec{
 				PodSpec: apiv1alpha1.PodSpec{
 					Size:                          3,
