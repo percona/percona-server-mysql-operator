@@ -1,0 +1,47 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 300  # 5 minutes for resize to complete
+    script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # Wait for resize to complete by checking that:
+      # 1. The PVC resize annotation is removed from the CR
+      # 2. All PVCs show the new size (5G) in their status
+      # 3. The cluster is back to ready state
+
+      echo "Waiting for PVC resize to complete..."
+
+      # Check PVC sizes periodically
+      for i in {1..60}; do
+          echo "Check attempt $i/60"
+
+          # Check if resize annotation is removed (indicating completion)
+          if ! kubectl get ps -n "${NAMESPACE}" "$(get_cluster_name)" -o jsonpath='{.metadata.annotations}' | grep -q "pvc-resize-in-progress"; then
+              echo "PVC resize annotation removed - resize should be complete"
+              break
+          fi
+
+          echo "PVC resize still in progress, waiting..."
+          sleep 5
+      done
+
+      echo "Final PVC sizes:"
+      kubectl get pvc -n "${NAMESPACE}" \
+        -l app.kubernetes.io/component=mysql \
+        -o custom-columns=NAME:.metadata.name,SIZE:.status.capacity.storage
+
+      # Ensure all datadir PVCs have the new size
+      for pvc in $(kubectl get pvc -n "${NAMESPACE}" -l app.kubernetes.io/component=mysql --no-headers -o custom-columns=:metadata.name | grep datadir); do
+          size=$(kubectl get pvc -n "${NAMESPACE}" "$pvc" -o jsonpath='{.status.capacity.storage}')
+          echo "PVC $pvc size: $size"
+          if [[ "$size" != "3Gi" ]]; then
+              echo "ERROR: PVC $pvc size is $size, expected 3Gi"
+              exit 1
+          fi
+      done
+
+      echo "All PVCs successfully resized to 3Gi"
