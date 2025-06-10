@@ -46,7 +46,7 @@ func TestStatefulSet(t *testing.T) {
 			mysqlSpec: apiv1alpha1.MySQLSpec{
 				PodSpec: apiv1alpha1.PodSpec{
 					Size:                          3,
-					TerminationGracePeriodSeconds: pointerInt64(30),
+					TerminationGracePeriodSeconds: toPointer(int64(30)),
 					VolumeSpec: &apiv1alpha1.VolumeSpec{
 						PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 							Resources: corev1.VolumeResourceRequirements{
@@ -64,7 +64,7 @@ func TestStatefulSet(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: pointerInt32(3),
+					Replicas: toPointer(int32(3)),
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: expectedAnnotations,
@@ -75,7 +75,7 @@ func TestStatefulSet(t *testing.T) {
 									Image: initImage,
 								},
 							},
-							TerminationGracePeriodSeconds: pointerInt64(30),
+							TerminationGracePeriodSeconds: toPointer(int64(30)),
 							Volumes:                       expectedVolumes(),
 						},
 					},
@@ -88,7 +88,7 @@ func TestStatefulSet(t *testing.T) {
 			mysqlSpec: apiv1alpha1.MySQLSpec{
 				PodSpec: apiv1alpha1.PodSpec{
 					Size:                          3,
-					TerminationGracePeriodSeconds: pointerInt64(30),
+					TerminationGracePeriodSeconds: toPointer(int64(30)),
 					VolumeSpec: &apiv1alpha1.VolumeSpec{
 						HostPath: &corev1.HostPathVolumeSource{},
 					},
@@ -100,7 +100,7 @@ func TestStatefulSet(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: pointerInt32(3),
+					Replicas: toPointer(int32(3)),
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: expectedAnnotations,
@@ -111,7 +111,7 @@ func TestStatefulSet(t *testing.T) {
 									Image: initImage,
 								},
 							},
-							TerminationGracePeriodSeconds: pointerInt64(30),
+							TerminationGracePeriodSeconds: toPointer(int64(30)),
 							Volumes: append(expectedVolumes(),
 								corev1.Volume{
 									Name: "datadir",
@@ -130,7 +130,7 @@ func TestStatefulSet(t *testing.T) {
 			mysqlSpec: apiv1alpha1.MySQLSpec{
 				PodSpec: apiv1alpha1.PodSpec{
 					Size:                          3,
-					TerminationGracePeriodSeconds: pointerInt64(30),
+					TerminationGracePeriodSeconds: toPointer(int64(30)),
 					VolumeSpec: &apiv1alpha1.VolumeSpec{
 						EmptyDir: &corev1.EmptyDirVolumeSource{},
 					},
@@ -142,7 +142,7 @@ func TestStatefulSet(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: pointerInt32(3),
+					Replicas: toPointer(int32(3)),
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: expectedAnnotations,
@@ -153,7 +153,7 @@ func TestStatefulSet(t *testing.T) {
 									Image: initImage,
 								},
 							},
-							TerminationGracePeriodSeconds: pointerInt64(30),
+							TerminationGracePeriodSeconds: toPointer(int64(30)),
 							Volumes: append(expectedVolumes(),
 								corev1.Volume{
 									Name: "datadir",
@@ -172,7 +172,7 @@ func TestStatefulSet(t *testing.T) {
 			mysqlSpec: apiv1alpha1.MySQLSpec{
 				PodSpec: apiv1alpha1.PodSpec{
 					Size:                          3,
-					TerminationGracePeriodSeconds: pointerInt64(30),
+					TerminationGracePeriodSeconds: toPointer(int64(30)),
 					VolumeSpec: &apiv1alpha1.VolumeSpec{
 						EmptyDir: &corev1.EmptyDirVolumeSource{},
 						HostPath: &corev1.HostPathVolumeSource{},
@@ -185,7 +185,7 @@ func TestStatefulSet(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: pointerInt32(3),
+					Replicas: toPointer(int32(3)),
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: expectedAnnotations,
@@ -196,7 +196,7 @@ func TestStatefulSet(t *testing.T) {
 									Image: initImage,
 								},
 							},
-							TerminationGracePeriodSeconds: pointerInt64(30),
+							TerminationGracePeriodSeconds: toPointer(int64(30)),
 							Volumes: append(expectedVolumes(),
 								corev1.Volume{
 									Name: "datadir",
@@ -295,7 +295,7 @@ func expectedVolumes() []corev1.Volume {
 										Path: "my-config.cnf",
 									},
 								},
-								Optional: pointerBoolean(true),
+								Optional: toPointer(true),
 							},
 						},
 						{
@@ -309,7 +309,7 @@ func expectedVolumes() []corev1.Volume {
 										Path: "auto-config.cnf",
 									},
 								},
-								Optional: pointerBoolean(true),
+								Optional: toPointer(true),
 							},
 						},
 						{
@@ -323,7 +323,7 @@ func expectedVolumes() []corev1.Volume {
 										Path: "my-secret.cnf",
 									},
 								},
-								Optional: pointerBoolean(true),
+								Optional: toPointer(true),
 							},
 						},
 					},
@@ -339,14 +339,6 @@ func expectedVolumes() []corev1.Volume {
 	}
 }
 
-func pointerInt64(i int64) *int64 {
-	return &i
-}
-
-func pointerInt32(i int32) *int32 {
-	return &i
-}
-
-func pointerBoolean(b bool) *bool {
-	return &b
+func toPointer[T any](v T) *T {
+	return &v
 }
