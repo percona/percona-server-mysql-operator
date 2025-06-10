@@ -10,66 +10,41 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
-	"github.com/percona/percona-server-mysql-operator/pkg/db"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
+	"github.com/percona/percona-server-mysql-operator/pkg/topology"
 )
 
-// topology represents the topology of the database cluster.
-type topology struct {
-	primary  string
-	replicas []string
-}
-
 // getDBTopology returns the topology of the database cluster.
-func getDBTopology(ctx context.Context, cli client.Client, cliCmd clientcmd.Client, cluster *apiv1alpha1.PerconaServerMySQL, operatorPass string) (topology, error) {
+func getDBTopology(ctx context.Context, cli client.Client, cliCmd clientcmd.Client, cluster *apiv1alpha1.PerconaServerMySQL, operatorPass string) (topology.Topology, error) {
 	switch cluster.Spec.MySQL.ClusterType {
 	case apiv1alpha1.ClusterTypeGR:
-		firstPod := &corev1.Pod{}
-		nn := types.NamespacedName{Namespace: cluster.Namespace, Name: mysql.PodName(cluster, 0)}
-		if err := cli.Get(ctx, nn, firstPod); err != nil {
-			return topology{}, err
-		}
-
-		fqdn := mysql.FQDN(cluster, 0)
-
-		rm := db.NewReplicationManager(firstPod, cliCmd, apiv1alpha1.UserOperator, operatorPass, fqdn)
-
-		replicas, err := rm.GetGroupReplicationReplicas(ctx)
+		top, err := topology.GroupReplication(ctx, cli, cliCmd, cluster, operatorPass)
 		if err != nil {
-			return topology{}, errors.Wrap(err, "get group-replication replicas")
+			return topology.Topology{}, errors.Wrapf(err, "failed to get group replication")
 		}
-
-		primary, err := rm.GetGroupReplicationPrimary(ctx)
-		if err != nil {
-			return topology{}, errors.Wrap(err, "get group-replication primary")
-		}
-		return topology{
-			primary:  primary,
-			replicas: replicas,
-		}, nil
+		return top, nil
 	case apiv1alpha1.ClusterTypeAsync:
 		pod := &corev1.Pod{}
 		nn := types.NamespacedName{Namespace: cluster.Namespace, Name: orchestrator.PodName(cluster, 0)}
 		if err := cli.Get(ctx, nn, pod); err != nil {
-			return topology{}, err
+			return topology.Topology{}, err
 		}
 
 		primary, err := orchestrator.ClusterPrimary(ctx, cliCmd, pod, cluster.ClusterHint())
 
 		if err != nil {
-			return topology{}, errors.Wrap(err, "get primary")
+			return topology.Topology{}, errors.Wrap(err, "get primary")
 		}
 
 		replicas := make([]string, 0, len(primary.Replicas))
 		for _, r := range primary.Replicas {
 			replicas = append(replicas, r.Hostname)
 		}
-		return topology{
-			primary:  primary.Key.Hostname,
-			replicas: replicas,
+		return topology.Topology{
+			Primary:  primary.Key.Hostname,
+			Replicas: replicas,
 		}, nil
 	default:
-		return topology{}, errors.New("unknown cluster type")
+		return topology.Topology{}, errors.New("unknown cluster type")
 	}
 }

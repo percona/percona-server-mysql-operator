@@ -15,8 +15,6 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/tls"
 )
 
-var validityNotAfter = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
-
 func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Secret, error) {
 	ca, cert, key, err := tls.IssueCerts(tls.DNSNames(cr))
 	if err != nil {
