@@ -103,8 +103,12 @@ deploy_client() {
 	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/client.yaml"
 }
 
-apply_s3_storage_secrets() {
+apply_minio_secret() {
 	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/minio-secret.yml"
+}
+
+apply_s3_storage_secrets() {
+	apply_minio_secret
 	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/cloud-secret.yml"
 }
 
@@ -307,6 +311,217 @@ deploy_minio() {
 	kubectl -n "${NAMESPACE}" run -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
 		bash -c "AWS_ACCESS_KEY_ID='$access_key' AWS_SECRET_ACCESS_KEY='$secret_key' AWS_DEFAULT_REGION=us-east-1 \
         /usr/bin/aws --endpoint-url http://minio-service:9000 s3 mb s3://operator-testing"
+}
+
+prepare_vault_tls() {
+	local name=$1
+	local namespace=$2
+	local csr_name=vault-csr-${RANDOM}
+	local csr_api_ver="v1"
+	local csr_signer
+
+	if [[ ${platform} == "eks" ]]; then
+		csr_signer="  signerName: beta.eks.amazonaws.com/app-serving"
+	else
+		csr_signer="  signerName: kubernetes.io/kubelet-serving"
+	fi
+
+	openssl genrsa -out ${tmp_dir}/vault.key 2048
+	cat <<EOF >${tmp_dir}/csr.conf
+[req]
+req_extensions = v3_req
+distinguished_name = req_distinguished_name
+[req_distinguished_name]
+[ v3_req ]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = ${name}
+DNS.2 = ${name}.${namespace}
+DNS.3 = ${name}.${namespace}.svc
+DNS.4 = ${name}.${namespace}.svc.cluster.local
+IP.1 = 127.0.0.1
+EOF
+
+	openssl req -new \
+		-key ${tmp_dir}/vault.key \
+		-subj "/CN=system:node:${name}.${namespace}.svc;/O=system:nodes" \
+		-out ${tmp_dir}/server.csr \
+		-config ${tmp_dir}/csr.conf
+
+	cat <<EOF >${tmp_dir}/csr.yaml
+apiVersion: certificates.k8s.io/${csr_api_ver}
+kind: CertificateSigningRequest
+metadata:
+  name: ${csr_name}
+spec:
+  groups:
+  - system:authenticated
+  request: $(cat ${tmp_dir}/server.csr | base64 | tr -d '\n')
+${csr_signer}
+  usages:
+  - digital signature
+  - key encipherment
+  - server auth
+EOF
+
+	kubectl create -n ${namespace} -f ${tmp_dir}/csr.yaml
+	sleep 10
+	kubectl certificate approve ${csr_name}
+	kubectl get csr ${csr_name} -o jsonpath='{.status.certificate}' >${tmp_dir}/serverCert
+	openssl base64 -in ${tmp_dir}/serverCert -d -A -out ${tmp_dir}/vault.crt
+	kubectl config view --raw --minify --flatten -o jsonpath='{.clusters[].cluster.certificate-authority-data}' | base64 -d >${tmp_dir}/vault.ca
+	if [[ ${platform} == "openshift" ]]; then
+		if [[ "x$(kubectl get namespaces | awk '{print $1}' | grep openshift-kube-controller-manager-operator)" != "x" ]]; then
+			#Detecting openshift 4+
+			kubectl -n openshift-kube-controller-manager-operator get secret csr-signer -o jsonpath='{.data.tls\.crt}' \
+				| base64 -d >${tmp_dir}/vault.ca
+		else
+			ca_secret_name=$(kubectl -n default get secrets \
+				| grep default \
+				| grep service-account-token \
+				| head -n 1 \
+				| awk {'print $1'})
+			kubectl -n default get secret ${ca_secret_name} -o jsonpath='{.data.ca\.crt}' \
+				| base64 -d >${tmp_dir}/vault.ca
+		fi
+	fi
+
+	kubectl create secret generic ${name} \
+		--namespace ${namespace} \
+		--from-file=vault.key=${tmp_dir}/vault.key \
+		--from-file=vault.crt=${tmp_dir}/vault.crt \
+		--from-file=vault.ca=${tmp_dir}/vault.ca
+
+}
+
+_deploy_vault() {
+	local name=$1
+	local protocol=$2
+	local platform=$3
+	local namespace=$4
+	local tmp_dir=$5
+
+	if kubectl get ns | grep ${namespace}; then
+		echo "${namespace} is already exist, assuming Vault is running there."
+		return
+	fi
+
+	rm -rf ${tmp_dir}
+	mkdir -p ${tmp_dir}
+
+	helm repo add hashicorp https://helm.releases.hashicorp.com
+	helm repo update
+
+	kubectl create namespace "${namespace}"
+	helm uninstall "$name" || :
+
+	echo "install Vault $name"
+
+	if [[ ${platform} == "openshift" ]]; then
+		oc patch clusterrole system:auth-delegator --type='json' -p '[{"op":"add","path":"/rules/-", "value":{"apiGroups":["security.openshift.io"], "attributeRestrictions":null, "resourceNames": ["privileged"], "resources":["securitycontextconstraints"],"verbs":["use"]}}]'
+	fi
+
+	if [ $protocol == "https" ]; then
+		prepare_vault_tls ${name} ${namespace}
+		helm install $name hashicorp/vault \
+			--disable-openapi-validation \
+			--version ${VAULT_VER} \
+			--namespace "${namespace}" \
+			--set dataStorage.enabled=false \
+			--set global.tlsDisable=false \
+			--set global.logLevel="trace" \
+			--set global.platform="${platform}" \
+			--set server.extraVolumes[0].type=secret \
+			--set server.extraVolumes[0].name=$name \
+			--set server.extraEnvironmentVars.VAULT_CACERT=/vault/userconfig/$name/vault.ca \
+			--set server.standalone.config="
+listener \"tcp\" {
+    address = \"[::]:8200\"
+    cluster_address = \"[::]:8201\"
+    tls_cert_file = \"/vault/userconfig/$name/vault.crt\"
+    tls_key_file  = \"/vault/userconfig/$name/vault.key\"
+    tls_client_ca_file = \"/vault/userconfig/$name/vault.ca\"
+}
+
+storage \"file\" {
+    path = \"/vault/data\"
+}"
+	else
+		helm install $name hashicorp/vault \
+			--disable-openapi-validation \
+			--version ${VAULT_VER} \
+			--namespace "${namespace}" \
+			--set dataStorage.enabled=false \
+			--set global.logLevel="trace" \
+			--set global.platform="${platform}"
+	fi
+
+	if [[ ${platform} == "openshift" ]]; then
+		oc patch clusterrole $name-agent-injector-clusterrole --type='json' -p '[{"op":"add","path":"/rules/-", "value":{"apiGroups":["security.openshift.io"], "attributeRestrictions":null, "resourceNames": ["privileged"], "resources":["securitycontextconstraints"],"verbs":["use"]}}]'
+		oc adm policy add-scc-to-user privileged $name-agent-injector
+	fi
+
+	set +o xtrace
+	retry=0
+	echo -n "waiting for pod/$name-0 to be ready"
+	until kubectl get -n ${namespace} pod/$name-0 -o 'jsonpath={.status.containerStatuses[0].state}' 2>/dev/null | grep 'running'; do
+		echo -n .
+		sleep 1
+		let retry+=1
+		if [[ $retry -ge 480 ]]; then
+			kubectl -n ${namespace} describe pod/$name-0
+			kubectl -n ${namespace} logs $name-0
+			echo max retry count "$retry" reached. something went wrong with vault
+			exit 1
+		fi
+	done
+	set -o xtrace
+
+	kubectl -n ${namespace} exec -it $name-0 -- vault operator init -tls-skip-verify -key-shares=1 -key-threshold=1 -format=json >"$tmp_dir/$name"
+	local unsealKey=$(jq -r ".unseal_keys_b64[]" <"$tmp_dir/$name")
+	local token=$(jq -r ".root_token" <"$tmp_dir/$name")
+	sleep 10
+
+	kubectl -n ${namespace} exec -it $name-0 -- vault operator unseal -tls-skip-verify "$unsealKey"
+	kubectl -n ${namespace} exec -it $name-0 -- \
+		sh -c "export VAULT_TOKEN=$token && export VAULT_LOG_LEVEL=trace \
+                && vault secrets enable --version=1 -tls-skip-verify -path=secret kv \
+                && vault audit enable file file_path=/vault/vault-audit.log"
+	sleep 10
+}
+
+deploy_vault() {
+	local name=${1:-vault-service}
+	local protocol=${2:-http}
+	local platform=${3:-kubernetes}
+	local namespace=${4:-${name}}
+
+	local tmp_dir=/tmp/vault
+	echo "Using tmp dir: ${tmp_dir}"
+
+	_deploy_vault ${name} ${protocol} ${platform} ${namespace} ${tmp_dir}
+
+	local unsealKey=$(jq -r ".unseal_keys_b64[]" <"$tmp_dir/$name")
+	local token=$(jq -r ".root_token" <"$tmp_dir/$name")
+
+	cat ${ROOT_REPO}/e2e-tests/conf/vault-secret.yaml \
+		| sed -e "s/#token/$token/" \
+		| sed -e "s/#vault_url/$protocol:\/\/$name.$name.svc.cluster.local:8200/" \
+		| sed -e "s/#secret/secret/" >"${tmp_dir}/vault-secret.yaml"
+
+	if [ $protocol == "https" ]; then
+		sed -e 's/^/    /' ${tmp_dir}/vault.ca >${tmp_dir}/vault.new.ca
+		sed -i "s/#vault_ca/vault_ca/" "${tmp_dir}/vault-secret.yaml"
+		sed -i "/#certVal/r ${tmp_dir}/vault.new.ca" "${tmp_dir}/vault-secret.yaml"
+		sed -i "/#certVal/d" "${tmp_dir}/vault-secret.yaml"
+	else
+		sed -i "/#vault_ca/d" "${tmp_dir}/vault-secret.yaml"
+	fi
+
+	kubectl apply -n "${NAMESPACE}" -f ${tmp_dir}/vault-secret.yaml
 }
 
 retry() {
@@ -789,10 +1004,10 @@ deploy_chaos_mesh() {
 	fi
 
 	echo "Waiting for chaos-mesh DaemonSet to be ready..."
-    until [ "$(kubectl get daemonset chaos-daemon -n ${NAMESPACE} -o jsonpath='{.status.numberReady}')" = "$(kubectl get daemonset chaos-daemon -n ${NAMESPACE} -o jsonpath='{.status.desiredNumberScheduled}')" ]; do
-        echo "Waiting for DaemonSet chaos-daemon..."
-        sleep 5
-    done
+	until [ "$(kubectl get daemonset chaos-daemon -n ${NAMESPACE} -o jsonpath='{.status.numberReady}')" = "$(kubectl get daemonset chaos-daemon -n ${NAMESPACE} -o jsonpath='{.status.desiredNumberScheduled}')" ]; do
+		echo "Waiting for DaemonSet chaos-daemon..."
+		sleep 5
+	done
 }
 
 destroy_chaos_mesh() {
