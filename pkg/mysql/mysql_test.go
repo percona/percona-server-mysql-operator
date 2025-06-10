@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -46,7 +47,7 @@ func TestStatefulSet(t *testing.T) {
 			mysqlSpec: apiv1alpha1.MySQLSpec{
 				PodSpec: apiv1alpha1.PodSpec{
 					Size:                          3,
-					TerminationGracePeriodSeconds: toPointer(int64(30)),
+					TerminationGracePeriodSeconds: ptr.To(int64(30)),
 					VolumeSpec: &apiv1alpha1.VolumeSpec{
 						PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 							Resources: corev1.VolumeResourceRequirements{
@@ -64,7 +65,7 @@ func TestStatefulSet(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: toPointer(int32(3)),
+					Replicas: ptr.To(int32(3)),
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: expectedAnnotations,
@@ -75,7 +76,7 @@ func TestStatefulSet(t *testing.T) {
 									Image: initImage,
 								},
 							},
-							TerminationGracePeriodSeconds: toPointer(int64(30)),
+							TerminationGracePeriodSeconds: ptr.To(int64(30)),
 							Volumes:                       expectedVolumes(),
 						},
 					},
@@ -88,7 +89,7 @@ func TestStatefulSet(t *testing.T) {
 			mysqlSpec: apiv1alpha1.MySQLSpec{
 				PodSpec: apiv1alpha1.PodSpec{
 					Size:                          3,
-					TerminationGracePeriodSeconds: toPointer(int64(30)),
+					TerminationGracePeriodSeconds: ptr.To(int64(30)),
 					VolumeSpec: &apiv1alpha1.VolumeSpec{
 						HostPath: &corev1.HostPathVolumeSource{},
 					},
@@ -100,7 +101,7 @@ func TestStatefulSet(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: toPointer(int32(3)),
+					Replicas: ptr.To(int32(3)),
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: expectedAnnotations,
@@ -111,7 +112,7 @@ func TestStatefulSet(t *testing.T) {
 									Image: initImage,
 								},
 							},
-							TerminationGracePeriodSeconds: toPointer(int64(30)),
+							TerminationGracePeriodSeconds: ptr.To(int64(30)),
 							Volumes: append(expectedVolumes(),
 								corev1.Volume{
 									Name: "datadir",
@@ -130,7 +131,7 @@ func TestStatefulSet(t *testing.T) {
 			mysqlSpec: apiv1alpha1.MySQLSpec{
 				PodSpec: apiv1alpha1.PodSpec{
 					Size:                          3,
-					TerminationGracePeriodSeconds: toPointer(int64(30)),
+					TerminationGracePeriodSeconds: ptr.To(int64(30)),
 					VolumeSpec: &apiv1alpha1.VolumeSpec{
 						EmptyDir: &corev1.EmptyDirVolumeSource{},
 					},
@@ -142,7 +143,7 @@ func TestStatefulSet(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: toPointer(int32(3)),
+					Replicas: ptr.To(int32(3)),
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: expectedAnnotations,
@@ -153,7 +154,7 @@ func TestStatefulSet(t *testing.T) {
 									Image: initImage,
 								},
 							},
-							TerminationGracePeriodSeconds: toPointer(int64(30)),
+							TerminationGracePeriodSeconds: ptr.To(int64(30)),
 							Volumes: append(expectedVolumes(),
 								corev1.Volume{
 									Name: "datadir",
@@ -172,7 +173,7 @@ func TestStatefulSet(t *testing.T) {
 			mysqlSpec: apiv1alpha1.MySQLSpec{
 				PodSpec: apiv1alpha1.PodSpec{
 					Size:                          3,
-					TerminationGracePeriodSeconds: toPointer(int64(30)),
+					TerminationGracePeriodSeconds: ptr.To(int64(30)),
 					VolumeSpec: &apiv1alpha1.VolumeSpec{
 						EmptyDir: &corev1.EmptyDirVolumeSource{},
 						HostPath: &corev1.HostPathVolumeSource{},
@@ -185,7 +186,7 @@ func TestStatefulSet(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
-					Replicas: toPointer(int32(3)),
+					Replicas: ptr.To(int32(3)),
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Annotations: expectedAnnotations,
@@ -196,7 +197,7 @@ func TestStatefulSet(t *testing.T) {
 									Image: initImage,
 								},
 							},
-							TerminationGracePeriodSeconds: toPointer(int64(30)),
+							TerminationGracePeriodSeconds: ptr.To(int64(30)),
 							Volumes: append(expectedVolumes(),
 								corev1.Volume{
 									Name: "datadir",
@@ -295,7 +296,7 @@ func expectedVolumes() []corev1.Volume {
 										Path: "my-config.cnf",
 									},
 								},
-								Optional: toPointer(true),
+								Optional: ptr.To(true),
 							},
 						},
 						{
@@ -309,7 +310,7 @@ func expectedVolumes() []corev1.Volume {
 										Path: "auto-config.cnf",
 									},
 								},
-								Optional: toPointer(true),
+								Optional: ptr.To(true),
 							},
 						},
 						{
@@ -323,7 +324,7 @@ func expectedVolumes() []corev1.Volume {
 										Path: "my-secret.cnf",
 									},
 								},
-								Optional: toPointer(true),
+								Optional: ptr.To(true),
 							},
 						},
 					},
@@ -337,8 +338,4 @@ func expectedVolumes() []corev1.Volume {
 			},
 		},
 	}
-}
-
-func toPointer[T any](v T) *T {
-	return &v
 }
