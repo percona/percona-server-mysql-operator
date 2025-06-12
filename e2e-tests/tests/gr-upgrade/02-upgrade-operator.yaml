@@ -1,10 +1,12 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 120
+    script: |-
       set -o errexit
       set -o xtrace
 
       source ../../functions
 
       upgrade_operator_image ${IMAGE}
+      wait_deployment percona-server-mysql-operator ${OPERATOR_NS:-$NAMESPACE}
