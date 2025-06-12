@@ -1,0 +1,13 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: backup1
+spec:
+  clusterName: async-data-at-rest-encryption
+  storageName: minio
+status:
+  state: Succeeded
