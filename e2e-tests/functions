@@ -673,6 +673,7 @@ wait_cluster_consistency_gr() {
 
 wait_pod() {
 	local pod=$1
+  local ns=${2:-${NAMESPACE}}
 
 	set +o xtrace
 	retry=0
