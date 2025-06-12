@@ -43,10 +43,14 @@ fi
 
 set +o xtrace
 temp=$(mktemp)
-sed -r "s|^[#]?user=.*$|user=${TOPOLOGY_USER}|" "${ORC_CONF_PATH}/orc-topology.cnf" >"${temp}"
-sed -r "s|^[#]?password=.*$|password=${TOPOLOGY_PASSWORD:-$ORC_TOPOLOGY_PASSWORD}|" "${ORC_CONF_PATH}/orc-topology.cnf" >"${temp}"
-cat "${temp}" >"${ORC_CONF_PATH}/config/orc-topology.cnf"
-rm "${temp}"
+cp "${ORC_CONF_PATH}/orc-topology.cnf" "${temp}"
+#TOPOLOGY_PASSWORD_ESCAPED=$(printf '%q' "${TOPOLOGY_PASSWORD:-$ORC_TOPOLOGY_PASSWORD}")
+sed -i -r "s|^[#]?user=.*$|user=${TOPOLOGY_USER}|" "${temp}"
+#sed -i -r "s|^[#]?password=.*$|password=${TOPOLOGY_PASSWORD_ESCAPED}|" "${temp}"
+sed -r "s|^[#]?password=.*$|password=${ORC_TOPOLOGY_PASSWORD}|" "${ORC_CONF_PATH}/orc-topology.cnf" > "${temp}"
+cat "${temp}" > "${ORC_CONF_PATH}/config/orc-topology.cnf"
+rm -f "${temp}"
+
 set -o xtrace
 
 exec "$@"
