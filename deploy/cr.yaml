@@ -14,14 +14,14 @@ spec:
 #    proxy: false
 #    proxySize: false
 #  pause: false
-  crVersion: 0.10.0
+  crVersion: 0.11.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
   updateStrategy: SmartUpdate
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
     apply: disabled
-#  initImage: percona/percona-server-mysql-operator:0.10.0
+#  initImage: perconalab/percona-server-mysql-operator:main
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
 #  ignoreLabels:
@@ -39,9 +39,9 @@ spec:
   mysql:
     clusterType: group-replication
     autoRecovery: true
-    image: percona/percona-server:8.0.42-33
+    image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
-#    initImage: percona/percona-server-mysql-operator:0.10.0
+#    initImage: perconalab/percona-server-mysql-operator:main
     size: 3
 
 #    env:
@@ -161,7 +161,7 @@ spec:
 
       size: 3
 
-      image: percona/haproxy:2.8.14
+      image: perconalab/percona-server-mysql-operator:main-haproxy
       imagePullPolicy: Always
 
       resources:
@@ -268,9 +268,9 @@ spec:
 
     router:
       enabled: false
-      image: percona/percona-mysql-router:8.0.42
+      image: perconalab/percona-server-mysql-operator:main-router
       imagePullPolicy: Always
-#      initImage: percona/percona-server-mysql-operator:0.10.0
+#      initImage: perconalab/percona-server-mysql-operator:main
 
       size: 3
 
@@ -321,10 +321,10 @@ spec:
   orchestrator:
     enabled: false
 
-    image: percona/percona-orchestrator:3.2.6-17
+    image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
-#    initImage: percona/percona-server-mysql-operator:0.10.0
+#    initImage: perconalab/percona-server-mysql-operator:main
 
     size: 3
 
@@ -375,7 +375,7 @@ spec:
   pmm:
     enabled: false
 
-    image: percona/pmm-client:3.2.0
+    image: perconalab/pmm-client:3-dev-latest
     imagePullPolicy: Always
 
     resources:
@@ -391,7 +391,7 @@ spec:
 
   backup:
     enabled: true
-    image: percona/percona-xtrabackup:8.0.35-33
+    image: perconalab/percona-server-mysql-operator:main-backup
 #    schedule:
 #      - name: "sat-night-backup"
 #        schedule: "0 0 * * 6"
@@ -403,7 +403,7 @@ spec:
 #        storageName: s3
 #    backoffLimit: 6
     imagePullPolicy: Always
-#    initImage: percona/percona-server-mysql-operator:0.10.0
+#    initImage: perconalab/percona-server-mysql-operator:main
 #    containerSecurityContext:
 #      privileged: true
     storages:
@@ -456,7 +456,7 @@ spec:
 #          prefix: ""
 
   toolkit:
-    image: percona/percona-toolkit:3.7.0
+    image: perconalab/percona-server-mysql-operator:main-toolkit
     imagePullPolicy: Always
 #    resources:
 #      requests:
