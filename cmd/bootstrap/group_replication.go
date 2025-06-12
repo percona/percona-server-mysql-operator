@@ -98,15 +98,14 @@ func (m *mysqlsh) clusterStatus(ctx context.Context) (innodbcluster.Status, erro
 }
 
 func (m *mysqlsh) rescanCluster(ctx context.Context) error {
-	var err error
-
+	var cmd string
 	if m.compareVersionWith("8.4") >= 0 {
-		_, _, err = m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rescan({'addUnmanaged': true, 'removeObsolete': true})", m.clusterName))
+		cmd = fmt.Sprintf("dba.getCluster('%s').rescan({'addUnmanaged': true, 'removeObsolete': true})", m.clusterName)
 	} else {
-		_, _, err = m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rescan({'addInstances': 'auto', 'removeInstances': 'auto'})", m.clusterName))
+		cmd = fmt.Sprintf("dba.getCluster('%s').rescan({'addInstances': 'auto', 'removeInstances': 'auto'})", m.clusterName)
 	}
 
-	if err != nil {
+	if _, _, err := m.run(ctx, cmd); err != nil {
 		return errors.Wrap(err, "rescan cluster")
 	}
 
@@ -213,15 +212,14 @@ func updateGroupPeers(ctx context.Context, peers sets.Set[string], version *v.Ve
 }
 
 func (m *mysqlsh) configureInstance(ctx context.Context) error {
-	var err error
-
+	var cmd string
 	if m.compareVersionWith("8.4") >= 0 {
-		_, _, err = m.run(ctx, fmt.Sprintf("dba.configureInstance('%s')", m.getURI()))
+		cmd = fmt.Sprintf("dba.configureInstance('%s')", m.getURI())
 	} else {
-		_, _, err = m.run(ctx, fmt.Sprintf("dba.configureLocalInstance('%s', {'clearReadOnly': true})", m.getURI()))
+		cmd = fmt.Sprintf("dba.configureLocalInstance('%s', {'clearReadOnly': true})", m.getURI())
 	}
 
-	if err != nil {
+	if _, _, err := m.run(ctx, cmd); err != nil {
 		return errors.Wrap(err, "configure instance")
 	}
 
@@ -241,29 +239,23 @@ func (m *mysqlsh) createCluster(ctx context.Context) error {
 }
 
 func (m *mysqlsh) addInstance(ctx context.Context, instanceDef string) error {
-	var err error
+	var cmd string
 
 	if m.compareVersionWith("8.4") >= 0 {
-		_, _, err = m.run(
-			ctx,
-			fmt.Sprintf(
-				"dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'recoveryProgress': 2})",
-				m.clusterName,
-				instanceDef,
-			),
+		cmd = fmt.Sprintf(
+			"dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'recoveryProgress': 2})",
+			m.clusterName,
+			instanceDef,
 		)
 	} else {
-		_, _, err = m.run(
-			ctx,
-			fmt.Sprintf(
-				"dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'waitRecovery': 3})",
-				m.clusterName,
-				instanceDef,
-			),
+		cmd = fmt.Sprintf(
+			"dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'waitRecovery': 3})",
+			m.clusterName,
+			instanceDef,
 		)
 	}
 
-	if err != nil {
+	if _, _, err := m.run(ctx, cmd); err != nil {
 		return errors.Wrap(err, "add instance")
 	}
 
