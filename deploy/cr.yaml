@@ -14,7 +14,7 @@ spec:
 #    proxy: false
 #    proxySize: false
 #  pause: false
-  crVersion: 0.10.0
+  crVersion: 0.11.0
   secretsName: cluster1-secrets
   sslSecretName: cluster1-ssl
   updateStrategy: SmartUpdate
