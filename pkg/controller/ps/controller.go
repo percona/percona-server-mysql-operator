@@ -559,7 +559,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 		return errors.Wrap(err, "reconcile service per pod")
 	}
 
-	if cr.Spec.MySQL.ExposePrimary.Enabled {
+	if cr.Spec.MySQL.ExposePrimary.Enabled && cr.Spec.MySQL.IsGR() {
 		if err := k8s.EnsureService(ctx, r.Client, cr, mysql.PrimaryService(cr), r.Scheme, true); err != nil {
 			return errors.Wrap(err, "reconcile service for primary mysql")
 		}

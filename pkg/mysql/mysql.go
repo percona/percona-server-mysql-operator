@@ -474,6 +474,8 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 	}
 }
 
+// PrimaryService constructs a service which exposes the pods that has the primary label.
+// For now this service should be available only for group replication.
 func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	expose := cr.Spec.MySQL.ExposePrimary
 
