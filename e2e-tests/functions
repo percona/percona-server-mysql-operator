@@ -60,6 +60,22 @@ wait_for_delete() {
 	done
 }
 
+apply_crd() {
+	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply --server-side --force-conflicts -f "${DEPLOY_DIR}/crd.yaml"
+}
+
+apply_rbac() {
+	local rbac_file
+
+	if [ -n "$OPERATOR_NS" ]; then
+		rbac_file="${DEPLOY_DIR}/cw-rbac.yaml"
+	else
+		rbac_file="${DEPLOY_DIR}/rbac.yaml"
+	fi
+
+	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f "${rbac_file}"
+}
+
 deploy_operator() {
 	destroy_operator
 
@@ -67,27 +83,23 @@ deploy_operator() {
 		create_namespace "${OPERATOR_NS}"
 	fi
 
-	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply --server-side --force-conflicts -f "${DEPLOY_DIR}/crd.yaml"
+	apply_crd
+	apply_rbac
+
+	local operator_file
 
 	if [ -n "$OPERATOR_NS" ]; then
-		kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f "${DEPLOY_DIR}/cw-rbac.yaml"
-
-		yq eval \
-			"$(printf 'select(documentIndex==1).spec.template.spec.containers[0].image="%s"' "${IMAGE}")" \
-			"${DEPLOY_DIR}/cw-operator.yaml" \
-			| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "true"' \
-			| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG"' \
-			| kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f -
+		operator_file="${DEPLOY_DIR}/cw-operator.yaml"
 	else
-		kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f "${DEPLOY_DIR}/rbac.yaml"
-
-		yq eval \
-			"$(printf 'select(documentIndex==1).spec.template.spec.containers[0].image="%s"' "${IMAGE}")" \
-			"${DEPLOY_DIR}/operator.yaml" \
-			| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "true"' \
-			| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG"' \
-			| kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f -
+		operator_file="${DEPLOY_DIR}/-operator.yaml"
 	fi
+
+	yq eval \
+		"$(printf 'select(documentIndex==1).spec.template.spec.containers[0].image="%s"' "${IMAGE}")" \
+		"${operator_file}" \
+		| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "true"' \
+		| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG"' \
+		| kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f -
 }
 
 upgrade_operator_image() {
@@ -622,8 +634,9 @@ get_cr() {
 	local image_toolkit=${6:-${IMAGE_TOOLKIT}}
 	local image_haproxy=${7:-${IMAGE_HAPROXY}}
 	local image_pmm_client=${8:-${IMAGE_PMM_CLIENT}}
+	local cr_file=${9:-${DEPLOY_DIR}/cr.yaml}
 
-	yq eval "$(printf '.metadata.name="%s"' "${test_name}${name_suffix:+-$name_suffix}")" "${DEPLOY_DIR}/cr.yaml" \
+	yq eval "$(printf '.metadata.name="%s"' "${test_name}${name_suffix:+-$name_suffix}")" ${cr_file} \
 		| yq eval "$(printf '.spec.initContainer.image="%s"' "${IMAGE}")" - \
 		| yq eval '.spec.secretsName="test-secrets"' - \
 		| yq eval '.spec.sslSecretName="test-ssl"' - \
@@ -912,6 +925,7 @@ wait_cluster_consistency_gr() {
 
 wait_pod() {
 	local pod=$1
+	local ns=${2:-${NAMESPACE}}
 
 	set +o xtrace
 	retry=0
@@ -1458,6 +1472,7 @@ check_scheduled_backup_labels() {
 		echo "Label percona.com/backup-ancestor is missing"
 		exit 1
 	fi
+}
 
 latest_operator_version_in_vs() {
 	local latest=$(curl -s https://check.percona.com/versions/v1/ps-operator | jq -r '.versions[].operator' | sort -V | tail -n1)
@@ -1489,6 +1504,11 @@ get_cr_with_latest_versions_in_vs() {
 	local image_haproxy=$(echo ${latest_versions} | jq -r '.versions[].matrix.haproxy[].imagePath')
 	local image_pmm_client=$(echo ${latest_versions} | jq -r '.versions[].matrix.pmm[].imagePath')
 
+	local git_tag="v${version}"
+
+	curl "https://raw.githubusercontent.com/percona/percona-server-mysql-operator/${git_tag}/deploy/cr.yaml" \
+		-o ${TEMP_DIR}/cr.yaml
+
 	get_cr "" \
 		${image_mysql} \
 		${image_backup} \
@@ -1496,5 +1516,6 @@ get_cr_with_latest_versions_in_vs() {
 		${image_router} \
 		${image_toolkit} \
 		${image_haproxy} \
-		${image_pmm_client}
+		${image_pmm_client} \
+		${TEMP_DIR}/cr.yaml
 }
