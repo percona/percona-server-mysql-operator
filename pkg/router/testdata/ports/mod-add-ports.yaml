@@ -1,0 +1,30 @@
+- name: http
+  port: 5555
+  targetPort: 0
+- name: rw-default
+  port: 6666
+  targetPort: 30
+- name: read-write
+  port: 6446
+  targetPort: 0
+- name: read-only
+  port: 6447
+  targetPort: 0
+- name: x-read-write
+  port: 6448
+  targetPort: 0
+- name: x-read-only
+  port: 6449
+  targetPort: 0
+- name: x-default
+  port: 33060
+  targetPort: 0
+- name: rw-admin
+  port: 33062
+  targetPort: 0
+- name: additional port
+  port: 4308
+  targetPort: 0
+- name: additional port with target port
+  port: 1337
+  targetPort: 20
