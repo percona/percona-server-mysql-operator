@@ -3,16 +3,18 @@ package ps
 import (
 	"context"
 	"fmt"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"strings"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	k8sretry "k8s.io/client-go/util/retry"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/topology"
 )
@@ -97,34 +99,48 @@ func podNameFromFQDN(fqdn string) (string, error) {
 
 // removePrimaryLabel removes the primary label from a pod
 func (r *PerconaServerMySQLReconciler) removePrimaryLabel(ctx context.Context, pod *corev1.Pod) error {
-	if pod.Labels == nil {
+	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
+		p := &corev1.Pod{}
+		if err := r.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, p); err != nil {
+			return errors.Wrap(err, "get pod")
+		}
+
+		if p.Labels == nil {
+			return nil
+		}
+
+		if _, exists := p.Labels[naming.LabelMySQLPrimary]; !exists {
+			return nil
+		}
+
+		delete(p.Labels, naming.LabelMySQLPrimary)
+
+		if err := r.Update(ctx, p); err != nil {
+			return errors.Wrap(err, "update pod to remove primary label")
+		}
+
 		return nil
-	}
-
-	if _, exists := pod.Labels[naming.LabelMySQLPrimary]; !exists {
-		return nil
-	}
-
-	delete(pod.Labels, naming.LabelMySQLPrimary)
-
-	if err := r.Update(ctx, pod); err != nil {
-		return errors.Wrap(err, "update pod to remove primary label")
-	}
-
-	return nil
+	})
 }
 
 // assignPrimaryLabel assigns the primary label to a pod
 func (r *PerconaServerMySQLReconciler) assignPrimaryLabel(ctx context.Context, pod *corev1.Pod) error {
-	if pod.Labels == nil {
-		pod.Labels = make(map[string]string)
-	}
+	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
+		p := &corev1.Pod{}
+		if err := r.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, p); err != nil {
+			return errors.Wrap(err, "get pod")
+		}
 
-	pod.Labels[naming.LabelMySQLPrimary] = "true"
+		if p.Labels == nil {
+			p.Labels = make(map[string]string)
+		}
 
-	if err := r.Update(ctx, pod); err != nil {
-		return errors.Wrap(err, "update pod to assign primary label")
-	}
+		p.Labels[naming.LabelMySQLPrimary] = "true"
 
-	return nil
+		if err := r.Update(ctx, p); err != nil {
+			return errors.Wrap(err, "update pod to assign primary label")
+		}
+
+		return nil
+	})
 }
