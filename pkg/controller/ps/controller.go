@@ -490,25 +490,25 @@ func validateClusterType(ctx context.Context, cl client.Client, cr *apiv1alpha1.
 		return errors.New("failed to get mysql container")
 	}
 
-	clusterType := ""
+	currentClusterType := ""
 	for _, e := range container.Env {
 		if e.Name != naming.EnvMySQLClusterType {
 			continue
 		}
 
-		clusterType = e.Value
+		currentClusterType = e.Value
 		break
 	}
 
-	if clusterType == "" {
+	if currentClusterType == "" {
 		return errors.New("failed to get mysql cluster type")
 	}
 
-	if cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterType(clusterType) {
+	if cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterType(currentClusterType) {
 		return nil
 	}
 
-	return errors.Errorf("wrong mysql cluster type, expected: %s", clusterType)
+	return errors.Errorf("cluster type cannot be changed from %s to %s on a running cluster", currentClusterType, cr.Spec.MySQL.ClusterType)
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
