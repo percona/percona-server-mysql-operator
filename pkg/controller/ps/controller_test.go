@@ -883,14 +883,14 @@ var _ = Describe("Primary mysql service on GR", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("Should not create primary service for async cluster", func() {
+		It("Should create primary service for async cluster", func() {
 			svc := &corev1.Service{}
 			Consistently(func() bool {
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name:      "async-cluster-mysql-primary",
 					Namespace: cr.Namespace,
 				}, svc)
-				return k8serrors.IsNotFound(err)
+				return err == nil
 			}, time.Second*5, time.Millisecond*250).Should(BeTrue())
 		})
 	})
