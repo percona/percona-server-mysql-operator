@@ -190,6 +190,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 
 	if !loadBalancersReady {
+		log.Info("Not all load balancers are ready, setting state to initializing")
 		cr.Status.State = apiv1alpha1.StateInitializing
 	}
 
@@ -226,6 +227,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
 	log := logf.FromContext(ctx).WithName("groupReplicationStatus")
 	if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
+		log.Info("Not all MySQL pods are ready", "ready", cr.Status.MySQL.Ready, "expected", cr.Spec.MySQL.Size)
 		return false, nil
 	}
 
