@@ -1,0 +1,14 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: pvc-resize
+status:
+  mysql:
+    ready: 3
+  haproxy:
+    ready: 3
+  state: ready

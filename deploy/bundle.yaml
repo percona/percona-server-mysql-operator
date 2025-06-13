@@ -4249,6 +4249,8 @@ spec:
                 type: object
               crVersion:
                 type: string
+              enableVolumeExpansion:
+                type: boolean
               ignoreAnnotations:
                 items:
                   type: string
@@ -11501,9 +11503,13 @@ rules:
   - ""
   resources:
   - events
+  - serviceaccounts
   verbs:
   - create
+  - get
+  - list
   - patch
+  - watch
 - apiGroups:
   - ""
   resources:
@@ -11517,16 +11523,6 @@ rules:
   - list
   - patch
   - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - serviceaccounts
-  verbs:
-  - create
-  - get
-  - list
-  - patch
   - watch
 - apiGroups:
   - apps
@@ -11567,6 +11563,16 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - get
+  - list
+  - patch
   - watch
 - apiGroups:
   - ps.percona.com

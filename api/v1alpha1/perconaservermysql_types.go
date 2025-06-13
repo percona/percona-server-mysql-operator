@@ -49,23 +49,24 @@ import (
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.proxy || self.proxy.haproxy.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.haproxy.enabled' must be true unless 'unsafeFlags.proxy' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.proxy.router == null || !has(self.proxy.router.enabled) || !self.proxy.router.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.router.enabled' must be disabled"
 type PerconaServerMySQLSpec struct {
-	CRVersion         string                               `json:"crVersion,omitempty"`
-	Pause             bool                                 `json:"pause,omitempty"`
-	SecretsName       string                               `json:"secretsName,omitempty"`
-	SSLSecretName     string                               `json:"sslSecretName,omitempty"`
-	Unsafe            UnsafeFlags                          `json:"unsafeFlags,omitempty"`
-	InitImage         string                               `json:"initImage,omitempty"`
-	IgnoreAnnotations []string                             `json:"ignoreAnnotations,omitempty"`
-	IgnoreLabels      []string                             `json:"ignoreLabels,omitempty"`
-	MySQL             MySQLSpec                            `json:"mysql,omitempty"`
-	Orchestrator      OrchestratorSpec                     `json:"orchestrator,omitempty"`
-	PMM               *PMMSpec                             `json:"pmm,omitempty"`
-	Backup            *BackupSpec                          `json:"backup,omitempty"`
-	Proxy             ProxySpec                            `json:"proxy,omitempty"`
-	TLS               *TLSSpec                             `json:"tls,omitempty"`
-	Toolkit           *ToolkitSpec                         `json:"toolkit,omitempty"`
-	UpgradeOptions    UpgradeOptions                       `json:"upgradeOptions,omitempty"`
-	UpdateStrategy    appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	CRVersion              string                               `json:"crVersion,omitempty"`
+	Pause                  bool                                 `json:"pause,omitempty"`
+	VolumeExpansionEnabled bool                                 `json:"enableVolumeExpansion,omitempty"`
+	SecretsName            string                               `json:"secretsName,omitempty"`
+	SSLSecretName          string                               `json:"sslSecretName,omitempty"`
+	Unsafe                 UnsafeFlags                          `json:"unsafeFlags,omitempty"`
+	InitImage              string                               `json:"initImage,omitempty"`
+	IgnoreAnnotations      []string                             `json:"ignoreAnnotations,omitempty"`
+	IgnoreLabels           []string                             `json:"ignoreLabels,omitempty"`
+	MySQL                  MySQLSpec                            `json:"mysql,omitempty"`
+	Orchestrator           OrchestratorSpec                     `json:"orchestrator,omitempty"`
+	PMM                    *PMMSpec                             `json:"pmm,omitempty"`
+	Backup                 *BackupSpec                          `json:"backup,omitempty"`
+	Proxy                  ProxySpec                            `json:"proxy,omitempty"`
+	TLS                    *TLSSpec                             `json:"tls,omitempty"`
+	Toolkit                *ToolkitSpec                         `json:"toolkit,omitempty"`
+	UpgradeOptions         UpgradeOptions                       `json:"upgradeOptions,omitempty"`
+	UpdateStrategy         appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
 }
 
 type UnsafeFlags struct {
@@ -1071,6 +1072,11 @@ var NonAlphaNumeric = regexp.MustCompile("[^a-zA-Z0-9_]+")
 // Generates a cluster name by sanitizing the PerconaServerMySQL name.
 func (cr *PerconaServerMySQL) InnoDBClusterName() string {
 	return NonAlphaNumeric.ReplaceAllString(cr.Name, "")
+}
+
+func (cr *PerconaServerMySQL) PVCResizeInProgress() bool {
+	_, ok := cr.Annotations[string(naming.AnnotationPVCResizeInProgress)]
+	return ok
 }
 
 // Registers PerconaServerMySQL types with the SchemeBuilder.

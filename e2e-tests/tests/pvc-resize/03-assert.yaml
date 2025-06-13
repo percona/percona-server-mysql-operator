@@ -1,0 +1,15 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 30
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: pvc-resize
+spec:
+  mysql:
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 3G

@@ -32,3 +32,4 @@ sidecars
 smart-update
 tls-cert-manager
 users
+pvc-resize
