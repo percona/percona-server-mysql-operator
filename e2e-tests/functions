@@ -780,14 +780,19 @@ deploy_chaos_mesh() {
 
 	helm repo add chaos-mesh https://charts.chaos-mesh.org
 	if [ -n "${MINIKUBE}" ]; then
-		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=docker --set dashboard.create=false --version ${CHAOS_MESH_VER}
+		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=docker --set dashboard.create=false --version ${CHAOS_MESH_VER} --wait
 	else
 		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version ${CHAOS_MESH_VER}
 	fi
 	if [[ -n $OPENSHIFT ]]; then
 		oc adm policy add-scc-to-user privileged -z chaos-daemon --namespace=${NAMESPACE}
 	fi
-	sleep 10
+
+	echo "Waiting for chaos-mesh DaemonSet to be ready..."
+    until [ "$(kubectl get daemonset chaos-daemon -n ${NAMESPACE} -o jsonpath='{.status.numberReady}')" = "$(kubectl get daemonset chaos-daemon -n ${NAMESPACE} -o jsonpath='{.status.desiredNumberScheduled}')" ]; do
+        echo "Waiting for DaemonSet chaos-daemon..."
+        sleep 5
+    done
 }
 
 destroy_chaos_mesh() {
