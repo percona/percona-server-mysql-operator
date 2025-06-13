@@ -7,7 +7,12 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 )
 
-func Container(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret, dbType string) corev1.Container {
+func Container(
+	cr *apiv1alpha1.PerconaServerMySQL,
+	secret *corev1.Secret,
+	dbType string,
+	customParams string) corev1.Container {
+	// Default ports
 	ports := []corev1.ContainerPort{{ContainerPort: 7777}}
 	for port := 30100; port <= 30105; port++ {
 		ports = append(ports, corev1.ContainerPort{ContainerPort: int32(port)})
@@ -15,6 +20,13 @@ func Container(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret, dbType
 
 	pmmSpec := cr.PMMSpec()
 	envs := pmmEnvs(cr, secret, dbType)
+
+	if customParams != "" {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "PMM_ADMIN_CUSTOM_PARAMS",
+			Value: customParams,
+		})
+	}
 
 	return corev1.Container{
 		Name:            "pmm-client",
