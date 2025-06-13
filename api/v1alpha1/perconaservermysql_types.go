@@ -396,6 +396,8 @@ type MySQLRouterSpec struct {
 
 	Expose ServiceExpose `json:"expose,omitempty"`
 
+	Ports []corev1.ServicePort `json:"ports,omitempty"`
+
 	PodSpec `json:",inline"`
 }
 
