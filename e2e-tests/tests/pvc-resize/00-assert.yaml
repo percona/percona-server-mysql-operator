@@ -2,9 +2,15 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 60
 ---
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
 metadata:
-  name: percona-server-mysql-operator
-status:
-  readyReplicas: 1
+  name: check-operator-deploy-status
+timeout: 120
+commands:
+  - script: kubectl assert exist-enhanced deployment percona-server-mysql-operator -n ${OPERATOR_NS:-$NAMESPACE} --field-selector status.readyReplicas=1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mysql-client
