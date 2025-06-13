@@ -67,7 +67,6 @@ func (r *PerconaServerMySQLReconciler) reconcileGRMySQLPrimaryLabel(ctx context.
 	}
 
 	if currentPrimaryPod != nil && correctPrimaryPod != nil && currentPrimaryPod.Name == correctPrimaryPod.Name {
-		logger.Info(fmt.Sprintf("Pod %s already has correct primary label", correctPrimaryPod.Name))
 		return nil
 	}
 
