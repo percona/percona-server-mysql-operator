@@ -87,8 +87,8 @@ spec:
 #      topologyKey: kubernetes.io/hostname
 #      whenUnsatisfiable: DoNotSchedule
 
-#    exposePrimary:
-#      enabled: false
+    exposePrimary:
+      enabled: true
 #      type: ClusterIP
 #      annotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
