@@ -18,6 +18,7 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/tls"
 )
@@ -282,7 +283,9 @@ func (r *PerconaServerMySQLReconciler) updateObjectLabels(ctx context.Context, o
 		objLabels = make(map[string]string)
 	}
 	shouldUpdate := false
-	for k, v := range cr.Labels() {
+	labels := cr.Labels("certificate", naming.ComponentTLS)
+	labels[naming.LabelManagedBy] = "cert-manager"
+	for k, v := range labels {
 		if objLabels[k] != v {
 			objLabels[k] = v
 			shouldUpdate = true

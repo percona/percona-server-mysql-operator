@@ -7,11 +7,12 @@ kind: StatefulSet
 metadata:
   generation: 1
   labels:
-    app.kubernetes.io/component: mysql
+    app.kubernetes.io/component: database
     app.kubernetes.io/instance: limits-no-requests
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.11.0
   name: limits-no-requests-mysql
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
@@ -25,31 +26,34 @@ spec:
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app.kubernetes.io/component: mysql
+      app.kubernetes.io/component: database
       app.kubernetes.io/instance: limits-no-requests
-      app.kubernetes.io/managed-by: percona-server-operator
-      app.kubernetes.io/name: percona-server
+      app.kubernetes.io/managed-by: percona-server-mysql-operator
+      app.kubernetes.io/name: mysql
       app.kubernetes.io/part-of: percona-server
+      app.kubernetes.io/version: v0.11.0
   serviceName: limits-no-requests-mysql
   template:
     metadata:
       labels:
-        app.kubernetes.io/component: mysql
+        app.kubernetes.io/component: database
         app.kubernetes.io/instance: limits-no-requests
-        app.kubernetes.io/managed-by: percona-server-operator
-        app.kubernetes.io/name: percona-server
+        app.kubernetes.io/managed-by: percona-server-mysql-operator
+        app.kubernetes.io/name: mysql
         app.kubernetes.io/part-of: percona-server
+        app.kubernetes.io/version: v0.11.0
     spec:
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
               matchLabels:
-                app.kubernetes.io/component: mysql
+                app.kubernetes.io/component: database
                 app.kubernetes.io/instance: limits-no-requests
-                app.kubernetes.io/managed-by: percona-server-operator
-                app.kubernetes.io/name: percona-server
+                app.kubernetes.io/managed-by: percona-server-mysql-operator
+                app.kubernetes.io/name: mysql
                 app.kubernetes.io/part-of: percona-server
+                app.kubernetes.io/version: v0.11.0
             topologyKey: kubernetes.io/hostname
       containers:
       - args:
@@ -242,11 +246,12 @@ kind: StatefulSet
 metadata:
   generation: 1
   labels:
-    app.kubernetes.io/component: orc
+    app.kubernetes.io/component: orchestrator
     app.kubernetes.io/instance: limits-no-requests
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.11.0
   name: limits-no-requests-orc
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
@@ -260,31 +265,34 @@ spec:
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app.kubernetes.io/component: orc
+      app.kubernetes.io/component: orchestrator
       app.kubernetes.io/instance: limits-no-requests
-      app.kubernetes.io/managed-by: percona-server-operator
-      app.kubernetes.io/name: percona-server
+      app.kubernetes.io/managed-by: percona-server-mysql-operator
+      app.kubernetes.io/name: orchestrator
       app.kubernetes.io/part-of: percona-server
+      app.kubernetes.io/version: v0.11.0
   serviceName: limits-no-requests-orc
   template:
     metadata:
       labels:
-        app.kubernetes.io/component: orc
+        app.kubernetes.io/component: orchestrator
         app.kubernetes.io/instance: limits-no-requests
-        app.kubernetes.io/managed-by: percona-server-operator
-        app.kubernetes.io/name: percona-server
+        app.kubernetes.io/managed-by: percona-server-mysql-operator
+        app.kubernetes.io/name: orchestrator
         app.kubernetes.io/part-of: percona-server
+        app.kubernetes.io/version: v0.11.0
     spec:
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
               matchLabels:
-                app.kubernetes.io/component: orc
+                app.kubernetes.io/component: orchestrator
                 app.kubernetes.io/instance: limits-no-requests
-                app.kubernetes.io/managed-by: percona-server-operator
-                app.kubernetes.io/name: percona-server
+                app.kubernetes.io/managed-by: percona-server-mysql-operator
+                app.kubernetes.io/name: orchestrator
                 app.kubernetes.io/part-of: percona-server
+                app.kubernetes.io/version: v0.11.0
             topologyKey: kubernetes.io/hostname
       containers:
       - env:
@@ -307,7 +315,7 @@ spec:
           periodSeconds: 5
           successThreshold: 1
           timeoutSeconds: 3
-        name: orc
+        name: orchestrator
         ports:
         - containerPort: 3000
           name: web
@@ -375,7 +383,7 @@ spec:
       - command:
         - /opt/percona-server-mysql-operator/ps-init-entrypoint.sh
         imagePullPolicy: Always
-        name: orc-init
+        name: orchestrator-init
         resources: {}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File

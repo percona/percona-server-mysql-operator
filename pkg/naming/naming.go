@@ -3,18 +3,6 @@ package naming
 const (
 	perconaPrefix      = "percona.com/"
 	mysqlPerconaPrefix = "mysql.percona.com/"
-
-	kubernetesPrefix = "app.kubernetes.io/"
-)
-
-const (
-	LabelName      = kubernetesPrefix + "name"
-	LabelInstance  = kubernetesPrefix + "instance"
-	LabelManagedBy = kubernetesPrefix + "managed-by"
-	LabelPartOf    = kubernetesPrefix + "part-of"
-	LabelComponent = kubernetesPrefix + "component"
-
-	LabelOperatorVersion = kubernetesPrefix + "version"
 )
 
 const (
@@ -51,11 +39,3 @@ const (
 	AnnotationPasswordsUpdated AnnotationKey = perconaPrefix + "passwords-updated"
 	AnnotationLastConfigHash   AnnotationKey = perconaPrefix + "last-config-hash"
 )
-
-// Labels returns a minimal set of labels.
-func Labels() map[string]string {
-	return map[string]string{
-		LabelName:   "percona-server",
-		LabelPartOf: "percona-server",
-	}
-}

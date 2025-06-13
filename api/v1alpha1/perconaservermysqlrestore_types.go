@@ -18,6 +18,8 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -75,4 +77,9 @@ type PerconaServerMySQLRestoreList struct {
 // Registers PerconaServerMySQLRestore types with the SchemeBuilder.
 func init() {
 	SchemeBuilder.Register(&PerconaServerMySQLRestore{}, &PerconaServerMySQLRestoreList{})
+}
+
+// Labels returns a standardized set of labels for the PerconaServerMySQLRestore custom resource.
+func (cr *PerconaServerMySQLRestore) Labels(name, component string) map[string]string {
+	return naming.Labels(name, cr.Name, "percona-server-restore", component)
 }

@@ -21,6 +21,8 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 // PerconaServerMySQLBackupSpec defines the desired state of PerconaServerMySQLBackup
@@ -149,6 +151,11 @@ type PerconaServerMySQLBackupList struct {
 // Initializes the scheme with PerconaServerMySQLBackup types.
 func init() {
 	SchemeBuilder.Register(&PerconaServerMySQLBackup{}, &PerconaServerMySQLBackupList{})
+}
+
+// Labels returns a standardized set of labels for the PerconaServerMySQLBackup custom resource.
+func (cr *PerconaServerMySQLBackup) Labels(name, component string) map[string]string {
+	return naming.Labels(name, cr.Name, "percona-server-backup", component)
 }
 
 // Hash returns FNV hash of the PerconaServerMySQLBackup UID
