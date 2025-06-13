@@ -5,6 +5,7 @@ metadata:
   labels:
     name: mysql-client
 spec:
+  terminationGracePeriodSeconds: 10
   containers:
   - name: mysql-client
     image: percona/percona-server:8.0.33
