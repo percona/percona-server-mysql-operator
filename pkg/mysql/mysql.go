@@ -486,7 +486,7 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 			cr,
 			secret,
 			ComponentName,
-			cr.Spec.PMM.MysqlParams)
+			cr.Spec.PMM.MySQLParams)
 
 		containers = append(containers, pmmC)
 	}
