@@ -12,7 +12,7 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: xtrabackup
     app.kubernetes.io/part-of: percona-server-restore
-    app.kubernetes.io/version: v0.10.0
+    app.kubernetes.io/version: v0.11.0
   name: xb-restore-gr-security-context-restore-minio
 spec:
   backoffLimit: 4

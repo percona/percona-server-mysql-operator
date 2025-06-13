@@ -57,7 +57,7 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.10.0
+    app.kubernetes.io/version: v0.11.0
   name: datadir-scaling-mysql-3
 spec:
   accessModes:
@@ -87,7 +87,7 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.10.0
+    app.kubernetes.io/version: v0.11.0
   name: datadir-scaling-mysql-4
 spec:
   accessModes:

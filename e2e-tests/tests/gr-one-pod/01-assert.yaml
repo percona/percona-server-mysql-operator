@@ -24,7 +24,7 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: router
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.10.0
+    app.kubernetes.io/version: v0.11.0
   name: gr-one-pod-router
 spec:
   replicas: 1

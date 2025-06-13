@@ -12,7 +12,7 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.10.0
+    app.kubernetes.io/version: v0.11.0
   name: limits-no-limits-mysql
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
@@ -31,7 +31,7 @@ spec:
       app.kubernetes.io/managed-by: percona-server-mysql-operator
       app.kubernetes.io/name: mysql
       app.kubernetes.io/part-of: percona-server
-      app.kubernetes.io/version: v0.10.0
+      app.kubernetes.io/version: v0.11.0
   serviceName: limits-no-limits-mysql
   template:
     metadata:
@@ -41,7 +41,7 @@ spec:
         app.kubernetes.io/managed-by: percona-server-mysql-operator
         app.kubernetes.io/name: mysql
         app.kubernetes.io/part-of: percona-server
-        app.kubernetes.io/version: v0.10.0
+        app.kubernetes.io/version: v0.11.0
     spec:
       affinity:
         podAntiAffinity:
@@ -53,7 +53,7 @@ spec:
                 app.kubernetes.io/managed-by: percona-server-mysql-operator
                 app.kubernetes.io/name: mysql
                 app.kubernetes.io/part-of: percona-server
-                app.kubernetes.io/version: v0.10.0
+                app.kubernetes.io/version: v0.11.0
             topologyKey: kubernetes.io/hostname
       containers:
       - args:
@@ -251,7 +251,7 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.10.0
+    app.kubernetes.io/version: v0.11.0
   name: limits-no-limits-orc
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
@@ -270,7 +270,7 @@ spec:
       app.kubernetes.io/managed-by: percona-server-mysql-operator
       app.kubernetes.io/name: orchestrator
       app.kubernetes.io/part-of: percona-server
-      app.kubernetes.io/version: v0.10.0
+      app.kubernetes.io/version: v0.11.0
   serviceName: limits-no-limits-orc
   template:
     metadata:
@@ -280,7 +280,7 @@ spec:
         app.kubernetes.io/managed-by: percona-server-mysql-operator
         app.kubernetes.io/name: orchestrator
         app.kubernetes.io/part-of: percona-server
-        app.kubernetes.io/version: v0.10.0
+        app.kubernetes.io/version: v0.11.0
     spec:
       affinity:
         podAntiAffinity:
@@ -292,7 +292,7 @@ spec:
                 app.kubernetes.io/managed-by: percona-server-mysql-operator
                 app.kubernetes.io/name: orchestrator
                 app.kubernetes.io/part-of: percona-server
-                app.kubernetes.io/version: v0.10.0
+                app.kubernetes.io/version: v0.11.0
             topologyKey: kubernetes.io/hostname
       containers:
       - env:
