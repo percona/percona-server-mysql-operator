@@ -1,0 +1,78 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  creationTimestamp: null
+  labels:
+    app.kubernetes.io/component: xtrabackup
+    app.kubernetes.io/instance: cluster
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: xb-backup-minio
+  namespace: job-ns
+spec:
+  backoffLimit: 6
+  completions: 1
+  parallelism: 1
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app.kubernetes.io/component: xtrabackup
+        app.kubernetes.io/instance: cluster
+        app.kubernetes.io/managed-by: percona-server-operator
+        app.kubernetes.io/name: percona-server
+        app.kubernetes.io/part-of: percona-server
+    spec:
+      containers:
+      - command:
+        - /opt/percona/run-backup.sh
+        env:
+        - name: BACKUP_NAME
+          value: backup
+        - name: BACKUP_DEST
+          value: destination
+        - name: VERIFY_TLS
+          value: "true"
+        image: perconalab/percona-server-mysql-operator:main-backup
+        imagePullPolicy: Always
+        name: xtrabackup
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /var/lib/mysql
+          name: datadir
+        - mountPath: /etc/mysql/mysql-tls-secret
+          name: tls
+      dnsPolicy: ClusterFirst
+      initContainers:
+      - command:
+        - /opt/percona-server-mysql-operator/ps-init-entrypoint.sh
+        image: init-image
+        imagePullPolicy: Always
+        name: xtrabackup-init
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+      restartPolicy: Never
+      runtimeClassName: runtime-class-name
+      setHostnameAsFQDN: true
+      shareProcessNamespace: true
+      volumes:
+      - emptyDir: {}
+        name: bin
+      - emptyDir: {}
+        name: datadir
+      - name: users
+        secret:
+          secretName: cluster1-secrets
+      - name: tls
+        secret:
+          secretName: cluster1-ssl
+status: {}
