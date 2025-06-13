@@ -2,18 +2,17 @@ package haproxy
 
 import (
 	"fmt"
-	"strconv"
-
+	"github.com/percona/percona-server-mysql-operator/pkg/pmm"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"strconv"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
-	"github.com/percona/percona-server-mysql-operator/pkg/pmm"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
@@ -261,13 +260,13 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 		haproxyContainer(cr),
 		mysqlMonitContainer(cr),
 	}
-	if cr.PMMEnabled(secret) {
-		pmmC := pmm.Container(cr, secret, ComponentName)
 
-		pmmC.Env = append(pmmC.Env, corev1.EnvVar{
-			Name:  "PMM_ADMIN_CUSTOM_PARAMS",
-			Value: "--listen-port=" + strconv.Itoa(PortPMMStats),
-		})
+	if cr.PMMEnabled(secret) {
+		pmmC := pmm.Container(
+			cr,
+			secret,
+			ComponentName,
+			"--listen-port="+strconv.Itoa(PortPMMStats))
 		pmmC.Ports = append(pmmC.Ports, corev1.ContainerPort{ContainerPort: PortPMMStats})
 
 		containers = append(containers, pmmC)
