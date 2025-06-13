@@ -28,6 +28,7 @@ import (
 	gs "github.com/onsi/gomega/gstruct"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -627,6 +628,184 @@ var _ = Describe("Reconcile Binlog Server", Ordered, func() {
 
 			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(sts), sts)
 			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+})
+
+var _ = Describe("PVC Resizing", Ordered, func() {
+	ctx := context.Background()
+
+	const crName = "pvc-resize"
+	const ns = crName
+	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      crName,
+			Namespace: ns,
+		},
+	}
+
+	BeforeAll(func() {
+		By("Creating the Namespace to perform the tests")
+		err := k8sClient.Create(ctx, namespace)
+		Expect(err).To(Not(HaveOccurred()))
+	})
+
+	AfterAll(func() {
+		By("Deleting the Namespace to perform the tests")
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	Context("Happy path PVC resizing", Ordered, func() {
+		cr, err := readDefaultCR(crName, ns)
+
+		It("should read default cr.yaml", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		cr.Spec.VolumeExpansionEnabled = true
+		originalSize := cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+
+		It("should create PerconaServerMySQL", func() {
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+		})
+
+		It("should reconcile to create StatefulSet", func() {
+			_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		sts := &appsv1.StatefulSet{}
+		It("should create MySQL StatefulSet", func() {
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      cr.Name + "-mysql",
+					Namespace: cr.Namespace,
+				}, sts)
+				return err == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+		})
+
+		It("should create StorageClass that supports volume expansion", func() {
+			allowVolumeExpansion := true
+			sc := &storagev1.StorageClass{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-storage-class",
+				},
+				Provisioner:          "kubernetes.io/no-provisioner",
+				AllowVolumeExpansion: &allowVolumeExpansion,
+			}
+			Expect(k8sClient.Create(ctx, sc)).Should(Succeed())
+		})
+
+		It("should create MySQL PVCs", func() {
+			exposer := mysql.Exposer(*cr)
+			for _, claim := range sts.Spec.VolumeClaimTemplates {
+				if claim.Name != "datadir" {
+					continue
+				}
+				for i := 0; i < int(*sts.Spec.Replicas); i++ {
+					pvc := claim.DeepCopy()
+					pvc.Labels = exposer.Labels()
+					pvc.Name = fmt.Sprintf("%s-%s-%d", claim.Name, sts.Name, i)
+					pvc.Namespace = ns
+					pvc.Spec.VolumeName = fmt.Sprintf("pv-%s-%d", sts.Name, i)
+					storageClassName := "test-storage-class"
+					pvc.Spec.StorageClassName = &storageClassName
+					Expect(k8sClient.Create(ctx, pvc)).Should(Succeed())
+
+					Eventually(func() bool {
+						err := k8sClient.Get(ctx, client.ObjectKeyFromObject(pvc), pvc)
+						if err != nil {
+							return false
+						}
+						pvc.Status.Phase = corev1.ClaimBound
+						pvc.Status.Capacity = corev1.ResourceList{
+							corev1.ResourceStorage: originalSize,
+						}
+						return k8sClient.Status().Update(ctx, pvc) == nil
+					}, time.Second*10, time.Millisecond*100).Should(BeTrue())
+				}
+			}
+		})
+
+		It("should create MySQL pods", func() {
+			exposer := mysql.Exposer(*cr)
+			for i := 0; i < int(*sts.Spec.Replicas); i++ {
+				pod := &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      fmt.Sprintf("%s-%d", sts.Name, i),
+						Namespace: ns,
+						Labels:    exposer.Labels(),
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "mysql",
+								Image: "mysql:8.0",
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, pod)).Should(Succeed())
+			}
+		})
+
+		When("volume expansion is requested", func() {
+			newSize := resource.MustParse("10Gi")
+
+			It("should update the CR with larger storage size", func() {
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, crNamespacedName, cr)
+					return err == nil
+				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+				cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = newSize
+				Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+			})
+
+			It("should trigger PVC resize when reconcilePersistentVolumes is called", func() {
+				err := reconciler().reconcilePersistentVolumes(ctx, cr)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should set PVC resize annotation on CR", func() {
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, crNamespacedName, cr)
+					if err != nil {
+						return false
+					}
+					annotations := cr.GetAnnotations()
+					_, exists := annotations[string(naming.AnnotationPVCResizeInProgress)]
+					return exists
+				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+			})
+
+			It("should update PVC specs with new size", func() {
+				pvcList := &corev1.PersistentVolumeClaimList{}
+				Eventually(func() bool {
+					err := k8sClient.List(ctx, pvcList, &client.ListOptions{
+						Namespace:     cr.Namespace,
+						LabelSelector: labels.SelectorFromSet(mysql.MatchLabels(cr)),
+					})
+					if err != nil {
+						return false
+					}
+
+					matchingPVCs := 0
+					for _, pvc := range pvcList.Items {
+						if !strings.HasPrefix(pvc.Name, "datadir-") {
+							continue
+						}
+						requestedSize := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+						if requestedSize.Cmp(newSize) == 0 {
+							matchingPVCs++
+						}
+					}
+					return matchingPVCs >= 3
+				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+			})
 		})
 	})
 })
