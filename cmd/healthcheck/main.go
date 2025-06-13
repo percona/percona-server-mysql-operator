@@ -18,33 +18,16 @@ import (
 	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
-	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 func main() {
-	fullClusterCrash, err := fileExists("/var/lib/mysql/full-cluster-crash")
-	if err != nil {
-		log.Fatalf("check /var/lib/mysql/full-cluster-crash: %s", err)
-	}
-	if fullClusterCrash {
+	if isManualRecovery() {
 		os.Exit(0)
 	}
 
-	manualRecovery, err := fileExists("/var/lib/mysql/sleep-forever")
+	mysqlState, err := getMySQLState()
 	if err != nil {
-		log.Fatalf("check /var/lib/mysql/sleep-forever: %s", err)
-	}
-	if manualRecovery {
-		os.Exit(0)
-	}
-
-	stateFilePath, ok := os.LookupEnv(naming.EnvMySQLStateFile)
-	if !ok {
-		log.Fatalln("MYSQL_STATE_FILE env variable is required")
-	}
-	mysqlState, err := os.ReadFile(stateFilePath)
-	if err != nil {
-		log.Fatalf("read mysql state: %s", err)
+		log.Fatalf("failed to get MySQL state: %v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -52,10 +35,16 @@ func main() {
 
 	switch os.Args[1] {
 	case "readiness":
-		if string(mysqlState) != string(state.MySQLReady) {
+		if mysqlState != string(state.MySQLReady) {
 			log.Println("MySQL state is not ready...")
 			os.Exit(1)
 		}
+
+		// mysqld must be up and running during crash recovery
+		if isFullClusterCrash() {
+			os.Exit(0)
+		}
+
 		switch os.Getenv("CLUSTER_TYPE") {
 		case "async":
 			if err := checkReadinessAsync(ctx); err != nil {
@@ -67,7 +56,11 @@ func main() {
 			}
 		}
 	case "liveness":
-		if string(mysqlState) == string(state.MySQLStartup) {
+		if isFullClusterCrash() {
+			os.Exit(0)
+		}
+
+		if mysqlState == string(state.MySQLStartup) {
 			log.Println("MySQL is starting up, not killing it...")
 			os.Exit(0)
 		}
