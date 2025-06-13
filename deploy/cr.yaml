@@ -105,7 +105,7 @@ spec:
         resources:
           requests:
             storage: 2G
-
+    gracePeriod: 600
 #    configuration: |
 #      max_connections=250
 #      innodb_buffer_pool_size={{containerMemoryLimit * 3/4}}
@@ -178,6 +178,8 @@ spec:
 #        periodSeconds: 5
 #        failureThreshold: 3
 #        successThreshold: 1
+
+      gracePeriod: 600
 
 #      configuration: |
 #
@@ -287,6 +289,8 @@ spec:
 #        topologyKey: kubernetes.io/hostname
 #        whenUnsatisfiable: DoNotSchedule
 
+      gracePeriod: 600
+
 #      configuration: |
 #        [default]
 #        logging_folder=/tmp/router/log
@@ -346,6 +350,8 @@ spec:
 #        rack: rack-22
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
+
+    gracePeriod: 600
 
     resources:
       requests:
