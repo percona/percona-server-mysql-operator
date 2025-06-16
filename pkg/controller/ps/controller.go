@@ -367,7 +367,7 @@ func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv
 }
 
 func (r *PerconaServerMySQLReconciler) deleteMySQLPvc(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	log := logf.FromContext(ctx).WithName("deleteMySQLPvc")
+	log := logf.FromContext(ctx)
 	log.Info("Starting PVC and secret deletion for MySQL cluster", "cluster", cr.Name, "finilizer", naming.FinalizerDeleteMySQLPvc)
 
 	exposer := mysql.Exposer(*cr)

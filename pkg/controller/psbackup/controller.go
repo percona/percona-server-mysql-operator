@@ -214,7 +214,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 }
 
 func (r *PerconaServerMySQLBackupReconciler) isBackupJobRunning(ctx context.Context, job *batchv1.Job) (bool, error) {
-	log := logf.FromContext(ctx).WithName("isBackupJobRunning")
+	log := logf.FromContext(ctx)
 	if len(job.Spec.Template.Spec.Containers) == 0 {
 		return false, nil
 	}
