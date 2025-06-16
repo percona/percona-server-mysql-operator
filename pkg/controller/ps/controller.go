@@ -472,6 +472,9 @@ func (r *PerconaServerMySQLReconciler) validate(ctx context.Context, cr *apiv1al
 }
 
 func validateClusterType(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if cr.Spec.Pause {
+		return nil
+	}
 	sts := new(appsv1.StatefulSet)
 	if err := cl.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts); err != nil {
 		if k8serrors.IsNotFound(err) {
