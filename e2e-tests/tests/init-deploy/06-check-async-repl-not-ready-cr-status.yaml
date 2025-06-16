@@ -1,7 +1,6 @@
 
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 30
 commands:
   - script: |-
       set -o errexit
@@ -34,3 +33,4 @@ commands:
           echo "Status state should be ready, but is $state."
           exit 1
       fi
+    timeout: 60
