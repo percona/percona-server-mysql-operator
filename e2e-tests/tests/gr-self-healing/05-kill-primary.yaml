@@ -1,18 +1,12 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 30
+
 commands:
-  - script: |-
+  - timeout: 720
+    script: |-
       set -o errexit
       set -o xtrace
 
       source ../../functions
 
-      init_pod="$(get_primary_from_group_replication)"
-      kill_pods "${NAMESPACE}" "pod" "$init_pod" "" "primary"
-      sleep 10 # wait a bit for pod to be killed
-
-      if [ "$init_pod" == "$(get_primary_from_group_replication)" ]; then
-          echo "primary pod was not killed! something went wrong."
-          exit 1
-      fi
+      check_primary_chaos "kill" ${NAMESPACE} $(get_primary_from_group_replication)
