@@ -1096,7 +1096,7 @@ func (r *PerconaServerMySQLReconciler) rescanClusterIfNeeded(ctx context.Context
 
 	log.Info("Cluster rescan started", "pod", pod.Name, "cluster", cr.InnoDBClusterName())
 
-	err = k8s.DeannotateObject(ctx, r.Client, cr, string(naming.AnnotationRescanNeeded))
+	err = k8s.DeannotateObject(ctx, r.Client, cr, naming.AnnotationRescanNeeded)
 	if err != nil {
 		return errors.Wrap(err, "remove rescan-needed annotation")
 	}

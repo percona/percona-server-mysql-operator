@@ -284,8 +284,8 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 	}
 
 	if rescanNeeded {
-		err := k8s.AnnotateObject(ctx, r.Client, cr, map[string]string{
-			string(naming.AnnotationRescanNeeded): "true",
+		err := k8s.AnnotateObject(ctx, r.Client, cr, map[naming.AnnotationKey]string{
+			naming.AnnotationRescanNeeded: "true",
 		})
 		if err != nil {
 			return false, errors.Wrap(err, "add rescan-needed annotation")
