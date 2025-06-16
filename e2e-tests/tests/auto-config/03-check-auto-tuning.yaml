@@ -8,6 +8,6 @@ commands:
 
       source ../../functions
 
-      RAM_SIZE=1073741824 # 1024Mi
+      RAM_SIZE_BYTES=4294967296 # 4Gi
 
-      check_auto_tuning ${RAM_SIZE}
+      check_auto_tuning ${RAM_SIZE_BYTES}

@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server-mysql-operator
-    app.kubernetes.io/version: v0.10.0
+    app.kubernetes.io/version: v0.11.0
   name: perconaservermysqlbackups.ps.percona.com
 spec:
   group: ps.percona.com
@@ -967,7 +967,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server-mysql-operator
-    app.kubernetes.io/version: v0.10.0
+    app.kubernetes.io/version: v0.11.0
   name: perconaservermysqlrestores.ps.percona.com
 spec:
   group: ps.percona.com
@@ -1926,7 +1926,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server
     app.kubernetes.io/part-of: percona-server-mysql-operator
-    app.kubernetes.io/version: v0.10.0
+    app.kubernetes.io/version: v0.11.0
   name: perconaservermysqls.ps.percona.com
 spec:
   group: ps.percona.com
@@ -11370,6 +11370,8 @@ spec:
                 type: array
               haproxy:
                 properties:
+                  imageID:
+                    type: string
                   ready:
                     format: int32
                     type: integer
@@ -11385,6 +11387,8 @@ spec:
                 type: string
               mysql:
                 properties:
+                  imageID:
+                    type: string
                   ready:
                     format: int32
                     type: integer
@@ -11398,6 +11402,8 @@ spec:
                 type: object
               orchestrator:
                 properties:
+                  imageID:
+                    type: string
                   ready:
                     format: int32
                     type: integer
@@ -11413,6 +11419,8 @@ spec:
                 type: string
               router:
                 properties:
+                  imageID:
+                    type: string
                   ready:
                     format: int32
                     type: integer
@@ -11677,7 +11685,7 @@ spec:
               fieldPath: metadata.namespace
         - name: DISABLE_TELEMETRY
           value: "false"
-        image: percona/percona-server-mysql-operator:0.10.0
+        image: perconalab/percona-server-mysql-operator:main
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
