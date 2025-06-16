@@ -9458,6 +9458,8 @@ spec:
                 type: array
               haproxy:
                 properties:
+                  imageID:
+                    type: string
                   ready:
                     format: int32
                     type: integer
@@ -9473,6 +9475,8 @@ spec:
                 type: string
               mysql:
                 properties:
+                  imageID:
+                    type: string
                   ready:
                     format: int32
                     type: integer
@@ -9486,6 +9490,8 @@ spec:
                 type: object
               orchestrator:
                 properties:
+                  imageID:
+                    type: string
                   ready:
                     format: int32
                     type: integer
@@ -9501,6 +9507,8 @@ spec:
                 type: string
               router:
                 properties:
+                  imageID:
+                    type: string
                   ready:
                     format: int32
                     type: integer
