@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"regexp"
@@ -46,8 +47,9 @@ func (m *mysqlsh) getURI() string {
 	if err != nil {
 		return ""
 	}
+	escapedPass := url.QueryEscape(operatorPass)
 
-	return fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, m.host)
+	return fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, escapedPass, m.host)
 }
 
 func (m *mysqlsh) run(ctx context.Context, cmd string) (bytes.Buffer, bytes.Buffer, error) {

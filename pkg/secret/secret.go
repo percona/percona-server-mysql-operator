@@ -44,7 +44,8 @@ const (
 	passwordMinLen = 16
 	passSymbols    = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
 		"abcdefghijklmnopqrstuvwxyz" +
-		"0123456789"
+		"0123456789" +
+		"!$%&()*+,-.<=>?@[]^_{}~"
 )
 
 var SecretUsers = []apiv1alpha1.SystemUser{
