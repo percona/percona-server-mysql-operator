@@ -1886,7 +1886,7 @@ spec:
                           type: object
                         azure:
                           properties:
-                            containerName:
+                            container:
                               type: string
                             credentialsSecret:
                               type: string
@@ -1897,7 +1897,7 @@ spec:
                             storageClass:
                               type: string
                           required:
-                          - containerName
+                          - container
                           - credentialsSecret
                           type: object
                         containerSecurityContext:
@@ -6413,6 +6413,8 @@ spec:
                     type: string
                   imagePullPolicy:
                     type: string
+                  mysqlParams:
+                    type: string
                   resources:
                     properties:
                       claims:
@@ -6449,8 +6451,6 @@ spec:
                   runtimeClassName:
                     type: string
                   serverHost:
-                    type: string
-                  serverUser:
                     type: string
                 required:
                 - image

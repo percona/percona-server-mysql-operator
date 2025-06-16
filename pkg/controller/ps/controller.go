@@ -415,6 +415,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 ) error {
 	log := logf.FromContext(ctx).WithName("doReconcile")
 
+	if err := r.validate(ctx, cr); err != nil {
+		return errors.Wrap(err, "failed to validate")
+	}
 	if err := r.reconcileFullClusterCrash(ctx, cr); err != nil {
 		return errors.Wrap(err, "failed to check full cluster crash")
 	}
@@ -459,6 +462,60 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	}
 
 	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) validate(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if err := validateClusterType(ctx, r.Client, cr); err != nil {
+		return errors.Wrap(err, "validate cluster type")
+	}
+	return nil
+}
+
+func validateClusterType(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if cr.Spec.Pause {
+		return nil
+	}
+	sts := new(appsv1.StatefulSet)
+	if err := cl.Get(ctx, types.NamespacedName{Name: mysql.Name(cr), Namespace: cr.Namespace}, sts); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return nil
+		}
+		return errors.Wrap(err, "failed to get mysql sts")
+	}
+
+	containerName := mysql.AppName
+	var container *corev1.Container
+	for _, c := range sts.Spec.Template.Spec.Containers {
+		if c.Name != containerName {
+			continue
+		}
+
+		container = &c
+		break
+	}
+	if container == nil {
+		return errors.New("failed to get mysql container")
+	}
+
+	currentClusterType := ""
+	for _, e := range container.Env {
+		if e.Name != naming.EnvMySQLClusterType {
+			continue
+		}
+
+		currentClusterType = e.Value
+		break
+	}
+
+	if currentClusterType == "" {
+		return errors.New("failed to get mysql cluster type")
+	}
+
+	if cr.Spec.MySQL.ClusterType == apiv1alpha1.ClusterType(currentClusterType) {
+		return nil
+	}
+
+	return errors.Errorf("cluster type cannot be changed from %s to %s on a running cluster", currentClusterType, cr.Spec.MySQL.ClusterType)
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {

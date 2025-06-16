@@ -135,7 +135,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}
 
-	return &appsv1.StatefulSet{
+	sts := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
 			Kind:       "StatefulSet",
@@ -150,9 +150,8 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
-			ServiceName:          ServiceName(cr),
-			VolumeClaimTemplates: volumeClaimTemplates(spec),
-			UpdateStrategy:       updateStrategy(cr),
+			ServiceName:    ServiceName(cr),
+			UpdateStrategy: updateStrategy(cr),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
@@ -277,6 +276,31 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 			},
 		},
 	}
+
+	if cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim != nil {
+		sts.Spec.VolumeClaimTemplates = append(sts.Spec.VolumeClaimTemplates, volumeClaimTemplates(spec)...)
+		return sts
+	}
+
+	var dataVolume *corev1.Volume
+	switch {
+	case spec.VolumeSpec.HostPath != nil:
+		dataVolume = &corev1.Volume{
+			Name:         DataVolumeName,
+			VolumeSource: corev1.VolumeSource{HostPath: spec.VolumeSpec.HostPath},
+		}
+	case spec.VolumeSpec.EmptyDir != nil:
+		dataVolume = &corev1.Volume{
+			Name:         DataVolumeName,
+			VolumeSource: corev1.VolumeSource{EmptyDir: spec.VolumeSpec.EmptyDir},
+		}
+	}
+
+	if dataVolume != nil {
+		sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes, *dataVolume)
+	}
+
+	return sts
 }
 
 func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrategy {
@@ -297,9 +321,14 @@ func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdate
 }
 
 func volumeClaimTemplates(spec *apiv1alpha1.MySQLSpec) []corev1.PersistentVolumeClaim {
-	pvcs := []corev1.PersistentVolumeClaim{
-		k8s.PVC(DataVolumeName, spec.VolumeSpec),
+	var pvcs []corev1.PersistentVolumeClaim
+
+	if spec.VolumeSpec.PersistentVolumeClaim == nil {
+		return pvcs
 	}
+
+	pvcs = append(pvcs, k8s.PVC(DataVolumeName, spec.VolumeSpec))
+
 	for _, p := range spec.SidecarPVCs {
 		pvcs = append(pvcs, corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{Name: p.Name},
@@ -481,7 +510,13 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 	}
 
 	if cr.PMMEnabled(secret) {
-		containers = append(containers, pmm.Container(cr, secret, AppName))
+		pmmC := pmm.Container(
+			cr,
+			secret,
+			AppName,
+			cr.Spec.PMM.MySQLParams)
+
+		containers = append(containers, pmmC)
 	}
 
 	return appendUniqueContainers(containers, cr.Spec.MySQL.Sidecars...)
@@ -516,7 +551,7 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			Value: string(cr.UID),
 		},
 		{
-			Name:  "CLUSTER_TYPE",
+			Name:  naming.EnvMySQLClusterType,
 			Value: string(cr.Spec.MySQL.ClusterType),
 		},
 		{
