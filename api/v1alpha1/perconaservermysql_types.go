@@ -197,8 +197,8 @@ func (s *PodSpec) GetInitImage() string {
 type PMMSpec struct {
 	Enabled                  bool                        `json:"enabled,omitempty"`
 	Image                    string                      `json:"image"`
+	MySQLParams              string                      `json:"mysqlParams,omitempty"`
 	ServerHost               string                      `json:"serverHost,omitempty"`
-	ServerUser               string                      `json:"serverUser,omitempty"`
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
@@ -332,7 +332,7 @@ func (b *BackupStorageGCSSpec) BucketAndPrefix() (string, string) {
 
 type BackupStorageAzureSpec struct {
 	// A container name is a valid DNS name that conforms to the Azure naming rules.
-	ContainerName BucketWithPrefix `json:"containerName"`
+	ContainerName BucketWithPrefix `json:"container"`
 
 	// A prefix is a sub-folder to the backups inside the container
 	Prefix string `json:"prefix,omitempty"`
@@ -747,7 +747,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 	}
 
 	var err error
-	cr.Spec.MySQL.VolumeSpec, err = reconcileVol(cr.Spec.MySQL.VolumeSpec)
+	cr.Spec.MySQL.VolumeSpec, err = cr.Spec.MySQL.VolumeSpec.validateVolume()
 	if err != nil {
 		return errors.Wrap(err, "reconcile mysql volumeSpec")
 	}
@@ -873,13 +873,34 @@ const (
 	BinVolumePath = "/opt/percona"
 )
 
-// reconcileVol validates and sets default values for a given VolumeSpec, ensuring it is properly defined.
-func reconcileVol(v *VolumeSpec) (*VolumeSpec, error) {
-	if v == nil || v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil {
-		return nil, errors.New("volumeSpec and it's internals should be specified")
+// validateVolume validates and sets default values for a given VolumeSpec, ensuring it is properly defined.
+func (v *VolumeSpec) validateVolume() (*VolumeSpec, error) {
+	if v == nil {
+		return nil, errors.New("volumeSpec provided is nil")
 	}
+
+	count := 0
+	if v.EmptyDir != nil {
+		count++
+	}
+	if v.HostPath != nil {
+		count++
+	}
+	if v.PersistentVolumeClaim != nil {
+		count++
+	}
+
+	if count == 0 {
+		return nil, errors.New("volumeSpec must specify at least one volume source")
+	}
+
+	if count > 1 {
+		return nil, errors.New("volumeSpec must specify at most one volume source — multiple sources set")
+	}
+
+	// if no PVC is defined, the following validations can be skipped.
 	if v.PersistentVolumeClaim == nil {
-		return nil, errors.New("pvc should be specified")
+		return v, nil
 	}
 	_, limits := v.PersistentVolumeClaim.Resources.Limits[corev1.ResourceStorage]
 	_, requests := v.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
