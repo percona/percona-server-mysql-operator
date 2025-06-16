@@ -14,7 +14,7 @@ spec:
       - name: mysql
         resources:
           limits:
-            memory: 1Gi
+            memory: 4Gi
       - name: xtrabackup
         ports:
         - containerPort: 6450
