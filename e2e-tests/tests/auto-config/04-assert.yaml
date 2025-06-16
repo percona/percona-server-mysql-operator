@@ -14,7 +14,7 @@ spec:
       - name: mysql
         resources:
           requests:
-            memory: 4Gi
+            memory: 5Gi
       - name: xtrabackup
       - name: pt-heartbeat
 status:
