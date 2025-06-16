@@ -23,8 +23,8 @@ require (
 	github.com/sjmudd/stopwatch v0.1.1
 	go.nhat.io/grpcmock v0.30.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/sync v0.14.0
-	golang.org/x/text v0.25.0
+	golang.org/x/sync v0.15.0
+	golang.org/x/text v0.26.0
 	google.golang.org/grpc v1.72.2
 	k8s.io/api v0.33.1
 	k8s.io/apiextensions-apiserver v0.33.1
@@ -122,7 +122,7 @@ require (
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/term v0.32.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
-	golang.org/x/tools v0.31.0 // indirect
+	golang.org/x/tools v0.33.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250303144028-a0af3efb3deb // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250407143221-ac9807e6c755 // indirect
