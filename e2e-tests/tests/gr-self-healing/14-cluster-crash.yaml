@@ -1,12 +1,11 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - script: |-
+  - timeout: 720
+    script: |-
       set -o errexit
       set -o xtrace
 
       source ../../functions
 
-      kill_pods "${NAMESPACE}" "label" "app.kubernetes.io/instance" "gr-self-healing" "cluster-crash"
-      sleep 30 # wait for crash
-    timeout: 40
+      check_primary_chaos "full-cluster-crash" ${NAMESPACE} $(get_primary_from_group_replication)
