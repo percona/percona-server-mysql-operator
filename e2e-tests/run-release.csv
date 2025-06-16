@@ -32,5 +32,6 @@ scheduled-backup
 service-per-pod
 sidecars
 smart-update
+storage
 tls-cert-manager
 users

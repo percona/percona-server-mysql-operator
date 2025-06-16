@@ -513,7 +513,7 @@ spec:
                     type: object
                   azure:
                     properties:
-                      containerName:
+                      container:
                         type: string
                       credentialsSecret:
                         type: string
@@ -524,7 +524,7 @@ spec:
                       storageClass:
                         type: string
                     required:
-                    - containerName
+                    - container
                     - credentialsSecret
                     type: object
                   containerSecurityContext:
