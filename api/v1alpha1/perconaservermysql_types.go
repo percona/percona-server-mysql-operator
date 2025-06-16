@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
 	"golang.org/x/text/cases"
@@ -193,8 +194,8 @@ func (s *PodSpec) GetInitImage() string {
 type PMMSpec struct {
 	Enabled                  bool                        `json:"enabled,omitempty"`
 	Image                    string                      `json:"image"`
+	MySQLParams              string                      `json:"mysqlParams,omitempty"`
 	ServerHost               string                      `json:"serverHost,omitempty"`
-	ServerUser               string                      `json:"serverUser,omitempty"`
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
@@ -479,6 +480,7 @@ type StatefulAppStatus struct {
 	Ready   int32            `json:"ready,omitempty"`
 	State   StatefulAppState `json:"state,omitempty"`
 	Version string           `json:"version,omitempty"`
+	ImageID string           `json:"imageID,omitempty"`
 }
 
 // PerconaServerMySQLStatus defines the observed state of PerconaServerMySQL
@@ -495,6 +497,10 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	Conditions     []metav1.Condition `json:"conditions,omitempty"`
 	// +optional
 	Host string `json:"host"`
+}
+
+func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {
+	return v.Must(v.NewVersion(s.MySQL.Version)).Compare(v.Must(v.NewVersion(ver)))
 }
 
 const ConditionInnoDBClusterBootstrapped string = "InnoDBClusterBootstrapped"
