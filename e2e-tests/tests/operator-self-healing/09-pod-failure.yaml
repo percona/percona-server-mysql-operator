@@ -1,12 +1,12 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 30
 commands:
-  - script: |-
+  - timeout: 60
+    script: |-
       set -o errexit
       set -o xtrace
 
       source ../../functions
 
-      failure_pod "${OPERATOR_NS:-$NAMESPACE}" "$(get_operator_pod)" "operator"
+      failure_pod "${OPERATOR_NS:-$NAMESPACE}" "$(get_operator_pod)" "chaos-pod-failure-operator"
       sleep 30 # wait for pod failure to happen

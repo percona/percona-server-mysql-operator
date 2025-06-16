@@ -1,12 +1,11 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 30
 commands:
-  - script: |-
+  - timeout: 720
+    script: |-
       set -o errexit
       set -o xtrace
 
       source ../../functions
 
-      failure_pod "${NAMESPACE}" "$(get_primary_from_group_replication)" "primary"
-      sleep 10 # wait a bit for pod to be killed
+      check_primary_chaos "failure" ${NAMESPACE} $(get_primary_from_group_replication)
