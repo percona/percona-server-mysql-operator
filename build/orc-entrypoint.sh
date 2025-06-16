@@ -41,16 +41,6 @@ if [ -f "$PATH_TO_SECRET/$TOPOLOGY_USER" ]; then
 	TOPOLOGY_PASSWORD=$(<"${PATH_TO_SECRET}/${TOPOLOGY_USER}")
 fi
 
-#set +o xtrace
-#temp=$(mktemp)
-#sed -r "s|^[#]?user=.*$|user=${TOPOLOGY_USER}|" "${ORC_CONF_PATH}/orc-topology.cnf" >"${temp}"
-#sed -r "s|^[#]?password=.*$|password=${TOPOLOGY_PASSWORD:-$ORC_TOPOLOGY_PASSWORD}|" "${ORC_CONF_PATH}/orc-topology.cnf" >"${temp}"
-#cat "${temp}" >"${ORC_CONF_PATH}/config/orc-topology.cnf"
-#rm "${temp}"
-#set -o xtrace
-#
-#exec "$@"
-
 set +o xtrace
 temp=$(mktemp)
 ESCAPED_PASSWORD=$(printf '%s' "${TOPOLOGY_PASSWORD:-$ORC_TOPOLOGY_PASSWORD}" | sed -e 's/[&\]/\\&/g')
