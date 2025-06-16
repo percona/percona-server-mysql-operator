@@ -110,7 +110,7 @@ spec:
           timeoutSeconds: 3
         resources:
           requests:
-            memory: 1G
+            memory: 2G
         startupProbe:
           exec:
             command:
