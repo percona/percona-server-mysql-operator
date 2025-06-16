@@ -52,7 +52,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLVersion(
 		return nil
 	}
 
-	re, err := regexp.Compile(`Ver (\d+\.\d+\.\d+)`)
+	re, err := regexp.Compile(`Ver (\d+\.\d+\.\d+(?:-\d+)?)`)
 	if err != nil {
 		return err
 	}
