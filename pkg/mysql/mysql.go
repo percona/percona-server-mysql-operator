@@ -511,7 +511,13 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 	}
 
 	if cr.PMMEnabled(secret) {
-		containers = append(containers, pmm.Container(cr, secret, ComponentName))
+		pmmC := pmm.Container(
+			cr,
+			secret,
+			ComponentName,
+			cr.Spec.PMM.MySQLParams)
+
+		containers = append(containers, pmmC)
 	}
 
 	return appendUniqueContainers(containers, cr.Spec.MySQL.Sidecars...)

@@ -28,7 +28,7 @@ func TestContainer(t *testing.T) {
 		},
 	}
 
-	container := Container(cr, secret, "mysql")
+	container := Container(cr, secret, "mysql", "")
 
 	assert.Equal(t, "pmm-client", container.Name)
 	assert.Equal(t, "percona/pmm-client:latest", container.Image)

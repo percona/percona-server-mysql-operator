@@ -194,8 +194,8 @@ func (s *PodSpec) GetInitImage() string {
 type PMMSpec struct {
 	Enabled                  bool                        `json:"enabled,omitempty"`
 	Image                    string                      `json:"image"`
+	MySQLParams              string                      `json:"mysqlParams,omitempty"`
 	ServerHost               string                      `json:"serverHost,omitempty"`
-	ServerUser               string                      `json:"serverUser,omitempty"`
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
@@ -329,7 +329,7 @@ func (b *BackupStorageGCSSpec) BucketAndPrefix() (string, string) {
 
 type BackupStorageAzureSpec struct {
 	// A container name is a valid DNS name that conforms to the Azure naming rules.
-	ContainerName BucketWithPrefix `json:"containerName"`
+	ContainerName BucketWithPrefix `json:"container"`
 
 	// A prefix is a sub-folder to the backups inside the container
 	Prefix string `json:"prefix,omitempty"`
