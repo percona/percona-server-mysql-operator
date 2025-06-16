@@ -29,7 +29,7 @@ commands:
           | yq eval '.spec.backup.storages.gcp-cs.gcs.prefix="ps"' - \
           | yq eval '.spec.backup.storages.azure-blob.type="azure"' - \
           | yq eval ".spec.backup.storages.azure-blob.verifyTLS=true" - \
-          | yq eval '.spec.backup.storages.azure-blob.azure.containerName="operator-testing"' - \
+          | yq eval '.spec.backup.storages.azure-blob.azure.container="operator-testing"' - \
           | yq eval '.spec.backup.storages.azure-blob.azure.credentialsSecret="azure-secret"' - \
           | yq eval '.spec.backup.storages.azure-blob.azure.prefix="ps"' - \
           | yq eval '.spec.mysql.clusterType="group-replication"' - \
