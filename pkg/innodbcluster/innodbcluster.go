@@ -11,7 +11,11 @@ var ErrMemberNotFound = errors.New("member not found")
 type ClusterStatus string
 
 const (
-	ClusterStatusOK ClusterStatus = "OK"
+	ClusterStatusOK                   ClusterStatus = "OK"
+	ClusterStatusOKPartial            ClusterStatus = "OK_PARTIAL"
+	ClusterStatusOKNoTolerance        ClusterStatus = "OK_NO_TOLERANCE"
+	ClusterStatusOKNoTolerancePartial ClusterStatus = "OK_NO_TOLERANCE_PARTIAL"
+	ClusterStatusOffline              ClusterStatus = "OFFLINE"
 )
 
 type MemberState string
