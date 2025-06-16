@@ -12,9 +12,11 @@ import (
 	"regexp"
 	"strings"
 
+	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	"github.com/sjmudd/stopwatch"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/util/retry"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
@@ -32,13 +34,19 @@ var sensitiveRegexp = regexp.MustCompile(":.*@")
 type mysqlsh struct {
 	clusterName string
 	host        string
+	version     *v.Version
 }
 
-func newShell(host string) *mysqlsh {
+func newShell(host string, version *v.Version) *mysqlsh {
 	return &mysqlsh{
 		clusterName: os.Getenv("INNODB_CLUSTER_NAME"),
+		version:     version,
 		host:        host,
 	}
+}
+
+func (m *mysqlsh) compareVersionWith(ver string) int {
+	return m.version.Compare(v.Must(v.NewVersion(ver)))
 }
 
 func (m *mysqlsh) getURI() string {
@@ -55,7 +63,7 @@ func (m *mysqlsh) run(ctx context.Context, cmd string) (bytes.Buffer, bytes.Buff
 
 	log.Printf("Running %s", sensitiveRegexp.ReplaceAllString(cmd, ":*****@"))
 
-	c := exec.CommandContext(ctx, "mysqlsh", "--no-wizard", "--uri", m.getURI(), "-e", cmd)
+	c := exec.CommandContext(ctx, "mysqlsh", "--no-wizard", "--js", "--uri", m.getURI(), "-e", cmd)
 
 	logWriter := util.NewSensitiveWriter(log.Writer(), sensitiveRegexp)
 
@@ -64,13 +72,13 @@ func (m *mysqlsh) run(ctx context.Context, cmd string) (bytes.Buffer, bytes.Buff
 
 	err := c.Run()
 
-	return stdoutb, stderrb, err
+	return stdoutb, stderrb, errors.Wrapf(err, "stderr: %s", stderrb.String())
 }
 
 func (m *mysqlsh) clusterStatus(ctx context.Context) (innodbcluster.Status, error) {
 	var stdoutb, stderrb bytes.Buffer
 
-	args := []string{"--result-format", "json", "--uri", m.getURI(), "--cluster", "--", "cluster", "status"}
+	args := []string{"--result-format", "json", "--uri", m.getURI(), "--cluster", "--js", "--", "cluster", "status"}
 
 	c := exec.CommandContext(ctx, "mysqlsh", args...)
 	c.Stdout = &stdoutb
@@ -89,6 +97,21 @@ func (m *mysqlsh) clusterStatus(ctx context.Context) (innodbcluster.Status, erro
 	return status, nil
 }
 
+func (m *mysqlsh) rescanCluster(ctx context.Context) error {
+	var cmd string
+	if m.compareVersionWith("8.4") >= 0 {
+		cmd = fmt.Sprintf("dba.getCluster('%s').rescan({'addUnmanaged': true, 'removeObsolete': true})", m.clusterName)
+	} else {
+		cmd = fmt.Sprintf("dba.getCluster('%s').rescan({'addInstances': 'auto', 'removeInstances': 'auto'})", m.clusterName)
+	}
+
+	if _, _, err := m.run(ctx, cmd); err != nil {
+		return errors.Wrap(err, "rescan cluster")
+	}
+
+	return nil
+}
+
 type SQLResult struct {
 	Error string              `json:"error,omitempty"`
 	Rows  []map[string]string `json:"rows,omitempty"`
@@ -98,7 +121,7 @@ func (m *mysqlsh) runSQL(ctx context.Context, sql string) (SQLResult, error) {
 	var stdoutb, stderrb bytes.Buffer
 
 	cmd := fmt.Sprintf("session.runSql('%s')", sql)
-	args := []string{"--uri", m.getURI(), "--json=raw", "--interactive", "--quiet-start", "2", "-e", cmd}
+	args := []string{"--uri", m.getURI(), "--js", "--json=raw", "--interactive", "--quiet-start", "2", "-e", cmd}
 
 	c := exec.CommandContext(ctx, "mysqlsh", args...)
 	c.Stdout = &stdoutb
@@ -149,7 +172,7 @@ func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) (string, erro
 	return "", nil
 }
 
-func updateGroupPeers(ctx context.Context, peers sets.Set[string]) error {
+func updateGroupPeers(ctx context.Context, peers sets.Set[string], version *v.Version) error {
 	fqdn, err := getFQDN(os.Getenv("SERVICE_NAME"))
 	if err != nil {
 		return errors.Wrap(err, "get FQDN")
@@ -157,7 +180,7 @@ func updateGroupPeers(ctx context.Context, peers sets.Set[string]) error {
 
 	for _, peer := range peers.UnsortedList() {
 		log.Printf("Connecting to peer %s", peer)
-		sh := newShell(peer)
+		sh := newShell(peer, version)
 
 		seeds, err := sh.getGroupSeeds(ctx)
 		if err != nil {
@@ -188,10 +211,16 @@ func updateGroupPeers(ctx context.Context, peers sets.Set[string]) error {
 	return nil
 }
 
-func (m *mysqlsh) configureLocalInstance(ctx context.Context) error {
-	_, _, err := m.run(ctx, fmt.Sprintf("dba.configureLocalInstance('%s', {'clearReadOnly': true})", m.getURI()))
-	if err != nil {
-		return errors.Wrap(err, "configure local instance")
+func (m *mysqlsh) configureInstance(ctx context.Context) error {
+	var cmd string
+	if m.compareVersionWith("8.4") >= 0 {
+		cmd = fmt.Sprintf("dba.configureInstance('%s')", m.getURI())
+	} else {
+		cmd = fmt.Sprintf("dba.configureLocalInstance('%s', {'clearReadOnly': true})", m.getURI())
+	}
+
+	if _, _, err := m.run(ctx, cmd); err != nil {
+		return errors.Wrap(err, "configure instance")
 	}
 
 	return nil
@@ -210,8 +239,23 @@ func (m *mysqlsh) createCluster(ctx context.Context) error {
 }
 
 func (m *mysqlsh) addInstance(ctx context.Context, instanceDef string) error {
-	_, _, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'waitRecovery': 3})", m.clusterName, instanceDef))
-	if err != nil {
+	var cmd string
+
+	if m.compareVersionWith("8.4") >= 0 {
+		cmd = fmt.Sprintf(
+			"dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'recoveryProgress': 2})",
+			m.clusterName,
+			instanceDef,
+		)
+	} else {
+		cmd = fmt.Sprintf(
+			"dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'waitRecovery': 3})",
+			m.clusterName,
+			instanceDef,
+		)
+	}
+
+	if _, _, err := m.run(ctx, cmd); err != nil {
 		return errors.Wrap(err, "add instance")
 	}
 
@@ -242,27 +286,18 @@ func (m *mysqlsh) removeInstance(ctx context.Context, instanceDef string, force 
 	return nil
 }
 
-func (m *mysqlsh) rescanCluster(ctx context.Context) error {
-	_, _, err := m.run(ctx, fmt.Sprintf("dba.getCluster('%s').rescan({'addInstances': 'auto', 'removeInstances': 'auto'})", m.clusterName))
-	if err != nil {
-		return errors.Wrap(err, "rescan cluster")
-	}
-
-	return nil
-}
-
-func connectToLocal(ctx context.Context) (*mysqlsh, error) {
+func connectToLocal(ctx context.Context, version *v.Version) (*mysqlsh, error) {
 	fqdn, err := getFQDN(os.Getenv("SERVICE_NAME"))
 	if err != nil {
 		return nil, errors.Wrap(err, "get FQDN")
 	}
 
-	return newShell(fqdn), nil
+	return newShell(fqdn, version), nil
 }
 
-func connectToCluster(ctx context.Context, peers sets.Set[string]) (*mysqlsh, error) {
+func connectToCluster(ctx context.Context, peers sets.Set[string], version *v.Version) (*mysqlsh, error) {
 	for _, peer := range sets.List(peers) {
-		shell := newShell(peer)
+		shell := newShell(peer, version)
 		stdout, stderr, err := shell.run(ctx, fmt.Sprintf("dba.getCluster('%s')", shell.clusterName))
 		if err != nil {
 			log.Printf("Failed get cluster from peer %s, stdout: %s stderr: %s", peer, stdout.String(), stderr.String())
@@ -275,8 +310,8 @@ func connectToCluster(ctx context.Context, peers sets.Set[string]) (*mysqlsh, er
 	return nil, errors.New("failed to open connection to cluster")
 }
 
-func handleFullClusterCrash(ctx context.Context) error {
-	localShell, err := connectToLocal(ctx)
+func handleFullClusterCrash(ctx context.Context, version *v.Version) error {
+	localShell, err := connectToLocal(ctx, version)
 	if err != nil {
 		return errors.Wrap(err, "connect to local")
 	}
@@ -296,6 +331,35 @@ func handleFullClusterCrash(ctx context.Context) error {
 	return nil
 }
 
+func getMySQLShellVersion(ctx context.Context) (*v.Version, error) {
+	re, err := regexp.Compile(`MySQL (\d+\.\d+\.\d+)`)
+	if err != nil {
+		return nil, err
+	}
+
+	var stdoutb, stderrb bytes.Buffer
+
+	c := exec.CommandContext(ctx, "mysqlsh", "--version")
+	c.Stdout = &stdoutb
+	c.Stderr = &stderrb
+
+	if err := c.Run(); err != nil {
+		return nil, errors.Wrapf(err, "run mysqlsh --version (stdout: %s, stderr: %s)", stdoutb.String(), stderrb.String())
+	}
+
+	f := re.FindSubmatch(stdoutb.Bytes())
+	if len(f) < 1 {
+		return nil, errors.Errorf("couldn't extract version information from mysqlsh --version (stdout: %s, stderr: %s)", stdoutb.String(), stderrb.String())
+	}
+
+	version, err := v.NewVersion(string(f[1]))
+	if err != nil {
+		return nil, errors.Wrap(err, "parse version")
+	}
+
+	return version, nil
+}
+
 func bootstrapGroupReplication(ctx context.Context) error {
 	timer := stopwatch.NewNamedStopwatch()
 	err := timer.Add("total")
@@ -309,14 +373,20 @@ func bootstrapGroupReplication(ctx context.Context) error {
 		log.Printf("bootstrap finished in %f seconds", timer.ElapsedSeconds("total"))
 	}()
 
-	log.Println("Bootstrap starting...")
+	log.Println("Starting bootstrap...")
 
-	localShell, err := connectToLocal(ctx)
+	mysqlshVer, err := getMySQLShellVersion(ctx)
+	if err != nil {
+		return errors.Wrap(err, "get mysqlsh version")
+	}
+	log.Println("mysql-shell version:", mysqlshVer)
+
+	localShell, err := connectToLocal(ctx, mysqlshVer)
 	if err != nil {
 		return errors.Wrap(err, "connect to local")
 	}
 
-	err = localShell.configureLocalInstance(ctx)
+	err = localShell.configureInstance(ctx)
 	if err != nil {
 		return err
 	}
@@ -328,7 +398,7 @@ func bootstrapGroupReplication(ctx context.Context) error {
 	}
 	log.Printf("peers: %v", sets.List(peers))
 
-	shell, err := connectToCluster(ctx, peers)
+	shell, err := connectToCluster(ctx, peers, mysqlshVer)
 	if err != nil {
 		log.Printf("Failed to connect to the cluster: %v", err)
 		if peers.Len() == 1 {
@@ -338,7 +408,7 @@ func bootstrapGroupReplication(ctx context.Context) error {
 			if err != nil {
 				if errors.Is(err, errRebootClusterFromCompleteOutage) {
 					log.Printf("Cluster already exists, we need to reboot")
-					if err := handleFullClusterCrash(ctx); err != nil {
+					if err := handleFullClusterCrash(ctx, mysqlshVer); err != nil {
 						return errors.Wrap(err, "handle full cluster crash")
 					}
 
@@ -349,13 +419,13 @@ func bootstrapGroupReplication(ctx context.Context) error {
 				}
 			}
 
-			shell, err = connectToCluster(ctx, peers)
+			shell, err = connectToCluster(ctx, peers, mysqlshVer)
 			if err != nil {
 				return errors.Wrap(err, "connect to the cluster")
 			}
 		} else {
 			log.Printf("Can't connect to any of the peers, we need to reboot")
-			if err := handleFullClusterCrash(ctx); err != nil {
+			if err := handleFullClusterCrash(ctx, mysqlshVer); err != nil {
 				return errors.Wrap(err, "handle full cluster crash")
 			}
 
@@ -377,7 +447,7 @@ func bootstrapGroupReplication(ctx context.Context) error {
 		if member.MemberRole == innodbcluster.MemberRolePrimary && member.MemberState != innodbcluster.MemberStateOnline {
 			log.Printf("Primary (%s) is not ONLINE. Starting full cluster crash recovery...", member.Address)
 
-			if err := handleFullClusterCrash(ctx); err != nil {
+			if err := handleFullClusterCrash(ctx, mysqlshVer); err != nil {
 				return errors.Wrap(err, "handle full cluster crash")
 			}
 
@@ -434,15 +504,20 @@ func bootstrapGroupReplication(ctx context.Context) error {
 		log.Printf("Instance (%s) state is %s", localShell.host, member.MemberState)
 	}
 
-	if err := updateGroupPeers(ctx, peers); err != nil {
+	if err := updateGroupPeers(ctx, peers, mysqlshVer); err != nil {
 		return err
 	}
 
 	if rescanNeeded {
-		err := shell.rescanCluster(ctx)
+		err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
+			return strings.Contains(err.Error(), "Another operation requiring access to the member is still in progress")
+		}, func() error {
+			return shell.rescanCluster(ctx)
+		})
 		if err != nil {
 			return err
 		}
+
 		log.Println("Cluster rescanned")
 	}
 

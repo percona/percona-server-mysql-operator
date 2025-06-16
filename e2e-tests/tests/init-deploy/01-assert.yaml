@@ -1,6 +1,11 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 420
+timeout: 600
+---
+kind: ResourceQuota
+apiVersion: v1
+metadata:
+  name: init-deploy-resource-quota
 ---
 kind: StatefulSet
 apiVersion: apps/v1
