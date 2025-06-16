@@ -79,7 +79,7 @@ help: ## Display this help.
 
 ##@ Development
 
-generate: controller-gen
+generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and CustomResourceDefinition objects
 	# Generate WebhookConfiguration, Role and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) crd:maxDescLen=0 rbac:roleName=$(NAME) webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 	$(CONTROLLER_GEN) rbac:roleName=$(NAME) paths="./..." output:rbac:artifacts:config=config/rbac/cluster
@@ -103,7 +103,7 @@ kuttl-shfmt:
 e2e-test: kuttl-shfmt
 	ROOT_REPO=$(ROOT_REPO) kubectl kuttl test --config e2e-tests/kuttl.yaml
 
-manifests: kustomize generate
+manifests: kustomize generate ## Generate Kubernetes manifests (CRDs, RBAC, operator deployment)
 	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml
 	echo "---" >> $(DEPLOYDIR)/crd.yaml
 
