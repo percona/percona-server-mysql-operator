@@ -45,7 +45,7 @@ const (
 	passSymbols    = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
 		"abcdefghijklmnopqrstuvwxyz" +
 		"0123456789" +
-		"!$%&()*+,-.<=>?@[]^_{}~"
+		"!$%&()*+,-.<=>?@[]^_{}~#"
 )
 
 var SecretUsers = []apiv1alpha1.SystemUser{
