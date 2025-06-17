@@ -3,6 +3,8 @@
 set -e
 set -o xtrace
 
+trap "exit" SIGTERM
+
 log() {
 	local message=$1
 	local date=$(/usr/bin/date +"%d/%b/%Y:%H:%M:%S.%3N")
