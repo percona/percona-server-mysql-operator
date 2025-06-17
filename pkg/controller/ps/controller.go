@@ -483,7 +483,7 @@ func validateClusterType(ctx context.Context, cl client.Client, cr *apiv1alpha1.
 		return errors.Wrap(err, "failed to get mysql sts")
 	}
 
-	containerName := mysql.ComponentName
+	containerName := mysql.AppName
 	var container *corev1.Container
 	for _, c := range sts.Spec.Template.Spec.Containers {
 		if c.Name != containerName {

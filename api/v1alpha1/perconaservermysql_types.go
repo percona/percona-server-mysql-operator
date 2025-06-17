@@ -49,6 +49,9 @@ import (
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.orchestrator || self.orchestrator.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'orchestrator.enabled' must be true unless 'unsafeFlags.orchestrator' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.proxy || self.proxy.haproxy.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.haproxy.enabled' must be true unless 'unsafeFlags.proxy' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.proxy.router == null || !has(self.proxy.router.enabled) || !self.proxy.router.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.router.enabled' must be disabled"
+// +kubebuilder:validation:XValidation:rule="!(has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize",message="Invalid configuration: Scaling MySQL replicas below 3 requires 'unsafeFlags.mysqlSize: true'"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size >= 9) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', scaling MySQL replicas above 9 requires 'unsafeFlags.mysqlSize: true'"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size % 2 == 0) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', using an even number of MySQL replicas requires 'unsafeFlags.mysqlSize: true'"
 type PerconaServerMySQLSpec struct {
 	CRVersion         string                               `json:"crVersion,omitempty"`
 	Pause             bool                                 `json:"pause,omitempty"`
@@ -1002,11 +1005,8 @@ func (p *PodSpec) GetTopologySpreadConstraints(ls map[string]string) []corev1.To
 }
 
 // Labels returns a standardized set of labels for the PerconaServerMySQL custom resource.
-func (cr *PerconaServerMySQL) Labels() map[string]string {
-	l := naming.Labels()
-	l[naming.LabelInstance] = cr.Name
-	l[naming.LabelManagedBy] = "percona-server-operator"
-	return l
+func (cr *PerconaServerMySQL) Labels(name, component string) map[string]string {
+	return naming.Labels(name, cr.Name, "percona-server", component)
 }
 
 // ClusterHint generates a unique identifier for the PerconaServerMySQL
