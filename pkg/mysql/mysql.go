@@ -552,7 +552,7 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			Value: string(cr.UID),
 		},
 		{
-			Name:  "CLUSTER_TYPE",
+			Name:  naming.EnvMySQLClusterType,
 			Value: string(cr.Spec.MySQL.ClusterType),
 		},
 		{
