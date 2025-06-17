@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
 	"golang.org/x/text/cases"
@@ -48,6 +49,9 @@ import (
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.orchestrator || self.orchestrator.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'orchestrator.enabled' must be true unless 'unsafeFlags.orchestrator' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.proxy || self.proxy.haproxy.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.haproxy.enabled' must be true unless 'unsafeFlags.proxy' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.proxy.router == null || !has(self.proxy.router.enabled) || !self.proxy.router.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.router.enabled' must be disabled"
+// +kubebuilder:validation:XValidation:rule="!(has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize",message="Invalid configuration: Scaling MySQL replicas below 3 requires 'unsafeFlags.mysqlSize: true'"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size >= 9) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', scaling MySQL replicas above 9 requires 'unsafeFlags.mysqlSize: true'"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size % 2 == 0) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', using an even number of MySQL replicas requires 'unsafeFlags.mysqlSize: true'"
 type PerconaServerMySQLSpec struct {
 	CRVersion         string                               `json:"crVersion,omitempty"`
 	Pause             bool                                 `json:"pause,omitempty"`
@@ -193,8 +197,8 @@ func (s *PodSpec) GetInitImage() string {
 type PMMSpec struct {
 	Enabled                  bool                        `json:"enabled,omitempty"`
 	Image                    string                      `json:"image"`
+	MySQLParams              string                      `json:"mysqlParams,omitempty"`
 	ServerHost               string                      `json:"serverHost,omitempty"`
-	ServerUser               string                      `json:"serverUser,omitempty"`
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
@@ -328,7 +332,7 @@ func (b *BackupStorageGCSSpec) BucketAndPrefix() (string, string) {
 
 type BackupStorageAzureSpec struct {
 	// A container name is a valid DNS name that conforms to the Azure naming rules.
-	ContainerName BucketWithPrefix `json:"containerName"`
+	ContainerName BucketWithPrefix `json:"container"`
 
 	// A prefix is a sub-folder to the backups inside the container
 	Prefix string `json:"prefix,omitempty"`
@@ -479,6 +483,7 @@ type StatefulAppStatus struct {
 	Ready   int32            `json:"ready,omitempty"`
 	State   StatefulAppState `json:"state,omitempty"`
 	Version string           `json:"version,omitempty"`
+	ImageID string           `json:"imageID,omitempty"`
 }
 
 // PerconaServerMySQLStatus defines the observed state of PerconaServerMySQL
@@ -495,6 +500,10 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	Conditions     []metav1.Condition `json:"conditions,omitempty"`
 	// +optional
 	Host string `json:"host"`
+}
+
+func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {
+	return v.Must(v.NewVersion(s.MySQL.Version)).Compare(v.Must(v.NewVersion(ver)))
 }
 
 const ConditionInnoDBClusterBootstrapped string = "InnoDBClusterBootstrapped"
@@ -738,7 +747,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 	}
 
 	var err error
-	cr.Spec.MySQL.VolumeSpec, err = reconcileVol(cr.Spec.MySQL.VolumeSpec)
+	cr.Spec.MySQL.VolumeSpec, err = cr.Spec.MySQL.VolumeSpec.validateVolume()
 	if err != nil {
 		return errors.Wrap(err, "reconcile mysql volumeSpec")
 	}
@@ -864,13 +873,34 @@ const (
 	BinVolumePath = "/opt/percona"
 )
 
-// reconcileVol validates and sets default values for a given VolumeSpec, ensuring it is properly defined.
-func reconcileVol(v *VolumeSpec) (*VolumeSpec, error) {
-	if v == nil || v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil {
-		return nil, errors.New("volumeSpec and it's internals should be specified")
+// validateVolume validates and sets default values for a given VolumeSpec, ensuring it is properly defined.
+func (v *VolumeSpec) validateVolume() (*VolumeSpec, error) {
+	if v == nil {
+		return nil, errors.New("volumeSpec provided is nil")
 	}
+
+	count := 0
+	if v.EmptyDir != nil {
+		count++
+	}
+	if v.HostPath != nil {
+		count++
+	}
+	if v.PersistentVolumeClaim != nil {
+		count++
+	}
+
+	if count == 0 {
+		return nil, errors.New("volumeSpec must specify at least one volume source")
+	}
+
+	if count > 1 {
+		return nil, errors.New("volumeSpec must specify at most one volume source — multiple sources set")
+	}
+
+	// if no PVC is defined, the following validations can be skipped.
 	if v.PersistentVolumeClaim == nil {
-		return nil, errors.New("pvc should be specified")
+		return v, nil
 	}
 	_, limits := v.PersistentVolumeClaim.Resources.Limits[corev1.ResourceStorage]
 	_, requests := v.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
@@ -975,11 +1005,8 @@ func (p *PodSpec) GetTopologySpreadConstraints(ls map[string]string) []corev1.To
 }
 
 // Labels returns a standardized set of labels for the PerconaServerMySQL custom resource.
-func (cr *PerconaServerMySQL) Labels() map[string]string {
-	l := naming.Labels()
-	l[naming.LabelInstance] = cr.Name
-	l[naming.LabelManagedBy] = "percona-server-operator"
-	return l
+func (cr *PerconaServerMySQL) Labels(name, component string) map[string]string {
+	return naming.Labels(name, cr.Name, "percona-server", component)
 }
 
 // ClusterHint generates a unique identifier for the PerconaServerMySQL
