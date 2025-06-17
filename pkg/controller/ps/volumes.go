@@ -41,7 +41,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 	stsName := mysql.Name(cr)
 
 	pvcList := &corev1.PersistentVolumeClaimList{}
-	err := r.Client.List(ctx, pvcList, &client.ListOptions{
+	err := r.List(ctx, pvcList, &client.ListOptions{
 		Namespace:     cr.Namespace,
 		LabelSelector: labels.SelectorFromSet(ls),
 	})
@@ -54,7 +54,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 	}
 
 	podList := corev1.PodList{}
-	if err := r.Client.List(ctx, &podList, client.InNamespace(cr.Namespace), client.MatchingLabels(ls)); err != nil {
+	if err := r.List(ctx, &podList, client.InNamespace(cr.Namespace), client.MatchingLabels(ls)); err != nil {
 		return errors.Wrap(err, "list pods")
 	}
 
@@ -112,7 +112,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 			Namespace: cr.Namespace,
 		},
 	}
-	if err := r.Client.Get(ctx, client.ObjectKeyFromObject(sts), sts); err != nil {
+	if err := r.Get(ctx, client.ObjectKeyFromObject(sts), sts); err != nil {
 		if k8serrors.IsNotFound(err) {
 			return nil
 		}
@@ -168,7 +168,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 			}
 
 			events := &eventsv1.EventList{}
-			if err := r.Client.List(ctx, events, &client.ListOptions{
+			if err := r.List(ctx, events, &client.ListOptions{
 				Namespace:     sts.Namespace,
 				FieldSelector: fields.SelectorFromSet(map[string]string{"regarding.name": pvc.Name}),
 			}); err != nil {
@@ -215,7 +215,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 		if resizeSucceeded {
 			log.Info("Deleting statefulset")
 
-			if err := r.Client.Delete(ctx, sts, client.PropagationPolicy("Orphan")); err != nil {
+			if err := r.Delete(ctx, sts, client.PropagationPolicy("Orphan")); err != nil {
 				if k8serrors.IsNotFound(err) {
 					return nil
 				}
@@ -273,7 +273,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 		log.Info("Resizing PVC", "name", pvc.Name, "actual", pvc.Status.Capacity.Storage(), "requested", requested)
 		pvc.Spec.Resources.Requests[corev1.ResourceStorage] = requested
 
-		if err := r.Client.Update(ctx, &pvc); err != nil {
+		if err := r.Update(ctx, &pvc); err != nil {
 			switch {
 			case strings.Contains(err.Error(), "exceeded quota"):
 				r.Recorder.Event(&pvc, corev1.EventTypeWarning, naming.EventExceededQuota, "PVC resize failed")
@@ -314,7 +314,7 @@ func (r *PerconaServerMySQLReconciler) revertVolumeTemplate(ctx context.Context,
 	log.Info("Reverting volume template for PXC", "originalSize", originalSize)
 	cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = originalSize
 
-	if err := r.Client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
+	if err := r.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
 		return errors.Wrapf(err, "patch pxc/%s", cr.Name)
 	}
 
