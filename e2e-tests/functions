@@ -542,11 +542,11 @@ EOF
 }
 
 get_mysql_pods() {
-	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/component=mysql | awk '{print $1}'
+	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/name=mysql | awk '{print $1}'
 }
 
 get_router_pods() {
-	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/component=router | awk '{print $1}'
+	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/name=router | awk '{print $1}'
 }
 
 get_mysql_users() {
@@ -1037,4 +1037,111 @@ deploy_cmctl() {
 		| yq '(select(.rules).rules[] | select(contains({"apiGroups": ["cert-manager.io"]}))).resources += "certificates/status"' \
 		| kubectl apply -n "${NAMESPACE}" -f -
 	kubectl apply -n "${NAMESPACE}" -f "${TESTS_CONFIG_DIR}/cmctl.yml"
+}
+
+get_operator_version() {
+	kubectl get crd -n "$NAMESPACE" perconaservermysqls.ps.percona.com -o jsonpath='{.metadata.labels.app\.kubernetes\.io/version}'
+}
+
+check_backup_job_labels() {
+	local psbackup
+	psbackup=$1
+
+	local jobs_count
+	jobs_count=$(kubectl get jobs -n "$NAMESPACE" -l "app.kubernetes.io/instance=${psbackup}" -o yaml | yq '.items | length')
+	if [ "$jobs_count" -ne 1 ]; then
+		echo "There are $jobs_count with app.kubernetes.io/instance=${psbackup} label. We should have only one"
+		exit 1
+	fi
+
+	local job
+	job=$(kubectl get jobs -n "$NAMESPACE" -l "app.kubernetes.io/instance=${psbackup}" -o yaml | yq '.items[0].metadata.name')
+
+	local labels
+	labels=$(kubectl get job "$job" -n "$NAMESPACE" -o json | jq -r '.metadata.labels')
+
+	local template_labels
+	template_labels=$(kubectl get job "$job" -n "$NAMESPACE" -o json | jq -r '.spec.template.metadata.labels')
+
+	local cluster_name
+	cluster_name=$(kubectl get ps-backup -n "$NAMESPACE" "${psbackup}" -o jsonpath='{.spec.clusterName}')
+
+	local expected_labels
+	expected_labels=(
+		"app.kubernetes.io/component=backup"
+		"app.kubernetes.io/instance=$psbackup"
+		"app.kubernetes.io/managed-by=percona-server-mysql-operator"
+		"app.kubernetes.io/name=xtrabackup"
+		"app.kubernetes.io/part-of=percona-server-backup"
+		"app.kubernetes.io/version=$(get_operator_version)"
+	)
+
+	local all_match
+	all_match=true
+
+	for entry in "${expected_labels[@]}"; do
+		key="${entry%%=*}"
+		expected_value="${entry#*=}"
+		actual_value=$(echo "$labels" | jq -r --arg key "$key" '.[$key]')
+
+		if [ "$actual_value" != "$expected_value" ]; then
+			echo "Label mismatch: $key (expected: $expected_value, found: $actual_value)"
+			all_match=false
+		fi
+
+		actual_value=$(echo "$template_labels" | jq -r --arg key "$key" '.[$key]')
+		if [ "$actual_value" != "$expected_value" ]; then
+			echo "Template label mismatch: $key (expected: $expected_value, found: $actual_value)"
+			all_match=false
+		fi
+	done
+
+	if [ "$all_match" != true ]; then
+		exit 1
+	fi
+}
+
+check_scheduled_backup_labels() {
+	local psbackup
+	psbackup=$1
+
+	local labels
+	labels=$(kubectl get ps-backup "$psbackup" -n "$NAMESPACE" -o json | jq -r '.metadata.labels')
+
+	local cluster_name
+	cluster_name=$(kubectl get ps-backup -n "$NAMESPACE" "${psbackup}" -o jsonpath='{.spec.clusterName}')
+
+	local expected_labels
+	expected_labels=(
+		"app.kubernetes.io/managed-by=percona-server-mysql-operator"
+		"app.kubernetes.io/name=percona-server-backup"
+		"app.kubernetes.io/part-of=percona-server"
+		"app.kubernetes.io/version=$(get_operator_version)"
+		"percona.com/backup-type=cron"
+		"percona.com/cluster=${cluster_name}"
+	)
+
+	local all_match
+	all_match=true
+
+	for entry in "${expected_labels[@]}"; do
+		key="${entry%%=*}"
+		expected_value="${entry#*=}"
+		actual_value=$(echo "$labels" | jq -r --arg key "$key" '.[$key]')
+
+		if [ "$actual_value" != "$expected_value" ]; then
+			echo "Label mismatch: $key (expected: $expected_value, found: $actual_value)"
+			all_match=false
+		fi
+	done
+
+	if [ "$all_match" != true ]; then
+		exit 1
+	fi
+
+	backup_ancestor_label=$(kubectl get ps-backup -n "$NAMESPACE" "${psbackup}" -o jsonpath='{.metadata.labels.percona\.com/backup-ancestor}')
+	if [ -z "$backup_ancestor_label" ]; then
+		echo "Label percona.com/backup-ancestor is missing"
+		exit 1
+	fi
 }
