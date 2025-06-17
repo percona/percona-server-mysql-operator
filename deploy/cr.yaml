@@ -42,6 +42,7 @@ spec:
     image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
 #    initImage: perconalab/percona-server-mysql-operator:main
+#    vaultSecretName: cluster1-vault
     size: 3
 
 #    env:

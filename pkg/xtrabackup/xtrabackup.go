@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
+	"k8s.io/utils/ptr"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -19,16 +20,18 @@ import (
 )
 
 const (
-	componentName      = "xtrabackup"
-	componentShortName = "xb"
-	dataVolumeName     = "datadir"
-	dataMountPath      = "/var/lib/mysql"
-	credsVolumeName    = "users"
-	credsMountPath     = "/etc/mysql/mysql-users-secret"
-	tlsVolumeName      = "tls"
-	tlsMountPath       = "/etc/mysql/mysql-tls-secret"
-	backupVolumeName   = componentName
-	backupMountPath    = "/backup"
+	componentName         = "xtrabackup"
+	componentShortName    = "xb"
+	dataVolumeName        = "datadir"
+	dataMountPath         = "/var/lib/mysql"
+	credsVolumeName       = "users"
+	credsMountPath        = "/etc/mysql/mysql-users-secret"
+	tlsVolumeName         = "tls"
+	tlsMountPath          = "/etc/mysql/mysql-tls-secret"
+	backupVolumeName      = componentName
+	backupMountPath       = "/backup"
+	vaultSecretVolumeName = "vault-keyring-secret"
+	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
 )
 
 func Name(cr *apiv1alpha1.PerconaServerMySQLBackup) string {
@@ -419,6 +422,15 @@ func RestoreJob(
 								},
 							},
 						},
+						{
+							Name: vaultSecretVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: cluster.Spec.MySQL.VaultSecretName,
+									Optional:   ptr.To(true),
+								},
+							},
+						},
 					},
 				},
 			},
@@ -507,6 +519,10 @@ func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alp
 				Name:  "VERIFY_TLS",
 				Value: strconv.FormatBool(verifyTLS),
 			},
+			{
+				Name:  "KEYRING_VAULT_PATH",
+				Value: fmt.Sprintf("%s/keyring_vault.conf", vaultSecretMountPath),
+			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -520,6 +536,10 @@ func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alp
 			{
 				Name:      tlsVolumeName,
 				MountPath: tlsMountPath,
+			},
+			{
+				Name:      vaultSecretVolumeName,
+				MountPath: vaultSecretMountPath,
 			},
 		},
 		Command:                  []string{"/opt/percona/run-restore.sh"},

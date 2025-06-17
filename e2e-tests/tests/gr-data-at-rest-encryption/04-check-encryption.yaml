@@ -1,0 +1,15 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # Check if table is encrypted by examining create options in information schema
+      data=$(run_mysql \
+          "SELECT CREATE_OPTIONS FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='myDB' AND TABLE_NAME='myTable'" \
+          "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password")
+
+      kubectl create configmap -n "${NAMESPACE}" 04-check-encryption --from-literal=myTable="${data}"

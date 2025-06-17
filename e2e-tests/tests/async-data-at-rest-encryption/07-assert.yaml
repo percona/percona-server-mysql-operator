@@ -1,0 +1,61 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 600
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: restore1
+spec:
+  backupName: backup1
+  clusterName: async-data-at-rest-encryption
+status:
+  state: Succeeded
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: async-data-at-rest-encryption-mysql
+status:
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: async-data-at-rest-encryption-haproxy
+status:
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: async-data-at-rest-encryption-orc
+status:
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: async-data-at-rest-encryption
+status:
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  router:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
