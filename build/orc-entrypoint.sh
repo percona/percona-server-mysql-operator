@@ -41,52 +41,18 @@ if [ -f "$PATH_TO_SECRET/$TOPOLOGY_USER" ]; then
 	TOPOLOGY_PASSWORD=$(<"${PATH_TO_SECRET}/${TOPOLOGY_USER}")
 fi
 
-#set +o xtrace
-#temp=$(mktemp)
-#ESCAPED_PASSWORD=$(printf '%s' "${TOPOLOGY_PASSWORD:-$ORC_TOPOLOGY_PASSWORD}" | sed -e 's/[&\]/\\&/g')
-#sed -r \
-#  -e "s|^[#]?user=.*$|user=${TOPOLOGY_USER}|" \
-#  -e "s|^[#]?password=.*$|password=${ESCAPED_PASSWORD}|" \
-#  "${ORC_CONF_PATH}/orc-topology.cnf" > "${temp}"
-#cat "${temp}" > "${ORC_CONF_PATH}/config/orc-topology.cnf"
-#rm "${temp}"
-#set -o xtrace
-#
-#exec "$@"
-
-#set +o xtrace
-#temp=$(mktemp)
-#
-## Properly escape the password and wrap in double quotes for .cnf
-#ESCAPED_PASSWORD=$(printf '%s' "${TOPOLOGY_PASSWORD:-$ORC_TOPOLOGY_PASSWORD}" | sed -e 's/["\\]/\\&/g')
-#ESCAPED_PASSWORD="\"${ESCAPED_PASSWORD}\""
-#
-#sed -r \
-#  -e "s|^[#]?user=.*$|user=${TOPOLOGY_USER}|" \
-#  -e "s|^[#]?password=.*$|password=${ESCAPED_PASSWORD}|" \
-#  "${ORC_CONF_PATH}/orc-topology.cnf" > "${temp}"
-#
-#cat "${temp}" > "${ORC_CONF_PATH}/config/orc-topology.cnf"
-#rm "${temp}"
-#set -o xtrace
-#
-#exec "$@"
-
 set +o xtrace
 temp=$(mktemp)
 
-# Escape &, ", and \ for sed substitution
 ESCAPED_PASSWORD=$(printf '%s' "${TOPOLOGY_PASSWORD:-$ORC_TOPOLOGY_PASSWORD}" | sed -e 's/[&"\\]/\\&/g')
 ESCAPED_PASSWORD="\"${ESCAPED_PASSWORD}\""  # Wrap in double quotes for .cnf
 
-# Substitute user and password lines
 sed -r \
   -e "s|^[#]?user=.*$|user=${TOPOLOGY_USER}|" \
   -e "s|^[#]?password=.*$|password=${ESCAPED_PASSWORD}|" \
   "${ORC_CONF_PATH}/orc-topology.cnf" > "${temp}"
 
-# Finalize config
-cat "${temp}" > "${ORC_CONF_PATH}/config/orc-topology.cnf"
+cat "${temp}" >"${ORC_CONF_PATH}/config/orc-topology.cnf"
 rm "${temp}"
 set -o xtrace
 
