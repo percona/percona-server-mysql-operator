@@ -280,57 +280,6 @@ var _ = Describe("Unsafe configurations", Ordered, func() {
 		Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 	})
 
-	Context("Unsafe configurations are disabled", func() {
-		Specify("controller shouldn't allow setting less than minimum safe size", func() {
-			cr.Spec.Unsafe.MySQLSize = false
-			cr.MySQLSpec().ClusterType = psv1alpha1.ClusterTypeGR
-			cr.MySQLSpec().Size = 1
-			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
-
-			_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
-			Expect(err).To(HaveOccurred())
-
-			Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
-			Expect(cr.Status.State).Should(Equal(psv1alpha1.StateError))
-		})
-
-		Specify("controller shouldn't allow setting more than maximum safe size", func() {
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, crNamespacedName, cr)
-				return err == nil
-			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
-
-			cr.Spec.Unsafe.MySQLSize = false
-			cr.MySQLSpec().ClusterType = psv1alpha1.ClusterTypeGR
-			cr.MySQLSpec().Size = 11
-			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
-
-			_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
-			Expect(err).To(HaveOccurred())
-
-			Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
-			Expect(cr.Status.State).Should(Equal(psv1alpha1.StateError))
-		})
-
-		Specify("controller should't allow setting even number of nodes for MySQL", func() {
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, crNamespacedName, cr)
-				return err == nil
-			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
-
-			cr.Spec.Unsafe.MySQLSize = false
-			cr.MySQLSpec().ClusterType = psv1alpha1.ClusterTypeGR
-			cr.MySQLSpec().Size = 4
-			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
-
-			_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
-			Expect(err).To(HaveOccurred())
-
-			Expect(k8sClient.Get(ctx, crNamespacedName, cr)).Should(Succeed())
-			Expect(cr.Status.State).Should(Equal(psv1alpha1.StateError))
-		})
-	})
-
 	Context("Unsafe configurations are enabled", func() {
 		Specify("controller should set unsafe number of replicas to MySQL statefulset", func() {
 			Eventually(func() bool {
@@ -527,6 +476,42 @@ var _ = Describe("CR validations", Ordered, func() {
 				createErr := k8sClient.Create(ctx, cr)
 				Expect(createErr).To(HaveOccurred())
 				Expect(createErr.Error()).To(ContainSubstring("'mysql.clusterType' is set to 'async', 'proxy.router.enabled' must be disabled"))
+			})
+		})
+
+		When("mysql replicas are set to even number", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-7", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.Size = 4
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("For 'group replication', using an even number of MySQL replicas requires 'unsafeFlags.mysqlSize: true'"))
+			})
+		})
+
+		When("mysql replicas are set to lower than 3", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-8", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.Size = 2
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("Scaling MySQL replicas below 3 requires 'unsafeFlags.mysqlSize: true'"))
+			})
+		})
+
+		When("mysql replicas are set to higher than 9", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-9", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.Size = 11
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("For 'group replication', scaling MySQL replicas above 9 requires 'unsafeFlags.mysqlSize: true'"))
 			})
 		})
 	})
@@ -894,7 +879,7 @@ var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 					&client.ListOptions{
 						Namespace: cr.Namespace,
 						LabelSelector: labels.SelectorFromSet(map[string]string{
-							"app.kubernetes.io/component": "mysql",
+							"app.kubernetes.io/name": "mysql",
 						}),
 					})
 				return err == nil
@@ -916,7 +901,7 @@ var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 					err := k8sClient.List(ctx, &pvcList, &client.ListOptions{
 						Namespace: cr.Namespace,
 						LabelSelector: labels.SelectorFromSet(map[string]string{
-							"app.kubernetes.io/component": "mysql",
+							"app.kubernetes.io/name": "mysql",
 						}),
 					})
 					return err == nil

@@ -2,17 +2,26 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 420
+commands:
+  - script: |-
+      #!/usr/bin/env bash
+      set -o errexit
+      set -o xtrace
+      set -euo pipefail
+
+      source ../../functions
+
+      list=$(kubectl get ps-backup -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}')
+      for name in $list; do
+        check_backup_job_labels "$name"
+        check_scheduled_backup_labels "$name"
+      done
+    timeout: 60
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
   generation: 1
-  labels:
-    app.kubernetes.io/component: xtrabackup
-    app.kubernetes.io/instance: scheduled-backup
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
-    app.kubernetes.io/part-of: percona-server
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
     blockOwnerDeletion: true
@@ -24,15 +33,6 @@ spec:
   completions: 1
   parallelism: 1
   suspend: false
-  template:
-    metadata:
-      creationTimestamp: null
-      labels:
-        app.kubernetes.io/component: xtrabackup
-        app.kubernetes.io/instance: scheduled-backup
-        app.kubernetes.io/managed-by: percona-server-operator
-        app.kubernetes.io/name: percona-server
-        app.kubernetes.io/part-of: percona-server
 status:
   ready: 0
   succeeded: 1
@@ -42,12 +42,6 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   generation: 1
-  labels:
-    app.kubernetes.io/component: xtrabackup
-    app.kubernetes.io/instance: scheduled-backup
-    app.kubernetes.io/managed-by: percona-server-operator
-    app.kubernetes.io/name: percona-server
-    app.kubernetes.io/part-of: percona-server
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
     blockOwnerDeletion: true
@@ -59,15 +53,6 @@ spec:
   completions: 1
   parallelism: 1
   suspend: false
-  template:
-    metadata:
-      creationTimestamp: null
-      labels:
-        app.kubernetes.io/component: xtrabackup
-        app.kubernetes.io/instance: scheduled-backup
-        app.kubernetes.io/managed-by: percona-server-operator
-        app.kubernetes.io/name: percona-server
-        app.kubernetes.io/part-of: percona-server
 status:
   ready: 0
   succeeded: 1

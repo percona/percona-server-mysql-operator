@@ -351,7 +351,7 @@ func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *api
 }
 
 func (r *PerconaServerMySQLReconciler) allLoadBalancersReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
-	opts := &client.ListOptions{Namespace: cr.Namespace, LabelSelector: labels.SelectorFromSet(cr.Labels())}
+	opts := &client.ListOptions{Namespace: cr.Namespace, LabelSelector: labels.SelectorFromSet(cr.Labels("", ""))}
 	svcList := &corev1.ServiceList{}
 	if err := r.Client.List(ctx, svcList, opts); err != nil {
 		return false, errors.Wrap(err, "list services")
