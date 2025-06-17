@@ -1042,6 +1042,7 @@ deploy_cmctl() {
 get_user_pass() {
   local user="${1:-root}"
   kubectl -n "${NAMESPACE}" get secret test-secrets -o jsonpath="{.data.${user}}" | base64 --decode
+}
 
 get_operator_version() {
 	kubectl get crd -n "$NAMESPACE" perconaservermysqls.ps.percona.com -o jsonpath='{.metadata.labels.app\.kubernetes\.io/version}'
