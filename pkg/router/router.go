@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	ComponentName    = "router"
+	AppName          = "router"
 	credsVolumeName  = "users"
 	CredsMountPath   = "/etc/mysql/mysql-users-secret"
 	tlsVolumeName    = "tls"
@@ -38,7 +38,7 @@ const (
 )
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
-	return cr.Name + "-" + ComponentName
+	return cr.Name + "-" + AppName
 }
 
 func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
@@ -51,8 +51,7 @@ func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
-		map[string]string{naming.LabelComponent: ComponentName},
-		cr.Labels())
+		cr.Labels(AppName, naming.ComponentProxy))
 }
 
 func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
@@ -173,7 +172,7 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHa
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
-							ComponentName,
+							AppName,
 							initImage,
 							spec.ImagePullPolicy,
 							spec.ContainerSecurityContext,
@@ -269,7 +268,7 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	env = append(env, spec.Env...)
 
 	return corev1.Container{
-		Name:            ComponentName,
+		Name:            AppName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
 		Resources:       spec.Resources,

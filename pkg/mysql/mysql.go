@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	ComponentName     = "mysql"
+	AppName           = "mysql"
 	DataVolumeName    = "datadir"
 	DataMountPath     = "/var/lib/mysql"
 	CustomConfigKey   = "my.cnf"
@@ -77,7 +77,7 @@ func (e *Exposer) SaveOldMeta() bool {
 }
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
-	return cr.Name + "-" + ComponentName
+	return cr.Name + "-" + AppName
 }
 
 func NamespacedName(cr *apiv1alpha1.PerconaServerMySQL) types.NamespacedName {
@@ -118,8 +118,7 @@ func PodFQDN(cr *apiv1alpha1.PerconaServerMySQL, pod *corev1.Pod) string {
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
-		map[string]string{naming.LabelComponent: ComponentName},
-		cr.Labels())
+		cr.Labels(AppName, naming.ComponentDatabase))
 }
 
 func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHash string, secret *corev1.Secret) *appsv1.StatefulSet {
@@ -160,7 +159,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
-							ComponentName,
+							AppName,
 							initImage,
 							spec.ImagePullPolicy,
 							spec.ContainerSecurityContext,
@@ -348,7 +347,7 @@ func volumeClaimTemplates(spec *apiv1alpha1.MySQLSpec) []corev1.PersistentVolume
 func servicePorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ServicePort {
 	ports := []corev1.ServicePort{
 		{
-			Name: ComponentName,
+			Name: AppName,
 			Port: DefaultPort,
 		},
 		{
@@ -366,7 +365,7 @@ func servicePorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ServicePort {
 	}
 
 	if cr.Spec.MySQL.IsGR() {
-		ports = append(ports, corev1.ServicePort{Name: ComponentName + "-gr", Port: DefaultGRPort})
+		ports = append(ports, corev1.ServicePort{Name: AppName + "-gr", Port: DefaultGRPort})
 	}
 
 	return ports
@@ -375,7 +374,7 @@ func servicePorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ServicePort {
 func containerPorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ContainerPort {
 	ports := []corev1.ContainerPort{
 		{
-			Name:          ComponentName,
+			Name:          AppName,
 			ContainerPort: DefaultPort,
 		},
 		{
@@ -389,7 +388,7 @@ func containerPorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ContainerPort {
 	}
 
 	if cr.Spec.MySQL.IsGR() {
-		ports = append(ports, corev1.ContainerPort{Name: ComponentName + "-gr", ContainerPort: DefaultGRPort})
+		ports = append(ports, corev1.ContainerPort{Name: AppName + "-gr", ContainerPort: DefaultGRPort})
 	}
 
 	return ports
@@ -519,7 +518,7 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 		pmmC := pmm.Container(
 			cr,
 			secret,
-			ComponentName,
+			AppName,
 			cr.Spec.PMM.MySQLParams)
 
 		containers = append(containers, pmmC)
@@ -572,7 +571,7 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	env = append(env, spec.Env...)
 
 	container := corev1.Container{
-		Name:            ComponentName,
+		Name:            AppName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
 		Resources:       spec.Resources,

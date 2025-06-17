@@ -43,7 +43,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLVersion(
 		return errors.Wrap(err, "get ready mysql pod")
 	}
 
-	imageId, err := k8s.GetImageIDFromPod(pod, mysql.ComponentName)
+	imageId, err := k8s.GetImageIDFromPod(pod, mysql.AppName)
 	if err != nil {
 		return errors.Wrapf(err, "get MySQL image id from %s", pod.Name)
 	}
@@ -59,7 +59,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLVersion(
 
 	var stdoutb, stderrb bytes.Buffer
 
-	err = r.ClientCmd.Exec(ctx, pod, mysql.ComponentName, []string{"mysqld", "--version"}, nil, &stdoutb, &stderrb, false)
+	err = r.ClientCmd.Exec(ctx, pod, mysql.AppName, []string{"mysqld", "--version"}, nil, &stdoutb, &stderrb, false)
 	if err != nil {
 		return errors.Wrapf(err, "run mysqld --version (stdout: %s, stderr: %s)", stdoutb.String(), stderrb.String())
 	}
