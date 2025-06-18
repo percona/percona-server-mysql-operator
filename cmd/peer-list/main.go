@@ -18,6 +18,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -46,9 +47,9 @@ var (
 	domain    = flag.String("domain", "", "The Cluster Domain which is used by the Cluster, if not set it tries to determine it from /etc/resolv.conf file.")
 )
 
-func lookup(svcName string) (sets.String, error) {
-	endpoints := sets.NewString()
-	_, srvRecords, err := net.LookupSRV("", "", svcName)
+func lookup(ctx context.Context, svcName string) (sets.Set[string], error) {
+	endpoints := sets.New[string]()
+	_, srvRecords, err := net.DefaultResolver.LookupSRV(ctx, "", "", svcName)
 	if err != nil {
 		return endpoints, err
 	}
@@ -60,10 +61,10 @@ func lookup(svcName string) (sets.String, error) {
 	return endpoints, nil
 }
 
-func shellOut(sendStdin, script string) {
+func shellOut(ctx context.Context, sendStdin, script string) {
 	log.Printf("execing: %v with stdin: %v", script, sendStdin)
 	// TODO: Switch to sending stdin from go
-	out, err := exec.Command("bash", "-c", fmt.Sprintf("echo -e '%v' | %v", sendStdin, script)).CombinedOutput()
+	out, err := exec.CommandContext(ctx, "bash", "-c", fmt.Sprintf("echo -e '%v' | %v", sendStdin, script)).CombinedOutput()
 	if err != nil {
 		log.Fatalf("Failed to execute %v: %v, err: %v", script, string(out), err)
 	}
@@ -71,12 +72,12 @@ func shellOut(sendStdin, script string) {
 }
 
 func main() {
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, syscall.SIGUSR1)
-	go func() {
-		<-signalChan
-		os.Exit(0)
-	}()
+	if pid := os.Getpid(); pid != 1 {
+		panic(fmt.Sprintf("pid is %d but should be 1", pid))
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 
 	flag.Parse()
 
@@ -136,28 +137,39 @@ func main() {
 		log.Printf("No on-start supplied, on-change %v will be applied on start.", script)
 	}
 
-	for peers := sets.NewString(); script != ""; time.Sleep(pollPeriod) {
-		newPeers, err := lookup(*svc)
-		if err != nil {
-			log.Printf("%v", err)
+	ticker := time.NewTicker(pollPeriod)
+	defer ticker.Stop()
 
-			if lerr, ok := err.(*net.DNSError); ok && lerr.IsNotFound {
-				// Service not resolved - no endpoints, so reset peers list
-				peers = sets.NewString()
-				continue
+	peers := sets.New[string]()
+
+	for script != "" {
+		select {
+		case <-ctx.Done():
+			log.Println("Context cancelled:", ctx.Err())
+			return
+		case <-ticker.C:
+			newPeers, err := lookup(ctx, *svc)
+			if err != nil {
+				log.Printf("%v", err)
+
+				if lerr, ok := err.(*net.DNSError); ok && lerr.IsNotFound {
+					// Service not resolved - no endpoints, so reset peers list
+					peers = sets.New[string]()
+					continue
+				}
 			}
-		}
 
-		peerList := newPeers.List()
-		sort.Strings(peerList)
+			if strings.Join(sets.List(peers), ":") != strings.Join(sets.List(newPeers), ":") {
+				log.Printf("Peer list updated\nwas %v\nnow %v", sets.List(peers), sets.List(newPeers))
 
-		if strings.Join(peers.List(), ":") != strings.Join(newPeers.List(), ":") {
-			log.Printf("Peer list updated\nwas %v\nnow %v", peers.List(), newPeers.List())
-			shellOut(strings.Join(peerList, "\n"), script)
-			peers = newPeers
+				peerList := sets.List(newPeers)
+				sort.Strings(peerList)
+				shellOut(ctx, strings.Join(peerList, "\n"), script)
+				peers = newPeers
+			}
+			script = *onChange
 		}
-		script = *onChange
 	}
-	// TODO: Exit if there's no on-change?
+
 	log.Printf("Peer finder exiting")
 }
