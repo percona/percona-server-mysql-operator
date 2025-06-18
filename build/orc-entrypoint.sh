@@ -3,8 +3,6 @@
 set -e
 set -o xtrace
 
-trap "exit" SIGTERM
-
 OPERATOR_BINDIR=/opt/percona
 ORC_CONF_PATH=${ORC_CONF_PATH:-/etc/orchestrator}
 ORC_CONF_FILE=${ORC_CONF_FILE:-"${ORC_CONF_PATH}/config/orchestrator.conf.json"}
