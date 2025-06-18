@@ -185,7 +185,7 @@ spec:
 #        failureThreshold: 3
 #        successThreshold: 1
 
-      gracePeriod: 600
+      gracePeriod: 30
 
 #      configuration: |
 #
