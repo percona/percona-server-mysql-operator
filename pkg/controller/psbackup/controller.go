@@ -380,7 +380,6 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 
 	var source string
 	if len(top.replicas) < 1 {
-		log.Info("no replicas found, using primary as the backup source", "primary", top.primary)
 		source = top.primary
 		log.Info("no replicas found, using primary as the backup source", "primary", top.primary)
 	} else {
