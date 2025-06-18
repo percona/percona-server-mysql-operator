@@ -6,5 +6,7 @@ const (
 
 	EnvMySQLNotifySocketInternal = "NOTIFY_SOCKET" // should only be set in the entrypoint
 
+	EnvMySQLClusterType = "CLUSTER_TYPE"
+
 	EnvBootstrapReadTimeout = "BOOTSTRAP_READ_TIMEOUT"
 )
