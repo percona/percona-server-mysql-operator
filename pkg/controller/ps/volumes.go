@@ -223,7 +223,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 			}
 
 			if err := k8s.DeannotateObject(ctx, r.Client, cr, naming.AnnotationPVCResizeInProgress); err != nil {
-				return errors.Wrap(err, "deannotate pxc")
+				return errors.Wrap(err, "deannotate ps")
 			}
 
 			log.Info("PVC resize completed")
@@ -236,7 +236,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 
 	if requested.Cmp(actual) < 0 {
 		if err := r.revertVolumeTemplate(ctx, cr, configured); err != nil {
-			return errors.Wrapf(err, "revert volume template in pxc/%s", cr.Name)
+			return errors.Wrapf(err, "revert volume template in ps/%s", cr.Name)
 		}
 		return errors.Errorf("requested storage (%s) is less than actual storage (%s)", requested.String(), actual.String())
 	}
@@ -255,7 +255,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 
 	err = k8s.AnnotateObject(ctx, r.Client, cr, map[naming.AnnotationKey]string{naming.AnnotationPVCResizeInProgress: now})
 	if err != nil {
-		return errors.Wrap(err, "annotate pxc")
+		return errors.Wrap(err, "annotate ps")
 	}
 
 	log.Info("Resizing PVCs", "requested", requested, "actual", actual, "pvcList", strings.Join(pvcsToUpdate, ","))
@@ -296,11 +296,11 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 
 func (r *PerconaServerMySQLReconciler) handlePVCResizeFailure(ctx context.Context, cr *psv1alpha1.PerconaServerMySQL, originalSize resource.Quantity) error {
 	if err := r.revertVolumeTemplate(ctx, cr, originalSize); err != nil {
-		return errors.Wrapf(err, "revert volume template in pxc/%s", cr.Name)
+		return errors.Wrapf(err, "revert volume template in ps/%s", cr.Name)
 	}
 
 	if err := k8s.DeannotateObject(ctx, r.Client, cr, naming.AnnotationPVCResizeInProgress); err != nil {
-		return errors.Wrapf(err, "deannotate pxc/%s", cr.Name)
+		return errors.Wrapf(err, "deannotate ps/%s", cr.Name)
 	}
 
 	return nil
@@ -311,11 +311,11 @@ func (r *PerconaServerMySQLReconciler) revertVolumeTemplate(ctx context.Context,
 
 	orig := cr.DeepCopy()
 
-	log.Info("Reverting volume template for PXC", "originalSize", originalSize)
+	log.Info("Reverting volume template for PS", "originalSize", originalSize)
 	cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = originalSize
 
 	if err := r.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
-		return errors.Wrapf(err, "patch pxc/%s", cr.Name)
+		return errors.Wrapf(err, "patch ps/%s", cr.Name)
 	}
 
 	return nil
