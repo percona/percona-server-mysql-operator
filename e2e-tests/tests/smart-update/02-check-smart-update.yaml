@@ -21,7 +21,7 @@ commands:
 
       wait_cluster_consistency_async "${test_name}" "3" "3"
 
-      pods=$(kubectl get pods -n "${NAMESPACE}" --sort-by=.status.startTime --no-headers --selector=app.kubernetes.io/component=mysql -ojson | jq --raw-output '.items[].metadata.name')
+      pods=$(kubectl get pods -n "${NAMESPACE}" --sort-by=.status.startTime --no-headers --selector=app.kubernetes.io/name=mysql -ojson | jq --raw-output '.items[].metadata.name')
 
       lastRestarted=$(echo $pods | awk '{print $NF}')
 

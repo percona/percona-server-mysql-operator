@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	componentName      = "xtrabackup"
+	appName            = "xtrabackup"
 	componentShortName = "xb"
 	dataVolumeName     = "datadir"
 	dataMountPath      = "/var/lib/mysql"
@@ -27,7 +27,7 @@ const (
 	credsMountPath     = "/etc/mysql/mysql-users-secret"
 	tlsVolumeName      = "tls"
 	tlsMountPath       = "/etc/mysql/mysql-tls-secret"
-	backupVolumeName   = componentName
+	backupVolumeName   = appName
 	backupMountPath    = "/backup"
 )
 
@@ -94,10 +94,6 @@ func trimJobName(name string) string {
 	return name
 }
 
-func MatchLabels(cluster *apiv1alpha1.PerconaServerMySQL) map[string]string {
-	return util.SSMapMerge(map[string]string{naming.LabelComponent: componentName}, cluster.Labels())
-}
-
 func Job(
 	cluster *apiv1alpha1.PerconaServerMySQL,
 	cr *apiv1alpha1.PerconaServerMySQLBackup,
@@ -107,7 +103,7 @@ func Job(
 	var one int32 = 1
 	t := true
 
-	labels := util.SSMapMerge(storage.Labels, MatchLabels(cluster))
+	labels := util.SSMapMerge(storage.Labels, cr.Labels(appName, naming.ComponentBackup))
 	backoffLimit := int32(6)
 	if cluster.Spec.Backup.BackoffLimit != nil {
 		backoffLimit = *cluster.Spec.Backup.BackoffLimit
@@ -137,7 +133,7 @@ func Job(
 					SetHostnameAsFQDN:     &t,
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
-							componentName,
+							appName,
 							initImage,
 							cluster.Spec.Backup.ImagePullPolicy,
 							storage.ContainerSecurityContext,
@@ -202,7 +198,7 @@ func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName str
 	}
 
 	return corev1.Container{
-		Name:            componentName,
+		Name:            appName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
 		Env: []corev1.EnvVar{
@@ -307,7 +303,7 @@ func XBCloudArgs(action XBCloudAction, conf *BackupConfig) []string {
 
 func deleteContainer(image string, conf *BackupConfig, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
 	return corev1.Container{
-		Name:            componentName,
+		Name:            appName,
 		Image:           image,
 		ImagePullPolicy: corev1.PullNever,
 		VolumeMounts: []corev1.VolumeMount{
@@ -334,7 +330,7 @@ func RestoreJob(
 ) *batchv1.Job {
 	one := int32(1)
 
-	labels := util.SSMapMerge(storage.Labels, MatchLabels(cluster))
+	labels := util.SSMapMerge(storage.Labels, restore.Labels(appName, naming.ComponentRestore))
 
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -357,7 +353,7 @@ func RestoreJob(
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,
 					InitContainers: []corev1.Container{
-						k8s.InitContainer(componentName, initImage,
+						k8s.InitContainer(appName, initImage,
 							cluster.Spec.Backup.ImagePullPolicy,
 							storage.ContainerSecurityContext,
 							cluster.Spec.Backup.Resources,
@@ -432,7 +428,7 @@ func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) 
 	t := true
 
 	storage := cr.Status.Storage
-	labels := util.SSMapMerge(storage.Labels, cr.Labels, map[string]string{naming.LabelComponent: componentName})
+	labels := util.SSMapMerge(storage.Labels, cr.Labels(appName, naming.ComponentBackup))
 
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -491,7 +487,7 @@ func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alp
 	}
 
 	return corev1.Container{
-		Name:            componentName,
+		Name:            appName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
 		Env: []corev1.EnvVar{
@@ -553,14 +549,14 @@ func PVC(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerM
 func SetStoragePVC(job *batchv1.Job, pvc *corev1.PersistentVolumeClaim) error {
 	spec := &job.Spec.Template.Spec
 
-	vol := corev1.Volume{Name: componentName}
+	vol := corev1.Volume{Name: appName}
 	vol.PersistentVolumeClaim = &corev1.PersistentVolumeClaimVolumeSource{ClaimName: pvc.Name}
 
 	spec.Volumes = append(spec.Volumes, vol)
 
 	for i := range spec.Containers {
 		container := &spec.Containers[i]
-		if container.Name == componentName {
+		if container.Name == appName {
 			container.VolumeMounts = append(
 				container.VolumeMounts,
 				corev1.VolumeMount{Name: backupVolumeName, MountPath: backupMountPath},
@@ -569,7 +565,7 @@ func SetStoragePVC(job *batchv1.Job, pvc *corev1.PersistentVolumeClaim) error {
 		}
 	}
 
-	return errors.Errorf("no container named %s in Job spec", componentName)
+	return errors.Errorf("no container named %s in Job spec", appName)
 }
 
 func SetStorageS3(job *batchv1.Job, s3 *apiv1alpha1.BackupStorageS3Spec) error {
@@ -615,13 +611,13 @@ func SetStorageS3(job *batchv1.Job, s3 *apiv1alpha1.BackupStorageS3Spec) error {
 	for i := range spec.Containers {
 		container := &spec.Containers[i]
 
-		if container.Name == componentName {
+		if container.Name == appName {
 			container.Env = append(container.Env, env...)
 			return nil
 		}
 	}
 
-	return errors.Errorf("no container named %s in Job spec", componentName)
+	return errors.Errorf("no container named %s in Job spec", appName)
 }
 
 func SetStorageGCS(job *batchv1.Job, gcs *apiv1alpha1.BackupStorageGCSSpec) error {
@@ -663,13 +659,13 @@ func SetStorageGCS(job *batchv1.Job, gcs *apiv1alpha1.BackupStorageGCSSpec) erro
 	for i := range spec.Containers {
 		container := &spec.Containers[i]
 
-		if container.Name == componentName {
+		if container.Name == appName {
 			container.Env = append(container.Env, env...)
 			return nil
 		}
 	}
 
-	return errors.Errorf("no container named %s in Job spec", componentName)
+	return errors.Errorf("no container named %s in Job spec", appName)
 }
 
 func SetStorageAzure(job *batchv1.Job, azure *apiv1alpha1.BackupStorageAzureSpec) error {
@@ -711,13 +707,13 @@ func SetStorageAzure(job *batchv1.Job, azure *apiv1alpha1.BackupStorageAzureSpec
 	for i := range spec.Containers {
 		container := &spec.Containers[i]
 
-		if container.Name == componentName {
+		if container.Name == appName {
 			container.Env = append(container.Env, env...)
 			return nil
 		}
 	}
 
-	return errors.Errorf("no container named %s in Job spec", componentName)
+	return errors.Errorf("no container named %s in Job spec", appName)
 }
 
 func SetSourceNode(job *batchv1.Job, src string) error {
@@ -726,13 +722,13 @@ func SetSourceNode(job *batchv1.Job, src string) error {
 	for i := range spec.Containers {
 		container := &spec.Containers[i]
 
-		if container.Name == componentName {
+		if container.Name == appName {
 			container.Env = append(container.Env, corev1.EnvVar{Name: "SRC_NODE", Value: src})
 			return nil
 		}
 	}
 
-	return errors.Errorf("no container named %s in Job spec", componentName)
+	return errors.Errorf("no container named %s in Job spec", appName)
 }
 
 type BackupConfig struct {
