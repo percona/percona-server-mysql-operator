@@ -68,7 +68,7 @@ spec:
         - 1003
       setHostnameAsFQDN: true
       shareProcessNamespace: true
-      terminationGracePeriodSeconds: 600
+      terminationGracePeriodSeconds: 30
       volumes:
       - emptyDir: {}
         name: bin

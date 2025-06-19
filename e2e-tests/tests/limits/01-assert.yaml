@@ -397,7 +397,7 @@ spec:
         - 1001
       serviceAccount: percona-server-mysql-operator-orchestrator
       serviceAccountName: percona-server-mysql-operator-orchestrator
-      terminationGracePeriodSeconds: 600
+      terminationGracePeriodSeconds: 30
       volumes:
       - emptyDir: {}
         name: bin
