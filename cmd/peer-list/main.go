@@ -145,8 +145,9 @@ func main() {
 	for script != "" {
 		select {
 		case <-ctx.Done():
-			log.Println("Context cancelled:", ctx.Err())
-			return
+			log.Println("Termination signal received")
+			script = ""
+			break
 		case <-ticker.C:
 			newPeers, err := lookup(ctx, *svc)
 			if err != nil {
