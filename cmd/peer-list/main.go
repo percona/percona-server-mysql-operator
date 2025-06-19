@@ -147,7 +147,6 @@ func main() {
 		case <-ctx.Done():
 			log.Println("Termination signal received")
 			script = ""
-			break
 		case <-ticker.C:
 			newPeers, err := lookup(ctx, *svc)
 			if err != nil {
