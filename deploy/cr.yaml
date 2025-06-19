@@ -185,7 +185,7 @@ spec:
 #        failureThreshold: 3
 #        successThreshold: 1
 
-      gracePeriod: 30
+      gracePeriod: 600
 
 #      configuration: |
 #
@@ -295,7 +295,7 @@ spec:
 #        topologyKey: kubernetes.io/hostname
 #        whenUnsatisfiable: DoNotSchedule
 
-      gracePeriod: 30
+      gracePeriod: 600
 
 #      configuration: |
 #        [default]
@@ -357,7 +357,7 @@ spec:
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
 
-    gracePeriod: 30
+    gracePeriod: 600
 
     resources:
       requests:

@@ -62,7 +62,7 @@ spec:
         - 1001
         - 1002
         - 1003
-      terminationGracePeriodSeconds: 30
+      terminationGracePeriodSeconds: 600
       volumes:
       - emptyDir: {}
         name: bin
