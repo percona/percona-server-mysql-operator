@@ -4901,6 +4901,29 @@ spec:
                       type:
                         type: string
                     type: object
+                  exposePrimary:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      enabled:
+                        type: boolean
+                      externalTrafficPolicy:
+                        type: string
+                      internalTrafficPolicy:
+                        type: string
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      loadBalancerSourceRanges:
+                        items:
+                          type: string
+                        type: array
+                      type:
+                        type: string
+                    type: object
                   gracePeriod:
                     format: int64
                     type: integer
