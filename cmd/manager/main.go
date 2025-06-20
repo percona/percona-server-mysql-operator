@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"strconv"
@@ -26,12 +27,14 @@ import (
 	"github.com/go-logr/logr"
 	uzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	eventsv1 "k8s.io/api/events/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsServer "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -179,6 +182,20 @@ func main() {
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
+
+	err = mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&eventsv1.Event{},
+		"regarding.name",
+		func(rawObj client.Object) []string {
+			event := rawObj.(*eventsv1.Event)
+			return []string{event.Regarding.Name}
+		},
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to index field")
+		os.Exit(1)
+	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
