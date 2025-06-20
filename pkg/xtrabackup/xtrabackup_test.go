@@ -9,6 +9,7 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 func TestJob(t *testing.T) {
@@ -51,11 +52,12 @@ func TestJob(t *testing.T) {
 		assert.Equal(t, "xb-backup-minio", j.Name)
 		assert.Equal(t, ns, j.Namespace)
 		assert.Equal(t, map[string]string{
-			"app.kubernetes.io/name":       "percona-server",
-			"app.kubernetes.io/part-of":    "percona-server",
-			"app.kubernetes.io/instance":   "cluster",
-			"app.kubernetes.io/managed-by": "percona-server-operator",
-			"app.kubernetes.io/component":  "xtrabackup",
+			"app.kubernetes.io/name":       "xtrabackup",
+			"app.kubernetes.io/part-of":    "percona-server-backup",
+			"app.kubernetes.io/version":    "v" + version.Version(),
+			"app.kubernetes.io/instance":   "backup",
+			"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
+			"app.kubernetes.io/component":  "backup",
 		}, j.Labels)
 		assert.Equal(t, map[string]string{"storage-annotation": "test"}, j.Annotations)
 	})

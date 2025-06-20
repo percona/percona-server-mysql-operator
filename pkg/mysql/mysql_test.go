@@ -13,6 +13,7 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 func TestStatefulSet(t *testing.T) {
@@ -46,13 +47,43 @@ func TestStatefulSet(t *testing.T) {
 		assert.Equal(t, "cluster-mysql", sts.Name)
 		assert.Equal(t, "mysql-ns", sts.Namespace)
 		labels := map[string]string{
-			"app.kubernetes.io/name":       "percona-server",
+			"app.kubernetes.io/name":       "mysql",
 			"app.kubernetes.io/part-of":    "percona-server",
 			"app.kubernetes.io/instance":   "cluster",
-			"app.kubernetes.io/managed-by": "percona-server-operator",
-			"app.kubernetes.io/component":  "mysql",
+			"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
+			"app.kubernetes.io/component":  "database",
+			"app.kubernetes.io/version":    "v" + version.Version(),
 		}
 		assert.Equal(t, labels, sts.Labels)
+	})
+
+	t.Run("defaults", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+
+		assert.Equal(t, int32(3), *sts.Spec.Replicas)
+		initContainers := sts.Spec.Template.Spec.InitContainers
+		assert.Len(t, initContainers, 1)
+		assert.Equal(t, initImage, initContainers[0].Image)
+
+		assert.Equal(t, map[string]string{
+			"percona.com/last-applied-tls":   tlsHash,
+			"percona.com/configuration-hash": configHash,
+		}, sts.Spec.Template.Annotations)
+	})
+
+	t.Run("termination grace period seconds", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+
+		cluster.Spec.MySQL.TerminationGracePeriodSeconds = nil
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		assert.Equal(t, int64(600), *sts.Spec.Template.Spec.TerminationGracePeriodSeconds)
+
+		cluster.Spec.MySQL.TerminationGracePeriodSeconds = ptr.To(int64(30))
+
+		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		assert.Equal(t, int64(30), *sts.Spec.Template.Spec.TerminationGracePeriodSeconds)
 	})
 
 	t.Run("image pull secrets", func(t *testing.T) {

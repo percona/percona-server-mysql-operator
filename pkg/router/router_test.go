@@ -8,6 +8,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 func TestDeployment(t *testing.T) {
@@ -33,13 +34,30 @@ func TestDeployment(t *testing.T) {
 		assert.Equal(t, "cluster-router", deployment.Name)
 		assert.Equal(t, "router-ns", deployment.Namespace)
 		labels := map[string]string{
-			"app.kubernetes.io/name":       "percona-server",
+			"app.kubernetes.io/name":       "router",
 			"app.kubernetes.io/part-of":    "percona-server",
+			"app.kubernetes.io/version":    "v" + version.Version(),
 			"app.kubernetes.io/instance":   "cluster",
-			"app.kubernetes.io/managed-by": "percona-server-operator",
-			"app.kubernetes.io/component":  "router",
+			"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
+			"app.kubernetes.io/component":  "proxy",
 		}
 		assert.Equal(t, labels, deployment.Labels)
+	})
+
+	t.Run("defaults", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+
+		deployment := Deployment(cluster, initImage, configHash, tlsHash)
+
+		assert.Equal(t, int32(3), *deployment.Spec.Replicas)
+		initContainers := deployment.Spec.Template.Spec.InitContainers
+		assert.Len(t, initContainers, 1)
+		assert.Equal(t, initImage, initContainers[0].Image)
+
+		assert.Equal(t, map[string]string{
+			"percona.com/last-applied-tls":   tlsHash,
+			"percona.com/configuration-hash": configHash,
+		}, deployment.Spec.Template.Annotations)
 	})
 
 	t.Run("image pull secrets", func(t *testing.T) {
