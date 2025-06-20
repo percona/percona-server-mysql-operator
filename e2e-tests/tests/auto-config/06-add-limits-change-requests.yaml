@@ -10,4 +10,4 @@ commands:
 
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
           --type json \
-          -p '[{"op": "replace", "path": "/spec/mysql/resources", "value": {"requests": {"memory": "512M"}, "limits": {"memory": "1Gi"}}}]'
+          -p '[{"op": "replace", "path": "/spec/mysql/resources", "value": {"requests": {"memory": "1Gi"}, "limits": {"memory": "4Gi"}}}]'

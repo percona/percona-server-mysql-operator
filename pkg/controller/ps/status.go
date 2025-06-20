@@ -24,6 +24,8 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 )
@@ -190,6 +192,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 
 	if !loadBalancersReady {
+		log.Info("Not all load balancers are ready, setting state to initializing")
 		cr.Status.State = apiv1alpha1.StateInitializing
 	}
 
@@ -226,6 +229,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
 	log := logf.FromContext(ctx).WithName("groupReplicationStatus")
 	if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
+		log.Info("Not all MySQL pods are ready", "ready", cr.Status.MySQL.Ready, "expected", cr.Spec.MySQL.Size)
 		return false, nil
 	}
 
@@ -250,26 +254,62 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 		return false, nil
 	}
 
-	members, err := db.GetGroupReplicationMembers(ctx)
+	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
+
+	msh, err := mysqlsh.NewWithExec(r.ClientCmd, pod, uri)
 	if err != nil {
 		return false, err
 	}
 
-	onlineMembers := 0
-	for _, member := range members {
+	status, err := msh.ClusterStatusWithExec(ctx, cr.InnoDBClusterName())
+	if err != nil {
+		return false, errors.Wrapf(err, "check cluster status from %s", pod.Name)
+	}
+
+	rescanNeeded := false
+	var onlineMembers int32
+	for _, member := range status.DefaultReplicaSet.Topology {
+		for _, instErr := range member.InstanceErrors {
+			log.WithName(member.Address).Info(instErr)
+			if strings.Contains(instErr, "rescan") {
+				log.Info("Cluster rescan is needed")
+				rescanNeeded = true
+			}
+		}
+
 		if member.MemberState != innodbcluster.MemberStateOnline {
 			log.WithName(member.Address).Info("Member is not ONLINE", "state", member.MemberState)
-			return false, nil
+			continue
 		}
+
 		onlineMembers++
 	}
 
-	if onlineMembers < int(cr.Spec.MySQL.Size) {
-		log.V(1).Info("Not enough ONLINE members", "onlineMembers", onlineMembers, "size", cr.Spec.MySQL.Size)
+	if rescanNeeded {
+		err := k8s.AnnotateObject(ctx, r.Client, cr, map[string]string{
+			string(naming.AnnotationRescanNeeded): "true",
+		})
+		if err != nil {
+			return false, errors.Wrap(err, "add rescan-needed annotation")
+		}
+	}
+
+	if onlineMembers < cr.Spec.MySQL.Size {
+		log.Info("Not all members are online", "online", onlineMembers, "size", cr.Spec.MySQL.Size)
 		return false, nil
 	}
 
-	log.V(1).Info("GR is ready")
+	switch status.DefaultReplicaSet.Status {
+	case innodbcluster.ClusterStatusOK,
+		innodbcluster.ClusterStatusOKPartial,
+		innodbcluster.ClusterStatusOKNoTolerance,
+		innodbcluster.ClusterStatusOKNoTolerancePartial:
+	default:
+		log.Info("Cluster status is not OK", "status", status.DefaultReplicaSet.Status)
+		return false, nil
+	}
+
+	log.V(1).Info("Group replication is ready", "primary", status.DefaultReplicaSet.Primary, "status", status.DefaultReplicaSet.Status)
 
 	return true, nil
 }
@@ -313,7 +353,7 @@ func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *api
 }
 
 func (r *PerconaServerMySQLReconciler) allLoadBalancersReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
-	opts := &client.ListOptions{Namespace: cr.Namespace, LabelSelector: labels.SelectorFromSet(cr.Labels())}
+	opts := &client.ListOptions{Namespace: cr.Namespace, LabelSelector: labels.SelectorFromSet(cr.Labels("", ""))}
 	svcList := &corev1.ServiceList{}
 	if err := r.Client.List(ctx, svcList, opts); err != nil {
 		return false, errors.Wrap(err, "list services")

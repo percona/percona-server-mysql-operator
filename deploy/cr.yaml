@@ -58,9 +58,9 @@ spec:
 #      value: "600"
     resources:
       requests:
-        memory: 1G
-      limits:
         memory: 2G
+      limits:
+        memory: 4G
 
 #    readinessProbe:
 #      initialDelaySeconds: 30
@@ -110,11 +110,17 @@ spec:
 #        - 10.0.0.0/8
 
     volumeSpec:
+#      emptyDir: { }
+#      hostPath:
+#        path: /data
+#        type: Directory
       persistentVolumeClaim:
+#        storageClassName: standard
+#        accessModes: [ "ReadWriteOnce" ]
         resources:
           requests:
             storage: 2G
-
+    gracePeriod: 600
 #    configuration: |
 #      max_connections=250
 #      innodb_buffer_pool_size={{containerMemoryLimit * 3/4}}
@@ -196,6 +202,8 @@ spec:
 #        periodSeconds: 5
 #        failureThreshold: 3
 #        successThreshold: 1
+
+      gracePeriod: 30
 
 #      configuration: |
 #
@@ -314,6 +322,8 @@ spec:
 #        topologyKey: kubernetes.io/hostname
 #        whenUnsatisfiable: DoNotSchedule
 
+      gracePeriod: 30
+
 #      configuration: |
 #        [default]
 #        logging_folder=/tmp/router/log
@@ -383,24 +393,19 @@ spec:
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
 
+    gracePeriod: 30
+
     resources:
       requests:
         memory: 128M
       limits:
         memory: 256M
 
-    volumeSpec:
-      persistentVolumeClaim:
-        resources:
-          requests:
-            storage: 1G
-
   pmm:
     enabled: false
-
     image: perconalab/pmm-client:3-dev-latest
     imagePullPolicy: Always
-
+#    mysqlParams: "--disable-tablestats-limit=2000"
     resources:
       requests:
         memory: 150M
@@ -410,7 +415,6 @@ spec:
 #        cpu: 400m
 
     serverHost: monitoring-service
-    serverUser: admin
 
   backup:
     enabled: true
@@ -433,6 +437,13 @@ spec:
 #    containerSecurityContext:
 #      privileged: true
     storages:
+#      azure-blob:
+#        type: azure
+#        azure:
+#          container: CONTAINER-NAME
+#          prefix: PREFIX-NAME
+#          endpointUrl: https://accountName.blob.core.windows.net
+#          credentialsSecret: SECRET-NAME
       s3-us-west:
         type: s3
         verifyTLS: true

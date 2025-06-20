@@ -22,5 +22,6 @@ scheduled-backup
 sidecars
 smart-update
 tls-cert-manager
+storage
 users
 version-service
