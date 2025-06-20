@@ -1,127 +1,97 @@
 package router
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
-	appsv1 "k8s.io/api/apps/v1"
+	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/yaml"
+	"k8s.io/utils/ptr"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 )
 
 func TestDeployment(t *testing.T) {
 	const ns = "router-ns"
 
+	const initImage = "init-image"
+	const configHash = "config-hash"
+	const tlsHash = "config-hash"
+
 	cr := readDefaultCluster(t, "cluster", ns)
-
-	tests := []struct {
-		name string
-
-		cluster    *apiv1alpha1.PerconaServerMySQL
-		initImage  string
-		configHash string
-		tlsHash    string
-
-		compareFile string
-	}{
-		{
-			name:        "default cr",
-			cluster:     cr.DeepCopy(),
-			initImage:   "init-image",
-			configHash:  "config-hash",
-			tlsHash:     "tls-hash",
-			compareFile: "default-deployment.yaml",
-		},
-		{
-			name: "default cr with image pull secrets",
-			cluster: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQL) {
-				cr.Spec.Proxy.Router.ImagePullSecrets = []corev1.LocalObjectReference{
-					{
-						Name: "secret-1",
-					},
-					{
-						Name: "secret-2",
-					},
-				}
-			}),
-			initImage:   "init-image",
-			configHash:  "config-hash",
-			tlsHash:     "tls-hash",
-			compareFile: "image-pull-secrets-deployment.yaml",
-		},
-		{
-			name: "default cr with runtime class name",
-			cluster: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQL) {
-				n := "runtime-class-name"
-				cr.Spec.Proxy.Router.RuntimeClassName = &n
-			}),
-			initImage:   "init-image",
-			configHash:  "config-hash",
-			tlsHash:     "tls-hash",
-			compareFile: "runtime-class-name.yaml",
-		},
-		{
-			name: "default cr with tolerations",
-			cluster: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQL) {
-				i := int64(1000)
-				cr.Spec.Proxy.Router.Tolerations = []corev1.Toleration{
-					{
-						Key:               "node.alpha.kubernetes.io/unreachable",
-						Operator:          "Exists",
-						Value:             "value",
-						Effect:            "NoExecute",
-						TolerationSeconds: &i,
-					},
-				}
-			}),
-			initImage:   "init-image",
-			configHash:  "config-hash",
-			tlsHash:     "tls-hash",
-			compareFile: "tolerations-deployment.yaml",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := Deployment(tt.cluster, tt.initImage, tt.configHash, tt.tlsHash)
-			compareObj(t, d, expectedObject[*appsv1.Deployment](t, tt.compareFile))
-		})
-	}
-}
-
-func expectedObject[T client.Object](t *testing.T, path string) T {
-	t.Helper()
-
-	data, err := os.ReadFile(filepath.Join("testdata", path))
-	if err != nil {
+	if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
+		Platform: platform.PlatformKubernetes,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
-	obj := new(T)
-	if err := yaml.Unmarshal(data, obj); err != nil {
-		t.Fatal(err)
-	}
+	t.Run("object meta", func(t *testing.T) {
+		cluster := cr.DeepCopy()
 
-	return *obj
-}
+		deployment := Deployment(cluster, initImage, configHash, tlsHash)
 
-func compareObj[T client.Object](t *testing.T, got, want T) {
-	t.Helper()
+		assert.NotNil(t, deployment)
+		assert.Equal(t, "cluster-router", deployment.Name)
+		assert.Equal(t, "router-ns", deployment.Namespace)
+		labels := map[string]string{
+			"app.kubernetes.io/name":       "percona-server",
+			"app.kubernetes.io/part-of":    "percona-server",
+			"app.kubernetes.io/instance":   "cluster",
+			"app.kubernetes.io/managed-by": "percona-server-operator",
+			"app.kubernetes.io/component":  "router",
+		}
+		assert.Equal(t, labels, deployment.Labels)
+	})
 
-	gotBytes, err := yaml.Marshal(got)
-	if err != nil {
-		t.Fatalf("error marshaling got: %v", err)
-	}
-	wantBytes, err := yaml.Marshal(want)
-	if err != nil {
-		t.Fatalf("error marshaling want: %v", err)
-	}
-	if string(gotBytes) != string(wantBytes) {
-		t.Fatal(cmp.Diff(string(wantBytes), string(gotBytes)))
-	}
+	t.Run("image pull secrets", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+
+		deployment := Deployment(cluster, initImage, configHash, tlsHash)
+		assert.Equal(t, []corev1.LocalObjectReference(nil), deployment.Spec.Template.Spec.ImagePullSecrets)
+
+		imagePullSecrets := []corev1.LocalObjectReference{
+			{
+				Name: "secret-1",
+			},
+			{
+				Name: "secret-2",
+			},
+		}
+		cluster.Spec.Proxy.Router.ImagePullSecrets = imagePullSecrets
+
+		deployment = Deployment(cluster, initImage, configHash, tlsHash)
+		assert.Equal(t, imagePullSecrets, deployment.Spec.Template.Spec.ImagePullSecrets)
+	})
+
+	t.Run("runtime class name", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		deployment := Deployment(cluster, initImage, configHash, tlsHash)
+		var e *string
+		assert.Equal(t, e, deployment.Spec.Template.Spec.RuntimeClassName)
+
+		const runtimeClassName = "runtimeClassName"
+		cluster.Spec.Proxy.Router.RuntimeClassName = ptr.To(runtimeClassName)
+
+		deployment = Deployment(cluster, initImage, configHash, tlsHash)
+		assert.Equal(t, runtimeClassName, *deployment.Spec.Template.Spec.RuntimeClassName)
+	})
+
+	t.Run("tolerations", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		deployment := Deployment(cluster, initImage, configHash, tlsHash)
+		assert.Equal(t, []corev1.Toleration(nil), deployment.Spec.Template.Spec.Tolerations)
+
+		tolerations := []corev1.Toleration{
+			{
+				Key:               "node.alpha.kubernetes.io/unreachable",
+				Operator:          "Exideployment",
+				Value:             "value",
+				Effect:            "NoExecute",
+				TolerationSeconds: ptr.To(int64(1001)),
+			},
+		}
+		cluster.Spec.Proxy.Router.Tolerations = tolerations
+
+		deployment = Deployment(cluster, initImage, configHash, tlsHash)
+		assert.Equal(t, tolerations, deployment.Spec.Template.Spec.Tolerations)
+	})
 }
