@@ -156,54 +156,58 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, tlsHash string) 
 					Affinity:                      spec.GetAffinity(labels),
 					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(labels),
 					ImagePullSecrets:              spec.ImagePullSecrets,
-					TerminationGracePeriodSeconds: spec.TerminationGracePeriodSeconds,
+					TerminationGracePeriodSeconds: spec.GetTerminationGracePeriodSeconds(),
 					PriorityClassName:             spec.PriorityClassName,
 					RuntimeClassName:              spec.RuntimeClassName,
 					ServiceAccountName:            spec.ServiceAccountName,
 					RestartPolicy:                 corev1.RestartPolicyAlways,
 					SchedulerName:                 spec.SchedulerName,
 					DNSPolicy:                     corev1.DNSClusterFirst,
-					Volumes: []corev1.Volume{
-						{
-							Name: apiv1alpha1.BinVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
-						},
-						{
-							Name: configVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
-						},
-						{
-							Name: credsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cr.InternalSecretName(),
-								},
-							},
-						},
-						{
-							Name: tlsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cr.Spec.SSLSecretName,
-								},
-							},
-						},
-						{
-							Name: customConfigVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: ConfigMapName(cr),
-									},
-								},
-							},
-						},
+					Volumes:                       volumes(cr),
+					SecurityContext:               spec.PodSecurityContext,
+				},
+			},
+		},
+	}
+}
+
+func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
+	return []corev1.Volume{
+		{
+			Name: apiv1alpha1.BinVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: configVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: credsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cr.InternalSecretName(),
+				},
+			},
+		},
+		{
+			Name: tlsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cr.Spec.SSLSecretName,
+				},
+			},
+		},
+		{
+			Name: customConfigVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: ConfigMapName(cr),
 					},
-					SecurityContext: spec.PodSecurityContext,
 				},
 			},
 		},

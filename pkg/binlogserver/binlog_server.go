@@ -55,8 +55,6 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 		annotations[string(naming.AnnotationConfigHash)] = configHash
 	}
 
-	t := true
-
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -95,81 +93,89 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 					Affinity:                      spec.GetAffinity(labels),
 					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(labels),
 					ImagePullSecrets:              spec.ImagePullSecrets,
-					TerminationGracePeriodSeconds: spec.TerminationGracePeriodSeconds,
+					TerminationGracePeriodSeconds: spec.GetTerminationGracePeriodSeconds(),
 					PriorityClassName:             spec.PriorityClassName,
 					RuntimeClassName:              spec.RuntimeClassName,
 					RestartPolicy:                 corev1.RestartPolicyAlways,
 					SchedulerName:                 spec.SchedulerName,
 					DNSPolicy:                     corev1.DNSClusterFirst,
-					Volumes: []corev1.Volume{
+					Volumes:                       volumes(cr),
+					SecurityContext:               spec.PodSecurityContext,
+				},
+			},
+		},
+	}
+}
+
+func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
+	t := true
+
+	spec := cr.Spec.Backup.PiTR.BinlogServer
+
+	return []corev1.Volume{
+		{
+			Name: apiv1alpha1.BinVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: credsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cr.InternalSecretName(),
+				},
+			},
+		},
+		{
+			Name: tlsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cr.Spec.SSLSecretName,
+				},
+			},
+		},
+		{
+			Name: storageCredsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: spec.Storage.S3.CredentialsSecret,
+				},
+			},
+		},
+		{
+			Name: configVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Projected: &corev1.ProjectedVolumeSource{
+					Sources: []corev1.VolumeProjection{
 						{
-							Name: apiv1alpha1.BinVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
-						},
-						{
-							Name: credsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cr.InternalSecretName(),
+							Secret: &corev1.SecretProjection{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: ConfigSecretName(cr),
 								},
-							},
-						},
-						{
-							Name: tlsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cr.Spec.SSLSecretName,
-								},
-							},
-						},
-						{
-							Name: storageCredsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: spec.Storage.S3.CredentialsSecret,
-								},
-							},
-						},
-						{
-							Name: configVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Projected: &corev1.ProjectedVolumeSource{
-									Sources: []corev1.VolumeProjection{
-										{
-											Secret: &corev1.SecretProjection{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: ConfigSecretName(cr),
-												},
-												Items: []corev1.KeyToPath{
-													{
-														Key:  ConfigKey,
-														Path: ConfigKey,
-													},
-												},
-											},
-										},
-										{
-											ConfigMap: &corev1.ConfigMapProjection{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: CustomConfigMapName(cr),
-												},
-												Items: []corev1.KeyToPath{
-													{
-														Key:  CustomConfigKey,
-														Path: CustomConfigKey,
-													},
-												},
-												Optional: &t,
-											},
-										},
+								Items: []corev1.KeyToPath{
+									{
+										Key:  ConfigKey,
+										Path: ConfigKey,
 									},
 								},
 							},
 						},
+						{
+							ConfigMap: &corev1.ConfigMapProjection{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: CustomConfigMapName(cr),
+								},
+								Items: []corev1.KeyToPath{
+									{
+										Key:  CustomConfigKey,
+										Path: CustomConfigKey,
+									},
+								},
+								Optional: &t,
+							},
+						},
 					},
-					SecurityContext: spec.PodSecurityContext,
 				},
 			},
 		},

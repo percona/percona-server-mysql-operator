@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -98,6 +99,32 @@ func TestValidateVolume(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expected, got)
 			}
+		})
+	}
+}
+
+func TestGetTerminationGracePeriodSeconds(t *testing.T) {
+	tests := map[string]struct {
+		input    *int64
+		expected int64
+	}{
+		"custom grace period": {
+			input:    to.Ptr(int64(20)),
+			expected: 20,
+		},
+		"nil grace period (default used)": {
+			input:    nil,
+			expected: 600,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			spec := PodSpec{
+				TerminationGracePeriodSeconds: tc.input,
+			}
+			result := spec.GetTerminationGracePeriodSeconds()
+			assert.Equal(t, tc.expected, *result)
 		})
 	}
 }
