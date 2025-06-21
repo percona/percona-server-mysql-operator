@@ -42,6 +42,10 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
+const (
+	defaultGracePeriodSec int64 = 600
+)
+
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
@@ -187,6 +191,16 @@ type PodSpec struct {
 	Configuration string `json:"configuration,omitempty"`
 
 	ContainerSpec `json:",inline"`
+}
+
+// GetTerminationGracePeriodSeconds returns the configured termination grace period for the Pod.
+// If not explicitly set, it returns the default grace period.
+func (s PodSpec) GetTerminationGracePeriodSeconds() *int64 {
+	gp := defaultGracePeriodSec
+	if s.TerminationGracePeriodSeconds != nil {
+		return s.TerminationGracePeriodSeconds
+	}
+	return &gp
 }
 
 // Retrieves the initialization image for the pod.
