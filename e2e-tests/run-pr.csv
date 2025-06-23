@@ -33,3 +33,4 @@ smart-update
 storage
 tls-cert-manager
 users
+pvc-resize

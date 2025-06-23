@@ -1,0 +1,41 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      echo "Verifying data integrity after PVC resize..."
+
+      original_count=$(kubectl get configmap -n "${NAMESPACE}" initial-data-count -o jsonpath='{.data.count}')
+      echo "Original data count: $original_count"
+
+      current_count=$(run_mysql "SELECT COUNT(*) FROM pvctest.data" "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password")
+      echo "Current data count: $current_count"
+
+      if [[ "$original_count" != "$current_count" ]]; then
+          echo "ERROR: Data count mismatch! Original: $original_count, Current: $current_count"
+          exit 1
+      fi
+
+      sample_data=$(run_mysql "SELECT data FROM pvctest.data WHERE id=1" "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password")
+      echo "Sample data: $sample_data"
+
+      if [[ "$sample_data" != "test data row 1 with some content to use storage space" ]]; then
+          echo "ERROR: Sample data verification failed"
+          exit 1
+      fi
+
+      run_mysql \
+          "INSERT pvctest.data (id, data) VALUES (2000, 'post-resize test data')" \
+          "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+
+      new_data=$(run_mysql "SELECT data FROM pvctest.data WHERE id=2000" "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password")
+      if [[ "$new_data" != "post-resize test data" ]]; then
+          echo "ERROR: Failed to insert data after resize"
+          exit 1
+      fi
+
+      echo "Data integrity verified successfully after PVC resize!"
