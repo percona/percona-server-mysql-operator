@@ -46,10 +46,3 @@ func readDefaultFile[T any](t *testing.T, filename string, obj *T) {
 		t.Fatal(err)
 	}
 }
-
-func updateResource[T any](cr *T, updateFuncs ...func(cr *T)) *T {
-	for _, f := range updateFuncs {
-		f(cr)
-	}
-	return cr
-}
