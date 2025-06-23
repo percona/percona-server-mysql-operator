@@ -1,13 +1,11 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 90
 commands:
-  - script: |-
+  - timeout: 720
+    script: |-
       set -o errexit
       set -o xtrace
 
       source ../../functions
 
-      network_loss "${NAMESPACE}" "$(get_primary_from_group_replication)" "primary"
-      sleep 30 # wait for new master to get elected
-    timeout: 90
+      check_primary_chaos "network" ${NAMESPACE} $(get_primary_from_group_replication)

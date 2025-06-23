@@ -63,7 +63,7 @@ var (
 
 func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoint string, outb, errb *bytes.Buffer) error {
 	c := []string{"curl", fmt.Sprintf("localhost:%d/%s", defaultWebPort, endpoint)}
-	err := cliCmd.Exec(ctx, pod, "orc", c, nil, outb, errb, false)
+	err := cliCmd.Exec(ctx, pod, AppName, c, nil, outb, errb, false)
 	if err != nil {
 		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", c, outb, errb)
 	}

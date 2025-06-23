@@ -100,7 +100,8 @@ deploy_tls_cluster_secrets() {
 }
 
 deploy_client() {
-	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/client.yaml"
+  yq eval "$(printf '.spec.containers[0].image="%s"' "${IMAGE_MYSQL}")" "${TESTS_CONFIG_DIR}/client.yaml" | \
+    kubectl -n "${NAMESPACE}" apply -f -
 }
 
 apply_s3_storage_secrets() {
@@ -385,8 +386,27 @@ run_mysqlsh() {
 	wait_pod $client_pod 1>&2
 
 	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
-		bash -c "printf '%s\n' \"${command}\" | mysqlsh --sql --quiet-start=2 $uri" 2>&1 \
+		bash -c "printf '%s\n' \"${command}\" | mysqlsh --sql --quiet-start=2 $uri" 2>/dev/null \
 		| tail -n +2
+}
+
+get_innodb_cluster_status() {
+	local uri="$1"
+
+	client_pod=$(get_client_pod)
+	wait_pod $client_pod 1>&2
+
+	kubectl -n "${NAMESPACE}" exec "${client_pod}" -- mysqlsh --js --quiet-start=2 --uri ${uri} -- cluster status
+}
+
+wait_until_innodb_ok() {
+	local uri="$1"
+
+  local retry=0
+  until [[ $(get_innodb_cluster_status ${uri} | jq -r .defaultReplicaSet.status) == "OK" ]]; do
+    sleep 5
+    retry=$((retry + 1))
+  done
 }
 
 run_curl() {
@@ -395,6 +415,13 @@ run_curl() {
 
 get_innodb_cluster_name() {
 	echo $(get_cluster_name) | tr -cd '[^a-zA-Z0-9_]+'
+}
+
+get_mysqlsh_uri_for_pod() {
+  local pod=$1
+
+
+	echo "root:root_password@${pod}.$(get_cluster_name)-mysql.${NAMESPACE}"
 }
 
 get_mysqlsh_uri() {
@@ -409,7 +436,7 @@ get_gr_status() {
 
 	client_pod=$(get_client_pod)
 
-	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- mysqlsh --uri $uri --cluster --result-format json -- cluster status \
+	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- mysqlsh --js --uri $uri --cluster --result-format json -- cluster status \
 		| sed -e 's/mysql: //' \
 		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
 }
@@ -515,17 +542,17 @@ EOF
 }
 
 get_mysql_pods() {
-	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/component=mysql | awk '{print $1}'
+	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/name=mysql | awk '{print $1}'
 }
 
 get_router_pods() {
-	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/component=router | awk '{print $1}'
+	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/name=router | awk '{print $1}'
 }
 
 get_mysql_users() {
 	local args=$1
 
-	run_mysql "SELECT user FROM mysql.user" "${args}" | grep -vE "mysql|root"
+	run_mysql "SELECT user FROM mysql.user" "${args}" | grep -vE "mysql|root|percona.telemetry"
 }
 
 get_service_ip() {
@@ -780,19 +807,14 @@ deploy_chaos_mesh() {
 
 	helm repo add chaos-mesh https://charts.chaos-mesh.org
 	if [ -n "${MINIKUBE}" ]; then
-		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=docker --set dashboard.create=false --version ${CHAOS_MESH_VER} --wait
+		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=docker --set dashboard.create=false --version ${CHAOS_MESH_VER}
 	else
 		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version ${CHAOS_MESH_VER}
 	fi
 	if [[ -n $OPENSHIFT ]]; then
 		oc adm policy add-scc-to-user privileged -z chaos-daemon --namespace=${NAMESPACE}
 	fi
-
-	echo "Waiting for chaos-mesh DaemonSet to be ready..."
-    until [ "$(kubectl get daemonset chaos-daemon -n ${NAMESPACE} -o jsonpath='{.status.numberReady}')" = "$(kubectl get daemonset chaos-daemon -n ${NAMESPACE} -o jsonpath='{.status.desiredNumberScheduled}')" ]; do
-        echo "Waiting for DaemonSet chaos-daemon..."
-        sleep 5
-    done
+	sleep 10
 }
 
 destroy_chaos_mesh() {
@@ -824,17 +846,17 @@ kill_pods() {
 	local selector=$2
 	local pod_label=$3
 	local label_value=$4
-	local chaos_suffix=$5
+	local chaos_name=$5
 
 	if [ "${selector}" == "pod" ]; then
 		yq eval '
-			.metadata.name = "chaos-pod-kill-'${chaos_suffix}'" |
+			.metadata.name = "'${chaos_name}'" |
 			del(.spec.selector.pods.test-namespace) |
 			.spec.selector.pods.'${ns}'[0] = "'${pod_label}'"' ${TESTS_CONFIG_DIR}/chaos-pod-kill.yml \
 			| kubectl apply --namespace ${ns} -f -
 	elif [ "${selector}" == "label" ]; then
 		yq eval '
-			.metadata.name = "chaos-kill-label-'${chaos_suffix}'" |
+			.metadata.name = "'${chaos_name}'" |
 			.spec.mode = "all" |
 			del(.spec.selector.pods) |
 			.spec.selector.labelSelectors."'${pod_label}'" = "'${label_value}'"' ${TESTS_CONFIG_DIR}/chaos-pod-kill.yml \
@@ -846,10 +868,10 @@ kill_pods() {
 failure_pod() {
 	local ns=$1
 	local pod=$2
-	local chaos_suffix=$3
+	local chaos_name=$3
 
 	yq eval '
-        .metadata.name = "chaos-pod-failure-'${chaos_suffix}'" |
+        .metadata.name = "'${chaos_name}'" |
         del(.spec.selector.pods.test-namespace) |
         .spec.selector.pods.'${ns}'[0] = "'${pod}'"' ${TESTS_CONFIG_DIR}/chaos-pod-failure.yml \
 		| kubectl apply --namespace ${ns} -f -
@@ -859,14 +881,131 @@ failure_pod() {
 network_loss() {
 	local ns=$1
 	local pod=$2
-	local chaos_suffix=$3
+	local chaos_name=$3
 
 	yq eval '
-        .metadata.name = "chaos-pod-network-loss-'${chaos_suffix}'" |
+        .metadata.name = "'${chaos_name}'" |
         del(.spec.selector.pods.test-namespace) |
         .spec.selector.pods.'${ns}'[0] = "'${pod}'"' ${TESTS_CONFIG_DIR}/chaos-network-loss.yml \
 		| kubectl apply --namespace ${ns} -f -
 	sleep 5
+}
+
+wait_until_chaos_applied() {
+      local chaos_type=$1
+      local chaos_name=$2
+
+      local resource
+      case ${chaos_type} in
+        "kill"|"failure"|"full-cluster-crash")
+          resource=podchaos/${chaos_name}
+          ;;
+        "network")
+          resource=networkchaos/${chaos_name}
+          ;;
+      esac
+
+      local retry=0
+      until [[ ${retry} == 30 ]]; do
+        sleep 10
+        retry=$((retry + 1))
+
+        succeeded=$(kubectl -n ${NAMESPACE} get ${resource} -o yaml \
+          | yq '.status.experiment.containerRecords[].events[]
+                  | select(.operation == "Apply" and .type == "Succeeded")')
+
+        if [[ -n ${succeeded} ]]; then
+          return
+        fi
+      done
+
+      echo "Timeout (300s) exceeded while waiting for chaos to be applied"
+      exit 1
+}
+
+wait_until_chaos_recovered() {
+      local chaos_type=$1
+      local chaos_name=$2
+
+      local resource
+      case ${chaos_type} in
+        "kill"|"failure")
+          resource=podchaos/${chaos_name}
+          ;;
+        "network")
+          resource=networkchaos/${chaos_name}
+          ;;
+      esac
+
+      local retry=0
+      until [[ ${retry} == 30 ]]; do
+        sleep 10
+        retry=$((retry + 1))
+
+        succeeded=$(kubectl -n ${NAMESPACE} get ${resource} -o yaml \
+          | yq '.status.experiment.containerRecords[].events[]
+                  | select(.operation == "Recover" and .type == "Succeeded")')
+
+        if [[ -n ${succeeded} ]]; then
+          return
+        fi
+      done
+
+      echo "Timeout (300s) exceeded while waiting for chaos to be recovered"
+      exit 1
+}
+
+check_primary_chaos() {
+      local chaos_type=$1
+      local ns=$2
+      local primary_before_failure=$3
+
+      local chaos_name
+      case ${chaos_type} in
+        "kill")
+          chaos_name="chaos-pod-kill-primary"
+          kill_pods "${ns}" "pod" "${primary_before_failure}" "" "${chaos_name}"
+          ;;
+        "full-cluster-crash")
+          chaos_name="chaos-kill-label-cluster-crash"
+          kill_pods "${ns}" "label" "app.kubernetes.io/instance" "gr-self-healing" "${chaos_name}"
+          ;;
+        "failure")
+          chaos_name="chaos-pod-failure-primary"
+          failure_pod "${ns}" "${primary_before_failure}" "${chaos_name}"
+          ;;
+        "network")
+          chaos_name="chaos-pod-network-loss-primary"
+          network_loss "${ns}" "${primary_before_failure}" "${chaos_name}"
+          ;;
+      esac
+
+      wait_until_chaos_applied ${chaos_type} ${chaos_name}
+      if [[ ${chaos_type} == "failure" || ${chaos_type} == "network" ]]; then
+        wait_until_chaos_recovered ${chaos_type} ${chaos_name}
+      fi
+
+      wait_cluster_consistency_gr "$(get_cluster_name)" 3 3
+
+      primary_after_failure=$(get_primary_from_group_replication)
+      uri=$(get_mysqlsh_uri_for_pod ${primary_after_failure})
+      wait_until_innodb_ok ${uri}
+
+      if [[ "${primary_before_failure}" == "${primary_after_failure}" ]]; then
+          echo "primary pod was not killed! something went wrong."
+          exit 1
+      fi
+
+      uri=$(get_mysqlsh_uri_for_pod $(get_primary_from_group_replication))
+      online_members=$(get_innodb_cluster_status ${uri} \
+          | jq .defaultReplicaSet.topology[].status \
+          | grep ONLINE \
+          | wc -l)
+
+      if [[ ${online_members} != 3 ]]; then
+          echo "expected 3 online members, got ${online_members}"
+          exit 1
+      fi
 }
 
 renew_certificate() {
@@ -898,4 +1037,111 @@ deploy_cmctl() {
 		| yq '(select(.rules).rules[] | select(contains({"apiGroups": ["cert-manager.io"]}))).resources += "certificates/status"' \
 		| kubectl apply -n "${NAMESPACE}" -f -
 	kubectl apply -n "${NAMESPACE}" -f "${TESTS_CONFIG_DIR}/cmctl.yml"
+}
+
+get_operator_version() {
+	kubectl get crd -n "$NAMESPACE" perconaservermysqls.ps.percona.com -o jsonpath='{.metadata.labels.app\.kubernetes\.io/version}'
+}
+
+check_backup_job_labels() {
+	local psbackup
+	psbackup=$1
+
+	local jobs_count
+	jobs_count=$(kubectl get jobs -n "$NAMESPACE" -l "app.kubernetes.io/instance=${psbackup}" -o yaml | yq '.items | length')
+	if [ "$jobs_count" -ne 1 ]; then
+		echo "There are $jobs_count with app.kubernetes.io/instance=${psbackup} label. We should have only one"
+		exit 1
+	fi
+
+	local job
+	job=$(kubectl get jobs -n "$NAMESPACE" -l "app.kubernetes.io/instance=${psbackup}" -o yaml | yq '.items[0].metadata.name')
+
+	local labels
+	labels=$(kubectl get job "$job" -n "$NAMESPACE" -o json | jq -r '.metadata.labels')
+
+	local template_labels
+	template_labels=$(kubectl get job "$job" -n "$NAMESPACE" -o json | jq -r '.spec.template.metadata.labels')
+
+	local cluster_name
+	cluster_name=$(kubectl get ps-backup -n "$NAMESPACE" "${psbackup}" -o jsonpath='{.spec.clusterName}')
+
+	local expected_labels
+	expected_labels=(
+		"app.kubernetes.io/component=backup"
+		"app.kubernetes.io/instance=$psbackup"
+		"app.kubernetes.io/managed-by=percona-server-mysql-operator"
+		"app.kubernetes.io/name=xtrabackup"
+		"app.kubernetes.io/part-of=percona-server-backup"
+		"app.kubernetes.io/version=$(get_operator_version)"
+	)
+
+	local all_match
+	all_match=true
+
+	for entry in "${expected_labels[@]}"; do
+		key="${entry%%=*}"
+		expected_value="${entry#*=}"
+		actual_value=$(echo "$labels" | jq -r --arg key "$key" '.[$key]')
+
+		if [ "$actual_value" != "$expected_value" ]; then
+			echo "Label mismatch: $key (expected: $expected_value, found: $actual_value)"
+			all_match=false
+		fi
+
+		actual_value=$(echo "$template_labels" | jq -r --arg key "$key" '.[$key]')
+		if [ "$actual_value" != "$expected_value" ]; then
+			echo "Template label mismatch: $key (expected: $expected_value, found: $actual_value)"
+			all_match=false
+		fi
+	done
+
+	if [ "$all_match" != true ]; then
+		exit 1
+	fi
+}
+
+check_scheduled_backup_labels() {
+	local psbackup
+	psbackup=$1
+
+	local labels
+	labels=$(kubectl get ps-backup "$psbackup" -n "$NAMESPACE" -o json | jq -r '.metadata.labels')
+
+	local cluster_name
+	cluster_name=$(kubectl get ps-backup -n "$NAMESPACE" "${psbackup}" -o jsonpath='{.spec.clusterName}')
+
+	local expected_labels
+	expected_labels=(
+		"app.kubernetes.io/managed-by=percona-server-mysql-operator"
+		"app.kubernetes.io/name=percona-server-backup"
+		"app.kubernetes.io/part-of=percona-server"
+		"app.kubernetes.io/version=$(get_operator_version)"
+		"percona.com/backup-type=cron"
+		"percona.com/cluster=${cluster_name}"
+	)
+
+	local all_match
+	all_match=true
+
+	for entry in "${expected_labels[@]}"; do
+		key="${entry%%=*}"
+		expected_value="${entry#*=}"
+		actual_value=$(echo "$labels" | jq -r --arg key "$key" '.[$key]')
+
+		if [ "$actual_value" != "$expected_value" ]; then
+			echo "Label mismatch: $key (expected: $expected_value, found: $actual_value)"
+			all_match=false
+		fi
+	done
+
+	if [ "$all_match" != true ]; then
+		exit 1
+	fi
+
+	backup_ancestor_label=$(kubectl get ps-backup -n "$NAMESPACE" "${psbackup}" -o jsonpath='{.metadata.labels.percona\.com/backup-ancestor}')
+	if [ -z "$backup_ancestor_label" ]; then
+		echo "Label percona.com/backup-ancestor is missing"
+		exit 1
+	fi
 }

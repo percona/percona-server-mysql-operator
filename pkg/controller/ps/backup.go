@@ -22,6 +22,7 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
 type cronRegistry struct {
@@ -119,17 +120,18 @@ func (r *cronRegistry) createBackupJobFunc(ctx context.Context, cl client.Client
 				Finalizers: []string{naming.FinalizerDeleteBackup},
 				Namespace:  cr.Namespace,
 				Name:       generateBackupName(cr, backupJob),
-				Labels: map[string]string{
+				Labels: util.SSMapMerge(map[string]string{
 					naming.LabelBackupAncestor: backupJob.Name,
 					naming.LabelCluster:        cr.Name,
 					naming.LabelBackupType:     "cron",
-				},
+				}, naming.Labels("percona-server-backup", "", "percona-server", "")),
 			},
 			Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
 				ClusterName: cr.Name,
 				StorageName: backupJob.StorageName,
 			},
 		}
+
 		err = cl.Create(ctx, bcp)
 		if err != nil {
 			log.Error(err, "failed to create backup")

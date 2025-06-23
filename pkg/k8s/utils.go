@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -448,4 +449,16 @@ func DeleteSecrets(ctx context.Context, cl client.Client, cr *apiv1alpha1.Percon
 	}
 
 	return nil
+}
+
+func GetImageIDFromPod(pod *corev1.Pod, containerName string) (string, error) {
+	idx := slices.IndexFunc(pod.Status.ContainerStatuses, func(s corev1.ContainerStatus) bool {
+		return s.Name == containerName
+	})
+
+	if idx == -1 {
+		return "", errors.Errorf("%s not found in pod", containerName)
+	}
+
+	return pod.Status.ContainerStatuses[idx].ImageID, nil
 }
