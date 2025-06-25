@@ -27,7 +27,7 @@ require (
 	golang.org/x/text v0.26.0
 	google.golang.org/grpc v1.73.0
 	k8s.io/api v0.33.2
-	k8s.io/apiextensions-apiserver v0.33.1
+	k8s.io/apiextensions-apiserver v0.33.2
 	k8s.io/apimachinery v0.33.2
 	k8s.io/client-go v0.33.2
 	k8s.io/utils v0.0.0-20250502105355-0f33e8f1c979
