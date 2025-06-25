@@ -7,7 +7,8 @@ commands:
 
       source ../../functions
 
-      mysql_args="-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+      password=$(get_user_pass root)
+      mysql_args="-h $(get_haproxy_svc $(get_cluster_name)) -uroot -p'$password'"
       users=($(get_mysql_users "${mysql_args}"))
 
       args=''
