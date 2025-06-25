@@ -28,6 +28,47 @@ metadata:
   name: gr-one-pod-router
 spec:
   replicas: 1
+  template:
+    spec:
+      containers:
+      - args:
+        - mysqlrouter
+        - -c
+        - /tmp/router/mysqlrouter.conf
+        command:
+        - /opt/percona/router-entrypoint.sh
+        env:
+        - name: MYSQL_SERVICE_NAME
+          value: gr-one-pod-mysql
+        name: router
+        ports:
+        - containerPort: 8443
+          name: http
+          protocol: TCP
+        - containerPort: 6446
+          name: rw-default
+          protocol: TCP
+        - containerPort: 6446
+          name: read-write
+          protocol: TCP
+        - containerPort: 6447
+          name: read-only
+          protocol: TCP
+        - containerPort: 6448
+          name: x-read-write
+          protocol: TCP
+        - containerPort: 6449
+          name: x-read-only
+          protocol: TCP
+        - containerPort: 33060
+          name: x-default
+          protocol: TCP
+        - containerPort: 33062
+          name: rw-admin
+          protocol: TCP
+        - containerPort: 3333
+          name: custom-port
+          protocol: TCP
 status:
   availableReplicas: 1
   observedGeneration: 1
@@ -59,3 +100,67 @@ status:
     size: 1
     state: ready
   state: ready
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: router
+    app.kubernetes.io/instance: gr-one-pod
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  name: gr-one-pod-router
+spec:
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: http
+    port: 8443
+    protocol: TCP
+    targetPort: 8443
+  - name: rw-default
+    port: 1111
+    protocol: TCP
+    targetPort: 6446
+  - name: read-write
+    port: 6446
+    protocol: TCP
+    targetPort: 6446
+  - name: read-only
+    port: 6447
+    protocol: TCP
+    targetPort: 6447
+  - name: x-read-write
+    port: 6448
+    protocol: TCP
+    targetPort: 6448
+  - name: x-read-only
+    port: 6449
+    protocol: TCP
+    targetPort: 6449
+  - name: x-default
+    port: 33060
+    protocol: TCP
+    targetPort: 33060
+  - name: rw-admin
+    port: 33062
+    protocol: TCP
+    targetPort: 33062
+  - name: custom-port
+    port: 2222
+    protocol: TCP
+    targetPort: 3333
+  selector:
+    app.kubernetes.io/component: router
+    app.kubernetes.io/instance: gr-one-pod
+    app.kubernetes.io/managed-by: percona-server-operator
+    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/part-of: percona-server
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+
