@@ -995,10 +995,10 @@ var _ = Describe("Primary mysql service", Ordered, func() {
 			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 
 			Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeClusterIP))
-			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/component", "mysql"))
+			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/component", "database"))
 			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/instance", "gr-primary-service"))
-			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/managed-by", "percona-server-operator"))
-			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/name", "percona-server"))
+			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/managed-by", "percona-server-mysql-operator"))
+			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/name", "mysql"))
 			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/part-of", "percona-server"))
 			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("mysql.percona.com/primary", "true"))
 		})
