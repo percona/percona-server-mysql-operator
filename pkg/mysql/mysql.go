@@ -96,6 +96,10 @@ func ProxyServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr) + "-proxy"
 }
 
+func PrimaryServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
+	return Name(cr) + "-primary"
+}
+
 func ConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
@@ -494,6 +498,50 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 		},
 		Spec: corev1.ServiceSpec{
 			Type:                     t,
+			Selector:                 selector,
+			Ports:                    servicePorts(cr),
+			LoadBalancerSourceRanges: loadBalancerSourceRanges,
+			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
+			ExternalTrafficPolicy:    externalTrafficPolicy,
+		},
+	}
+}
+
+// PrimaryService constructs a service which exposes the pods that has the primary label.
+// For now this service should be available only for group replication.
+func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
+	expose := cr.Spec.MySQL.ExposePrimary
+
+	labels := MatchLabels(cr)
+	labels = util.SSMapMerge(expose.Labels, labels)
+
+	selector := MatchLabels(cr)
+	selector[naming.LabelMySQLPrimary] = "true"
+	selector = util.SSMapMerge(expose.Labels, selector)
+
+	var loadBalancerSourceRanges []string
+	if expose.Type == corev1.ServiceTypeLoadBalancer {
+		loadBalancerSourceRanges = expose.LoadBalancerSourceRanges
+	}
+
+	var externalTrafficPolicy corev1.ServiceExternalTrafficPolicyType
+	if expose.Type == corev1.ServiceTypeLoadBalancer || expose.Type == corev1.ServiceTypeNodePort {
+		externalTrafficPolicy = expose.ExternalTrafficPolicy
+	}
+
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Service",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        PrimaryServiceName(cr),
+			Namespace:   cr.Namespace,
+			Labels:      labels,
+			Annotations: expose.Annotations,
+		},
+		Spec: corev1.ServiceSpec{
+			Type:                     expose.Type,
 			Selector:                 selector,
 			Ports:                    servicePorts(cr),
 			LoadBalancerSourceRanges: loadBalancerSourceRanges,
