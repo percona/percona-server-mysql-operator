@@ -192,6 +192,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 
 	if !loadBalancersReady {
+		log.Info("Not all load balancers are ready, setting state to initializing")
 		cr.Status.State = apiv1alpha1.StateInitializing
 	}
 
@@ -228,6 +229,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
 	log := logf.FromContext(ctx).WithName("groupReplicationStatus")
 	if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
+		log.Info("Not all MySQL pods are ready", "ready", cr.Status.MySQL.Ready, "expected", cr.Spec.MySQL.Size)
 		return false, nil
 	}
 
@@ -284,8 +286,8 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 	}
 
 	if rescanNeeded {
-		err := k8s.AnnotateObject(ctx, r.Client, cr, map[string]string{
-			string(naming.AnnotationRescanNeeded): "true",
+		err := k8s.AnnotateObject(ctx, r.Client, cr, map[naming.AnnotationKey]string{
+			naming.AnnotationRescanNeeded: "true",
 		})
 		if err != nil {
 			return false, errors.Wrap(err, "add rescan-needed annotation")
@@ -351,7 +353,7 @@ func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *api
 }
 
 func (r *PerconaServerMySQLReconciler) allLoadBalancersReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
-	opts := &client.ListOptions{Namespace: cr.Namespace, LabelSelector: labels.SelectorFromSet(cr.Labels())}
+	opts := &client.ListOptions{Namespace: cr.Namespace, LabelSelector: labels.SelectorFromSet(cr.Labels("", ""))}
 	svcList := &corev1.ServiceList{}
 	if err := r.Client.List(ctx, svcList, opts); err != nil {
 		return false, errors.Wrap(err, "list services")

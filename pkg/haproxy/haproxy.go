@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	ComponentName   = "haproxy"
+	AppName         = "haproxy"
 	credsVolumeName = "users"
 	CredsMountPath  = "/etc/mysql/mysql-users-secret"
 	tlsVolumeName   = "tls"
@@ -35,7 +35,7 @@ const (
 )
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
-	return cr.Name + "-" + ComponentName
+	return cr.Name + "-" + AppName
 }
 
 func NamespacedName(cr *apiv1alpha1.PerconaServerMySQL) types.NamespacedName {
@@ -48,8 +48,7 @@ func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
-		map[string]string{naming.LabelComponent: ComponentName},
-		cr.Labels())
+		cr.Labels(AppName, naming.ComponentProxy))
 }
 
 func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
@@ -137,7 +136,6 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}
 
-	t := true
 	return &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -165,7 +163,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 					Tolerations:  cr.Spec.Proxy.HAProxy.Tolerations,
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
-							ComponentName,
+							AppName,
 							initImage,
 							cr.Spec.Proxy.HAProxy.ImagePullPolicy,
 							cr.Spec.Proxy.HAProxy.ContainerSecurityContext,
@@ -173,68 +171,74 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 							nil,
 						),
 					},
-					Containers:                containers(cr, secret),
-					Affinity:                  cr.Spec.Proxy.HAProxy.GetAffinity(labels),
-					TopologySpreadConstraints: cr.Spec.Proxy.HAProxy.GetTopologySpreadConstraints(labels),
-					ImagePullSecrets:          cr.Spec.Proxy.HAProxy.ImagePullSecrets,
-					// TerminationGracePeriodSeconds: 30,
-					RestartPolicy: corev1.RestartPolicyAlways,
-					SchedulerName: "default-scheduler",
-					DNSPolicy:     corev1.DNSClusterFirst,
-					Volumes: []corev1.Volume{
+					Containers:                    containers(cr, secret),
+					Affinity:                      cr.Spec.Proxy.HAProxy.GetAffinity(labels),
+					TopologySpreadConstraints:     cr.Spec.Proxy.HAProxy.GetTopologySpreadConstraints(labels),
+					ImagePullSecrets:              cr.Spec.Proxy.HAProxy.ImagePullSecrets,
+					TerminationGracePeriodSeconds: cr.Spec.Proxy.HAProxy.GetTerminationGracePeriodSeconds(),
+					RestartPolicy:                 corev1.RestartPolicyAlways,
+					SchedulerName:                 "default-scheduler",
+					DNSPolicy:                     corev1.DNSClusterFirst,
+					Volumes:                       volumes(cr),
+					SecurityContext:               cr.Spec.Proxy.HAProxy.PodSecurityContext,
+				},
+			},
+		},
+	}
+}
+
+func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
+	t := true
+
+	return []corev1.Volume{
+		{
+			Name: "bin",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: "haproxy-config",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: credsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cr.InternalSecretName(),
+				},
+			},
+		},
+		{
+			Name: tlsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cr.Spec.SSLSecretName,
+				},
+			},
+		},
+		{
+			Name: configVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Projected: &corev1.ProjectedVolumeSource{
+					Sources: []corev1.VolumeProjection{
 						{
-							Name: "bin",
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
-						},
-						{
-							Name: "haproxy-config",
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
-						},
-						{
-							Name: credsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cr.InternalSecretName(),
+							ConfigMap: &corev1.ConfigMapProjection{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: Name(cr),
 								},
-							},
-						},
-						{
-							Name: tlsVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cr.Spec.SSLSecretName,
-								},
-							},
-						},
-						{
-							Name: configVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Projected: &corev1.ProjectedVolumeSource{
-									Sources: []corev1.VolumeProjection{
-										{
-											ConfigMap: &corev1.ConfigMapProjection{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: Name(cr),
-												},
-												Items: []corev1.KeyToPath{
-													{
-														Key:  CustomConfigKey,
-														Path: "haproxy.cfg",
-													},
-												},
-												Optional: &t,
-											},
-										},
+								Items: []corev1.KeyToPath{
+									{
+										Key:  CustomConfigKey,
+										Path: "haproxy.cfg",
 									},
 								},
+								Optional: &t,
 							},
 						},
 					},
-					SecurityContext: cr.Spec.Proxy.HAProxy.PodSecurityContext,
 				},
 			},
 		},
@@ -266,7 +270,7 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 		pmmC := pmm.Container(
 			cr,
 			secret,
-			ComponentName,
+			AppName,
 			"--listen-port="+strconv.Itoa(PortPMMStats))
 		pmmC.Ports = append(pmmC.Ports, corev1.ContainerPort{ContainerPort: PortPMMStats})
 
@@ -287,7 +291,7 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	env = append(env, spec.Env...)
 
 	return corev1.Container{
-		Name:            ComponentName,
+		Name:            AppName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
 		Resources:       spec.Resources,

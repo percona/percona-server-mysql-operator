@@ -1,0 +1,20 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 30
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # Check initial PVC sizes
+      echo "Initial PVC sizes:"
+      kubectl get pvc -n "${NAMESPACE}" -l app.kubernetes.io/name=percona-server-mysql
+
+      # Update the cluster to request larger PVC size (from 2G to 3G)
+      kubectl -n "${NAMESPACE}" patch ps pvc-resize \
+        --type=merge \
+        -p='{"spec":{"mysql":{"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3G"}}}}}}}'
+
+      echo "PVC resize request submitted"

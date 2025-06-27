@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/tls"
 )
 
@@ -25,7 +26,7 @@ func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cr.Spec.SSLSecretName,
 			Namespace: cr.Namespace,
-			Labels:    cr.Labels(),
+			Labels:    cr.Labels("certificate", naming.ComponentTLS),
 		},
 		Data: map[string][]byte{
 			"ca.crt":  ca,

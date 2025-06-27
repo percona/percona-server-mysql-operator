@@ -82,6 +82,8 @@ type PerconaServerMySQLReconciler struct {
 //+kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=rolebindings,verbs=get;list;watch;create;patch
 //+kubebuilder:rbac:groups="rbac.authorization.k8s.io",resources=roles,verbs=get;list;watch;create;patch
+//+kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;patch
+//+kubebuilder:rbac:groups="events.k8s.io",resources=events,verbs=get;list;watch;create;patch
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PerconaServerMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -127,6 +129,7 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 	}
 
 	if cr.ObjectMeta.DeletionTimestamp != nil {
+		log.Info("CR marked for deletion, applying finalizers", "name", cr.Name)
 		if err := r.applyFinalizers(ctx, cr); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "apply finalizers")
 		}
@@ -231,17 +234,18 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			return errors.Wrap(err, "get cluster status")
 		}
 
-		log.Info("Got primary", "primary", clusterStatus.DefaultReplicaSet.Primary)
+		log.Info("Cluster primary detected", "primary", clusterStatus.DefaultReplicaSet.Primary)
 
 		if !strings.HasPrefix(clusterStatus.DefaultReplicaSet.Primary, mysql.PodFQDN(cr, &firstPod)) {
 			log.Info("Primary is not pod-0", "primary", clusterStatus.DefaultReplicaSet.Primary)
 
 			log.Info("Ensuring pod-0 is the primary")
-			err := mysh.SetPrimaryInstanceWithExec(ctx, cr.InnoDBClusterName(), mysql.PodFQDN(cr, &firstPod))
+			podFQDN := mysql.PodFQDN(cr, &firstPod)
+			err := mysh.SetPrimaryInstanceWithExec(ctx, cr.InnoDBClusterName(), podFQDN)
 			if err != nil {
 				return errors.Wrap(err, "set primary instance")
 			}
-
+			log.Info("Setting primary instance", "pod", podFQDN)
 			return psrestore.ErrWaitingTermination
 		}
 
@@ -284,15 +288,16 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 	}
 
 	if sts.Spec.Replicas == nil || *sts.Spec.Replicas != 1 {
+		log.Info("Downscaling StatefulSet to 1 replica", "sts", sts.Name)
 		dscaleTo := int32(1)
 		sts.Spec.Replicas = &dscaleTo
 		err = r.Client.Update(ctx, sts)
 		if err != nil {
 			return errors.Wrap(err, "downscale StatefulSet")
 		}
-		log.Info("Statefulset downscaled", "sts", sts)
+		log.Info("StatefulSet downscaled", "sts", sts.Name)
 	}
-
+	log.Info("MySQL pod deletion finished. Waiting for termination")
 	return psrestore.ErrWaitingTermination
 }
 
@@ -317,6 +322,7 @@ func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv
 		if err != nil {
 			return errors.Wrapf(err, "delete issuer %s", issuerName)
 		}
+		log.Info("Issuer deleted", "name", issuerName)
 	}
 
 	certs := []string{
@@ -338,6 +344,7 @@ func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv
 		if err != nil {
 			return errors.Wrapf(err, "delete certificate %s", certName)
 		}
+		log.Info("Certificate deleted", "name", certName)
 	}
 
 	secretNames := []string{
@@ -359,15 +366,15 @@ func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv
 		if err != nil {
 			return errors.Wrapf(err, "delete secret %s", secretName)
 		}
+		log.Info("Secret deleted", "name", secretName)
 	}
-
+	log.V(1).Info("Finished deletion of SSL-related resources")
 	return nil
 }
 
 func (r *PerconaServerMySQLReconciler) deleteMySQLPvc(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
-
-	log.Info(fmt.Sprintf("Applying %s finalizer", naming.FinalizerDeleteMySQLPvc))
+	log.Info("Starting PVC and secret deletion for MySQL cluster", "cluster", cr.Name, "finilizer", naming.FinalizerDeleteMySQLPvc)
 
 	exposer := mysql.Exposer(*cr)
 
@@ -436,6 +443,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcileServices(ctx, cr); err != nil {
 		return errors.Wrap(err, "services")
 	}
+	if err := r.reconcilePersistentVolumes(ctx, cr); err != nil {
+		return errors.Wrap(err, "persistent volumes")
+	}
 	if err := r.reconcileDatabase(ctx, cr); err != nil {
 		return errors.Wrap(err, "database")
 	}
@@ -486,7 +496,7 @@ func validateClusterType(ctx context.Context, cl client.Client, cr *apiv1alpha1.
 		return errors.Wrap(err, "failed to get mysql sts")
 	}
 
-	containerName := mysql.ComponentName
+	containerName := mysql.AppName
 	var container *corev1.Container
 	for _, c := range sts.Spec.Template.Spec.Containers {
 		if c.Name != containerName {
@@ -551,6 +561,11 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 		return errors.Wrapf(err, "get Secret/%s", nn.Name)
 	}
 
+	if cr.PVCResizeInProgress() {
+		log.V(1).Info("PVC resize in progress, skipping MySQL reconciliation")
+		return nil
+	}
+
 	sts := mysql.StatefulSet(cr, initImage, configHash, tlsHash, internalSecret)
 
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, sts, r.Scheme); err != nil {
@@ -563,6 +578,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 	}
 
 	if cr.Spec.UpdateStrategy == apiv1alpha1.SmartUpdateStatefulSetStrategyType {
+		log.Info("Performing smart update for StatefulSet")
 		return r.smartUpdate(ctx, sts, cr)
 	}
 
@@ -680,10 +696,12 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 
 	// for single-node clusters, we need to set read_only=0 if orchestrator is disabled
 	if setWriteMode {
+		log.Info("Single-node write mode detected, setting read_only=0")
 		config = "\nsuper_read_only=0\nread_only=0"
 	}
 
 	if memory != nil {
+		log.V(1).Info("Generating auto-tune config based on memory", "memory", memory.String())
 		autotuneParams, err := mysql.GetAutoTuneParams(cr, memory)
 		if err != nil {
 			return err
@@ -809,6 +827,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	log := logf.FromContext(ctx)
 	if err := k8s.EnsureService(ctx, r.Client, cr, orchestrator.Service(cr), r.Scheme, true); err != nil {
 		return errors.Wrap(err, "reconcile Service")
 	}
@@ -817,7 +836,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context
 	if err := r.reconcileServicePerPod(ctx, cr, &exposer); err != nil {
 		return errors.Wrap(err, "reconcile service per pod")
 	}
-
+	log.Info("Finished reconciling orchestrator services")
 	return nil
 }
 
@@ -954,7 +973,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return errors.Wrap(err, "get cluster primary")
 	}
 	if primary.Alias == "" {
-		log.Info("mysql is not ready, orchestrator cluster primary alias is empty. skip")
+		log.Info("Mysql is not ready, orchestrator cluster primary alias is empty. skip")
 		return nil
 	}
 
@@ -972,6 +991,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 
 	// In the case of a cluster downscale, we need to forget replicas that are not part of the cluster
 	if len(clusterInstances) > int(cr.MySQLSpec().Size) {
+		log.Info("Detected possible downscale, checking for replicas to forget")
 		mysqlPods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
 		if err != nil {
 			return errors.Wrap(err, "get mysql pods")
@@ -1017,7 +1037,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 	log := logf.FromContext(ctx)
 
 	if cr.Status.MySQL.Ready == 0 || cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
-		log.V(1).Info("Waiting for MySQL pods to be ready")
+		log.V(1).Info("Waiting for all MySQL pods to be ready", "ready", cr.Status.MySQL.Ready, "expected", cr.Spec.MySQL.Size)
 		return nil
 	}
 
@@ -1095,7 +1115,7 @@ func (r *PerconaServerMySQLReconciler) rescanClusterIfNeeded(ctx context.Context
 
 	log.Info("Cluster rescan started", "pod", pod.Name, "cluster", cr.InnoDBClusterName())
 
-	err = k8s.DeannotateObject(ctx, r.Client, cr, string(naming.AnnotationRescanNeeded))
+	err = k8s.DeannotateObject(ctx, r.Client, cr, naming.AnnotationRescanNeeded)
 	if err != nil {
 		return errors.Wrap(err, "remove rescan-needed annotation")
 	}
@@ -1411,6 +1431,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 }
 
 func (r *PerconaServerMySQLReconciler) getPrimaryFromOrchestrator(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (*orchestrator.Instance, error) {
+	log := logf.FromContext(ctx)
 	pod, err := getReadyOrcPod(ctx, r.Client, cr)
 	if err != nil {
 		return nil, err
@@ -1422,6 +1443,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryFromOrchestrator(ctx context.Co
 
 	if primary.Key.Hostname == "" {
 		primary.Key.Hostname = fmt.Sprintf("%s.%s.%s", primary.Alias, mysql.ServiceName(cr), cr.Namespace)
+		log.V(1).Info("Primary hostname was empty, constructed FQDN", "hostname", primary.Key.Hostname)
 	}
 
 	return primary, nil

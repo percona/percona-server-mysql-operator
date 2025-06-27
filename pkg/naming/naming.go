@@ -3,18 +3,6 @@ package naming
 const (
 	perconaPrefix      = "percona.com/"
 	mysqlPerconaPrefix = "mysql.percona.com/"
-
-	kubernetesPrefix = "app.kubernetes.io/"
-)
-
-const (
-	LabelName      = kubernetesPrefix + "name"
-	LabelInstance  = kubernetesPrefix + "instance"
-	LabelManagedBy = kubernetesPrefix + "managed-by"
-	LabelPartOf    = kubernetesPrefix + "part-of"
-	LabelComponent = kubernetesPrefix + "component"
-
-	LabelOperatorVersion = kubernetesPrefix + "version"
 )
 
 const (
@@ -45,18 +33,11 @@ func (s AnnotationKey) String() string {
 }
 
 const (
-	AnnotationSecretHash       AnnotationKey = perconaPrefix + "last-applied-secret"
-	AnnotationConfigHash       AnnotationKey = perconaPrefix + "configuration-hash"
-	AnnotationTLSHash          AnnotationKey = perconaPrefix + "last-applied-tls"
-	AnnotationPasswordsUpdated AnnotationKey = perconaPrefix + "passwords-updated"
-	AnnotationLastConfigHash   AnnotationKey = perconaPrefix + "last-config-hash"
-	AnnotationRescanNeeded     AnnotationKey = perconaPrefix + "rescan-needed"
+	AnnotationSecretHash          AnnotationKey = perconaPrefix + "last-applied-secret"
+	AnnotationConfigHash          AnnotationKey = perconaPrefix + "configuration-hash"
+	AnnotationTLSHash             AnnotationKey = perconaPrefix + "last-applied-tls"
+	AnnotationPasswordsUpdated    AnnotationKey = perconaPrefix + "passwords-updated"
+	AnnotationLastConfigHash      AnnotationKey = perconaPrefix + "last-config-hash"
+	AnnotationRescanNeeded        AnnotationKey = perconaPrefix + "rescan-needed"
+	AnnotationPVCResizeInProgress AnnotationKey = perconaPrefix + "pvc-resize-in-progress"
 )
-
-// Labels returns a minimal set of labels.
-func Labels() map[string]string {
-	return map[string]string{
-		LabelName:   "percona-server",
-		LabelPartOf: "percona-server",
-	}
-}

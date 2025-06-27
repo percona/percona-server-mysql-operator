@@ -5,7 +5,7 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.16.3
   labels:
     app.kubernetes.io/component: crd
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
     app.kubernetes.io/version: v0.11.0
   name: perconaservermysqlbackups.ps.percona.com
@@ -965,7 +965,7 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.16.3
   labels:
     app.kubernetes.io/component: crd
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
     app.kubernetes.io/version: v0.11.0
   name: perconaservermysqlrestores.ps.percona.com
@@ -1924,7 +1924,7 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.16.3
   labels:
     app.kubernetes.io/component: crd
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
     app.kubernetes.io/version: v0.11.0
   name: perconaservermysqls.ps.percona.com
@@ -4249,6 +4249,8 @@ spec:
                 type: object
               crVersion:
                 type: string
+              enableVolumeExpansion:
+                type: boolean
               ignoreAnnotations:
                 items:
                   type: string
@@ -11351,6 +11353,17 @@ spec:
                 ''async'', ''proxy.router.enabled'' must be disabled'
               rule: '!(self.mysql.clusterType == ''async'') || self.proxy.router ==
                 null || !has(self.proxy.router.enabled) || !self.proxy.router.enabled'
+            - message: 'Invalid configuration: Scaling MySQL replicas below 3 requires
+                ''unsafeFlags.mysqlSize: true'''
+              rule: '!(has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize'
+            - message: 'Invalid configuration: For ''group replication'', scaling
+                MySQL replicas above 9 requires ''unsafeFlags.mysqlSize: true'''
+              rule: '!(self.mysql.clusterType == ''group-replication'' && has(self.mysql.size)
+                && self.mysql.size >= 9) || self.unsafeFlags.mysqlSize'
+            - message: 'Invalid configuration: For ''group replication'', using an
+                even number of MySQL replicas requires ''unsafeFlags.mysqlSize: true'''
+              rule: '!(self.mysql.clusterType == ''group-replication'' && has(self.mysql.size)
+                && self.mysql.size % 2 == 0) || self.unsafeFlags.mysqlSize'
           status:
             properties:
               backupVersion:
