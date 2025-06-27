@@ -964,7 +964,7 @@ var _ = Describe("Primary mysql service", Ordered, func() {
 		_ = k8sClient.Delete(ctx, namespace)
 	})
 
-	Context("Expose primary is configured", Ordered, func() {
+	Context("Expose primary with gr cluster type", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
 
 		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
