@@ -773,7 +773,7 @@ var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 	})
 })
 
-var _ = Describe("Primary mysql service on GR", Ordered, func() {
+var _ = Describe("Primary mysql service", Ordered, func() {
 	ctx := context.Background()
 
 	const crName = "gr-primary-service"
