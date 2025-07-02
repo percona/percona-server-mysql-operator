@@ -6450,8 +6450,6 @@ spec:
                           x-kubernetes-int-or-string: true
                         type: object
                     type: object
-                  runtimeClassName:
-                    type: string
                   serverHost:
                     type: string
                 required:
