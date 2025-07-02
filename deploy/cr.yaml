@@ -41,6 +41,15 @@ spec:
     autoRecovery: true
     image: perconalab/percona-server-mysql-operator:main-psmysql
     imagePullPolicy: Always
+#    runtimeClassName: image-rc
+#    tolerations:
+#    - key: "node.alpha.kubernetes.io/unreachable"
+#      operator: "Exists"
+#      effect: "NoExecute"
+#      tolerationSeconds: 6000
+#    imagePullSecrets:
+#    - "secret-1"
+#    - "secret-2"
 #    initImage: perconalab/percona-server-mysql-operator:main
     size: 3
 
@@ -169,6 +178,15 @@ spec:
 
       image: perconalab/percona-server-mysql-operator:main-haproxy
       imagePullPolicy: Always
+#      runtimeClassName: image-rc
+#      tolerations:
+#      - key: "node.alpha.kubernetes.io/unreachable"
+#        operator: "Exists"
+#        effect: "NoExecute"
+#        tolerationSeconds: 6000
+#      imagePullSecrets:
+#      - "secret-1"
+#      - "secret-2"
 
       resources:
         requests:
@@ -278,6 +296,15 @@ spec:
       enabled: false
       image: perconalab/percona-server-mysql-operator:main-router
       imagePullPolicy: Always
+#      runtimeClassName: image-rc
+#      tolerations:
+#      - key: "node.alpha.kubernetes.io/unreachable"
+#        operator: "Exists"
+#        effect: "NoExecute"
+#        tolerationSeconds: 6000
+#      imagePullSecrets:
+#      - "secret-1"
+#      - "secret-2"
 #      initImage: perconalab/percona-server-mysql-operator:main
 
       size: 3
@@ -333,6 +360,15 @@ spec:
 
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
+#    runtimeClassName: image-rc
+#    tolerations:
+#    - key: "node.alpha.kubernetes.io/unreachable"
+#      operator: "Exists"
+#      effect: "NoExecute"
+#      tolerationSeconds: 6000
+#    imagePullSecrets:
+#    - "secret-1"
+#    - "secret-2"
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
 #    initImage: perconalab/percona-server-mysql-operator:main
 
@@ -407,6 +443,9 @@ spec:
 #        storageName: s3
 #    backoffLimit: 6
     imagePullPolicy: Always
+#    imagePullSecrets:
+#    - "secret-1"
+#    - "secret-2"
 #    initImage: perconalab/percona-server-mysql-operator:main
 #    containerSecurityContext:
 #      privileged: true
@@ -460,6 +499,7 @@ spec:
 #        podSecurityContext:
 #          fsGroup: 1001
 #          supplementalGroups: [1001, 1002, 1003]
+#        runtimeClassName: image-rc
         s3:
           bucket: S3-BACKUP-BUCKET-NAME-HERE
           credentialsSecret: cluster1-s3-credentials

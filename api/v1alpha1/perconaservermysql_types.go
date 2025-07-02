@@ -218,7 +218,6 @@ type PMMSpec struct {
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
-	RuntimeClassName         *string                     `json:"runtimeClassName,omitempty"`
 }
 
 type BackupSpec struct {

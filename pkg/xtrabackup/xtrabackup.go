@@ -144,6 +144,7 @@ func Job(
 					Containers: []corev1.Container{
 						xtrabackupContainer(cluster, cr.Name, destination, storage),
 					},
+					ImagePullSecrets:          cluster.Spec.Backup.ImagePullSecrets,
 					SecurityContext:           storage.PodSecurityContext,
 					Affinity:                  storage.Affinity,
 					TopologySpreadConstraints: storage.TopologySpreadConstraints,
@@ -351,7 +352,8 @@ func RestoreJob(
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyNever,
+					RestartPolicy:    corev1.RestartPolicyNever,
+					ImagePullSecrets: cluster.Spec.Backup.ImagePullSecrets,
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(appName, initImage,
 							cluster.Spec.Backup.ImagePullPolicy,
