@@ -936,3 +936,134 @@ var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 		})
 	})
 })
+
+var _ = Describe("Primary mysql service", Ordered, func() {
+	ctx := context.Background()
+
+	const crName = "gr-primary-service"
+	const ns = "gr-primary-service"
+	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ns,
+			Namespace: ns,
+		},
+	}
+
+	BeforeAll(func() {
+		By("Creating the Namespace to perform the tests")
+		err := k8sClient.Create(ctx, namespace)
+		Expect(err).To(Not(HaveOccurred()))
+
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterAll(func() {
+		By("Deleting the Namespace to perform the tests")
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	Context("Expose primary with gr cluster type", Ordered, func() {
+		cr, err := readDefaultCR(crName, ns)
+
+		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+		cr.Spec.MySQL.ExposePrimary.Enabled = true
+		cr.Spec.MySQL.ExposePrimary.Type = corev1.ServiceTypeClusterIP
+
+		It("Should read default cr.yaml", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should create cluster", func() {
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+		})
+
+		It("Should reconcile once to create user secret", func() {
+			_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should create primary service", func() {
+			svc := &corev1.Service{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      cr.Name + "-mysql-primary",
+					Namespace: cr.Namespace,
+				}, svc)
+				return err == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+			Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeClusterIP))
+			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/component", "database"))
+			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/instance", "gr-primary-service"))
+			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/managed-by", "percona-server-mysql-operator"))
+			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/name", "mysql"))
+			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/part-of", "percona-server"))
+			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("mysql.percona.com/primary", "true"))
+		})
+
+		It("Should remove primary service when expose primary is disabled", func() {
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, crNamespacedName, cr)
+				return err == nil
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+			cr.Spec.MySQL.ExposePrimary.Enabled = false
+			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+
+			_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			svc := &corev1.Service{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      cr.Name + "-mysql-primary",
+					Namespace: cr.Namespace,
+				}, svc)
+				return k8serrors.IsNotFound(err)
+			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+		})
+	})
+
+	Context("Expose primary with async cluster type", Ordered, func() {
+		cr, err := readDefaultCR("async-cluster", ns)
+
+		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+		cr.Spec.MySQL.ExposePrimary.Enabled = true
+		cr.Spec.MySQL.ExposePrimary.Type = corev1.ServiceTypeClusterIP
+		cr.Spec.Orchestrator.Enabled = true
+
+		It("Should read default cr.yaml", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should create async cluster", func() {
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+		})
+
+		It("Should reconcile once to create user secret", func() {
+			_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: "async-cluster", Namespace: ns}})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should create primary service for async cluster", func() {
+			svc := &corev1.Service{}
+			Consistently(func() bool {
+				err := k8sClient.Get(ctx, types.NamespacedName{
+					Name:      "async-cluster-mysql-primary",
+					Namespace: cr.Namespace,
+				}, svc)
+				return err == nil
+			}, time.Second*5, time.Millisecond*250).Should(BeTrue())
+
+			Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeClusterIP))
+			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/component", "database"))
+			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/instance", "async-cluster"))
+			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/managed-by", "percona-server-mysql-operator"))
+			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/name", "mysql"))
+			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/part-of", "percona-server"))
+			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("mysql.percona.com/primary", "true"))
+		})
+	})
+})
