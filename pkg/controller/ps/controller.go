@@ -449,6 +449,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcileDatabase(ctx, cr); err != nil {
 		return errors.Wrap(err, "database")
 	}
+	if err := r.reconcileGRMySQLPrimaryLabel(ctx, cr); err != nil {
+		return errors.Wrap(err, "failed to reconcile MySQL primary")
+	}
 	if err := r.reconcileOrchestrator(ctx, cr); err != nil {
 		return errors.Wrap(err, "orchestrator")
 	}
@@ -631,6 +634,12 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 	exposer := mysql.Exposer(*cr)
 	if err := r.reconcileServicePerPod(ctx, cr, &exposer); err != nil {
 		return errors.Wrap(err, "reconcile service per pod")
+	}
+
+	if cr.Spec.MySQL.ExposePrimary.Enabled {
+		if err := k8s.EnsureService(ctx, r.Client, cr, mysql.PrimaryService(cr), r.Scheme, true); err != nil {
+			return errors.Wrap(err, "reconcile service for primary mysql")
+		}
 	}
 
 	return nil
@@ -1114,6 +1123,7 @@ func (r *PerconaServerMySQLReconciler) rescanClusterIfNeeded(ctx context.Context
 	return nil
 }
 
+// cleanupOutdatedServices removes outdated services that are no longer needed.
 func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Context, exposer Exposer, ns string) error {
 	log := logf.FromContext(ctx).WithName("cleanupOutdatedServices")
 	size := int(exposer.Size())
@@ -1151,11 +1161,32 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 	return nil
 }
 
+// cleanupOutdatedGRPrimaryService cleans up the outdated mysql primary service when group replication is enabled.
+func (r *PerconaServerMySQLReconciler) cleanupOutdatedGRPrimaryService(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	if !cr.Spec.MySQL.IsGR() {
+		return nil
+	}
+	if !cr.Spec.MySQL.ExposePrimary.Enabled {
+		svcName := mysql.PrimaryServiceName(cr)
+		svc := corev1.Service{}
+		if err := r.Get(ctx, types.NamespacedName{Name: svcName, Namespace: cr.Namespace}, &svc); err == nil {
+			if err := r.Delete(ctx, &svc); err != nil && !k8serrors.IsNotFound(err) {
+				return errors.Wrapf(err, "error while deleting primary service %s", svc.Name)
+			}
+		}
+	}
+
+	return nil
+}
+
 func (r *PerconaServerMySQLReconciler) cleanupMysql(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	if !cr.Spec.Pause {
 		mysqlExposer := mysql.Exposer(*cr)
 		if err := r.cleanupOutdatedServices(ctx, &mysqlExposer, cr.Namespace); err != nil {
 			return errors.Wrap(err, "cleanup MySQL services")
+		}
+		if err := r.cleanupOutdatedGRPrimaryService(ctx, cr); err != nil {
+			return errors.Wrap(err, "cleanup outdated MySQL primary service")
 		}
 	}
 	return nil
