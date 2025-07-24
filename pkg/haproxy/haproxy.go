@@ -291,6 +291,27 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	}
 	env = append(env, spec.Env...)
 
+	readinessProbe := spec.ReadinessProbe
+	readinessProbe.Exec = &corev1.ExecAction{
+		Command: []string{"/opt/percona/haproxy_readiness_check.sh"},
+	}
+	livenessProbe := spec.LivenessProbe
+	livenessProbe.Exec = &corev1.ExecAction{
+		Command: []string{"/opt/percona/haproxy_liveness_check.sh"},
+	}
+
+	probsEnvs := []corev1.EnvVar{
+		{
+			Name:  "LIVENESS_CHECK_TIMEOUT",
+			Value: fmt.Sprint(livenessProbe.TimeoutSeconds),
+		},
+		{
+			Name:  "READINESS_CHECK_TIMEOUT",
+			Value: fmt.Sprint(readinessProbe.TimeoutSeconds),
+		},
+	}
+	env = append(env, probsEnvs...)
+
 	return corev1.Container{
 		Name:            AppName,
 		Image:           spec.Image,
@@ -300,6 +321,8 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		EnvFrom:         spec.EnvFrom,
 		Command:         []string{"/opt/percona/haproxy-entrypoint.sh"},
 		Args:            []string{"haproxy"},
+		ReadinessProbe:  &readinessProbe,
+		LivenessProbe:   &livenessProbe,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "mysql",
