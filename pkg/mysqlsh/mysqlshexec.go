@@ -68,7 +68,6 @@ func (m *mysqlshExec) ClusterStatusWithExec(ctx context.Context) (innodbcluster.
 	stderrBuffer := bytes.Buffer{}
 
 	c := []string{"mysqlsh", "--result-format", "json", "--js", "--uri", m.uri, "--cluster", "--", "cluster", "status"}
-	fmt.Printf("DEBUG: mysqlsh URI: %q\n", m.uri)
 	err := m.client.Exec(ctx, m.pod, "mysql", c, nil, &stdoutBuffer, &stderrBuffer, false)
 	if err != nil {
 		sout := sensitiveRegexp.ReplaceAllString(stdoutBuffer.String(), ":*****@")
