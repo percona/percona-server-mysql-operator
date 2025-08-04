@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	ComponentName     = "mysql"
+	AppName           = "mysql"
 	DataVolumeName    = "datadir"
 	DataMountPath     = "/var/lib/mysql"
 	CustomConfigKey   = "my.cnf"
@@ -77,7 +77,7 @@ func (e *Exposer) SaveOldMeta() bool {
 }
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
-	return cr.Name + "-" + ComponentName
+	return cr.Name + "-" + AppName
 }
 
 func NamespacedName(cr *apiv1alpha1.PerconaServerMySQL) types.NamespacedName {
@@ -94,6 +94,10 @@ func UnreadyServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 
 func ProxyServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr) + "-proxy"
+}
+
+func PrimaryServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
+	return Name(cr) + "-primary"
 }
 
 func ConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
@@ -118,15 +122,13 @@ func PodFQDN(cr *apiv1alpha1.PerconaServerMySQL, pod *corev1.Pod) string {
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.MySQLSpec().Labels,
-		map[string]string{naming.LabelComponent: ComponentName},
-		cr.Labels())
+		cr.Labels(AppName, naming.ComponentDatabase))
 }
 
 func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHash string, secret *corev1.Secret) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 	spec := cr.MySQLSpec()
 	replicas := spec.Size
-	t := true
 
 	annotations := make(map[string]string)
 	if configHash != "" {
@@ -136,7 +138,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}
 
-	return &appsv1.StatefulSet{
+	sts := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
 			Kind:       "StatefulSet",
@@ -151,9 +153,8 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
-			ServiceName:          ServiceName(cr),
-			VolumeClaimTemplates: volumeClaimTemplates(spec),
-			UpdateStrategy:       updateStrategy(cr),
+			ServiceName:    ServiceName(cr),
+			UpdateStrategy: updateStrategy(cr),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
@@ -162,7 +163,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
-							ComponentName,
+							AppName,
 							initImage,
 							spec.ImagePullPolicy,
 							spec.ContainerSecurityContext,
@@ -177,104 +178,135 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 					Affinity:                      spec.GetAffinity(labels),
 					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(labels),
 					ImagePullSecrets:              spec.ImagePullSecrets,
-					TerminationGracePeriodSeconds: spec.TerminationGracePeriodSeconds,
+					TerminationGracePeriodSeconds: spec.GetTerminationGracePeriodSeconds(),
 					PriorityClassName:             spec.PriorityClassName,
 					RuntimeClassName:              spec.RuntimeClassName,
 					RestartPolicy:                 corev1.RestartPolicyAlways,
 					SchedulerName:                 spec.SchedulerName,
 					DNSPolicy:                     corev1.DNSClusterFirst,
 					Volumes: append(
-						[]corev1.Volume{
-							{
-								Name: apiv1alpha1.BinVolumeName,
-								VolumeSource: corev1.VolumeSource{
-									EmptyDir: &corev1.EmptyDirVolumeSource{},
-								},
-							},
-							{
-								Name: mysqlshVolumeName, // In OpenShift, we should use emptyDir for ./mysqlsh to avoid permission issues.
-								VolumeSource: corev1.VolumeSource{
-									EmptyDir: &corev1.EmptyDirVolumeSource{},
-								},
-							},
-							{
-								Name: credsVolumeName,
-								VolumeSource: corev1.VolumeSource{
-									Secret: &corev1.SecretVolumeSource{
-										SecretName: cr.InternalSecretName(),
-									},
-								},
-							},
-							{
-								Name: tlsVolumeName,
-								VolumeSource: corev1.VolumeSource{
-									Secret: &corev1.SecretVolumeSource{
-										SecretName: cr.Spec.SSLSecretName,
-									},
-								},
-							},
-							{
-								Name: configVolumeName,
-								VolumeSource: corev1.VolumeSource{
-									Projected: &corev1.ProjectedVolumeSource{
-										Sources: []corev1.VolumeProjection{
-											{
-												ConfigMap: &corev1.ConfigMapProjection{
-													LocalObjectReference: corev1.LocalObjectReference{
-														Name: ConfigMapName(cr),
-													},
-													Items: []corev1.KeyToPath{
-														{
-															Key:  CustomConfigKey,
-															Path: "my-config.cnf",
-														},
-													},
-													Optional: &t,
-												},
-											},
-											{
-												ConfigMap: &corev1.ConfigMapProjection{
-													LocalObjectReference: corev1.LocalObjectReference{
-														Name: AutoConfigMapName(cr),
-													},
-													Items: []corev1.KeyToPath{
-														{
-															Key:  CustomConfigKey,
-															Path: "auto-config.cnf",
-														},
-													},
-													Optional: &t,
-												},
-											},
-											{
-												Secret: &corev1.SecretProjection{
-													LocalObjectReference: corev1.LocalObjectReference{
-														Name: ConfigMapName(cr),
-													},
-													Items: []corev1.KeyToPath{
-														{
-															Key:  CustomConfigKey,
-															Path: "my-secret.cnf",
-														},
-													},
-													Optional: &t,
-												},
-											},
-										},
-									},
-								},
-							},
-							{
-								Name: "backup-logs",
-								VolumeSource: corev1.VolumeSource{
-									EmptyDir: &corev1.EmptyDirVolumeSource{},
-								},
-							},
-						},
+						volumes(cr),
 						spec.SidecarVolumes...,
 					),
 					SecurityContext: spec.PodSecurityContext,
 				},
+			},
+		},
+	}
+
+	if cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim != nil {
+		sts.Spec.VolumeClaimTemplates = append(sts.Spec.VolumeClaimTemplates, volumeClaimTemplates(spec)...)
+		return sts
+	}
+
+	var dataVolume *corev1.Volume
+	switch {
+	case spec.VolumeSpec.HostPath != nil:
+		dataVolume = &corev1.Volume{
+			Name:         DataVolumeName,
+			VolumeSource: corev1.VolumeSource{HostPath: spec.VolumeSpec.HostPath},
+		}
+	case spec.VolumeSpec.EmptyDir != nil:
+		dataVolume = &corev1.Volume{
+			Name:         DataVolumeName,
+			VolumeSource: corev1.VolumeSource{EmptyDir: spec.VolumeSpec.EmptyDir},
+		}
+	}
+
+	if dataVolume != nil {
+		sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes, *dataVolume)
+	}
+
+	return sts
+}
+
+func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
+	t := true
+	return []corev1.Volume{
+
+		{
+			Name: apiv1alpha1.BinVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: mysqlshVolumeName, // In OpenShift, we should use emptyDir for ./mysqlsh to avoid permission issues.
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: credsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cr.InternalSecretName(),
+				},
+			},
+		},
+		{
+			Name: tlsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cr.Spec.SSLSecretName,
+				},
+			},
+		},
+		{
+			Name: configVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Projected: &corev1.ProjectedVolumeSource{
+					Sources: []corev1.VolumeProjection{
+						{
+							ConfigMap: &corev1.ConfigMapProjection{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: ConfigMapName(cr),
+								},
+								Items: []corev1.KeyToPath{
+									{
+										Key:  CustomConfigKey,
+										Path: "my-config.cnf",
+									},
+								},
+								Optional: &t,
+							},
+						},
+						{
+							ConfigMap: &corev1.ConfigMapProjection{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: AutoConfigMapName(cr),
+								},
+								Items: []corev1.KeyToPath{
+									{
+										Key:  CustomConfigKey,
+										Path: "auto-config.cnf",
+									},
+								},
+								Optional: &t,
+							},
+						},
+						{
+							Secret: &corev1.SecretProjection{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: ConfigMapName(cr),
+								},
+								Items: []corev1.KeyToPath{
+									{
+										Key:  CustomConfigKey,
+										Path: "my-secret.cnf",
+									},
+								},
+								Optional: &t,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Name: "backup-logs",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
 	}
@@ -298,9 +330,14 @@ func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdate
 }
 
 func volumeClaimTemplates(spec *apiv1alpha1.MySQLSpec) []corev1.PersistentVolumeClaim {
-	pvcs := []corev1.PersistentVolumeClaim{
-		k8s.PVC(DataVolumeName, spec.VolumeSpec),
+	var pvcs []corev1.PersistentVolumeClaim
+
+	if spec.VolumeSpec.PersistentVolumeClaim == nil {
+		return pvcs
 	}
+
+	pvcs = append(pvcs, k8s.PVC(DataVolumeName, spec.VolumeSpec))
+
 	for _, p := range spec.SidecarPVCs {
 		pvcs = append(pvcs, corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{Name: p.Name},
@@ -314,7 +351,7 @@ func volumeClaimTemplates(spec *apiv1alpha1.MySQLSpec) []corev1.PersistentVolume
 func servicePorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ServicePort {
 	ports := []corev1.ServicePort{
 		{
-			Name: ComponentName,
+			Name: AppName,
 			Port: DefaultPort,
 		},
 		{
@@ -332,7 +369,7 @@ func servicePorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ServicePort {
 	}
 
 	if cr.Spec.MySQL.IsGR() {
-		ports = append(ports, corev1.ServicePort{Name: ComponentName + "-gr", Port: DefaultGRPort})
+		ports = append(ports, corev1.ServicePort{Name: AppName + "-gr", Port: DefaultGRPort})
 	}
 
 	return ports
@@ -341,7 +378,7 @@ func servicePorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ServicePort {
 func containerPorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ContainerPort {
 	ports := []corev1.ContainerPort{
 		{
-			Name:          ComponentName,
+			Name:          AppName,
 			ContainerPort: DefaultPort,
 		},
 		{
@@ -355,7 +392,7 @@ func containerPorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ContainerPort {
 	}
 
 	if cr.Spec.MySQL.IsGR() {
-		ports = append(ports, corev1.ContainerPort{Name: ComponentName + "-gr", ContainerPort: DefaultGRPort})
+		ports = append(ports, corev1.ContainerPort{Name: AppName + "-gr", ContainerPort: DefaultGRPort})
 	}
 
 	return ports
@@ -470,6 +507,50 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 	}
 }
 
+// PrimaryService constructs a service which exposes the pods that has the primary label.
+// For now this service should be available only for group replication.
+func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
+	expose := cr.Spec.MySQL.ExposePrimary
+
+	labels := MatchLabels(cr)
+	labels = util.SSMapMerge(expose.Labels, labels)
+
+	selector := MatchLabels(cr)
+	selector[naming.LabelMySQLPrimary] = "true"
+	selector = util.SSMapMerge(expose.Labels, selector)
+
+	var loadBalancerSourceRanges []string
+	if expose.Type == corev1.ServiceTypeLoadBalancer {
+		loadBalancerSourceRanges = expose.LoadBalancerSourceRanges
+	}
+
+	var externalTrafficPolicy corev1.ServiceExternalTrafficPolicyType
+	if expose.Type == corev1.ServiceTypeLoadBalancer || expose.Type == corev1.ServiceTypeNodePort {
+		externalTrafficPolicy = expose.ExternalTrafficPolicy
+	}
+
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Service",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        PrimaryServiceName(cr),
+			Namespace:   cr.Namespace,
+			Labels:      labels,
+			Annotations: expose.Annotations,
+		},
+		Spec: corev1.ServiceSpec{
+			Type:                     expose.Type,
+			Selector:                 selector,
+			Ports:                    servicePorts(cr),
+			LoadBalancerSourceRanges: loadBalancerSourceRanges,
+			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
+			ExternalTrafficPolicy:    externalTrafficPolicy,
+		},
+	}
+}
+
 func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []corev1.Container {
 	containers := []corev1.Container{mysqldContainer(cr)}
 
@@ -482,7 +563,13 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 	}
 
 	if cr.PMMEnabled(secret) {
-		containers = append(containers, pmm.Container(cr, secret, ComponentName))
+		pmmC := pmm.Container(
+			cr,
+			secret,
+			AppName,
+			cr.Spec.PMM.MySQLParams)
+
+		containers = append(containers, pmmC)
 	}
 
 	return appendUniqueContainers(containers, cr.Spec.MySQL.Sidecars...)
@@ -517,7 +604,7 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			Value: string(cr.UID),
 		},
 		{
-			Name:  "CLUSTER_TYPE",
+			Name:  naming.EnvMySQLClusterType,
 			Value: string(cr.Spec.MySQL.ClusterType),
 		},
 		{
@@ -532,7 +619,7 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	env = append(env, spec.Env...)
 
 	container := corev1.Container{
-		Name:            ComponentName,
+		Name:            AppName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
 		Resources:       spec.Resources,

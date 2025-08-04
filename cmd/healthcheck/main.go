@@ -20,9 +20,19 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
+const (
+	noBootstrapFile      = "/var/lib/mysql/no-bootstrap"
+	manualRecoveryFile   = "/var/lib/mysql/sleep-forever"
+	fullClusterCrashFile = "/var/lib/mysql/full-cluster-crash"
+)
+
 func main() {
-	if isManualRecovery() {
-		os.Exit(0)
+	for _, rFile := range []string{noBootstrapFile, manualRecoveryFile} {
+		recovery, err := fileExists(rFile)
+		if err == nil && recovery {
+			log.Printf("%s exists. exiting...", rFile)
+			os.Exit(0)
+		}
 	}
 
 	mysqlState, err := getMySQLState()

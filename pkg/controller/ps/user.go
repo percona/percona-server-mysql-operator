@@ -77,7 +77,7 @@ func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr
 	}
 	userSecret.Name = cr.Spec.SecretsName
 	userSecret.Namespace = cr.Namespace
-	userSecret.Labels = cr.Labels()
+	userSecret.Labels = mysql.MatchLabels(cr)
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, nil, userSecret, r.Scheme); err != nil {
 		return errors.Wrap(err, "ensure user secret")
 	}
@@ -110,7 +110,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		internalSecret.ObjectMeta = metav1.ObjectMeta{
 			Name:      cr.InternalSecretName(),
 			Namespace: cr.Namespace,
-			Labels:    cr.Labels(),
+			Labels:    mysql.MatchLabels(cr),
 		}
 
 		if err = r.Client.Create(ctx, internalSecret); err != nil {
@@ -363,7 +363,7 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 	}
 	components := []component{
 		{
-			name:      mysql.ComponentName,
+			name:      mysql.AppName,
 			size:      int(cr.MySQLSpec().Size),
 			credsPath: mysql.CredsMountPath,
 		},
@@ -371,7 +371,7 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 
 	if cr.MySQLSpec().IsAsync() {
 		components = append(components, component{
-			name:      orchestrator.ComponentName,
+			name:      orchestrator.AppName,
 			size:      int(cr.Spec.Orchestrator.Size),
 			credsPath: orchestrator.CredsMountPath,
 		})
@@ -379,7 +379,7 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 
 	if cr.HAProxyEnabled() {
 		components = append(components, component{
-			name:      haproxy.ComponentName,
+			name:      haproxy.AppName,
 			size:      int(cr.Spec.Proxy.HAProxy.Size),
 			credsPath: haproxy.CredsMountPath,
 		})
@@ -387,7 +387,7 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 
 	if cr.RouterEnabled() {
 		components = append(components, component{
-			name:      router.ComponentName,
+			name:      router.AppName,
 			size:      int(cr.Spec.Proxy.HAProxy.Size),
 			credsPath: router.CredsMountPath,
 		})

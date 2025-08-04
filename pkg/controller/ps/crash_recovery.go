@@ -132,8 +132,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 
 		// TODO: This needs to reconsidered.
 		if strings.Contains(err.Error(), "The Cluster is ONLINE") {
-			log.Info("Tried to reboot the cluster but MySQL says the cluster is already online", "pod", pod.Name, "host", podFQDN)
-			log.Info("Deleting all MySQL pods")
+			log.Info("Tried to reboot the cluster but MySQL says the cluster is already online. Deleting all MySQL pods.")
 			err := r.Client.DeleteAllOf(ctx, &corev1.Pod{}, &client.DeleteAllOfOptions{
 				ListOptions: client.ListOptions{
 					LabelSelector: labels.SelectorFromSet(mysql.MatchLabels(cr)),

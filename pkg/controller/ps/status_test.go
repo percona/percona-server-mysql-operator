@@ -187,7 +187,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "cluster-service",
 							Namespace: cr.Namespace,
-							Labels:    cr.Labels(),
+							Labels:    cr.Labels("mysql", "database"),
 							OwnerReferences: []metav1.OwnerReference{
 								{
 									Name:       cr.GetName(),
@@ -435,12 +435,13 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 	}
 
 	tests := []struct {
-		name              string
-		cr                *apiv1alpha1.PerconaServerMySQL
-		objects           []client.Object
-		expected          apiv1alpha1.PerconaServerMySQLStatus
-		mysqlMemberStates []innodbcluster.MemberState
-		noMetadataDB      bool
+		name               string
+		cr                 *apiv1alpha1.PerconaServerMySQL
+		objects            []client.Object
+		expected           apiv1alpha1.PerconaServerMySQLStatus
+		innodbClusterState innodbcluster.ClusterStatus
+		mysqlMemberStates  []innodbcluster.MemberState
+		noMetadataDB       bool
 	}{
 		{
 			name: "without pods",
@@ -504,6 +505,7 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 					},
 				},
 			},
+			innodbClusterState: innodbcluster.ClusterStatusOK,
 			mysqlMemberStates: []innodbcluster.MemberState{
 				innodbcluster.MemberStateOnline,
 				innodbcluster.MemberStateOnline,
@@ -544,6 +546,7 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 					},
 				},
 			},
+			innodbClusterState: innodbcluster.ClusterStatusOK,
 			mysqlMemberStates: []innodbcluster.MemberState{
 				innodbcluster.MemberStateOnline,
 				innodbcluster.MemberStateOnline,
@@ -585,6 +588,7 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 					},
 				},
 			},
+			innodbClusterState: innodbcluster.ClusterStatusOffline,
 			mysqlMemberStates: []innodbcluster.MemberState{
 				innodbcluster.MemberStateOffline,
 				innodbcluster.MemberStateOffline,
@@ -625,6 +629,7 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 					},
 				},
 			},
+			innodbClusterState: innodbcluster.ClusterStatusOKPartial,
 			mysqlMemberStates: []innodbcluster.MemberState{
 				innodbcluster.MemberStateOnline,
 				innodbcluster.MemberStateOnline,
@@ -636,7 +641,7 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := tt.cr.DeepCopy()
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).WithStatusSubresource(cr).WithObjects(tt.objects...).WithStatusSubresource(tt.objects...)
-			cliCmd, err := getFakeClient(cr, tt.mysqlMemberStates, tt.noMetadataDB)
+			cliCmd, err := getFakeClient(cr, tt.innodbClusterState, tt.mysqlMemberStates, tt.noMetadataDB)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -699,12 +704,13 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 	}
 
 	tests := []struct {
-		name              string
-		cr                *apiv1alpha1.PerconaServerMySQL
-		objects           []client.Object
-		expected          apiv1alpha1.PerconaServerMySQLStatus
-		mysqlMemberStates []innodbcluster.MemberState
-		noMetadataDB      bool
+		name               string
+		cr                 *apiv1alpha1.PerconaServerMySQL
+		objects            []client.Object
+		expected           apiv1alpha1.PerconaServerMySQLStatus
+		innodbClusterState innodbcluster.ClusterStatus
+		mysqlMemberStates  []innodbcluster.MemberState
+		noMetadataDB       bool
 	}{
 		{
 			name: "without pods",
@@ -768,6 +774,7 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 					},
 				},
 			},
+			innodbClusterState: innodbcluster.ClusterStatusOK,
 			mysqlMemberStates: []innodbcluster.MemberState{
 				innodbcluster.MemberStateOnline,
 				innodbcluster.MemberStateOnline,
@@ -808,6 +815,7 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				},
 				Host: cr.Name + "-router." + cr.Namespace,
 			},
+			innodbClusterState: innodbcluster.ClusterStatusOK,
 			mysqlMemberStates: []innodbcluster.MemberState{
 				innodbcluster.MemberStateOnline,
 				innodbcluster.MemberStateOnline,
@@ -849,6 +857,7 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 					},
 				},
 			},
+			innodbClusterState: innodbcluster.ClusterStatusOffline,
 			mysqlMemberStates: []innodbcluster.MemberState{
 				innodbcluster.MemberStateOffline,
 				innodbcluster.MemberStateOffline,
@@ -889,6 +898,7 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 					},
 				},
 			},
+			innodbClusterState: innodbcluster.ClusterStatusOKPartial,
 			mysqlMemberStates: []innodbcluster.MemberState{
 				innodbcluster.MemberStateOnline,
 				innodbcluster.MemberStateOnline,
@@ -900,7 +910,7 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := tt.cr.DeepCopy()
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).WithStatusSubresource(cr).WithObjects(tt.objects...).WithStatusSubresource(tt.objects...)
-			cliCmd, err := getFakeClient(cr, tt.mysqlMemberStates, tt.noMetadataDB)
+			cliCmd, err := getFakeClient(cr, tt.innodbClusterState, tt.mysqlMemberStates, tt.noMetadataDB)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1066,7 +1076,12 @@ type fakeClientScript struct {
 
 // getFakeClient returns a fake clientcmd.Client object with the array of fakeClientScript objects.
 // This array is constructed to cover every possible client call in the reconcileCRStatus function.
-func getFakeClient(cr *apiv1alpha1.PerconaServerMySQL, mysqlMemberStates []innodbcluster.MemberState, noMetadataDB bool) (clientcmd.Client, error) {
+func getFakeClient(
+	cr *apiv1alpha1.PerconaServerMySQL,
+	innodbClusterStatus innodbcluster.ClusterStatus,
+	mysqlMemberStates []innodbcluster.MemberState,
+	noMetadataDB bool,
+) (clientcmd.Client, error) {
 	queryScript := func(query string, out any) fakeClientScript {
 		buf := new(bytes.Buffer)
 		w := csv.NewWriter(buf)
@@ -1082,12 +1097,30 @@ func getFakeClient(cr *apiv1alpha1.PerconaServerMySQL, mysqlMemberStates []innod
 				"--database",
 				"performance_schema",
 				"-ptest",
-				"-u",
-				"operator",
-				"-h",
-				host,
-				"-e",
-				query,
+				"-u", "operator",
+				"-h", host,
+				"-e", query,
+			},
+			stdout: buf.Bytes(),
+		}
+	}
+
+	mysqlshClusterStatus := func(out innodbcluster.Status) fakeClientScript {
+		buf := new(bytes.Buffer)
+
+		if err := json.NewEncoder(buf).Encode(out); err != nil {
+			panic(err)
+		}
+
+		host := fmt.Sprintf("%s.%s.%s", mysql.PodName(cr, 0), mysql.ServiceName(cr), cr.Namespace)
+
+		return fakeClientScript{
+			cmd: []string{
+				"mysqlsh",
+				"--result-format", "json",
+				"--js",
+				"--uri", fmt.Sprintf("operator:test@%s", host),
+				"--cluster", "--", "cluster", "status",
 			},
 			stdout: buf.Bytes(),
 		}
@@ -1111,20 +1144,24 @@ func getFakeClient(cr *apiv1alpha1.PerconaServerMySQL, mysqlMemberStates []innod
 	}
 	scripts = append(scripts, s)
 
-	// GetGroupReplicationMembers
 	if !noMetadataDB {
-		type member struct {
-			Member string `csv:"member"`
-			State  string `csv:"state"`
+		status := innodbcluster.Status{
+			ClusterName: cr.Name,
+			DefaultReplicaSet: innodbcluster.ReplicaSetStatus{
+				Status:   innodbClusterStatus,
+				Topology: map[string]innodbcluster.Member{},
+			},
 		}
-		var members []*member
-		for _, state := range mysqlMemberStates {
-			members = append(members, &member{
-				Member: cr.Name + "-mysql-0." + cr.Namespace,
-				State:  string(state),
-			})
+
+		for i, state := range mysqlMemberStates {
+			host := fmt.Sprintf("%s-mysql-%d.%s", cr.Name, i, cr.Namespace)
+			status.DefaultReplicaSet.Topology[host] = innodbcluster.Member{
+				Address:     host,
+				MemberState: state,
+			}
 		}
-		scripts = append(scripts, queryScript("SELECT MEMBER_HOST as member, MEMBER_STATE as state FROM replication_group_members", members))
+
+		scripts = append(scripts, mysqlshClusterStatus(status))
 	}
 
 	scripts = append(scripts, fakeClientScript{
