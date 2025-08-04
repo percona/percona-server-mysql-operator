@@ -1,10 +1,13 @@
 package k8s
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"testing"
+
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 )
 
 func TestInitContainer(t *testing.T) {
@@ -51,12 +54,13 @@ func TestInitContainer(t *testing.T) {
 			expectedVolumes: append(expectedVolumeMounts,
 				corev1.VolumeMount{
 					Name:      "dataVolumeName",
-					MountPath: "dataMountPath"}),
+					MountPath: "dataMountPath",
+				}),
 		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			container := InitContainer(componentName, image, pullPolicy, secCtx, expectedResources, tt.inputVolumes)
+			container := InitContainer(new(apiv1alpha1.PerconaServerMySQL), componentName, image, pullPolicy, secCtx, expectedResources, tt.inputVolumes)
 
 			assert.Equal(t, componentName+"-init", container.Name)
 			assert.Equal(t, image, container.Image)

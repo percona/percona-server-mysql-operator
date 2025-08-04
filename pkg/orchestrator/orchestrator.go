@@ -142,6 +142,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, tlsHash string) 
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
+							cr,
 							AppName,
 							initImage,
 							spec.ImagePullPolicy,
