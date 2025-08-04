@@ -163,6 +163,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
+							cr,
 							AppName,
 							initImage,
 							spec.ImagePullPolicy,
@@ -223,7 +224,6 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
 	t := true
 	return []corev1.Volume{
-
 		{
 			Name: apiv1alpha1.BinVolumeName,
 			VolumeSource: corev1.VolumeSource{
