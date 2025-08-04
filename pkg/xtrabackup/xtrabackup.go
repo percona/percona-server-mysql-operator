@@ -136,6 +136,7 @@ func Job(
 					SetHostnameAsFQDN:     &t,
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
+							cluster,
 							appName,
 							initImage,
 							cluster.Spec.Backup.ImagePullPolicy,
@@ -356,7 +357,7 @@ func RestoreJob(
 					RestartPolicy:    corev1.RestartPolicyNever,
 					ImagePullSecrets: cluster.Spec.Backup.ImagePullSecrets,
 					InitContainers: []corev1.Container{
-						k8s.InitContainer(appName, initImage,
+						k8s.InitContainer(cluster, appName, initImage,
 							cluster.Spec.Backup.ImagePullPolicy,
 							storage.ContainerSecurityContext,
 							cluster.Spec.Backup.Resources,

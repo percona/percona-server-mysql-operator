@@ -22,7 +22,19 @@ spec:
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
     apply: disabled
-#  initImage: perconalab/percona-server-mysql-operator:main
+#  initContainer:
+#    image: perconalab/percona-server-mysql-operator:main
+#    containerSecurityContext:
+#      privileged: false
+#      runAsUser: 1001
+#      runAsGroup: 1001
+#    resources:
+#      requests:
+#        memory: 100M
+#        cpu: 100m
+#      limits:
+#        memory: 200M
+#        cpu: 200m
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
 #  ignoreLabels:
