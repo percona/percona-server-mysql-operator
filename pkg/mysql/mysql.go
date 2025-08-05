@@ -820,6 +820,13 @@ func backupVolumeMounts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.VolumeMount
 		},
 	}
 
+	if cr.CompareVersion("0.11.0") >= 0 {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      vaultSecretVolumeName,
+			MountPath: vaultSecretMountPath,
+		})
+	}
+
 	return mounts
 }
 
