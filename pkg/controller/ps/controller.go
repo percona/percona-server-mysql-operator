@@ -1043,6 +1043,9 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 
 	pod, err := getReadyMySQLPod(ctx, r.Client, cr)
 	if err != nil {
+		if errors.Is(err, ErrNoReadyPods) {
+			return nil
+		}
 		return errors.Wrap(err, "get ready mysql pod")
 	}
 
@@ -1087,6 +1090,9 @@ func (r *PerconaServerMySQLReconciler) rescanClusterIfNeeded(ctx context.Context
 
 	pod, err := getReadyMySQLPod(ctx, r.Client, cr)
 	if err != nil {
+		if errors.Is(err, ErrNoReadyPods) {
+			return nil
+		}
 		return errors.Wrap(err, "get ready mysql pod")
 	}
 
@@ -1291,6 +1297,9 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 
 		pod, err := getReadyMySQLPod(ctx, r.Client, cr)
 		if err != nil {
+			if errors.Is(err, ErrNoReadyPods) {
+				return nil
+			}
 			return errors.Wrap(err, "get ready mysql pod")
 		}
 
