@@ -48,8 +48,8 @@ spec:
 #      effect: "NoExecute"
 #      tolerationSeconds: 6000
 #    imagePullSecrets:
-#    - "secret-1"
-#    - "secret-2"
+#      - name: "my-secret-1"
+#      - name: "my-secret-2"
 #    initImage: perconalab/percona-server-mysql-operator:main
     size: 3
 
@@ -185,8 +185,8 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      imagePullSecrets:
-#      - "secret-1"
-#      - "secret-2"
+#        - name: "my-secret-1"
+#        - name: "my-secret-2"
 
       resources:
         requests:
@@ -303,8 +303,8 @@ spec:
 #        effect: "NoExecute"
 #        tolerationSeconds: 6000
 #      imagePullSecrets:
-#      - "secret-1"
-#      - "secret-2"
+#        - name: "my-secret-1"
+#        - name: "my-secret-2"
 #      initImage: perconalab/percona-server-mysql-operator:main
 
       size: 3
@@ -367,8 +367,8 @@ spec:
 #      effect: "NoExecute"
 #      tolerationSeconds: 6000
 #    imagePullSecrets:
-#    - "secret-1"
-#    - "secret-2"
+#      - name: "my-secret-1"
+#      - name: "my-secret-2"
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
 #    initImage: perconalab/percona-server-mysql-operator:main
 
@@ -444,8 +444,8 @@ spec:
 #    backoffLimit: 6
     imagePullPolicy: Always
 #    imagePullSecrets:
-#    - "secret-1"
-#    - "secret-2"
+#      - name: "my-secret-1"
+#      - name: "my-secret-2"
 #    initImage: perconalab/percona-server-mysql-operator:main
 #    containerSecurityContext:
 #      privileged: true

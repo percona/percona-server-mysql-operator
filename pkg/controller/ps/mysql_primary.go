@@ -49,8 +49,6 @@ func (r *PerconaServerMySQLReconciler) reconcileGRMySQLPrimaryLabel(ctx context.
 		return nil
 	}
 
-	logger.Info(fmt.Sprintf("primary pod name %s", primaryPodName))
-
 	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "get pods")
