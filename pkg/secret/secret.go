@@ -12,10 +12,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/tls"
 )
-
-var validityNotAfter = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
 
 func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Secret, error) {
 	ca, cert, key, err := tls.IssueCerts(tls.DNSNames(cr))
@@ -27,7 +26,7 @@ func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cr.Spec.SSLSecretName,
 			Namespace: cr.Namespace,
-			Labels:    cr.Labels(),
+			Labels:    cr.Labels("certificate", naming.ComponentTLS),
 		},
 		Data: map[string][]byte{
 			"ca.crt":  ca,

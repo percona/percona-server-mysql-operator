@@ -5,7 +5,7 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.16.3
   labels:
     app.kubernetes.io/component: crd
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
     app.kubernetes.io/version: v0.11.0
   name: perconaservermysqlbackups.ps.percona.com
@@ -517,7 +517,7 @@ spec:
                     type: object
                   azure:
                     properties:
-                      containerName:
+                      container:
                         type: string
                       credentialsSecret:
                         type: string
@@ -528,7 +528,7 @@ spec:
                       storageClass:
                         type: string
                     required:
-                    - containerName
+                    - container
                     - credentialsSecret
                     type: object
                   containerSecurityContext:
@@ -965,7 +965,7 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.16.3
   labels:
     app.kubernetes.io/component: crd
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
     app.kubernetes.io/version: v0.11.0
   name: perconaservermysqlrestores.ps.percona.com
@@ -1461,7 +1461,7 @@ spec:
                         type: object
                       azure:
                         properties:
-                          containerName:
+                          container:
                             type: string
                           credentialsSecret:
                             type: string
@@ -1472,7 +1472,7 @@ spec:
                           storageClass:
                             type: string
                         required:
-                        - containerName
+                        - container
                         - credentialsSecret
                         type: object
                       containerSecurityContext:
@@ -1924,7 +1924,7 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.16.3
   labels:
     app.kubernetes.io/component: crd
-    app.kubernetes.io/name: percona-server
+    app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
     app.kubernetes.io/version: v0.11.0
   name: perconaservermysqls.ps.percona.com
@@ -3809,7 +3809,7 @@ spec:
                           type: object
                         azure:
                           properties:
-                            containerName:
+                            container:
                               type: string
                             credentialsSecret:
                               type: string
@@ -3820,7 +3820,7 @@ spec:
                             storageClass:
                               type: string
                           required:
-                          - containerName
+                          - container
                           - credentialsSecret
                           type: object
                         containerSecurityContext:
@@ -4249,6 +4249,8 @@ spec:
                 type: object
               crVersion:
                 type: string
+              enableVolumeExpansion:
+                type: boolean
               ignoreAnnotations:
                 items:
                   type: string
@@ -4879,6 +4881,29 @@ spec:
                       type: object
                     type: array
                   expose:
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      enabled:
+                        type: boolean
+                      externalTrafficPolicy:
+                        type: string
+                      internalTrafficPolicy:
+                        type: string
+                      labels:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      loadBalancerSourceRanges:
+                        items:
+                          type: string
+                        type: array
+                      type:
+                        type: string
+                    type: object
+                  exposePrimary:
                     properties:
                       annotations:
                         additionalProperties:
@@ -8338,6 +8363,8 @@ spec:
                     type: string
                   imagePullPolicy:
                     type: string
+                  mysqlParams:
+                    type: string
                   resources:
                     properties:
                       claims:
@@ -8371,11 +8398,7 @@ spec:
                           x-kubernetes-int-or-string: true
                         type: object
                     type: object
-                  runtimeClassName:
-                    type: string
                   serverHost:
-                    type: string
-                  serverUser:
                     type: string
                 required:
                 - image
@@ -11330,6 +11353,17 @@ spec:
                 ''async'', ''proxy.router.enabled'' must be disabled'
               rule: '!(self.mysql.clusterType == ''async'') || self.proxy.router ==
                 null || !has(self.proxy.router.enabled) || !self.proxy.router.enabled'
+            - message: 'Invalid configuration: Scaling MySQL replicas below 3 requires
+                ''unsafeFlags.mysqlSize: true'''
+              rule: '!(has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize'
+            - message: 'Invalid configuration: For ''group replication'', scaling
+                MySQL replicas above 9 requires ''unsafeFlags.mysqlSize: true'''
+              rule: '!(self.mysql.clusterType == ''group-replication'' && has(self.mysql.size)
+                && self.mysql.size >= 9) || self.unsafeFlags.mysqlSize'
+            - message: 'Invalid configuration: For ''group replication'', using an
+                even number of MySQL replicas requires ''unsafeFlags.mysqlSize: true'''
+              rule: '!(self.mysql.clusterType == ''group-replication'' && has(self.mysql.size)
+                && self.mysql.size % 2 == 0) || self.unsafeFlags.mysqlSize'
           status:
             properties:
               backupVersion:
@@ -11372,6 +11406,8 @@ spec:
                 type: array
               haproxy:
                 properties:
+                  imageID:
+                    type: string
                   ready:
                     format: int32
                     type: integer
@@ -11387,6 +11423,8 @@ spec:
                 type: string
               mysql:
                 properties:
+                  imageID:
+                    type: string
                   ready:
                     format: int32
                     type: integer
@@ -11400,6 +11438,8 @@ spec:
                 type: object
               orchestrator:
                 properties:
+                  imageID:
+                    type: string
                   ready:
                     format: int32
                     type: integer
@@ -11415,6 +11455,8 @@ spec:
                 type: string
               router:
                 properties:
+                  imageID:
+                    type: string
                   ready:
                     format: int32
                     type: integer
@@ -11503,9 +11545,13 @@ rules:
   - ""
   resources:
   - events
+  - serviceaccounts
   verbs:
   - create
+  - get
+  - list
   - patch
+  - watch
 - apiGroups:
   - ""
   resources:
@@ -11519,16 +11565,6 @@ rules:
   - list
   - patch
   - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - serviceaccounts
-  verbs:
-  - create
-  - get
-  - list
-  - patch
   - watch
 - apiGroups:
   - apps
@@ -11569,6 +11605,16 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - get
+  - list
+  - patch
   - watch
 - apiGroups:
   - ps.percona.com

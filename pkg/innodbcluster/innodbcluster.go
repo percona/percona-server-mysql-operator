@@ -6,7 +6,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var ErrMemberNotFound error = errors.New("member not found")
+var ErrMemberNotFound = errors.New("member not found")
 
 type ClusterStatus string
 
@@ -15,12 +15,7 @@ const (
 	ClusterStatusOKPartial            ClusterStatus = "OK_PARTIAL"
 	ClusterStatusOKNoTolerance        ClusterStatus = "OK_NO_TOLERANCE"
 	ClusterStatusOKNoTolerancePartial ClusterStatus = "OK_NO_TOLERANCE_PARTIAL"
-	ClusterStatusNoQuorum             ClusterStatus = "NO_QUORUM"
 	ClusterStatusOffline              ClusterStatus = "OFFLINE"
-	ClusterStatusError                ClusterStatus = "ERROR"
-	ClusterStatusUnreachable          ClusterStatus = "UNREACHABLE"
-	ClusterStatusUnknown              ClusterStatus = "UNKNOWN"
-	ClusterStatusFenced               ClusterStatus = "FENCED_WRITES"
 )
 
 type MemberState string
@@ -28,17 +23,14 @@ type MemberState string
 const (
 	MemberStateOnline      MemberState = "ONLINE"
 	MemberStateOffline     MemberState = "OFFLINE"
-	MemberStateRecovering  MemberState = "RECOVERING"
 	MemberStateUnreachable MemberState = "UNREACHABLE"
-	MemberStateError       MemberState = "ERROR"
 	MemberStateMissing     MemberState = "(MISSING)"
 )
 
 type MemberRole string
 
 const (
-	MemberRolePrimary   MemberRole = "PRIMARY"
-	MemberRoleSecondary MemberRole = "SECONDARY"
+	MemberRolePrimary MemberRole = "PRIMARY"
 )
 
 type Member struct {

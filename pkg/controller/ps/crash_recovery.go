@@ -86,10 +86,10 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 			continue
 		}
 
-		log.Info("Attempting to reboot cluster from complete outage")
+		log.Info("Attempting to reboot cluster from complete outage", "pod", pod.Name)
 		err = mysh.RebootClusterFromCompleteOutageWithExec(ctx, cr.InnoDBClusterName())
 		if err == nil {
-			log.Info("Cluster was successfully rebooted")
+			log.Info("Cluster was successfully rebooted", "pod", pod.Name)
 			r.Recorder.Event(cr, "Normal", "FullClusterCrashRecovered", "Cluster recovered from full cluster crash")
 			err := r.cleanupFullClusterCrashFile(ctx, cr)
 			if err != nil {
@@ -99,8 +99,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 		}
 
 		if strings.Contains(err.Error(), "The Cluster is ONLINE") {
-			log.Info("Tried to reboot the cluster but MySQL says the cluster is already online")
-			log.Info("Deleting all MySQL pods")
+			log.Info("Tried to reboot the cluster but MySQL says the cluster is already online. Deleting all MySQL pods.")
 			err := r.Client.DeleteAllOf(ctx, &corev1.Pod{}, &client.DeleteAllOfOptions{
 				ListOptions: client.ListOptions{
 					LabelSelector: labels.SelectorFromSet(mysql.MatchLabels(cr)),
@@ -113,7 +112,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 			break
 		}
 
-		log.Error(err, "failed to reboot cluster from complete outage")
+		log.Error(err, "failed to reboot cluster from complete outage", "pod", pod.Name)
 	}
 
 	return nil
