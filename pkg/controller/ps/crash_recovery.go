@@ -122,7 +122,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 				}
 
 				log.Info("Deleting secondary pod", "pod", pod.Name)
-				if err := r.Client.Delete(ctx, &pod); err != nil {
+				if err := r.Delete(ctx, &pod); err != nil {
 					log.Error(err, "failed to delete pod", "pod", pod.Name)
 				}
 			}
@@ -133,7 +133,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 		// TODO: This needs to reconsidered.
 		if strings.Contains(err.Error(), "The Cluster is ONLINE") {
 			log.Info("Tried to reboot the cluster but MySQL says the cluster is already online. Deleting all MySQL pods.")
-			err := r.Client.DeleteAllOf(ctx, &corev1.Pod{}, &client.DeleteAllOfOptions{
+			err := r.DeleteAllOf(ctx, &corev1.Pod{}, &client.DeleteAllOfOptions{
 				ListOptions: client.ListOptions{
 					LabelSelector: labels.SelectorFromSet(mysql.MatchLabels(cr)),
 					Namespace:     cr.Namespace,

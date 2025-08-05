@@ -13,13 +13,3 @@ func isFullClusterCrash() bool {
 
 	return fullClusterCrash
 }
-
-func isManualRecovery() bool {
-	manualRecovery, err := fileExists("/var/lib/mysql/sleep-forever")
-	if err != nil {
-		log.Printf("check /var/lib/mysql/sleep-forever: %s", err)
-		return false
-	}
-
-	return manualRecovery
-}
