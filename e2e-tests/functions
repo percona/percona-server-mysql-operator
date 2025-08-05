@@ -100,8 +100,8 @@ deploy_tls_cluster_secrets() {
 }
 
 deploy_client() {
-  yq eval "$(printf '.spec.containers[0].image="%s"' "${IMAGE_MYSQL}")" "${TESTS_CONFIG_DIR}/client.yaml" | \
-    kubectl -n "${NAMESPACE}" apply -f -
+	yq eval "$(printf '.spec.containers[0].image="%s"' "${IMAGE_MYSQL}")" "${TESTS_CONFIG_DIR}/client.yaml" \
+		| kubectl -n "${NAMESPACE}" apply -f -
 }
 
 apply_minio_secret() {
@@ -617,11 +617,11 @@ get_innodb_cluster_status() {
 wait_until_innodb_ok() {
 	local uri="$1"
 
-  local retry=0
-  until [[ $(get_innodb_cluster_status ${uri} | jq -r .defaultReplicaSet.status) == "OK" ]]; do
-    sleep 5
-    retry=$((retry + 1))
-  done
+	local retry=0
+	until [[ $(get_innodb_cluster_status ${uri} | jq -r .defaultReplicaSet.status) == "OK" ]]; do
+		sleep 5
+		retry=$((retry + 1))
+	done
 }
 
 run_curl() {
@@ -633,8 +633,7 @@ get_innodb_cluster_name() {
 }
 
 get_mysqlsh_uri_for_pod() {
-  local pod=$1
-
+	local pod=$1
 
 	echo "root:root_password@${pod}.$(get_cluster_name)-mysql.${NAMESPACE}"
 }
@@ -1112,120 +1111,120 @@ network_loss() {
 }
 
 wait_until_chaos_applied() {
-      local chaos_type=$1
-      local chaos_name=$2
+	local chaos_type=$1
+	local chaos_name=$2
 
-      local resource
-      case ${chaos_type} in
-        "kill"|"failure"|"full-cluster-crash")
-          resource=podchaos/${chaos_name}
-          ;;
-        "network")
-          resource=networkchaos/${chaos_name}
-          ;;
-      esac
+	local resource
+	case ${chaos_type} in
+		"kill" | "failure" | "full-cluster-crash")
+			resource=podchaos/${chaos_name}
+			;;
+		"network")
+			resource=networkchaos/${chaos_name}
+			;;
+	esac
 
-      local retry=0
-      until [[ ${retry} == 30 ]]; do
-        sleep 10
-        retry=$((retry + 1))
+	local retry=0
+	until [[ ${retry} == 30 ]]; do
+		sleep 10
+		retry=$((retry + 1))
 
-        succeeded=$(kubectl -n ${NAMESPACE} get ${resource} -o yaml \
-          | yq '.status.experiment.containerRecords[].events[]
+		succeeded=$(kubectl -n ${NAMESPACE} get ${resource} -o yaml \
+			| yq '.status.experiment.containerRecords[].events[]
                   | select(.operation == "Apply" and .type == "Succeeded")')
 
-        if [[ -n ${succeeded} ]]; then
-          return
-        fi
-      done
+		if [[ -n ${succeeded} ]]; then
+			return
+		fi
+	done
 
-      echo "Timeout (300s) exceeded while waiting for chaos to be applied"
-      exit 1
+	echo "Timeout (300s) exceeded while waiting for chaos to be applied"
+	exit 1
 }
 
 wait_until_chaos_recovered() {
-      local chaos_type=$1
-      local chaos_name=$2
+	local chaos_type=$1
+	local chaos_name=$2
 
-      local resource
-      case ${chaos_type} in
-        "kill"|"failure")
-          resource=podchaos/${chaos_name}
-          ;;
-        "network")
-          resource=networkchaos/${chaos_name}
-          ;;
-      esac
+	local resource
+	case ${chaos_type} in
+		"kill" | "failure")
+			resource=podchaos/${chaos_name}
+			;;
+		"network")
+			resource=networkchaos/${chaos_name}
+			;;
+	esac
 
-      local retry=0
-      until [[ ${retry} == 30 ]]; do
-        sleep 10
-        retry=$((retry + 1))
+	local retry=0
+	until [[ ${retry} == 30 ]]; do
+		sleep 10
+		retry=$((retry + 1))
 
-        succeeded=$(kubectl -n ${NAMESPACE} get ${resource} -o yaml \
-          | yq '.status.experiment.containerRecords[].events[]
+		succeeded=$(kubectl -n ${NAMESPACE} get ${resource} -o yaml \
+			| yq '.status.experiment.containerRecords[].events[]
                   | select(.operation == "Recover" and .type == "Succeeded")')
 
-        if [[ -n ${succeeded} ]]; then
-          return
-        fi
-      done
+		if [[ -n ${succeeded} ]]; then
+			return
+		fi
+	done
 
-      echo "Timeout (300s) exceeded while waiting for chaos to be recovered"
-      exit 1
+	echo "Timeout (300s) exceeded while waiting for chaos to be recovered"
+	exit 1
 }
 
 check_primary_chaos() {
-      local chaos_type=$1
-      local ns=$2
-      local primary_before_failure=$3
+	local chaos_type=$1
+	local ns=$2
+	local primary_before_failure=$3
 
-      local chaos_name
-      case ${chaos_type} in
-        "kill")
-          chaos_name="chaos-pod-kill-primary"
-          kill_pods "${ns}" "pod" "${primary_before_failure}" "" "${chaos_name}"
-          ;;
-        "full-cluster-crash")
-          chaos_name="chaos-kill-label-cluster-crash"
-          kill_pods "${ns}" "label" "app.kubernetes.io/instance" "gr-self-healing" "${chaos_name}"
-          ;;
-        "failure")
-          chaos_name="chaos-pod-failure-primary"
-          failure_pod "${ns}" "${primary_before_failure}" "${chaos_name}"
-          ;;
-        "network")
-          chaos_name="chaos-pod-network-loss-primary"
-          network_loss "${ns}" "${primary_before_failure}" "${chaos_name}"
-          ;;
-      esac
+	local chaos_name
+	case ${chaos_type} in
+		"kill")
+			chaos_name="chaos-pod-kill-primary"
+			kill_pods "${ns}" "pod" "${primary_before_failure}" "" "${chaos_name}"
+			;;
+		"full-cluster-crash")
+			chaos_name="chaos-kill-label-cluster-crash"
+			kill_pods "${ns}" "label" "app.kubernetes.io/instance" "gr-self-healing" "${chaos_name}"
+			;;
+		"failure")
+			chaos_name="chaos-pod-failure-primary"
+			failure_pod "${ns}" "${primary_before_failure}" "${chaos_name}"
+			;;
+		"network")
+			chaos_name="chaos-pod-network-loss-primary"
+			network_loss "${ns}" "${primary_before_failure}" "${chaos_name}"
+			;;
+	esac
 
-      wait_until_chaos_applied ${chaos_type} ${chaos_name}
-      if [[ ${chaos_type} == "failure" || ${chaos_type} == "network" ]]; then
-        wait_until_chaos_recovered ${chaos_type} ${chaos_name}
-      fi
+	wait_until_chaos_applied ${chaos_type} ${chaos_name}
+	if [[ ${chaos_type} == "failure" || ${chaos_type} == "network" ]]; then
+		wait_until_chaos_recovered ${chaos_type} ${chaos_name}
+	fi
 
-      wait_cluster_consistency_gr "$(get_cluster_name)" 3 3
+	wait_cluster_consistency_gr "$(get_cluster_name)" 3 3
 
-      primary_after_failure=$(get_primary_from_group_replication)
-      uri=$(get_mysqlsh_uri_for_pod ${primary_after_failure})
-      wait_until_innodb_ok ${uri}
+	primary_after_failure=$(get_primary_from_group_replication)
+	uri=$(get_mysqlsh_uri_for_pod ${primary_after_failure})
+	wait_until_innodb_ok ${uri}
 
-      if [[ "${primary_before_failure}" == "${primary_after_failure}" ]]; then
-          echo "primary pod was not killed! something went wrong."
-          exit 1
-      fi
+	if [[ ${primary_before_failure} == "${primary_after_failure}" ]]; then
+		echo "primary pod was not killed! something went wrong."
+		exit 1
+	fi
 
-      uri=$(get_mysqlsh_uri_for_pod $(get_primary_from_group_replication))
-      online_members=$(get_innodb_cluster_status ${uri} \
-          | jq .defaultReplicaSet.topology[].status \
-          | grep ONLINE \
-          | wc -l)
+	uri=$(get_mysqlsh_uri_for_pod $(get_primary_from_group_replication))
+	online_members=$(get_innodb_cluster_status ${uri} \
+		| jq .defaultReplicaSet.topology[].status \
+		| grep ONLINE \
+		| wc -l)
 
-      if [[ ${online_members} != 3 ]]; then
-          echo "expected 3 online members, got ${online_members}"
-          exit 1
-      fi
+	if [[ ${online_members} != 3 ]]; then
+		echo "expected 3 online members, got ${online_members}"
+		exit 1
+	fi
 }
 
 renew_certificate() {
