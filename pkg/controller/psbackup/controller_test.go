@@ -367,7 +367,10 @@ func TestRunningState(t *testing.T) {
 			if !ok {
 				t.Fatal("storage not found")
 			}
-			job := xtrabackup.Job(tt.cluster, tt.cr, "s3://bucket/container", "init-image", storage)
+			job, err := xtrabackup.Job(tt.cluster, tt.cr, "s3://bucket/container", "init-image", storage)
+			if err != nil {
+				t.Fatal(err)
+			}
 			job.Status.Active = 1
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr, tt.cluster, job).WithStatusSubresource(tt.cr, tt.cluster, job)
 
@@ -379,7 +382,7 @@ func TestRunningState(t *testing.T) {
 					return tt.sidecarClient
 				},
 			}
-			_, err := r.Reconcile(ctx, controllerruntime.Request{
+			_, err = r.Reconcile(ctx, controllerruntime.Request{
 				NamespacedName: types.NamespacedName{
 					Name:      tt.cr.Name,
 					Namespace: tt.cr.Namespace,

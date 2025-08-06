@@ -1,6 +1,7 @@
 package xtrabackup
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -99,7 +100,7 @@ func Job(
 	cr *apiv1alpha1.PerconaServerMySQLBackup,
 	destination apiv1alpha1.BackupDestination, initImage string,
 	storage *apiv1alpha1.BackupStorageSpec,
-) *batchv1.Job {
+) (*batchv1.Job, error) {
 	var one int32 = 1
 	t := true
 
@@ -108,6 +109,11 @@ func Job(
 	if cluster.Spec.Backup.BackoffLimit != nil {
 		backoffLimit = *cluster.Spec.Backup.BackoffLimit
 	}
+	xbContainer, err := xtrabackupContainer(cluster, cr.Name, destination, storage)
+	if err != nil {
+		return nil, errors.Wrap(err, "xtrabackup container")
+	}
+
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1",
@@ -142,7 +148,7 @@ func Job(
 						),
 					},
 					Containers: []corev1.Container{
-						xtrabackupContainer(cluster, cr.Name, destination, storage),
+						xbContainer,
 					},
 					ImagePullSecrets:          cluster.Spec.Backup.ImagePullSecrets,
 					SecurityContext:           storage.PodSecurityContext,
@@ -187,15 +193,19 @@ func Job(
 				},
 			},
 		},
-	}
+	}, nil
 }
 
-func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName string, destination apiv1alpha1.BackupDestination, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
+func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName string, destination apiv1alpha1.BackupDestination, storage *apiv1alpha1.BackupStorageSpec) (corev1.Container, error) {
 	spec := cluster.Spec.Backup
 
 	verifyTLS := true
 	if storage.VerifyTLS != nil {
 		verifyTLS = *storage.VerifyTLS
+	}
+	containerOptionsJSON, err := json.Marshal(storage.ContainerOptions)
+	if err != nil {
+		return corev1.Container{}, errors.Wrap(err, "marshal container options")
 	}
 
 	return corev1.Container{
@@ -214,6 +224,10 @@ func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName str
 			{
 				Name:  "VERIFY_TLS",
 				Value: strconv.FormatBool(verifyTLS),
+			},
+			{
+				Name:  "CONTAINER_OPTIONS",
+				Value: string(containerOptionsJSON),
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
@@ -235,7 +249,7 @@ func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName str
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          storage.ContainerSecurityContext,
 		Resources:                storage.Resources,
-	}
+	}, nil
 }
 
 type XBCloudAction string
@@ -250,6 +264,10 @@ func XBCloudArgs(action XBCloudAction, conf *BackupConfig) []string {
 
 	if !conf.VerifyTLS {
 		args = append(args, "--insecure")
+	}
+
+	if conf.ContainerOptions != nil {
+		args = append(args, conf.ContainerOptions.Args.Xbcloud...)
 	}
 
 	switch conf.Type {
@@ -313,6 +331,7 @@ func deleteContainer(image string, conf *BackupConfig, storage *apiv1alpha1.Back
 				MountPath: apiv1alpha1.BinVolumePath,
 			},
 		},
+		Env:                      storage.ContainerOptions.GetEnv(),
 		Command:                  append([]string{"xbcloud"}, XBCloudArgs(XBCloudActionDelete, conf)...),
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
@@ -488,11 +507,8 @@ func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alp
 		verifyTLS = *storage.VerifyTLS
 	}
 
-	return corev1.Container{
-		Name:            appName,
-		Image:           spec.Image,
-		ImagePullPolicy: spec.ImagePullPolicy,
-		Env: []corev1.EnvVar{
+	envs := util.MergeEnvLists(
+		[]corev1.EnvVar{
 			{
 				Name:  "RESTORE_NAME",
 				Value: restore.Name,
@@ -506,6 +522,14 @@ func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alp
 				Value: strconv.FormatBool(verifyTLS),
 			},
 		},
+		restore.Spec.ContainerOptions.GetEnvVar(cluster, storage),
+	)
+
+	return corev1.Container{
+		Name:            appName,
+		Image:           spec.Image,
+		ImagePullPolicy: spec.ImagePullPolicy,
+		Env:             envs,
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      apiv1alpha1.BinVolumeName,
@@ -734,10 +758,11 @@ func SetSourceNode(job *batchv1.Job, src string) error {
 }
 
 type BackupConfig struct {
-	Destination string                        `json:"destination"`
-	Type        apiv1alpha1.BackupStorageType `json:"type"`
-	VerifyTLS   bool                          `json:"verifyTLS,omitempty"`
-	S3          struct {
+	Destination      string                              `json:"destination"`
+	Type             apiv1alpha1.BackupStorageType       `json:"type"`
+	VerifyTLS        bool                                `json:"verifyTLS,omitempty"`
+	ContainerOptions *apiv1alpha1.BackupContainerOptions `json:"containerOptions,omitempty"`
+	S3               struct {
 		Bucket       string `json:"bucket"`
 		Region       string `json:"region,omitempty"`
 		EndpointURL  string `json:"endpointUrl,omitempty"`

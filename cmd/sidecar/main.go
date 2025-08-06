@@ -16,11 +16,10 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	"github.com/pkg/errors"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -114,8 +113,8 @@ func getNamespace() (string, error) {
 	return string(ns), nil
 }
 
-func xtrabackupArgs(user, pass string) []string {
-	return []string{
+func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
+	args := []string{
 		"--backup",
 		"--stream=xbstream",
 		"--safe-slave-backup",
@@ -124,6 +123,10 @@ func xtrabackupArgs(user, pass string) []string {
 		fmt.Sprintf("--user=%s", user),
 		fmt.Sprintf("--password=%s", pass),
 	}
+	if conf != nil && conf.ContainerOptions != nil {
+		args = append(args, conf.ContainerOptions.Args.Xtrabackup...)
+	}
+	return args
 }
 
 func backupHandler(w http.ResponseWriter, req *http.Request) {
@@ -347,6 +350,14 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	for _, env := range backupConf.ContainerOptions.Env {
+		if err := os.Setenv(env.Name, env.Value); err != nil {
+			log.Error(err, "failed to set env")
+			http.Error(w, "failed to set env", http.StatusInternalServerError)
+			return
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Connection", "keep-alive")
 
@@ -359,7 +370,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	g, gCtx := errgroup.WithContext(req.Context())
 
-	xtrabackup := exec.CommandContext(gCtx, "xtrabackup", xtrabackupArgs(string(backupUser), backupPass)...)
+	xtrabackup := exec.CommandContext(gCtx, "xtrabackup", xtrabackupArgs(string(backupUser), backupPass, &backupConf)...)
 
 	xbOut, err := xtrabackup.StdoutPipe()
 	if err != nil {
