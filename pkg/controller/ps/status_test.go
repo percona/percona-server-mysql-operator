@@ -380,6 +380,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 				Client:    cb.Build(),
 				Scheme:    scheme,
 				ClientCmd: cliCmd,
+				Recorder:  new(record.FakeRecorder),
 				ServerVersion: &platform.ServerVersion{
 					Platform: platform.PlatformKubernetes,
 				},
@@ -973,8 +974,9 @@ func TestReconcileErrorStatus(t *testing.T) {
 		WithStatusSubresource(objects...)
 
 	r := &PerconaServerMySQLReconciler{
-		Client: cb.Build(),
-		Scheme: scheme,
+		Client:   cb.Build(),
+		Scheme:   scheme,
+		Recorder: new(record.FakeRecorder),
 		ServerVersion: &platform.ServerVersion{
 			Platform: platform.PlatformKubernetes,
 		},
