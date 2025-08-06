@@ -38,7 +38,11 @@ func (r *PerconaServerMySQLReconciler) reconcileGRMySQLPrimaryLabel(ctx context.
 	}
 	top, err := topology.GroupReplication(ctx, r.Client, r.ClientCmd, cr, operatorPass)
 	if err != nil {
-		return errors.Wrap(err, "get topology replication")
+		if errors.Is(err, topology.ErrNoPrimary) {
+			logger.Error(err, "failed to get topology")
+			return nil
+		}
+		return errors.Wrap(err, "get topology")
 	}
 
 	primaryPodName, err := podNameFromFQDN(top.Primary)

@@ -2,6 +2,8 @@ package topology
 
 import (
 	"context"
+	"database/sql"
+
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -13,6 +15,8 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
+
+var ErrNoPrimary = errors.New("no primary")
 
 // Topology represents the topology of the database cluster.
 type Topology struct {
@@ -45,6 +49,9 @@ func GroupReplication(ctx context.Context, cli client.Client, cliCmd clientcmd.C
 
 	primary, err := rm.GetGroupReplicationPrimary(ctx)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Topology{}, ErrNoPrimary
+		}
 		return Topology{}, errors.Wrap(err, "get group replication primary")
 	}
 
