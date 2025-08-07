@@ -25,6 +25,8 @@ spec:
           name: tls
         - mountPath: /etc/mysql/config
           name: config
+        - mountPath: /etc/mysql/vault-keyring-secret
+          name: vault-keyring-secret
       - name: xtrabackup
         volumeMounts:
         - mountPath: /opt/percona
@@ -35,6 +37,8 @@ spec:
           name: users
         - mountPath: /var/log/xtrabackup
           name: backup-logs
+        - mountPath: /etc/mysql/vault-keyring-secret
+          name: vault-keyring-secret
       volumes:
       - emptyDir: {}
         name: bin
