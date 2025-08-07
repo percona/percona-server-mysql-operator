@@ -332,11 +332,9 @@ func RestoreJob(
 	initImage string,
 	pvcName string,
 ) *batchv1.Job {
-	one := int32(1)
-
 	labels := util.SSMapMerge(storage.Labels, restore.Labels(appName, naming.ComponentRestore))
 
-	return &batchv1.Job{
+	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "batch/v1",
 			Kind:       "Job",
@@ -348,8 +346,8 @@ func RestoreJob(
 			Annotations: storage.Annotations,
 		},
 		Spec: batchv1.JobSpec{
-			Parallelism: &one,
-			Completions: &one,
+			Parallelism: ptr.To(int32(1)),
+			Completions: ptr.To(int32(1)),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
@@ -420,21 +418,26 @@ func RestoreJob(
 								},
 							},
 						},
-						{
-							Name: vaultSecretVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: cluster.Spec.MySQL.VaultSecretName,
-									Optional:   ptr.To(true),
-								},
-							},
-						},
 					},
 				},
 			},
 			BackoffLimit: func(i int32) *int32 { return &i }(4),
 		},
 	}
+
+	if cluster.Spec.MySQL.VaultSecretName != "" {
+		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: vaultSecretVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cluster.Spec.MySQL.VaultSecretName,
+					Optional:   ptr.To(true),
+				},
+			},
+		})
+	}
+
+	return job
 }
 
 func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) *batchv1.Job {
@@ -492,7 +495,12 @@ func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) 
 	}
 }
 
-func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alpha1.PerconaServerMySQLRestore, destination apiv1alpha1.BackupDestination, storage *apiv1alpha1.BackupStorageSpec) corev1.Container {
+func restoreContainer(
+	cluster *apiv1alpha1.PerconaServerMySQL,
+	restore *apiv1alpha1.PerconaServerMySQLRestore,
+	destination apiv1alpha1.BackupDestination,
+	storage *apiv1alpha1.BackupStorageSpec,
+) corev1.Container {
 	spec := cluster.Spec.Backup
 
 	verifyTLS := true
@@ -500,7 +508,7 @@ func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alp
 		verifyTLS = *storage.VerifyTLS
 	}
 
-	return corev1.Container{
+	container := corev1.Container{
 		Name:            appName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
@@ -535,10 +543,6 @@ func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alp
 				Name:      tlsVolumeName,
 				MountPath: tlsMountPath,
 			},
-			{
-				Name:      vaultSecretVolumeName,
-				MountPath: vaultSecretMountPath,
-			},
 		},
 		Command:                  []string{"/opt/percona/run-restore.sh"},
 		TerminationMessagePath:   "/dev/termination-log",
@@ -546,6 +550,15 @@ func restoreContainer(cluster *apiv1alpha1.PerconaServerMySQL, restore *apiv1alp
 		SecurityContext:          storage.ContainerSecurityContext,
 		Resources:                storage.Resources,
 	}
+
+	if cluster.Spec.MySQL.VaultSecretName != "" {
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      vaultSecretVolumeName,
+			MountPath: vaultSecretMountPath,
+		})
+	}
+
+	return container
 }
 
 func PVC(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerMySQLBackup, storage *apiv1alpha1.BackupStorageSpec) *corev1.PersistentVolumeClaim {
