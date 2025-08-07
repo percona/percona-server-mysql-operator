@@ -39,7 +39,7 @@ spec:
   mysql:
     clusterType: group-replication
     autoRecovery: true
-    image: perconalab/percona-server-mysql-operator:main-psmysql
+    image: perconalab/percona-server-mysql-operator:main-psmysql8.0
     imagePullPolicy: Always
 #    runtimeClassName: image-rc
 #    tolerations:
@@ -294,7 +294,7 @@ spec:
 
     router:
       enabled: false
-      image: perconalab/percona-server-mysql-operator:main-router
+      image: perconalab/percona-server-mysql-operator:main-router8.0
       imagePullPolicy: Always
 #      runtimeClassName: image-rc
 #      tolerations:
@@ -431,7 +431,7 @@ spec:
 
   backup:
     enabled: true
-    image: perconalab/percona-server-mysql-operator:main-backup
+    image: perconalab/percona-server-mysql-operator:main-backup8.0
 #    schedule:
 #      - name: "sat-night-backup"
 #        schedule: "0 0 * * 6"
