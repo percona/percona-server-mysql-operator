@@ -8,5 +8,7 @@ commands:
 
       source ../../functions
 
+      apply_crd
+      apply_rbac
       upgrade_operator_image ${IMAGE}
       wait_deployment percona-server-mysql-operator ${OPERATOR_NS:-$NAMESPACE}
