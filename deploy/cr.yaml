@@ -418,6 +418,18 @@ spec:
     enabled: false
     image: perconalab/pmm-client:3-dev-latest
     imagePullPolicy: Always
+#    readinessProbes:
+#      initialDelaySeconds: 15
+#      timeoutSeconds: 15
+#      periodSeconds: 30
+#      successThreshold: 1
+#      failureThreshold: 5
+#    livenessProbes:
+#      initialDelaySeconds: 300
+#      timeoutSeconds: 5
+#      periodSeconds: 10
+#      successThreshold: 1
+#      failureThreshold: 3
 #    mysqlParams: "--disable-tablestats-limit=2000"
     resources:
       requests:
