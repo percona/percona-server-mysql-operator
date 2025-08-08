@@ -65,6 +65,10 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 			continue
 		}
 
+		if !k8s.IsPodReady(pod) {
+			continue
+		}
+
 		operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
 		if err != nil {
 			return errors.Wrap(err, "get operator password")
@@ -80,6 +84,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 
 		status, err := mysh.ClusterStatusWithExec(ctx)
 		if err == nil && status.DefaultReplicaSet.Status == innodbcluster.ClusterStatusOK {
+			log.Info("Cluster is healthy", "pod", pod.Name, "host", podFQDN)
 			err := r.cleanupFullClusterCrashFile(ctx, cr)
 			if err != nil {
 				log.Error(err, "failed to remove /var/lib/mysql/full-cluster-crash")
@@ -87,21 +92,49 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 			continue
 		}
 
-		log.Info("Attempting to reboot cluster from complete outage", "pod", pod.Name)
+		log.Info("Attempting to reboot cluster from complete outage", "pod", pod.Name, "host", podFQDN)
 		err = mysh.RebootClusterFromCompleteOutageWithExec(ctx, cr.InnoDBClusterName())
 		if err == nil {
-			log.Info("Cluster was successfully rebooted", "pod", pod.Name)
+			log.Info("Cluster was successfully rebooted", "pod", pod.Name, "host", podFQDN)
 			r.Recorder.Event(cr, "Normal", "FullClusterCrashRecovered", "Cluster recovered from full cluster crash")
 			err := r.cleanupFullClusterCrashFile(ctx, cr)
 			if err != nil {
 				log.Error(err, "failed to remove /var/lib/mysql/full-cluster-crash")
+				break
 			}
+
+			primary, err := r.getPrimaryPod(ctx, cr)
+			if err != nil {
+				log.Error(err, "failed to get primary pod")
+				break
+			}
+
+			log.Info(fmt.Sprintf("Primary pod is %s", primary.Name))
+
+			pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
+			if err != nil {
+				log.Error(err, "failed to get mysql pods")
+				break
+			}
+
+			for _, pod := range pods {
+				if pod.Name == primary.Name {
+					continue
+				}
+
+				log.Info("Deleting secondary pod", "pod", pod.Name)
+				if err := r.Delete(ctx, &pod); err != nil {
+					log.Error(err, "failed to delete pod", "pod", pod.Name)
+				}
+			}
+
 			break
 		}
 
+		// TODO: This needs to reconsidered.
 		if strings.Contains(err.Error(), "The Cluster is ONLINE") {
 			log.Info("Tried to reboot the cluster but MySQL says the cluster is already online. Deleting all MySQL pods.")
-			err := r.Client.DeleteAllOf(ctx, &corev1.Pod{}, &client.DeleteAllOfOptions{
+			err := r.DeleteAllOf(ctx, &corev1.Pod{}, &client.DeleteAllOfOptions{
 				ListOptions: client.ListOptions{
 					LabelSelector: labels.SelectorFromSet(mysql.MatchLabels(cr)),
 					Namespace:     cr.Namespace,
@@ -113,7 +146,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 			break
 		}
 
-		log.Error(err, "failed to reboot cluster from complete outage", "pod", pod.Name)
+		log.Error(err, "failed to reboot cluster from complete outage", "pod", pod.Name, "host", podFQDN)
 	}
 
 	return nil
