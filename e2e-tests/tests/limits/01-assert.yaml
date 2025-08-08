@@ -228,6 +228,11 @@ spec:
               optional: true
       - emptyDir: {}
         name: backup-logs
+      - name: vault-keyring-secret
+        secret:
+          defaultMode: 420
+          optional: true
+          secretName: limits-vault
   updateStrategy:
     type: OnDelete
   volumeClaimTemplates:
