@@ -64,7 +64,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 					}
 				},
 			),
-			stateDesc: "spec.backup stanza not found in PerconaServerMySQL CustomResource or backup is disabled",
+			stateDesc: "spec.backup not found in PerconaServerMySQL CustomResource or backup is disabled",
 		},
 		{
 			name: "without storage",
