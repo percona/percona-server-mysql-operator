@@ -61,14 +61,13 @@ func (m *mysqlshExec) DoesClusterExistWithExec(ctx context.Context, clusterName 
 	return err == nil
 }
 
-func (m *mysqlshExec) ClusterStatusWithExec(ctx context.Context, clusterName string) (innodbcluster.Status, error) {
+func (m *mysqlshExec) ClusterStatusWithExec(ctx context.Context) (innodbcluster.Status, error) {
 	status := innodbcluster.Status{}
 
 	stdoutBuffer := bytes.Buffer{}
 	stderrBuffer := bytes.Buffer{}
 
 	c := []string{"mysqlsh", "--result-format", "json", "--js", "--uri", m.uri, "--cluster", "--", "cluster", "status"}
-
 	err := m.client.Exec(ctx, m.pod, "mysql", c, nil, &stdoutBuffer, &stderrBuffer, false)
 	if err != nil {
 		sout := sensitiveRegexp.ReplaceAllString(stdoutBuffer.String(), ":*****@")
