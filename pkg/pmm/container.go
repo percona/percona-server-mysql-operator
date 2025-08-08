@@ -70,7 +70,7 @@ func Container(
 	if pmmSpec.LivenessProbes != nil {
 		container.LivenessProbe = pmmSpec.LivenessProbes
 		if reflect.DeepEqual(container.LivenessProbe.ProbeHandler, corev1.ProbeHandler{}) {
-			container.LivenessProbe.ProbeHandler.HTTPGet = &corev1.HTTPGetAction{
+			container.LivenessProbe.HTTPGet = &corev1.HTTPGetAction{
 				Port: intstr.FromInt32(7777),
 				Path: "/local/Status",
 			}
@@ -80,7 +80,7 @@ func Container(
 	if pmmSpec.ReadinessProbes != nil {
 		container.ReadinessProbe = pmmSpec.ReadinessProbes
 		if reflect.DeepEqual(container.ReadinessProbe.ProbeHandler, corev1.ProbeHandler{}) {
-			container.ReadinessProbe.ProbeHandler.HTTPGet = &corev1.HTTPGetAction{
+			container.ReadinessProbe.HTTPGet = &corev1.HTTPGetAction{
 				Port: intstr.FromInt32(7777),
 				Path: "/local/Status",
 			}
