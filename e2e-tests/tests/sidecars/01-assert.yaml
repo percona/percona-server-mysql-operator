@@ -107,14 +107,14 @@ spec:
               optional: true
       - emptyDir: {}
         name: backup-logs
-      - emptyDir:
-          medium: Memory
-        name: empty-vol
       - name: vault-keyring-secret
         secret:
           defaultMode: 420
           optional: true
           secretName: sidecars-vault
+      - emptyDir:
+          medium: Memory
+        name: empty-vol
   volumeClaimTemplates:
   - apiVersion: v1
     kind: PersistentVolumeClaim

@@ -54,7 +54,7 @@ status:
     ready: 3
     size: 3
     state: ready
-  router:
+  haproxy:
     ready: 3
     size: 3
     state: ready
