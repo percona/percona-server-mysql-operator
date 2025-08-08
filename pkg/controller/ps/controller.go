@@ -1043,6 +1043,9 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 
 	pod, err := getReadyMySQLPod(ctx, r.Client, cr)
 	if err != nil {
+		if errors.Is(err, ErrNoReadyPods) {
+			return nil
+		}
 		return errors.Wrap(err, "get ready mysql pod")
 	}
 
@@ -1087,6 +1090,9 @@ func (r *PerconaServerMySQLReconciler) rescanClusterIfNeeded(ctx context.Context
 
 	pod, err := getReadyMySQLPod(ctx, r.Client, cr)
 	if err != nil {
+		if errors.Is(err, ErrNoReadyPods) {
+			return nil
+		}
 		return errors.Wrap(err, "get ready mysql pod")
 	}
 
@@ -1291,6 +1297,9 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 
 		pod, err := getReadyMySQLPod(ctx, r.Client, cr)
 		if err != nil {
+			if errors.Is(err, ErrNoReadyPods) {
+				return nil
+			}
 			return errors.Wrap(err, "get ready mysql pod")
 		}
 
@@ -1479,6 +1488,25 @@ func (r *PerconaServerMySQLReconciler) getPrimaryHost(ctx context.Context, cr *a
 	log.V(1).Info("Cluster primary from orchestrator", "primary", primary)
 
 	return primary.Key.Hostname, nil
+}
+
+func (r *PerconaServerMySQLReconciler) getPrimaryPod(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Pod, error) {
+	primaryHost, err := r.getPrimaryHost(ctx, cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "get primary host")
+	}
+
+	idx, err := getPodIndexFromHostname(primaryHost)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get pod index from %s", primaryHost)
+	}
+
+	primPod, err := getMySQLPod(ctx, r.Client, cr, idx)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get primary pod by index %d", idx)
+	}
+
+	return primPod, nil
 }
 
 func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, primary *orchestrator.Instance) error {
