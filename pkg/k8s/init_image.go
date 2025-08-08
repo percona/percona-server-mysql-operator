@@ -16,13 +16,12 @@ type ComponentWithInit interface {
 	GetInitImage() string
 }
 
-func InitContainer(component, image string,
+func InitContainer(cr *apiv1alpha1.PerconaServerMySQL, component, image string,
 	pullPolicy corev1.PullPolicy,
 	secCtx *corev1.SecurityContext,
 	resources corev1.ResourceRequirements,
 	extraVolumeMounts []corev1.VolumeMount,
 ) corev1.Container {
-
 	volumeMounts := []corev1.VolumeMount{
 		{
 			Name:      apiv1alpha1.BinVolumeName,
@@ -32,6 +31,14 @@ func InitContainer(component, image string,
 
 	if len(extraVolumeMounts) > 0 {
 		volumeMounts = append(volumeMounts, extraVolumeMounts...)
+	}
+
+	if cr.Spec.InitContainer.Resources != nil {
+		resources = *cr.Spec.InitContainer.Resources
+	}
+
+	if cr.Spec.InitContainer.ContainerSecurityContext != nil {
+		secCtx = cr.Spec.InitContainer.ContainerSecurityContext
 	}
 
 	return corev1.Container{
@@ -54,7 +61,7 @@ func InitImage(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaSer
 	if image := comp.GetInitImage(); len(image) > 0 {
 		return image, nil
 	}
-	if image := cr.Spec.InitImage; len(image) > 0 {
+	if image := cr.Spec.InitContainer.Image; len(image) > 0 {
 		return image, nil
 	}
 	return OperatorImage(ctx, cl)

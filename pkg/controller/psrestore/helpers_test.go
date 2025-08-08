@@ -25,7 +25,7 @@ func readDefaultCluster(t *testing.T, name, namespace string) *apiv1alpha1.Perco
 
 	cr.Name = name
 	cr.Namespace = namespace
-	cr.Spec.InitImage = "init-image"
+	cr.Spec.InitContainer.Image = "init-image"
 	return cr
 }
 
