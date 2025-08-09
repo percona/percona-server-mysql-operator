@@ -27,6 +27,8 @@ spec:
           name: tls
         - mountPath: /etc/mysql/config
           name: config
+        - mountPath: /etc/mysql/vault-keyring-secret
+          name: vault-keyring-secret
       - name: xtrabackup
         volumeMounts:
         - mountPath: /opt/percona
@@ -37,6 +39,8 @@ spec:
           name: users
         - mountPath: /var/log/xtrabackup
           name: backup-logs
+        - mountPath: /etc/mysql/vault-keyring-secret
+          name: vault-keyring-secret
       - name: pt-heartbeat
         volumeMounts:
         - mountPath: /opt/percona
@@ -103,6 +107,11 @@ spec:
               optional: true
       - emptyDir: {}
         name: backup-logs
+      - name: vault-keyring-secret
+        secret:
+          defaultMode: 420
+          optional: true
+          secretName: sidecars-vault
       - emptyDir:
           medium: Memory
         name: empty-vol

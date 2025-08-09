@@ -52,6 +52,7 @@ spec:
 #      - name: "my-secret-1"
 #      - name: "my-secret-2"
 #    initImage: perconalab/percona-server-mysql-operator:main
+#    vaultSecretName: cluster1-vault
     size: 3
 
 #    env:

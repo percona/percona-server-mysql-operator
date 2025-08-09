@@ -15,7 +15,7 @@ commands:
       current_count=$(run_mysql "SELECT COUNT(*) FROM pvctest.data" "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password")
       echo "Current data count: $current_count"
 
-      if [[ "$original_count" != "$current_count" ]]; then
+      if [[ $original_count != "$current_count" ]]; then
           echo "ERROR: Data count mismatch! Original: $original_count, Current: $current_count"
           exit 1
       fi
@@ -23,7 +23,7 @@ commands:
       sample_data=$(run_mysql "SELECT data FROM pvctest.data WHERE id=1" "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password")
       echo "Sample data: $sample_data"
 
-      if [[ "$sample_data" != "test data row 1 with some content to use storage space" ]]; then
+      if [[ $sample_data != "test data row 1 with some content to use storage space" ]]; then
           echo "ERROR: Sample data verification failed"
           exit 1
       fi
@@ -33,7 +33,7 @@ commands:
           "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
 
       new_data=$(run_mysql "SELECT data FROM pvctest.data WHERE id=2000" "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password")
-      if [[ "$new_data" != "post-resize test data" ]]; then
+      if [[ $new_data != "post-resize test data" ]]; then
           echo "ERROR: Failed to insert data after resize"
           exit 1
       fi

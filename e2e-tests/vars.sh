@@ -23,6 +23,7 @@ export IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:3-dev-latest"
 export CERT_MANAGER_VER="1.17.2"
 export MINIO_VER="5.4.0"
 export CHAOS_MESH_VER="2.7.2"
+export VAULT_VER="0.16.1"
 
 date=$(which gdate || which date)
 

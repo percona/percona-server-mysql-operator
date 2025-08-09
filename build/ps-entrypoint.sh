@@ -167,6 +167,26 @@ create_default_cnf() {
 		sed -i "/\[mysqld\]/a ssl_key=${TLS_DIR}/tls.key" $CFG
 	fi
 
+	# if vault secret file exists we assume we need to turn on encryption
+	vault_secret="/etc/mysql/vault-keyring-secret/keyring_vault.conf"
+	if [[ -f "${vault_secret}" ]]; then
+		sed -i "/\[mysqld\]/a early-plugin-load=keyring_vault.so" $CFG
+		sed -i "/\[mysqld\]/a keyring_vault_config=${vault_secret}" $CFG
+
+		if [[ ${MYSQL_VERSION} =~ ^(8\.0|8\.4)$ ]]; then
+			sed -i "/\[mysqld\]/a default_table_encryption=ON" $CFG
+			sed -i "/\[mysqld\]/a table_encryption_privilege_check=ON" $CFG
+			sed -i "/\[mysqld\]/a innodb_undo_log_encrypt=ON" $CFG
+			sed -i "/\[mysqld\]/a innodb_redo_log_encrypt=ON" $CFG
+			sed -i "/\[mysqld\]/a binlog_encryption=ON" $CFG
+			sed -i "/\[mysqld\]/a binlog_rotate_encryption_master_key_at_startup=ON" $CFG
+			sed -i "/\[mysqld\]/a innodb_temp_tablespace_encrypt=ON" $CFG
+			sed -i "/\[mysqld\]/a innodb_parallel_dblwr_encrypt=ON" $CFG
+			sed -i "/\[mysqld\]/a innodb_encrypt_online_alter_logs=ON" $CFG
+			sed -i "/\[mysqld\]/a encrypt_tmp_files=ON" $CFG
+		fi
+	fi
+
 	for f in "${CUSTOM_CONFIG_FILES[@]}"; do
 		echo "${f}"
 		if [ -f "${f}" ]; then

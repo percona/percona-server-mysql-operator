@@ -1,0 +1,28 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-data-at-rest-encryption-mysql
+status:
+  replicas: 5
+  readyReplicas: 5
+  currentReplicas: 5
+  collisionCount: 0
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-data-at-rest-encryption
+status:
+  mysql:
+    ready: 5
+    size: 5
+    state: ready
+  router:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready

@@ -14,7 +14,7 @@ commands:
 
       # Update the cluster to request larger PVC size (from 2G to 3G)
       kubectl -n "${NAMESPACE}" patch ps pvc-resize \
-        --type=merge \
-        -p='{"spec":{"mysql":{"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3G"}}}}}}}'
+          --type=merge \
+          -p='{"spec":{"mysql":{"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3G"}}}}}}}'
 
       echo "PVC resize request submitted"
