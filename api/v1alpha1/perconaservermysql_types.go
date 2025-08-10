@@ -24,18 +24,17 @@ import (
 	"strings"
 
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
-	"gopkg.in/ini.v1"
-
-	"github.com/percona/percona-server-mysql-operator/pkg/platform"
-	"github.com/percona/percona-server-mysql-operator/pkg/version"
-
 	"github.com/pkg/errors"
+	"gopkg.in/ini.v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -154,8 +153,9 @@ type PodSpec struct {
 	SchedulerName                 string              `json:"schedulerName,omitempty"`
 	RuntimeClassName              *string             `json:"runtimeClassName,omitempty"`
 
-	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
-	ServiceAccountName string                     `json:"serviceAccountName,omitempty"`
+	PodSecurityContext  *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	ServiceAccountName  string                     `json:"serviceAccountName,omitempty"`
+	PodDisruptionBudget *PodDisruptionBudgetSpec   `json:"podDisruptionBudget,omitempty"`
 
 	Configuration string `json:"configuration,omitempty"`
 

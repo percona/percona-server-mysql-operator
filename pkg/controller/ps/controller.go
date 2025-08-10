@@ -379,39 +379,34 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(
 ) error {
 	log := logf.FromContext(ctx).WithName("reconcileDatabase")
 
-	configurable := mysql.Configurable(*cr)
-	configHash, err := r.reconcileCustomConfiguration(ctx, cr, &configurable)
-	if err != nil {
-		return errors.Wrap(err, "reconcile MySQL config")
-	}
-
-	if err = r.reconcileMySQLAutoConfig(ctx, cr); err != nil {
+	if err := r.reconcileMySQLAutoConfig(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile MySQL auto-config")
 	}
 
-	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.MySQL.PodSpec)
-	if err != nil {
-		return errors.Wrap(err, "get init image")
+	component := mysql.Component(*cr)
+	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
+		return errors.Wrap(err, "ensure component")
 	}
 
 	internalSecret := new(corev1.Secret)
-	nn := types.NamespacedName{Name: cr.InternalSecretName(), Namespace: cr.Namespace}
-	err = r.Client.Get(ctx, nn, internalSecret)
-	if client.IgnoreNotFound(err) != nil {
-		return errors.Wrapf(err, "get Secret/%s", nn.Name)
+	if err := r.Client.Get(ctx, types.NamespacedName{
+		Name:      cr.InternalSecretName(),
+		Namespace: cr.Namespace,
+	}, internalSecret); client.IgnoreNotFound(err) != nil {
+		return errors.Wrapf(err, "get internal secret")
 	}
-
-	sts := mysql.StatefulSet(cr, initImage, configHash, internalSecret)
-
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, sts, r.Scheme); err != nil {
-		return errors.Wrap(err, "reconcile sts")
-	}
-
 	if pmm := cr.Spec.PMM; pmm != nil && pmm.Enabled && !pmm.HasSecret(internalSecret) {
 		log.Info(fmt.Sprintf(`Can't enable PMM: either "%s" key doesn't exist in the secrets, or secrets and internal secrets are out of sync`,
 			apiv1alpha1.UserPMMServerKey), "secrets", cr.Spec.SecretsName, "internalSecrets", cr.InternalSecretName())
 	}
 
+	sts := new(appsv1.StatefulSet)
+	if err := r.Get(ctx, types.NamespacedName{
+		Name:      component.Name(),
+		Namespace: cr.Namespace,
+	}, sts); err != nil {
+		return errors.Wrap(err, "get statefulset")
+	}
 	if cr.Spec.UpdateStrategy == apiv1alpha1.SmartUpdateStatefulSetStrategyType {
 		return r.smartUpdate(ctx, sts, cr)
 	}
@@ -571,13 +566,9 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return errors.Wrap(err, "reconcile ConfigMap")
 	}
 
-	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Orchestrator.PodSpec)
-	if err != nil {
-		return errors.Wrap(err, "get init image")
-	}
-
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.StatefulSet(cr, initImage), r.Scheme); err != nil {
-		return errors.Wrap(err, "reconcile StatefulSet")
+	component := orchestrator.Component(*cr)
+	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
+		return errors.Wrap(err, "ensure component")
 	}
 
 	raftNodes := orchestrator.RaftNodes(cr)
@@ -638,12 +629,6 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 		return nil
 	}
 
-	configurable := haproxy.Configurable(*cr)
-	configHash, err := r.reconcileCustomConfiguration(ctx, cr, &configurable)
-	if err != nil {
-		return errors.Wrap(err, "reconcile HAProxy config")
-	}
-
 	nn := types.NamespacedName{Namespace: cr.Namespace, Name: mysql.PodName(cr, 0)}
 	firstMySQLPodReady, err := k8s.IsPodWithNameReady(ctx, r.Client, nn)
 	if err != nil {
@@ -655,20 +640,9 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 		return nil
 	}
 
-	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Proxy.HAProxy.PodSpec)
-	if err != nil {
-		return errors.Wrap(err, "get init image")
-	}
-
-	internalSecret := new(corev1.Secret)
-	nn = types.NamespacedName{Name: cr.InternalSecretName(), Namespace: cr.Namespace}
-	err = r.Client.Get(ctx, nn, internalSecret)
-	if client.IgnoreNotFound(err) != nil {
-		return errors.Wrapf(err, "get Secret/%s", nn.Name)
-	}
-
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, haproxy.StatefulSet(cr, initImage, configHash, internalSecret), r.Scheme); err != nil {
-		return errors.Wrap(err, "reconcile StatefulSet")
+	component := haproxy.Component(*cr)
+	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
+		return errors.Wrap(err, "ensure component")
 	}
 
 	return nil
@@ -900,12 +874,6 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		return nil
 	}
 
-	configurable := router.Configurable(*cr)
-	configHash, err := r.reconcileCustomConfiguration(ctx, cr, &configurable)
-	if err != nil {
-		return errors.Wrap(err, "reconcile Router config")
-	}
-
 	if cr.Spec.Proxy.Router.Size > 0 {
 		if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
 			log.V(1).Info("Waiting for MySQL pods to be ready")
@@ -931,13 +899,9 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		}
 	}
 
-	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Proxy.Router.PodSpec)
-	if err != nil {
-		return errors.Wrap(err, "get init image")
-	}
-
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Deployment(cr, initImage, configHash), r.Scheme); err != nil {
-		return errors.Wrap(err, "reconcile Deployment")
+	component := router.Component(*cr)
+	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
+		return errors.Wrap(err, "ensure component")
 	}
 
 	return nil

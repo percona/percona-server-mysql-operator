@@ -244,6 +244,47 @@ func EnsureObjectWithHash(
 	return nil
 }
 
+type Component interface {
+	Name() string
+	PerconaServerMySQL() *apiv1alpha1.PerconaServerMySQL
+	Lables() map[string]string
+	PodSpec() *apiv1alpha1.PodSpec
+
+	Object(ctx context.Context, cl client.Client) (client.Object, error)
+}
+
+func EnsureComponent(
+	ctx context.Context,
+	cl client.Client,
+	c Component,
+) error {
+	cr := c.PerconaServerMySQL()
+
+	obj, err := c.Object(ctx, cl)
+	if err != nil {
+		return errors.Wrap(err, "statefulset")
+	}
+	if err := EnsureObjectWithHash(ctx, cl, cr, obj, cl.Scheme()); err != nil {
+		return errors.Wrap(err, "failed to ensure statefulset")
+	}
+
+	podSpec := c.PodSpec()
+	if podSpec == nil || podSpec.PodDisruptionBudget == nil {
+		return nil
+	}
+
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+		return errors.Wrap(err, "get statefulset")
+	}
+
+	pdb := podDisruptionBudget(cr, podSpec.PodDisruptionBudget, c.Lables())
+	if err := EnsureObjectWithHash(ctx, cl, obj, pdb, cl.Scheme()); err != nil {
+		return errors.Wrap(err, "failed to create pdb")
+	}
+
+	return nil
+}
+
 func EnsureService(
 	ctx context.Context,
 	cl client.Client,

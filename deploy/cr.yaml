@@ -38,7 +38,9 @@ spec:
 #    initImage: percona/percona-server-mysql-operator:0.7.0
 
     size: 3
-
+    podDisruptionBudget:
+      maxUnavailable: 1
+#      minAvailable: 0
     resources:
       requests:
         memory: 1G
@@ -130,6 +132,9 @@ spec:
       image: perconalab/percona-server-mysql-operator:main-haproxy
       imagePullPolicy: Always
 
+      podDisruptionBudget:
+        maxUnavailable: 1
+#        minAvailable: 0
       resources:
         requests:
           memory: 1G
@@ -227,6 +232,9 @@ spec:
 
       size: 3
 
+      podDisruptionBudget:
+        maxUnavailable: 1
+#        minAvailable: 0
       resources:
         requests:
           memory: 256M
@@ -298,6 +306,9 @@ spec:
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
 
+    podDisruptionBudget:
+      maxUnavailable: 1
+#      minAvailable: 0
     resources:
       requests:
         memory: 128M

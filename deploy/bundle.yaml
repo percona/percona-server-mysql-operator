@@ -2,8 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.10.0
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.18.0
   name: perconaservermysqlbackups.ps.percona.com
 spec:
   group: ps.percona.com
@@ -839,8 +838,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.10.0
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.18.0
   name: perconaservermysqlrestores.ps.percona.com
 spec:
   group: ps.percona.com
@@ -1675,8 +1673,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.10.0
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.18.0
   name: perconaservermysqls.ps.percona.com
 spec:
   group: ps.percona.com
@@ -3253,6 +3250,7 @@ spec:
                             format: int32
                             type: integer
                           service:
+                            default: ""
                             type: string
                         required:
                         - port
@@ -3316,6 +3314,19 @@ spec:
                   nodeSelector:
                     additionalProperties:
                       type: string
+                    type: object
+                  podDisruptionBudget:
+                    properties:
+                      maxUnavailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                      minAvailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
                     type: object
                   podSecurityContext:
                     properties:
@@ -3401,6 +3412,7 @@ spec:
                             format: int32
                             type: integer
                           service:
+                            default: ""
                             type: string
                         required:
                         - port
@@ -4570,6 +4582,7 @@ spec:
                                   format: int32
                                   type: integer
                                 service:
+                                  default: ""
                                   type: string
                               required:
                               - port
@@ -4674,6 +4687,7 @@ spec:
                                   format: int32
                                   type: integer
                                 service:
+                                  default: ""
                                   type: string
                               required:
                               - port
@@ -4859,6 +4873,7 @@ spec:
                                   format: int32
                                   type: integer
                                 service:
+                                  default: ""
                                   type: string
                               required:
                               - port
@@ -4988,6 +5003,7 @@ spec:
                             format: int32
                             type: integer
                           service:
+                            default: ""
                             type: string
                         required:
                         - port
@@ -5805,6 +5821,7 @@ spec:
                             format: int32
                             type: integer
                           service:
+                            default: ""
                             type: string
                         required:
                         - port
@@ -5868,6 +5885,19 @@ spec:
                   nodeSelector:
                     additionalProperties:
                       type: string
+                    type: object
+                  podDisruptionBudget:
+                    properties:
+                      maxUnavailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                      minAvailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
                     type: object
                   podSecurityContext:
                     properties:
@@ -5953,6 +5983,7 @@ spec:
                             format: int32
                             type: integer
                           service:
+                            default: ""
                             type: string
                         required:
                         - port
@@ -6071,6 +6102,7 @@ spec:
                             format: int32
                             type: integer
                           service:
+                            default: ""
                             type: string
                         required:
                         - port
@@ -7001,6 +7033,7 @@ spec:
                                 format: int32
                                 type: integer
                               service:
+                                default: ""
                                 type: string
                             required:
                             - port
@@ -7064,6 +7097,19 @@ spec:
                       nodeSelector:
                         additionalProperties:
                           type: string
+                        type: object
+                      podDisruptionBudget:
+                        properties:
+                          maxUnavailable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
+                          minAvailable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
                         type: object
                       podSecurityContext:
                         properties:
@@ -7149,6 +7195,7 @@ spec:
                                 format: int32
                                 type: integer
                               service:
+                                default: ""
                                 type: string
                             required:
                             - port
@@ -7267,6 +7314,7 @@ spec:
                                 format: int32
                                 type: integer
                               service:
+                                default: ""
                                 type: string
                             required:
                             - port
@@ -8084,6 +8132,7 @@ spec:
                                 format: int32
                                 type: integer
                               service:
+                                default: ""
                                 type: string
                             required:
                             - port
@@ -8147,6 +8196,19 @@ spec:
                       nodeSelector:
                         additionalProperties:
                           type: string
+                        type: object
+                      podDisruptionBudget:
+                        properties:
+                          maxUnavailable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
+                          minAvailable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
                         type: object
                       podSecurityContext:
                         properties:
@@ -8232,6 +8294,7 @@ spec:
                                 format: int32
                                 type: integer
                               service:
+                                default: ""
                                 type: string
                             required:
                             - port
@@ -8350,6 +8413,7 @@ spec:
                                 format: int32
                                 type: integer
                               service:
+                                default: ""
                                 type: string
                             required:
                             - port
@@ -8742,6 +8806,7 @@ spec:
                             format: int32
                             type: integer
                           service:
+                            default: ""
                             type: string
                         required:
                         - port
@@ -8820,6 +8885,7 @@ spec:
                             format: int32
                             type: integer
                           service:
+                            default: ""
                             type: string
                         required:
                         - port
@@ -8929,6 +8995,7 @@ spec:
                             format: int32
                             type: integer
                           service:
+                            default: ""
                             type: string
                         required:
                         - port
@@ -9159,13 +9226,13 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  creationTimestamp: null
   name: percona-server-mysql-operator
 rules:
 - apiGroups:
   - ""
   resources:
   - configmaps
+  - persistentvolumeclaims
   - pods
   - pods/exec
   - secrets
@@ -9185,18 +9252,6 @@ rules:
   verbs:
   - create
   - patch
-- apiGroups:
-  - ""
-  resources:
-  - persistentvolumeclaims
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
 - apiGroups:
   - apps
   resources:
@@ -9243,31 +9298,9 @@ rules:
   - perconaservermysqlbackups
   - perconaservermysqlbackups/finalizers
   - perconaservermysqlbackups/status
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ps.percona.com
-  resources:
   - perconaservermysqlrestores
   - perconaservermysqlrestores/finalizers
   - perconaservermysqlrestores/status
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ps.percona.com
-  resources:
   - perconaservermysqls
   - perconaservermysqls/finalizers
   - perconaservermysqls/status
