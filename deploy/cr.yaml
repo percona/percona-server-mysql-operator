@@ -57,6 +57,9 @@ spec:
 #    env:
 #    - name: BOOTSTRAP_READ_TIMEOUT
 #      value: "600"
+    podDisruptionBudget:
+      maxUnavailable: 1
+#      minAvailable: 0
     resources:
       requests:
         memory: 2G
@@ -189,6 +192,9 @@ spec:
 #        - name: "my-secret-1"
 #        - name: "my-secret-2"
 
+      podDisruptionBudget:
+        maxUnavailable: 1
+#        minAvailable: 0
       resources:
         requests:
           memory: 1G
@@ -310,6 +316,9 @@ spec:
 
       size: 3
 
+      podDisruptionBudget:
+        maxUnavailable: 1
+#        minAvailable: 0
       resources:
         requests:
           memory: 256M
@@ -407,6 +416,9 @@ spec:
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
 
+    podDisruptionBudget:
+      maxUnavailable: 1
+#      minAvailable: 0
     gracePeriod: 30
 
     resources:
