@@ -27,7 +27,7 @@ func (r *PerconaServerMySQLReconciler) ensureTLSSecret(ctx context.Context, cr *
 	log := logf.FromContext(ctx)
 
 	secret := corev1.Secret{}
-	err := r.Client.Get(ctx,
+	err := r.Get(ctx,
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      cr.Spec.SSLSecretName,
