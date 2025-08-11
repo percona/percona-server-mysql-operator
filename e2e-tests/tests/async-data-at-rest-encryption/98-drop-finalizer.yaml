@@ -3,3 +3,9 @@ kind: PerconaServerMySQL
 metadata:
   name: async-data-at-rest-encryption
   finalizers: []
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: backup1
+  finalizers: []
