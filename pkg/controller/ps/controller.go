@@ -544,7 +544,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 	}
 
 	internalSecret := new(corev1.Secret)
-	if err := r.Client.Get(ctx, types.NamespacedName{
+	if err := r.Get(ctx, types.NamespacedName{
 		Name:      cr.InternalSecretName(),
 		Namespace: cr.Namespace,
 	}, internalSecret); client.IgnoreNotFound(err) != nil {
