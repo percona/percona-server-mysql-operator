@@ -3,11 +3,11 @@ package k8s
 import (
 	"testing"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 )
 
 func TestPVC(t *testing.T) {
@@ -29,7 +29,7 @@ func TestPVC(t *testing.T) {
 
 	pvcName := "pvc-name"
 
-	pvc := PVC(pvcName, spec)
+	pvc := PVC(new(apiv1alpha1.PerconaServerMySQL), pvcName, spec)
 
 	assert.Equal(t, pvcName, pvc.Name)
 	assert.NotNil(t, pvc.Spec.StorageClassName)

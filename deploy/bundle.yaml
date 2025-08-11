@@ -4261,6 +4261,17 @@ spec:
                 type: array
               initImage:
                 type: string
+              metadata:
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  labels:
+                    additionalProperties:
+                      type: string
+                    type: object
+                type: object
               mysql:
                 properties:
                   affinity:
