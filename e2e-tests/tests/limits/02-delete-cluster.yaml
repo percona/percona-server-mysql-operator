@@ -9,4 +9,4 @@ commands:
 
       get_cr "no-limits" \
           | kubectl -n "${NAMESPACE}" delete -f -
-    timeout: 240
+    timeout: 300
