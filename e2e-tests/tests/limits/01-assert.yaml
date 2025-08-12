@@ -190,7 +190,7 @@ spec:
       securityContext:
         supplementalGroups:
         - 1001
-      terminationGracePeriodSeconds: 600
+      terminationGracePeriodSeconds: 30
       volumes:
       - emptyDir: {}
         name: bin
