@@ -11,7 +11,7 @@ import (
 func podDisruptionBudget(cr *apiv1alpha1.PerconaServerMySQL, spec *apiv1alpha1.PodDisruptionBudgetSpec, labels map[string]string) *policyv1.PodDisruptionBudget {
 	return &policyv1.PodDisruptionBudget{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-" + labels[naming.LabelComponent],
+			Name:      cr.Name + "-" + labels[naming.LabelName],
 			Namespace: cr.Namespace,
 			Labels:    labels,
 		},

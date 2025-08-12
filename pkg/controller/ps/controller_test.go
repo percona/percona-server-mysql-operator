@@ -28,18 +28,24 @@ import (
 	gs "github.com/onsi/gomega/gstruct"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	psv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
+	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 )
 
 var _ = Describe("Sidecars", Ordered, func() {
@@ -302,6 +308,162 @@ var _ = Describe("Unsafe configurations", Ordered, func() {
 			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 
 			Expect(*sts.Spec.Replicas).Should(Equal(int32(1)))
+		})
+	})
+})
+
+var _ = Describe("PodDisruptionBudget", Ordered, func() {
+	ctx := context.Background()
+
+	crName := "pdb"
+	ns := crName
+	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      crName,
+			Namespace: ns,
+		},
+	}
+
+	var r *PerconaServerMySQLReconciler
+
+	BeforeAll(func() {
+		By("Creating the Namespace to perform the tests")
+		err := k8sClient.Create(ctx, namespace)
+		Expect(err).To(Not(HaveOccurred()))
+	})
+
+	AfterAll(func() {
+		By("Deleting the Namespace to perform the tests")
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	Context("Check default cluster", Ordered, func() {
+		cr, err := readDefaultCR(crName, ns)
+		It("should prepare reconciler", func() {
+			r = reconciler()
+			Expect(err).To(Succeed())
+			cliCmd, err := getFakeClient(cr, innodbcluster.ClusterStatusOK, []innodbcluster.MemberState{
+				innodbcluster.MemberStateOnline,
+				innodbcluster.MemberStateOnline,
+				innodbcluster.MemberStateOnline,
+			}, false, true)
+			Expect(err).To(Succeed())
+			r.ClientCmd = cliCmd
+			const operatorPass = "test"
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cr.InternalSecretName(),
+					Namespace: cr.Namespace,
+				},
+				Data: map[string][]byte{
+					string(apiv1alpha1.UserOperator): []byte(operatorPass),
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+		})
+
+		It("should create cr.yaml", func() {
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.Unsafe.Orchestrator = true
+			cr.Spec.Unsafe.Proxy = true
+			cr.Spec.MySQL.PodDisruptionBudget = &psv1alpha1.PodDisruptionBudgetSpec{
+				MaxUnavailable: &intstr.IntOrString{
+					Type:   intstr.Int,
+					IntVal: 20,
+				},
+			}
+			cr.Spec.Proxy.Router.Enabled = false
+			cr.Spec.Proxy.HAProxy.Enabled = true
+			cr.Spec.Proxy.HAProxy.PodDisruptionBudget = &psv1alpha1.PodDisruptionBudgetSpec{
+				MinAvailable: &intstr.IntOrString{
+					Type:   intstr.Int,
+					IntVal: 12,
+				},
+			}
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.Orchestrator.PodDisruptionBudget = &psv1alpha1.PodDisruptionBudgetSpec{
+				MaxUnavailable: &intstr.IntOrString{
+					Type:   intstr.Int,
+					IntVal: 11,
+				},
+			}
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+		})
+
+		It("should create MySQL pods", func() {
+			for _, pod := range makeFakeReadyPods(cr, 3, "mysql") {
+				status := pod.(*corev1.Pod).Status
+				Expect(k8sClient.Create(ctx, pod)).Should(Succeed())
+				p := new(corev1.Pod)
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), p)).Should(Succeed())
+				p.Status = status
+				Expect(k8sClient.Status().Update(ctx, p)).Should(Succeed())
+			}
+		})
+
+		When("HAProxy is enabled", Ordered, func() {
+			It("should reconcile", func() {
+				_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+				Expect(err).NotTo(HaveOccurred())
+			})
+			It("should check PodDisruptionBudget for MySQL", func() {
+				pdb := &policyv1.PodDisruptionBudget{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      cr.Name + "-mysql",
+						Namespace: cr.Namespace,
+					},
+				}
+
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, client.ObjectKeyFromObject(pdb), pdb)
+					return err == nil
+				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+				Expect(pdb.Labels).To(Equal(mysql.MatchLabels(cr)))
+				Expect(pdb.Spec.Selector.MatchLabels).To(Equal(mysql.MatchLabels(cr)))
+
+				Expect(pdb.Spec.MaxUnavailable.IntVal).To(Equal(int32(20)))
+			})
+
+			It("should check PodDisruptionBudget for HAProxy", func() {
+				pdb := &policyv1.PodDisruptionBudget{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      cr.Name + "-haproxy",
+						Namespace: cr.Namespace,
+					},
+				}
+
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, client.ObjectKeyFromObject(pdb), pdb)
+					return err == nil
+				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+				Expect(pdb.Labels).To(Equal(haproxy.MatchLabels(cr)))
+				Expect(pdb.Spec.Selector.MatchLabels).To(Equal(haproxy.MatchLabels(cr)))
+
+				Expect(pdb.Spec.MinAvailable.IntVal).To(Equal(int32(12)))
+			})
+
+			It("should check PodDisruptionBudget for Orchestrator", func() {
+				pdb := &policyv1.PodDisruptionBudget{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      cr.Name + "-orchestrator",
+						Namespace: cr.Namespace,
+					},
+				}
+
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, client.ObjectKeyFromObject(pdb), pdb)
+					return err == nil
+				}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+				Expect(pdb.Labels).To(Equal(orchestrator.MatchLabels(cr)))
+				Expect(pdb.Spec.Selector.MatchLabels).To(Equal(orchestrator.MatchLabels(cr)))
+
+				Expect(pdb.Spec.MaxUnavailable.IntVal).To(Equal(int32(11)))
+			})
 		})
 	})
 })
