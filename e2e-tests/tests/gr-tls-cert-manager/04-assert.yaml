@@ -36,11 +36,11 @@ spec:
 status:
   conditions:
     - message: Certificate is up to date and has not expired
-      observedGeneration: 1
+      observedGeneration: 2
       reason: Ready
       status: 'True'
       type: Ready
-  revision: 1
+  revision: 2
 ---
 apiVersion: apps/v1
 kind: StatefulSet
