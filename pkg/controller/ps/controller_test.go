@@ -39,7 +39,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	psv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
@@ -358,7 +357,7 @@ var _ = Describe("PodDisruptionBudget", Ordered, func() {
 					Namespace: cr.Namespace,
 				},
 				Data: map[string][]byte{
-					string(apiv1alpha1.UserOperator): []byte(operatorPass),
+					string(psv1alpha1.UserOperator): []byte(operatorPass),
 				},
 			}
 			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
