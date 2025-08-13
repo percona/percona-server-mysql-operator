@@ -367,6 +367,13 @@ func (in *Metadata) DeepCopy() *Metadata {
 func (in *MySQLRouterSpec) DeepCopyInto(out *MySQLRouterSpec) {
 	*out = *in
 	in.Expose.DeepCopyInto(&out.Expose)
+	if in.Ports != nil {
+		in, out := &in.Ports, &out.Ports
+		*out = make([]corev1.ServicePort, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	in.PodSpec.DeepCopyInto(&out.PodSpec)
 }
 

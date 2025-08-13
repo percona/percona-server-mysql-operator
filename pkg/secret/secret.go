@@ -40,12 +40,25 @@ func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL
 	return secret, nil
 }
 
+// Password generation constants.
+//
+// passSymbols defines the allowed character set for generated passwords.
+// It includes uppercase letters, lowercase letters, digits, and selected special characters.
+//
+// Note: We intentionally exclude some characters that could break SQL, shell, YAML,
+// or connection string contexts — such as single quotes ('), double quotes ("), backslashes (\),
+// forward slashes (/), colons (:), pipes (|), semicolons (;), and backticks (`).
+//
+// These omissions reduce the risk of injection vulnerabilities or misinterpretation in tooling.
+//
+// The password length is constrained between passwordMinLen and passwordMaxLen for security and usability.
 const (
 	passwordMaxLen = 20
 	passwordMinLen = 16
 	passSymbols    = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
 		"abcdefghijklmnopqrstuvwxyz" +
-		"0123456789"
+		"0123456789" +
+		"!$%&()*+,-.<=>?@[]^_{}~#"
 )
 
 var SecretUsers = []apiv1alpha1.SystemUser{

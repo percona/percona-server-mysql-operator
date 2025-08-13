@@ -2,6 +2,7 @@ package router
 
 import (
 	"fmt"
+	"slices"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -27,14 +28,14 @@ const (
 )
 
 const (
-	PortHTTP       = 8443
-	PortRWDefault  = 3306
-	PortReadWrite  = 6446
-	PortReadOnly   = 6447
-	PortXReadWrite = 6448
-	PortXReadOnly  = 6449
-	PortXDefault   = 33060
-	PortRWAdmin    = 33062
+	portHTTP       = 8443
+	portRWDefault  = 3306
+	portReadWrite  = 6446
+	portReadOnly   = 6447
+	portXReadWrite = 6448
+	portXReadOnly  = 6449
+	portXDefault   = 33060
+	portRWAdmin    = 33062
 )
 
 func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
@@ -69,7 +70,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 		externalTrafficPolicy = expose.ExternalTrafficPolicy
 	}
 
-	return &corev1.Service{
+	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "Service",
@@ -81,52 +82,16 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
 		},
 		Spec: corev1.ServiceSpec{
-			Type: expose.Type,
-			Ports: []corev1.ServicePort{
-				// do not change the port order
-				// 8443 port should be the first in service, see K8SPS-132 task
-				{
-					Name: "http",
-					Port: int32(PortHTTP),
-				},
-				{
-					Name: "rw-default",
-					Port: int32(PortRWDefault),
-					TargetPort: intstr.IntOrString{
-						IntVal: PortReadWrite,
-					},
-				},
-				{
-					Name: "read-write",
-					Port: int32(PortReadWrite),
-				},
-				{
-					Name: "read-only",
-					Port: int32(PortReadOnly),
-				},
-				{
-					Name: "x-read-write",
-					Port: int32(PortXReadWrite),
-				},
-				{
-					Name: "x-read-only",
-					Port: int32(PortXReadOnly),
-				},
-				{
-					Name: "x-default",
-					Port: int32(PortXDefault),
-				},
-				{
-					Name: "rw-admin",
-					Port: int32(PortRWAdmin),
-				},
-			},
+			Type:                     expose.Type,
+			Ports:                    ports(cr.Spec.Proxy.Router.Ports),
 			Selector:                 labels,
 			LoadBalancerSourceRanges: loadBalancerSourceRanges,
 			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
 			ExternalTrafficPolicy:    externalTrafficPolicy,
 		},
 	}
+
+	return s
 }
 
 func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHash string) *appsv1.Deployment {
@@ -257,6 +222,79 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 	return []corev1.Container{routerContainer(cr)}
 }
 
+func ports(sPorts []corev1.ServicePort) []corev1.ServicePort {
+	defaultPorts := []corev1.ServicePort{
+		// do not change the port order
+		// 8443 port should be the first in service, see K8SPS-132 task
+		{
+			Name: "http",
+			Port: int32(portHTTP),
+		},
+		{
+			Name: "rw-default",
+			Port: int32(portRWDefault),
+			TargetPort: intstr.IntOrString{
+				IntVal: portReadWrite,
+			},
+		},
+		{
+			Name: "read-write",
+			Port: int32(portReadWrite),
+		},
+		{
+			Name: "read-only",
+			Port: int32(portReadOnly),
+		},
+		{
+			Name: "x-read-write",
+			Port: int32(portXReadWrite),
+		},
+		{
+			Name: "x-read-only",
+			Port: int32(portXReadOnly),
+		},
+		{
+			Name: "x-default",
+			Port: int32(portXDefault),
+		},
+		{
+			Name: "rw-admin",
+			Port: int32(portRWAdmin),
+		},
+	}
+	if len(sPorts) == 0 {
+		return defaultPorts
+	}
+
+	specifiedPorts := make([]corev1.ServicePort, len(sPorts))
+	copy(specifiedPorts, sPorts)
+
+	ports := []corev1.ServicePort{}
+	for _, defaultPort := range defaultPorts {
+		idx := slices.IndexFunc(specifiedPorts, func(port corev1.ServicePort) bool {
+			return port.Name == defaultPort.Name
+		})
+		if idx == -1 {
+			ports = append(ports, defaultPort)
+			continue
+		}
+
+		modifiedPort := specifiedPorts[idx]
+		if modifiedPort.Port == 0 {
+			modifiedPort.Port = defaultPort.Port
+		}
+		if modifiedPort.TargetPort.IntValue() == 0 {
+			modifiedPort.TargetPort = defaultPort.TargetPort
+		}
+		ports = append(ports, modifiedPort)
+		specifiedPorts = slices.Delete(specifiedPorts, idx, idx+1)
+	}
+
+	ports = append(ports, specifiedPorts...)
+
+	return ports
+}
+
 func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	spec := cr.Spec.Proxy.Router
 
@@ -268,43 +306,13 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	}
 	env = append(env, spec.Env...)
 
-	return corev1.Container{
+	c := corev1.Container{
 		Name:            AppName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
 		Resources:       spec.Resources,
 		Env:             env,
 		EnvFrom:         spec.EnvFrom,
-		Ports: []corev1.ContainerPort{
-			{
-				Name:          "http",
-				ContainerPort: int32(PortHTTP),
-			},
-			{
-				Name:          "read-write",
-				ContainerPort: int32(PortReadWrite),
-			},
-			{
-				Name:          "read-only",
-				ContainerPort: int32(PortReadOnly),
-			},
-			{
-				Name:          "x-read-write",
-				ContainerPort: int32(PortXReadWrite),
-			},
-			{
-				Name:          "x-read-only",
-				ContainerPort: int32(PortXReadOnly),
-			},
-			{
-				Name:          "x-default",
-				ContainerPort: int32(PortXDefault),
-			},
-			{
-				Name:          "rw-admin",
-				ContainerPort: int32(PortRWAdmin),
-			},
-		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      apiv1alpha1.BinVolumeName,
@@ -331,4 +339,19 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		StartupProbe:             k8s.ExecProbe(spec.StartupProbe, []string{"/opt/percona/router_startup_check.sh"}),
 		ReadinessProbe:           k8s.ExecProbe(spec.ReadinessProbe, []string{"/opt/percona/router_readiness_check.sh"}),
 	}
+
+	for _, servicePort := range ports(cr.Spec.Proxy.Router.Ports) {
+		containerPort := servicePort.Port
+		if targetPort := servicePort.TargetPort.IntValue(); targetPort != 0 {
+			containerPort = int32(targetPort)
+		}
+
+		c.Ports = append(c.Ports, corev1.ContainerPort{
+			Name:          servicePort.Name,
+			ContainerPort: containerPort,
+			Protocol:      servicePort.Protocol,
+		})
+	}
+
+	return c
 }
