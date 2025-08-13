@@ -17,6 +17,11 @@ commands:
           | yq eval ".spec.mysql.size=1" - \
           | yq eval ".spec.proxy.haproxy.enabled=false" - \
           | yq eval ".spec.proxy.router.size=1" - \
+          | yq eval '.spec.proxy.router.ports[0].name="rw-default"' - \
+          | yq eval ".spec.proxy.router.ports[0].port=1111" - \
+          | yq eval '.spec.proxy.router.ports[1].name="custom-port"' - \
+          | yq eval ".spec.proxy.router.ports[1].port=2222" - \
+          | yq eval ".spec.proxy.router.ports[1].targetPort=3333" - \
           | yq eval ".spec.orchestrator.enabled=false" - \
           | yq eval '.spec.backup.storages.minio.type="s3"' - \
           | yq eval '.spec.backup.storages.minio.s3.bucket="operator-testing"' - \

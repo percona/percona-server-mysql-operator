@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -74,14 +75,14 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 		}
 
 		podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
-		podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
+		podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, url.QueryEscape(operatorPass), podFQDN)
 
 		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, &pod, podUri)
 		if err != nil {
 			return err
 		}
 
-		status, err := mysh.ClusterStatusWithExec(ctx, cr.InnoDBClusterName())
+		status, err := mysh.ClusterStatusWithExec(ctx)
 		if err == nil && status.DefaultReplicaSet.Status == innodbcluster.ClusterStatusOK {
 			log.Info("Cluster is healthy", "pod", pod.Name, "host", podFQDN)
 			err := r.cleanupFullClusterCrashFile(ctx, cr)

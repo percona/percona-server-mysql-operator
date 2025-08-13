@@ -1,0 +1,11 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 60
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: 08-read-data
+data:
+  data: |-
+    100500
