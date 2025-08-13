@@ -11680,6 +11680,16 @@ rules:
   - patch
   - watch
 - apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+- apiGroups:
   - ps.percona.com
   resources:
   - perconaservermysqlbackups
