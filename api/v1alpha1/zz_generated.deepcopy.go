@@ -365,7 +365,7 @@ func (in *MySQLRouterSpec) DeepCopyInto(out *MySQLRouterSpec) {
 	in.Expose.DeepCopyInto(&out.Expose)
 	if in.Ports != nil {
 		in, out := &in.Ports, &out.Ports
-		*out = make([]corev1.ServicePort, len(*in))
+		*out = make([]v1.ServicePort, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
