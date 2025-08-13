@@ -21,6 +21,7 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"reflect"
 	"slices"
 	"strconv"
@@ -221,7 +222,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			return errors.Wrap(err, "get operator password")
 		}
 
-		firstPodUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, mysql.PodFQDN(cr, &firstPod))
+		firstPodUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, url.QueryEscape(operatorPass), mysql.PodFQDN(cr, &firstPod))
 
 		um := database.NewReplicationManager(&firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, mysql.PodFQDN(cr, &firstPod))
 
@@ -230,7 +231,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			return err
 		}
 
-		clusterStatus, err := mysh.ClusterStatusWithExec(ctx, cr.InnoDBClusterName())
+		clusterStatus, err := mysh.ClusterStatusWithExec(ctx)
 		if err != nil {
 			return errors.Wrap(err, "get cluster status")
 		}

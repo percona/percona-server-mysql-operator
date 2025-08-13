@@ -5052,6 +5052,8 @@ spec:
                       - whenUnsatisfiable
                       type: object
                     type: array
+                  vaultSecretName:
+                    type: string
                   volumeSpec:
                     properties:
                       emptyDir:
@@ -8584,6 +8586,31 @@ spec:
                                 type: string
                             type: object
                         type: object
+                      ports:
+                        items:
+                          properties:
+                            appProtocol:
+                              type: string
+                            name:
+                              type: string
+                            nodePort:
+                              format: int32
+                              type: integer
+                            port:
+                              format: int32
+                              type: integer
+                            protocol:
+                              default: TCP
+                              type: string
+                            targetPort:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              x-kubernetes-int-or-string: true
+                          required:
+                          - port
+                          type: object
+                        type: array
                       priorityClassName:
                         type: string
                       readinessProbe:
