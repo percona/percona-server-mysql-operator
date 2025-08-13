@@ -5026,6 +5026,8 @@ spec:
                       - whenUnsatisfiable
                       type: object
                     type: array
+                  vaultSecretName:
+                    type: string
                   volumeSpec:
                     properties:
                       emptyDir:

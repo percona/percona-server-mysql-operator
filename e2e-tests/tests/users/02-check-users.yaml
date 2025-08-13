@@ -34,13 +34,13 @@ commands:
       version=$(kubectl -n ${NAMESPACE} get ps users -o yaml | yq .status.mysql.version)
 
       if [[ ${version} =~ "8.0" ]]; then
-        kubectl get -n ${NAMESPACE} cm 02-check-users -o yaml | yq .data | diff -u - 02-grants-80.txt
-        exit 0
+          kubectl get -n ${NAMESPACE} cm 02-check-users -o yaml | yq .data | diff -u - 02-grants-80.txt
+          exit 0
       fi
 
       if [[ ${version} =~ "8.4" ]]; then
-        kubectl get -n ${NAMESPACE} cm 02-check-users -o yaml | yq .data | diff -u - 02-grants-84.txt
-        exit 0
+          kubectl get -n ${NAMESPACE} cm 02-check-users -o yaml | yq .data | diff -u - 02-grants-84.txt
+          exit 0
       fi
 
       echo "unsupported MySQL version"
