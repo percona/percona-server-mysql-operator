@@ -384,11 +384,13 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	for _, env := range backupConf.ContainerOptions.Env {
-		if err := os.Setenv(env.Name, env.Value); err != nil {
-			log.Error(err, "failed to set env")
-			http.Error(w, "failed to set env", http.StatusInternalServerError)
-			return
+	if backupConf.ContainerOptions != nil {
+		for _, env := range backupConf.ContainerOptions.Env {
+			if err := os.Setenv(env.Name, env.Value); err != nil {
+				log.Error(err, "failed to set env")
+				http.Error(w, "failed to set env", http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 
