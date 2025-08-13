@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -35,6 +36,8 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		return nil
 	}
 
+	initialState := cr.Status.State
+
 	clusterCondition := metav1.Condition{
 		Status:             metav1.ConditionTrue,
 		Type:               apiv1alpha1.StateInitializing.String(),
@@ -50,6 +53,8 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
 
 			cr.Status.State = apiv1alpha1.StateError
+
+			r.Recorder.Event(cr, "Error", "ReconcileError", "Failed to reconcile cluster")
 		}
 
 		nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
@@ -210,17 +215,10 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		}
 	}
 
-	log.V(1).Info(
-		"Writing CR status",
-		"mysql", cr.Status.MySQL,
-		"orchestrator", cr.Status.Orchestrator,
-		"router", cr.Status.Router,
-		"haproxy", cr.Status.HAProxy,
-		"host", cr.Status.Host,
-		"loadbalancers", loadBalancersReady,
-		"conditions", cr.Status.Conditions,
-		"state", cr.Status.State,
-	)
+	if cr.Status.State != initialState {
+		log.Info("Cluster state changed", "previous", initialState, "current", cr.Status.State)
+		r.Recorder.Event(cr, "Warning", "ClusterStateChanged", fmt.Sprintf("%s -> %s", initialState, cr.Status.State))
+	}
 
 	nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
 	return writeStatus(ctx, r.Client, nn, cr.Status)
@@ -254,14 +252,14 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 		return false, nil
 	}
 
-	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
+	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, url.QueryEscape(operatorPass), mysql.PodFQDN(cr, pod))
 
 	msh, err := mysqlsh.NewWithExec(r.ClientCmd, pod, uri)
 	if err != nil {
 		return false, err
 	}
 
-	status, err := msh.ClusterStatusWithExec(ctx, cr.InnoDBClusterName())
+	status, err := msh.ClusterStatusWithExec(ctx)
 	if err != nil {
 		return false, errors.Wrapf(err, "check cluster status from %s", pod.Name)
 	}

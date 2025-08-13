@@ -9,12 +9,15 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
+	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -68,10 +71,7 @@ func (s *Status) GetBackupConfig() *xb.BackupConfig {
 	return &cfg
 }
 
-func main() {
-	opts := zap.Options{Development: true}
-	logf.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-
+func startServer() *http.Server {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/health/", func(w http.ResponseWriter, req *http.Request) {
@@ -80,8 +80,42 @@ func main() {
 	mux.HandleFunc("/backup/", backupHandler)
 	mux.HandleFunc("/logs/", logHandler)
 
-	log.Info("starting http server")
-	log.Error(http.ListenAndServe(":"+strconv.Itoa(mysql.SidecarHTTPPort), mux), "http server failed")
+	srv := &http.Server{Addr: ":" + strconv.Itoa(mysql.SidecarHTTPPort), Handler: mux}
+
+	go func() {
+		log.Info("starting http server")
+		// always returns error. ErrServerClosed on graceful close
+		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+			log.Error(err, "http server failed")
+		}
+	}()
+
+	return srv
+}
+
+func main() {
+	opts := zap.Options{Development: true}
+	logf.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	srv := startServer()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	<-stop
+
+	log.Info("received interrupt signal, shutting down http server")
+
+	// TODO: should this timeout use terminationGracePeriodSeconds?
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Error(err, "graceful shutdown failed")
+		os.Exit(1)
+	}
+
+	os.Exit(0)
 }
 
 func getSecret(username apiv1alpha1.SystemUser) (string, error) {

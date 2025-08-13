@@ -42,8 +42,14 @@ main() {
 		"azure") run_azure | extract "${tmpdir}" ;;
 	esac
 
+	local keyring=""
+	if [[ -f ${KEYRING_VAULT_PATH} ]]; then
+		echo "Using keyring vault config: ${KEYRING_VAULT_PATH}"
+		keyring="--keyring-vault-config=${KEYRING_VAULT_PATH}"
+	fi
+
 	# shellcheck disable=SC2086
-	xtrabackup --prepare --rollback-prepared-trx --target-dir="${tmpdir}" ${XB_EXTRA_ARGS}
+	xtrabackup --prepare --rollback-prepared-trx --target-dir="${tmpdir}" ${XB_EXTRA_ARGS} ${keyring}
 	# shellcheck disable=SC2086
 	xtrabackup --datadir="${DATADIR}" --move-back --force-non-empty-directories --target-dir="${tmpdir}" ${XB_EXTRA_ARGS}
 

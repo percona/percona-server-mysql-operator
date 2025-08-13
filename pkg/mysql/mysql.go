@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -17,19 +18,21 @@ import (
 )
 
 const (
-	AppName           = "mysql"
-	DataVolumeName    = "datadir"
-	DataMountPath     = "/var/lib/mysql"
-	CustomConfigKey   = "my.cnf"
-	configVolumeName  = "config"
-	configMountPath   = "/etc/mysql/config"
-	credsVolumeName   = "users"
-	CredsMountPath    = "/etc/mysql/mysql-users-secret"
-	mysqlshVolumeName = "mysqlsh"
-	mysqlshMountPath  = "/.mysqlsh"
-	tlsVolumeName     = "tls"
-	tlsMountPath      = "/etc/mysql/mysql-tls-secret"
-	BackupLogDir      = "/var/log/xtrabackup"
+	AppName               = "mysql"
+	DataVolumeName        = "datadir"
+	DataMountPath         = "/var/lib/mysql"
+	CustomConfigKey       = "my.cnf"
+	configVolumeName      = "config"
+	configMountPath       = "/etc/mysql/config"
+	credsVolumeName       = "users"
+	CredsMountPath        = "/etc/mysql/mysql-users-secret"
+	mysqlshVolumeName     = "mysqlsh"
+	mysqlshMountPath      = "/.mysqlsh"
+	tlsVolumeName         = "tls"
+	tlsMountPath          = "/etc/mysql/mysql-tls-secret"
+	BackupLogDir          = "/var/log/xtrabackup"
+	vaultSecretVolumeName = "vault-keyring-secret"
+	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
 )
 
 const (
@@ -221,8 +224,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 }
 
 func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
-	t := true
-	return []corev1.Volume{
+	volumes := []corev1.Volume{
 		{
 			Name: apiv1alpha1.BinVolumeName,
 			VolumeSource: corev1.VolumeSource{
@@ -267,7 +269,7 @@ func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
 										Path: "my-config.cnf",
 									},
 								},
-								Optional: &t,
+								Optional: ptr.To(true),
 							},
 						},
 						{
@@ -281,7 +283,7 @@ func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
 										Path: "auto-config.cnf",
 									},
 								},
-								Optional: &t,
+								Optional: ptr.To(true),
 							},
 						},
 						{
@@ -295,7 +297,7 @@ func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
 										Path: "my-secret.cnf",
 									},
 								},
-								Optional: &t,
+								Optional: ptr.To(true),
 							},
 						},
 					},
@@ -309,6 +311,20 @@ func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
 			},
 		},
 	}
+
+	if cr.CompareVersion("0.11.0") >= 0 {
+		volumes = append(volumes, corev1.Volume{
+			Name: vaultSecretVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cr.Spec.MySQL.VaultSecretName,
+					Optional:   ptr.To(true),
+				},
+			},
+		})
+	}
+
+	return volumes
 }
 
 func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrategy {
@@ -574,6 +590,44 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 	return appendUniqueContainers(containers, cr.Spec.MySQL.Sidecars...)
 }
 
+func mysqldVolumeMounts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.VolumeMount {
+	mounts := []corev1.VolumeMount{
+		{
+			Name:      apiv1alpha1.BinVolumeName,
+			MountPath: apiv1alpha1.BinVolumePath,
+		},
+		{
+			Name:      DataVolumeName,
+			MountPath: DataMountPath,
+		},
+		{
+			Name:      mysqlshVolumeName,
+			MountPath: mysqlshMountPath,
+		},
+		{
+			Name:      credsVolumeName,
+			MountPath: CredsMountPath,
+		},
+		{
+			Name:      tlsVolumeName,
+			MountPath: tlsMountPath,
+		},
+		{
+			Name:      configVolumeName,
+			MountPath: configMountPath,
+		},
+	}
+
+	if cr.CompareVersion("0.11.0") >= 0 {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      vaultSecretVolumeName,
+			MountPath: vaultSecretMountPath,
+		})
+	}
+
+	return mounts
+}
+
 func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	spec := cr.MySQLSpec()
 
@@ -618,47 +672,25 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	env = append(env, spec.Env...)
 
 	container := corev1.Container{
-		Name:            AppName,
-		Image:           spec.Image,
-		ImagePullPolicy: spec.ImagePullPolicy,
-		Resources:       spec.Resources,
-		Ports:           containerPorts(cr),
-		Env:             env,
-		EnvFrom:         spec.EnvFrom,
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      apiv1alpha1.BinVolumeName,
-				MountPath: apiv1alpha1.BinVolumePath,
-			},
-			{
-				Name:      DataVolumeName,
-				MountPath: DataMountPath,
-			},
-			{
-				Name:      mysqlshVolumeName,
-				MountPath: mysqlshMountPath,
-			},
-			{
-				Name:      credsVolumeName,
-				MountPath: CredsMountPath,
-			},
-			{
-				Name:      tlsVolumeName,
-				MountPath: tlsMountPath,
-			},
-			{
-				Name:      configVolumeName,
-				MountPath: configMountPath,
-			},
-		},
+		Name:                     AppName,
+		Image:                    spec.Image,
+		ImagePullPolicy:          spec.ImagePullPolicy,
+		Resources:                spec.Resources,
+		Ports:                    containerPorts(cr),
+		Env:                      env,
+		EnvFrom:                  spec.EnvFrom,
 		Command:                  []string{"/opt/percona/ps-entrypoint.sh"},
+		VolumeMounts:             mysqldVolumeMounts(cr),
 		Args:                     []string{"mysqld"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          spec.ContainerSecurityContext,
-		LivenessProbe:            k8s.ExecProbe(spec.LivenessProbe, []string{"/opt/percona/healthcheck", "liveness"}),
-		ReadinessProbe:           k8s.ExecProbe(spec.ReadinessProbe, []string{"/opt/percona/healthcheck", "readiness"}),
-		StartupProbe:             k8s.ExecProbe(spec.StartupProbe, []string{"/opt/percona/bootstrap"}),
+		LivenessProbe: k8s.ExecProbe(spec.LivenessProbe,
+			[]string{"/opt/percona/healthcheck", "liveness"}),
+		ReadinessProbe: k8s.ExecProbe(spec.ReadinessProbe,
+			[]string{"/opt/percona/healthcheck", "readiness"}),
+		StartupProbe: k8s.ExecProbe(spec.StartupProbe,
+			[]string{"/opt/percona/bootstrap"}),
 		Lifecycle: &corev1.Lifecycle{
 			PreStop: &corev1.LifecycleHandler{
 				Exec: &corev1.ExecAction{
@@ -669,6 +701,36 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	}
 
 	return container
+}
+
+func backupVolumeMounts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.VolumeMount {
+	mounts := []corev1.VolumeMount{
+		{
+			Name:      apiv1alpha1.BinVolumeName,
+			MountPath: apiv1alpha1.BinVolumePath,
+		},
+		{
+			Name:      DataVolumeName,
+			MountPath: DataMountPath,
+		},
+		{
+			Name:      credsVolumeName,
+			MountPath: CredsMountPath,
+		},
+		{
+			Name:      "backup-logs",
+			MountPath: BackupLogDir,
+		},
+	}
+
+	if cr.CompareVersion("0.11.0") >= 0 {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      vaultSecretVolumeName,
+			MountPath: vaultSecretMountPath,
+		})
+	}
+
+	return mounts
 }
 
 func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
@@ -683,24 +745,7 @@ func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 				ContainerPort: SidecarHTTPPort,
 			},
 		},
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      apiv1alpha1.BinVolumeName,
-				MountPath: apiv1alpha1.BinVolumePath,
-			},
-			{
-				Name:      DataVolumeName,
-				MountPath: DataMountPath,
-			},
-			{
-				Name:      credsVolumeName,
-				MountPath: CredsMountPath,
-			},
-			{
-				Name:      "backup-logs",
-				MountPath: BackupLogDir,
-			},
-		},
+		VolumeMounts:             backupVolumeMounts(cr),
 		Command:                  []string{"/opt/percona/sidecar"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
