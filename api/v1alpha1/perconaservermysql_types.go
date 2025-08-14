@@ -63,7 +63,7 @@ type PerconaServerMySQLSpec struct {
 	SecretsName            string                               `json:"secretsName,omitempty"`
 	SSLSecretName          string                               `json:"sslSecretName,omitempty"`
 	Unsafe                 UnsafeFlags                          `json:"unsafeFlags,omitempty"`
-	InitImage              string                               `json:"initImage,omitempty"`
+	InitContainer          InitContainerSpec                    `json:"initContainer,omitempty"`
 	IgnoreAnnotations      []string                             `json:"ignoreAnnotations,omitempty"`
 	IgnoreLabels           []string                             `json:"ignoreLabels,omitempty"`
 	MySQL                  MySQLSpec                            `json:"mysql,omitempty"`
@@ -75,6 +75,12 @@ type PerconaServerMySQLSpec struct {
 	Toolkit                *ToolkitSpec                         `json:"toolkit,omitempty"`
 	UpgradeOptions         UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	UpdateStrategy         appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+}
+
+type InitContainerSpec struct {
+	Image                    string                       `json:"image,omitempty"`
+	Resources                *corev1.ResourceRequirements `json:"resources,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
 }
 
 type UnsafeFlags struct {
