@@ -8,7 +8,7 @@ fi
 
 LOG_FILE=/var/lib/mysql/pre-stop.log
 NAMESPACE=$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)
-OPERATOR_PASSWORD=$(jq -rn --arg x "$(</etc/mysql/mysql-users-secret/operator)" '$x|@uri')
+OPERATOR_PASSWORD=$(perl -MURI::Escape -e 'print uri_escape($ARGV[0]);' "$(</etc/mysql/mysql-users-secret/operator)")
 FQDN="${HOSTNAME}.${SERVICE_NAME}.${NAMESPACE}"
 POD_IP=$(hostname -I | awk '{print $1}')
 
