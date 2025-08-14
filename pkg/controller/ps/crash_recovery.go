@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -74,8 +73,8 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 			return errors.Wrap(err, "get operator password")
 		}
 
-		podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
-		podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, url.QueryEscape(operatorPass), podFQDN)
+		podFQDN := mysql.PodFQDN(cr, &pod)
+		podUri := getMySQLURI(apiv1alpha1.UserOperator, operatorPass, podFQDN)
 
 		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, &pod, podUri)
 		if err != nil {
