@@ -130,6 +130,15 @@ spec:
 #        path: /data
 #        type: Directory
       persistentVolumeClaim:
+#        dataSource:
+#          apiGroup: ""
+#          kind: PersistentVolumeClaim
+#          name: source-pvc
+#        dataSourceRef:
+#          apiGroup: ""
+#          kind: PersistentVolumeClaim
+#          name: source-pvc
+#          namespace: default
 #        storageClassName: standard
 #        accessModes: [ "ReadWriteOnce" ]
         resources:
