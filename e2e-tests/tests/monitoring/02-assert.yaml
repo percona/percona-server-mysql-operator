@@ -93,17 +93,21 @@ spec:
                 - -c
                 - pmm-admin unregister --force
         livenessProbe:
-          failureThreshold: 3
           httpGet:
             path: /local/Status
             port: 7777
             scheme: HTTP
-          initialDelaySeconds: 60
-          periodSeconds: 10
+          initialDelaySeconds: 15
+          timeoutSeconds: 15
+          periodSeconds: 30
           successThreshold: 1
-          timeoutSeconds: 5
-
-
+          failureThreshold: 5
+        readinessProbe:
+          initialDelaySeconds: 15
+          timeoutSeconds: 15
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 5
 status:
   observedGeneration: 1
   replicas: 3
