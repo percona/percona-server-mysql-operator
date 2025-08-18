@@ -251,14 +251,14 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 		return false, nil
 	}
 
-	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
+	uri := getMySQLURI(apiv1alpha1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
 
 	msh, err := mysqlsh.NewWithExec(r.ClientCmd, pod, uri)
 	if err != nil {
 		return false, err
 	}
 
-	status, err := msh.ClusterStatusWithExec(ctx, cr.InnoDBClusterName())
+	status, err := msh.ClusterStatusWithExec(ctx)
 	if err != nil {
 		return false, errors.Wrapf(err, "check cluster status from %s", pod.Name)
 	}
