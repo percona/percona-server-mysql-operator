@@ -127,6 +127,8 @@ type MySQLSpec struct {
 	SidecarVolumes []corev1.Volume    `json:"sidecarVolumes,omitempty"`
 	SidecarPVCs    []SidecarPVC       `json:"sidecarPVCs,omitempty"`
 
+	VaultSecretName string `json:"vaultSecretName,omitempty"`
+
 	PodSpec `json:",inline"`
 }
 
@@ -414,6 +416,8 @@ type MySQLRouterSpec struct {
 
 	Expose ServiceExpose `json:"expose,omitempty"`
 
+	Ports []corev1.ServicePort `json:"ports,omitempty"`
+
 	PodSpec `json:",inline"`
 }
 
@@ -578,6 +582,16 @@ func (cr *PerconaServerMySQL) PMMSpec() *PMMSpec {
 // OrchestratorSpec returns the Orchestrator specification from the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 	return &cr.Spec.Orchestrator
+}
+
+func (cr *PerconaServerMySQL) Version() *v.Version {
+	return v.Must(v.NewVersion(cr.Spec.CRVersion))
+}
+
+// CompareVersion compares given version to current version.
+// Returns -1, 0, or 1 if given version is smaller, equal, or larger than the current version, respectively.
+func (cr *PerconaServerMySQL) CompareVersion(ver string) int {
+	return cr.Version().Compare(v.Must(v.NewVersion(ver)))
 }
 
 // CheckNSetDefaults validates and sets default values for the PerconaServerMySQL custom resource.
@@ -866,6 +880,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 
 	if cr.Spec.SSLSecretName == "" {
 		cr.Spec.SSLSecretName = cr.Name + "-ssl"
+	}
+
+	if cr.Spec.MySQL.VaultSecretName == "" {
+		cr.Spec.MySQL.VaultSecretName = cr.Name + "-vault"
 	}
 
 	return nil
