@@ -112,7 +112,7 @@ func Job(
 	if cluster.Spec.Backup.BackoffLimit != nil {
 		backoffLimit = *cluster.Spec.Backup.BackoffLimit
 	}
-	xbContainer, err := xtrabackupContainer(cluster, cr.Name, destination, storage)
+	xbContainer, err := xtrabackupContainer(cluster, cr, destination, storage)
 	if err != nil {
 		return nil, errors.Wrap(err, "xtrabackup container")
 	}
@@ -199,14 +199,35 @@ func Job(
 	}, nil
 }
 
-func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName string, destination apiv1alpha1.BackupDestination, storage *apiv1alpha1.BackupStorageSpec) (corev1.Container, error) {
+func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerMySQLBackup, destination apiv1alpha1.BackupDestination, storage *apiv1alpha1.BackupStorageSpec) (corev1.Container, error) {
 	spec := cluster.Spec.Backup
 
 	verifyTLS := true
 	if storage.VerifyTLS != nil {
 		verifyTLS = *storage.VerifyTLS
 	}
-	containerOptionsJSON, err := json.Marshal(storage.ContainerOptions)
+
+	containerOptions := storage.DeepCopy().ContainerOptions
+	if containerOptions == nil {
+		containerOptions = new(apiv1alpha1.BackupContainerOptions)
+	}
+	backupContainerOptions := cr.DeepCopy().Spec.ContainerOptions
+	if backupContainerOptions != nil {
+		if backupContainerOptions.Args.Xbcloud != nil {
+			containerOptions.Args.Xbcloud = backupContainerOptions.Args.Xbcloud
+		}
+		if backupContainerOptions.Args.Xbstream != nil {
+			containerOptions.Args.Xbstream = backupContainerOptions.Args.Xbstream
+		}
+		if backupContainerOptions.Args.Xtrabackup != nil {
+			containerOptions.Args.Xtrabackup = backupContainerOptions.Args.Xtrabackup
+			fmt.Println("TEST 2", containerOptions.Args.Xtrabackup)
+		}
+		if backupContainerOptions.Env != nil {
+			containerOptions.Env = backupContainerOptions.Env
+		}
+	}
+	containerOptionsJSON, err := json.Marshal(containerOptions)
 	if err != nil {
 		return corev1.Container{}, errors.Wrap(err, "marshal container options")
 	}
@@ -218,7 +239,7 @@ func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, backupName str
 		Env: []corev1.EnvVar{
 			{
 				Name:  "BACKUP_NAME",
-				Value: backupName,
+				Value: cr.Name,
 			},
 			{
 				Name:  "BACKUP_DEST",

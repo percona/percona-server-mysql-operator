@@ -444,11 +444,34 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 	if err != nil {
 		return nil, errors.Wrap(err, "get backup destination")
 	}
+
+	containerOptions := cr.DeepCopy().Status.Storage.ContainerOptions
+	if containerOptions == nil {
+		containerOptions = new(apiv1alpha1.BackupContainerOptions)
+	}
+	backupContainerOptions := cr.DeepCopy().Spec.ContainerOptions
+	if backupContainerOptions != nil {
+		if backupContainerOptions.Args.Xbcloud != nil {
+			containerOptions.Args.Xbcloud = backupContainerOptions.Args.Xbcloud
+		}
+		if backupContainerOptions.Args.Xbstream != nil {
+			containerOptions.Args.Xbstream = backupContainerOptions.Args.Xbstream
+		}
+		if backupContainerOptions.Args.Xtrabackup != nil {
+			containerOptions.Args.Xtrabackup = backupContainerOptions.Args.Xtrabackup
+			fmt.Println("TEST 2", containerOptions.Args.Xtrabackup)
+		}
+		if backupContainerOptions.Env != nil {
+			containerOptions.Env = backupContainerOptions.Env
+		}
+	}
+
 	conf := &xtrabackup.BackupConfig{
 		Destination:      destination.PathWithoutBucket(),
 		VerifyTLS:        verifyTLS,
-		ContainerOptions: storage.ContainerOptions,
+		ContainerOptions: containerOptions,
 	}
+	fmt.Println("TEST", conf.ContainerOptions)
 	s := new(corev1.Secret)
 	nn := types.NamespacedName{
 		Namespace: cr.Namespace,
