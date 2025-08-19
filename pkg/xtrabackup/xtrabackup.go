@@ -139,6 +139,7 @@ func Job(
 							cluster,
 							appName,
 							initImage,
+							&cluster.Spec.Backup.InitContainer,
 							cluster.Spec.Backup.ImagePullPolicy,
 							storage.ContainerSecurityContext,
 							cluster.Spec.Backup.Resources,
@@ -358,6 +359,7 @@ func RestoreJob(
 					ImagePullSecrets: cluster.Spec.Backup.ImagePullSecrets,
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(cluster, appName, initImage,
+							&cluster.Spec.Backup.InitContainer,
 							cluster.Spec.Backup.ImagePullPolicy,
 							storage.ContainerSecurityContext,
 							cluster.Spec.Backup.Resources,

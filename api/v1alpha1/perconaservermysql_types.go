@@ -180,11 +180,11 @@ type ContainerSpec struct {
 
 type PodSpec struct {
 	// +kubebuilder:validation:Required
-	Size        int32             `json:"size,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	VolumeSpec  *VolumeSpec       `json:"volumeSpec,omitempty"`
-	InitImage   string            `json:"initImage,omitempty"`
+	Size          int32             `json:"size,omitempty"`
+	Annotations   map[string]string `json:"annotations,omitempty"`
+	Labels        map[string]string `json:"labels,omitempty"`
+	VolumeSpec    *VolumeSpec       `json:"volumeSpec,omitempty"`
+	InitContainer InitContainerSpec `json:"initContainer,omitempty"`
 
 	Affinity                      *PodAffinity                      `json:"affinity,omitempty"`
 	TopologySpreadConstraints     []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
@@ -213,9 +213,8 @@ func (s PodSpec) GetTerminationGracePeriodSeconds() *int64 {
 	return &gp
 }
 
-// Retrieves the initialization image for the pod.
-func (s *PodSpec) GetInitImage() string {
-	return s.InitImage
+func (s *PodSpec) GetInitSpec() InitContainerSpec {
+	return s.InitContainer
 }
 
 type PMMSpec struct {
@@ -231,7 +230,7 @@ type PMMSpec struct {
 type BackupSpec struct {
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	Image                    string                        `json:"image"`
-	InitImage                string                        `json:"initImage,omitempty"`
+	InitContainer            InitContainerSpec             `json:"initContainer,omitempty"`
 	ImagePullSecrets         []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
 	ServiceAccountName       string                        `json:"serviceAccountName,omitempty"`
@@ -253,9 +252,8 @@ type BackupSchedule struct {
 	StorageName string `json:"storageName,omitempty"`
 }
 
-// Retrieves the initialization image for the backup.
-func (s *BackupSpec) GetInitImage() string {
-	return s.InitImage
+func (s *BackupSpec) GetInitSpec() InitContainerSpec {
+	return s.InitContainer
 }
 
 type BackupStorageType string

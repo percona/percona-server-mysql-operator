@@ -44,6 +44,7 @@ func TestInitContainer(t *testing.T) {
 		expectedVolumes         []corev1.VolumeMount
 		expectedResources       corev1.ResourceRequirements
 		expectedSecurityContext corev1.SecurityContext
+		initSpec                *apiv1alpha1.InitContainerSpec
 	}{
 		"default volumes": {
 			expectedVolumes:         expectedVolumeMounts,
@@ -102,6 +103,36 @@ func TestInitContainer(t *testing.T) {
 			},
 			expectedResources: expectedResources,
 		},
+		"initSpec": {
+			expectedVolumes: expectedVolumeMounts,
+			cr: &apiv1alpha1.PerconaServerMySQL{
+				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+					InitContainer: apiv1alpha1.InitContainerSpec{
+						ContainerSecurityContext: &corev1.SecurityContext{
+							Privileged: ptr.To(true),
+						},
+					},
+				},
+			},
+			expectedSecurityContext: corev1.SecurityContext{
+				Privileged: ptr.To(true),
+			},
+			expectedResources: corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("500m"),
+					corev1.ResourceMemory: resource.MustParse("256Mi"),
+				},
+			},
+			initSpec: &apiv1alpha1.InitContainerSpec{
+				Image: "initspec-image",
+				Resources: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("500m"),
+						corev1.ResourceMemory: resource.MustParse("256Mi"),
+					},
+				},
+			},
+		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -109,7 +140,7 @@ func TestInitContainer(t *testing.T) {
 			if tt.cr != nil {
 				cr = tt.cr
 			}
-			container := InitContainer(cr, componentName, image, pullPolicy, secCtx, expectedResources, tt.inputVolumes)
+			container := InitContainer(cr, componentName, image, tt.initSpec, pullPolicy, secCtx, expectedResources, tt.inputVolumes)
 
 			assert.Equal(t, componentName+"-init", container.Name)
 			assert.Equal(t, image, container.Image)
