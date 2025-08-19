@@ -636,7 +636,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 	}
 
 	if cr.Spec.MySQL.ExposePrimary.Enabled {
-		if err := k8s.EnsureService(ctx, r.Client, cr, mysql.PrimaryService(cr), r.Scheme, true); err != nil {
+		if err := k8s.EnsureService(ctx, r.Client, cr, mysql.PrimaryService(cr), r.Scheme, false); err != nil {
 			return errors.Wrap(err, "reconcile service for primary mysql")
 		}
 	}
