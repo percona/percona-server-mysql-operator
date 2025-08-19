@@ -1,6 +1,10 @@
 # Images versions
 IMAGE_OPERATOR=percona/percona-server-mysql-operator:0.10.0
 
+IMAGE_MYSQL84=percona/percona-server:8.4.5-5
+IMAGE_BACKUP84=percona/percona-xtrabackup:8.4.0-3
+IMAGE_ROUTER84=percona/percona-mysql-router:8.4.5
+
 IMAGE_MYSQL80=percona/percona-server:8.0.42-33
 IMAGE_BACKUP80=percona/percona-xtrabackup:8.0.35-33
 IMAGE_ROUTER80=percona/percona-mysql-router:8.0.42
