@@ -145,6 +145,7 @@ rules:
   - list
   - patch
   - update
+  - watch
 - apiGroups:
   - ps.percona.com
   resources:

@@ -63,3 +63,126 @@ status:
     size: 3
     state: ready
   state: ready
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  generation: 1
+  labels:
+    app.kubernetes.io/component: proxy
+    app.kubernetes.io/instance: init-deploy
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: haproxy
+    app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.11.0
+  name: init-deploy-haproxy
+  ownerReferences:
+  - apiVersion: apps/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: StatefulSet
+    name: init-deploy-haproxy
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: proxy
+      app.kubernetes.io/instance: init-deploy
+      app.kubernetes.io/managed-by: percona-server-mysql-operator
+      app.kubernetes.io/name: haproxy
+      app.kubernetes.io/part-of: percona-server
+      app.kubernetes.io/version: v0.11.0
+status:
+  conditions:
+  - message: ""
+    observedGeneration: 1
+    reason: SufficientPods
+    status: "True"
+    type: DisruptionAllowed
+  currentHealthy: 3
+  desiredHealthy: 1
+  disruptionsAllowed: 2
+  expectedPods: 3
+  observedGeneration: 1
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  generation: 1
+  labels:
+    app.kubernetes.io/component: database
+    app.kubernetes.io/instance: init-deploy
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.11.0
+  name: init-deploy-mysql
+  ownerReferences:
+  - apiVersion: apps/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: StatefulSet
+    name: init-deploy-mysql
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: database
+      app.kubernetes.io/instance: init-deploy
+      app.kubernetes.io/managed-by: percona-server-mysql-operator
+      app.kubernetes.io/name: mysql
+      app.kubernetes.io/part-of: percona-server
+      app.kubernetes.io/version: v0.11.0
+status:
+  conditions:
+  - message: ""
+    observedGeneration: 1
+    reason: SufficientPods
+    status: "True"
+    type: DisruptionAllowed
+  currentHealthy: 3
+  desiredHealthy: 2
+  disruptionsAllowed: 1
+  expectedPods: 3
+  observedGeneration: 1
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  generation: 1
+  labels:
+    app.kubernetes.io/component: orchestrator
+    app.kubernetes.io/instance: init-deploy
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: orchestrator
+    app.kubernetes.io/part-of: percona-server
+    app.kubernetes.io/version: v0.11.0
+  name: init-deploy-orchestrator
+  ownerReferences:
+  - apiVersion: apps/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: StatefulSet
+    name: init-deploy-orc
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: orchestrator
+      app.kubernetes.io/instance: init-deploy
+      app.kubernetes.io/managed-by: percona-server-mysql-operator
+      app.kubernetes.io/name: orchestrator
+      app.kubernetes.io/part-of: percona-server
+      app.kubernetes.io/version: v0.11.0
+status:
+  conditions:
+  - message: ""
+    observedGeneration: 1
+    reason: SufficientPods
+    status: "True"
+    type: DisruptionAllowed
+  currentHealthy: 3
+  desiredHealthy: 2
+  disruptionsAllowed: 1
+  expectedPods: 3
+  observedGeneration: 1
