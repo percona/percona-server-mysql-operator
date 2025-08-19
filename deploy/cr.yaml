@@ -22,7 +22,7 @@ spec:
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
     apply: disabled
-#  initImage: perconalab/percona-server-mysql-operator:main
+#  initImage: percona/percona-server-mysql-operator:0.11.0
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
 #  ignoreLabels:
@@ -40,7 +40,7 @@ spec:
   mysql:
     clusterType: group-replication
     autoRecovery: true
-    image: perconalab/percona-server-mysql-operator:main-psmysql8.0
+    image: percona/percona-server:8.0.42-33
     imagePullPolicy: Always
 #    runtimeClassName: image-rc
 #    tolerations:
@@ -51,7 +51,7 @@ spec:
 #    imagePullSecrets:
 #      - name: "my-secret-1"
 #      - name: "my-secret-2"
-#    initImage: perconalab/percona-server-mysql-operator:main
+#    initImage: percona/percona-server-mysql-operator:0.11.0
 #    vaultSecretName: cluster1-vault
     size: 3
 
@@ -178,7 +178,7 @@ spec:
 
       size: 3
 
-      image: perconalab/percona-server-mysql-operator:main-haproxy
+      image: percona/haproxy:2.8.15
       imagePullPolicy: Always
 #      runtimeClassName: image-rc
 #      tolerations:
@@ -296,7 +296,7 @@ spec:
 
     router:
       enabled: false
-      image: perconalab/percona-server-mysql-operator:main-router8.0
+      image: percona/percona-mysql-router:8.0.42
       imagePullPolicy: Always
 #      runtimeClassName: image-rc
 #      tolerations:
@@ -307,7 +307,7 @@ spec:
 #      imagePullSecrets:
 #        - name: "my-secret-1"
 #        - name: "my-secret-2"
-#      initImage: perconalab/percona-server-mysql-operator:main
+#      initImage: percona/percona-server-mysql-operator:0.11.0
 #      ports:
 #      - name: http
 #        port: 8443
@@ -388,7 +388,7 @@ spec:
   orchestrator:
     enabled: false
 
-    image: perconalab/percona-server-mysql-operator:main-orchestrator
+    image: percona/percona-orchestrator:3.2.6-17
     imagePullPolicy: Always
 #    runtimeClassName: image-rc
 #    tolerations:
@@ -400,7 +400,7 @@ spec:
 #      - name: "my-secret-1"
 #      - name: "my-secret-2"
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
-#    initImage: perconalab/percona-server-mysql-operator:main
+#    initImage: percona/percona-server-mysql-operator:0.11.0
 
     size: 3
 
@@ -446,7 +446,7 @@ spec:
 
   pmm:
     enabled: false
-    image: perconalab/pmm-client:3-dev-latest
+    image: percona/pmm-client:3.3.1
     imagePullPolicy: Always
 #    mysqlParams: "--disable-tablestats-limit=2000"
     resources:
@@ -461,7 +461,7 @@ spec:
 
   backup:
     enabled: true
-    image: perconalab/percona-server-mysql-operator:main-backup8.0
+    image: percona/percona-xtrabackup:8.0.35-33
 #    schedule:
 #      - name: "sat-night-backup"
 #        schedule: "0 0 * * 6"
@@ -476,7 +476,7 @@ spec:
 #    imagePullSecrets:
 #      - name: "my-secret-1"
 #      - name: "my-secret-2"
-#    initImage: perconalab/percona-server-mysql-operator:main
+#    initImage: percona/percona-server-mysql-operator:0.11.0
 #    containerSecurityContext:
 #      privileged: true
     storages:
@@ -537,7 +537,7 @@ spec:
 #          prefix: ""
 
   toolkit:
-    image: perconalab/percona-server-mysql-operator:main-toolkit
+    image: percona/percona-toolkit:3.7.0
     imagePullPolicy: Always
 #    resources:
 #      requests:
