@@ -55,9 +55,8 @@ func (m *mysqlsh) getURI() string {
 	if err != nil {
 		return ""
 	}
-	escapedPass := url.QueryEscape(operatorPass)
 
-	return fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, escapedPass, m.host)
+	return fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, url.QueryEscape(operatorPass), m.host)
 }
 
 func (m *mysqlsh) run(ctx context.Context, cmd string) (bytes.Buffer, bytes.Buffer, error) {
