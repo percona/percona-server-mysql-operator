@@ -122,7 +122,7 @@ type SQLResult struct {
 func (m *mysqlsh) runSQL(ctx context.Context, sql string) (SQLResult, error) {
 	var stdoutb, stderrb bytes.Buffer
 
-	cmd := fmt.Sprintf("session.runSql('%s')", sql)
+	cmd := fmt.Sprintf("session.runSql(\"%s\")", sql)
 	args := []string{"--uri", m.getURI(), "--js", "--json=raw", "--interactive", "--quiet-start", "2", "-e", cmd}
 
 	c := exec.CommandContext(ctx, "mysqlsh", args...)
@@ -136,7 +136,7 @@ func (m *mysqlsh) runSQL(ctx context.Context, sql string) (SQLResult, error) {
 	}
 
 	if err := json.Unmarshal(stdoutb.Bytes(), &result); err != nil {
-		return result, errors.Wrap(err, "unmarshal result")
+		return result, errors.Wrapf(err, "unmarshal result %s", stdoutb.String())
 	}
 
 	if len(result.Error) > 0 {
@@ -260,14 +260,17 @@ const (
 )
 
 func gtidSubtract(ctx context.Context, shell *mysqlsh, a, b string) (string, error) {
-	query := fmt.Sprintf("SELECT GTID_SUBTRACT('%s', '%s')", a, b)
+	a = strings.ReplaceAll(a, "\n", "")
+	b = strings.ReplaceAll(b, "\n", "")
+
+	query := fmt.Sprintf("SELECT GTID_SUBTRACT('%s', '%s') AS sub", a, b)
 
 	result, err := shell.runSQL(ctx, query)
 	if err != nil {
-		return "", errors.Wrap(err, "execute GTID_SUBTRACT")
+		return "", errors.Wrapf(err, "execute %s", query)
 	}
 
-	return result.Rows[0]["GTID_SUBTRACT"], nil
+	return result.Rows[0]["sub"], nil
 }
 
 func compareGTIDs(ctx context.Context, shell *mysqlsh, a, b string) (GTIDSetRelation, error) {
@@ -284,12 +287,12 @@ func compareGTIDs(ctx context.Context, shell *mysqlsh, a, b string) (GTIDSetRela
 
 	aSubB, err := gtidSubtract(ctx, shell, a, b)
 	if err != nil {
-		return "", errors.Wrapf(err, "GTID_SUBTRACT(%s, %s)", a, b)
+		return "", errors.Wrapf(err, "a sub b")
 	}
 
 	bSubA, err := gtidSubtract(ctx, shell, b, a)
 	if err != nil {
-		return "", errors.Wrapf(err, "GTID_SUBTRACT(%s, %s)", b, a)
+		return "", errors.Wrapf(err, "b sub a")
 	}
 
 	if aSubB == "" && bSubA == "" {
@@ -302,7 +305,7 @@ func compareGTIDs(ctx context.Context, shell *mysqlsh, a, b string) (GTIDSetRela
 		query := fmt.Sprintf("GTID_SUBTRACT('%s', '%s')", a, b)
 		abIntersection, err := gtidSubtract(ctx, shell, a, query)
 		if err != nil {
-			return "", errors.Wrapf(err, "GTID_SUBTRACT(%s, %s)", a, query)
+			return "", errors.Wrapf(err, "intersection")
 		}
 
 		if abIntersection == "" {
