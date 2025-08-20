@@ -278,6 +278,10 @@ func EnsureComponent(
 		return errors.Wrap(err, "failed to ensure statefulset")
 	}
 
+	if cr.CompareVersion("0.12.0") < 0 {
+		return nil
+	}
+
 	podSpec := c.PodSpec()
 	if podSpec == nil || podSpec.PodDisruptionBudget == nil {
 		return nil
