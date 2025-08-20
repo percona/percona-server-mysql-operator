@@ -13,7 +13,7 @@ import (
 )
 
 type ComponentWithInit interface {
-	GetInitSpec() apiv1alpha1.InitContainerSpec
+	GetInitSpec(cr *apiv1alpha1.PerconaServerMySQL) apiv1alpha1.InitContainerSpec
 }
 
 func InitContainer(cr *apiv1alpha1.PerconaServerMySQL, component string, image string, initSpec *apiv1alpha1.InitContainerSpec,
@@ -64,11 +64,14 @@ func InitContainer(cr *apiv1alpha1.PerconaServerMySQL, component string, image s
 // It returns component specific init image if it's defined, else it returns top level init image.
 // If there is no init image defined in the CR, it returns the current running operator image.
 func InitImage(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, comp ComponentWithInit) (string, error) {
-	if spec := comp.GetInitSpec(); len(spec.Image) > 0 {
+	if spec := comp.GetInitSpec(cr); len(spec.Image) > 0 {
 		return spec.Image, nil
 	}
 	if image := cr.Spec.InitContainer.Image; len(image) > 0 {
 		return image, nil
+	}
+	if cr.CompareVersion("0.12.0") < 0 && cr.Spec.InitImage == "" {
+		return cr.Spec.InitImage, nil
 	}
 	return OperatorImage(ctx, cl)
 }

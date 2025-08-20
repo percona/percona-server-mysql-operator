@@ -2178,6 +2178,8 @@ spec:
                             type: object
                         type: object
                     type: object
+                  initImage:
+                    type: string
                   pitr:
                     properties:
                       binlogServer:
@@ -2927,6 +2929,8 @@ spec:
                                     type: object
                                 type: object
                             type: object
+                          initImage:
+                            type: string
                           labels:
                             additionalProperties:
                               type: string
@@ -4585,6 +4589,8 @@ spec:
                         type: object
                     type: object
                 type: object
+              initImage:
+                type: string
               mysql:
                 properties:
                   affinity:
@@ -5376,6 +5382,8 @@ spec:
                             type: object
                         type: object
                     type: object
+                  initImage:
+                    type: string
                   labels:
                     additionalProperties:
                       type: string
@@ -8262,6 +8270,8 @@ spec:
                             type: object
                         type: object
                     type: object
+                  initImage:
+                    type: string
                   labels:
                     additionalProperties:
                       type: string
@@ -9709,6 +9719,8 @@ spec:
                                 type: object
                             type: object
                         type: object
+                      initImage:
+                        type: string
                       labels:
                         additionalProperties:
                           type: string
@@ -11032,6 +11044,8 @@ spec:
                                 type: object
                             type: object
                         type: object
+                      initImage:
+                        type: string
                       labels:
                         additionalProperties:
                           type: string

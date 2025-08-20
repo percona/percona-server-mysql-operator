@@ -162,7 +162,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 								Type: apiv1alpha1.BackupStorageS3,
 							},
 						},
-						InitContainer: apiv1alpha1.InitContainerSpec{
+						InitContainer: &apiv1alpha1.InitContainerSpec{
 							Image: "operator-image",
 						},
 					},
@@ -207,7 +207,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 								Type: apiv1alpha1.BackupStorageS3,
 							},
 						},
-						InitContainer: apiv1alpha1.InitContainerSpec{
+						InitContainer: &apiv1alpha1.InitContainerSpec{
 							Image: "operator-image",
 						},
 					},
@@ -264,7 +264,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 								Type: apiv1alpha1.BackupStorageS3,
 							},
 						},
-						InitContainer: apiv1alpha1.InitContainerSpec{
+						InitContainer: &apiv1alpha1.InitContainerSpec{
 							Image: "operator-image",
 						},
 					},
@@ -358,7 +358,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 								Type: apiv1alpha1.BackupStorageS3,
 							},
 						},
-						InitContainer: apiv1alpha1.InitContainerSpec{
+						InitContainer: &apiv1alpha1.InitContainerSpec{
 							Image: "operator-image",
 						},
 					},

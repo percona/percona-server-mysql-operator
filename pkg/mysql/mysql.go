@@ -169,7 +169,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 							cr,
 							AppName,
 							initImage,
-							&spec.InitContainer,
+							spec.InitContainer,
 							spec.ImagePullPolicy,
 							spec.ContainerSecurityContext,
 							spec.Resources,
