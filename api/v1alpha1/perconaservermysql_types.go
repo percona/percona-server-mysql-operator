@@ -289,6 +289,9 @@ type BackupContainerOptions struct {
 }
 
 func (b *BackupContainerOptions) GetEnv() []corev1.EnvVar {
+	if b == nil {
+		return nil
+	}
 	return util.MergeEnvLists(b.Env, b.Args.Env())
 }
 
