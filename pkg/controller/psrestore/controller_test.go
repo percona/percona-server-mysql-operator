@@ -386,6 +386,9 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 				if tt.cluster.Spec.Backup == nil {
 					tt.cluster.Spec.Backup = &apiv1alpha1.BackupSpec{}
 				}
+				if tt.cluster.Spec.Backup.InitContainer == nil {
+					tt.cluster.Spec.Backup.InitContainer = &apiv1alpha1.InitContainerSpec{}
+				}
 				tt.cluster.Spec.Backup.InitContainer.Image = "operator-image"
 				tt.objects = append(tt.objects, tt.cluster)
 				tt.objects = append(tt.objects,
