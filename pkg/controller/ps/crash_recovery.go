@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -74,8 +76,8 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 			return errors.Wrap(err, "get operator password")
 		}
 
-		podFQDN := fmt.Sprintf("%s.%s.%s", pod.Name, mysql.ServiceName(cr), cr.Namespace)
-		podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, url.QueryEscape(operatorPass), podFQDN)
+		podFQDN := mysql.PodFQDN(cr, &pod)
+		podUri := getMySQLURI(apiv1alpha1.UserOperator, operatorPass, podFQDN)
 
 		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, &pod, podUri)
 		if err != nil {
@@ -103,7 +105,22 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 				break
 			}
 
-			primary, err := r.getPrimaryPod(ctx, cr)
+			var primary *corev1.Pod
+			err = retry.OnError(wait.Backoff{
+				Duration: 10 * time.Second,
+				Factor:   1.5,
+				Steps:    10,
+			}, func(err error) bool { return true }, func() error {
+				var err error
+
+				primary, err = r.getPrimaryPod(ctx, cr)
+				if err != nil {
+					log.V(1).Error(err, "failed to get primary pod")
+					return err
+				}
+
+				return nil
+			})
 			if err != nil {
 				log.Error(err, "failed to get primary pod")
 				break
