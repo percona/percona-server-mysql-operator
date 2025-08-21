@@ -295,7 +295,7 @@ func (b *BackupContainerOptions) GetEnv() []corev1.EnvVar {
 	return util.MergeEnvLists(b.Env, b.Args.Env())
 }
 
-func (b *BackupContainerOptions) GetEnvVar(cluster *PerconaServerMySQL, storage *BackupStorageSpec) []corev1.EnvVar {
+func (b *BackupContainerOptions) GetEnvVar(storage *BackupStorageSpec) []corev1.EnvVar {
 	if b != nil {
 		return b.GetEnv()
 	}
@@ -304,7 +304,7 @@ func (b *BackupContainerOptions) GetEnvVar(cluster *PerconaServerMySQL, storage 
 		return nil
 	}
 
-	return storage.ContainerOptions.GetEnvVar(nil, nil)
+	return storage.ContainerOptions.GetEnv()
 }
 
 type BackupContainerArgs struct {

@@ -459,7 +459,6 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 		}
 		if backupContainerOptions.Args.Xtrabackup != nil {
 			containerOptions.Args.Xtrabackup = backupContainerOptions.Args.Xtrabackup
-			fmt.Println("TEST 2", containerOptions.Args.Xtrabackup)
 		}
 		if backupContainerOptions.Env != nil {
 			containerOptions.Env = backupContainerOptions.Env
@@ -471,7 +470,6 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 		VerifyTLS:        verifyTLS,
 		ContainerOptions: containerOptions,
 	}
-	fmt.Println("TEST", conf.ContainerOptions)
 	s := new(corev1.Secret)
 	nn := types.NamespacedName{
 		Namespace: cr.Namespace,

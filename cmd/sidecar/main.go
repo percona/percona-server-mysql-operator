@@ -250,6 +250,7 @@ func deleteBackup(ctx context.Context, cfg *xb.BackupConfig, backupName string) 
 		logWriter = io.MultiWriter(backupLog, os.Stderr)
 	}
 	xbcloud := exec.CommandContext(ctx, "xbcloud", xb.XBCloudArgs(xb.XBCloudActionDelete, cfg)...)
+	xbcloud.Env = envs(*cfg)
 	xbcloudErr, err := xbcloud.StderrPipe()
 	if err != nil {
 		return errors.Wrap(err, "xbcloud stderr pipe failed")
@@ -384,16 +385,6 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	if backupConf.ContainerOptions != nil {
-		for _, env := range backupConf.ContainerOptions.Env {
-			if err := os.Setenv(env.Name, env.Value); err != nil {
-				log.Error(err, "failed to set env")
-				http.Error(w, "failed to set env", http.StatusInternalServerError)
-				return
-			}
-		}
-	}
-
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Connection", "keep-alive")
 
@@ -407,6 +398,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	g, gCtx := errgroup.WithContext(req.Context())
 
 	xtrabackup := exec.CommandContext(gCtx, "xtrabackup", xtrabackupArgs(string(backupUser), backupPass, &backupConf)...)
+	xtrabackup.Env = envs(backupConf)
 
 	xbOut, err := xtrabackup.StdoutPipe()
 	if err != nil {
@@ -434,6 +426,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	logWriter := io.MultiWriter(backupLog, os.Stderr)
 
 	xbcloud := exec.CommandContext(gCtx, "xbcloud", xb.XBCloudArgs(xb.XBCloudActionPut, &backupConf)...)
+	xbcloud.Env = envs(backupConf)
 	xbcloud.Stdin = xbOut
 
 	xbcloudErr, err := xbcloud.StderrPipe()
@@ -526,4 +519,14 @@ func logHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "failed to scan log", http.StatusInternalServerError)
 		return
 	}
+}
+
+func envs(cfg xb.BackupConfig) []string {
+	envs := os.Environ()
+	if cfg.ContainerOptions != nil {
+		for _, env := range cfg.ContainerOptions.Env {
+			envs = append(envs, fmt.Sprintf("%s=%s", env.Name, env.Value))
+		}
+	}
+	return envs
 }

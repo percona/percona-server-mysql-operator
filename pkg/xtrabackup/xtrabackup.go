@@ -221,7 +221,6 @@ func xtrabackupContainer(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha
 		}
 		if backupContainerOptions.Args.Xtrabackup != nil {
 			containerOptions.Args.Xtrabackup = backupContainerOptions.Args.Xtrabackup
-			fmt.Println("TEST 2", containerOptions.Args.Xtrabackup)
 		}
 		if backupContainerOptions.Env != nil {
 			containerOptions.Env = backupContainerOptions.Env
@@ -567,7 +566,7 @@ func restoreContainer(
 				Value: fmt.Sprintf("%s/keyring_vault.conf", vaultSecretMountPath),
 			},
 		},
-		restore.Spec.ContainerOptions.GetEnvVar(cluster, storage),
+		restore.Spec.ContainerOptions.GetEnvVar(storage),
 	)
 
 	volumeMounts := []corev1.VolumeMount{
