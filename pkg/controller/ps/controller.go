@@ -800,7 +800,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 	if err != nil {
 		return nil
 	}
-	g, gCtx := errgroup.WithContext(context.Background())
+	g, gCtx := errgroup.WithContext(ctx)
 
 	if len(raftNodes) > len(existingNodes) {
 		newPeers := util.Difference(raftNodes, existingNodes)
@@ -812,7 +812,9 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 			})
 		}
 
-		log.Error(g.Wait(), "Orchestrator add peers", "peers", newPeers)
+		if err := g.Wait(); err != nil && !cr.Spec.Pause {
+			log.Error(err, "Orchestrator add peers", "peers", newPeers)
+		}
 	} else {
 		oldPeers := util.Difference(existingNodes, raftNodes)
 
@@ -823,7 +825,9 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 			})
 		}
 
-		log.Error(g.Wait(), "Orchestrator remove peers", "peers", oldPeers)
+		if err := g.Wait(); err != nil && !cr.Spec.Pause {
+			log.Error(err, "Orchestrator remove peers", "peers", oldPeers)
+		}
 	}
 
 	return nil
