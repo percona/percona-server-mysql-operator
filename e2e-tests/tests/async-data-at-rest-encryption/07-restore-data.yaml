@@ -1,0 +1,7 @@
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: restore1
+spec:
+  clusterName: async-data-at-rest-encryption
+  backupName: backup1

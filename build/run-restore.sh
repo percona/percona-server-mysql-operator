@@ -41,7 +41,13 @@ main() {
 		"azure") run_azure | extract "${tmpdir}" ;;
 	esac
 
-	xtrabackup --prepare --rollback-prepared-trx --target-dir="${tmpdir}"
+	local keyring=""
+	if [[ -f ${KEYRING_VAULT_PATH} ]]; then
+		echo "Using keyring vault config: ${KEYRING_VAULT_PATH}"
+		keyring="--keyring-vault-config=${KEYRING_VAULT_PATH}"
+	fi
+
+	xtrabackup --prepare --rollback-prepared-trx --target-dir="${tmpdir}" ${keyring}
 	xtrabackup --datadir="${DATADIR}" --move-back --force-non-empty-directories --target-dir="${tmpdir}"
 
 	rm -rf "${tmpdir}"

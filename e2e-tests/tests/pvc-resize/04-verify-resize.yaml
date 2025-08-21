@@ -1,7 +1,7 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - timeout: 300  # 5 minutes for resize to complete
+  - timeout: 300 # 5 minutes for resize to complete
     script: |-
       set -o errexit
       set -o xtrace
@@ -31,14 +31,14 @@ commands:
 
       echo "Final PVC sizes:"
       kubectl get pvc -n "${NAMESPACE}" \
-        -l app.kubernetes.io/component=mysql \
-        -o custom-columns=NAME:.metadata.name,SIZE:.status.capacity.storage
+          -l app.kubernetes.io/component=mysql \
+          -o custom-columns=NAME:.metadata.name,SIZE:.status.capacity.storage
 
       # Ensure all datadir PVCs have the new size
       for pvc in $(kubectl get pvc -n "${NAMESPACE}" -l app.kubernetes.io/component=mysql --no-headers -o custom-columns=:metadata.name | grep datadir); do
           size=$(kubectl get pvc -n "${NAMESPACE}" "$pvc" -o jsonpath='{.status.capacity.storage}')
           echo "PVC $pvc size: $size"
-          if [[ "$size" != "3Gi" ]]; then
+          if [[ $size != "3Gi" ]]; then
               echo "ERROR: PVC $pvc size is $size, expected 3Gi"
               exit 1
           fi

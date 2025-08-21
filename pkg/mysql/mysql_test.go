@@ -348,7 +348,8 @@ func TestStatefulsetVolumes(t *testing.T) {
 					Namespace: "test-ns",
 				},
 				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: tt.mysqlSpec,
+					CRVersion: version.Version(),
+					MySQL:     tt.mysqlSpec,
 				},
 			}
 
@@ -461,6 +462,15 @@ func expectedVolumes() []corev1.Volume {
 			Name: "backup-logs",
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: "vault-keyring-secret",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "",
+					Optional:   ptr.To(true),
+				},
 			},
 		},
 	}

@@ -167,6 +167,26 @@ create_default_cnf() {
 		sed -i "/\[mysqld\]/a ssl_key=${TLS_DIR}/tls.key" $CFG
 	fi
 
+	# if vault secret file exists we assume we need to turn on encryption
+	vault_secret="/etc/mysql/vault-keyring-secret/keyring_vault.conf"
+	if [[ -f "${vault_secret}" ]]; then
+		sed -i "/\[mysqld\]/a early-plugin-load=keyring_vault.so" $CFG
+		sed -i "/\[mysqld\]/a keyring_vault_config=${vault_secret}" $CFG
+
+		if [[ ${MYSQL_VERSION} =~ ^(8\.0|8\.4)$ ]]; then
+			sed -i "/\[mysqld\]/a default_table_encryption=ON" $CFG
+			sed -i "/\[mysqld\]/a table_encryption_privilege_check=ON" $CFG
+			sed -i "/\[mysqld\]/a innodb_undo_log_encrypt=ON" $CFG
+			sed -i "/\[mysqld\]/a innodb_redo_log_encrypt=ON" $CFG
+			sed -i "/\[mysqld\]/a binlog_encryption=ON" $CFG
+			sed -i "/\[mysqld\]/a binlog_rotate_encryption_master_key_at_startup=ON" $CFG
+			sed -i "/\[mysqld\]/a innodb_temp_tablespace_encrypt=ON" $CFG
+			sed -i "/\[mysqld\]/a innodb_parallel_dblwr_encrypt=ON" $CFG
+			sed -i "/\[mysqld\]/a innodb_encrypt_online_alter_logs=ON" $CFG
+			sed -i "/\[mysqld\]/a encrypt_tmp_files=ON" $CFG
+		fi
+	fi
+
 	for f in "${CUSTOM_CONFIG_FILES[@]}"; do
 		echo "${f}"
 		if [ -f "${f}" ]; then
@@ -188,6 +208,14 @@ load_group_replication_plugin() {
 ensure_read_only() {
 	sed -i "/\[mysqld\]/a read_only=ON" $CFG
 	sed -i "/\[mysqld\]/a super_read_only=ON" $CFG
+}
+
+escape_special() {
+	{ set +x; } 2>/dev/null
+	echo "$1" \
+		| sed 's/\\/\\\\/g' \
+		| sed 's/'\''/'\\\\\''/g' \
+		| sed 's/"/\\\"/g'
 }
 
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
@@ -275,7 +303,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			# no, we don't care if read finds a terminating character in this heredoc
 			# https://unix.stackexchange.com/questions/265149/why-is-set-o-errexit-breaking-this-read-heredoc-expression/265151#265151
 			read -r -d '' rootCreate <<-EOSQL || true
-				CREATE USER 'root'@'${MYSQL_ROOT_HOST}' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}' PASSWORD EXPIRE NEVER;
+				CREATE USER 'root'@'${MYSQL_ROOT_HOST}' IDENTIFIED BY '$(escape_special "${MYSQL_ROOT_PASSWORD}")' PASSWORD EXPIRE NEVER;
 				GRANT ALL ON *.* TO 'root'@'${MYSQL_ROOT_HOST}' WITH GRANT OPTION ;
 			EOSQL
 		fi
@@ -299,38 +327,38 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			SET @@SESSION.SQL_LOG_BIN=0;
 
 			DELETE FROM mysql.user WHERE user NOT IN ('mysql.sys', 'mysqlxsys', 'root', 'mysql.infoschema', 'mysql.session') OR host NOT IN ('localhost') ;
-			ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}' ;
+			ALTER USER 'root'@'localhost' IDENTIFIED BY '$(escape_special "${MYSQL_ROOT_PASSWORD}")' ;
 			GRANT ALL ON *.* TO 'root'@'localhost' WITH GRANT OPTION ;
 			${rootCreate}
 			/*!80016 REVOKE SYSTEM_USER ON *.* FROM root */;
 
-			CREATE USER 'operator'@'${MYSQL_ROOT_HOST}' IDENTIFIED BY '${OPERATOR_ADMIN_PASSWORD}' PASSWORD EXPIRE NEVER;
+			CREATE USER 'operator'@'${MYSQL_ROOT_HOST}' IDENTIFIED BY '$(escape_special "${OPERATOR_ADMIN_PASSWORD}")' PASSWORD EXPIRE NEVER;
 			GRANT ALL ON *.* TO 'operator'@'${MYSQL_ROOT_HOST}' WITH GRANT OPTION ;
 
-			CREATE USER 'xtrabackup'@'localhost' IDENTIFIED BY '${XTRABACKUP_PASSWORD}' PASSWORD EXPIRE NEVER;
+			CREATE USER 'xtrabackup'@'localhost' IDENTIFIED BY '$(escape_special "${XTRABACKUP_PASSWORD}")' PASSWORD EXPIRE NEVER;
 			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.replication_group_members TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.log_status TO 'xtrabackup'@'localhost';
 			GRANT SELECT ON performance_schema.keyring_component_status TO 'xtrabackup'@'localhost';
 
-			CREATE USER 'monitor'@'${MONITOR_HOST}' IDENTIFIED BY '${MONITOR_PASSWORD}' WITH MAX_USER_CONNECTIONS 100 PASSWORD EXPIRE NEVER;
+			CREATE USER 'monitor'@'${MONITOR_HOST}' IDENTIFIED BY '$(escape_special "${MONITOR_PASSWORD}")' WITH MAX_USER_CONNECTIONS 100 PASSWORD EXPIRE NEVER;
 			GRANT SYSTEM_USER, SELECT, PROCESS, SUPER, REPLICATION CLIENT, RELOAD, BACKUP_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
 			GRANT SELECT ON performance_schema.* TO 'monitor'@'${MONITOR_HOST}';
 			${monitorConnectGrant}
 
-			CREATE USER 'replication'@'%' IDENTIFIED BY '${REPLICATION_PASSWORD}' PASSWORD EXPIRE NEVER;
+			CREATE USER 'replication'@'%' IDENTIFIED BY '$(escape_special "${REPLICATION_PASSWORD}")' PASSWORD EXPIRE NEVER;
 			GRANT DELETE, INSERT, UPDATE ON mysql.* TO 'replication'@'%' WITH GRANT OPTION;
 			GRANT SELECT ON performance_schema.threads to 'replication'@'%';
 			GRANT SYSTEM_USER, REPLICATION SLAVE, BACKUP_ADMIN, GROUP_REPLICATION_STREAM, CLONE_ADMIN, CONNECTION_ADMIN, CREATE USER, EXECUTE, FILE, GROUP_REPLICATION_ADMIN, PERSIST_RO_VARIABLES_ADMIN, PROCESS, RELOAD, REPLICATION CLIENT, REPLICATION_APPLIER, REPLICATION_SLAVE_ADMIN, ROLE_ADMIN, SELECT, SHUTDOWN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'replication'@'%' WITH GRANT OPTION;
 
-			CREATE USER 'orchestrator'@'%' IDENTIFIED BY '${ORC_TOPOLOGY_PASSWORD}' PASSWORD EXPIRE NEVER;
+			CREATE USER 'orchestrator'@'%' IDENTIFIED BY '$(escape_special "${ORC_TOPOLOGY_PASSWORD}")' PASSWORD EXPIRE NEVER;
 			GRANT SYSTEM_USER, SUPER, PROCESS, REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';
 			GRANT SELECT ON performance_schema.replication_group_members TO 'orchestrator'@'%';
 			GRANT SELECT ON mysql.slave_master_info TO 'orchestrator'@'%';
 			GRANT SELECT ON sys_operator.* TO 'orchestrator'@'%';
 
 			CREATE DATABASE IF NOT EXISTS sys_operator;
-			CREATE USER 'heartbeat'@'localhost' IDENTIFIED BY '${HEARTBEAT_PASSWORD}' PASSWORD EXPIRE NEVER;
+			CREATE USER 'heartbeat'@'localhost' IDENTIFIED BY '$(escape_special "${HEARTBEAT_PASSWORD}")' PASSWORD EXPIRE NEVER;
 			GRANT SYSTEM_USER, REPLICATION CLIENT ON *.* TO 'heartbeat'@'localhost';
 			GRANT SELECT, CREATE, DELETE, UPDATE, INSERT ON sys_operator.heartbeat TO 'heartbeat'@'localhost';
 

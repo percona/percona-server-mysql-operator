@@ -135,6 +135,8 @@ spec:
           name: tls
         - mountPath: /etc/mysql/config
           name: config
+        - mountPath: /etc/mysql/vault-keyring-secret
+          name: vault-keyring-secret
       - command:
         - /opt/percona/sidecar
         imagePullPolicy: Always
@@ -155,6 +157,8 @@ spec:
           name: users
         - mountPath: /var/log/xtrabackup
           name: backup-logs
+        - mountPath: /etc/mysql/vault-keyring-secret
+          name: vault-keyring-secret
       - command:
         - /opt/percona/heartbeat-entrypoint.sh
         imagePullPolicy: Always
@@ -186,7 +190,7 @@ spec:
       securityContext:
         supplementalGroups:
         - 1001
-      terminationGracePeriodSeconds: 600
+      terminationGracePeriodSeconds: 30
       volumes:
       - emptyDir: {}
         name: bin
@@ -224,6 +228,11 @@ spec:
               optional: true
       - emptyDir: {}
         name: backup-logs
+      - name: vault-keyring-secret
+        secret:
+          defaultMode: 420
+          optional: true
+          secretName: limits-no-limits-vault
   updateStrategy:
     type: OnDelete
   volumeClaimTemplates:

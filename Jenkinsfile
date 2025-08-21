@@ -375,7 +375,7 @@ pipeline {
         ENABLE_LOGGING = "true"
     }
     agent {
-        label 'docker'
+        label 'docker-x64-min'
     }
     options {
         disableConcurrentBuilds(abortPrevious: true)
@@ -530,7 +530,7 @@ pipeline {
                         }
                     }
                     agent {
-                        label 'docker'
+                        label 'docker-x64-min'
                     }
                     steps {
                         prepareNode()
@@ -545,7 +545,7 @@ pipeline {
                         }
                     }
                     agent {
-                        label 'docker'
+                        label 'docker-x64-min'
                     }
                     steps {
                         prepareNode()
@@ -560,7 +560,7 @@ pipeline {
                         }
                     }
                     agent {
-                        label 'docker'
+                        label 'docker-x64-min'
                     }
                     steps {
                         prepareNode()
@@ -575,7 +575,7 @@ pipeline {
                         }
                     }
                     agent {
-                        label 'docker'
+                        label 'docker-x64-min'
                     }
                     steps {
                         prepareNode()
@@ -590,7 +590,7 @@ pipeline {
                         }
                     }
                     agent {
-                        label 'docker'
+                        label 'docker-x64-min'
                     }
                     steps {
                         prepareNode()
@@ -605,7 +605,7 @@ pipeline {
                         }
                     }
                     agent {
-                        label 'docker'
+                        label 'docker-x64-min'
                     }
                     steps {
                         prepareNode()
@@ -620,7 +620,7 @@ pipeline {
                         }
                     }
                     agent {
-                        label 'docker'
+                        label 'docker-x64-min'
                     }
                     steps {
                         prepareNode()

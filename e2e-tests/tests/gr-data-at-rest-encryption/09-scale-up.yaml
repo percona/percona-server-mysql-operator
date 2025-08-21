@@ -1,0 +1,9 @@
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-data-at-rest-encryption
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+spec:
+  mysql:
+    size: 5
