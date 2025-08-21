@@ -74,7 +74,7 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: haproxy
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.11.0
+    app.kubernetes.io/version: v0.12.0
   name: init-deploy-haproxy
   ownerReferences:
   - apiVersion: apps/v1
@@ -91,7 +91,7 @@ spec:
       app.kubernetes.io/managed-by: percona-server-mysql-operator
       app.kubernetes.io/name: haproxy
       app.kubernetes.io/part-of: percona-server
-      app.kubernetes.io/version: v0.11.0
+      app.kubernetes.io/version: v0.12.0
 status:
   conditions:
   - message: ""
@@ -115,7 +115,7 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.11.0
+    app.kubernetes.io/version: v0.12.0
   name: init-deploy-mysql
   ownerReferences:
   - apiVersion: apps/v1
@@ -132,7 +132,7 @@ spec:
       app.kubernetes.io/managed-by: percona-server-mysql-operator
       app.kubernetes.io/name: mysql
       app.kubernetes.io/part-of: percona-server
-      app.kubernetes.io/version: v0.11.0
+      app.kubernetes.io/version: v0.12.0
 status:
   conditions:
   - message: ""
@@ -156,7 +156,7 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.11.0
+    app.kubernetes.io/version: v0.12.0
   name: init-deploy-orchestrator
   ownerReferences:
   - apiVersion: apps/v1
@@ -173,7 +173,7 @@ spec:
       app.kubernetes.io/managed-by: percona-server-mysql-operator
       app.kubernetes.io/name: orchestrator
       app.kubernetes.io/part-of: percona-server
-      app.kubernetes.io/version: v0.11.0
+      app.kubernetes.io/version: v0.12.0
 status:
   conditions:
   - message: ""
