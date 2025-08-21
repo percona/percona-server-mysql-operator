@@ -839,7 +839,6 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context
 	if err := r.reconcileServicePerPod(ctx, cr, &exposer); err != nil {
 		return errors.Wrap(err, "reconcile service per pod")
 	}
-	log.Info("Finished reconciling orchestrator services")
 	return nil
 }
 
