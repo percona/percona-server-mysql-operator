@@ -70,8 +70,8 @@ func InitImage(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaSer
 	if image := cr.Spec.InitContainer.Image; len(image) > 0 {
 		return image, nil
 	}
-	if cr.CompareVersion("0.12.0") < 0 && cr.Spec.InitImage == "" {
-		return cr.Spec.InitImage, nil
+	if cr.CompareVersion("0.12.0") < 0 && cr.Spec.InitImage == "" { //nolint:staticcheck
+		return cr.Spec.InitImage, nil //nolint:staticcheck
 	}
 	return OperatorImage(ctx, cl)
 }
