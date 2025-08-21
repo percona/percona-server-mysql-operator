@@ -192,8 +192,5 @@ func isCertManagerSecretCreatedByUser(ctx context.Context, c client.Client, cr *
 		}
 		return true, errors.Wrap(err, "failed to get issuer")
 	}
-	if metav1.IsControlledBy(issuer, cr) {
-		return false, nil
-	}
-	return true, nil
+	return !metav1.IsControlledBy(issuer, cr), nil
 }
