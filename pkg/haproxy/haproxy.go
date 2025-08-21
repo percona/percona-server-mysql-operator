@@ -293,14 +293,8 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 
 	var readinessProbe, livenessProbe *corev1.Probe
 	if cr.CompareVersion("0.12.0") >= 0 {
-		readinessProbe = &spec.ReadinessProbe
-		readinessProbe.Exec = &corev1.ExecAction{
-			Command: []string{"/opt/percona/haproxy_readiness_check.sh"},
-		}
-		livenessProbe = &spec.LivenessProbe
-		livenessProbe.Exec = &corev1.ExecAction{
-			Command: []string{"/opt/percona/haproxy_liveness_check.sh"},
-		}
+		readinessProbe = k8s.ExecProbe(spec.ReadinessProbe, []string{"/opt/percona/haproxy_readiness_check.sh"})
+		livenessProbe = k8s.ExecProbe(spec.LivenessProbe, []string{"/opt/percona/haproxy_liveness_check.sh"})
 
 		probsEnvs := []corev1.EnvVar{
 			{
