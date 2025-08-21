@@ -40,6 +40,7 @@ import (
 	psv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 var _ = Describe("Sidecars", Ordered, func() {
@@ -1064,6 +1065,80 @@ var _ = Describe("Primary mysql service", Ordered, func() {
 			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/name", "mysql"))
 			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/part-of", "percona-server"))
 			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("mysql.percona.com/primary", "true"))
+		})
+	})
+})
+
+var _ = Describe("CR Version Management", Ordered, func() {
+	ctx := context.Background()
+	const crName = "cr-version"
+	const ns = crName
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      crName,
+			Namespace: ns,
+		},
+	}
+
+	BeforeAll(func() {
+		By("Creating the Namespace for CR version tests")
+		err := k8sClient.Create(ctx, namespace)
+		Expect(err).To(Not(HaveOccurred()))
+	})
+
+	AfterAll(func() {
+		By("Deleting the Namespace after CR version tests")
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	Context("setCRVersion logic", Ordered, func() {
+		When("the CRVersion is already set", func() {
+			It("should not change the CRVersion", func() {
+				cr, err := readDefaultCR("cr-version-1", ns)
+				Expect(err).NotTo(HaveOccurred())
+
+				cr.Spec.CRVersion = "0.11.0"
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+
+				reconciler := &PerconaServerMySQLReconciler{Client: k8sClient}
+				err = reconciler.setCRVersion(ctx, cr)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cr.Spec.CRVersion).To(Equal("0.11.0"))
+			})
+		})
+
+		When("the CRVersion is empty", func() {
+			It("should set CRVersion and patch the resource", func() {
+				cr, err := readDefaultCR("cr-version-2", ns)
+				Expect(err).NotTo(HaveOccurred())
+
+				cr.Spec.CRVersion = ""
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+
+				reconciler := &PerconaServerMySQLReconciler{Client: k8sClient}
+				err = reconciler.setCRVersion(ctx, cr)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Fetch the CR again to verify the patch was applied in the cluster
+				updated := &psv1alpha1.PerconaServerMySQL{}
+				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, updated)).Should(Succeed())
+				Expect(updated.Spec.CRVersion).To(Equal(version.Version()))
+			})
+		})
+
+		When("the patch operation fails", func() {
+			It("should return an error", func() {
+				cr, err := readDefaultCR("cr-version-3", ns)
+				Expect(err).NotTo(HaveOccurred())
+				cr.Spec.CRVersion = ""
+
+				// Do NOT create the CR in k8s, so Patch will fail (object does not exist)
+				reconciler := &PerconaServerMySQLReconciler{Client: k8sClient}
+				err = reconciler.setCRVersion(ctx, cr)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("patch CR"))
+			})
 		})
 	})
 })

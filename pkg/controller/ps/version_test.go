@@ -205,6 +205,7 @@ func TestReconcileVersions(t *testing.T) {
 					Backup: &apiv1alpha1.BackupSpec{
 						Image: "some-image",
 					},
+					CRVersion: version.Version(),
 					MySQL: apiv1alpha1.MySQLSpec{
 						ClusterType: apiv1alpha1.ClusterTypeGR,
 						PodSpec: apiv1alpha1.PodSpec{
@@ -347,6 +348,7 @@ func TestGetVersion(t *testing.T) {
 					Backup: &apiv1alpha1.BackupSpec{
 						Image: "some-image",
 					},
+					CRVersion: version.Version(),
 					MySQL: apiv1alpha1.MySQLSpec{
 						ClusterType: apiv1alpha1.ClusterTypeGR,
 						PodSpec: apiv1alpha1.PodSpec{

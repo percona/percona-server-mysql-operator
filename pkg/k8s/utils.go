@@ -246,6 +246,9 @@ func EnsureObjectWithHash(
 			patch = client.StrategicMergeFrom(oldObject)
 		}
 
+		printPrettyJSON("oldObject", oldObject)
+		printPrettyJSON("obj", obj)
+
 		if err := cl.Patch(ctx, obj, patch); err != nil {
 			return errors.Wrapf(err, "patch %v", nn.String())
 		}
@@ -461,4 +464,13 @@ func GetImageIDFromPod(pod *corev1.Pod, containerName string) (string, error) {
 	}
 
 	return pod.Status.ContainerStatuses[idx].ImageID, nil
+}
+
+func printPrettyJSON(name string, obj interface{}) {
+	data, err := json.MarshalIndent(obj, "", "  ")
+	if err != nil {
+		fmt.Printf("failed to marshal %s: %v\n", name, err)
+		return
+	}
+	fmt.Printf("%s: %s\n", name, string(data))
 }

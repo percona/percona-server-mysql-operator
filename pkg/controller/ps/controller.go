@@ -127,6 +127,11 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 
 		return ctrl.Result{}, errors.Wrap(err, "get CR")
 	}
+	log.Info("set CR version first")
+	if err := r.setCRVersion(ctx, cr); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "set CR version")
+	}
+	log.Info("set CR version second")
 
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		log.Info("CR marked for deletion, applying finalizers", "name", cr.Name)
