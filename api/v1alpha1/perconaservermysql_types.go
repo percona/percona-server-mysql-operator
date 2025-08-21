@@ -785,6 +785,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.Orchestrator.ServiceAccountName = "percona-server-mysql-operator-orchestrator"
 	}
 
+	var err error
 	cr.Spec.MySQL.VolumeSpec, err = cr.Spec.MySQL.VolumeSpec.validateVolume()
 	if err != nil {
 		return errors.Wrap(err, "reconcile mysql volumeSpec")
