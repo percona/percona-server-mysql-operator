@@ -340,6 +340,7 @@ var _ = Describe("PodDisruptionBudget", Ordered, func() {
 
 	Context("Check default cluster", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
+		cr.Spec.CRVersion = "0.12.0"
 		It("should prepare reconciler", func() {
 			r = reconciler()
 			Expect(err).To(Succeed())
