@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -173,50 +174,56 @@ func (m *mysqlsh) getGroupSeeds(ctx context.Context) (string, error) {
 	return result.Rows[0]["@@group_replication_group_seeds"], nil
 }
 
-func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) (string, error) {
-	sql := fmt.Sprintf("SET PERSIST group_replication_group_seeds = \"%s\"", seeds)
+func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) error {
+	sql := fmt.Sprintf("SET PERSIST group_replication_group_seeds = '%s'", seeds)
+
 	_, err := m.runSQL(ctx, sql)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	return "", nil
+	return nil
 }
 
 func updateGroupPeers(ctx context.Context, peers sets.Set[string], version *v.Version) error {
-	fqdn, err := getFQDN(os.Getenv("SERVICE_NAME"))
-	if err != nil {
-		return errors.Wrap(err, "get FQDN")
+	log.Printf("Updating group seeds in peers: %v", peers)
+
+	seedList := make([]string, 0)
+	for _, peer := range peers.UnsortedList() {
+		seedList = append(seedList, fmt.Sprintf("%s:%d", peer, 3306))
 	}
 
+	slices.SortFunc(seedList, func(a, b string) int {
+		return strings.Compare(a, b)
+	})
+
 	for _, peer := range peers.UnsortedList() {
-		log.Printf("Connecting to peer %s", peer)
 		sh := newShell(peer, version)
 
-		seeds, err := sh.getGroupSeeds(ctx)
-		if err != nil {
-			log.Printf("ERROR: get @@group_replication_group_seeds from %s: %s", peer, err)
-			continue
-		}
-
-		log.Printf("Got group_replication_group_seeds from peer %s = %s", peer, seeds)
+		log.Printf("Connected to peer %s", peer)
 
 		tmpSeeds := make([]string, 0)
-		if len(seeds) > 0 {
-			tmpSeeds = strings.Split(seeds, ",")
+		for _, seed := range seedList {
+			// peer shouldn't have its own host as seed
+			if seed == fmt.Sprintf("%s:%d", peer, 3306) {
+				continue
+			}
+			tmpSeeds = append(tmpSeeds, seed)
 		}
-		seedSet := sets.New(tmpSeeds...)
-		seedSet.Insert(fmt.Sprintf("%s:%d", fqdn, 33061))
 
-		seeds = strings.Join(sets.List(seedSet), ",")
-
-		_, err = sh.setGroupSeeds(ctx, seeds)
-		if err != nil {
-			log.Printf("ERROR: set @@group_replication_group_seeds in %s: %s", peer, err)
+		seeds := strings.Join(tmpSeeds, ",")
+		if seeds == "" {
+			log.Printf("seeds are empty")
 			continue
 		}
 
-		log.Printf("Set group_replication_group_seeds in peer %s = %s", peer, seeds)
+		if err := sh.setGroupSeeds(ctx, seeds); err != nil {
+			log.Printf("ERROR: failed to set @@group_replication_group_seeds in %s: %s", peer, err)
+			continue
+		}
+
+		log.Printf("Seeds: %s", seeds)
+		log.Printf("Updated group_replication_group_seeds in peer %s", peer)
 	}
 
 	return nil
@@ -682,8 +689,6 @@ func bootstrapGroupReplication(ctx context.Context) error {
 	case innodbcluster.MemberStateUnreachable:
 		log.Printf("Instance (%s) is in InnoDB Cluster but its state is %s", localShell.host, member.MemberState)
 		os.Exit(1)
-	default:
-		log.Printf("Instance (%s) state is %s", localShell.host, member.MemberState)
 	}
 
 	if err := updateGroupPeers(ctx, peers, mysqlshVer); err != nil {
