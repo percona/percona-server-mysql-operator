@@ -423,6 +423,8 @@ _deploy_vault() {
 
 	if [[ ${platform} == "openshift" ]]; then
 		oc patch clusterrole system:auth-delegator --type='json' -p '[{"op":"add","path":"/rules/-", "value":{"apiGroups":["security.openshift.io"], "attributeRestrictions":null, "resourceNames": ["privileged"], "resources":["securitycontextconstraints"],"verbs":["use"]}}]'
+		local extra_args="--set server.image.repository=docker.io/hashicorp/vault \
+						  --set injector.image.repository=docker.io/hashicorp/vault-k8s"
 	fi
 
 	if [ $protocol == "https" ]; then
@@ -431,6 +433,7 @@ _deploy_vault() {
 			--disable-openapi-validation \
 			--version ${VAULT_VER} \
 			--namespace "${namespace}" \
+			$extra_args \
 			--set dataStorage.enabled=false \
 			--set global.tlsDisable=false \
 			--set global.logLevel="trace" \
@@ -455,6 +458,7 @@ storage \"file\" {
 			--disable-openapi-validation \
 			--version ${VAULT_VER} \
 			--namespace "${namespace}" \
+			$extra_args \
 			--set dataStorage.enabled=false \
 			--set global.logLevel="trace" \
 			--set global.platform="${platform}"
