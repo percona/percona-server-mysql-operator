@@ -406,7 +406,6 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 
 	selector := MatchLabels(cr)
 	selector["statefulset.kubernetes.io/pod-name"] = podName
-	selector = util.SSMapMerge(expose.Labels, selector)
 
 	var loadBalancerSourceRanges []string
 	if t == corev1.ServiceTypeLoadBalancer {
