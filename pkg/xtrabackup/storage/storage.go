@@ -16,7 +16,7 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/pkg/errors"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
 var ErrObjectNotFound = errors.New("object not found")
@@ -34,19 +34,19 @@ type NewClientFunc func(context.Context, Options) (Storage, error)
 
 func NewClient(ctx context.Context, opts Options) (Storage, error) {
 	switch opts.Type() {
-	case apiv1alpha1.BackupStorageS3:
+	case apiv1.BackupStorageS3:
 		opts, ok := opts.(*S3Options)
 		if !ok {
 			return nil, errors.New("invalid options type")
 		}
 		return NewS3(ctx, opts.Endpoint, opts.AccessKeyID, opts.SecretAccessKey, opts.BucketName, opts.Prefix, opts.Region, opts.VerifyTLS)
-	case apiv1alpha1.BackupStorageGCS:
+	case apiv1.BackupStorageGCS:
 		opts, ok := opts.(*GCSOptions)
 		if !ok {
 			return nil, errors.New("invalid options type")
 		}
 		return NewGCS(ctx, opts.Endpoint, opts.AccessKeyID, opts.SecretAccessKey, opts.BucketName, opts.Prefix, opts.VerifyTLS)
-	case apiv1alpha1.BackupStorageAzure:
+	case apiv1.BackupStorageAzure:
 		opts, ok := opts.(*AzureOptions)
 		if !ok {
 			return nil, errors.New("invalid options type")

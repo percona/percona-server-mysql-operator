@@ -23,7 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
@@ -122,7 +122,7 @@ func ObjectExists(ctx context.Context, cl client.Reader, nn types.NamespacedName
 func EnsureObject(
 	ctx context.Context,
 	cl client.Client,
-	cr *apiv1alpha1.PerconaServerMySQL,
+	cr *apiv1.PerconaServerMySQL,
 	o client.Object,
 	s *runtime.Scheme,
 ) error {
@@ -257,7 +257,7 @@ func EnsureObjectWithHash(
 func EnsureService(
 	ctx context.Context,
 	cl client.Client,
-	cr *apiv1alpha1.PerconaServerMySQL,
+	cr *apiv1.PerconaServerMySQL,
 	svc *corev1.Service,
 	s *runtime.Scheme,
 	saveOldMeta bool,
@@ -286,7 +286,7 @@ func EnsureService(
 	return EnsureObjectWithHash(ctx, cl, cr, svc, s)
 }
 
-func setIgnoredAnnotations(cr *apiv1alpha1.PerconaServerMySQL, obj, oldObject client.Object) {
+func setIgnoredAnnotations(cr *apiv1.PerconaServerMySQL, obj, oldObject client.Object) {
 	oldAnnotations := oldObject.GetAnnotations()
 	if len(oldAnnotations) == 0 {
 		return
@@ -298,7 +298,7 @@ func setIgnoredAnnotations(cr *apiv1alpha1.PerconaServerMySQL, obj, oldObject cl
 	obj.SetAnnotations(annotations)
 }
 
-func setIgnoredLabels(cr *apiv1alpha1.PerconaServerMySQL, obj, oldObject client.Object) {
+func setIgnoredLabels(cr *apiv1.PerconaServerMySQL, obj, oldObject client.Object) {
 	oldLabels := oldObject.GetLabels()
 	if len(oldLabels) == 0 {
 		return
@@ -418,8 +418,8 @@ func GetCRWithDefaults(
 	cl client.Client,
 	nn types.NamespacedName,
 	serverVersion *platform.ServerVersion,
-) (*apiv1alpha1.PerconaServerMySQL, error) {
-	cr := new(apiv1alpha1.PerconaServerMySQL)
+) (*apiv1.PerconaServerMySQL, error) {
+	cr := new(apiv1.PerconaServerMySQL)
 	if err := cl.Get(ctx, nn, cr); err != nil {
 		return nil, errors.Wrapf(err, "get %v", nn.String())
 	}
@@ -430,7 +430,7 @@ func GetCRWithDefaults(
 	return cr, nil
 }
 
-func DeleteSecrets(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQL, secretNames []string) error {
+func DeleteSecrets(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL, secretNames []string) error {
 	for _, secretName := range secretNames {
 		secret := &corev1.Secret{}
 		err := cl.Get(ctx, types.NamespacedName{

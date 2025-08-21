@@ -7,7 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
@@ -26,26 +26,26 @@ const (
 	CustomConfigKey        = "custom.json"
 )
 
-func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
+func Name(cr *apiv1.PerconaServerMySQL) string {
 	return cr.Name + "-" + AppName
 }
 
-func CustomConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
+func CustomConfigMapName(cr *apiv1.PerconaServerMySQL) string {
 	return cr.Name + "-" + AppName + "-config"
 }
 
-func ConfigSecretName(cr *apiv1alpha1.PerconaServerMySQL) string {
+func ConfigSecretName(cr *apiv1.PerconaServerMySQL) string {
 	return cr.Name + "-" + AppName + "-config"
 }
 
-func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
+func MatchLabels(cr *apiv1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(
 		cr.MySQLSpec().Labels,
 		cr.Labels(AppName, naming.ComponentPITR),
 	)
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash string) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash string) *appsv1.StatefulSet {
 	spec := cr.Spec.Backup.PiTR.BinlogServer
 
 	labels := MatchLabels(cr)
@@ -107,14 +107,14 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash strin
 	}
 }
 
-func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
+func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 	t := true
 
 	spec := cr.Spec.Backup.PiTR.BinlogServer
 
 	return []corev1.Volume{
 		{
-			Name: apiv1alpha1.BinVolumeName,
+			Name: apiv1.BinVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
@@ -182,11 +182,11 @@ func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
 	}
 }
 
-func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
+func containers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
 	return []corev1.Container{binlogServerContainer(cr)}
 }
 
-func binlogServerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
+func binlogServerContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	spec := cr.Spec.Backup.PiTR.BinlogServer
 
 	env := []corev1.EnvVar{
@@ -210,8 +210,8 @@ func binlogServerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container 
 		EnvFrom:         spec.EnvFrom,
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      apiv1alpha1.BinVolumeName,
-				MountPath: apiv1alpha1.BinVolumePath,
+				Name:      apiv1.BinVolumeName,
+				MountPath: apiv1.BinVolumePath,
 			},
 			{
 				Name:      credsVolumeName,

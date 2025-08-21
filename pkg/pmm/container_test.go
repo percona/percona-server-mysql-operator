@@ -1,18 +1,20 @@
 package pmm
 
 import (
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"testing"
+
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
 func TestContainer(t *testing.T) {
-	cr := &apiv1alpha1.PerconaServerMySQL{
+	cr := &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-cluster"},
-		Spec: apiv1alpha1.PerconaServerMySQLSpec{
-			PMM: &apiv1alpha1.PMMSpec{
+		Spec: apiv1.PerconaServerMySQLSpec{
+			PMM: &apiv1.PMMSpec{
 				Image:           "percona/pmm-client:latest",
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				ServerHost:      "pmm-server",
@@ -23,8 +25,8 @@ func TestContainer(t *testing.T) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-secret"},
 		Data: map[string][]byte{
-			string(apiv1alpha1.UserPMMServerToken): []byte("token"),
-			string(apiv1alpha1.UserMonitor):        []byte("monitor-pass"),
+			string(apiv1.UserPMMServerToken): []byte("token"),
+			string(apiv1.UserMonitor):        []byte("monitor-pass"),
 		},
 	}
 
@@ -41,8 +43,8 @@ func TestContainer(t *testing.T) {
 	}
 
 	assert.Equal(t, 1, len(container.VolumeMounts))
-	assert.Equal(t, apiv1alpha1.BinVolumeName, container.VolumeMounts[0].Name)
-	assert.Equal(t, apiv1alpha1.BinVolumePath, container.VolumeMounts[0].MountPath)
+	assert.Equal(t, apiv1.BinVolumeName, container.VolumeMounts[0].Name)
+	assert.Equal(t, apiv1.BinVolumePath, container.VolumeMounts[0].MountPath)
 
 	foundEnv := map[string]bool{}
 	for _, env := range container.Env {

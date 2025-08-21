@@ -37,7 +37,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         properties:
@@ -987,7 +987,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         properties:
@@ -1964,7 +1964,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         properties:
@@ -11760,7 +11760,7 @@ spec:
           value: ""
         - name: DISABLE_TELEMETRY
           value: "false"
-        image: perconalab/percona-server-mysql-operator:main
+        image: perconalab/percona-server-mysql-operator:K8SPS-475-gkech-1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

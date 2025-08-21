@@ -9,7 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
 type ComponentWithInit interface {
@@ -25,8 +25,8 @@ func InitContainer(component, image string,
 
 	volumeMounts := []corev1.VolumeMount{
 		{
-			Name:      apiv1alpha1.BinVolumeName,
-			MountPath: apiv1alpha1.BinVolumePath,
+			Name:      apiv1.BinVolumeName,
+			MountPath: apiv1.BinVolumePath,
 		},
 	}
 
@@ -50,7 +50,7 @@ func InitContainer(component, image string,
 // InitImage returns the image to be used in init container.
 // It returns component specific init image if it's defined, else it returns top level init image.
 // If there is no init image defined in the CR, it returns the current running operator image.
-func InitImage(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, comp ComponentWithInit) (string, error) {
+func InitImage(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServerMySQL, comp ComponentWithInit) (string, error) {
 	if image := comp.GetInitImage(); len(image) > 0 {
 		return image, nil
 	}

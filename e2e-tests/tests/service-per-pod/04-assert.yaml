@@ -26,7 +26,7 @@ status:
   updatedReplicas: 3
   collisionCount: 0
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
   name: service-per-pod
@@ -55,7 +55,7 @@ metadata:
     app.kubernetes.io/version: v0.11.0
   name: service-per-pod-mysql
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
@@ -101,7 +101,7 @@ metadata:
     app.kubernetes.io/version: v0.11.0
   name: service-per-pod-mysql-unready
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
@@ -149,7 +149,7 @@ metadata:
     percona.com/exposed: "true"
   name: service-per-pod-mysql-0
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
@@ -196,7 +196,7 @@ metadata:
     percona.com/exposed: "true"
   name: service-per-pod-mysql-1
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
@@ -243,7 +243,7 @@ metadata:
     percona.com/exposed: "true"
   name: service-per-pod-mysql-2
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL

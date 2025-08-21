@@ -14,10 +14,10 @@ import (
 
 	"github.com/pkg/errors"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
-func DNSNames(cr *apiv1alpha1.PerconaServerMySQL) []string {
+func DNSNames(cr *apiv1.PerconaServerMySQL) []string {
 	hosts := []string{
 		fmt.Sprintf("*.%s-mysql", cr.Name),
 		fmt.Sprintf("*.%s-mysql.%s", cr.Name, cr.Namespace),

@@ -18,7 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	database "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
@@ -30,7 +30,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 )
 
-func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, reconcileErr error) error {
+func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1.PerconaServerMySQL, reconcileErr error) error {
 	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
 		return nil
 	}
@@ -39,19 +39,19 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	clusterCondition := metav1.Condition{
 		Status:             metav1.ConditionTrue,
-		Type:               apiv1alpha1.StateInitializing.String(),
+		Type:               apiv1.StateInitializing.String(),
 		LastTransitionTime: metav1.Now(),
 	}
 
 	if reconcileErr != nil {
-		if cr.Status.State != apiv1alpha1.StateError {
-			clusterCondition.Type = apiv1alpha1.StateError.String()
+		if cr.Status.State != apiv1.StateError {
+			clusterCondition.Type = apiv1.StateError.String()
 			clusterCondition.Reason = "ErrorReconcile"
 			clusterCondition.Message = reconcileErr.Error()
 
 			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
 
-			cr.Status.State = apiv1alpha1.StateError
+			cr.Status.State = apiv1.StateError
 
 			r.Recorder.Event(cr, "Error", "ReconcileError", "Failed to reconcile cluster")
 		}
@@ -61,7 +61,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 
 	if cr.Status.Conditions != nil {
-		meta.RemoveStatusCondition(&cr.Status.Conditions, apiv1alpha1.StateError.String())
+		meta.RemoveStatusCondition(&cr.Status.Conditions, apiv1.StateError.String())
 	}
 
 	log := logf.FromContext(ctx).WithName("reconcileCRStatus")
@@ -72,14 +72,14 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 	cr.Status.MySQL = mysqlStatus
 
-	if mysqlStatus.State == apiv1alpha1.StateReady {
+	if mysqlStatus.State == apiv1.StateReady {
 		if cr.Spec.MySQL.IsGR() {
 			ready, err := r.isGRReady(ctx, cr)
 			if err != nil {
 				return errors.Wrap(err, "check if GR is ready")
 			}
 			if !ready {
-				mysqlStatus.State = apiv1alpha1.StateInitializing
+				mysqlStatus.State = apiv1.StateInitializing
 			}
 		}
 
@@ -89,7 +89,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 				return errors.Wrap(err, "check if async is ready")
 			}
 			if !ready {
-				mysqlStatus.State = apiv1alpha1.StateInitializing
+				mysqlStatus.State = apiv1.StateInitializing
 
 				log.Info(fmt.Sprintf("Async replication not ready: %s", msg))
 				r.Recorder.Event(cr, "Warning", "AsyncReplicationNotReady", msg)
@@ -99,7 +99,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 	cr.Status.MySQL = mysqlStatus
 
-	orcStatus := apiv1alpha1.StatefulAppStatus{}
+	orcStatus := apiv1.StatefulAppStatus{}
 	if cr.OrchestratorEnabled() && cr.Spec.MySQL.IsAsync() {
 		orcStatus, err = r.appStatus(ctx, cr, orchestrator.Name(cr), cr.OrchestratorSpec().Size, orchestrator.MatchLabels(cr), cr.Status.Orchestrator.Version)
 		if err != nil {
@@ -108,7 +108,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 	cr.Status.Orchestrator = orcStatus
 
-	routerStatus := apiv1alpha1.StatefulAppStatus{}
+	routerStatus := apiv1.StatefulAppStatus{}
 	if cr.RouterEnabled() {
 		routerStatus, err = r.appStatus(ctx, cr, router.Name(cr), cr.Spec.Proxy.Router.Size, router.MatchLabels(cr), cr.Status.Router.Version)
 		if err != nil {
@@ -117,7 +117,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 	cr.Status.Router = routerStatus
 
-	haproxyStatus := apiv1alpha1.StatefulAppStatus{}
+	haproxyStatus := apiv1.StatefulAppStatus{}
 	if cr.HAProxyEnabled() {
 		haproxyStatus, err = r.appStatus(ctx, cr, haproxy.Name(cr), cr.Spec.Proxy.HAProxy.Size, haproxy.MatchLabels(cr), cr.Status.HAProxy.Version)
 		if err != nil {
@@ -126,24 +126,24 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 	cr.Status.HAProxy = haproxyStatus
 
-	cr.Status.State = apiv1alpha1.StateReady
+	cr.Status.State = apiv1.StateReady
 	if cr.Spec.MySQL.IsAsync() {
-		if cr.OrchestratorEnabled() && cr.Status.Orchestrator.State != apiv1alpha1.StateReady {
+		if cr.OrchestratorEnabled() && cr.Status.Orchestrator.State != apiv1.StateReady {
 			cr.Status.State = cr.Status.Orchestrator.State
 		}
-		if cr.HAProxyEnabled() && cr.Status.HAProxy.State != apiv1alpha1.StateReady {
+		if cr.HAProxyEnabled() && cr.Status.HAProxy.State != apiv1.StateReady {
 			cr.Status.State = cr.Status.HAProxy.State
 		}
 	} else if cr.Spec.MySQL.IsGR() {
-		if cr.RouterEnabled() && cr.Status.Router.State != apiv1alpha1.StateReady {
+		if cr.RouterEnabled() && cr.Status.Router.State != apiv1.StateReady {
 			cr.Status.State = cr.Status.Router.State
 		}
-		if cr.HAProxyEnabled() && cr.Status.HAProxy.State != apiv1alpha1.StateReady {
+		if cr.HAProxyEnabled() && cr.Status.HAProxy.State != apiv1.StateReady {
 			cr.Status.State = cr.Status.HAProxy.State
 		}
 	}
 
-	if cr.Status.MySQL.State != apiv1alpha1.StateReady {
+	if cr.Status.MySQL.State != apiv1.StateReady {
 		cr.Status.State = cr.Status.MySQL.State
 	}
 
@@ -173,13 +173,13 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		}
 
 		if fullClusterCrash {
-			clusterCondition.Type = apiv1alpha1.StateError.String()
+			clusterCondition.Type = apiv1.StateError.String()
 			clusterCondition.Reason = "FullClusterCrashDetected"
 			clusterCondition.Message = "Full cluster crash detected"
 
 			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
 
-			cr.Status.State = apiv1alpha1.StateError
+			cr.Status.State = apiv1.StateError
 
 			r.Recorder.Event(cr, "Warning", "FullClusterCrashDetected", "Full cluster crash detected")
 		}
@@ -197,12 +197,12 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	if !loadBalancersReady {
 		log.Info("Not all load balancers are ready, setting state to initializing")
-		cr.Status.State = apiv1alpha1.StateInitializing
+		cr.Status.State = apiv1.StateInitializing
 	}
 
 	switch cr.Status.State {
-	case apiv1alpha1.StateInitializing, apiv1alpha1.StateReady:
-		for _, appState := range []apiv1alpha1.StatefulAppState{apiv1alpha1.StateInitializing, apiv1alpha1.StateReady} {
+	case apiv1.StateInitializing, apiv1.StateReady:
+		for _, appState := range []apiv1.StatefulAppState{apiv1.StateInitializing, apiv1.StateReady} {
 			clusterCondition.Type = appState.String()
 			clusterCondition.Reason = appState.String()
 			if cr.Status.State == appState {
@@ -223,14 +223,14 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	return writeStatus(ctx, r.Client, nn, cr.Status)
 }
 
-func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
+func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, error) {
 	log := logf.FromContext(ctx).WithName("groupReplicationStatus")
 	if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
 		log.Info("Not all MySQL pods are ready", "ready", cr.Status.MySQL.Ready, "expected", cr.Spec.MySQL.Size)
 		return false, nil
 	}
 
-	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
 	if err != nil {
 		return false, errors.Wrap(err, "get operator password")
 	}
@@ -240,7 +240,7 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 		return false, errors.Wrap(err, "get ready mysql pod")
 	}
 
-	db := database.NewReplicationManager(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
+	db := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
 
 	dbExists, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata")
 	if err != nil {
@@ -251,7 +251,7 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 		return false, nil
 	}
 
-	uri := getMySQLURI(apiv1alpha1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
+	uri := getMySQLURI(apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
 
 	msh, err := mysqlsh.NewWithExec(r.ClientCmd, pod, uri)
 	if err != nil {
@@ -311,7 +311,7 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 	return true, nil
 }
 
-func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, string, error) {
+func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, string, error) {
 	pod, err := getReadyOrcPod(ctx, r.Client, cr)
 	if err != nil {
 		return false, "", err
@@ -349,7 +349,7 @@ func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *api
 	return msg == "", msg, nil
 }
 
-func (r *PerconaServerMySQLReconciler) allLoadBalancersReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
+func (r *PerconaServerMySQLReconciler) allLoadBalancersReady(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, error) {
 	opts := &client.ListOptions{Namespace: cr.Namespace, LabelSelector: labels.SelectorFromSet(cr.Labels("", ""))}
 	svcList := &corev1.ServiceList{}
 	if err := r.Client.List(ctx, svcList, opts); err != nil {
@@ -367,7 +367,7 @@ func (r *PerconaServerMySQLReconciler) allLoadBalancersReady(ctx context.Context
 	return true, nil
 }
 
-func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
+func appHost(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServerMySQL) (string, error) {
 	var serviceName string
 
 	if cr.RouterEnabled() {
@@ -405,10 +405,10 @@ func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServe
 	return host, nil
 }
 
-func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, compName string, size int32, labels map[string]string, version string) (apiv1alpha1.StatefulAppStatus, error) {
-	status := apiv1alpha1.StatefulAppStatus{
+func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1.PerconaServerMySQL, compName string, size int32, labels map[string]string, version string) (apiv1.StatefulAppStatus, error) {
+	status := apiv1.StatefulAppStatus{
 		Size:  size,
-		State: apiv1alpha1.StateInitializing,
+		State: apiv1.StateInitializing,
 	}
 
 	sfsObj := &appsv1.StatefulSet{}
@@ -430,13 +430,13 @@ func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1a
 
 	switch {
 	case cr.Spec.Pause && status.Ready > 0:
-		status.State = apiv1alpha1.StateStopping
+		status.State = apiv1.StateStopping
 	case cr.Spec.Pause && status.Ready == 0:
-		status.State = apiv1alpha1.StatePaused
+		status.State = apiv1.StatePaused
 	case sfsObj.Status.Replicas > sfsObj.Status.UpdatedReplicas:
-		status.State = apiv1alpha1.StateInitializing
+		status.State = apiv1.StateInitializing
 	case status.Ready == status.Size:
-		status.State = apiv1alpha1.StateReady
+		status.State = apiv1.StateReady
 	}
 
 	status.Version = version
@@ -444,9 +444,9 @@ func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1a
 	return status, nil
 }
 
-func writeStatus(ctx context.Context, cl client.Client, nn types.NamespacedName, status apiv1alpha1.PerconaServerMySQLStatus) error {
+func writeStatus(ctx context.Context, cl client.Client, nn types.NamespacedName, status apiv1.PerconaServerMySQLStatus) error {
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
-		cr := &apiv1alpha1.PerconaServerMySQL{}
+		cr := &apiv1.PerconaServerMySQL{}
 		if err := cl.Get(ctx, nn, cr); err != nil {
 			return errors.Wrapf(err, "get %v", nn.String())
 		}

@@ -3,7 +3,7 @@ package k8s
 import (
 	"testing"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
@@ -17,7 +17,7 @@ func TestPVC(t *testing.T) {
 		corev1.ResourceStorage: resource.MustParse("2Gi"),
 	}
 
-	spec := &apiv1alpha1.VolumeSpec{
+	spec := &apiv1.VolumeSpec{
 		PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 			StorageClassName: &storageClassName,
 			AccessModes:      accessModes,

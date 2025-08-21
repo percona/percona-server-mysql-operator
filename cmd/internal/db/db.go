@@ -8,7 +8,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/db"
 	defs "github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
@@ -24,7 +24,7 @@ type DB struct {
 }
 
 type DBParams struct {
-	User apiv1alpha1.SystemUser
+	User apiv1.SystemUser
 	Pass string
 	Host string
 	Port int32
@@ -89,7 +89,7 @@ func (d *DB) StartReplication(ctx context.Context, host, replicaPass string, por
                 SOURCE_AUTO_POSITION=1,
                 SOURCE_RETRY_COUNT=3,
                 SOURCE_CONNECT_RETRY=60
-        `, apiv1alpha1.UserReplication, replicaPass, host, port)
+        `, apiv1.UserReplication, replicaPass, host, port)
 	if err != nil {
 		return errors.Wrap(err, "exec CHANGE REPLICATION SOURCE TO")
 	}

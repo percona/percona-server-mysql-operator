@@ -37,7 +37,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	psv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	psv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
@@ -201,7 +201,7 @@ var _ = Describe("Sidecars", Ordered, func() {
 			},
 		}
 		cr.MySQLSpec().Sidecars = append(cr.Spec.MySQL.Sidecars, sidecarPVC)
-		cr.MySQLSpec().SidecarPVCs = []psv1alpha1.SidecarPVC{
+		cr.MySQLSpec().SidecarPVCs = []psv1.SidecarPVC{
 			{
 				Name: pvcName,
 				Spec: corev1.PersistentVolumeClaimSpec{
@@ -288,7 +288,7 @@ var _ = Describe("Unsafe configurations", Ordered, func() {
 			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 
 			cr.Spec.Unsafe.MySQLSize = true
-			cr.MySQLSpec().ClusterType = psv1alpha1.ClusterTypeGR
+			cr.MySQLSpec().ClusterType = psv1.ClusterTypeGR
 			cr.MySQLSpec().Size = 1
 			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
 
@@ -333,7 +333,7 @@ var _ = Describe("Reconcile HAProxy when async cluster type", Ordered, func() {
 
 	Context("Cleanup outdated HAProxy service", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
-		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+		cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 		cr.Spec.Orchestrator.Enabled = true
 		cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 		It("should read and create default cr.yaml", func() {
@@ -402,7 +402,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validation-1", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 			It("should read and create default cr.yaml", func() {
@@ -414,7 +414,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-2", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 			cr.Spec.Orchestrator.Enabled = false
 			cr.Spec.Unsafe.Orchestrator = true
@@ -427,7 +427,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-3", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 			cr.Spec.Orchestrator.Enabled = false
 			It("the creation of the cluster should fail with error message", func() {
@@ -439,7 +439,7 @@ var _ = Describe("CR validations", Ordered, func() {
 
 		When("cluster type is async and HAProxy is disabled but unsafe flag enabled", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-4", ns)
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.Proxy.HAProxy.Enabled = false
@@ -454,7 +454,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-5", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 			cr.Spec.Proxy.HAProxy.Enabled = false
@@ -469,7 +469,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-6", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 			cr.Spec.Proxy.Router.Enabled = true
 			It("the creation of the cluster should fail with error message", func() {
@@ -546,23 +546,23 @@ var _ = Describe("Reconcile Binlog Server", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
 
 		cr.Spec.Backup.PiTR.Enabled = true
-		cr.Spec.Backup.PiTR.BinlogServer = &psv1alpha1.BinlogServerSpec{
+		cr.Spec.Backup.PiTR.BinlogServer = &psv1.BinlogServerSpec{
 			ConnectTimeout: 20,
 			WriteTimeout:   20,
 			ReadTimeout:    20,
 			ServerID:       42,
 			IdleTime:       60,
-			Storage: psv1alpha1.BinlogServerStorageSpec{
-				S3: &psv1alpha1.BackupStorageS3Spec{
+			Storage: psv1.BinlogServerStorageSpec{
+				S3: &psv1.BackupStorageS3Spec{
 					Bucket:            "s3-test-bucket",
 					Region:            "us-west-1",
 					EndpointURL:       "s3.amazonaws.com",
 					CredentialsSecret: "s3-test-credentials",
 				},
 			},
-			PodSpec: psv1alpha1.PodSpec{
+			PodSpec: psv1.PodSpec{
 				Size: 1,
-				ContainerSpec: psv1alpha1.ContainerSpec{
+				ContainerSpec: psv1.ContainerSpec{
 					Image: "binlog-server-image",
 				},
 			},
@@ -967,7 +967,7 @@ var _ = Describe("Primary mysql service", Ordered, func() {
 	Context("Expose primary with gr cluster type", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
 
-		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+		cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
 		cr.Spec.MySQL.ExposePrimary.Enabled = true
 		cr.Spec.MySQL.ExposePrimary.Type = corev1.ServiceTypeClusterIP
 
@@ -1029,7 +1029,7 @@ var _ = Describe("Primary mysql service", Ordered, func() {
 	Context("Expose primary with async cluster type", Ordered, func() {
 		cr, err := readDefaultCR("async-cluster", ns)
 
-		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+		cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 		cr.Spec.MySQL.ExposePrimary.Enabled = true
 		cr.Spec.MySQL.ExposePrimary.Type = corev1.ServiceTypeClusterIP
 		cr.Spec.Orchestrator.Enabled = true

@@ -38,7 +38,7 @@ status:
   updatedReplicas: 3
   collisionCount: 0
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
   name: async-ignore-annotations
@@ -72,7 +72,7 @@ metadata:
     app.kubernetes.io/version: v0.11.0
   name: async-ignore-annotations-haproxy
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL

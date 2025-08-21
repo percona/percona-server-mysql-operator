@@ -16,7 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
@@ -29,7 +29,7 @@ type Configurable interface {
 	ExecuteConfigurationTemplate(configuration string, memory *resource.Quantity) (string, error)
 }
 
-func (r *PerconaServerMySQLReconciler) reconcileCustomConfiguration(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, configurable Configurable) (string, error) {
+func (r *PerconaServerMySQLReconciler) reconcileCustomConfiguration(ctx context.Context, cr *apiv1.PerconaServerMySQL, configurable Configurable) (string, error) {
 	log := logf.FromContext(ctx).WithName("reconcileCustomConfiguration")
 
 	cmName := configurable.GetConfigMapName()

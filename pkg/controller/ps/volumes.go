@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	psv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	psv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -34,7 +34,7 @@ func validatePVCName(pvc corev1.PersistentVolumeClaim, stsName string) bool {
 	return strings.HasPrefix(pvc.Name, "datadir-"+stsName)
 }
 
-func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Context, cr *psv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Context, cr *psv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("PVCResize")
 
 	ls := mysql.MatchLabels(cr)
@@ -294,7 +294,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) handlePVCResizeFailure(ctx context.Context, cr *psv1alpha1.PerconaServerMySQL, originalSize resource.Quantity) error {
+func (r *PerconaServerMySQLReconciler) handlePVCResizeFailure(ctx context.Context, cr *psv1.PerconaServerMySQL, originalSize resource.Quantity) error {
 	if err := r.revertVolumeTemplate(ctx, cr, originalSize); err != nil {
 		return errors.Wrapf(err, "revert volume template in ps/%s", cr.Name)
 	}
@@ -306,7 +306,7 @@ func (r *PerconaServerMySQLReconciler) handlePVCResizeFailure(ctx context.Contex
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) revertVolumeTemplate(ctx context.Context, cr *psv1alpha1.PerconaServerMySQL, originalSize resource.Quantity) error {
+func (r *PerconaServerMySQLReconciler) revertVolumeTemplate(ctx context.Context, cr *psv1.PerconaServerMySQL, originalSize resource.Quantity) error {
 	log := logf.FromContext(ctx)
 
 	orig := cr.DeepCopy()

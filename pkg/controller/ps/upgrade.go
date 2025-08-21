@@ -15,12 +15,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
 const controllerRevisionHash = "controller-revision-hash"
 
-func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *appsv1.StatefulSet, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *appsv1.StatefulSet, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
 	if cr.Spec.Pause {
@@ -53,12 +53,12 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 
 	log.Info("statefulSet was changed, run smart update")
 
-	if cr.HAProxyEnabled() && cr.Status.HAProxy.State != apiv1alpha1.StateReady {
+	if cr.HAProxyEnabled() && cr.Status.HAProxy.State != apiv1.StateReady {
 		log.Info("Waiting for HAProxy to be ready before smart update")
 		return nil
 	}
 
-	if cr.RouterEnabled() && cr.Status.Router.State != apiv1alpha1.StateReady {
+	if cr.RouterEnabled() && cr.Status.Router.State != apiv1.StateReady {
 		log.Info("Waiting for MySQL Router to be ready before smart update")
 		return nil
 	}
@@ -158,8 +158,8 @@ func stsChanged(sts *appsv1.StatefulSet, pods []corev1.Pod) bool {
 	return false
 }
 
-func (r *PerconaServerMySQLReconciler) isBackupRunning(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, error) {
-	bcpList := apiv1alpha1.PerconaServerMySQLBackupList{}
+func (r *PerconaServerMySQLReconciler) isBackupRunning(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, error) {
+	bcpList := apiv1.PerconaServerMySQLBackupList{}
 	if err := r.Client.List(ctx, &bcpList, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
 		if k8serrors.IsNotFound(err) {
 			return false, nil
@@ -172,7 +172,7 @@ func (r *PerconaServerMySQLReconciler) isBackupRunning(ctx context.Context, cr *
 			continue
 		}
 
-		if bcp.Status.State == apiv1alpha1.BackupRunning || bcp.Status.State == apiv1alpha1.BackupStarting {
+		if bcp.Status.State == apiv1.BackupRunning || bcp.Status.State == apiv1.BackupStarting {
 			return true, nil
 		}
 	}
