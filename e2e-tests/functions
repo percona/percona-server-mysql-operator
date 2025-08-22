@@ -1230,7 +1230,8 @@ check_primary_chaos() {
 	online_members=$(get_innodb_cluster_status ${uri} \
 		| jq .defaultReplicaSet.topology[].status \
 		| grep ONLINE \
-		| wc -l)
+		| wc -l \
+		| sed 's/ //g')
 
 	if [[ ${online_members} != 3 ]]; then
 		echo "expected 3 online members, got ${online_members}"
