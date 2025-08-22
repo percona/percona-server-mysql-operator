@@ -1,11 +1,12 @@
 package pmm
 
 import (
+	"reflect"
+
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"reflect"
 )
 
 func Container(
@@ -37,7 +38,17 @@ func Container(
 		Ports:           ports,
 		Resources:       pmmSpec.Resources,
 		Env:             envs,
-		Lifecycle: &corev1.Lifecycle{
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      apiv1alpha1.BinVolumeName,
+				MountPath: apiv1alpha1.BinVolumePath,
+			},
+		},
+	}
+
+	if cr.CompareVersion("0.12.0") >= 0 {
+
+		container.Lifecycle = &corev1.Lifecycle{
 			PreStop: &corev1.LifecycleHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
@@ -47,8 +58,9 @@ func Container(
 					},
 				},
 			},
-		},
-		LivenessProbe: &corev1.Probe{
+		}
+
+		container.LivenessProbe = &corev1.Probe{
 			InitialDelaySeconds: 60,
 			TimeoutSeconds:      5,
 			PeriodSeconds:       10,
@@ -58,35 +70,28 @@ func Container(
 					Path: "/local/Status",
 				},
 			},
-		},
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      apiv1alpha1.BinVolumeName,
-				MountPath: apiv1alpha1.BinVolumePath,
-			},
-		},
-	}
+		}
 
-	if pmmSpec.LivenessProbes != nil {
-		container.LivenessProbe = pmmSpec.LivenessProbes
-		if reflect.DeepEqual(container.LivenessProbe.ProbeHandler, corev1.ProbeHandler{}) {
-			container.LivenessProbe.HTTPGet = &corev1.HTTPGetAction{
-				Port: intstr.FromInt32(7777),
-				Path: "/local/Status",
+		if pmmSpec.LivenessProbes != nil {
+			container.LivenessProbe = pmmSpec.LivenessProbes
+			if reflect.DeepEqual(container.LivenessProbe.ProbeHandler, corev1.ProbeHandler{}) {
+				container.LivenessProbe.HTTPGet = &corev1.HTTPGetAction{
+					Port: intstr.FromInt32(7777),
+					Path: "/local/Status",
+				}
+			}
+		}
+
+		if pmmSpec.ReadinessProbes != nil {
+			container.ReadinessProbe = pmmSpec.ReadinessProbes
+			if reflect.DeepEqual(container.ReadinessProbe.ProbeHandler, corev1.ProbeHandler{}) {
+				container.ReadinessProbe.HTTPGet = &corev1.HTTPGetAction{
+					Port: intstr.FromInt32(7777),
+					Path: "/local/Status",
+				}
 			}
 		}
 	}
-
-	if pmmSpec.ReadinessProbes != nil {
-		container.ReadinessProbe = pmmSpec.ReadinessProbes
-		if reflect.DeepEqual(container.ReadinessProbe.ProbeHandler, corev1.ProbeHandler{}) {
-			container.ReadinessProbe.HTTPGet = &corev1.HTTPGetAction{
-				Port: intstr.FromInt32(7777),
-				Path: "/local/Status",
-			}
-		}
-	}
-
 	return container
 }
 
