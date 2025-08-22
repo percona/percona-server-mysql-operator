@@ -96,7 +96,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCustomConfiguration(ctx context.
 		return "", errors.New("resources.limits[memory] or resources.requests[memory] should be specified for template usage in configuration")
 	}
 
-	cm := k8s.ConfigMap(cmName, cr.Namespace, configurable.GetConfigMapKey(), configuration)
+	cm := k8s.ConfigMap(cmName, cr.Namespace, configurable.GetConfigMapKey(), configuration, cr)
 	if !reflect.DeepEqual(currCm.Data, cm.Data) {
 		if err := k8s.EnsureObject(ctx, r.Client, cr, cm, r.Scheme); err != nil {
 			return "", errors.Wrapf(err, "ensure ConfigMap/%s", cmName)
