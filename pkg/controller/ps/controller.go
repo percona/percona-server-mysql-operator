@@ -796,7 +796,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 	if err != nil {
 		return nil
 	}
-	g, gCtx := errgroup.WithContext(context.Background())
+	g, gCtx := errgroup.WithContext(ctx)
 
 	if len(raftNodes) > len(existingNodes) {
 		newPeers := util.Difference(raftNodes, existingNodes)
@@ -808,7 +808,9 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 			})
 		}
 
-		log.Error(g.Wait(), "Orchestrator add peers", "peers", newPeers)
+		if err := g.Wait(); err != nil && !cr.Spec.Pause {
+			log.Error(err, "Orchestrator add peers", "peers", newPeers)
+		}
 	} else {
 		oldPeers := util.Difference(existingNodes, raftNodes)
 
@@ -819,14 +821,15 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 			})
 		}
 
-		log.Error(g.Wait(), "Orchestrator remove peers", "peers", oldPeers)
+		if err := g.Wait(); err != nil && !cr.Spec.Pause {
+			log.Error(err, "Orchestrator remove peers", "peers", oldPeers)
+		}
 	}
 
 	return nil
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	log := logf.FromContext(ctx)
 	if err := k8s.EnsureService(ctx, r.Client, cr, orchestrator.Service(cr), r.Scheme, true); err != nil {
 		return errors.Wrap(err, "reconcile Service")
 	}
@@ -835,7 +838,6 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context
 	if err := r.reconcileServicePerPod(ctx, cr, &exposer); err != nil {
 		return errors.Wrap(err, "reconcile service per pod")
 	}
-	log.Info("Finished reconciling orchestrator services")
 	return nil
 }
 
