@@ -8,8 +8,7 @@ import (
 )
 
 func ConfigMap(name, namespace, filename, data string, cr *apiv1alpha1.PerconaServerMySQL) *corev1.ConfigMap {
-
-	return &corev1.ConfigMap{
+	cm := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "ConfigMap",
@@ -17,10 +16,14 @@ func ConfigMap(name, namespace, filename, data string, cr *apiv1alpha1.PerconaSe
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
-			Labels:    naming.Labels(name, cr.Name, "percona-server", "database"),
 		},
 		Data: map[string]string{
 			filename: data,
 		},
 	}
+	if cr.CompareVersion("0.12.0") >= 0 {
+		cm.Labels = naming.Labels(name, cr.Name, "percona-server", "database")
+	}
+
+	return cm
 }
