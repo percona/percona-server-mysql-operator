@@ -618,15 +618,15 @@ func (r *PerconaServerMySQLReconciler) reconcileServicePerPod(ctx context.Contex
 func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	_ = logf.FromContext(ctx).WithName("reconcileMySQLServices")
 
-	if err := k8s.EnsureService(ctx, r.Client, cr, mysql.UnreadyService(cr), r.Scheme, false); err != nil {
+	if err := k8s.EnsureService(ctx, r.Client, cr, mysql.UnreadyService(cr), r.Scheme, true); err != nil {
 		return errors.Wrap(err, "reconcile unready svc")
 	}
 
-	if err := k8s.EnsureService(ctx, r.Client, cr, mysql.HeadlessService(cr), r.Scheme, false); err != nil {
+	if err := k8s.EnsureService(ctx, r.Client, cr, mysql.HeadlessService(cr), r.Scheme, true); err != nil {
 		return errors.Wrap(err, "reconcile headless svc")
 	}
 
-	if err := k8s.EnsureService(ctx, r.Client, cr, mysql.ProxyService(cr), r.Scheme, false); err != nil {
+	if err := k8s.EnsureService(ctx, r.Client, cr, mysql.ProxyService(cr), r.Scheme, true); err != nil {
 		return errors.Wrap(err, "reconcile proxy svc")
 	}
 
@@ -636,7 +636,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLServices(ctx context.Contex
 	}
 
 	if cr.Spec.MySQL.ExposePrimary.Enabled {
-		if err := k8s.EnsureService(ctx, r.Client, cr, mysql.PrimaryService(cr), r.Scheme, false); err != nil {
+		if err := k8s.EnsureService(ctx, r.Client, cr, mysql.PrimaryService(cr), r.Scheme, true); err != nil {
 			return errors.Wrap(err, "reconcile service for primary mysql")
 		}
 	}
