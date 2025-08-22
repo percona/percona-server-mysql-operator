@@ -39,7 +39,6 @@ import (
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
-	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 const (
@@ -585,15 +584,6 @@ func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 	return &cr.Spec.Orchestrator
 }
 
-// SetVersion sets the CRVersion to the version value if it's not already set.
-func (cr *PerconaServerMySQL) SetVersion() {
-	if len(cr.Spec.CRVersion) > 0 {
-		return
-	}
-
-	cr.Spec.CRVersion = version.Version()
-}
-
 func (cr *PerconaServerMySQL) Version() *v.Version {
 	return v.Must(v.NewVersion(cr.Spec.CRVersion))
 }
@@ -613,8 +603,6 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 	if valid := cr.Spec.MySQL.ClusterType.isValid(); !valid {
 		return errors.Errorf("%s is not a valid clusterType, valid options are %s and %s", cr.Spec.MySQL.ClusterType, ClusterTypeGR, ClusterTypeAsync)
 	}
-
-	cr.SetVersion()
 
 	if cr.Spec.Backup == nil {
 		cr.Spec.Backup = new(BackupSpec)
