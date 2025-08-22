@@ -8,6 +8,10 @@ commands:
 
       source ../../functions
 
+      if [ "$EKS" = 1 ]; then
+        kubectl apply -f ../../conf/eks-storage-class.yaml
+      fi
+
       get_cr \
           | yq eval '.spec.mysql.clusterType="group-replication"' - \
           | yq eval '.spec.mysql.size=3' - \

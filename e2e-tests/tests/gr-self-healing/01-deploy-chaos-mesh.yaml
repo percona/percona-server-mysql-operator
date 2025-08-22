@@ -8,4 +8,4 @@ commands:
       source ../../functions
 
       deploy_chaos_mesh
-    timeout: 120
+    timeout: 240

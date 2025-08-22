@@ -9,6 +9,12 @@ if oc get projects 2>/dev/null; then
 	OPENSHIFT=4
 fi
 
+if [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "\-eks\-") ]; then
+	EKS=1
+else
+	EKS=0
+fi
+
 init_temp_dir() {
 	rm -rf "$TEMP_DIR"
 	mkdir -p "$TEMP_DIR"
@@ -423,6 +429,8 @@ _deploy_vault() {
 
 	if [[ ${platform} == "openshift" ]]; then
 		oc patch clusterrole system:auth-delegator --type='json' -p '[{"op":"add","path":"/rules/-", "value":{"apiGroups":["security.openshift.io"], "attributeRestrictions":null, "resourceNames": ["privileged"], "resources":["securitycontextconstraints"],"verbs":["use"]}}]'
+		local extra_args="--set server.image.repository=docker.io/hashicorp/vault \
+						  --set injector.image.repository=docker.io/hashicorp/vault-k8s"
 	fi
 
 	if [ $protocol == "https" ]; then
@@ -431,6 +439,7 @@ _deploy_vault() {
 			--disable-openapi-validation \
 			--version ${VAULT_VER} \
 			--namespace "${namespace}" \
+			$extra_args \
 			--set dataStorage.enabled=false \
 			--set global.tlsDisable=false \
 			--set global.logLevel="trace" \
@@ -455,6 +464,7 @@ storage \"file\" {
 			--disable-openapi-validation \
 			--version ${VAULT_VER} \
 			--namespace "${namespace}" \
+			$extra_args \
 			--set dataStorage.enabled=false \
 			--set global.logLevel="trace" \
 			--set global.platform="${platform}"
@@ -1220,7 +1230,8 @@ check_primary_chaos() {
 	online_members=$(get_innodb_cluster_status ${uri} \
 		| jq .defaultReplicaSet.topology[].status \
 		| grep ONLINE \
-		| wc -l)
+		| wc -l \
+		| sed 's/ //g')
 
 	if [[ ${online_members} != 3 ]]; then
 		echo "expected 3 online members, got ${online_members}"
