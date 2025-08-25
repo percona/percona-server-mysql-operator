@@ -27,8 +27,9 @@ import (
 
 // PerconaServerMySQLBackupSpec defines the desired state of PerconaServerMySQLBackup
 type PerconaServerMySQLBackupSpec struct {
-	ClusterName string `json:"clusterName"`
-	StorageName string `json:"storageName"`
+	ClusterName      string                  `json:"clusterName"`
+	StorageName      string                  `json:"storageName"`
+	ContainerOptions *BackupContainerOptions `json:"containerOptions,omitempty"`
 }
 
 type BackupState string

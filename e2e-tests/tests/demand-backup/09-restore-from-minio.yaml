@@ -5,3 +5,12 @@ metadata:
 spec:
   clusterName: demand-backup
   backupName: demand-backup-minio
+  containerOptions:
+    env:
+    - name: CUSTOM_ENV
+      value: "test-2"
+    args:
+      xtrabackup:
+      - "--strict"
+      xbstream:
+      - "--verbose"

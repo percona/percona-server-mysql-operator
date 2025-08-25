@@ -19,11 +19,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	"github.com/pkg/errors"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -148,8 +147,8 @@ func getNamespace() (string, error) {
 	return string(ns), nil
 }
 
-func xtrabackupArgs(user, pass string) []string {
-	return []string{
+func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
+	args := []string{
 		"--backup",
 		"--stream=xbstream",
 		"--safe-slave-backup",
@@ -158,6 +157,10 @@ func xtrabackupArgs(user, pass string) []string {
 		fmt.Sprintf("--user=%s", user),
 		fmt.Sprintf("--password=%s", pass),
 	}
+	if conf != nil && conf.ContainerOptions != nil {
+		args = append(args, conf.ContainerOptions.Args.Xtrabackup...)
+	}
+	return args
 }
 
 func backupHandler(w http.ResponseWriter, req *http.Request) {
@@ -247,6 +250,7 @@ func deleteBackup(ctx context.Context, cfg *xb.BackupConfig, backupName string) 
 		logWriter = io.MultiWriter(backupLog, os.Stderr)
 	}
 	xbcloud := exec.CommandContext(ctx, "xbcloud", xb.XBCloudArgs(xb.XBCloudActionDelete, cfg)...)
+	xbcloud.Env = envs(*cfg)
 	xbcloudErr, err := xbcloud.StderrPipe()
 	if err != nil {
 		return errors.Wrap(err, "xbcloud stderr pipe failed")
@@ -393,7 +397,8 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	g, gCtx := errgroup.WithContext(req.Context())
 
-	xtrabackup := exec.CommandContext(gCtx, "xtrabackup", xtrabackupArgs(string(backupUser), backupPass)...)
+	xtrabackup := exec.CommandContext(gCtx, "xtrabackup", xtrabackupArgs(string(backupUser), backupPass, &backupConf)...)
+	xtrabackup.Env = envs(backupConf)
 
 	xbOut, err := xtrabackup.StdoutPipe()
 	if err != nil {
@@ -421,6 +426,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	logWriter := io.MultiWriter(backupLog, os.Stderr)
 
 	xbcloud := exec.CommandContext(gCtx, "xbcloud", xb.XBCloudArgs(xb.XBCloudActionPut, &backupConf)...)
+	xbcloud.Env = envs(backupConf)
 	xbcloud.Stdin = xbOut
 
 	xbcloudErr, err := xbcloud.StderrPipe()
@@ -513,4 +519,14 @@ func logHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "failed to scan log", http.StatusInternalServerError)
 		return
 	}
+}
+
+func envs(cfg xb.BackupConfig) []string {
+	envs := os.Environ()
+	if cfg.ContainerOptions != nil {
+		for _, env := range cfg.ContainerOptions.Env {
+			envs = append(envs, fmt.Sprintf("%s=%s", env.Name, env.Value))
+		}
+	}
+	return envs
 }
