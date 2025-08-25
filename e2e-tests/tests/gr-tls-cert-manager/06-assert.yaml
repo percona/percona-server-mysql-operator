@@ -36,19 +36,19 @@ spec:
 status:
   conditions:
     - message: Certificate is up to date and has not expired
-      observedGeneration: 1
+      observedGeneration: 2
       reason: Ready
       status: 'True'
       type: Ready
-  revision: 2
+  revision: 3
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  generation: 2
+  generation: 3
   name: gr-tls-cert-manager-mysql
 status:
-  observedGeneration: 2
+  observedGeneration: 3
   replicas: 3
   readyReplicas: 3
 ---
@@ -64,7 +64,7 @@ metadata:
     app.kubernetes.io/part-of: percona-server
     app.kubernetes.io/version: v0.12.0
 status:
-  observedGeneration: 2
+  observedGeneration: 3
   replicas: 3
   updatedReplicas: 3
   readyReplicas: 3
