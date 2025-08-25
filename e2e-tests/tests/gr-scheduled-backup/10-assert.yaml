@@ -2,7 +2,7 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 420
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLBackup
 metadata:
   finalizers:
@@ -17,7 +17,7 @@ spec:
 status:
   state: Succeeded
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLBackup
 metadata:
   finalizers:

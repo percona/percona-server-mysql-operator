@@ -23,7 +23,7 @@ kind: Job
 metadata:
   generation: 1
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQLBackup
@@ -43,7 +43,7 @@ kind: Job
 metadata:
   generation: 1
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQLBackup
@@ -58,7 +58,7 @@ status:
   succeeded: 1
   uncountedTerminatedPods: {}
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLBackup
 metadata:
   finalizers:
@@ -73,7 +73,7 @@ spec:
 status:
   state: Succeeded
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLBackup
 metadata:
   finalizers:

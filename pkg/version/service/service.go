@@ -9,7 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	vsclient "github.com/percona/percona-server-mysql-operator/pkg/version/service/client"
 	"github.com/percona/percona-server-mysql-operator/pkg/version/service/client/models"
@@ -29,7 +29,7 @@ func GetDefaultVersionServiceEndpoint() string {
 	return defaultEndpoint
 }
 
-func GetVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, endpoint string, serverVersion *platform.ServerVersion) (DepVersion, error) {
+func GetVersion(ctx context.Context, cr *apiv1.PerconaServerMySQL, endpoint string, serverVersion *platform.ServerVersion) (DepVersion, error) {
 	requestURL, err := url.Parse(endpoint)
 	if err != nil {
 		return DepVersion{}, errors.Wrap(err, "url parse")

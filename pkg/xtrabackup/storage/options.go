@@ -8,17 +8,17 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
 
 type Options interface {
-	Type() apiv1alpha1.BackupStorageType
+	Type() apiv1.BackupStorageType
 }
 
 func GetOptionsFromBackupConfig(cfg *xtrabackup.BackupConfig) (Options, error) {
 	switch cfg.Type {
-	case apiv1alpha1.BackupStorageAzure:
+	case apiv1.BackupStorageAzure:
 		a := cfg.Azure
 		return &AzureOptions{
 			StorageAccount: a.StorageAccount,
@@ -26,7 +26,7 @@ func GetOptionsFromBackupConfig(cfg *xtrabackup.BackupConfig) (Options, error) {
 			Endpoint:       a.EndpointURL,
 			Container:      a.ContainerName,
 		}, nil
-	case apiv1alpha1.BackupStorageGCS:
+	case apiv1.BackupStorageGCS:
 		g := cfg.GCS
 		return &GCSOptions{
 			Endpoint:        g.EndpointURL,
@@ -35,7 +35,7 @@ func GetOptionsFromBackupConfig(cfg *xtrabackup.BackupConfig) (Options, error) {
 			BucketName:      g.Bucket,
 			VerifyTLS:       cfg.VerifyTLS,
 		}, nil
-	case apiv1alpha1.BackupStorageS3:
+	case apiv1.BackupStorageS3:
 		s3 := cfg.S3
 		return &S3Options{
 			Endpoint:        s3.EndpointURL,
@@ -49,7 +49,7 @@ func GetOptionsFromBackupConfig(cfg *xtrabackup.BackupConfig) (Options, error) {
 	return nil, errors.Errorf("storage type %s is not supported", cfg.Type)
 }
 
-func GetOptionsFromBackup(ctx context.Context, cl client.Client, cluster *apiv1alpha1.PerconaServerMySQL, backup *apiv1alpha1.PerconaServerMySQLBackup) (Options, error) {
+func GetOptionsFromBackup(ctx context.Context, cl client.Client, cluster *apiv1.PerconaServerMySQL, backup *apiv1.PerconaServerMySQLBackup) (Options, error) {
 	switch {
 	case backup.Status.Storage.S3 != nil:
 		return getS3Options(ctx, cl, cluster, backup)
@@ -62,7 +62,7 @@ func GetOptionsFromBackup(ctx context.Context, cl client.Client, cluster *apiv1a
 	}
 }
 
-func getGCSOptions(ctx context.Context, cl client.Client, cluster *apiv1alpha1.PerconaServerMySQL, backup *apiv1alpha1.PerconaServerMySQLBackup) (Options, error) {
+func getGCSOptions(ctx context.Context, cl client.Client, cluster *apiv1.PerconaServerMySQL, backup *apiv1.PerconaServerMySQLBackup) (Options, error) {
 	secret := new(corev1.Secret)
 	err := cl.Get(ctx, types.NamespacedName{
 		Name:      backup.Status.Storage.GCS.CredentialsSecret,
@@ -104,7 +104,7 @@ func getGCSOptions(ctx context.Context, cl client.Client, cluster *apiv1alpha1.P
 	}, nil
 }
 
-func getAzureOptions(ctx context.Context, cl client.Client, backup *apiv1alpha1.PerconaServerMySQLBackup) (*AzureOptions, error) {
+func getAzureOptions(ctx context.Context, cl client.Client, backup *apiv1.PerconaServerMySQLBackup) (*AzureOptions, error) {
 	secret := new(corev1.Secret)
 	err := cl.Get(ctx, types.NamespacedName{
 		Name:      backup.Status.Storage.Azure.CredentialsSecret,
@@ -134,7 +134,7 @@ func getAzureOptions(ctx context.Context, cl client.Client, backup *apiv1alpha1.
 	}, nil
 }
 
-func getS3Options(ctx context.Context, cl client.Client, cluster *apiv1alpha1.PerconaServerMySQL, backup *apiv1alpha1.PerconaServerMySQLBackup) (*S3Options, error) {
+func getS3Options(ctx context.Context, cl client.Client, cluster *apiv1.PerconaServerMySQL, backup *apiv1.PerconaServerMySQLBackup) (*S3Options, error) {
 	secret := new(corev1.Secret)
 	err := cl.Get(ctx, types.NamespacedName{
 		Name:      backup.Status.Storage.S3.CredentialsSecret,
@@ -194,8 +194,8 @@ type S3Options struct {
 	VerifyTLS       bool
 }
 
-func (o *S3Options) Type() apiv1alpha1.BackupStorageType {
-	return apiv1alpha1.BackupStorageS3
+func (o *S3Options) Type() apiv1.BackupStorageType {
+	return apiv1.BackupStorageS3
 }
 
 var _ = Options(new(GCSOptions))
@@ -209,8 +209,8 @@ type GCSOptions struct {
 	VerifyTLS       bool
 }
 
-func (o *GCSOptions) Type() apiv1alpha1.BackupStorageType {
-	return apiv1alpha1.BackupStorageGCS
+func (o *GCSOptions) Type() apiv1.BackupStorageType {
+	return apiv1.BackupStorageGCS
 }
 
 var _ = Options(new(AzureOptions))
@@ -223,6 +223,6 @@ type AzureOptions struct {
 	Prefix         string
 }
 
-func (o *AzureOptions) Type() apiv1alpha1.BackupStorageType {
-	return apiv1alpha1.BackupStorageAzure
+func (o *AzureOptions) Type() apiv1.BackupStorageType {
+	return apiv1.BackupStorageAzure
 }

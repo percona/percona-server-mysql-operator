@@ -34,7 +34,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	psv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	psv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 )
 
@@ -80,7 +80,7 @@ var _ = BeforeSuite(func() {
 	err = os.Setenv("KUBECONFIG", kubecfg[1])
 	Expect(err).NotTo(HaveOccurred())
 
-	err = psv1alpha1.AddToScheme(scheme.Scheme)
+	err = psv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
@@ -109,13 +109,13 @@ func reconciler() *PerconaServerMySQLReconciler {
 	}
 }
 
-func readDefaultCR(name, namespace string) (*psv1alpha1.PerconaServerMySQL, error) {
+func readDefaultCR(name, namespace string) (*psv1.PerconaServerMySQL, error) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "cr.yaml"))
 	if err != nil {
 		return nil, err
 	}
 
-	cr := &psv1alpha1.PerconaServerMySQL{}
+	cr := &psv1.PerconaServerMySQL{}
 
 	if err := yaml.Unmarshal(data, cr); err != nil {
 		return nil, err

@@ -76,7 +76,7 @@ status:
   replicas: 1
   updatedReplicas: 1
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
   name: gr-one-pod

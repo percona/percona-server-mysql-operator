@@ -10,7 +10,7 @@ import (
 	"github.com/sjmudd/stopwatch"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	database "github.com/percona/percona-server-mysql-operator/cmd/internal/db"
 	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -73,13 +73,13 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 	log.Printf("Donor: %s", donor)
 
 	log.Printf("Opening connection to %s", podIp)
-	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
+	operatorPass, err := getSecret(apiv1.UserOperator)
 	if err != nil {
-		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
+		return errors.Wrapf(err, "get %s password", apiv1.UserOperator)
 	}
 
 	params := database.DBParams{
-		User: apiv1alpha1.UserOperator,
+		User: apiv1.UserOperator,
 		Pass: operatorPass,
 		Host: podIp,
 	}
@@ -148,7 +148,7 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 
 		timer.Start("clone")
 		log.Printf("Cloning from %s", donor)
-		err = db.Clone(ctx, donor, string(apiv1alpha1.UserOperator), operatorPass, mysql.DefaultAdminPort)
+		err = db.Clone(ctx, donor, string(apiv1.UserOperator), operatorPass, mysql.DefaultAdminPort)
 		timer.Stop("clone")
 		if err != nil && !errors.Is(err, database.ErrRestartAfterClone) {
 			return errors.Wrapf(err, "clone from donor %s", donor)
@@ -179,9 +179,9 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 	if rStatus == mysqldb.ReplicationStatusNotInitiated {
 		log.Println("configuring replication")
 
-		replicaPass, err := getSecret(apiv1alpha1.UserReplication)
+		replicaPass, err := getSecret(apiv1.UserReplication)
 		if err != nil {
-			return errors.Wrapf(err, "get %s password", apiv1alpha1.UserReplication)
+			return errors.Wrapf(err, "get %s password", apiv1.UserReplication)
 		}
 
 		if err := db.StopReplication(ctx); err != nil {
@@ -204,14 +204,14 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 	replicas := sets.New[string]()
 	primary := ""
 
-	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
+	operatorPass, err := getSecret(apiv1.UserOperator)
 	if err != nil {
-		return "", nil, errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
+		return "", nil, errors.Wrapf(err, "get %s password", apiv1.UserOperator)
 	}
 
 	for _, peer := range sets.List(peers) {
 		params := database.DBParams{
-			User: apiv1alpha1.UserOperator,
+			User: apiv1.UserOperator,
 			Pass: operatorPass,
 			Host: peer,
 		}
@@ -270,14 +270,14 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 func selectDonor(ctx context.Context, fqdn, primary string, replicas []string) (string, error) {
 	donor := ""
 
-	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
+	operatorPass, err := getSecret(apiv1.UserOperator)
 	if err != nil {
-		return "", errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
+		return "", errors.Wrapf(err, "get %s password", apiv1.UserOperator)
 	}
 
 	for _, replica := range replicas {
 		params := database.DBParams{
-			User: apiv1alpha1.UserOperator,
+			User: apiv1.UserOperator,
 			Pass: operatorPass,
 			Host: replica,
 		}

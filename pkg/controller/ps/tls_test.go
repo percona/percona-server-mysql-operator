@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
@@ -93,7 +93,7 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 	Context("with custom SANs", func() {
 		Specify("CR should be updated", func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, cr)).Should(Succeed())
-			cr.Spec.TLS = &apiv1alpha1.TLSSpec{
+			cr.Spec.TLS = &apiv1.TLSSpec{
 				SANs: []string{"mysql-1.example.com"},
 			}
 			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
@@ -143,7 +143,7 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 		Specify("CR should be updated", func() {
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, cr)).Should(Succeed())
 
-			cr.Spec.TLS = &apiv1alpha1.TLSSpec{
+			cr.Spec.TLS = &apiv1.TLSSpec{
 				SANs: []string{"mysql-1.example.com"},
 				IssuerConf: &cmmeta.ObjectReference{
 					Name: "some-issuer",

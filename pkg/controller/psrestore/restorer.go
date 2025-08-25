@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
@@ -148,9 +148,9 @@ func (a *azure) Job() (*batchv1.Job, error) {
 var _ Restorer = new(azure)
 
 type restorerOptions struct {
-	cluster          *apiv1alpha1.PerconaServerMySQL
-	bcp              *apiv1alpha1.PerconaServerMySQLBackup
-	cr               *apiv1alpha1.PerconaServerMySQLRestore
+	cluster          *apiv1.PerconaServerMySQL
+	bcp              *apiv1.PerconaServerMySQLBackup
+	cr               *apiv1.PerconaServerMySQLRestore
 	scheme           *runtime.Scheme
 	k8sClient        client.Client
 	newStorageClient storage.NewClientFunc
@@ -159,8 +159,8 @@ type restorerOptions struct {
 
 func (r *PerconaServerMySQLRestoreReconciler) getRestorer(
 	ctx context.Context,
-	cr *apiv1alpha1.PerconaServerMySQLRestore,
-	cluster *apiv1alpha1.PerconaServerMySQL,
+	cr *apiv1.PerconaServerMySQLRestore,
+	cluster *apiv1.PerconaServerMySQL,
 ) (Restorer, error) {
 	initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
 	if err != nil {
@@ -180,13 +180,13 @@ func (r *PerconaServerMySQLRestoreReconciler) getRestorer(
 		newStorageClient: r.NewStorageClient,
 	}
 	switch bcp.Status.Storage.Type {
-	case apiv1alpha1.BackupStorageGCS:
+	case apiv1.BackupStorageGCS:
 		sr := gcs{&s}
 		return &sr, nil
-	case apiv1alpha1.BackupStorageS3:
+	case apiv1.BackupStorageS3:
 		sr := s3{&s}
 		return &sr, nil
-	case apiv1alpha1.BackupStorageAzure:
+	case apiv1.BackupStorageAzure:
 		sr := azure{&s}
 		return &sr, nil
 	}
@@ -263,17 +263,17 @@ func (opts *restorerOptions) validateJob(ctx context.Context, job *batchv1.Job) 
 	return nil
 }
 
-func getBackup(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQLRestore, cluster *apiv1alpha1.PerconaServerMySQL) (*apiv1alpha1.PerconaServerMySQLBackup, error) {
+func getBackup(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQLRestore, cluster *apiv1.PerconaServerMySQL) (*apiv1.PerconaServerMySQLBackup, error) {
 	if cr.Spec.BackupSource != nil {
 		status := cr.Spec.BackupSource.DeepCopy()
-		status.State = apiv1alpha1.BackupSucceeded
+		status.State = apiv1.BackupSucceeded
 		status.CompletedAt = nil
-		return &apiv1alpha1.PerconaServerMySQLBackup{
+		return &apiv1.PerconaServerMySQLBackup{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      cr.Name,
 				Namespace: cr.Namespace,
 			},
-			Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
+			Spec: apiv1.PerconaServerMySQLBackupSpec{
 				ClusterName: cr.Spec.ClusterName,
 			},
 			Status: *status,
@@ -283,7 +283,7 @@ func getBackup(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaSer
 		return nil, errors.New("backupName and backupSource are empty")
 	}
 
-	backup := &apiv1alpha1.PerconaServerMySQLBackup{}
+	backup := &apiv1.PerconaServerMySQLBackup{}
 	nn := types.NamespacedName{Name: cr.Spec.BackupName, Namespace: cr.Namespace}
 	if err := cl.Get(ctx, nn, backup); err != nil {
 		if k8serrors.IsNotFound(err) {

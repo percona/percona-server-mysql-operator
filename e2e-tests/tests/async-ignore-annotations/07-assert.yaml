@@ -18,7 +18,7 @@ metadata:
     service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
   name: async-ignore-annotations-mysql-0
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
@@ -67,7 +67,7 @@ metadata:
     service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
   name: async-ignore-annotations-haproxy
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
@@ -124,7 +124,7 @@ metadata:
     rack: rack-22-test
   name: async-ignore-annotations-orc-0
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL

@@ -7,13 +7,13 @@ import (
 
 	"sigs.k8s.io/yaml"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
-func readDefaultCluster(t *testing.T, name, namespace string) *apiv1alpha1.PerconaServerMySQL {
+func readDefaultCluster(t *testing.T, name, namespace string) *apiv1.PerconaServerMySQL {
 	t.Helper()
 
-	cr := &apiv1alpha1.PerconaServerMySQL{}
+	cr := &apiv1.PerconaServerMySQL{}
 	readDefaultFile(t, "cr.yaml", cr)
 
 	cr.Name = name
@@ -22,13 +22,13 @@ func readDefaultCluster(t *testing.T, name, namespace string) *apiv1alpha1.Perco
 	return cr
 }
 
-func readDefaultBackup(t *testing.T, name, namespace string) *apiv1alpha1.PerconaServerMySQLBackup {
+func readDefaultBackup(t *testing.T, name, namespace string) *apiv1.PerconaServerMySQLBackup {
 	t.Helper()
 
-	cr := &apiv1alpha1.PerconaServerMySQLBackup{}
+	cr := &apiv1.PerconaServerMySQLBackup{}
 	readDefaultFile(t, "backup.yaml", cr)
 
-	cr.Status.Storage = new(apiv1alpha1.BackupStorageSpec)
+	cr.Status.Storage = new(apiv1.BackupStorageSpec)
 	cr.Name = name
 	cr.Namespace = namespace
 	return cr

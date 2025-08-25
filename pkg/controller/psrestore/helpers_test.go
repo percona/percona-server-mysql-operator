@@ -13,14 +13,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	fakestorage "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage/fake"
 )
 
-func readDefaultCluster(t *testing.T, name, namespace string) *apiv1alpha1.PerconaServerMySQL {
+func readDefaultCluster(t *testing.T, name, namespace string) *apiv1.PerconaServerMySQL {
 	t.Helper()
 
-	cr := &apiv1alpha1.PerconaServerMySQL{}
+	cr := &apiv1.PerconaServerMySQL{}
 	readDefaultFile(t, "cr.yaml", cr)
 
 	cr.Name = name
@@ -29,22 +29,22 @@ func readDefaultCluster(t *testing.T, name, namespace string) *apiv1alpha1.Perco
 	return cr
 }
 
-func readDefaultBackup(t *testing.T, name, namespace string) *apiv1alpha1.PerconaServerMySQLBackup {
+func readDefaultBackup(t *testing.T, name, namespace string) *apiv1.PerconaServerMySQLBackup {
 	t.Helper()
 
-	cr := &apiv1alpha1.PerconaServerMySQLBackup{}
+	cr := &apiv1.PerconaServerMySQLBackup{}
 	readDefaultFile(t, "backup.yaml", cr)
 
-	cr.Status.Storage = new(apiv1alpha1.BackupStorageSpec)
+	cr.Status.Storage = new(apiv1.BackupStorageSpec)
 	cr.Name = name
 	cr.Namespace = namespace
 	return cr
 }
 
-func readDefaultRestore(t *testing.T, name, namespace string) *apiv1alpha1.PerconaServerMySQLRestore {
+func readDefaultRestore(t *testing.T, name, namespace string) *apiv1.PerconaServerMySQLRestore {
 	t.Helper()
 
-	cr := &apiv1alpha1.PerconaServerMySQLRestore{}
+	cr := &apiv1.PerconaServerMySQLRestore{}
 	readDefaultFile(t, "restore.yaml", cr)
 
 	cr.Name = name
@@ -120,7 +120,7 @@ func buildFakeClient(t *testing.T, objs ...runtime.Object) client.Client {
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add client-go scheme")
 	}
-	if err := apiv1alpha1.AddToScheme(scheme); err != nil {
+	if err := apiv1.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add apis scheme")
 	}
 

@@ -99,7 +99,7 @@ kind: ConfigMap
 metadata:
   name: auto-auto-config-mysql
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
