@@ -254,6 +254,51 @@ func EnsureObjectWithHash(
 	return nil
 }
 
+type Component interface {
+	Name() string
+	PerconaServerMySQL() *apiv1alpha1.PerconaServerMySQL
+	Labels() map[string]string
+	PodSpec() *apiv1alpha1.PodSpec
+
+	Object(ctx context.Context, cl client.Client) (client.Object, error)
+}
+
+func EnsureComponent(
+	ctx context.Context,
+	cl client.Client,
+	c Component,
+) error {
+	cr := c.PerconaServerMySQL()
+
+	obj, err := c.Object(ctx, cl)
+	if err != nil {
+		return errors.Wrap(err, "statefulset")
+	}
+	if err := EnsureObjectWithHash(ctx, cl, cr, obj, cl.Scheme()); err != nil {
+		return errors.Wrap(err, "failed to ensure statefulset")
+	}
+
+	if cr.CompareVersion("0.12.0") < 0 {
+		return nil
+	}
+
+	podSpec := c.PodSpec()
+	if podSpec == nil || podSpec.PodDisruptionBudget == nil {
+		return nil
+	}
+
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+		return errors.Wrap(err, "get statefulset")
+	}
+
+	pdb := podDisruptionBudget(cr, podSpec.PodDisruptionBudget, c.Labels())
+	if err := EnsureObjectWithHash(ctx, cl, obj, pdb, cl.Scheme()); err != nil {
+		return errors.Wrap(err, "failed to create pdb")
+	}
+
+	return nil
+}
+
 func EnsureService(
 	ctx context.Context,
 	cl client.Client,
@@ -461,4 +506,25 @@ func GetImageIDFromPod(pod *corev1.Pod, containerName string) (string, error) {
 	}
 
 	return pod.Status.ContainerStatuses[idx].ImageID, nil
+}
+
+func GetTLSHash(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
+	secret := new(corev1.Secret)
+	err := cl.Get(ctx, types.NamespacedName{
+		Name:      cr.Spec.SSLSecretName,
+		Namespace: cr.Namespace,
+	}, secret)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return "", nil
+		}
+		return "", errors.Wrap(err, "get secret")
+	}
+
+	hash, err := ObjectHash(secret)
+	if err != nil {
+		return "", errors.Wrap(err, "get secret hash")
+	}
+
+	return hash, nil
 }

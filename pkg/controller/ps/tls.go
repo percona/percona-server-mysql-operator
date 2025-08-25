@@ -87,27 +87,6 @@ func (r *PerconaServerMySQLReconciler) ensureManualTLS(ctx context.Context, cr *
 	return nil
 }
 
-func getTLSHash(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
-	secret := new(corev1.Secret)
-	err := cl.Get(ctx, types.NamespacedName{
-		Name:      cr.Spec.SSLSecretName,
-		Namespace: cr.Namespace,
-	}, secret)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			return "", nil
-		}
-		return "", errors.Wrap(err, "get secret")
-	}
-
-	hash, err := k8s.ObjectHash(secret)
-	if err != nil {
-		return "", errors.Wrap(err, "get secret hash")
-	}
-
-	return hash, nil
-}
-
 func (r *PerconaServerMySQLReconciler) checkTLSIssuer(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	if cr.Spec.TLS == nil || cr.Spec.TLS.IssuerConf == nil {
 		return nil

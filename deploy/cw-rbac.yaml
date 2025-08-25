@@ -136,6 +136,17 @@ rules:
   - patch
   - watch
 - apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - ps.percona.com
   resources:
   - perconaservermysqlbackups

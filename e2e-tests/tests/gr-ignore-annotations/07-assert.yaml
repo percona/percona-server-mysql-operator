@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.11.0
+    app.kubernetes.io/version: v0.12.0
     percona.com/exposed: "true"
     rack: rack-22-test
   annotations:
@@ -51,7 +51,7 @@ spec:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.11.0
+    app.kubernetes.io/version: v0.12.0
     rack: rack-22-test
   sessionAffinity: None
   type: LoadBalancer
@@ -65,7 +65,7 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: router
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.11.0
+    app.kubernetes.io/version: v0.12.0
     rack: rack-22-test
   annotations:
     service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http-test
@@ -116,7 +116,7 @@ spec:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: router
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.11.0
+    app.kubernetes.io/version: v0.12.0
     rack: rack-22-test
   sessionAffinity: None
   type: LoadBalancer
