@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 
 	v "github.com/hashicorp/go-version"
@@ -121,7 +123,7 @@ type SQLResult struct {
 func (m *mysqlsh) runSQL(ctx context.Context, sql string) (SQLResult, error) {
 	var stdoutb, stderrb bytes.Buffer
 
-	cmd := fmt.Sprintf("session.runSql('%s')", sql)
+	cmd := fmt.Sprintf("session.runSql(\"%s\")", sql)
 	args := []string{"--uri", m.getURI(), "--js", "--json=raw", "--interactive", "--quiet-start", "2", "-e", cmd}
 
 	c := exec.CommandContext(ctx, "mysqlsh", args...)
@@ -135,7 +137,7 @@ func (m *mysqlsh) runSQL(ctx context.Context, sql string) (SQLResult, error) {
 	}
 
 	if err := json.Unmarshal(stdoutb.Bytes(), &result); err != nil {
-		return result, errors.Wrap(err, "unmarshal result")
+		return result, errors.Wrapf(err, "unmarshal result %s", stdoutb.String())
 	}
 
 	if len(result.Error) > 0 {
@@ -154,6 +156,15 @@ func (m *mysqlsh) getGTIDExecuted(ctx context.Context) (string, error) {
 	return result.Rows[0]["@@GTID_EXECUTED"], nil
 }
 
+func (m *mysqlsh) getGTIDPurged(ctx context.Context) (string, error) {
+	result, err := m.runSQL(ctx, "SELECT @@GTID_PURGED")
+	if err != nil {
+		return "", err
+	}
+
+	return result.Rows[0]["@@GTID_PURGED"], nil
+}
+
 func (m *mysqlsh) getGroupSeeds(ctx context.Context) (string, error) {
 	result, err := m.runSQL(ctx, "SELECT @@group_replication_group_seeds")
 	if err != nil {
@@ -163,50 +174,56 @@ func (m *mysqlsh) getGroupSeeds(ctx context.Context) (string, error) {
 	return result.Rows[0]["@@group_replication_group_seeds"], nil
 }
 
-func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) (string, error) {
-	sql := fmt.Sprintf("SET PERSIST group_replication_group_seeds = \"%s\"", seeds)
+func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) error {
+	sql := fmt.Sprintf("SET PERSIST group_replication_group_seeds = '%s'", seeds)
+
 	_, err := m.runSQL(ctx, sql)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	return "", nil
+	return nil
 }
 
 func updateGroupPeers(ctx context.Context, peers sets.Set[string], version *v.Version) error {
-	fqdn, err := getFQDN(os.Getenv("SERVICE_NAME"))
-	if err != nil {
-		return errors.Wrap(err, "get FQDN")
+	log.Printf("Updating group seeds in peers: %v", peers)
+
+	seedList := make([]string, 0)
+	for _, peer := range peers.UnsortedList() {
+		seedList = append(seedList, fmt.Sprintf("%s:%d", peer, 3306))
 	}
 
+	slices.SortFunc(seedList, func(a, b string) int {
+		return strings.Compare(a, b)
+	})
+
 	for _, peer := range peers.UnsortedList() {
-		log.Printf("Connecting to peer %s", peer)
 		sh := newShell(peer, version)
 
-		seeds, err := sh.getGroupSeeds(ctx)
-		if err != nil {
-			log.Printf("ERROR: get @@group_replication_group_seeds from %s: %s", peer, err)
-			continue
-		}
-
-		log.Printf("Got group_replication_group_seeds from peer %s = %s", peer, seeds)
+		log.Printf("Connected to peer %s", peer)
 
 		tmpSeeds := make([]string, 0)
-		if len(seeds) > 0 {
-			tmpSeeds = strings.Split(seeds, ",")
+		for _, seed := range seedList {
+			// peer shouldn't have its own host as seed
+			if seed == fmt.Sprintf("%s:%d", peer, 3306) {
+				continue
+			}
+			tmpSeeds = append(tmpSeeds, seed)
 		}
-		seedSet := sets.New(tmpSeeds...)
-		seedSet.Insert(fmt.Sprintf("%s:%d", fqdn, 33061))
 
-		seeds = strings.Join(sets.List(seedSet), ",")
-
-		_, err = sh.setGroupSeeds(ctx, seeds)
-		if err != nil {
-			log.Printf("ERROR: set @@group_replication_group_seeds in %s: %s", peer, err)
+		seeds := strings.Join(tmpSeeds, ",")
+		if seeds == "" {
+			log.Printf("seeds are empty")
 			continue
 		}
 
-		log.Printf("Set group_replication_group_seeds in peer %s = %s", peer, seeds)
+		if err := sh.setGroupSeeds(ctx, seeds); err != nil {
+			log.Printf("ERROR: failed to set @@group_replication_group_seeds in %s: %s", peer, err)
+			continue
+		}
+
+		log.Printf("Seeds: %s", seeds)
+		log.Printf("Updated group_replication_group_seeds in peer %s", peer)
 	}
 
 	return nil
@@ -239,20 +256,181 @@ func (m *mysqlsh) createCluster(ctx context.Context) error {
 	return nil
 }
 
-func (m *mysqlsh) addInstance(ctx context.Context, instanceDef string) error {
+type GTIDSetRelation string
+
+const (
+	GTIDSetEqual      GTIDSetRelation = "EQUAL"
+	GTIDSetContained  GTIDSetRelation = "CONTAINED"
+	GTIDSetContains   GTIDSetRelation = "CONTAINS"
+	GTIDSetDisjoint   GTIDSetRelation = "DISJOINT"
+	GTIDSetIntersects GTIDSetRelation = "INTERSECTS"
+)
+
+func gtidSubtract(ctx context.Context, shell *mysqlsh, a, b string) (string, error) {
+	a = strings.ReplaceAll(a, "\n", "")
+	b = strings.ReplaceAll(b, "\n", "")
+
+	query := fmt.Sprintf("SELECT GTID_SUBTRACT('%s', '%s') AS sub", a, b)
+
+	result, err := shell.runSQL(ctx, query)
+	if err != nil {
+		return "", errors.Wrapf(err, "execute %s", query)
+	}
+
+	return result.Rows[0]["sub"], nil
+}
+
+func compareGTIDs(ctx context.Context, shell *mysqlsh, a, b string) (GTIDSetRelation, error) {
+	if a == "" || b == "" {
+		if a == "" {
+			if b == "" {
+				return GTIDSetEqual, nil
+			}
+			return GTIDSetContained, nil
+		}
+
+		return GTIDSetContains, nil
+	}
+
+	aSubB, err := gtidSubtract(ctx, shell, a, b)
+	if err != nil {
+		return "", errors.Wrapf(err, "a sub b")
+	}
+
+	bSubA, err := gtidSubtract(ctx, shell, b, a)
+	if err != nil {
+		return "", errors.Wrapf(err, "b sub a")
+	}
+
+	if aSubB == "" && bSubA == "" {
+		return GTIDSetEqual, nil
+	} else if aSubB == "" && bSubA != "" {
+		return GTIDSetContained, nil
+	} else if aSubB != "" && bSubA == "" {
+		return GTIDSetContains, nil
+	} else {
+		query := fmt.Sprintf("GTID_SUBTRACT('%s', '%s')", a, b)
+		abIntersection, err := gtidSubtract(ctx, shell, a, query)
+		if err != nil {
+			return "", errors.Wrapf(err, "intersection")
+		}
+
+		if abIntersection == "" {
+			return GTIDSetDisjoint, nil
+		}
+
+		return GTIDSetIntersects, nil
+	}
+}
+
+// If purged has more gtids than the executed on the replica
+// it means some data will not be recoverable
+func comparePrimaryPurged(ctx context.Context, shell *mysqlsh, purged, executed string) bool {
+	query := fmt.Sprintf("SELECT GTID_SUBTRACT('%s', '%s') = ''", purged, executed)
+
+	result, err := shell.runSQL(ctx, query)
+	if err != nil {
+		return false
+	}
+
+	sub, err := strconv.Atoi(result.Rows[0]["GTID_SUBTRACT"])
+	if err != nil {
+		return false
+	}
+
+	return sub == 0
+}
+
+func checkReplicaState(
+	ctx context.Context,
+	primary, replica string,
+	version *v.Version,
+) (innodbcluster.ReplicaGtidState, error) {
+	primarySh := newShell(primary, version)
+	replicaSh := newShell(replica, version)
+
+	primaryExecuted, err := primarySh.getGTIDExecuted(ctx)
+	if err != nil {
+		return "", errors.Wrap(err, "get GTID_EXECUTED from primary")
+	}
+	log.Printf("Primary GTID_EXECUTED=%s", primaryExecuted)
+
+	primaryPurged, err := primarySh.getGTIDPurged(ctx)
+	if err != nil {
+		return "", errors.Wrap(err, "get GTID_PURGED from primary")
+	}
+	log.Printf("Primary GTID_PURGED=%s", primaryPurged)
+
+	replicaExecuted, err := replicaSh.getGTIDExecuted(ctx)
+	if err != nil {
+		return "", errors.Wrap(err, "get GTID_EXECUTED from replica")
+	}
+	log.Printf("Replica GTID_EXECUTED=%s", replicaExecuted)
+
+	if replicaExecuted == "" && primaryPurged == "" && primaryExecuted != "" {
+		return innodbcluster.ReplicaGtidNew, nil
+	}
+
+	relation, err := compareGTIDs(ctx, primarySh, primaryExecuted, replicaExecuted)
+	if err != nil {
+		return "", errors.Wrap(err, "compare GTIDs")
+	}
+
+	switch relation {
+	case GTIDSetIntersects, GTIDSetDisjoint, GTIDSetContained:
+		return innodbcluster.ReplicaGtidDiverged, nil
+	case GTIDSetEqual:
+		return innodbcluster.ReplicaGtidIdentical, nil
+	case GTIDSetContains:
+		if primaryPurged == "" || comparePrimaryPurged(ctx, primarySh, primaryPurged, replicaExecuted) {
+			return innodbcluster.ReplicaGtidRecovarable, nil
+		}
+		return innodbcluster.ReplicaGtidIrrecovarable, nil
+	}
+
+	return "", errors.New("internal error")
+}
+
+func getRecoveryMethod(
+	ctx context.Context,
+	primary, replica string,
+	version *v.Version,
+) (innodbcluster.RecoveryMethod, error) {
+	replicaState, err := checkReplicaState(ctx, primary, replica, version)
+	if err != nil {
+		return "", errors.Wrap(err, "check replica state")
+	}
+
+	switch replicaState {
+	case innodbcluster.ReplicaGtidDiverged:
+		return innodbcluster.RecoveryClone, nil
+	case innodbcluster.ReplicaGtidIrrecovarable:
+		return innodbcluster.RecoveryClone, nil
+	case innodbcluster.ReplicaGtidRecovarable, innodbcluster.ReplicaGtidIdentical:
+		return innodbcluster.RecoveryIncremental, nil
+	case innodbcluster.ReplicaGtidNew:
+		return innodbcluster.RecoveryIncremental, nil
+	default:
+		return innodbcluster.RecoveryClone, nil
+	}
+}
+
+func (m *mysqlsh) addInstance(ctx context.Context, instanceDef string, method innodbcluster.RecoveryMethod) error {
 	var cmd string
 
 	if m.compareVersionWith("8.4") >= 0 {
 		cmd = fmt.Sprintf(
-			"dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'recoveryProgress': 2})",
+			"dba.getCluster('%s').addInstance('%s', {'recoveryMethod': '%s', 'recoveryProgress': 1})",
 			m.clusterName,
 			instanceDef,
+			method,
 		)
 	} else {
 		cmd = fmt.Sprintf(
-			"dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'waitRecovery': 3})",
+			"dba.getCluster('%s').addInstance('%s', {'recoveryMethod': '%s', 'waitRecovery': 2})",
 			m.clusterName,
 			instanceDef,
+			method,
 		)
 	}
 
@@ -444,24 +622,34 @@ func bootstrapGroupReplication(ctx context.Context) error {
 
 	log.Printf("Cluster status:\n%s", status)
 
+	var primary string
 	for _, member := range status.DefaultReplicaSet.Topology {
-		if member.MemberRole == innodbcluster.MemberRolePrimary && member.MemberState != innodbcluster.MemberStateOnline {
-			log.Printf("Primary (%s) is not ONLINE. Starting full cluster crash recovery...", member.Address)
+		if member.MemberRole == innodbcluster.MemberRolePrimary {
+			primary = member.Address
+			if member.MemberState != innodbcluster.MemberStateOnline {
+				log.Printf("Primary (%s) is not ONLINE. Starting full cluster crash recovery...", member.Address)
 
-			if err := handleFullClusterCrash(ctx, mysqlshVer); err != nil {
-				return errors.Wrap(err, "handle full cluster crash")
+				if err := handleFullClusterCrash(ctx, mysqlshVer); err != nil {
+					return errors.Wrap(err, "handle full cluster crash")
+				}
+
+				// force restart container
+				os.Exit(1)
 			}
-
-			// force restart container
-			os.Exit(1)
 		}
 	}
+	log.Printf("Primary is %s", primary)
 
 	member, ok := status.DefaultReplicaSet.Topology[fmt.Sprintf("%s:%d", localShell.host, 3306)]
 	if !ok {
-		log.Printf("Adding instance (%s) to InnoDB cluster", localShell.host)
+		recoveryMethod, err := getRecoveryMethod(ctx, primary, localShell.host, mysqlshVer)
+		if err != nil {
+			return err
+		}
 
-		if err := shell.addInstance(ctx, localShell.getURI()); err != nil {
+		log.Printf("Adding instance (%s) to InnoDB cluster using %s recovery", localShell.host, recoveryMethod)
+
+		if err := shell.addInstance(ctx, localShell.getURI(), recoveryMethod); err != nil {
 			return err
 		}
 
@@ -501,8 +689,6 @@ func bootstrapGroupReplication(ctx context.Context) error {
 	case innodbcluster.MemberStateUnreachable:
 		log.Printf("Instance (%s) is in InnoDB Cluster but its state is %s", localShell.host, member.MemberState)
 		os.Exit(1)
-	default:
-		log.Printf("Instance (%s) state is %s", localShell.host, member.MemberState)
 	}
 
 	if err := updateGroupPeers(ctx, peers, mysqlshVer); err != nil {

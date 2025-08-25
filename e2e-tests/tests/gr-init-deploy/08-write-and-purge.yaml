@@ -1,0 +1,27 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 180
+    script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      for i in {1..20}; do
+          run_mysql \
+              "INSERT myDB.myTable (id) VALUES (${i})" \
+              "-h $(get_mysql_router_service $(get_cluster_name)) -uroot -proot_password"
+      done
+
+      run_mysql \
+          "FLUSH BINARY LOGS" \
+          "-h $(get_mysql_router_service $(get_cluster_name)) -uroot -proot_password"
+
+      run_mysql \
+          "PURGE BINARY LOGS TO 'binlog.000003'" \
+          "-h $(get_mysql_router_service $(get_cluster_name)) -uroot -proot_password"
+
+      data=$(run_mysql "SELECT count(*) FROM myDB.myTable" "-h $(get_mysql_router_service $(get_cluster_name)) -uroot -proot_password")
+
+      kubectl create configmap -n "${NAMESPACE}" 08-write-and-purge --from-literal=count="${data}"

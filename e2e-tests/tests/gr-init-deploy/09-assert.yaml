@@ -1,0 +1,26 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 360
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-init-deploy-mysql
+status:
+  observedGeneration: 2
+  replicas: 5
+  readyReplicas: 5
+  currentReplicas: 5
+  updatedReplicas: 5
+  collisionCount: 0
+---
+apiVersion: ps.percona.com/v1alpha1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-init-deploy
+status:
+  mysql:
+    ready: 5
+    size: 5
+    state: ready
+  state: ready

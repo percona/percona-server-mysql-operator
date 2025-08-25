@@ -1,0 +1,15 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: 10-check-group-seeds
+data:
+  gr-init-deploy-mysql-0: gr-init-deploy-mysql-1.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-2.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-3.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-4.gr-init-deploy-mysql.NAMESPACE:3306
+  gr-init-deploy-mysql-1: gr-init-deploy-mysql-0.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-2.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-3.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-4.gr-init-deploy-mysql.NAMESPACE:3306
+  gr-init-deploy-mysql-2: gr-init-deploy-mysql-0.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-1.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-3.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-4.gr-init-deploy-mysql.NAMESPACE:3306
+  gr-init-deploy-mysql-3: gr-init-deploy-mysql-0.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-1.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-2.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-4.gr-init-deploy-mysql.NAMESPACE:3306
+  gr-init-deploy-mysql-4: gr-init-deploy-mysql-0.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-1.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-2.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-3.gr-init-deploy-mysql.NAMESPACE:3306
+
