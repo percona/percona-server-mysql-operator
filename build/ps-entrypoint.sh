@@ -212,10 +212,26 @@ ensure_read_only() {
 
 escape_special() {
 	{ set +x; } 2>/dev/null
-	echo "$1" \
-		| sed 's/\\/\\\\/g' \
-		| sed 's/'\''/'\\\\\''/g' \
-		| sed 's/"/\\\"/g'
+
+	# $1 = input string
+	# $2 = optional flag, e.g., "heartbeat" to enable comma escaping
+
+	result="$1"
+
+	# Escape backslashes
+	result=$(echo "$result" | sed 's/\\/\\\\/g')
+	# Escape single quotes
+	result=$(echo "$result" | sed "s/'/\\\\'/g")
+	# Escape double quotes
+	result=$(echo "$result" | sed 's/"/\\\"/g')
+
+	# Escape comma ONLY if second argument is "heartbeat"
+	# If password contains commas they must be escaped with a backslash: “exam,ple” according https://docs.percona.com/percona-toolkit/pt-heartbeat.html
+	if [[ "$2" == "heartbeat" ]]; then
+		result=$(echo "$result" | sed 's/,/\\,/g')
+	fi
+
+	echo "$result"
 }
 
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
@@ -358,7 +374,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			GRANT SELECT ON sys_operator.* TO 'orchestrator'@'%';
 
 			CREATE DATABASE IF NOT EXISTS sys_operator;
-			CREATE USER 'heartbeat'@'localhost' IDENTIFIED BY '$(escape_special "${HEARTBEAT_PASSWORD}")' PASSWORD EXPIRE NEVER;
+			CREATE USER 'heartbeat'@'localhost' IDENTIFIED BY '$(escape_special "${HEARTBEAT_PASSWORD}" "heartbeat")' PASSWORD EXPIRE NEVER;
 			GRANT SYSTEM_USER, REPLICATION CLIENT ON *.* TO 'heartbeat'@'localhost';
 			GRANT SELECT, CREATE, DELETE, UPDATE, INSERT ON sys_operator.heartbeat TO 'heartbeat'@'localhost';
 
