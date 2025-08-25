@@ -15,5 +15,5 @@ images:
   newName: percona/percona-server-mysql-operator
   newTag: main
 - name: perconalab/percona-server-mysql-operator
-  newName: perconalab/percona-server-mysql-operator
-  newTag: main
+  newName: percona/percona-server-mysql-operator
+  newTag: 0.11.0
