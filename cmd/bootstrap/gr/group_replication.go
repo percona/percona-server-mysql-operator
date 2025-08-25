@@ -1,4 +1,4 @@
-package main
+package gr
 
 import (
 	"bytes"
@@ -22,6 +22,7 @@ import (
 	"k8s.io/client-go/util/retry"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -53,7 +54,7 @@ func (m *mysqlsh) compareVersionWith(ver string) int {
 }
 
 func (m *mysqlsh) getURI() string {
-	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
+	operatorPass, err := utils.GetSecret(apiv1alpha1.UserOperator)
 	if err != nil {
 		return ""
 	}
@@ -466,7 +467,7 @@ func (m *mysqlsh) removeInstance(ctx context.Context, instanceDef string, force 
 }
 
 func connectToLocal(ctx context.Context, version *v.Version) (*mysqlsh, error) {
-	fqdn, err := getFQDN(os.Getenv("SERVICE_NAME"))
+	fqdn, err := utils.GetFQDN(os.Getenv("SERVICE_NAME"))
 	if err != nil {
 		return nil, errors.Wrap(err, "get FQDN")
 	}
@@ -503,7 +504,7 @@ func handleFullClusterCrash(ctx context.Context, version *v.Version) error {
 	gtidExecuted := strings.ReplaceAll(result, "\n", "")
 	log.Printf("GTID_EXECUTED: %s", gtidExecuted)
 
-	if err := createFile(fullClusterCrashFile, gtidExecuted); err != nil {
+	if err := utils.CreateFullClusterCrashFile(gtidExecuted); err != nil {
 		return err
 	}
 
@@ -539,7 +540,7 @@ func getMySQLShellVersion(ctx context.Context) (*v.Version, error) {
 	return version, nil
 }
 
-func bootstrapGroupReplication(ctx context.Context) error {
+func Bootstrap(ctx context.Context) error {
 	timer := stopwatch.NewNamedStopwatch()
 	err := timer.Add("total")
 	if err != nil {
@@ -571,7 +572,7 @@ func bootstrapGroupReplication(ctx context.Context) error {
 	}
 	log.Printf("Instance (%s) configured to join to the InnoDB cluster", localShell.host)
 
-	peers, err := lookup(os.Getenv("SERVICE_NAME"))
+	peers, err := utils.Lookup(os.Getenv("SERVICE_NAME"))
 	if err != nil {
 		return errors.Wrap(err, "lookup")
 	}
