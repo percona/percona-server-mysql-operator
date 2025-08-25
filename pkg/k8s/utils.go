@@ -256,9 +256,9 @@ func EnsureObjectWithHash(
 
 type Component interface {
 	Name() string
-	PerconaServerMySQL() *apiv1alpha1.PerconaServerMySQL
+	PerconaServerMySQL() *apiv1.PerconaServerMySQL
 	Labels() map[string]string
-	PodSpec() *apiv1alpha1.PodSpec
+	PodSpec() *apiv1.PodSpec
 
 	Object(ctx context.Context, cl client.Client) (client.Object, error)
 }
@@ -508,7 +508,7 @@ func GetImageIDFromPod(pod *corev1.Pod, containerName string) (string, error) {
 	return pod.Status.ContainerStatuses[idx].ImageID, nil
 }
 
-func GetTLSHash(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
+func GetTLSHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL) (string, error) {
 	secret := new(corev1.Secret)
 	err := cl.Get(ctx, types.NamespacedName{
 		Name:      cr.Spec.SSLSecretName,
