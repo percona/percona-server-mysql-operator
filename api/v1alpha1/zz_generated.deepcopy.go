@@ -935,6 +935,11 @@ func (in *PodSpec) DeepCopyInto(out *PodSpec) {
 		*out = new(v1.PodSecurityContext)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.PodDisruptionBudget != nil {
+		in, out := &in.PodDisruptionBudget, &out.PodDisruptionBudget
+		*out = new(PodDisruptionBudgetSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	in.ContainerSpec.DeepCopyInto(&out.ContainerSpec)
 }
 

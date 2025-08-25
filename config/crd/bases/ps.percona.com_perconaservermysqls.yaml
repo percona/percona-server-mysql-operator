@@ -1097,6 +1097,19 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
+                          podDisruptionBudget:
+                            properties:
+                              maxUnavailable:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                x-kubernetes-int-or-string: true
+                              minAvailable:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                x-kubernetes-int-or-string: true
+                            type: object
                           podSecurityContext:
                             properties:
                               appArmorProfile:
@@ -3549,6 +3562,19 @@ spec:
                   nodeSelector:
                     additionalProperties:
                       type: string
+                    type: object
+                  podDisruptionBudget:
+                    properties:
+                      maxUnavailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                      minAvailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
                     type: object
                   podSecurityContext:
                     properties:
@@ -6438,6 +6464,19 @@ spec:
                     additionalProperties:
                       type: string
                     type: object
+                  podDisruptionBudget:
+                    properties:
+                      maxUnavailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                      minAvailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                    type: object
                   podSecurityContext:
                     properties:
                       appArmorProfile:
@@ -7887,6 +7926,19 @@ spec:
                         additionalProperties:
                           type: string
                         type: object
+                      podDisruptionBudget:
+                        properties:
+                          maxUnavailable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
+                          minAvailable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
+                        type: object
                       podSecurityContext:
                         properties:
                           appArmorProfile:
@@ -9211,6 +9263,19 @@ spec:
                       nodeSelector:
                         additionalProperties:
                           type: string
+                        type: object
+                      podDisruptionBudget:
+                        properties:
+                          maxUnavailable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
+                          minAvailable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
                         type: object
                       podSecurityContext:
                         properties:

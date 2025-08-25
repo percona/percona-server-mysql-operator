@@ -201,8 +201,9 @@ type PodSpec struct {
 	SchedulerName                 string                            `json:"schedulerName,omitempty"`
 	RuntimeClassName              *string                           `json:"runtimeClassName,omitempty"`
 
-	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
-	ServiceAccountName string                     `json:"serviceAccountName,omitempty"`
+	PodSecurityContext  *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	ServiceAccountName  string                     `json:"serviceAccountName,omitempty"`
+	PodDisruptionBudget *PodDisruptionBudgetSpec   `json:"podDisruptionBudget,omitempty"`
 
 	Configuration string `json:"configuration,omitempty"`
 

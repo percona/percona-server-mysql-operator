@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
-    app.kubernetes.io/version: v0.11.0
+    app.kubernetes.io/version: v0.12.0
   name: perconaservermysqlbackups.ps.percona.com
 spec:
   group: ps.percona.com
@@ -967,7 +967,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
-    app.kubernetes.io/version: v0.11.0
+    app.kubernetes.io/version: v0.12.0
   name: perconaservermysqlrestores.ps.percona.com
 spec:
   group: ps.percona.com
@@ -1926,7 +1926,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
-    app.kubernetes.io/version: v0.11.0
+    app.kubernetes.io/version: v0.12.0
   name: perconaservermysqls.ps.percona.com
 spec:
   group: ps.percona.com
@@ -3019,6 +3019,19 @@ spec:
                           nodeSelector:
                             additionalProperties:
                               type: string
+                            type: object
+                          podDisruptionBudget:
+                            properties:
+                              maxUnavailable:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                x-kubernetes-int-or-string: true
+                              minAvailable:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                x-kubernetes-int-or-string: true
                             type: object
                           podSecurityContext:
                             properties:
@@ -5472,6 +5485,19 @@ spec:
                   nodeSelector:
                     additionalProperties:
                       type: string
+                    type: object
+                  podDisruptionBudget:
+                    properties:
+                      maxUnavailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                      minAvailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
                     type: object
                   podSecurityContext:
                     properties:
@@ -8361,6 +8387,19 @@ spec:
                     additionalProperties:
                       type: string
                     type: object
+                  podDisruptionBudget:
+                    properties:
+                      maxUnavailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                      minAvailable:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        x-kubernetes-int-or-string: true
+                    type: object
                   podSecurityContext:
                     properties:
                       appArmorProfile:
@@ -9810,6 +9849,19 @@ spec:
                         additionalProperties:
                           type: string
                         type: object
+                      podDisruptionBudget:
+                        properties:
+                          maxUnavailable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
+                          minAvailable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
+                        type: object
                       podSecurityContext:
                         properties:
                           appArmorProfile:
@@ -11135,6 +11187,19 @@ spec:
                         additionalProperties:
                           type: string
                         type: object
+                      podDisruptionBudget:
+                        properties:
+                          maxUnavailable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
+                          minAvailable:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            x-kubernetes-int-or-string: true
+                        type: object
                       podSecurityContext:
                         properties:
                           appArmorProfile:
@@ -12410,6 +12475,17 @@ rules:
   - get
   - list
   - patch
+  - watch
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - ps.percona.com
