@@ -628,6 +628,66 @@ pipeline {
                         clusterRunner('cluster7')
                     }
                 }
+                stage('cluster8') {
+                    when {
+                        expression {
+                            isPRJob && needToRunTests
+                        }
+                    }
+                    agent {
+                        label 'docker-x64-min'
+                    }
+                    steps {
+                        prepareNode()
+                        unstash "sourceFILES"
+                        clusterRunner('cluster8')
+                    }
+                }
+                stage('cluster9') {
+                    when {
+                        expression {
+                            isPRJob && needToRunTests
+                        }
+                    }
+                    agent {
+                        label 'docker-x64-min'
+                    }
+                    steps {
+                        prepareNode()
+                        unstash "sourceFILES"
+                        clusterRunner('cluster9')
+                    }
+                }
+                stage('cluster10') {
+                    when {
+                        expression {
+                            isPRJob && needToRunTests
+                        }
+                    }
+                    agent {
+                        label 'docker-x64-min'
+                    }
+                    steps {
+                        prepareNode()
+                        unstash "sourceFILES"
+                        clusterRunner('cluster10')
+                    }
+                }
+                stage('cluster11') {
+                    when {
+                        expression {
+                            isPRJob && needToRunTests
+                        }
+                    }
+                    agent {
+                        label 'docker-x64-min'
+                    }
+                    steps {
+                        prepareNode()
+                        unstash "sourceFILES"
+                        clusterRunner('cluster11')
+                    }
+                }
             }
         }
     }
