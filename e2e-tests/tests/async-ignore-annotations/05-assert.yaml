@@ -50,7 +50,6 @@ spec:
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
     app.kubernetes.io/version: v0.12.0
-    rack: rack-22
   sessionAffinity: None
   type: ClusterIP
 ---
@@ -108,7 +107,6 @@ spec:
     app.kubernetes.io/name: haproxy
     app.kubernetes.io/part-of: percona-server
     app.kubernetes.io/version: v0.12.0
-    rack: rack-22
   sessionAffinity: None
   type: ClusterIP
 ---
@@ -155,6 +153,5 @@ spec:
     app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
     app.kubernetes.io/version: v0.12.0
-    rack: rack-22
   sessionAffinity: None
   type: ClusterIP

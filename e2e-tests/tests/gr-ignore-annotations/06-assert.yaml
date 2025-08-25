@@ -54,7 +54,6 @@ spec:
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
     app.kubernetes.io/version: v0.12.0
-    rack: rack-22-test
   sessionAffinity: None
   type: LoadBalancer
 ---
@@ -121,6 +120,5 @@ spec:
     app.kubernetes.io/name: router
     app.kubernetes.io/part-of: percona-server
     app.kubernetes.io/version: v0.12.0
-    rack: rack-22-test
   sessionAffinity: None
   type: LoadBalancer

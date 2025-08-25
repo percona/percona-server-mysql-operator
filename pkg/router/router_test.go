@@ -5,8 +5,10 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
@@ -296,6 +298,93 @@ func TestPorts(t *testing.T) {
 				}
 				t.Fatal(cmp.Diff(string(wantBytes), string(gotBytes)))
 			}
+		})
+	}
+}
+
+func TestService(t *testing.T) {
+	podName := "test-cluster-router"
+
+	cr := &apiv1alpha1.PerconaServerMySQL{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "test-namespace",
+		},
+		Spec: apiv1alpha1.PerconaServerMySQLSpec{
+			Proxy: apiv1alpha1.ProxySpec{
+				Router: &apiv1alpha1.MySQLRouterSpec{
+					Expose: apiv1alpha1.ServiceExpose{
+						Type: corev1.ServiceTypeLoadBalancer,
+						Labels: map[string]string{
+							"custom-label": "custom-value",
+						},
+						Annotations: map[string]string{
+							"custom-annotation": "custom-annotation-value",
+						},
+						LoadBalancerSourceRanges: []string{"10.0.0.0/8"},
+					},
+				},
+			},
+		},
+	}
+
+	tests := map[string]struct {
+		serviceType                 corev1.ServiceType
+		expectLoadBalancer          bool
+		expectExternalTrafficPolicy bool
+	}{
+		"LoadBalancer service": {
+			serviceType:                 corev1.ServiceTypeLoadBalancer,
+			expectLoadBalancer:          true,
+			expectExternalTrafficPolicy: true,
+		},
+		"NodePort service": {
+			serviceType:                 corev1.ServiceTypeNodePort,
+			expectLoadBalancer:          false,
+			expectExternalTrafficPolicy: true,
+		},
+		"ClusterIP service": {
+			serviceType:                 corev1.ServiceTypeClusterIP,
+			expectLoadBalancer:          false,
+			expectExternalTrafficPolicy: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr.Spec.Proxy.Router.Expose.Type = tt.serviceType
+
+			service := Service(cr)
+
+			assert.Equal(t, "v1", service.APIVersion)
+			assert.Equal(t, "Service", service.Kind)
+			assert.Equal(t, podName, service.Name)
+			assert.Equal(t, "test-namespace", service.Namespace)
+
+			assert.Equal(t, tt.serviceType, service.Spec.Type)
+
+			expectedLabels := MatchLabels(cr)
+			expectedLabels["custom-label"] = "custom-value"
+			assert.Equal(t, expectedLabels, service.Labels)
+
+			expectedSelector := MatchLabels(cr)
+			assert.Equal(t, expectedSelector, service.Spec.Selector)
+
+			assert.Equal(t, cr.Spec.Proxy.Router.Expose.Annotations, service.Annotations)
+
+			if tt.expectLoadBalancer {
+				assert.Equal(t, cr.Spec.Proxy.Router.Expose.LoadBalancerSourceRanges, service.Spec.LoadBalancerSourceRanges)
+			} else {
+				assert.Empty(t, service.Spec.LoadBalancerSourceRanges)
+			}
+
+			if tt.expectExternalTrafficPolicy {
+				assert.Equal(t, cr.Spec.Proxy.Router.Expose.ExternalTrafficPolicy, service.Spec.ExternalTrafficPolicy)
+			} else {
+				assert.Empty(t, service.Spec.ExternalTrafficPolicy)
+			}
+
+			assert.Equal(t, cr.Spec.Proxy.Router.Expose.InternalTrafficPolicy, service.Spec.InternalTrafficPolicy)
 		})
 	}
 }
