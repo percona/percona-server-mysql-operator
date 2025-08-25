@@ -141,6 +141,11 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}
 
+	finalizers := make([]string, 0)
+	if cr.CompareVersion("0.12.0") >= 0 {
+		finalizers = append(finalizers, naming.FinalizerRemoveInstance)
+	}
+
 	sts := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
@@ -162,6 +167,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
 					Annotations: annotations,
+					Finalizers:  finalizers,
 				},
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
@@ -691,13 +697,16 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			[]string{"/opt/percona/healthcheck", "readiness"}),
 		StartupProbe: k8s.ExecProbe(spec.StartupProbe,
 			[]string{"/opt/percona/bootstrap"}),
-		Lifecycle: &corev1.Lifecycle{
+	}
+
+	if cr.CompareVersion("0.12.0") < 0 {
+		container.Lifecycle = &corev1.Lifecycle{
 			PreStop: &corev1.LifecycleHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{"/opt/percona/ps-pre-stop.sh"},
 				},
 			},
-		},
+		}
 	}
 
 	return container

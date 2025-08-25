@@ -75,7 +75,7 @@ type PerconaServerMySQLReconciler struct {
 
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqls;perconaservermysqls/status;perconaservermysqls/finalizers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=configmaps;services;secrets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups="",resources=pods;pods/exec,verbs=get;list;watch;create;update;patch;delete;deletecollection
+//+kubebuilder:rbac:groups="",resources=pods;pods/exec;pods/finalizers,verbs=get;list;watch;create;update;patch;delete;deletecollection
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=create;get;list;patch;update;watch
 //+kubebuilder:rbac:groups=apps,resources=statefulsets;deployments,verbs=get;list;watch;create;update;patch;delete
@@ -91,6 +91,7 @@ func (r *PerconaServerMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1alpha1.PerconaServerMySQL{}).
 		Named("ps-controller").
+		Owns(&corev1.Pod{}).
 		Complete(r)
 }
 
@@ -424,10 +425,13 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	log := logf.FromContext(ctx).WithName("doReconcile")
 
 	if err := r.validate(ctx, cr); err != nil {
-		return errors.Wrap(err, "failed to validate")
+		return errors.Wrap(err, "validate")
 	}
 	if err := r.reconcileFullClusterCrash(ctx, cr); err != nil {
-		return errors.Wrap(err, "failed to check full cluster crash")
+		return errors.Wrap(err, "check full cluster crash")
+	}
+	if err := r.reconcilePods(ctx, cr); err != nil {
+		return errors.Wrap(err, "pods")
 	}
 	if err := r.reconcileVersions(ctx, cr); err != nil {
 		log.Error(err, "failed to reconcile versions")
@@ -530,6 +534,45 @@ func validateClusterType(ctx context.Context, cl client.Client, cr *apiv1alpha1.
 	}
 
 	return errors.Errorf("cluster type cannot be changed from %s to %s on a running cluster", currentClusterType, cr.Spec.MySQL.ClusterType)
+}
+
+func (r *PerconaServerMySQLReconciler) reconcilePods(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	mysqlPods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "get mysql pods")
+	}
+
+	for _, pod := range mysqlPods {
+		if pod.DeletionTimestamp.IsZero() {
+			continue
+		}
+
+		for _, f := range pod.Finalizers {
+			switch f {
+			case naming.FinalizerRemoveInstance:
+				err := r.removeInstanceIfNeeded(ctx, cr, &pod)
+				if err != nil {
+					return errors.Wrap(err, "remove instance")
+				}
+			}
+		}
+
+		err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
+			p := new(corev1.Pod)
+			err := r.Client.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, p)
+			if err != nil {
+				return errors.Wrap(err, "get pod")
+			}
+
+			p.SetFinalizers([]string{})
+			return r.Client.Update(ctx, p)
+		})
+		if err != nil {
+			return errors.Wrap(err, "remove finalizers")
+		}
+	}
+
+	return nil
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
@@ -1091,6 +1134,97 @@ func (r *PerconaServerMySQLReconciler) rescanClusterIfNeeded(ctx context.Context
 	return nil
 }
 
+func (r *PerconaServerMySQLReconciler) removeInstanceIfNeeded(
+	ctx context.Context,
+	cr *apiv1alpha1.PerconaServerMySQL,
+	pod *corev1.Pod,
+) error {
+	if !cr.DeletionTimestamp.IsZero() {
+		return nil
+	}
+
+	idx, err := k8s.GetIdxFromPod(pod)
+	if err != nil {
+		return errors.Wrap(err, "get idx from pod")
+	}
+
+	if int32(idx) <= cr.Spec.MySQL.Size {
+		return nil
+	}
+
+	switch cr.Spec.MySQL.ClusterType {
+	case apiv1alpha1.ClusterTypeAsync:
+		if err := r.forgetInstanceInOrchestrator(ctx, cr, pod); err != nil {
+			return errors.Wrap(err, "forget instance in orchestrator")
+		}
+	case apiv1alpha1.ClusterTypeGR:
+		if err := r.removeInstanceFromGR(ctx, cr, pod); err != nil {
+			return errors.Wrap(err, "remove instance from group replication")
+		}
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) forgetInstanceInOrchestrator(
+	ctx context.Context,
+	cr *apiv1alpha1.PerconaServerMySQL,
+	pod *corev1.Pod,
+) error {
+	log := logf.FromContext(ctx)
+
+	log.Info("Forgeting instance", "instance", pod.Name)
+
+	err := orchestrator.ForgetInstance(ctx, r.ClientCmd, pod, pod.Name, mysql.DefaultPort)
+	if err != nil {
+		return errors.Wrapf(err, "forget instance %s", pod.Name)
+	}
+
+	log.Info("Instance removed from orchestrator", "instance", pod.Name)
+
+	return nil
+}
+func (r *PerconaServerMySQLReconciler) removeInstanceFromGR(
+	ctx context.Context,
+	cr *apiv1alpha1.PerconaServerMySQL,
+	pod *corev1.Pod,
+) error {
+	log := logf.FromContext(ctx)
+
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+
+	p, err := getReadyMySQLPod(ctx, r.Client, cr)
+	if err != nil {
+		return errors.Wrap(err, "get ready mysql pod")
+	}
+
+	podFQDN := fmt.Sprintf("%s.%s.%s", p.Name, mysql.ServiceName(cr), cr.Namespace)
+	podUri := getMySQLURI(apiv1alpha1.UserOperator, operatorPass, podFQDN)
+
+	mysh, err := mysqlsh.NewWithExec(r.ClientCmd, p, podUri)
+	if err != nil {
+		return err
+	}
+
+	log.Info("Removing member from GR", "member", pod.Name)
+
+	err = mysh.RemoveInstanceWithExec(ctx, cr.InnoDBClusterName(), podUri)
+	if err != nil {
+		// member already removed from metadata
+		if strings.Contains(err.Error(), "MYSQLSH 51104") {
+			return nil
+		}
+		return errors.Wrapf(err, "remove instance %s", pod.Name)
+	}
+
+	log.Info("Member removed from GR", "member", pod.Name)
+
+	return nil
+}
+
 // cleanupOutdatedServices removes outdated services that are no longer needed.
 func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Context, exposer Exposer, ns string) error {
 	log := logf.FromContext(ctx).WithName("cleanupOutdatedServices")
@@ -1564,6 +1698,10 @@ func getReadyMySQLPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.Per
 	}
 
 	for i, pod := range pods {
+		if !pod.DeletionTimestamp.IsZero() {
+			continue
+		}
+
 		if k8s.IsPodReady(pod) {
 			return &pods[i], nil
 		}
@@ -1589,6 +1727,10 @@ func getReadyOrcPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.Perco
 	}
 
 	for i, pod := range pods {
+		if !pod.DeletionTimestamp.IsZero() {
+			continue
+		}
+
 		if k8s.IsPodReady(pod) {
 			return &pods[i], nil
 		}

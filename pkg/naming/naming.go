@@ -24,6 +24,7 @@ const (
 	FinalizerDeletePodsInOrder = perconaPrefix + "delete-mysql-pods-in-order"
 	FinalizerDeleteBackup      = perconaPrefix + "delete-backup"
 	FinalizerDeleteMySQLPvc    = perconaPrefix + "delete-mysql-pvc"
+	FinalizerRemoveInstance    = mysqlPerconaPrefix + "remove-instance"
 )
 
 type AnnotationKey string
