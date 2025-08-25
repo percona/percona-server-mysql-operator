@@ -29,6 +29,8 @@ for i in {1..5}; do
 		sleep "$((TIMEOUT * i))"
 	fi
 done
+
+# If password contains commas they must be escaped with a backslash: “exam,ple” according https://docs.percona.com/percona-toolkit/pt-heartbeat.html
 ESCAPED_HEARTBEAT_PASSWORD="${HEARTBEAT_PASSWORD//,/\\,}"
 
 HEARTBEAT_USER='heartbeat'
