@@ -227,7 +227,7 @@ escape_special() {
 
 	# Escape comma ONLY if second argument is "heartbeat"
 	# If password contains commas they must be escaped with a backslash: “exam,ple” according https://docs.percona.com/percona-toolkit/pt-heartbeat.html
-	if [[ "$2" == "heartbeat" ]]; then
+	if [[ $2 == "heartbeat" ]]; then
 		result=$(echo "$result" | sed 's/,/\\,/g')
 	fi
 
