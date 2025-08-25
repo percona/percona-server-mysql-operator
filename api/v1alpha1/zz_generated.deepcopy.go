@@ -967,6 +967,11 @@ func (in *PodSpec) DeepCopyInto(out *PodSpec) {
 		*out = new(corev1.PodSecurityContext)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.PodDisruptionBudget != nil {
+		in, out := &in.PodDisruptionBudget, &out.PodDisruptionBudget
+		*out = new(PodDisruptionBudgetSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	in.ContainerSpec.DeepCopyInto(&out.ContainerSpec)
 }
 
@@ -1029,7 +1034,7 @@ func (in *ServiceExpose) DeepCopyInto(out *ServiceExpose) {
 	}
 	if in.InternalTrafficPolicy != nil {
 		in, out := &in.InternalTrafficPolicy, &out.InternalTrafficPolicy
-		*out = new(corev1.ServiceInternalTrafficPolicy)
+		*out = new(corev1.ServiceInternalTrafficPolicyType)
 		**out = **in
 	}
 }
