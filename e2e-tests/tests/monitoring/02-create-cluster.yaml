@@ -11,6 +11,16 @@ commands:
           | yq eval '.spec.mysql.clusterType="async"' - \
           | yq eval '.spec.pmm.enabled = true' - \
           | yq eval '.spec.pmm.mysqlParams = "--disable-tablestats-limit=2000"' - \
+          | yq eval '.spec.pmm.readinessProbes.initialDelaySeconds = 15' - \
+          | yq eval '.spec.pmm.readinessProbes.timeoutSeconds = 15' - \
+          | yq eval '.spec.pmm.readinessProbes.periodSeconds = 30' - \
+          | yq eval '.spec.pmm.readinessProbes.successThreshold = 1' - \
+          | yq eval '.spec.pmm.readinessProbes.failureThreshold = 5' - \
+          | yq eval '.spec.pmm.livenessProbes.initialDelaySeconds = 15' - \
+          | yq eval '.spec.pmm.livenessProbes.timeoutSeconds = 15' - \
+          | yq eval '.spec.pmm.livenessProbes.periodSeconds = 30' - \
+          | yq eval '.spec.pmm.livenessProbes.successThreshold = 1' - \
+          | yq eval '.spec.pmm.livenessProbes.failureThreshold = 5' - \
           | yq eval '.spec.proxy.haproxy.enabled = true' - \
           | yq eval '.spec.proxy.haproxy.expose.type = "LoadBalancer"' - \
           | kubectl -n "${NAMESPACE}" apply -f -
