@@ -103,7 +103,7 @@ func Labels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 }
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
-	return util.SSMapMerge(Labels(cr),
+	return util.SSMapMerge(cr.GlobalLabels(), Labels(cr),
 		cr.Labels(AppName, naming.ComponentOrchestrator))
 }
 
@@ -123,9 +123,10 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, tlsHash string) 
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      Name(cr),
-			Namespace: cr.Namespace,
-			Labels:    labels,
+			Name:        Name(cr),
+			Namespace:   cr.Namespace,
+			Labels:      labels,
+			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &Replicas,
@@ -137,7 +138,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, tlsHash string) 
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
-					Annotations: annotations,
+					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
 				},
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
@@ -375,9 +376,10 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ServiceName(cr),
-			Namespace: cr.Namespace,
-			Labels:    MatchLabels(cr),
+			Name:        ServiceName(cr),
+			Namespace:   cr.Namespace,
+			Labels:      MatchLabels(cr),
+			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: corev1.ServiceSpec{
 			ClusterIP: "None",
@@ -427,7 +429,7 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 			Name:        podName,
 			Namespace:   cr.Namespace,
 			Labels:      labels,
-			Annotations: expose.Annotations,
+			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     t,
@@ -456,8 +458,10 @@ func ConfigMap(cr *apiv1alpha1.PerconaServerMySQL, data map[string]string) *core
 			Kind:       "ConfigMap",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ConfigMapName(cr),
-			Namespace: cr.Namespace,
+			Name:        ConfigMapName(cr),
+			Namespace:   cr.Namespace,
+			Labels:      cr.GlobalLabels(),
+			Annotations: cr.GlobalAnnotations(),
 		},
 		Data: data,
 	}
@@ -500,8 +504,10 @@ func ConfigMapData(cr *apiv1alpha1.PerconaServerMySQL) (map[string]string, error
 
 func RBAC(cr *apiv1alpha1.PerconaServerMySQL) (*rbacv1.Role, *rbacv1.RoleBinding, *corev1.ServiceAccount) {
 	meta := metav1.ObjectMeta{
-		Namespace: cr.Namespace,
-		Name:      "percona-server-mysql-operator-orchestrator",
+		Namespace:   cr.Namespace,
+		Name:        "percona-server-mysql-operator-orchestrator",
+		Labels:      cr.GlobalLabels(),
+		Annotations: cr.GlobalAnnotations(),
 	}
 
 	account := &corev1.ServiceAccount{ObjectMeta: meta}
