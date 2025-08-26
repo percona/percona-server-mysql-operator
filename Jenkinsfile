@@ -248,7 +248,10 @@ void runTest(Integer TEST_ID) {
 
 void prepareNode() {
     sh """
-        sudo curl -s -L -o /usr/local/bin/kubectl https://dl.k8s.io/release/\$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl && sudo chmod +x /usr/local/bin/kubectl
+        if [ ! -f /usr/local/bin/kubectl ]; then
+            sudo curl -s -L -o /usr/local/bin/kubectl https://dl.k8s.io/release/\$(curl -L -s https://api.github.com/repos/kubernetes/kubernetes/releases/latest | jq -r .tag_name)/bin/linux/amd64/kubectl && sudo chmod +x /usr/local/bin/kubectl
+        fi
+
         kubectl version --client --output=yaml
 
         curl -fsSL https://get.helm.sh/helm-v3.18.0-linux-amd64.tar.gz | sudo tar -C /usr/local/bin --strip-components 1 -xzf - linux-amd64/helm
