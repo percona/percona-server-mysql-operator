@@ -42,7 +42,6 @@ file_env() {
 	fi
 	export "$var"="$val"
 	unset "$fileVar"
-	set -o xtrace
 }
 
 # usage: process_init_file FILENAME MYSQLCOMMAND...
@@ -294,7 +293,6 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			MYSQL_ROOT_PASSWORD="$(pwmake 128)"
 			echo "GENERATED ROOT PASSWORD: $MYSQL_ROOT_PASSWORD"
 		fi
-		set -x
 
 		rootCreate=
 		# default root to listen for connections from anywhere
@@ -366,7 +364,6 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			FLUSH PRIVILEGES ;
 		EOSQL
 
-		{ set +x; } 2>/dev/null
 		if [ -n "$MYSQL_ROOT_PASSWORD" ]; then
 			mysql+=(-p"${MYSQL_ROOT_PASSWORD}")
 		fi
