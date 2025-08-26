@@ -134,6 +134,105 @@ func TestStatefulset(t *testing.T) {
 		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
 		assert.Equal(t, tolerations, sts.Spec.Template.Spec.Tolerations)
 	})
+
+	t.Run("probes", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		cluster.Spec.CRVersion = "0.12.0"
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		var hContainer *corev1.Container
+		for _, c := range sts.Spec.Template.Spec.Containers {
+			if c.Name == AppName {
+				hContainer = &c
+			}
+		}
+		if hContainer == nil {
+			t.Fatal("haproxy container is not found")
+		}
+
+		expectedReadinessProbe := corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_readiness_check.sh"}},
+			},
+			TimeoutSeconds:   3,
+			PeriodSeconds:    5,
+			FailureThreshold: 3,
+			SuccessThreshold: 1,
+		}
+		expectedLivenessProbe := corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_liveness_check.sh"}},
+			},
+			TimeoutSeconds:   3,
+			PeriodSeconds:    5,
+			FailureThreshold: 3,
+			SuccessThreshold: 1,
+		}
+
+		assert.Equal(t, expectedReadinessProbe, *hContainer.ReadinessProbe)
+		assert.Equal(t, expectedLivenessProbe, *hContainer.LivenessProbe)
+
+		cluster.Spec.Proxy.HAProxy.ReadinessProbe = corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"invalid-command"},
+				},
+			},
+			InitialDelaySeconds:           10,
+			TimeoutSeconds:                20,
+			PeriodSeconds:                 30,
+			SuccessThreshold:              40,
+			FailureThreshold:              50,
+			TerminationGracePeriodSeconds: new(int64),
+		}
+		cluster.Spec.Proxy.HAProxy.LivenessProbe = corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"invalid-command"},
+				},
+			},
+			InitialDelaySeconds:           11,
+			TimeoutSeconds:                21,
+			PeriodSeconds:                 31,
+			SuccessThreshold:              41,
+			FailureThreshold:              51,
+			TerminationGracePeriodSeconds: new(int64),
+		}
+		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		for _, c := range sts.Spec.Template.Spec.Containers {
+			if c.Name == AppName {
+				hContainer = &c
+			}
+		}
+		if hContainer == nil {
+			t.Fatal("haproxy container is not found")
+		}
+
+		expectedReadinessProbe = corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_readiness_check.sh"}},
+			},
+			InitialDelaySeconds:           10,
+			TimeoutSeconds:                20,
+			PeriodSeconds:                 30,
+			SuccessThreshold:              40,
+			FailureThreshold:              50,
+			TerminationGracePeriodSeconds: new(int64),
+		}
+		expectedLivenessProbe = corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_liveness_check.sh"}},
+			},
+			InitialDelaySeconds:           11,
+			TimeoutSeconds:                21,
+			PeriodSeconds:                 31,
+			SuccessThreshold:              41,
+			FailureThreshold:              51,
+			TerminationGracePeriodSeconds: new(int64),
+		}
+
+		assert.Equal(t, expectedReadinessProbe, *hContainer.ReadinessProbe)
+		assert.Equal(t, expectedLivenessProbe, *hContainer.LivenessProbe)
+	})
 }
 
 func TestService(t *testing.T) {
