@@ -90,7 +90,7 @@ const (
 	ReplicaGtidNew           ReplicaGtidState = "NEW"
 	ReplicaGtidIdentical     ReplicaGtidState = "IDENTICAL"
 	ReplicaGtidDiverged      ReplicaGtidState = "DIVERGED"
-	ReplicaGtidRecovarable   ReplicaGtidState = "RECOVERABLE"
+	ReplicaGtidRecoverable   ReplicaGtidState = "RECOVERABLE"
 	ReplicaGtidIrrecoverable ReplicaGtidState = "IRRECOVERABLE"
 )
 
