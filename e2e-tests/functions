@@ -1037,15 +1037,23 @@ check_passwords_leak() {
 }
 
 deploy_chaos_mesh() {
+	local container_runtime="containerd"
+	local socket_path="/run/containerd/containerd.sock"
+
 	destroy_chaos_mesh
+	
+	if [ -n "${MINIKUBE}" ]; then
+		container_runtime=docker
+		socket_path=/var/run/docker.sock
+	elif [ -n "${OPENSHIFT}" ]; then
+		container_runtime=crio
+		socket_path=/var/run/crio/crio.sock
+	fi
 
 	helm repo add chaos-mesh https://charts.chaos-mesh.org
-	if [ -n "${MINIKUBE}" ]; then
-		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=docker --set dashboard.create=false --version ${CHAOS_MESH_VER}
-	else
-		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version ${CHAOS_MESH_VER}
-	fi
-	if [[ -n $OPENSHIFT ]]; then
+	helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=$container_runtime --set chaosDaemon.socketPath=$socket_path --set dashboard.create=false --version ${CHAOS_MESH_VER}
+
+	if [ -n "${OPENSHIFT}" ]; then
 		oc adm policy add-scc-to-user privileged -z chaos-daemon --namespace=${NAMESPACE}
 	fi
 
