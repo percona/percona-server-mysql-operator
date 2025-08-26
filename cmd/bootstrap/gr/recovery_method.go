@@ -29,7 +29,12 @@ func gtidSubtract(ctx context.Context, shell SQLRunner, a, b string) (string, er
 		return "", errors.Wrapf(err, "execute %s", query)
 	}
 
-	return result.Rows[0]["sub"], nil
+	v, ok := result.Rows[0]["sub"]
+	if !ok {
+		return "", errors.Errorf("unexpected output: %+v", result)
+	}
+
+	return v, nil
 }
 
 type GTIDSetRelation string
@@ -66,23 +71,27 @@ func compareGTIDs(ctx context.Context, shell SQLRunner, a, b string) (GTIDSetRel
 
 	if aSubB == "" && bSubA == "" {
 		return GTIDSetEqual, nil
-	} else if aSubB == "" && bSubA != "" {
-		return GTIDSetContained, nil
-	} else if aSubB != "" && bSubA == "" {
-		return GTIDSetContains, nil
-	} else {
-		query := fmt.Sprintf("GTID_SUBTRACT('%s', '%s')", a, b)
-		abIntersection, err := gtidSubtract(ctx, shell, a, query)
-		if err != nil {
-			return "", errors.Wrapf(err, "intersection")
-		}
-
-		if abIntersection == "" {
-			return GTIDSetDisjoint, nil
-		}
-
-		return GTIDSetIntersects, nil
 	}
+
+	if aSubB == "" && bSubA != "" {
+		return GTIDSetContained, nil
+	}
+
+	if aSubB != "" && bSubA == "" {
+		return GTIDSetContains, nil
+	}
+
+	query := fmt.Sprintf("GTID_SUBTRACT('%s', '%s')", a, b)
+	abIntersection, err := gtidSubtract(ctx, shell, a, query)
+	if err != nil {
+		return "", errors.Wrapf(err, "intersection")
+	}
+
+	if abIntersection == "" {
+		return GTIDSetDisjoint, nil
+	}
+
+	return GTIDSetIntersects, nil
 }
 
 // If purged has more gtids than the executed on the replica
@@ -95,7 +104,12 @@ func comparePrimaryPurged(ctx context.Context, shell SQLRunner, purged, executed
 		return false
 	}
 
-	sub, err := strconv.Atoi(result.Rows[0]["GTID_SUBTRACT"])
+	v, ok := result.Rows[0]["GTID_SUBTRACT"]
+	if !ok {
+		return false
+	}
+
+	sub, err := strconv.Atoi(v)
 	if err != nil {
 		return false
 	}

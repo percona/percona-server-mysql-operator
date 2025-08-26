@@ -153,7 +153,12 @@ func (m *mysqlsh) getGTIDExecuted(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	return result.Rows[0]["@@GTID_EXECUTED"], nil
+	v, ok := result.Rows[0]["@@GTID_EXECUTED"]
+	if !ok {
+		return "", errors.Errorf("unexpected output: %+v", result)
+	}
+
+	return v, nil
 }
 
 func (m *mysqlsh) getGTIDPurged(ctx context.Context) (string, error) {
@@ -162,7 +167,12 @@ func (m *mysqlsh) getGTIDPurged(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	return result.Rows[0]["@@GTID_PURGED"], nil
+	v, ok := result.Rows[0]["@@GTID_PURGED"]
+	if !ok {
+		return "", errors.Errorf("unexpected output: %+v", result)
+	}
+
+	return v, nil
 }
 
 func (m *mysqlsh) getGroupSeeds(ctx context.Context) (string, error) {
@@ -171,7 +181,12 @@ func (m *mysqlsh) getGroupSeeds(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	return result.Rows[0]["@@group_replication_group_seeds"], nil
+	v, ok := result.Rows[0]["@@group_replication_group_seeds"]
+	if !ok {
+		return "", errors.Errorf("unexpected output: %+v", result)
+	}
+
+	return v, nil
 }
 
 func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) error {
