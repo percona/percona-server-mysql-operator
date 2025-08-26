@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -450,4 +451,8 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 
 	log.Info("Updated password propagated")
 	return nil
+}
+
+func getMySQLURI(user apiv1alpha1.SystemUser, password, host string) string {
+	return fmt.Sprintf("%s:%s@%s", user, url.QueryEscape(password), host)
 }

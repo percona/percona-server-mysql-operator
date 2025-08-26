@@ -21,7 +21,6 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"reflect"
 	"slices"
 	"strconv"
@@ -78,6 +77,7 @@ type PerconaServerMySQLReconciler struct {
 //+kubebuilder:rbac:groups="",resources=configmaps;services;secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=pods;pods/exec,verbs=get;list;watch;create;update;patch;delete;deletecollection
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+//+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=create;get;list;patch;update;watch
 //+kubebuilder:rbac:groups=apps,resources=statefulsets;deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=certmanager.k8s.io;cert-manager.io,resources=issuers;certificates,verbs=get;list;watch;create;update;patch;delete;deletecollection
 //+kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;patch
@@ -221,7 +221,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			return errors.Wrap(err, "get operator password")
 		}
 
-		firstPodUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, url.QueryEscape(operatorPass), mysql.PodFQDN(cr, &firstPod))
+		firstPodUri := getMySQLURI(apiv1alpha1.UserOperator, operatorPass, mysql.PodFQDN(cr, &firstPod))
 
 		um := database.NewReplicationManager(&firstPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, mysql.PodFQDN(cr, &firstPod))
 
@@ -268,7 +268,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 				continue
 			}
 
-			podUri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, podFQDN)
+			podUri := getMySQLURI(apiv1alpha1.UserOperator, operatorPass, podFQDN)
 
 			log.Info("Removing member from GR", "member", pod.Name, "memberState", state)
 			err = mysh.RemoveInstanceWithExec(ctx, cr.InnoDBClusterName(), podUri)
@@ -535,31 +535,21 @@ func validateClusterType(ctx context.Context, cl client.Client, cr *apiv1alpha1.
 func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileDatabase")
 
-	configurable := mysql.Configurable(*cr)
-	configHash, err := r.reconcileCustomConfiguration(ctx, cr, &configurable)
-	if err != nil {
-		return errors.Wrap(err, "reconcile MySQL config")
-	}
-
-	tlsHash, err := getTLSHash(ctx, r.Client, cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to get tls hash")
-	}
-
-	if err = r.reconcileMySQLAutoConfig(ctx, cr); err != nil {
+	if err := r.reconcileMySQLAutoConfig(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile MySQL auto-config")
 	}
 
-	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.MySQL.PodSpec)
-	if err != nil {
-		return errors.Wrap(err, "get init image")
+	component := mysql.Component(*cr)
+	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
+		return errors.Wrap(err, "ensure component")
 	}
 
 	internalSecret := new(corev1.Secret)
-	nn := types.NamespacedName{Name: cr.InternalSecretName(), Namespace: cr.Namespace}
-	err = r.Client.Get(ctx, nn, internalSecret)
-	if client.IgnoreNotFound(err) != nil {
-		return errors.Wrapf(err, "get Secret/%s", nn.Name)
+	if err := r.Get(ctx, types.NamespacedName{
+		Name:      cr.InternalSecretName(),
+		Namespace: cr.Namespace,
+	}, internalSecret); client.IgnoreNotFound(err) != nil {
+		return errors.Wrapf(err, "get internal secret")
 	}
 
 	if cr.PVCResizeInProgress() {
@@ -567,19 +557,19 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 		return nil
 	}
 
-	sts := mysql.StatefulSet(cr, initImage, configHash, tlsHash, internalSecret)
-
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, sts, r.Scheme); err != nil {
-		return errors.Wrap(err, "reconcile sts")
-	}
-
 	if pmm := cr.Spec.PMM; pmm != nil && pmm.Enabled && !pmm.HasSecret(internalSecret) {
 		log.Info(fmt.Sprintf(`Can't enable PMM: either "%s" key doesn't exist in the secrets, or secrets and internal secrets are out of sync`,
 			apiv1alpha1.UserPMMServerToken), "secrets", cr.Spec.SecretsName, "internalSecrets", cr.InternalSecretName())
 	}
 
+	sts := new(appsv1.StatefulSet)
+	if err := r.Get(ctx, types.NamespacedName{
+		Name:      component.Name(),
+		Namespace: cr.Namespace,
+	}, sts); err != nil {
+		return errors.Wrap(err, "get statefulset")
+	}
 	if cr.Spec.UpdateStrategy == apiv1alpha1.SmartUpdateStatefulSetStrategyType {
-		log.Info("Performing smart update for StatefulSet")
 		return r.smartUpdate(ctx, sts, cr)
 	}
 
@@ -775,18 +765,9 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return errors.Wrap(err, "reconcile ConfigMap")
 	}
 
-	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Orchestrator.PodSpec)
-	if err != nil {
-		return errors.Wrap(err, "get init image")
-	}
-
-	tlsHash, err := getTLSHash(ctx, r.Client, cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to get tls hash")
-	}
-
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.StatefulSet(cr, initImage, tlsHash), r.Scheme); err != nil {
-		return errors.Wrap(err, "reconcile StatefulSet")
+	component := orchestrator.Component(*cr)
+	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
+		return errors.Wrap(err, "ensure component")
 	}
 
 	raftNodes := orchestrator.RaftNodes(cr)
@@ -798,7 +779,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 	if err != nil {
 		return nil
 	}
-	g, gCtx := errgroup.WithContext(context.Background())
+	g, gCtx := errgroup.WithContext(ctx)
 
 	if len(raftNodes) > len(existingNodes) {
 		newPeers := util.Difference(raftNodes, existingNodes)
@@ -810,7 +791,9 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 			})
 		}
 
-		log.Error(g.Wait(), "Orchestrator add peers", "peers", newPeers)
+		if err := g.Wait(); err != nil && !cr.Spec.Pause {
+			log.Error(err, "Orchestrator add peers", "peers", newPeers)
+		}
 	} else {
 		oldPeers := util.Difference(existingNodes, raftNodes)
 
@@ -821,14 +804,15 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 			})
 		}
 
-		log.Error(g.Wait(), "Orchestrator remove peers", "peers", oldPeers)
+		if err := g.Wait(); err != nil && !cr.Spec.Pause {
+			log.Error(err, "Orchestrator remove peers", "peers", oldPeers)
+		}
 	}
 
 	return nil
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	log := logf.FromContext(ctx)
 	if err := k8s.EnsureService(ctx, r.Client, cr, orchestrator.Service(cr), r.Scheme, true); err != nil {
 		return errors.Wrap(err, "reconcile Service")
 	}
@@ -837,7 +821,6 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context
 	if err := r.reconcileServicePerPod(ctx, cr, &exposer); err != nil {
 		return errors.Wrap(err, "reconcile service per pod")
 	}
-	log.Info("Finished reconciling orchestrator services")
 	return nil
 }
 
@@ -846,17 +829,6 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 
 	if !cr.HAProxyEnabled() {
 		return nil
-	}
-
-	configurable := haproxy.Configurable(*cr)
-	configHash, err := r.reconcileCustomConfiguration(ctx, cr, &configurable)
-	if err != nil {
-		return errors.Wrap(err, "reconcile HAProxy config")
-	}
-
-	tlsHash, err := getTLSHash(ctx, r.Client, cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to get tls hash")
 	}
 
 	nn := types.NamespacedName{Namespace: cr.Namespace, Name: mysql.PodName(cr, 0)}
@@ -870,20 +842,9 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 		return nil
 	}
 
-	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Proxy.HAProxy.PodSpec)
-	if err != nil {
-		return errors.Wrap(err, "get init image")
-	}
-
-	internalSecret := new(corev1.Secret)
-	nn = types.NamespacedName{Name: cr.InternalSecretName(), Namespace: cr.Namespace}
-	err = r.Client.Get(ctx, nn, internalSecret)
-	if client.IgnoreNotFound(err) != nil {
-		return errors.Wrapf(err, "get Secret/%s", nn.Name)
-	}
-
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, haproxy.StatefulSet(cr, initImage, configHash, tlsHash, internalSecret), r.Scheme); err != nil {
-		return errors.Wrap(err, "reconcile StatefulSet")
+	component := haproxy.Component(*cr)
+	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
+		return errors.Wrap(err, "ensure component")
 	}
 
 	return nil
@@ -1102,7 +1063,7 @@ func (r *PerconaServerMySQLReconciler) rescanClusterIfNeeded(ctx context.Context
 		return errors.Wrap(err, "get operator password")
 	}
 
-	uri := fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
+	uri := getMySQLURI(apiv1alpha1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
 
 	msh, err := mysqlsh.NewWithExec(r.ClientCmd, pod, uri)
 	if err != nil {
@@ -1279,17 +1240,6 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		return nil
 	}
 
-	configurable := router.Configurable(*cr)
-	configHash, err := r.reconcileCustomConfiguration(ctx, cr, &configurable)
-	if err != nil {
-		return errors.Wrap(err, "reconcile Router config")
-	}
-
-	tlsHash, err := getTLSHash(ctx, r.Client, cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to get tls hash")
-	}
-
 	if cr.Spec.Proxy.Router.Size > 0 {
 		if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
 			log.V(1).Info("Waiting for MySQL pods to be ready")
@@ -1316,13 +1266,9 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		}
 	}
 
-	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Proxy.Router.PodSpec)
-	if err != nil {
-		return errors.Wrap(err, "get init image")
-	}
-
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, router.Deployment(cr, initImage, configHash, tlsHash), r.Scheme); err != nil {
-		return errors.Wrap(err, "reconcile Deployment")
+	component := router.Component(*cr)
+	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
+		return errors.Wrap(err, "ensure component")
 	}
 
 	return nil
