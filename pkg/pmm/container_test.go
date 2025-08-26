@@ -1,19 +1,22 @@
 package pmm
 
 import (
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"testing"
+
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 func TestContainer(t *testing.T) {
 	cr := &apiv1alpha1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-cluster"},
 		Spec: apiv1alpha1.PerconaServerMySQLSpec{
-			CRVersion: "0.12.0",
+			CRVersion: version.Version(),
 			PMM: &apiv1alpha1.PMMSpec{
 				Image:           "percona/pmm-client:latest",
 				ImagePullPolicy: corev1.PullIfNotPresent,
@@ -91,7 +94,7 @@ func TestContainer_CustomProbes(t *testing.T) {
 	cr := &apiv1alpha1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-cluster"},
 		Spec: apiv1alpha1.PerconaServerMySQLSpec{
-			CRVersion: "0.12.0",
+			CRVersion: version.Version(),
 			PMM: &apiv1alpha1.PMMSpec{
 				Image:           "percona/pmm-client:latest",
 				ImagePullPolicy: corev1.PullIfNotPresent,
@@ -112,13 +115,11 @@ func TestContainer_CustomProbes(t *testing.T) {
 
 	c := Container(cr, secret, "mysql", "")
 
-	if assert.NotNil(t, c.LivenessProbe) && assert.NotNil(t, c.LivenessProbe.HTTPGet) {
-		assert.Equal(t, int32(15), c.LivenessProbe.InitialDelaySeconds)
-		assert.Equal(t, int32(7), c.LivenessProbe.TimeoutSeconds)
-		assert.Equal(t, int32(11), c.LivenessProbe.PeriodSeconds)
-		assert.Equal(t, intstr.FromInt32(7777), c.LivenessProbe.HTTPGet.Port)
-		assert.Equal(t, "/local/Status", c.LivenessProbe.HTTPGet.Path)
-	}
+	assert.Equal(t, int32(15), c.LivenessProbe.InitialDelaySeconds)
+	assert.Equal(t, int32(7), c.LivenessProbe.TimeoutSeconds)
+	assert.Equal(t, int32(11), c.LivenessProbe.PeriodSeconds)
+	assert.Equal(t, intstr.FromInt32(7777), c.LivenessProbe.HTTPGet.Port)
+	assert.Equal(t, "/local/Status", c.LivenessProbe.HTTPGet.Path)
 
 	if assert.NotNil(t, c.ReadinessProbe) && assert.NotNil(t, c.ReadinessProbe.HTTPGet) {
 		assert.Equal(t, int32(5), c.ReadinessProbe.InitialDelaySeconds)
