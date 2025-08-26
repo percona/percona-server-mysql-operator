@@ -323,6 +323,7 @@ deploy_minio() {
 prepare_vault_tls() {
 	local name=$1
 	local namespace=$2
+	local platform=$3
 	local csr_name=vault-csr-${RANDOM}
 	local csr_api_ver="v1"
 	local csr_signer
@@ -434,7 +435,7 @@ _deploy_vault() {
 	fi
 
 	if [ $protocol == "https" ]; then
-		prepare_vault_tls ${name} ${namespace}
+		prepare_vault_tls ${name} ${namespace} ${platform}
 		helm install $name hashicorp/vault \
 			--disable-openapi-validation \
 			--version ${VAULT_VER} \
@@ -512,6 +513,14 @@ deploy_vault() {
 
 	local tmp_dir=/tmp/vault
 	echo "Using tmp dir: ${tmp_dir}"
+
+	if [[ -n ${OPENSHIFT} ]]; then
+		platform=openshift
+	fi
+
+	if [[ "$EKS" = 1 ]]; then
+		platform=eks
+	fi
 
 	_deploy_vault ${name} ${protocol} ${platform} ${namespace} ${tmp_dir}
 
