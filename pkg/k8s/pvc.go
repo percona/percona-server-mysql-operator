@@ -16,6 +16,8 @@ func PVC(name string, spec *apiv1alpha1.VolumeSpec) corev1.PersistentVolumeClaim
 			StorageClassName: spec.PersistentVolumeClaim.StorageClassName,
 			AccessModes:      spec.PersistentVolumeClaim.AccessModes,
 			Resources:        spec.PersistentVolumeClaim.Resources,
+			DataSource:       spec.PersistentVolumeClaim.DataSource,
+			DataSourceRef:    spec.PersistentVolumeClaim.DataSourceRef,
 		},
 	}
 }
