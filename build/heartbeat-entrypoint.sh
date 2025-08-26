@@ -30,6 +30,9 @@ for i in {1..5}; do
 	fi
 done
 
+# If password contains commas they must be escaped with a backslash: “exam,ple” according https://docs.percona.com/percona-toolkit/pt-heartbeat.html
+ESCAPED_HEARTBEAT_PASSWORD="${HEARTBEAT_PASSWORD//,/\\,}"
+
 HEARTBEAT_USER='heartbeat'
 echo "[INFO] pt-heartbeat --update --replace --fail-successive-errors 20 --check-read-only --create-table --database sys_operator \
 	--table heartbeat --user ${HEARTBEAT_USER} --password XXXX --port ${MYSQL_ADMIN_PORT}"
@@ -43,5 +46,5 @@ pt-heartbeat \
 	--database sys_operator \
 	--table heartbeat \
 	--user "${HEARTBEAT_USER}" \
-	--password "${HEARTBEAT_PASSWORD}" \
+	--password "${ESCAPED_HEARTBEAT_PASSWORD}" \
 	--port "${MYSQL_ADMIN_PORT}"
