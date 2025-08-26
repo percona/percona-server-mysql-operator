@@ -518,7 +518,7 @@ deploy_vault() {
 		platform=openshift
 	fi
 
-	if [[ "$EKS" = 1 ]]; then
+	if [ "$EKS" = 1 ]; then
 		platform=eks
 	fi
 
