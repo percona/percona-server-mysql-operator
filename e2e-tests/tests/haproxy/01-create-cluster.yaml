@@ -14,4 +14,9 @@ commands:
           | yq eval '.spec.orchestrator.enabled=true' - \
           | yq eval '.spec.proxy.haproxy.enabled=true' - \
           | yq eval '.spec.proxy.haproxy.size=3' - \
+          | yq eval '.spec.proxy.haproxy.livenessProbe.timeoutSeconds=30' - \
+          | yq eval '.spec.proxy.haproxy.livenessProbe.periodSeconds=10' - \
+          | yq eval '.spec.proxy.haproxy.readinessProbe.failureThreshold=40' - \
+          | yq eval '.spec.proxy.haproxy.readinessProbe.successThreshold=10' - \
+          | yq eval '.spec.proxy.haproxy.size=3' - \
           | kubectl -n "${NAMESPACE}" apply -f -
