@@ -12655,6 +12655,28 @@ spec:
                 even number of MySQL replicas requires ''unsafeFlags.mysqlSize: true'''
               rule: '!(self.mysql.clusterType == ''group-replication'' && has(self.mysql.size)
                 && self.mysql.size % 2 == 0) || self.unsafeFlags.mysqlSize'
+            - message: 'Invalid configuration: For ''group replication'', MySQL Router
+                or HAProxy must be enabled unless ''unsafeFlags.proxy'' is enabled'
+              rule: '!(self.mysql.clusterType == ''group-replication'') || self.unsafeFlags.proxy
+                || self.proxy.router.enabled || self.proxy.haproxy.enabled'
+            - message: 'Invalid configuration: For ''group replication'', Router size
+                must be 2 or greater unless ''unsafeFlags.proxySize'' is enabled'
+              rule: '!(self.mysql.clusterType == ''group-replication'' && self.proxy.router.enabled
+                && has(self.proxy.router.size) && self.proxy.router.size < 2) || self.unsafeFlags.proxySize'
+            - message: 'Invalid configuration: For ''group replication'', MySQL size
+                must be 3 or greater unless ''unsafeFlags.mysqlSize'' is enabled'
+              rule: '!(self.mysql.clusterType == ''group-replication'' && has(self.mysql.size)
+                && self.mysql.size < 3) || self.unsafeFlags.mysqlSize'
+            - message: 'Invalid configuration: For ''async'' replication, Orchestrator
+                size must be 3 or greater and odd unless ''unsafeFlags.orchestratorSize''
+                is enabled'
+              rule: '!(self.mysql.clusterType == ''async'' && has(self.orchestrator.size)
+                && (self.orchestrator.size < 3 || self.orchestrator.size % 2 == 0)
+                && self.orchestrator.size > 0) || self.unsafeFlags.orchestratorSize'
+            - message: 'Invalid configuration: For ''async'' replication, SmartUpdate
+                requires Orchestrator to be enabled'
+              rule: '!(self.mysql.clusterType == ''async'' && self.updateStrategy
+                == ''SmartUpdate'') || self.orchestrator.enabled'
           status:
             properties:
               backupVersion:
