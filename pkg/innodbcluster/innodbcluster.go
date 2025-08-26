@@ -91,7 +91,7 @@ const (
 	ReplicaGtidIdentical     ReplicaGtidState = "IDENTICAL"
 	ReplicaGtidDiverged      ReplicaGtidState = "DIVERGED"
 	ReplicaGtidRecovarable   ReplicaGtidState = "RECOVERABLE"
-	ReplicaGtidIrrecovarable ReplicaGtidState = "IRRECOVERABLE"
+	ReplicaGtidIrrecoverable ReplicaGtidState = "IRRECOVERABLE"
 )
 
 type RecoveryMethod string

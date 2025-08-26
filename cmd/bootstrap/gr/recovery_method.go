@@ -140,7 +140,7 @@ func checkReplicaState(ctx context.Context, primary, replica SQLRunner) (innodbc
 		if primaryPurged == "" || comparePrimaryPurged(ctx, primary, primaryPurged, replicaExecuted) {
 			return innodbcluster.ReplicaGtidRecovarable, nil
 		}
-		return innodbcluster.ReplicaGtidIrrecovarable, nil
+		return innodbcluster.ReplicaGtidIrrecoverable, nil
 	}
 
 	return "", errors.New("internal error")
@@ -155,7 +155,7 @@ func getRecoveryMethod(ctx context.Context, primary, replica SQLRunner) (innodbc
 	switch replicaState {
 	case innodbcluster.ReplicaGtidDiverged:
 		return innodbcluster.RecoveryClone, nil
-	case innodbcluster.ReplicaGtidIrrecovarable:
+	case innodbcluster.ReplicaGtidIrrecoverable:
 		return innodbcluster.RecoveryClone, nil
 	case innodbcluster.ReplicaGtidRecovarable, innodbcluster.ReplicaGtidIdentical:
 		return innodbcluster.RecoveryIncremental, nil
