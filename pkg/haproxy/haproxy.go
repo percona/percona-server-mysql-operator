@@ -164,8 +164,10 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 					RuntimeClassName: cr.Spec.Proxy.HAProxy.RuntimeClassName,
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
+							cr,
 							AppName,
 							initImage,
+							cr.Spec.Proxy.HAProxy.InitContainer,
 							cr.Spec.Proxy.HAProxy.ImagePullPolicy,
 							cr.Spec.Proxy.HAProxy.ContainerSecurityContext,
 							cr.Spec.Proxy.HAProxy.Resources,
