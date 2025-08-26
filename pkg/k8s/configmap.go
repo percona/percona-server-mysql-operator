@@ -7,7 +7,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func ConfigMap(name, namespace, filename, data string, cr *apiv1alpha1.PerconaServerMySQL) *corev1.ConfigMap {
+func ConfigMap(cr *apiv1alpha1.PerconaServerMySQL, name, filename, data string) *corev1.ConfigMap {
 	cm := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -15,7 +15,7 @@ func ConfigMap(name, namespace, filename, data string, cr *apiv1alpha1.PerconaSe
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: namespace,
+			Namespace: cr.Namespace,
 		},
 		Data: map[string]string{
 			filename: data,

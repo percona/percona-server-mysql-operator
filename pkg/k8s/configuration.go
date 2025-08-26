@@ -95,7 +95,7 @@ func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1alpha1.Per
 		return "", errors.New("resources.limits[memory] or resources.requests[memory] should be specified for template usage in configuration")
 	}
 
-	cm := ConfigMap(cmName, cr.Namespace, configurable.GetConfigMapKey(), configuration, cr)
+	cm := ConfigMap(cr, cmName, configurable.GetConfigMapKey(), configuration)
 
 	if !reflect.DeepEqual(currCm.Data, cm.Data) {
 		if err := EnsureObject(ctx, cl, cr, cm, cl.Scheme()); err != nil {
