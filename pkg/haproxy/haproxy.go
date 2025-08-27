@@ -61,6 +61,8 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 	labels := MatchLabels(cr)
 	labels = util.SSMapMerge(expose.Labels, labels)
 
+	selector := MatchLabels(cr)
+
 	serviceType := cr.Spec.Proxy.HAProxy.Expose.Type
 
 	var loadBalancerSourceRanges []string
@@ -117,7 +119,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 		Spec: corev1.ServiceSpec{
 			Type:                     serviceType,
 			Ports:                    ports,
-			Selector:                 labels,
+			Selector:                 selector,
 			LoadBalancerSourceRanges: loadBalancerSourceRanges,
 			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
 			ExternalTrafficPolicy:    externalTrafficPolicy,
