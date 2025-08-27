@@ -594,8 +594,6 @@ spec:
                               - name
                               type: object
                             type: array
-                        required:
-                        - args
                         type: object
                       containerSecurityContext:
                         properties:
@@ -1103,8 +1101,6 @@ spec:
                       - name
                       type: object
                     type: array
-                required:
-                - args
                 type: object
             required:
             - clusterName

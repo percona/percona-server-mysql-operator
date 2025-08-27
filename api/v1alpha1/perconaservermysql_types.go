@@ -314,7 +314,9 @@ type BackupStorageSpec struct {
 }
 
 type BackupContainerOptions struct {
-	Env  []corev1.EnvVar     `json:"env,omitempty"`
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+	// +optional
 	Args BackupContainerArgs `json:"args"`
 }
 

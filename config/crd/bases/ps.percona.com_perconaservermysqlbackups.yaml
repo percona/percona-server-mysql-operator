@@ -130,8 +130,6 @@ spec:
                       - name
                       type: object
                     type: array
-                required:
-                - args
                 type: object
               storageName:
                 type: string
@@ -696,8 +694,6 @@ spec:
                           - name
                           type: object
                         type: array
-                    required:
-                    - args
                     type: object
                   containerSecurityContext:
                     properties:
