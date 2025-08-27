@@ -11,15 +11,15 @@ if [ -n "$VERIFY_TLS" ] && [[ $VERIFY_TLS == "false" ]]; then
 fi
 
 run_s3() {
-	xbcloud get "${XBCLOUD_ARGS}" "${BACKUP_DEST}" --storage=s3 --s3-bucket="${S3_BUCKET}"
+	xbcloud get ${XBCLOUD_ARGS} "${BACKUP_DEST}" --storage=s3 --s3-bucket="${S3_BUCKET}"
 }
 
 run_gcs() {
-	xbcloud get "${XBCLOUD_ARGS}" "${BACKUP_DEST}" --storage=google --google-bucket="${GCS_BUCKET}"
+	xbcloud get ${XBCLOUD_ARGS} "${BACKUP_DEST}" --storage=google --google-bucket="${GCS_BUCKET}"
 }
 
 run_azure() {
-	xbcloud get "${XBCLOUD_ARGS}" "${BACKUP_DEST}" --storage=azure
+	xbcloud get ${XBCLOUD_ARGS} "${BACKUP_DEST}" --storage=azure
 }
 
 extract() {
