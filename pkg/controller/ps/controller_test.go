@@ -995,7 +995,7 @@ var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 		cr.Finalizers = append(cr.Finalizers, naming.FinalizerDeleteMySQLPvc)
-		cr.Spec.SecretsName = "cluster1-secrets"
+		cr.Spec.SecretsName = "ps-cluster1-secrets"
 
 		sfsWithOwner := appsv1.StatefulSet{}
 		// stsApp := statefulset.NewNode(cr)
