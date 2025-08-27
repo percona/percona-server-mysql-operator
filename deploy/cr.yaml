@@ -1,7 +1,7 @@
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
-  name: cluster1
+  name: ps-cluster1
   finalizers:
     - percona.com/delete-mysql-pods-in-order
     # - percona.com/delete-ssl
@@ -16,8 +16,8 @@ spec:
 #  pause: false
   crVersion: 0.12.0
 #  enableVolumeExpansion: false
-  secretsName: cluster1-secrets
-  sslSecretName: cluster1-ssl
+  secretsName: ps-cluster1-secrets
+  sslSecretName: ps-cluster1-ssl
   updateStrategy: SmartUpdate
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
@@ -76,7 +76,7 @@ spec:
 #        limits:
 #          memory: 200M
 #          cpu: 200m
-#    vaultSecretName: cluster1-vault
+#    vaultSecretName: ps-cluster1-vault
     size: 3
 
 #    env:
@@ -613,7 +613,8 @@ spec:
 #        runtimeClassName: image-rc
         s3:
           bucket: S3-BACKUP-BUCKET-NAME-HERE
-          credentialsSecret: cluster1-s3-credentials
+          credentialsSecret: ps-cluster1-s3-credentials
+#      - "--someflag=abc"
           region: us-west-2
 #          prefix: ""
 
