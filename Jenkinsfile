@@ -252,6 +252,7 @@ void prepareNode() {
             sudo curl -s -L -o /usr/local/bin/kubectl https://dl.k8s.io/release/\$(curl -L -s https://api.github.com/repos/kubernetes/kubernetes/releases/latest | jq -r .tag_name)/bin/linux/amd64/kubectl && sudo chmod +x /usr/local/bin/kubectl
         fi
 
+        file /usr/local/bin/kubectl
         kubectl version --client --output=yaml
 
         curl -fsSL https://get.helm.sh/helm-v3.18.0-linux-amd64.tar.gz | sudo tar -C /usr/local/bin --strip-components 1 -xzf - linux-amd64/helm
