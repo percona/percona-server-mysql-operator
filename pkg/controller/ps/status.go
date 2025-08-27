@@ -219,6 +219,8 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		r.Recorder.Event(cr, "Warning", "ClusterStateChanged", fmt.Sprintf("%s -> %s", initialState, cr.Status.State))
 	}
 
+	log.Info("StatusCondition", "conditions", cr.Status.Conditions)
+
 	nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
 	return writeStatus(ctx, r.Client, nn, cr.Status)
 }

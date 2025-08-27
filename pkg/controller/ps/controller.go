@@ -39,6 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/record"
 	k8sretry "k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -128,6 +129,8 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 
 		return ctrl.Result{}, errors.Wrap(err, "get CR")
 	}
+
+	log.Info("StatusCondition fresh CR", "conditions", cr.Status.Conditions)
 
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		log.Info("CR marked for deletion, applying finalizers", "name", cr.Name)
@@ -1019,21 +1022,45 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 	db := database.NewReplicationManager(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, mysql.ServiceName(cr))
 	cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1alpha1.ConditionInnoDBClusterBootstrapped)
 	if cond == nil || cond.Status == metav1.ConditionFalse {
-		if exists, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata"); err != nil || !exists {
+		exists, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata")
+		if err != nil || !exists {
 			log.V(1).Info("InnoDB cluster is not created yet")
 			return nil
 		}
 
+		t := metav1.Now()
 		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
-			Type:               apiv1alpha1.ConditionInnoDBClusterBootstrapped,
-			Status:             metav1.ConditionTrue,
-			Reason:             apiv1alpha1.ConditionInnoDBClusterBootstrapped,
-			Message:            fmt.Sprintf("InnoDB cluster successfully bootstrapped with %d nodes", cr.MySQLSpec().Size),
-			LastTransitionTime: metav1.Now(),
+			Type:   apiv1alpha1.ConditionInnoDBClusterBootstrapped,
+			Status: metav1.ConditionTrue,
+			Reason: apiv1alpha1.ConditionInnoDBClusterBootstrapped,
+			Message: fmt.Sprintf("InnoDB cluster successfully bootstrapped with %d nodes",
+				cr.MySQLSpec().Size),
+			LastTransitionTime: t,
 		})
+		log.Info("SetStatusCondition", "lastTransitionTime", t)
+
+		nn := types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}
+
+		if err := writeStatus(ctx, r.Client, nn, cr.Status); err != nil {
+			return errors.Wrap(err, "write status")
+		}
+
+		err = wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 10*time.Second, false,
+			func(ctx context.Context) (bool, error) {
+				if err := r.Client.Get(ctx, nn, cr); err != nil {
+					return false, errors.Wrap(err, "failed to get cr")
+				}
+				cond := meta.FindStatusCondition(cr.Status.Conditions,
+					apiv1alpha1.ConditionInnoDBClusterBootstrapped)
+				return cond != nil, nil
+			})
+		if err != nil {
+			return errors.Wrap(err, "wait for cached cr to updated with condition")
+		}
 
 		return nil
 	}
+	log.Info("GetStatusCondition", "status", cond.Status, "lastTransitionTime", cond.LastTransitionTime)
 
 	if exists, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata"); err != nil || !exists {
 		return errors.Wrap(err, "InnoDB cluster is already bootstrapped, but failed to check its status")
