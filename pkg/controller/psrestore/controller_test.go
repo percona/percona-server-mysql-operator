@@ -23,7 +23,7 @@ import (
 
 func TestRestoreStatusErrStateDesc(t *testing.T) {
 	namespace := "some-namespace"
-	clusterName := "cluster1"
+	clusterName := "ps-cluster1"
 	backupName := "backup1"
 	restoreName := "restore1"
 	storageName := "some-storage"

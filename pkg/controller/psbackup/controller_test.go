@@ -34,7 +34,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err, "failed to read default backup")
 	}
-	cluster, err := readDefaultCR("cluster1", namespace)
+	cluster, err := readDefaultCR("ps-cluster1", namespace)
 	if err != nil {
 		t.Fatal(err, "failed to read default cr")
 	}
@@ -323,7 +323,7 @@ func TestRunningState(t *testing.T) {
 	}
 	cr.Status.State = apiv1alpha1.BackupStarting
 	cr.Spec.StorageName = "s3-us-west"
-	cluster, err := readDefaultCR("cluster1", namespace)
+	cluster, err := readDefaultCR("ps-cluster1", namespace)
 	if err != nil {
 		t.Fatal(err, "failed to read default cr")
 	}
