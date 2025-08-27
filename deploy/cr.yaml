@@ -28,7 +28,19 @@ spec:
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
     apply: disabled
-#  initImage: perconalab/percona-server-mysql-operator:main
+#  initContainer:
+#    image: perconalab/percona-server-mysql-operator:main
+#    containerSecurityContext:
+#      privileged: false
+#      runAsUser: 1001
+#      runAsGroup: 1001
+#    resources:
+#      requests:
+#        memory: 100M
+#        cpu: 100m
+#      limits:
+#        memory: 200M
+#        cpu: 200m
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
 #  ignoreLabels:
@@ -57,7 +69,19 @@ spec:
 #    imagePullSecrets:
 #      - name: "my-secret-1"
 #      - name: "my-secret-2"
-#    initImage: perconalab/percona-server-mysql-operator:main
+#    initContainer:
+#      image: perconalab/percona-server-mysql-operator:main
+#      containerSecurityContext:
+#        privileged: false
+#        runAsUser: 1001
+#        runAsGroup: 1001
+#      resources:
+#        requests:
+#          memory: 100M
+#          cpu: 100m
+#        limits:
+#          memory: 200M
+#          cpu: 200m
 #    vaultSecretName: cluster1-vault
     size: 3
 
@@ -328,7 +352,19 @@ spec:
 #      imagePullSecrets:
 #        - name: "my-secret-1"
 #        - name: "my-secret-2"
-#      initImage: perconalab/percona-server-mysql-operator:main
+#      initContainer:
+#        image: perconalab/percona-server-mysql-operator:main
+#        containerSecurityContext:
+#          privileged: false
+#          runAsUser: 1001
+#          runAsGroup: 1001
+#        resources:
+#          requests:
+#            memory: 100M
+#            cpu: 100m
+#          limits:
+#            memory: 200M
+#            cpu: 200m
 #      ports:
 #      - name: http
 #        port: 8443
@@ -424,7 +460,19 @@ spec:
 #      - name: "my-secret-1"
 #      - name: "my-secret-2"
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
-#    initImage: perconalab/percona-server-mysql-operator:main
+#    initContainer:
+#      image: perconalab/percona-server-mysql-operator:main
+#      containerSecurityContext:
+#        privileged: false
+#        runAsUser: 1001
+#        runAsGroup: 1001
+#      resources:
+#        requests:
+#          memory: 100M
+#          cpu: 100m
+#        limits:
+#          memory: 200M
+#          cpu: 200m
 
     size: 3
 
@@ -503,7 +551,19 @@ spec:
 #    imagePullSecrets:
 #      - name: "my-secret-1"
 #      - name: "my-secret-2"
-#    initImage: perconalab/percona-server-mysql-operator:main
+#    initContainer:
+#      image: perconalab/percona-server-mysql-operator:main
+#      containerSecurityContext:
+#        privileged: false
+#        runAsUser: 1001
+#        runAsGroup: 1001
+#      resources:
+#        requests:
+#          memory: 100M
+#          cpu: 100m
+#        limits:
+#          memory: 200M
+#          cpu: 200m
 #    containerSecurityContext:
 #      privileged: true
     storages:

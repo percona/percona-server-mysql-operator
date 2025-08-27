@@ -1,4 +1,4 @@
-package main
+package async
 
 import (
 	"context"
@@ -11,12 +11,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	database "github.com/percona/percona-server-mysql-operator/cmd/internal/db"
 	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
-func bootstrapAsyncReplication(ctx context.Context) error {
+func Bootstrap(ctx context.Context) error {
 	timer := stopwatch.NewNamedStopwatch()
 	err := timer.AddMany([]string{"clone", "total"})
 	if err != nil {
@@ -31,13 +32,13 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 
 	svc := os.Getenv("SERVICE_NAME_UNREADY")
 	mysqlSvc := os.Getenv("SERVICE_NAME")
-	peers, err := lookup(svc)
+	peers, err := utils.Lookup(svc)
 	if err != nil {
 		return errors.Wrap(err, "lookup")
 	}
 	log.Printf("Peers: %v", sets.List(peers))
 
-	fqdn, err := getFQDN(mysqlSvc)
+	fqdn, err := utils.GetFQDN(mysqlSvc)
 	if err != nil {
 		return errors.Wrap(err, "get FQDN")
 	}
@@ -54,13 +55,13 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 		return errors.Wrap(err, "get hostname")
 	}
 
-	podIp, err := getPodIP(podHostname)
+	podIp, err := utils.GetPodIP(podHostname)
 	if err != nil {
 		return errors.Wrap(err, "get pod IP")
 	}
 	log.Printf("PodIP: %s", podIp)
 
-	primaryIp, err := getPodIP(primary)
+	primaryIp, err := utils.GetPodIP(primary)
 	if err != nil {
 		return errors.Wrap(err, "get primary IP")
 	}
@@ -73,7 +74,7 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 	log.Printf("Donor: %s", donor)
 
 	log.Printf("Opening connection to %s", podIp)
-	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
+	operatorPass, err := utils.GetSecret(apiv1alpha1.UserOperator)
 	if err != nil {
 		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
@@ -83,7 +84,7 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 		Pass: operatorPass,
 		Host: podIp,
 	}
-	readTimeout, err := getReadTimeout()
+	readTimeout, err := utils.GetReadTimeout()
 	if err != nil {
 		return errors.Wrap(err, "get read timeout")
 	}
@@ -179,7 +180,7 @@ func bootstrapAsyncReplication(ctx context.Context) error {
 	if rStatus == mysqldb.ReplicationStatusNotInitiated {
 		log.Println("configuring replication")
 
-		replicaPass, err := getSecret(apiv1alpha1.UserReplication)
+		replicaPass, err := utils.GetSecret(apiv1alpha1.UserReplication)
 		if err != nil {
 			return errors.Wrapf(err, "get %s password", apiv1alpha1.UserReplication)
 		}
@@ -204,7 +205,7 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 	replicas := sets.New[string]()
 	primary := ""
 
-	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
+	operatorPass, err := utils.GetSecret(apiv1alpha1.UserOperator)
 	if err != nil {
 		return "", nil, errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
@@ -215,7 +216,7 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 			Pass: operatorPass,
 			Host: peer,
 		}
-		readTimeout, err := getReadTimeout()
+		readTimeout, err := utils.GetReadTimeout()
 		if err != nil {
 			return "", nil, errors.Wrap(err, "get read timeout")
 		}
@@ -270,7 +271,7 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 func selectDonor(ctx context.Context, fqdn, primary string, replicas []string) (string, error) {
 	donor := ""
 
-	operatorPass, err := getSecret(apiv1alpha1.UserOperator)
+	operatorPass, err := utils.GetSecret(apiv1alpha1.UserOperator)
 	if err != nil {
 		return "", errors.Wrapf(err, "get %s password", apiv1alpha1.UserOperator)
 	}
@@ -281,7 +282,7 @@ func selectDonor(ctx context.Context, fqdn, primary string, replicas []string) (
 			Pass: operatorPass,
 			Host: replica,
 		}
-		readTimeout, err := getReadTimeout()
+		readTimeout, err := utils.GetReadTimeout()
 		if err != nil {
 			return "", errors.Wrap(err, "get read timeout")
 		}

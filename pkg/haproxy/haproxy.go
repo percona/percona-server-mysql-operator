@@ -61,6 +61,8 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 	labels := MatchLabels(cr)
 	labels = util.SSMapMerge(expose.Labels, labels)
 
+	selector := MatchLabels(cr)
+
 	serviceType := cr.Spec.Proxy.HAProxy.Expose.Type
 
 	var loadBalancerSourceRanges []string
@@ -117,7 +119,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 		Spec: corev1.ServiceSpec{
 			Type:                     serviceType,
 			Ports:                    ports,
-			Selector:                 labels,
+			Selector:                 selector,
 			LoadBalancerSourceRanges: loadBalancerSourceRanges,
 			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
 			ExternalTrafficPolicy:    externalTrafficPolicy,
@@ -165,8 +167,10 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 					RuntimeClassName: cr.Spec.Proxy.HAProxy.RuntimeClassName,
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
+							cr,
 							AppName,
 							initImage,
+							cr.Spec.Proxy.HAProxy.InitContainer,
 							cr.Spec.Proxy.HAProxy.ImagePullPolicy,
 							cr.Spec.Proxy.HAProxy.ContainerSecurityContext,
 							cr.Spec.Proxy.HAProxy.Resources,
@@ -292,6 +296,24 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	}
 	env = append(env, spec.Env...)
 
+	var readinessProbe, livenessProbe *corev1.Probe
+	if cr.CompareVersion("0.12.0") >= 0 {
+		readinessProbe = k8s.ExecProbe(spec.ReadinessProbe, []string{"/opt/percona/haproxy_readiness_check.sh"})
+		livenessProbe = k8s.ExecProbe(spec.LivenessProbe, []string{"/opt/percona/haproxy_liveness_check.sh"})
+
+		probsEnvs := []corev1.EnvVar{
+			{
+				Name:  "LIVENESS_CHECK_TIMEOUT",
+				Value: fmt.Sprint(livenessProbe.TimeoutSeconds),
+			},
+			{
+				Name:  "READINESS_CHECK_TIMEOUT",
+				Value: fmt.Sprint(readinessProbe.TimeoutSeconds),
+			},
+		}
+		env = append(env, probsEnvs...)
+	}
+
 	return corev1.Container{
 		Name:            AppName,
 		Image:           spec.Image,
@@ -301,6 +323,8 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		EnvFrom:         spec.EnvFrom,
 		Command:         []string{"/opt/percona/haproxy-entrypoint.sh"},
 		Args:            []string{"haproxy"},
+		ReadinessProbe:  readinessProbe,
+		LivenessProbe:   livenessProbe,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "mysql",

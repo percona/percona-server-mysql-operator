@@ -64,7 +64,6 @@ type PerconaServerMySQLSpec struct {
 	SecretsName            string                               `json:"secretsName,omitempty"`
 	SSLSecretName          string                               `json:"sslSecretName,omitempty"`
 	Unsafe                 UnsafeFlags                          `json:"unsafeFlags,omitempty"`
-	InitImage              string                               `json:"initImage,omitempty"`
 	IgnoreAnnotations      []string                             `json:"ignoreAnnotations,omitempty"`
 	IgnoreLabels           []string                             `json:"ignoreLabels,omitempty"`
 	MySQL                  MySQLSpec                            `json:"mysql,omitempty"`
@@ -76,6 +75,16 @@ type PerconaServerMySQLSpec struct {
 	Toolkit                *ToolkitSpec                         `json:"toolkit,omitempty"`
 	UpgradeOptions         UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	UpdateStrategy         appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+
+	// Deprecated: not supported since v0.12.0. Use initContainer instead
+	InitImage     string            `json:"initImage,omitempty"`
+	InitContainer InitContainerSpec `json:"initContainer,omitempty"`
+}
+
+type InitContainerSpec struct {
+	Image                    string                       `json:"image,omitempty"`
+	Resources                *corev1.ResourceRequirements `json:"resources,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
 }
 
 type UnsafeFlags struct {
@@ -179,7 +188,10 @@ type PodSpec struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	VolumeSpec  *VolumeSpec       `json:"volumeSpec,omitempty"`
-	InitImage   string            `json:"initImage,omitempty"`
+
+	// Deprecated: not supported since v0.12.0. Use initContainer instead
+	InitImage     string             `json:"initImage,omitempty"`
+	InitContainer *InitContainerSpec `json:"initContainer,omitempty"`
 
 	Affinity                      *PodAffinity                      `json:"affinity,omitempty"`
 	TopologySpreadConstraints     []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
@@ -225,9 +237,16 @@ func (s PodSpec) GetTerminationGracePeriodSeconds() *int64 {
 	return &gp
 }
 
-// Retrieves the initialization image for the pod.
-func (s *PodSpec) GetInitImage() string {
-	return s.InitImage
+func (s *PodSpec) GetInitSpec(cr *PerconaServerMySQL) InitContainerSpec {
+	if s.InitContainer == nil {
+		if cr.CompareVersion("0.12.0") < 0 {
+			return InitContainerSpec{
+				Image: s.InitImage,
+			}
+		}
+		return InitContainerSpec{}
+	}
+	return *s.InitContainer
 }
 
 type PMMSpec struct {
@@ -243,7 +262,6 @@ type PMMSpec struct {
 type BackupSpec struct {
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	Image                    string                        `json:"image"`
-	InitImage                string                        `json:"initImage,omitempty"`
 	ImagePullSecrets         []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
 	ServiceAccountName       string                        `json:"serviceAccountName,omitempty"`
@@ -253,6 +271,10 @@ type BackupSpec struct {
 	BackoffLimit             *int32                        `json:"backoffLimit,omitempty"`
 	PiTR                     PiTRSpec                      `json:"pitr,omitempty"`
 	Schedule                 []BackupSchedule              `json:"schedule,omitempty"`
+
+	// Deprecated: not supported since v0.12.0. Use initContainer instead
+	InitImage     string             `json:"initImage,omitempty"`
+	InitContainer *InitContainerSpec `json:"initContainer,omitempty"`
 }
 
 type BackupSchedule struct {
@@ -265,9 +287,16 @@ type BackupSchedule struct {
 	StorageName string `json:"storageName,omitempty"`
 }
 
-// Retrieves the initialization image for the backup.
-func (s *BackupSpec) GetInitImage() string {
-	return s.InitImage
+func (s *BackupSpec) GetInitSpec(cr *PerconaServerMySQL) InitContainerSpec {
+	if s.InitContainer == nil {
+		if cr.CompareVersion("0.12.0") < 0 {
+			return InitContainerSpec{
+				Image: s.InitImage,
+			}
+		}
+		return InitContainerSpec{}
+	}
+	return *s.InitContainer
 }
 
 type BackupStorageType string
@@ -490,7 +519,7 @@ type ServiceExpose struct {
 	ExternalTrafficPolicy    corev1.ServiceExternalTrafficPolicyType  `json:"externalTrafficPolicy,omitempty"`
 }
 
-// Determines if both annotations and labels of the service expose are empty.
+// SaveOldMeta determines if both annotations and labels of the service expose are empty.
 func (e *ServiceExpose) SaveOldMeta() bool {
 	return len(e.Annotations) == 0 && len(e.Labels) == 0
 }
