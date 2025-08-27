@@ -60,6 +60,8 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 
 	labels := util.SSMapMerge(expose.Labels, MatchLabels(cr))
 
+	selector := MatchLabels(cr)
+
 	var loadBalancerSourceRanges []string
 	if expose.Type == corev1.ServiceTypeLoadBalancer {
 		loadBalancerSourceRanges = expose.LoadBalancerSourceRanges
@@ -84,7 +86,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Type:                     expose.Type,
 			Ports:                    ports(cr.Spec.Proxy.Router.Ports),
-			Selector:                 labels,
+			Selector:                 selector,
 			LoadBalancerSourceRanges: loadBalancerSourceRanges,
 			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
 			ExternalTrafficPolicy:    externalTrafficPolicy,
@@ -137,8 +139,10 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHa
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
+							cr,
 							AppName,
 							initImage,
+							spec.InitContainer,
 							spec.ImagePullPolicy,
 							spec.ContainerSecurityContext,
 							spec.Resources,
