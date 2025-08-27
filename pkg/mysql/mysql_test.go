@@ -187,7 +187,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 			},
 			expectedStatefulSet: appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster1-mysql",
+					Name:      "ps-cluster1-mysql",
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
@@ -207,7 +207,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 						},
 					},
 					VolumeClaimTemplates: expectedPVCs,
-					ServiceName:          "cluster1-mysql",
+					ServiceName:          "ps-cluster1-mysql",
 				},
 			},
 		},
@@ -223,7 +223,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 			},
 			expectedStatefulSet: appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster1-mysql",
+					Name:      "ps-cluster1-mysql",
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
@@ -249,7 +249,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 							),
 						},
 					},
-					ServiceName: "cluster1-mysql",
+					ServiceName: "ps-cluster1-mysql",
 				},
 			},
 		},
@@ -265,7 +265,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 			},
 			expectedStatefulSet: appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster1-mysql",
+					Name:      "ps-cluster1-mysql",
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
@@ -291,7 +291,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 							),
 						},
 					},
-					ServiceName: "cluster1-mysql",
+					ServiceName: "ps-cluster1-mysql",
 				},
 			},
 		},
@@ -308,7 +308,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 			},
 			expectedStatefulSet: appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster1-mysql",
+					Name:      "ps-cluster1-mysql",
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
@@ -334,7 +334,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 							),
 						},
 					},
-					ServiceName: "cluster1-mysql",
+					ServiceName: "ps-cluster1-mysql",
 				},
 			},
 		},
@@ -344,7 +344,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cr := &apiv1alpha1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster1",
+					Name:      "ps-cluster1",
 					Namespace: "test-ns",
 				},
 				Spec: apiv1alpha1.PerconaServerMySQLSpec{
@@ -395,7 +395,7 @@ func expectedVolumes() []corev1.Volume {
 			Name: "users",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: "internal-cluster1",
+					SecretName: "internal-ps-cluster1",
 				},
 			},
 		},
@@ -415,7 +415,7 @@ func expectedVolumes() []corev1.Volume {
 						{
 							ConfigMap: &corev1.ConfigMapProjection{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "cluster1-mysql",
+									Name: "ps-cluster1-mysql",
 								},
 								Items: []corev1.KeyToPath{
 									{
@@ -429,7 +429,7 @@ func expectedVolumes() []corev1.Volume {
 						{
 							ConfigMap: &corev1.ConfigMapProjection{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "auto-cluster1-mysql",
+									Name: "auto-ps-cluster1-mysql",
 								},
 								Items: []corev1.KeyToPath{
 									{
@@ -443,7 +443,7 @@ func expectedVolumes() []corev1.Volume {
 						{
 							Secret: &corev1.SecretProjection{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "cluster1-mysql",
+									Name: "ps-cluster1-mysql",
 								},
 								Items: []corev1.KeyToPath{
 									{
