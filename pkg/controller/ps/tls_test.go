@@ -25,7 +25,7 @@ import (
 
 var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 	ctx := context.Background()
-	cr, err := readDefaultCR("cluster1", "tls-1")
+	cr, err := readDefaultCR("ps-cluster1", "tls-1")
 	It("should read defautl cr.yaml", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -75,15 +75,15 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			dnsNames := []string{
-				"*.cluster1-mysql",
-				"*.cluster1-mysql.tls-1",
-				"*.cluster1-mysql.tls-1.svc",
-				"*.cluster1-orchestrator",
-				"*.cluster1-orchestrator.tls-1",
-				"*.cluster1-orchestrator.tls-1.svc",
-				"*.cluster1-router",
-				"*.cluster1-router.tls-1",
-				"*.cluster1-router.tls-1.svc",
+				"*.ps-cluster1-mysql",
+				"*.ps-cluster1-mysql.tls-1",
+				"*.ps-cluster1-mysql.tls-1.svc",
+				"*.ps-cluster1-orchestrator",
+				"*.ps-cluster1-orchestrator.tls-1",
+				"*.ps-cluster1-orchestrator.tls-1.svc",
+				"*.ps-cluster1-router",
+				"*.ps-cluster1-router.tls-1",
+				"*.ps-cluster1-router.tls-1.svc",
 			}
 
 			Expect(tlsCert.DNSNames).Should(BeEquivalentTo(dnsNames))
@@ -123,15 +123,15 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			dnsNames := []string{
-				"*.cluster1-mysql",
-				"*.cluster1-mysql.tls-1",
-				"*.cluster1-mysql.tls-1.svc",
-				"*.cluster1-orchestrator",
-				"*.cluster1-orchestrator.tls-1",
-				"*.cluster1-orchestrator.tls-1.svc",
-				"*.cluster1-router",
-				"*.cluster1-router.tls-1",
-				"*.cluster1-router.tls-1.svc",
+				"*.ps-cluster1-mysql",
+				"*.ps-cluster1-mysql.tls-1",
+				"*.ps-cluster1-mysql.tls-1.svc",
+				"*.ps-cluster1-orchestrator",
+				"*.ps-cluster1-orchestrator.tls-1",
+				"*.ps-cluster1-orchestrator.tls-1.svc",
+				"*.ps-cluster1-router",
+				"*.ps-cluster1-router.tls-1",
+				"*.ps-cluster1-router.tls-1.svc",
 				"mysql-1.example.com",
 			}
 
