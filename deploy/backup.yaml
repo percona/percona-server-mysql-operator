@@ -1,10 +1,10 @@
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQLBackup
 metadata:
-  name: backup4
+  name: backup1
   finalizers:
     - percona.com/delete-backup
 spec:
 #  sourceBackupHost: cluster1-mysql-0.<mysql_service_name>.<namespace>
   clusterName: cluster1
-  storageName: azure-blob
+  storageName: minio

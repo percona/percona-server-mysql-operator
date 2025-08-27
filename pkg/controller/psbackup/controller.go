@@ -397,7 +397,7 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 	} else {
 		source = top.Replicas[0]
 	}
-	log.Info("Testing source", "source", source)
+
 	return source, nil
 }
 
