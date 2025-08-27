@@ -1047,7 +1047,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 
 		err = wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 10*time.Second, false,
 			func(ctx context.Context) (bool, error) {
-				if err := r.Client.Get(ctx, nn, cr); err != nil {
+				if err := r.Get(ctx, nn, cr); err != nil {
 					return false, errors.Wrap(err, "failed to get cr")
 				}
 				cond := meta.FindStatusCondition(cr.Status.Conditions,
