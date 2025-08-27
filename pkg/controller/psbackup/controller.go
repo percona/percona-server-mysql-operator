@@ -324,7 +324,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context
 	status.Image = cluster.Spec.Backup.Image
 	status.Storage = storage
 
-	src, err := r.getBackupSource(ctx, cluster)
+	src, err := r.getBackupSource(ctx, cr, cluster)
 	if err != nil {
 		return errors.Wrap(err, "get backup source node")
 	}
@@ -365,8 +365,20 @@ func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creatio
 	return d, nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) (string, error) {
+func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup, cluster *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	log := logf.FromContext(ctx).WithName("getBackupSource")
+
+	if cr.Spec.SourceBackupHost != "" {
+		return cr.Spec.SourceBackupHost, nil
+	}
+
+	if cluster.Spec.Backup.SourceBackupHost != "" {
+		return cluster.Spec.Backup.SourceBackupHost, nil
+	}
+
+	if cluster.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeAsync && cluster.Spec.Unsafe.Orchestrator && !cluster.Spec.Orchestrator.Enabled {
+		return "", errors.New("Orchestrator is turn off, you need to set SourceBackupHost either in cr or in backup")
+	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cluster, apiv1alpha1.UserOperator)
 	if err != nil {
@@ -385,7 +397,7 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 	} else {
 		source = top.Replicas[0]
 	}
-
+	log.Info("Testing source", "source", source)
 	return source, nil
 }
 
@@ -570,7 +582,7 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 		}
 		return complete, nil
 	}
-	src, err := r.getBackupSource(ctx, cluster)
+	src, err := r.getBackupSource(ctx, cr, cluster)
 	if err != nil {
 		return false, errors.Wrap(err, "get backup source node")
 	}

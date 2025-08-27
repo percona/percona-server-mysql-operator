@@ -51,6 +51,8 @@ spec:
             properties:
               clusterName:
                 type: string
+              sourceBackupHost:
+                type: string
               storageName:
                 type: string
             required:
@@ -3373,6 +3375,8 @@ spec:
                       type: object
                     type: array
                   serviceAccountName:
+                    type: string
+                  sourceBackupHost:
                     type: string
                   storages:
                     additionalProperties:
