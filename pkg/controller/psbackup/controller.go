@@ -38,6 +38,7 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
@@ -374,6 +375,14 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 
 	if cluster.Spec.Backup.SourceBackupHost != "" {
 		return cluster.Spec.Backup.SourceBackupHost, nil
+	}
+
+	if cluster.Spec.MySQL.Size == 1 {
+		if cluster.Name == "" || cluster.Namespace == "" {
+			return "", errors.New("cluster name/namespace required")
+		}
+		backupSourceHost := fmt.Sprintf("%s.%s.%s", mysql.PodName(cluster, 0), mysql.ServiceName(cluster), cluster.Namespace)
+		return backupSourceHost, nil
 	}
 
 	if cluster.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeAsync && cluster.Spec.Unsafe.Orchestrator && !cluster.Spec.Orchestrator.Enabled {
