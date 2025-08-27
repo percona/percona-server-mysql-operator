@@ -57,6 +57,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size >= 9) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', scaling MySQL replicas above 9 requires 'unsafeFlags.mysqlSize: true'"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size % 2 == 0) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', using an even number of MySQL replicas requires 'unsafeFlags.mysqlSize: true'"
 type PerconaServerMySQLSpec struct {
+	Metadata               *Metadata                            `json:"metadata,omitempty"`
 	CRVersion              string                               `json:"crVersion,omitempty"`
 	Pause                  bool                                 `json:"pause,omitempty"`
 	VolumeExpansionEnabled bool                                 `json:"enableVolumeExpansion,omitempty"`
@@ -208,6 +209,22 @@ type PodSpec struct {
 	Configuration string `json:"configuration,omitempty"`
 
 	ContainerSpec `json:",inline"`
+}
+
+type Metadata struct {
+	// Map of string keys and values that can be used to organize and categorize
+	// (scope and select) objects. May match selectors of replication controllers
+	// and services.
+	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels
+	// +optional
+	Labels map[string]string `json:"labels,omitempty" protobuf:"bytes,11,rep,name=labels"`
+
+	// Annotations is an unstructured key value map stored with a resource that may be
+	// set by external tools to store and retrieve arbitrary metadata. They are not
+	// queryable and should be preserved when modifying objects.
+	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty" protobuf:"bytes,12,rep,name=annotations"`
 }
 
 // GetTerminationGracePeriodSeconds returns the configured termination grace period for the Pod.
@@ -622,6 +639,22 @@ func (cr *PerconaServerMySQL) SetVersion() {
 	}
 
 	cr.Spec.CRVersion = version.Version()
+}
+
+func (cr *PerconaServerMySQL) GlobalLabels() map[string]string {
+	if cr.Spec.Metadata == nil {
+		return nil
+	}
+
+	return cr.Spec.Metadata.Labels
+}
+
+func (cr *PerconaServerMySQL) GlobalAnnotations() map[string]string {
+	if cr.Spec.Metadata == nil {
+		return nil
+	}
+
+	return cr.Spec.Metadata.Annotations
 }
 
 func (cr *PerconaServerMySQL) Version() *v.Version {
