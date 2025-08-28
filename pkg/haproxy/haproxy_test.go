@@ -153,19 +153,21 @@ func TestStatefulset(t *testing.T) {
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_readiness_check.sh"}},
 			},
-			TimeoutSeconds:   3,
-			PeriodSeconds:    5,
-			FailureThreshold: 3,
-			SuccessThreshold: 1,
+			InitialDelaySeconds: 15,
+			TimeoutSeconds:      1,
+			PeriodSeconds:       5,
+			SuccessThreshold:    1,
+			FailureThreshold:    3,
 		}
 		expectedLivenessProbe := corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_liveness_check.sh"}},
 			},
-			TimeoutSeconds:   3,
-			PeriodSeconds:    5,
-			FailureThreshold: 3,
-			SuccessThreshold: 1,
+			InitialDelaySeconds: 60,
+			TimeoutSeconds:      3,
+			PeriodSeconds:       30,
+			SuccessThreshold:    1,
+			FailureThreshold:    4,
 		}
 
 		assert.Equal(t, expectedReadinessProbe, *hContainer.ReadinessProbe)

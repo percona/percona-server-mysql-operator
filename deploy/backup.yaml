@@ -6,5 +6,5 @@ metadata:
     - percona.com/delete-backup
 spec:
 #  sourceHost: cluster1-mysql-0.<mysql_service_name>.<namespace>
-  clusterName: cluster1
+  clusterName: ps-cluster1
   storageName: minio
