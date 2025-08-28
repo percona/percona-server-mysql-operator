@@ -44,14 +44,15 @@ spec:
         - name: LIVENESS_CHECK_TIMEOUT
           value: "30"
         - name: READINESS_CHECK_TIMEOUT
-          value: "3"
+          value: "1"
         image: perconalab/percona-server-mysql-operator:main-haproxy
         imagePullPolicy: Always
         livenessProbe:
           exec:
             command:
             - /opt/percona/haproxy_liveness_check.sh
-          failureThreshold: 3
+          initialDelaySeconds: 60
+          failureThreshold: 4
           periodSeconds: 10
           successThreshold: 1
           timeoutSeconds: 30
@@ -73,10 +74,11 @@ spec:
           exec:
             command:
             - /opt/percona/haproxy_readiness_check.sh
+          initialDelaySeconds: 15
           failureThreshold: 40
           periodSeconds: 5
           successThreshold: 10
-          timeoutSeconds: 3
+          timeoutSeconds: 1
         resources:
           requests:
             cpu: 600m

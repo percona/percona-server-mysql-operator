@@ -703,7 +703,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 		config += autotuneParams
 	}
 
-	configMap := k8s.ConfigMap(mysql.AutoConfigMapName(cr), cr.Namespace, mysql.CustomConfigKey, config)
+	configMap := k8s.ConfigMap(cr, mysql.AutoConfigMapName(cr), mysql.CustomConfigKey, config)
 	if !reflect.DeepEqual(currentConfigMap.Data, configMap.Data) {
 		if err := k8s.EnsureObject(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
 			return errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)

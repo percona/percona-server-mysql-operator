@@ -14,7 +14,7 @@ commands:
 
       renew_certificate "tls-cert-manager-ssl"
 
-      sleep 10
+      sleep 20
 
       new_generation_mysql=$(kubectl -n ${NAMESPACE} get sts tls-cert-manager-mysql -o jsonpath='{.metadata.generation}')
       new_generation_haproxy=$(kubectl -n ${NAMESPACE} get sts tls-cert-manager-haproxy -o jsonpath='{.metadata.generation}')

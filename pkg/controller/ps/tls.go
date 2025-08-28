@@ -26,18 +26,19 @@ import (
 func (r *PerconaServerMySQLReconciler) ensureTLSSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
-	secretObj := corev1.Secret{}
-	err := r.Client.Get(context.TODO(),
+	secret := corev1.Secret{}
+	err := r.Get(ctx,
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      cr.Spec.SSLSecretName,
 		},
-		&secretObj,
+		&secret,
 	)
-
-	// don't create ssl secret if it is created by customer not by operator
-	if err == nil && !metav1.IsControlledBy(&secretObj, cr) {
-		return nil
+	if err == nil {
+		// don't create ssl secret if it is created by customer not by operator
+		if c, err := tls.IsSecretCreatedByUser(ctx, r.Client, cr, &secret); err != nil || c {
+			return err
+		}
 	}
 
 	err = r.ensureSSLByCertManager(ctx, cr)
@@ -133,8 +134,10 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 
 		caCert := &cm.Certificate{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      certName,
-				Namespace: cr.Namespace,
+				Name:        certName,
+				Namespace:   cr.Namespace,
+				Labels:      cr.GlobalLabels(),
+				Annotations: cr.GlobalAnnotations(),
 			},
 			Spec: cm.CertificateSpec{
 				SecretName: secretName,
@@ -169,8 +172,10 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 
 	kubeCert := &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      certName,
-			Namespace: cr.Namespace,
+			Name:        certName,
+			Namespace:   cr.Namespace,
+			Labels:      cr.GlobalLabels(),
+			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: cm.CertificateSpec{
 			SecretName: cr.Spec.SSLSecretName,
@@ -195,14 +200,16 @@ func (r *PerconaServerMySQLReconciler) ensureIssuer(ctx context.Context, cr *api
 ) error {
 	isr := &cm.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      issuerName,
-			Namespace: cr.Namespace,
+			Name:        issuerName,
+			Namespace:   cr.Namespace,
+			Labels:      cr.GlobalLabels(),
+			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: cm.IssuerSpec{
 			IssuerConfig: IssuerConf,
 		},
 	}
-	err := k8s.EnsureObjectWithHash(ctx, r.Client, nil, isr, r.Scheme)
+	err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, isr, r.Scheme)
 	if err != nil {
 		return errors.Wrap(err, "create issuer")
 	}
