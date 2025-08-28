@@ -7,7 +7,7 @@ kind: ConfigMap
 metadata:
   name: 07-check-group-seeds
 data:
-  gr-init-deploy-mysql-0: gr-init-deploy-mysql-0.gr-init-deploy-mysql.NAMESPACE:33061,gr-init-deploy-mysql-1.gr-init-deploy-mysql.NAMESPACE:33061,gr-init-deploy-mysql-2.gr-init-deploy-mysql.NAMESPACE:33061
-  gr-init-deploy-mysql-1: gr-init-deploy-mysql-0.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-1.gr-init-deploy-mysql.NAMESPACE:33061,gr-init-deploy-mysql-2.gr-init-deploy-mysql.NAMESPACE:33061
-  gr-init-deploy-mysql-2: gr-init-deploy-mysql-0.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-1.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-2.gr-init-deploy-mysql.NAMESPACE:33061
-  
+  gr-init-deploy-mysql-0: gr-init-deploy-mysql-1.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-2.gr-init-deploy-mysql.NAMESPACE:3306
+  gr-init-deploy-mysql-1: gr-init-deploy-mysql-0.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-2.gr-init-deploy-mysql.NAMESPACE:3306
+  gr-init-deploy-mysql-2: gr-init-deploy-mysql-0.gr-init-deploy-mysql.NAMESPACE:3306,gr-init-deploy-mysql-1.gr-init-deploy-mysql.NAMESPACE:3306
+

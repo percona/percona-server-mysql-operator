@@ -46,7 +46,10 @@ func TestJob(t *testing.T) {
 		cluster := cr.DeepCopy()
 		cr := backup.DeepCopy()
 
-		j := Job(cluster, cr, destination, initImage, cluster.Spec.Backup.Storages[storageName])
+		j, err := Job(cluster, cr, destination, initImage, cluster.Spec.Backup.Storages[storageName])
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		assert.NotNil(t, j)
 		assert.Equal(t, "xb-backup-minio", j.Name)
@@ -66,7 +69,10 @@ func TestJob(t *testing.T) {
 		cluster := cr.DeepCopy()
 		cr := backup.DeepCopy()
 
-		j := Job(cluster, cr, destination, initImage, cluster.Spec.Backup.Storages[storageName])
+		j, err := Job(cluster, cr, destination, initImage, cluster.Spec.Backup.Storages[storageName])
+		if err != nil {
+			t.Fatal(err)
+		}
 		assert.Equal(t, []corev1.LocalObjectReference(nil), j.Spec.Template.Spec.ImagePullSecrets)
 
 		imagePullSecrets := []corev1.LocalObjectReference{
@@ -79,7 +85,10 @@ func TestJob(t *testing.T) {
 		}
 		cluster.Spec.Backup.ImagePullSecrets = imagePullSecrets
 
-		j = Job(cluster, cr, destination, initImage, cluster.Spec.Backup.Storages[storageName])
+		j, err = Job(cluster, cr, destination, initImage, cluster.Spec.Backup.Storages[storageName])
+		if err != nil {
+			t.Fatal(err)
+		}
 		assert.Equal(t, imagePullSecrets, j.Spec.Template.Spec.ImagePullSecrets)
 	})
 
@@ -87,14 +96,20 @@ func TestJob(t *testing.T) {
 		cluster := cr.DeepCopy()
 		cr := backup.DeepCopy()
 
-		j := Job(cluster, cr, destination, initImage, cluster.Spec.Backup.Storages[storageName])
+		j, err := Job(cluster, cr, destination, initImage, cluster.Spec.Backup.Storages[storageName])
+		if err != nil {
+			t.Fatal(err)
+		}
 		var e *string
 		assert.Equal(t, e, j.Spec.Template.Spec.RuntimeClassName)
 
 		const runtimeClassName = "runtimeClassName"
 		cluster.Spec.Backup.Storages[storageName].RuntimeClassName = ptr.To(runtimeClassName)
 
-		j = Job(cluster, cr, destination, initImage, cluster.Spec.Backup.Storages[storageName])
+		j, err = Job(cluster, cr, destination, initImage, cluster.Spec.Backup.Storages[storageName])
+		if err != nil {
+			t.Fatal(err)
+		}
 		assert.Equal(t, runtimeClassName, *j.Spec.Template.Spec.RuntimeClassName)
 	})
 }

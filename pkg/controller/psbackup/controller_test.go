@@ -33,7 +33,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err, "failed to read default backup")
 	}
-	cluster, err := readDefaultCR("cluster1", namespace)
+	cluster, err := readDefaultCR("ps-cluster1", namespace)
 	if err != nil {
 		t.Fatal(err, "failed to read default cr")
 	}
@@ -322,7 +322,7 @@ func TestRunningState(t *testing.T) {
 	}
 	cr.Status.State = apiv1alpha1.BackupStarting
 	cr.Spec.StorageName = "s3-us-west"
-	cluster, err := readDefaultCR("cluster1", namespace)
+	cluster, err := readDefaultCR("ps-cluster1", namespace)
 	if err != nil {
 		t.Fatal(err, "failed to read default cr")
 	}
@@ -367,7 +367,10 @@ func TestRunningState(t *testing.T) {
 			if !ok {
 				t.Fatal("storage not found")
 			}
-			job := xtrabackup.Job(tt.cluster, tt.cr, "s3://bucket/container", "init-image", storage)
+			job, err := xtrabackup.Job(tt.cluster, tt.cr, "s3://bucket/container", "init-image", storage)
+			if err != nil {
+				t.Fatal(err)
+			}
 			job.Status.Active = 1
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr, tt.cluster, job).WithStatusSubresource(tt.cr, tt.cluster, job)
 
@@ -379,7 +382,7 @@ func TestRunningState(t *testing.T) {
 					return tt.sidecarClient
 				},
 			}
-			_, err := r.Reconcile(ctx, controllerruntime.Request{
+			_, err = r.Reconcile(ctx, controllerruntime.Request{
 				NamespacedName: types.NamespacedName{
 					Name:      tt.cr.Name,
 					Namespace: tt.cr.Namespace,
