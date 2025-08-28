@@ -1671,7 +1671,7 @@ spec:
                     type: array
                   serviceAccountName:
                     type: string
-                  sourceBackupHost:
+                  sourceHost:
                     type: string
                   storages:
                     additionalProperties:

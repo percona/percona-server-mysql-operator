@@ -369,12 +369,12 @@ func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creatio
 func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup, cluster *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	log := logf.FromContext(ctx).WithName("getBackupSource")
 
-	if cr.Spec.SourceBackupHost != "" {
-		return cr.Spec.SourceBackupHost, nil
+	if cr.Spec.SourceHost != "" {
+		return cr.Spec.SourceHost, nil
 	}
 
-	if cluster.Spec.Backup.SourceBackupHost != "" {
-		return cluster.Spec.Backup.SourceBackupHost, nil
+	if cluster.Spec.Backup.SourceHost != "" {
+		return cluster.Spec.Backup.SourceHost, nil
 	}
 
 	if cluster.Spec.MySQL.Size == 1 {
@@ -385,8 +385,8 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 		return backupSourceHost, nil
 	}
 
-	if cluster.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeAsync && cluster.Spec.Unsafe.Orchestrator && !cluster.Spec.Orchestrator.Enabled {
-		return "", errors.New("Orchestrator is turn off, you need to set SourceBackupHost either in cr or in backup")
+	if cluster.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeAsync && !cluster.Spec.Orchestrator.Enabled {
+		return "", errors.New("Orchestrator is disabled, you need to set SourceHost for backup either in cr or in backup")
 	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cluster, apiv1alpha1.UserOperator)

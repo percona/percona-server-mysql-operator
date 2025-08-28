@@ -47,7 +47,7 @@ spec:
             properties:
               clusterName:
                 type: string
-              sourceBackupHost:
+              sourceHost:
                 type: string
               storageName:
                 type: string

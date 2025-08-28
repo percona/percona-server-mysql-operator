@@ -423,15 +423,15 @@ func TestGetBackupSource(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "sourceBackupHost from backup",
+			name: "sourceHost from backup",
 			cr: &apiv1alpha1.PerconaServerMySQLBackup{
 				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
-					SourceBackupHost: "backuphost",
+					SourceHost: "backuphost",
 				},
 			},
 			cluster: &apiv1alpha1.PerconaServerMySQL{
 				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					Backup: &apiv1alpha1.BackupSpec{SourceBackupHost: "clusterhost"},
+					Backup: &apiv1alpha1.BackupSpec{SourceHost: "clusterhost"},
 				},
 			},
 			want:    "backuphost",
@@ -444,7 +444,7 @@ func TestGetBackupSource(t *testing.T) {
 			},
 			cluster: &apiv1alpha1.PerconaServerMySQL{
 				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					Backup: &apiv1alpha1.BackupSpec{SourceBackupHost: "clusterhost"},
+					Backup: &apiv1alpha1.BackupSpec{SourceHost: "clusterhost"},
 				},
 			},
 			want:    "clusterhost",
