@@ -255,7 +255,10 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context
 	if err != nil {
 		return errors.Wrap(err, "get backup destination")
 	}
-	job := xtrabackup.Job(cluster, cr, destination, initImage, storage)
+	job, err := xtrabackup.Job(cluster, cr, destination, initImage, storage)
+	if err != nil {
+		return errors.Wrap(err, "create backup job")
+	}
 
 	switch storage.Type {
 	case apiv1alpha1.BackupStorageS3:
@@ -462,9 +465,31 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 	if err != nil {
 		return nil, errors.Wrap(err, "get backup destination")
 	}
+
+	containerOptions := cr.DeepCopy().Status.Storage.ContainerOptions
+	if containerOptions == nil {
+		containerOptions = new(apiv1alpha1.BackupContainerOptions)
+	}
+	backupContainerOptions := cr.DeepCopy().Spec.ContainerOptions
+	if backupContainerOptions != nil {
+		if backupContainerOptions.Args.Xbcloud != nil {
+			containerOptions.Args.Xbcloud = backupContainerOptions.Args.Xbcloud
+		}
+		if backupContainerOptions.Args.Xbstream != nil {
+			containerOptions.Args.Xbstream = backupContainerOptions.Args.Xbstream
+		}
+		if backupContainerOptions.Args.Xtrabackup != nil {
+			containerOptions.Args.Xtrabackup = backupContainerOptions.Args.Xtrabackup
+		}
+		if backupContainerOptions.Env != nil {
+			containerOptions.Env = backupContainerOptions.Env
+		}
+	}
+
 	conf := &xtrabackup.BackupConfig{
-		Destination: destination.PathWithoutBucket(),
-		VerifyTLS:   verifyTLS,
+		Destination:      destination.PathWithoutBucket(),
+		VerifyTLS:        verifyTLS,
+		ContainerOptions: containerOptions,
 	}
 	s := new(corev1.Secret)
 	nn := types.NamespacedName{

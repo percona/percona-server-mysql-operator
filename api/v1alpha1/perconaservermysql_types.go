@@ -39,6 +39,7 @@ import (
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
@@ -327,6 +328,62 @@ type BackupStorageSpec struct {
 	ContainerSecurityContext  *corev1.SecurityContext           `json:"containerSecurityContext,omitempty"`
 	RuntimeClassName          *string                           `json:"runtimeClassName,omitempty"`
 	VerifyTLS                 *bool                             `json:"verifyTLS,omitempty"`
+	ContainerOptions          *BackupContainerOptions           `json:"containerOptions,omitempty"`
+}
+
+type BackupContainerOptions struct {
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+	// +optional
+	Args BackupContainerArgs `json:"args"`
+}
+
+func (b *BackupContainerOptions) GetEnv() []corev1.EnvVar {
+	if b == nil {
+		return nil
+	}
+	return util.MergeEnvLists(b.Env, b.Args.Env())
+}
+
+func (b *BackupContainerOptions) GetEnvVar(storage *BackupStorageSpec) []corev1.EnvVar {
+	if b != nil {
+		return b.GetEnv()
+	}
+
+	if storage == nil || storage.ContainerOptions == nil {
+		return nil
+	}
+
+	return storage.ContainerOptions.GetEnv()
+}
+
+type BackupContainerArgs struct {
+	Xtrabackup []string `json:"xtrabackup,omitempty"`
+	Xbcloud    []string `json:"xbcloud,omitempty"`
+	Xbstream   []string `json:"xbstream,omitempty"`
+}
+
+func (b *BackupContainerArgs) Env() []corev1.EnvVar {
+	envs := []corev1.EnvVar{}
+	if len(b.Xtrabackup) > 0 {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "XB_EXTRA_ARGS",
+			Value: strings.Join(b.Xtrabackup, " "),
+		})
+	}
+	if len(b.Xbcloud) > 0 {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "XBCLOUD_EXTRA_ARGS",
+			Value: strings.Join(b.Xbcloud, " "),
+		})
+	}
+	if len(b.Xbstream) > 0 {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "XBSTREAM_EXTRA_ARGS",
+			Value: strings.Join(b.Xbstream, " "),
+		})
+	}
+	return envs
 }
 
 type BackupStorageS3Spec struct {
