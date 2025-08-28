@@ -121,11 +121,10 @@ func TestContainer_CustomProbes(t *testing.T) {
 	assert.Equal(t, intstr.FromInt32(7777), c.LivenessProbe.HTTPGet.Port)
 	assert.Equal(t, "/local/Status", c.LivenessProbe.HTTPGet.Path)
 
-	if assert.NotNil(t, c.ReadinessProbe) && assert.NotNil(t, c.ReadinessProbe.HTTPGet) {
-		assert.Equal(t, int32(5), c.ReadinessProbe.InitialDelaySeconds)
-		assert.Equal(t, int32(4), c.ReadinessProbe.TimeoutSeconds)
-		assert.Equal(t, int32(12), c.ReadinessProbe.PeriodSeconds)
-		assert.Equal(t, intstr.FromInt32(7777), c.ReadinessProbe.HTTPGet.Port)
-		assert.Equal(t, "/local/Status", c.ReadinessProbe.HTTPGet.Path)
-	}
+	assert.Equal(t, int32(5), c.ReadinessProbe.InitialDelaySeconds)
+	assert.Equal(t, int32(4), c.ReadinessProbe.TimeoutSeconds)
+	assert.Equal(t, int32(12), c.ReadinessProbe.PeriodSeconds)
+	assert.Equal(t, intstr.FromInt32(7777), c.ReadinessProbe.HTTPGet.Port)
+	assert.Equal(t, "/local/Status", c.ReadinessProbe.HTTPGet.Path)
+
 }

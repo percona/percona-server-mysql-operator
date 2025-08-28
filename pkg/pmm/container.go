@@ -47,7 +47,6 @@ func Container(
 	}
 
 	if cr.CompareVersion("0.12.0") >= 0 {
-
 		container.Lifecycle = &corev1.Lifecycle{
 			PreStop: &corev1.LifecycleHandler{
 				Exec: &corev1.ExecAction{
@@ -92,6 +91,7 @@ func Container(
 			}
 		}
 	}
+
 	return container
 }
 
