@@ -7,3 +7,12 @@ metadata:
 spec:
   clusterName: demand-backup
   storageName: minio
+  containerOptions:
+    env:
+    - name: CUSTOM_ENV_2
+      value: "test"
+    args:
+      xtrabackup:
+      - "--strict"
+      xbstream:
+      - "--notsupported"
