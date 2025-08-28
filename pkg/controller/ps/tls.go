@@ -134,8 +134,10 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 
 		caCert := &cm.Certificate{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      certName,
-				Namespace: cr.Namespace,
+				Name:        certName,
+				Namespace:   cr.Namespace,
+				Labels:      cr.GlobalLabels(),
+				Annotations: cr.GlobalAnnotations(),
 			},
 			Spec: cm.CertificateSpec{
 				SecretName: secretName,
@@ -170,8 +172,10 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 
 	kubeCert := &cm.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      certName,
-			Namespace: cr.Namespace,
+			Name:        certName,
+			Namespace:   cr.Namespace,
+			Labels:      cr.GlobalLabels(),
+			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: cm.CertificateSpec{
 			SecretName: cr.Spec.SSLSecretName,
@@ -196,8 +200,10 @@ func (r *PerconaServerMySQLReconciler) ensureIssuer(ctx context.Context, cr *api
 ) error {
 	isr := &cm.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      issuerName,
-			Namespace: cr.Namespace,
+			Name:        issuerName,
+			Namespace:   cr.Namespace,
+			Labels:      cr.GlobalLabels(),
+			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: cm.IssuerSpec{
 			IssuerConfig: IssuerConf,
