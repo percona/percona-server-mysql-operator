@@ -675,6 +675,13 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	}
 	env = append(env, spec.Env...)
 
+	if cr.CompareVersion("0.12.0") >= 0 {
+		env = append(env, corev1.EnvVar{
+			Name:  "KEYRING_VAULT_PATH",
+			Value: fmt.Sprintf("%s/keyring_vault.cnf", vaultSecretMountPath),
+		})
+	}
+
 	container := corev1.Container{
 		Name:                     AppName,
 		Image:                    spec.Image,

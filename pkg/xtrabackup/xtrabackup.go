@@ -424,7 +424,7 @@ func RestoreJob(
 					},
 				},
 			},
-			BackoffLimit: func(i int32) *int32 { return &i }(4),
+			BackoffLimit: cluster.Spec.Backup.BackoffLimit,
 		},
 	}
 
@@ -530,7 +530,7 @@ func restoreContainer(
 			},
 			{
 				Name:  "KEYRING_VAULT_PATH",
-				Value: fmt.Sprintf("%s/keyring_vault.conf", vaultSecretMountPath),
+				Value: fmt.Sprintf("%s/keyring_vault.cnf", vaultSecretMountPath),
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
