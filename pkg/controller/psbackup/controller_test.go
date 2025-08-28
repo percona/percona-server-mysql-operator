@@ -3,6 +3,7 @@ package psbackup
 import (
 	"context"
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -409,12 +410,12 @@ func TestRunningState(t *testing.T) {
 
 func TestGetBackupSource(t *testing.T) {
 	scheme := runtime.NewScheme()
-	if err := clientgoscheme.AddToScheme(scheme); err != nil {
-		t.Fatal(err, "failed to add client-go scheme")
-	}
-	if err := apiv1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatal(err, "failed to add apis scheme")
-	}
+
+	err := clientgoscheme.AddToScheme(scheme)
+	require.NoError(t, err)
+
+	err = apiv1alpha1.AddToScheme(scheme)
+	require.NoError(t, err)
 
 	ctx := context.Background()
 
@@ -499,16 +500,18 @@ func TestGetBackupSource(t *testing.T) {
 			cb.WithObjects(tt.cluster)
 		}
 
-		r := PerconaServerMySQLBackupReconciler{
-			Client:        cb.Build(),
-			Scheme:        scheme,
-			ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
-		}
-
 		t.Run(tt.name, func(t *testing.T) {
+			r := PerconaServerMySQLBackupReconciler{
+				Client:        cb.Build(),
+				Scheme:        scheme,
+				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+			}
+
 			got, err := r.getBackupSource(ctx, tt.cr, tt.cluster)
 			if tt.wantErr {
-				assert.Error(t, err)
+				const errMsg = "Orchestrator is disabled. Please specify the backup source explicitly using either spec.backup.sourceHost in the cluster CR or spec.sourceBackupHost in the PerconaServerMySQLBackup resource."
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), errMsg)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.want, got)

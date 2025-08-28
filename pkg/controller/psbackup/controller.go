@@ -389,7 +389,7 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 	}
 
 	if cluster.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeAsync && !cluster.Spec.Orchestrator.Enabled {
-		return "", errors.New("Orchestrator is disabled, you need to set SourceHost for backup either in cr or in backup")
+		return "", errors.New("Orchestrator is disabled. Please specify the backup source explicitly using either spec.backup.sourceHost in the cluster CR or spec.sourceBackupHost in the PerconaServerMySQLBackup resource.")
 	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cluster, apiv1alpha1.UserOperator)
