@@ -130,8 +130,6 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 		return ctrl.Result{}, errors.Wrap(err, "get CR")
 	}
 
-	log.Info("StatusCondition fresh CR", "conditions", cr.Status.Conditions)
-
 	if cr.ObjectMeta.DeletionTimestamp != nil {
 		log.Info("CR marked for deletion, applying finalizers", "name", cr.Name)
 		if err := r.applyFinalizers(ctx, cr); err != nil {
@@ -1028,16 +1026,14 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 			return nil
 		}
 
-		t := metav1.Now()
 		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
 			Type:   apiv1alpha1.ConditionInnoDBClusterBootstrapped,
 			Status: metav1.ConditionTrue,
 			Reason: apiv1alpha1.ConditionInnoDBClusterBootstrapped,
 			Message: fmt.Sprintf("InnoDB cluster successfully bootstrapped with %d nodes",
 				cr.MySQLSpec().Size),
-			LastTransitionTime: t,
+			LastTransitionTime: metav1.Now(),
 		})
-		log.Info("SetStatusCondition", "lastTransitionTime", t)
 
 		nn := types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}
 
@@ -1047,9 +1043,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 
 		err = wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 10*time.Second, false,
 			func(ctx context.Context) (bool, error) {
-				if err := r.Get(ctx, nn, cr); err != nil {
-					return false, errors.Wrap(err, "failed to get cr")
-				}
+				cr, err = k8s.GetCRWithDefaults(ctx, r.Client, nn, r.ServerVersion)
 				cond := meta.FindStatusCondition(cr.Status.Conditions,
 					apiv1alpha1.ConditionInnoDBClusterBootstrapped)
 				return cond != nil, nil
@@ -1060,7 +1054,6 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 
 		return nil
 	}
-	log.Info("GetStatusCondition", "status", cond.Status, "lastTransitionTime", cond.LastTransitionTime)
 
 	if exists, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata"); err != nil || !exists {
 		return errors.Wrap(err, "InnoDB cluster is already bootstrapped, but failed to check its status")
