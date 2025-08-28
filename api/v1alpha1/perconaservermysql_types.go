@@ -39,6 +39,7 @@ import (
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
@@ -57,6 +58,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size >= 9) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', scaling MySQL replicas above 9 requires 'unsafeFlags.mysqlSize: true'"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size % 2 == 0) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', using an even number of MySQL replicas requires 'unsafeFlags.mysqlSize: true'"
 type PerconaServerMySQLSpec struct {
+	Metadata               *Metadata                            `json:"metadata,omitempty"`
 	CRVersion              string                               `json:"crVersion,omitempty"`
 	Pause                  bool                                 `json:"pause,omitempty"`
 	VolumeExpansionEnabled bool                                 `json:"enableVolumeExpansion,omitempty"`
@@ -210,6 +212,22 @@ type PodSpec struct {
 	ContainerSpec `json:",inline"`
 }
 
+type Metadata struct {
+	// Map of string keys and values that can be used to organize and categorize
+	// (scope and select) objects. May match selectors of replication controllers
+	// and services.
+	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels
+	// +optional
+	Labels map[string]string `json:"labels,omitempty" protobuf:"bytes,11,rep,name=labels"`
+
+	// Annotations is an unstructured key value map stored with a resource that may be
+	// set by external tools to store and retrieve arbitrary metadata. They are not
+	// queryable and should be preserved when modifying objects.
+	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty" protobuf:"bytes,12,rep,name=annotations"`
+}
+
 // GetTerminationGracePeriodSeconds returns the configured termination grace period for the Pod.
 // If not explicitly set, it returns the default grace period.
 func (s PodSpec) GetTerminationGracePeriodSeconds() *int64 {
@@ -309,6 +327,62 @@ type BackupStorageSpec struct {
 	ContainerSecurityContext  *corev1.SecurityContext           `json:"containerSecurityContext,omitempty"`
 	RuntimeClassName          *string                           `json:"runtimeClassName,omitempty"`
 	VerifyTLS                 *bool                             `json:"verifyTLS,omitempty"`
+	ContainerOptions          *BackupContainerOptions           `json:"containerOptions,omitempty"`
+}
+
+type BackupContainerOptions struct {
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+	// +optional
+	Args BackupContainerArgs `json:"args"`
+}
+
+func (b *BackupContainerOptions) GetEnv() []corev1.EnvVar {
+	if b == nil {
+		return nil
+	}
+	return util.MergeEnvLists(b.Env, b.Args.Env())
+}
+
+func (b *BackupContainerOptions) GetEnvVar(storage *BackupStorageSpec) []corev1.EnvVar {
+	if b != nil {
+		return b.GetEnv()
+	}
+
+	if storage == nil || storage.ContainerOptions == nil {
+		return nil
+	}
+
+	return storage.ContainerOptions.GetEnv()
+}
+
+type BackupContainerArgs struct {
+	Xtrabackup []string `json:"xtrabackup,omitempty"`
+	Xbcloud    []string `json:"xbcloud,omitempty"`
+	Xbstream   []string `json:"xbstream,omitempty"`
+}
+
+func (b *BackupContainerArgs) Env() []corev1.EnvVar {
+	envs := []corev1.EnvVar{}
+	if len(b.Xtrabackup) > 0 {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "XB_EXTRA_ARGS",
+			Value: strings.Join(b.Xtrabackup, " "),
+		})
+	}
+	if len(b.Xbcloud) > 0 {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "XBCLOUD_EXTRA_ARGS",
+			Value: strings.Join(b.Xbcloud, " "),
+		})
+	}
+	if len(b.Xbstream) > 0 {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "XBSTREAM_EXTRA_ARGS",
+			Value: strings.Join(b.Xbstream, " "),
+		})
+	}
+	return envs
 }
 
 type BackupStorageS3Spec struct {
@@ -502,7 +576,7 @@ type ServiceExpose struct {
 	ExternalTrafficPolicy    corev1.ServiceExternalTrafficPolicyType  `json:"externalTrafficPolicy,omitempty"`
 }
 
-// Determines if both annotations and labels of the service expose are empty.
+// SaveOldMeta determines if both annotations and labels of the service expose are empty.
 func (e *ServiceExpose) SaveOldMeta() bool {
 	return len(e.Annotations) == 0 && len(e.Labels) == 0
 }
@@ -622,6 +696,22 @@ func (cr *PerconaServerMySQL) SetVersion() {
 	}
 
 	cr.Spec.CRVersion = version.Version()
+}
+
+func (cr *PerconaServerMySQL) GlobalLabels() map[string]string {
+	if cr.Spec.Metadata == nil {
+		return nil
+	}
+
+	return cr.Spec.Metadata.Labels
+}
+
+func (cr *PerconaServerMySQL) GlobalAnnotations() map[string]string {
+	if cr.Spec.Metadata == nil {
+		return nil
+	}
+
+	return cr.Spec.Metadata.Annotations
 }
 
 func (cr *PerconaServerMySQL) Version() *v.Version {
@@ -757,30 +847,36 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.Proxy.HAProxy = new(HAProxySpec)
 	}
 
-	if cr.Spec.Proxy.HAProxy.LivenessProbe.PeriodSeconds == 0 {
-		cr.Spec.Proxy.HAProxy.LivenessProbe.PeriodSeconds = 5
-	}
-	if cr.Spec.Proxy.HAProxy.LivenessProbe.FailureThreshold == 0 {
-		cr.Spec.Proxy.HAProxy.LivenessProbe.FailureThreshold = 3
-	}
-	if cr.Spec.Proxy.HAProxy.LivenessProbe.SuccessThreshold == 0 {
-		cr.Spec.Proxy.HAProxy.LivenessProbe.SuccessThreshold = 1
+	if cr.Spec.Proxy.HAProxy.LivenessProbe.InitialDelaySeconds == 0 {
+		cr.Spec.Proxy.HAProxy.LivenessProbe.InitialDelaySeconds = 60
 	}
 	if cr.Spec.Proxy.HAProxy.LivenessProbe.TimeoutSeconds == 0 {
 		cr.Spec.Proxy.HAProxy.LivenessProbe.TimeoutSeconds = 3
 	}
+	if cr.Spec.Proxy.HAProxy.LivenessProbe.PeriodSeconds == 0 {
+		cr.Spec.Proxy.HAProxy.LivenessProbe.PeriodSeconds = 30
+	}
+	if cr.Spec.Proxy.HAProxy.LivenessProbe.SuccessThreshold == 0 {
+		cr.Spec.Proxy.HAProxy.LivenessProbe.SuccessThreshold = 1
+	}
+	if cr.Spec.Proxy.HAProxy.LivenessProbe.FailureThreshold == 0 {
+		cr.Spec.Proxy.HAProxy.LivenessProbe.FailureThreshold = 4
+	}
 
+	if cr.Spec.Proxy.HAProxy.ReadinessProbe.InitialDelaySeconds == 0 {
+		cr.Spec.Proxy.HAProxy.ReadinessProbe.InitialDelaySeconds = 15
+	}
+	if cr.Spec.Proxy.HAProxy.ReadinessProbe.TimeoutSeconds == 0 {
+		cr.Spec.Proxy.HAProxy.ReadinessProbe.TimeoutSeconds = 1
+	}
 	if cr.Spec.Proxy.HAProxy.ReadinessProbe.PeriodSeconds == 0 {
 		cr.Spec.Proxy.HAProxy.ReadinessProbe.PeriodSeconds = 5
-	}
-	if cr.Spec.Proxy.HAProxy.ReadinessProbe.FailureThreshold == 0 {
-		cr.Spec.Proxy.HAProxy.ReadinessProbe.FailureThreshold = 3
 	}
 	if cr.Spec.Proxy.HAProxy.ReadinessProbe.SuccessThreshold == 0 {
 		cr.Spec.Proxy.HAProxy.ReadinessProbe.SuccessThreshold = 1
 	}
-	if cr.Spec.Proxy.HAProxy.ReadinessProbe.TimeoutSeconds == 0 {
-		cr.Spec.Proxy.HAProxy.ReadinessProbe.TimeoutSeconds = 3
+	if cr.Spec.Proxy.HAProxy.ReadinessProbe.FailureThreshold == 0 {
+		cr.Spec.Proxy.HAProxy.ReadinessProbe.FailureThreshold = 3
 	}
 
 	var fsgroup *int64

@@ -34,8 +34,12 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/restmapper"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -991,7 +995,7 @@ var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 		cr.Finalizers = append(cr.Finalizers, naming.FinalizerDeleteMySQLPvc)
-		cr.Spec.SecretsName = "cluster1-secrets"
+		cr.Spec.SecretsName = "ps-cluster1-secrets"
 
 		sfsWithOwner := appsv1.StatefulSet{}
 		// stsApp := statefulset.NewNode(cr)
@@ -1226,6 +1230,189 @@ var _ = Describe("Primary mysql service", Ordered, func() {
 			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/name", "mysql"))
 			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/part-of", "percona-server"))
 			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("mysql.percona.com/primary", "true"))
+		})
+	})
+})
+
+var _ = Describe("Global labels and annotations", Ordered, func() {
+	ctx := context.Background()
+
+	const crName = "global-labels-annotations"
+	const ns = "gr-" + crName
+	const asyncNS = "async-" + crName
+	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
+	asyncCrNamespacedName := types.NamespacedName{Name: crName, Namespace: asyncNS}
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ns,
+			Namespace: ns,
+		},
+	}
+
+	asyncNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      asyncNS,
+			Namespace: asyncNS,
+		},
+	}
+
+	BeforeAll(func() {
+		By("Creating the Namespace to perform the tests")
+		err := k8sClient.Create(ctx, namespace)
+		Expect(err).To(Not(HaveOccurred()))
+
+		err = k8sClient.Create(ctx, asyncNamespace)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterAll(func() {
+		By("Deleting the Namespace to perform the tests")
+		_ = k8sClient.Delete(ctx, namespace)
+		_ = k8sClient.Delete(ctx, asyncNamespace)
+	})
+
+	Context("Check labels/annotations on gr cluster type", Ordered, func() {
+		cr, err := readDefaultCR(crName, ns)
+
+		It("Should read default cr.yaml", func() {
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.Metadata = &psv1alpha1.Metadata{
+				Labels: map[string]string{
+					"test-label": "test-value",
+				},
+				Annotations: map[string]string{
+					"test-annotation": "test-value",
+				},
+			}
+		})
+
+		It("Should create cluster", func() {
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+		})
+
+		It("Should reconcile once", func() {
+			_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should check all objects", func() {
+			dyn, err := dynamic.NewForConfig(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			disc, err := discovery.NewDiscoveryClientForConfig(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			gr, err := restmapper.GetAPIGroupResources(disc)
+			Expect(err).NotTo(HaveOccurred())
+
+			for _, list := range gr {
+				for version, resources := range list.VersionedResources {
+					for _, r := range resources {
+						// Skip subresources (like pods/status)
+						if strings.Contains(r.Name, "/") {
+							continue
+						}
+						if !r.Namespaced {
+							continue
+						}
+
+						gv, err := schema.ParseGroupVersion(version)
+						if err != nil {
+							continue
+						}
+						gvr := gv.WithResource(r.Name)
+
+						resList, err := dyn.Resource(gvr).Namespace(ns).List(ctx, metav1.ListOptions{})
+						if err != nil {
+							continue // some resources may not be listable
+						}
+						for _, item := range resList.Items {
+							objectWithMissingMetadata := ""
+							_, kind := item.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
+							if item.GetLabels()["test-label"] != "test-value" || item.GetAnnotations()["test-annotation"] != "test-value" {
+								objectWithMissingMetadata = item.GetName() + "/" + kind
+							}
+							Expect(objectWithMissingMetadata).To(BeEmpty())
+						}
+					}
+				}
+			}
+		})
+	})
+
+	Context("Check labels/annotations on gr cluster type", Ordered, func() {
+		ns := asyncNS
+		cr, err := readDefaultCR("async-cluster", ns)
+
+		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+		cr.Spec.Orchestrator.Enabled = true
+		cr.Spec.Metadata = &psv1alpha1.Metadata{
+			Labels: map[string]string{
+				"test-label": "test-value",
+			},
+			Annotations: map[string]string{
+				"test-annotation": "test-value",
+			},
+		}
+
+		It("Should read default cr.yaml", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should create async cluster", func() {
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+		})
+
+		It("Should reconcile once to create user secret", func() {
+			_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: asyncCrNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should check all objects", func() {
+			dyn, err := dynamic.NewForConfig(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			disc, err := discovery.NewDiscoveryClientForConfig(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			gr, err := restmapper.GetAPIGroupResources(disc)
+			Expect(err).NotTo(HaveOccurred())
+
+			for _, list := range gr {
+				for version, resources := range list.VersionedResources {
+					for _, r := range resources {
+						// Skip subresources (like pods/status)
+						if strings.Contains(r.Name, "/") {
+							continue
+						}
+						if !r.Namespaced {
+							continue
+						}
+
+						gv, err := schema.ParseGroupVersion(version)
+						if err != nil {
+							continue
+						}
+						gvr := gv.WithResource(r.Name)
+
+						resList, err := dyn.Resource(gvr).Namespace(ns).List(ctx, metav1.ListOptions{})
+						if err != nil {
+							continue // some resources may not be listable
+						}
+						for _, item := range resList.Items {
+							objectWithMissingMetadata := ""
+							_, kind := item.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
+							if item.GetLabels()["test-label"] != "test-value" || item.GetAnnotations()["test-annotation"] != "test-value" {
+								objectWithMissingMetadata = item.GetName() + "/" + kind
+							}
+							Expect(objectWithMissingMetadata).To(BeEmpty())
+						}
+					}
+				}
+			}
 		})
 	})
 })

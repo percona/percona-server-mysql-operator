@@ -47,7 +47,7 @@ func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 }
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
-	return util.SSMapMerge(cr.MySQLSpec().Labels,
+	return util.SSMapMerge(cr.GlobalLabels(), cr.Spec.Proxy.HAProxy.Labels,
 		cr.Labels(AppName, naming.ComponentProxy))
 }
 
@@ -60,6 +60,8 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 
 	labels := MatchLabels(cr)
 	labels = util.SSMapMerge(expose.Labels, labels)
+
+	selector := MatchLabels(cr)
 
 	serviceType := cr.Spec.Proxy.HAProxy.Expose.Type
 
@@ -112,12 +114,12 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 			Name:        ServiceName(cr),
 			Namespace:   cr.Namespace,
 			Labels:      labels,
-			Annotations: expose.Annotations,
+			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
 		},
 		Spec: corev1.ServiceSpec{
 			Type:                     serviceType,
 			Ports:                    ports,
-			Selector:                 labels,
+			Selector:                 selector,
 			LoadBalancerSourceRanges: loadBalancerSourceRanges,
 			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
 			ExternalTrafficPolicy:    externalTrafficPolicy,
@@ -142,9 +144,10 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      Name(cr),
-			Namespace: cr.Namespace,
-			Labels:    labels,
+			Name:        Name(cr),
+			Namespace:   cr.Namespace,
+			Labels:      labels,
+			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &cr.Spec.Proxy.HAProxy.Size,
@@ -156,7 +159,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
-					Annotations: annotations,
+					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector:     cr.Spec.Proxy.HAProxy.NodeSelector,

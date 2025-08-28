@@ -1,12 +1,18 @@
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
-  name: cluster1
+  name: ps-cluster1
   finalizers:
     - percona.com/delete-mysql-pods-in-order
     # - percona.com/delete-ssl
     # - percona.com/delete-mysql-pvc
 spec:
+#  metadata:
+#    annotations:
+#      service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+#      service.beta.kubernetes.io/aws-load-balancer-type: nlb
+#    labels:
+#      rack: rack-22
 #  unsafeFlags:
 #    mysqlSize: false
 #    orchestrator: false
@@ -16,8 +22,8 @@ spec:
 #  pause: false
   crVersion: 0.12.0
 #  enableVolumeExpansion: false
-  secretsName: cluster1-secrets
-  sslSecretName: cluster1-ssl
+  secretsName: ps-cluster1-secrets
+  sslSecretName: ps-cluster1-ssl
   updateStrategy: SmartUpdate
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
@@ -76,7 +82,7 @@ spec:
 #        limits:
 #          memory: 200M
 #          cpu: 200m
-#    vaultSecretName: cluster1-vault
+#    vaultSecretName: ps-cluster1-vault
     size: 3
 
 #    env:
@@ -611,9 +617,21 @@ spec:
 #          fsGroup: 1001
 #          supplementalGroups: [1001, 1002, 1003]
 #        runtimeClassName: image-rc
+#        containerOptions:
+#          env:
+#          - name: VERIFY_TLS
+#            value: "false"
+#          args:
+#            xtrabackup:
+#            - "--someflag=abc"
+#            xbcloud:
+#            - "--someflag=abc"
+#            xbstream:
+#            - "--someflag=abc"
         s3:
           bucket: S3-BACKUP-BUCKET-NAME-HERE
-          credentialsSecret: cluster1-s3-credentials
+          credentialsSecret: ps-cluster1-s3-credentials
+#      - "--someflag=abc"
           region: us-west-2
 #          prefix: ""
 
