@@ -5,5 +5,5 @@ metadata:
   finalizers:
     - percona.com/delete-backup
 spec:
-  clusterName: cluster1
+  clusterName: ps-cluster1
   storageName: minio

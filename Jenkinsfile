@@ -246,11 +246,34 @@ void runTest(Integer TEST_ID) {
     }
 }
 
-void prepareNode() {
+void downloadKubectl() {
     sh """
-        sudo curl -s -L -o /usr/local/bin/kubectl https://dl.k8s.io/release/\$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl && sudo chmod +x /usr/local/bin/kubectl
-        kubectl version --client --output=yaml
+        KUBECTL_VERSION="\$(curl -L -s https://api.github.com/repos/kubernetes/kubernetes/releases/latest | jq -r .tag_name)"
+        for i in {1..5}; do
+          if [ -f /usr/local/bin/kubectl ]; then
+              break
+          fi
+          echo "Attempt \$i: downloading kubectl..."
+          sudo curl -s -L -o /usr/local/bin/kubectl "https://dl.k8s.io/release/\${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          sudo curl -s -L -o /tmp/kubectl.sha256 "https://dl.k8s.io/release/\${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256"
 
+          if echo "\$(cat /tmp/kubectl.sha256) /usr/local/bin/kubectl" | sha256sum --check --status; then
+            echo 'Download passed checksum'
+            sudo chmod +x /usr/local/bin/kubectl
+            kubectl version --client --output=yaml
+            break
+          else
+            echo 'Checksum failed, retrying...'
+            sudo rm -f /usr/local/bin/kubectl /tmp/kubectl.sha256
+            sleep 5
+          fi
+        done
+    """
+}
+
+void prepareNode() {
+    downloadKubectl()
+    sh """
         curl -fsSL https://get.helm.sh/helm-v3.18.0-linux-amd64.tar.gz | sudo tar -C /usr/local/bin --strip-components 1 -xzf - linux-amd64/helm
 
         sudo curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.45.4/yq_linux_amd64 -o /usr/local/bin/yq && sudo chmod +x /usr/local/bin/yq

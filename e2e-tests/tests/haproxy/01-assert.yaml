@@ -30,6 +30,99 @@ kind: StatefulSet
 apiVersion: apps/v1
 metadata:
   name: haproxy-haproxy
+spec:
+  template:
+    spec:
+      containers:
+      - args:
+        - haproxy
+        command:
+        - /opt/percona/haproxy-entrypoint.sh
+        env:
+        - name: CLUSTER_TYPE
+          value: async
+        - name: LIVENESS_CHECK_TIMEOUT
+          value: "30"
+        - name: READINESS_CHECK_TIMEOUT
+          value: "1"
+        image: perconalab/percona-server-mysql-operator:main-haproxy
+        imagePullPolicy: Always
+        livenessProbe:
+          exec:
+            command:
+            - /opt/percona/haproxy_liveness_check.sh
+          initialDelaySeconds: 60
+          failureThreshold: 4
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 30
+        name: haproxy
+        ports:
+        - containerPort: 3306
+          name: mysql
+          protocol: TCP
+        - containerPort: 3307
+          name: mysql-replicas
+          protocol: TCP
+        - containerPort: 3309
+          name: proxy-protocol
+          protocol: TCP
+        - containerPort: 33060
+          name: mysqlx
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - /opt/percona/haproxy_readiness_check.sh
+          initialDelaySeconds: 15
+          failureThreshold: 40
+          periodSeconds: 5
+          successThreshold: 10
+          timeoutSeconds: 1
+        resources:
+          requests:
+            cpu: 600m
+            memory: 1G
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /etc/haproxy/mysql
+          name: haproxy-config
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
+        - mountPath: /etc/mysql/mysql-tls-secret
+          name: tls
+        - mountPath: /etc/haproxy-custom/
+          name: config
+      - args:
+        - /opt/percona/peer-list
+        - -on-change=/opt/percona/haproxy_add_mysql_nodes.sh
+        - -service=$(MYSQL_SERVICE)
+        command:
+        - /opt/percona/haproxy-entrypoint.sh
+        env:
+        - name: MYSQL_SERVICE
+          value: haproxy-mysql-proxy
+        image: perconalab/percona-server-mysql-operator:main-haproxy
+        imagePullPolicy: Always
+        name: mysql-monit
+        resources:
+          requests:
+            cpu: 600m
+            memory: 1G
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /etc/haproxy/mysql
+          name: haproxy-config
+        - mountPath: /etc/mysql/mysql-users-secret
+          name: users
+        - mountPath: /etc/mysql/mysql-tls-secret
+          name: tls
 status:
   observedGeneration: 1
   replicas: 3
