@@ -1,24 +1,12 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 30
+timeout: 300
 ---
-kind: ConfigMap
-apiVersion: v1
+kind: PerconaServerMySQLBackup
+apiVersion: ps.percona.com/v1alpha1
 metadata:
-  name: 08-delete-data-s3-0
-data:
-  data: ""
----
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: 08-delete-data-s3-1
-data:
-  data: ""
----
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: 08-delete-data-s3-2
-data:
-  data: ""
+  name: demand-backup-s3
+  finalizers:
+    - percona.com/delete-backup
+status:
+  state: Succeeded
