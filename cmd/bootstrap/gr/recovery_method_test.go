@@ -52,6 +52,11 @@ func (m *mockSQLRunner) setGTIDSubtractResponse(a, b, result string) {
 	m.sqlResponses[query] = result
 }
 
+func (m *mockSQLRunner) setGTIDSubtractIntersectionResponse(a, b, result string) {
+	query := fmt.Sprintf("SELECT GTID_SUBTRACT('%s', GTID_SUBTRACT('%s', '%s')) AS sub", a, a, b)
+	m.sqlResponses[query] = result
+}
+
 func TestCompareGTIDs_Equal(t *testing.T) {
 	ctx := context.Background()
 	mock := newMockSQLRunner()
@@ -114,7 +119,7 @@ func TestCompareGTIDs_Disjoint(t *testing.T) {
 	mock.setGTIDSubtractResponse("a:1-5", "b:1-5", "a:1-5")
 	mock.setGTIDSubtractResponse("b:1-5", "a:1-5", "b:1-5")
 	// the intersection calculation: a - (a - b) should be empty for disjoint
-	mock.setGTIDSubtractResponse("a:1-5", "GTID_SUBTRACT('a:1-5', 'b:1-5')", "")
+	mock.setGTIDSubtractIntersectionResponse("a:1-5", "b:1-5", "")
 
 	result, err := compareGTIDs(ctx, mock, "a:1-5", "b:1-5")
 
@@ -134,7 +139,7 @@ func TestCompareGTIDs_Intersects(t *testing.T) {
 	mock.setGTIDSubtractResponse("a:1-10", "a:6-15", "a:1-5")
 	mock.setGTIDSubtractResponse("a:6-15", "a:1-10", "a:11-15")
 	// intersection calculation: a - (a - b) should be non-empty
-	mock.setGTIDSubtractResponse("a:1-10", "GTID_SUBTRACT('a:1-10', 'a:6-15')", "a:6-10")
+	mock.setGTIDSubtractIntersectionResponse("a:1-10", "a:6-15", "a:6-10")
 
 	result, err := compareGTIDs(ctx, mock, "a:1-10", "a:6-15")
 
@@ -301,7 +306,7 @@ func TestCheckReplicaState_Diverged_Intersects(t *testing.T) {
 	// sets intersect but neither contains the other
 	primary.setGTIDSubtractResponse("a:1-10", "a:5-15", "a:1-4")
 	primary.setGTIDSubtractResponse("a:5-15", "a:1-10", "a:11-15")
-	primary.setGTIDSubtractResponse("a:1-10", "GTID_SUBTRACT('a:1-10', 'a:5-15')", "a:5-10")
+	primary.setGTIDSubtractIntersectionResponse("a:1-10", "a:5-15", "a:5-10")
 
 	result, err := checkReplicaState(ctx, primary, replica)
 
@@ -321,7 +326,7 @@ func TestCheckReplicaState_Diverged_Disjoint(t *testing.T) {
 	// completely different gtid sets
 	primary.setGTIDSubtractResponse("a:1-5", "b:1-5", "a:1-5")
 	primary.setGTIDSubtractResponse("b:1-5", "a:1-5", "b:1-5")
-	primary.setGTIDSubtractResponse("a:1-5", "GTID_SUBTRACT('a:1-5', 'b:1-5')", "")
+	primary.setGTIDSubtractIntersectionResponse("a:1-5", "b:1-5", "")
 
 	result, err := checkReplicaState(ctx, primary, replica)
 

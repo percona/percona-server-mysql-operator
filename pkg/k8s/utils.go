@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -165,6 +166,8 @@ func EnsureObjectWithHash(
 	obj client.Object,
 	s *runtime.Scheme,
 ) error {
+	log := logf.FromContext(ctx)
+
 	if owner != nil {
 		if err := controllerutil.SetControllerReference(owner, obj, s); err != nil {
 			return errors.Wrapf(err, "set controller reference to %s/%s",
@@ -204,6 +207,8 @@ func EnsureObjectWithHash(
 		if !k8serrors.IsNotFound(err) {
 			return errors.Wrapf(err, "get %v", nn.String())
 		}
+
+		log.V(1).Info("Creating object", "name", obj.GetName(), "kind", obj.GetObjectKind())
 
 		if err := cl.Create(ctx, obj); err != nil {
 			return errors.Wrapf(err, "create %v", nn.String())
@@ -245,6 +250,8 @@ func EnsureObjectWithHash(
 		default:
 			patch = client.StrategicMergeFrom(oldObject)
 		}
+
+		log.V(1).Info("Patching object", "name", obj.GetName(), "kind", obj.GetObjectKind())
 
 		if err := cl.Patch(ctx, obj, patch); err != nil {
 			return errors.Wrapf(err, "patch %v", nn.String())
