@@ -121,11 +121,16 @@ manifests: kustomize generate ## Generate Kubernetes manifests (CRDs, RBAC, oper
 	echo "---" >> $(DEPLOYDIR)/cw-operator.yaml
 	cat $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/cw-rbac.yaml $(DEPLOYDIR)/cw-operator.yaml > $(DEPLOYDIR)/cw-bundle.yaml
 
-gen-versionservice-client: swagger
+gen-version-service-client: swagger
 	rm pkg/version/service/version.swagger.yaml
 	curl https://raw.githubusercontent.com/Percona-Lab/percona-version-service/main/api/version.swagger.yaml --output pkg/version/service/version.swagger.yaml
 	rm -rf pkg/version/service/client
 	swagger generate client -f pkg/version/service/version.swagger.yaml -c pkg/version/service/client -m pkg/version/service/client/models
+
+gen-telemetry-service-client: swagger
+	# unlike the version service, the Swagger file for telemetry cannot be accessed directly.
+	rm -rf pkg/telemetry/client
+	swagger generate client -f pkg/telemetry/reporter_api.swagger.json -c pkg/telemetry/client -m pkg/telemetry/client/models
 
 ##@ Build
 
