@@ -447,7 +447,6 @@ spec:
 
   orchestrator:
     enabled: false
-
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 #    runtimeClassName: image-rc
@@ -536,6 +535,7 @@ spec:
 
   backup:
     enabled: true
+#    sourceHost: cluster1-mysql-0.<mysql_service_name>.<namespace>
     image: perconalab/percona-server-mysql-operator:main-backup8.0
 #    schedule:
 #      - name: "sat-night-backup"

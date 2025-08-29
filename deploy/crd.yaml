@@ -135,6 +135,8 @@ spec:
                       type: object
                     type: array
                 type: object
+              sourceHost:
+                type: string
               storageName:
                 type: string
             required:
@@ -3929,6 +3931,8 @@ spec:
                       type: object
                     type: array
                   serviceAccountName:
+                    type: string
+                  sourceHost:
                     type: string
                   storages:
                     additionalProperties:
