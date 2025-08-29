@@ -11,6 +11,7 @@ request_data() {
 				{
 				    "destination": "$(json_escape "${BACKUP_DEST}")",
 				    "type": "$(json_escape "${STORAGE_TYPE}")",
+				    "containerOptions": ${CONTAINER_OPTIONS},
 				    "verifyTLS": $(json_escape "${VERIFY_TLS}"),
 				    "s3": {
 				        "bucket": "$(json_escape "${S3_BUCKET}")",
@@ -29,6 +30,7 @@ request_data() {
 				    "destination": "$(json_escape "${BACKUP_DEST}")",
 				    "verifyTLS": $(json_escape "${VERIFY_TLS}"),
 				    "type": "$(json_escape "${STORAGE_TYPE}")",
+				    "containerOptions": ${CONTAINER_OPTIONS},
 				    "gcs": {
 				        "bucket": "$(json_escape "${GCS_BUCKET}")",
 				        "endpointUrl": "$(json_escape "${GCS_ENDPOINT}")",
@@ -45,6 +47,7 @@ request_data() {
 				    "destination": "$(json_escape "${BACKUP_DEST}")",
 				    "verifyTLS": $(json_escape "${VERIFY_TLS}"),
 				    "type": "$(json_escape "${STORAGE_TYPE}")",
+				    "containerOptions": ${CONTAINER_OPTIONS},
 				    "azure": {
 				        "containerName": "$(json_escape "${AZURE_CONTAINER_NAME}")",
 				        "storageAccount": "$(json_escape "${AZURE_STORAGE_ACCOUNT}")",

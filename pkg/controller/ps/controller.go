@@ -39,6 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/record"
 	k8sretry "k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -703,7 +704,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 		config += autotuneParams
 	}
 
-	configMap := k8s.ConfigMap(mysql.AutoConfigMapName(cr), cr.Namespace, mysql.CustomConfigKey, config)
+	configMap := k8s.ConfigMap(cr, mysql.AutoConfigMapName(cr), mysql.CustomConfigKey, config)
 	if !reflect.DeepEqual(currentConfigMap.Data, configMap.Data) {
 		if err := k8s.EnsureObject(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
 			return errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
@@ -1022,18 +1023,37 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 	db := database.NewReplicationManager(pod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, mysql.ServiceName(cr))
 	cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1alpha1.ConditionInnoDBClusterBootstrapped)
 	if cond == nil || cond.Status == metav1.ConditionFalse {
-		if exists, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata"); err != nil || !exists {
+		exists, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata")
+		if err != nil || !exists {
 			log.V(1).Info("InnoDB cluster is not created yet")
 			return nil
 		}
 
 		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
-			Type:               apiv1alpha1.ConditionInnoDBClusterBootstrapped,
-			Status:             metav1.ConditionTrue,
-			Reason:             apiv1alpha1.ConditionInnoDBClusterBootstrapped,
-			Message:            fmt.Sprintf("InnoDB cluster successfully bootstrapped with %d nodes", cr.MySQLSpec().Size),
+			Type:   apiv1alpha1.ConditionInnoDBClusterBootstrapped,
+			Status: metav1.ConditionTrue,
+			Reason: apiv1alpha1.ConditionInnoDBClusterBootstrapped,
+			Message: fmt.Sprintf("InnoDB cluster successfully bootstrapped with %d nodes",
+				cr.MySQLSpec().Size),
 			LastTransitionTime: metav1.Now(),
 		})
+
+		nn := types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}
+
+		if err := writeStatus(ctx, r.Client, nn, cr.Status); err != nil {
+			return errors.Wrap(err, "write status")
+		}
+
+		err = wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 10*time.Second, false,
+			func(ctx context.Context) (bool, error) {
+				cr, err = k8s.GetCRWithDefaults(ctx, r.Client, nn, r.ServerVersion)
+				cond := meta.FindStatusCondition(cr.Status.Conditions,
+					apiv1alpha1.ConditionInnoDBClusterBootstrapped)
+				return cond != nil, nil
+			})
+		if err != nil {
+			return errors.Wrap(err, "wait for cached cr to updated with condition")
+		}
 
 		return nil
 	}

@@ -43,7 +43,7 @@ func TestPVC(t *testing.T) {
 
 	pvcName := "pvc-name"
 
-	pvc := PVC(pvcName, spec)
+	pvc := PVC(new(apiv1alpha1.PerconaServerMySQL), pvcName, spec)
 
 	assert.Equal(t, pvcName, pvc.Name)
 	assert.NotNil(t, pvc.Spec.StorageClassName)

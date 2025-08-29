@@ -124,7 +124,7 @@ func PodFQDN(cr *apiv1alpha1.PerconaServerMySQL, pod *corev1.Pod) string {
 }
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
-	return util.SSMapMerge(cr.MySQLSpec().Labels,
+	return util.SSMapMerge(cr.GlobalLabels(), cr.MySQLSpec().Labels,
 		cr.Labels(AppName, naming.ComponentDatabase))
 }
 
@@ -147,9 +147,10 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      Name(cr),
-			Namespace: cr.Namespace,
-			Labels:    labels,
+			Name:        Name(cr),
+			Namespace:   cr.Namespace,
+			Labels:      labels,
+			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
@@ -161,7 +162,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
-					Annotations: annotations,
+					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
 				},
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
@@ -200,7 +201,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 	}
 
 	if cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim != nil {
-		sts.Spec.VolumeClaimTemplates = append(sts.Spec.VolumeClaimTemplates, volumeClaimTemplates(spec)...)
+		sts.Spec.VolumeClaimTemplates = append(sts.Spec.VolumeClaimTemplates, volumeClaimTemplates(cr, spec)...)
 		return sts
 	}
 
@@ -346,14 +347,14 @@ func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdate
 	}
 }
 
-func volumeClaimTemplates(spec *apiv1alpha1.MySQLSpec) []corev1.PersistentVolumeClaim {
+func volumeClaimTemplates(cr *apiv1alpha1.PerconaServerMySQL, spec *apiv1alpha1.MySQLSpec) []corev1.PersistentVolumeClaim {
 	var pvcs []corev1.PersistentVolumeClaim
 
 	if spec.VolumeSpec.PersistentVolumeClaim == nil {
 		return pvcs
 	}
 
-	pvcs = append(pvcs, k8s.PVC(DataVolumeName, spec.VolumeSpec))
+	pvcs = append(pvcs, k8s.PVC(cr, DataVolumeName, spec.VolumeSpec))
 
 	for _, p := range spec.SidecarPVCs {
 		pvcs = append(pvcs, corev1.PersistentVolumeClaim{
@@ -424,9 +425,10 @@ func UnreadyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      UnreadyServiceName(cr),
-			Namespace: cr.Namespace,
-			Labels:    labels,
+			Name:        UnreadyServiceName(cr),
+			Namespace:   cr.Namespace,
+			Labels:      labels,
+			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: corev1.ServiceSpec{
 			ClusterIP:                "None",
@@ -445,9 +447,10 @@ func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ServiceName(cr),
-			Namespace: cr.Namespace,
-			Labels:    labels,
+			Name:        ServiceName(cr),
+			Namespace:   cr.Namespace,
+			Labels:      labels,
+			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: corev1.ServiceSpec{
 			Type:                     corev1.ServiceTypeClusterIP,
@@ -467,9 +470,10 @@ func ProxyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Kind:       "Service",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ProxyServiceName(cr),
-			Namespace: cr.Namespace,
-			Labels:    labels,
+			Name:        ProxyServiceName(cr),
+			Namespace:   cr.Namespace,
+			Labels:      labels,
+			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: corev1.ServiceSpec{
 			Type:                     corev1.ServiceTypeClusterIP,
@@ -510,7 +514,7 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 			Name:        podName,
 			Namespace:   cr.Namespace,
 			Labels:      labels,
-			Annotations: expose.Annotations,
+			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
 		},
 		Spec: corev1.ServiceSpec{
 			Type:                     t,
@@ -553,7 +557,7 @@ func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Name:        PrimaryServiceName(cr),
 			Namespace:   cr.Namespace,
 			Labels:      labels,
-			Annotations: expose.Annotations,
+			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
 		},
 		Spec: corev1.ServiceSpec{
 			Type:                     expose.Type,
