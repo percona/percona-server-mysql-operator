@@ -37,6 +37,25 @@ func gtidSubtract(ctx context.Context, shell SQLRunner, a, b string) (string, er
 	return v, nil
 }
 
+func gtidSubtractIntersection(ctx context.Context, shell SQLRunner, a, b string) (string, error) {
+	a = strings.ReplaceAll(a, "\n", "")
+	b = strings.ReplaceAll(b, "\n", "")
+
+	query := fmt.Sprintf("SELECT GTID_SUBTRACT('%s', GTID_SUBTRACT('%s', '%s')) AS sub", a, a, b)
+
+	result, err := shell.runSQL(ctx, query)
+	if err != nil {
+		return "", errors.Wrapf(err, "execute %s", query)
+	}
+
+	v, ok := result.Rows[0]["sub"]
+	if !ok {
+		return "", errors.Errorf("unexpected output: %+v", result)
+	}
+
+	return v, nil
+}
+
 type GTIDSetRelation string
 
 const (
@@ -81,8 +100,7 @@ func compareGTIDs(ctx context.Context, shell SQLRunner, a, b string) (GTIDSetRel
 		return GTIDSetContains, nil
 	}
 
-	query := fmt.Sprintf("GTID_SUBTRACT('%s', '%s')", a, b)
-	abIntersection, err := gtidSubtract(ctx, shell, a, query)
+	abIntersection, err := gtidSubtractIntersection(ctx, shell, a, b)
 	if err != nil {
 		return "", errors.Wrapf(err, "intersection")
 	}
