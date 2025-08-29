@@ -1671,6 +1671,8 @@ spec:
                     type: array
                   serviceAccountName:
                     type: string
+                  sourceHost:
+                    type: string
                   storages:
                     additionalProperties:
                       properties:
