@@ -24,7 +24,14 @@ func ConfigMap(cr *apiv1alpha1.PerconaServerMySQL, name, filename, data string, 
 		},
 	}
 	if cr.CompareVersion("0.12.0") >= 0 {
-		cm.Labels = naming.Labels(name, cr.Name, "percona-server", component)
+		if cm.Labels == nil {
+			cm.Labels = map[string]string{}
+		}
+		for k, v := range naming.Labels(name, cr.Name, "percona-server", component) {
+			if _, exists := cm.Labels[k]; !exists { // global labels have priority
+				cm.Labels[k] = v
+			}
+		}
 	}
 
 	return cm
