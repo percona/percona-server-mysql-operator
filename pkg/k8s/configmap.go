@@ -7,7 +7,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func ConfigMap(cr *apiv1alpha1.PerconaServerMySQL, name, filename, data string) *corev1.ConfigMap {
+func ConfigMap(cr *apiv1alpha1.PerconaServerMySQL, name, filename, data string, component string) *corev1.ConfigMap {
 	cm := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -24,7 +24,7 @@ func ConfigMap(cr *apiv1alpha1.PerconaServerMySQL, name, filename, data string) 
 		},
 	}
 	if cr.CompareVersion("0.12.0") >= 0 {
-		cm.Labels = naming.Labels(name, cr.Name, "percona-server", "database")
+		cm.Labels = naming.Labels(name, cr.Name, "percona-server", component)
 	}
 
 	return cm
