@@ -258,6 +258,8 @@ type PMMSpec struct {
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
+	LivenessProbes           *corev1.Probe               `json:"livenessProbes,omitempty"`
+	ReadinessProbes          *corev1.Probe               `json:"readinessProbes,omitempty"`
 }
 
 type BackupSpec struct {
