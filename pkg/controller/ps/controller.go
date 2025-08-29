@@ -471,6 +471,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcileScheduledBackup(ctx, cr); err != nil {
 		return errors.Wrap(err, "scheduled backup")
 	}
+	if err := r.reconcileDataSource(ctx, cr); err != nil {
+		return errors.Wrap(err, "scheduled backup")
+	}
 	if err := r.cleanupOutdated(ctx, cr); err != nil {
 		return errors.Wrap(err, "cleanup outdated")
 	}
