@@ -19,7 +19,7 @@ MONITOR_PASSWORD=$(/bin/cat /etc/mysql/mysql-users-secret/monitor)
 TIMEOUT=${HA_CONNECTION_TIMEOUT:-10}
 MYSQL_CMDLINE="/usr/bin/timeout $TIMEOUT /usr/bin/mysql -BnN -u${MONITOR_USER} -h ${MYSQL_SERVER_IP} -P ${MYSQL_SERVER_PORT}"
 
-CLUSTER_TYPE=$(/bin/cat /tmp/cluster_type)
+CLUSTER_TYPE=${CLUSTER_TYPE:-$(/bin/cat /tmp/cluster_type)}
 
 check_async() {
 	local VALUES=$(MYSQL_PWD="${MONITOR_PASSWORD}" ${MYSQL_CMDLINE} -e "select concat(concat(@@global.read_only,',', @@global.super_read_only));select service_state from performance_schema.replication_connection_status where channel_name='';select service_state from performance_schema.replication_applier_status where channel_name='';")

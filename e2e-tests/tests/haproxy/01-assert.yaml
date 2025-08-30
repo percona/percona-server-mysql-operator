@@ -105,6 +105,8 @@ spec:
         env:
         - name: MYSQL_SERVICE
           value: haproxy-mysql-proxy
+        - name: CLUSTER_TYPE
+          value: async
         image: perconalab/percona-server-mysql-operator:main-haproxy
         imagePullPolicy: Always
         name: mysql-monit
