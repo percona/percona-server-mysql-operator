@@ -447,7 +447,6 @@ spec:
 
   orchestrator:
     enabled: false
-
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 #    runtimeClassName: image-rc
@@ -523,6 +522,18 @@ spec:
     enabled: false
     image: perconalab/pmm-client:3-dev-latest
     imagePullPolicy: Always
+#    readinessProbes:
+#      initialDelaySeconds: 15
+#      timeoutSeconds: 15
+#      periodSeconds: 30
+#      successThreshold: 1
+#      failureThreshold: 5
+#    livenessProbes:
+#      initialDelaySeconds: 300
+#      timeoutSeconds: 5
+#      periodSeconds: 10
+#      successThreshold: 1
+#      failureThreshold: 3
 #    mysqlParams: "--disable-tablestats-limit=2000"
     resources:
       requests:
@@ -536,6 +547,7 @@ spec:
 
   backup:
     enabled: true
+#    sourceHost: cluster1-mysql-0.<mysql_service_name>.<namespace>
     image: perconalab/percona-server-mysql-operator:main-backup8.0
 #    schedule:
 #      - name: "sat-night-backup"
@@ -617,6 +629,17 @@ spec:
 #          fsGroup: 1001
 #          supplementalGroups: [1001, 1002, 1003]
 #        runtimeClassName: image-rc
+#        containerOptions:
+#          env:
+#          - name: VERIFY_TLS
+#            value: "false"
+#          args:
+#            xtrabackup:
+#            - "--someflag=abc"
+#            xbcloud:
+#            - "--someflag=abc"
+#            xbstream:
+#            - "--someflag=abc"
         s3:
           bucket: S3-BACKUP-BUCKET-NAME-HERE
           credentialsSecret: ps-cluster1-s3-credentials
