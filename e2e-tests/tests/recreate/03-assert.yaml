@@ -58,7 +58,6 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   name: datadir-recreate-mysql-0
 ---
 apiVersion: v1
@@ -72,7 +71,6 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   name: datadir-recreate-mysql-1
 ---
 apiVersion: v1
@@ -86,7 +84,6 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   name: datadir-recreate-mysql-2
 ---
 apiVersion: v1
@@ -98,7 +95,6 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   name: recreate-mysql
 spec:
   clusterIP: None
@@ -131,7 +127,6 @@ spec:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   sessionAffinity: None
   type: ClusterIP
 ---
@@ -144,7 +139,6 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   name: recreate-orc
 spec:
   clusterIP: None
@@ -170,7 +164,6 @@ spec:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   sessionAffinity: None
   type: ClusterIP
 ---
@@ -183,7 +176,6 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
     percona.com/exposed: "true"
   name: recreate-orc-1
 spec:
@@ -206,7 +198,6 @@ spec:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
     statefulset.kubernetes.io/pod-name: recreate-orc-1
   sessionAffinity: None
   type: ClusterIP
@@ -220,7 +211,6 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: haproxy
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   name: recreate-haproxy
 spec:
   internalTrafficPolicy: Cluster
@@ -254,6 +244,5 @@ spec:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: haproxy
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   sessionAffinity: None
   type: ClusterIP

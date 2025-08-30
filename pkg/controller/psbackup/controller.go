@@ -136,7 +136,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 	if cluster.Spec.Backup == nil || !cluster.Spec.Backup.Enabled {
 		status.State = apiv1alpha1.BackupError
-		status.StateDesc = "spec.backup stanza not found in PerconaServerMySQL CustomResource or backup is disabled"
+		status.StateDesc = "spec.backup not found in PerconaServerMySQL CustomResource or backup is disabled"
 		return rr, nil
 	}
 
@@ -263,7 +263,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context
 	switch storage.Type {
 	case apiv1alpha1.BackupStorageS3:
 		if storage.S3 == nil {
-			return errors.New("s3 stanza is required in storage")
+			return errors.New("s3 is required in storage")
 		}
 
 		nn := types.NamespacedName{Name: storage.S3.CredentialsSecret, Namespace: cr.Namespace}
@@ -283,7 +283,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context
 		status.Destination = destination
 	case apiv1alpha1.BackupStorageGCS:
 		if storage.GCS == nil {
-			return errors.New("gcs stanza is required in storage")
+			return errors.New("gcs is required in storage")
 		}
 
 		nn := types.NamespacedName{Name: storage.GCS.CredentialsSecret, Namespace: cr.Namespace}
@@ -303,7 +303,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context
 		status.Destination = destination
 	case apiv1alpha1.BackupStorageAzure:
 		if storage.Azure == nil {
-			return errors.New("azure stanza is required in storage")
+			return errors.New("azure is required in storage")
 		}
 
 		nn := types.NamespacedName{Name: storage.Azure.CredentialsSecret, Namespace: cr.Namespace}

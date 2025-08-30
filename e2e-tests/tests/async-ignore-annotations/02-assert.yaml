@@ -13,7 +13,6 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
     percona.com/exposed: "true"
   annotations:
     async-annotations-to-ignore-mysql: "true"
@@ -49,7 +48,6 @@ spec:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   sessionAffinity: None
   type: ClusterIP
 ---
@@ -64,7 +62,6 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: haproxy
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   annotations:
     async-annotations-to-ignore-haproxy: "true"
     async-annotations-not-to-ignore-haproxy: "true"
@@ -106,7 +103,6 @@ spec:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: haproxy
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   sessionAffinity: None
   type: ClusterIP
 ---
@@ -122,7 +118,6 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
     async-labels-to-ignore-orc: "true"
     async-labels-not-to-ignore-orc: "true"
     percona.com/exposed: "true"
@@ -152,6 +147,5 @@ spec:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   sessionAffinity: None
   type: ClusterIP

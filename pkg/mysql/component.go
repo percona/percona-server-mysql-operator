@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -50,7 +51,7 @@ func (c *Component) Object(ctx context.Context, cl client.Client) (client.Object
 	}
 
 	configurable := Configurable(*cr)
-	configHash, err := k8s.CustomConfigHash(ctx, cl, cr, &configurable)
+	configHash, err := k8s.CustomConfigHash(ctx, cl, cr, &configurable, naming.ComponentDatabase)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get custom config hash")
 	}

@@ -13,7 +13,6 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   annotations:
     gr-annotations-to-ignore-mysql: "true"
     gr-annotations-not-to-ignore-mysql: "true"
@@ -52,7 +51,6 @@ spec:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   sessionAffinity: None
   type: LoadBalancer
 ---
@@ -67,7 +65,6 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: router
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   annotations:
     gr-annotations-to-ignore-router: "true"
     gr-annotations-not-to-ignore-router: "true"
@@ -118,6 +115,5 @@ spec:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: router
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   sessionAffinity: None
   type: LoadBalancer

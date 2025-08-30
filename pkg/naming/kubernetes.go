@@ -1,7 +1,5 @@
 package naming
 
-import "github.com/percona/percona-server-mysql-operator/pkg/version"
-
 // Kubernetes documentation on label naming conventions and usage:
 // https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
 
@@ -32,15 +30,11 @@ const (
 	// The role or function of the component within the application architecture.
 	// Should match one of the predefined values from the `naming` package.
 	LabelComponent = kubernetesPrefix + "component"
-
-	// Operator version. Should use `version.Version()`
-	LabelOperatorVersion = kubernetesPrefix + "version"
 )
 
 func baseLabels() map[string]string {
 	return map[string]string{
-		LabelOperatorVersion: "v" + version.Version(),
-		LabelManagedBy:       "percona-server-mysql-operator",
+		LabelManagedBy: "percona-server-mysql-operator",
 	}
 }
 

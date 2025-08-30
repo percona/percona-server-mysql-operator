@@ -14,7 +14,6 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
-	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 func TestDeployment(t *testing.T) {
@@ -42,7 +41,6 @@ func TestDeployment(t *testing.T) {
 		labels := map[string]string{
 			"app.kubernetes.io/name":       "router",
 			"app.kubernetes.io/part-of":    "percona-server",
-			"app.kubernetes.io/version":    "v" + version.Version(),
 			"app.kubernetes.io/instance":   "cluster",
 			"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
 			"app.kubernetes.io/component":  "proxy",
