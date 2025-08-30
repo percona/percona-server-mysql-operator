@@ -680,6 +680,166 @@ var _ = Describe("CR validations", Ordered, func() {
 				Expect(createErr.Error()).To(ContainSubstring("For 'group replication', scaling MySQL replicas above 9 requires 'unsafeFlags.mysqlSize: true'"))
 			})
 		})
+
+		When("group-replication cluster type with no proxy enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-10", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.Proxy.Router.Enabled = false
+			cr.Spec.Proxy.HAProxy.Enabled = false
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("Invalid configuration: For 'group replication', MySQL Router or HAProxy must be enabled unless 'unsafeFlags.proxy' is enabled"))
+			})
+		})
+
+		When("group-replication cluster type with no proxy enabled but unsafe flag enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-11", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.Proxy.Router.Enabled = false
+			cr.Spec.Proxy.HAProxy.Enabled = false
+			cr.Spec.Unsafe.Proxy = true
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("group-replication cluster type with router size less than 2", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-12", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.Proxy.Router.Enabled = true
+			cr.Spec.Proxy.Router.Size = 1
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("Invalid configuration: For 'group replication', Router size must be 2 or greater unless 'unsafeFlags.proxySize' is enabled"))
+			})
+		})
+
+		When("group-replication cluster type with router size less than 2 but unsafe flag enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-13", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.Proxy.Router.Enabled = true
+			cr.Spec.Proxy.Router.Size = 1
+			cr.Spec.Unsafe.ProxySize = true
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("group-replication cluster type with mysql size less than 3", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-14", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.MySQL.Size = 2
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("Invalid configuration: For 'group replication', MySQL size must be 3 or greater unless 'unsafeFlags.mysqlSize' is enabled"))
+			})
+		})
+
+		When("group-replication cluster type with mysql size less than 3 but unsafe flag enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-15", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.MySQL.Size = 2
+			cr.Spec.Unsafe.MySQLSize = true
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("async cluster type with orchestrator size less than 3", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-16", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.Orchestrator.Size = 2
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("Invalid configuration: For 'async' replication, Orchestrator size must be 3 or greater and odd unless 'unsafeFlags.orchestratorSize' is enabled"))
+			})
+		})
+
+		When("async cluster type with orchestrator size even number", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-17", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.Orchestrator.Size = 4
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("Invalid configuration: For 'async' replication, Orchestrator size must be 3 or greater and odd unless 'unsafeFlags.orchestratorSize' is enabled"))
+			})
+		})
+
+		When("async cluster type with orchestrator size less than 3 but unsafe flag enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-18", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.Orchestrator.Size = 2
+			cr.Spec.Unsafe.OrchestratorSize = true
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("async cluster type with orchestrator size even number but unsafe flag enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-19", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.Orchestrator.Size = 4
+			cr.Spec.Unsafe.OrchestratorSize = true
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("async cluster type with SmartUpdate but orchestrator disabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-20", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = psv1alpha1.SmartUpdateStatefulSetStrategyType
+			cr.Spec.Orchestrator.Enabled = false
+			cr.Spec.Unsafe.Proxy = true
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"))
+			})
+		})
+
+		When("async cluster type with SmartUpdate and orchestrator enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-21", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = psv1alpha1.SmartUpdateStatefulSetStrategyType
+			cr.Spec.Orchestrator.Enabled = true
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
 	})
 })
 
