@@ -1,0 +1,117 @@
+package telemetry
+
+import (
+	"context"
+	"fmt"
+	"net/url"
+	"time"
+
+	"github.com/go-openapi/strfmt"
+	"github.com/google/uuid"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	telemetryclient "github.com/percona/percona-server-mysql-operator/pkg/telemetry/client"
+	"github.com/percona/percona-server-mysql-operator/pkg/telemetry/client/models"
+	"github.com/percona/percona-server-mysql-operator/pkg/telemetry/client/reporter_api"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+)
+
+const (
+	metricBackupVersion       = "backup_version"
+	metricDatabaseVersion     = "database_version"
+	metricUpgradeOptionsApply = "upgrade_options_apply"
+	metricOperatorVersion     = "operator_version"
+	metricPMMVersion          = "pmm_version"
+	metricHAProxyVersion      = "haproxy_version"
+	metricPlatform            = "platform"
+	metricKubernetesVersion   = "kubernetes_version"
+)
+
+// Service defines the properties of the telemetry service.
+type Service struct {
+	ReporterAPI reporter_api.ClientService
+}
+
+// NewTelemetryService creates a new Service.
+func NewTelemetryService(endpoint string) (*Service, error) {
+	requestURL, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("invalid telemetry endpoint: %w", err)
+	}
+
+	telemetryClient := telemetryclient.NewHTTPClientWithConfig(nil, &telemetryclient.TransportConfig{
+		Host:     requestURL.Host,
+		BasePath: requestURL.Path,
+		Schemes:  []string{requestURL.Scheme},
+	})
+
+	return &Service{
+		ReporterAPI: telemetryClient.ReporterAPI,
+	}, nil
+}
+
+// SendReport sends the report with the custom metric data to the telemetry service.
+func (s Service) SendReport(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.ServerVersion) error {
+	report := createReport(cr, serverVersion)
+
+	params := &reporter_api.ReporterAPIGenericReportParams{
+		Context: ctx,
+		Body: &models.V1ReportRequest{
+			Reports: []*models.Genericv1GenericReport{&report},
+		},
+	}
+
+	resp, err := s.ReporterAPI.ReporterAPIGenericReport(params)
+	if err != nil {
+	}
+
+	log := logf.FromContext(ctx)
+	log.Info(fmt.Sprintf("response from API: %s", resp))
+
+	return nil
+}
+
+func createReport(cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.ServerVersion) models.Genericv1GenericReport {
+	metrics := []*models.GenericReportMetric{
+		{
+			Key:   metricUpgradeOptionsApply,
+			Value: cr.Spec.UpgradeOptions.Apply,
+		},
+		{
+			Key:   metricBackupVersion,
+			Value: cr.Status.BackupVersion,
+		},
+		{
+			Key:   metricDatabaseVersion,
+			Value: cr.Status.MySQL.Version,
+		},
+		{
+			Key:   metricKubernetesVersion,
+			Value: serverVersion.Info.GitVersion,
+		},
+		{
+			Key:   metricOperatorVersion,
+			Value: cr.Spec.CRVersion,
+		},
+		{
+			Key:   metricPlatform,
+			Value: string(serverVersion.Platform),
+		},
+		{
+			Key:   metricPMMVersion,
+			Value: cr.Status.PMMVersion,
+		},
+		{
+			Key:   metricHAProxyVersion,
+			Value: cr.Status.HAProxy.Version,
+		},
+	}
+
+	return models.Genericv1GenericReport{
+		ID:            uuid.NewString(),
+		CreateTime:    strfmt.DateTime(time.Now()),
+		ProductFamily: models.V1ProductFamilyPRODUCTFAMILYINVALID.Pointer(), // temp solution until the final product family is created
+		InstanceID:    string(cr.GetUID()),
+		Metrics:       metrics,
+	}
+}
