@@ -324,6 +324,7 @@ func TestRunningState(t *testing.T) {
 	}
 	cr.Status.State = apiv1alpha1.BackupStarting
 	cr.Spec.StorageName = "s3-us-west"
+	cr.Spec.SourceHost = "backuphost"
 	cluster, err := readDefaultCR("ps-cluster1", namespace)
 	if err != nil {
 		t.Fatal(err, "failed to read default cr")
