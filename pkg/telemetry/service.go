@@ -10,6 +10,7 @@ import (
 	"github.com/go-openapi/strfmt"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
@@ -54,7 +55,11 @@ func NewTelemetryService() (*Service, error) {
 
 // SendReport sends the report with the custom metric data to the telemetry service.
 func (s Service) SendReport(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.ServerVersion) error {
+	logger := logf.FromContext(ctx)
+
 	report := createReport(cr, serverVersion)
+
+	logger.Info("generated telemetry report", "id", report.ID)
 
 	params := &reporter_api.ReporterAPIGenericReportParams{
 		Context: ctx,
@@ -121,7 +126,7 @@ func createReport(cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.Se
 func Schedule() string {
 	sch, found := os.LookupEnv("TELEMETRY_SCHEDULE")
 	if !found {
-		sch = "30 * * * *"
+		sch = "* * * * *"
 	}
 	return sch
 }
