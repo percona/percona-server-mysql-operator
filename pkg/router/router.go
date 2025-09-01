@@ -51,7 +51,7 @@ func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 }
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
-	return util.SSMapMerge(cr.MySQLSpec().Labels,
+	return util.SSMapMerge(cr.GlobalLabels(), cr.MySQLSpec().Labels,
 		cr.Labels(AppName, naming.ComponentProxy))
 }
 
@@ -59,6 +59,8 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	expose := cr.Spec.Proxy.Router.Expose
 
 	labels := util.SSMapMerge(expose.Labels, MatchLabels(cr))
+
+	selector := MatchLabels(cr)
 
 	var loadBalancerSourceRanges []string
 	if expose.Type == corev1.ServiceTypeLoadBalancer {
@@ -79,12 +81,12 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 			Name:        ServiceName(cr),
 			Namespace:   cr.Namespace,
 			Labels:      labels,
-			Annotations: expose.Annotations,
+			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
 		},
 		Spec: corev1.ServiceSpec{
 			Type:                     expose.Type,
 			Ports:                    ports(cr.Spec.Proxy.Router.Ports),
-			Selector:                 labels,
+			Selector:                 selector,
 			LoadBalancerSourceRanges: loadBalancerSourceRanges,
 			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
 			ExternalTrafficPolicy:    externalTrafficPolicy,
@@ -114,9 +116,10 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHa
 			Kind:       "Deployment",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      Name(cr),
-			Namespace: cr.Namespace,
-			Labels:    labels,
+			Name:        Name(cr),
+			Namespace:   cr.Namespace,
+			Labels:      labels,
+			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -132,13 +135,15 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHa
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
-					Annotations: annotations,
+					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
 				},
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
+							cr,
 							AppName,
 							initImage,
+							spec.InitContainer,
 							spec.ImagePullPolicy,
 							spec.ContainerSecurityContext,
 							spec.Resources,

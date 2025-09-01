@@ -38,6 +38,7 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
@@ -254,7 +255,10 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context
 	if err != nil {
 		return errors.Wrap(err, "get backup destination")
 	}
-	job := xtrabackup.Job(cluster, cr, destination, initImage, storage)
+	job, err := xtrabackup.Job(cluster, cr, destination, initImage, storage)
+	if err != nil {
+		return errors.Wrap(err, "create backup job")
+	}
 
 	switch storage.Type {
 	case apiv1alpha1.BackupStorageS3:
@@ -324,7 +328,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context
 	status.Image = cluster.Spec.Backup.Image
 	status.Storage = storage
 
-	src, err := r.getBackupSource(ctx, cluster)
+	src, err := r.getBackupSource(ctx, cr, cluster)
 	if err != nil {
 		return errors.Wrap(err, "get backup source node")
 	}
@@ -365,8 +369,28 @@ func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creatio
 	return d, nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context, cluster *apiv1alpha1.PerconaServerMySQL) (string, error) {
+func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup, cluster *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	log := logf.FromContext(ctx).WithName("getBackupSource")
+
+	if cr.Spec.SourceHost != "" {
+		return cr.Spec.SourceHost, nil
+	}
+
+	if cluster.Spec.Backup.SourceHost != "" {
+		return cluster.Spec.Backup.SourceHost, nil
+	}
+
+	if cluster.Spec.MySQL.Size == 1 {
+		if cluster.Name == "" || cluster.Namespace == "" {
+			return "", errors.New("cluster name/namespace required")
+		}
+		backupSourceHost := fmt.Sprintf("%s.%s.%s", mysql.PodName(cluster, 0), mysql.ServiceName(cluster), cluster.Namespace)
+		return backupSourceHost, nil
+	}
+
+	if cluster.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeAsync && !cluster.Spec.Orchestrator.Enabled {
+		return "", errors.New("Orchestrator is disabled. Please specify the backup source explicitly using either spec.backup.sourceHost in the cluster CR or spec.sourceBackupHost in the PerconaServerMySQLBackup resource.")
+	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cluster, apiv1alpha1.UserOperator)
 	if err != nil {
@@ -441,9 +465,31 @@ func (r *PerconaServerMySQLBackupReconciler) backupConfig(ctx context.Context, c
 	if err != nil {
 		return nil, errors.Wrap(err, "get backup destination")
 	}
+
+	containerOptions := cr.DeepCopy().Status.Storage.ContainerOptions
+	if containerOptions == nil {
+		containerOptions = new(apiv1alpha1.BackupContainerOptions)
+	}
+	backupContainerOptions := cr.DeepCopy().Spec.ContainerOptions
+	if backupContainerOptions != nil {
+		if backupContainerOptions.Args.Xbcloud != nil {
+			containerOptions.Args.Xbcloud = backupContainerOptions.Args.Xbcloud
+		}
+		if backupContainerOptions.Args.Xbstream != nil {
+			containerOptions.Args.Xbstream = backupContainerOptions.Args.Xbstream
+		}
+		if backupContainerOptions.Args.Xtrabackup != nil {
+			containerOptions.Args.Xtrabackup = backupContainerOptions.Args.Xtrabackup
+		}
+		if backupContainerOptions.Env != nil {
+			containerOptions.Env = backupContainerOptions.Env
+		}
+	}
+
 	conf := &xtrabackup.BackupConfig{
-		Destination: destination.PathWithoutBucket(),
-		VerifyTLS:   verifyTLS,
+		Destination:      destination.PathWithoutBucket(),
+		VerifyTLS:        verifyTLS,
+		ContainerOptions: containerOptions,
 	}
 	s := new(corev1.Secret)
 	nn := types.NamespacedName{
@@ -570,7 +616,7 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 		}
 		return complete, nil
 	}
-	src, err := r.getBackupSource(ctx, cluster)
+	src, err := r.getBackupSource(ctx, cr, cluster)
 	if err != nil {
 		return false, errors.Wrap(err, "get backup source node")
 	}

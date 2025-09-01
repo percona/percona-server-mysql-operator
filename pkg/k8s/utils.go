@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -165,6 +166,8 @@ func EnsureObjectWithHash(
 	obj client.Object,
 	s *runtime.Scheme,
 ) error {
+	log := logf.FromContext(ctx)
+
 	if owner != nil {
 		if err := controllerutil.SetControllerReference(owner, obj, s); err != nil {
 			return errors.Wrapf(err, "set controller reference to %s/%s",
@@ -204,6 +207,8 @@ func EnsureObjectWithHash(
 		if !k8serrors.IsNotFound(err) {
 			return errors.Wrapf(err, "get %v", nn.String())
 		}
+
+		log.V(1).Info("Creating object", "name", obj.GetName(), "kind", obj.GetObjectKind())
 
 		if err := cl.Create(ctx, obj); err != nil {
 			return errors.Wrapf(err, "create %v", nn.String())
@@ -246,9 +251,56 @@ func EnsureObjectWithHash(
 			patch = client.StrategicMergeFrom(oldObject)
 		}
 
+		log.V(1).Info("Patching object", "name", obj.GetName(), "kind", obj.GetObjectKind())
+
 		if err := cl.Patch(ctx, obj, patch); err != nil {
 			return errors.Wrapf(err, "patch %v", nn.String())
 		}
+	}
+
+	return nil
+}
+
+type Component interface {
+	Name() string
+	PerconaServerMySQL() *apiv1alpha1.PerconaServerMySQL
+	Labels() map[string]string
+	PodSpec() *apiv1alpha1.PodSpec
+
+	Object(ctx context.Context, cl client.Client) (client.Object, error)
+}
+
+func EnsureComponent(
+	ctx context.Context,
+	cl client.Client,
+	c Component,
+) error {
+	cr := c.PerconaServerMySQL()
+
+	obj, err := c.Object(ctx, cl)
+	if err != nil {
+		return errors.Wrap(err, "statefulset")
+	}
+	if err := EnsureObjectWithHash(ctx, cl, cr, obj, cl.Scheme()); err != nil {
+		return errors.Wrap(err, "failed to ensure statefulset")
+	}
+
+	if cr.CompareVersion("0.12.0") < 0 {
+		return nil
+	}
+
+	podSpec := c.PodSpec()
+	if podSpec == nil || podSpec.PodDisruptionBudget == nil {
+		return nil
+	}
+
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+		return errors.Wrap(err, "get statefulset")
+	}
+
+	pdb := podDisruptionBudget(cr, podSpec.PodDisruptionBudget, c.Labels())
+	if err := EnsureObjectWithHash(ctx, cl, obj, pdb, cl.Scheme()); err != nil {
+		return errors.Wrap(err, "failed to create pdb")
 	}
 
 	return nil
@@ -461,4 +513,25 @@ func GetImageIDFromPod(pod *corev1.Pod, containerName string) (string, error) {
 	}
 
 	return pod.Status.ContainerStatuses[idx].ImageID, nil
+}
+
+func GetTLSHash(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
+	secret := new(corev1.Secret)
+	err := cl.Get(ctx, types.NamespacedName{
+		Name:      cr.Spec.SSLSecretName,
+		Namespace: cr.Namespace,
+	}, secret)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return "", nil
+		}
+		return "", errors.Wrap(err, "get secret")
+	}
+
+	hash, err := ObjectHash(secret)
+	if err != nil {
+		return "", errors.Wrap(err, "get secret hash")
+	}
+
+	return hash, nil
 }
