@@ -45,15 +45,15 @@ main() {
 
 	local keyring=""
 	if [[ -f ${KEYRING_VAULT_PATH} ]]; then
-    if [[ ${XTRABACKUP_VERSION} == "8.0" ]]; then
-      echo "Using keyring vault config: ${KEYRING_VAULT_PATH}"
-      keyring="--keyring-vault-config=${KEYRING_VAULT_PATH}"
-    elif [[ ${XTRABACKUP_VERSION} == "8.4" ]]; then
-      # PXB expects the config with a specific name
-      cp ${KEYRING_VAULT_PATH} /tmp/component_keyring_vault.cnf
-      echo "Using keyring vault component: /tmp/component_keyring_vault.cnf"
-      keyring="--component-keyring-config=/tmp/component_keyring_vault.cnf"
-    fi
+		if [[ ${XTRABACKUP_VERSION} == "8.0" ]]; then
+			echo "Using keyring vault config: ${KEYRING_VAULT_PATH}"
+			keyring="--keyring-vault-config=${KEYRING_VAULT_PATH}"
+		elif [[ ${XTRABACKUP_VERSION} == "8.4" ]]; then
+			# PXB expects the config with a specific name
+			cp ${KEYRING_VAULT_PATH} /tmp/component_keyring_vault.cnf
+			echo "Using keyring vault component: /tmp/component_keyring_vault.cnf"
+			keyring="--component-keyring-config=/tmp/component_keyring_vault.cnf"
+		fi
 	fi
 
 	# shellcheck disable=SC2086

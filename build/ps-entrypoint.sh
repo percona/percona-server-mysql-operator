@@ -138,35 +138,35 @@ TLS_DIR=/etc/mysql/mysql-tls-secret
 CUSTOM_CONFIG_FILES=("/etc/mysql/config/auto-config.cnf" "/etc/mysql/config/my-config.cnf" "/etc/mysql/config/my-secret.cnf")
 
 install_keyring_component() {
-      echo -n '{ "components": "file://component_keyring_vault" }' > /var/lib/mysql/mysqld.my
-      cp ${KEYRING_VAULT_PATH} /var/lib/mysql/component_keyring_vault.cnf
-      cp ${KEYRING_VAULT_PATH} /var/lib/mysql/vault.cnf
+	echo -n '{ "components": "file://component_keyring_vault" }' >/var/lib/mysql/mysqld.my
+	cp ${KEYRING_VAULT_PATH} /var/lib/mysql/component_keyring_vault.cnf
+	cp ${KEYRING_VAULT_PATH} /var/lib/mysql/vault.cnf
 }
 
 uninstall_keyring_component() {
-    if [[ -f /var/lib/mysql/mysqld.my ]]; then
-      rm /var/lib/mysql/mysqld.my
-    fi
+	if [[ -f /var/lib/mysql/mysqld.my ]]; then
+		rm /var/lib/mysql/mysqld.my
+	fi
 
-    if [[ -f /var/lib/mysql/component_keyring_vault.cnf ]]; then
-      rm /var/lib/mysql/component_keyring_vault.cnf
-    fi
+	if [[ -f /var/lib/mysql/component_keyring_vault.cnf ]]; then
+		rm /var/lib/mysql/component_keyring_vault.cnf
+	fi
 
-    if [[ -f /var/lib/mysql/vault.cnf ]]; then
-      rm /var/lib/mysql/vault.cnf
-    fi
+	if [[ -f /var/lib/mysql/vault.cnf ]]; then
+		rm /var/lib/mysql/vault.cnf
+	fi
 }
 
 add_encryption_options() {
-			sed -i "/\[mysqld\]/a default_table_encryption=ON" $CFG
-			sed -i "/\[mysqld\]/a table_encryption_privilege_check=ON" $CFG
-			sed -i "/\[mysqld\]/a innodb_undo_log_encrypt=ON" $CFG
-			sed -i "/\[mysqld\]/a innodb_redo_log_encrypt=ON" $CFG
-			sed -i "/\[mysqld\]/a binlog_encryption=ON" $CFG
-			sed -i "/\[mysqld\]/a binlog_rotate_encryption_master_key_at_startup=ON" $CFG
-			sed -i "/\[mysqld\]/a innodb_temp_tablespace_encrypt=ON" $CFG
-			sed -i "/\[mysqld\]/a innodb_encrypt_online_alter_logs=ON" $CFG
-			sed -i "/\[mysqld\]/a encrypt_tmp_files=ON" $CFG
+	sed -i "/\[mysqld\]/a default_table_encryption=ON" $CFG
+	sed -i "/\[mysqld\]/a table_encryption_privilege_check=ON" $CFG
+	sed -i "/\[mysqld\]/a innodb_undo_log_encrypt=ON" $CFG
+	sed -i "/\[mysqld\]/a innodb_redo_log_encrypt=ON" $CFG
+	sed -i "/\[mysqld\]/a binlog_encryption=ON" $CFG
+	sed -i "/\[mysqld\]/a binlog_rotate_encryption_master_key_at_startup=ON" $CFG
+	sed -i "/\[mysqld\]/a innodb_temp_tablespace_encrypt=ON" $CFG
+	sed -i "/\[mysqld\]/a innodb_encrypt_online_alter_logs=ON" $CFG
+	sed -i "/\[mysqld\]/a encrypt_tmp_files=ON" $CFG
 }
 
 create_default_cnf() {
@@ -199,14 +199,14 @@ create_default_cnf() {
 	fi
 
 	# if vault secret file exists we assume we need to turn on encryption
-	if [[ -f "${KEYRING_VAULT_PATH}" && ${MYSQL_VERSION} == '8.0' ]]; then
-      sed -i "/\[mysqld\]/a early-plugin-load=keyring_vault.so" $CFG
-      sed -i "/\[mysqld\]/a keyring_vault_config=${KEYRING_VAULT_PATH}" $CFG
+	if [[ -f ${KEYRING_VAULT_PATH} && ${MYSQL_VERSION} == '8.0' ]]; then
+		sed -i "/\[mysqld\]/a early-plugin-load=keyring_vault.so" $CFG
+		sed -i "/\[mysqld\]/a keyring_vault_config=${KEYRING_VAULT_PATH}" $CFG
 
-      add_encryption_options
+		add_encryption_options
 
-      # this variable causes mysqld to crash in 8.4
-      sed -i "/\[mysqld\]/a innodb_parallel_dblwr_encrypt=ON" $CFG
+		# this variable causes mysqld to crash in 8.4
+		sed -i "/\[mysqld\]/a innodb_parallel_dblwr_encrypt=ON" $CFG
 	fi
 
 	for f in "${CUSTOM_CONFIG_FILES[@]}"; do
@@ -447,11 +447,11 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 fi
 
 # if vault secret file exists we assume we need to turn on encryption
-if [[ -f "${KEYRING_VAULT_PATH}" && ${MYSQL_VERSION} == '8.4' ]]; then
-    install_keyring_component
-    add_encryption_options
+if [[ -f ${KEYRING_VAULT_PATH} && ${MYSQL_VERSION} == '8.4' ]]; then
+	install_keyring_component
+	add_encryption_options
 else
-    uninstall_keyring_component
+	uninstall_keyring_component
 fi
 
 if [[ -f /var/lib/mysql/full-cluster-crash ]]; then
