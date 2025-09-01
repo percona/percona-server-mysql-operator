@@ -334,7 +334,7 @@ func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *api
 	}
 
 	// formatMessage formats a map of problems to a message like
-	// 'cluster1-mysql-1:[not_replicating, replication_lag], cluster1-mysql-2:[not_replicating]'
+	// 'ps-cluster1-mysql-1:[not_replicating, replication_lag], ps-cluster1-mysql-2:[not_replicating]'
 	formatMessage := func(problems map[string][]string) string {
 		var sb strings.Builder
 		for k, v := range problems {

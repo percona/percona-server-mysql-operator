@@ -42,7 +42,6 @@ file_env() {
 	fi
 	export "$var"="$val"
 	unset "$fileVar"
-	set -o xtrace
 }
 
 # usage: process_init_file FILENAME MYSQLCOMMAND...
@@ -138,6 +137,33 @@ CFG=/etc/my.cnf.d/node.cnf
 TLS_DIR=/etc/mysql/mysql-tls-secret
 CUSTOM_CONFIG_FILES=("/etc/mysql/config/auto-config.cnf" "/etc/mysql/config/my-config.cnf" "/etc/mysql/config/my-secret.cnf")
 
+install_keyring_component() {
+	echo -n '{ "components": "file://component_keyring_vault" }' >/var/lib/mysql/mysqld.my
+	cp ${KEYRING_VAULT_PATH} /var/lib/mysql/component_keyring_vault.cnf
+}
+
+uninstall_keyring_component() {
+	if [[ -f /var/lib/mysql/mysqld.my ]]; then
+		rm /var/lib/mysql/mysqld.my
+	fi
+
+	if [[ -f /var/lib/mysql/component_keyring_vault.cnf ]]; then
+		rm /var/lib/mysql/component_keyring_vault.cnf
+	fi
+}
+
+add_encryption_options() {
+	sed -i "/\[mysqld\]/a default_table_encryption=ON" $CFG
+	sed -i "/\[mysqld\]/a table_encryption_privilege_check=ON" $CFG
+	sed -i "/\[mysqld\]/a innodb_undo_log_encrypt=ON" $CFG
+	sed -i "/\[mysqld\]/a innodb_redo_log_encrypt=ON" $CFG
+	sed -i "/\[mysqld\]/a binlog_encryption=ON" $CFG
+	sed -i "/\[mysqld\]/a binlog_rotate_encryption_master_key_at_startup=ON" $CFG
+	sed -i "/\[mysqld\]/a innodb_temp_tablespace_encrypt=ON" $CFG
+	sed -i "/\[mysqld\]/a innodb_encrypt_online_alter_logs=ON" $CFG
+	sed -i "/\[mysqld\]/a encrypt_tmp_files=ON" $CFG
+}
+
 create_default_cnf() {
 	POD_IP=$(hostname -I | awk '{print $1}')
 
@@ -168,23 +194,14 @@ create_default_cnf() {
 	fi
 
 	# if vault secret file exists we assume we need to turn on encryption
-	vault_secret="/etc/mysql/vault-keyring-secret/keyring_vault.conf"
-	if [[ -f "${vault_secret}" ]]; then
+	if [[ -f ${KEYRING_VAULT_PATH} && ${MYSQL_VERSION} == '8.0' ]]; then
 		sed -i "/\[mysqld\]/a early-plugin-load=keyring_vault.so" $CFG
-		sed -i "/\[mysqld\]/a keyring_vault_config=${vault_secret}" $CFG
+		sed -i "/\[mysqld\]/a keyring_vault_config=${KEYRING_VAULT_PATH}" $CFG
 
-		if [[ ${MYSQL_VERSION} =~ ^(8\.0|8\.4)$ ]]; then
-			sed -i "/\[mysqld\]/a default_table_encryption=ON" $CFG
-			sed -i "/\[mysqld\]/a table_encryption_privilege_check=ON" $CFG
-			sed -i "/\[mysqld\]/a innodb_undo_log_encrypt=ON" $CFG
-			sed -i "/\[mysqld\]/a innodb_redo_log_encrypt=ON" $CFG
-			sed -i "/\[mysqld\]/a binlog_encryption=ON" $CFG
-			sed -i "/\[mysqld\]/a binlog_rotate_encryption_master_key_at_startup=ON" $CFG
-			sed -i "/\[mysqld\]/a innodb_temp_tablespace_encrypt=ON" $CFG
-			sed -i "/\[mysqld\]/a innodb_parallel_dblwr_encrypt=ON" $CFG
-			sed -i "/\[mysqld\]/a innodb_encrypt_online_alter_logs=ON" $CFG
-			sed -i "/\[mysqld\]/a encrypt_tmp_files=ON" $CFG
-		fi
+		add_encryption_options
+
+		# this variable causes mysqld to crash in 8.4
+		sed -i "/\[mysqld\]/a innodb_parallel_dblwr_encrypt=ON" $CFG
 	fi
 
 	for f in "${CUSTOM_CONFIG_FILES[@]}"; do
@@ -294,7 +311,6 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			MYSQL_ROOT_PASSWORD="$(pwmake 128)"
 			echo "GENERATED ROOT PASSWORD: $MYSQL_ROOT_PASSWORD"
 		fi
-		set -x
 
 		rootCreate=
 		# default root to listen for connections from anywhere
@@ -366,7 +382,6 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			FLUSH PRIVILEGES ;
 		EOSQL
 
-		{ set +x; } 2>/dev/null
 		if [ -n "$MYSQL_ROOT_PASSWORD" ]; then
 			mysql+=(-p"${MYSQL_ROOT_PASSWORD}")
 		fi
@@ -426,10 +441,19 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 	fi
 fi
 
+if [[ ${MYSQL_VERSION} == '8.4' ]]; then
+  # if vault secret file exists we assume we need to turn on encryption
+  if [[ -f ${KEYRING_VAULT_PATH} ]]; then
+    install_keyring_component
+    add_encryption_options
+  else
+    uninstall_keyring_component
+  fi
+fi
+
 if [[ -f /var/lib/mysql/full-cluster-crash ]]; then
 	set +o xtrace
 	node_name=$(hostname -f)
-	cluster_name=$(hostname | cut -d '-' -f1) # TODO: This won't work if CR has `-` in its name.
 	gtid_executed=$(</var/lib/mysql/full-cluster-crash)
 	namespace=$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)
 

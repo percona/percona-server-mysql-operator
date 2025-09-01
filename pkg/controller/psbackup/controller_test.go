@@ -3,11 +3,13 @@ package psbackup
 import (
 	"context"
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -33,7 +35,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err, "failed to read default backup")
 	}
-	cluster, err := readDefaultCR("cluster1", namespace)
+	cluster, err := readDefaultCR("ps-cluster1", namespace)
 	if err != nil {
 		t.Fatal(err, "failed to read default cr")
 	}
@@ -322,7 +324,7 @@ func TestRunningState(t *testing.T) {
 	}
 	cr.Status.State = apiv1alpha1.BackupStarting
 	cr.Spec.StorageName = "s3-us-west"
-	cluster, err := readDefaultCR("cluster1", namespace)
+	cluster, err := readDefaultCR("ps-cluster1", namespace)
 	if err != nil {
 		t.Fatal(err, "failed to read default cr")
 	}
@@ -367,7 +369,10 @@ func TestRunningState(t *testing.T) {
 			if !ok {
 				t.Fatal("storage not found")
 			}
-			job := xtrabackup.Job(tt.cluster, tt.cr, "s3://bucket/container", "init-image", storage)
+			job, err := xtrabackup.Job(tt.cluster, tt.cr, "s3://bucket/container", "init-image", storage)
+			if err != nil {
+				t.Fatal(err)
+			}
 			job.Status.Active = 1
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr, tt.cluster, job).WithStatusSubresource(tt.cr, tt.cluster, job)
 
@@ -379,7 +384,7 @@ func TestRunningState(t *testing.T) {
 					return tt.sidecarClient
 				},
 			}
-			_, err := r.Reconcile(ctx, controllerruntime.Request{
+			_, err = r.Reconcile(ctx, controllerruntime.Request{
 				NamespacedName: types.NamespacedName{
 					Name:      tt.cr.Name,
 					Namespace: tt.cr.Namespace,
@@ -398,6 +403,118 @@ func TestRunningState(t *testing.T) {
 			}
 			if cr.Status.State != tt.state {
 				t.Fatalf("expected state %s, got %s", tt.state, cr.Status.State)
+			}
+		})
+	}
+}
+
+func TestGetBackupSource(t *testing.T) {
+	scheme := runtime.NewScheme()
+
+	err := clientgoscheme.AddToScheme(scheme)
+	require.NoError(t, err)
+
+	err = apiv1alpha1.AddToScheme(scheme)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		cr      *apiv1alpha1.PerconaServerMySQLBackup
+		cluster *apiv1alpha1.PerconaServerMySQL
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "sourceHost from backup",
+			cr: &apiv1alpha1.PerconaServerMySQLBackup{
+				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
+					SourceHost: "backuphost",
+				},
+			},
+			cluster: &apiv1alpha1.PerconaServerMySQL{
+				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+					Backup: &apiv1alpha1.BackupSpec{SourceHost: "clusterhost"},
+				},
+			},
+			want:    "backuphost",
+			wantErr: false,
+		},
+		{
+			name: "host from cluster",
+			cr: &apiv1alpha1.PerconaServerMySQLBackup{
+				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{},
+			},
+			cluster: &apiv1alpha1.PerconaServerMySQL{
+				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+					Backup: &apiv1alpha1.BackupSpec{SourceHost: "clusterhost"},
+				},
+			},
+			want:    "clusterhost",
+			wantErr: false,
+		},
+		{
+			name: "single node cluster",
+			cr:   &apiv1alpha1.PerconaServerMySQLBackup{},
+			cluster: &apiv1alpha1.PerconaServerMySQL{
+				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+					MySQL: apiv1alpha1.MySQLSpec{
+						PodSpec: apiv1alpha1.PodSpec{Size: 1},
+					},
+					Backup: &apiv1alpha1.BackupSpec{},
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "single-node",
+					Namespace: "test-ns",
+				},
+			},
+			want:    "single-node-mysql-0.single-node-mysql.test-ns",
+			wantErr: false,
+		},
+		{
+			name: "async cluster, orchestrator off, no host",
+			cr:   &apiv1alpha1.PerconaServerMySQLBackup{},
+			cluster: &apiv1alpha1.PerconaServerMySQL{
+				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+					MySQL: apiv1alpha1.MySQLSpec{
+						ClusterType: apiv1alpha1.ClusterTypeAsync,
+					},
+					Backup: &apiv1alpha1.BackupSpec{},
+					Unsafe: apiv1alpha1.UnsafeFlags{
+						Orchestrator: true,
+					},
+					Orchestrator: apiv1alpha1.OrchestratorSpec{
+						Enabled: false,
+					},
+				},
+			},
+			want:    "",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr).WithStatusSubresource(tt.cr)
+		if tt.cluster != nil {
+			cb.WithObjects(tt.cluster)
+		}
+
+		t.Run(tt.name, func(t *testing.T) {
+			r := PerconaServerMySQLBackupReconciler{
+				Client:        cb.Build(),
+				Scheme:        scheme,
+				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+			}
+
+			got, err := r.getBackupSource(ctx, tt.cr, tt.cluster)
+			if tt.wantErr {
+				const errMsg = "Orchestrator is disabled. Please specify the backup source explicitly using either spec.backup.sourceHost in the cluster CR or spec.sourceBackupHost in the PerconaServerMySQLBackup resource."
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), errMsg)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.want, got)
 			}
 		})
 	}
