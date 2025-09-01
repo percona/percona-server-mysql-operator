@@ -13,7 +13,7 @@ import (
 )
 
 func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	log := logf.FromContext(ctx).WithName("reconcileScheduledTelemetrySending")
+	logger := logf.FromContext(ctx).WithName("reconcileScheduledTelemetrySending")
 
 	jn := telemetryJobName(cr)
 	existingJob, ok := r.Crons.telemetryJobs.Load(jn)
@@ -30,59 +30,72 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 
 	configuredSchedule := telemetry.Schedule()
 
+	// If the configured schedule is identical to the existing job's schedule, no action is needed.
 	if job.cronSchedule == configuredSchedule {
 		return nil
 	}
 
-	log.Info("removing existing telemetry job because the configured schedule changed", "old", job.cronSchedule, "new", configuredSchedule)
+	logger.Info("removing existing telemetry job because the configured schedule changed", "old", job.cronSchedule, "new", configuredSchedule)
 	r.Crons.telemetryJobs.Delete(jn)
 
-	telemetryService, err := telemetry.NewTelemetryService()
-	if err != nil {
-		return errors.Wrap(err, "telemetry service")
-	}
-
-	id, err := r.Crons.addFuncWithSeconds(configuredSchedule, func() {
-		localCr := &apiv1alpha1.PerconaServerMySQL{}
-		err := r.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, localCr)
-		if k8serrors.IsNotFound(err) {
-			log.Info("cluster is not found, deleting the job",
-				"name", jn, "cluster", cr.Name, "namespace", cr.Namespace)
-			r.Crons.telemetryJobs.Delete(jn)
-			return
-		}
-		if err != nil {
-			log.Error(err, "failed to get cr")
-			return
-		}
-
-		if cr.Status.State != apiv1alpha1.StateReady {
-			log.Info("cluster is not ready yet")
-			return
-		}
-
-		err = telemetryService.SendReport(ctx, cr, r.ServerVersion)
-		if err != nil {
-			log.Error(err, "failed to send telemetry report")
-		}
-	})
+	id, err := r.Crons.addFuncWithSeconds(configuredSchedule, r.telemetrySendingHandlerFunc(ctx, cr, jn))
 	if err != nil {
 		return err
 	}
 
-	log.Info("adding new job", "name", jn, "schedule", configuredSchedule)
+	logger.Info("adding new job", "name", jn, "schedule", configuredSchedule)
 
 	r.Crons.telemetryJobs.Store(jn, telemetryJob{
 		scheduleJob:  scheduleJob{jobID: id},
 		cronSchedule: configuredSchedule,
 	})
 
-	// send telemetry on cluster creation
-	err = telemetryService.SendReport(ctx, cr, r.ServerVersion)
+	err = r.sendTelemetry(ctx, cr)
 	if err != nil {
-		log.Error(err, "failed to send telemetry report")
+		logger.Error(err, "failed to send telemetry report")
 	}
 
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) telemetrySendingHandlerFunc(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, jobName string) func() {
+	return func() {
+		logger := logf.FromContext(ctx).WithName("telemetrySendingHandlerFunc")
+
+		localCr := &apiv1alpha1.PerconaServerMySQL{}
+		err := r.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, localCr)
+		if k8serrors.IsNotFound(err) {
+			logger.Info("cluster is not found, deleting the job",
+				"name", jobName, "cluster", cr.Name, "namespace", cr.Namespace)
+			r.Crons.telemetryJobs.Delete(jobName)
+			return
+		}
+		if err != nil {
+			logger.Error(err, "failed to get cr")
+			return
+		}
+
+		if cr.Status.State != apiv1alpha1.StateReady {
+			logger.Info("cluster is not ready yet")
+			return
+		}
+
+		err = r.sendTelemetry(ctx, cr)
+		if err != nil {
+			logger.Error(err, "failed to send telemetry report")
+		}
+	}
+}
+
+func (r *PerconaServerMySQLReconciler) sendTelemetry(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+	telemetryService, err := telemetry.NewTelemetryService()
+	if err != nil {
+		return errors.Wrap(err, "telemetry service")
+	}
+	err = telemetryService.SendReport(ctx, cr, r.ServerVersion)
+	if err != nil {
+		return errors.Wrap(err, "failed to send telemetry report")
+	}
 	return nil
 }
 
