@@ -147,6 +147,14 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, nil
 	}
 
+	src, err := r.getBackupSource(ctx, cr, cluster)
+
+	if err != nil {
+		status.State = apiv1alpha1.BackupError
+		status.StateDesc = fmt.Sprintf("Check Source host for backup")
+		return rr, nil
+	}
+
 	if cluster.Status.MySQL.State != apiv1alpha1.StateReady {
 		log.Info("Cluster is not ready", "cluster", cr.Name)
 		status.State = apiv1alpha1.BackupNew
@@ -156,7 +164,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 	job := &batchv1.Job{}
 	nn = xtrabackup.JobNamespacedName(cr)
-	err := r.Client.Get(ctx, nn, job)
+	err = r.Client.Get(ctx, nn, job)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return rr, errors.Wrapf(err, "get job %v", nn.String())
 	}
@@ -164,7 +172,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	if k8serrors.IsNotFound(err) {
 		log.Info("Creating backup job", "jobName", nn.Name)
 
-		if err := r.createBackupJob(ctx, cr, cluster, storage, &status); err != nil {
+		if err := r.createBackupJob(ctx, cr, cluster, storage, &status, src); err != nil {
 			return rr, errors.Wrap(err, "failed to create backup job")
 		}
 
@@ -245,7 +253,7 @@ func (r *PerconaServerMySQLBackupReconciler) isBackupJobRunning(ctx context.Cont
 	return true, nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup, cluster *apiv1alpha1.PerconaServerMySQL, storage *apiv1alpha1.BackupStorageSpec, status *apiv1alpha1.PerconaServerMySQLBackupStatus) error {
+func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup, cluster *apiv1alpha1.PerconaServerMySQL, storage *apiv1alpha1.BackupStorageSpec, status *apiv1alpha1.PerconaServerMySQLBackupStatus, src string) error {
 	initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
 	if err != nil {
 		return errors.Wrap(err, "get operator image")
@@ -327,11 +335,6 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context
 
 	status.Image = cluster.Spec.Backup.Image
 	status.Storage = storage
-
-	src, err := r.getBackupSource(ctx, cr, cluster)
-	if err != nil {
-		return errors.Wrap(err, "get backup source node")
-	}
 
 	if err := xtrabackup.SetSourceNode(job, src); err != nil {
 		return errors.Wrap(err, "set backup source node")
