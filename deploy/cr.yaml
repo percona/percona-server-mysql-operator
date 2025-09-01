@@ -459,9 +459,6 @@ spec:
 #      - name: "my-secret-1"
 #      - name: "my-secret-2"
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
-<<<<<<< HEAD
-#    initImage: percona/percona-server-mysql-operator:0.11.0
-=======
 #    initContainer:
 #      image: perconalab/percona-server-mysql-operator:main
 #      containerSecurityContext:
@@ -475,7 +472,6 @@ spec:
 #        limits:
 #          memory: 200M
 #          cpu: 200m
->>>>>>> main
 
     size: 3
 
@@ -551,12 +547,8 @@ spec:
 
   backup:
     enabled: true
-<<<<<<< HEAD
-    image: percona/percona-xtrabackup:8.0.35-33
-=======
 #    sourceHost: cluster1-mysql-0.<mysql_service_name>.<namespace>
     image: perconalab/percona-server-mysql-operator:main-backup8.0
->>>>>>> main
 #    schedule:
 #      - name: "sat-night-backup"
 #        schedule: "0 0 * * 6"
@@ -571,9 +563,6 @@ spec:
 #    imagePullSecrets:
 #      - name: "my-secret-1"
 #      - name: "my-secret-2"
-<<<<<<< HEAD
-#    initImage: percona/percona-server-mysql-operator:0.11.0
-=======
 #    initContainer:
 #      image: perconalab/percona-server-mysql-operator:main
 #      containerSecurityContext:
@@ -587,7 +576,6 @@ spec:
 #        limits:
 #          memory: 200M
 #          cpu: 200m
->>>>>>> main
 #    containerSecurityContext:
 #      privileged: true
     storages:
