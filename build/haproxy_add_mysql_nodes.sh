@@ -22,7 +22,6 @@ function main() {
 	NODE_LIST_REPL=()
 	NODE_LIST_MYSQLX=()
 	NODE_LIST_ADMIN=()
-	NODE_LIST_BACKUP=()
 
 	SERVER_OPTIONS=${HA_SERVER_OPTIONS:-'resolvers kubernetes inter 10000 rise 1 fall 2 check weight 1'}
 	send_proxy=''
