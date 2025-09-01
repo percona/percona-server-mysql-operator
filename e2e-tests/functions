@@ -508,7 +508,12 @@ deploy_vault() {
 	local unsealKey=$(jq -r ".unseal_keys_b64[]" <"$tmp_dir/$name")
 	local token=$(jq -r ".root_token" <"$tmp_dir/$name")
 
-	cat ${ROOT_REPO}/e2e-tests/conf/vault-secret.yaml \
+	local secret=${ROOT_REPO}/e2e-tests/conf/vault-secret.yaml
+	if [[ ${MYSQL_VERSION} == "8.4" ]]; then
+		secret=${ROOT_REPO}/e2e-tests/conf/vault-secret-84.yaml
+	fi
+
+	cat ${secret} \
 		| sed -e "s/#token/$token/" \
 		| sed -e "s/#vault_url/$protocol:\/\/$name.$name.svc.cluster.local:8200/" \
 		| sed -e "s/#secret/secret/" >"${tmp_dir}/vault-secret.yaml"
