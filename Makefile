@@ -79,7 +79,7 @@ help: ## Display this help.
 
 ##@ Development
 
-generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and CustomResourceDefinition objects
+generate: controller-gen mockgen ## Generate code containing DeepCopy, DeepCopyInto, and CustomResourceDefinition objects
 	# Generate WebhookConfiguration, Role and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) crd:maxDescLen=0 rbac:roleName=$(NAME) webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 	$(CONTROLLER_GEN) rbac:roleName=$(NAME) paths="./..." output:rbac:artifacts:config=config/rbac/cluster
@@ -177,6 +177,10 @@ envtest: ## Download envtest-setup locally if necessary.
 SWAGGER = $(shell pwd)/bin/swagger
 swagger: ## Download swagger locally if necessary.
 	$(call go-get-tool,$(SWAGGER),github.com/go-swagger/go-swagger/cmd/swagger@latest)
+
+MOCKGEN = $(shell pwd)/bin/mockgen
+mockgen: ## Download mockgen locally if necessary.
+	$(call go-get-tool,$(MOCKGEN), github.com/golang/mock/mockgen@latest)
 
 # go-get-tool will 'go get' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
