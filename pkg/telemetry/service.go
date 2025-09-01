@@ -126,7 +126,7 @@ func createReport(cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.Se
 func Schedule() string {
 	sch, found := os.LookupEnv("TELEMETRY_SCHEDULE")
 	if !found {
-		sch = "* * * * *"
+		sch = "30 * * * *"
 	}
 	return sch
 }
