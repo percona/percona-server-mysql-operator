@@ -50,6 +50,8 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 		cronSchedule: configuredSchedule,
 	})
 
+	logger.Info("sending telemetry on cluster start")
+
 	err = r.sendTelemetry(ctx, cr)
 	if err != nil {
 		logger.Error(err, "failed to send telemetry report")
@@ -79,6 +81,8 @@ func (r *PerconaServerMySQLReconciler) telemetrySendingHandlerFunc(ctx context.C
 			logger.Info("cluster is not ready yet")
 			return
 		}
+
+		logger.Info("sending telemetry on schedule...", "job name", jobName)
 
 		err = r.sendTelemetry(ctx, cr)
 		if err != nil {
