@@ -200,9 +200,7 @@ func (r *PerconaServerMySQLReconciler) upgradeVersions(ctx context.Context, cr *
 // The new (semver-matching) version is determined by the CR's crVersion field.
 // If the crVersion is an empty string, it sets the current operator version.
 func (r *PerconaServerMySQLReconciler) setCRVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	logf.FromContext(ctx).Info("Set CR version run the method", "version", cr.Spec.CRVersion)
 	if len(cr.Spec.CRVersion) > 0 {
-		logf.FromContext(ctx).Info("Set CR version not needed", "version", cr.Spec.CRVersion)
 		return nil
 	}
 
