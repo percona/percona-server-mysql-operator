@@ -64,7 +64,9 @@ func (r *PerconaServerMySQLReconciler) reconcileDataSource(ctx context.Context, 
 			continue
 		}
 
-		log.Info("Pod has duplicate uuid. Removing /var/lib/mysql/auto.cnf and deleting the pod", "pod", pod.Name, "uuid", uuid)
+		outb.Reset()
+		errb.Reset()
+		log.Info("Pod has duplicate server-uuid. Removing /var/lib/mysql/auto.cnf and deleting the pod", "pod", pod.Name, "uuid", uuid)
 		cmd = []string{"rm", "/var/lib/mysql/auto.cnf"}
 		if err := r.ClientCmd.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false); err != nil {
 			return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, outb.String(), errb.String())
