@@ -15,10 +15,10 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 	log := logf.FromContext(ctx).WithName("reconcileScheduledTelemetrySending")
 
 	jn := telemetryJobName(cr)
-	existingJob, ok := r.crons.telemetryJobs.Load(jn)
+	existingJob, ok := r.Crons.telemetryJobs.Load(jn)
 	if !telemetryEnabled() {
 		if ok {
-			r.crons.telemetryJobs.Delete(jn)
+			r.Crons.telemetryJobs.Delete(jn)
 		}
 		return nil
 	}
@@ -34,17 +34,17 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 	}
 
 	log.Info("remove existing telemetry job because the configured schedule changed", "old", job.cronSchedule, "new", configuredSchedule)
-	r.crons.telemetryJobs.Delete(jn)
+	r.Crons.telemetryJobs.Delete(jn)
 
 	telemetryService, err := telemetry.NewTelemetryService("")
 
-	id, err := r.crons.addFuncWithSeconds(configuredSchedule, func() {
+	id, err := r.Crons.addFuncWithSeconds(configuredSchedule, func() {
 		localCr := &apiv1alpha1.PerconaServerMySQL{}
 		err := r.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, localCr)
 		if k8serrors.IsNotFound(err) {
 			log.Info("cluster is not found, deleting the job",
 				"name", jn, "cluster", cr.Name, "namespace", cr.Namespace)
-			r.crons.telemetryJobs.Delete(jn)
+			r.Crons.telemetryJobs.Delete(jn)
 			return
 		}
 		if err != nil {
@@ -63,7 +63,7 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 
 	log.Info("add new job", "name", jn, "schedule", configuredSchedule)
 
-	r.crons.telemetryJobs.Store(jn, telemetryJob{
+	r.Crons.telemetryJobs.Store(jn, telemetryJob{
 		scheduleJob:  scheduleJob{jobID: id},
 		cronSchedule: configuredSchedule,
 	})

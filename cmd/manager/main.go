@@ -157,7 +157,7 @@ func main() {
 		ServerVersion: serverVersion,
 		Recorder:      mgr.GetEventRecorderFor("ps-controller"),
 		ClientCmd:     cliCmd,
-		crons:         ps.NewCronRegistry(),
+		Crons:         ps.NewCronRegistry(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ps-controller")
 		os.Exit(1)

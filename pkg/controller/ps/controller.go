@@ -70,8 +70,7 @@ type PerconaServerMySQLReconciler struct {
 	ServerVersion *platform.ServerVersion
 	Recorder      record.EventRecorder
 	ClientCmd     clientcmd.Client
-
-	crons CronRegistry
+	Crons         CronRegistry
 }
 
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqls;perconaservermysqls/status;perconaservermysqls/finalizers,verbs=get;list;watch;create;update;patch;delete

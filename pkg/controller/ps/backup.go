@@ -126,18 +126,18 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledBackup(ctx context.Cont
 		bcp.Name = backupNamePrefix + "-" + bcp.Name
 		backups[bcp.Name] = bcp
 
-		sch := r.crons.getBackupJob(bcp)
+		sch := r.Crons.getBackupJob(bcp)
 		if ok && sch.Schedule == bcp.Schedule && sch.StorageName == bcp.StorageName {
 			continue
 		}
 
 		log.Info("Creating or updating backup job", "name", bcp.Name, "schedule", bcp.Schedule)
-		if err := r.crons.addBackupJob(ctx, r.Client, cr, bcp); err != nil {
+		if err := r.Crons.addBackupJob(ctx, r.Client, cr, bcp); err != nil {
 			log.Error(err, "can't add backup job", "backup name", cr.Spec.Backup.Schedule[i].Name, "schedule", bcp.Schedule)
 		}
 	}
 
-	r.crons.backupJobs.Range(func(k, v interface{}) bool {
+	r.Crons.backupJobs.Range(func(k, v interface{}) bool {
 		item := v.(backupScheduleJob)
 		if !strings.HasPrefix(item.Name, backupNamePrefix) {
 			return true
@@ -146,7 +146,7 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledBackup(ctx context.Cont
 		spec, ok := backups[item.Name]
 		if !ok {
 			log.Info("Deleting outdated backup job", "name", item.Name)
-			r.crons.deleteBackupJob(item.Name)
+			r.Crons.deleteBackupJob(item.Name)
 			return true
 		}
 
