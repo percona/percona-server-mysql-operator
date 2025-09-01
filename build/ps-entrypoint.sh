@@ -140,7 +140,6 @@ CUSTOM_CONFIG_FILES=("/etc/mysql/config/auto-config.cnf" "/etc/mysql/config/my-c
 install_keyring_component() {
 	echo -n '{ "components": "file://component_keyring_vault" }' >/var/lib/mysql/mysqld.my
 	cp ${KEYRING_VAULT_PATH} /var/lib/mysql/component_keyring_vault.cnf
-	cp ${KEYRING_VAULT_PATH} /var/lib/mysql/vault.cnf
 }
 
 uninstall_keyring_component() {
@@ -150,10 +149,6 @@ uninstall_keyring_component() {
 
 	if [[ -f /var/lib/mysql/component_keyring_vault.cnf ]]; then
 		rm /var/lib/mysql/component_keyring_vault.cnf
-	fi
-
-	if [[ -f /var/lib/mysql/vault.cnf ]]; then
-		rm /var/lib/mysql/vault.cnf
 	fi
 }
 
@@ -446,12 +441,14 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 	fi
 fi
 
-# if vault secret file exists we assume we need to turn on encryption
-if [[ -f ${KEYRING_VAULT_PATH} && ${MYSQL_VERSION} == '8.4' ]]; then
-	install_keyring_component
-	add_encryption_options
-else
-	uninstall_keyring_component
+if [[ ${MYSQL_VERSION} == '8.4' ]]; then
+  # if vault secret file exists we assume we need to turn on encryption
+  if [[ -f ${KEYRING_VAULT_PATH} ]]; then
+    install_keyring_component
+    add_encryption_options
+  else
+    uninstall_keyring_component
+  fi
 fi
 
 if [[ -f /var/lib/mysql/full-cluster-crash ]]; then
