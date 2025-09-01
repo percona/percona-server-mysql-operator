@@ -35,8 +35,8 @@ type Service struct {
 }
 
 // NewTelemetryService creates a new Service.
-func NewTelemetryService(endpoint string) (*Service, error) {
-	requestURL, err := url.Parse(endpoint)
+func NewTelemetryService() (*Service, error) {
+	requestURL, err := url.Parse(endpoint())
 	if err != nil {
 		return nil, fmt.Errorf("invalid telemetry endpoint: %w", err)
 	}
@@ -122,6 +122,15 @@ func Schedule() string {
 	sch, found := os.LookupEnv("TELEMETRY_SCHEDULE")
 	if !found {
 		sch = fmt.Sprintf("30 * * * *")
+	}
+	return sch
+}
+
+// endpoint returns the endpoint for sending telemetry requests.
+func endpoint() string {
+	sch, found := os.LookupEnv("TELEMETRY_SERVICE_URL")
+	if !found {
+		sch = fmt.Sprintf("https://check-dev.percona.com/versions/v1") // to change this with the production endpoint as default.
 	}
 	return sch
 }

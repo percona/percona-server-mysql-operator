@@ -36,7 +36,9 @@ func TestNewTelemetryService(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			service, err := NewTelemetryService(tt.endpoint)
+			t.Setenv("TELEMETRY_SERVICE_URL", tt.endpoint)
+
+			service, err := NewTelemetryService()
 
 			if tt.expectError != nil {
 				assert.Error(t, err)
@@ -143,6 +145,32 @@ func TestSchedule(t *testing.T) {
 
 			s := Schedule()
 			assert.Equal(t, tt.expectedSch, s)
+		})
+	}
+}
+
+func TestEndpoint(t *testing.T) {
+	tests := map[string]struct {
+		envValue      string
+		expectedValue string
+	}{
+		"default schedule when env var not set": {
+			expectedValue: "https://check-dev.percona.com/versions/v1",
+		},
+		"custom schedule from env var": {
+			envValue:      "https://telemetry.percona.com/versions/v1",
+			expectedValue: "https://telemetry.percona.com/versions/v1",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if tt.envValue != "" {
+				t.Setenv("TELEMETRY_SERVICE_URL", tt.envValue)
+			}
+
+			s := endpoint()
+			assert.Equal(t, tt.expectedValue, s)
 		})
 	}
 }

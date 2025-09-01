@@ -33,10 +33,10 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 		return nil
 	}
 
-	log.Info("remove existing telemetry job because the configured schedule changed", "old", job.cronSchedule, "new", configuredSchedule)
+	log.Info("removing existing telemetry job because the configured schedule changed", "old", job.cronSchedule, "new", configuredSchedule)
 	r.Crons.telemetryJobs.Delete(jn)
 
-	telemetryService, err := telemetry.NewTelemetryService("")
+	telemetryService, err := telemetry.NewTelemetryService()
 
 	id, err := r.Crons.addFuncWithSeconds(configuredSchedule, func() {
 		localCr := &apiv1alpha1.PerconaServerMySQL{}
@@ -48,7 +48,12 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 			return
 		}
 		if err != nil {
-			log.Error(err, "failed to get CR")
+			log.Error(err, "failed to get cr")
+			return
+		}
+
+		if cr.Status.State != apiv1alpha1.StateReady {
+			log.Info("cluster is not ready yet")
 			return
 		}
 
@@ -61,7 +66,7 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 		return err
 	}
 
-	log.Info("add new job", "name", jn, "schedule", configuredSchedule)
+	log.Info("adding new job", "name", jn, "schedule", configuredSchedule)
 
 	r.Crons.telemetryJobs.Store(jn, telemetryJob{
 		scheduleJob:  scheduleJob{jobID: id},
