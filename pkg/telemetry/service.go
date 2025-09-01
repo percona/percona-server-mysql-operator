@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/go-openapi/strfmt"
@@ -114,4 +115,13 @@ func createReport(cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.Se
 		InstanceID:    string(cr.GetUID()),
 		Metrics:       metrics,
 	}
+}
+
+// Schedule returns the schedule for sending telemetry requests.
+func Schedule() string {
+	sch, found := os.LookupEnv("TELEMETRY_SCHEDULE")
+	if !found {
+		sch = fmt.Sprintf("30 * * * *")
+	}
+	return sch
 }

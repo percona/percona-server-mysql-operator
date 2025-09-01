@@ -104,7 +104,7 @@ func reconciler() *PerconaServerMySQLReconciler {
 		ServerVersion: &platform.ServerVersion{
 			Platform: platform.PlatformKubernetes,
 		},
-		Crons:    NewCronRegistry(),
+		crons:    NewCronRegistry(),
 		Recorder: new(record.FakeRecorder),
 	}
 }

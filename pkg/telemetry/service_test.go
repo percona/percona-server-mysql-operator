@@ -121,6 +121,32 @@ func TestSendReport(t *testing.T) {
 	}
 }
 
+func TestSchedule(t *testing.T) {
+	tests := map[string]struct {
+		envValue    string
+		expectedSch string
+	}{
+		"default schedule when env var not set": {
+			expectedSch: "30 * * * *",
+		},
+		"custom schedule from env var": {
+			envValue:    "0 12 * * *",
+			expectedSch: "0 12 * * *",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if tt.envValue != "" {
+				t.Setenv("TELEMETRY_SCHEDULE", tt.envValue)
+			}
+
+			s := Schedule()
+			assert.Equal(t, tt.expectedSch, s)
+		})
+	}
+}
+
 func defaultCR() *apiv1alpha1.PerconaServerMySQL {
 	return &apiv1alpha1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
