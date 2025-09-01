@@ -379,12 +379,18 @@ func mysqlMonitContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			Name:  "MYSQL_SERVICE",
 			Value: mysql.ProxyServiceName(cr),
 		},
-		{
-			Name:  "CLUSTER_TYPE",
-			Value: string(cr.Spec.MySQL.ClusterType),
-		},
 	}
 	env = append(env, spec.Env...)
+
+	if cr.CompareVersion("0.12.0") >= 0 {
+		cluserTypeEnv := []corev1.EnvVar{
+			{
+				Name:  "CLUSTER_TYPE",
+				Value: string(cr.Spec.MySQL.ClusterType),
+			},
+		}
+		env = append(env, cluserTypeEnv...)
+	}
 
 	return corev1.Container{
 		Name:            "mysql-monit",
