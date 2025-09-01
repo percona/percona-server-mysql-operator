@@ -121,7 +121,7 @@ func createReport(cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.Se
 func Schedule() string {
 	sch, found := os.LookupEnv("TELEMETRY_SCHEDULE")
 	if !found {
-		sch = fmt.Sprintf("30 * * * *")
+		sch = "30 * * * *"
 	}
 	return sch
 }
@@ -130,7 +130,7 @@ func Schedule() string {
 func endpoint() string {
 	sch, found := os.LookupEnv("TELEMETRY_SERVICE_URL")
 	if !found {
-		sch = fmt.Sprintf("https://check-dev.percona.com/versions/v1") // to change this with the production endpoint as default.
+		sch = "https://check-dev.percona.com/versions/v1" // to change this with the production endpoint as default.
 	}
 	return sch
 }

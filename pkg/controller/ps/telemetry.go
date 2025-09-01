@@ -63,7 +63,7 @@ func (r *PerconaServerMySQLReconciler) telemetrySendingHandlerFunc(ctx context.C
 		logger := logf.FromContext(ctx).WithName("telemetrySendingHandlerFunc")
 
 		localCr := &apiv1alpha1.PerconaServerMySQL{}
-		err := r.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, localCr)
+		err := r.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, localCr)
 		if k8serrors.IsNotFound(err) {
 			logger.Info("cluster is not found, deleting the job",
 				"name", jobName, "cluster", cr.Name, "namespace", cr.Namespace)
