@@ -82,14 +82,14 @@ func (r *PerconaServerMySQLReconciler) telemetrySendingHandlerFunc(ctx context.C
 			return
 		}
 
-		if cr.Status.State != apiv1alpha1.StateReady {
+		if localCr.Status.State != apiv1alpha1.StateReady {
 			logger.Info("cluster is not ready yet")
 			return
 		}
 
 		logger.Info("sending telemetry on schedule...", "job name", jobName)
 
-		err = r.sendTelemetry(ctx, cr)
+		err = r.sendTelemetry(ctx, localCr)
 		if err != nil {
 			logger.Error(err, "failed to send telemetry report")
 		}
