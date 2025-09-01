@@ -57,6 +57,11 @@ const (
 // +kubebuilder:validation:XValidation:rule="!(has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize",message="Invalid configuration: Scaling MySQL replicas below 3 requires 'unsafeFlags.mysqlSize: true'"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size >= 9) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', scaling MySQL replicas above 9 requires 'unsafeFlags.mysqlSize: true'"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size % 2 == 0) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', using an even number of MySQL replicas requires 'unsafeFlags.mysqlSize: true'"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication') || self.unsafeFlags.proxy || self.proxy.router.enabled || self.proxy.haproxy.enabled",message="Invalid configuration: For 'group replication', MySQL Router or HAProxy must be enabled unless 'unsafeFlags.proxy' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && self.proxy.router.enabled && has(self.proxy.router.size) && self.proxy.router.size < 2) || self.unsafeFlags.proxySize",message="Invalid configuration: For 'group replication', Router size must be 2 or greater unless 'unsafeFlags.proxySize' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', MySQL size must be 3 or greater unless 'unsafeFlags.mysqlSize' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && has(self.orchestrator.size) && (self.orchestrator.size < 3 || self.orchestrator.size % 2 == 0) && self.orchestrator.size > 0) || self.unsafeFlags.orchestratorSize",message="Invalid configuration: For 'async' replication, Orchestrator size must be 3 or greater and odd unless 'unsafeFlags.orchestratorSize' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && self.updateStrategy == 'SmartUpdate') || self.orchestrator.enabled",message="Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"
 type PerconaServerMySQLSpec struct {
 	Metadata               *Metadata                            `json:"metadata,omitempty"`
 	CRVersion              string                               `json:"crVersion,omitempty"`
@@ -921,57 +926,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 	}
 
-	if cr.Spec.MySQL.ClusterType == ClusterTypeGR {
-		if !cr.Spec.Proxy.Router.Enabled && !cr.Spec.Proxy.HAProxy.Enabled && !cr.Spec.Unsafe.Proxy {
-			return errors.New("MySQL Router or HAProxy must be enabled for Group Replication. Enable spec.unsafeFlags.proxy to bypass this check")
-		}
-
-		if cr.RouterEnabled() && !cr.Spec.Unsafe.ProxySize {
-			if cr.Spec.Proxy.Router.Size < MinSafeProxySize {
-				return errors.Errorf("Router size should be %d or greater. Enable spec.unsafeFlags.proxySize to set a lower size", MinSafeProxySize)
-			}
-		}
-
-		if !cr.Spec.Unsafe.MySQLSize {
-			if cr.Spec.MySQL.Size < MinSafeGRSize {
-				return errors.Errorf("MySQL size should be %d or greater for Group Replication. Enable spec.unsafeFlags.mysqlSize to set a lower size", MinSafeGRSize)
-			}
-
-			if cr.Spec.MySQL.Size > MaxSafeGRSize {
-				return errors.Errorf("MySQL size should be %d or lower for Group Replication. Enable spec.unsafeFlags.mysqlSize to set a higher size", MaxSafeGRSize)
-			}
-
-			if cr.Spec.MySQL.Size%2 == 0 {
-				return errors.New("MySQL size should be an odd number for Group Replication. Enable spec.unsafeFlags.mysqlSize to set an even number")
-			}
-		}
-	}
-
 	if cr.Spec.MySQL.ClusterType == ClusterTypeAsync {
-		if !cr.Spec.Unsafe.MySQLSize && cr.Spec.MySQL.Size < MinSafeAsyncSize {
-			return errors.Errorf("MySQL size should be %d or greater for asynchronous replication. Enable spec.unsafeFlags.mysqlSize to set a lower size", MinSafeAsyncSize)
-		}
-
-		if !cr.Spec.Unsafe.Orchestrator && !cr.Spec.Orchestrator.Enabled {
-			return errors.New("Orchestrator must be enabled for asynchronous replication. Enable spec.unsafeFlags.orchestrator to bypass this check")
-		}
-
-		if oSize := int(cr.Spec.Orchestrator.Size); cr.OrchestratorEnabled() && (oSize < 3 || oSize%2 == 0) && oSize != 0 && !cr.Spec.Unsafe.OrchestratorSize {
-			return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup. Enable spec.unsafeFlags.orchestratorSize to bypass this check")
-		}
-
-		if !cr.Spec.Orchestrator.Enabled && cr.Spec.UpdateStrategy == SmartUpdateStatefulSetStrategyType {
-			return errors.Errorf("Orchestrator must be enabled to use SmartUpdate. Either enable Orchestrator or set spec.updateStrategy to %s", appsv1.RollingUpdateStatefulSetStrategyType)
-		}
-
-		if !cr.Spec.Unsafe.Proxy && !cr.HAProxyEnabled() {
-			return errors.New("HAProxy must be enabled for asynchronous replication. Enable spec.unsafeFlags.proxy to bypass this check")
-		}
-
-		if cr.RouterEnabled() {
-			return errors.New("MySQL Router can't be enabled for asynchronous replication")
-		}
-
 		for _, env := range cr.Spec.MySQL.Env {
 			if env.Name != naming.EnvBootstrapReadTimeout {
 				continue
@@ -986,18 +941,8 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		}
 	}
 
-	if cr.RouterEnabled() && cr.HAProxyEnabled() {
-		return errors.New("MySQL Router and HAProxy can't be enabled at the same time")
-	}
-
 	if cr.Spec.Proxy.HAProxy == nil {
 		cr.Spec.Proxy.HAProxy = new(HAProxySpec)
-	}
-
-	if cr.HAProxyEnabled() && !cr.Spec.Unsafe.ProxySize {
-		if cr.Spec.Proxy.HAProxy.Size < MinSafeProxySize {
-			return errors.Errorf("HAProxy size should be %d or greater. Enable spec.unsafeFlags.proxySize to set a lower size", MinSafeProxySize)
-		}
 	}
 
 	if cr.Spec.PMM == nil {
