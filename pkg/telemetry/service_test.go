@@ -1,4 +1,4 @@
-//go:generate mockgen -source=client/reporter_api/reporter_api_client.go -destination=mock_reporter_api_client.go -package=telemetry
+//go:generate ../../bin/mockgen -source=client/reporter_api/reporter_api_client.go -destination=mock_reporter_api_client.go -package=telemetry
 
 package telemetry
 
