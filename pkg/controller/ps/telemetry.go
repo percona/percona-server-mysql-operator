@@ -6,6 +6,7 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/telemetry"
+	"github.com/pkg/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -37,6 +38,9 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 	r.Crons.telemetryJobs.Delete(jn)
 
 	telemetryService, err := telemetry.NewTelemetryService()
+	if err != nil {
+		return errors.Wrap(err, "telemetry service")
+	}
 
 	id, err := r.Crons.addFuncWithSeconds(configuredSchedule, func() {
 		localCr := &apiv1alpha1.PerconaServerMySQL{}

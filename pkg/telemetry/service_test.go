@@ -47,7 +47,7 @@ func TestNewTelemetryService(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, service)
-				assert.NotNil(t, service.ReporterAPI)
+				assert.NotNil(t, service.reporterAPI)
 			}
 		})
 	}
@@ -109,7 +109,7 @@ func TestSendReport(t *testing.T) {
 			mockReportAPI := NewMockClientService(ctrl)
 			tt.setupMock(mockReportAPI)
 
-			telemetryService := Service{ReporterAPI: mockReportAPI}
+			telemetryService := Service{reporterAPI: mockReportAPI}
 
 			err := telemetryService.SendReport(ctx, defaultCR(), defaultServerVersion())
 

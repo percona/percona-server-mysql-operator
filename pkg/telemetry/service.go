@@ -31,7 +31,7 @@ const (
 
 // Service defines the properties of the telemetry service.
 type Service struct {
-	ReporterAPI reporter_api.ClientService
+	reporterAPI reporter_api.ClientService
 }
 
 // NewTelemetryService creates a new Service.
@@ -48,7 +48,7 @@ func NewTelemetryService() (*Service, error) {
 	})
 
 	return &Service{
-		ReporterAPI: telemetryClient.ReporterAPI,
+		reporterAPI: telemetryClient.ReporterAPI,
 	}, nil
 }
 
@@ -64,7 +64,7 @@ func (s Service) SendReport(ctx context.Context, cr *apiv1alpha1.PerconaServerMy
 	}
 
 	// Since errors are handled internally in ReporterAPIGenericReport, processing the ReporterAPIGenericReportOK is redundant for now.
-	_, err := s.ReporterAPI.ReporterAPIGenericReport(params)
+	_, err := s.reporterAPI.ReporterAPIGenericReport(params)
 	if err != nil {
 		return errors.Wrap(err, "failed to send report to the percona telemetry service")
 	}
