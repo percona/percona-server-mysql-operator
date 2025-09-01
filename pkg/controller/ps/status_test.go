@@ -39,7 +39,7 @@ import (
 func TestReconcileStatusAsync(t *testing.T) {
 	ctx := context.Background()
 
-	cr, err := readDefaultCR("cluster1", "status-1")
+	cr, err := readDefaultCR("ps-cluster1", "status-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -405,7 +405,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 func TestReconcileStatusHAProxyGR(t *testing.T) {
 	ctx := context.Background()
 
-	cr, err := readDefaultCR("cluster1", "status-1")
+	cr, err := readDefaultCR("ps-cluster1", "status-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -641,7 +641,7 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := tt.cr.DeepCopy()
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).WithStatusSubresource(cr).WithObjects(tt.objects...).WithStatusSubresource(tt.objects...)
-			cliCmd, err := getFakeClient(cr, tt.innodbClusterState, tt.mysqlMemberStates, tt.noMetadataDB)
+			cliCmd, err := getFakeClient(cr, tt.innodbClusterState, tt.mysqlMemberStates, tt.noMetadataDB, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -674,7 +674,7 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 func TestReconcileStatusRouterGR(t *testing.T) {
 	ctx := context.Background()
 
-	cr, err := readDefaultCR("cluster1", "status-1")
+	cr, err := readDefaultCR("ps-cluster1", "status-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -910,7 +910,7 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := tt.cr.DeepCopy()
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).WithStatusSubresource(cr).WithObjects(tt.objects...).WithStatusSubresource(tt.objects...)
-			cliCmd, err := getFakeClient(cr, tt.innodbClusterState, tt.mysqlMemberStates, tt.noMetadataDB)
+			cliCmd, err := getFakeClient(cr, tt.innodbClusterState, tt.mysqlMemberStates, tt.noMetadataDB, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -943,7 +943,7 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 func TestReconcileErrorStatus(t *testing.T) {
 	ctx := context.Background()
 
-	cr, err := readDefaultCR("cluster1", "status-err")
+	cr, err := readDefaultCR("ps-cluster1", "status-err")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1016,8 +1016,9 @@ func TestReconcileErrorStatus(t *testing.T) {
 }
 
 type fakeClient struct {
-	scripts   []fakeClientScript
-	execCount int
+	scripts      []fakeClientScript
+	execCount    int
+	disableCheck bool
 }
 
 // Exec increments the internal counter `execCount`.
@@ -1029,7 +1030,7 @@ func (c *fakeClient) Exec(_ context.Context, _ *corev1.Pod, _ string, command []
 	if c.execCount >= len(c.scripts) {
 		return errors.Errorf("unexpected exec call")
 	}
-	if !reflect.DeepEqual(c.scripts[c.execCount].cmd, command) {
+	if !reflect.DeepEqual(c.scripts[c.execCount].cmd, command) && !c.disableCheck {
 		return errors.Errorf("expected command: %v; got %v", c.scripts[c.execCount].cmd, command)
 	}
 	var in []byte
@@ -1040,7 +1041,7 @@ func (c *fakeClient) Exec(_ context.Context, _ *corev1.Pod, _ string, command []
 			return err
 		}
 	}
-	if !reflect.DeepEqual(in, c.scripts[c.execCount].stdin) {
+	if !reflect.DeepEqual(in, c.scripts[c.execCount].stdin) && !c.disableCheck {
 		return errors.Errorf("expected stdin: %v; got %v", c.scripts[c.execCount].stdin, in)
 	}
 	_, err = stdout.Write(c.scripts[c.execCount].stdout)
@@ -1080,7 +1081,7 @@ func getFakeClient(
 	cr *apiv1alpha1.PerconaServerMySQL,
 	innodbClusterStatus innodbcluster.ClusterStatus,
 	mysqlMemberStates []innodbcluster.MemberState,
-	noMetadataDB bool,
+	noMetadataDB bool, disableCheck bool,
 ) (clientcmd.Client, error) {
 	queryScript := func(query string, out any) fakeClientScript {
 		buf := new(bytes.Buffer)
@@ -1174,7 +1175,8 @@ func getFakeClient(
 	})
 
 	return &fakeClient{
-		scripts: scripts,
+		scripts:      scripts,
+		disableCheck: disableCheck,
 	}, nil
 }
 

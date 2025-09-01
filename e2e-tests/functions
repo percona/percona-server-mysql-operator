@@ -527,7 +527,12 @@ deploy_vault() {
 	local unsealKey=$(jq -r ".unseal_keys_b64[]" <"$tmp_dir/$name")
 	local token=$(jq -r ".root_token" <"$tmp_dir/$name")
 
-	cat ${ROOT_REPO}/e2e-tests/conf/vault-secret.yaml \
+	local secret=${ROOT_REPO}/e2e-tests/conf/vault-secret.yaml
+	if [[ ${MYSQL_VERSION} == "8.4" ]]; then
+		secret=${ROOT_REPO}/e2e-tests/conf/vault-secret-84.yaml
+	fi
+
+	cat ${secret} \
 		| sed -e "s/#token/$token/" \
 		| sed -e "s/#vault_url/$protocol:\/\/$name.$name.svc.cluster.local:8200/" \
 		| sed -e "s/#secret/secret/" >"${tmp_dir}/vault-secret.yaml"
@@ -570,12 +575,12 @@ get_cr() {
 	local name_suffix=$1
 
 	yq eval "$(printf '.metadata.name="%s"' "${test_name}${name_suffix:+-$name_suffix}")" "${DEPLOY_DIR}/cr.yaml" \
-		| yq eval "$(printf '.spec.initImage="%s"' "${IMAGE}")" - \
+		| yq eval "$(printf '.spec.initContainer.image="%s"' "${IMAGE}")" - \
 		| yq eval '.spec.secretsName="test-secrets"' - \
 		| yq eval '.spec.sslSecretName="test-ssl"' - \
 		| yq eval '.spec.upgradeOptions.apply="disabled"' - \
 		| yq eval '.spec.mysql.clusterType="async"' - \
-    | yq eval '.spec.mysql.gracePeriod=30' - \
+		| yq eval '.spec.mysql.gracePeriod=30' - \
 		| yq eval '.spec.orchestrator.enabled=true' - \
 		| yq eval "$(printf '.spec.mysql.image="%s"' "${IMAGE_MYSQL}")" - \
 		| yq eval "$(printf '.spec.backup.image="%s"' "${IMAGE_BACKUP}")" - \
@@ -1288,8 +1293,8 @@ deploy_cmctl() {
 }
 
 get_user_pass() {
-  local user="${1:-root}"
-  kubectl -n "${NAMESPACE}" get secret test-secrets -o jsonpath="{.data.${user}}" | base64 --decode
+	local user="${1:-root}"
+	kubectl -n "${NAMESPACE}" get secret test-secrets -o jsonpath="{.data.${user}}" | base64 --decode
 }
 
 get_operator_version() {

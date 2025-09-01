@@ -3,8 +3,19 @@ kind: PerconaServerMySQLRestore
 metadata:
   name: restore1
 spec:
-  clusterName: cluster1
+  clusterName: ps-cluster1
   backupName: backup1
+#  containerOptions:
+#    env:
+#    - name: VERIFY_TLS
+#      value: "false"
+#    args:
+#      xtrabackup:
+#      - "--someflag=abc"
+#      xbcloud:
+#      - "--someflag=abc"
+#      xbstream:
+#      - "--someflag=abc"
 #  backupSource:
 #    destination: s3://S3-BACKUP-BUCKET-NAME-HERE/backup-path
 #    storage:

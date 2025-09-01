@@ -1,12 +1,18 @@
 apiVersion: ps.percona.com/v1alpha1
 kind: PerconaServerMySQL
 metadata:
-  name: cluster1
+  name: ps-cluster1
   finalizers:
     - percona.com/delete-mysql-pods-in-order
     # - percona.com/delete-ssl
     # - percona.com/delete-mysql-pvc
 spec:
+#  metadata:
+#    annotations:
+#      service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+#      service.beta.kubernetes.io/aws-load-balancer-type: nlb
+#    labels:
+#      rack: rack-22
 #  unsafeFlags:
 #    mysqlSize: false
 #    orchestrator: false
@@ -14,15 +20,27 @@ spec:
 #    proxy: false
 #    proxySize: false
 #  pause: false
-  crVersion: 0.11.0
+  crVersion: 0.12.0
 #  enableVolumeExpansion: false
-  secretsName: cluster1-secrets
-  sslSecretName: cluster1-ssl
+  secretsName: ps-cluster1-secrets
+  sslSecretName: ps-cluster1-ssl
   updateStrategy: SmartUpdate
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
     apply: disabled
-#  initImage: percona/percona-server-mysql-operator:0.11.0
+#  initContainer:
+#    image: perconalab/percona-server-mysql-operator:main
+#    containerSecurityContext:
+#      privileged: false
+#      runAsUser: 1001
+#      runAsGroup: 1001
+#    resources:
+#      requests:
+#        memory: 100M
+#        cpu: 100m
+#      limits:
+#        memory: 200M
+#        cpu: 200m
 #  ignoreAnnotations:
 #    - service.beta.kubernetes.io/aws-load-balancer-backend-protocol
 #  ignoreLabels:
@@ -51,13 +69,28 @@ spec:
 #    imagePullSecrets:
 #      - name: "my-secret-1"
 #      - name: "my-secret-2"
-#    initImage: percona/percona-server-mysql-operator:0.11.0
-#    vaultSecretName: cluster1-vault
+#    initContainer:
+#      image: perconalab/percona-server-mysql-operator:main
+#      containerSecurityContext:
+#        privileged: false
+#        runAsUser: 1001
+#        runAsGroup: 1001
+#      resources:
+#        requests:
+#          memory: 100M
+#          cpu: 100m
+#        limits:
+#          memory: 200M
+#          cpu: 200m
+#    vaultSecretName: ps-cluster1-vault
     size: 3
 
 #    env:
 #    - name: BOOTSTRAP_READ_TIMEOUT
 #      value: "600"
+    podDisruptionBudget:
+      maxUnavailable: 1
+#      minAvailable: 0
     resources:
       requests:
         memory: 2G
@@ -130,6 +163,15 @@ spec:
 #        path: /data
 #        type: Directory
       persistentVolumeClaim:
+#        dataSource:
+#          apiGroup: ""
+#          kind: PersistentVolumeClaim
+#          name: source-pvc
+#        dataSourceRef:
+#          apiGroup: ""
+#          kind: PersistentVolumeClaim
+#          name: source-pvc
+#          namespace: default
 #        storageClassName: standard
 #        accessModes: [ "ReadWriteOnce" ]
         resources:
@@ -190,6 +232,9 @@ spec:
 #        - name: "my-secret-1"
 #        - name: "my-secret-2"
 
+      podDisruptionBudget:
+        maxUnavailable: 1
+#        minAvailable: 0
       resources:
         requests:
           memory: 1G
@@ -307,7 +352,19 @@ spec:
 #      imagePullSecrets:
 #        - name: "my-secret-1"
 #        - name: "my-secret-2"
-#      initImage: percona/percona-server-mysql-operator:0.11.0
+#      initContainer:
+#        image: perconalab/percona-server-mysql-operator:main
+#        containerSecurityContext:
+#          privileged: false
+#          runAsUser: 1001
+#          runAsGroup: 1001
+#        resources:
+#          requests:
+#            memory: 100M
+#            cpu: 100m
+#          limits:
+#            memory: 200M
+#            cpu: 200m
 #      ports:
 #      - name: http
 #        port: 8443
@@ -339,6 +396,9 @@ spec:
 
       size: 3
 
+      podDisruptionBudget:
+        maxUnavailable: 1
+#        minAvailable: 0
       resources:
         requests:
           memory: 256M
@@ -387,8 +447,7 @@ spec:
 
   orchestrator:
     enabled: false
-
-    image: percona/percona-orchestrator:3.2.6-17
+    image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 #    runtimeClassName: image-rc
 #    tolerations:
@@ -400,7 +459,23 @@ spec:
 #      - name: "my-secret-1"
 #      - name: "my-secret-2"
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
+<<<<<<< HEAD
 #    initImage: percona/percona-server-mysql-operator:0.11.0
+=======
+#    initContainer:
+#      image: perconalab/percona-server-mysql-operator:main
+#      containerSecurityContext:
+#        privileged: false
+#        runAsUser: 1001
+#        runAsGroup: 1001
+#      resources:
+#        requests:
+#          memory: 100M
+#          cpu: 100m
+#        limits:
+#          memory: 200M
+#          cpu: 200m
+>>>>>>> main
 
     size: 3
 
@@ -436,6 +511,9 @@ spec:
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
 
+    podDisruptionBudget:
+      maxUnavailable: 1
+#      minAvailable: 0
     gracePeriod: 30
 
     resources:
@@ -448,6 +526,18 @@ spec:
     enabled: false
     image: percona/pmm-client:3.3.1
     imagePullPolicy: Always
+#    readinessProbes:
+#      initialDelaySeconds: 15
+#      timeoutSeconds: 15
+#      periodSeconds: 30
+#      successThreshold: 1
+#      failureThreshold: 5
+#    livenessProbes:
+#      initialDelaySeconds: 300
+#      timeoutSeconds: 5
+#      periodSeconds: 10
+#      successThreshold: 1
+#      failureThreshold: 3
 #    mysqlParams: "--disable-tablestats-limit=2000"
     resources:
       requests:
@@ -461,7 +551,12 @@ spec:
 
   backup:
     enabled: true
+<<<<<<< HEAD
     image: percona/percona-xtrabackup:8.0.35-33
+=======
+#    sourceHost: cluster1-mysql-0.<mysql_service_name>.<namespace>
+    image: perconalab/percona-server-mysql-operator:main-backup8.0
+>>>>>>> main
 #    schedule:
 #      - name: "sat-night-backup"
 #        schedule: "0 0 * * 6"
@@ -476,7 +571,23 @@ spec:
 #    imagePullSecrets:
 #      - name: "my-secret-1"
 #      - name: "my-secret-2"
+<<<<<<< HEAD
 #    initImage: percona/percona-server-mysql-operator:0.11.0
+=======
+#    initContainer:
+#      image: perconalab/percona-server-mysql-operator:main
+#      containerSecurityContext:
+#        privileged: false
+#        runAsUser: 1001
+#        runAsGroup: 1001
+#      resources:
+#        requests:
+#          memory: 100M
+#          cpu: 100m
+#        limits:
+#          memory: 200M
+#          cpu: 200m
+>>>>>>> main
 #    containerSecurityContext:
 #      privileged: true
     storages:
@@ -530,9 +641,21 @@ spec:
 #          fsGroup: 1001
 #          supplementalGroups: [1001, 1002, 1003]
 #        runtimeClassName: image-rc
+#        containerOptions:
+#          env:
+#          - name: VERIFY_TLS
+#            value: "false"
+#          args:
+#            xtrabackup:
+#            - "--someflag=abc"
+#            xbcloud:
+#            - "--someflag=abc"
+#            xbstream:
+#            - "--someflag=abc"
         s3:
           bucket: S3-BACKUP-BUCKET-NAME-HERE
-          credentialsSecret: cluster1-s3-credentials
+          credentialsSecret: ps-cluster1-s3-credentials
+#      - "--someflag=abc"
           region: us-west-2
 #          prefix: ""
 

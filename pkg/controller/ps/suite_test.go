@@ -123,6 +123,10 @@ func readDefaultCR(name, namespace string) (*psv1alpha1.PerconaServerMySQL, erro
 
 	cr.Name = name
 	cr.Namespace = namespace
+<<<<<<< HEAD
 	cr.Spec.InitImage = "percona/percona-server-mysql-operator:0.11.0"
+=======
+	cr.Spec.InitContainer.Image = "perconalab/percona-server-mysql-operator:main"
+>>>>>>> main
 	return cr, nil
 }
