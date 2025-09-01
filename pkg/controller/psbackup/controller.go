@@ -164,7 +164,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 	job := &batchv1.Job{}
 	nn = xtrabackup.JobNamespacedName(cr)
-	err = r.Client.Get(ctx, nn, job)
+	err = r.Get(ctx, nn, job)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return rr, errors.Wrapf(err, "get job %v", nn.String())
 	}
