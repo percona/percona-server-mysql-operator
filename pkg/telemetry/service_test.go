@@ -9,6 +9,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	k8sversion "k8s.io/apimachinery/pkg/version"
@@ -25,10 +26,10 @@ func TestNewTelemetryService(t *testing.T) {
 		endpoint    string
 		expectError error
 	}{
-		"valid endpoint": {
+		"valid url": {
 			endpoint: "https://telemetry.percona.com/v1",
 		},
-		"invalid endpoint": {
+		"invalid url": {
 			endpoint:    "://invalid-url",
 			expectError: errors.New("invalid"),
 		},
@@ -42,7 +43,7 @@ func TestNewTelemetryService(t *testing.T) {
 
 			if tt.expectError != nil {
 				assert.Error(t, err)
-				assert.ErrorContains(t, err, "invalid telemetry endpoint")
+				assert.ErrorContains(t, err, "invalid telemetry url")
 				assert.Nil(t, service)
 			} else {
 				assert.NoError(t, err)
@@ -123,6 +124,14 @@ func TestSendReport(t *testing.T) {
 	}
 }
 
+func TestSomething(t *testing.T) {
+	service, err := NewTelemetryService()
+	require.NoError(t, err)
+
+	err = service.SendReport(context.Background(), defaultCR(), defaultServerVersion())
+	assert.NoError(t, err)
+}
+
 func TestSchedule(t *testing.T) {
 	tests := map[string]struct {
 		envValue    string
@@ -149,17 +158,17 @@ func TestSchedule(t *testing.T) {
 	}
 }
 
-func TestEndpoint(t *testing.T) {
+func TestServiceURL(t *testing.T) {
 	tests := map[string]struct {
 		envValue      string
 		expectedValue string
 	}{
 		"default schedule when env var not set": {
-			expectedValue: "https://check-dev.percona.com/versions/v1",
+			expectedValue: "https://check-dev.percona.com",
 		},
 		"custom schedule from env var": {
-			envValue:      "https://telemetry.percona.com/versions/v1",
-			expectedValue: "https://telemetry.percona.com/versions/v1",
+			envValue:      "https://telemetry.percona.com",
+			expectedValue: "https://telemetry.percona.com",
 		},
 	}
 
@@ -169,7 +178,7 @@ func TestEndpoint(t *testing.T) {
 				t.Setenv("TELEMETRY_SERVICE_URL", tt.envValue)
 			}
 
-			s := endpoint()
+			s := serviceURL()
 			assert.Equal(t, tt.expectedValue, s)
 		})
 	}

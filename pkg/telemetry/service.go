@@ -36,9 +36,9 @@ type Service struct {
 
 // NewTelemetryService creates a new Service.
 func NewTelemetryService() (*Service, error) {
-	requestURL, err := url.Parse(endpoint())
+	requestURL, err := url.Parse(serviceURL())
 	if err != nil {
-		return nil, fmt.Errorf("invalid telemetry endpoint: %w", err)
+		return nil, fmt.Errorf("invalid telemetry url: %w", err)
 	}
 
 	telemetryClient := telemetryclient.NewHTTPClientWithConfig(nil, &telemetryclient.TransportConfig{
@@ -126,11 +126,11 @@ func Schedule() string {
 	return sch
 }
 
-// endpoint returns the endpoint for sending telemetry requests.
-func endpoint() string {
+// serviceURL returns the url for sending telemetry requests.
+func serviceURL() string {
 	sch, found := os.LookupEnv("TELEMETRY_SERVICE_URL")
 	if !found {
-		sch = "https://check-dev.percona.com/versions/v1" // to change this with the production endpoint as default.
+		sch = "https://check-dev.percona.com" // to change this with the production url as default.
 	}
 	return sch
 }
