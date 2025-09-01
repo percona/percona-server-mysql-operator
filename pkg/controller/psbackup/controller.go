@@ -151,7 +151,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 	if err != nil {
 		status.State = apiv1alpha1.BackupError
-		status.StateDesc = fmt.Sprintf("Check Source host for backup")
+		status.StateDesc = "Check Source host for backup"
 		return rr, nil
 	}
 
