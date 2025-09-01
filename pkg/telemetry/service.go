@@ -8,12 +8,13 @@ import (
 
 	"github.com/go-openapi/strfmt"
 	"github.com/google/uuid"
+	"github.com/pkg/errors"
+
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	telemetryclient "github.com/percona/percona-server-mysql-operator/pkg/telemetry/client"
 	"github.com/percona/percona-server-mysql-operator/pkg/telemetry/client/models"
 	"github.com/percona/percona-server-mysql-operator/pkg/telemetry/client/reporter_api"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -61,12 +62,11 @@ func (s Service) SendReport(ctx context.Context, cr *apiv1alpha1.PerconaServerMy
 		},
 	}
 
-	resp, err := s.ReporterAPI.ReporterAPIGenericReport(params)
+	// Since errors are handled internally in ReporterAPIGenericReport, processing the ReporterAPIGenericReportOK is redundant for now.
+	_, err := s.ReporterAPI.ReporterAPIGenericReport(params)
 	if err != nil {
+		return errors.Wrap(err, "failed to send report to the percona telemetry service")
 	}
-
-	log := logf.FromContext(ctx)
-	log.Info(fmt.Sprintf("response from API: %s", resp))
 
 	return nil
 }
@@ -110,7 +110,7 @@ func createReport(cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.Se
 	return models.Genericv1GenericReport{
 		ID:            uuid.NewString(),
 		CreateTime:    strfmt.DateTime(time.Now()),
-		ProductFamily: models.V1ProductFamilyPRODUCTFAMILYINVALID.Pointer(), // temp solution until the final product family is created
+		ProductFamily: models.V1ProductFamilyPRODUCTFAMILYEVEREST.Pointer(), // temp solution until the final product family is created for this operator.
 		InstanceID:    string(cr.GetUID()),
 		Metrics:       metrics,
 	}
