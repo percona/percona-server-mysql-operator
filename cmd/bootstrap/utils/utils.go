@@ -13,7 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	state "github.com/percona/percona-server-mysql-operator/cmd/internal/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -50,7 +50,7 @@ func GetReadTimeout() (uint32, error) {
 	return uint32(readTimeout), nil
 }
 
-func GetSecret(username apiv1alpha1.SystemUser) (string, error) {
+func GetSecret(username apiv1.SystemUser) (string, error) {
 	path := filepath.Join(mysql.CredsMountPath, string(username))
 	sBytes, err := os.ReadFile(path)
 	if err != nil {

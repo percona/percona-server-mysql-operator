@@ -8,7 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"strings"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
@@ -17,7 +17,7 @@ type UserManager struct {
 	db *db
 }
 
-func NewUserManager(pod *corev1.Pod, cliCmd clientcmd.Client, user apiv1alpha1.SystemUser, pass, host string) *UserManager {
+func NewUserManager(pod *corev1.Pod, cliCmd clientcmd.Client, user apiv1.SystemUser, pass, host string) *UserManager {
 	return &UserManager{db: newDB(pod, cliCmd, user, pass, host)}
 }
 

@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
 type Configurable interface {
@@ -28,7 +28,7 @@ type Configurable interface {
 	ExecuteConfigurationTemplate(configuration string, memory *resource.Quantity) (string, error)
 }
 
-func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQL, configurable Configurable, component string) (string, error) {
+func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL, configurable Configurable, component string) (string, error) {
 	log := logf.FromContext(ctx).WithName("CustomConfigHash")
 
 	cmName := configurable.GetConfigMapName()

@@ -11,7 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	psv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	psv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/testutil"
 )
@@ -26,7 +26,7 @@ func TestAnnotateObject(t *testing.T) {
 				Namespace: "test-namespace",
 			},
 		},
-		&psv1alpha1.PerconaServerMySQL{
+		&psv1.PerconaServerMySQL{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
 				Namespace: "test-namespace",
@@ -71,7 +71,7 @@ func TestDeannotateObject(t *testing.T) {
 				},
 			},
 		},
-		&psv1alpha1.PerconaServerMySQL{
+		&psv1.PerconaServerMySQL{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
 				Namespace: "test-namespace",

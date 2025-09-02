@@ -2,7 +2,7 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 120
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
   name: gr-recreate
@@ -82,7 +82,7 @@ metadata:
     app.kubernetes.io/part-of: percona-server
   name: gr-recreate-mysql
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
@@ -130,7 +130,7 @@ metadata:
     app.kubernetes.io/part-of: percona-server
   name: gr-recreate-router
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL

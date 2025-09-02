@@ -12,7 +12,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	database "github.com/percona/percona-server-mysql-operator/cmd/internal/db"
 	state "github.com/percona/percona-server-mysql-operator/cmd/internal/naming"
 	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
@@ -100,13 +100,13 @@ func checkReadinessAsync(ctx context.Context) error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	monitorPass, err := getSecret(string(apiv1alpha1.UserMonitor))
+	monitorPass, err := getSecret(string(apiv1.UserMonitor))
 	if err != nil {
-		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
+		return errors.Wrapf(err, "get %s password", apiv1.UserMonitor)
 	}
 
 	params := database.DBParams{
-		User: apiv1alpha1.UserMonitor,
+		User: apiv1.UserMonitor,
 		Pass: monitorPass,
 		Host: podIP,
 	}
@@ -140,13 +140,13 @@ func checkReadinessGR(ctx context.Context) error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	monitorPass, err := getSecret(string(apiv1alpha1.UserMonitor))
+	monitorPass, err := getSecret(string(apiv1.UserMonitor))
 	if err != nil {
-		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
+		return errors.Wrapf(err, "get %s password", apiv1.UserMonitor)
 	}
 
 	params := database.DBParams{
-		User: apiv1alpha1.UserMonitor,
+		User: apiv1.UserMonitor,
 		Pass: monitorPass,
 		Host: podIP,
 	}
@@ -179,13 +179,13 @@ func checkLivenessAsync(ctx context.Context) error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	monitorPass, err := getSecret(string(apiv1alpha1.UserMonitor))
+	monitorPass, err := getSecret(string(apiv1.UserMonitor))
 	if err != nil {
-		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
+		return errors.Wrapf(err, "get %s password", apiv1.UserMonitor)
 	}
 
 	params := database.DBParams{
-		User: apiv1alpha1.UserMonitor,
+		User: apiv1.UserMonitor,
 		Pass: monitorPass,
 		Host: podIP,
 	}
@@ -204,13 +204,13 @@ func checkLivenessGR(ctx context.Context) error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	monitorPass, err := getSecret(string(apiv1alpha1.UserMonitor))
+	monitorPass, err := getSecret(string(apiv1.UserMonitor))
 	if err != nil {
-		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
+		return errors.Wrapf(err, "get %s password", apiv1.UserMonitor)
 	}
 
 	params := database.DBParams{
-		User: apiv1alpha1.UserMonitor,
+		User: apiv1.UserMonitor,
 		Pass: monitorPass,
 		Host: podIP,
 	}
@@ -240,13 +240,13 @@ func checkReplication(ctx context.Context) error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	monitorPass, err := getSecret(string(apiv1alpha1.UserMonitor))
+	monitorPass, err := getSecret(string(apiv1.UserMonitor))
 	if err != nil {
-		return errors.Wrapf(err, "get %s password", apiv1alpha1.UserMonitor)
+		return errors.Wrapf(err, "get %s password", apiv1.UserMonitor)
 	}
 
 	params := database.DBParams{
-		User: apiv1alpha1.UserMonitor,
+		User: apiv1.UserMonitor,
 		Pass: monitorPass,
 		Host: podIP,
 	}

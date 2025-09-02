@@ -11,13 +11,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/tls"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
-func GenerateCertsSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Secret, error) {
+func GenerateCertsSecret(ctx context.Context, cr *apiv1.PerconaServerMySQL) (*corev1.Secret, error) {
 	ca, cert, key, err := tls.IssueCerts(tls.DNSNames(cr))
 	if err != nil {
 		return nil, errors.Wrap(err, "issue TLS certificates")
@@ -61,17 +61,17 @@ const (
 		"!$%&()*+,-.<=>?@[]^_{}~#"
 )
 
-var SecretUsers = []apiv1alpha1.SystemUser{
-	apiv1alpha1.UserHeartbeat,
-	apiv1alpha1.UserMonitor,
-	apiv1alpha1.UserOperator,
-	apiv1alpha1.UserOrchestrator,
-	apiv1alpha1.UserRoot,
-	apiv1alpha1.UserXtraBackup,
-	apiv1alpha1.UserReplication,
+var SecretUsers = []apiv1.SystemUser{
+	apiv1.UserHeartbeat,
+	apiv1.UserMonitor,
+	apiv1.UserOperator,
+	apiv1.UserOrchestrator,
+	apiv1.UserRoot,
+	apiv1.UserXtraBackup,
+	apiv1.UserReplication,
 }
 
-func FillPasswordsSecret(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) error {
+func FillPasswordsSecret(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) error {
 	if len(secret.Data) == 0 {
 		secret.Data = make(map[string][]byte, len(SecretUsers))
 	}

@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/utils/ptr"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
 func TestInitContainer(t *testing.T) {
@@ -39,12 +39,12 @@ func TestInitContainer(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		cr                      *apiv1alpha1.PerconaServerMySQL
+		cr                      *apiv1.PerconaServerMySQL
 		inputVolumes            []corev1.VolumeMount
 		expectedVolumes         []corev1.VolumeMount
 		expectedResources       corev1.ResourceRequirements
 		expectedSecurityContext corev1.SecurityContext
-		initSpec                *apiv1alpha1.InitContainerSpec
+		initSpec                *apiv1.InitContainerSpec
 	}{
 		"default volumes": {
 			expectedVolumes:         expectedVolumeMounts,
@@ -66,9 +66,9 @@ func TestInitContainer(t *testing.T) {
 			expectedResources: expectedResources,
 		},
 		"initContainer.resources": {
-			cr: &apiv1alpha1.PerconaServerMySQL{
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					InitContainer: apiv1alpha1.InitContainerSpec{
+			cr: &apiv1.PerconaServerMySQL{
+				Spec: apiv1.PerconaServerMySQLSpec{
+					InitContainer: apiv1.InitContainerSpec{
 						Image: "initcontainer-image",
 						Resources: &corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
@@ -89,9 +89,9 @@ func TestInitContainer(t *testing.T) {
 		},
 		"initContainer.containerSecurityContext": {
 			expectedVolumes: expectedVolumeMounts,
-			cr: &apiv1alpha1.PerconaServerMySQL{
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					InitContainer: apiv1alpha1.InitContainerSpec{
+			cr: &apiv1.PerconaServerMySQL{
+				Spec: apiv1.PerconaServerMySQLSpec{
+					InitContainer: apiv1.InitContainerSpec{
 						ContainerSecurityContext: &corev1.SecurityContext{
 							Privileged: ptr.To(true),
 						},
@@ -105,9 +105,9 @@ func TestInitContainer(t *testing.T) {
 		},
 		"initSpec": {
 			expectedVolumes: expectedVolumeMounts,
-			cr: &apiv1alpha1.PerconaServerMySQL{
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					InitContainer: apiv1alpha1.InitContainerSpec{
+			cr: &apiv1.PerconaServerMySQL{
+				Spec: apiv1.PerconaServerMySQLSpec{
+					InitContainer: apiv1.InitContainerSpec{
 						ContainerSecurityContext: &corev1.SecurityContext{
 							Privileged: ptr.To(true),
 						},
@@ -123,7 +123,7 @@ func TestInitContainer(t *testing.T) {
 					corev1.ResourceMemory: resource.MustParse("256Mi"),
 				},
 			},
-			initSpec: &apiv1alpha1.InitContainerSpec{
+			initSpec: &apiv1.InitContainerSpec{
 				Image: "initspec-image",
 				Resources: &corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
@@ -136,7 +136,7 @@ func TestInitContainer(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			cr := new(apiv1alpha1.PerconaServerMySQL)
+			cr := new(apiv1.PerconaServerMySQL)
 			if tt.cr != nil {
 				cr = tt.cr
 			}

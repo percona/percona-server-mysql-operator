@@ -22,7 +22,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
@@ -55,28 +55,28 @@ func TestReconcileVersions(t *testing.T) {
 
 	tests := []struct {
 		name             string
-		cr               *apiv1alpha1.PerconaServerMySQL
+		cr               *apiv1.PerconaServerMySQL
 		telemetryEnabled bool
-		want             apiv1alpha1.PerconaServerMySQLStatus
+		want             apiv1.PerconaServerMySQLStatus
 		shouldErr        bool
 	}{
 		{
 			name: "Test disabled telemetry and version upgrade",
-			cr: &apiv1alpha1.PerconaServerMySQL{
+			cr: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,
 					Namespace: namespace,
 					UID:       types.UID("custom-resource-uid"),
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					Backup: &apiv1alpha1.BackupSpec{
+				Spec: apiv1.PerconaServerMySQLSpec{
+					Backup: &apiv1.BackupSpec{
 						Image: "some-image",
 					},
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeGR,
-						PodSpec: apiv1alpha1.PodSpec{
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: apiv1.ClusterTypeGR,
+						PodSpec: apiv1.PodSpec{
 							Size: 3,
-							VolumeSpec: &apiv1alpha1.VolumeSpec{
+							VolumeSpec: &apiv1.VolumeSpec{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 									Resources: corev1.VolumeResourceRequirements{
 										Requests: map[corev1.ResourceName]resource.Quantity{
@@ -87,40 +87,40 @@ func TestReconcileVersions(t *testing.T) {
 							},
 						},
 					},
-					Proxy: apiv1alpha1.ProxySpec{
-						HAProxy: &apiv1alpha1.HAProxySpec{
+					Proxy: apiv1.ProxySpec{
+						HAProxy: &apiv1.HAProxySpec{
 							Enabled: true,
-							PodSpec: apiv1alpha1.PodSpec{
+							PodSpec: apiv1.PodSpec{
 								Size: 2,
 							},
 						},
 					},
-					UpgradeOptions: apiv1alpha1.UpgradeOptions{
-						Apply:                  apiv1alpha1.UpgradeStrategyDisabled,
+					UpgradeOptions: apiv1.UpgradeOptions{
+						Apply:                  apiv1.UpgradeStrategyDisabled,
 						VersionServiceEndpoint: defaultEndpoint,
 					},
 				},
 			},
 			telemetryEnabled: false,
-			want:             apiv1alpha1.PerconaServerMySQLStatus{},
+			want:             apiv1.PerconaServerMySQLStatus{},
 		},
 		{
 			name: "Test enabled telemetry and version upgrade",
-			cr: &apiv1alpha1.PerconaServerMySQL{
+			cr: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,
 					Namespace: namespace,
 					UID:       types.UID("custom-resource-uid"),
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					Backup: &apiv1alpha1.BackupSpec{
+				Spec: apiv1.PerconaServerMySQLSpec{
+					Backup: &apiv1.BackupSpec{
 						Image: "some-image",
 					},
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeGR,
-						PodSpec: apiv1alpha1.PodSpec{
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: apiv1.ClusterTypeGR,
+						PodSpec: apiv1.PodSpec{
 							Size: 3,
-							VolumeSpec: &apiv1alpha1.VolumeSpec{
+							VolumeSpec: &apiv1.VolumeSpec{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 									Resources: corev1.VolumeResourceRequirements{
 										Requests: map[corev1.ResourceName]resource.Quantity{
@@ -131,40 +131,40 @@ func TestReconcileVersions(t *testing.T) {
 							},
 						},
 					},
-					Proxy: apiv1alpha1.ProxySpec{
-						HAProxy: &apiv1alpha1.HAProxySpec{
+					Proxy: apiv1.ProxySpec{
+						HAProxy: &apiv1.HAProxySpec{
 							Enabled: true,
-							PodSpec: apiv1alpha1.PodSpec{
+							PodSpec: apiv1.PodSpec{
 								Size: 2,
 							},
 						},
 					},
-					UpgradeOptions: apiv1alpha1.UpgradeOptions{
-						Apply:                  apiv1alpha1.UpgradeStrategyDisabled,
+					UpgradeOptions: apiv1.UpgradeOptions{
+						Apply:                  apiv1.UpgradeStrategyDisabled,
 						VersionServiceEndpoint: defaultEndpoint,
 					},
 				},
 			},
 			telemetryEnabled: true,
-			want:             apiv1alpha1.PerconaServerMySQLStatus{},
+			want:             apiv1.PerconaServerMySQLStatus{},
 		},
 		{
 			name: "Test enabled telemetry and custom version upgrade endpoint",
-			cr: &apiv1alpha1.PerconaServerMySQL{
+			cr: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,
 					Namespace: namespace,
 					UID:       types.UID("custom-resource-uid"),
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					Backup: &apiv1alpha1.BackupSpec{
+				Spec: apiv1.PerconaServerMySQLSpec{
+					Backup: &apiv1.BackupSpec{
 						Image: "some-image",
 					},
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeGR,
-						PodSpec: apiv1alpha1.PodSpec{
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: apiv1.ClusterTypeGR,
+						PodSpec: apiv1.PodSpec{
 							Size: 3,
-							VolumeSpec: &apiv1alpha1.VolumeSpec{
+							VolumeSpec: &apiv1.VolumeSpec{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 									Resources: corev1.VolumeResourceRequirements{
 										Requests: map[corev1.ResourceName]resource.Quantity{
@@ -175,41 +175,41 @@ func TestReconcileVersions(t *testing.T) {
 							},
 						},
 					},
-					Proxy: apiv1alpha1.ProxySpec{
-						HAProxy: &apiv1alpha1.HAProxySpec{
+					Proxy: apiv1.ProxySpec{
+						HAProxy: &apiv1.HAProxySpec{
 							Enabled: true,
-							PodSpec: apiv1alpha1.PodSpec{
+							PodSpec: apiv1.PodSpec{
 								Size: 2,
 							},
 						},
 					},
-					UpgradeOptions: apiv1alpha1.UpgradeOptions{
-						Apply:                  apiv1alpha1.UpgradeStrategyRecommended,
+					UpgradeOptions: apiv1.UpgradeOptions{
+						Apply:                  apiv1.UpgradeStrategyRecommended,
 						VersionServiceEndpoint: customEndpoint,
 					},
 				},
 			},
 			telemetryEnabled: true,
 			shouldErr:        true,
-			want:             apiv1alpha1.PerconaServerMySQLStatus{},
+			want:             apiv1.PerconaServerMySQLStatus{},
 		},
 		{
 			name: "Test disabled telemetry with `recommended` upgrade strategy",
-			cr: &apiv1alpha1.PerconaServerMySQL{
+			cr: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,
 					Namespace: namespace,
 					UID:       types.UID("custom-resource-uid"),
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					Backup: &apiv1alpha1.BackupSpec{
+				Spec: apiv1.PerconaServerMySQLSpec{
+					Backup: &apiv1.BackupSpec{
 						Image: "some-image",
 					},
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeGR,
-						PodSpec: apiv1alpha1.PodSpec{
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: apiv1.ClusterTypeGR,
+						PodSpec: apiv1.PodSpec{
 							Size: 3,
-							VolumeSpec: &apiv1alpha1.VolumeSpec{
+							VolumeSpec: &apiv1.VolumeSpec{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 									Resources: corev1.VolumeResourceRequirements{
 										Requests: map[corev1.ResourceName]resource.Quantity{
@@ -220,24 +220,24 @@ func TestReconcileVersions(t *testing.T) {
 							},
 						},
 					},
-					Proxy: apiv1alpha1.ProxySpec{
-						HAProxy: &apiv1alpha1.HAProxySpec{
+					Proxy: apiv1.ProxySpec{
+						HAProxy: &apiv1.HAProxySpec{
 							Enabled: true,
-							PodSpec: apiv1alpha1.PodSpec{
+							PodSpec: apiv1.PodSpec{
 								Size: 2,
 							},
 						},
 					},
-					UpgradeOptions: apiv1alpha1.UpgradeOptions{
-						Apply:                  apiv1alpha1.UpgradeStrategyRecommended,
+					UpgradeOptions: apiv1.UpgradeOptions{
+						Apply:                  apiv1.UpgradeStrategyRecommended,
 						VersionServiceEndpoint: defaultEndpoint,
 					},
 				},
-				Status: apiv1alpha1.PerconaServerMySQLStatus{
-					MySQL: apiv1alpha1.StatefulAppStatus{
+				Status: apiv1.PerconaServerMySQLStatus{
+					MySQL: apiv1.StatefulAppStatus{
 						Version: "database-version",
 					},
-					HAProxy: apiv1alpha1.StatefulAppStatus{
+					HAProxy: apiv1.StatefulAppStatus{
 						Version: "haproxy-version",
 					},
 					BackupVersion:  "backup-version",
@@ -246,17 +246,17 @@ func TestReconcileVersions(t *testing.T) {
 				},
 			},
 			telemetryEnabled: false,
-			want: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			want: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Version: "mysql-version",
 				},
-				Orchestrator: apiv1alpha1.StatefulAppStatus{
+				Orchestrator: apiv1.StatefulAppStatus{
 					Version: "orchestrator-version",
 				},
-				Router: apiv1alpha1.StatefulAppStatus{
+				Router: apiv1.StatefulAppStatus{
 					Version: "router-version",
 				},
-				HAProxy: apiv1alpha1.StatefulAppStatus{
+				HAProxy: apiv1.StatefulAppStatus{
 					Version: "haproxy-version",
 				},
 				ToolkitVersion: "toolkit-version",
@@ -270,7 +270,7 @@ func TestReconcileVersions(t *testing.T) {
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add client-go scheme")
 	}
-	if err := apiv1alpha1.AddToScheme(scheme); err != nil {
+	if err := apiv1.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add apis scheme")
 	}
 
@@ -332,26 +332,26 @@ func TestGetVersion(t *testing.T) {
 
 	tests := []struct {
 		name string
-		cr   *apiv1alpha1.PerconaServerMySQL
+		cr   *apiv1.PerconaServerMySQL
 		want vs.DepVersion
 	}{
 		{
 			name: "Test minimal CR",
-			cr: &apiv1alpha1.PerconaServerMySQL{
+			cr: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,
 					Namespace: namespace,
 					UID:       types.UID("custom-resource-uid"),
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					Backup: &apiv1alpha1.BackupSpec{
+				Spec: apiv1.PerconaServerMySQLSpec{
+					Backup: &apiv1.BackupSpec{
 						Image: "some-image",
 					},
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeGR,
-						PodSpec: apiv1alpha1.PodSpec{
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: apiv1.ClusterTypeGR,
+						PodSpec: apiv1.PodSpec{
 							Size: 3,
-							VolumeSpec: &apiv1alpha1.VolumeSpec{
+							VolumeSpec: &apiv1.VolumeSpec{
 								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 									Resources: corev1.VolumeResourceRequirements{
 										Requests: map[corev1.ResourceName]resource.Quantity{
@@ -362,20 +362,20 @@ func TestGetVersion(t *testing.T) {
 							},
 						},
 					},
-					Proxy: apiv1alpha1.ProxySpec{
-						HAProxy: &apiv1alpha1.HAProxySpec{
+					Proxy: apiv1.ProxySpec{
+						HAProxy: &apiv1.HAProxySpec{
 							Enabled: true,
-							PodSpec: apiv1alpha1.PodSpec{
+							PodSpec: apiv1.PodSpec{
 								Size: 2,
 							},
 						},
 					},
 				},
-				Status: apiv1alpha1.PerconaServerMySQLStatus{
-					MySQL: apiv1alpha1.StatefulAppStatus{
+				Status: apiv1.PerconaServerMySQLStatus{
+					MySQL: apiv1.StatefulAppStatus{
 						Version: "database-version",
 					},
-					HAProxy: apiv1alpha1.StatefulAppStatus{
+					HAProxy: apiv1.StatefulAppStatus{
 						Version: "haproxy-version",
 					},
 					BackupVersion:  "backup-version",
@@ -406,7 +406,7 @@ func TestGetVersion(t *testing.T) {
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add client-go scheme")
 	}
-	if err := apiv1alpha1.AddToScheme(scheme); err != nil {
+	if err := apiv1.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add apis scheme")
 	}
 
@@ -454,7 +454,7 @@ func (vs *fakeVS) Apply(_ context.Context, req any) (any, error) {
 	}
 	r := req.(*pbVersion.ApplyRequest)
 	switch r.Apply {
-	case string(apiv1alpha1.UpgradeStrategyDisabled), string(apiv1alpha1.UpgradeStrategyNever):
+	case string(apiv1.UpgradeStrategyDisabled), string(apiv1.UpgradeStrategyNever):
 		return &pbVersion.VersionResponse{}, nil
 	}
 

@@ -24,7 +24,7 @@ status:
   readyReplicas: 3
   updatedReplicas: 3
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
   name: gr-self-healing
@@ -51,7 +51,7 @@ metadata:
     app.kubernetes.io/part-of: percona-server
   name: gr-self-healing-mysql
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
@@ -99,7 +99,7 @@ metadata:
     app.kubernetes.io/part-of: percona-server
   name: gr-self-healing-router
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
@@ -147,7 +147,7 @@ spec:
   sessionAffinity: None
   type: ClusterIP
 ---
-apiVersion: chaos-mesh.org/v1alpha1
+apiVersion: chaos-mesh.org/v1
 kind: PodChaos
 metadata:
   name: chaos-pod-failure-primary

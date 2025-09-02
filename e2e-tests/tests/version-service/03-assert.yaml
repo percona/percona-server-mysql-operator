@@ -22,7 +22,7 @@ status:
   replicas: 3
   readyReplicas: 3
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
   generation: 4

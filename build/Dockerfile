@@ -58,8 +58,8 @@ RUN mkdir /opt/percona-server-mysql-operator
 
 LABEL name="Percona Distribution for MySQL Operator" \
     vendor="Percona" \
-    summary="Percona Distribution for MySQL Operator v1alpha1 contains everything you need to quickly and consistently deploy and scale Percona Server for MySQL instances" \
-    description="Percona Distribution for MySQL Operator v1alpha1 contains everything you need to quickly and consistently deploy and scale Percona Server for MySQL instances in a Kubernetes-based environment, both on-premises or in the cloud" \
+    summary="Percona Distribution for MySQL Operator v1 contains everything you need to quickly and consistently deploy and scale Percona Server for MySQL instances" \
+    description="Percona Distribution for MySQL Operator v1 contains everything you need to quickly and consistently deploy and scale Percona Server for MySQL instances in a Kubernetes-based environment, both on-premises or in the cloud" \
     maintainer="Percona Development <info@percona.com>"
 
 COPY LICENSE /licenses/

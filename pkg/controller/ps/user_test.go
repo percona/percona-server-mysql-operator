@@ -14,7 +14,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 )
 
@@ -71,29 +71,29 @@ func TestEnsureUserSecrets(t *testing.T) {
 	ns := "some-namespace"
 	tests := []struct {
 		name   string
-		cr     *apiv1alpha1.PerconaServerMySQL
+		cr     *apiv1.PerconaServerMySQL
 		secret *corev1.Secret
 	}{
 		{
 			name: "without user secret",
-			cr: &apiv1alpha1.PerconaServerMySQL{
+			cr: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "some-cluster",
 					Namespace: ns,
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName: secretsName,
 				},
 			},
 		},
 		{
 			name: "with user secret",
-			cr: &apiv1alpha1.PerconaServerMySQL{
+			cr: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "some-cluster",
 					Namespace: ns,
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName: secretsName,
 				},
 			},
@@ -103,24 +103,24 @@ func TestEnsureUserSecrets(t *testing.T) {
 					Namespace: ns,
 				},
 				Data: map[string][]byte{
-					string(apiv1alpha1.UserHeartbeat):    []byte("hb-password"),
-					string(apiv1alpha1.UserMonitor):      []byte("m-password"),
-					string(apiv1alpha1.UserOperator):     []byte("op-password"),
-					string(apiv1alpha1.UserOrchestrator): []byte("orc-password"),
-					string(apiv1alpha1.UserReplication):  []byte("repl-password"),
-					string(apiv1alpha1.UserRoot):         []byte("root-password"),
-					string(apiv1alpha1.UserXtraBackup):   []byte("backup-password"),
+					string(apiv1.UserHeartbeat):    []byte("hb-password"),
+					string(apiv1.UserMonitor):      []byte("m-password"),
+					string(apiv1.UserOperator):     []byte("op-password"),
+					string(apiv1.UserOrchestrator): []byte("orc-password"),
+					string(apiv1.UserReplication):  []byte("repl-password"),
+					string(apiv1.UserRoot):         []byte("root-password"),
+					string(apiv1.UserXtraBackup):   []byte("backup-password"),
 				},
 			},
 		},
 		{
 			name: "with partially filled secret",
-			cr: &apiv1alpha1.PerconaServerMySQL{
+			cr: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "some-cluster",
 					Namespace: ns,
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName: secretsName,
 				},
 			},
@@ -130,21 +130,21 @@ func TestEnsureUserSecrets(t *testing.T) {
 					Namespace: ns,
 				},
 				Data: map[string][]byte{
-					string(apiv1alpha1.UserHeartbeat):   []byte("hb-password"),
-					string(apiv1alpha1.UserMonitor):     []byte("m-password"),
-					string(apiv1alpha1.UserReplication): []byte("repl-password"),
-					string(apiv1alpha1.UserXtraBackup):  []byte("backup-password"),
+					string(apiv1.UserHeartbeat):   []byte("hb-password"),
+					string(apiv1.UserMonitor):     []byte("m-password"),
+					string(apiv1.UserReplication): []byte("repl-password"),
+					string(apiv1.UserXtraBackup):  []byte("backup-password"),
 				},
 			},
 		},
 		{
 			name: "with existing empty secret",
-			cr: &apiv1alpha1.PerconaServerMySQL{
+			cr: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "some-cluster",
 					Namespace: ns,
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName: secretsName,
 				},
 			},
@@ -162,7 +162,7 @@ func TestEnsureUserSecrets(t *testing.T) {
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add client-go scheme")
 	}
-	if err := apiv1alpha1.AddToScheme(scheme); err != nil {
+	if err := apiv1.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add apis scheme")
 	}
 

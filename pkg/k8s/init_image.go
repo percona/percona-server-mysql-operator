@@ -9,14 +9,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
 type ComponentWithInit interface {
-	GetInitSpec(cr *apiv1alpha1.PerconaServerMySQL) apiv1alpha1.InitContainerSpec
+	GetInitSpec(cr *apiv1.PerconaServerMySQL) apiv1.InitContainerSpec
 }
 
-func InitContainer(cr *apiv1alpha1.PerconaServerMySQL, component string, image string, initSpec *apiv1alpha1.InitContainerSpec,
+func InitContainer(cr *apiv1.PerconaServerMySQL, component string, image string, initSpec *apiv1.InitContainerSpec,
 	pullPolicy corev1.PullPolicy,
 	secCtx *corev1.SecurityContext,
 	resources corev1.ResourceRequirements,
@@ -24,8 +24,8 @@ func InitContainer(cr *apiv1alpha1.PerconaServerMySQL, component string, image s
 ) corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
 		{
-			Name:      apiv1alpha1.BinVolumeName,
-			MountPath: apiv1alpha1.BinVolumePath,
+			Name:      apiv1.BinVolumeName,
+			MountPath: apiv1.BinVolumePath,
 		},
 	}
 
@@ -63,7 +63,7 @@ func InitContainer(cr *apiv1alpha1.PerconaServerMySQL, component string, image s
 // InitImage returns the image to be used in init container.
 // It returns component specific init image if it's defined, else it returns top level init image.
 // If there is no init image defined in the CR, it returns the current running operator image.
-func InitImage(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, comp ComponentWithInit) (string, error) {
+func InitImage(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServerMySQL, comp ComponentWithInit) (string, error) {
 	if spec := comp.GetInitSpec(cr); len(spec.Image) > 0 {
 		return spec.Image, nil
 	}

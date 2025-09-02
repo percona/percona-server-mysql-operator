@@ -21,10 +21,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
-func DNSNames(cr *apiv1alpha1.PerconaServerMySQL) []string {
+func DNSNames(cr *apiv1.PerconaServerMySQL) []string {
 	hosts := []string{
 		fmt.Sprintf("*.%s-mysql", cr.Name),
 		fmt.Sprintf("*.%s-mysql.%s", cr.Name, cr.Namespace),
@@ -163,7 +163,7 @@ func DNSNamesFromCert(data []byte) ([]string, error) {
 	return names, nil
 }
 
-func IsSecretCreatedByUser(ctx context.Context, c client.Client, cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) (bool, error) {
+func IsSecretCreatedByUser(ctx context.Context, c client.Client, cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) (bool, error) {
 	if metav1.IsControlledBy(secret, cr) {
 		return false, nil
 	}
@@ -173,7 +173,7 @@ func IsSecretCreatedByUser(ctx context.Context, c client.Client, cr *apiv1alpha1
 	return true, nil
 }
 
-func isCertManagerSecretCreatedByUser(ctx context.Context, c client.Client, cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) (bool, error) {
+func isCertManagerSecretCreatedByUser(ctx context.Context, c client.Client, cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) (bool, error) {
 	if metav1.IsControlledBy(secret, cr) {
 		return false, nil
 	}

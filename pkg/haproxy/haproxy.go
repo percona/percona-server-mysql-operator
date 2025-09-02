@@ -9,7 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -34,28 +34,28 @@ const (
 	PortPMMStats       = 8404
 )
 
-func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
+func Name(cr *apiv1.PerconaServerMySQL) string {
 	return cr.Name + "-" + AppName
 }
 
-func NamespacedName(cr *apiv1alpha1.PerconaServerMySQL) types.NamespacedName {
+func NamespacedName(cr *apiv1.PerconaServerMySQL) types.NamespacedName {
 	return types.NamespacedName{Name: Name(cr), Namespace: cr.Namespace}
 }
 
-func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
+func ServiceName(cr *apiv1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
-func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
+func MatchLabels(cr *apiv1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.GlobalLabels(), cr.Spec.Proxy.HAProxy.Labels,
 		cr.Labels(AppName, naming.ComponentProxy))
 }
 
-func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
+func PodName(cr *apiv1.PerconaServerMySQL, idx int) string {
 	return fmt.Sprintf("%s-%d", Name(cr), idx)
 }
 
-func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.Service {
+func Service(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) *corev1.Service {
 	expose := cr.Spec.Proxy.HAProxy.Expose
 
 	labels := MatchLabels(cr)
@@ -127,7 +127,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 	}
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHash string, secret *corev1.Secret) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash string, secret *corev1.Secret) *appsv1.StatefulSet {
 	labels := MatchLabels(cr)
 
 	annotations := make(map[string]string)
@@ -193,7 +193,7 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 	}
 }
 
-func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
+func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 	t := true
 
 	return []corev1.Volume{
@@ -251,7 +251,7 @@ func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
 	}
 }
 
-func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrategy {
+func updateStrategy(cr *apiv1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrategy {
 	switch cr.Spec.UpdateStrategy {
 	case appsv1.OnDeleteStatefulSetStrategyType:
 		return appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
@@ -266,7 +266,7 @@ func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdate
 	}
 }
 
-func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []corev1.Container {
+func containers(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) []corev1.Container {
 	containers := []corev1.Container{
 		haproxyContainer(cr),
 		mysqlMonitContainer(cr),
@@ -285,7 +285,7 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 	return containers
 }
 
-func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
+func haproxyContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	spec := cr.Spec.Proxy.HAProxy
 
 	env := []corev1.EnvVar{
@@ -371,7 +371,7 @@ func haproxyContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	}
 }
 
-func mysqlMonitContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
+func mysqlMonitContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	spec := cr.Spec.Proxy.HAProxy
 
 	env := []corev1.EnvVar{

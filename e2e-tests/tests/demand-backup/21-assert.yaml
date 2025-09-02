@@ -2,7 +2,7 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 400
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
   name: demand-backup
@@ -24,7 +24,7 @@ status:
   state: ready
 ---
 kind: PerconaServerMySQLRestore
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 metadata:
   name: demand-backup-restore-gcp
 status:

@@ -18,7 +18,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	perconaClientCmd "github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -167,7 +167,7 @@ func newClient(namespace string) (client.Client, error) {
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		return nil, errors.Wrap(err, "failed to add to client-go types to scheme")
 	}
-	if err := apiv1alpha1.AddToScheme(scheme); err != nil {
+	if err := apiv1.AddToScheme(scheme); err != nil {
 		return nil, errors.Wrap(err, "failed to add to percona types to scheme")
 	}
 

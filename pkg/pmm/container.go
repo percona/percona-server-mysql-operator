@@ -3,14 +3,14 @@ package pmm
 import (
 	"reflect"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func Container(
-	cr *apiv1alpha1.PerconaServerMySQL,
+	cr *apiv1.PerconaServerMySQL,
 	secret *corev1.Secret,
 	dbType string,
 	customParams string) corev1.Container {
@@ -40,8 +40,8 @@ func Container(
 		Env:             envs,
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      apiv1alpha1.BinVolumeName,
-				MountPath: apiv1alpha1.BinVolumePath,
+				Name:      apiv1.BinVolumeName,
+				MountPath: apiv1.BinVolumePath,
 			},
 		},
 	}
@@ -95,9 +95,9 @@ func Container(
 	return container
 }
 
-func pmmEnvs(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret, dbType string) []corev1.EnvVar {
+func pmmEnvs(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret, dbType string) []corev1.EnvVar {
 	user := "service_token"
-	token := string(apiv1alpha1.UserPMMServerToken)
+	token := string(apiv1.UserPMMServerToken)
 	pmmSpec := cr.PMMSpec()
 
 	return []corev1.EnvVar{
@@ -213,12 +213,12 @@ func pmmEnvs(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret, dbType s
 		},
 		{
 			Name:  "DB_USER",
-			Value: string(apiv1alpha1.UserMonitor),
+			Value: string(apiv1.UserMonitor),
 		},
 		{
 			Name: "DB_PASSWORD",
 			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: k8s.SecretKeySelector(secret.Name, string(apiv1alpha1.UserMonitor)),
+				SecretKeyRef: k8s.SecretKeySelector(secret.Name, string(apiv1.UserMonitor)),
 			},
 		},
 		{
