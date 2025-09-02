@@ -164,7 +164,6 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: haproxy
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   name: haproxy-haproxy
   ownerReferences:
   - apiVersion: ps.percona.com/v1alpha1
@@ -203,6 +202,5 @@ spec:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: haproxy
     app.kubernetes.io/part-of: percona-server
-    app.kubernetes.io/version: v0.12.0
   sessionAffinity: None
   type: ClusterIP
