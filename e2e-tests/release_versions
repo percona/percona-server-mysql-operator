@@ -1,21 +1,25 @@
 # Images versions
-IMAGE_OPERATOR=percona/percona-server-mysql-operator:0.10.0
+IMAGE_OPERATOR=percona/percona-server-mysql-operator:0.11.0
+
+IMAGE_MYSQL84=percona/percona-server:8.4.5-5
+IMAGE_BACKUP84=percona/percona-xtrabackup:8.4.0-3
+IMAGE_ROUTER84=percona/percona-mysql-router:8.4.5
 
 IMAGE_MYSQL80=percona/percona-server:8.0.42-33
 IMAGE_BACKUP80=percona/percona-xtrabackup:8.0.35-33
 IMAGE_ROUTER80=percona/percona-mysql-router:8.0.42
 
-IMAGE_HAPROXY=percona/haproxy:2.8.14
+IMAGE_HAPROXY=percona/haproxy:2.8.15
 IMAGE_ORCHESTRATOR=percona/percona-orchestrator:3.2.6-17
 IMAGE_TOOLKIT=percona/percona-toolkit:3.7.0
-IMAGE_PMM_CLIENT=percona/pmm-client:3.2.0
-IMAGE_PMM_SERVER=percona/pmm-server:3.2.0
+IMAGE_PMM_CLIENT=percona/pmm-client:3.3.1
+IMAGE_PMM_SERVER=percona/pmm-server:3.3.1
 
 # Supported k8s versions
-GKE_MIN=1.30
-GKE_MAX=1.32
-EKS_MIN=1.30
-EKS_MAX=1.32
-OPENSHIFT_MIN=4.15.51
-OPENSHIFT_MAX=4.18.15
-MINIKUBE_MAX=1.33.0
+GKE_MIN=1.31
+GKE_MAX=1.33
+EKS_MIN=1.31
+EKS_MAX=1.33
+OPENSHIFT_MIN=4.15.56
+OPENSHIFT_MAX=4.19.7
+MINIKUBE_MAX=1.33.1
