@@ -156,7 +156,7 @@ func TestServiceURL(t *testing.T) {
 		expectedValue string
 	}{
 		"default schedule when env var not set": {
-			expectedValue: "https://check-dev.percona.com",
+			expectedValue: "https://check.percona.com",
 		},
 		"custom schedule from env var": {
 			envValue:      "https://telemetry.percona.com",

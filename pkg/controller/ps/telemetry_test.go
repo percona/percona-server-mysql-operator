@@ -38,7 +38,7 @@ var _ = Describe("Reconcile telemetry sending", Ordered, func() {
 			err := os.Unsetenv("TELEMETRY_SERVICE_URL")
 			Expect(err).NotTo(HaveOccurred())
 		})
-		// configuring a dummy url so that ginkgo test do not make an actual API call.
+		// configuring a dummy URL to prevent Ginkgo tests from making API calls to the real one.
 		err = os.Setenv("TELEMETRY_SERVICE_URL", "https://telemetry-dummy.percona.com")
 		Expect(err).NotTo(HaveOccurred())
 	})

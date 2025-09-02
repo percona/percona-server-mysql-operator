@@ -135,7 +135,7 @@ func Schedule() string {
 func serviceURL() string {
 	sch, found := os.LookupEnv("TELEMETRY_SERVICE_URL")
 	if !found {
-		sch = "https://check-dev.percona.com" // to change this with the production url as default.
+		sch = "https://check.percona.com"
 	}
 	return sch
 }
