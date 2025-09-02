@@ -58,7 +58,7 @@ spec:
   mysql:
     clusterType: group-replication
     autoRecovery: true
-    image: percona/percona-server:8.0.42-33
+    image: perconalab/percona-server-mysql-operator:main-psmysql8.0
     imagePullPolicy: Always
 #    runtimeClassName: image-rc
 #    tolerations:
@@ -220,7 +220,7 @@ spec:
 
       size: 3
 
-      image: percona/haproxy:2.8.15
+      image: perconalab/percona-server-mysql-operator:main-haproxy
       imagePullPolicy: Always
 #      runtimeClassName: image-rc
 #      tolerations:
@@ -341,7 +341,7 @@ spec:
 
     router:
       enabled: false
-      image: percona/percona-mysql-router:8.0.42
+      image: perconalab/percona-server-mysql-operator:main-router8.0
       imagePullPolicy: Always
 #      runtimeClassName: image-rc
 #      tolerations:
@@ -520,7 +520,7 @@ spec:
 
   pmm:
     enabled: false
-    image: percona/pmm-client:3.3.1
+    image: perconalab/pmm-client:3-dev-latest
     imagePullPolicy: Always
 #    readinessProbes:
 #      initialDelaySeconds: 15
@@ -648,7 +648,7 @@ spec:
 #          prefix: ""
 
   toolkit:
-    image: percona/percona-toolkit:3.7.0
+    image: perconalab/percona-server-mysql-operator:main-toolkit
     imagePullPolicy: Always
 #    resources:
 #      requests:

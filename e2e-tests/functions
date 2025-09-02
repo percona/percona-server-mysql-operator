@@ -1045,8 +1045,6 @@ deploy_chaos_mesh() {
 	local container_runtime="containerd"
 	local socket_path="/run/containerd/containerd.sock"
 
-	destroy_chaos_mesh
-	
 	if [ -n "${MINIKUBE}" ]; then
 		container_runtime=docker
 		socket_path=/var/run/docker.sock
@@ -1055,6 +1053,7 @@ deploy_chaos_mesh() {
 		socket_path=/var/run/crio/crio.sock
 	fi
 
+	destroy_chaos_mesh
 	helm repo add chaos-mesh https://charts.chaos-mesh.org
 	helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=$container_runtime --set chaosDaemon.socketPath=$socket_path --set dashboard.create=false --version ${CHAOS_MESH_VER}
 
