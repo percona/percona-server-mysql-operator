@@ -9,6 +9,12 @@ if oc get projects 2>/dev/null; then
 	OPENSHIFT=4
 fi
 
+if [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "\-eks\-") ]; then
+	EKS=1
+else
+	EKS=0
+fi
+
 init_temp_dir() {
 	rm -rf "$TEMP_DIR"
 	mkdir -p "$TEMP_DIR"
@@ -317,6 +323,7 @@ deploy_minio() {
 prepare_vault_tls() {
 	local name=$1
 	local namespace=$2
+	local platform=$3
 	local csr_name=vault-csr-${RANDOM}
 	local csr_api_ver="v1"
 	local csr_signer
@@ -423,14 +430,17 @@ _deploy_vault() {
 
 	if [[ ${platform} == "openshift" ]]; then
 		oc patch clusterrole system:auth-delegator --type='json' -p '[{"op":"add","path":"/rules/-", "value":{"apiGroups":["security.openshift.io"], "attributeRestrictions":null, "resourceNames": ["privileged"], "resources":["securitycontextconstraints"],"verbs":["use"]}}]'
+		local extra_args="--set server.image.repository=docker.io/hashicorp/vault \
+						  --set injector.image.repository=docker.io/hashicorp/vault-k8s"
 	fi
 
 	if [ $protocol == "https" ]; then
-		prepare_vault_tls ${name} ${namespace}
+		prepare_vault_tls ${name} ${namespace} ${platform}
 		helm install $name hashicorp/vault \
 			--disable-openapi-validation \
 			--version ${VAULT_VER} \
 			--namespace "${namespace}" \
+			$extra_args \
 			--set dataStorage.enabled=false \
 			--set global.tlsDisable=false \
 			--set global.logLevel="trace" \
@@ -455,6 +465,7 @@ storage \"file\" {
 			--disable-openapi-validation \
 			--version ${VAULT_VER} \
 			--namespace "${namespace}" \
+			$extra_args \
 			--set dataStorage.enabled=false \
 			--set global.logLevel="trace" \
 			--set global.platform="${platform}"
@@ -502,6 +513,14 @@ deploy_vault() {
 
 	local tmp_dir=/tmp/vault
 	echo "Using tmp dir: ${tmp_dir}"
+
+	if [[ -n ${OPENSHIFT} ]]; then
+		platform=openshift
+	fi
+
+	if [ "$EKS" = 1 ]; then
+		platform=eks
+	fi
 
 	_deploy_vault ${name} ${protocol} ${platform} ${namespace} ${tmp_dir}
 
@@ -1023,15 +1042,22 @@ check_passwords_leak() {
 }
 
 deploy_chaos_mesh() {
-	destroy_chaos_mesh
+	local container_runtime="containerd"
+	local socket_path="/run/containerd/containerd.sock"
 
-	helm repo add chaos-mesh https://charts.chaos-mesh.org
 	if [ -n "${MINIKUBE}" ]; then
-		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=docker --set dashboard.create=false --version ${CHAOS_MESH_VER}
-	else
-		helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=containerd --set chaosDaemon.socketPath=/run/containerd/containerd.sock --set dashboard.create=false --version ${CHAOS_MESH_VER}
+		container_runtime=docker
+		socket_path=/var/run/docker.sock
+	elif [ -n "${OPENSHIFT}" ]; then
+		container_runtime=crio
+		socket_path=/var/run/crio/crio.sock
 	fi
-	if [[ -n $OPENSHIFT ]]; then
+
+	destroy_chaos_mesh
+	helm repo add chaos-mesh https://charts.chaos-mesh.org
+	helm install chaos-mesh chaos-mesh/chaos-mesh --namespace=${NAMESPACE} --set chaosDaemon.runtime=$container_runtime --set chaosDaemon.socketPath=$socket_path --set dashboard.create=false --version ${CHAOS_MESH_VER}
+
+	if [ -n "${OPENSHIFT}" ]; then
 		oc adm policy add-scc-to-user privileged -z chaos-daemon --namespace=${NAMESPACE}
 	fi
 
@@ -1225,7 +1251,8 @@ check_primary_chaos() {
 	online_members=$(get_innodb_cluster_status ${uri} \
 		| jq .defaultReplicaSet.topology[].status \
 		| grep ONLINE \
-		| wc -l)
+		| wc -l \
+		| sed 's/ //g')
 
 	if [[ ${online_members} != 3 ]]; then
 		echo "expected 3 online members, got ${online_members}"
