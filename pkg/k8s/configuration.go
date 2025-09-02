@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 )
 
 type Configurable interface {
@@ -28,7 +28,7 @@ type Configurable interface {
 	ExecuteConfigurationTemplate(configuration string, memory *resource.Quantity) (string, error)
 }
 
-func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL, configurable Configurable) (string, error) {
+func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQL, configurable Configurable, component string) (string, error) {
 	log := logf.FromContext(ctx).WithName("CustomConfigHash")
 
 	cmName := configurable.GetConfigMapName()
@@ -95,7 +95,8 @@ func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 		return "", errors.New("resources.limits[memory] or resources.requests[memory] should be specified for template usage in configuration")
 	}
 
-	cm := ConfigMap(cr, cmName, configurable.GetConfigMapKey(), configuration)
+	cm := ConfigMap(cr, cmName, configurable.GetConfigMapKey(), configuration, component)
+
 	if !reflect.DeepEqual(currCm.Data, cm.Data) {
 		if err := EnsureObject(ctx, cl, cr, cm, cl.Scheme()); err != nil {
 			return "", errors.Wrapf(err, "ensure ConfigMap/%s", cmName)

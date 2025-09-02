@@ -66,7 +66,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 					}
 				},
 			),
-			stateDesc: "spec.backup stanza not found in PerconaServerMySQL CustomResource or backup is disabled",
+			stateDesc: "spec.backup not found in PerconaServerMySQL CustomResource or backup is disabled",
 		},
 		{
 			name: "without storage",
@@ -324,6 +324,7 @@ func TestRunningState(t *testing.T) {
 	}
 	cr.Status.State = apiv1.BackupStarting
 	cr.Spec.StorageName = "s3-us-west"
+	cr.Spec.SourceHost = "backuphost"
 	cluster, err := readDefaultCR("ps-cluster1", namespace)
 	if err != nil {
 		t.Fatal(err, "failed to read default cr")

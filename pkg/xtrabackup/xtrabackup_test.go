@@ -9,7 +9,6 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
-	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 func TestJob(t *testing.T) {
@@ -57,7 +56,6 @@ func TestJob(t *testing.T) {
 		assert.Equal(t, map[string]string{
 			"app.kubernetes.io/name":       "xtrabackup",
 			"app.kubernetes.io/part-of":    "percona-server-backup",
-			"app.kubernetes.io/version":    "v" + version.Version(),
 			"app.kubernetes.io/instance":   "backup",
 			"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
 			"app.kubernetes.io/component":  "backup",

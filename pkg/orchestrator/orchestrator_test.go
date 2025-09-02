@@ -11,7 +11,6 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
-	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 func TestStatefulSet(t *testing.T) {
@@ -37,7 +36,6 @@ func TestStatefulSet(t *testing.T) {
 		labels := map[string]string{
 			"app.kubernetes.io/name":       "orchestrator",
 			"app.kubernetes.io/part-of":    "percona-server",
-			"app.kubernetes.io/version":    "v" + version.Version(),
 			"app.kubernetes.io/instance":   "cluster",
 			"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
 			"app.kubernetes.io/component":  "orchestrator",
