@@ -265,6 +265,7 @@ type Component interface {
 	Name() string
 	PerconaServerMySQL() *apiv1alpha1.PerconaServerMySQL
 	Labels() map[string]string
+	MatchLabels() map[string]string
 	PodSpec() *apiv1alpha1.PodSpec
 
 	Object(ctx context.Context, cl client.Client) (client.Object, error)
@@ -298,7 +299,7 @@ func EnsureComponent(
 		return errors.Wrap(err, "get statefulset")
 	}
 
-	pdb := podDisruptionBudget(cr, podSpec.PodDisruptionBudget, c.Labels())
+	pdb := podDisruptionBudget(cr, podSpec.PodDisruptionBudget, c.Labels(), c.MatchLabels())
 	if err := EnsureObjectWithHash(ctx, cl, obj, pdb, cl.Scheme()); err != nil {
 		return errors.Wrap(err, "failed to create pdb")
 	}

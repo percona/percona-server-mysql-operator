@@ -64,7 +64,7 @@ func (e *Exposer) Size() int32 {
 	return e.Spec.MySQL.Size
 }
 
-func (e *Exposer) Labels() map[string]string {
+func (e *Exposer) MatchLabels() map[string]string {
 	cr := apiv1alpha1.PerconaServerMySQL(*e)
 	return MatchLabels(&cr)
 }
@@ -123,13 +123,16 @@ func PodFQDN(cr *apiv1alpha1.PerconaServerMySQL, pod *corev1.Pod) string {
 	return fmt.Sprintf("%s.%s.%s", pod.Name, ServiceName(cr), cr.Namespace)
 }
 
+func Labels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
+	return util.SSMapMerge(cr.GlobalLabels(), cr.MySQLSpec().Labels, MatchLabels(cr))
+}
+
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
-	return util.SSMapMerge(cr.GlobalLabels(), cr.MySQLSpec().Labels,
-		cr.Labels(AppName, naming.ComponentDatabase))
+	return cr.Labels(AppName, naming.ComponentDatabase)
 }
 
 func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHash string, secret *corev1.Secret) *appsv1.StatefulSet {
-	labels := MatchLabels(cr)
+	selector := MatchLabels(cr)
 	spec := cr.MySQLSpec()
 	replicas := spec.Size
 
@@ -149,19 +152,19 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        Name(cr),
 			Namespace:   cr.Namespace,
-			Labels:      labels,
+			Labels:      Labels(cr),
 			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: selector,
 			},
 			ServiceName:    ServiceName(cr),
 			UpdateStrategy: updateStrategy(cr),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels:      labels,
+					Labels:      Labels(cr),
 					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
 				},
 				Spec: corev1.PodSpec{
@@ -181,8 +184,8 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 					ServiceAccountName:            cr.Spec.MySQL.ServiceAccountName,
 					NodeSelector:                  cr.Spec.MySQL.NodeSelector,
 					Tolerations:                   cr.Spec.MySQL.Tolerations,
-					Affinity:                      spec.GetAffinity(labels),
-					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(labels),
+					Affinity:                      spec.GetAffinity(selector),
+					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(selector),
 					ImagePullSecrets:              spec.ImagePullSecrets,
 					TerminationGracePeriodSeconds: spec.GetTerminationGracePeriodSeconds(),
 					PriorityClassName:             spec.PriorityClassName,
@@ -417,7 +420,7 @@ func containerPorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ContainerPort {
 }
 
 func UnreadyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
-	labels := MatchLabels(cr)
+	selector := MatchLabels(cr)
 
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -427,20 +430,20 @@ func UnreadyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        UnreadyServiceName(cr),
 			Namespace:   cr.Namespace,
-			Labels:      labels,
+			Labels:      Labels(cr),
 			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: corev1.ServiceSpec{
 			ClusterIP:                "None",
 			Ports:                    servicePorts(cr),
-			Selector:                 labels,
+			Selector:                 selector,
 			PublishNotReadyAddresses: true,
 		},
 	}
 }
 
 func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
-	labels := MatchLabels(cr)
+	selector := MatchLabels(cr)
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -449,21 +452,21 @@ func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ServiceName(cr),
 			Namespace:   cr.Namespace,
-			Labels:      labels,
+			Labels:      Labels(cr),
 			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: corev1.ServiceSpec{
 			Type:                     corev1.ServiceTypeClusterIP,
 			ClusterIP:                "None",
 			Ports:                    servicePorts(cr),
-			Selector:                 labels,
+			Selector:                 selector,
 			PublishNotReadyAddresses: cr.Spec.MySQL.IsGR(),
 		},
 	}
 }
 
 func ProxyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
-	labels := MatchLabels(cr)
+	selector := MatchLabels(cr)
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -472,14 +475,14 @@ func ProxyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ProxyServiceName(cr),
 			Namespace:   cr.Namespace,
-			Labels:      labels,
+			Labels:      Labels(cr),
 			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: corev1.ServiceSpec{
 			Type:                     corev1.ServiceTypeClusterIP,
 			ClusterIP:                "None",
 			Ports:                    servicePorts(cr),
-			Selector:                 labels,
+			Selector:                 selector,
 			PublishNotReadyAddresses: false,
 		},
 	}
@@ -490,7 +493,7 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 
 	labels := MatchLabels(cr)
 	labels[naming.LabelExposed] = "true"
-	labels = util.SSMapMerge(expose.Labels, labels)
+	labels = util.SSMapMerge(cr.GlobalLabels(), expose.Labels, labels)
 
 	selector := MatchLabels(cr)
 	selector["statefulset.kubernetes.io/pod-name"] = podName
@@ -533,7 +536,7 @@ func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	expose := cr.Spec.MySQL.ExposePrimary
 
 	labels := MatchLabels(cr)
-	labels = util.SSMapMerge(expose.Labels, labels)
+	labels = util.SSMapMerge(cr.GlobalLabels(), expose.Labels, labels)
 
 	selector := MatchLabels(cr)
 	selector[naming.LabelMySQLPrimary] = "true"

@@ -386,7 +386,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPvc(ctx context.Context, cr *a
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(exposer.Labels()),
+			LabelSelector: labels.SelectorFromSet(exposer.MatchLabels()),
 		},
 	)
 	if err != nil {
@@ -581,7 +581,7 @@ type Exposer interface {
 	Exposed() bool
 	Name(index string) string
 	Size() int32
-	Labels() map[string]string
+	MatchLabels() map[string]string
 	Service(name string) *corev1.Service
 	SaveOldMeta() bool
 }
@@ -1128,7 +1128,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 		}
 	}
 
-	svcLabels := exposer.Labels()
+	svcLabels := exposer.MatchLabels()
 	svcLabels[naming.LabelExposed] = "true"
 	services, err := k8s.ServicesByLabels(ctx, r.Client, svcLabels, ns)
 	if err != nil {
@@ -1199,7 +1199,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOrchestrator(ctx context.Context, 
 		return nil
 	}
 
-	svcLabels := orcExposer.Labels()
+	svcLabels := orcExposer.MatchLabels()
 	svcLabels[naming.LabelExposed] = "true"
 	services, err := k8s.ServicesByLabels(ctx, r.Client, svcLabels, cr.Namespace)
 	if err != nil {

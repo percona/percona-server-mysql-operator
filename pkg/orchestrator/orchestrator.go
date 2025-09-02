@@ -52,7 +52,7 @@ func (e *Exposer) Size() int32 {
 	return e.Spec.Orchestrator.Size
 }
 
-func (e *Exposer) Labels() map[string]string {
+func (e *Exposer) MatchLabels() map[string]string {
 	cr := apiv1alpha1.PerconaServerMySQL(*e)
 	return MatchLabels(&cr)
 }
@@ -99,16 +99,15 @@ func APIHost(cr *apiv1alpha1.PerconaServerMySQL) string {
 
 // Labels returns labels of orchestrator
 func Labels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
-	return cr.OrchestratorSpec().Labels
+	return util.SSMapMerge(cr.GlobalLabels(), cr.OrchestratorSpec().Labels, MatchLabels(cr))
 }
 
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
-	return util.SSMapMerge(cr.GlobalLabels(), Labels(cr),
-		cr.Labels(AppName, naming.ComponentOrchestrator))
+	return cr.Labels(AppName, naming.ComponentOrchestrator)
 }
 
 func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, tlsHash string) *appsv1.StatefulSet {
-	labels := MatchLabels(cr)
+	selector := MatchLabels(cr)
 	spec := cr.OrchestratorSpec()
 	Replicas := spec.Size
 
@@ -125,19 +124,19 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, tlsHash string) 
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        Name(cr),
 			Namespace:   cr.Namespace,
-			Labels:      labels,
+			Labels:      Labels(cr),
 			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &Replicas,
 			ServiceName: Name(cr),
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: selector,
 			},
 			UpdateStrategy: updateStrategy(cr),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels:      labels,
+					Labels:      Labels(cr),
 					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
 				},
 				Spec: corev1.PodSpec{
@@ -156,8 +155,8 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, tlsHash string) 
 					NodeSelector:                  cr.Spec.Orchestrator.NodeSelector,
 					Tolerations:                   cr.Spec.Orchestrator.Tolerations,
 					Containers:                    containers(cr),
-					Affinity:                      spec.GetAffinity(labels),
-					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(labels),
+					Affinity:                      spec.GetAffinity(selector),
+					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(selector),
 					ImagePullSecrets:              spec.ImagePullSecrets,
 					TerminationGracePeriodSeconds: spec.GetTerminationGracePeriodSeconds(),
 					PriorityClassName:             spec.PriorityClassName,
@@ -406,7 +405,7 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 
 	labels := MatchLabels(cr)
 	labels[naming.LabelExposed] = "true"
-	labels = util.SSMapMerge(expose.Labels, labels)
+	labels = util.SSMapMerge(cr.GlobalLabels(), expose.Labels, labels)
 
 	selector := MatchLabels(cr)
 	selector["statefulset.kubernetes.io/pod-name"] = podName
