@@ -144,7 +144,11 @@
         "PRODUCT_FAMILY_PMM",
         "PRODUCT_FAMILY_EVEREST",
         "PRODUCT_FAMILY_PERCONA_TOOLKIT",
-        "PRODUCT_FAMILY_PXB"
+        "PRODUCT_FAMILY_PXB",
+        "PRODUCT_FAMILY_OPERATOR_PXC",
+        "PRODUCT_FAMILY_OPERATOR_POSTGRESQL",
+        "PRODUCT_FAMILY_OPERATOR_PSMDB",
+        "PRODUCT_FAMILY_OPERATOR_PS"
       ],
       "default": "PRODUCT_FAMILY_INVALID",
       "description": "ProductFamily represents Percona product family."

@@ -116,7 +116,7 @@ func createReport(cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.Se
 	return models.Genericv1GenericReport{
 		ID:            uuid.NewString(),
 		CreateTime:    strfmt.DateTime(time.Now()),
-		ProductFamily: models.V1ProductFamilyPRODUCTFAMILYEVEREST.Pointer(), // temp solution until the final product family is created for this operator.
+		ProductFamily: models.V1ProductFamilyPRODUCTFAMILYOPERATORPS.Pointer(),
 		InstanceID:    string(cr.GetUID()),
 		Metrics:       metrics,
 	}

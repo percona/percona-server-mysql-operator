@@ -9,13 +9,13 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/telemetry/client/models"
 	"github.com/percona/percona-server-mysql-operator/pkg/telemetry/client/reporter_api"
 )
 
@@ -74,7 +74,7 @@ func TestSendReport(t *testing.T) {
 						assert.NotEmpty(t, report.ID)
 						assert.Equal(t, defaultUID, report.InstanceID)
 						assert.NotNil(t, report.CreateTime)
-						assert.NotNil(t, report.ProductFamily) // change with the assert for the final product family
+						assert.Equal(t, models.V1ProductFamilyPRODUCTFAMILYOPERATORPS, *report.ProductFamily)
 						assert.Len(t, report.Metrics, 8)
 					}).
 					Return(&reporter_api.ReporterAPIGenericReportOK{}, nil)
@@ -93,7 +93,7 @@ func TestSendReport(t *testing.T) {
 						assert.NotEmpty(t, report.ID)
 						assert.Equal(t, defaultUID, report.InstanceID)
 						assert.NotNil(t, report.CreateTime)
-						assert.NotNil(t, report.ProductFamily) // change with the assert for the final product family
+						assert.Equal(t, models.V1ProductFamilyPRODUCTFAMILYOPERATORPS, *report.ProductFamily)
 						assert.Len(t, report.Metrics, 8)
 					}).
 					Return(nil, errors.New("some error"))
@@ -122,14 +122,6 @@ func TestSendReport(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestSomething(t *testing.T) {
-	service, err := NewTelemetryService()
-	require.NoError(t, err)
-
-	err = service.SendReport(context.Background(), defaultCR(), defaultServerVersion())
-	assert.NoError(t, err)
 }
 
 func TestSchedule(t *testing.T) {
