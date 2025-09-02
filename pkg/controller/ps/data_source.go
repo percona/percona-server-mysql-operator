@@ -11,12 +11,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
-func (r *PerconaServerMySQLReconciler) reconcileDataSource(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) reconcileDataSource(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileDataSource")
 
 	pvcSpec := cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim
@@ -24,7 +24,7 @@ func (r *PerconaServerMySQLReconciler) reconcileDataSource(ctx context.Context, 
 		return nil
 	}
 
-	if cr.Spec.MySQL.ClusterType != apiv1alpha1.ClusterTypeAsync || cr.Status.State != apiv1alpha1.StateInitializing {
+	if cr.Spec.MySQL.ClusterType != apiv1.ClusterTypeAsync || cr.Status.State != apiv1.StateInitializing {
 		return nil
 	}
 
