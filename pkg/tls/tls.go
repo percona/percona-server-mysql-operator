@@ -163,7 +163,7 @@ func DNSNamesFromCert(data []byte) ([]string, error) {
 	return names, nil
 }
 
-func IsSecretCreatedByUser(ctx context.Context, c client.Client, cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) (bool, error) {
+func IsSecretCreatedByUser(ctx context.Context, c client.Client, cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) (bool, error) {
 	if metav1.IsControlledBy(secret, cr) {
 		return false, nil
 	}
@@ -173,7 +173,7 @@ func IsSecretCreatedByUser(ctx context.Context, c client.Client, cr *apiv1alpha1
 	return true, nil
 }
 
-func isCertManagerSecretCreatedByUser(ctx context.Context, c client.Client, cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) (bool, error) {
+func isCertManagerSecretCreatedByUser(ctx context.Context, c client.Client, cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) (bool, error) {
 	if metav1.IsControlledBy(secret, cr) {
 		return false, nil
 	}

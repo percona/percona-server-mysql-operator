@@ -685,7 +685,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-10", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
 			cr.Spec.Proxy.Router.Enabled = false
 			cr.Spec.Proxy.HAProxy.Enabled = false
 			It("the creation of the cluster should fail with error message", func() {
@@ -699,7 +699,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-11", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
 			cr.Spec.Proxy.Router.Enabled = false
 			cr.Spec.Proxy.HAProxy.Enabled = false
 			cr.Spec.Unsafe.Proxy = true
@@ -712,7 +712,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-12", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
 			cr.Spec.Proxy.Router.Enabled = true
 			cr.Spec.Proxy.Router.Size = 1
 			It("the creation of the cluster should fail with error message", func() {
@@ -726,7 +726,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-13", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
 			cr.Spec.Proxy.Router.Enabled = true
 			cr.Spec.Proxy.Router.Size = 1
 			cr.Spec.Unsafe.ProxySize = true
@@ -739,7 +739,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-14", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
 			cr.Spec.MySQL.Size = 2
 			It("the creation of the cluster should fail with error message", func() {
 				createErr := k8sClient.Create(ctx, cr)
@@ -752,7 +752,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-15", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
 			cr.Spec.MySQL.Size = 2
 			cr.Spec.Unsafe.MySQLSize = true
 			It("should create the cluster successfully", func() {
@@ -764,7 +764,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-16", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.Orchestrator.Size = 2
 			It("the creation of the cluster should fail with error message", func() {
@@ -778,7 +778,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-17", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.Orchestrator.Size = 4
 			It("the creation of the cluster should fail with error message", func() {
@@ -792,7 +792,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-18", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.Orchestrator.Size = 2
 			cr.Spec.Unsafe.OrchestratorSize = true
@@ -805,7 +805,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-19", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.Orchestrator.Size = 4
 			cr.Spec.Unsafe.OrchestratorSize = true
@@ -818,8 +818,8 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-20", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
-			cr.Spec.UpdateStrategy = psv1alpha1.SmartUpdateStatefulSetStrategyType
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = psv1.SmartUpdateStatefulSetStrategyType
 			cr.Spec.Orchestrator.Enabled = false
 			cr.Spec.Unsafe.Proxy = true
 			It("the creation of the cluster should fail with error message", func() {
@@ -833,8 +833,8 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-21", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
-			cr.Spec.UpdateStrategy = psv1alpha1.SmartUpdateStatefulSetStrategyType
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = psv1.SmartUpdateStatefulSetStrategyType
 			cr.Spec.Orchestrator.Enabled = true
 			It("should create the cluster successfully", func() {
 				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
@@ -1438,8 +1438,8 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 		It("Should read default cr.yaml", func() {
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
-			cr.Spec.Metadata = &psv1alpha1.Metadata{
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
+			cr.Spec.Metadata = &psv1.Metadata{
 				Labels: map[string]string{
 					"test-label": "test-value",
 				},
@@ -1507,9 +1507,9 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 		ns := asyncNS
 		cr, err := readDefaultCR("async-cluster", ns)
 
-		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+		cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 		cr.Spec.Orchestrator.Enabled = true
-		cr.Spec.Metadata = &psv1alpha1.Metadata{
+		cr.Spec.Metadata = &psv1.Metadata{
 			Labels: map[string]string{
 				"test-label": "test-value",
 			},

@@ -414,28 +414,28 @@ func TestGetBackupSource(t *testing.T) {
 	err := clientgoscheme.AddToScheme(scheme)
 	require.NoError(t, err)
 
-	err = apiv1alpha1.AddToScheme(scheme)
+	err = apiv1.AddToScheme(scheme)
 	require.NoError(t, err)
 
 	ctx := context.Background()
 
 	tests := []struct {
 		name    string
-		cr      *apiv1alpha1.PerconaServerMySQLBackup
-		cluster *apiv1alpha1.PerconaServerMySQL
+		cr      *apiv1.PerconaServerMySQLBackup
+		cluster *apiv1.PerconaServerMySQL
 		want    string
 		wantErr bool
 	}{
 		{
 			name: "sourceHost from backup",
-			cr: &apiv1alpha1.PerconaServerMySQLBackup{
-				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
+			cr: &apiv1.PerconaServerMySQLBackup{
+				Spec: apiv1.PerconaServerMySQLBackupSpec{
 					SourceHost: "backuphost",
 				},
 			},
-			cluster: &apiv1alpha1.PerconaServerMySQL{
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					Backup: &apiv1alpha1.BackupSpec{SourceHost: "clusterhost"},
+			cluster: &apiv1.PerconaServerMySQL{
+				Spec: apiv1.PerconaServerMySQLSpec{
+					Backup: &apiv1.BackupSpec{SourceHost: "clusterhost"},
 				},
 			},
 			want:    "backuphost",
@@ -443,12 +443,12 @@ func TestGetBackupSource(t *testing.T) {
 		},
 		{
 			name: "host from cluster",
-			cr: &apiv1alpha1.PerconaServerMySQLBackup{
-				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{},
+			cr: &apiv1.PerconaServerMySQLBackup{
+				Spec: apiv1.PerconaServerMySQLBackupSpec{},
 			},
-			cluster: &apiv1alpha1.PerconaServerMySQL{
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					Backup: &apiv1alpha1.BackupSpec{SourceHost: "clusterhost"},
+			cluster: &apiv1.PerconaServerMySQL{
+				Spec: apiv1.PerconaServerMySQLSpec{
+					Backup: &apiv1.BackupSpec{SourceHost: "clusterhost"},
 				},
 			},
 			want:    "clusterhost",
@@ -456,13 +456,13 @@ func TestGetBackupSource(t *testing.T) {
 		},
 		{
 			name: "single node cluster",
-			cr:   &apiv1alpha1.PerconaServerMySQLBackup{},
-			cluster: &apiv1alpha1.PerconaServerMySQL{
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: apiv1alpha1.MySQLSpec{
-						PodSpec: apiv1alpha1.PodSpec{Size: 1},
+			cr:   &apiv1.PerconaServerMySQLBackup{},
+			cluster: &apiv1.PerconaServerMySQL{
+				Spec: apiv1.PerconaServerMySQLSpec{
+					MySQL: apiv1.MySQLSpec{
+						PodSpec: apiv1.PodSpec{Size: 1},
 					},
-					Backup: &apiv1alpha1.BackupSpec{},
+					Backup: &apiv1.BackupSpec{},
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "single-node",
@@ -474,17 +474,17 @@ func TestGetBackupSource(t *testing.T) {
 		},
 		{
 			name: "async cluster, orchestrator off, no host",
-			cr:   &apiv1alpha1.PerconaServerMySQLBackup{},
-			cluster: &apiv1alpha1.PerconaServerMySQL{
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeAsync,
+			cr:   &apiv1.PerconaServerMySQLBackup{},
+			cluster: &apiv1.PerconaServerMySQL{
+				Spec: apiv1.PerconaServerMySQLSpec{
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: apiv1.ClusterTypeAsync,
 					},
-					Backup: &apiv1alpha1.BackupSpec{},
-					Unsafe: apiv1alpha1.UnsafeFlags{
+					Backup: &apiv1.BackupSpec{},
+					Unsafe: apiv1.UnsafeFlags{
 						Orchestrator: true,
 					},
-					Orchestrator: apiv1alpha1.OrchestratorSpec{
+					Orchestrator: apiv1.OrchestratorSpec{
 						Enabled: false,
 					},
 				},

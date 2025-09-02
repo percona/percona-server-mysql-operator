@@ -3,7 +3,7 @@ package orchestrator
 import (
 	"testing"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
@@ -130,14 +130,14 @@ func TestStatefulSet(t *testing.T) {
 func TestPodService(t *testing.T) {
 	podName := "test-pod"
 
-	cr := &apiv1alpha1.PerconaServerMySQL{
+	cr := &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "test-namespace",
 		},
-		Spec: apiv1alpha1.PerconaServerMySQLSpec{
-			Orchestrator: apiv1alpha1.OrchestratorSpec{
-				Expose: apiv1alpha1.ServiceExpose{
+		Spec: apiv1.PerconaServerMySQLSpec{
+			Orchestrator: apiv1.OrchestratorSpec{
+				Expose: apiv1.ServiceExpose{
 					Type: corev1.ServiceTypeLoadBalancer,
 					Labels: map[string]string{
 						"custom-label": "custom-value",

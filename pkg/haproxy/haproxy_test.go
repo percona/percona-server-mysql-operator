@@ -3,7 +3,7 @@ package haproxy
 import (
 	"testing"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -240,15 +240,15 @@ func TestStatefulset(t *testing.T) {
 func TestService(t *testing.T) {
 	podName := "test-cluster-haproxy"
 
-	cr := &apiv1alpha1.PerconaServerMySQL{
+	cr := &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "test-namespace",
 		},
-		Spec: apiv1alpha1.PerconaServerMySQLSpec{
-			Proxy: apiv1alpha1.ProxySpec{
-				HAProxy: &apiv1alpha1.HAProxySpec{
-					Expose: apiv1alpha1.ServiceExpose{
+		Spec: apiv1.PerconaServerMySQLSpec{
+			Proxy: apiv1.ProxySpec{
+				HAProxy: &apiv1.HAProxySpec{
+					Expose: apiv1.ServiceExpose{
 						Type: corev1.ServiceTypeLoadBalancer,
 						Labels: map[string]string{
 							"custom-label": "custom-value",

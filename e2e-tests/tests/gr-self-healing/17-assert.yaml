@@ -151,7 +151,7 @@ spec:
   sessionAffinity: None
   type: ClusterIP
 ---
-apiVersion: chaos-mesh.org/v1alpha1
+apiVersion: chaos-mesh.org/v1
 kind: PodChaos
 metadata:
   name: chaos-kill-label-cluster-crash

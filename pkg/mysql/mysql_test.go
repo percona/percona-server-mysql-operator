@@ -567,17 +567,17 @@ func TestPrimaryService_GroupReplication(t *testing.T) {
 func TestPodService(t *testing.T) {
 	podName := "test-pod"
 
-	cr := &apiv1alpha1.PerconaServerMySQL{
+	cr := &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "test-namespace",
 		},
-		Spec: apiv1alpha1.PerconaServerMySQLSpec{
-			MySQL: apiv1alpha1.MySQLSpec{
-				ClusterType: apiv1alpha1.ClusterTypeGR,
-				Expose: apiv1alpha1.ServiceExposeTogglable{
+		Spec: apiv1.PerconaServerMySQLSpec{
+			MySQL: apiv1.MySQLSpec{
+				ClusterType: apiv1.ClusterTypeGR,
+				Expose: apiv1.ServiceExposeTogglable{
 					Enabled: true,
-					ServiceExpose: apiv1alpha1.ServiceExpose{
+					ServiceExpose: apiv1.ServiceExpose{
 						Type: corev1.ServiceTypeLoadBalancer,
 						Labels: map[string]string{
 							"custom-label": "custom-value",

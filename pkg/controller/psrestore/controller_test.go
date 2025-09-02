@@ -162,7 +162,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 								Type: apiv1.BackupStorageS3,
 							},
 						},
-						InitContainer: &apiv1alpha1.InitContainerSpec{
+						InitContainer: &apiv1.InitContainerSpec{
 							Image: "operator-image",
 						},
 					},
@@ -207,7 +207,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 								Type: apiv1.BackupStorageS3,
 							},
 						},
-						InitContainer: &apiv1alpha1.InitContainerSpec{
+						InitContainer: &apiv1.InitContainerSpec{
 							Image: "operator-image",
 						},
 					},
@@ -264,7 +264,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 								Type: apiv1.BackupStorageS3,
 							},
 						},
-						InitContainer: &apiv1alpha1.InitContainerSpec{
+						InitContainer: &apiv1.InitContainerSpec{
 							Image: "operator-image",
 						},
 					},
@@ -358,7 +358,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 								Type: apiv1.BackupStorageS3,
 							},
 						},
-						InitContainer: &apiv1alpha1.InitContainerSpec{
+						InitContainer: &apiv1.InitContainerSpec{
 							Image: "operator-image",
 						},
 					},
@@ -387,7 +387,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 					tt.cluster.Spec.Backup = &apiv1.BackupSpec{}
 				}
 				if tt.cluster.Spec.Backup.InitContainer == nil {
-					tt.cluster.Spec.Backup.InitContainer = &apiv1alpha1.InitContainerSpec{}
+					tt.cluster.Spec.Backup.InitContainer = &apiv1.InitContainerSpec{}
 				}
 				tt.cluster.Spec.Backup.InitContainer.Image = "operator-image"
 				tt.objects = append(tt.objects, tt.cluster)
