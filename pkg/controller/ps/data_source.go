@@ -40,12 +40,13 @@ func (r *PerconaServerMySQLReconciler) reconcileDataSource(ctx context.Context, 
 	uuidMap := make(map[string]struct{})
 
 	for _, pod := range pods {
+		if !k8s.IsPodReady(pod) {
+			continue
+		}
+
 		var outb, errb bytes.Buffer
 		cmd := []string{"cat", "/var/lib/mysql/auto.cnf"}
 		if err := r.ClientCmd.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false); err != nil {
-			if strings.Contains(err.Error(), "does not have a host assigned") || strings.Contains(err.Error(), "container not found") {
-				continue
-			}
 			return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, outb.String(), errb.String())
 		}
 
