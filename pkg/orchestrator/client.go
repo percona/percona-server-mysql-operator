@@ -327,7 +327,7 @@ func BeginDowntime(
 	reason string,
 	durationSeconds int,
 ) error {
-	url := fmt.Sprintf("api/begin-downtime/%s/%d/%s/%s/%ss", host, port, owner, reason, durationSeconds)
+	url := fmt.Sprintf("api/begin-downtime/%s/%d/%s/%s/%ds", host, port, owner, reason, durationSeconds)
 
 	var res, errb bytes.Buffer
 	err := exec(ctx, cliCmd, pod, url, &res, &errb)

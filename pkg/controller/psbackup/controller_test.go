@@ -66,7 +66,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 					}
 				},
 			),
-			stateDesc: "spec.backup not found in PerconaServerMySQL CustomResource or backup is disabled",
+			stateDesc: "spec.backup not found in PerconaServerMySQL CustomResource or backups are disabled",
 		},
 		{
 			name: "without storage",
@@ -228,7 +228,7 @@ func TestCheckFinalizers(t *testing.T) {
 				cr.Status.State = apiv1alpha1.BackupFailed
 			}),
 			finalizerJobFail:   true,
-			expectedFinalizers: []string{},
+			expectedFinalizers: nil,
 		},
 		{
 			name: "with successful finalizer and failed state",
@@ -236,7 +236,7 @@ func TestCheckFinalizers(t *testing.T) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupFailed
 			}),
-			expectedFinalizers: []string{},
+			expectedFinalizers: nil,
 		},
 		{
 			name: "with successful finalizer, unknown finalizer and failed state",
@@ -244,7 +244,7 @@ func TestCheckFinalizers(t *testing.T) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup, "unknown-finalizer"}
 				cr.Status.State = apiv1alpha1.BackupFailed
 			}),
-			expectedFinalizers: []string{"unknown-finalizer"},
+			expectedFinalizers: nil,
 		},
 	}
 
@@ -301,7 +301,7 @@ func TestCheckFinalizers(t *testing.T) {
 
 			r.checkFinalizers(ctx, cr)
 			if !reflect.DeepEqual(cr.Finalizers, tt.expectedFinalizers) {
-				t.Fatalf("expected finalizers %v, got %v", tt.expectedFinalizers, tt.cr.Finalizers)
+				t.Fatalf("expected finalizers %v, got %v", tt.expectedFinalizers, cr.Finalizers)
 			}
 		})
 	}
