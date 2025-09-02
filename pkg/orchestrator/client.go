@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -45,12 +46,17 @@ type InstanceKey struct {
 }
 
 type Instance struct {
-	Key       InstanceKey   `json:"Key"`
-	Alias     string        `json:"InstanceAlias"`
-	MasterKey InstanceKey   `json:"MasterKey"`
-	Replicas  []InstanceKey `json:"Replicas"`
-	ReadOnly  bool          `json:"ReadOnly"`
-	Problems  []string      `json:"Problems"`
+	Key                  InstanceKey   `json:"Key"`
+	Alias                string        `json:"InstanceAlias"`
+	MasterKey            InstanceKey   `json:"MasterKey"`
+	Replicas             []InstanceKey `json:"Replicas"`
+	ReadOnly             bool          `json:"ReadOnly"`
+	Problems             []string      `json:"Problems"`
+	IsDowntimed          bool          `json:"IsDowntimed"`
+	DowntimeReason       string        `json:"DowntimeReason"`
+	DowntimeOwner        string        `json:"DowntimeOwner"`
+	DowntimeEndTimestamp string        `json:"DowntimeEndTimestamp"`
+	ElapsedDowntime      time.Duration `json:"ElapsedDowntime"`
 }
 
 var (
@@ -290,6 +296,61 @@ func Cluster(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clus
 
 func ForgetInstance(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) error {
 	url := fmt.Sprintf("api/forget/%s/%d", host, port)
+
+	var res, errb bytes.Buffer
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
+	if err != nil {
+		return err
+	}
+
+	orcResp := new(orcResponse)
+	body := res.Bytes()
+
+	if len(body) == 0 {
+		return ErrEmptyResponse
+	}
+
+	if err := json.Unmarshal(body, orcResp); err != nil {
+		return errors.Wrapf(err, "json decode \"%s\"", string(body))
+	}
+
+	return orcResp.Error()
+}
+
+func BeginDowntime(
+	ctx context.Context,
+	cliCmd clientcmd.Client,
+	pod *corev1.Pod,
+	host string,
+	port int,
+	owner string,
+	reason string,
+	durationSeconds int,
+) error {
+	url := fmt.Sprintf("api/begin-downtime/%s/%d/%s/%s/%ss", host, port, owner, reason, durationSeconds)
+
+	var res, errb bytes.Buffer
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
+	if err != nil {
+		return err
+	}
+
+	orcResp := new(orcResponse)
+	body := res.Bytes()
+
+	if len(body) == 0 {
+		return ErrEmptyResponse
+	}
+
+	if err := json.Unmarshal(body, orcResp); err != nil {
+		return errors.Wrapf(err, "json decode \"%s\"", string(body))
+	}
+
+	return orcResp.Error()
+}
+
+func EndDowntime(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) error {
+	url := fmt.Sprintf("api/end-downtime/%s/%d", host, port)
 
 	var res, errb bytes.Buffer
 	err := exec(ctx, cliCmd, pod, url, &res, &errb)

@@ -128,7 +128,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			if cr.Status.StateDesc != tt.stateDesc {
 				t.Fatalf("expected stateDesc %s, got %s", tt.stateDesc, cr.Status.StateDesc)
 			}
-			if cr.Status.State != apiv1alpha1.BackupError {
+			if cr.Status.State != apiv1alpha1.BackupFailed {
 				t.Fatalf("expected state %s, got %s", apiv1alpha1.RestoreError, cr.Status.State)
 			}
 		})
@@ -160,7 +160,7 @@ func TestCheckFinalizers(t *testing.T) {
 			name: "without finalizers",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
 				cr.Finalizers = []string{}
-				cr.Status.State = apiv1alpha1.BackupError
+				cr.Status.State = apiv1alpha1.BackupFailed
 			}),
 			expectedFinalizers: nil,
 		},
@@ -184,7 +184,7 @@ func TestCheckFinalizers(t *testing.T) {
 			name: "with finalizer and error state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
-				cr.Status.State = apiv1alpha1.BackupError
+				cr.Status.State = apiv1alpha1.BackupFailed
 			}),
 			expectedFinalizers: nil,
 		},

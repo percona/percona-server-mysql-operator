@@ -141,6 +141,8 @@ spec:
             type: object
           status:
             properties:
+              backupSource:
+                type: string
               completed:
                 format: date-time
                 type: string

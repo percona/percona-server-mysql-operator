@@ -39,6 +39,8 @@ spec:
                 type: string
               backupSource:
                 properties:
+                  backupSource:
+                    type: string
                   completed:
                     format: date-time
                     type: string
