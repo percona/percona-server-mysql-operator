@@ -3,6 +3,7 @@
 set -e
 set -o xtrace
 
+XTRABACKUP_VERSION=$(xtrabackup --version 2>&1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
 DATADIR=${DATADIR:-/var/lib/mysql}
 PARALLEL=$(grep -c processor /proc/cpuinfo)
 XBCLOUD_ARGS="--curl-retriable-errors=7 --parallel=${PARALLEL} ${XBCLOUD_EXTRA_ARGS}"
@@ -44,8 +45,15 @@ main() {
 
 	local keyring=""
 	if [[ -f ${KEYRING_VAULT_PATH} ]]; then
-		echo "Using keyring vault config: ${KEYRING_VAULT_PATH}"
-		keyring="--keyring-vault-config=${KEYRING_VAULT_PATH}"
+		if [[ ${XTRABACKUP_VERSION} == "8.0" ]]; then
+			echo "Using keyring vault config: ${KEYRING_VAULT_PATH}"
+			keyring="--keyring-vault-config=${KEYRING_VAULT_PATH}"
+		elif [[ ${XTRABACKUP_VERSION} == "8.4" ]]; then
+			# PXB expects the config with a specific name
+			cp ${KEYRING_VAULT_PATH} /tmp/component_keyring_vault.cnf
+			echo "Using keyring vault component: /tmp/component_keyring_vault.cnf"
+			keyring="--component-keyring-config=/tmp/component_keyring_vault.cnf"
+		fi
 	fi
 
 	# shellcheck disable=SC2086
