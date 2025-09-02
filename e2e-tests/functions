@@ -1303,7 +1303,6 @@ check_backup_job_labels() {
 		"app.kubernetes.io/managed-by=percona-server-mysql-operator"
 		"app.kubernetes.io/name=xtrabackup"
 		"app.kubernetes.io/part-of=percona-server-backup"
-		"app.kubernetes.io/version=$(get_operator_version)"
 	)
 
 	local all_match
@@ -1346,7 +1345,6 @@ check_scheduled_backup_labels() {
 		"app.kubernetes.io/managed-by=percona-server-mysql-operator"
 		"app.kubernetes.io/name=percona-server-backup"
 		"app.kubernetes.io/part-of=percona-server"
-		"app.kubernetes.io/version=$(get_operator_version)"
 		"percona.com/backup-type=cron"
 		"percona.com/cluster=${cluster_name}"
 	)
