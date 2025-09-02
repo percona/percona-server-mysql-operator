@@ -23,7 +23,7 @@ import (
 
 func TestRestoreStatusErrStateDesc(t *testing.T) {
 	namespace := "some-namespace"
-	clusterName := "cluster1"
+	clusterName := "ps-cluster1"
 	backupName := "backup1"
 	restoreName := "restore1"
 	storageName := "some-storage"
@@ -162,7 +162,9 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 								Type: apiv1.BackupStorageS3,
 							},
 						},
-						InitImage: "operator-image",
+						InitContainer: &apiv1alpha1.InitContainerSpec{
+							Image: "operator-image",
+						},
 					},
 				},
 			},
@@ -205,7 +207,9 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 								Type: apiv1.BackupStorageS3,
 							},
 						},
-						InitImage: "operator-image",
+						InitContainer: &apiv1alpha1.InitContainerSpec{
+							Image: "operator-image",
+						},
 					},
 				},
 			},
@@ -260,7 +264,9 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 								Type: apiv1.BackupStorageS3,
 							},
 						},
-						InitImage: "operator-image",
+						InitContainer: &apiv1alpha1.InitContainerSpec{
+							Image: "operator-image",
+						},
 					},
 				},
 			},
@@ -352,7 +358,9 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 								Type: apiv1.BackupStorageS3,
 							},
 						},
-						InitImage: "operator-image",
+						InitContainer: &apiv1alpha1.InitContainerSpec{
+							Image: "operator-image",
+						},
 					},
 				},
 			},
@@ -378,7 +386,10 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 				if tt.cluster.Spec.Backup == nil {
 					tt.cluster.Spec.Backup = &apiv1.BackupSpec{}
 				}
-				tt.cluster.Spec.Backup.InitImage = "operator-image"
+				if tt.cluster.Spec.Backup.InitContainer == nil {
+					tt.cluster.Spec.Backup.InitContainer = &apiv1alpha1.InitContainerSpec{}
+				}
+				tt.cluster.Spec.Backup.InitContainer.Image = "operator-image"
 				tt.objects = append(tt.objects, tt.cluster)
 				tt.objects = append(tt.objects,
 					&appsv1.StatefulSet{

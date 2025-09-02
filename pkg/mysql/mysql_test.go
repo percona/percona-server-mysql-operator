@@ -187,7 +187,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 			},
 			expectedStatefulSet: appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster1-mysql",
+					Name:      "ps-cluster1-mysql",
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
@@ -207,7 +207,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 						},
 					},
 					VolumeClaimTemplates: expectedPVCs,
-					ServiceName:          "cluster1-mysql",
+					ServiceName:          "ps-cluster1-mysql",
 				},
 			},
 		},
@@ -223,7 +223,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 			},
 			expectedStatefulSet: appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster1-mysql",
+					Name:      "ps-cluster1-mysql",
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
@@ -249,7 +249,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 							),
 						},
 					},
-					ServiceName: "cluster1-mysql",
+					ServiceName: "ps-cluster1-mysql",
 				},
 			},
 		},
@@ -265,7 +265,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 			},
 			expectedStatefulSet: appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster1-mysql",
+					Name:      "ps-cluster1-mysql",
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
@@ -291,7 +291,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 							),
 						},
 					},
-					ServiceName: "cluster1-mysql",
+					ServiceName: "ps-cluster1-mysql",
 				},
 			},
 		},
@@ -308,7 +308,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 			},
 			expectedStatefulSet: appsv1.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster1-mysql",
+					Name:      "ps-cluster1-mysql",
 					Namespace: "test-ns",
 				},
 				Spec: appsv1.StatefulSetSpec{
@@ -334,7 +334,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 							),
 						},
 					},
-					ServiceName: "cluster1-mysql",
+					ServiceName: "ps-cluster1-mysql",
 				},
 			},
 		},
@@ -344,7 +344,7 @@ func TestStatefulsetVolumes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cr := &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "cluster1",
+					Name:      "ps-cluster1",
 					Namespace: "test-ns",
 				},
 				Spec: apiv1.PerconaServerMySQLSpec{
@@ -395,7 +395,7 @@ func expectedVolumes() []corev1.Volume {
 			Name: "users",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: "internal-cluster1",
+					SecretName: "internal-ps-cluster1",
 				},
 			},
 		},
@@ -415,7 +415,7 @@ func expectedVolumes() []corev1.Volume {
 						{
 							ConfigMap: &corev1.ConfigMapProjection{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "cluster1-mysql",
+									Name: "ps-cluster1-mysql",
 								},
 								Items: []corev1.KeyToPath{
 									{
@@ -429,7 +429,7 @@ func expectedVolumes() []corev1.Volume {
 						{
 							ConfigMap: &corev1.ConfigMapProjection{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "auto-cluster1-mysql",
+									Name: "auto-ps-cluster1-mysql",
 								},
 								Items: []corev1.KeyToPath{
 									{
@@ -443,7 +443,7 @@ func expectedVolumes() []corev1.Volume {
 						{
 							Secret: &corev1.SecretProjection{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "cluster1-mysql",
+									Name: "ps-cluster1-mysql",
 								},
 								Items: []corev1.KeyToPath{
 									{
@@ -532,7 +532,6 @@ func TestPrimaryService_GroupReplication(t *testing.T) {
 
 			assert.Equal(t, "v1", service.APIVersion)
 			assert.Equal(t, "Service", service.Kind)
-			assert.Equal(t, PrimaryServiceName(cr), service.Name)
 			assert.Equal(t, "test-cluster-mysql-primary", service.Name)
 			assert.Equal(t, "test-namespace", service.Namespace)
 
@@ -544,7 +543,6 @@ func TestPrimaryService_GroupReplication(t *testing.T) {
 
 			expectedSelector := MatchLabels(cr)
 			expectedSelector[naming.LabelMySQLPrimary] = "true"
-			expectedSelector["custom-label"] = "custom-value"
 			assert.Equal(t, expectedSelector, service.Spec.Selector)
 
 			assert.Equal(t, cr.Spec.MySQL.ExposePrimary.Annotations, service.Annotations)
@@ -562,6 +560,97 @@ func TestPrimaryService_GroupReplication(t *testing.T) {
 			}
 
 			assert.Equal(t, cr.Spec.MySQL.ExposePrimary.InternalTrafficPolicy, service.Spec.InternalTrafficPolicy)
+		})
+	}
+}
+
+func TestPodService(t *testing.T) {
+	podName := "test-pod"
+
+	cr := &apiv1alpha1.PerconaServerMySQL{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "test-namespace",
+		},
+		Spec: apiv1alpha1.PerconaServerMySQLSpec{
+			MySQL: apiv1alpha1.MySQLSpec{
+				ClusterType: apiv1alpha1.ClusterTypeGR,
+				Expose: apiv1alpha1.ServiceExposeTogglable{
+					Enabled: true,
+					ServiceExpose: apiv1alpha1.ServiceExpose{
+						Type: corev1.ServiceTypeLoadBalancer,
+						Labels: map[string]string{
+							"custom-label": "custom-value",
+						},
+						Annotations: map[string]string{
+							"custom-annotation": "custom-annotation-value",
+						},
+						LoadBalancerSourceRanges: []string{"10.0.0.0/8"},
+					},
+				},
+			},
+		},
+	}
+
+	tests := map[string]struct {
+		serviceType                 corev1.ServiceType
+		expectLoadBalancer          bool
+		expectExternalTrafficPolicy bool
+	}{
+		"LoadBalancer service for GR": {
+			serviceType:                 corev1.ServiceTypeLoadBalancer,
+			expectLoadBalancer:          true,
+			expectExternalTrafficPolicy: true,
+		},
+		"NodePort service for GR": {
+			serviceType:                 corev1.ServiceTypeNodePort,
+			expectLoadBalancer:          false,
+			expectExternalTrafficPolicy: true,
+		},
+		"ClusterIP service for GR": {
+			serviceType:                 corev1.ServiceTypeClusterIP,
+			expectLoadBalancer:          false,
+			expectExternalTrafficPolicy: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr.Spec.MySQL.Expose.Type = tt.serviceType
+
+			service := PodService(cr, tt.serviceType, podName)
+
+			assert.Equal(t, "v1", service.APIVersion)
+			assert.Equal(t, "Service", service.Kind)
+			assert.Equal(t, podName, service.Name)
+			assert.Equal(t, "test-namespace", service.Namespace)
+
+			assert.Equal(t, tt.serviceType, service.Spec.Type)
+
+			expectedLabels := MatchLabels(cr)
+			expectedLabels["custom-label"] = "custom-value"
+			expectedLabels[naming.LabelExposed] = "true"
+			assert.Equal(t, expectedLabels, service.Labels)
+
+			expectedSelector := MatchLabels(cr)
+			expectedSelector["statefulset.kubernetes.io/pod-name"] = podName
+			assert.Equal(t, expectedSelector, service.Spec.Selector)
+
+			assert.Equal(t, cr.Spec.MySQL.Expose.Annotations, service.Annotations)
+
+			if tt.expectLoadBalancer {
+				assert.Equal(t, cr.Spec.MySQL.Expose.LoadBalancerSourceRanges, service.Spec.LoadBalancerSourceRanges)
+			} else {
+				assert.Empty(t, service.Spec.LoadBalancerSourceRanges)
+			}
+
+			if tt.expectExternalTrafficPolicy {
+				assert.Equal(t, cr.Spec.MySQL.Expose.ExternalTrafficPolicy, service.Spec.ExternalTrafficPolicy)
+			} else {
+				assert.Empty(t, service.Spec.ExternalTrafficPolicy)
+			}
+
+			assert.Equal(t, cr.Spec.MySQL.Expose.InternalTrafficPolicy, service.Spec.InternalTrafficPolicy)
 		})
 	}
 }

@@ -83,3 +83,20 @@ Topology:
 
 	return status
 }
+
+type ReplicaGtidState string
+
+const (
+	ReplicaGtidNew           ReplicaGtidState = "NEW"
+	ReplicaGtidIdentical     ReplicaGtidState = "IDENTICAL"
+	ReplicaGtidDiverged      ReplicaGtidState = "DIVERGED"
+	ReplicaGtidRecoverable   ReplicaGtidState = "RECOVERABLE"
+	ReplicaGtidIrrecoverable ReplicaGtidState = "IRRECOVERABLE"
+)
+
+type RecoveryMethod string
+
+const (
+	RecoveryClone       RecoveryMethod = "clone"
+	RecoveryIncremental RecoveryMethod = "incremental"
+)

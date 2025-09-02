@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"fmt"
@@ -13,14 +13,14 @@ import (
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	state "github.com/percona/percona-server-mysql-operator/cmd/internal/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
-func getFQDN(svcName string) (string, error) {
+func GetFQDN(svcName string) (string, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
 		return "", errors.Wrap(err, "get hostname")
@@ -34,7 +34,7 @@ func getFQDN(svcName string) (string, error) {
 	return fmt.Sprintf("%s.%s.%s", hostname, svcName, namespace), nil
 }
 
-func getReadTimeout() (uint32, error) {
+func GetReadTimeout() (uint32, error) {
 	s, ok := os.LookupEnv(naming.EnvBootstrapReadTimeout)
 	if !ok {
 		return 0, nil
@@ -50,7 +50,7 @@ func getReadTimeout() (uint32, error) {
 	return uint32(readTimeout), nil
 }
 
-func getSecret(username apiv1.SystemUser) (string, error) {
+func GetSecret(username apiv1alpha1.SystemUser) (string, error) {
 	path := filepath.Join(mysql.CredsMountPath, string(username))
 	sBytes, err := os.ReadFile(path)
 	if err != nil {
@@ -60,7 +60,7 @@ func getSecret(username apiv1.SystemUser) (string, error) {
 	return strings.TrimSpace(string(sBytes)), nil
 }
 
-func getPodIP(hostname string) (string, error) {
+func GetPodIP(hostname string) (string, error) {
 	addrs, err := net.LookupHost(hostname)
 	if err != nil {
 		return "", errors.Wrapf(err, "lookup %s", hostname)
@@ -70,7 +70,7 @@ func getPodIP(hostname string) (string, error) {
 	return addrs[0], nil
 }
 
-func lookup(svcName string) (sets.Set[string], error) {
+func Lookup(svcName string) (sets.Set[string], error) {
 	endpoints := sets.New[string]()
 	_, srvRecords, err := net.LookupSRV("", "", svcName)
 	if err != nil {
@@ -87,7 +87,29 @@ func lookup(svcName string) (sets.Set[string], error) {
 	return endpoints, nil
 }
 
-func lockExists(lockName string) (bool, error) {
+const (
+	noBootstrapFile      = "/var/lib/mysql/no-bootstrap"
+	manualRecoveryFile   = "/var/lib/mysql/sleep-forever"
+	fullClusterCrashFile = "/var/lib/mysql/full-cluster-crash"
+)
+
+func ManualRecoveryRequested() (bool, string) {
+	recoveryFiles := []string{
+		noBootstrapFile,
+		manualRecoveryFile,
+		fullClusterCrashFile,
+	}
+	for _, rFile := range recoveryFiles {
+		exists, err := fileExists(rFile)
+		if err == nil && exists {
+			return true, rFile
+		}
+	}
+
+	return false, ""
+}
+
+func LockExists(lockName string) (bool, error) {
 	return fileExists(fmt.Sprintf("/var/lib/mysql/%s.lock", lockName))
 }
 
@@ -102,9 +124,9 @@ func fileExists(name string) (bool, error) {
 	return true, nil
 }
 
-func waitLockRemoval(lockName string) error {
+func WaitLockRemoval(lockName string) error {
 	for {
-		exists, err := lockExists(lockName)
+		exists, err := LockExists(lockName)
 		if err != nil {
 			return err
 		}
@@ -115,7 +137,7 @@ func waitLockRemoval(lockName string) error {
 	}
 }
 
-func waitForMySQLReadyState() error {
+func WaitForMySQLReadyState() error {
 	stateFilePath, ok := os.LookupEnv(naming.EnvMySQLStateFile)
 	if !ok {
 		return errors.New("env var MYSQL_STATE_FILE is required")
@@ -145,4 +167,8 @@ func createFile(name, content string) error {
 	}
 
 	return nil
+}
+
+func CreateFullClusterCrashFile(gtidExecuted string) error {
+	return createFile(fullClusterCrashFile, gtidExecuted)
 }

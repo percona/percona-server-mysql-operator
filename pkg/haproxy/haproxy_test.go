@@ -3,6 +3,7 @@ package haproxy
 import (
 	"testing"
 
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -133,4 +134,192 @@ func TestStatefulset(t *testing.T) {
 		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
 		assert.Equal(t, tolerations, sts.Spec.Template.Spec.Tolerations)
 	})
+
+	t.Run("probes", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		cluster.Spec.CRVersion = "0.12.0"
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		var hContainer *corev1.Container
+		for _, c := range sts.Spec.Template.Spec.Containers {
+			if c.Name == AppName {
+				hContainer = &c
+			}
+		}
+		if hContainer == nil {
+			t.Fatal("haproxy container is not found")
+		}
+
+		expectedReadinessProbe := corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_readiness_check.sh"}},
+			},
+			InitialDelaySeconds: 15,
+			TimeoutSeconds:      1,
+			PeriodSeconds:       5,
+			SuccessThreshold:    1,
+			FailureThreshold:    3,
+		}
+		expectedLivenessProbe := corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_liveness_check.sh"}},
+			},
+			InitialDelaySeconds: 60,
+			TimeoutSeconds:      3,
+			PeriodSeconds:       30,
+			SuccessThreshold:    1,
+			FailureThreshold:    4,
+		}
+
+		assert.Equal(t, expectedReadinessProbe, *hContainer.ReadinessProbe)
+		assert.Equal(t, expectedLivenessProbe, *hContainer.LivenessProbe)
+
+		cluster.Spec.Proxy.HAProxy.ReadinessProbe = corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"invalid-command"},
+				},
+			},
+			InitialDelaySeconds:           10,
+			TimeoutSeconds:                20,
+			PeriodSeconds:                 30,
+			SuccessThreshold:              40,
+			FailureThreshold:              50,
+			TerminationGracePeriodSeconds: new(int64),
+		}
+		cluster.Spec.Proxy.HAProxy.LivenessProbe = corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"invalid-command"},
+				},
+			},
+			InitialDelaySeconds:           11,
+			TimeoutSeconds:                21,
+			PeriodSeconds:                 31,
+			SuccessThreshold:              41,
+			FailureThreshold:              51,
+			TerminationGracePeriodSeconds: new(int64),
+		}
+		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		for _, c := range sts.Spec.Template.Spec.Containers {
+			if c.Name == AppName {
+				hContainer = &c
+			}
+		}
+		if hContainer == nil {
+			t.Fatal("haproxy container is not found")
+		}
+
+		expectedReadinessProbe = corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_readiness_check.sh"}},
+			},
+			InitialDelaySeconds:           10,
+			TimeoutSeconds:                20,
+			PeriodSeconds:                 30,
+			SuccessThreshold:              40,
+			FailureThreshold:              50,
+			TerminationGracePeriodSeconds: new(int64),
+		}
+		expectedLivenessProbe = corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_liveness_check.sh"}},
+			},
+			InitialDelaySeconds:           11,
+			TimeoutSeconds:                21,
+			PeriodSeconds:                 31,
+			SuccessThreshold:              41,
+			FailureThreshold:              51,
+			TerminationGracePeriodSeconds: new(int64),
+		}
+
+		assert.Equal(t, expectedReadinessProbe, *hContainer.ReadinessProbe)
+		assert.Equal(t, expectedLivenessProbe, *hContainer.LivenessProbe)
+	})
+}
+
+func TestService(t *testing.T) {
+	podName := "test-cluster-haproxy"
+
+	cr := &apiv1alpha1.PerconaServerMySQL{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "test-namespace",
+		},
+		Spec: apiv1alpha1.PerconaServerMySQLSpec{
+			Proxy: apiv1alpha1.ProxySpec{
+				HAProxy: &apiv1alpha1.HAProxySpec{
+					Expose: apiv1alpha1.ServiceExpose{
+						Type: corev1.ServiceTypeLoadBalancer,
+						Labels: map[string]string{
+							"custom-label": "custom-value",
+						},
+						Annotations: map[string]string{
+							"custom-annotation": "custom-annotation-value",
+						},
+						LoadBalancerSourceRanges: []string{"10.0.0.0/8"},
+					},
+				},
+			},
+		},
+	}
+
+	tests := map[string]struct {
+		serviceType                 corev1.ServiceType
+		expectLoadBalancer          bool
+		expectExternalTrafficPolicy bool
+	}{
+		"LoadBalancer service": {
+			serviceType:                 corev1.ServiceTypeLoadBalancer,
+			expectLoadBalancer:          true,
+			expectExternalTrafficPolicy: true,
+		},
+		"NodePort service": {
+			serviceType:                 corev1.ServiceTypeNodePort,
+			expectLoadBalancer:          false,
+			expectExternalTrafficPolicy: true,
+		},
+		"ClusterIP service": {
+			serviceType:                 corev1.ServiceTypeClusterIP,
+			expectLoadBalancer:          false,
+			expectExternalTrafficPolicy: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr.Spec.Proxy.HAProxy.Expose.Type = tt.serviceType
+
+			service := Service(cr, nil)
+
+			assert.Equal(t, "v1", service.APIVersion)
+			assert.Equal(t, "Service", service.Kind)
+			assert.Equal(t, podName, service.Name)
+			assert.Equal(t, "test-namespace", service.Namespace)
+
+			assert.Equal(t, tt.serviceType, service.Spec.Type)
+
+			expectedLabels := MatchLabels(cr)
+			expectedLabels["custom-label"] = "custom-value"
+			assert.Equal(t, expectedLabels, service.Labels)
+
+			expectedSelector := MatchLabels(cr)
+			assert.Equal(t, expectedSelector, service.Spec.Selector)
+
+			assert.Equal(t, cr.Spec.Proxy.HAProxy.Expose.Annotations, service.Annotations)
+
+			if tt.expectLoadBalancer {
+				assert.Equal(t, cr.Spec.Proxy.HAProxy.Expose.LoadBalancerSourceRanges, service.Spec.LoadBalancerSourceRanges)
+			} else {
+				assert.Empty(t, service.Spec.LoadBalancerSourceRanges)
+			}
+
+			if tt.expectExternalTrafficPolicy {
+				assert.Equal(t, cr.Spec.Proxy.HAProxy.Expose.ExternalTrafficPolicy, service.Spec.ExternalTrafficPolicy)
+			} else {
+				assert.Empty(t, service.Spec.ExternalTrafficPolicy)
+			}
+
+			assert.Equal(t, cr.Spec.Proxy.HAProxy.Expose.InternalTrafficPolicy, service.Spec.InternalTrafficPolicy)
+		})
+	}
 }

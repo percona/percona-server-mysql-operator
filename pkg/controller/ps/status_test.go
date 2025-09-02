@@ -39,7 +39,7 @@ import (
 func TestReconcileStatusAsync(t *testing.T) {
 	ctx := context.Background()
 
-	cr, err := readDefaultCR("cluster1", "status-1")
+	cr, err := readDefaultCR("ps-cluster1", "status-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -405,7 +405,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 func TestReconcileStatusHAProxyGR(t *testing.T) {
 	ctx := context.Background()
 
-	cr, err := readDefaultCR("cluster1", "status-1")
+	cr, err := readDefaultCR("ps-cluster1", "status-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -674,7 +674,7 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 func TestReconcileStatusRouterGR(t *testing.T) {
 	ctx := context.Background()
 
-	cr, err := readDefaultCR("cluster1", "status-1")
+	cr, err := readDefaultCR("ps-cluster1", "status-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -943,7 +943,7 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 func TestReconcileErrorStatus(t *testing.T) {
 	ctx := context.Background()
 
-	cr, err := readDefaultCR("cluster1", "status-err")
+	cr, err := readDefaultCR("ps-cluster1", "status-err")
 	if err != nil {
 		t.Fatal(err)
 	}

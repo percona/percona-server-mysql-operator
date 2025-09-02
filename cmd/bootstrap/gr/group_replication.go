@@ -1,4 +1,4 @@
-package main
+package gr
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 
 	v "github.com/hashicorp/go-version"
@@ -19,7 +20,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/retry"
 
-	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -51,12 +53,12 @@ func (m *mysqlsh) compareVersionWith(ver string) int {
 }
 
 func (m *mysqlsh) getURI() string {
-	operatorPass, err := getSecret(apiv1.UserOperator)
+	operatorPass, err := utils.GetSecret(apiv1alpha1.UserOperator)
 	if err != nil {
 		return ""
 	}
 
-	return fmt.Sprintf("%s:%s@%s", apiv1.UserOperator, url.QueryEscape(operatorPass), m.host)
+	return fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, url.QueryEscape(operatorPass), m.host)
 }
 
 func (m *mysqlsh) run(ctx context.Context, cmd string) (bytes.Buffer, bytes.Buffer, error) {
@@ -121,7 +123,7 @@ type SQLResult struct {
 func (m *mysqlsh) runSQL(ctx context.Context, sql string) (SQLResult, error) {
 	var stdoutb, stderrb bytes.Buffer
 
-	cmd := fmt.Sprintf("session.runSql('%s')", sql)
+	cmd := fmt.Sprintf("session.runSql(\"%s\")", sql)
 	args := []string{"--uri", m.getURI(), "--js", "--json=raw", "--interactive", "--quiet-start", "2", "-e", cmd}
 
 	c := exec.CommandContext(ctx, "mysqlsh", args...)
@@ -135,7 +137,7 @@ func (m *mysqlsh) runSQL(ctx context.Context, sql string) (SQLResult, error) {
 	}
 
 	if err := json.Unmarshal(stdoutb.Bytes(), &result); err != nil {
-		return result, errors.Wrap(err, "unmarshal result")
+		return result, errors.Wrapf(err, "unmarshal result %s", stdoutb.String())
 	}
 
 	if len(result.Error) > 0 {
@@ -151,7 +153,26 @@ func (m *mysqlsh) getGTIDExecuted(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	return result.Rows[0]["@@GTID_EXECUTED"], nil
+	v, ok := result.Rows[0]["@@GTID_EXECUTED"]
+	if !ok {
+		return "", errors.Errorf("unexpected output: %+v", result)
+	}
+
+	return v, nil
+}
+
+func (m *mysqlsh) getGTIDPurged(ctx context.Context) (string, error) {
+	result, err := m.runSQL(ctx, "SELECT @@GTID_PURGED")
+	if err != nil {
+		return "", err
+	}
+
+	v, ok := result.Rows[0]["@@GTID_PURGED"]
+	if !ok {
+		return "", errors.Errorf("unexpected output: %+v", result)
+	}
+
+	return v, nil
 }
 
 func (m *mysqlsh) getGroupSeeds(ctx context.Context) (string, error) {
@@ -160,53 +181,64 @@ func (m *mysqlsh) getGroupSeeds(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	return result.Rows[0]["@@group_replication_group_seeds"], nil
-}
-
-func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) (string, error) {
-	sql := fmt.Sprintf("SET PERSIST group_replication_group_seeds = \"%s\"", seeds)
-	_, err := m.runSQL(ctx, sql)
-	if err != nil {
-		return "", err
+	v, ok := result.Rows[0]["@@group_replication_group_seeds"]
+	if !ok {
+		return "", errors.Errorf("unexpected output: %+v", result)
 	}
 
-	return "", nil
+	return v, nil
+}
+
+func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) error {
+	sql := fmt.Sprintf("SET PERSIST group_replication_group_seeds = '%s'", seeds)
+
+	_, err := m.runSQL(ctx, sql)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func updateGroupPeers(ctx context.Context, peers sets.Set[string], version *v.Version) error {
-	fqdn, err := getFQDN(os.Getenv("SERVICE_NAME"))
-	if err != nil {
-		return errors.Wrap(err, "get FQDN")
+	log.Printf("Updating group seeds in peers: %v", peers)
+
+	seedList := make([]string, 0)
+	for _, peer := range peers.UnsortedList() {
+		seedList = append(seedList, fmt.Sprintf("%s:%d", peer, 3306))
 	}
 
+	slices.SortFunc(seedList, func(a, b string) int {
+		return strings.Compare(a, b)
+	})
+
 	for _, peer := range peers.UnsortedList() {
-		log.Printf("Connecting to peer %s", peer)
 		sh := newShell(peer, version)
 
-		seeds, err := sh.getGroupSeeds(ctx)
-		if err != nil {
-			log.Printf("ERROR: get @@group_replication_group_seeds from %s: %s", peer, err)
-			continue
-		}
-
-		log.Printf("Got group_replication_group_seeds from peer %s = %s", peer, seeds)
+		log.Printf("Connected to peer %s", peer)
 
 		tmpSeeds := make([]string, 0)
-		if len(seeds) > 0 {
-			tmpSeeds = strings.Split(seeds, ",")
+		for _, seed := range seedList {
+			// peer shouldn't have its own host as seed
+			if seed == fmt.Sprintf("%s:%d", peer, 3306) {
+				continue
+			}
+			tmpSeeds = append(tmpSeeds, seed)
 		}
-		seedSet := sets.New(tmpSeeds...)
-		seedSet.Insert(fmt.Sprintf("%s:%d", fqdn, 33061))
 
-		seeds = strings.Join(sets.List(seedSet), ",")
-
-		_, err = sh.setGroupSeeds(ctx, seeds)
-		if err != nil {
-			log.Printf("ERROR: set @@group_replication_group_seeds in %s: %s", peer, err)
+		seeds := strings.Join(tmpSeeds, ",")
+		if seeds == "" {
+			log.Printf("seeds are empty")
 			continue
 		}
 
-		log.Printf("Set group_replication_group_seeds in peer %s = %s", peer, seeds)
+		if err := sh.setGroupSeeds(ctx, seeds); err != nil {
+			log.Printf("ERROR: failed to set @@group_replication_group_seeds in %s: %s", peer, err)
+			continue
+		}
+
+		log.Printf("Seeds: %s", seeds)
+		log.Printf("Updated group_replication_group_seeds in peer %s", peer)
 	}
 
 	return nil
@@ -239,20 +271,22 @@ func (m *mysqlsh) createCluster(ctx context.Context) error {
 	return nil
 }
 
-func (m *mysqlsh) addInstance(ctx context.Context, instanceDef string) error {
+func (m *mysqlsh) addInstance(ctx context.Context, instanceDef string, method innodbcluster.RecoveryMethod) error {
 	var cmd string
 
 	if m.compareVersionWith("8.4") >= 0 {
 		cmd = fmt.Sprintf(
-			"dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'recoveryProgress': 2})",
+			"dba.getCluster('%s').addInstance('%s', {'recoveryMethod': '%s', 'recoveryProgress': 1})",
 			m.clusterName,
 			instanceDef,
+			method,
 		)
 	} else {
 		cmd = fmt.Sprintf(
-			"dba.getCluster('%s').addInstance('%s', {'recoveryMethod': 'clone', 'waitRecovery': 3})",
+			"dba.getCluster('%s').addInstance('%s', {'recoveryMethod': '%s', 'waitRecovery': 2})",
 			m.clusterName,
 			instanceDef,
+			method,
 		)
 	}
 
@@ -288,7 +322,7 @@ func (m *mysqlsh) removeInstance(ctx context.Context, instanceDef string, force 
 }
 
 func connectToLocal(ctx context.Context, version *v.Version) (*mysqlsh, error) {
-	fqdn, err := getFQDN(os.Getenv("SERVICE_NAME"))
+	fqdn, err := utils.GetFQDN(os.Getenv("SERVICE_NAME"))
 	if err != nil {
 		return nil, errors.Wrap(err, "get FQDN")
 	}
@@ -325,7 +359,7 @@ func handleFullClusterCrash(ctx context.Context, version *v.Version) error {
 	gtidExecuted := strings.ReplaceAll(result, "\n", "")
 	log.Printf("GTID_EXECUTED: %s", gtidExecuted)
 
-	if err := createFile(fullClusterCrashFile, gtidExecuted); err != nil {
+	if err := utils.CreateFullClusterCrashFile(gtidExecuted); err != nil {
 		return err
 	}
 
@@ -361,7 +395,7 @@ func getMySQLShellVersion(ctx context.Context) (*v.Version, error) {
 	return version, nil
 }
 
-func bootstrapGroupReplication(ctx context.Context) error {
+func Bootstrap(ctx context.Context) error {
 	timer := stopwatch.NewNamedStopwatch()
 	err := timer.Add("total")
 	if err != nil {
@@ -393,7 +427,7 @@ func bootstrapGroupReplication(ctx context.Context) error {
 	}
 	log.Printf("Instance (%s) configured to join to the InnoDB cluster", localShell.host)
 
-	peers, err := lookup(os.Getenv("SERVICE_NAME"))
+	peers, err := utils.Lookup(os.Getenv("SERVICE_NAME"))
 	if err != nil {
 		return errors.Wrap(err, "lookup")
 	}
@@ -444,24 +478,34 @@ func bootstrapGroupReplication(ctx context.Context) error {
 
 	log.Printf("Cluster status:\n%s", status)
 
+	var primary string
 	for _, member := range status.DefaultReplicaSet.Topology {
-		if member.MemberRole == innodbcluster.MemberRolePrimary && member.MemberState != innodbcluster.MemberStateOnline {
-			log.Printf("Primary (%s) is not ONLINE. Starting full cluster crash recovery...", member.Address)
+		if member.MemberRole == innodbcluster.MemberRolePrimary {
+			primary = member.Address
+			if member.MemberState != innodbcluster.MemberStateOnline {
+				log.Printf("Primary (%s) is not ONLINE. Starting full cluster crash recovery...", member.Address)
 
-			if err := handleFullClusterCrash(ctx, mysqlshVer); err != nil {
-				return errors.Wrap(err, "handle full cluster crash")
+				if err := handleFullClusterCrash(ctx, mysqlshVer); err != nil {
+					return errors.Wrap(err, "handle full cluster crash")
+				}
+
+				// force restart container
+				os.Exit(1)
 			}
-
-			// force restart container
-			os.Exit(1)
 		}
 	}
+	log.Printf("Primary is %s", primary)
 
 	member, ok := status.DefaultReplicaSet.Topology[fmt.Sprintf("%s:%d", localShell.host, 3306)]
 	if !ok {
-		log.Printf("Adding instance (%s) to InnoDB cluster", localShell.host)
+		recoveryMethod, err := getRecoveryMethod(ctx, newShell(primary, mysqlshVer), localShell)
+		if err != nil {
+			return err
+		}
 
-		if err := shell.addInstance(ctx, localShell.getURI()); err != nil {
+		log.Printf("Adding instance (%s) to InnoDB cluster using %s recovery", localShell.host, recoveryMethod)
+
+		if err := shell.addInstance(ctx, localShell.getURI(), recoveryMethod); err != nil {
 			return err
 		}
 
@@ -501,8 +545,6 @@ func bootstrapGroupReplication(ctx context.Context) error {
 	case innodbcluster.MemberStateUnreachable:
 		log.Printf("Instance (%s) is in InnoDB Cluster but its state is %s", localShell.host, member.MemberState)
 		os.Exit(1)
-	default:
-		log.Printf("Instance (%s) state is %s", localShell.host, member.MemberState)
 	}
 
 	if err := updateGroupPeers(ctx, peers, mysqlshVer); err != nil {

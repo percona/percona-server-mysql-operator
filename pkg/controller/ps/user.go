@@ -26,6 +26,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
 var ErrPassNotPropagated = errors.New("password not yet propagated")
@@ -78,7 +79,8 @@ func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr
 	}
 	userSecret.Name = cr.Spec.SecretsName
 	userSecret.Namespace = cr.Namespace
-	userSecret.Labels = mysql.MatchLabels(cr)
+	userSecret.Labels = util.SSMapMerge(cr.GlobalLabels(), mysql.MatchLabels(cr))
+	userSecret.Annotations = util.SSMapMerge(cr.GlobalAnnotations())
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, nil, userSecret, r.Scheme); err != nil {
 		return errors.Wrap(err, "ensure user secret")
 	}
@@ -109,9 +111,10 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	if k8serrors.IsNotFound(err) {
 		secret.DeepCopyInto(internalSecret)
 		internalSecret.ObjectMeta = metav1.ObjectMeta{
-			Name:      cr.InternalSecretName(),
-			Namespace: cr.Namespace,
-			Labels:    mysql.MatchLabels(cr),
+			Name:        cr.InternalSecretName(),
+			Namespace:   cr.Namespace,
+			Labels:      util.SSMapMerge(cr.GlobalLabels(), mysql.MatchLabels(cr)),
+			Annotations: cr.GlobalAnnotations(),
 		}
 
 		if err = r.Client.Create(ctx, internalSecret); err != nil {

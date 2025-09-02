@@ -85,6 +85,29 @@ spec:
             value: --query-source=perfschema
           - name: PMM_ADMIN_CUSTOM_PARAMS
             value: --disable-tablestats-limit=2000
+        lifecycle:
+          preStop:
+            exec:
+              command:
+                - bash
+                - -c
+                - pmm-admin unregister --force
+        livenessProbe:
+          httpGet:
+            path: /local/Status
+            port: 7777
+            scheme: HTTP
+          initialDelaySeconds: 15
+          timeoutSeconds: 15
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 5
+        readinessProbe:
+          initialDelaySeconds: 15
+          timeoutSeconds: 15
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 5
 status:
   observedGeneration: 1
   replicas: 3

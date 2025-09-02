@@ -34,8 +34,12 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/restmapper"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -676,6 +680,166 @@ var _ = Describe("CR validations", Ordered, func() {
 				Expect(createErr.Error()).To(ContainSubstring("For 'group replication', scaling MySQL replicas above 9 requires 'unsafeFlags.mysqlSize: true'"))
 			})
 		})
+
+		When("group-replication cluster type with no proxy enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-10", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.Proxy.Router.Enabled = false
+			cr.Spec.Proxy.HAProxy.Enabled = false
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("Invalid configuration: For 'group replication', MySQL Router or HAProxy must be enabled unless 'unsafeFlags.proxy' is enabled"))
+			})
+		})
+
+		When("group-replication cluster type with no proxy enabled but unsafe flag enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-11", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.Proxy.Router.Enabled = false
+			cr.Spec.Proxy.HAProxy.Enabled = false
+			cr.Spec.Unsafe.Proxy = true
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("group-replication cluster type with router size less than 2", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-12", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.Proxy.Router.Enabled = true
+			cr.Spec.Proxy.Router.Size = 1
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("Invalid configuration: For 'group replication', Router size must be 2 or greater unless 'unsafeFlags.proxySize' is enabled"))
+			})
+		})
+
+		When("group-replication cluster type with router size less than 2 but unsafe flag enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-13", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.Proxy.Router.Enabled = true
+			cr.Spec.Proxy.Router.Size = 1
+			cr.Spec.Unsafe.ProxySize = true
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("group-replication cluster type with mysql size less than 3", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-14", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.MySQL.Size = 2
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("Invalid configuration: For 'group replication', MySQL size must be 3 or greater unless 'unsafeFlags.mysqlSize' is enabled"))
+			})
+		})
+
+		When("group-replication cluster type with mysql size less than 3 but unsafe flag enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-15", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.MySQL.Size = 2
+			cr.Spec.Unsafe.MySQLSize = true
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("async cluster type with orchestrator size less than 3", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-16", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.Orchestrator.Size = 2
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("Invalid configuration: For 'async' replication, Orchestrator size must be 3 or greater and odd unless 'unsafeFlags.orchestratorSize' is enabled"))
+			})
+		})
+
+		When("async cluster type with orchestrator size even number", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-17", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.Orchestrator.Size = 4
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("Invalid configuration: For 'async' replication, Orchestrator size must be 3 or greater and odd unless 'unsafeFlags.orchestratorSize' is enabled"))
+			})
+		})
+
+		When("async cluster type with orchestrator size less than 3 but unsafe flag enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-18", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.Orchestrator.Size = 2
+			cr.Spec.Unsafe.OrchestratorSize = true
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("async cluster type with orchestrator size even number but unsafe flag enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-19", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.Orchestrator.Size = 4
+			cr.Spec.Unsafe.OrchestratorSize = true
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("async cluster type with SmartUpdate but orchestrator disabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-20", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = psv1alpha1.SmartUpdateStatefulSetStrategyType
+			cr.Spec.Orchestrator.Enabled = false
+			cr.Spec.Unsafe.Proxy = true
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"))
+			})
+		})
+
+		When("async cluster type with SmartUpdate and orchestrator enabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-21", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = psv1alpha1.SmartUpdateStatefulSetStrategyType
+			cr.Spec.Orchestrator.Enabled = true
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
 	})
 })
 
@@ -991,7 +1155,7 @@ var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 		cr.Finalizers = append(cr.Finalizers, naming.FinalizerDeleteMySQLPvc)
-		cr.Spec.SecretsName = "cluster1-secrets"
+		cr.Spec.SecretsName = "ps-cluster1-secrets"
 
 		sfsWithOwner := appsv1.StatefulSet{}
 		// stsApp := statefulset.NewNode(cr)
@@ -1226,6 +1390,189 @@ var _ = Describe("Primary mysql service", Ordered, func() {
 			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/name", "mysql"))
 			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("app.kubernetes.io/part-of", "percona-server"))
 			Expect(svc.Spec.Selector).Should(HaveKeyWithValue("mysql.percona.com/primary", "true"))
+		})
+	})
+})
+
+var _ = Describe("Global labels and annotations", Ordered, func() {
+	ctx := context.Background()
+
+	const crName = "global-labels-annotations"
+	const ns = "gr-" + crName
+	const asyncNS = "async-" + crName
+	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
+	asyncCrNamespacedName := types.NamespacedName{Name: crName, Namespace: asyncNS}
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ns,
+			Namespace: ns,
+		},
+	}
+
+	asyncNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      asyncNS,
+			Namespace: asyncNS,
+		},
+	}
+
+	BeforeAll(func() {
+		By("Creating the Namespace to perform the tests")
+		err := k8sClient.Create(ctx, namespace)
+		Expect(err).To(Not(HaveOccurred()))
+
+		err = k8sClient.Create(ctx, asyncNamespace)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterAll(func() {
+		By("Deleting the Namespace to perform the tests")
+		_ = k8sClient.Delete(ctx, namespace)
+		_ = k8sClient.Delete(ctx, asyncNamespace)
+	})
+
+	Context("Check labels/annotations on gr cluster type", Ordered, func() {
+		cr, err := readDefaultCR(crName, ns)
+
+		It("Should read default cr.yaml", func() {
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.Metadata = &psv1alpha1.Metadata{
+				Labels: map[string]string{
+					"test-label": "test-value",
+				},
+				Annotations: map[string]string{
+					"test-annotation": "test-value",
+				},
+			}
+		})
+
+		It("Should create cluster", func() {
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+		})
+
+		It("Should reconcile once", func() {
+			_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should check all objects", func() {
+			dyn, err := dynamic.NewForConfig(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			disc, err := discovery.NewDiscoveryClientForConfig(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			gr, err := restmapper.GetAPIGroupResources(disc)
+			Expect(err).NotTo(HaveOccurred())
+
+			for _, list := range gr {
+				for version, resources := range list.VersionedResources {
+					for _, r := range resources {
+						// Skip subresources (like pods/status)
+						if strings.Contains(r.Name, "/") {
+							continue
+						}
+						if !r.Namespaced {
+							continue
+						}
+
+						gv, err := schema.ParseGroupVersion(version)
+						if err != nil {
+							continue
+						}
+						gvr := gv.WithResource(r.Name)
+
+						resList, err := dyn.Resource(gvr).Namespace(ns).List(ctx, metav1.ListOptions{})
+						if err != nil {
+							continue // some resources may not be listable
+						}
+						for _, item := range resList.Items {
+							objectWithMissingMetadata := ""
+							_, kind := item.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
+							if item.GetLabels()["test-label"] != "test-value" || item.GetAnnotations()["test-annotation"] != "test-value" {
+								objectWithMissingMetadata = item.GetName() + "/" + kind
+							}
+							Expect(objectWithMissingMetadata).To(BeEmpty())
+						}
+					}
+				}
+			}
+		})
+	})
+
+	Context("Check labels/annotations on gr cluster type", Ordered, func() {
+		ns := asyncNS
+		cr, err := readDefaultCR("async-cluster", ns)
+
+		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+		cr.Spec.Orchestrator.Enabled = true
+		cr.Spec.Metadata = &psv1alpha1.Metadata{
+			Labels: map[string]string{
+				"test-label": "test-value",
+			},
+			Annotations: map[string]string{
+				"test-annotation": "test-value",
+			},
+		}
+
+		It("Should read default cr.yaml", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should create async cluster", func() {
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+		})
+
+		It("Should reconcile once to create user secret", func() {
+			_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: asyncCrNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should check all objects", func() {
+			dyn, err := dynamic.NewForConfig(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			disc, err := discovery.NewDiscoveryClientForConfig(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			gr, err := restmapper.GetAPIGroupResources(disc)
+			Expect(err).NotTo(HaveOccurred())
+
+			for _, list := range gr {
+				for version, resources := range list.VersionedResources {
+					for _, r := range resources {
+						// Skip subresources (like pods/status)
+						if strings.Contains(r.Name, "/") {
+							continue
+						}
+						if !r.Namespaced {
+							continue
+						}
+
+						gv, err := schema.ParseGroupVersion(version)
+						if err != nil {
+							continue
+						}
+						gvr := gv.WithResource(r.Name)
+
+						resList, err := dyn.Resource(gvr).Namespace(ns).List(ctx, metav1.ListOptions{})
+						if err != nil {
+							continue // some resources may not be listable
+						}
+						for _, item := range resList.Items {
+							objectWithMissingMetadata := ""
+							_, kind := item.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
+							if item.GetLabels()["test-label"] != "test-value" || item.GetAnnotations()["test-annotation"] != "test-value" {
+								objectWithMissingMetadata = item.GetName() + "/" + kind
+							}
+							Expect(objectWithMissingMetadata).To(BeEmpty())
+						}
+					}
+				}
+			}
 		})
 	})
 })

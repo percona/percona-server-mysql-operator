@@ -76,6 +76,8 @@ spec:
           value: /var/lib/mysql/notify.sock
         - name: MYSQL_STATE_FILE
           value: /var/lib/mysql/mysql.state
+        - name: KEYRING_VAULT_PATH
+          value: /etc/mysql/vault-keyring-secret/keyring_vault.cnf
         imagePullPolicy: Always
         livenessProbe:
           exec:

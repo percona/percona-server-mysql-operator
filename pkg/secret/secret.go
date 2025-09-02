@@ -14,6 +14,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/tls"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
 func GenerateCertsSecret(ctx context.Context, cr *apiv1.PerconaServerMySQL) (*corev1.Secret, error) {
@@ -24,9 +25,10 @@ func GenerateCertsSecret(ctx context.Context, cr *apiv1.PerconaServerMySQL) (*co
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Spec.SSLSecretName,
-			Namespace: cr.Namespace,
-			Labels:    cr.Labels("certificate", naming.ComponentTLS),
+			Name:        cr.Spec.SSLSecretName,
+			Namespace:   cr.Namespace,
+			Labels:      util.SSMapMerge(cr.GlobalLabels(), cr.Labels("certificate", naming.ComponentTLS)),
+			Annotations: cr.GlobalAnnotations(),
 		},
 		Data: map[string][]byte{
 			"ca.crt":  ca,

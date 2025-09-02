@@ -39,6 +39,7 @@ import (
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
@@ -56,14 +57,19 @@ const (
 // +kubebuilder:validation:XValidation:rule="!(has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize",message="Invalid configuration: Scaling MySQL replicas below 3 requires 'unsafeFlags.mysqlSize: true'"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size >= 9) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', scaling MySQL replicas above 9 requires 'unsafeFlags.mysqlSize: true'"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size % 2 == 0) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', using an even number of MySQL replicas requires 'unsafeFlags.mysqlSize: true'"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication') || self.unsafeFlags.proxy || self.proxy.router.enabled || self.proxy.haproxy.enabled",message="Invalid configuration: For 'group replication', MySQL Router or HAProxy must be enabled unless 'unsafeFlags.proxy' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && self.proxy.router.enabled && has(self.proxy.router.size) && self.proxy.router.size < 2) || self.unsafeFlags.proxySize",message="Invalid configuration: For 'group replication', Router size must be 2 or greater unless 'unsafeFlags.proxySize' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', MySQL size must be 3 or greater unless 'unsafeFlags.mysqlSize' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && has(self.orchestrator.size) && (self.orchestrator.size < 3 || self.orchestrator.size % 2 == 0) && self.orchestrator.size > 0) || self.unsafeFlags.orchestratorSize",message="Invalid configuration: For 'async' replication, Orchestrator size must be 3 or greater and odd unless 'unsafeFlags.orchestratorSize' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && self.updateStrategy == 'SmartUpdate') || self.orchestrator.enabled",message="Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"
 type PerconaServerMySQLSpec struct {
+	Metadata               *Metadata                            `json:"metadata,omitempty"`
 	CRVersion              string                               `json:"crVersion,omitempty"`
 	Pause                  bool                                 `json:"pause,omitempty"`
 	VolumeExpansionEnabled bool                                 `json:"enableVolumeExpansion,omitempty"`
 	SecretsName            string                               `json:"secretsName,omitempty"`
 	SSLSecretName          string                               `json:"sslSecretName,omitempty"`
 	Unsafe                 UnsafeFlags                          `json:"unsafeFlags,omitempty"`
-	InitImage              string                               `json:"initImage,omitempty"`
 	IgnoreAnnotations      []string                             `json:"ignoreAnnotations,omitempty"`
 	IgnoreLabels           []string                             `json:"ignoreLabels,omitempty"`
 	MySQL                  MySQLSpec                            `json:"mysql,omitempty"`
@@ -75,6 +81,16 @@ type PerconaServerMySQLSpec struct {
 	Toolkit                *ToolkitSpec                         `json:"toolkit,omitempty"`
 	UpgradeOptions         UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	UpdateStrategy         appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+
+	// Deprecated: not supported since v0.12.0. Use initContainer instead
+	InitImage     string            `json:"initImage,omitempty"`
+	InitContainer InitContainerSpec `json:"initContainer,omitempty"`
+}
+
+type InitContainerSpec struct {
+	Image                    string                       `json:"image,omitempty"`
+	Resources                *corev1.ResourceRequirements `json:"resources,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
 }
 
 type UnsafeFlags struct {
@@ -178,7 +194,10 @@ type PodSpec struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	VolumeSpec  *VolumeSpec       `json:"volumeSpec,omitempty"`
-	InitImage   string            `json:"initImage,omitempty"`
+
+	// Deprecated: not supported since v0.12.0. Use initContainer instead
+	InitImage     string             `json:"initImage,omitempty"`
+	InitContainer *InitContainerSpec `json:"initContainer,omitempty"`
 
 	Affinity                      *PodAffinity                      `json:"affinity,omitempty"`
 	TopologySpreadConstraints     []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
@@ -198,6 +217,22 @@ type PodSpec struct {
 	ContainerSpec `json:",inline"`
 }
 
+type Metadata struct {
+	// Map of string keys and values that can be used to organize and categorize
+	// (scope and select) objects. May match selectors of replication controllers
+	// and services.
+	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels
+	// +optional
+	Labels map[string]string `json:"labels,omitempty" protobuf:"bytes,11,rep,name=labels"`
+
+	// Annotations is an unstructured key value map stored with a resource that may be
+	// set by external tools to store and retrieve arbitrary metadata. They are not
+	// queryable and should be preserved when modifying objects.
+	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty" protobuf:"bytes,12,rep,name=annotations"`
+}
+
 // GetTerminationGracePeriodSeconds returns the configured termination grace period for the Pod.
 // If not explicitly set, it returns the default grace period.
 func (s PodSpec) GetTerminationGracePeriodSeconds() *int64 {
@@ -208,9 +243,16 @@ func (s PodSpec) GetTerminationGracePeriodSeconds() *int64 {
 	return &gp
 }
 
-// Retrieves the initialization image for the pod.
-func (s *PodSpec) GetInitImage() string {
-	return s.InitImage
+func (s *PodSpec) GetInitSpec(cr *PerconaServerMySQL) InitContainerSpec {
+	if s.InitContainer == nil {
+		if cr.CompareVersion("0.12.0") < 0 {
+			return InitContainerSpec{
+				Image: s.InitImage,
+			}
+		}
+		return InitContainerSpec{}
+	}
+	return *s.InitContainer
 }
 
 type PMMSpec struct {
@@ -221,12 +263,14 @@ type PMMSpec struct {
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
+	LivenessProbes           *corev1.Probe               `json:"livenessProbes,omitempty"`
+	ReadinessProbes          *corev1.Probe               `json:"readinessProbes,omitempty"`
 }
 
 type BackupSpec struct {
 	Enabled                  bool                          `json:"enabled,omitempty"`
+	SourceHost               string                        `json:"sourceHost,omitempty"`
 	Image                    string                        `json:"image"`
-	InitImage                string                        `json:"initImage,omitempty"`
 	ImagePullSecrets         []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
 	ServiceAccountName       string                        `json:"serviceAccountName,omitempty"`
@@ -236,6 +280,10 @@ type BackupSpec struct {
 	BackoffLimit             *int32                        `json:"backoffLimit,omitempty"`
 	PiTR                     PiTRSpec                      `json:"pitr,omitempty"`
 	Schedule                 []BackupSchedule              `json:"schedule,omitempty"`
+
+	// Deprecated: not supported since v0.12.0. Use initContainer instead
+	InitImage     string             `json:"initImage,omitempty"`
+	InitContainer *InitContainerSpec `json:"initContainer,omitempty"`
 }
 
 type BackupSchedule struct {
@@ -248,9 +296,16 @@ type BackupSchedule struct {
 	StorageName string `json:"storageName,omitempty"`
 }
 
-// Retrieves the initialization image for the backup.
-func (s *BackupSpec) GetInitImage() string {
-	return s.InitImage
+func (s *BackupSpec) GetInitSpec(cr *PerconaServerMySQL) InitContainerSpec {
+	if s.InitContainer == nil {
+		if cr.CompareVersion("0.12.0") < 0 {
+			return InitContainerSpec{
+				Image: s.InitImage,
+			}
+		}
+		return InitContainerSpec{}
+	}
+	return *s.InitContainer
 }
 
 type BackupStorageType string
@@ -280,6 +335,62 @@ type BackupStorageSpec struct {
 	ContainerSecurityContext  *corev1.SecurityContext           `json:"containerSecurityContext,omitempty"`
 	RuntimeClassName          *string                           `json:"runtimeClassName,omitempty"`
 	VerifyTLS                 *bool                             `json:"verifyTLS,omitempty"`
+	ContainerOptions          *BackupContainerOptions           `json:"containerOptions,omitempty"`
+}
+
+type BackupContainerOptions struct {
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+	// +optional
+	Args BackupContainerArgs `json:"args"`
+}
+
+func (b *BackupContainerOptions) GetEnv() []corev1.EnvVar {
+	if b == nil {
+		return nil
+	}
+	return util.MergeEnvLists(b.Env, b.Args.Env())
+}
+
+func (b *BackupContainerOptions) GetEnvVar(storage *BackupStorageSpec) []corev1.EnvVar {
+	if b != nil {
+		return b.GetEnv()
+	}
+
+	if storage == nil || storage.ContainerOptions == nil {
+		return nil
+	}
+
+	return storage.ContainerOptions.GetEnv()
+}
+
+type BackupContainerArgs struct {
+	Xtrabackup []string `json:"xtrabackup,omitempty"`
+	Xbcloud    []string `json:"xbcloud,omitempty"`
+	Xbstream   []string `json:"xbstream,omitempty"`
+}
+
+func (b *BackupContainerArgs) Env() []corev1.EnvVar {
+	envs := []corev1.EnvVar{}
+	if len(b.Xtrabackup) > 0 {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "XB_EXTRA_ARGS",
+			Value: strings.Join(b.Xtrabackup, " "),
+		})
+	}
+	if len(b.Xbcloud) > 0 {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "XBCLOUD_EXTRA_ARGS",
+			Value: strings.Join(b.Xbcloud, " "),
+		})
+	}
+	if len(b.Xbstream) > 0 {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "XBSTREAM_EXTRA_ARGS",
+			Value: strings.Join(b.Xbstream, " "),
+		})
+	}
+	return envs
 }
 
 type BackupStorageS3Spec struct {
@@ -473,7 +584,7 @@ type ServiceExpose struct {
 	ExternalTrafficPolicy    corev1.ServiceExternalTrafficPolicyType  `json:"externalTrafficPolicy,omitempty"`
 }
 
-// Determines if both annotations and labels of the service expose are empty.
+// SaveOldMeta determines if both annotations and labels of the service expose are empty.
 func (e *ServiceExpose) SaveOldMeta() bool {
 	return len(e.Annotations) == 0 && len(e.Labels) == 0
 }
@@ -593,6 +704,22 @@ func (cr *PerconaServerMySQL) SetVersion() {
 	}
 
 	cr.Spec.CRVersion = version.Version()
+}
+
+func (cr *PerconaServerMySQL) GlobalLabels() map[string]string {
+	if cr.Spec.Metadata == nil {
+		return nil
+	}
+
+	return cr.Spec.Metadata.Labels
+}
+
+func (cr *PerconaServerMySQL) GlobalAnnotations() map[string]string {
+	if cr.Spec.Metadata == nil {
+		return nil
+	}
+
+	return cr.Spec.Metadata.Annotations
 }
 
 func (cr *PerconaServerMySQL) Version() *v.Version {
@@ -728,30 +855,36 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.Proxy.HAProxy = new(HAProxySpec)
 	}
 
-	if cr.Spec.Proxy.HAProxy.LivenessProbe.PeriodSeconds == 0 {
-		cr.Spec.Proxy.HAProxy.LivenessProbe.PeriodSeconds = 5
-	}
-	if cr.Spec.Proxy.HAProxy.LivenessProbe.FailureThreshold == 0 {
-		cr.Spec.Proxy.HAProxy.LivenessProbe.FailureThreshold = 3
-	}
-	if cr.Spec.Proxy.HAProxy.LivenessProbe.SuccessThreshold == 0 {
-		cr.Spec.Proxy.HAProxy.LivenessProbe.SuccessThreshold = 1
+	if cr.Spec.Proxy.HAProxy.LivenessProbe.InitialDelaySeconds == 0 {
+		cr.Spec.Proxy.HAProxy.LivenessProbe.InitialDelaySeconds = 60
 	}
 	if cr.Spec.Proxy.HAProxy.LivenessProbe.TimeoutSeconds == 0 {
 		cr.Spec.Proxy.HAProxy.LivenessProbe.TimeoutSeconds = 3
 	}
+	if cr.Spec.Proxy.HAProxy.LivenessProbe.PeriodSeconds == 0 {
+		cr.Spec.Proxy.HAProxy.LivenessProbe.PeriodSeconds = 30
+	}
+	if cr.Spec.Proxy.HAProxy.LivenessProbe.SuccessThreshold == 0 {
+		cr.Spec.Proxy.HAProxy.LivenessProbe.SuccessThreshold = 1
+	}
+	if cr.Spec.Proxy.HAProxy.LivenessProbe.FailureThreshold == 0 {
+		cr.Spec.Proxy.HAProxy.LivenessProbe.FailureThreshold = 4
+	}
 
+	if cr.Spec.Proxy.HAProxy.ReadinessProbe.InitialDelaySeconds == 0 {
+		cr.Spec.Proxy.HAProxy.ReadinessProbe.InitialDelaySeconds = 15
+	}
+	if cr.Spec.Proxy.HAProxy.ReadinessProbe.TimeoutSeconds == 0 {
+		cr.Spec.Proxy.HAProxy.ReadinessProbe.TimeoutSeconds = 1
+	}
 	if cr.Spec.Proxy.HAProxy.ReadinessProbe.PeriodSeconds == 0 {
 		cr.Spec.Proxy.HAProxy.ReadinessProbe.PeriodSeconds = 5
-	}
-	if cr.Spec.Proxy.HAProxy.ReadinessProbe.FailureThreshold == 0 {
-		cr.Spec.Proxy.HAProxy.ReadinessProbe.FailureThreshold = 3
 	}
 	if cr.Spec.Proxy.HAProxy.ReadinessProbe.SuccessThreshold == 0 {
 		cr.Spec.Proxy.HAProxy.ReadinessProbe.SuccessThreshold = 1
 	}
-	if cr.Spec.Proxy.HAProxy.ReadinessProbe.TimeoutSeconds == 0 {
-		cr.Spec.Proxy.HAProxy.ReadinessProbe.TimeoutSeconds = 3
+	if cr.Spec.Proxy.HAProxy.ReadinessProbe.FailureThreshold == 0 {
+		cr.Spec.Proxy.HAProxy.ReadinessProbe.FailureThreshold = 3
 	}
 
 	var fsgroup *int64
@@ -793,57 +926,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 	}
 
-	if cr.Spec.MySQL.ClusterType == ClusterTypeGR {
-		if !cr.Spec.Proxy.Router.Enabled && !cr.Spec.Proxy.HAProxy.Enabled && !cr.Spec.Unsafe.Proxy {
-			return errors.New("MySQL Router or HAProxy must be enabled for Group Replication. Enable spec.unsafeFlags.proxy to bypass this check")
-		}
-
-		if cr.RouterEnabled() && !cr.Spec.Unsafe.ProxySize {
-			if cr.Spec.Proxy.Router.Size < MinSafeProxySize {
-				return errors.Errorf("Router size should be %d or greater. Enable spec.unsafeFlags.proxySize to set a lower size", MinSafeProxySize)
-			}
-		}
-
-		if !cr.Spec.Unsafe.MySQLSize {
-			if cr.Spec.MySQL.Size < MinSafeGRSize {
-				return errors.Errorf("MySQL size should be %d or greater for Group Replication. Enable spec.unsafeFlags.mysqlSize to set a lower size", MinSafeGRSize)
-			}
-
-			if cr.Spec.MySQL.Size > MaxSafeGRSize {
-				return errors.Errorf("MySQL size should be %d or lower for Group Replication. Enable spec.unsafeFlags.mysqlSize to set a higher size", MaxSafeGRSize)
-			}
-
-			if cr.Spec.MySQL.Size%2 == 0 {
-				return errors.New("MySQL size should be an odd number for Group Replication. Enable spec.unsafeFlags.mysqlSize to set an even number")
-			}
-		}
-	}
-
 	if cr.Spec.MySQL.ClusterType == ClusterTypeAsync {
-		if !cr.Spec.Unsafe.MySQLSize && cr.Spec.MySQL.Size < MinSafeAsyncSize {
-			return errors.Errorf("MySQL size should be %d or greater for asynchronous replication. Enable spec.unsafeFlags.mysqlSize to set a lower size", MinSafeAsyncSize)
-		}
-
-		if !cr.Spec.Unsafe.Orchestrator && !cr.Spec.Orchestrator.Enabled {
-			return errors.New("Orchestrator must be enabled for asynchronous replication. Enable spec.unsafeFlags.orchestrator to bypass this check")
-		}
-
-		if oSize := int(cr.Spec.Orchestrator.Size); cr.OrchestratorEnabled() && (oSize < 3 || oSize%2 == 0) && oSize != 0 && !cr.Spec.Unsafe.OrchestratorSize {
-			return errors.New("Orchestrator size must be 3 or greater and an odd number for raft setup. Enable spec.unsafeFlags.orchestratorSize to bypass this check")
-		}
-
-		if !cr.Spec.Orchestrator.Enabled && cr.Spec.UpdateStrategy == SmartUpdateStatefulSetStrategyType {
-			return errors.Errorf("Orchestrator must be enabled to use SmartUpdate. Either enable Orchestrator or set spec.updateStrategy to %s", appsv1.RollingUpdateStatefulSetStrategyType)
-		}
-
-		if !cr.Spec.Unsafe.Proxy && !cr.HAProxyEnabled() {
-			return errors.New("HAProxy must be enabled for asynchronous replication. Enable spec.unsafeFlags.proxy to bypass this check")
-		}
-
-		if cr.RouterEnabled() {
-			return errors.New("MySQL Router can't be enabled for asynchronous replication")
-		}
-
 		for _, env := range cr.Spec.MySQL.Env {
 			if env.Name != naming.EnvBootstrapReadTimeout {
 				continue
@@ -858,18 +941,8 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		}
 	}
 
-	if cr.RouterEnabled() && cr.HAProxyEnabled() {
-		return errors.New("MySQL Router and HAProxy can't be enabled at the same time")
-	}
-
 	if cr.Spec.Proxy.HAProxy == nil {
 		cr.Spec.Proxy.HAProxy = new(HAProxySpec)
-	}
-
-	if cr.HAProxyEnabled() && !cr.Spec.Unsafe.ProxySize {
-		if cr.Spec.Proxy.HAProxy.Size < MinSafeProxySize {
-			return errors.Errorf("HAProxy size should be %d or greater. Enable spec.unsafeFlags.proxySize to set a lower size", MinSafeProxySize)
-		}
 	}
 
 	if cr.Spec.PMM == nil {

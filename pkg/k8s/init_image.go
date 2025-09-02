@@ -9,29 +9,42 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 )
 
 type ComponentWithInit interface {
-	GetInitImage() string
+	GetInitSpec(cr *apiv1alpha1.PerconaServerMySQL) apiv1alpha1.InitContainerSpec
 }
 
-func InitContainer(component, image string,
+func InitContainer(cr *apiv1alpha1.PerconaServerMySQL, component string, image string, initSpec *apiv1alpha1.InitContainerSpec,
 	pullPolicy corev1.PullPolicy,
 	secCtx *corev1.SecurityContext,
 	resources corev1.ResourceRequirements,
 	extraVolumeMounts []corev1.VolumeMount,
 ) corev1.Container {
-
 	volumeMounts := []corev1.VolumeMount{
 		{
-			Name:      apiv1.BinVolumeName,
-			MountPath: apiv1.BinVolumePath,
+			Name:      apiv1alpha1.BinVolumeName,
+			MountPath: apiv1alpha1.BinVolumePath,
 		},
 	}
 
 	if len(extraVolumeMounts) > 0 {
 		volumeMounts = append(volumeMounts, extraVolumeMounts...)
+	}
+
+	if cr.Spec.InitContainer.Resources != nil {
+		resources = *cr.Spec.InitContainer.Resources
+	}
+	if initSpec != nil && initSpec.Resources != nil {
+		resources = *initSpec.Resources
+	}
+
+	if cr.Spec.InitContainer.ContainerSecurityContext != nil {
+		secCtx = cr.Spec.InitContainer.ContainerSecurityContext
+	}
+	if initSpec != nil && initSpec.ContainerSecurityContext != nil {
+		secCtx = initSpec.ContainerSecurityContext
 	}
 
 	return corev1.Container{
@@ -50,12 +63,15 @@ func InitContainer(component, image string,
 // InitImage returns the image to be used in init container.
 // It returns component specific init image if it's defined, else it returns top level init image.
 // If there is no init image defined in the CR, it returns the current running operator image.
-func InitImage(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServerMySQL, comp ComponentWithInit) (string, error) {
-	if image := comp.GetInitImage(); len(image) > 0 {
+func InitImage(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, comp ComponentWithInit) (string, error) {
+	if spec := comp.GetInitSpec(cr); len(spec.Image) > 0 {
+		return spec.Image, nil
+	}
+	if image := cr.Spec.InitContainer.Image; len(image) > 0 {
 		return image, nil
 	}
-	if image := cr.Spec.InitImage; len(image) > 0 {
-		return image, nil
+	if cr.CompareVersion("0.12.0") < 0 && cr.Spec.InitImage == "" { //nolint:staticcheck
+		return cr.Spec.InitImage, nil //nolint:staticcheck
 	}
 	return OperatorImage(ctx, cl)
 }

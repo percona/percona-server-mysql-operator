@@ -39,7 +39,7 @@ func ConfigSecretName(cr *apiv1.PerconaServerMySQL) string {
 }
 
 func MatchLabels(cr *apiv1.PerconaServerMySQL) map[string]string {
-	return util.SSMapMerge(
+	return util.SSMapMerge(cr.GlobalLabels(),
 		cr.MySQLSpec().Labels,
 		cr.Labels(AppName, naming.ComponentPITR),
 	)
@@ -61,9 +61,10 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash string) *ap
 			Kind:       "StatefulSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      Name(cr),
-			Namespace: cr.Namespace,
-			Labels:    labels,
+			Name:        Name(cr),
+			Namespace:   cr.Namespace,
+			Labels:      labels,
+			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &spec.Size,
@@ -73,13 +74,15 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash string) *ap
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
-					Annotations: annotations,
+					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
 				},
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
 						k8s.InitContainer(
+							cr,
 							AppName,
 							initImage,
+							nil,
 							spec.ImagePullPolicy,
 							spec.ContainerSecurityContext,
 							spec.Resources,
