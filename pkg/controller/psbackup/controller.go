@@ -148,7 +148,6 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	src, err := r.getBackupSource(ctx, cr, cluster)
-
 	if err != nil {
 		status.State = apiv1alpha1.BackupError
 		status.StateDesc = "Check Source host for backup"
@@ -253,7 +252,7 @@ func (r *PerconaServerMySQLBackupReconciler) isBackupJobRunning(ctx context.Cont
 	return true, nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup, cluster *apiv1alpha1.PerconaServerMySQL, storage *apiv1alpha1.BackupStorageSpec, status *apiv1alpha1.PerconaServerMySQLBackupStatus, src string) error {
+func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup, cluster *apiv1alpha1.PerconaServerMySQL, storage *apiv1alpha1.BackupStorageSpec, status *apiv1alpha1.PerconaServerMySQLBackupStatus, sourceHost string) error {
 	initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
 	if err != nil {
 		return errors.Wrap(err, "get operator image")
@@ -336,7 +335,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context
 	status.Image = cluster.Spec.Backup.Image
 	status.Storage = storage
 
-	if err := xtrabackup.SetSourceNode(job, src); err != nil {
+	if err := xtrabackup.SetSourceNode(job, sourceHost); err != nil {
 		return errors.Wrap(err, "set backup source node")
 	}
 
