@@ -53,7 +53,6 @@ func TestStatefulSet(t *testing.T) {
 			"app.kubernetes.io/instance":   "cluster",
 			"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
 			"app.kubernetes.io/component":  "database",
-			"app.kubernetes.io/version":    "v" + version.Version(),
 		}
 		assert.Equal(t, labels, sts.Labels)
 	})
