@@ -50,15 +50,18 @@ func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
+func Labels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
+	return util.SSMapMerge(cr.GlobalLabels(), cr.MySQLSpec().Labels, MatchLabels(cr))
+}
+
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
-	return util.SSMapMerge(cr.GlobalLabels(), cr.MySQLSpec().Labels,
-		cr.Labels(AppName, naming.ComponentProxy))
+	return cr.Labels(AppName, naming.ComponentProxy)
 }
 
 func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	expose := cr.Spec.Proxy.Router.Expose
 
-	labels := util.SSMapMerge(expose.Labels, MatchLabels(cr))
+	labels := util.SSMapMerge(cr.GlobalLabels(), expose.Labels, MatchLabels(cr))
 
 	selector := MatchLabels(cr)
 
@@ -97,7 +100,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 }
 
 func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHash string) *appsv1.Deployment {
-	labels := MatchLabels(cr)
+	selector := MatchLabels(cr)
 	spec := cr.Spec.Proxy.Router
 	replicas := spec.Size
 
@@ -118,13 +121,13 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHa
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        Name(cr),
 			Namespace:   cr.Namespace,
-			Labels:      labels,
+			Labels:      Labels(cr),
 			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: selector,
 			},
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RollingUpdateDeploymentStrategyType,
@@ -134,7 +137,7 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHa
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels:      labels,
+					Labels:      Labels(cr),
 					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
 				},
 				Spec: corev1.PodSpec{
@@ -153,8 +156,8 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHa
 					Containers:                    containers(cr),
 					NodeSelector:                  cr.Spec.Proxy.Router.NodeSelector,
 					Tolerations:                   cr.Spec.Proxy.Router.Tolerations,
-					Affinity:                      spec.GetAffinity(labels),
-					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(labels),
+					Affinity:                      spec.GetAffinity(selector),
+					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(selector),
 					ImagePullSecrets:              spec.ImagePullSecrets,
 					TerminationGracePeriodSeconds: spec.GetTerminationGracePeriodSeconds(),
 					RestartPolicy:                 corev1.RestartPolicyAlways,
