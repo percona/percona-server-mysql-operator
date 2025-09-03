@@ -98,7 +98,7 @@ deploy_operator() {
 		"$(printf 'select(documentIndex==1).spec.template.spec.containers[0].image="%s"' "${IMAGE}")" \
 		"${operator_file}" \
 		| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "true"' \
-		| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG"' \
+		| yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "VERBOSE"' \
 		| kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f -
 }
 
