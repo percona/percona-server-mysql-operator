@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -128,9 +129,14 @@ func TestSchedule(t *testing.T) {
 	tests := map[string]struct {
 		envValue    string
 		expectedSch string
+		randomSch   bool
 	}{
 		"default schedule when env var not set": {
-			expectedSch: "30 * * * *",
+			randomSch: true,
+		},
+		"custom wrong schedule from env var": {
+			envValue:  "wrong schedule",
+			randomSch: true,
 		},
 		"custom schedule from env var": {
 			envValue:    "0 12 * * *",
@@ -143,9 +149,15 @@ func TestSchedule(t *testing.T) {
 			if tt.envValue != "" {
 				t.Setenv("TELEMETRY_SCHEDULE", tt.envValue)
 			}
-
 			s := Schedule()
+			if tt.randomSch {
+				_, err := cron.ParseStandard(s)
+				assert.NoError(t, err)
+				return
+			}
 			assert.Equal(t, tt.expectedSch, s)
+			_, err := cron.ParseStandard(s)
+			assert.NoError(t, err)
 		})
 	}
 }

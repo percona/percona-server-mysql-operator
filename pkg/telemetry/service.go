@@ -11,6 +11,7 @@ import (
 	"github.com/go-openapi/strfmt"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/robfig/cron/v3"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
@@ -125,10 +126,16 @@ func createReport(cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.Se
 
 // Schedule returns the schedule for sending telemetry requests.
 func Schedule() string {
+	// adding a random jitter so the telemetry service isn't bombarded by simultaneous requests from all operators.
+	defaultSchedule := fmt.Sprintf("%d * * * *", rand.Intn(60))
+
 	sch, found := os.LookupEnv("TELEMETRY_SCHEDULE")
 	if !found {
-		// adding a random jitter so the telemetry service isn't bombarded by simultaneous requests from all operators.
-		sch = fmt.Sprintf("%d * * * *", rand.Intn(60))
+		sch = defaultSchedule
+	}
+	_, err := cron.ParseStandard(sch)
+	if err != nil {
+		sch = defaultSchedule
 	}
 	return sch
 }
