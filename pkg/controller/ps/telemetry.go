@@ -50,11 +50,6 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 		cronSchedule: configuredSchedule,
 	})
 
-	if cr.Status.State != apiv1alpha1.StateReady {
-		logger.Info("cluster is not ready yet")
-		return nil
-	}
-
 	logger.Info("sending telemetry on cluster start")
 
 	err = r.sendTelemetry(ctx, cr)

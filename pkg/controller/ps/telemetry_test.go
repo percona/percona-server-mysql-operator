@@ -3,16 +3,12 @@ package ps
 import (
 	"context"
 	"os"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/robfig/cron/v3"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 )
 
 var _ = Describe("Reconcile telemetry sending", Ordered, func() {
@@ -20,7 +16,6 @@ var _ = Describe("Reconcile telemetry sending", Ordered, func() {
 
 	const crName = "telemetry-test"
 	const ns = crName
-	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
 	namespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -174,35 +169,6 @@ var _ = Describe("Reconcile telemetry sending", Ordered, func() {
 			telemetryJob, ok := job.(telemetryJob)
 			Expect(ok).To(BeTrue())
 			Expect(telemetryJob.cronSchedule).To(Equal("1 2 3 * *"))
-		})
-	})
-
-	Context("When cluster is ready", func() {
-		BeforeEach(func() {
-			DeferCleanup(func() {
-				err := os.Unsetenv("DISABLE_TELEMETRY")
-				Expect(err).NotTo(HaveOccurred())
-			})
-			err := os.Setenv("DISABLE_TELEMETRY", "false")
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should handle cluster ready state without error", func() {
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, crNamespacedName, cr)
-				return err == nil
-			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
-
-			cr.Status.State = apiv1alpha1.StateReady
-			Expect(k8sClient.Status().Update(ctx, cr)).Should(Succeed())
-
-			r := reconciler()
-			err := r.reconcileScheduledTelemetrySending(ctx, cr)
-			Expect(err).NotTo(HaveOccurred())
-
-			jobName := telemetryJobName(cr)
-			_, exists := r.Crons.telemetryJobs.Load(jobName)
-			Expect(exists).To(BeTrue())
 		})
 	})
 })
