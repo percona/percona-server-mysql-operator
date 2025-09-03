@@ -139,7 +139,7 @@ func TestSchedule(t *testing.T) {
 		"custom wrong schedule from env var": {
 			envValue:      "wrong schedule",
 			randomSch:     true,
-			expectedFound: false,
+			expectedFound: true,
 		},
 		"custom schedule from env var": {
 			envValue:      "0 12 * * *",

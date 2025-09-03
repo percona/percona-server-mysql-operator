@@ -15,6 +15,10 @@ import (
 func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
 	logger := logf.FromContext(ctx)
 
+	if cr.Status.State != apiv1alpha1.StateReady {
+		return nil
+	}
+
 	jn := telemetryJobName(cr)
 	existingJob, existingJobFound := r.Crons.telemetryJobs.Load(jn)
 	if !telemetryEnabled() {
