@@ -801,6 +801,19 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 	} else {
 		oldPeers := util.Difference(existingNodes, raftNodes)
 
+		if cr.Spec.Orchestrator.Size == 1 && len(oldPeers) > 0 {
+			log.Info("Scaling down to single node, enabling single node mode first", "oldPeers", oldPeers)
+
+			cmData, err := orchestrator.ConfigMapData(cr)
+			if err != nil {
+				return errors.Wrap(err, "get ConfigMap data for single node")
+			}
+
+			if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.ConfigMap(cr, cmData), r.Scheme); err != nil {
+				return errors.Wrap(err, "update ConfigMap for single node")
+			}
+		}
+
 		for _, peer := range oldPeers {
 			p := peer
 			g.Go(func() error {

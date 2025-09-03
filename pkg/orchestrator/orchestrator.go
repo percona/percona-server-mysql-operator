@@ -482,6 +482,11 @@ func orcConfig(cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	config := make(map[string]interface{}, 0)
 
 	config["RaftNodes"] = RaftNodes(cr)
+
+	if cr.Spec.Orchestrator.Size == 1 {
+		config["RaftEnabledSingleNode"] = true
+	}
+
 	configJson, err := json.Marshal(config)
 	if err != nil {
 		return "", errors.Wrap(err, "marshal orchestrator raft nodes to json")
@@ -491,7 +496,7 @@ func orcConfig(cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
 }
 
 func ConfigMapData(cr *apiv1alpha1.PerconaServerMySQL) (map[string]string, error) {
-	cmData := make(map[string]string, 0)
+	cmData := make(map[string]string)
 
 	config, err := orcConfig(cr)
 	if err != nil {
