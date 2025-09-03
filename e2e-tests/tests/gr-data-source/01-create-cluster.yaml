@@ -1,0 +1,18 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      suffix="initial"
+
+      get_cr $suffix \
+          | yq eval '.spec.mysql.clusterType="group-replication"' - \
+          | yq eval '.spec.proxy.router.enabled=true' - \
+          | yq eval '.spec.proxy.haproxy.enabled=false' - \
+          | yq eval '.spec.mysql.size=3' - \
+          | kubectl -n "${NAMESPACE}" apply -f -

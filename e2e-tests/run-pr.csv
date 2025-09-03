@@ -1,11 +1,12 @@
-version-service
+async-data-at-rest-encryption
+async-data-source
 async-ignore-annotations
 auto-config
 config
 config-router
 demand-backup
-async-data-at-rest-encryption
 gr-data-at-rest-encryption
+gr-data-source
 gr-demand-backup
 gr-demand-backup-haproxy
 gr-finalizer
@@ -26,6 +27,7 @@ limits
 monitoring
 one-pod
 operator-self-healing
+pvc-resize
 recreate
 scaling
 scheduled-backup
@@ -35,4 +37,4 @@ smart-update
 storage
 tls-cert-manager
 users
-pvc-resize
+version-service

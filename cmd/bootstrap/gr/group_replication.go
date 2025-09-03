@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -23,6 +24,7 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
@@ -259,6 +261,34 @@ func (m *mysqlsh) configureInstance(ctx context.Context) error {
 	return nil
 }
 
+func (m *mysqlsh) getClusterName(ctx context.Context) (string, error) {
+	result, err := m.runSQL(ctx, "SELECT cluster_name FROM mysql_innodb_cluster_metadata.v2_clusters")
+	if err != nil {
+		if strings.Contains(err.Error(), "Unknown database 'mysql_innodb_cluster_metadata'") {
+			return "", nil
+		}
+		return "", err
+	}
+	if len(result.Rows) == 0 {
+		return "", nil
+	}
+
+	v, ok := result.Rows[0]["cluster_name"]
+	if !ok {
+		return "", errors.Errorf("unexpected output: %+v", result)
+	}
+
+	return v, nil
+}
+
+func (m *mysqlsh) dropMetadataSchema(ctx context.Context) error {
+	if _, _, err := m.run(ctx, "dba.dropMetadataSchema({force: true})"); err != nil {
+		return errors.Wrap(err, "configure instance")
+	}
+
+	return nil
+}
+
 func (m *mysqlsh) createCluster(ctx context.Context) error {
 	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.createCluster('%s')", m.clusterName))
 	if err != nil {
@@ -437,9 +467,24 @@ func Bootstrap(ctx context.Context) error {
 	if err != nil {
 		log.Printf("Failed to connect to the cluster: %v", err)
 		if peers.Len() == 1 {
+			clusterName, err := localShell.getClusterName(ctx)
+			if err != nil {
+				return errors.Wrap(err, "get cluster name")
+			}
+			if clusterName != "" {
+				envClusterName, ok := os.LookupEnv("INNODB_CLUSTER_NAME")
+				if !ok {
+					return errors.New("cluster name env is not found")
+				}
+				if clusterName != envClusterName {
+					if err := localShell.dropMetadataSchema(ctx); err != nil {
+						return errors.New("drop metadata schema")
+					}
+				}
+			}
 			log.Printf("Creating InnoDB cluster: %s", localShell.clusterName)
 
-			err := localShell.createCluster(ctx)
+			err = localShell.createCluster(ctx)
 			if err != nil {
 				if errors.Is(err, errRebootClusterFromCompleteOutage) {
 					log.Printf("Cluster already exists, we need to reboot")
@@ -506,6 +551,17 @@ func Bootstrap(ctx context.Context) error {
 		log.Printf("Adding instance (%s) to InnoDB cluster using %s recovery", localShell.host, recoveryMethod)
 
 		if err := shell.addInstance(ctx, localShell.getURI(), recoveryMethod); err != nil {
+			if strings.Contains(err.Error(), "Cannot add an instance with the same server UUID") {
+				cfgFilePath := filepath.Join(mysql.DataMountPath, "auto.cnf")
+
+				log.Printf("Instance has a duplicate UUID. Deleting %s file", cfgFilePath)
+				if err := os.Remove(cfgFilePath); err != nil {
+					return errors.Wrapf(err, "delete %s file", cfgFilePath)
+				}
+
+				log.Printf("Exiting with status code 1 to restart the pod")
+				os.Exit(1)
+			}
 			return err
 		}
 
