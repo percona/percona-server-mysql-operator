@@ -24,6 +24,11 @@ func (c *Component) PerconaServerMySQL() *apiv1alpha1.PerconaServerMySQL {
 
 func (c *Component) Labels() map[string]string {
 	cr := c.PerconaServerMySQL()
+	return Labels(cr)
+}
+
+func (c *Component) MatchLabels() map[string]string {
+	cr := c.PerconaServerMySQL()
 	return MatchLabels(cr)
 }
 

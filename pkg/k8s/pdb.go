@@ -8,18 +8,18 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
-func podDisruptionBudget(cr *apiv1alpha1.PerconaServerMySQL, spec *apiv1alpha1.PodDisruptionBudgetSpec, labels map[string]string) *policyv1.PodDisruptionBudget {
+func podDisruptionBudget(cr *apiv1alpha1.PerconaServerMySQL, spec *apiv1alpha1.PodDisruptionBudgetSpec, ls, selector map[string]string) *policyv1.PodDisruptionBudget {
 	return &policyv1.PodDisruptionBudget{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-" + labels[naming.LabelName],
+			Name:      cr.Name + "-" + ls[naming.LabelName],
 			Namespace: cr.Namespace,
-			Labels:    labels,
+			Labels:    ls,
 		},
 		Spec: policyv1.PodDisruptionBudgetSpec{
 			MinAvailable:   spec.MinAvailable,
 			MaxUnavailable: spec.MaxUnavailable,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: selector,
 			},
 		},
 	}
