@@ -152,9 +152,9 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, nil
 	}
 
-	src, err := r.getBackupSource(ctx, cr, cluster)
+	backupSource, err := r.getBackupSource(ctx, cr, cluster)
 	if err != nil {
-		status.State = apiv1alpha1.BackupError
+		status.State = apiv1alpha1.BackupFailed
 		status.StateDesc = "Check Source host for backup"
 		return rr, nil
 	}
@@ -174,11 +174,6 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	if k8serrors.IsNotFound(err) {
-		backupSource, err := r.getBackupSource(ctx, cr, cluster)
-		if err != nil {
-			return rr, errors.Wrap(err, "get backup source node")
-		}
-
 		log.Info("Preparing backup source", "source", backupSource)
 		if err := r.prepareBackupSource(ctx, cr, cluster, backupSource); err != nil {
 			return rr, errors.Wrap(err, "prepare backup source")
