@@ -13,7 +13,7 @@ import (
 )
 
 func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	logger := logf.FromContext(ctx).WithName("reconcileScheduledTelemetrySending")
+	logger := logf.FromContext(ctx)
 
 	jn := telemetryJobName(cr)
 	existingJob, ok := r.Crons.telemetryJobs.Load(jn)
@@ -67,7 +67,7 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 
 func (r *PerconaServerMySQLReconciler) telemetrySendingHandlerFunc(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, jobName string) func() {
 	return func() {
-		logger := logf.FromContext(ctx).WithName("telemetrySendingHandlerFunc")
+		logger := logf.FromContext(ctx)
 
 		localCr := &apiv1alpha1.PerconaServerMySQL{}
 		err := r.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, localCr)

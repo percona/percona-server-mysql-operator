@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"os"
 	"time"
@@ -126,7 +127,7 @@ func createReport(cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.Se
 func Schedule() string {
 	sch, found := os.LookupEnv("TELEMETRY_SCHEDULE")
 	if !found {
-		sch = "30 * * * *"
+		sch = fmt.Sprintf("%d * * * *", rand.Intn(60))
 	}
 	return sch
 }
