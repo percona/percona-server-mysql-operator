@@ -1007,7 +1007,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 		return nil
 	}
 
-	pod, err := getReadyMySQLPod(ctx, r.Client, cr)
+	pod, err := GetReadyMySQLPod(ctx, r.Client, cr)
 	if err != nil {
 		if errors.Is(err, ErrNoReadyPods) {
 			return nil
@@ -1073,7 +1073,7 @@ func (r *PerconaServerMySQLReconciler) rescanClusterIfNeeded(ctx context.Context
 
 	log := logf.FromContext(ctx)
 
-	pod, err := getReadyMySQLPod(ctx, r.Client, cr)
+	pod, err := GetReadyMySQLPod(ctx, r.Client, cr)
 	if err != nil {
 		if errors.Is(err, ErrNoReadyPods) {
 			return nil
@@ -1269,7 +1269,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 			return nil
 		}
 
-		pod, err := getReadyMySQLPod(ctx, r.Client, cr)
+		pod, err := GetReadyMySQLPod(ctx, r.Client, cr)
 		if err != nil {
 			if errors.Is(err, ErrNoReadyPods) {
 				return nil
@@ -1434,7 +1434,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryFromGR(ctx context.Context, cr 
 		return "", errors.Wrap(err, "get operator password")
 	}
 
-	pod, err := getReadyMySQLPod(ctx, r.Client, cr)
+	pod, err := GetReadyMySQLPod(ctx, r.Client, cr)
 	if err != nil {
 		return "", errors.Wrap(err, "get ready mysql pod")
 	}
@@ -1580,7 +1580,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 	return errors.Wrap(g.Wait(), "start replication on replicas")
 }
 
-func getReadyMySQLPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Pod, error) {
+func GetReadyMySQLPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Pod, error) {
 	pods, err := k8s.PodsByLabels(ctx, cl, mysql.MatchLabels(cr), cr.Namespace)
 	if err != nil {
 		return nil, errors.Wrap(err, "get pods")
