@@ -452,7 +452,7 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 }
 
 func ConfigMap(cr *apiv1alpha1.PerconaServerMySQL, data map[string]string) *corev1.ConfigMap {
-	return &corev1.ConfigMap{
+	cm := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "ConfigMap",
@@ -465,6 +465,17 @@ func ConfigMap(cr *apiv1alpha1.PerconaServerMySQL, data map[string]string) *core
 		},
 		Data: data,
 	}
+	if cr.CompareVersion("0.12.0") >= 0 {
+		if cm.Labels == nil {
+			cm.Labels = map[string]string{}
+		}
+		for k, v := range naming.Labels(ConfigMapName(cr), cr.Name, "percona-server", "orchestrator") {
+			if _, exists := cm.Labels[k]; !exists { // global labels have priority
+				cm.Labels[k] = v
+			}
+		}
+	}
+	return cm
 }
 
 func RaftNodes(cr *apiv1alpha1.PerconaServerMySQL) []string {
