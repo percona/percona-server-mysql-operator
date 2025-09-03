@@ -115,6 +115,31 @@ var _ = Describe("Reconcile telemetry sending", Ordered, func() {
 			Expect(telemetryJobVal.cronSchedule).NotTo(BeEmpty())
 		})
 
+		It("should keep telemetry job after the 2nd reconciliation without configured schedule", func() {
+			r := reconciler()
+			jobName := telemetryJobName(cr)
+
+			err := r.reconcileScheduledTelemetrySending(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+
+			firstJob, firstExists := r.Crons.telemetryJobs.Load(jobName)
+			Expect(firstExists).To(BeTrue())
+
+			firstTelemetryJobVal, ok := firstJob.(telemetryJob)
+			Expect(ok).To(BeTrue())
+
+			err = r.reconcileScheduledTelemetrySending(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+
+			secondJob, secondExists := r.Crons.telemetryJobs.Load(jobName)
+			Expect(secondExists).To(BeTrue())
+
+			secondTelemetryJobVal, ok := secondJob.(telemetryJob)
+			Expect(ok).To(BeTrue())
+
+			Expect(firstTelemetryJobVal.cronSchedule).To(Equal(secondTelemetryJobVal.cronSchedule))
+		})
+
 		It("should keep existing job with same schedule", func() {
 			r := reconciler()
 			jobName := telemetryJobName(cr)
