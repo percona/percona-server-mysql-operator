@@ -543,6 +543,11 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 		return errors.Wrap(err, "reconcile MySQL auto-config")
 	}
 
+	if cr.PVCResizeInProgress() {
+		log.V(1).Info("PVC resize in progress, skipping MySQL reconciliation")
+		return nil
+	}
+
 	component := mysql.Component(*cr)
 	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
 		return errors.Wrap(err, "ensure component")
@@ -554,11 +559,6 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 		Namespace: cr.Namespace,
 	}, internalSecret); client.IgnoreNotFound(err) != nil {
 		return errors.Wrapf(err, "get internal secret")
-	}
-
-	if cr.PVCResizeInProgress() {
-		log.V(1).Info("PVC resize in progress, skipping MySQL reconciliation")
-		return nil
 	}
 
 	if pmm := cr.Spec.PMM; pmm != nil && pmm.Enabled && !pmm.HasSecret(internalSecret) {
