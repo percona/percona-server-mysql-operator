@@ -61,7 +61,7 @@ func (s Service) SendReport(ctx context.Context, cr *apiv1alpha1.PerconaServerMy
 
 	report := createReport(cr, serverVersion)
 
-	logger.Info("generated telemetry report", "id", report.ID)
+	logger.Info("generated telemetry report", "report_id", report.ID)
 
 	params := &reporter_api.ReporterAPIGenericReportParams{
 		Context: ctx,
