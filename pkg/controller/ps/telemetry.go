@@ -16,19 +16,24 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 	logger := logf.FromContext(ctx)
 
 	jn := telemetryJobName(cr)
-	existingJob, ok := r.Crons.telemetryJobs.Load(jn)
+	existingJob, existingJobFound := r.Crons.telemetryJobs.Load(jn)
 	if !telemetryEnabled() {
-		if ok {
+		if existingJobFound {
 			r.Crons.telemetryJobs.Delete(jn)
 		}
 		return nil
 	}
 	job := telemetryJob{}
-	if ok {
+	if existingJobFound {
 		job = existingJob.(telemetryJob)
 	}
 
-	configuredSchedule := telemetry.Schedule()
+	configuredSchedule, scheduleFound := telemetry.Schedule()
+
+	// If an existing job is found but no schedule is set, assume the job is already fully configured.
+	if existingJobFound && !scheduleFound {
+		return nil
+	}
 
 	// If the configured schedule is identical to the existing job's schedule, no action is needed.
 	if job.cronSchedule == configuredSchedule {

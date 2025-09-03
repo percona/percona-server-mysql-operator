@@ -127,20 +127,24 @@ func TestSendReport(t *testing.T) {
 
 func TestSchedule(t *testing.T) {
 	tests := map[string]struct {
-		envValue    string
-		expectedSch string
-		randomSch   bool
+		envValue      string
+		expectedSch   string
+		randomSch     bool
+		expectedFound bool
 	}{
 		"default schedule when env var not set": {
-			randomSch: true,
+			randomSch:     true,
+			expectedFound: false,
 		},
 		"custom wrong schedule from env var": {
-			envValue:  "wrong schedule",
-			randomSch: true,
+			envValue:      "wrong schedule",
+			randomSch:     true,
+			expectedFound: false,
 		},
 		"custom schedule from env var": {
-			envValue:    "0 12 * * *",
-			expectedSch: "0 12 * * *",
+			envValue:      "0 12 * * *",
+			expectedSch:   "0 12 * * *",
+			expectedFound: true,
 		},
 	}
 
@@ -149,15 +153,17 @@ func TestSchedule(t *testing.T) {
 			if tt.envValue != "" {
 				t.Setenv("TELEMETRY_SCHEDULE", tt.envValue)
 			}
-			s := Schedule()
+			s, found := Schedule()
 			if tt.randomSch {
 				_, err := cron.ParseStandard(s)
 				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedFound, found)
 				return
 			}
 			assert.Equal(t, tt.expectedSch, s)
 			_, err := cron.ParseStandard(s)
 			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedFound, found)
 		})
 	}
 }
