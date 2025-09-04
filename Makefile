@@ -79,7 +79,7 @@ help: ## Display this help.
 
 ##@ Development
 
-generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and CustomResourceDefinition objects
+generate: controller-gen mockgen ## Generate code containing DeepCopy, DeepCopyInto, and CustomResourceDefinition objects
 	# Generate WebhookConfiguration, Role and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) crd:maxDescLen=0 rbac:roleName=$(NAME) webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 	$(CONTROLLER_GEN) rbac:roleName=$(NAME) paths="./..." output:rbac:artifacts:config=config/rbac/cluster
@@ -121,11 +121,16 @@ manifests: kustomize generate ## Generate Kubernetes manifests (CRDs, RBAC, oper
 	echo "---" >> $(DEPLOYDIR)/cw-operator.yaml
 	cat $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/cw-rbac.yaml $(DEPLOYDIR)/cw-operator.yaml > $(DEPLOYDIR)/cw-bundle.yaml
 
-gen-versionservice-client: swagger
+gen-version-service-client: swagger
 	rm pkg/version/service/version.swagger.yaml
 	curl https://raw.githubusercontent.com/Percona-Lab/percona-version-service/main/api/version.swagger.yaml --output pkg/version/service/version.swagger.yaml
 	rm -rf pkg/version/service/client
 	swagger generate client -f pkg/version/service/version.swagger.yaml -c pkg/version/service/client -m pkg/version/service/client/models
+
+gen-telemetry-service-client: swagger
+	# unlike the version service, the Swagger file for telemetry cannot be accessed directly.
+	rm -rf pkg/telemetry/client
+	swagger generate client -f pkg/telemetry/reporter_api.swagger.json -c pkg/telemetry/client -m pkg/telemetry/client/models
 
 ##@ Build
 
@@ -172,6 +177,10 @@ envtest: ## Download envtest-setup locally if necessary.
 SWAGGER = $(shell pwd)/bin/swagger
 swagger: ## Download swagger locally if necessary.
 	$(call go-get-tool,$(SWAGGER),github.com/go-swagger/go-swagger/cmd/swagger@latest)
+
+MOCKGEN = $(shell pwd)/bin/mockgen
+mockgen: ## Download mockgen locally if necessary.
+	$(call go-get-tool,$(MOCKGEN), github.com/golang/mock/mockgen@latest)
 
 # go-get-tool will 'go get' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
