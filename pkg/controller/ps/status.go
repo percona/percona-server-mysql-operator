@@ -405,7 +405,7 @@ func appHost(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServe
 	return host, nil
 }
 
-func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, compName string, size int32, labels map[string]string, version string) (apiv1alpha1.StatefulAppStatus, error) {
+func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, compName string, size int32, selector map[string]string, version string) (apiv1alpha1.StatefulAppStatus, error) {
 	status := apiv1alpha1.StatefulAppStatus{
 		Size:  size,
 		State: apiv1alpha1.StateInitializing,
@@ -417,7 +417,7 @@ func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1a
 		return status, err
 	}
 
-	pods, err := k8s.PodsByLabels(ctx, r.Client, labels, cr.Namespace)
+	pods, err := k8s.PodsByLabels(ctx, r.Client, selector, cr.Namespace)
 	if err != nil {
 		return status, errors.Wrap(err, "get pod list")
 	}

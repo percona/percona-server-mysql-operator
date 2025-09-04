@@ -386,7 +386,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPvc(ctx context.Context, cr *a
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(exposer.Labels()),
+			LabelSelector: labels.SelectorFromSet(exposer.MatchLabels()),
 		},
 	)
 	if err != nil {
@@ -543,6 +543,11 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 		return errors.Wrap(err, "reconcile MySQL auto-config")
 	}
 
+	if cr.PVCResizeInProgress() {
+		log.V(1).Info("PVC resize in progress, skipping MySQL reconciliation")
+		return nil
+	}
+
 	component := mysql.Component(*cr)
 	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
 		return errors.Wrap(err, "ensure component")
@@ -554,11 +559,6 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 		Namespace: cr.Namespace,
 	}, internalSecret); client.IgnoreNotFound(err) != nil {
 		return errors.Wrapf(err, "get internal secret")
-	}
-
-	if cr.PVCResizeInProgress() {
-		log.V(1).Info("PVC resize in progress, skipping MySQL reconciliation")
-		return nil
 	}
 
 	if pmm := cr.Spec.PMM; pmm != nil && pmm.Enabled && !pmm.HasSecret(internalSecret) {
@@ -584,7 +584,7 @@ type Exposer interface {
 	Exposed() bool
 	Name(index string) string
 	Size() int32
-	Labels() map[string]string
+	MatchLabels() map[string]string
 	Service(name string) *corev1.Service
 	SaveOldMeta() bool
 }
@@ -1144,7 +1144,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdatedServices(ctx context.Conte
 		}
 	}
 
-	svcLabels := exposer.Labels()
+	svcLabels := exposer.MatchLabels()
 	svcLabels[naming.LabelExposed] = "true"
 	services, err := k8s.ServicesByLabels(ctx, r.Client, svcLabels, ns)
 	if err != nil {
@@ -1215,7 +1215,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOrchestrator(ctx context.Context, 
 		return nil
 	}
 
-	svcLabels := orcExposer.Labels()
+	svcLabels := orcExposer.MatchLabels()
 	svcLabels[naming.LabelExposed] = "true"
 	services, err := k8s.ServicesByLabels(ctx, r.Client, svcLabels, cr.Namespace)
 	if err != nil {
