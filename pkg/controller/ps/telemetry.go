@@ -32,7 +32,11 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 		job = existingJob.(telemetryJob)
 	}
 
-	configuredSchedule, scheduleFound := telemetry.Schedule()
+	configuredSchedule, scheduleFound, err := telemetry.Schedule()
+	if err != nil {
+		logger.Error(err, "failed to get the schedule for the telemetry job")
+		return nil
+	}
 
 	// If an existing job is found but no schedule is set, assume the job is already fully configured.
 	if existingJobFound && !scheduleFound {

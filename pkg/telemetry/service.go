@@ -125,7 +125,7 @@ func createReport(cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.Se
 }
 
 // Schedule returns the schedule for sending telemetry requests.
-func Schedule() (string, bool) {
+func Schedule() (string, bool, error) {
 	// adding a random jitter so the telemetry service isn't bombarded by simultaneous requests from all operators.
 	defaultSchedule := fmt.Sprintf("%d * * * *", rand.Intn(60))
 
@@ -135,9 +135,9 @@ func Schedule() (string, bool) {
 	}
 	_, err := cron.ParseStandard(sch)
 	if err != nil {
-		sch = defaultSchedule
+		return "", false, errors.Wrap(err, "failed to parse schedule")
 	}
-	return sch, found
+	return sch, found, nil
 }
 
 // serviceURL returns the url for sending telemetry requests.

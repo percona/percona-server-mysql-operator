@@ -131,6 +131,7 @@ func TestSchedule(t *testing.T) {
 		expectedSch   string
 		randomSch     bool
 		expectedFound bool
+		expectedError error
 	}{
 		"default schedule when env var not set": {
 			randomSch:     true,
@@ -138,8 +139,8 @@ func TestSchedule(t *testing.T) {
 		},
 		"custom wrong schedule from env var": {
 			envValue:      "wrong schedule",
-			randomSch:     true,
-			expectedFound: true,
+			expectedFound: false,
+			expectedError: errors.New("failed to parse schedule"),
 		},
 		"custom schedule from env var": {
 			envValue:      "0 12 * * *",
@@ -153,15 +154,21 @@ func TestSchedule(t *testing.T) {
 			if tt.envValue != "" {
 				t.Setenv("TELEMETRY_SCHEDULE", tt.envValue)
 			}
-			s, found := Schedule()
+			s, found, err := Schedule()
 			if tt.randomSch {
 				_, err := cron.ParseStandard(s)
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedFound, found)
 				return
 			}
+			if tt.expectedError != nil {
+				assert.Error(t, err)
+				assert.ErrorContains(t, err, tt.expectedError.Error())
+				assert.Equal(t, tt.expectedFound, found)
+				return
+			}
 			assert.Equal(t, tt.expectedSch, s)
-			_, err := cron.ParseStandard(s)
+			_, err = cron.ParseStandard(s)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expectedFound, found)
 		})
