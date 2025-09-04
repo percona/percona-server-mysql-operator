@@ -93,10 +93,6 @@ func FQDN(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
 	return fmt.Sprintf("%s.%s.svc", PodName(cr, idx), cr.Namespace)
 }
 
-func APIHost(cr *apiv1alpha1.PerconaServerMySQL) string {
-	return fmt.Sprintf("http://%s:%d", FQDN(cr, 0), defaultWebPort)
-}
-
 // Labels returns labels of orchestrator
 func Labels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.GlobalLabels(), cr.OrchestratorSpec().Labels, MatchLabels(cr))
