@@ -150,7 +150,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	src, err := r.getBackupSource(ctx, cr, cluster)
 	if err != nil {
 		status.State = apiv1alpha1.BackupError
-		status.StateDesc = "Check Source host for backup"
+		status.StateDesc = fmt.Sprintf("failed to get the source host for backup: %v", err)
 		return rr, nil
 	}
 
@@ -252,7 +252,14 @@ func (r *PerconaServerMySQLBackupReconciler) isBackupJobRunning(ctx context.Cont
 	return true, nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup, cluster *apiv1alpha1.PerconaServerMySQL, storage *apiv1alpha1.BackupStorageSpec, status *apiv1alpha1.PerconaServerMySQLBackupStatus, sourceHost string) error {
+func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
+	ctx context.Context,
+	cr *apiv1alpha1.PerconaServerMySQLBackup,
+	cluster *apiv1alpha1.PerconaServerMySQL,
+	storage *apiv1alpha1.BackupStorageSpec,
+	status *apiv1alpha1.PerconaServerMySQLBackupStatus,
+	sourceHost string,
+) error {
 	initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
 	if err != nil {
 		return errors.Wrap(err, "get operator image")
@@ -372,26 +379,28 @@ func getDestination(storage *apiv1alpha1.BackupStorageSpec, clusterName, creatio
 }
 
 func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup, cluster *apiv1alpha1.PerconaServerMySQL) (string, error) {
-	log := logf.FromContext(ctx).WithName("getBackupSource")
+	log := logf.FromContext(ctx)
 
-	if cr.Spec.SourceHost != "" {
-		return cr.Spec.SourceHost, nil
+	var sourcePod string
+	if cr.Spec.SourcePod != "" {
+		sourcePod = cr.Spec.SourcePod
+	} else if cluster.Spec.Backup.SourcePod != "" {
+		sourcePod = cluster.Spec.Backup.SourcePod
+	} else if cluster.Spec.MySQL.Size == 1 {
+		sourcePod = mysql.PodName(cluster, 0)
 	}
 
-	if cluster.Spec.Backup.SourceHost != "" {
-		return cluster.Spec.Backup.SourceHost, nil
-	}
-
-	if cluster.Spec.MySQL.Size == 1 {
-		if cluster.Name == "" || cluster.Namespace == "" {
-			return "", errors.New("cluster name/namespace required")
+	if sourcePod != "" {
+		pod := &corev1.Pod{}
+		err := r.Get(ctx, types.NamespacedName{Name: sourcePod, Namespace: cr.Namespace}, pod)
+		if err != nil {
+			return sourcePod, errors.Wrap(err, "get pod")
 		}
-		backupSourceHost := fmt.Sprintf("%s.%s.%s", mysql.PodName(cluster, 0), mysql.ServiceName(cluster), cluster.Namespace)
-		return backupSourceHost, nil
+		return fmt.Sprintf("%s.%s.%s", sourcePod, mysql.ServiceName(cluster), cluster.Namespace), nil
 	}
 
 	if cluster.Spec.MySQL.ClusterType == apiv1alpha1.ClusterTypeAsync && !cluster.Spec.Orchestrator.Enabled {
-		return "", errors.New("Orchestrator is disabled. Please specify the backup source explicitly using either spec.backup.sourceHost in the cluster CR or spec.sourceBackupHost in the PerconaServerMySQLBackup resource.")
+		return "", errors.New("Orchestrator is disabled. Please specify the backup source explicitly using either spec.backup.sourcePod in the cluster CR or spec.sourcePod in the PerconaServerMySQLBackup resource.")
 	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cluster, apiv1alpha1.UserOperator)
