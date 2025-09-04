@@ -70,8 +70,7 @@ type PerconaServerMySQLReconciler struct {
 	ServerVersion *platform.ServerVersion
 	Recorder      record.EventRecorder
 	ClientCmd     clientcmd.Client
-
-	Crons cronRegistry
+	Crons         CronRegistry
 }
 
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqls;perconaservermysqls/status;perconaservermysqls/finalizers,verbs=get;list;watch;create;update;patch;delete
@@ -474,6 +473,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	}
 	if err := r.reconcileDataSource(ctx, cr); err != nil {
 		return errors.Wrap(err, "scheduled backup")
+	}
+	if err := r.reconcileScheduledTelemetrySending(ctx, cr); err != nil {
+		return errors.Wrap(err, "scheduled telemetry sending")
 	}
 	if err := r.cleanupOutdated(ctx, cr); err != nil {
 		return errors.Wrap(err, "cleanup outdated")

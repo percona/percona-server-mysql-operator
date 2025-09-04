@@ -14,6 +14,7 @@ require (
 	github.com/go-openapi/validate v0.24.0
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/gocarina/gocsv v0.0.0-20230616125104-99d496ca653d
+	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.7.0
 	github.com/hashicorp/go-version v1.7.0
 	github.com/minio/minio-go/v7 v7.0.95
@@ -80,7 +81,7 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/pprof v0.0.0-20250403155104-27863c87afa6 // indirect
-	github.com/google/uuid v1.6.0 // indirect
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.2
 	github.com/iancoleman/orderedmap v0.3.0 // indirect
