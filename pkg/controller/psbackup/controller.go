@@ -714,7 +714,7 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 	return true, nil
 }
 
-func getBackupSourcePod(ctx context.Context, cl client.Client, namespace string, src string) (*corev1.Pod, error) {
+func getBackupSourcePod(ctx context.Context, cl client.Client, namespace, src string) (*corev1.Pod, error) {
 	s := strings.Split(src, ".")
 	if len(s) < 1 {
 		return nil, errors.Errorf("unexpected backup source '%s'", src)
