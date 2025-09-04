@@ -547,7 +547,7 @@ spec:
 
   backup:
     enabled: true
-#    sourceHost: cluster1-mysql-0.<mysql_service_name>.<namespace>
+#    sourcePod: ps-cluster1-mysql-1
     image: perconalab/percona-server-mysql-operator:main-backup8.0
 #    schedule:
 #      - name: "sat-night-backup"
