@@ -729,7 +729,7 @@ func getBackupSourcePod(ctx context.Context, cl client.Client, namespace, src st
 	}
 	err := cl.Get(ctx, client.ObjectKeyFromObject(pod), pod)
 	if err != nil {
-		return pod, err
+		return pod, errors.Wrap(err, "get pod")
 	}
 
 	return pod, nil
