@@ -693,7 +693,6 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 
 	// for single-node clusters, we need to set read_only=0 if orchestrator is disabled
 	if setWriteMode {
-		log.Info("Single-node write mode detected, setting read_only=0")
 		config = "\nsuper_read_only=0\nread_only=0"
 	}
 
