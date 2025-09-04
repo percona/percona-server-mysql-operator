@@ -10,9 +10,7 @@ import (
 func PVC(cr *apiv1alpha1.PerconaServerMySQL, name string, spec *apiv1alpha1.VolumeSpec) corev1.PersistentVolumeClaim {
 	return corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Labels:      cr.GlobalLabels(),
-			Annotations: cr.GlobalAnnotations(),
+			Name: name,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			StorageClassName: spec.PersistentVolumeClaim.StorageClassName,
