@@ -494,7 +494,7 @@ func (r *PerconaServerMySQLBackupReconciler) runPostFinishTasks(
 
 	err = orchestrator.EndDowntime(ctx, r.ClientCmd, pod, cr.Status.BackupSource, mysql.DefaultPort)
 	if err != nil {
-		return errors.Wrapf(err, "begin downtime for %s", cr.Status.BackupSource)
+		return errors.Wrapf(err, "end downtime for %s", cr.Status.BackupSource)
 	}
 
 	return nil
