@@ -136,7 +136,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 	if cluster.Spec.Backup == nil || !cluster.Spec.Backup.Enabled {
 		status.State = apiv1alpha1.BackupError
-		status.StateDesc = "spec.backup stanza not found in PerconaServerMySQL CustomResource or backup is disabled"
+		status.StateDesc = "spec.backup not found in PerconaServerMySQL CustomResource or backup is disabled"
 		return rr, nil
 	}
 
@@ -144,6 +144,13 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	if !ok {
 		status.State = apiv1alpha1.BackupError
 		status.StateDesc = fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", cr.Spec.StorageName)
+		return rr, nil
+	}
+
+	src, err := r.getBackupSource(ctx, cr, cluster)
+	if err != nil {
+		status.State = apiv1alpha1.BackupError
+		status.StateDesc = "Check Source host for backup"
 		return rr, nil
 	}
 
@@ -156,7 +163,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 	job := &batchv1.Job{}
 	nn = xtrabackup.JobNamespacedName(cr)
-	err := r.Client.Get(ctx, nn, job)
+	err = r.Get(ctx, nn, job)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return rr, errors.Wrapf(err, "get job %v", nn.String())
 	}
@@ -164,7 +171,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	if k8serrors.IsNotFound(err) {
 		log.Info("Creating backup job", "jobName", nn.Name)
 
-		if err := r.createBackupJob(ctx, cr, cluster, storage, &status); err != nil {
+		if err := r.createBackupJob(ctx, cr, cluster, storage, &status, src); err != nil {
 			return rr, errors.Wrap(err, "failed to create backup job")
 		}
 
@@ -245,7 +252,7 @@ func (r *PerconaServerMySQLBackupReconciler) isBackupJobRunning(ctx context.Cont
 	return true, nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup, cluster *apiv1alpha1.PerconaServerMySQL, storage *apiv1alpha1.BackupStorageSpec, status *apiv1alpha1.PerconaServerMySQLBackupStatus) error {
+func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup, cluster *apiv1alpha1.PerconaServerMySQL, storage *apiv1alpha1.BackupStorageSpec, status *apiv1alpha1.PerconaServerMySQLBackupStatus, sourceHost string) error {
 	initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
 	if err != nil {
 		return errors.Wrap(err, "get operator image")
@@ -263,7 +270,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context
 	switch storage.Type {
 	case apiv1alpha1.BackupStorageS3:
 		if storage.S3 == nil {
-			return errors.New("s3 stanza is required in storage")
+			return errors.New("s3 is required in storage")
 		}
 
 		nn := types.NamespacedName{Name: storage.S3.CredentialsSecret, Namespace: cr.Namespace}
@@ -283,7 +290,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context
 		status.Destination = destination
 	case apiv1alpha1.BackupStorageGCS:
 		if storage.GCS == nil {
-			return errors.New("gcs stanza is required in storage")
+			return errors.New("gcs is required in storage")
 		}
 
 		nn := types.NamespacedName{Name: storage.GCS.CredentialsSecret, Namespace: cr.Namespace}
@@ -303,7 +310,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context
 		status.Destination = destination
 	case apiv1alpha1.BackupStorageAzure:
 		if storage.Azure == nil {
-			return errors.New("azure stanza is required in storage")
+			return errors.New("azure is required in storage")
 		}
 
 		nn := types.NamespacedName{Name: storage.Azure.CredentialsSecret, Namespace: cr.Namespace}
@@ -328,12 +335,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(ctx context.Context
 	status.Image = cluster.Spec.Backup.Image
 	status.Storage = storage
 
-	src, err := r.getBackupSource(ctx, cr, cluster)
-	if err != nil {
-		return errors.Wrap(err, "get backup source node")
-	}
-
-	if err := xtrabackup.SetSourceNode(job, src); err != nil {
+	if err := xtrabackup.SetSourceNode(job, sourceHost); err != nil {
 		return errors.Wrap(err, "set backup source node")
 	}
 

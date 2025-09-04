@@ -3,14 +3,13 @@ package haproxy
 import (
 	"testing"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
-	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 func TestStatefulset(t *testing.T) {
@@ -45,7 +44,6 @@ func TestStatefulset(t *testing.T) {
 		labels := map[string]string{
 			"app.kubernetes.io/name":       "haproxy",
 			"app.kubernetes.io/part-of":    "percona-server",
-			"app.kubernetes.io/version":    "v" + version.Version(),
 			"app.kubernetes.io/instance":   "cluster",
 			"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
 			"app.kubernetes.io/component":  "proxy",
@@ -298,7 +296,7 @@ func TestService(t *testing.T) {
 
 			assert.Equal(t, tt.serviceType, service.Spec.Type)
 
-			expectedLabels := MatchLabels(cr)
+			expectedLabels := Labels(cr)
 			expectedLabels["custom-label"] = "custom-value"
 			assert.Equal(t, expectedLabels, service.Labels)
 

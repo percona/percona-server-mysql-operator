@@ -32,6 +32,7 @@ func TestStatefulSet(t *testing.T) {
 	}
 
 	cr := readDefaultCluster(t, "cluster", ns)
+	cr.Spec.CRVersion = version.Version()
 	if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
 		Platform: platform.PlatformKubernetes,
 	}); err != nil {
@@ -52,7 +53,6 @@ func TestStatefulSet(t *testing.T) {
 			"app.kubernetes.io/instance":   "cluster",
 			"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
 			"app.kubernetes.io/component":  "database",
-			"app.kubernetes.io/version":    "v" + version.Version(),
 		}
 		assert.Equal(t, labels, sts.Labels)
 	})

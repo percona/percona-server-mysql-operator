@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 
 	"github.com/pkg/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -24,6 +25,11 @@ func (c *Component) PerconaServerMySQL() *apiv1alpha1.PerconaServerMySQL {
 
 func (c *Component) Labels() map[string]string {
 	cr := c.PerconaServerMySQL()
+	return Labels(cr)
+}
+
+func (c *Component) MatchLabels() map[string]string {
+	cr := c.PerconaServerMySQL()
 	return MatchLabels(cr)
 }
 
@@ -40,7 +46,7 @@ func (c *Component) Object(ctx context.Context, cl client.Client) (client.Object
 	}
 
 	configurable := Configurable(*cr)
-	configHash, err := k8s.CustomConfigHash(ctx, cl, cr, &configurable)
+	configHash, err := k8s.CustomConfigHash(ctx, cl, cr, &configurable, naming.ComponentProxy)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get custom config hash")
 	}

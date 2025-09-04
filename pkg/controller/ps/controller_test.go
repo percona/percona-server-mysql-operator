@@ -1019,7 +1019,7 @@ var _ = Describe("PVC Resizing", Ordered, func() {
 				}
 				for i := 0; i < int(*sts.Spec.Replicas); i++ {
 					pvc := claim.DeepCopy()
-					pvc.Labels = exposer.Labels()
+					pvc.Labels = exposer.MatchLabels()
 					pvc.Name = fmt.Sprintf("%s-%s-%d", claim.Name, sts.Name, i)
 					pvc.Namespace = ns
 					pvc.Spec.VolumeName = fmt.Sprintf("pv-%s-%d", sts.Name, i)
@@ -1049,7 +1049,7 @@ var _ = Describe("PVC Resizing", Ordered, func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      fmt.Sprintf("%s-%d", sts.Name, i),
 						Namespace: ns,
-						Labels:    exposer.Labels(),
+						Labels:    exposer.MatchLabels(),
 					},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
@@ -1190,7 +1190,7 @@ var _ = Describe("Finalizer delete-mysql-pvc", Ordered, func() {
 			for _, claim := range sfsWithOwner.Spec.VolumeClaimTemplates {
 				for i := 0; i < int(*sfsWithOwner.Spec.Replicas); i++ {
 					pvc := claim.DeepCopy()
-					pvc.Labels = exposer.Labels()
+					pvc.Labels = exposer.MatchLabels()
 					pvc.Name = strings.Join([]string{pvc.Name, sfsWithOwner.Name, strconv.Itoa(i)}, "-")
 					pvc.Namespace = ns
 					Expect(k8sClient.Create(ctx, pvc)).Should(Succeed())

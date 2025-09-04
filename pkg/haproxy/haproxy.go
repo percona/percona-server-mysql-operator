@@ -46,9 +46,12 @@ func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
+func Labels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
+	return util.SSMapMerge(cr.GlobalLabels(), cr.Spec.Proxy.HAProxy.Labels, MatchLabels(cr))
+}
+
 func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
-	return util.SSMapMerge(cr.GlobalLabels(), cr.Spec.Proxy.HAProxy.Labels,
-		cr.Labels(AppName, naming.ComponentProxy))
+	return cr.Labels(AppName, naming.ComponentProxy)
 }
 
 func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
@@ -59,7 +62,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 	expose := cr.Spec.Proxy.HAProxy.Expose
 
 	labels := MatchLabels(cr)
-	labels = util.SSMapMerge(expose.Labels, labels)
+	labels = util.SSMapMerge(cr.GlobalLabels(), expose.Labels, labels)
 
 	selector := MatchLabels(cr)
 
@@ -128,7 +131,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) *corev1.
 }
 
 func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHash string, secret *corev1.Secret) *appsv1.StatefulSet {
-	labels := MatchLabels(cr)
+	selector := MatchLabels(cr)
 
 	annotations := make(map[string]string)
 	if configHash != "" {
@@ -146,19 +149,19 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        Name(cr),
 			Namespace:   cr.Namespace,
-			Labels:      labels,
+			Labels:      Labels(cr),
 			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &cr.Spec.Proxy.HAProxy.Size,
 			ServiceName: Name(cr),
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: selector,
 			},
 			UpdateStrategy: updateStrategy(cr),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels:      labels,
+					Labels:      Labels(cr),
 					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
 				},
 				Spec: corev1.PodSpec{
@@ -178,8 +181,8 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 						),
 					},
 					Containers:                    containers(cr, secret),
-					Affinity:                      cr.Spec.Proxy.HAProxy.GetAffinity(labels),
-					TopologySpreadConstraints:     cr.Spec.Proxy.HAProxy.GetTopologySpreadConstraints(labels),
+					Affinity:                      cr.Spec.Proxy.HAProxy.GetAffinity(selector),
+					TopologySpreadConstraints:     cr.Spec.Proxy.HAProxy.GetTopologySpreadConstraints(selector),
 					ImagePullSecrets:              cr.Spec.Proxy.HAProxy.ImagePullSecrets,
 					TerminationGracePeriodSeconds: cr.Spec.Proxy.HAProxy.GetTerminationGracePeriodSeconds(),
 					RestartPolicy:                 corev1.RestartPolicyAlways,
@@ -381,6 +384,16 @@ func mysqlMonitContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		},
 	}
 	env = append(env, spec.Env...)
+
+	if cr.CompareVersion("0.12.0") >= 0 {
+		cluserTypeEnv := []corev1.EnvVar{
+			{
+				Name:  "CLUSTER_TYPE",
+				Value: string(cr.Spec.MySQL.ClusterType),
+			},
+		}
+		env = append(env, cluserTypeEnv...)
+	}
 
 	return corev1.Container{
 		Name:            "mysql-monit",
