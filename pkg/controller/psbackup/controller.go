@@ -62,13 +62,13 @@ type PerconaServerMySQLBackupReconciler struct {
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 
-const ControllerName = "psbackup-controller"
+const controllerName = "psbackup-controller"
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PerconaServerMySQLBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1alpha1.PerconaServerMySQLBackup{}).
-		Named(ControllerName).
+		Named(controllerName).
 		Complete(r)
 }
 
@@ -457,7 +457,7 @@ func (r *PerconaServerMySQLBackupReconciler) prepareBackupSource(
 			return errors.Wrap(err, "get ready orchestrator pod")
 		}
 
-		owner := ControllerName
+		owner := controllerName
 		reason := fmt.Sprintf("ps-backup-%s", cr.Name)
 		duration := 1200 // TODO: this should be configurable
 		log.Info("Starting downtime for backup source", "source", backupSource, "owner", owner, "reason", reason, "durationSeconds", duration)
