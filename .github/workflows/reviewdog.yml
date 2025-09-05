@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: reviewdog/action-shellcheck@v1.22.0
+      - uses: reviewdog/action-shellcheck@v1
         with:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-check
@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: reviewdog/action-misspell@v1.22.0
+      - uses: reviewdog/action-misspell@v1
         with:
           github_token: ${{ secrets.github_token }}
           locale: "US"
@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: reviewdog/action-alex@v1.22.0
+      - uses: reviewdog/action-alex@v1
         with:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-review
