@@ -1,0 +1,12 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 30
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 12-read-from-replicas
+data:
+  async-data-source-ref-mysql-0.async-data-source-ref-mysql: "100500"
+  async-data-source-ref-mysql-1.async-data-source-ref-mysql: "100500"
+  async-data-source-ref-mysql-2.async-data-source-ref-mysql: "100500"

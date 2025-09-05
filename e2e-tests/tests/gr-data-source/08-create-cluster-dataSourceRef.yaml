@@ -1,0 +1,21 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      suffix="ref"
+      get_cr $suffix \
+          | yq eval '.spec.mysql.clusterType="group-replication"' - \
+          | yq eval '.spec.proxy.router.enabled=true' - \
+          | yq eval '.spec.proxy.haproxy.enabled=false' - \
+          | yq eval '.spec.mysql.size=3' - \
+          | yq eval '.spec.secretsName="internal-gr-data-source-initial"' - \
+          | yq eval '.spec.mysql.volumeSpec.persistentVolumeClaim.resources.requests.storage="3Gi"' - \
+          | yq eval '.spec.mysql.volumeSpec.persistentVolumeClaim.dataSourceRef.kind="PersistentVolumeClaim"' - \
+          | yq eval '.spec.mysql.volumeSpec.persistentVolumeClaim.dataSourceRef.name="datadir-gr-data-source-initial-mysql-0"' - \
+          | kubectl -n "${NAMESPACE}" apply -f -
+    timeout: 180

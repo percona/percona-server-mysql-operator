@@ -176,7 +176,7 @@ spec:
 #        accessModes: [ "ReadWriteOnce" ]
         resources:
           requests:
-            storage: 2G
+            storage: 2Gi
     gracePeriod: 600
 #    configuration: |
 #      max_connections=250
@@ -207,7 +207,7 @@ spec:
 #      spec:
 #        resources:
 #          requests:
-#            storage: 1G
+#            storage: 1Gi
 #    containerSecurityContext:
 #      privileged: true
 #    podSecurityContext:
