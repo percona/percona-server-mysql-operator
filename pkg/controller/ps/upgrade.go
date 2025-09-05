@@ -21,7 +21,7 @@ import (
 const controllerRevisionHash = "controller-revision-hash"
 
 func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *appsv1.StatefulSet, cr *apiv1alpha1.PerconaServerMySQL) error {
-	log := logf.FromContext(ctx)
+	log := logf.FromContext(ctx).WithName("SmartUpdate")
 
 	if cr.Spec.Pause {
 		return nil
@@ -111,6 +111,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	log.Info("apply changes to primary pod", "pod", primPod.Name)
 
 	if primPod.ObjectMeta.Labels[controllerRevisionHash] != sts.Status.UpdateRevision {
+		// TODO: We need to perform failover before killing the primary
 		log.Info("primary pod was deleted", "pod", primPod.Name)
 		err = deletePod(ctx, r.Client, primPod, currentSet)
 		if err != nil {
