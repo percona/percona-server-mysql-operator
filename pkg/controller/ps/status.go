@@ -235,7 +235,7 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 		return false, errors.Wrap(err, "get operator password")
 	}
 
-	pod, err := GetReadyMySQLPod(ctx, r.Client, cr)
+	pod, err := mysql.GetReadyMySQLPod(ctx, r.Client, cr)
 	if err != nil {
 		return false, errors.Wrap(err, "get ready mysql pod")
 	}

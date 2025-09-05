@@ -2,6 +2,7 @@ package ps
 
 import (
 	"context"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"time"
 
 	"github.com/pkg/errors"
@@ -86,7 +87,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	if err != nil {
 		return err
 	}
-	primPod, err := getMySQLPod(ctx, r.Client, cr, idx)
+	primPod, err := mysql.GetMySQLPod(ctx, r.Client, cr, idx)
 	if err != nil {
 		return errors.Wrap(err, "get primary pod")
 	}
@@ -126,7 +127,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		Jitter:   0.1,
 	}
 	err = k8sretry.OnError(backoff, func(err error) bool { return err != nil }, func() error {
-		primPod, err := getMySQLPod(ctx, r.Client, cr, idx)
+		primPod, err := mysql.GetMySQLPod(ctx, r.Client, cr, idx)
 		if err != nil {
 			return errors.Wrap(err, "get primary pod")
 		}

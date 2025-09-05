@@ -37,7 +37,6 @@ import (
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
-	"github.com/percona/percona-server-mysql-operator/pkg/controller/ps"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -629,7 +628,7 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 		return complete, nil
 	}
 
-	pod, err := ps.GetReadyMySQLPod(ctx, r.Client, cluster)
+	pod, err := mysql.GetReadyMySQLPod(ctx, r.Client, cluster)
 	if err != nil {
 		return false, errors.Wrap(err, "get ready mysql pod")
 	}
