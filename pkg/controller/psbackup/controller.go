@@ -20,12 +20,14 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -40,6 +42,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
@@ -59,11 +62,13 @@ type PerconaServerMySQLBackupReconciler struct {
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 
+const controllerName = "psbackup-controller"
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *PerconaServerMySQLBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1alpha1.PerconaServerMySQLBackup{}).
-		Named("psbackup-controller").
+		Named(controllerName).
 		Complete(r)
 }
 
@@ -136,7 +141,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 	if cluster.Spec.Backup == nil || !cluster.Spec.Backup.Enabled {
 		status.State = apiv1alpha1.BackupError
-		status.StateDesc = "spec.backup not found in PerconaServerMySQL CustomResource or backup is disabled"
+		status.StateDesc = "spec.backup not found in PerconaServerMySQL CustomResource or backups are disabled"
 		return rr, nil
 	}
 
@@ -147,7 +152,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, nil
 	}
 
-	src, err := r.getBackupSource(ctx, cr, cluster)
+	backupSource, err := r.getBackupSource(ctx, cr, cluster)
 	if err != nil {
 		status.State = apiv1alpha1.BackupError
 		status.StateDesc = fmt.Sprintf("failed to get the source host for backup: %v", err)
@@ -169,9 +174,13 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	if k8serrors.IsNotFound(err) {
-		log.Info("Creating backup job", "jobName", nn.Name)
+		log.Info("Preparing backup source", "source", backupSource)
+		if err := r.prepareBackupSource(ctx, cr, cluster, backupSource); err != nil {
+			return rr, errors.Wrap(err, "prepare backup source")
+		}
 
-		if err := r.createBackupJob(ctx, cr, cluster, storage, &status, src); err != nil {
+		log.Info("Creating backup job", "jobName", nn.Name)
+		if err := r.createBackupJob(ctx, cr, cluster, backupSource, storage, &status); err != nil {
 			return rr, errors.Wrap(err, "failed to create backup job")
 		}
 
@@ -212,6 +221,10 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return rr, nil
 		}
 	case apiv1alpha1.BackupFailed, apiv1alpha1.BackupSucceeded:
+		log.Info("Running post finish tasks")
+		if err := r.runPostFinishTasks(ctx, cr, cluster); err != nil {
+			return rr, errors.Wrap(err, "run post finish tasks")
+		}
 		return rr, nil
 	default:
 		status.State = apiv1alpha1.BackupStarting
@@ -256,9 +269,9 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 	ctx context.Context,
 	cr *apiv1alpha1.PerconaServerMySQLBackup,
 	cluster *apiv1alpha1.PerconaServerMySQL,
+	backupSource string,
 	storage *apiv1alpha1.BackupStorageSpec,
 	status *apiv1alpha1.PerconaServerMySQLBackupStatus,
-	sourceHost string,
 ) error {
 	initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
 	if err != nil {
@@ -342,9 +355,11 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 	status.Image = cluster.Spec.Backup.Image
 	status.Storage = storage
 
-	if err := xtrabackup.SetSourceNode(job, sourceHost); err != nil {
+	if err := xtrabackup.SetSourceNode(job, backupSource); err != nil {
 		return errors.Wrap(err, "set backup source node")
 	}
+
+	status.BackupSource = backupSource
 
 	if err := controllerutil.SetControllerReference(cr, job, r.Scheme); err != nil {
 		return errors.Wrapf(err, "set controller reference to Job %s/%s", job.Namespace, job.Name)
@@ -422,6 +437,63 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 	}
 
 	return source, nil
+}
+
+func (r *PerconaServerMySQLBackupReconciler) prepareBackupSource(
+	ctx context.Context,
+	cr *apiv1alpha1.PerconaServerMySQLBackup,
+	cluster *apiv1alpha1.PerconaServerMySQL,
+	backupSource string,
+) error {
+	log := logf.FromContext(ctx)
+
+	if cluster.Spec.MySQL.IsAsync() && cluster.Spec.Orchestrator.Enabled {
+		orcPod, err := orchestrator.GetReadyPod(ctx, r.Client, cluster)
+		if err != nil {
+			return errors.Wrap(err, "get ready orchestrator pod")
+		}
+
+		owner := controllerName
+		reason := fmt.Sprintf("ps-backup-%s", cr.Name)
+		duration := 1200 // TODO: this should be configurable
+		log.Info("Starting downtime for backup source", "source", backupSource, "owner", owner, "reason", reason, "durationSeconds", duration)
+
+		err = orchestrator.BeginDowntime(
+			ctx, r.ClientCmd, orcPod,
+			backupSource, mysql.DefaultPort,
+			owner, reason, duration)
+		if err != nil {
+			return errors.Wrapf(err, "begin downtime for %s", backupSource)
+		}
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLBackupReconciler) runPostFinishTasks(
+	ctx context.Context,
+	cr *apiv1alpha1.PerconaServerMySQLBackup,
+	cluster *apiv1alpha1.PerconaServerMySQL,
+) error {
+	if !cluster.Spec.MySQL.IsAsync() || !cluster.Spec.Orchestrator.Enabled {
+		return nil
+	}
+
+	log := logf.FromContext(ctx)
+
+	pod, err := orchestrator.GetReadyPod(ctx, r.Client, cluster)
+	if err != nil {
+		return errors.Wrap(err, "get ready orchestrator pod")
+	}
+
+	log.Info("Ending downtime for backup source", "source", cr.Status.BackupSource)
+
+	err = orchestrator.EndDowntime(ctx, r.ClientCmd, pod, cr.Status.BackupSource, mysql.DefaultPort)
+	if err != nil {
+		return errors.Wrapf(err, "end downtime for %s", cr.Status.BackupSource)
+	}
+
+	return nil
 }
 
 func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQLBackup) {
@@ -582,6 +654,9 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 		return true, nil
 	}
 
+	log := logf.FromContext(ctx)
+	log.Info("Deleting backup")
+
 	backupConf, err := r.backupConfig(ctx, cr)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to create sidecar backup config")
@@ -628,14 +703,37 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 		return complete, nil
 	}
 
+
 	pod, err := mysql.GetReadyMySQLPod(ctx, r.Client, cluster)
 	if err != nil {
 		return false, errors.Wrap(err, "get ready mysql pod")
 	}
 	src := mysql.PodFQDN(cluster, pod)
 	sc := r.NewSidecarClient(src)
+
 	if err := sc.DeleteBackup(ctx, cr.Name, *backupConf); err != nil {
 		return false, errors.Wrap(err, "delete backup")
 	}
 	return true, nil
+}
+
+func getBackupSourcePod(ctx context.Context, cl client.Client, namespace, src string) (*corev1.Pod, error) {
+	s := strings.Split(src, ".")
+	if len(s) < 1 {
+		return nil, errors.Errorf("unexpected backup source '%s'", src)
+	}
+	podName := s[0]
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      podName,
+			Namespace: namespace,
+		},
+	}
+	err := cl.Get(ctx, client.ObjectKeyFromObject(pod), pod)
+	if err != nil {
+		return pod, errors.Wrap(err, "get pod")
+	}
+
+	return pod, nil
 }
