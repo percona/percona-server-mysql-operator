@@ -489,6 +489,7 @@ func orcConfig(cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
 
 	config["RaftNodes"] = RaftNodes(cr)
 
+	config["RaftEnabledSingleNode"] = false
 	if cr.Spec.Orchestrator.Size == 1 {
 		config["RaftEnabledSingleNode"] = true
 	}

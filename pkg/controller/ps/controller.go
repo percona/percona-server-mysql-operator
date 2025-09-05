@@ -809,8 +809,24 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 				return errors.Wrap(err, "get ConfigMap data for single node")
 			}
 
+			configMap := orchestrator.ConfigMap(cr, cmData)
+
 			if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.ConfigMap(cr, cmData), r.Scheme); err != nil {
 				return errors.Wrap(err, "update ConfigMap for single node")
+			}
+
+			configMapHash, err := k8s.ObjectHash(configMap)
+			if err != nil {
+				return errors.Wrap(err, "calculate config map hash")
+			}
+
+			sts := &appsv1.StatefulSet{}
+			if err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), sts); err != nil {
+				return errors.Wrap(err, "get orchestrator sts")
+			}
+
+			if err := k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationLastConfigHash, configMapHash); err != nil {
+				return errors.Wrap(err, "restart orchestrator for config change")
 			}
 		}
 
