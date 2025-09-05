@@ -152,7 +152,7 @@ spec:
                       type: object
                     type: array
                 type: object
-              sourceHost:
+              sourcePod:
                 type: string
               storageName:
                 type: string
@@ -162,6 +162,8 @@ spec:
             type: object
           status:
             properties:
+              backupSource:
+                type: string
               completed:
                 format: date-time
                 type: string
@@ -1207,6 +1209,8 @@ spec:
                 type: string
               backupSource:
                 properties:
+                  backupSource:
+                    type: string
                   completed:
                     format: date-time
                     type: string
@@ -4017,7 +4021,7 @@ spec:
                     type: array
                   serviceAccountName:
                     type: string
-                  sourceHost:
+                  sourcePod:
                     type: string
                   storages:
                     additionalProperties:
