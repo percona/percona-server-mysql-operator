@@ -163,15 +163,6 @@ spec:
 #        path: /data
 #        type: Directory
       persistentVolumeClaim:
-#        dataSource:
-#          apiGroup: ""
-#          kind: PersistentVolumeClaim
-#          name: source-pvc
-#        dataSourceRef:
-#          apiGroup: ""
-#          kind: PersistentVolumeClaim
-#          name: source-pvc
-#          namespace: default
 #        storageClassName: standard
 #        accessModes: [ "ReadWriteOnce" ]
         resources:
@@ -547,7 +538,7 @@ spec:
 
   backup:
     enabled: true
-#    sourceHost: cluster1-mysql-0.<mysql_service_name>.<namespace>
+#    sourcePod: ps-cluster1-mysql-1
     image: perconalab/percona-server-mysql-operator:main-backup8.0
 #    schedule:
 #      - name: "sat-night-backup"

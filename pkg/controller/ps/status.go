@@ -312,6 +312,8 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1a
 }
 
 func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) (bool, string, error) {
+	log := logf.FromContext(ctx)
+
 	pod, err := getReadyOrcPod(ctx, r.Client, cr)
 	if err != nil {
 		return false, "", err
@@ -328,6 +330,15 @@ func (r *PerconaServerMySQLReconciler) isAsyncReady(ctx context.Context, cr *api
 	problems := make(map[string][]string)
 
 	for _, i := range instances {
+		if i.IsDowntimed {
+			log.Info("MySQL instance is downtimed",
+				"instance", i.Alias,
+				"owner", i.DowntimeOwner,
+				"reason", i.DowntimeReason,
+				"elapsedDowntime", i.ElapsedDowntime,
+				"downtimeEndTs", i.DowntimeEndTimestamp)
+			continue
+		}
 		if len(i.Problems) > 0 {
 			problems[i.Alias] = i.Problems
 		}
