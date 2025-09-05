@@ -42,7 +42,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	pods := corev1.PodList{}
 	if err := r.Client.List(ctx, &pods, &client.ListOptions{
 		Namespace:     currentSet.Namespace,
-		LabelSelector: labels.SelectorFromSet(currentSet.Labels),
+		LabelSelector: labels.SelectorFromSet(currentSet.Spec.Selector.MatchLabels),
 	}); err != nil {
 		return errors.Wrap(err, "get pod list")
 	}
