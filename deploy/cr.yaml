@@ -13,10 +13,10 @@ spec:
 #      service.beta.kubernetes.io/aws-load-balancer-type: nlb
 #    labels:
 #      rack: rack-22
-#  unsafeFlags:
+  unsafeFlags:
 #    mysqlSize: false
 #    orchestrator: false
-#    orchestratorSize: false
+    orchestratorSize: true
 #    proxy: false
 #    proxySize: false
 #  pause: false
@@ -56,7 +56,7 @@ spec:
 #      group: cert-manager.io
 
   mysql:
-    clusterType: group-replication
+    clusterType: async
     autoRecovery: true
     image: perconalab/percona-server-mysql-operator:main-psmysql8.0
     imagePullPolicy: Always
@@ -446,7 +446,7 @@ spec:
 #          - 10.0.0.0/8
 
   orchestrator:
-    enabled: false
+    enabled: true
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 #    runtimeClassName: image-rc
@@ -473,7 +473,7 @@ spec:
 #          memory: 200M
 #          cpu: 200m
 
-    size: 3
+    size: 1
 
     affinity:
       antiAffinityTopologyKey: "kubernetes.io/hostname"

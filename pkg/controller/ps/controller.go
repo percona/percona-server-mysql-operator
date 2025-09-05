@@ -812,7 +812,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 
 			configMap := orchestrator.ConfigMap(cr, cmData)
 
-			if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.ConfigMap(cr, cmData), r.Scheme); err != nil {
+			if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
 				return errors.Wrap(err, "update ConfigMap for single node")
 			}
 
