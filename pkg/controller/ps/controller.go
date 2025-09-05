@@ -766,13 +766,29 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return errors.Wrap(err, "get ConfigMap data")
 	}
 
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.ConfigMap(cr, cmData), r.Scheme); err != nil {
+	configMap := orchestrator.ConfigMap(cr, cmData)
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile ConfigMap")
 	}
 
 	component := orchestrator.Component(*cr)
 	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
 		return errors.Wrap(err, "ensure component")
+	}
+
+	configMapHash, err := k8s.ObjectHash(configMap)
+	if err != nil {
+		return errors.Wrap(err, "calculate config map hash")
+	}
+
+	sts := &appsv1.StatefulSet{}
+	if err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), sts); err != nil {
+		return errors.Wrap(err, "get orchestrator sts")
+	}
+
+	if err := k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationLastConfigHash, configMapHash); err != nil {
+		return errors.Wrap(err, "restart orchestrator for config change")
 	}
 
 	raftNodes := orchestrator.RaftNodes(cr)
@@ -801,35 +817,6 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		}
 	} else {
 		oldPeers := util.Difference(existingNodes, raftNodes)
-
-		if cr.Spec.Orchestrator.Size == 1 && len(oldPeers) > 0 {
-			log.Info("Scaling down to single node, enabling single node mode first", "oldPeers", oldPeers)
-
-			cmData, err := orchestrator.ConfigMapData(cr)
-			if err != nil {
-				return errors.Wrap(err, "get ConfigMap data for single node")
-			}
-
-			configMap := orchestrator.ConfigMap(cr, cmData)
-
-			if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
-				return errors.Wrap(err, "update ConfigMap for single node")
-			}
-
-			configMapHash, err := k8s.ObjectHash(configMap)
-			if err != nil {
-				return errors.Wrap(err, "calculate config map hash")
-			}
-
-			sts := &appsv1.StatefulSet{}
-			if err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), sts); err != nil {
-				return errors.Wrap(err, "get orchestrator sts")
-			}
-
-			if err := k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationLastConfigHash, configMapHash); err != nil {
-				return errors.Wrap(err, "restart orchestrator for config change")
-			}
-		}
 
 		for _, peer := range oldPeers {
 			p := peer
