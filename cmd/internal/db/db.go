@@ -196,9 +196,9 @@ func (d *DB) getCloneStatus(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "fetch clone status")
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
-	for rows.Next() {
+	if rows.Next() {
 		var state string
 		if err := rows.Scan(&state); err != nil {
 			return "", errors.Wrap(err, "scan rows")
@@ -215,10 +215,10 @@ func (d *DB) getCloneStatusDetails(ctx context.Context) (map[string]interface{},
 	if err != nil {
 		return nil, errors.Wrap(err, "fetch clone status details")
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	details := make(map[string]interface{})
-	for rows.Next() {
+	if rows.Next() {
 		var state, beginTime, endTime, source, destination, errorNo, errorMessage sql.NullString
 		if err := rows.Scan(&state, &beginTime, &endTime, &source, &destination, &errorNo, &errorMessage); err != nil {
 			return nil, errors.Wrap(err, "scan clone status details")
@@ -231,7 +231,6 @@ func (d *DB) getCloneStatusDetails(ctx context.Context) (map[string]interface{},
 		details["destination"] = destination.String
 		details["error_no"] = errorNo.String
 		details["error_message"] = errorMessage.String
-		break // Only get the first row
 	}
 
 	return details, nil

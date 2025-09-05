@@ -56,12 +56,12 @@ func TestGetCloneTimeout(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clean up any existing environment variable
-			os.Unsetenv("BOOTSTRAP_CLONE_TIMEOUT")
+			_ = os.Unsetenv("BOOTSTRAP_CLONE_TIMEOUT")
 
 			// Set the environment variable if needed
 			if tt.envValue != "" {
-				os.Setenv("BOOTSTRAP_CLONE_TIMEOUT", tt.envValue)
-				defer os.Unsetenv("BOOTSTRAP_CLONE_TIMEOUT")
+				_ = os.Setenv("BOOTSTRAP_CLONE_TIMEOUT", tt.envValue)
+				defer func() { _ = os.Unsetenv("BOOTSTRAP_CLONE_TIMEOUT") }()
 			}
 
 			result, err := GetCloneTimeout()
@@ -79,8 +79,8 @@ func TestGetCloneTimeout(t *testing.T) {
 
 func TestGetCloneTimeout_EnvironmentVariable(t *testing.T) {
 	// Test that the function reads from the correct environment variable
-	os.Setenv("BOOTSTRAP_CLONE_TIMEOUT", "600")
-	defer os.Unsetenv("BOOTSTRAP_CLONE_TIMEOUT")
+	_ = os.Setenv("BOOTSTRAP_CLONE_TIMEOUT", "600")
+	defer func() { _ = os.Unsetenv("BOOTSTRAP_CLONE_TIMEOUT") }()
 
 	result, err := GetCloneTimeout()
 	require.NoError(t, err)
@@ -89,8 +89,8 @@ func TestGetCloneTimeout_EnvironmentVariable(t *testing.T) {
 
 func TestGetCloneTimeout_ZeroTimeout(t *testing.T) {
 	// Test that zero timeout is valid (disables timeout)
-	os.Setenv("BOOTSTRAP_CLONE_TIMEOUT", "0")
-	defer os.Unsetenv("BOOTSTRAP_CLONE_TIMEOUT")
+	_ = os.Setenv("BOOTSTRAP_CLONE_TIMEOUT", "0")
+	defer func() { _ = os.Unsetenv("BOOTSTRAP_CLONE_TIMEOUT") }()
 
 	result, err := GetCloneTimeout()
 	require.NoError(t, err)
