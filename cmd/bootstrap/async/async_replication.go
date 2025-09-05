@@ -90,6 +90,12 @@ func Bootstrap(ctx context.Context) error {
 	}
 	params.ReadTimeoutSeconds = readTimeout
 
+	cloneTimeout, err := utils.GetCloneTimeout()
+	if err != nil {
+		return errors.Wrap(err, "get clone timeout")
+	}
+	params.CloneTimeoutSeconds = cloneTimeout
+
 	db, err := database.NewDatabase(ctx, params)
 	if err != nil {
 		return errors.Wrap(err, "connect to database")
@@ -149,7 +155,7 @@ func Bootstrap(ctx context.Context) error {
 
 		timer.Start("clone")
 		log.Printf("Cloning from %s", donor)
-		err = db.Clone(ctx, donor, string(apiv1alpha1.UserOperator), operatorPass, mysql.DefaultAdminPort)
+		err = db.Clone(ctx, donor, string(apiv1alpha1.UserOperator), operatorPass, mysql.DefaultAdminPort, params.CloneTimeoutSeconds)
 		timer.Stop("clone")
 		if err != nil && !errors.Is(err, database.ErrRestartAfterClone) {
 			return errors.Wrapf(err, "clone from donor %s", donor)
