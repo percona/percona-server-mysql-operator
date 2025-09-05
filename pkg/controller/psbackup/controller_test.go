@@ -132,7 +132,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			if cr.Status.StateDesc != tt.stateDesc {
 				t.Fatalf("expected stateDesc %s, got %s", tt.stateDesc, cr.Status.StateDesc)
 			}
-			if cr.Status.State != apiv1alpha1.BackupFailed {
+			if cr.Status.State != apiv1alpha1.BackupError {
 				t.Fatalf("expected state %s, got %s", apiv1alpha1.RestoreError, cr.Status.State)
 			}
 		})
@@ -164,7 +164,7 @@ func TestCheckFinalizers(t *testing.T) {
 			name: "without finalizers",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
 				cr.Finalizers = []string{}
-				cr.Status.State = apiv1alpha1.BackupFailed
+				cr.Status.State = apiv1alpha1.BackupError
 			}),
 			expectedFinalizers: nil,
 		},
@@ -188,7 +188,7 @@ func TestCheckFinalizers(t *testing.T) {
 			name: "with finalizer and error state",
 			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
-				cr.Status.State = apiv1alpha1.BackupFailed
+				cr.Status.State = apiv1alpha1.BackupError
 			}),
 			expectedFinalizers: nil,
 		},
@@ -232,7 +232,7 @@ func TestCheckFinalizers(t *testing.T) {
 				cr.Status.State = apiv1alpha1.BackupFailed
 			}),
 			finalizerJobFail:   true,
-			expectedFinalizers: nil,
+			expectedFinalizers: []string{},
 		},
 		{
 			name: "with successful finalizer and failed state",
@@ -240,7 +240,7 @@ func TestCheckFinalizers(t *testing.T) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1alpha1.BackupFailed
 			}),
-			expectedFinalizers: nil,
+			expectedFinalizers: []string{},
 		},
 		{
 			name: "with successful finalizer, unknown finalizer and failed state",
@@ -248,7 +248,7 @@ func TestCheckFinalizers(t *testing.T) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup, "unknown-finalizer"}
 				cr.Status.State = apiv1alpha1.BackupFailed
 			}),
-			expectedFinalizers: nil,
+			expectedFinalizers: []string{"unknown-finalizer"},
 		},
 	}
 
@@ -723,26 +723,6 @@ func TestPrepareBackupSource(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "error when backup source pod not found",
-			cluster: &apiv1alpha1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster",
-					Namespace: namespace,
-				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeAsync,
-					},
-					Orchestrator: apiv1alpha1.OrchestratorSpec{
-						Enabled: true,
-					},
-				},
-			},
-			pods:     []client.Object{orchestratorPod},
-			wantErr:  true,
-			errorMsg: "get backup source pod",
-		},
-		{
 			name: "error when orchestrator pod not ready",
 			cluster: &apiv1alpha1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
@@ -761,26 +741,6 @@ func TestPrepareBackupSource(t *testing.T) {
 			pods:     []client.Object{backupPod},
 			wantErr:  true,
 			errorMsg: "get ready orchestrator pod",
-		},
-		{
-			name: "error with malformed backup source",
-			cluster: &apiv1alpha1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster",
-					Namespace: namespace,
-				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeAsync,
-					},
-					Orchestrator: apiv1alpha1.OrchestratorSpec{
-						Enabled: false,
-					},
-				},
-			},
-			pods:     []client.Object{orchestratorPod},
-			wantErr:  true,
-			errorMsg: "get backup source pod",
 		},
 	}
 

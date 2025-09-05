@@ -128,7 +128,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
 	if err := r.Client.Get(ctx, nn, cluster); err != nil {
 		if k8serrors.IsNotFound(err) {
-			status.State = apiv1alpha1.BackupFailed
+			status.State = apiv1alpha1.BackupError
 			status.StateDesc = fmt.Sprintf("PerconaServerMySQL %s in namespace %s is not found", cr.Spec.ClusterName, cr.Namespace)
 			return rr, nil
 		}
@@ -140,21 +140,21 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	if cluster.Spec.Backup == nil || !cluster.Spec.Backup.Enabled {
-		status.State = apiv1alpha1.BackupFailed
+		status.State = apiv1alpha1.BackupError
 		status.StateDesc = "spec.backup not found in PerconaServerMySQL CustomResource or backups are disabled"
 		return rr, nil
 	}
 
 	storage, ok := cluster.Spec.Backup.Storages[cr.Spec.StorageName]
 	if !ok {
-		status.State = apiv1alpha1.BackupFailed
+		status.State = apiv1alpha1.BackupError
 		status.StateDesc = fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", cr.Spec.StorageName)
 		return rr, nil
 	}
 
 	backupSource, err := r.getBackupSource(ctx, cr, cluster)
 	if err != nil {
-		status.State = apiv1alpha1.BackupFailed
+		status.State = apiv1alpha1.BackupError
 		status.StateDesc = "Check Source host for backup"
 		return rr, nil
 	}
@@ -445,12 +445,6 @@ func (r *PerconaServerMySQLBackupReconciler) prepareBackupSource(
 ) error {
 	log := logf.FromContext(ctx)
 
-	// verify backup source pod exists
-	_, err := getBackupSourcePod(ctx, r.Client, cluster.Namespace, backupSource)
-	if err != nil {
-		return errors.Wrap(err, "get backup source pod")
-	}
-
 	if cluster.Spec.MySQL.IsAsync() && cluster.Spec.Orchestrator.Enabled {
 		orcPod, err := orchestrator.GetReadyPod(ctx, r.Client, cluster)
 		if err != nil {
@@ -513,7 +507,7 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 	}()
 
 	switch cr.Status.State {
-	case apiv1alpha1.BackupFailed, apiv1alpha1.BackupNew:
+	case apiv1alpha1.BackupError, apiv1alpha1.BackupNew:
 		cr.Finalizers = nil
 		return
 	}
