@@ -50,6 +50,22 @@ func GetReadTimeout() (uint32, error) {
 	return uint32(readTimeout), nil
 }
 
+func GetCloneTimeout() (uint32, error) {
+	s, ok := os.LookupEnv("BOOTSTRAP_CLONE_TIMEOUT")
+	if !ok {
+		return 0, nil // Will use default from DBParams
+	}
+	cloneTimeout, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to parse BOOTSTRAP_CLONE_TIMEOUT")
+	}
+	if cloneTimeout < 0 {
+		return 0, errors.New("BOOTSTRAP_CLONE_TIMEOUT should be a positive value")
+	}
+
+	return uint32(cloneTimeout), nil
+}
+
 func GetSecret(username apiv1alpha1.SystemUser) (string, error) {
 	path := filepath.Join(mysql.CredsMountPath, string(username))
 	sBytes, err := os.ReadFile(path)
