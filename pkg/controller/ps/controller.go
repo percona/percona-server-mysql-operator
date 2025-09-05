@@ -1008,7 +1008,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 		return nil
 	}
 
-	pod, err := mysql.GetReadyMySQLPod(ctx, r.Client, cr)
+	pod, err := mysql.GetReadyPod(ctx, r.Client, cr)
 	if err != nil {
 		if errors.Is(err, ErrNoReadyPods) {
 			return nil
@@ -1074,7 +1074,7 @@ func (r *PerconaServerMySQLReconciler) rescanClusterIfNeeded(ctx context.Context
 
 	log := logf.FromContext(ctx)
 
-	pod, err := mysql.GetReadyMySQLPod(ctx, r.Client, cr)
+	pod, err := mysql.GetReadyPod(ctx, r.Client, cr)
 	if err != nil {
 		if errors.Is(err, ErrNoReadyPods) {
 			return nil
@@ -1270,7 +1270,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 			return nil
 		}
 
-		pod, err := mysql.GetReadyMySQLPod(ctx, r.Client, cr)
+		pod, err := mysql.GetReadyPod(ctx, r.Client, cr)
 		if err != nil {
 			if errors.Is(err, ErrNoReadyPods) {
 				return nil
@@ -1435,7 +1435,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryFromGR(ctx context.Context, cr 
 		return "", errors.Wrap(err, "get operator password")
 	}
 
-	pod, err := mysql.GetReadyMySQLPod(ctx, r.Client, cr)
+	pod, err := mysql.GetReadyPod(ctx, r.Client, cr)
 	if err != nil {
 		return "", errors.Wrap(err, "get ready mysql pod")
 	}
@@ -1472,7 +1472,7 @@ func (r *PerconaServerMySQLReconciler) getPrimaryPod(ctx context.Context, cr *ap
 		return nil, errors.Wrapf(err, "get pod index from %s", primaryHost)
 	}
 
-	primPod, err := mysql.GetMySQLPod(ctx, r.Client, cr, idx)
+	primPod, err := mysql.GetPod(ctx, r.Client, cr, idx)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get primary pod by index %d", idx)
 	}
@@ -1503,7 +1503,7 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 				return err
 			}
 
-			pod, err := mysql.GetMySQLPod(ctx, r.Client, cr, idx)
+			pod, err := mysql.GetPod(ctx, r.Client, cr, idx)
 			if err != nil {
 				return err
 			}
@@ -1557,7 +1557,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 			if err != nil {
 				return err
 			}
-			pod, err := mysql.GetMySQLPod(ctx, r.Client, cr, idx)
+			pod, err := mysql.GetPod(ctx, r.Client, cr, idx)
 			if err != nil {
 				return err
 			}

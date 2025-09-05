@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func GetReadyMySQLPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Pod, error) {
+func GetReadyPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Pod, error) {
 	pods, err := k8s.PodsByLabels(ctx, cl, MatchLabels(cr), cr.Namespace)
 	if err != nil {
 		return nil, errors.Wrap(err, "get pods")
@@ -24,7 +24,7 @@ func GetReadyMySQLPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.Per
 	return nil, errors.New("no ready pods")
 }
 
-func GetMySQLPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
+func GetPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {
 	pod := &corev1.Pod{}
 
 	nn := types.NamespacedName{Namespace: cr.Namespace, Name: PodName(cr, idx)}

@@ -628,7 +628,7 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 		return complete, nil
 	}
 
-	pod, err := mysql.GetReadyMySQLPod(ctx, r.Client, cluster)
+	pod, err := mysql.GetReadyPod(ctx, r.Client, cluster)
 	if err != nil {
 		return false, errors.Wrap(err, "get ready mysql pod")
 	}

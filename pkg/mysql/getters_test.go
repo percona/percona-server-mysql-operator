@@ -44,7 +44,7 @@ func TestGetReadyPod(t *testing.T) {
 
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(readyPod).Build()
 
-		pod, err := GetReadyMySQLPod(context.Background(), cl, cluster)
+		pod, err := GetReadyPod(context.Background(), cl, cluster)
 		require.NoError(t, err)
 		assert.NotNil(t, pod)
 		assert.Equal(t, "mysql-ready", pod.Name)
@@ -70,7 +70,7 @@ func TestGetReadyPod(t *testing.T) {
 
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(readyPod1, readyPod2).Build()
 
-		pod, err := GetReadyMySQLPod(context.Background(), cl, cluster)
+		pod, err := GetReadyPod(context.Background(), cl, cluster)
 		require.NoError(t, err)
 		assert.NotNil(t, pod)
 		assert.Contains(t, []string{"mysql-ready-0", "mysql-ready-1"}, pod.Name)
@@ -108,7 +108,7 @@ func TestGetReadyPod(t *testing.T) {
 
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(notReady, ready).Build()
 
-		pod, err := GetReadyMySQLPod(context.Background(), cl, cluster)
+		pod, err := GetReadyPod(context.Background(), cl, cluster)
 		require.NoError(t, err)
 		assert.NotNil(t, pod)
 		assert.Equal(t, "mysql-ready", pod.Name)
@@ -132,7 +132,7 @@ func TestGetReadyPod(t *testing.T) {
 
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(notReady).Build()
 
-		pod, err := GetReadyMySQLPod(context.Background(), cl, cluster)
+		pod, err := GetReadyPod(context.Background(), cl, cluster)
 		require.Error(t, err)
 		assert.Nil(t, pod)
 		assert.Contains(t, err.Error(), "no ready pods")
@@ -159,7 +159,7 @@ func TestGetReadyPod(t *testing.T) {
 
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(deleting).Build()
 
-		pod, err := GetReadyMySQLPod(context.Background(), cl, cluster)
+		pod, err := GetReadyPod(context.Background(), cl, cluster)
 
 		require.Error(t, err)
 		assert.Nil(t, pod)
@@ -191,7 +191,7 @@ func TestGetMySQLPod(t *testing.T) {
 
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(p).Build()
 
-		got, err := GetMySQLPod(context.Background(), cl, cluster, 0)
+		got, err := GetPod(context.Background(), cl, cluster, 0)
 		require.NoError(t, err)
 		assert.NotNil(t, got)
 		assert.Equal(t, name, got.Name)
@@ -201,7 +201,7 @@ func TestGetMySQLPod(t *testing.T) {
 	t.Run("returns not found for missing pod", func(t *testing.T) {
 		cl := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-		got, err := GetMySQLPod(context.Background(), cl, cluster, 0)
+		got, err := GetPod(context.Background(), cl, cluster, 0)
 		require.Error(t, err)
 		assert.Nil(t, got)
 	})
@@ -217,7 +217,7 @@ func TestGetMySQLPod(t *testing.T) {
 
 		cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(p0).Build()
 
-		got, err := GetMySQLPod(context.Background(), cl, cluster, 1)
+		got, err := GetPod(context.Background(), cl, cluster, 1)
 		require.Error(t, err)
 		assert.Nil(t, got)
 	})
