@@ -2,7 +2,6 @@ package ps
 
 import (
 	"context"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"time"
 
 	"github.com/pkg/errors"
@@ -17,6 +16,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
 const controllerRevisionHash = "controller-revision-hash"
