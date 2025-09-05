@@ -8,3 +8,14 @@ spec:
   clusterName: ps-cluster1
   storageName: minio
 #  sourcePod: ps-cluster1-mysql-1
+#  containerOptions:
+#    env:
+#    - name: VERIFY_TLS
+#      value: "false"
+#    args:
+#      xtrabackup:
+#      - "--someflag=abc"
+#      xbcloud:
+#      - "--someflag=abc"
+#      xbstream:
+#      - "--someflag=abc"
