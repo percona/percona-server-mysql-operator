@@ -7,7 +7,7 @@ metadata:
 spec:
   clusterName: ps-cluster1
   storageName: minio
-#  sourceHost: ps-cluster1-mysql-0.ps-cluster1-mysql.<namespace>
+#  sourcePod: ps-cluster1-mysql-1
 #  containerOptions:
 #    env:
 #    - name: VERIFY_TLS
