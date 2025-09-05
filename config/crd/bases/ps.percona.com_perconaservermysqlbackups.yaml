@@ -148,7 +148,7 @@ spec:
                       type: object
                     type: array
                 type: object
-              sourceHost:
+              sourcePod:
                 type: string
               storageName:
                 type: string

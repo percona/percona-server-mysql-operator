@@ -3,11 +3,12 @@ package psbackup
 import (
 	"context"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/stretchr/testify/assert"
 	batchv1 "k8s.io/api/batch/v1"
@@ -19,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	controllerruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
@@ -324,7 +326,7 @@ func TestRunningState(t *testing.T) {
 	}
 	cr.Status.State = apiv1alpha1.BackupStarting
 	cr.Spec.StorageName = "s3-us-west"
-	cr.Spec.SourceHost = "backuphost"
+	cr.Spec.SourcePod = "ps-cluster1-mysql-0"
 	cluster, err := readDefaultCR("ps-cluster1", namespace)
 	if err != nil {
 		t.Fatal(err, "failed to read default cr")
@@ -375,7 +377,13 @@ func TestRunningState(t *testing.T) {
 				t.Fatal(err)
 			}
 			job.Status.Active = 1
-			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr, tt.cluster, job).WithStatusSubresource(tt.cr, tt.cluster, job)
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "ps-cluster1-mysql-0",
+					Namespace: tt.cr.Namespace,
+				},
+			}
+			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr, tt.cluster, job, pod).WithStatusSubresource(tt.cr, tt.cluster, job)
 
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cb.Build(),
@@ -403,7 +411,7 @@ func TestRunningState(t *testing.T) {
 				t.Fatal(err, "failed to get backup")
 			}
 			if cr.Status.State != tt.state {
-				t.Fatalf("expected state %s, got %s", tt.state, cr.Status.State)
+				t.Fatalf("expected state %s, got %s (StateDesc: %s)", tt.state, cr.Status.State, cr.Status.StateDesc)
 			}
 		})
 	}
@@ -421,62 +429,89 @@ func TestGetBackupSource(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name    string
-		cr      *apiv1alpha1.PerconaServerMySQLBackup
-		cluster *apiv1alpha1.PerconaServerMySQL
-		want    string
-		wantErr bool
+		name        string
+		cr          *apiv1alpha1.PerconaServerMySQLBackup
+		cluster     *apiv1alpha1.PerconaServerMySQL
+		want        string
+		expectedErr string
 	}{
 		{
 			name: "sourceHost from backup",
 			cr: &apiv1alpha1.PerconaServerMySQLBackup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-backup",
+					Namespace: "test-ns",
+				},
 				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
-					SourceHost: "backuphost",
+					SourcePod: "ps-cluster1-mysql-0",
 				},
 			},
 			cluster: &apiv1alpha1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "ps-cluster1",
+					Namespace: "test-ns",
+				},
 				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					Backup: &apiv1alpha1.BackupSpec{SourceHost: "clusterhost"},
+					Backup: &apiv1alpha1.BackupSpec{SourcePod: "ps-cluster1-mysql-1"},
 				},
 			},
-			want:    "backuphost",
-			wantErr: false,
+			want: "ps-cluster1-mysql-0.ps-cluster1-mysql.test-ns",
 		},
 		{
 			name: "host from cluster",
 			cr: &apiv1alpha1.PerconaServerMySQLBackup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-backup",
+					Namespace: "test-ns",
+				},
 				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{},
 			},
 			cluster: &apiv1alpha1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "ps-cluster1",
+					Namespace: "test-ns",
+				},
 				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					Backup: &apiv1alpha1.BackupSpec{SourceHost: "clusterhost"},
+					Backup: &apiv1alpha1.BackupSpec{SourcePod: "ps-cluster1-mysql-1"},
 				},
 			},
-			want:    "clusterhost",
-			wantErr: false,
+			want: "ps-cluster1-mysql-1.ps-cluster1-mysql.test-ns",
 		},
 		{
 			name: "single node cluster",
-			cr:   &apiv1alpha1.PerconaServerMySQLBackup{},
+			cr: &apiv1alpha1.PerconaServerMySQLBackup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-backup",
+					Namespace: "test-ns",
+				},
+			},
 			cluster: &apiv1alpha1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "ps-cluster1",
+					Namespace: "test-ns",
+				},
 				Spec: apiv1alpha1.PerconaServerMySQLSpec{
 					MySQL: apiv1alpha1.MySQLSpec{
 						PodSpec: apiv1alpha1.PodSpec{Size: 1},
 					},
 					Backup: &apiv1alpha1.BackupSpec{},
 				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "single-node",
-					Namespace: "test-ns",
-				},
 			},
-			want:    "single-node-mysql-0.single-node-mysql.test-ns",
-			wantErr: false,
+			want: "ps-cluster1-mysql-0.ps-cluster1-mysql.test-ns",
 		},
 		{
 			name: "async cluster, orchestrator off, no host",
-			cr:   &apiv1alpha1.PerconaServerMySQLBackup{},
+			cr: &apiv1alpha1.PerconaServerMySQLBackup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-backup",
+					Namespace: "test-ns",
+				},
+			},
 			cluster: &apiv1alpha1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "ps-cluster1",
+					Namespace: "test-ns",
+				},
 				Spec: apiv1alpha1.PerconaServerMySQLSpec{
 					MySQL: apiv1alpha1.MySQLSpec{
 						ClusterType: apiv1alpha1.ClusterTypeAsync,
@@ -490,16 +525,36 @@ func TestGetBackupSource(t *testing.T) {
 					},
 				},
 			},
-			want:    "",
-			wantErr: true,
+			want:        "",
+			expectedErr: "Orchestrator is disabled. Please specify the backup source explicitly using either spec.backup.sourcePod in the cluster CR or spec.sourcePod in the PerconaServerMySQLBackup resource.",
 		},
 	}
 
 	for _, tt := range tests {
-		cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr).WithStatusSubresource(tt.cr)
-		if tt.cluster != nil {
-			cb.WithObjects(tt.cluster)
+		objs := []client.Object{
+			tt.cluster,
+			tt.cr,
+			&corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "ps-cluster1-mysql-0",
+					Namespace: "test-ns",
+				},
+			},
+			&corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "ps-cluster1-mysql-1",
+					Namespace: "test-ns",
+				},
+			},
+			&corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "ps-cluster1-mysql-2",
+					Namespace: "test-ns",
+				},
+			},
 		}
+
+		cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).WithStatusSubresource(tt.cr)
 
 		t.Run(tt.name, func(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
@@ -509,12 +564,11 @@ func TestGetBackupSource(t *testing.T) {
 			}
 
 			got, err := r.getBackupSource(ctx, tt.cr, tt.cluster)
-			if tt.wantErr {
-				const errMsg = "Orchestrator is disabled. Please specify the backup source explicitly using either spec.backup.sourceHost in the cluster CR or spec.sourceBackupHost in the PerconaServerMySQLBackup resource."
+			if tt.expectedErr != "" {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), errMsg)
+				assert.Contains(t, err.Error(), tt.expectedErr)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.want, got)
 			}
 		})
