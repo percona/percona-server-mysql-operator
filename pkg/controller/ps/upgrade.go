@@ -16,6 +16,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
 const controllerRevisionHash = "controller-revision-hash"
@@ -86,7 +87,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	if err != nil {
 		return err
 	}
-	primPod, err := getMySQLPod(ctx, r.Client, cr, idx)
+	primPod, err := mysql.GetPod(ctx, r.Client, cr, idx)
 	if err != nil {
 		return errors.Wrap(err, "get primary pod")
 	}
@@ -127,7 +128,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		Jitter:   0.1,
 	}
 	err = k8sretry.OnError(backoff, func(err error) bool { return err != nil }, func() error {
-		primPod, err := getMySQLPod(ctx, r.Client, cr, idx)
+		primPod, err := mysql.GetPod(ctx, r.Client, cr, idx)
 		if err != nil {
 			return errors.Wrap(err, "get primary pod")
 		}

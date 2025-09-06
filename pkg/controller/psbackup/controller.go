@@ -258,7 +258,7 @@ func (r *PerconaServerMySQLBackupReconciler) isBackupJobRunning(ctx context.Cont
 	}
 
 	if cfg == nil || cfg.Destination != destination {
-		log.Info("Running backup destination does not match expected or config is nil", "expected destination", destination)
+		log.Error(fmt.Errorf("running backup destination does not match expected or config is nil"), "expected destination", "destination", destination)
 		return false, nil
 	}
 
@@ -703,7 +703,13 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 		return complete, nil
 	}
 
-	sc := r.NewSidecarClient(cr.Status.BackupSource)
+	pod, err := mysql.GetReadyPod(ctx, r.Client, cluster)
+	if err != nil {
+		return false, errors.Wrap(err, "get ready mysql pod")
+	}
+	src := mysql.PodFQDN(cluster, pod)
+	sc := r.NewSidecarClient(src)
+
 	if err := sc.DeleteBackup(ctx, cr.Name, *backupConf); err != nil {
 		return false, errors.Wrap(err, "delete backup")
 	}
