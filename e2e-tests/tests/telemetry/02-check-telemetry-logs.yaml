@@ -18,17 +18,71 @@ commands:
 
       echo "Checking operator logs for telemetry reports..."
 
-      if kubectl logs -n "${OPERATOR_NS:-$NAMESPACE}" "$OPERATOR_POD" | grep -i "generated telemetry report"; then
-        echo "Found telemetry report generation in logs"
+      # Extract all report IDs from operator logs
+      REPORT_IDS=$(kubectl logs -n "${OPERATOR_NS:-$NAMESPACE}" "$OPERATOR_POD" | grep -E "(sending telemetry|report.*id)" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | sort -u)
+
+      if [[ -z "$REPORT_IDS" ]]; then
+        echo "No report IDs found in operator logs"
+        exit 1
+      fi
+
+      if kubectl logs -n "${OPERATOR_NS:-$NAMESPACE}" "$OPERATOR_POD" | grep -i "sending telemetry on cluster start"; then
+        echo "Found telemetry report generation in logs for cluster start"
       else
         echo "Telemetry report generation not found"
         exit 1
       fi
 
-      if kubectl logs -n "${OPERATOR_NS:-$NAMESPACE}" "$OPERATOR_POD" | grep -E "(telemetry|report.*percona)" -i; then
-        echo "Found telemetry activity in logs"
+      if kubectl logs -n "${OPERATOR_NS:-$NAMESPACE}" "$OPERATOR_POD" | grep -i "sending telemetry on schedule"; then
+        echo "Found telemetry report generation in logs for schedule"
       else
-        echo "No telemetry activity found in logs"
+        echo "Telemetry report generation not found"
         exit 1
       fi
 
+      get_report_by_id() {
+        local token=$1
+        local report_id=$2
+
+        if [[ -z "$token" || -z "$report_id" ]]; then
+        echo "Token and report_id are required"
+        return 1
+        fi
+
+        local sql="select * from generic_reports where id = '${report_id}' FORMAT JSON"
+        local encoded_sql
+        encoded_sql="$(printf "%s" "$sql" | jq -sRr @uri)"
+
+        local url="https://pmm.check-dev.percona.com/graph/api/datasources/proxy/33/?query=${encoded_sql}&database=telemetryd"
+
+        local retry=0 resp rows
+
+        set +o xtrace
+        while :; do
+        resp="$(run_curl "-H 'Authorization: Bearer ${token}'" "$url" 2>/dev/null || true)"
+        rows="$(printf '%s' "$resp" | jq -r '.rows // 0')"
+
+        if [[ "$rows" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Report data found:"
+        printf '%s' "$resp" | jq '.data'
+        set -o xtrace
+        return 0
+        fi
+
+        ((retry++))
+        if (( retry >= 30 )); then
+        echo "Max retry count $retry reached. Report data was not found!"
+        echo "Last response:"
+        printf '%s\n' "$resp"
+        set -o xtrace
+        return 1
+        fi
+
+        sleep 2
+        done
+      }
+
+      for report_id in $REPORT_IDS; do
+        get_report_by_id "${PMM_TELEMETRY_TOKEN:?PMM_TELEMETRY_TOKEN env var is required}" "$report_id"
+        echo "verified report ID: $report_id"
+      done
