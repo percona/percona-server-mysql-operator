@@ -19,11 +19,11 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 		return nil
 	}
 
-	jn := telemetryJobName(cr)
-	existingJob, existingJobFound := r.Crons.telemetryJobs.Load(jn)
+	jobName := telemetryJobName(cr)
+	existingJob, existingJobFound := r.Crons.telemetryJobs.Load(jobName)
 	if !telemetryEnabled() {
 		if existingJobFound {
-			r.Crons.telemetryJobs.Delete(jn)
+			r.Crons.deleteTelemetryJob(jobName)
 		}
 		return nil
 	}
@@ -49,16 +49,16 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 	}
 
 	logger.Info("removing existing telemetry job because the configured schedule changed", "old", job.cronSchedule, "new", configuredSchedule)
-	r.Crons.telemetryJobs.Delete(jn)
+	r.Crons.deleteTelemetryJob(jobName)
 
-	id, err := r.Crons.addFuncWithSeconds(configuredSchedule, r.telemetrySendingHandlerFunc(ctx, cr, jn))
+	id, err := r.Crons.addFuncWithSeconds(configuredSchedule, r.telemetrySendingHandlerFunc(ctx, cr, jobName))
 	if err != nil {
 		return err
 	}
 
-	logger.Info("adding new job", "name", jn, "schedule", configuredSchedule)
+	logger.Info("adding new job", "name", jobName, "schedule", configuredSchedule)
 
-	r.Crons.telemetryJobs.Store(jn, telemetryJob{
+	r.Crons.telemetryJobs.Store(jobName, telemetryJob{
 		scheduleJob:  scheduleJob{jobID: id},
 		cronSchedule: configuredSchedule,
 	})
@@ -82,7 +82,7 @@ func (r *PerconaServerMySQLReconciler) telemetrySendingHandlerFunc(ctx context.C
 		if k8serrors.IsNotFound(err) {
 			logger.Info("cluster is not found, deleting the job",
 				"name", jobName, "cluster", cr.Name, "namespace", cr.Namespace)
-			r.Crons.telemetryJobs.Delete(jobName)
+			r.Crons.deleteTelemetryJob(jobName)
 			return
 		}
 		if err != nil {
@@ -128,4 +128,12 @@ func telemetryJobName(cr *apiv1alpha1.PerconaServerMySQL) string {
 		Namespace: cr.Namespace,
 	}
 	return fmt.Sprintf("%s/%s", jobName, nn.String())
+}
+
+func (r *CronRegistry) deleteTelemetryJob(jobName string) {
+	job, ok := r.telemetryJobs.LoadAndDelete(jobName)
+	if !ok {
+		return
+	}
+	r.crons.Remove(job.(telemetryJob).jobID)
 }
