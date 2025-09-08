@@ -26,8 +26,8 @@ commands:
             "${DEPLOY_DIR}/cw-operator.yaml" \
             | yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "false"' \
             | yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG"' \
-            | yq eval 'select(documentIndex==1).spec.template.spec.containers[] |= (select(.name=="manager").env += [{"name":"TELEMETRY_SCHEDULE","value":"* * * * *"}])' \
-            | yq eval 'select(documentIndex==1).spec.template.spec.containers[] |= (select(.name=="manager").env += [{"name":"TELEMETRY_SERVICE_URL","value":"https://check-dev.percona.com"}])' \
+            | yq eval 'select(documentIndex==1).spec.template.spec.containers[] | (select(.name=="manager").env += [{"name":"TELEMETRY_SCHEDULE","value":"* * * * *"}])' \
+            | yq eval 'select(documentIndex==1).spec.template.spec.containers[] | (select(.name=="manager").env += [{"name":"TELEMETRY_SERVICE_URL","value":"https://check-dev.percona.com"}])' \
             | kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f -
         else
           kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f "${DEPLOY_DIR}/rbac.yaml"
@@ -37,8 +37,8 @@ commands:
             "${DEPLOY_DIR}/operator.yaml" \
             | yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "false"' \
             | yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG"' \
-            | yq eval 'select(documentIndex==1).spec.template.spec.containers[] |= (select(.name=="manager").env += [{"name":"TELEMETRY_SCHEDULE","value":"* * * * *"}])' \
-            | yq eval 'select(documentIndex==1).spec.template.spec.containers[] |= (select(.name=="manager").env += [{"name":"TELEMETRY_SERVICE_URL","value":"https://check-dev.percona.com"}])' \
+            | yq eval 'select(documentIndex==1).spec.template.spec.containers[] | (select(.name=="manager").env += [{"name":"TELEMETRY_SCHEDULE","value":"* * * * *"}])' \
+            | yq eval 'select(documentIndex==1).spec.template.spec.containers[] | (select(.name=="manager").env += [{"name":"TELEMETRY_SERVICE_URL","value":"https://check-dev.percona.com"}])' \
             | kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f -
         fi
       }
