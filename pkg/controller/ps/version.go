@@ -35,9 +35,9 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLVersion(
 ) error {
 	log := logf.FromContext(ctx)
 
-	pod, err := getReadyMySQLPod(ctx, r.Client, cr)
+	pod, err := mysql.GetReadyPod(ctx, r.Client, cr)
 	if err != nil {
-		if errors.Is(err, ErrNoReadyPods) {
+		if errors.Is(err, mysql.ErrNoReadyPods) {
 			return nil
 		}
 		return errors.Wrap(err, "get ready mysql pod")
