@@ -1400,3 +1400,40 @@ check_scheduled_backup_labels() {
 		exit 1
 	fi
 }
+
+get_telemetry_report_by_id() {
+	local token=$1
+	local report_id=$2
+
+	if [[ -z $token || -z $report_id ]]; then
+		echo "Token and report_id are required"
+		return 1
+	fi
+
+	local sql="select * from generic_reports where id = '${report_id}' FORMAT JSON"
+	local encoded_sql
+	encoded_sql="$(printf "%s" "$sql" | jq -sRr @uri)"
+
+	local url="https://pmm.check-dev.percona.com/graph/api/datasources/proxy/33/?query=${encoded_sql}&database=telemetryd"
+
+	local retry=0 resp rows
+
+	while :; do
+		resp="$(curl -fsS -k -H "Authorization: Bearer ${token}" "$url" 2>&1)"
+		rows="$(echo "$resp" | jq '.rows')"
+
+		if [[ $rows =~ ^[1-9][0-9]*$ ]]; then
+			echo "Report data found:"
+			echo "$resp" | jq '.data'
+			return 0
+		fi
+
+		((retry++))
+		if ((retry >= 10)); then
+			echo "Max retry count $retry reached. Report data was not found!"
+			return 1
+		fi
+
+		sleep 5
+	done
+}
