@@ -783,7 +783,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 	}
 
 	sts := &appsv1.StatefulSet{}
-	if err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), sts); err != nil {
+	if err := r.Get(ctx, orchestrator.NamespacedName(cr), sts); err != nil {
 		return errors.Wrap(err, "get orchestrator sts")
 	}
 
