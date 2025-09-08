@@ -12,6 +12,10 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 )
 
+var (
+	ErrNoReadyPods = errors.New("no ready pods")
+)
+
 func GetReadyPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL) (*corev1.Pod, error) {
 	pods, err := k8s.PodsByLabels(ctx, cl, MatchLabels(cr), cr.Namespace)
 	if err != nil {
@@ -23,7 +27,7 @@ func GetReadyPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaS
 			return &pods[i], nil
 		}
 	}
-	return nil, errors.New("no ready pods")
+	return nil, ErrNoReadyPods
 }
 
 func GetPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.PerconaServerMySQL, idx int) (*corev1.Pod, error) {

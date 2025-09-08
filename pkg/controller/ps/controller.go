@@ -1007,7 +1007,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 
 	pod, err := mysql.GetReadyPod(ctx, r.Client, cr)
 	if err != nil {
-		if errors.Is(err, ErrNoReadyPods) {
+		if errors.Is(err, mysql.ErrNoReadyPods) {
 			return nil
 		}
 		return errors.Wrap(err, "get ready mysql pod")
@@ -1073,7 +1073,7 @@ func (r *PerconaServerMySQLReconciler) rescanClusterIfNeeded(ctx context.Context
 
 	pod, err := mysql.GetReadyPod(ctx, r.Client, cr)
 	if err != nil {
-		if errors.Is(err, ErrNoReadyPods) {
+		if errors.Is(err, mysql.ErrNoReadyPods) {
 			return nil
 		}
 		return errors.Wrap(err, "get ready mysql pod")
@@ -1269,7 +1269,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 
 		pod, err := mysql.GetReadyPod(ctx, r.Client, cr)
 		if err != nil {
-			if errors.Is(err, ErrNoReadyPods) {
+			if errors.Is(err, mysql.ErrNoReadyPods) {
 				return nil
 			}
 			return errors.Wrap(err, "get ready mysql pod")
@@ -1589,7 +1589,7 @@ func getReadyOrcPod(ctx context.Context, cl client.Reader, cr *apiv1alpha1.Perco
 			return &pods[i], nil
 		}
 	}
-	return nil, ErrNoReadyPods
+	return nil, mysql.ErrNoReadyPods
 }
 
 func getPodIndexFromHostname(hostname string) (int, error) {
