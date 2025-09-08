@@ -27,9 +27,9 @@ import (
 
 // PerconaServerMySQLBackupSpec defines the desired state of PerconaServerMySQLBackup
 type PerconaServerMySQLBackupSpec struct {
-	SourceHost       string                  `json:"sourceHost,omitempty"`
 	ClusterName      string                  `json:"clusterName"`
 	StorageName      string                  `json:"storageName"`
+	SourcePod        string                  `json:"sourcePod,omitempty"`
 	ContainerOptions *BackupContainerOptions `json:"containerOptions,omitempty"`
 }
 
@@ -39,19 +39,23 @@ const (
 	BackupNew       BackupState = ""
 	BackupStarting  BackupState = "Starting"
 	BackupRunning   BackupState = "Running"
-	BackupFailed    BackupState = "Failed"
-	BackupError     BackupState = "Error"
 	BackupSucceeded BackupState = "Succeeded"
+
+	// Used for backups that failed to start at all
+	BackupError BackupState = "Error"
+	// Used for backups that started but failed
+	BackupFailed BackupState = "Failed"
 )
 
 // PerconaServerMySQLBackupStatus defines the observed state of PerconaServerMySQLBackup
 type PerconaServerMySQLBackupStatus struct {
-	State       BackupState        `json:"state,omitempty"`
-	StateDesc   string             `json:"stateDescription,omitempty"`
-	Destination BackupDestination  `json:"destination,omitempty"`
-	Storage     *BackupStorageSpec `json:"storage,omitempty"`
-	CompletedAt *metav1.Time       `json:"completed,omitempty"`
-	Image       string             `json:"image,omitempty"`
+	State        BackupState        `json:"state,omitempty"`
+	StateDesc    string             `json:"stateDescription,omitempty"`
+	Destination  BackupDestination  `json:"destination,omitempty"`
+	Storage      *BackupStorageSpec `json:"storage,omitempty"`
+	CompletedAt  *metav1.Time       `json:"completed,omitempty"`
+	Image        string             `json:"image,omitempty"`
+	BackupSource string             `json:"backupSource,omitempty"`
 }
 
 const (

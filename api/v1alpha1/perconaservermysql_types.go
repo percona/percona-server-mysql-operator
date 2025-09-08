@@ -268,7 +268,7 @@ type PMMSpec struct {
 
 type BackupSpec struct {
 	Enabled                  bool                          `json:"enabled,omitempty"`
-	SourceHost               string                        `json:"sourceHost,omitempty"`
+	SourcePod                string                        `json:"sourcePod,omitempty"`
 	Image                    string                        `json:"image"`
 	ImagePullSecrets         []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
