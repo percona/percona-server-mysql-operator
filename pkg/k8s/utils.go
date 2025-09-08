@@ -536,3 +536,28 @@ func GetTLSHash(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaSe
 
 	return hash, nil
 }
+
+func EqualMetadata(m ...metav1.ObjectMeta) bool {
+	if len(m) <= 1 {
+		return true
+	}
+	filter := func(m metav1.ObjectMeta) metav1.ObjectMeta {
+		delete(m.Annotations, naming.AnnotationLastConfigHash.String())
+		return metav1.ObjectMeta{
+			Name:                       m.Name,
+			GenerateName:               m.GenerateName,
+			Namespace:                  m.Namespace,
+			DeletionGracePeriodSeconds: m.DeletionGracePeriodSeconds,
+			Labels:                     m.Labels,
+			Annotations:                m.Annotations,
+			Finalizers:                 m.Finalizers,
+		}
+	}
+	first := m[0]
+	for i := 1; i < len(m); i++ {
+		if !reflect.DeepEqual(filter(first), filter(m[i])) {
+			return false
+		}
+	}
+	return true
+}
