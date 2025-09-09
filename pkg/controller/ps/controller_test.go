@@ -1561,6 +1561,66 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 				}
 			}
 		})
+		It("Should update global labels and annotations", func() {
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cr), cr)).Should(Succeed())
+
+			cr.Spec.Metadata = &psv1alpha1.Metadata{
+				Labels: map[string]string{
+					"test-label3": "test-value3",
+				},
+				Annotations: map[string]string{
+					"test-annotation3": "test-value3",
+				},
+			}
+			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+		})
+		It("Should reconcile once", func() {
+			_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+		})
+		It("Should check all objects", func() {
+			dyn, err := dynamic.NewForConfig(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			disc, err := discovery.NewDiscoveryClientForConfig(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			gr, err := restmapper.GetAPIGroupResources(disc)
+			Expect(err).NotTo(HaveOccurred())
+
+			for _, list := range gr {
+				for version, resources := range list.VersionedResources {
+					for _, r := range resources {
+						// Skip subresources (like pods/status)
+						if strings.Contains(r.Name, "/") {
+							continue
+						}
+						if !r.Namespaced {
+							continue
+						}
+
+						gv, err := schema.ParseGroupVersion(version)
+						if err != nil {
+							continue
+						}
+						gvr := gv.WithResource(r.Name)
+
+						resList, err := dyn.Resource(gvr).Namespace(ns).List(ctx, metav1.ListOptions{})
+						if err != nil {
+							continue // some resources may not be listable
+						}
+						for _, item := range resList.Items {
+							objectWithMissingMetadata := ""
+							_, kind := item.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
+							if item.GetLabels()["test-label3"] != "test-value3" || item.GetAnnotations()["test-annotation3"] != "test-value3" {
+								objectWithMissingMetadata = item.GetName() + "/" + kind
+							}
+							Expect(objectWithMissingMetadata).To(BeEmpty())
+						}
+					}
+				}
+			}
+		})
 	})
 
 	Context("Check labels/annotations on async cluster type", Ordered, func() {
@@ -1686,6 +1746,66 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 							objectWithMissingMetadata := ""
 							_, kind := item.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
 							if item.GetLabels()["test-label2"] != "test-value2" || item.GetAnnotations()["test-annotation2"] != "test-value2" {
+								objectWithMissingMetadata = item.GetName() + "/" + kind
+							}
+							Expect(objectWithMissingMetadata).To(BeEmpty())
+						}
+					}
+				}
+			}
+		})
+		It("Should update global labels and annotations", func() {
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cr), cr)).Should(Succeed())
+
+			cr.Spec.Metadata = &psv1alpha1.Metadata{
+				Labels: map[string]string{
+					"test-label3": "test-value3",
+				},
+				Annotations: map[string]string{
+					"test-annotation3": "test-value3",
+				},
+			}
+			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+		})
+		It("Should reconcile once", func() {
+			_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+		})
+		It("Should check all objects", func() {
+			dyn, err := dynamic.NewForConfig(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			disc, err := discovery.NewDiscoveryClientForConfig(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			gr, err := restmapper.GetAPIGroupResources(disc)
+			Expect(err).NotTo(HaveOccurred())
+
+			for _, list := range gr {
+				for version, resources := range list.VersionedResources {
+					for _, r := range resources {
+						// Skip subresources (like pods/status)
+						if strings.Contains(r.Name, "/") {
+							continue
+						}
+						if !r.Namespaced {
+							continue
+						}
+
+						gv, err := schema.ParseGroupVersion(version)
+						if err != nil {
+							continue
+						}
+						gvr := gv.WithResource(r.Name)
+
+						resList, err := dyn.Resource(gvr).Namespace(ns).List(ctx, metav1.ListOptions{})
+						if err != nil {
+							continue // some resources may not be listable
+						}
+						for _, item := range resList.Items {
+							objectWithMissingMetadata := ""
+							_, kind := item.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
+							if item.GetLabels()["test-label3"] != "test-value3" || item.GetAnnotations()["test-annotation3"] != "test-value3" {
 								objectWithMissingMetadata = item.GetName() + "/" + kind
 							}
 							Expect(objectWithMissingMetadata).To(BeEmpty())

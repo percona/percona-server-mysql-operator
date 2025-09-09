@@ -80,20 +80,16 @@ func (r *PerconaServerMySQLReconciler) ensureManualTLS(ctx context.Context, cr *
 	}
 
 	// We should update the secret only if the DNS names have changed
-	if k8serrors.IsNotFound(err) || !slices.Equal(currentDNSNames, newDNSNames) {
+	if k8serrors.IsNotFound(err) || !slices.Equal(currentDNSNames, newDNSNames) || !k8s.EqualMetadata(currentSecret.ObjectMeta, secret.ObjectMeta) {
+		if slices.Equal(currentDNSNames, newDNSNames) {
+			secret.Data = currentSecret.Data
+		}
 		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, secret, r.Scheme); err != nil {
 			return errors.Wrap(err, "create secret")
 		}
 		return nil
 	}
 
-	if !k8s.EqualMetadata(currentSecret.ObjectMeta, secret.ObjectMeta) {
-		currentSecret.ObjectMeta = secret.ObjectMeta
-
-		if err := r.Update(ctx, currentSecret); err != nil {
-			return errors.Wrap(err, "update metdata")
-		}
-	}
 	return nil
 }
 
