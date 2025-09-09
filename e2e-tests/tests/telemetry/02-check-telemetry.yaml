@@ -4,7 +4,6 @@ timeout: 180
 commands:
   - script: |-
       set -o errexit
-      set +o xtrace
 
       source ../../functions
 
@@ -43,4 +42,3 @@ commands:
         get_telemetry_report_by_id ${PMM_TELEMETRY_TOKEN:?PMM_TELEMETRY_TOKEN env var is required} $report_id
         echo "verified report ID: $report_id"
       done
-      set -o xtrace
