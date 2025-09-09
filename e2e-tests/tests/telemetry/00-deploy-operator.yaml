@@ -28,13 +28,14 @@ commands:
 
         kubectl -n "$ns" apply -f "$rbac_file"
 
-        yq eval '
-        (select(documentIndex==1).spec.template.spec.containers[0].image) = strenv(IMAGE) |
-        (select(documentIndex==1).spec.template.spec.containers[] | select(.name == "manager").env[] | select(.name == "DISABLE_TELEMETRY").value) = "false" |
-        (select(documentIndex==1).spec.template.spec.containers[] | select(.name == "manager").env[] | select(.name == "LOG_LEVEL").value) = "DEBUG" |
-        (select(documentIndex==1).spec.template.spec.containers[] | select(.name == "manager").env[] | select(.name == "TELEMETRY_SCHEDULE").value) = "* * * * *" |
-        (select(documentIndex==1).spec.template.spec.containers[] | select(.name == "manager").env[] | select(.name == "TELEMETRY_SERVICE_URL").value) = "https://check-dev.percona.com"
-        ' "$operator_file" | kubectl -n "$ns" apply -f -
+        yq eval \
+        "$(printf 'select(documentIndex==1).spec.template.spec.containers[0].image="%s"' "${IMAGE}")" \
+        "$operator_file" \
+        | yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "false"' \
+        | yq eval '(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG"' \
+        | yq eval 'select(documentIndex==1).spec.template.spec.containers[0].env += [{"name":"TELEMETRY_SCHEDULE","value":"* * * * *"}]' \
+        | yq eval 'select(documentIndex==1).spec.template.spec.containers[0].env += [{"name":"TELEMETRY_SERVICE_URL","value":"https://check-dev.percona.com"}]' \
+        | kubectl -n "$ns" apply -f -
       }
 
       deploy_operator_with_telemetry
