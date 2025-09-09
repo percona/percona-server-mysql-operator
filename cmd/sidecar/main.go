@@ -330,7 +330,7 @@ func checkBackupMD5Size(ctx context.Context, cfg *xb.BackupConfig) error {
 }
 
 func startReplicaSQLThread(ctx context.Context) error {
-	backupUser := apiv1alpha1.UserXtraBackup
+	backupUser := apiv1.UserXtraBackup
 
 	backupPass, err := getSecret(backupUser)
 	if err != nil {
