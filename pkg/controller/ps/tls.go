@@ -90,7 +90,7 @@ func (r *PerconaServerMySQLReconciler) ensureManualTLS(ctx context.Context, cr *
 	if !k8s.EqualMetadata(currentSecret.ObjectMeta, secret.ObjectMeta) {
 		currentSecret.ObjectMeta = secret.ObjectMeta
 
-		if err := r.Client.Update(ctx, currentSecret); err != nil {
+		if err := r.Update(ctx, currentSecret); err != nil {
 			return errors.Wrap(err, "update metdata")
 		}
 	}

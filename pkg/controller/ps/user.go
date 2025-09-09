@@ -156,7 +156,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 
 		if !k8s.EqualMetadata(internalMeta, internalSecret.ObjectMeta) {
 			internalSecret.ObjectMeta = internalMeta
-			if err := r.Client.Update(ctx, internalSecret); err != nil {
+			if err := r.Update(ctx, internalSecret); err != nil {
 				return errors.Wrap(err, "update internal secret metadata")
 			}
 		}
