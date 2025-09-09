@@ -736,6 +736,20 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return errors.Wrap(err, "get config map")
 	}
 
+	cmData, err := orchestrator.ConfigMapData(cr)
+	if err != nil {
+		return errors.Wrap(err, "get ConfigMap data")
+	}
+
+	configMap := orchestrator.ConfigMap(cr, cmData)
+	if !reflect.DeepEqual(cmap.Data, cmData) {
+		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
+			return errors.Wrap(err, "reconcile ConfigMap")
+		}
+		log.Info("ConfigMap updated", "name", configMap.Name, "data", configMap.Data)
+		return nil
+	}
+
 	existingNodes := make([]string, 0)
 	if !k8serrors.IsNotFound(err) {
 		cfg, ok := cmap.Data[orchestrator.ConfigFileName]
@@ -756,17 +770,6 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		for _, v := range nodes {
 			existingNodes = append(existingNodes, v.(string))
 		}
-	}
-
-	cmData, err := orchestrator.ConfigMapData(cr)
-	if err != nil {
-		return errors.Wrap(err, "get ConfigMap data")
-	}
-
-	configMap := orchestrator.ConfigMap(cr, cmData)
-
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
-		return errors.Wrap(err, "reconcile ConfigMap")
 	}
 
 	component := orchestrator.Component(*cr)
