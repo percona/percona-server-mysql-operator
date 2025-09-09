@@ -3,6 +3,7 @@ package ps
 import (
 	"context"
 	stderrors "errors"
+	"maps"
 	"math"
 	"slices"
 	"strings"
@@ -20,10 +21,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	psv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	psv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
 const (
@@ -34,8 +36,54 @@ func validatePVCName(pvc corev1.PersistentVolumeClaim, stsName string) bool {
 	return strings.HasPrefix(pvc.Name, "datadir-"+stsName)
 }
 
-func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Context, cr *psv1.PerconaServerMySQL) error {
+func reconcilePVCMetadata(ctx context.Context, cl client.Client, cr *psv1alpha1.PerconaServerMySQL) error {
+	log := logf.FromContext(ctx).WithName("reconcilePVCMetadata")
+
+	list := new(corev1.PersistentVolumeClaimList)
+	if err := cl.List(ctx, list, &client.ListOptions{
+		Namespace:     cr.Namespace,
+		LabelSelector: labels.SelectorFromSet(mysql.MatchLabels(cr)),
+	}); err != nil {
+		return errors.Wrap(err, "list PVCs")
+	}
+
+	for _, pvc := range list.Items {
+		kubernetesAnnotations := pvc.DeepCopy().Annotations
+		maps.DeleteFunc(kubernetesAnnotations, func(k, v string) bool {
+			keepKeys := []string{
+				"pv.kubernetes.io/bind-completed",
+				"pv.kubernetes.io/bound-by-controller",
+				"volume.beta.kubernetes.io/storage-provisioner",
+				"volume.kubernetes.io/selected-node",
+				"volume.kubernetes.io/storage-provisioner",
+			}
+			return !slices.Contains(keepKeys, k)
+		})
+
+		expectedAnnotations := util.SSMapMerge(cr.GlobalAnnotations(), kubernetesAnnotations)
+		expectedLabels := mysql.Labels(cr)
+
+		if maps.Equal(expectedLabels, pvc.Labels) && maps.Equal(expectedAnnotations, pvc.Annotations) {
+			continue
+		}
+
+		log.V(1).Info("Updating metadata for pvc", "pvc", pvc.Name)
+		pvc.SetAnnotations(expectedAnnotations)
+		pvc.SetLabels(expectedLabels)
+		if err := cl.Update(ctx, &pvc); err != nil {
+			return errors.Wrap(err, "failed to update pvc")
+		}
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Context, cr *psv1alpha1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("PVCResize")
+
+	if err := reconcilePVCMetadata(ctx, r.Client, cr); err != nil {
+		return errors.Wrap(err, "failed to reconcile pvc metadata")
+	}
 
 	ls := mysql.MatchLabels(cr)
 	stsName := mysql.Name(cr)
@@ -294,7 +342,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) handlePVCResizeFailure(ctx context.Context, cr *psv1.PerconaServerMySQL, originalSize resource.Quantity) error {
+func (r *PerconaServerMySQLReconciler) handlePVCResizeFailure(ctx context.Context, cr *psv1alpha1.PerconaServerMySQL, originalSize resource.Quantity) error {
 	if err := r.revertVolumeTemplate(ctx, cr, originalSize); err != nil {
 		return errors.Wrapf(err, "revert volume template in ps/%s", cr.Name)
 	}
@@ -306,7 +354,7 @@ func (r *PerconaServerMySQLReconciler) handlePVCResizeFailure(ctx context.Contex
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) revertVolumeTemplate(ctx context.Context, cr *psv1.PerconaServerMySQL, originalSize resource.Quantity) error {
+func (r *PerconaServerMySQLReconciler) revertVolumeTemplate(ctx context.Context, cr *psv1alpha1.PerconaServerMySQL, originalSize resource.Quantity) error {
 	log := logf.FromContext(ctx)
 
 	orig := cr.DeepCopy()

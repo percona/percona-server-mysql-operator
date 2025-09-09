@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,6 +12,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
 
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 )
 
@@ -303,15 +303,15 @@ func TestPorts(t *testing.T) {
 func TestService(t *testing.T) {
 	podName := "test-cluster-router"
 
-	cr := &apiv1.PerconaServerMySQL{
+	cr := &apiv1alpha1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "test-namespace",
 		},
-		Spec: apiv1.PerconaServerMySQLSpec{
-			Proxy: apiv1.ProxySpec{
-				Router: &apiv1.MySQLRouterSpec{
-					Expose: apiv1.ServiceExpose{
+		Spec: apiv1alpha1.PerconaServerMySQLSpec{
+			Proxy: apiv1alpha1.ProxySpec{
+				Router: &apiv1alpha1.MySQLRouterSpec{
+					Expose: apiv1alpha1.ServiceExpose{
 						Type: corev1.ServiceTypeLoadBalancer,
 						Labels: map[string]string{
 							"custom-label": "custom-value",
@@ -361,7 +361,7 @@ func TestService(t *testing.T) {
 
 			assert.Equal(t, tt.serviceType, service.Spec.Type)
 
-			expectedLabels := MatchLabels(cr)
+			expectedLabels := Labels(cr)
 			expectedLabels["custom-label"] = "custom-value"
 			assert.Equal(t, expectedLabels, service.Labels)
 

@@ -269,7 +269,7 @@ type PMMSpec struct {
 
 type BackupSpec struct {
 	Enabled                  bool                          `json:"enabled,omitempty"`
-	SourceHost               string                        `json:"sourceHost,omitempty"`
+	SourcePod                string                        `json:"sourcePod,omitempty"`
 	Image                    string                        `json:"image"`
 	ImagePullSecrets         []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
@@ -1068,7 +1068,7 @@ func (p *PodSpec) reconcileAffinityOpts() {
 }
 
 // GetAffinity derives an Affinity configuration based on the provided PodSpec's affinity settings and labels.
-func (p *PodSpec) GetAffinity(labels map[string]string) *corev1.Affinity {
+func (p *PodSpec) GetAffinity(selector map[string]string) *corev1.Affinity {
 	if p.Affinity == nil {
 		return nil
 	}
@@ -1085,7 +1085,7 @@ func (p *PodSpec) GetAffinity(labels map[string]string) *corev1.Affinity {
 				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
 					{
 						LabelSelector: &metav1.LabelSelector{
-							MatchLabels: labels,
+							MatchLabels: selector,
 						},
 						TopologyKey: *p.Affinity.TopologyKey,
 					},
@@ -1097,13 +1097,13 @@ func (p *PodSpec) GetAffinity(labels map[string]string) *corev1.Affinity {
 	return nil
 }
 
-func (p *PodSpec) GetTopologySpreadConstraints(ls map[string]string) []corev1.TopologySpreadConstraint {
+func (p *PodSpec) GetTopologySpreadConstraints(selector map[string]string) []corev1.TopologySpreadConstraint {
 	tscs := make([]corev1.TopologySpreadConstraint, 0)
 
 	for _, tsc := range p.TopologySpreadConstraints {
 		if tsc.LabelSelector == nil && tsc.MatchLabelKeys == nil {
 			tsc.LabelSelector = &metav1.LabelSelector{
-				MatchLabels: ls,
+				MatchLabels: selector,
 			}
 		}
 		tscs = append(tscs, tsc)

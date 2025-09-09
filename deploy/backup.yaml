@@ -5,7 +5,17 @@ metadata:
   finalizers:
     - percona.com/delete-backup
 spec:
-
-#  sourceHost: cluster1-mysql-0.<mysql_service_name>.<namespace>
   clusterName: ps-cluster1
   storageName: minio
+#  sourcePod: ps-cluster1-mysql-1
+#  containerOptions:
+#    env:
+#    - name: VERIFY_TLS
+#      value: "false"
+#    args:
+#      xtrabackup:
+#      - "--someflag=abc"
+#      xbcloud:
+#      - "--someflag=abc"
+#      xbstream:
+#      - "--someflag=abc"

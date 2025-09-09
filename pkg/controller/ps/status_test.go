@@ -1250,16 +1250,16 @@ func makeFakeReadyPods(cr *apiv1.PerconaServerMySQL, amount int, podType string)
 		switch podType {
 		case "mysql":
 			pod.Name = mysql.PodName(cr, i)
-			pod.Labels = mysql.MatchLabels(cr)
+			pod.Labels = mysql.Labels(cr)
 		case "orchestrator":
 			pod.Name = orchestrator.PodName(cr, i)
-			pod.Labels = orchestrator.MatchLabels(cr)
+			pod.Labels = orchestrator.Labels(cr)
 		case "haproxy":
 			pod.Name = haproxy.PodName(cr, i)
-			pod.Labels = haproxy.MatchLabels(cr)
+			pod.Labels = haproxy.Labels(cr)
 		case "router":
 			pod.Name = router.PodName(cr, i)
-			pod.Labels = router.MatchLabels(cr)
+			pod.Labels = router.Labels(cr)
 		}
 		pod.Namespace = cr.Namespace
 		pods = append(pods, pod)

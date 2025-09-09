@@ -210,7 +210,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	if err != nil {
 		return err
 	}
-	primPod, err := getMySQLPod(ctx, r.Client, cr, idx)
+	primPod, err := mysql.GetPod(ctx, r.Client, cr, idx)
 	if err != nil {
 		return err
 	}
@@ -336,7 +336,7 @@ func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
 	if err != nil {
 		return err
 	}
-	primPod, err := getMySQLPod(ctx, r.Client, cr, idx)
+	primPod, err := mysql.GetPod(ctx, r.Client, cr, idx)
 	if err != nil {
 		return err
 	}

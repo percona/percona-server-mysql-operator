@@ -13,7 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -36,15 +36,15 @@ const (
 	tlsMountPath           = "/etc/orchestrator/ssl"
 )
 
-type Exposer apiv1.PerconaServerMySQL
+type Exposer apiv1alpha1.PerconaServerMySQL
 
 func (e *Exposer) Exposed() bool {
-	cr := apiv1.PerconaServerMySQL(*e)
+	cr := apiv1alpha1.PerconaServerMySQL(*e)
 	return cr.OrchestratorEnabled()
 }
 
 func (e *Exposer) Name(index string) string {
-	cr := apiv1.PerconaServerMySQL(*e)
+	cr := apiv1alpha1.PerconaServerMySQL(*e)
 	return Name(&cr) + "-" + index
 }
 
@@ -52,63 +52,62 @@ func (e *Exposer) Size() int32 {
 	return e.Spec.Orchestrator.Size
 }
 
-func (e *Exposer) Labels() map[string]string {
-	cr := apiv1.PerconaServerMySQL(*e)
+func (e *Exposer) MatchLabels() map[string]string {
+	cr := apiv1alpha1.PerconaServerMySQL(*e)
 	return MatchLabels(&cr)
 }
 
 func (e *Exposer) Service(name string) *corev1.Service {
-	cr := apiv1.PerconaServerMySQL(*e)
+	cr := apiv1alpha1.PerconaServerMySQL(*e)
 	return PodService(&cr, cr.Spec.Orchestrator.Expose.Type, name)
 }
 
 func (e *Exposer) SaveOldMeta() bool {
-	cr := apiv1.PerconaServerMySQL(*e)
+	cr := apiv1alpha1.PerconaServerMySQL(*e)
 	return cr.OrchestratorSpec().Expose.SaveOldMeta()
 }
 
 // Name returns component name
-func Name(cr *apiv1.PerconaServerMySQL) string {
+func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return cr.Name + "-" + componentShortName
 }
 
-func NamespacedName(cr *apiv1.PerconaServerMySQL) types.NamespacedName {
+func NamespacedName(cr *apiv1alpha1.PerconaServerMySQL) types.NamespacedName {
 	return types.NamespacedName{Name: Name(cr), Namespace: cr.Namespace}
 }
 
-func ServiceName(cr *apiv1.PerconaServerMySQL) string {
+func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
-func ConfigMapName(cr *apiv1.PerconaServerMySQL) string {
+func ConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
-func PodName(cr *apiv1.PerconaServerMySQL, idx int) string {
+func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
 	return fmt.Sprintf("%s-%d", Name(cr), idx)
 }
 
-func FQDN(cr *apiv1.PerconaServerMySQL, idx int) string {
+func FQDN(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
 	// TODO: DNS suffix
 	return fmt.Sprintf("%s.%s.svc", PodName(cr, idx), cr.Namespace)
 }
 
-func APIHost(cr *apiv1.PerconaServerMySQL) string {
+func APIHost(cr *apiv1alpha1.PerconaServerMySQL) string {
 	return fmt.Sprintf("http://%s:%d", FQDN(cr, 0), defaultWebPort)
 }
 
 // Labels returns labels of orchestrator
-func Labels(cr *apiv1.PerconaServerMySQL) map[string]string {
-	return cr.OrchestratorSpec().Labels
+func Labels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
+	return util.SSMapMerge(cr.GlobalLabels(), cr.OrchestratorSpec().Labels, MatchLabels(cr))
 }
 
-func MatchLabels(cr *apiv1.PerconaServerMySQL) map[string]string {
-	return util.SSMapMerge(cr.GlobalLabels(), Labels(cr),
-		cr.Labels(AppName, naming.ComponentOrchestrator))
+func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
+	return cr.Labels(AppName, naming.ComponentOrchestrator)
 }
 
-func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, tlsHash string) *appsv1.StatefulSet {
-	labels := MatchLabels(cr)
+func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, tlsHash string) *appsv1.StatefulSet {
+	selector := MatchLabels(cr)
 	spec := cr.OrchestratorSpec()
 	Replicas := spec.Size
 
@@ -125,19 +124,19 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, tlsHash string) *appsv
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        Name(cr),
 			Namespace:   cr.Namespace,
-			Labels:      labels,
+			Labels:      Labels(cr),
 			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &Replicas,
 			ServiceName: Name(cr),
 			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
+				MatchLabels: selector,
 			},
 			UpdateStrategy: updateStrategy(cr),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels:      labels,
+					Labels:      Labels(cr),
 					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
 				},
 				Spec: corev1.PodSpec{
@@ -156,8 +155,8 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, tlsHash string) *appsv
 					NodeSelector:                  cr.Spec.Orchestrator.NodeSelector,
 					Tolerations:                   cr.Spec.Orchestrator.Tolerations,
 					Containers:                    containers(cr),
-					Affinity:                      spec.GetAffinity(labels),
-					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(labels),
+					Affinity:                      spec.GetAffinity(selector),
+					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(selector),
 					ImagePullSecrets:              spec.ImagePullSecrets,
 					TerminationGracePeriodSeconds: spec.GetTerminationGracePeriodSeconds(),
 					PriorityClassName:             spec.PriorityClassName,
@@ -174,10 +173,10 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, tlsHash string) *appsv
 	}
 }
 
-func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
+func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
 	return []corev1.Volume{
 		{
-			Name: apiv1.BinVolumeName,
+			Name: apiv1alpha1.BinVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
@@ -217,7 +216,7 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 	}
 }
 
-func updateStrategy(cr *apiv1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrategy {
+func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrategy {
 	switch cr.Spec.UpdateStrategy {
 	case appsv1.OnDeleteStatefulSetStrategyType:
 		return appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
@@ -232,14 +231,14 @@ func updateStrategy(cr *apiv1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrate
 	}
 }
 
-func containers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
+func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 	sidecars := sidecarContainers(cr)
 	containers := make([]corev1.Container, 1, len(sidecars)+1)
 	containers[0] = container(cr)
 	return append(containers, sidecars...)
 }
 
-func container(cr *apiv1.PerconaServerMySQL) corev1.Container {
+func container(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	env := []corev1.EnvVar{
 		{
 			Name:  "ORC_SERVICE",
@@ -312,7 +311,7 @@ func container(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	}
 }
 
-func sidecarContainers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
+func sidecarContainers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
 	serviceName := mysql.ServiceName(cr)
 
 	return []corev1.Container{
@@ -348,8 +347,8 @@ func sidecarContainers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
 func containerMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{
-			Name:      apiv1.BinVolumeName,
-			MountPath: apiv1.BinVolumePath,
+			Name:      apiv1alpha1.BinVolumeName,
+			MountPath: apiv1alpha1.BinVolumePath,
 		},
 		{
 			Name:      tlsVolumeName,
@@ -365,13 +364,13 @@ func containerMounts() []corev1.VolumeMount {
 		},
 		{
 			Name:      credsVolumeName,
-			MountPath: filepath.Join(CredsMountPath, string(apiv1.UserOrchestrator)),
-			SubPath:   string(apiv1.UserOrchestrator),
+			MountPath: filepath.Join(CredsMountPath, string(apiv1alpha1.UserOrchestrator)),
+			SubPath:   string(apiv1alpha1.UserOrchestrator),
 		},
 	}
 }
 
-func Service(cr *apiv1.PerconaServerMySQL) *corev1.Service {
+func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
@@ -401,12 +400,12 @@ func Service(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
-func PodService(cr *apiv1.PerconaServerMySQL, t corev1.ServiceType, podName string) *corev1.Service {
+func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podName string) *corev1.Service {
 	expose := cr.Spec.Orchestrator.Expose
 
 	labels := MatchLabels(cr)
 	labels[naming.LabelExposed] = "true"
-	labels = util.SSMapMerge(expose.Labels, labels)
+	labels = util.SSMapMerge(cr.GlobalLabels(), expose.Labels, labels)
 
 	selector := MatchLabels(cr)
 	selector["statefulset.kubernetes.io/pod-name"] = podName
@@ -452,8 +451,8 @@ func PodService(cr *apiv1.PerconaServerMySQL, t corev1.ServiceType, podName stri
 	}
 }
 
-func ConfigMap(cr *apiv1.PerconaServerMySQL, data map[string]string) *corev1.ConfigMap {
-	return &corev1.ConfigMap{
+func ConfigMap(cr *apiv1alpha1.PerconaServerMySQL, data map[string]string) *corev1.ConfigMap {
+	cm := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "ConfigMap",
@@ -466,9 +465,20 @@ func ConfigMap(cr *apiv1.PerconaServerMySQL, data map[string]string) *corev1.Con
 		},
 		Data: data,
 	}
+	if cr.CompareVersion("0.12.0") >= 0 {
+		if cm.Labels == nil {
+			cm.Labels = map[string]string{}
+		}
+		for k, v := range naming.Labels(ConfigMapName(cr), cr.Name, "percona-server", "orchestrator") {
+			if _, exists := cm.Labels[k]; !exists { // global labels have priority
+				cm.Labels[k] = v
+			}
+		}
+	}
+	return cm
 }
 
-func RaftNodes(cr *apiv1.PerconaServerMySQL) []string {
+func RaftNodes(cr *apiv1alpha1.PerconaServerMySQL) []string {
 	nodes := make([]string, cr.Spec.Orchestrator.Size)
 
 	for i := 0; i < int(cr.Spec.Orchestrator.Size); i++ {
@@ -478,7 +488,7 @@ func RaftNodes(cr *apiv1.PerconaServerMySQL) []string {
 	return nodes
 }
 
-func orcConfig(cr *apiv1.PerconaServerMySQL) (string, error) {
+func orcConfig(cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
 	config := make(map[string]interface{}, 0)
 
 	config["RaftNodes"] = RaftNodes(cr)
@@ -490,7 +500,7 @@ func orcConfig(cr *apiv1.PerconaServerMySQL) (string, error) {
 	return string(configJson), nil
 }
 
-func ConfigMapData(cr *apiv1.PerconaServerMySQL) (map[string]string, error) {
+func ConfigMapData(cr *apiv1alpha1.PerconaServerMySQL) (map[string]string, error) {
 	cmData := make(map[string]string, 0)
 
 	config, err := orcConfig(cr)
@@ -503,7 +513,7 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (map[string]string, error) {
 	return cmData, nil
 }
 
-func RBAC(cr *apiv1.PerconaServerMySQL) (*rbacv1.Role, *rbacv1.RoleBinding, *corev1.ServiceAccount) {
+func RBAC(cr *apiv1alpha1.PerconaServerMySQL) (*rbacv1.Role, *rbacv1.RoleBinding, *corev1.ServiceAccount) {
 	meta := metav1.ObjectMeta{
 		Namespace:   cr.Namespace,
 		Name:        "percona-server-mysql-operator-orchestrator",

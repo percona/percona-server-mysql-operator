@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
@@ -17,17 +16,6 @@ func TestPVC(t *testing.T) {
 	requests := corev1.ResourceList{
 		corev1.ResourceStorage: resource.MustParse("2Gi"),
 	}
-	dataSource := &corev1.TypedLocalObjectReference{
-		APIGroup: ptr.To("some-api-group"),
-		Kind:     "some-kind",
-		Name:     "some-name",
-	}
-	dataSourceRef := &corev1.TypedObjectReference{
-		APIGroup:  ptr.To("some-api-group-2"),
-		Kind:      "some-kind-2",
-		Name:      "some-name-2",
-		Namespace: ptr.To("namespace"),
-	}
 
 	spec := &apiv1.VolumeSpec{
 		PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
@@ -36,8 +24,6 @@ func TestPVC(t *testing.T) {
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: requests,
 			},
-			DataSource:    dataSource,
-			DataSourceRef: dataSourceRef,
 		},
 	}
 
@@ -50,6 +36,4 @@ func TestPVC(t *testing.T) {
 	assert.Equal(t, storageClassName, *pvc.Spec.StorageClassName)
 	assert.Equal(t, accessModes, pvc.Spec.AccessModes)
 	assert.Equal(t, requests, pvc.Spec.Resources.Requests)
-	assert.Equal(t, dataSource, pvc.Spec.DataSource)
-	assert.Equal(t, dataSourceRef, pvc.Spec.DataSourceRef)
 }

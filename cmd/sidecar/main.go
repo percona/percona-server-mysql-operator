@@ -187,14 +187,14 @@ func getBackupHandler(w http.ResponseWriter, req *http.Request) {
 	data, err := json.Marshal(status.GetBackupConfig())
 	if err != nil {
 		log.Error(err, "failed to marshal data")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
+		http.Error(w, "get backup failed", http.StatusInternalServerError)
 		return
 	}
 
 	_, err = w.Write(data)
 	if err != nil {
 		log.Error(err, "failed to write data")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
+		http.Error(w, "get backup failed", http.StatusInternalServerError)
 		return
 	}
 }
@@ -203,7 +203,7 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 	ns, err := getNamespace()
 	if err != nil {
 		log.Error(err, "failed to detect namespace")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
+		http.Error(w, "delete failed", http.StatusInternalServerError)
 		return
 	}
 
@@ -218,7 +218,7 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 	data, err := io.ReadAll(req.Body)
 	if err != nil {
 		log.Error(err, "failed to read request data")
-		http.Error(w, "backup failed", http.StatusBadRequest)
+		http.Error(w, "delete failed", http.StatusBadRequest)
 		return
 	}
 	defer req.Body.Close()
@@ -226,13 +226,13 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 	backupConf := xb.BackupConfig{}
 	if err = json.Unmarshal(data, &backupConf); err != nil {
 		log.Error(err, "failed to unmarshal backup config")
-		http.Error(w, "backup failed", http.StatusBadRequest)
+		http.Error(w, "delete failed", http.StatusBadRequest)
 		return
 	}
 
 	if err := deleteBackup(req.Context(), &backupConf, backupName); err != nil {
 		log.Error(err, "failed to delete backup")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
+		http.Error(w, "delete failed", http.StatusInternalServerError)
 		return
 	}
 
@@ -242,7 +242,9 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 func deleteBackup(ctx context.Context, cfg *xb.BackupConfig, backupName string) error {
 	logWriter := io.Writer(os.Stderr)
 	if backupName != "" {
-		backupLog, err := os.OpenFile(filepath.Join(mysql.BackupLogDir, backupName+".log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+		backupLog, err := os.OpenFile(
+			filepath.Join(mysql.BackupLogDir, backupName+".log"),
+			os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
 		if err != nil {
 			return errors.Wrap(err, "failed to open log file")
 		}
@@ -327,6 +329,27 @@ func checkBackupMD5Size(ctx context.Context, cfg *xb.BackupConfig) error {
 	return nil
 }
 
+func startReplicaSQLThread(ctx context.Context) error {
+	backupUser := apiv1alpha1.UserXtraBackup
+
+	backupPass, err := getSecret(backupUser)
+	if err != nil {
+		return errors.Wrap(err, "get password")
+	}
+
+	startSQL := "START REPLICA SQL_THREAD"
+	cmd := exec.CommandContext(ctx, "mysql", "-u", string(backupUser), "-p", "-e", startSQL)
+	cmd.Stdin = strings.NewReader(backupPass + "\n")
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Error(err, "failed to start SQL thread", "output", string(out))
+		return errors.Wrap(err, startSQL)
+	}
+
+	return nil
+}
+
 func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	if !status.TryRunBackup() {
 		log.Info("backup is already running", "host", req.RemoteAddr)
@@ -369,7 +392,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	defer func() {
 		status.RemoveBackupConfig()
 	}()
-	log.V(1).Info("Checking if backup exists")
+	log.Info("Checking if backup exists")
 	exists, err := backupExists(req.Context(), &backupConf)
 	if err != nil {
 		log.Error(err, "failed to check if backup exists")
@@ -377,7 +400,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if exists {
-		log.V(1).Info("Backup exists. Deleting backup")
+		log.Info("Backup exists. Deleting backup")
 		if err := deleteBackup(req.Context(), &backupConf, backupName); err != nil {
 			log.Error(err, "failed to delete existing backup")
 			http.Error(w, "backup failed", http.StatusBadRequest)
@@ -475,13 +498,20 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 		}
 
 		if err := xtrabackup.Wait(); err != nil {
-			log.Error(err, "failed waiting for xtrabackup to finish")
+			log.Error(err, "failed to wait for xtrabackup to finish")
 			return err
 		}
 		return nil
 	})
 
 	if err := g.Wait(); err != nil {
+		log.Error(err, "backup failed")
+
+		// --safe-slave-backup stops SQL thread but it's not started
+		// if xtrabackup command fails
+		log.Info("starting replication SQL thread")
+		startReplicaSQLThread(req.Context())
+
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
