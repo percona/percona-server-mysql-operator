@@ -37,7 +37,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         properties:
@@ -1193,7 +1193,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         properties:
@@ -2374,7 +2374,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         properties:
@@ -13415,7 +13415,7 @@ subjects:
 apiVersion: v1
 data:
   controller_manager_config.yaml: |
-    apiVersion: controller-runtime.sigs.k8s.io/v1alpha1
+    apiVersion: controller-runtime.sigs.k8s.io/v1
     kind: ControllerManagerConfig
     health:
       healthProbeBindAddress: :8081

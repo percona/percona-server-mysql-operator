@@ -1,6 +1,6 @@
 ## Append samples you want in your CSV to this file as resources ##
 resources:
-- ps_v1alpha1_perconaservermysql.yaml
-- ps_v1alpha1_perconaservermysqlbackup.yaml
-- ps_v1alpha1_perconaservermysqlrestore.yaml
+- ps_v1_perconaservermysql.yaml
+- ps_v1_perconaservermysqlbackup.yaml
+- ps_v1_perconaservermysqlrestore.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
@@ -43,7 +43,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cr.Spec.MySQL.ClusterType = apiv1alpha1.ClusterTypeAsync
+	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
 	cr.Spec.UpdateStrategy = appsv1.OnDeleteStatefulSetStrategyType
 
 	scheme := runtime.NewScheme()
@@ -51,7 +51,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = apiv1alpha1.AddToScheme(scheme)
+	err = apiv1.AddToScheme(scheme)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,39 +60,39 @@ func TestReconcileStatusAsync(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		cr       *apiv1alpha1.PerconaServerMySQL
+		cr       *apiv1.PerconaServerMySQL
 		objects  []client.Object
-		expected apiv1alpha1.PerconaServerMySQLStatus
+		expected apiv1.PerconaServerMySQLStatus
 	}{
 		{
 			name:    "without pods",
 			cr:      cr,
 			objects: []client.Object{},
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
-					State: apiv1alpha1.StateInitializing,
+					State: apiv1.StateInitializing,
 				},
-				Orchestrator: apiv1alpha1.StatefulAppStatus{
+				Orchestrator: apiv1.StatefulAppStatus{
 					Size:  3,
-					State: apiv1alpha1.StateInitializing,
+					State: apiv1.StateInitializing,
 				},
-				HAProxy: apiv1alpha1.StatefulAppStatus{
+				HAProxy: apiv1.StatefulAppStatus{
 					Size:  3,
-					State: apiv1alpha1.StateInitializing,
+					State: apiv1.StateInitializing,
 				},
-				State: apiv1alpha1.StateInitializing,
+				State: apiv1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateInitializing.String(),
+						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateInitializing.String(),
+						Reason: apiv1.StateInitializing.String(),
 					},
 					{
-						Type:   apiv1alpha1.StateReady.String(),
+						Type:   apiv1.StateReady.String(),
 						Status: metav1.ConditionFalse,
-						Reason: apiv1alpha1.StateReady.String(),
+						Reason: apiv1.StateReady.String(),
 					},
 				},
 			},
@@ -104,33 +104,33 @@ func TestReconcileStatusAsync(t *testing.T) {
 				makeFakeReadyPods(cr, 3, "mysql"),
 				makeFakeReadyPods(cr, 3, "orchestrator"),
 			),
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				Orchestrator: apiv1alpha1.StatefulAppStatus{
+				Orchestrator: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				HAProxy: apiv1alpha1.StatefulAppStatus{
+				HAProxy: apiv1.StatefulAppStatus{
 					Size:  3,
-					State: apiv1alpha1.StateInitializing,
+					State: apiv1.StateInitializing,
 				},
-				State: apiv1alpha1.StateInitializing,
+				State: apiv1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateInitializing.String(),
+						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateInitializing.String(),
+						Reason: apiv1.StateInitializing.String(),
 					},
 					{
-						Type:   apiv1alpha1.StateReady.String(),
+						Type:   apiv1.StateReady.String(),
 						Status: metav1.ConditionFalse,
-						Reason: apiv1alpha1.StateReady.String(),
+						Reason: apiv1.StateReady.String(),
 					},
 				},
 			},
@@ -143,34 +143,34 @@ func TestReconcileStatusAsync(t *testing.T) {
 				makeFakeReadyPods(cr, 3, "haproxy"),
 				makeFakeReadyPods(cr, 3, "orchestrator"),
 			),
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				Orchestrator: apiv1alpha1.StatefulAppStatus{
+				Orchestrator: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				HAProxy: apiv1alpha1.StatefulAppStatus{
+				HAProxy: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				State: apiv1alpha1.StateReady,
+				State: apiv1.StateReady,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateInitializing.String(),
+						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionFalse,
-						Reason: apiv1alpha1.StateInitializing.String(),
+						Reason: apiv1.StateInitializing.String(),
 					},
 					{
-						Type:   apiv1alpha1.StateReady.String(),
+						Type:   apiv1.StateReady.String(),
 						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateReady.String(),
+						Reason: apiv1.StateReady.String(),
 					},
 				},
 			},
@@ -201,34 +201,34 @@ func TestReconcileStatusAsync(t *testing.T) {
 						},
 					},
 				}),
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				Orchestrator: apiv1alpha1.StatefulAppStatus{
+				Orchestrator: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				HAProxy: apiv1alpha1.StatefulAppStatus{
+				HAProxy: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				State: apiv1alpha1.StateInitializing,
+				State: apiv1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateInitializing.String(),
+						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateInitializing.String(),
+						Reason: apiv1.StateInitializing.String(),
 					},
 					{
-						Type:   apiv1alpha1.StateReady.String(),
+						Type:   apiv1.StateReady.String(),
 						Status: metav1.ConditionFalse,
-						Reason: apiv1alpha1.StateReady.String(),
+						Reason: apiv1.StateReady.String(),
 					},
 				},
 			},
@@ -253,41 +253,41 @@ func TestReconcileStatusAsync(t *testing.T) {
 						},
 					},
 				}),
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				Orchestrator: apiv1alpha1.StatefulAppStatus{
+				Orchestrator: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				HAProxy: apiv1alpha1.StatefulAppStatus{
+				HAProxy: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				State: apiv1alpha1.StateReady,
+				State: apiv1.StateReady,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateInitializing.String(),
+						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionFalse,
-						Reason: apiv1alpha1.StateInitializing.String(),
+						Reason: apiv1.StateInitializing.String(),
 					},
 					{
-						Type:   apiv1alpha1.StateReady.String(),
+						Type:   apiv1.StateReady.String(),
 						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateReady.String(),
+						Reason: apiv1.StateReady.String(),
 					},
 				},
 			},
 		},
 		{
 			name: "with all ready pods without orchestrator",
-			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQL) {
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQL) {
 				cr.Spec.Unsafe.Orchestrator = true
 				cr.Spec.Unsafe.MySQLSize = true
 				cr.Spec.Orchestrator.Enabled = false
@@ -299,36 +299,36 @@ func TestReconcileStatusAsync(t *testing.T) {
 				makeFakeReadyPods(cr, 1, "mysql"),
 				makeFakeReadyPods(cr, 3, "haproxy"),
 			),
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Size:  1,
 					Ready: 1,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				HAProxy: apiv1alpha1.StatefulAppStatus{
+				HAProxy: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				State: apiv1alpha1.StateReady,
+				State: apiv1.StateReady,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateInitializing.String(),
+						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionFalse,
-						Reason: apiv1alpha1.StateInitializing.String(),
+						Reason: apiv1.StateInitializing.String(),
 					},
 					{
-						Type:   apiv1alpha1.StateReady.String(),
+						Type:   apiv1.StateReady.String(),
 						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateReady.String(),
+						Reason: apiv1.StateReady.String(),
 					},
 				},
 			},
 		},
 		{
 			name: "with all ready pods without haproxy",
-			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQL) {
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQL) {
 				cr.Spec.Orchestrator.Enabled = true
 				cr.Spec.Unsafe.Proxy = true
 				cr.Spec.Proxy.HAProxy.Enabled = false
@@ -337,29 +337,29 @@ func TestReconcileStatusAsync(t *testing.T) {
 				makeFakeReadyPods(cr, 3, "mysql"),
 				makeFakeReadyPods(cr, 3, "orchestrator"),
 			),
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				Orchestrator: apiv1alpha1.StatefulAppStatus{
+				Orchestrator: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				State: apiv1alpha1.StateReady,
+				State: apiv1.StateReady,
 				Host:  cr.Name + "-mysql." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateInitializing.String(),
+						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionFalse,
-						Reason: apiv1alpha1.StateInitializing.String(),
+						Reason: apiv1.StateInitializing.String(),
 					},
 					{
-						Type:   apiv1alpha1.StateReady.String(),
+						Type:   apiv1.StateReady.String(),
 						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateReady.String(),
+						Reason: apiv1.StateReady.String(),
 					},
 				},
 			},
@@ -409,7 +409,7 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cr.Spec.MySQL.ClusterType = apiv1alpha1.ClusterTypeGR
+	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
 	cr.Spec.Proxy.HAProxy.Enabled = true
 	cr.Spec.Proxy.Router.Enabled = false
 
@@ -418,7 +418,7 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = apiv1alpha1.AddToScheme(scheme)
+	err = apiv1.AddToScheme(scheme)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,15 +430,15 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 			Namespace: cr.Namespace,
 		},
 		Data: map[string][]byte{
-			string(apiv1alpha1.UserOperator): []byte(operatorPass),
+			string(apiv1.UserOperator): []byte(operatorPass),
 		},
 	}
 
 	tests := []struct {
 		name               string
-		cr                 *apiv1alpha1.PerconaServerMySQL
+		cr                 *apiv1.PerconaServerMySQL
 		objects            []client.Object
-		expected           apiv1alpha1.PerconaServerMySQLStatus
+		expected           apiv1.PerconaServerMySQLStatus
 		innodbClusterState innodbcluster.ClusterStatus
 		mysqlMemberStates  []innodbcluster.MemberState
 		noMetadataDB       bool
@@ -446,27 +446,27 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 		{
 			name: "without pods",
 			cr:   cr,
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
-					State: apiv1alpha1.StateInitializing,
+					State: apiv1.StateInitializing,
 				},
-				HAProxy: apiv1alpha1.StatefulAppStatus{
+				HAProxy: apiv1.StatefulAppStatus{
 					Size:  3,
-					State: apiv1alpha1.StateInitializing,
+					State: apiv1.StateInitializing,
 				},
-				State: apiv1alpha1.StateInitializing,
+				State: apiv1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateInitializing.String(),
+						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateInitializing.String(),
+						Reason: apiv1.StateInitializing.String(),
 					},
 					{
-						Type:   apiv1alpha1.StateReady.String(),
+						Type:   apiv1.StateReady.String(),
 						Status: metav1.ConditionFalse,
-						Reason: apiv1alpha1.StateReady.String(),
+						Reason: apiv1.StateReady.String(),
 					},
 				},
 			},
@@ -479,29 +479,29 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				makeFakeReadyPods(cr, 3, "haproxy"),
 				[]client.Object{secret},
 			),
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				HAProxy: apiv1alpha1.StatefulAppStatus{
+				HAProxy: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				State: apiv1alpha1.StateReady,
+				State: apiv1.StateReady,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateInitializing.String(),
+						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionFalse,
-						Reason: apiv1alpha1.StateInitializing.String(),
+						Reason: apiv1.StateInitializing.String(),
 					},
 					{
-						Type:   apiv1alpha1.StateReady.String(),
+						Type:   apiv1.StateReady.String(),
 						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateReady.String(),
+						Reason: apiv1.StateReady.String(),
 					},
 				},
 			},
@@ -520,29 +520,29 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				makeFakeReadyPods(cr, 3, "haproxy"),
 				[]client.Object{secret},
 			),
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateInitializing,
+					State: apiv1.StateInitializing,
 				},
-				HAProxy: apiv1alpha1.StatefulAppStatus{
+				HAProxy: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				State: apiv1alpha1.StateInitializing,
+				State: apiv1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateInitializing.String(),
+						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateInitializing.String(),
+						Reason: apiv1.StateInitializing.String(),
 					},
 					{
-						Type:   apiv1alpha1.StateReady.String(),
+						Type:   apiv1.StateReady.String(),
 						Status: metav1.ConditionFalse,
-						Reason: apiv1alpha1.StateReady.String(),
+						Reason: apiv1.StateReady.String(),
 					},
 				},
 			},
@@ -562,29 +562,29 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				makeFakeReadyPods(cr, 3, "haproxy"),
 				[]client.Object{secret},
 			),
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateInitializing,
+					State: apiv1.StateInitializing,
 				},
-				HAProxy: apiv1alpha1.StatefulAppStatus{
+				HAProxy: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				State: apiv1alpha1.StateInitializing,
+				State: apiv1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateInitializing.String(),
+						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateInitializing.String(),
+						Reason: apiv1.StateInitializing.String(),
 					},
 					{
-						Type:   apiv1alpha1.StateReady.String(),
+						Type:   apiv1.StateReady.String(),
 						Status: metav1.ConditionFalse,
-						Reason: apiv1alpha1.StateReady.String(),
+						Reason: apiv1.StateReady.String(),
 					},
 				},
 			},
@@ -603,29 +603,29 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				makeFakeReadyPods(cr, 3, "haproxy"),
 				[]client.Object{secret},
 			),
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateInitializing,
+					State: apiv1.StateInitializing,
 				},
-				HAProxy: apiv1alpha1.StatefulAppStatus{
+				HAProxy: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				State: apiv1alpha1.StateInitializing,
+				State: apiv1.StateInitializing,
 				Host:  cr.Name + "-haproxy." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateInitializing.String(),
+						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateInitializing.String(),
+						Reason: apiv1.StateInitializing.String(),
 					},
 					{
-						Type:   apiv1alpha1.StateReady.String(),
+						Type:   apiv1.StateReady.String(),
 						Status: metav1.ConditionFalse,
-						Reason: apiv1alpha1.StateReady.String(),
+						Reason: apiv1.StateReady.String(),
 					},
 				},
 			},
@@ -678,7 +678,7 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cr.Spec.MySQL.ClusterType = apiv1alpha1.ClusterTypeGR
+	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
 	cr.Spec.Proxy.HAProxy.Enabled = false
 	cr.Spec.Proxy.Router.Enabled = true
 
@@ -687,7 +687,7 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = apiv1alpha1.AddToScheme(scheme)
+	err = apiv1.AddToScheme(scheme)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -699,15 +699,15 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 			Namespace: cr.Namespace,
 		},
 		Data: map[string][]byte{
-			string(apiv1alpha1.UserOperator): []byte(operatorPass),
+			string(apiv1.UserOperator): []byte(operatorPass),
 		},
 	}
 
 	tests := []struct {
 		name               string
-		cr                 *apiv1alpha1.PerconaServerMySQL
+		cr                 *apiv1.PerconaServerMySQL
 		objects            []client.Object
-		expected           apiv1alpha1.PerconaServerMySQLStatus
+		expected           apiv1.PerconaServerMySQLStatus
 		innodbClusterState innodbcluster.ClusterStatus
 		mysqlMemberStates  []innodbcluster.MemberState
 		noMetadataDB       bool
@@ -715,27 +715,27 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 		{
 			name: "without pods",
 			cr:   cr,
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
-					State: apiv1alpha1.StateInitializing,
+					State: apiv1.StateInitializing,
 				},
-				Router: apiv1alpha1.StatefulAppStatus{
+				Router: apiv1.StatefulAppStatus{
 					Size:  3,
-					State: apiv1alpha1.StateInitializing,
+					State: apiv1.StateInitializing,
 				},
-				State: apiv1alpha1.StateInitializing,
+				State: apiv1.StateInitializing,
 				Host:  cr.Name + "-router." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateInitializing.String(),
+						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateInitializing.String(),
+						Reason: apiv1.StateInitializing.String(),
 					},
 					{
-						Type:   apiv1alpha1.StateReady.String(),
+						Type:   apiv1.StateReady.String(),
 						Status: metav1.ConditionFalse,
-						Reason: apiv1alpha1.StateReady.String(),
+						Reason: apiv1.StateReady.String(),
 					},
 				},
 			},
@@ -748,29 +748,29 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				makeFakeReadyPods(cr, 3, "router"),
 				[]client.Object{secret},
 			),
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				Router: apiv1alpha1.StatefulAppStatus{
+				Router: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				State: apiv1alpha1.StateReady,
+				State: apiv1.StateReady,
 				Host:  cr.Name + "-router." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateInitializing.String(),
+						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionFalse,
-						Reason: apiv1alpha1.StateInitializing.String(),
+						Reason: apiv1.StateInitializing.String(),
 					},
 					{
-						Type:   apiv1alpha1.StateReady.String(),
+						Type:   apiv1.StateReady.String(),
 						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateReady.String(),
+						Reason: apiv1.StateReady.String(),
 					},
 				},
 			},
@@ -789,28 +789,28 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				makeFakeReadyPods(cr, 3, "router"),
 				[]client.Object{secret},
 			),
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateInitializing,
+					State: apiv1.StateInitializing,
 				},
-				Router: apiv1alpha1.StatefulAppStatus{
+				Router: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				State: apiv1alpha1.StateInitializing,
+				State: apiv1.StateInitializing,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateInitializing.String(),
+						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateInitializing.String(),
+						Reason: apiv1.StateInitializing.String(),
 					},
 					{
-						Type:   apiv1alpha1.StateReady.String(),
+						Type:   apiv1.StateReady.String(),
 						Status: metav1.ConditionFalse,
-						Reason: apiv1alpha1.StateReady.String(),
+						Reason: apiv1.StateReady.String(),
 					},
 				},
 				Host: cr.Name + "-router." + cr.Namespace,
@@ -831,29 +831,29 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				makeFakeReadyPods(cr, 3, "router"),
 				[]client.Object{secret},
 			),
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateInitializing,
+					State: apiv1.StateInitializing,
 				},
-				Router: apiv1alpha1.StatefulAppStatus{
+				Router: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				State: apiv1alpha1.StateInitializing,
+				State: apiv1.StateInitializing,
 				Host:  cr.Name + "-router." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateInitializing.String(),
+						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateInitializing.String(),
+						Reason: apiv1.StateInitializing.String(),
 					},
 					{
-						Type:   apiv1alpha1.StateReady.String(),
+						Type:   apiv1.StateReady.String(),
 						Status: metav1.ConditionFalse,
-						Reason: apiv1alpha1.StateReady.String(),
+						Reason: apiv1.StateReady.String(),
 					},
 				},
 			},
@@ -872,29 +872,29 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				makeFakeReadyPods(cr, 3, "router"),
 				[]client.Object{secret},
 			),
-			expected: apiv1alpha1.PerconaServerMySQLStatus{
-				MySQL: apiv1alpha1.StatefulAppStatus{
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateInitializing,
+					State: apiv1.StateInitializing,
 				},
-				Router: apiv1alpha1.StatefulAppStatus{
+				Router: apiv1.StatefulAppStatus{
 					Size:  3,
 					Ready: 3,
-					State: apiv1alpha1.StateReady,
+					State: apiv1.StateReady,
 				},
-				State: apiv1alpha1.StateInitializing,
+				State: apiv1.StateInitializing,
 				Host:  cr.Name + "-router." + cr.Namespace,
 				Conditions: []metav1.Condition{
 					{
-						Type:   apiv1alpha1.StateInitializing.String(),
+						Type:   apiv1.StateInitializing.String(),
 						Status: metav1.ConditionTrue,
-						Reason: apiv1alpha1.StateInitializing.String(),
+						Reason: apiv1.StateInitializing.String(),
 					},
 					{
-						Type:   apiv1alpha1.StateReady.String(),
+						Type:   apiv1.StateReady.String(),
 						Status: metav1.ConditionFalse,
-						Reason: apiv1alpha1.StateReady.String(),
+						Reason: apiv1.StateReady.String(),
 					},
 				},
 			},
@@ -947,7 +947,7 @@ func TestReconcileErrorStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cr.Spec.MySQL.ClusterType = apiv1alpha1.ClusterTypeAsync
+	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
 	cr.Spec.UpdateStrategy = appsv1.OnDeleteStatefulSetStrategyType
 
 	scheme := runtime.NewScheme()
@@ -955,7 +955,7 @@ func TestReconcileErrorStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = apiv1alpha1.AddToScheme(scheme)
+	err = apiv1.AddToScheme(scheme)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -993,11 +993,11 @@ func TestReconcileErrorStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expected := apiv1alpha1.PerconaServerMySQLStatus{
-		State: apiv1alpha1.StateError,
+	expected := apiv1.PerconaServerMySQLStatus{
+		State: apiv1.StateError,
 		Conditions: []metav1.Condition{
 			{
-				Type:    apiv1alpha1.StateError.String(),
+				Type:    apiv1.StateError.String(),
 				Status:  metav1.ConditionTrue,
 				Reason:  "ErrorReconcile",
 				Message: reconcileErr.Error(),
@@ -1078,7 +1078,7 @@ type fakeClientScript struct {
 // getFakeClient returns a fake clientcmd.Client object with the array of fakeClientScript objects.
 // This array is constructed to cover every possible client call in the reconcileCRStatus function.
 func getFakeClient(
-	cr *apiv1alpha1.PerconaServerMySQL,
+	cr *apiv1.PerconaServerMySQL,
 	innodbClusterStatus innodbcluster.ClusterStatus,
 	mysqlMemberStates []innodbcluster.MemberState,
 	noMetadataDB bool, disableCheck bool,
@@ -1180,7 +1180,7 @@ func getFakeClient(
 	}, nil
 }
 
-func getFakeOrchestratorClient(cr *apiv1alpha1.PerconaServerMySQL) (clientcmd.Client, error) {
+func getFakeOrchestratorClient(cr *apiv1.PerconaServerMySQL) (clientcmd.Client, error) {
 	var scripts []fakeClientScript
 
 	// Get async cluster from Orchestrator
@@ -1221,7 +1221,7 @@ func getFakeOrchestratorClient(cr *apiv1alpha1.PerconaServerMySQL) (clientcmd.Cl
 	}, nil
 }
 
-func makeFakeReadyPods(cr *apiv1alpha1.PerconaServerMySQL, amount int, podType string) []client.Object {
+func makeFakeReadyPods(cr *apiv1.PerconaServerMySQL, amount int, podType string) []client.Object {
 	fakePod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{},
 		Spec: corev1.PodSpec{

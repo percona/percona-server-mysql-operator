@@ -7,7 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
 func TestPVC(t *testing.T) {
@@ -17,7 +17,7 @@ func TestPVC(t *testing.T) {
 		corev1.ResourceStorage: resource.MustParse("2Gi"),
 	}
 
-	spec := &apiv1alpha1.VolumeSpec{
+	spec := &apiv1.VolumeSpec{
 		PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 			StorageClassName: &storageClassName,
 			AccessModes:      accessModes,
@@ -29,7 +29,7 @@ func TestPVC(t *testing.T) {
 
 	pvcName := "pvc-name"
 
-	pvc := PVC(new(apiv1alpha1.PerconaServerMySQL), pvcName, spec)
+	pvc := PVC(new(apiv1.PerconaServerMySQL), pvcName, spec)
 
 	assert.Equal(t, pvcName, pvc.Name)
 	assert.NotNil(t, pvc.Spec.StorageClassName)

@@ -9,7 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -38,27 +38,27 @@ const (
 	portRWAdmin    = 33062
 )
 
-func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
+func Name(cr *apiv1.PerconaServerMySQL) string {
 	return cr.Name + "-" + AppName
 }
 
-func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
+func PodName(cr *apiv1.PerconaServerMySQL, idx int) string {
 	return fmt.Sprintf("%s-%d", Name(cr), idx)
 }
 
-func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
+func ServiceName(cr *apiv1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
-func Labels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
+func Labels(cr *apiv1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.GlobalLabels(), cr.MySQLSpec().Labels, MatchLabels(cr))
 }
 
-func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
+func MatchLabels(cr *apiv1.PerconaServerMySQL) map[string]string {
 	return cr.Labels(AppName, naming.ComponentProxy)
 }
 
-func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
+func Service(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 	expose := cr.Spec.Proxy.Router.Expose
 
 	labels := util.SSMapMerge(cr.GlobalLabels(), expose.Labels, MatchLabels(cr))
@@ -99,7 +99,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	return s
 }
 
-func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHash string) *appsv1.Deployment {
+func Deployment(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash string) *appsv1.Deployment {
 	selector := MatchLabels(cr)
 	spec := cr.Spec.Proxy.Router
 	replicas := spec.Size
@@ -173,12 +173,12 @@ func Deployment(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHa
 	}
 }
 
-func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
+func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 	t := true
 
 	return []corev1.Volume{
 		{
-			Name: apiv1alpha1.BinVolumeName,
+			Name: apiv1.BinVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
@@ -225,7 +225,7 @@ func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
 	}
 }
 
-func containers(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Container {
+func containers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
 	return []corev1.Container{routerContainer(cr)}
 }
 
@@ -302,7 +302,7 @@ func ports(sPorts []corev1.ServicePort) []corev1.ServicePort {
 	return ports
 }
 
-func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
+func routerContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	spec := cr.Spec.Proxy.Router
 
 	env := []corev1.EnvVar{
@@ -322,8 +322,8 @@ func routerContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		EnvFrom:         spec.EnvFrom,
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      apiv1alpha1.BinVolumeName,
-				MountPath: apiv1alpha1.BinVolumePath,
+				Name:      apiv1.BinVolumeName,
+				MountPath: apiv1.BinVolumePath,
 			},
 			{
 				Name:      credsVolumeName,

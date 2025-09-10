@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/telemetry"
 	"github.com/pkg/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -12,18 +12,18 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	logger := logf.FromContext(ctx)
 
-	if cr.Status.State != apiv1alpha1.StateReady {
+	if cr.Status.State != apiv1.StateReady {
 		return nil
 	}
 
-	jn := telemetryJobName(cr)
-	existingJob, existingJobFound := r.Crons.telemetryJobs.Load(jn)
+	jobName := telemetryJobName(cr)
+	existingJob, existingJobFound := r.Crons.telemetryJobs.Load(jobName)
 	if !telemetryEnabled() {
 		if existingJobFound {
-			r.Crons.telemetryJobs.Delete(jn)
+			r.Crons.deleteTelemetryJob(jobName)
 		}
 		return nil
 	}
@@ -49,16 +49,16 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 	}
 
 	logger.Info("removing existing telemetry job because the configured schedule changed", "old", job.cronSchedule, "new", configuredSchedule)
-	r.Crons.telemetryJobs.Delete(jn)
+	r.Crons.deleteTelemetryJob(jobName)
 
-	id, err := r.Crons.addFuncWithSeconds(configuredSchedule, r.telemetrySendingHandlerFunc(ctx, cr, jn))
+	id, err := r.Crons.addFuncWithSeconds(configuredSchedule, r.telemetrySendingHandlerFunc(ctx, cr, jobName))
 	if err != nil {
 		return err
 	}
 
-	logger.Info("adding new job", "name", jn, "schedule", configuredSchedule)
+	logger.Info("adding new job", "name", jobName, "schedule", configuredSchedule)
 
-	r.Crons.telemetryJobs.Store(jn, telemetryJob{
+	r.Crons.telemetryJobs.Store(jobName, telemetryJob{
 		scheduleJob:  scheduleJob{jobID: id},
 		cronSchedule: configuredSchedule,
 	})
@@ -73,16 +73,16 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) telemetrySendingHandlerFunc(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, jobName string) func() {
+func (r *PerconaServerMySQLReconciler) telemetrySendingHandlerFunc(ctx context.Context, cr *apiv1.PerconaServerMySQL, jobName string) func() {
 	return func() {
 		logger := logf.FromContext(ctx)
 
-		localCr := &apiv1alpha1.PerconaServerMySQL{}
+		localCr := &apiv1.PerconaServerMySQL{}
 		err := r.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, localCr)
 		if k8serrors.IsNotFound(err) {
 			logger.Info("cluster is not found, deleting the job",
 				"name", jobName, "cluster", cr.Name, "namespace", cr.Namespace)
-			r.Crons.telemetryJobs.Delete(jobName)
+			r.Crons.deleteTelemetryJob(jobName)
 			return
 		}
 		if err != nil {
@@ -90,7 +90,7 @@ func (r *PerconaServerMySQLReconciler) telemetrySendingHandlerFunc(ctx context.C
 			return
 		}
 
-		if localCr.Status.State != apiv1alpha1.StateReady {
+		if localCr.Status.State != apiv1.StateReady {
 			logger.Info("cluster is not ready yet")
 			return
 		}
@@ -104,7 +104,7 @@ func (r *PerconaServerMySQLReconciler) telemetrySendingHandlerFunc(ctx context.C
 	}
 }
 
-func (r *PerconaServerMySQLReconciler) sendTelemetry(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) sendTelemetry(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	telemetryService, err := telemetry.NewTelemetryService()
 	if err != nil {
 		return errors.Wrap(err, "telemetry service")
@@ -121,11 +121,19 @@ type telemetryJob struct {
 	cronSchedule string
 }
 
-func telemetryJobName(cr *apiv1alpha1.PerconaServerMySQL) string {
+func telemetryJobName(cr *apiv1.PerconaServerMySQL) string {
 	jobName := "telemetry"
 	nn := types.NamespacedName{
 		Name:      cr.Name,
 		Namespace: cr.Namespace,
 	}
 	return fmt.Sprintf("%s/%s", jobName, nn.String())
+}
+
+func (r *CronRegistry) deleteTelemetryJob(jobName string) {
+	job, ok := r.telemetryJobs.LoadAndDelete(jobName)
+	if !ok {
+		return
+	}
+	r.crons.Remove(job.(telemetryJob).jobID)
 }

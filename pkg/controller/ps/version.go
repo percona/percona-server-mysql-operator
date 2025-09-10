@@ -11,13 +11,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	vs "github.com/percona/percona-server-mysql-operator/pkg/version/service"
 )
 
-func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	if err := r.reconcileMySQLVersion(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile mysql version")
 	}
@@ -31,13 +31,13 @@ func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr
 
 func (r *PerconaServerMySQLReconciler) reconcileMySQLVersion(
 	ctx context.Context,
-	cr *apiv1alpha1.PerconaServerMySQL,
+	cr *apiv1.PerconaServerMySQL,
 ) error {
 	log := logf.FromContext(ctx)
 
-	pod, err := getReadyMySQLPod(ctx, r.Client, cr)
+	pod, err := mysql.GetReadyPod(ctx, r.Client, cr)
 	if err != nil {
-		if errors.Is(err, ErrNoReadyPods) {
+		if errors.Is(err, mysql.ErrNoReadyPods) {
 			return nil
 		}
 		return errors.Wrap(err, "get ready mysql pod")
@@ -91,13 +91,13 @@ func telemetryEnabled() bool {
 	return true
 }
 
-func versionUpgradeEnabled(cr *apiv1alpha1.PerconaServerMySQL) bool {
+func versionUpgradeEnabled(cr *apiv1.PerconaServerMySQL) bool {
 	return cr.Spec.UpgradeOptions.Apply != "" &&
-		cr.Spec.UpgradeOptions.Apply != apiv1alpha1.UpgradeStrategyDisabled &&
-		cr.Spec.UpgradeOptions.Apply != apiv1alpha1.UpgradeStrategyNever
+		cr.Spec.UpgradeOptions.Apply != apiv1.UpgradeStrategyDisabled &&
+		cr.Spec.UpgradeOptions.Apply != apiv1.UpgradeStrategyNever
 }
 
-func (r *PerconaServerMySQLReconciler) upgradeVersions(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) upgradeVersions(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	if !(versionUpgradeEnabled(cr) || telemetryEnabled()) {
 		return nil
 	}

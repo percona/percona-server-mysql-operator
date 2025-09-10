@@ -7,13 +7,13 @@ import (
 
 	"sigs.k8s.io/yaml"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
-func readDefaultCluster(t *testing.T, name, namespace string) *apiv1alpha1.PerconaServerMySQL {
+func readDefaultCluster(t *testing.T, name, namespace string) *apiv1.PerconaServerMySQL {
 	t.Helper()
 
-	cr := &apiv1alpha1.PerconaServerMySQL{}
+	cr := &apiv1.PerconaServerMySQL{}
 	readDefaultFile(t, "cr.yaml", cr)
 
 	cr.Name = name

@@ -7,7 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 )
 
@@ -23,13 +23,13 @@ func TestJob(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	cr.Spec.Backup.Storages = map[string]*apiv1alpha1.BackupStorageSpec{
+	cr.Spec.Backup.Storages = map[string]*apiv1.BackupStorageSpec{
 		storageName: {
 			Annotations: map[string]string{
 				"storage-annotation": "test",
 			},
-			Type: apiv1alpha1.BackupStorageS3,
-			S3: &apiv1alpha1.BackupStorageS3Spec{
+			Type: apiv1.BackupStorageS3,
+			S3: &apiv1.BackupStorageS3Spec{
 				Bucket:            "bucket",
 				Prefix:            "prefix",
 				CredentialsSecret: "secret",
