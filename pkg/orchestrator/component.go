@@ -5,6 +5,7 @@ import (
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
@@ -53,7 +54,7 @@ func (c *Component) Object(ctx context.Context, cl client.Client) (client.Object
 		if err != nil {
 			return nil, errors.Wrap(err, "calculate config map hash")
 		}
-	} else if client.IgnoreNotFound(err) != nil {
+	} else if !k8serrors.IsNotFound(err) {
 		return nil, errors.Wrap(err, "get config map")
 	}
 
