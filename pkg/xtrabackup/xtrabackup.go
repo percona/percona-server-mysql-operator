@@ -107,7 +107,7 @@ func Job(
 	var one int32 = 1
 	t := true
 
-	labels := util.SSMapMerge(storage.Labels, cr.Labels(appName, naming.ComponentBackup))
+	labels := util.SSMapMerge(cluster.GlobalLabels(), storage.Labels, cr.Labels(appName, naming.ComponentBackup))
 	backoffLimit := int32(6)
 	if cluster.Spec.Backup.BackoffLimit != nil {
 		backoffLimit = *cluster.Spec.Backup.BackoffLimit
@@ -126,7 +126,7 @@ func Job(
 			Name:        JobName(cr),
 			Namespace:   cluster.Namespace,
 			Labels:      labels,
-			Annotations: storage.Annotations,
+			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), storage.Annotations),
 		},
 		Spec: batchv1.JobSpec{
 			Parallelism:  &one,
@@ -134,7 +134,8 @@ func Job(
 			BackoffLimit: &backoffLimit,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: cluster.GlobalAnnotations(),
 				},
 				Spec: corev1.PodSpec{
 					RestartPolicy:         corev1.RestartPolicyNever,
@@ -373,7 +374,7 @@ func RestoreJob(
 	initImage string,
 	pvcName string,
 ) *batchv1.Job {
-	labels := util.SSMapMerge(storage.Labels, restore.Labels(appName, naming.ComponentRestore))
+	labels := util.SSMapMerge(cluster.GlobalLabels(), storage.Labels, restore.Labels(appName, naming.ComponentRestore))
 
 	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -384,14 +385,15 @@ func RestoreJob(
 			Name:        RestoreJobName(cluster, restore),
 			Namespace:   cluster.Namespace,
 			Labels:      labels,
-			Annotations: storage.Annotations,
+			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), storage.Annotations),
 		},
 		Spec: batchv1.JobSpec{
 			Parallelism: ptr.To(int32(1)),
 			Completions: ptr.To(int32(1)),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: cluster.GlobalAnnotations(),
 				},
 				Spec: corev1.PodSpec{
 					RestartPolicy:    corev1.RestartPolicyNever,
@@ -482,12 +484,12 @@ func RestoreJob(
 	return job
 }
 
-func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) *batchv1.Job {
+func GetDeleteJob(cluster *apiv1alpha1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) *batchv1.Job {
 	var one int32 = 1
 	t := true
 
 	storage := cr.Status.Storage
-	labels := util.SSMapMerge(storage.Labels, cr.Labels(appName, naming.ComponentBackup))
+	labels := util.SSMapMerge(cluster.GlobalLabels(), storage.Labels, cr.Labels(appName, naming.ComponentBackup))
 
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -498,14 +500,15 @@ func GetDeleteJob(cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) 
 			Name:        DeleteJobName(cr),
 			Namespace:   cr.Namespace,
 			Labels:      labels,
-			Annotations: storage.Annotations,
+			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), storage.Annotations),
 		},
 		Spec: batchv1.JobSpec{
 			Parallelism: &one,
 			Completions: &one,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: cluster.GlobalAnnotations(),
 				},
 				Spec: corev1.PodSpec{
 					RestartPolicy:         corev1.RestartPolicyNever,

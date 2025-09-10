@@ -676,7 +676,7 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 			return false, errors.Wrapf(err, "get job %s", nn)
 		}
 		if k8serrors.IsNotFound(err) {
-			job = xtrabackup.GetDeleteJob(cr, backupConf)
+			job = xtrabackup.GetDeleteJob(cluster, cr, backupConf)
 			if err := controllerutil.SetControllerReference(cr, job, r.Scheme); err != nil {
 				return false, errors.Wrapf(err, "set controller reference to Job %s/%s", job.Namespace, job.Name)
 			}

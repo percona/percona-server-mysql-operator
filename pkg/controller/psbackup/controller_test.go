@@ -275,7 +275,7 @@ func TestCheckFinalizers(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.cr.Status.Storage = storage
 
-			job := xtrabackup.GetDeleteJob(tt.cr, new(xtrabackup.BackupConfig))
+			job := xtrabackup.GetDeleteJob(new(apiv1alpha1.PerconaServerMySQL), tt.cr, new(xtrabackup.BackupConfig))
 			cond := batchv1.JobCondition{
 				Type:   batchv1.JobComplete,
 				Status: corev1.ConditionTrue,

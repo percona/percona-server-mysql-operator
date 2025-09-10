@@ -1339,8 +1339,10 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 
 	configSecret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      binlogserver.ConfigSecretName(cr),
-			Namespace: cr.Namespace,
+			Name:        binlogserver.ConfigSecretName(cr),
+			Namespace:   cr.Namespace,
+			Labels:      cr.GlobalLabels(),
+			Annotations: cr.GlobalAnnotations(),
 		},
 	}
 	configSecret.Data = make(map[string][]byte)

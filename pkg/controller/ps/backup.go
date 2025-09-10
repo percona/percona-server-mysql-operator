@@ -91,11 +91,12 @@ func (r *CronRegistry) createBackupJobFunc(ctx context.Context, cl client.Client
 				Finalizers: []string{naming.FinalizerDeleteBackup},
 				Namespace:  cr.Namespace,
 				Name:       generateBackupName(cr, backupJob),
-				Labels: util.SSMapMerge(map[string]string{
+				Labels: util.SSMapMerge(cr.GlobalLabels(), map[string]string{
 					naming.LabelBackupAncestor: backupJob.Name,
 					naming.LabelCluster:        cr.Name,
 					naming.LabelBackupType:     "cron",
 				}, naming.Labels("percona-server-backup", "", "percona-server", "")),
+				Annotations: cr.GlobalAnnotations(),
 			},
 			Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
 				ClusterName: cr.Name,

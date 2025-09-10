@@ -379,7 +379,7 @@ func Service(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ServiceName(cr),
 			Namespace:   cr.Namespace,
-			Labels:      MatchLabels(cr),
+			Labels:      util.SSMapMerge(cr.GlobalLabels(), MatchLabels(cr)),
 			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: corev1.ServiceSpec{
