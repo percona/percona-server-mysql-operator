@@ -477,7 +477,7 @@ func GetCRWithDefaults(
 	if err := cl.Get(ctx, nn, cr); err != nil {
 		return nil, errors.Wrapf(err, "get %v", nn.String())
 	}
-	if err := SetCRVersion(ctx, cl, cr); err != nil {
+	if err := setCRVersion(ctx, cl, cr); err != nil {
 		return cr, errors.Wrapf(err, "set CR version for %v", nn.String())
 	}
 
@@ -542,7 +542,7 @@ func GetTLSHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMy
 	return hash, nil
 }
 
-func SetCRVersion(
+func setCRVersion(
 	ctx context.Context,
 	cl client.Client,
 	cr *apiv1.PerconaServerMySQL,

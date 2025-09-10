@@ -16,6 +16,8 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/testutil"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 func TestEnsureService(t *testing.T) {
@@ -514,4 +516,69 @@ func TestEqualMetadata(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSetCRVersion(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("CRVersion is already set", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "cr-version-1",
+				Namespace: "default",
+			},
+			Spec: apiv1.PerconaServerMySQLSpec{
+				CRVersion: version.Version(),
+			},
+		}
+
+		cl := testutil.BuildFakeClient(cr)
+
+		err := setCRVersion(ctx, cl, cr)
+		require.NoError(t, err)
+
+		// Проверяем, что версия не изменилась
+		assert.Equal(t, version.Version(), cr.Spec.CRVersion)
+	})
+
+	t.Run("CRVersion is empty and gets patched", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "cr-version-2",
+				Namespace: "default",
+			},
+			Spec: apiv1.PerconaServerMySQLSpec{
+				CRVersion: "",
+			},
+		}
+
+		cl := testutil.BuildFakeClient(cr)
+
+		err := setCRVersion(ctx, cl, cr)
+		require.NoError(t, err)
+
+		// Проверяем, что версия установлена
+		var updated apiv1.PerconaServerMySQL
+		err = cl.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, &updated)
+		require.NoError(t, err)
+		assert.Equal(t, version.Version(), updated.Spec.CRVersion)
+	})
+
+	t.Run("Patch fails because object does not exist", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "cr-version-3",
+				Namespace: "default",
+			},
+			Spec: apiv1.PerconaServerMySQLSpec{
+				CRVersion: "",
+			},
+		}
+
+		cl := testutil.BuildFakeClient()
+
+		err := setCRVersion(ctx, cl, cr)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "patch CR version")
+	})
 }

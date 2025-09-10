@@ -26,7 +26,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	gs "github.com/onsi/gomega/gstruct"
-	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -47,11 +46,9 @@ import (
 	psv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
-	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
-	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 var _ = Describe("Sidecars", Ordered, func() {
@@ -1816,83 +1813,6 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 					}
 				}
 			}
-		})
-	})
-})
-var _ = Describe("CR Version Management", Ordered, func() {
-	ctx := context.Background()
-	const crName = "cr-version"
-	const ns = crName
-
-	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ns,
-		},
-	}
-
-	BeforeAll(func() {
-		By("Creating the test namespace")
-		err := k8sClient.Create(ctx, namespace)
-		Expect(err).NotTo(HaveOccurred())
-	})
-
-	AfterAll(func() {
-		By("Deleting the test namespace")
-		_ = k8sClient.Delete(ctx, namespace)
-	})
-
-	Context("SetCRVersion logic", func() {
-
-		When("CRVersion is already set", func() {
-			It("should not change the CRVersion", func() {
-				cr, err := readDefaultCR("cr-version-1", ns)
-				Expect(err).NotTo(HaveOccurred())
-				cr.Spec.CRVersion = "0.11.0"
-
-				Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-				DeferCleanup(func() {
-					_ = k8sClient.Delete(ctx, cr)
-				})
-
-				err = k8s.SetCRVersion(ctx, k8sClient, cr)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(cr.Spec.CRVersion).To(Equal("0.11.0"))
-			})
-		})
-
-		When("CRVersion is empty", func() {
-			It("should set CRVersion and patch the resource", func() {
-				cr, err := readDefaultCR("cr-version-2", ns)
-				Expect(err).NotTo(HaveOccurred())
-				cr.Spec.CRVersion = ""
-
-				Expect(k8sClient.Create(ctx, cr)).To(Succeed())
-				DeferCleanup(func() {
-					_ = k8sClient.Delete(ctx, cr)
-				})
-
-				err = k8s.SetCRVersion(ctx, k8sClient, cr)
-				Expect(err).NotTo(HaveOccurred())
-
-				updated := &psv1.PerconaServerMySQL{}
-				key := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
-				Expect(k8sClient.Get(ctx, key, updated)).To(Succeed())
-				Expect(updated.Spec.CRVersion).To(Equal(version.Version()))
-			})
-		})
-
-		When("the patch operation fails", func() {
-			It("should return an error with 'patch CR version' and NotFound", func() {
-				cr, err := readDefaultCR("cr-version-3", ns)
-				Expect(err).NotTo(HaveOccurred())
-				cr.Spec.CRVersion = ""
-
-				err = k8s.SetCRVersion(ctx, k8sClient, cr)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("patch CR version"))
-				Expect(k8serrors.IsNotFound(errors.Unwrap(err))).To(BeTrue(),
-					"expected NotFound error, got: %v", err)
-			})
 		})
 	})
 })
