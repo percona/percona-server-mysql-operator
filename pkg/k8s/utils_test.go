@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
@@ -22,11 +22,11 @@ func TestEnsureService(t *testing.T) {
 	scheme := runtime.NewScheme()
 	err := corev1.AddToScheme(scheme)
 	require.NoError(t, err)
-	err = apiv1alpha1.AddToScheme(scheme)
+	err = apiv1.AddToScheme(scheme)
 	require.NoError(t, err)
 
 	tests := map[string]struct {
-		cr          *apiv1alpha1.PerconaServerMySQL
+		cr          *apiv1.PerconaServerMySQL
 		svc         *corev1.Service
 		existingSvc *corev1.Service
 		saveOldMeta bool
@@ -34,13 +34,13 @@ func TestEnsureService(t *testing.T) {
 		validate    func(t *testing.T, cl client.Client, svc *corev1.Service)
 	}{
 		"no ignore annotations or labels, saveOldMeta false": {
-			cr: &apiv1alpha1.PerconaServerMySQL{
+			cr: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cr",
 					Namespace: "default",
 					UID:       "test-uid",
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{},
+				Spec: apiv1.PerconaServerMySQLSpec{},
 			},
 			svc: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
@@ -67,13 +67,13 @@ func TestEnsureService(t *testing.T) {
 			},
 		},
 		"service doesn't exist - creates new service": {
-			cr: &apiv1alpha1.PerconaServerMySQL{
+			cr: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cr",
 					Namespace: "default",
 					UID:       "test-uid",
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+				Spec: apiv1.PerconaServerMySQLSpec{
 					IgnoreAnnotations: []string{"ignore.me"},
 				},
 			},
@@ -104,13 +104,13 @@ func TestEnsureService(t *testing.T) {
 			},
 		},
 		"service exists - preserves old metadata when saveOldMeta is true": {
-			cr: &apiv1alpha1.PerconaServerMySQL{
+			cr: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cr",
 					Namespace: "default",
 					UID:       "test-uid",
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{},
+				Spec: apiv1.PerconaServerMySQLSpec{},
 			},
 			svc: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
@@ -161,13 +161,13 @@ func TestEnsureService(t *testing.T) {
 			},
 		},
 		"service exists - dont preserve old metadata when saveOldMeta is true": {
-			cr: &apiv1alpha1.PerconaServerMySQL{
+			cr: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cr",
 					Namespace: "default",
 					UID:       "test-uid",
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{},
+				Spec: apiv1.PerconaServerMySQLSpec{},
 			},
 			svc: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
@@ -210,13 +210,13 @@ func TestEnsureService(t *testing.T) {
 			},
 		},
 		"service exists - handles ignored annotations": {
-			cr: &apiv1alpha1.PerconaServerMySQL{
+			cr: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cr",
 					Namespace: "default",
 					UID:       "test-uid",
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+				Spec: apiv1.PerconaServerMySQLSpec{
 					IgnoreAnnotations: []string{"ignore.annotation"},
 				},
 			},
@@ -263,13 +263,13 @@ func TestEnsureService(t *testing.T) {
 			},
 		},
 		"service exists - handles ignored labels": {
-			cr: &apiv1alpha1.PerconaServerMySQL{
+			cr: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cr",
 					Namespace: "default",
 					UID:       "test-uid",
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+				Spec: apiv1.PerconaServerMySQLSpec{
 					IgnoreLabels: []string{"ignore.label"},
 				},
 			},

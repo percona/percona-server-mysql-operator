@@ -1504,7 +1504,7 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 		It("Should update global labels and annotations", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cr), cr)).Should(Succeed())
 
-			cr.Spec.Metadata = &psv1alpha1.Metadata{
+			cr.Spec.Metadata = &psv1.Metadata{
 				Labels: map[string]string{
 					"test-label2": "test-value2",
 				},
@@ -1564,7 +1564,7 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 		It("Should update global labels and annotations", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cr), cr)).Should(Succeed())
 
-			cr.Spec.Metadata = &psv1alpha1.Metadata{
+			cr.Spec.Metadata = &psv1.Metadata{
 				Labels: map[string]string{
 					"test-label3": "test-value3",
 				},
@@ -1697,7 +1697,7 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 		It("Should update global labels and annotations", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cr), cr)).Should(Succeed())
 
-			cr.Spec.Metadata = &psv1alpha1.Metadata{
+			cr.Spec.Metadata = &psv1.Metadata{
 				Labels: map[string]string{
 					"test-label2": "test-value2",
 				},
@@ -1757,7 +1757,7 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 		It("Should update global labels and annotations", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cr), cr)).Should(Succeed())
 
-			cr.Spec.Metadata = &psv1alpha1.Metadata{
+			cr.Spec.Metadata = &psv1.Metadata{
 				Labels: map[string]string{
 					"test-label3": "test-value3",
 				},
