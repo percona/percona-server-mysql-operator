@@ -538,7 +538,6 @@ func TestSetCRVersion(t *testing.T) {
 		err := setCRVersion(ctx, cl, cr)
 		require.NoError(t, err)
 
-		// Проверяем, что версия не изменилась
 		assert.Equal(t, version.Version(), cr.Spec.CRVersion)
 	})
 
@@ -558,7 +557,6 @@ func TestSetCRVersion(t *testing.T) {
 		err := setCRVersion(ctx, cl, cr)
 		require.NoError(t, err)
 
-		// Проверяем, что версия установлена
 		var updated apiv1.PerconaServerMySQL
 		err = cl.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, &updated)
 		require.NoError(t, err)
