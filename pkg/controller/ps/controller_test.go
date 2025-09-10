@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	gs "github.com/onsi/gomega/gstruct"
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -1644,8 +1645,10 @@ var _ = Describe("CR Version Management", Ordered, func() {
 				// Do NOT create the CR in k8s, so Patch will fail (object does not exist)
 				reconciler := &PerconaServerMySQLReconciler{Client: k8sClient}
 				err = reconciler.setCRVersion(ctx, cr)
+
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("patch CR"))
+				Expect(k8serrors.IsNotFound(errors.Unwrap(err))).To(BeTrue(), "expected NotFound error, got: %v", err)
 			})
 		})
 	})
