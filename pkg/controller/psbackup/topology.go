@@ -8,22 +8,22 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/topology"
 )
 
 // getDBTopology returns the topology of the database cluster.
-func getDBTopology(ctx context.Context, cli client.Client, cliCmd clientcmd.Client, cluster *apiv1alpha1.PerconaServerMySQL, operatorPass string) (topology.Topology, error) {
+func getDBTopology(ctx context.Context, cli client.Client, cliCmd clientcmd.Client, cluster *apiv1.PerconaServerMySQL, operatorPass string) (topology.Topology, error) {
 	switch cluster.Spec.MySQL.ClusterType {
-	case apiv1alpha1.ClusterTypeGR:
+	case apiv1.ClusterTypeGR:
 		top, err := topology.GroupReplication(ctx, cli, cliCmd, cluster, operatorPass)
 		if err != nil {
 			return topology.Topology{}, errors.Wrapf(err, "failed to get group replication")
 		}
 		return top, nil
-	case apiv1alpha1.ClusterTypeAsync:
+	case apiv1.ClusterTypeAsync:
 		pod := &corev1.Pod{}
 		nn := types.NamespacedName{Namespace: cluster.Namespace, Name: orchestrator.PodName(cluster, 0)}
 		if err := cli.Get(ctx, nn, pod); err != nil {

@@ -396,6 +396,7 @@ pipeline {
         CLUSTER_NAME = sh(script: "echo jen-ps-${env.CHANGE_ID}-${GIT_SHORT_COMMIT}-${env.BUILD_NUMBER} | tr '[:upper:]' '[:lower:]'", , returnStdout: true).trim()
         AUTHOR_NAME = sh(script: "echo ${CHANGE_AUTHOR_EMAIL} | awk -F'@' '{print \$1}'", , returnStdout: true).trim()
         ENABLE_LOGGING = "true"
+        PMM_TELEMETRY_TOKEN = credentials('PMM-CHECK-DEV-TOKEN')
     }
     agent {
         label 'docker-x64-min'
