@@ -14,7 +14,6 @@ import (
 	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
-	"github.com/percona/percona-server-mysql-operator/pkg/version"
 	vs "github.com/percona/percona-server-mysql-operator/pkg/version/service"
 )
 
@@ -193,25 +192,5 @@ func (r *PerconaServerMySQLReconciler) upgradeVersions(ctx context.Context, cr *
 	cr.Status.PMMVersion = version.PMMVersion
 	cr.Status.HAProxy.Version = version.HAProxyVersion
 	cr.Status.ToolkitVersion = version.ToolkitVersion
-	return nil
-}
-
-// setCRVersion sets operator version of PerconaServerMySQL.
-// The new (semver-matching) version is determined by the CR's crVersion field.
-// If the crVersion is an empty string, it sets the current operator version.
-func (r *PerconaServerMySQLReconciler) setCRVersion(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
-	if len(cr.Spec.CRVersion) > 0 {
-		return nil
-	}
-
-	orig := cr.DeepCopy()
-	cr.Spec.CRVersion = version.Version()
-
-	if err := r.Patch(ctx, cr, client.MergeFrom(orig)); err != nil {
-		return errors.Wrap(err, "patch CR")
-	}
-
-	logf.FromContext(ctx).Info("Set CR version", "version", cr.Spec.CRVersion)
-
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 	"os"
 	"reflect"
 	"slices"
@@ -476,6 +477,10 @@ func GetCRWithDefaults(
 	if err := cl.Get(ctx, nn, cr); err != nil {
 		return nil, errors.Wrapf(err, "get %v", nn.String())
 	}
+	if err := SetCRVersion(ctx, cl, cr); err != nil {
+		return cr, errors.Wrapf(err, "set CR version for %v", nn.String())
+	}
+
 	if err := cr.CheckNSetDefaults(ctx, serverVersion); err != nil {
 		return cr, errors.Wrapf(err, "check and set defaults for %v", nn.String())
 	}
@@ -535,4 +540,24 @@ func GetTLSHash(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaSe
 	}
 
 	return hash, nil
+}
+
+func SetCRVersion(
+	ctx context.Context,
+	cl client.Client,
+	cr *apiv1alpha1.PerconaServerMySQL,
+) error {
+	if cr.Spec.CRVersion != "" {
+		return nil
+	}
+
+	orig := cr.DeepCopy()
+	cr.Spec.CRVersion = version.Version()
+
+	if err := cl.Patch(ctx, cr, client.MergeFrom(orig)); err != nil {
+		return errors.Wrap(err, "patch CR version")
+	}
+
+	logf.FromContext(ctx).Info("Set CR version", "version", cr.Spec.CRVersion)
+	return nil
 }
