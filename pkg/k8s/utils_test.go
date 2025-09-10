@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -580,5 +581,8 @@ func TestSetCRVersion(t *testing.T) {
 		err := setCRVersion(ctx, cl, cr)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "patch CR version")
+		if !strings.Contains(err.Error(), "patch CR version") {
+			t.Fatalf("Expected error to contain 'patch CR version test', got: %v", err)
+		}
 	})
 }
