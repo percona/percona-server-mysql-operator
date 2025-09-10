@@ -18,13 +18,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
 type backupScheduleJob struct {
-	apiv1alpha1.BackupSchedule
+	apiv1.BackupSchedule
 	scheduleJob
 }
 
@@ -44,7 +44,7 @@ func (r *CronRegistry) stopBackupJob(name string) {
 	r.crons.Remove(job.(backupScheduleJob).jobID)
 }
 
-func (r *CronRegistry) getBackupJob(bcp apiv1alpha1.BackupSchedule) backupScheduleJob {
+func (r *CronRegistry) getBackupJob(bcp apiv1.BackupSchedule) backupScheduleJob {
 	sch := backupScheduleJob{}
 	schRaw, ok := r.backupJobs.Load(bcp.Name)
 	if ok {
@@ -53,7 +53,7 @@ func (r *CronRegistry) getBackupJob(bcp apiv1alpha1.BackupSchedule) backupSchedu
 	return sch
 }
 
-func (r *CronRegistry) addBackupJob(ctx context.Context, cl client.Client, cluster *apiv1alpha1.PerconaServerMySQL, bcp apiv1alpha1.BackupSchedule) error {
+func (r *CronRegistry) addBackupJob(ctx context.Context, cl client.Client, cluster *apiv1.PerconaServerMySQL, bcp apiv1.BackupSchedule) error {
 	if bcp.Schedule == "" {
 		r.stopBackupJob(bcp.Name)
 		return nil
@@ -71,11 +71,11 @@ func (r *CronRegistry) addBackupJob(ctx context.Context, cl client.Client, clust
 	return nil
 }
 
-func (r *CronRegistry) createBackupJobFunc(ctx context.Context, cl client.Client, cluster *apiv1alpha1.PerconaServerMySQL, backupJob apiv1alpha1.BackupSchedule) func() {
+func (r *CronRegistry) createBackupJobFunc(ctx context.Context, cl client.Client, cluster *apiv1.PerconaServerMySQL, backupJob apiv1.BackupSchedule) func() {
 	log := logf.FromContext(ctx)
 
 	return func() {
-		cr := &apiv1alpha1.PerconaServerMySQL{}
+		cr := &apiv1.PerconaServerMySQL{}
 		err := cl.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, cr)
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
@@ -86,7 +86,7 @@ func (r *CronRegistry) createBackupJobFunc(ctx context.Context, cl client.Client
 			log.Error(err, "failed to get cluster")
 		}
 
-		bcp := &apiv1alpha1.PerconaServerMySQLBackup{
+		bcp := &apiv1.PerconaServerMySQLBackup{
 			ObjectMeta: metav1.ObjectMeta{
 				Finalizers: []string{naming.FinalizerDeleteBackup},
 				Namespace:  cr.Namespace,
@@ -98,7 +98,7 @@ func (r *CronRegistry) createBackupJobFunc(ctx context.Context, cl client.Client
 				}, naming.Labels("percona-server-backup", "", "percona-server", "")),
 				Annotations: cr.GlobalAnnotations(),
 			},
-			Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
+			Spec: apiv1.PerconaServerMySQLBackupSpec{
 				ClusterName: cr.Name,
 				StorageName: backupJob.StorageName,
 			},
@@ -111,10 +111,10 @@ func (r *CronRegistry) createBackupJobFunc(ctx context.Context, cl client.Client
 	}
 }
 
-func (r *PerconaServerMySQLReconciler) reconcileScheduledBackup(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) reconcileScheduledBackup(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileScheduledBackup")
 
-	backups := make(map[string]apiv1alpha1.BackupSchedule)
+	backups := make(map[string]apiv1.BackupSchedule)
 	backupNamePrefix := backupJobClusterPrefix(cr.Namespace + "-" + cr.Name)
 
 	for i, bcp := range cr.Spec.Backup.Schedule {
@@ -180,8 +180,8 @@ func backupJobClusterPrefix(clusterName string) string {
 	return hex.EncodeToString(h.Sum(nil))[:5]
 }
 
-func (r *PerconaServerMySQLReconciler) oldScheduledBackups(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, ancestor string, keep int) ([]apiv1alpha1.PerconaServerMySQLBackup, error) {
-	bcpList := apiv1alpha1.PerconaServerMySQLBackupList{}
+func (r *PerconaServerMySQLReconciler) oldScheduledBackups(ctx context.Context, cr *apiv1.PerconaServerMySQL, ancestor string, keep int) ([]apiv1.PerconaServerMySQLBackup, error) {
+	bcpList := apiv1.PerconaServerMySQLBackupList{}
 	err := r.List(ctx,
 		&bcpList,
 		&client.ListOptions{
@@ -193,22 +193,22 @@ func (r *PerconaServerMySQLReconciler) oldScheduledBackups(ctx context.Context, 
 		},
 	)
 	if err != nil {
-		return []apiv1alpha1.PerconaServerMySQLBackup{}, err
+		return []apiv1.PerconaServerMySQLBackup{}, err
 	}
 
 	if len(bcpList.Items) <= keep {
-		return []apiv1alpha1.PerconaServerMySQLBackup{}, nil
+		return []apiv1.PerconaServerMySQLBackup{}, nil
 	}
 
-	backups := []apiv1alpha1.PerconaServerMySQLBackup{}
+	backups := []apiv1.PerconaServerMySQLBackup{}
 	for _, bcp := range bcpList.Items {
-		if bcp.Status.State == apiv1alpha1.BackupSucceeded {
+		if bcp.Status.State == apiv1.BackupSucceeded {
 			backups = append(backups, bcp)
 		}
 	}
 
 	if len(backups) <= keep {
-		return []apiv1alpha1.PerconaServerMySQLBackup{}, nil
+		return []apiv1.PerconaServerMySQLBackup{}, nil
 	}
 
 	sort.Slice(backups, func(i, j int) bool {
@@ -220,7 +220,7 @@ func (r *PerconaServerMySQLReconciler) oldScheduledBackups(ctx context.Context, 
 	return backups, nil
 }
 
-func generateBackupName(cr *apiv1alpha1.PerconaServerMySQL, backupJob apiv1alpha1.BackupSchedule) string {
+func generateBackupName(cr *apiv1.PerconaServerMySQL, backupJob apiv1.BackupSchedule) string {
 	result := "cron-"
 	if len(cr.Name) > 16 {
 		result += cr.Name[:16]

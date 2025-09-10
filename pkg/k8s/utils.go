@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
@@ -123,7 +123,7 @@ func ObjectExists(ctx context.Context, cl client.Reader, nn types.NamespacedName
 func EnsureObject(
 	ctx context.Context,
 	cl client.Client,
-	cr *apiv1alpha1.PerconaServerMySQL,
+	cr *apiv1.PerconaServerMySQL,
 	o client.Object,
 	s *runtime.Scheme,
 ) error {
@@ -263,10 +263,10 @@ func EnsureObjectWithHash(
 
 type Component interface {
 	Name() string
-	PerconaServerMySQL() *apiv1alpha1.PerconaServerMySQL
+	PerconaServerMySQL() *apiv1.PerconaServerMySQL
 	Labels() map[string]string
 	MatchLabels() map[string]string
-	PodSpec() *apiv1alpha1.PodSpec
+	PodSpec() *apiv1.PodSpec
 
 	Object(ctx context.Context, cl client.Client) (client.Object, error)
 }
@@ -310,7 +310,7 @@ func EnsureComponent(
 func EnsureService(
 	ctx context.Context,
 	cl client.Client,
-	cr *apiv1alpha1.PerconaServerMySQL,
+	cr *apiv1.PerconaServerMySQL,
 	svc *corev1.Service,
 	s *runtime.Scheme,
 	saveOldMeta bool,
@@ -339,7 +339,7 @@ func EnsureService(
 	return EnsureObjectWithHash(ctx, cl, cr, svc, s)
 }
 
-func setIgnoredAnnotations(cr *apiv1alpha1.PerconaServerMySQL, obj, oldObject client.Object) {
+func setIgnoredAnnotations(cr *apiv1.PerconaServerMySQL, obj, oldObject client.Object) {
 	oldAnnotations := oldObject.GetAnnotations()
 	if len(oldAnnotations) == 0 {
 		return
@@ -351,7 +351,7 @@ func setIgnoredAnnotations(cr *apiv1alpha1.PerconaServerMySQL, obj, oldObject cl
 	obj.SetAnnotations(annotations)
 }
 
-func setIgnoredLabels(cr *apiv1alpha1.PerconaServerMySQL, obj, oldObject client.Object) {
+func setIgnoredLabels(cr *apiv1.PerconaServerMySQL, obj, oldObject client.Object) {
 	oldLabels := oldObject.GetLabels()
 	if len(oldLabels) == 0 {
 		return
@@ -471,8 +471,8 @@ func GetCRWithDefaults(
 	cl client.Client,
 	nn types.NamespacedName,
 	serverVersion *platform.ServerVersion,
-) (*apiv1alpha1.PerconaServerMySQL, error) {
-	cr := new(apiv1alpha1.PerconaServerMySQL)
+) (*apiv1.PerconaServerMySQL, error) {
+	cr := new(apiv1.PerconaServerMySQL)
 	if err := cl.Get(ctx, nn, cr); err != nil {
 		return nil, errors.Wrapf(err, "get %v", nn.String())
 	}
@@ -483,7 +483,7 @@ func GetCRWithDefaults(
 	return cr, nil
 }
 
-func DeleteSecrets(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQL, secretNames []string) error {
+func DeleteSecrets(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL, secretNames []string) error {
 	for _, secretName := range secretNames {
 		secret := &corev1.Secret{}
 		err := cl.Get(ctx, types.NamespacedName{
@@ -516,7 +516,7 @@ func GetImageIDFromPod(pod *corev1.Pod, containerName string) (string, error) {
 	return pod.Status.ContainerStatuses[idx].ImageID, nil
 }
 
-func GetTLSHash(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaServerMySQL) (string, error) {
+func GetTLSHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL) (string, error) {
 	secret := new(corev1.Secret)
 	err := cl.Get(ctx, types.NamespacedName{
 		Name:      cr.Spec.SSLSecretName,
@@ -535,4 +535,29 @@ func GetTLSHash(ctx context.Context, cl client.Client, cr *apiv1alpha1.PerconaSe
 	}
 
 	return hash, nil
+}
+
+func EqualMetadata(m ...metav1.ObjectMeta) bool {
+	if len(m) <= 1 {
+		return true
+	}
+	filter := func(m metav1.ObjectMeta) metav1.ObjectMeta {
+		delete(m.Annotations, naming.AnnotationLastConfigHash.String())
+		return metav1.ObjectMeta{
+			Name:                       m.Name,
+			GenerateName:               m.GenerateName,
+			Namespace:                  m.Namespace,
+			DeletionGracePeriodSeconds: m.DeletionGracePeriodSeconds,
+			Labels:                     m.Labels,
+			Annotations:                m.Annotations,
+			Finalizers:                 m.Finalizers,
+		}
+	}
+	first := m[0]
+	for i := 1; i < len(m); i++ {
+		if !reflect.DeepEqual(filter(first), filter(m[i])) {
+			return false
+		}
+	}
+	return true
 }

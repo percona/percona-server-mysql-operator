@@ -20,7 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/retry"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
@@ -53,12 +53,12 @@ func (m *mysqlsh) compareVersionWith(ver string) int {
 }
 
 func (m *mysqlsh) getURI() string {
-	operatorPass, err := utils.GetSecret(apiv1alpha1.UserOperator)
+	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
 	if err != nil {
 		return ""
 	}
 
-	return fmt.Sprintf("%s:%s@%s", apiv1alpha1.UserOperator, url.QueryEscape(operatorPass), m.host)
+	return fmt.Sprintf("%s:%s@%s", apiv1.UserOperator, url.QueryEscape(operatorPass), m.host)
 }
 
 func (m *mysqlsh) run(ctx context.Context, cmd string) (bytes.Buffer, bytes.Buffer, error) {

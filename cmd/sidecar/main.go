@@ -24,7 +24,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	xb "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
@@ -118,7 +118,7 @@ func main() {
 	os.Exit(0)
 }
 
-func getSecret(username apiv1alpha1.SystemUser) (string, error) {
+func getSecret(username apiv1.SystemUser) (string, error) {
 	path := filepath.Join(mysql.CredsMountPath, string(username))
 	sBytes, err := os.ReadFile(path)
 	if err != nil {
@@ -299,7 +299,7 @@ func backupExists(ctx context.Context, cfg *xb.BackupConfig) (bool, error) {
 
 func checkBackupMD5Size(ctx context.Context, cfg *xb.BackupConfig) error {
 	// xbcloud doesn't create md5 file for azure
-	if cfg.Type == apiv1alpha1.BackupStorageAzure {
+	if cfg.Type == apiv1.BackupStorageAzure {
 		return nil
 	}
 
@@ -330,7 +330,7 @@ func checkBackupMD5Size(ctx context.Context, cfg *xb.BackupConfig) error {
 }
 
 func startReplicaSQLThread(ctx context.Context) error {
-	backupUser := apiv1alpha1.UserXtraBackup
+	backupUser := apiv1.UserXtraBackup
 
 	backupPass, err := getSecret(backupUser)
 	if err != nil {
@@ -411,7 +411,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Connection", "keep-alive")
 
-	backupUser := apiv1alpha1.UserXtraBackup
+	backupUser := apiv1.UserXtraBackup
 	backupPass, err := getSecret(backupUser)
 	if err != nil {
 		log.Error(err, "failed to get backup password")
@@ -507,10 +507,12 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	if err := g.Wait(); err != nil {
 		log.Error(err, "backup failed")
 
-		// --safe-slave-backup stops SQL thread but it's not started
-		// if xtrabackup command fails
-		log.Info("starting replication SQL thread")
-		startReplicaSQLThread(req.Context())
+		if getClusterType() == apiv1.ClusterTypeAsync {
+			// --safe-slave-backup stops SQL thread but it's not started
+			// if xtrabackup command fails
+			log.Info("starting replication SQL thread")
+			startReplicaSQLThread(req.Context()) // nolint:errcheck
+		}
 
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
@@ -559,4 +561,13 @@ func envs(cfg xb.BackupConfig) []string {
 		}
 	}
 	return envs
+}
+
+func getClusterType() apiv1.ClusterType {
+	cType, ok := os.LookupEnv("CLUSTER_TYPE")
+	if !ok {
+		return apiv1.ClusterTypeGR
+	}
+
+	return apiv1.ClusterType(cType)
 }

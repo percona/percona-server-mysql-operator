@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
@@ -46,8 +46,8 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		cluster   *apiv1alpha1.PerconaServerMySQL
-		cr        *apiv1alpha1.PerconaServerMySQLBackup
+		cluster   *apiv1.PerconaServerMySQL
+		cr        *apiv1.PerconaServerMySQLBackup
 		stateDesc string
 	}{
 		{
@@ -60,13 +60,13 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			cr:   cr,
 			cluster: updateResource(
 				cluster.DeepCopy(),
-				func(cr *apiv1alpha1.PerconaServerMySQL) {
+				func(cr *apiv1.PerconaServerMySQL) {
 					cr.Namespace = namespace
 
-					cr.Spec.Backup = &apiv1alpha1.BackupSpec{
+					cr.Spec.Backup = &apiv1.BackupSpec{
 						Image:    "some-image",
 						Enabled:  false,
-						Storages: make(map[string]*apiv1alpha1.BackupStorageSpec),
+						Storages: make(map[string]*apiv1.BackupStorageSpec),
 					}
 				},
 			),
@@ -77,12 +77,12 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			cr:   cr,
 			cluster: updateResource(
 				cluster.DeepCopy(),
-				func(cr *apiv1alpha1.PerconaServerMySQL) {
+				func(cr *apiv1.PerconaServerMySQL) {
 					cr.Namespace = namespace
-					cr.Spec.Backup = &apiv1alpha1.BackupSpec{
+					cr.Spec.Backup = &apiv1.BackupSpec{
 						Image:    "some-image",
 						Enabled:  true,
-						Storages: make(map[string]*apiv1alpha1.BackupStorageSpec),
+						Storages: make(map[string]*apiv1.BackupStorageSpec),
 					}
 				},
 			),
@@ -94,7 +94,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add client-go scheme")
 	}
-	if err := apiv1alpha1.AddToScheme(scheme); err != nil {
+	if err := apiv1.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add apis scheme")
 	}
 
@@ -121,7 +121,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			if err != nil {
 				t.Fatal(err, "failed to reconcile")
 			}
-			cr := &apiv1alpha1.PerconaServerMySQLBackup{}
+			cr := &apiv1.PerconaServerMySQLBackup{}
 			err = r.Get(ctx, types.NamespacedName{
 				Name:      tt.cr.Name,
 				Namespace: tt.cr.Namespace,
@@ -132,8 +132,8 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			if cr.Status.StateDesc != tt.stateDesc {
 				t.Fatalf("expected stateDesc %s, got %s", tt.stateDesc, cr.Status.StateDesc)
 			}
-			if cr.Status.State != apiv1alpha1.BackupError {
-				t.Fatalf("expected state %s, got %s", apiv1alpha1.RestoreError, cr.Status.State)
+			if cr.Status.State != apiv1.BackupError {
+				t.Fatalf("expected state %s, got %s", apiv1.RestoreError, cr.Status.State)
 			}
 		})
 	}
@@ -145,7 +145,7 @@ func TestCheckFinalizers(t *testing.T) {
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add client-go scheme")
 	}
-	if err := apiv1alpha1.AddToScheme(scheme); err != nil {
+	if err := apiv1.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add apis scheme")
 	}
 	namespace := "some-namespace"
@@ -156,97 +156,97 @@ func TestCheckFinalizers(t *testing.T) {
 
 	tests := []struct {
 		name               string
-		cr                 *apiv1alpha1.PerconaServerMySQLBackup
+		cr                 *apiv1.PerconaServerMySQLBackup
 		expectedFinalizers []string
 		finalizerJobFail   bool
 	}{
 		{
 			name: "without finalizers",
-			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
 				cr.Finalizers = []string{}
-				cr.Status.State = apiv1alpha1.BackupError
+				cr.Status.State = apiv1.BackupError
 			}),
 			expectedFinalizers: nil,
 		},
 		{
 			name: "with finalizer and starting state",
-			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
-				cr.Status.State = apiv1alpha1.BackupStarting
+				cr.Status.State = apiv1.BackupStarting
 			}),
 			expectedFinalizers: []string{naming.FinalizerDeleteBackup},
 		},
 		{
 			name: "with finalizer and running state",
-			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
-				cr.Status.State = apiv1alpha1.BackupRunning
+				cr.Status.State = apiv1.BackupRunning
 			}),
 			expectedFinalizers: []string{naming.FinalizerDeleteBackup},
 		},
 		{
 			name: "with finalizer and error state",
-			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
-				cr.Status.State = apiv1alpha1.BackupError
+				cr.Status.State = apiv1.BackupError
 			}),
 			expectedFinalizers: nil,
 		},
 		{
 			name: "with finalizer and new state",
-			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
-				cr.Status.State = apiv1alpha1.BackupNew
+				cr.Status.State = apiv1.BackupNew
 			}),
 			expectedFinalizers: nil,
 		},
 		{
 			name: "with failing finalizer and succeeded state",
-			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
-				cr.Status.State = apiv1alpha1.BackupSucceeded
+				cr.Status.State = apiv1.BackupSucceeded
 			}),
 			finalizerJobFail:   true,
 			expectedFinalizers: []string{naming.FinalizerDeleteBackup},
 		},
 		{
 			name: "with successful finalizer and succeeded state",
-			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
-				cr.Status.State = apiv1alpha1.BackupSucceeded
+				cr.Status.State = apiv1.BackupSucceeded
 			}),
 			expectedFinalizers: []string{},
 		},
 		{
 			name: "with successful finalizer, unknown finalizer and succeeded state",
-			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup, "unknown-finalizer"}
-				cr.Status.State = apiv1alpha1.BackupSucceeded
+				cr.Status.State = apiv1.BackupSucceeded
 			}),
 			expectedFinalizers: []string{"unknown-finalizer"},
 		},
 		{
 			name: "with failing finalizer and failed state",
-			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
-				cr.Status.State = apiv1alpha1.BackupFailed
+				cr.Status.State = apiv1.BackupFailed
 			}),
 			finalizerJobFail:   true,
 			expectedFinalizers: []string{},
 		},
 		{
 			name: "with successful finalizer and failed state",
-			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
-				cr.Status.State = apiv1alpha1.BackupFailed
+				cr.Status.State = apiv1.BackupFailed
 			}),
 			expectedFinalizers: []string{},
 		},
 		{
 			name: "with successful finalizer, unknown finalizer and failed state",
-			cr: updateResource(cr.DeepCopy(), func(cr *apiv1alpha1.PerconaServerMySQLBackup) {
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup, "unknown-finalizer"}
-				cr.Status.State = apiv1alpha1.BackupFailed
+				cr.Status.State = apiv1.BackupFailed
 			}),
 			expectedFinalizers: []string{"unknown-finalizer"},
 		},
@@ -262,9 +262,9 @@ func TestCheckFinalizers(t *testing.T) {
 			secret.CredentialsAWSSecretKey: []byte("secret-key"),
 		},
 	}
-	storage := &apiv1alpha1.BackupStorageSpec{
-		Type: apiv1alpha1.BackupStorageS3,
-		S3: &apiv1alpha1.BackupStorageS3Spec{
+	storage := &apiv1.BackupStorageSpec{
+		Type: apiv1.BackupStorageS3,
+		S3: &apiv1.BackupStorageS3Spec{
 			Bucket:            "some-bucket",
 			CredentialsSecret: "some-secret",
 		},
@@ -295,7 +295,7 @@ func TestCheckFinalizers(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cr := new(apiv1alpha1.PerconaServerMySQLBackup)
+			cr := new(apiv1.PerconaServerMySQLBackup)
 			if err := r.Get(ctx, types.NamespacedName{Name: tt.cr.Name, Namespace: tt.cr.Namespace}, cr); err != nil {
 				if k8serrors.IsNotFound(err) && len(cr.Finalizers) == 0 {
 					return
@@ -317,7 +317,7 @@ func TestRunningState(t *testing.T) {
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add client-go scheme")
 	}
-	if err := apiv1alpha1.AddToScheme(scheme); err != nil {
+	if err := apiv1.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add apis scheme")
 	}
 	namespace := "some-namespace"
@@ -326,33 +326,33 @@ func TestRunningState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err, "failed to read default backup")
 	}
-	cr.Status.State = apiv1alpha1.BackupStarting
+	cr.Status.State = apiv1.BackupStarting
 	cr.Spec.StorageName = "s3-us-west"
 	cr.Spec.SourcePod = "ps-cluster1-mysql-0"
 	cluster, err := readDefaultCR("ps-cluster1", namespace)
 	if err != nil {
 		t.Fatal(err, "failed to read default cr")
 	}
-	cluster.Status.MySQL.State = apiv1alpha1.StateReady
+	cluster.Status.MySQL.State = apiv1.StateReady
 	tests := []struct {
 		name          string
-		cr            *apiv1alpha1.PerconaServerMySQLBackup
-		cluster       *apiv1alpha1.PerconaServerMySQL
+		cr            *apiv1.PerconaServerMySQLBackup
+		cluster       *apiv1.PerconaServerMySQL
 		sidecarClient *fakeSidecarClient
-		state         apiv1alpha1.BackupState
+		state         apiv1.BackupState
 	}{
 		{
 			name:          "not running",
 			cr:            cr.DeepCopy(),
 			cluster:       cluster.DeepCopy(),
-			state:         apiv1alpha1.BackupStarting,
+			state:         apiv1.BackupStarting,
 			sidecarClient: &fakeSidecarClient{},
 		},
 		{
 			name:    "other backup is running",
 			cr:      cr.DeepCopy(),
 			cluster: cluster.DeepCopy(),
-			state:   apiv1alpha1.BackupStarting,
+			state:   apiv1.BackupStarting,
 			sidecarClient: &fakeSidecarClient{
 				destination: "other-container",
 			},
@@ -361,7 +361,7 @@ func TestRunningState(t *testing.T) {
 			name:    "running",
 			cr:      cr.DeepCopy(),
 			cluster: cluster.DeepCopy(),
-			state:   apiv1alpha1.BackupRunning,
+			state:   apiv1.BackupRunning,
 			sidecarClient: &fakeSidecarClient{
 				destination: "container",
 			},
@@ -404,7 +404,7 @@ func TestRunningState(t *testing.T) {
 			if err != nil {
 				t.Fatal(err, "failed to reconcile")
 			}
-			cr := &apiv1alpha1.PerconaServerMySQLBackup{}
+			cr := &apiv1.PerconaServerMySQLBackup{}
 			err = r.Get(ctx, types.NamespacedName{
 				Name:      tt.cr.Name,
 				Namespace: tt.cr.Namespace,
@@ -425,104 +425,104 @@ func TestGetBackupSource(t *testing.T) {
 	err := clientgoscheme.AddToScheme(scheme)
 	require.NoError(t, err)
 
-	err = apiv1alpha1.AddToScheme(scheme)
+	err = apiv1.AddToScheme(scheme)
 	require.NoError(t, err)
 
 	ctx := context.Background()
 
 	tests := []struct {
 		name        string
-		cr          *apiv1alpha1.PerconaServerMySQLBackup
-		cluster     *apiv1alpha1.PerconaServerMySQL
+		cr          *apiv1.PerconaServerMySQLBackup
+		cluster     *apiv1.PerconaServerMySQL
 		want        string
 		expectedErr string
 	}{
 		{
 			name: "sourceHost from backup",
-			cr: &apiv1alpha1.PerconaServerMySQLBackup{
+			cr: &apiv1.PerconaServerMySQLBackup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-backup",
 					Namespace: "test-ns",
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
+				Spec: apiv1.PerconaServerMySQLBackupSpec{
 					SourcePod: "ps-cluster1-mysql-0",
 				},
 			},
-			cluster: &apiv1alpha1.PerconaServerMySQL{
+			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "ps-cluster1",
 					Namespace: "test-ns",
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					Backup: &apiv1alpha1.BackupSpec{SourcePod: "ps-cluster1-mysql-1"},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					Backup: &apiv1.BackupSpec{SourcePod: "ps-cluster1-mysql-1"},
 				},
 			},
 			want: "ps-cluster1-mysql-0.ps-cluster1-mysql.test-ns",
 		},
 		{
 			name: "host from cluster",
-			cr: &apiv1alpha1.PerconaServerMySQLBackup{
+			cr: &apiv1.PerconaServerMySQLBackup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-backup",
 					Namespace: "test-ns",
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{},
+				Spec: apiv1.PerconaServerMySQLBackupSpec{},
 			},
-			cluster: &apiv1alpha1.PerconaServerMySQL{
+			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "ps-cluster1",
 					Namespace: "test-ns",
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					Backup: &apiv1alpha1.BackupSpec{SourcePod: "ps-cluster1-mysql-1"},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					Backup: &apiv1.BackupSpec{SourcePod: "ps-cluster1-mysql-1"},
 				},
 			},
 			want: "ps-cluster1-mysql-1.ps-cluster1-mysql.test-ns",
 		},
 		{
 			name: "single node cluster",
-			cr: &apiv1alpha1.PerconaServerMySQLBackup{
+			cr: &apiv1.PerconaServerMySQLBackup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-backup",
 					Namespace: "test-ns",
 				},
 			},
-			cluster: &apiv1alpha1.PerconaServerMySQL{
+			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "ps-cluster1",
 					Namespace: "test-ns",
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: apiv1alpha1.MySQLSpec{
-						PodSpec: apiv1alpha1.PodSpec{Size: 1},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					MySQL: apiv1.MySQLSpec{
+						PodSpec: apiv1.PodSpec{Size: 1},
 					},
-					Backup: &apiv1alpha1.BackupSpec{},
+					Backup: &apiv1.BackupSpec{},
 				},
 			},
 			want: "ps-cluster1-mysql-0.ps-cluster1-mysql.test-ns",
 		},
 		{
 			name: "async cluster, orchestrator off, no host",
-			cr: &apiv1alpha1.PerconaServerMySQLBackup{
+			cr: &apiv1.PerconaServerMySQLBackup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-backup",
 					Namespace: "test-ns",
 				},
 			},
-			cluster: &apiv1alpha1.PerconaServerMySQL{
+			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "ps-cluster1",
 					Namespace: "test-ns",
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeAsync,
+				Spec: apiv1.PerconaServerMySQLSpec{
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: apiv1.ClusterTypeAsync,
 					},
-					Backup: &apiv1alpha1.BackupSpec{},
-					Unsafe: apiv1alpha1.UnsafeFlags{
+					Backup: &apiv1.BackupSpec{},
+					Unsafe: apiv1.UnsafeFlags{
 						Orchestrator: true,
 					},
-					Orchestrator: apiv1alpha1.OrchestratorSpec{
+					Orchestrator: apiv1.OrchestratorSpec{
 						Enabled: false,
 					},
 				},
@@ -594,13 +594,13 @@ func (f *fakeSidecarClient) DeleteBackup(ctx context.Context, name string, cfg x
 	return nil
 }
 
-func readDefaultCR(name, namespace string) (*apiv1alpha1.PerconaServerMySQL, error) {
+func readDefaultCR(name, namespace string) (*apiv1.PerconaServerMySQL, error) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "cr.yaml"))
 	if err != nil {
 		return nil, err
 	}
 
-	cr := &apiv1alpha1.PerconaServerMySQL{}
+	cr := &apiv1.PerconaServerMySQL{}
 
 	if err := yaml.Unmarshal(data, cr); err != nil {
 		return nil, err
@@ -611,13 +611,13 @@ func readDefaultCR(name, namespace string) (*apiv1alpha1.PerconaServerMySQL, err
 	return cr, nil
 }
 
-func readDefaultCRBackup(name, namespace string) (*apiv1alpha1.PerconaServerMySQLBackup, error) {
+func readDefaultCRBackup(name, namespace string) (*apiv1.PerconaServerMySQLBackup, error) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "backup.yaml"))
 	if err != nil {
 		return nil, err
 	}
 
-	cr := &apiv1alpha1.PerconaServerMySQLBackup{}
+	cr := &apiv1.PerconaServerMySQLBackup{}
 
 	if err := yaml.Unmarshal(data, cr); err != nil {
 		return nil, err
@@ -664,18 +664,18 @@ func TestPrepareBackupSource(t *testing.T) {
 	err := clientgoscheme.AddToScheme(scheme)
 	require.NoError(t, err)
 
-	err = apiv1alpha1.AddToScheme(scheme)
+	err = apiv1.AddToScheme(scheme)
 	require.NoError(t, err)
 
 	namespace := "test-namespace"
 	backupSource := "test-mysql-0.test-mysql.test-namespace"
 
-	cr := &apiv1alpha1.PerconaServerMySQLBackup{
+	cr := &apiv1.PerconaServerMySQLBackup{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-backup",
 			Namespace: namespace,
 		},
-		Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
+		Spec: apiv1.PerconaServerMySQLBackupSpec{
 			ClusterName: "test-cluster",
 		},
 	}
@@ -712,23 +712,23 @@ func TestPrepareBackupSource(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		cluster  *apiv1alpha1.PerconaServerMySQL
+		cluster  *apiv1.PerconaServerMySQL
 		pods     []client.Object
 		wantErr  bool
 		errorMsg string
 	}{
 		{
 			name: "success with async cluster and orchestrator enabled",
-			cluster: &apiv1alpha1.PerconaServerMySQL{
+			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: namespace,
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeAsync,
+				Spec: apiv1.PerconaServerMySQLSpec{
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: apiv1.ClusterTypeAsync,
 					},
-					Orchestrator: apiv1alpha1.OrchestratorSpec{
+					Orchestrator: apiv1.OrchestratorSpec{
 						Enabled: true,
 					},
 				},
@@ -738,16 +738,16 @@ func TestPrepareBackupSource(t *testing.T) {
 		},
 		{
 			name: "success with group replication cluster (no orchestrator needed)",
-			cluster: &apiv1alpha1.PerconaServerMySQL{
+			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: namespace,
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeGR,
+				Spec: apiv1.PerconaServerMySQLSpec{
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: apiv1.ClusterTypeGR,
 					},
-					Orchestrator: apiv1alpha1.OrchestratorSpec{
+					Orchestrator: apiv1.OrchestratorSpec{
 						Enabled: false,
 					},
 				},
@@ -757,16 +757,16 @@ func TestPrepareBackupSource(t *testing.T) {
 		},
 		{
 			name: "success with async cluster but orchestrator disabled",
-			cluster: &apiv1alpha1.PerconaServerMySQL{
+			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: namespace,
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeAsync,
+				Spec: apiv1.PerconaServerMySQLSpec{
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: apiv1.ClusterTypeAsync,
 					},
-					Orchestrator: apiv1alpha1.OrchestratorSpec{
+					Orchestrator: apiv1.OrchestratorSpec{
 						Enabled: false,
 					},
 				},
@@ -776,16 +776,16 @@ func TestPrepareBackupSource(t *testing.T) {
 		},
 		{
 			name: "error when orchestrator pod not ready",
-			cluster: &apiv1alpha1.PerconaServerMySQL{
+			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: namespace,
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeAsync,
+				Spec: apiv1.PerconaServerMySQLSpec{
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: apiv1.ClusterTypeAsync,
 					},
-					Orchestrator: apiv1alpha1.OrchestratorSpec{
+					Orchestrator: apiv1.OrchestratorSpec{
 						Enabled: true,
 					},
 				},
@@ -923,21 +923,21 @@ func TestRunPostFinishTasks(t *testing.T) {
 	err := clientgoscheme.AddToScheme(scheme)
 	require.NoError(t, err)
 
-	err = apiv1alpha1.AddToScheme(scheme)
+	err = apiv1.AddToScheme(scheme)
 	require.NoError(t, err)
 
 	namespace := "test-namespace"
 	backupSource := "test-mysql-0.test-mysql.test-namespace"
 
-	cr := &apiv1alpha1.PerconaServerMySQLBackup{
+	cr := &apiv1.PerconaServerMySQLBackup{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-backup",
 			Namespace: namespace,
 		},
-		Spec: apiv1alpha1.PerconaServerMySQLBackupSpec{
+		Spec: apiv1.PerconaServerMySQLBackupSpec{
 			ClusterName: "test-cluster",
 		},
-		Status: apiv1alpha1.PerconaServerMySQLBackupStatus{
+		Status: apiv1.PerconaServerMySQLBackupStatus{
 			BackupSource: backupSource,
 		},
 	}
@@ -964,7 +964,7 @@ func TestRunPostFinishTasks(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		cluster   *apiv1alpha1.PerconaServerMySQL
+		cluster   *apiv1.PerconaServerMySQL
 		pods      []client.Object
 		clientCmd clientcmd.Client
 		wantErr   bool
@@ -972,16 +972,16 @@ func TestRunPostFinishTasks(t *testing.T) {
 	}{
 		{
 			name: "success with async cluster and orchestrator enabled",
-			cluster: &apiv1alpha1.PerconaServerMySQL{
+			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: namespace,
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeAsync,
+				Spec: apiv1.PerconaServerMySQLSpec{
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: apiv1.ClusterTypeAsync,
 					},
-					Orchestrator: apiv1alpha1.OrchestratorSpec{
+					Orchestrator: apiv1.OrchestratorSpec{
 						Enabled: true,
 					},
 				},
@@ -992,16 +992,16 @@ func TestRunPostFinishTasks(t *testing.T) {
 		},
 		{
 			name: "skip with group replication cluster",
-			cluster: &apiv1alpha1.PerconaServerMySQL{
+			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: namespace,
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeGR,
+				Spec: apiv1.PerconaServerMySQLSpec{
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: apiv1.ClusterTypeGR,
 					},
-					Orchestrator: apiv1alpha1.OrchestratorSpec{
+					Orchestrator: apiv1.OrchestratorSpec{
 						Enabled: false,
 					},
 				},
@@ -1012,16 +1012,16 @@ func TestRunPostFinishTasks(t *testing.T) {
 		},
 		{
 			name: "skip with async cluster but orchestrator disabled",
-			cluster: &apiv1alpha1.PerconaServerMySQL{
+			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: namespace,
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeAsync,
+				Spec: apiv1.PerconaServerMySQLSpec{
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: apiv1.ClusterTypeAsync,
 					},
-					Orchestrator: apiv1alpha1.OrchestratorSpec{
+					Orchestrator: apiv1.OrchestratorSpec{
 						Enabled: false,
 					},
 				},
@@ -1032,16 +1032,16 @@ func TestRunPostFinishTasks(t *testing.T) {
 		},
 		{
 			name: "error when orchestrator pod not ready",
-			cluster: &apiv1alpha1.PerconaServerMySQL{
+			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: namespace,
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeAsync,
+				Spec: apiv1.PerconaServerMySQLSpec{
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: apiv1.ClusterTypeAsync,
 					},
-					Orchestrator: apiv1alpha1.OrchestratorSpec{
+					Orchestrator: apiv1.OrchestratorSpec{
 						Enabled: true,
 					},
 				},
@@ -1053,16 +1053,16 @@ func TestRunPostFinishTasks(t *testing.T) {
 		},
 		{
 			name: "error when end downtime fails",
-			cluster: &apiv1alpha1.PerconaServerMySQL{
+			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: namespace,
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
-					MySQL: apiv1alpha1.MySQLSpec{
-						ClusterType: apiv1alpha1.ClusterTypeAsync,
+				Spec: apiv1.PerconaServerMySQLSpec{
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: apiv1.ClusterTypeAsync,
 					},
-					Orchestrator: apiv1alpha1.OrchestratorSpec{
+					Orchestrator: apiv1.OrchestratorSpec{
 						Enabled: true,
 					},
 				},

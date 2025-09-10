@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/telemetry"
 	"github.com/pkg/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -12,10 +12,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	logger := logf.FromContext(ctx)
 
-	if cr.Status.State != apiv1alpha1.StateReady {
+	if cr.Status.State != apiv1.StateReady {
 		return nil
 	}
 
@@ -73,11 +73,11 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) telemetrySendingHandlerFunc(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, jobName string) func() {
+func (r *PerconaServerMySQLReconciler) telemetrySendingHandlerFunc(ctx context.Context, cr *apiv1.PerconaServerMySQL, jobName string) func() {
 	return func() {
 		logger := logf.FromContext(ctx)
 
-		localCr := &apiv1alpha1.PerconaServerMySQL{}
+		localCr := &apiv1.PerconaServerMySQL{}
 		err := r.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, localCr)
 		if k8serrors.IsNotFound(err) {
 			logger.Info("cluster is not found, deleting the job",
@@ -90,7 +90,7 @@ func (r *PerconaServerMySQLReconciler) telemetrySendingHandlerFunc(ctx context.C
 			return
 		}
 
-		if localCr.Status.State != apiv1alpha1.StateReady {
+		if localCr.Status.State != apiv1.StateReady {
 			logger.Info("cluster is not ready yet")
 			return
 		}
@@ -104,7 +104,7 @@ func (r *PerconaServerMySQLReconciler) telemetrySendingHandlerFunc(ctx context.C
 	}
 }
 
-func (r *PerconaServerMySQLReconciler) sendTelemetry(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) sendTelemetry(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	telemetryService, err := telemetry.NewTelemetryService()
 	if err != nil {
 		return errors.Wrap(err, "telemetry service")
@@ -121,7 +121,7 @@ type telemetryJob struct {
 	cronSchedule string
 }
 
-func telemetryJobName(cr *apiv1alpha1.PerconaServerMySQL) string {
+func telemetryJobName(cr *apiv1.PerconaServerMySQL) string {
 	jobName := "telemetry"
 	nn := types.NamespacedName{
 		Name:      cr.Name,
