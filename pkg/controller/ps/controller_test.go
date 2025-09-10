@@ -19,6 +19,7 @@ package ps
 import (
 	"context"
 	"fmt"
+	"github.com/pkg/errors"
 	"strconv"
 	"strings"
 	"time"
@@ -26,7 +27,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	gs "github.com/onsi/gomega/gstruct"
-	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -47,6 +47,7 @@ import (
 	psv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
@@ -1585,70 +1586,72 @@ var _ = Describe("CR Version Management", Ordered, func() {
 
 	namespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      crName,
-			Namespace: ns,
+			Name: ns,
 		},
 	}
 
 	BeforeAll(func() {
-		By("Creating the Namespace for CR version tests")
+		By("Creating the test namespace")
 		err := k8sClient.Create(ctx, namespace)
-		Expect(err).To(Not(HaveOccurred()))
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	AfterAll(func() {
-		By("Deleting the Namespace after CR version tests")
+		By("Deleting the test namespace")
 		_ = k8sClient.Delete(ctx, namespace)
 	})
 
-	Context("setCRVersion logic", Ordered, func() {
-		When("the CRVersion is already set", func() {
+	Context("SetCRVersion logic", func() {
+
+		When("CRVersion is already set", func() {
 			It("should not change the CRVersion", func() {
 				cr, err := readDefaultCR("cr-version-1", ns)
 				Expect(err).NotTo(HaveOccurred())
-
 				cr.Spec.CRVersion = "0.11.0"
-				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
-				reconciler := &PerconaServerMySQLReconciler{Client: k8sClient}
-				err = reconciler.setCRVersion(ctx, cr)
+				Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+				DeferCleanup(func() {
+					_ = k8sClient.Delete(ctx, cr)
+				})
+
+				err = k8s.SetCRVersion(ctx, k8sClient, cr)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(cr.Spec.CRVersion).To(Equal("0.11.0"))
 			})
 		})
 
-		When("the CRVersion is empty", func() {
+		When("CRVersion is empty", func() {
 			It("should set CRVersion and patch the resource", func() {
 				cr, err := readDefaultCR("cr-version-2", ns)
 				Expect(err).NotTo(HaveOccurred())
-
 				cr.Spec.CRVersion = ""
-				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 
-				reconciler := &PerconaServerMySQLReconciler{Client: k8sClient}
-				err = reconciler.setCRVersion(ctx, cr)
+				Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+				DeferCleanup(func() {
+					_ = k8sClient.Delete(ctx, cr)
+				})
+
+				err = k8s.SetCRVersion(ctx, k8sClient, cr)
 				Expect(err).NotTo(HaveOccurred())
 
-				// Fetch the CR again to verify the patch was applied in the cluster
 				updated := &psv1alpha1.PerconaServerMySQL{}
-				Expect(k8sClient.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, updated)).Should(Succeed())
+				key := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
+				Expect(k8sClient.Get(ctx, key, updated)).To(Succeed())
 				Expect(updated.Spec.CRVersion).To(Equal(version.Version()))
 			})
 		})
 
 		When("the patch operation fails", func() {
-			It("should return an error", func() {
+			It("should return an error with 'patch CR version' and NotFound", func() {
 				cr, err := readDefaultCR("cr-version-3", ns)
 				Expect(err).NotTo(HaveOccurred())
 				cr.Spec.CRVersion = ""
 
-				// Do NOT create the CR in k8s, so Patch will fail (object does not exist)
-				reconciler := &PerconaServerMySQLReconciler{Client: k8sClient}
-				err = reconciler.setCRVersion(ctx, cr)
-
+				err = k8s.SetCRVersion(ctx, k8sClient, cr)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("patch CR"))
-				Expect(k8serrors.IsNotFound(errors.Unwrap(err))).To(BeTrue(), "expected NotFound error, got: %v", err)
+				Expect(err.Error()).To(ContainSubstring("patch CR version"))
+				Expect(k8serrors.IsNotFound(errors.Unwrap(err))).To(BeTrue(),
+					"expected NotFound error, got: %v", err)
 			})
 		})
 	})
