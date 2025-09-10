@@ -15,14 +15,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 )
 
-func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("Crash recovery")
 
 	if cr.Spec.MySQL.IsAsync() {
@@ -71,13 +71,13 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 			continue
 		}
 
-		operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+		operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
 		if err != nil {
 			return errors.Wrap(err, "get operator password")
 		}
 
 		podFQDN := mysql.PodFQDN(cr, &pod)
-		podUri := getMySQLURI(apiv1alpha1.UserOperator, operatorPass, podFQDN)
+		podUri := getMySQLURI(apiv1.UserOperator, operatorPass, podFQDN)
 
 		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, &pod, podUri)
 		if err != nil {
@@ -169,7 +169,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) cleanupFullClusterCrashFile(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) cleanupFullClusterCrashFile(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
 	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)

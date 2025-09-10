@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -31,18 +31,18 @@ import (
 
 var ErrPassNotPropagated = errors.New("password not yet propagated")
 
-func allSystemUsers() map[apiv1alpha1.SystemUser]mysql.User {
-	uu := [...]apiv1alpha1.SystemUser{
-		apiv1alpha1.UserHeartbeat,
-		apiv1alpha1.UserMonitor,
-		apiv1alpha1.UserOperator,
-		apiv1alpha1.UserOrchestrator,
-		apiv1alpha1.UserReplication,
-		apiv1alpha1.UserRoot,
-		apiv1alpha1.UserXtraBackup,
+func allSystemUsers() map[apiv1.SystemUser]mysql.User {
+	uu := [...]apiv1.SystemUser{
+		apiv1.UserHeartbeat,
+		apiv1.UserMonitor,
+		apiv1.UserOperator,
+		apiv1.UserOrchestrator,
+		apiv1.UserReplication,
+		apiv1.UserRoot,
+		apiv1.UserXtraBackup,
 	}
 
-	users := make(map[apiv1alpha1.SystemUser]mysql.User, len(uu))
+	users := make(map[apiv1.SystemUser]mysql.User, len(uu))
 	for _, u := range uu {
 		user := mysql.User{
 			Username: u,
@@ -50,9 +50,9 @@ func allSystemUsers() map[apiv1alpha1.SystemUser]mysql.User {
 		}
 
 		switch u {
-		case apiv1alpha1.UserRoot:
+		case apiv1.UserRoot:
 			user.Hosts = append(user.Hosts, "localhost")
-		case apiv1alpha1.UserHeartbeat, apiv1alpha1.UserXtraBackup:
+		case apiv1.UserHeartbeat, apiv1.UserXtraBackup:
 			user.Hosts = []string{"localhost"}
 		}
 
@@ -62,7 +62,7 @@ func allSystemUsers() map[apiv1alpha1.SystemUser]mysql.User {
 	return users
 }
 
-func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	nn := types.NamespacedName{
 		Namespace: cr.Namespace,
 		Name:      cr.Spec.SecretsName,
@@ -88,7 +88,7 @@ func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileUsers")
 
 	secret := &corev1.Secret{}
@@ -139,7 +139,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	allUsers := allSystemUsers()
 	if hash == internalHash {
 		if v, ok := internalSecret.Annotations[naming.AnnotationPasswordsUpdated.String()]; ok && v == "false" {
-			operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+			operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
 			if err != nil {
 				return errors.Wrap(err, "get operator password")
 			}
@@ -165,7 +165,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return nil
 	}
 
-	if cr.Status.MySQL.State != apiv1alpha1.StateReady {
+	if cr.Status.MySQL.State != apiv1.StateReady {
 		log.Info("MySQL is not ready")
 		return nil
 	}
@@ -184,18 +184,18 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 			continue
 		}
 
-		mysqlUser := allUsers[apiv1alpha1.SystemUser(user)]
+		mysqlUser := allUsers[apiv1.SystemUser(user)]
 		mysqlUser.Password = string(pass)
 
-		switch apiv1alpha1.SystemUser(user) {
-		case apiv1alpha1.UserMonitor:
+		switch apiv1.SystemUser(user) {
+		case apiv1.UserMonitor:
 			restartMySQL = cr.PMMEnabled(internalSecret)
-		case apiv1alpha1.UserPMMServerToken:
+		case apiv1.UserPMMServerToken:
 			restartPMM = cr.PMMEnabled(internalSecret)
 			continue // PMM server user credentials are not stored in db
-		case apiv1alpha1.UserReplication:
+		case apiv1.UserReplication:
 			restartReplication = true
-		case apiv1alpha1.UserOrchestrator:
+		case apiv1.UserOrchestrator:
 			restartOrchestrator = true && cr.Spec.MySQL.IsAsync()
 		}
 
@@ -204,7 +204,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		updatedUsers = append(updatedUsers, mysqlUser)
 	}
 
-	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
 	if err != nil {
 		return errors.Wrap(err, "get operator password")
 	}
@@ -224,7 +224,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return err
 	}
 
-	um := db.NewUserManager(primPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, primaryHost)
+	um := db.NewUserManager(primPod, r.ClientCmd, apiv1.UserOperator, operatorPass, primaryHost)
 
 	var asyncPrimary *orchestrator.Instance
 
@@ -247,7 +247,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	if restartReplication {
 		var updatedReplicaPass string
 		for _, user := range updatedUsers {
-			if user.Username == apiv1alpha1.UserReplication {
+			if user.Username == apiv1.UserReplication {
 				updatedReplicaPass = user.Password
 				break
 			}
@@ -296,7 +296,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		}
 	}
 
-	if cr.Status.State != apiv1alpha1.StateReady {
+	if cr.Status.State != apiv1.StateReady {
 		log.Info("Waiting cluster to be ready")
 		return nil
 	}
@@ -319,7 +319,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 
 func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
 	ctx context.Context,
-	cr *apiv1alpha1.PerconaServerMySQL,
+	cr *apiv1.PerconaServerMySQL,
 	secrets *corev1.Secret,
 	updatedUsers []mysql.User,
 	operatorPass string,
@@ -350,7 +350,7 @@ func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
 		return err
 	}
 
-	um := db.NewUserManager(primPod, r.ClientCmd, apiv1alpha1.UserOperator, operatorPass, primaryHost)
+	um := db.NewUserManager(primPod, r.ClientCmd, apiv1.UserOperator, operatorPass, primaryHost)
 
 	if err := um.DiscardOldPasswords(ctx, updatedUsers); err != nil {
 		return errors.Wrap(err, "discard old passwords")
@@ -366,7 +366,7 @@ func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, secrets *corev1.Secret) error {
+func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, cr *apiv1.PerconaServerMySQL, secrets *corev1.Secret) error {
 	log := logf.FromContext(ctx)
 
 	type component struct {
@@ -462,6 +462,6 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 	return nil
 }
 
-func getMySQLURI(user apiv1alpha1.SystemUser, password, host string) string {
+func getMySQLURI(user apiv1.SystemUser, password, host string) string {
 	return fmt.Sprintf("%s:%s@%s", user, url.QueryEscape(password), host)
 }

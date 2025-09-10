@@ -12,7 +12,7 @@ import (
 	k8sretry "k8s.io/client-go/util/retry"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -21,14 +21,14 @@ import (
 
 // reconcileGRMySQLPrimaryLabel when cluster type is group replication, it reconciles
 // the primary pod based on the mysql cluster state by adding to it the respective label.
-func (r *PerconaServerMySQLReconciler) reconcileGRMySQLPrimaryLabel(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) reconcileGRMySQLPrimaryLabel(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	logger := logf.FromContext(ctx)
 
 	if !cr.Spec.MySQL.IsGR() {
 		return nil
 	}
 
-	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1alpha1.UserOperator)
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
 	if err != nil {
 		// the internal secret for the password might not be available immediately
 		if k8serrors.IsNotFound(errors.Cause(err)) {

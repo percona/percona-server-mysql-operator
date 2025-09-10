@@ -43,7 +43,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	psv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	psv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -210,7 +210,7 @@ var _ = Describe("Sidecars", Ordered, func() {
 			},
 		}
 		cr.MySQLSpec().Sidecars = append(cr.Spec.MySQL.Sidecars, sidecarPVC)
-		cr.MySQLSpec().SidecarPVCs = []psv1alpha1.SidecarPVC{
+		cr.MySQLSpec().SidecarPVCs = []psv1.SidecarPVC{
 			{
 				Name: pvcName,
 				Spec: corev1.PersistentVolumeClaimSpec{
@@ -297,7 +297,7 @@ var _ = Describe("Unsafe configurations", Ordered, func() {
 			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 
 			cr.Spec.Unsafe.MySQLSize = true
-			cr.MySQLSpec().ClusterType = psv1alpha1.ClusterTypeGR
+			cr.MySQLSpec().ClusterType = psv1.ClusterTypeGR
 			cr.MySQLSpec().Size = 1
 			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
 
@@ -362,17 +362,17 @@ var _ = Describe("PodDisruptionBudget", Ordered, func() {
 					Namespace: cr.Namespace,
 				},
 				Data: map[string][]byte{
-					string(psv1alpha1.UserOperator): []byte(operatorPass),
+					string(psv1.UserOperator): []byte(operatorPass),
 				},
 			}
 			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 		})
 
 		It("should create cr.yaml", func() {
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.Unsafe.Orchestrator = true
 			cr.Spec.Unsafe.Proxy = true
-			cr.Spec.MySQL.PodDisruptionBudget = &psv1alpha1.PodDisruptionBudgetSpec{
+			cr.Spec.MySQL.PodDisruptionBudget = &psv1.PodDisruptionBudgetSpec{
 				MaxUnavailable: &intstr.IntOrString{
 					Type:   intstr.Int,
 					IntVal: 20,
@@ -380,14 +380,14 @@ var _ = Describe("PodDisruptionBudget", Ordered, func() {
 			}
 			cr.Spec.Proxy.Router.Enabled = false
 			cr.Spec.Proxy.HAProxy.Enabled = true
-			cr.Spec.Proxy.HAProxy.PodDisruptionBudget = &psv1alpha1.PodDisruptionBudgetSpec{
+			cr.Spec.Proxy.HAProxy.PodDisruptionBudget = &psv1.PodDisruptionBudgetSpec{
 				MinAvailable: &intstr.IntOrString{
 					Type:   intstr.Int,
 					IntVal: 12,
 				},
 			}
 			cr.Spec.Orchestrator.Enabled = true
-			cr.Spec.Orchestrator.PodDisruptionBudget = &psv1alpha1.PodDisruptionBudgetSpec{
+			cr.Spec.Orchestrator.PodDisruptionBudget = &psv1.PodDisruptionBudgetSpec{
 				MaxUnavailable: &intstr.IntOrString{
 					Type:   intstr.Int,
 					IntVal: 11,
@@ -499,7 +499,7 @@ var _ = Describe("Reconcile HAProxy when async cluster type", Ordered, func() {
 
 	Context("Cleanup outdated HAProxy service", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
-		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+		cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 		cr.Spec.Orchestrator.Enabled = true
 		cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 		It("should read and create default cr.yaml", func() {
@@ -568,7 +568,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validation-1", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 			It("should read and create default cr.yaml", func() {
@@ -580,7 +580,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-2", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 			cr.Spec.Orchestrator.Enabled = false
 			cr.Spec.Unsafe.Orchestrator = true
@@ -593,7 +593,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-3", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 			cr.Spec.Orchestrator.Enabled = false
 			It("the creation of the cluster should fail with error message", func() {
@@ -605,7 +605,7 @@ var _ = Describe("CR validations", Ordered, func() {
 
 		When("cluster type is async and HAProxy is disabled but unsafe flag enabled", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-4", ns)
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.Proxy.HAProxy.Enabled = false
@@ -620,7 +620,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-5", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 			cr.Spec.Proxy.HAProxy.Enabled = false
@@ -635,7 +635,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-6", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 			cr.Spec.Proxy.Router.Enabled = true
 			It("the creation of the cluster should fail with error message", func() {
@@ -685,7 +685,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-10", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
 			cr.Spec.Proxy.Router.Enabled = false
 			cr.Spec.Proxy.HAProxy.Enabled = false
 			It("the creation of the cluster should fail with error message", func() {
@@ -699,7 +699,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-11", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
 			cr.Spec.Proxy.Router.Enabled = false
 			cr.Spec.Proxy.HAProxy.Enabled = false
 			cr.Spec.Unsafe.Proxy = true
@@ -712,7 +712,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-12", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
 			cr.Spec.Proxy.Router.Enabled = true
 			cr.Spec.Proxy.Router.Size = 1
 			It("the creation of the cluster should fail with error message", func() {
@@ -726,7 +726,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-13", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
 			cr.Spec.Proxy.Router.Enabled = true
 			cr.Spec.Proxy.Router.Size = 1
 			cr.Spec.Unsafe.ProxySize = true
@@ -739,7 +739,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-14", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
 			cr.Spec.MySQL.Size = 2
 			It("the creation of the cluster should fail with error message", func() {
 				createErr := k8sClient.Create(ctx, cr)
@@ -752,7 +752,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-15", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
 			cr.Spec.MySQL.Size = 2
 			cr.Spec.Unsafe.MySQLSize = true
 			It("should create the cluster successfully", func() {
@@ -764,7 +764,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-16", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.Orchestrator.Size = 2
 			It("the creation of the cluster should fail with error message", func() {
@@ -778,7 +778,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-17", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.Orchestrator.Size = 4
 			It("the creation of the cluster should fail with error message", func() {
@@ -792,7 +792,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-18", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.Orchestrator.Size = 2
 			cr.Spec.Unsafe.OrchestratorSize = true
@@ -805,7 +805,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-19", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.Orchestrator.Size = 4
 			cr.Spec.Unsafe.OrchestratorSize = true
@@ -818,8 +818,8 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-20", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
-			cr.Spec.UpdateStrategy = psv1alpha1.SmartUpdateStatefulSetStrategyType
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = psv1.SmartUpdateStatefulSetStrategyType
 			cr.Spec.Orchestrator.Enabled = false
 			cr.Spec.Unsafe.Proxy = true
 			It("the creation of the cluster should fail with error message", func() {
@@ -833,8 +833,8 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-21", ns)
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
-			cr.Spec.UpdateStrategy = psv1alpha1.SmartUpdateStatefulSetStrategyType
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.UpdateStrategy = psv1.SmartUpdateStatefulSetStrategyType
 			cr.Spec.Orchestrator.Enabled = true
 			It("should create the cluster successfully", func() {
 				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
@@ -872,23 +872,23 @@ var _ = Describe("Reconcile Binlog Server", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
 
 		cr.Spec.Backup.PiTR.Enabled = true
-		cr.Spec.Backup.PiTR.BinlogServer = &psv1alpha1.BinlogServerSpec{
+		cr.Spec.Backup.PiTR.BinlogServer = &psv1.BinlogServerSpec{
 			ConnectTimeout: 20,
 			WriteTimeout:   20,
 			ReadTimeout:    20,
 			ServerID:       42,
 			IdleTime:       60,
-			Storage: psv1alpha1.BinlogServerStorageSpec{
-				S3: &psv1alpha1.BackupStorageS3Spec{
+			Storage: psv1.BinlogServerStorageSpec{
+				S3: &psv1.BackupStorageS3Spec{
 					Bucket:            "s3-test-bucket",
 					Region:            "us-west-1",
 					EndpointURL:       "s3.amazonaws.com",
 					CredentialsSecret: "s3-test-credentials",
 				},
 			},
-			PodSpec: psv1alpha1.PodSpec{
+			PodSpec: psv1.PodSpec{
 				Size: 1,
-				ContainerSpec: psv1alpha1.ContainerSpec{
+				ContainerSpec: psv1.ContainerSpec{
 					Image: "binlog-server-image",
 				},
 			},
@@ -1293,7 +1293,7 @@ var _ = Describe("Primary mysql service", Ordered, func() {
 	Context("Expose primary with gr cluster type", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
 
-		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
+		cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
 		cr.Spec.MySQL.ExposePrimary.Enabled = true
 		cr.Spec.MySQL.ExposePrimary.Type = corev1.ServiceTypeClusterIP
 
@@ -1355,7 +1355,7 @@ var _ = Describe("Primary mysql service", Ordered, func() {
 	Context("Expose primary with async cluster type", Ordered, func() {
 		cr, err := readDefaultCR("async-cluster", ns)
 
-		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+		cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 		cr.Spec.MySQL.ExposePrimary.Enabled = true
 		cr.Spec.MySQL.ExposePrimary.Type = corev1.ServiceTypeClusterIP
 		cr.Spec.Orchestrator.Enabled = true
@@ -1438,8 +1438,8 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 		It("Should read default cr.yaml", func() {
 			Expect(err).NotTo(HaveOccurred())
 
-			cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeGR
-			cr.Spec.Metadata = &psv1alpha1.Metadata{
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
+			cr.Spec.Metadata = &psv1.Metadata{
 				Labels: map[string]string{
 					"test-label": "test-value",
 				},
@@ -1504,7 +1504,7 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 		It("Should update global labels and annotations", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cr), cr)).Should(Succeed())
 
-			cr.Spec.Metadata = &psv1alpha1.Metadata{
+			cr.Spec.Metadata = &psv1.Metadata{
 				Labels: map[string]string{
 					"test-label2": "test-value2",
 				},
@@ -1564,7 +1564,7 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 		It("Should update global labels and annotations", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cr), cr)).Should(Succeed())
 
-			cr.Spec.Metadata = &psv1alpha1.Metadata{
+			cr.Spec.Metadata = &psv1.Metadata{
 				Labels: map[string]string{
 					"test-label3": "test-value3",
 				},
@@ -1627,9 +1627,9 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 		ns := asyncNS
 		cr, err := readDefaultCR("async-cluster", ns)
 
-		cr.Spec.MySQL.ClusterType = psv1alpha1.ClusterTypeAsync
+		cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
 		cr.Spec.Orchestrator.Enabled = true
-		cr.Spec.Metadata = &psv1alpha1.Metadata{
+		cr.Spec.Metadata = &psv1.Metadata{
 			Labels: map[string]string{
 				"test-label": "test-value",
 			},
@@ -1697,7 +1697,7 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 		It("Should update global labels and annotations", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cr), cr)).Should(Succeed())
 
-			cr.Spec.Metadata = &psv1alpha1.Metadata{
+			cr.Spec.Metadata = &psv1.Metadata{
 				Labels: map[string]string{
 					"test-label2": "test-value2",
 				},
@@ -1757,7 +1757,7 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 		It("Should update global labels and annotations", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cr), cr)).Should(Succeed())
 
-			cr.Spec.Metadata = &psv1alpha1.Metadata{
+			cr.Spec.Metadata = &psv1.Metadata{
 				Labels: map[string]string{
 					"test-label3": "test-value3",
 				},

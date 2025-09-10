@@ -24,7 +24,7 @@ status:
   readyReplicas: 3
   updatedReplicas: 3
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
   name: gr-scheduled-backup

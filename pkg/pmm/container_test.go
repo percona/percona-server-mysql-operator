@@ -8,16 +8,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 func TestContainer(t *testing.T) {
-	cr := &apiv1alpha1.PerconaServerMySQL{
+	cr := &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-cluster"},
-		Spec: apiv1alpha1.PerconaServerMySQLSpec{
+		Spec: apiv1.PerconaServerMySQLSpec{
 			CRVersion: version.Version(),
-			PMM: &apiv1alpha1.PMMSpec{
+			PMM: &apiv1.PMMSpec{
 				Image:           "percona/pmm-client:latest",
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				ServerHost:      "pmm-server",
@@ -28,8 +28,8 @@ func TestContainer(t *testing.T) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-secret"},
 		Data: map[string][]byte{
-			string(apiv1alpha1.UserPMMServerToken): []byte("token"),
-			string(apiv1alpha1.UserMonitor):        []byte("monitor-pass"),
+			string(apiv1.UserPMMServerToken): []byte("token"),
+			string(apiv1.UserMonitor):        []byte("monitor-pass"),
 		},
 	}
 
@@ -46,8 +46,8 @@ func TestContainer(t *testing.T) {
 	}
 
 	assert.Equal(t, 1, len(container.VolumeMounts))
-	assert.Equal(t, apiv1alpha1.BinVolumeName, container.VolumeMounts[0].Name)
-	assert.Equal(t, apiv1alpha1.BinVolumePath, container.VolumeMounts[0].MountPath)
+	assert.Equal(t, apiv1.BinVolumeName, container.VolumeMounts[0].Name)
+	assert.Equal(t, apiv1.BinVolumePath, container.VolumeMounts[0].MountPath)
 
 	foundEnv := map[string]bool{}
 	for _, env := range container.Env {
@@ -91,11 +91,11 @@ func TestContainer_CustomProbes(t *testing.T) {
 		FailureThreshold:    3,
 	}
 
-	cr := &apiv1alpha1.PerconaServerMySQL{
+	cr := &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-cluster"},
-		Spec: apiv1alpha1.PerconaServerMySQLSpec{
+		Spec: apiv1.PerconaServerMySQLSpec{
 			CRVersion: version.Version(),
-			PMM: &apiv1alpha1.PMMSpec{
+			PMM: &apiv1.PMMSpec{
 				Image:           "percona/pmm-client:latest",
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				ServerHost:      "pmm-server",
@@ -108,8 +108,8 @@ func TestContainer_CustomProbes(t *testing.T) {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-secret"},
 		Data: map[string][]byte{
-			string(apiv1alpha1.UserPMMServerToken): []byte("token"),
-			string(apiv1alpha1.UserMonitor):        []byte("monitor-pass"),
+			string(apiv1.UserPMMServerToken): []byte("token"),
+			string(apiv1.UserMonitor):        []byte("monitor-pass"),
 		},
 	}
 
