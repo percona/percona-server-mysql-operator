@@ -107,15 +107,17 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return errors.Wrapf(err, "get Secret/%s", nn.Name)
 	}
 
+	internalMeta := metav1.ObjectMeta{
+		Name:        cr.InternalSecretName(),
+		Namespace:   cr.Namespace,
+		Labels:      util.SSMapMerge(cr.GlobalLabels(), mysql.MatchLabels(cr)),
+		Annotations: cr.GlobalAnnotations(),
+	}
+
 	// Internal secret is not found
 	if k8serrors.IsNotFound(err) {
 		secret.DeepCopyInto(internalSecret)
-		internalSecret.ObjectMeta = metav1.ObjectMeta{
-			Name:        cr.InternalSecretName(),
-			Namespace:   cr.Namespace,
-			Labels:      util.SSMapMerge(cr.GlobalLabels(), mysql.MatchLabels(cr)),
-			Annotations: cr.GlobalAnnotations(),
-		}
+		internalSecret.ObjectMeta = internalMeta
 
 		if err = r.Client.Create(ctx, internalSecret); err != nil {
 			return errors.Wrapf(err, "create secret %s", internalSecret.Name)
@@ -150,6 +152,13 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 				users = append(users, u)
 			}
 			return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, users, operatorPass)
+		}
+
+		if !k8s.EqualMetadata(internalMeta, internalSecret.ObjectMeta) {
+			internalSecret.ObjectMeta = internalMeta
+			if err := r.Update(ctx, internalSecret); err != nil {
+				return errors.Wrap(err, "update internal secret metadata")
+			}
 		}
 
 		log.V(1).Info("Secret data is up to date")
