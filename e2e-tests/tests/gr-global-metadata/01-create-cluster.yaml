@@ -15,3 +15,4 @@ commands:
         | yq eval '.spec.metadata.labels={"label1":"label1","label2":"label2"}' - \
         | yq eval '.spec.metadata.annotations={"annotation1":"annotation1","annotation2":"annotation2"}' - \
         | kubectl -n "${NAMESPACE}" apply -f -
+

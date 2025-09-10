@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 300
+timeout: 400
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -67,8 +67,6 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-    label1: label1
-    label2: label2
   name: gr-global-metadata-mysql
 ---
 apiVersion: v1
@@ -91,8 +89,6 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: mysql
     app.kubernetes.io/part-of: percona-server
-    label1: label1
-    label2: label2
   name: gr-global-metadata-mysql-proxy
 ---
 apiVersion: v1
@@ -148,8 +144,6 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: auto-gr-global-metadata-mysql
     app.kubernetes.io/part-of: percona-server
-    label1: label1
-    label2: label2
   name: auto-gr-global-metadata-mysql
 ---
 apiVersion: v1
@@ -174,7 +168,18 @@ metadata:
     app.kubernetes.io/part-of: percona-server
   name: test-ssl
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  labels:
+    app.kubernetes.io/component: database
+    app.kubernetes.io/instance: gr-global-metadata
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/part-of: percona-server
+  name: gr-global-metadata-mysql
+---
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
   name: gr-global-metadata

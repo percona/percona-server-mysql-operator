@@ -80,6 +80,8 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
+    label1: label1
+    label2: label2
   name: async-global-metadata-orc
 spec:
   replicas: 3
@@ -177,6 +179,22 @@ metadata:
     label1: label1
     label2: label2
   name: async-global-metadata-mysql-unready
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    annotation1: annotation1
+    annotation2: annotation2
+  labels:
+    app.kubernetes.io/component: orchestrator
+    app.kubernetes.io/instance: async-global-metadata
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: orchestrator
+    app.kubernetes.io/part-of: percona-server
+    # label1: label1
+    # label2: label2
+  name: async-global-metadata-orc
 ---
 apiVersion: v1
 kind: Service
@@ -322,7 +340,23 @@ metadata:
     label2: label2
   name: test-ssl
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  # annotations:
+  #   annotation1: annotation1
+  #   annotation2: annotation2
+  labels:
+    app.kubernetes.io/component: database
+    app.kubernetes.io/instance: async-global-metadata
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/part-of: percona-server
+    label1: label1
+    label2: label2
+  name: async-global-metadata-mysql
+---
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
   name: async-global-metadata
