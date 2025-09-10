@@ -19,7 +19,6 @@ package ps
 import (
 	"context"
 	"fmt"
-	"github.com/pkg/errors"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +26,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	gs "github.com/onsi/gomega/gstruct"
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -1874,7 +1874,7 @@ var _ = Describe("CR Version Management", Ordered, func() {
 				err = k8s.SetCRVersion(ctx, k8sClient, cr)
 				Expect(err).NotTo(HaveOccurred())
 
-				updated := &psv1alpha1.PerconaServerMySQL{}
+				updated := &psv1.PerconaServerMySQL{}
 				key := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
 				Expect(k8sClient.Get(ctx, key, updated)).To(Succeed())
 				Expect(updated.Spec.CRVersion).To(Equal(version.Version()))

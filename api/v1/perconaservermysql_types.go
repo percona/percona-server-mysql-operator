@@ -19,7 +19,6 @@ package v1
 import (
 	"context"
 	"fmt"
-	"github.com/percona/percona-server-mysql-operator/pkg/util"
 	"hash/fnv"
 	"path"
 	"regexp"
@@ -40,6 +39,7 @@ import (
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
 const (

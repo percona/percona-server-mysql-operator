@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/percona/percona-server-mysql-operator/pkg/version"
 	"os"
 	"reflect"
 	"slices"
@@ -29,6 +28,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 const WatchNamespaceEnvVar = "WATCH_NAMESPACE"
@@ -584,5 +584,4 @@ func EqualMetadata(m ...metav1.ObjectMeta) bool {
 		}
 	}
 	return true
-
 }
