@@ -1,4 +1,4 @@
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLBackup
 metadata:
   name: gr-demand-backup-gcp

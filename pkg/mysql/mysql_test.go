@@ -10,7 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
@@ -166,15 +166,15 @@ func TestStatefulsetVolumes(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		mysqlSpec           apiv1alpha1.MySQLSpec
+		mysqlSpec           apiv1.MySQLSpec
 		expectedStatefulSet appsv1.StatefulSet
 	}{
 		"pvc configured": {
-			mysqlSpec: apiv1alpha1.MySQLSpec{
-				PodSpec: apiv1alpha1.PodSpec{
+			mysqlSpec: apiv1.MySQLSpec{
+				PodSpec: apiv1.PodSpec{
 					Size:                          3,
 					TerminationGracePeriodSeconds: ptr.To(int64(30)),
-					VolumeSpec: &apiv1alpha1.VolumeSpec{
+					VolumeSpec: &apiv1.VolumeSpec{
 						PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 							Resources: corev1.VolumeResourceRequirements{
 								Requests: map[corev1.ResourceName]resource.Quantity{
@@ -212,11 +212,11 @@ func TestStatefulsetVolumes(t *testing.T) {
 			},
 		},
 		"host path configured": {
-			mysqlSpec: apiv1alpha1.MySQLSpec{
-				PodSpec: apiv1alpha1.PodSpec{
+			mysqlSpec: apiv1.MySQLSpec{
+				PodSpec: apiv1.PodSpec{
 					Size:                          3,
 					TerminationGracePeriodSeconds: ptr.To(int64(30)),
-					VolumeSpec: &apiv1alpha1.VolumeSpec{
+					VolumeSpec: &apiv1.VolumeSpec{
 						HostPath: &corev1.HostPathVolumeSource{},
 					},
 				},
@@ -254,11 +254,11 @@ func TestStatefulsetVolumes(t *testing.T) {
 			},
 		},
 		"empty dir configured": {
-			mysqlSpec: apiv1alpha1.MySQLSpec{
-				PodSpec: apiv1alpha1.PodSpec{
+			mysqlSpec: apiv1.MySQLSpec{
+				PodSpec: apiv1.PodSpec{
 					Size:                          3,
 					TerminationGracePeriodSeconds: ptr.To(int64(30)),
-					VolumeSpec: &apiv1alpha1.VolumeSpec{
+					VolumeSpec: &apiv1.VolumeSpec{
 						EmptyDir: &corev1.EmptyDirVolumeSource{},
 					},
 				},
@@ -296,11 +296,11 @@ func TestStatefulsetVolumes(t *testing.T) {
 			},
 		},
 		"both entry dir and host path provided - only host path is actually configured due to higher priority": {
-			mysqlSpec: apiv1alpha1.MySQLSpec{
-				PodSpec: apiv1alpha1.PodSpec{
+			mysqlSpec: apiv1.MySQLSpec{
+				PodSpec: apiv1.PodSpec{
 					Size:                          3,
 					TerminationGracePeriodSeconds: ptr.To(int64(30)),
-					VolumeSpec: &apiv1alpha1.VolumeSpec{
+					VolumeSpec: &apiv1.VolumeSpec{
 						EmptyDir: &corev1.EmptyDirVolumeSource{},
 						HostPath: &corev1.HostPathVolumeSource{},
 					},
@@ -342,12 +342,12 @@ func TestStatefulsetVolumes(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			cr := &apiv1alpha1.PerconaServerMySQL{
+			cr := &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "ps-cluster1",
 					Namespace: "test-ns",
 				},
-				Spec: apiv1alpha1.PerconaServerMySQLSpec{
+				Spec: apiv1.PerconaServerMySQLSpec{
 					CRVersion: version.Version(),
 					MySQL:     tt.mysqlSpec,
 				},
@@ -477,17 +477,17 @@ func expectedVolumes() []corev1.Volume {
 }
 
 func TestPrimaryService_GroupReplication(t *testing.T) {
-	cr := &apiv1alpha1.PerconaServerMySQL{
+	cr := &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "test-namespace",
 		},
-		Spec: apiv1alpha1.PerconaServerMySQLSpec{
-			MySQL: apiv1alpha1.MySQLSpec{
-				ClusterType: apiv1alpha1.ClusterTypeGR,
-				ExposePrimary: apiv1alpha1.ServiceExposeTogglable{
+		Spec: apiv1.PerconaServerMySQLSpec{
+			MySQL: apiv1.MySQLSpec{
+				ClusterType: apiv1.ClusterTypeGR,
+				ExposePrimary: apiv1.ServiceExposeTogglable{
 					Enabled: true,
-					ServiceExpose: apiv1alpha1.ServiceExpose{
+					ServiceExpose: apiv1.ServiceExpose{
 						Type: corev1.ServiceTypeLoadBalancer,
 						Labels: map[string]string{
 							"custom-label": "custom-value",
@@ -567,17 +567,17 @@ func TestPrimaryService_GroupReplication(t *testing.T) {
 func TestPodService(t *testing.T) {
 	podName := "test-pod"
 
-	cr := &apiv1alpha1.PerconaServerMySQL{
+	cr := &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "test-namespace",
 		},
-		Spec: apiv1alpha1.PerconaServerMySQLSpec{
-			MySQL: apiv1alpha1.MySQLSpec{
-				ClusterType: apiv1alpha1.ClusterTypeGR,
-				Expose: apiv1alpha1.ServiceExposeTogglable{
+		Spec: apiv1.PerconaServerMySQLSpec{
+			MySQL: apiv1.MySQLSpec{
+				ClusterType: apiv1.ClusterTypeGR,
+				Expose: apiv1.ServiceExposeTogglable{
 					Enabled: true,
-					ServiceExpose: apiv1alpha1.ServiceExpose{
+					ServiceExpose: apiv1.ServiceExpose{
 						Type: corev1.ServiceTypeLoadBalancer,
 						Labels: map[string]string{
 							"custom-label": "custom-value",
@@ -656,7 +656,7 @@ func TestPodService(t *testing.T) {
 }
 
 func TestPrimaryServiceName(t *testing.T) {
-	cr := &apiv1alpha1.PerconaServerMySQL{
+	cr := &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "my-cluster",
 		},

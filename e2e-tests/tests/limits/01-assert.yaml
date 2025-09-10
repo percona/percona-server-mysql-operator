@@ -14,7 +14,7 @@ metadata:
     app.kubernetes.io/part-of: percona-server
   name: limits-no-limits-mysql
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
@@ -260,7 +260,7 @@ metadata:
     app.kubernetes.io/part-of: percona-server
   name: limits-no-limits-orc
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL

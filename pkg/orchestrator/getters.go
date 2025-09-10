@@ -3,7 +3,7 @@ package orchestrator
 import (
 	"context"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/pkg/errors"
@@ -15,7 +15,7 @@ import (
 func GetReadyPod(
 	ctx context.Context,
 	cl client.Client,
-	cluster *apiv1alpha1.PerconaServerMySQL,
+	cluster *apiv1.PerconaServerMySQL,
 ) (*corev1.Pod, error) {
 	podList := &corev1.PodList{}
 	err := cl.List(ctx, podList,
