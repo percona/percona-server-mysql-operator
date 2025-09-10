@@ -16,14 +16,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/tls"
 )
 
-func (r *PerconaServerMySQLReconciler) ensureTLSSecret(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) ensureTLSSecret(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
 	secret := corev1.Secret{}
@@ -55,7 +55,7 @@ func (r *PerconaServerMySQLReconciler) ensureTLSSecret(ctx context.Context, cr *
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) ensureManualTLS(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) ensureManualTLS(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	secret, err := secret.GenerateCertsSecret(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "create SSL manually")
@@ -80,15 +80,20 @@ func (r *PerconaServerMySQLReconciler) ensureManualTLS(ctx context.Context, cr *
 	}
 
 	// We should update the secret only if the DNS names have changed
-	if k8serrors.IsNotFound(err) || !slices.Equal(currentDNSNames, newDNSNames) {
+	if k8serrors.IsNotFound(err) || !slices.Equal(currentDNSNames, newDNSNames) || !k8s.EqualMetadata(currentSecret.ObjectMeta, secret.ObjectMeta) {
+		if slices.Equal(currentDNSNames, newDNSNames) {
+			secret.Data = currentSecret.Data
+		}
 		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, secret, r.Scheme); err != nil {
 			return errors.Wrap(err, "create secret")
 		}
+		return nil
 	}
+
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) checkTLSIssuer(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) checkTLSIssuer(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	if cr.Spec.TLS == nil || cr.Spec.TLS.IssuerConf == nil {
 		return nil
 	}
@@ -104,7 +109,7 @@ func (r *PerconaServerMySQLReconciler) checkTLSIssuer(ctx context.Context, cr *a
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	issuerName := cr.Name + "-ps-issuer"
 	caIssuerName := cr.Name + "-ps-ca-issuer"
 	issuerKind := "Issuer"
@@ -196,7 +201,7 @@ func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Contex
 	return r.waitForCert(ctx, cr, certName, cr.Spec.SSLSecretName)
 }
 
-func (r *PerconaServerMySQLReconciler) ensureIssuer(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, issuerName string, IssuerConf cm.IssuerConfig,
+func (r *PerconaServerMySQLReconciler) ensureIssuer(ctx context.Context, cr *apiv1.PerconaServerMySQL, issuerName string, IssuerConf cm.IssuerConfig,
 ) error {
 	isr := &cm.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
@@ -217,7 +222,7 @@ func (r *PerconaServerMySQLReconciler) ensureIssuer(ctx context.Context, cr *api
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) waitForCert(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, certName, secretName string) error {
+func (r *PerconaServerMySQLReconciler) waitForCert(ctx context.Context, cr *apiv1.PerconaServerMySQL, certName, secretName string) error {
 	ticker := time.NewTicker(3 * time.Second)
 	timeoutTimer := time.NewTimer(30 * time.Second)
 	defer timeoutTimer.Stop()
@@ -263,7 +268,7 @@ func (r *PerconaServerMySQLReconciler) waitForCert(ctx context.Context, cr *apiv
 	}
 }
 
-func (r *PerconaServerMySQLReconciler) updateObjectLabels(ctx context.Context, obj client.Object, cr *apiv1alpha1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) updateObjectLabels(ctx context.Context, obj client.Object, cr *apiv1.PerconaServerMySQL) error {
 	objLabels := obj.GetLabels()
 	if objLabels == nil {
 		objLabels = make(map[string]string)

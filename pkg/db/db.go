@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 )
 
@@ -19,12 +19,12 @@ var sensitiveRegexp = regexp.MustCompile(":.*@")
 type db struct {
 	client clientcmd.Client
 	pod    *corev1.Pod
-	user   apiv1alpha1.SystemUser
+	user   apiv1.SystemUser
 	pass   string
 	host   string
 }
 
-func newDB(pod *corev1.Pod, cliCmd clientcmd.Client, user apiv1alpha1.SystemUser, pass, host string) *db {
+func newDB(pod *corev1.Pod, cliCmd clientcmd.Client, user apiv1.SystemUser, pass, host string) *db {
 	return &db{client: cliCmd, pod: pod, user: user, pass: pass, host: host}
 }
 

@@ -7,8 +7,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
-	"github.com/robfig/cron/v3"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -53,45 +52,60 @@ var _ = Describe("Reconcile telemetry sending", Ordered, func() {
 
 	It("should create PerconaServerMySQL", func() {
 		Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
-		cr.Status.State = apiv1alpha1.StateReady
+		cr.Status.State = apiv1.StateReady
 
 	})
 
 	Context("When telemetry is disabled", func() {
-		BeforeEach(func() {
+		It("should not create telemetry job when telemetry is disabled", func() {
 			DeferCleanup(func() {
 				err := os.Unsetenv("DISABLE_TELEMETRY")
 				Expect(err).NotTo(HaveOccurred())
 			})
 			err := os.Setenv("DISABLE_TELEMETRY", "true")
 			Expect(err).NotTo(HaveOccurred())
-		})
 
-		It("should not create telemetry job when telemetry is disabled", func() {
 			r := reconciler()
 
-			err := r.reconcileScheduledTelemetrySending(ctx, cr)
+			err = r.reconcileScheduledTelemetrySending(ctx, cr)
 			Expect(err).NotTo(HaveOccurred())
 
 			jobName := telemetryJobName(cr)
 			_, exists := r.Crons.telemetryJobs.Load(jobName)
 			Expect(exists).To(BeFalse())
+
+			Expect(r.Crons.crons.Entries()).To(HaveLen(0))
 		})
 
 		It("should remove existing telemetry job when telemetry is disabled", func() {
 			r := reconciler()
 			jobName := telemetryJobName(cr)
 
-			r.Crons.telemetryJobs.Store(jobName, telemetryJob{
-				scheduleJob:  scheduleJob{jobID: cron.EntryID(1)},
-				cronSchedule: "0 0 * * *",
-			})
-
+			// reconcile 1st time to create fully a job
 			err := r.reconcileScheduledTelemetrySending(ctx, cr)
 			Expect(err).NotTo(HaveOccurred())
 
 			_, exists := r.Crons.telemetryJobs.Load(jobName)
+			Expect(exists).To(BeTrue())
+
+			Expect(r.Crons.crons.Entries()).To(HaveLen(1))
+
+			DeferCleanup(func() {
+				err := os.Unsetenv("DISABLE_TELEMETRY")
+				Expect(err).NotTo(HaveOccurred())
+			})
+			err = os.Setenv("DISABLE_TELEMETRY", "true")
+			Expect(err).NotTo(HaveOccurred())
+
+			// reconcile 2nd time to remove the job
+			err = r.reconcileScheduledTelemetrySending(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, exists = r.Crons.telemetryJobs.Load(jobName)
 			Expect(exists).To(BeFalse())
+
+			Expect(r.Crons.crons.Entries()).To(HaveLen(0))
+
 		})
 	})
 
@@ -118,6 +132,9 @@ var _ = Describe("Reconcile telemetry sending", Ordered, func() {
 			telemetryJobVal, ok := job.(telemetryJob)
 			Expect(ok).To(BeTrue())
 			Expect(telemetryJobVal.cronSchedule).NotTo(BeEmpty())
+
+			Expect(r.Crons.crons.Entries()).To(HaveLen(1))
+
 		})
 
 		It("should keep telemetry job after the 2nd reconciliation without configured schedule", func() {
@@ -133,6 +150,8 @@ var _ = Describe("Reconcile telemetry sending", Ordered, func() {
 			firstTelemetryJobVal, ok := firstJob.(telemetryJob)
 			Expect(ok).To(BeTrue())
 
+			Expect(r.Crons.crons.Entries()).To(HaveLen(1))
+
 			err = r.reconcileScheduledTelemetrySending(ctx, cr)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -141,6 +160,8 @@ var _ = Describe("Reconcile telemetry sending", Ordered, func() {
 
 			secondTelemetryJobVal, ok := secondJob.(telemetryJob)
 			Expect(ok).To(BeTrue())
+
+			Expect(r.Crons.crons.Entries()).To(HaveLen(1))
 
 			Expect(firstTelemetryJobVal.cronSchedule).To(Equal(secondTelemetryJobVal.cronSchedule))
 		})
@@ -156,21 +177,29 @@ var _ = Describe("Reconcile telemetry sending", Ordered, func() {
 			err := os.Setenv("TELEMETRY_SCHEDULE", "0 0 * * *")
 			Expect(err).NotTo(HaveOccurred())
 
-			originalJobID := cron.EntryID(1)
-			r.Crons.telemetryJobs.Store(jobName, telemetryJob{
-				scheduleJob:  scheduleJob{jobID: originalJobID},
-				cronSchedule: "0 0 * * *",
-			})
+			err = r.reconcileScheduledTelemetrySending(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+
+			firstJob, firstExists := r.Crons.telemetryJobs.Load(jobName)
+			Expect(firstExists).To(BeTrue())
+
+			firstTelemetryJobVal, ok := firstJob.(telemetryJob)
+			Expect(ok).To(BeTrue())
+
+			Expect(r.Crons.crons.Entries()).To(HaveLen(1))
 
 			err = r.reconcileScheduledTelemetrySending(ctx, cr)
 			Expect(err).NotTo(HaveOccurred())
 
-			job, exists := r.Crons.telemetryJobs.Load(jobName)
-			Expect(exists).To(BeTrue())
+			secondJob, secondExists := r.Crons.telemetryJobs.Load(jobName)
+			Expect(secondExists).To(BeTrue())
 
-			telemetryJobVal, ok := job.(telemetryJob)
+			secondTelemetryJobVal, ok := secondJob.(telemetryJob)
 			Expect(ok).To(BeTrue())
-			Expect(telemetryJobVal.jobID).To(Equal(originalJobID))
+
+			Expect(r.Crons.crons.Entries()).To(HaveLen(1))
+
+			Expect(firstTelemetryJobVal.cronSchedule).To(Equal(secondTelemetryJobVal.cronSchedule))
 		})
 
 		It("should replace existing job with different schedule", func() {
@@ -184,21 +213,32 @@ var _ = Describe("Reconcile telemetry sending", Ordered, func() {
 			err := os.Setenv("TELEMETRY_SCHEDULE", "1 2 3 * *")
 			Expect(err).NotTo(HaveOccurred())
 
-			originalJobID := cron.EntryID(1)
-			r.Crons.telemetryJobs.Store(jobName, telemetryJob{
-				scheduleJob:  scheduleJob{jobID: originalJobID},
-				cronSchedule: "0 1 * * *",
-			})
-
 			err = r.reconcileScheduledTelemetrySending(ctx, cr)
 			Expect(err).NotTo(HaveOccurred())
 
 			job, exists := r.Crons.telemetryJobs.Load(jobName)
 			Expect(exists).To(BeTrue())
 
-			telemetryJob, ok := job.(telemetryJob)
+			telJob, ok := job.(telemetryJob)
 			Expect(ok).To(BeTrue())
-			Expect(telemetryJob.cronSchedule).To(Equal("1 2 3 * *"))
+			Expect(telJob.cronSchedule).To(Equal("1 2 3 * *"))
+
+			Expect(r.Crons.crons.Entries()).To(HaveLen(1))
+
+			err = os.Setenv("TELEMETRY_SCHEDULE", "3 2 1 * *")
+			Expect(err).NotTo(HaveOccurred())
+
+			err = r.reconcileScheduledTelemetrySending(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+
+			job, exists = r.Crons.telemetryJobs.Load(jobName)
+			Expect(exists).To(BeTrue())
+
+			telJob, ok = job.(telemetryJob)
+			Expect(ok).To(BeTrue())
+			Expect(telJob.cronSchedule).To(Equal("3 2 1 * *"))
+
+			Expect(r.Crons.crons.Entries()).To(HaveLen(1))
 		})
 	})
 
@@ -212,7 +252,7 @@ var _ = Describe("Reconcile telemetry sending", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should handle cluster ready state without error", func() {
+		It("should handle cluster non-ready state without error", func() {
 			crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
 
 			Eventually(func() bool {
@@ -220,7 +260,7 @@ var _ = Describe("Reconcile telemetry sending", Ordered, func() {
 				return err == nil
 			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 
-			cr.Status.State = apiv1alpha1.StateInitializing
+			cr.Status.State = apiv1.StateInitializing
 			Expect(k8sClient.Status().Update(ctx, cr)).Should(Succeed())
 
 			r := reconciler()
@@ -230,6 +270,8 @@ var _ = Describe("Reconcile telemetry sending", Ordered, func() {
 			jobName := telemetryJobName(cr)
 			_, exists := r.Crons.telemetryJobs.Load(jobName)
 			Expect(exists).To(BeFalse())
+
+			Expect(r.Crons.crons.Entries()).To(HaveLen(0))
 		})
 	})
 })

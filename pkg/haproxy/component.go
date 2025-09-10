@@ -9,19 +9,19 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 )
 
-type Component apiv1alpha1.PerconaServerMySQL
+type Component apiv1.PerconaServerMySQL
 
 func (c *Component) Name() string {
 	cr := c.PerconaServerMySQL()
 	return Name(cr)
 }
 
-func (c *Component) PerconaServerMySQL() *apiv1alpha1.PerconaServerMySQL {
-	cr := apiv1alpha1.PerconaServerMySQL(*c)
+func (c *Component) PerconaServerMySQL() *apiv1.PerconaServerMySQL {
+	cr := apiv1.PerconaServerMySQL(*c)
 	return &cr
 }
 
@@ -35,7 +35,7 @@ func (c *Component) MatchLabels() map[string]string {
 	return MatchLabels(cr)
 }
 
-func (c *Component) PodSpec() *apiv1alpha1.PodSpec {
+func (c *Component) PodSpec() *apiv1.PodSpec {
 	return &c.Spec.Proxy.HAProxy.PodSpec
 }
 
