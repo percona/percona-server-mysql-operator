@@ -102,12 +102,17 @@ func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
 	return cr.Labels(AppName, naming.ComponentOrchestrator)
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, tlsHash string) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHash string) *appsv1.StatefulSet {
 	selector := MatchLabels(cr)
 	spec := cr.OrchestratorSpec()
 	Replicas := spec.Size
 
-	annotations := make(map[string]string, 0)
+	annotations := make(map[string]string)
+	if cr.CompareVersion("0.12.0") >= 0 {
+		if configHash != "" {
+			annotations[string(naming.AnnotationConfigHash)] = configHash
+		}
+	}
 	if tlsHash != "" {
 		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}

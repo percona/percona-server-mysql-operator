@@ -777,20 +777,6 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return errors.Wrap(err, "ensure component")
 	}
 
-	configMapHash, err := k8s.ObjectHash(configMap)
-	if err != nil {
-		return errors.Wrap(err, "calculate config map hash")
-	}
-
-	sts := &appsv1.StatefulSet{}
-	if err := r.Get(ctx, orchestrator.NamespacedName(cr), sts); err != nil {
-		return errors.Wrap(err, "get orchestrator sts")
-	}
-
-	if err := k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationLastConfigHash, configMapHash); err != nil {
-		return errors.Wrap(err, "restart orchestrator for config change")
-	}
-
 	raftNodes := orchestrator.RaftNodes(cr)
 	if len(existingNodes) == 0 || len(existingNodes) == len(raftNodes) {
 		return nil
@@ -919,7 +905,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 
 	sts := &appsv1.StatefulSet{}
 	// no need to set init image since we're just getting obj from API
-	if err := r.Get(ctx, client.ObjectKeyFromObject(orchestrator.StatefulSet(cr, "", "")), sts); err != nil {
+	if err := r.Get(ctx, client.ObjectKeyFromObject(orchestrator.StatefulSet(cr, "", "", "")), sts); err != nil {
 		return client.IgnoreNotFound(err)
 	}
 
@@ -1204,7 +1190,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOrchestrator(ctx context.Context, 
 	orcExposer := orchestrator.Exposer(*cr)
 
 	if !cr.OrchestratorEnabled() {
-		if err := r.Delete(ctx, orchestrator.StatefulSet(cr, "", "")); err != nil && !k8serrors.IsNotFound(err) {
+		if err := r.Delete(ctx, orchestrator.StatefulSet(cr, "", "", "")); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrap(err, "failed to delete orchestrator statefulset")
 		}
 
