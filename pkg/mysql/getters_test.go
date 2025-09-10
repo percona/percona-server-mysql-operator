@@ -11,15 +11,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
 func TestGetReadyPod(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, apiv1alpha1.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
 
-	cluster := &apiv1alpha1.PerconaServerMySQL{
+	cluster := &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "test-ns",
@@ -171,9 +171,9 @@ func TestGetReadyPod(t *testing.T) {
 func TestGetMySQLPod(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, apiv1alpha1.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
 
-	cluster := &apiv1alpha1.PerconaServerMySQL{
+	cluster := &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "test-ns",

@@ -7,7 +7,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -52,7 +52,7 @@ var _ = Describe("Reconcile telemetry sending", Ordered, func() {
 
 	It("should create PerconaServerMySQL", func() {
 		Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
-		cr.Status.State = apiv1alpha1.StateReady
+		cr.Status.State = apiv1.StateReady
 
 	})
 
@@ -260,7 +260,7 @@ var _ = Describe("Reconcile telemetry sending", Ordered, func() {
 				return err == nil
 			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
 
-			cr.Status.State = apiv1alpha1.StateInitializing
+			cr.Status.State = apiv1.StateInitializing
 			Expect(k8sClient.Status().Update(ctx, cr)).Should(Succeed())
 
 			r := reconciler()

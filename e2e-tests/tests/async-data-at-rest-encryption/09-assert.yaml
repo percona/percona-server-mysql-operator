@@ -12,7 +12,7 @@ status:
   currentReplicas: 5
   collisionCount: 0
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
   name: async-data-at-rest-encryption

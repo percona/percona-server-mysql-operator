@@ -35,6 +35,7 @@ service-per-pod
 sidecars
 smart-update
 storage
+telemetry
 tls-cert-manager
 users
 pvc-resize
