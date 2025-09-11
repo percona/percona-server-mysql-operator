@@ -2,7 +2,6 @@ package k8s
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -577,10 +576,7 @@ func TestSetCRVersion(t *testing.T) {
 		cl := testutil.BuildFakeClient()
 
 		err := setCRVersion(ctx, cl, cr)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "patch CR version")
-		if !strings.Contains(err.Error(), "patch CR version") {
-			t.Fatalf("Expected error to contain 'patch CR version test', got: %v", err)
-		}
+		assert.Error(t, err)
+		assert.Equal(t, "patch CR version: perconaservermysqls.ps.percona.com \"cr-version-3\" not found", err.Error())
 	})
 }
