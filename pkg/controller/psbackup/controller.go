@@ -235,7 +235,6 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 }
 
 func (r *PerconaServerMySQLBackupReconciler) isBackupJobRunning(ctx context.Context, job *batchv1.Job) (bool, error) {
-	log := logf.FromContext(ctx)
 	if len(job.Spec.Template.Spec.Containers) == 0 {
 		return false, nil
 	}
@@ -258,7 +257,6 @@ func (r *PerconaServerMySQLBackupReconciler) isBackupJobRunning(ctx context.Cont
 	}
 
 	if cfg == nil || cfg.Destination != destination {
-		log.Error(fmt.Errorf("running backup destination does not match expected or config is nil"), "expected destination", "destination", destination)
 		return false, nil
 	}
 

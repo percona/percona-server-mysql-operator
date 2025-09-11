@@ -507,10 +507,12 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	if err := g.Wait(); err != nil {
 		log.Error(err, "backup failed")
 
-		// --safe-slave-backup stops SQL thread but it's not started
-		// if xtrabackup command fails
-		log.Info("starting replication SQL thread")
-		startReplicaSQLThread(req.Context())
+		if getClusterType() == apiv1.ClusterTypeAsync {
+			// --safe-slave-backup stops SQL thread but it's not started
+			// if xtrabackup command fails
+			log.Info("starting replication SQL thread")
+			startReplicaSQLThread(req.Context()) // nolint:errcheck
+		}
 
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
@@ -559,4 +561,13 @@ func envs(cfg xb.BackupConfig) []string {
 		}
 	}
 	return envs
+}
+
+func getClusterType() apiv1.ClusterType {
+	cType, ok := os.LookupEnv("CLUSTER_TYPE")
+	if !ok {
+		return apiv1.ClusterTypeGR
+	}
+
+	return apiv1.ClusterType(cType)
 }
