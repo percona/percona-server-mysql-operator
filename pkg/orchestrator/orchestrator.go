@@ -93,10 +93,6 @@ func FQDN(cr *apiv1.PerconaServerMySQL, idx int) string {
 	return fmt.Sprintf("%s.%s.svc", PodName(cr, idx), cr.Namespace)
 }
 
-func APIHost(cr *apiv1.PerconaServerMySQL) string {
-	return fmt.Sprintf("http://%s:%d", FQDN(cr, 0), defaultWebPort)
-}
-
 // Labels returns labels of orchestrator
 func Labels(cr *apiv1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.GlobalLabels(), cr.OrchestratorSpec().Labels, MatchLabels(cr))
@@ -106,12 +102,17 @@ func MatchLabels(cr *apiv1.PerconaServerMySQL) map[string]string {
 	return cr.Labels(AppName, naming.ComponentOrchestrator)
 }
 
-func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, tlsHash string) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash string) *appsv1.StatefulSet {
 	selector := MatchLabels(cr)
 	spec := cr.OrchestratorSpec()
 	Replicas := spec.Size
 
-	annotations := make(map[string]string, 0)
+	annotations := make(map[string]string)
+	if cr.CompareVersion("0.12.0") >= 0 {
+		if configHash != "" {
+			annotations[string(naming.AnnotationConfigHash)] = configHash
+		}
+	}
 	if tlsHash != "" {
 		annotations[string(naming.AnnotationTLSHash)] = tlsHash
 	}
@@ -492,6 +493,14 @@ func orcConfig(cr *apiv1.PerconaServerMySQL) (string, error) {
 	config := make(map[string]interface{}, 0)
 
 	config["RaftNodes"] = RaftNodes(cr)
+
+	if cr.CompareVersion("0.12.0") >= 0 {
+		config["RaftEnabledSingleNode"] = false
+		if cr.Spec.Orchestrator.Size == 1 {
+			config["RaftEnabledSingleNode"] = true
+		}
+	}
+
 	configJson, err := json.Marshal(config)
 	if err != nil {
 		return "", errors.Wrap(err, "marshal orchestrator raft nodes to json")
@@ -501,7 +510,7 @@ func orcConfig(cr *apiv1.PerconaServerMySQL) (string, error) {
 }
 
 func ConfigMapData(cr *apiv1.PerconaServerMySQL) (map[string]string, error) {
-	cmData := make(map[string]string, 0)
+	cmData := make(map[string]string)
 
 	config, err := orcConfig(cr)
 	if err != nil {
