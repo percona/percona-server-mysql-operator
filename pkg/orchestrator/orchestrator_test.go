@@ -3,13 +3,13 @@ package orchestrator
 import (
 	"testing"
 
-	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
-	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 )
 
@@ -28,6 +28,15 @@ func TestStatefulSet(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	cr.Spec.Metadata = &apiv1.Metadata{
+		Labels: map[string]string{
+			"global-label": "global-value",
+		},
+		Annotations: map[string]string{
+			"global-annotation": "global-annotation-value",
+		},
+	}
+
 	t.Run("object meta", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 
@@ -42,8 +51,14 @@ func TestStatefulSet(t *testing.T) {
 			"app.kubernetes.io/instance":   "cluster",
 			"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
 			"app.kubernetes.io/component":  "orchestrator",
+			"global-label":                 "global-value",
 		}
 		assert.Equal(t, labels, sts.Labels)
+
+		annotations := map[string]string{
+			"global-annotation": "global-annotation-value",
+		}
+		assert.Equal(t, annotations, sts.Annotations)
 	})
 
 	t.Run("defaults", func(t *testing.T) {
@@ -59,6 +74,7 @@ func TestStatefulSet(t *testing.T) {
 		assert.Equal(t, map[string]string{
 			"percona.com/configuration-hash": configHash,
 			"percona.com/last-applied-tls":   tlsHash,
+			"global-annotation":              "global-annotation-value",
 		}, sts.Spec.Template.Annotations)
 	})
 
@@ -138,6 +154,14 @@ func TestPodService(t *testing.T) {
 			Namespace: "test-namespace",
 		},
 		Spec: apiv1.PerconaServerMySQLSpec{
+			Metadata: &apiv1.Metadata{
+				Labels: map[string]string{
+					"global-label": "global-value",
+				},
+				Annotations: map[string]string{
+					"global-annotation": "global-annotation-value",
+				},
+			},
 			Orchestrator: apiv1.OrchestratorSpec{
 				Expose: apiv1.ServiceExpose{
 					Type: corev1.ServiceTypeLoadBalancer,
@@ -190,14 +214,17 @@ func TestPodService(t *testing.T) {
 
 			expectedLabels := MatchLabels(cr)
 			expectedLabels["custom-label"] = "custom-value"
+			expectedLabels["global-label"] = "global-value"
 			expectedLabels[naming.LabelExposed] = "true"
 			assert.Equal(t, expectedLabels, service.Labels)
+
+			expectedAnnotations := cr.DeepCopy().Spec.Orchestrator.Expose.Annotations
+			expectedAnnotations["global-annotation"] = "global-annotation-value"
+			assert.Equal(t, expectedAnnotations, service.Annotations)
 
 			expectedSelector := MatchLabels(cr)
 			expectedSelector["statefulset.kubernetes.io/pod-name"] = podName
 			assert.Equal(t, expectedSelector, service.Spec.Selector)
-
-			assert.Equal(t, cr.Spec.Orchestrator.Expose.Annotations, service.Annotations)
 
 			if tt.expectLoadBalancer {
 				assert.Equal(t, cr.Spec.Orchestrator.Expose.LoadBalancerSourceRanges, service.Spec.LoadBalancerSourceRanges)
