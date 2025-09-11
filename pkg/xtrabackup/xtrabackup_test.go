@@ -151,8 +151,6 @@ func TestDeleteJob(t *testing.T) {
 
 	const ns = "delete-job-ns"
 	const storageName = "some-storage"
-	const destination = "prefix/destination"
-	const initImage = "init-image"
 
 	cr := readDefaultCluster(t, "cluster", ns)
 	if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
