@@ -28,6 +28,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 const WatchNamespaceEnvVar = "WATCH_NAMESPACE"
@@ -476,6 +477,10 @@ func GetCRWithDefaults(
 	if err := cl.Get(ctx, nn, cr); err != nil {
 		return nil, errors.Wrapf(err, "get %v", nn.String())
 	}
+	if err := setCRVersion(ctx, cl, cr); err != nil {
+		return cr, errors.Wrapf(err, "set CR version for %v", nn.String())
+	}
+
 	if err := cr.CheckNSetDefaults(ctx, serverVersion); err != nil {
 		return cr, errors.Wrapf(err, "check and set defaults for %v", nn.String())
 	}
@@ -537,6 +542,25 @@ func GetTLSHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMy
 	return hash, nil
 }
 
+func setCRVersion(
+	ctx context.Context,
+	cl client.Client,
+	cr *apiv1.PerconaServerMySQL,
+) error {
+	if cr.Spec.CRVersion != "" {
+		return nil
+	}
+
+	orig := cr.DeepCopy()
+	cr.Spec.CRVersion = version.Version()
+
+	if err := cl.Patch(ctx, cr, client.MergeFrom(orig)); err != nil {
+		return errors.Wrap(err, "patch CR version")
+	}
+
+	logf.FromContext(ctx).Info("Set CR version", "version", cr.Spec.CRVersion)
+	return nil
+}
 func EqualMetadata(m ...metav1.ObjectMeta) bool {
 	if len(m) <= 1 {
 		return true
