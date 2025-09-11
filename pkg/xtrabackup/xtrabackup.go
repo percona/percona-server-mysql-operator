@@ -484,7 +484,7 @@ func RestoreJob(
 	return job
 }
 
-func GetDeleteJob(cluster *apiv1.PerconaServerMySQL, cr *apiv1alpha1.PerconaServerMySQLBackup, conf *BackupConfig) *batchv1.Job {
+func GetDeleteJob(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQLBackup, conf *BackupConfig) *batchv1.Job {
 	var one int32 = 1
 	t := true
 
