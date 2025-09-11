@@ -14,9 +14,12 @@ import (
 )
 
 func TestStatefulSet(t *testing.T) {
-	const ns = "orc-ns"
-	const initImage = "init-image"
-	const tlsHash = "tls-hash"
+	const (
+		ns         = "orc-ns"
+		initImage  = "init-image"
+		tlsHash    = "tls-hash"
+		configHash = "config-hash"
+	)
 
 	cr := readDefaultCluster(t, "cluster", ns)
 	if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
@@ -28,7 +31,7 @@ func TestStatefulSet(t *testing.T) {
 	t.Run("object meta", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 
-		sts := StatefulSet(cluster, initImage, tlsHash)
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash)
 
 		assert.NotNil(t, sts)
 		assert.Equal(t, "cluster-orc", sts.Name)
@@ -46,7 +49,7 @@ func TestStatefulSet(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 
-		sts := StatefulSet(cluster, initImage, tlsHash)
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash)
 
 		assert.Equal(t, int32(3), *sts.Spec.Replicas)
 		initContainers := sts.Spec.Template.Spec.InitContainers
@@ -54,7 +57,8 @@ func TestStatefulSet(t *testing.T) {
 		assert.Equal(t, initImage, initContainers[0].Image)
 
 		assert.Equal(t, map[string]string{
-			"percona.com/last-applied-tls": tlsHash,
+			"percona.com/configuration-hash": configHash,
+			"percona.com/last-applied-tls":   tlsHash,
 		}, sts.Spec.Template.Annotations)
 	})
 
@@ -62,19 +66,19 @@ func TestStatefulSet(t *testing.T) {
 		cluster := cr.DeepCopy()
 
 		cluster.Spec.Orchestrator.TerminationGracePeriodSeconds = nil
-		sts := StatefulSet(cluster, initImage, tlsHash)
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash)
 		assert.Equal(t, int64(600), *sts.Spec.Template.Spec.TerminationGracePeriodSeconds)
 
 		cluster.Spec.Orchestrator.TerminationGracePeriodSeconds = ptr.To(int64(30))
 
-		sts = StatefulSet(cluster, initImage, tlsHash)
+		sts = StatefulSet(cluster, initImage, configHash, tlsHash)
 		assert.Equal(t, int64(30), *sts.Spec.Template.Spec.TerminationGracePeriodSeconds)
 	})
 
 	t.Run("image pull secrets", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 
-		sts := StatefulSet(cluster, initImage, tlsHash)
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash)
 		assert.Equal(t, []corev1.LocalObjectReference(nil), sts.Spec.Template.Spec.ImagePullSecrets)
 
 		imagePullSecrets := []corev1.LocalObjectReference{
@@ -87,26 +91,26 @@ func TestStatefulSet(t *testing.T) {
 		}
 		cluster.Spec.Orchestrator.ImagePullSecrets = imagePullSecrets
 
-		sts = StatefulSet(cluster, initImage, tlsHash)
+		sts = StatefulSet(cluster, initImage, configHash, tlsHash)
 		assert.Equal(t, imagePullSecrets, sts.Spec.Template.Spec.ImagePullSecrets)
 	})
 
 	t.Run("runtime class name", func(t *testing.T) {
 		cluster := cr.DeepCopy()
-		sts := StatefulSet(cluster, initImage, tlsHash)
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash)
 		var e *string
 		assert.Equal(t, e, sts.Spec.Template.Spec.RuntimeClassName)
 
 		const runtimeClassName = "runtimeClassName"
 		cluster.Spec.Orchestrator.RuntimeClassName = ptr.To(runtimeClassName)
 
-		sts = StatefulSet(cluster, initImage, tlsHash)
+		sts = StatefulSet(cluster, initImage, configHash, tlsHash)
 		assert.Equal(t, runtimeClassName, *sts.Spec.Template.Spec.RuntimeClassName)
 	})
 
 	t.Run("tolerations", func(t *testing.T) {
 		cluster := cr.DeepCopy()
-		sts := StatefulSet(cluster, initImage, tlsHash)
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash)
 		assert.Equal(t, []corev1.Toleration(nil), sts.Spec.Template.Spec.Tolerations)
 
 		tolerations := []corev1.Toleration{
@@ -120,7 +124,7 @@ func TestStatefulSet(t *testing.T) {
 		}
 		cluster.Spec.Orchestrator.Tolerations = tolerations
 
-		sts = StatefulSet(cluster, initImage, tlsHash)
+		sts = StatefulSet(cluster, initImage, configHash, tlsHash)
 		assert.Equal(t, tolerations, sts.Spec.Template.Spec.Tolerations)
 	})
 }
