@@ -1,14 +1,14 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 300
+timeout: 400
 ---
 apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQLBackup
+kind: PerconaServerMySQLRestore
 metadata:
-  name: backup1
+  name: restore1
 spec:
   clusterName: gr-global-metadata
-  storageName: minio
+  backupName: backup1
 status:
   state: Succeeded
 ---
@@ -19,14 +19,14 @@ metadata:
   #   annotation1: annotation1
   #   annotation2: annotation2
   labels:
-    app.kubernetes.io/component: backup
-    app.kubernetes.io/instance: backup1
+    app.kubernetes.io/component: restore
+    app.kubernetes.io/instance: restore1
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: xtrabackup
-    app.kubernetes.io/part-of: percona-server-backup
+    app.kubernetes.io/part-of: percona-server-restore
     # label1: label1
     # label2: label2
-  name: xb-backup1-minio
+  name: xb-restore-restore1
 spec:
   template:
     metadata:
@@ -34,10 +34,26 @@ spec:
       #   annotation1: annotation1
       #   annotation2: annotation2
       labels:
-        app.kubernetes.io/component: backup
-        app.kubernetes.io/instance: backup1
+        app.kubernetes.io/component: restore
+        app.kubernetes.io/instance: restore1
         app.kubernetes.io/managed-by: percona-server-mysql-operator
         app.kubernetes.io/name: xtrabackup
-        app.kubernetes.io/part-of: percona-server-backup
+        app.kubernetes.io/part-of: percona-server-restore
         # label1: label1
         # label2: label2
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-global-metadata
+status:
+  router:
+    ready: 3
+    size: 3
+    state: ready
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
+

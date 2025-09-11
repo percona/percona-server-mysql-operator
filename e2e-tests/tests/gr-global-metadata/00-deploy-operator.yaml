@@ -10,3 +10,5 @@ commands:
       init_temp_dir # do this only in the first TestStep
 
       deploy_operator
+      apply_minio_secret
+      deploy_minio
