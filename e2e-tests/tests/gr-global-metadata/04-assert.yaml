@@ -1,0 +1,43 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: backup1
+spec:
+  clusterName: gr-global-metadata
+  storageName: minio
+status:
+  state: Succeeded
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    annotation1: annotation1
+    annotation2: annotation2
+  labels:
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/instance: backup1
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: xtrabackup
+    app.kubernetes.io/part-of: percona-server-backup
+    label1: label1
+    label2: label2
+  name: xb-backup1-minio
+spec:
+  template:
+    metadata:
+      annotations:
+        annotation1: annotation1
+        annotation2: annotation2
+      labels:
+        app.kubernetes.io/component: backup
+        app.kubernetes.io/instance: backup1
+        app.kubernetes.io/managed-by: percona-server-mysql-operator
+        app.kubernetes.io/name: xtrabackup
+        app.kubernetes.io/part-of: percona-server-backup
+        label1: label1
+        label2: label2

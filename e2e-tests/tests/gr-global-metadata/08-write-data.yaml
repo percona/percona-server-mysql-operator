@@ -1,0 +1,25 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+      password=$(get_user_pass root)
+      router_service=$(get_router_service $(get_cluster_name))
+
+      run_mysql \
+          "CREATE DATABASE IF NOT EXISTS metadata;
+           CREATE TABLE IF NOT EXISTS metadata.name (
+             id VARCHAR(255) PRIMARY KEY
+           );" \
+          "-h $router_service -uroot -p'$password'"
+
+      run_mysql \
+          "INSERT INTO metadata.name (id) VALUES ('annotation2')
+           ON DUPLICATE KEY UPDATE id='annotation2';
+           INSERT INTO metadata.name (id) VALUES ('label2')
+           ON DUPLICATE KEY UPDATE id='label2';" \
+          "-h $router_service -uroot -p'$password'"
