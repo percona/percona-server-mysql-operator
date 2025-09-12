@@ -7,7 +7,6 @@ commands:
       set -o xtrace
       
       # Services and backup/restore related objects will persist annotations and labels
-
       for key in label1 label2 annotation1 annotation2; do
         if kubectl get deployment,statefulset,configmap,secret,pdb -A -o yaml -n "${NAMESPACE}" | grep -q "$key: $key"; then
           echo "'$key' still exists! Failing..."
