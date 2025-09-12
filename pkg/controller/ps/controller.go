@@ -736,6 +736,20 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return errors.Wrap(err, "get config map")
 	}
 
+	cmData, err := orchestrator.ConfigMapData(cr)
+	if err != nil {
+		return errors.Wrap(err, "get ConfigMap data")
+	}
+
+	configMap := orchestrator.ConfigMap(cr, cmData)
+	if !reflect.DeepEqual(cmap.Data, cmData) {
+		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
+			return errors.Wrap(err, "reconcile ConfigMap")
+		}
+		log.Info("ConfigMap updated", "name", configMap.Name, "data", configMap.Data)
+		return nil
+	}
+
 	existingNodes := make([]string, 0)
 	if !k8serrors.IsNotFound(err) {
 		cfg, ok := cmap.Data[orchestrator.ConfigFileName]
@@ -756,15 +770,6 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		for _, v := range nodes {
 			existingNodes = append(existingNodes, v.(string))
 		}
-	}
-
-	cmData, err := orchestrator.ConfigMapData(cr)
-	if err != nil {
-		return errors.Wrap(err, "get ConfigMap data")
-	}
-
-	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, orchestrator.ConfigMap(cr, cmData), r.Scheme); err != nil {
-		return errors.Wrap(err, "reconcile ConfigMap")
 	}
 
 	component := orchestrator.Component(*cr)
@@ -900,7 +905,7 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 
 	sts := &appsv1.StatefulSet{}
 	// no need to set init image since we're just getting obj from API
-	if err := r.Get(ctx, client.ObjectKeyFromObject(orchestrator.StatefulSet(cr, "", "")), sts); err != nil {
+	if err := r.Get(ctx, client.ObjectKeyFromObject(orchestrator.StatefulSet(cr, "", "", "")), sts); err != nil {
 		return client.IgnoreNotFound(err)
 	}
 
@@ -1185,7 +1190,7 @@ func (r *PerconaServerMySQLReconciler) cleanupOrchestrator(ctx context.Context, 
 	orcExposer := orchestrator.Exposer(*cr)
 
 	if !cr.OrchestratorEnabled() {
-		if err := r.Delete(ctx, orchestrator.StatefulSet(cr, "", "")); err != nil && !k8serrors.IsNotFound(err) {
+		if err := r.Delete(ctx, orchestrator.StatefulSet(cr, "", "", "")); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrap(err, "failed to delete orchestrator statefulset")
 		}
 
@@ -1339,8 +1344,10 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 
 	configSecret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      binlogserver.ConfigSecretName(cr),
-			Namespace: cr.Namespace,
+			Name:        binlogserver.ConfigSecretName(cr),
+			Namespace:   cr.Namespace,
+			Labels:      cr.GlobalLabels(),
+			Annotations: cr.GlobalAnnotations(),
 		},
 	}
 	configSecret.Data = make(map[string][]byte)
