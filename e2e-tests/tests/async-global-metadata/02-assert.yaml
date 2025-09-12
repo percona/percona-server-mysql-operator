@@ -192,8 +192,8 @@ metadata:
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: orchestrator
     app.kubernetes.io/part-of: percona-server
-    # label1: label1
-    # label2: label2
+    label1: label1
+    label2: label2
   name: async-global-metadata-orc
 ---
 apiVersion: v1
@@ -343,9 +343,9 @@ metadata:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  # annotations:
-  #   annotation1: annotation1
-  #   annotation2: annotation2
+  annotations:
+    annotation1: annotation1
+    annotation2: annotation2
   labels:
     app.kubernetes.io/component: database
     app.kubernetes.io/instance: async-global-metadata

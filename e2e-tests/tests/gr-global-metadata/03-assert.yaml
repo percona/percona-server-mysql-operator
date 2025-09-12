@@ -15,32 +15,32 @@ status:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  # annotations:
-  #   annotation1: annotation1
-  #   annotation2: annotation2
+  annotations:
+    annotation1: annotation1
+    annotation2: annotation2
   labels:
     app.kubernetes.io/component: restore
     app.kubernetes.io/instance: restore1
     app.kubernetes.io/managed-by: percona-server-mysql-operator
     app.kubernetes.io/name: xtrabackup
     app.kubernetes.io/part-of: percona-server-restore
-    # label1: label1
-    # label2: label2
+    label1: label1
+    label2: label2
   name: xb-restore-restore1
 spec:
   template:
     metadata:
-      # annotations:
-      #   annotation1: annotation1
-      #   annotation2: annotation2
+      annotations:
+        annotation1: annotation1
+        annotation2: annotation2
       labels:
         app.kubernetes.io/component: restore
         app.kubernetes.io/instance: restore1
         app.kubernetes.io/managed-by: percona-server-mysql-operator
         app.kubernetes.io/name: xtrabackup
         app.kubernetes.io/part-of: percona-server-restore
-        # label1: label1
-        # label2: label2
+        label1: label1
+        label2: label2
 ---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL

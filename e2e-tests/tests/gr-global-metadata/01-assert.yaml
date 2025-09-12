@@ -241,9 +241,9 @@ metadata:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  # annotations:
-  #   annotation1: annotation1
-  #   annotation2: annotation2
+  annotations:
+    annotation1: annotation1
+    annotation2: annotation2
   labels:
     app.kubernetes.io/component: database
     app.kubernetes.io/instance: gr-global-metadata
