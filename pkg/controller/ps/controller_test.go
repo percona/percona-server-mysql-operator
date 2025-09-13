@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	gs "github.com/onsi/gomega/gstruct"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -344,7 +345,7 @@ var _ = Describe("PodDisruptionBudget", Ordered, func() {
 
 	Context("Check default cluster", Ordered, func() {
 		cr, err := readDefaultCR(crName, ns)
-		cr.Spec.CRVersion = "0.12.0"
+		cr.Spec.CRVersion = version.Version()
 		It("should prepare reconciler", func() {
 			r = reconciler()
 			Expect(err).To(Succeed())
@@ -410,6 +411,9 @@ var _ = Describe("PodDisruptionBudget", Ordered, func() {
 		When("HAProxy is enabled", Ordered, func() {
 			It("should reconcile", func() {
 				_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+				Expect(err).NotTo(HaveOccurred())
+				// reconcile and a second time cause the orchestrator needs 2 cycles
+				_, err = r.Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
 				Expect(err).NotTo(HaveOccurred())
 			})
 			It("should check PodDisruptionBudget for MySQL", func() {

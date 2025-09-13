@@ -1,8 +1,10 @@
 package xtrabackup
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"path"
 	"strconv"
 
 	"github.com/pkg/errors"
@@ -12,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -107,7 +110,7 @@ func Job(
 	var one int32 = 1
 	t := true
 
-	labels := util.SSMapMerge(storage.Labels, cr.Labels(appName, naming.ComponentBackup))
+	labels := util.SSMapMerge(cluster.GlobalLabels(), storage.Labels, cr.Labels(appName, naming.ComponentBackup))
 	backoffLimit := int32(6)
 	if cluster.Spec.Backup.BackoffLimit != nil {
 		backoffLimit = *cluster.Spec.Backup.BackoffLimit
@@ -126,7 +129,7 @@ func Job(
 			Name:        JobName(cr),
 			Namespace:   cluster.Namespace,
 			Labels:      labels,
-			Annotations: storage.Annotations,
+			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), storage.Annotations),
 		},
 		Spec: batchv1.JobSpec{
 			Parallelism:  &one,
@@ -134,7 +137,8 @@ func Job(
 			BackoffLimit: &backoffLimit,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: cluster.GlobalAnnotations(),
 				},
 				Spec: corev1.PodSpec{
 					RestartPolicy:         corev1.RestartPolicyNever,
@@ -373,7 +377,7 @@ func RestoreJob(
 	initImage string,
 	pvcName string,
 ) *batchv1.Job {
-	labels := util.SSMapMerge(storage.Labels, restore.Labels(appName, naming.ComponentRestore))
+	labels := util.SSMapMerge(cluster.GlobalLabels(), storage.Labels, restore.Labels(appName, naming.ComponentRestore))
 
 	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -384,14 +388,15 @@ func RestoreJob(
 			Name:        RestoreJobName(cluster, restore),
 			Namespace:   cluster.Namespace,
 			Labels:      labels,
-			Annotations: storage.Annotations,
+			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), storage.Annotations),
 		},
 		Spec: batchv1.JobSpec{
 			Parallelism: ptr.To(int32(1)),
 			Completions: ptr.To(int32(1)),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: cluster.GlobalAnnotations(),
 				},
 				Spec: corev1.PodSpec{
 					RestartPolicy:    corev1.RestartPolicyNever,
@@ -482,12 +487,12 @@ func RestoreJob(
 	return job
 }
 
-func GetDeleteJob(cr *apiv1.PerconaServerMySQLBackup, conf *BackupConfig) *batchv1.Job {
+func GetDeleteJob(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQLBackup, conf *BackupConfig) *batchv1.Job {
 	var one int32 = 1
 	t := true
 
 	storage := cr.Status.Storage
-	labels := util.SSMapMerge(storage.Labels, cr.Labels(appName, naming.ComponentBackup))
+	labels := util.SSMapMerge(cluster.GlobalLabels(), storage.Labels, cr.Labels(appName, naming.ComponentBackup))
 
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
@@ -498,14 +503,15 @@ func GetDeleteJob(cr *apiv1.PerconaServerMySQLBackup, conf *BackupConfig) *batch
 			Name:        DeleteJobName(cr),
 			Namespace:   cr.Namespace,
 			Labels:      labels,
-			Annotations: storage.Annotations,
+			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), storage.Annotations),
 		},
 		Spec: batchv1.JobSpec{
 			Parallelism: &one,
 			Completions: &one,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
+					Labels:      labels,
+					Annotations: cluster.GlobalAnnotations(),
 				},
 				Spec: corev1.PodSpec{
 					RestartPolicy:         corev1.RestartPolicyNever,
@@ -839,4 +845,145 @@ type BackupConfig struct {
 		StorageAccount string `json:"storageAccount,omitempty"`
 		AccessKey      string `json:"accessKey,omitempty"`
 	} `json:"azure,omitempty"`
+}
+
+func GetBackupConfig(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQLBackup) (*BackupConfig, error) {
+	storage := cr.Status.Storage
+	if storage == nil {
+		return nil, errors.New("storage is not set")
+	}
+	verifyTLS := true
+	if storage.VerifyTLS != nil {
+		verifyTLS = *storage.VerifyTLS
+	}
+	destination, err := GetDestination(storage, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
+	if err != nil {
+		return nil, errors.Wrap(err, "get backup destination")
+	}
+
+	containerOptions := cr.DeepCopy().Status.Storage.ContainerOptions
+	if containerOptions == nil {
+		containerOptions = new(apiv1.BackupContainerOptions)
+	}
+	backupContainerOptions := cr.DeepCopy().Spec.ContainerOptions
+	if backupContainerOptions != nil {
+		if backupContainerOptions.Args.Xbcloud != nil {
+			containerOptions.Args.Xbcloud = backupContainerOptions.Args.Xbcloud
+		}
+		if backupContainerOptions.Args.Xbstream != nil {
+			containerOptions.Args.Xbstream = backupContainerOptions.Args.Xbstream
+		}
+		if backupContainerOptions.Args.Xtrabackup != nil {
+			containerOptions.Args.Xtrabackup = backupContainerOptions.Args.Xtrabackup
+		}
+		if backupContainerOptions.Env != nil {
+			containerOptions.Env = backupContainerOptions.Env
+		}
+	}
+
+	conf := &BackupConfig{
+		Destination:      destination.PathWithoutBucket(),
+		VerifyTLS:        verifyTLS,
+		ContainerOptions: containerOptions,
+	}
+	s := new(corev1.Secret)
+	nn := types.NamespacedName{
+		Namespace: cr.Namespace,
+	}
+	switch storage.Type {
+	case apiv1.BackupStorageS3:
+		s3 := storage.S3
+		if cl != nil {
+			nn.Name = s3.CredentialsSecret
+			if err := cl.Get(ctx, nn, s); err != nil {
+				return nil, errors.Wrapf(err, "get secret/%s", nn.Name)
+			}
+			accessKey, ok := s.Data[secret.CredentialsAWSAccessKey]
+			if !ok {
+				return nil, errors.Errorf("no credentials for S3 in secret %s", nn.Name)
+			}
+			secretKey, ok := s.Data[secret.CredentialsAWSSecretKey]
+			if !ok {
+				return nil, errors.Errorf("no credentials for S3 in secret %s", nn.Name)
+			}
+			conf.S3.AccessKey = string(accessKey)
+			conf.S3.SecretKey = string(secretKey)
+		}
+		bucket, _ := s3.BucketAndPrefix()
+		conf.S3.Bucket = bucket
+		conf.S3.Region = s3.Region
+		conf.S3.EndpointURL = s3.EndpointURL
+		conf.S3.StorageClass = s3.StorageClass
+		conf.Type = apiv1.BackupStorageS3
+	case apiv1.BackupStorageGCS:
+		gcs := storage.GCS
+		nn.Name = gcs.CredentialsSecret
+		if cl != nil {
+			if err := cl.Get(ctx, nn, s); err != nil {
+				return nil, errors.Wrapf(err, "get secret/%s", nn.Name)
+			}
+			accessKey, ok := s.Data[secret.CredentialsGCSAccessKey]
+			if !ok {
+				return nil, errors.Errorf("no credentials for GCS in secret %s", nn.Name)
+			}
+			secretKey, ok := s.Data[secret.CredentialsGCSSecretKey]
+			if !ok {
+				return nil, errors.Errorf("no credentials for GCS in secret %s", nn.Name)
+			}
+			conf.GCS.AccessKey = string(accessKey)
+			conf.GCS.SecretKey = string(secretKey)
+		}
+		bucket, _ := gcs.BucketAndPrefix()
+		conf.GCS.Bucket = bucket
+		conf.GCS.EndpointURL = gcs.EndpointURL
+		conf.GCS.StorageClass = gcs.StorageClass
+		conf.Type = apiv1.BackupStorageGCS
+	case apiv1.BackupStorageAzure:
+		azure := storage.Azure
+		nn.Name = azure.CredentialsSecret
+		if cl != nil {
+			if err := cl.Get(ctx, nn, s); err != nil {
+				return nil, errors.Wrapf(err, "get secret/%s", nn.Name)
+			}
+			storageAccount, ok := s.Data[secret.CredentialsAzureStorageAccount]
+			if !ok {
+				return nil, errors.Errorf("no credentials for Azure in secret %s", nn.Name)
+			}
+			accessKey, ok := s.Data[secret.CredentialsAzureAccessKey]
+			if !ok {
+				return nil, errors.Errorf("no credentials for Azure in secret %s", nn.Name)
+			}
+			conf.Azure.StorageAccount = string(storageAccount)
+			conf.Azure.AccessKey = string(accessKey)
+		}
+		container, _ := azure.ContainerAndPrefix()
+		conf.Azure.ContainerName = container
+		conf.Azure.EndpointURL = azure.EndpointURL
+		conf.Azure.StorageClass = azure.StorageClass
+		conf.Type = apiv1.BackupStorageAzure
+	default:
+		return nil, errors.New("unknown backup storage type")
+	}
+	return conf, nil
+}
+
+func GetDestination(storage *apiv1.BackupStorageSpec, clusterName, creationTimeStamp string) (apiv1.BackupDestination, error) {
+	backupName := fmt.Sprintf("%s-%s-full", clusterName, creationTimeStamp)
+
+	var d apiv1.BackupDestination
+	switch storage.Type {
+	case apiv1.BackupStorageS3:
+		bucket, prefix := storage.S3.BucketAndPrefix()
+		d.SetS3Destination(path.Join(bucket, prefix), backupName)
+	case apiv1.BackupStorageGCS:
+		bucket, prefix := storage.GCS.BucketAndPrefix()
+		d.SetGCSDestination(path.Join(bucket, prefix), backupName)
+	case apiv1.BackupStorageAzure:
+		container, prefix := storage.Azure.ContainerAndPrefix()
+		d.SetAzureDestination(path.Join(container, prefix), backupName)
+	default:
+		return d, errors.Errorf("storage type %s is not supported", storage.Type)
+	}
+
+	return d, nil
 }
