@@ -50,7 +50,6 @@ func GetReadTimeout() (uint32, error) {
 	return uint32(readTimeout), nil
 }
 
-
 func GetCloneTimeout() (uint32, error) {
 	s, ok := os.LookupEnv("BOOTSTRAP_CLONE_TIMEOUT")
 	if !ok {

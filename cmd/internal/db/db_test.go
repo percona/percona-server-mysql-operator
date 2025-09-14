@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
 // For testing purposes, we'll focus on testing the DBParams logic
@@ -24,10 +24,10 @@ func TestDBParams_setDefaults(t *testing.T) {
 		{
 			name: "all defaults",
 			params: DBParams{
-				User: apiv1alpha1.UserOperator,
+				User: apiv1.UserOperator,
 			},
 			expected: DBParams{
-				User:                apiv1alpha1.UserOperator,
+				User:                apiv1.UserOperator,
 				Port:                33062, // DefaultAdminPort
 				ReadTimeoutSeconds:  3600,  // 1 hour for long-running operations like clone
 				CloneTimeoutSeconds: 3600,  // 1 hour default for clone operations
@@ -36,13 +36,13 @@ func TestDBParams_setDefaults(t *testing.T) {
 		{
 			name: "custom values",
 			params: DBParams{
-				User:                apiv1alpha1.UserOperator,
+				User:                apiv1.UserOperator,
 				Port:                3306,
 				ReadTimeoutSeconds:  30,
 				CloneTimeoutSeconds: 300,
 			},
 			expected: DBParams{
-				User:                apiv1alpha1.UserOperator,
+				User:                apiv1.UserOperator,
 				Port:                3306,
 				ReadTimeoutSeconds:  30,
 				CloneTimeoutSeconds: 300,
@@ -51,11 +51,11 @@ func TestDBParams_setDefaults(t *testing.T) {
 		{
 			name: "zero port gets default",
 			params: DBParams{
-				User: apiv1alpha1.UserOperator,
+				User: apiv1.UserOperator,
 				Port: 0,
 			},
 			expected: DBParams{
-				User:                apiv1alpha1.UserOperator,
+				User:                apiv1.UserOperator,
 				Port:                33062, // DefaultAdminPort
 				ReadTimeoutSeconds:  3600,  // 1 hour for long-running operations like clone
 				CloneTimeoutSeconds: 3600,  // 1 hour default for clone operations
@@ -64,13 +64,13 @@ func TestDBParams_setDefaults(t *testing.T) {
 		{
 			name: "zero clone timeout gets default",
 			params: DBParams{
-				User:                apiv1alpha1.UserOperator,
+				User:                apiv1.UserOperator,
 				Port:                3306,
 				ReadTimeoutSeconds:  30,
 				CloneTimeoutSeconds: 0, // Should get default timeout
 			},
 			expected: DBParams{
-				User:                apiv1alpha1.UserOperator,
+				User:                apiv1.UserOperator,
 				Port:                3306,
 				ReadTimeoutSeconds:  30,
 				CloneTimeoutSeconds: 3600, // Should get 1 hour default
@@ -88,7 +88,7 @@ func TestDBParams_setDefaults(t *testing.T) {
 
 func TestDBParams_DSN(t *testing.T) {
 	params := DBParams{
-		User:                apiv1alpha1.UserOperator,
+		User:                apiv1.UserOperator,
 		Pass:                "testpass",
 		Host:                "localhost",
 		Port:                3306,
