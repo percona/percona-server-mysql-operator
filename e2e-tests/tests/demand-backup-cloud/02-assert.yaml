@@ -1,21 +1,13 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 300
----
-kind: PerconaServerMySQLBackup
-apiVersion: ps.percona.com/v1
-metadata:
-  name: demand-backup-minio-fail
-  finalizers:
-    - percona.com/delete-backup
-status:
-  state: Failed
+timeout: 420
 ---
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: demand-backup-mysql
+  name: demand-backup-cloud-mysql
 status:
+  observedGeneration: 1
   replicas: 3
   readyReplicas: 3
   currentReplicas: 3
@@ -25,8 +17,9 @@ status:
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: demand-backup-orc
+  name: demand-backup-cloud-orc
 status:
+  observedGeneration: 1
   replicas: 3
   readyReplicas: 3
   currentReplicas: 3
@@ -36,8 +29,9 @@ status:
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: demand-backup-haproxy
+  name: demand-backup-cloud-haproxy
 status:
+  observedGeneration: 1
   replicas: 3
   readyReplicas: 3
   currentReplicas: 3
@@ -47,7 +41,7 @@ status:
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
-  name: demand-backup
+  name: demand-backup-cloud
   finalizers:
     - percona.com/delete-mysql-pods-in-order
 status:

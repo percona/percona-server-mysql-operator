@@ -5,61 +5,56 @@ timeout: 300
 kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
 metadata:
-  name: demand-backup-minio-fail
-  finalizers:
-    - percona.com/delete-backup
+  name: gr-demand-backup-minio-minio-fail
 status:
   state: Failed
 ---
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: demand-backup-mysql
+  name: gr-demand-backup-minio-mysql
 status:
+  observedGeneration: 1
   replicas: 3
   readyReplicas: 3
   currentReplicas: 3
   updatedReplicas: 3
   collisionCount: 0
 ---
-kind: StatefulSet
+kind: Deployment
 apiVersion: apps/v1
 metadata:
-  name: demand-backup-orc
+  name: gr-demand-backup-minio-router
 status:
+  observedGeneration: 1
   replicas: 3
   readyReplicas: 3
-  currentReplicas: 3
   updatedReplicas: 3
-  collisionCount: 0
----
-kind: StatefulSet
-apiVersion: apps/v1
-metadata:
-  name: demand-backup-haproxy
-status:
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
-  collisionCount: 0
 ---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
-  name: demand-backup
-  finalizers:
-    - percona.com/delete-mysql-pods-in-order
+  name: gr-demand-backup-minio
+spec:
+  backup:
+    backoffLimit: 3
 status:
-  haproxy:
-    ready: 3
-    size: 3
-    state: ready
+  conditions:
+  - reason: Initializing
+    status: "False"
+    type: Initializing
+  - reason: Ready
+    status: "True"
+    type: Ready
+  - message: InnoDB cluster successfully bootstrapped with 3 nodes
+    reason: InnoDBClusterBootstrapped
+    status: "True"
+    type: InnoDBClusterBootstrapped
   mysql:
     ready: 3
     size: 3
     state: ready
-  orchestrator:
+  router:
     ready: 3
     size: 3
     state: ready
