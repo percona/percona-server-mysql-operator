@@ -93,9 +93,9 @@ spec:
 #      minAvailable: 0
     resources:
       requests:
-        memory: 2G
+        memory: 2Gi
       limits:
-        memory: 4G
+        memory: 4Gi
 
 #    readinessProbe:
 #      initialDelaySeconds: 30
@@ -167,7 +167,7 @@ spec:
 #        accessModes: [ "ReadWriteOnce" ]
         resources:
           requests:
-            storage: 2G
+            storage: 2Gi
     gracePeriod: 600
 #    configuration: |
 #      max_connections=250
@@ -198,7 +198,7 @@ spec:
 #      spec:
 #        resources:
 #          requests:
-#            storage: 1G
+#            storage: 1Gi
 #    containerSecurityContext:
 #      privileged: true
 #    podSecurityContext:
@@ -228,10 +228,10 @@ spec:
 #        minAvailable: 0
       resources:
         requests:
-          memory: 1G
+          memory: 1Gi
           cpu: 600m
 #        limits:
-#          memory: 1G
+#          memory: 1Gi
 #          cpu: 700m
 
 #      env:
@@ -585,7 +585,7 @@ spec:
 #          backupWorker: 'True'
 #        resources:
 #          requests:
-#            memory: 1G
+#            memory: 1Gi
 #            cpu: 600m
 #        affinity:
 #          nodeAffinity:
@@ -622,7 +622,7 @@ spec:
 #        runtimeClassName: image-rc
 #        containerOptions:
 #          env:
-#          - name: VERIFY_TLS
+#          - name: CUSTOM_VAR
 #            value: "false"
 #          args:
 #            xtrabackup:
