@@ -1,11 +1,13 @@
 version-service
 async-ignore-annotations
+async-global-metadata
 auto-config
 config
 config-router
 demand-backup-minio
 demand-backup-cloud
 async-data-at-rest-encryption
+gr-global-metadata
 gr-data-at-rest-encryption
 gr-demand-backup-minio
 gr-demand-backup-cloud
