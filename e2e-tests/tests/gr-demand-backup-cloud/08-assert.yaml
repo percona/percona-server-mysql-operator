@@ -5,6 +5,6 @@ timeout: 300
 kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
 metadata:
-  name: gr-demand-backup-cloud-minio
+  name: gr-demand-backup-cloud-s3
 status:
   state: Succeeded

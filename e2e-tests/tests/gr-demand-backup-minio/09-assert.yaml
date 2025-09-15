@@ -14,7 +14,6 @@ apiVersion: apps/v1
 metadata:
   name: gr-demand-backup-minio-mysql
 status:
-  observedGeneration: 1
   replicas: 3
   readyReplicas: 3
   currentReplicas: 3
@@ -26,7 +25,6 @@ apiVersion: apps/v1
 metadata:
   name: gr-demand-backup-minio-router
 status:
-  observedGeneration: 1
   replicas: 3
   readyReplicas: 3
   updatedReplicas: 3
@@ -39,17 +37,6 @@ spec:
   backup:
     backoffLimit: 3
 status:
-  conditions:
-  - reason: Initializing
-    status: "False"
-    type: Initializing
-  - reason: Ready
-    status: "True"
-    type: Ready
-  - message: InnoDB cluster successfully bootstrapped with 3 nodes
-    reason: InnoDBClusterBootstrapped
-    status: "True"
-    type: InnoDBClusterBootstrapped
   mysql:
     ready: 3
     size: 3
