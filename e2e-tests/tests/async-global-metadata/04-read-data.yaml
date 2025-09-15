@@ -1,0 +1,19 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 30
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      password=$(get_user_pass root)
+      cluster_name=$(get_cluster_name)
+      for service in "mysql" "mysql-proxy" "mysql-primary"; do
+        data=$(run_mysql "SELECT * FROM metadata.name" "-h ${cluster_name}-${service} -uroot -p'$password'")
+        if [[ "$data" != *"annotation1"* ]] || [[ "$data" != *"label1"* ]]; then
+          echo "Missing data written previously!"
+          exit 1
+        fi
+      done
