@@ -5,7 +5,7 @@ timeout: 300
 kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
 metadata:
-  name: demand-backup-minio-fail
+  name: demand-backup-minio-minio-fail
   finalizers:
     - percona.com/delete-backup
 status:
@@ -14,7 +14,7 @@ status:
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: demand-backup-mysql
+  name: demand-backup-minio-mysql
 status:
   replicas: 3
   readyReplicas: 3
@@ -25,7 +25,7 @@ status:
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: demand-backup-orc
+  name: demand-backup-minio-orc
 status:
   replicas: 3
   readyReplicas: 3
@@ -36,7 +36,7 @@ status:
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: demand-backup-haproxy
+  name: demand-backup-minio-haproxy
 status:
   replicas: 3
   readyReplicas: 3
@@ -47,7 +47,7 @@ status:
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
-  name: demand-backup
+  name: demand-backup-minio
   finalizers:
     - percona.com/delete-mysql-pods-in-order
 status:

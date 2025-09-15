@@ -1,10 +1,10 @@
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLRestore
 metadata:
-  name: demand-backup-restore-minio
+  name: demand-backup-minio-restore-minio
 spec:
-  clusterName: demand-backup
-  backupName: demand-backup-minio
+  clusterName: demand-backup-minio
+  backupName: demand-backup-minio-minio
   containerOptions:
     env:
     - name: CUSTOM_ENV

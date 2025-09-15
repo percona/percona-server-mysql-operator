@@ -10,7 +10,7 @@ commands:
 
       kubectl delete ps-backup --all -n "${NAMESPACE}"
 
-      backup_name_minio="demand-backup-minio"
+      backup_name_minio="demand-backup-minio-minio"
 
       accessKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
       secretKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"

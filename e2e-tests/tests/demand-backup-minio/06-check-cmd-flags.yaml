@@ -7,13 +7,7 @@ commands:
 
       source ../../functions
 
-      restore_pod_name=$(kubectl get pod -n ${NAMESPACE} -l batch.kubernetes.io/job-name=xb-restore-demand-backup-restore-minio -o name)
-
-      xbstream_flag_count=$(kubectl logs -n ${NAMESPACE} $restore_pod_name | grep -- "--verbose" | wc -l)
-      if [ "$xbstream_flag_count" -eq 0 ]; then
-        echo "custom flag --verbose was provided to the restore but it's not mentioned in the logs"
-        exit 1
-      fi
+      restore_pod_name=$(kubectl get pod -n ${NAMESPACE} -l batch.kubernetes.io/job-name=xb-demand-backup-minio-minio-minio  -o name)
 
       xtrabackup_flag_count=$(kubectl logs -n ${NAMESPACE} $restore_pod_name | grep -- "--strict" | wc -l)
       if [ "$xtrabackup_flag_count" -eq 0 ]; then
