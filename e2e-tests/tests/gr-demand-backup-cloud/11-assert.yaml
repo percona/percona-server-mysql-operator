@@ -5,20 +5,20 @@ timeout: 30
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 06-read-data-s3-0
+  name: 11-read-data-gcp-0
 data:
   data: "100500"
 ---
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 06-read-data-s3-1
+  name: 11-read-data-gcp-1
 data:
   data: "100500"
 ---
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 06-read-data-s3-2
+  name: 11-read-data-gcp-2
 data:
   data: "100500"

@@ -15,5 +15,5 @@ commands:
       cluster_name=$(get_cluster_name)
       for i in 0 1 2; do
           data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql -uroot -p'$password'")
-          kubectl create configmap -n "${NAMESPACE}" 04-delete-data-minio-backup-source-${i} --from-literal=data="${data}"
+          kubectl create configmap -n "${NAMESPACE}" 12-delete-data-minio-backup-source-${i} --from-literal=data="${data}"
       done

@@ -5,6 +5,6 @@ timeout: 300
 kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
 metadata:
-  name: gr-demand-backup-cloud-gcp
+  name: gr-demand-backup-cloud-azure
 status:
   state: Succeeded

@@ -20,6 +20,6 @@ status:
 kind: PerconaServerMySQLRestore
 apiVersion: ps.percona.com/v1
 metadata:
-  name: gr-demand-backup-cloud-restore-gcp
+  name: gr-demand-backup-cloud-restore-azure
 status:
   state: Succeeded

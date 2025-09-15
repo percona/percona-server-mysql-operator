@@ -5,20 +5,20 @@ timeout: 30
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 06-read-data-azure-0
+  name: 07-read-data-s3-0
 data:
   data: "100500"
 ---
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 06-read-data-azure-1
+  name: 07-read-data-s3-1
 data:
   data: "100500"
 ---
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 06-read-data-azure-2
+  name: 07-read-data-s3-2
 data:
   data: "100500"

@@ -14,7 +14,7 @@ commands:
           host=$(get_mysql_headless_fqdn $(get_cluster_name) $i)
           seeds=$(run_mysql "SELECT @@group_replication_group_seeds" "-h ${host} -uroot -proot_password")
           echo ${seeds}
-          seeds=$(echo ${seeds} | sed -e "s/\.${NAMESPACE}//g")
+          seeds=$(echo ${seeds} | $sed -e "s/\.${NAMESPACE}//g")
           args="${args} --from-literal=${host}=${seeds}"
       done
 

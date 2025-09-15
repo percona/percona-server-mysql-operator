@@ -3,7 +3,7 @@ async-ignore-annotations
 auto-config
 config
 config-router
-demand-backup
+demand-backup-minio
 demand-backup-cloud
 async-data-at-rest-encryption
 gr-data-at-rest-encryption
