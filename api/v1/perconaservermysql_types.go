@@ -952,6 +952,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.Proxy.HAProxy.Size = 0
 	}
 
+	if cr.Spec.SecretsName == "" {
+		cr.Spec.SecretsName = cr.Name + "-secrets"
+	}
+
 	if cr.Spec.SSLSecretName == "" {
 		cr.Spec.SSLSecretName = cr.Name + "-ssl"
 	}
