@@ -4,9 +4,11 @@ auto-config
 config
 config-router
 demand-backup
+demand-backup-cloud
 async-data-at-rest-encryption
 gr-data-at-rest-encryption
-gr-demand-backup
+gr-demand-backup-minio
+gr-demand-backup-cloud
 gr-demand-backup-haproxy
 gr-finalizer
 gr-haproxy
