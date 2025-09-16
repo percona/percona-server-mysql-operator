@@ -27,21 +27,4 @@ commands:
           | yq eval '.spec.backup.storages.minio.containerOptions.env[1].value="test"' - \
           | yq eval '.spec.backup.storages.minio.containerOptions.args.xtrabackup[0]="--notsupported"' - \
           | yq eval '.spec.backup.storages.minio.containerOptions.args.xbcloud[0]="--insecure"' - \
-          | yq eval '.spec.backup.storages.aws-s3.type="s3"' - \
-          | yq eval ".spec.backup.storages.aws-s3.verifyTLS=true" - \
-          | yq eval '.spec.backup.storages.aws-s3.s3.bucket="operator-testing"' - \
-          | yq eval '.spec.backup.storages.aws-s3.s3.credentialsSecret="aws-s3-secret"' - \
-          | yq eval '.spec.backup.storages.aws-s3.s3.region="us-east-1"' - \
-          | yq eval '.spec.backup.storages.aws-s3.s3.prefix="ps"' - \
-          | yq eval '.spec.backup.storages.gcp-cs.type="gcs"' - \
-          | yq eval ".spec.backup.storages.gcp-cs.verifyTLS=true" - \
-          | yq eval '.spec.backup.storages.gcp-cs.gcs.bucket="operator-testing"' - \
-          | yq eval '.spec.backup.storages.gcp-cs.gcs.credentialsSecret="gcp-cs-secret"' - \
-          | yq eval '.spec.backup.storages.gcp-cs.gcs.endpointUrl="https://storage.googleapis.com"' - \
-          | yq eval '.spec.backup.storages.gcp-cs.gcs.prefix="ps"' - \
-          | yq eval '.spec.backup.storages.azure-blob.type="azure"' - \
-          | yq eval ".spec.backup.storages.azure-blob.verifyTLS=true" - \
-          | yq eval '.spec.backup.storages.azure-blob.azure.container="operator-testing"' - \
-          | yq eval '.spec.backup.storages.azure-blob.azure.credentialsSecret="azure-secret"' - \
-          | yq eval '.spec.backup.storages.azure-blob.azure.prefix="ps"' - \
           | kubectl -n "${NAMESPACE}" apply -f -

@@ -15,17 +15,6 @@ commands:
           | yq eval ".spec.proxy.haproxy.size=3" - \
           | yq eval ".spec.orchestrator.enabled=true" - \
           | yq eval ".spec.orchestrator.size=3" - \
-          | yq eval '.spec.backup.storages.minio.type="s3"' - \
-          | yq eval '.spec.backup.storages.minio.s3.bucket="operator-testing"' - \
-          | yq eval '.spec.backup.storages.minio.s3.credentialsSecret="minio-secret"' - \
-          | yq eval ".spec.backup.storages.minio.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
-          | yq eval '.spec.backup.storages.minio.s3.region="us-east-1"' - \
-          | yq eval '.spec.backup.storages.minio.containerOptions.env[0].name="VERIFY_TLS"' - \
-          | yq eval '.spec.backup.storages.minio.containerOptions.env[0].value="false"' - \
-          | yq eval '.spec.backup.storages.minio.containerOptions.env[1].name="CUSTOM_ENV"' - \
-          | yq eval '.spec.backup.storages.minio.containerOptions.env[1].value="test"' - \
-          | yq eval '.spec.backup.storages.minio.containerOptions.args.xtrabackup[0]="--notsupported"' - \
-          | yq eval '.spec.backup.storages.minio.containerOptions.args.xbcloud[0]="--insecure"' - \
           | yq eval '.spec.backup.storages.aws-s3.type="s3"' - \
           | yq eval ".spec.backup.storages.aws-s3.verifyTLS=true" - \
           | yq eval '.spec.backup.storages.aws-s3.s3.bucket="operator-testing"' - \
