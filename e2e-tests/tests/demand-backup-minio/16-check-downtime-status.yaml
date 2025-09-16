@@ -1,0 +1,40 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # Check that unsupported arg was passed to backup.
+      # Check that during backup the sorce backup node was marked as downtime in orchestrator (using logs).
+
+      backup_name="demand-backup-minio-minio-fail"
+
+      backup_source_pod=$(kubectl get ps-backup -n ${NAMESPACE} $backup_name -o jsonpath='{.status.backupSource}' | awk -F'.' '{print $1}')
+      backup_pod_name=$(kubectl get pod -n ${NAMESPACE} -l batch.kubernetes.io/job-name=xb-${backup_name}-minio  -o name)
+
+      # Logs of unsuccessful backups are stored only on the backup source pod. Use it to check logs.
+      xtrabackup_flag_count=$(kubectl logs -n ${NAMESPACE} $backup_source_pod -c xtrabackup | grep -c -- "--customnotsupported")
+      if [ "$xtrabackup_flag_count" -eq 0 ]; then
+        echo "custom flag --customnotsupported was provided to the backup but it's not mentioned in the logs"
+        exit 1
+      fi
+
+      begin_downtime_count=$(kubectl logs -n ${NAMESPACE} demand-backup-minio-orc-0 | grep $backup_source_pod | grep -c "begin-downtime")
+      if [[ "$begin_downtime_count" == 0 ]]; then
+        echo "Downtime was not started"
+        exit 1
+      fi
+
+      end_downtime_count=$(kubectl logs -n ${NAMESPACE} demand-backup-minio-orc-0 | grep $backup_source_pod | grep -c "end-downtime")
+      if [[ "$end_downtime_count" == 0 ]]; then
+        echo "Downtime was not started"
+        exit 1
+      fi
+
+      if [[ "$begin_downtime_count" != "$end_downtime_count" ]]; then
+        echo "End and start downtime count in orchestrator differ."
+        exit 1
+      fi

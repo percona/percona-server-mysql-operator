@@ -1,0 +1,7 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: gr-demand-backup-cloud-restore-gcp
+spec:
+  clusterName: gr-demand-backup-cloud
+  backupName: gr-demand-backup-cloud-gcp
