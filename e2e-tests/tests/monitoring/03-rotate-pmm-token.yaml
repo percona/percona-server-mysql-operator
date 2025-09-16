@@ -7,11 +7,19 @@ commands:
 
       source ../../functions
 
+      wait_for_generation "sts/monitoring-mysql" 1
+      wait_for_generation "sts/monitoring-haproxy" 1
+
       # add new PMM API token to secret
       NEW_TOKEN=$(get_pmm_server_token "operator-new")
       kubectl patch -n "${NAMESPACE}" secret test-secrets --type merge --patch "$(jq -n --arg token "$NEW_TOKEN" '{"stringData": {"pmmservertoken": $token}}')"
 
       # delete old PMM token
       delete_pmm_server_token "operator"
+
       sleep 10
+
+      wait_for_generation "sts/monitoring-mysql" 2
+      wait_for_generation "sts/monitoring-haproxy" 2
+
     timeout: 120
