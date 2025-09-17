@@ -45,7 +45,6 @@ spec:
           value: "30"
         - name: READINESS_CHECK_TIMEOUT
           value: "1"
-        image: perconalab/percona-server-mysql-operator:main-haproxy
         imagePullPolicy: Always
         livenessProbe:
           exec:
@@ -103,7 +102,6 @@ spec:
           value: haproxy-mysql-proxy
         - name: CLUSTER_TYPE
           value: async
-        image: perconalab/percona-server-mysql-operator:main-haproxy
         imagePullPolicy: Always
         name: mysql-monit
         terminationMessagePath: /dev/termination-log
