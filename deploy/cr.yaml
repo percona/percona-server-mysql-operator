@@ -58,7 +58,7 @@ spec:
   mysql:
     clusterType: group-replication
     autoRecovery: true
-    image: percona/percona-server:8.0.43-34.1
+    image: percona/percona-server:8.4.6-6.1
     imagePullPolicy: Always
 #    runtimeClassName: image-rc
 #    tolerations:
@@ -332,7 +332,7 @@ spec:
 
     router:
       enabled: false
-      image: percona/percona-mysql-router:8.0.43
+      image: percona/percona-mysql-router:8.4.6
       imagePullPolicy: Always
 #      runtimeClassName: image-rc
 #      tolerations:
@@ -539,7 +539,7 @@ spec:
   backup:
     enabled: true
 #    sourcePod: ps-cluster1-mysql-1
-    image: percona/percona-xtrabackup:8.0.35-34.1
+    image: percona/percona-xtrabackup:8.4.0-4.1
 #    schedule:
 #      - name: "sat-night-backup"
 #        schedule: "0 0 * * 6"
