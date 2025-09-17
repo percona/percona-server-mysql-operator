@@ -748,7 +748,7 @@ func backupVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 }
 
 func backupContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
-	return corev1.Container{
+	container := corev1.Container{
 		Name:            "xtrabackup",
 		Image:           cr.Spec.Backup.Image,
 		ImagePullPolicy: cr.Spec.Backup.ImagePullPolicy,
@@ -766,6 +766,15 @@ func backupContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		SecurityContext:          cr.Spec.Backup.ContainerSecurityContext,
 		Resources:                cr.Spec.Backup.Resources,
 	}
+
+	if cr.CompareVersion("0.12.0") >= 0 {
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  "CLUSTER_TYPE",
+			Value: string(cr.Spec.MySQL.ClusterType),
+		})
+	}
+
+	return container
 }
 
 func heartbeatContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {

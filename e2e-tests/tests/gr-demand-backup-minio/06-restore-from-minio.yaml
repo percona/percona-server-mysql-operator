@@ -1,0 +1,7 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: gr-demand-backup-minio-restore-minio
+spec:
+  clusterName: gr-demand-backup-minio
+  backupName: gr-demand-backup-minio-minio

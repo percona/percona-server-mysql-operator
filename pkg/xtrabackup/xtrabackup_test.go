@@ -110,4 +110,167 @@ func TestJob(t *testing.T) {
 		}
 		assert.Equal(t, runtimeClassName, *j.Spec.Template.Spec.RuntimeClassName)
 	})
+
+	t.Run("global labels and annotations", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		cr := backup.DeepCopy()
+
+		cluster.Spec.Metadata = &apiv1.Metadata{
+			Labels: map[string]string{
+				"custom-label": "label",
+			},
+			Annotations: map[string]string{
+				"custom-annotation": "annotation",
+			},
+		}
+
+		j, err := Job(cluster, cr, destination, initImage, cluster.Spec.Backup.Storages[storageName])
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		expectedLabels := map[string]string{
+			"app.kubernetes.io/component":  "backup",
+			"app.kubernetes.io/instance":   "backup",
+			"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
+			"app.kubernetes.io/name":       "xtrabackup",
+			"app.kubernetes.io/part-of":    "percona-server-backup",
+			"custom-label":                 "label",
+		}
+		expectedAnnotations := map[string]string{
+			"storage-annotation": "test",
+			"custom-annotation":  "annotation",
+		}
+		assert.Equal(t, expectedLabels, j.Labels)
+		assert.Equal(t, expectedAnnotations, j.Annotations)
+	})
+}
+
+func TestDeleteJob(t *testing.T) {
+	ctx := t.Context()
+
+	const ns = "delete-job-ns"
+	const storageName = "some-storage"
+
+	cr := readDefaultCluster(t, "cluster", ns)
+	if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
+		Platform: platform.PlatformKubernetes,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cr.Spec.Backup.Storages = map[string]*apiv1.BackupStorageSpec{
+		storageName: {
+			Annotations: map[string]string{
+				"storage-annotation": "test",
+			},
+			Type: apiv1.BackupStorageS3,
+			S3: &apiv1.BackupStorageS3Spec{
+				Bucket:            "bucket",
+				Prefix:            "prefix",
+				CredentialsSecret: "secret",
+				Region:            "region",
+				EndpointURL:       "endpoint",
+				StorageClass:      "storage-class",
+			},
+		},
+	}
+	backup := readDefaultBackup(t, "backup", ns)
+	backup.Status.Storage = cr.Spec.Backup.Storages[storageName]
+
+	t.Run("global labels and annotations", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		cr := backup.DeepCopy()
+
+		cluster.Spec.Metadata = &apiv1.Metadata{
+			Labels: map[string]string{
+				"custom-label": "label",
+			},
+			Annotations: map[string]string{
+				"custom-annotation": "annotation",
+			},
+		}
+
+		cfg, err := GetBackupConfig(ctx, nil, cr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		j := GetDeleteJob(cluster, cr, cfg)
+
+		expectedLabels := map[string]string{
+			"app.kubernetes.io/component":  "backup",
+			"app.kubernetes.io/instance":   "backup",
+			"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
+			"app.kubernetes.io/name":       "xtrabackup",
+			"app.kubernetes.io/part-of":    "percona-server-backup",
+			"custom-label":                 "label",
+		}
+		expectedAnnotations := map[string]string{
+			"storage-annotation": "test",
+			"custom-annotation":  "annotation",
+		}
+		assert.Equal(t, expectedLabels, j.Labels)
+		assert.Equal(t, expectedAnnotations, j.Annotations)
+	})
+}
+
+func TestRestoreJob(t *testing.T) {
+	const ns = "restore-job-ns"
+	const storageName = "some-storage"
+	const destination = "prefix/destination"
+	const initImage = "init-image"
+
+	cr := readDefaultCluster(t, "cluster", ns)
+	if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
+		Platform: platform.PlatformKubernetes,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cr.Spec.Backup.Storages = map[string]*apiv1.BackupStorageSpec{
+		storageName: {
+			Annotations: map[string]string{
+				"storage-annotation": "test",
+			},
+			Type: apiv1.BackupStorageS3,
+			S3: &apiv1.BackupStorageS3Spec{
+				Bucket:            "bucket",
+				Prefix:            "prefix",
+				CredentialsSecret: "secret",
+				Region:            "region",
+				EndpointURL:       "endpoint",
+				StorageClass:      "storage-class",
+			},
+		},
+	}
+	backup := readDefaultRestore(t, "backup", ns)
+
+	t.Run("global labels and annotations", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		cr := backup.DeepCopy()
+
+		cluster.Spec.Metadata = &apiv1.Metadata{
+			Labels: map[string]string{
+				"custom-label": "label",
+			},
+			Annotations: map[string]string{
+				"custom-annotation": "annotation",
+			},
+		}
+
+		j := RestoreJob(cluster, destination, cr, cluster.Spec.Backup.Storages[storageName], initImage, "pvc-name")
+
+		expectedLabels := map[string]string{
+			"app.kubernetes.io/component":  "restore",
+			"app.kubernetes.io/instance":   "backup",
+			"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
+			"app.kubernetes.io/name":       "xtrabackup",
+			"app.kubernetes.io/part-of":    "percona-server-restore",
+			"custom-label":                 "label",
+		}
+		expectedAnnotations := map[string]string{
+			"storage-annotation": "test",
+			"custom-annotation":  "annotation",
+		}
+		assert.Equal(t, expectedLabels, j.Labels)
+		assert.Equal(t, expectedAnnotations, j.Annotations)
+	})
 }

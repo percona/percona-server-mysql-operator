@@ -1,0 +1,7 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: demand-backup-cloud-restore-s3
+spec:
+  clusterName: demand-backup-cloud
+  backupName: demand-backup-cloud-s3

@@ -13349,6 +13349,7 @@ rules:
   - policy
   resources:
   - poddisruptionbudgets
+  - poddisruptionbudgets/finalizers
   verbs:
   - create
   - get
