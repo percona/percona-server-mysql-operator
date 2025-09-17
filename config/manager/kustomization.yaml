@@ -13,7 +13,7 @@ kind: Kustomization
 images:
 - name: controller
   newName: percona/percona-server-mysql-operator
-  newTag: main
+  newTag: 0.12.0
 - name: perconalab/percona-server-mysql-operator
-  newName: perconalab/percona-server-mysql-operator
-  newTag: main
+  newName: percona/percona-server-mysql-operator
+  newTag: 0.12.0
