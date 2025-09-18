@@ -1,7 +1,0 @@
-apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQLRestore
-metadata:
-  name: demand-backup-restore-azure
-spec:
-  clusterName: demand-backup
-  backupName: demand-backup-azure

@@ -1,0 +1,25 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 500
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-demand-backup-cloud
+status:
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  router:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
+---
+kind: PerconaServerMySQLRestore
+apiVersion: ps.percona.com/v1
+metadata:
+  name: gr-demand-backup-cloud-restore-azure
+status:
+  state: Succeeded

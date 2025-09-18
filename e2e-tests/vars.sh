@@ -11,7 +11,11 @@ export GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 export VERSION=${VERSION:-$(echo "${GIT_BRANCH}" | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')}
 
 export IMAGE=${IMAGE:-"perconalab/percona-server-mysql-operator:${VERSION}"}
-export MYSQL_VERSION=${MYSQL_VERSION:-"8.0"}
+if [[ -z ${MYSQL_VERSION-} && -n ${IMAGE_MYSQL-} ]]; then
+	export MYSQL_VERSION=$(echo "$IMAGE_MYSQL" | sed -E 's/.*://; s/^[^0-9]*([0-9]+\.[0-9]+).*/\1/')
+else
+	export MYSQL_VERSION=${MYSQL_VERSION:-"8.4"}
+fi
 export IMAGE_MYSQL=${IMAGE_MYSQL:-"perconalab/percona-server-mysql-operator:main-psmysql${MYSQL_VERSION}"}
 export IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mysql-operator:main-backup${MYSQL_VERSION}"}
 export IMAGE_ORCHESTRATOR=${IMAGE_ORCHESTRATOR:-"perconalab/percona-server-mysql-operator:main-orchestrator"}
