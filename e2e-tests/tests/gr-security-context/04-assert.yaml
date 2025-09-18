@@ -21,7 +21,6 @@ spec:
   suspend: false
   template:
     metadata:
-      creationTimestamp: null
       labels:
         app.kubernetes.io/component: backup
         app.kubernetes.io/instance: gr-security-context-minio

@@ -22,7 +22,7 @@ commands:
           query="SHOW GRANTS FOR '${user}'@'${host}';"
 
           run_mysql "${query}" "${mysql_args}" \
-              | sed -E "s/'(10|192)[.][0-9][^']*'//; s/'[^']*[.]internal'//" \
+              | $sed -E "s/'(10|192)[.][0-9][^']*'//; s/'[^']*[.]internal'//" \
                   >"${TEMP_DIR}/${user}.sql"
 
           args="${args} --from-file=${user}=${TEMP_DIR}/${user}.sql"
