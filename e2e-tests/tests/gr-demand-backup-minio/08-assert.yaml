@@ -1,0 +1,48 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+---
+kind: PerconaServerMySQLBackup
+apiVersion: ps.percona.com/v1
+metadata:
+  name: gr-demand-backup-minio-minio-fail
+status:
+  state: Failed
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-demand-backup-minio-mysql
+status:
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: gr-demand-backup-minio-router
+status:
+  replicas: 3
+  readyReplicas: 3
+  updatedReplicas: 3
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-demand-backup-minio
+spec:
+  backup:
+    backoffLimit: 3
+status:
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  router:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready

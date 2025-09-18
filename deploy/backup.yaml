@@ -10,7 +10,7 @@ spec:
 #  sourcePod: ps-cluster1-mysql-1
 #  containerOptions:
 #    env:
-#    - name: VERIFY_TLS
+#    - name: CUSTOM_VAR
 #      value: "false"
 #    args:
 #      xtrabackup:
