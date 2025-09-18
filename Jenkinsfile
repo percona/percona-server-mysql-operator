@@ -14,7 +14,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                 if [[ \${ret_num} -gt 1 ]]; then
                     kubectl cluster-info || true
                     kubectl config current-context || true
-                    ping $(gcloud container clusters list --filter="name=$CLUSTER_NAME-${CLUSTER_SUFFIX}" '--format=csv[no-heading](MASTER_IP)') -t 10 || true
+                    ping \$(gcloud container clusters list --filter="name=$CLUSTER_NAME-${CLUSTER_SUFFIX}" '--format=csv[no-heading](MASTER_IP)') -t 10 || true
                 fi
                 gcloud container clusters list --filter="name=$CLUSTER_NAME-${CLUSTER_SUFFIX}" --zone $region --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $region --quiet || true
                 gcloud container clusters create $CLUSTER_NAME-${CLUSTER_SUFFIX} \
