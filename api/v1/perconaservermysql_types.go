@@ -876,7 +876,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 	}
 
 	var fsgroup *int64
-	if serverVersion.Platform != platform.PlatformOpenshift {
+	if serverVersion != nil && serverVersion.Platform != platform.PlatformOpenshift {
 		var tp int64 = 1001
 		fsgroup = &tp
 	}
@@ -950,6 +950,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.Orchestrator.Size = 0
 		cr.Spec.Proxy.Router.Size = 0
 		cr.Spec.Proxy.HAProxy.Size = 0
+	}
+
+	if cr.Spec.SecretsName == "" {
+		cr.Spec.SecretsName = cr.Name + "-secrets"
 	}
 
 	if cr.Spec.SSLSecretName == "" {
