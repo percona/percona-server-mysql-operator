@@ -53,7 +53,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 			cr.Status.State = apiv1.StateError
 
-			r.Recorder.Event(cr, "Error", "ReconcileError", "Failed to reconcile cluster")
+			r.Recorder.Event(cr, corev1.EventTypeWarning, "ReconcileError", "Failed to reconcile cluster")
 		}
 
 		nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
@@ -92,7 +92,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 				mysqlStatus.State = apiv1.StateInitializing
 
 				log.Info(fmt.Sprintf("Async replication not ready: %s", msg))
-				r.Recorder.Event(cr, "Warning", "AsyncReplicationNotReady", msg)
+				r.Recorder.Event(cr, corev1.EventTypeWarning, "AsyncReplicationNotReady", msg)
 
 			}
 		}
@@ -181,7 +181,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 			cr.Status.State = apiv1.StateError
 
-			r.Recorder.Event(cr, "Warning", "FullClusterCrashDetected", "Full cluster crash detected")
+			r.Recorder.Event(cr, corev1.EventTypeWarning, "FullClusterCrashDetected", "Full cluster crash detected")
 		}
 	}
 
@@ -216,7 +216,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	if cr.Status.State != initialState {
 		log.Info("Cluster state changed", "previous", initialState, "current", cr.Status.State)
-		r.Recorder.Event(cr, "Warning", "ClusterStateChanged", fmt.Sprintf("%s -> %s", initialState, cr.Status.State))
+		r.Recorder.Event(cr, corev1.EventTypeWarning, "ClusterStateChanged", fmt.Sprintf("%s -> %s", initialState, cr.Status.State))
 	}
 
 	nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
