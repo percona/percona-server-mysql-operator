@@ -329,7 +329,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 
 			p.Spec.Resources.Requests[corev1.ResourceStorage] = requested
 
-			return r.Client.Update(ctx, p)
+			return r.Update(ctx, p)
 		})
 		if err != nil {
 			switch {
