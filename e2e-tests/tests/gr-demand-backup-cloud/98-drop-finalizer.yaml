@@ -1,0 +1,5 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-demand-backup-cloud
+  finalizers: []

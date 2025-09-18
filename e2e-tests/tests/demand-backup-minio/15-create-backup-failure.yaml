@@ -1,0 +1,16 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: demand-backup-minio-minio-fail
+  finalizers:
+    - percona.com/delete-backup
+spec:
+  clusterName: demand-backup-minio
+  storageName: minio
+  containerOptions:
+    env:
+    - name: CUSTOM_ENV_2
+      value: "test"
+    args:
+      xtrabackup:
+      - "--customnotsupported"
