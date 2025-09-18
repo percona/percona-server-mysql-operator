@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
+	k8sretry "k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -319,9 +320,18 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 		}
 
 		log.Info("Resizing PVC", "name", pvc.Name, "actual", pvc.Status.Capacity.Storage(), "requested", requested)
-		pvc.Spec.Resources.Requests[corev1.ResourceStorage] = requested
 
-		if err := r.Update(ctx, &pvc); err != nil {
+		err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
+			p := new(corev1.PersistentVolumeClaim)
+			if err := r.Get(ctx, client.ObjectKeyFromObject(&pvc), p); err != nil {
+				return err
+			}
+
+			p.Spec.Resources.Requests[corev1.ResourceStorage] = requested
+
+			return r.Client.Update(ctx, p)
+		})
+		if err != nil {
 			switch {
 			case strings.Contains(err.Error(), "exceeded quota"):
 				r.Recorder.Event(&pvc, corev1.EventTypeWarning, naming.EventExceededQuota, "PVC resize failed")
