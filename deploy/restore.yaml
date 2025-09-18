@@ -7,7 +7,7 @@ spec:
   backupName: backup1
 #  containerOptions:
 #    env:
-#    - name: VERIFY_TLS
+#    - name: CUSTOM_VAR
 #      value: "false"
 #    args:
 #      xtrabackup:
