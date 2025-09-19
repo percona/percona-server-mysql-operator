@@ -23,6 +23,7 @@ import (
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
@@ -134,6 +135,115 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			}
 			if cr.Status.State != apiv1.BackupError {
 				t.Fatalf("expected state %s, got %s", apiv1.RestoreError, cr.Status.State)
+			}
+		})
+	}
+}
+
+func TestStateDescCleanup(t *testing.T) {
+	ctx := t.Context()
+	scheme := runtime.NewScheme()
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		t.Fatal(err, "failed to add client-go scheme")
+	}
+	if err := apiv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err, "failed to add apis scheme")
+	}
+	const namespace = "state-desc-cleanup"
+	const storageName = "s3-us-west"
+
+	cluster, err := readDefaultCR("ps-cluster1", namespace)
+	if err != nil {
+		t.Fatal(err, "failed to read default cr")
+	}
+	cluster.Status.MySQL.State = apiv1.StateReady
+	cluster.Spec.InitContainer.Image = "init-image"
+
+	cr, err := readDefaultCRBackup("some-name", namespace)
+	if err != nil {
+		t.Fatal(err, "failed to read default backup")
+	}
+	cr.Spec.ClusterName = cluster.Name
+	cr.Spec.StorageName = storageName
+
+	storage := cluster.Spec.Backup.Storages[storageName]
+
+	newSecret := func(name string, data map[string][]byte) *corev1.Secret {
+		return &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+			Data:       data,
+		}
+	}
+
+	s3Secret := newSecret(storage.S3.CredentialsSecret, map[string][]byte{
+		secret.CredentialsAWSAccessKey: []byte("access-key"),
+		secret.CredentialsAWSSecretKey: []byte("secret-key"),
+	})
+	userSecret := newSecret(cluster.InternalSecretName(), map[string][]byte{
+		string(apiv1.UserOperator): []byte("access-key"),
+	})
+
+	tests := []struct {
+		name      string
+		cr        *apiv1.PerconaServerMySQLBackup
+		failedJob bool
+	}{
+		{
+			name: "clean description on success",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+				cr.Status.State = apiv1.BackupRunning
+				cr.Status.StateDesc = "to-delete"
+			}),
+		},
+		{
+			name: "clean description on fail",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+				cr.Status.State = apiv1.BackupRunning
+				cr.Status.StateDesc = "to-delete"
+			}),
+			failedJob: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cond := batchv1.JobCondition{
+				Type:   batchv1.JobComplete,
+				Status: corev1.ConditionTrue,
+			}
+			if tt.failedJob {
+				cond.Type = batchv1.JobFailed
+			}
+
+			job, err := xtrabackup.Job(cluster.DeepCopy(), tt.cr, "dest", "init-image", storage)
+			if err != nil {
+				t.Fatal(err)
+			}
+			job.Status.Conditions = append(job.Status.Conditions, cond)
+
+			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr, cluster.DeepCopy(), s3Secret, userSecret, job).WithStatusSubresource(tt.cr, cluster.DeepCopy(), s3Secret, job)
+			r := PerconaServerMySQLBackupReconciler{
+				Client:        cb.Build(),
+				Scheme:        scheme,
+				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+			}
+
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			cr := new(apiv1.PerconaServerMySQLBackup)
+			if err := r.Get(ctx, types.NamespacedName{Name: tt.cr.Name, Namespace: tt.cr.Namespace}, cr); err != nil {
+				t.Fatal(err)
+			}
+
+			if cr.Status.State != apiv1.BackupFailed && cr.Status.State != apiv1.BackupSucceeded {
+				t.Fatalf("wrong test setup. backup should succeeded or failed. Got: %s", cr.Status.State)
+			}
+
+			if cr.Status.StateDesc != "" {
+				t.Fatal("state desc should be empty")
 			}
 		})
 	}
