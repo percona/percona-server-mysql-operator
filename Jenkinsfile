@@ -14,7 +14,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                 if [[ \${ret_num} -gt 1 ]]; then
                     kubectl cluster-info || true
                     kubectl config current-context || true
-                    kubectl get nodes -v=10 || true
+                    kubectl --request-timeout 60 get nodes -v=9 || true
                     ping -t10 \$(gcloud container clusters list --filter="name=$CLUSTER_NAME-${CLUSTER_SUFFIX}" '--format=csv[no-heading](MASTER_IP)') || true
                 fi
                 gcloud container clusters list --filter="name=$CLUSTER_NAME-${CLUSTER_SUFFIX}" --zone $region --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $region --quiet || true
@@ -35,11 +35,12 @@ void createCluster(String CLUSTER_SUFFIX) {
                     --logging=NONE \
                     --no-enable-managed-prometheus \
                     --quiet && \
+                if [[ \${ret_num} -gt 1 ]]; then gcloud container clusters get-credentials  $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone $region; fi && \
                 kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user jenkins@"$GCP_PROJECT".iam.gserviceaccount.com || ret_val=\$?
                 if [ \${ret_val} -eq 0 ]; then break; fi
                 ret_num=\$((ret_num + 1))
             done
-            if [ \${ret_num} -eq 5 ]; then
+            if [ \${ret_num} -eq 5 ]; then 
                 gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone $region --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $region --quiet || true
                 exit 1
             fi
