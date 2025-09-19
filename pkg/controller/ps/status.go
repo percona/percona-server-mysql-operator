@@ -225,6 +225,13 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, error) {
 	log := logf.FromContext(ctx).WithName("groupReplicationStatus")
+
+	// Skip GR readiness check when cluster is paused
+	if cr.Spec.Pause {
+		log.V(1).Info("Skipping GR readiness check - cluster is paused", "cluster", cr.Name, "namespace", cr.Namespace)
+		return false, nil
+	}
+
 	if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
 		log.Info("Not all MySQL pods are ready", "ready", cr.Status.MySQL.Ready, "expected", cr.Spec.MySQL.Size)
 		return false, nil

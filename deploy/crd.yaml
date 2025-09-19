@@ -5014,6 +5014,18 @@ spec:
                 type: string
               enableVolumeExpansion:
                 type: boolean
+              hibernation:
+                properties:
+                  enabled:
+                    type: boolean
+                  schedule:
+                    properties:
+                      pause:
+                        type: string
+                      unpause:
+                        type: string
+                    type: object
+                type: object
               ignoreAnnotations:
                 items:
                   type: string
@@ -13146,6 +13158,31 @@ spec:
                   state:
                     type: string
                   version:
+                    type: string
+                type: object
+              hibernation:
+                properties:
+                  lastPauseTime:
+                    format: date-time
+                    type: string
+                  lastUnpauseTime:
+                    format: date-time
+                    type: string
+                  nextPauseTime:
+                    format: date-time
+                    type: string
+                  nextUnpauseTime:
+                    format: date-time
+                    type: string
+                  reason:
+                    type: string
+                  state:
+                    enum:
+                    - Active
+                    - Paused
+                    - Scheduled
+                    - Blocked
+                    - Disabled
                     type: string
                 type: object
               host:

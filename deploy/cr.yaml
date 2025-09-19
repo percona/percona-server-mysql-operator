@@ -5,7 +5,7 @@ metadata:
   finalizers:
     - percona.com/delete-mysql-pods-in-order
     # - percona.com/delete-ssl
-    # - percona.com/delete-mysql-pvc
+    - percona.com/delete-mysql-pvc
 spec:
 #  metadata:
 #    annotations:
@@ -28,6 +28,11 @@ spec:
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
     apply: disabled
+  hibernation:
+    enabled: true
+    schedule:
+      pause: "55 12 * * 1-5"   # Pause Mon-Fri at 8 PM
+      unpause: "45 12 * * 1-5"  # Unpause Mon-Fri at 8 AM
 #  initContainer:
 #    image: perconalab/percona-server-mysql-operator:main
 #    containerSecurityContext:

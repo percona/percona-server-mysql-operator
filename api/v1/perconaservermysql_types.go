@@ -80,6 +80,7 @@ type PerconaServerMySQLSpec struct {
 	Toolkit                *ToolkitSpec                         `json:"toolkit,omitempty"`
 	UpgradeOptions         UpgradeOptions                       `json:"upgradeOptions,omitempty"`
 	UpdateStrategy         appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	Hibernation            *HibernationSpec                     `json:"hibernation,omitempty"`
 
 	// Deprecated: not supported since v0.12.0. Use initContainer instead
 	InitImage     string            `json:"initImage,omitempty"`
@@ -629,7 +630,8 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	ToolkitVersion string             `json:"toolkitVersion,omitempty"`
 	Conditions     []metav1.Condition `json:"conditions,omitempty"`
 	// +optional
-	Host string `json:"host"`
+	Host        string             `json:"host"`
+	Hibernation *HibernationStatus `json:"hibernation,omitempty"`
 }
 
 func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {
@@ -960,6 +962,13 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.MySQL.VaultSecretName = cr.Name + "-vault"
 	}
 
+	// Validate hibernation configuration
+	if cr.Spec.Hibernation != nil {
+		if err := cr.Spec.Hibernation.Validate(); err != nil {
+			return errors.Wrap(err, "invalid hibernation configuration")
+		}
+	}
+
 	return nil
 }
 
@@ -1200,6 +1209,36 @@ func (cr *PerconaServerMySQL) PVCResizeInProgress() bool {
 	return ok
 }
 
+// Validate validates the hibernation specification.
+func (h *HibernationSpec) Validate() error {
+	if h == nil || !h.Enabled {
+		return nil
+	}
+
+	if h.Schedule.Pause != "" {
+		if _, err := cron.ParseStandard(h.Schedule.Pause); err != nil {
+			return errors.Wrap(err, "invalid pause schedule")
+		}
+	}
+
+	if h.Schedule.Unpause != "" {
+		if _, err := cron.ParseStandard(h.Schedule.Unpause); err != nil {
+			return errors.Wrap(err, "invalid unpause schedule")
+		}
+	}
+
+	if h.Schedule.Pause == "" && h.Schedule.Unpause == "" {
+		return errors.New("at least one schedule (pause or unpause) must be specified when hibernation is enabled")
+	}
+
+	return nil
+}
+
+// IsHibernationEnabled checks if hibernation is enabled.
+func (cr *PerconaServerMySQL) IsHibernationEnabled() bool {
+	return cr.Spec.Hibernation != nil && cr.Spec.Hibernation.Enabled
+}
+
 // Registers PerconaServerMySQL types with the SchemeBuilder.
 func init() {
 	SchemeBuilder.Register(&PerconaServerMySQL{}, &PerconaServerMySQLList{})
@@ -1213,9 +1252,37 @@ type UpgradeOptions struct {
 	Apply                  string `json:"apply,omitempty"`
 }
 
+type HibernationSpec struct {
+	Enabled  bool                `json:"enabled,omitempty"`
+	Schedule HibernationSchedule `json:"schedule,omitempty"`
+}
+
+type HibernationSchedule struct {
+	Pause   string `json:"pause,omitempty"`   // Cron expression for pause (minute hour day month weekday)
+	Unpause string `json:"unpause,omitempty"` // Cron expression for unpause (minute hour day month weekday)
+}
+
+type HibernationStatus struct {
+	// State indicates the current hibernation state of the cluster
+	// +kubebuilder:validation:Enum=Active;Paused;Scheduled;Blocked;Disabled
+	State           string       `json:"state,omitempty"`           // Current hibernation state
+	LastPauseTime   *metav1.Time `json:"lastPauseTime,omitempty"`   // When cluster was last paused
+	LastUnpauseTime *metav1.Time `json:"lastUnpauseTime,omitempty"` // When cluster was last unpaused
+	NextPauseTime   *metav1.Time `json:"nextPauseTime,omitempty"`   // When cluster will be paused next
+	NextUnpauseTime *metav1.Time `json:"nextUnpauseTime,omitempty"` // When cluster will be unpaused next
+	Reason          string       `json:"reason,omitempty"`          // Why pause was skipped or additional info
+}
+
 const (
 	UpgradeStrategyDisabled    = "disabled"
 	UpgradeStrategyNever       = "never"
 	UpgradeStrategyRecommended = "recommended"
-	UpgradeStrategyLatest      = "latest"
+
+	// Hibernation states
+	HibernationStateActive    = "Active"    // Cluster is running normally
+	HibernationStatePaused    = "Paused"    // Cluster is paused by hibernation
+	HibernationStateScheduled = "Scheduled" // Hibernation is scheduled but not yet active
+	HibernationStateBlocked   = "Blocked"   // Hibernation is blocked by active operations
+	HibernationStateDisabled  = "Disabled"  // Hibernation is disabled
+	UpgradeStrategyLatest     = "latest"
 )
