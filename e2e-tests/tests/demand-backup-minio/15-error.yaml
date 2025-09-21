@@ -1,0 +1,9 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: demand-backup-minio
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+status:
+  status:
+    state: initializing
