@@ -184,7 +184,6 @@ metadata:
       }
       ]
     capabilities: Basic Install
-    olm.operatorNamespace: openshift-operators
     containerImage: 'docker.io/percona/percona-server-mysql-operator:0.12.0'
     categories: Database
     description: 'Percona Operator for MySQL based on Percona Server for MySQL automates the creation and management of highly available, enterprise-ready MySQL database clusters on Kubernetes.'
@@ -194,22 +193,20 @@ spec:
   customresourcedefinitions:
     owned:
       - description: PerconaServerMySQLBackup is the Schema for the perconaservermysqlbackups API
-        displayName: Percona Server My SQLBackup
+        displayName: Percona Server MySQL Backup
         kind: PerconaServerMySQLBackup
         name: perconaservermysqlbackups.ps.percona.com
         version: v1
       - description: PerconaServerMySQLRestore is the Schema for the perconaservermysqlrestores API
-        displayName: Percona Server My SQLRestore
+        displayName: Percona Server MySQL Restore
         kind: PerconaServerMySQLRestore
         name: perconaservermysqlrestores.ps.percona.com
         version: v1
       - description: PerconaServerMySQL is the Schema for the perconaservermysqls API
-        displayName: Percona Server My SQL
+        displayName: Percona Server MySQL
         kind: PerconaServerMySQL
         name: perconaservermysqls.ps.percona.com
         version: v1
-  cleanup:
-    enabled: false
   apiservicedefinitions: {}
   keywords:
     - mysql
