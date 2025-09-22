@@ -12,24 +12,18 @@ import (
 func TestCheckNSetDefaults(t *testing.T) {
 	t.Run("empty cr", func(t *testing.T) {
 		cr := new(PerconaServerMySQL)
-		expectedErr := "backup.image can't be empty"
 
 		err := cr.CheckNSetDefaults(t.Context(), nil)
-		if err.Error() != expectedErr {
-			t.Errorf("unexpected err: %s", err.Error())
-		}
+		assert.EqualError(t, err, "backup.image can't be empty")
 	})
 	t.Run("with backup image", func(t *testing.T) {
 		cr := new(PerconaServerMySQL)
 		cr.Spec.Backup = &BackupSpec{
 			Image: "backup-image",
 		}
-		expectedErr := "reconcile mysql volumeSpec: volumeSpec provided is nil"
 
 		err := cr.CheckNSetDefaults(t.Context(), nil)
-		if err.Error() != expectedErr {
-			t.Errorf("unexpected err: %s", err.Error())
-		}
+		assert.EqualError(t, err, "reconcile mysql volumeSpec: volumeSpec provided is nil")
 	})
 	t.Run("with backup image and volume spec", func(t *testing.T) {
 		cr := new(PerconaServerMySQL)
@@ -50,9 +44,7 @@ func TestCheckNSetDefaults(t *testing.T) {
 		}
 
 		err := cr.CheckNSetDefaults(t.Context(), nil)
-		if err != nil {
-			t.Errorf("unexpected err: %s", err.Error())
-		}
+		assert.NoError(t, err)
 	})
 }
 

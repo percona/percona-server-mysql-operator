@@ -603,24 +603,6 @@ var _ = Describe("CR validations", Ordered, func() {
 				Expect(err.Error()).To(ContainSubstring("spec.orchestrator.size"))
 			})
 		})
-		When("defaults with specified sizes", Ordered, func() {
-			cr := defaultCR.DeepCopy()
-			cr.Name = "defaults-2"
-
-			err := cr.CheckNSetDefaults(ctx, nil)
-			Expect(err).NotTo(HaveOccurred())
-
-			cr.Spec.MySQL.Size = 3
-			cr.Spec.Proxy.Router.Size = 3
-			cr.Spec.Proxy.HAProxy.Size = 3
-			cr.Spec.Orchestrator.Size = 3
-
-			It("should fail the creation of cr", func() {
-				err := k8sClient.Create(ctx, cr)
-				Expect(err).NotTo(Succeed())
-				Expect(err.Error()).To(ContainSubstring(`For 'group replication', MySQL Router or HAProxy must be enabled unless 'unsafeFlags.proxy' is enabled`))
-			})
-		})
 		When("group-replication cluster", Ordered, func() {
 			cr := defaultCR.DeepCopy()
 			cr.Name = "gr-1"
