@@ -143,26 +143,25 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 func TestStateDescCleanup(t *testing.T) {
 	ctx := t.Context()
 	scheme := runtime.NewScheme()
-	if err := clientgoscheme.AddToScheme(scheme); err != nil {
-		t.Fatal(err, "failed to add client-go scheme")
-	}
-	if err := apiv1.AddToScheme(scheme); err != nil {
-		t.Fatal(err, "failed to add apis scheme")
-	}
+
+	err := clientgoscheme.AddToScheme(scheme)
+	require.NoError(t, err)
+
+	err = apiv1.AddToScheme(scheme)
+	require.NoError(t, err)
+
 	const namespace = "state-desc-cleanup"
 	const storageName = "s3-us-west"
 
 	cluster, err := readDefaultCR("ps-cluster1", namespace)
-	if err != nil {
-		t.Fatal(err, "failed to read default cr")
-	}
+	require.NoError(t, err)
+
 	cluster.Status.MySQL.State = apiv1.StateReady
 	cluster.Spec.InitContainer.Image = "init-image"
 
 	cr, err := readDefaultCRBackup("some-name", namespace)
-	if err != nil {
-		t.Fatal(err, "failed to read default backup")
-	}
+	require.NoError(t, err)
+
 	cr.Spec.ClusterName = cluster.Name
 	cr.Spec.StorageName = storageName
 
@@ -184,9 +183,10 @@ func TestStateDescCleanup(t *testing.T) {
 	})
 
 	tests := []struct {
-		name      string
-		cr        *apiv1.PerconaServerMySQLBackup
-		failedJob bool
+		name          string
+		cr            *apiv1.PerconaServerMySQLBackup
+		expectedState apiv1.BackupState
+		failedJob     bool
 	}{
 		{
 			name: "clean description on success",
@@ -194,6 +194,7 @@ func TestStateDescCleanup(t *testing.T) {
 				cr.Status.State = apiv1.BackupRunning
 				cr.Status.StateDesc = "to-delete"
 			}),
+			expectedState: apiv1.BackupSucceeded,
 		},
 		{
 			name: "clean description on fail",
@@ -201,7 +202,8 @@ func TestStateDescCleanup(t *testing.T) {
 				cr.Status.State = apiv1.BackupRunning
 				cr.Status.StateDesc = "to-delete"
 			}),
-			failedJob: true,
+			failedJob:     true,
+			expectedState: apiv1.BackupFailed,
 		},
 	}
 
@@ -216,9 +218,8 @@ func TestStateDescCleanup(t *testing.T) {
 			}
 
 			job, err := xtrabackup.Job(cluster.DeepCopy(), tt.cr, "dest", "init-image", storage)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
+
 			job.Status.Conditions = append(job.Status.Conditions, cond)
 
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr, cluster.DeepCopy(), s3Secret, userSecret, job).WithStatusSubresource(tt.cr, cluster.DeepCopy(), s3Secret, job)
@@ -229,22 +230,18 @@ func TestStateDescCleanup(t *testing.T) {
 			}
 
 			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 
 			cr := new(apiv1.PerconaServerMySQLBackup)
-			if err := r.Get(ctx, types.NamespacedName{Name: tt.cr.Name, Namespace: tt.cr.Namespace}, cr); err != nil {
-				t.Fatal(err)
-			}
+			err = r.Get(ctx, types.NamespacedName{Name: tt.cr.Name, Namespace: tt.cr.Namespace}, cr)
+			require.NoError(t, err)
 
 			if cr.Status.State != apiv1.BackupFailed && cr.Status.State != apiv1.BackupSucceeded {
 				t.Fatalf("wrong test setup. backup should succeeded or failed. Got: %s", cr.Status.State)
 			}
 
-			if cr.Status.StateDesc != "" {
-				t.Fatal("state desc should be empty")
-			}
+			assert.Equal(t, cr.Status.State, tt.expectedState)
+			assert.Empty(t, cr.Status.StateDesc)
 		})
 	}
 }
