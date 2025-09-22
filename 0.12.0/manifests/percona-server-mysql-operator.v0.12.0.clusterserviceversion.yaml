@@ -422,7 +422,7 @@ spec:
               - create
               - update
               - patch
-              - delete 
+              - delete
           serviceAccountName: percona-server-mysql-operator
       permissions:
         - rules:
