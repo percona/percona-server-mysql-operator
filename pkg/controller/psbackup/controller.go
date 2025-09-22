@@ -477,12 +477,6 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 	}
 	log := logf.FromContext(ctx).WithName("checkFinalizers")
 
-	defer func() {
-		if err := r.Update(ctx, cr); err != nil {
-			log.Error(err, "failed to update finalizers for backup", "backup", cr.Name)
-		}
-	}()
-
 	switch cr.Status.State {
 	case apiv1.BackupError, apiv1.BackupNew:
 		cr.Finalizers = nil
@@ -508,6 +502,10 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 		}
 	}
 	cr.Finalizers = finalizers.List()
+
+	if err := r.Update(ctx, cr); err != nil {
+		log.Error(err, "failed to update finalizers for backup", "backup", cr.Name)
+	}
 }
 
 func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) (bool, error) {

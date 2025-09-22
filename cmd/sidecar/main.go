@@ -214,7 +214,7 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	backupName := path[2]
-	log = log.WithValues("namespace", ns, "name", backupName)
+	log := log.WithValues("namespace", ns, "name", backupName)
 	data, err := io.ReadAll(req.Body)
 	if err != nil {
 		log.Error(err, "failed to read request data")
@@ -230,9 +230,21 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	exists, err := backupExists(req.Context(), &backupConf)
+	if err != nil {
+		log.Error(err, "failed to check if backup exists")
+		http.Error(w, "delete failed", http.StatusBadRequest)
+		return
+	}
+
+	if !exists {
+		log.Info("Backup doesn't exist during deletion", "destination", backupConf.Destination, "storage", backupConf.Type)
+		return
+	}
+
 	if err := deleteBackup(req.Context(), &backupConf, backupName); err != nil {
 		log.Error(err, "failed to delete backup")
-		http.Error(w, "delete failed", http.StatusInternalServerError)
+		http.Error(w, "delete failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -371,7 +383,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	backupName := path[2]
-	log = log.WithValues("namespace", ns, "name", backupName)
+	log := log.WithValues("namespace", ns, "name", backupName)
 
 	data, err := io.ReadAll(req.Body)
 	if err != nil {
