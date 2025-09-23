@@ -37,6 +37,39 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    deprecated: true
+    deprecationWarning: ps.percona.com/v1alpha1 is deprecated and removed in v0.12.0; see release notes for instructions to migrate to ps.percona.com/v1
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: false
+    subresources:
+      status: {}
+  - additionalPrinterColumns:
+    - jsonPath: .spec.storageName
+      name: Storage
+      type: string
+    - jsonPath: .status.destination
+      name: Destination
+      type: string
+    - jsonPath: .status.state
+      name: State
+      type: string
+    - jsonPath: .status.completed
+      name: Completed
+      type: date
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1
     schema:
       openAPIV3Schema:
@@ -1186,6 +1219,30 @@ spec:
     singular: perconaservermysqlrestore
   scope: Namespaced
   versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.state
+      name: State
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    deprecated: true
+    deprecationWarning: ps.percona.com/v1alpha1 is deprecated and removed in v0.12.0; see release notes for instructions to migrate to ps.percona.com/v1
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: false
+    subresources:
+      status: {}
   - additionalPrinterColumns:
     - jsonPath: .status.state
       name: State
@@ -2349,6 +2406,48 @@ spec:
     singular: perconaservermysql
   scope: Namespaced
   versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.mysql.clusterType
+      name: Replication
+      type: string
+    - jsonPath: .status.host
+      name: Endpoint
+      type: string
+    - jsonPath: .status.state
+      name: State
+      type: string
+    - jsonPath: .status.mysql.ready
+      name: MySQL
+      type: string
+    - jsonPath: .status.orchestrator.ready
+      name: Orchestrator
+      type: string
+    - jsonPath: .status.haproxy.ready
+      name: HAProxy
+      type: string
+    - jsonPath: .status.router.ready
+      name: Router
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    deprecated: true
+    deprecationWarning: ps.percona.com/v1alpha1 is deprecated and removed in v0.12.0; see release notes for instructions to migrate to ps.percona.com/v1
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: false
+    subresources:
+      status: {}
   - additionalPrinterColumns:
     - jsonPath: .spec.mysql.clusterType
       name: Replication
