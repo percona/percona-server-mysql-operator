@@ -1527,7 +1527,7 @@ func BenchmarkHibernationScheduleParsing(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = time.Parse("0 20 * * 1-5", schedule)
+		_, _ = cron.ParseStandard(schedule)
 	}
 }
 
