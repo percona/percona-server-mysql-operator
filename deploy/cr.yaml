@@ -20,7 +20,7 @@ spec:
 #    proxy: false
 #    proxySize: false
 #  pause: false
-  crVersion: 0.12.0
+  crVersion: 1.0.0
 #  enableVolumeExpansion: false
   secretsName: ps-cluster1-secrets
   sslSecretName: ps-cluster1-ssl
