@@ -54,7 +54,7 @@ func (r *PerconaServerMySQLHibernationReconciler) Reconcile(ctx context.Context,
 
 	// Fetch the PerconaServerMySQL instance
 	cr := &apiv1.PerconaServerMySQL{}
-	if err := r.Client.Get(ctx, req.NamespacedName, cr); err != nil {
+	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -205,7 +205,7 @@ func (r *PerconaServerMySQLHibernationReconciler) scheduleHibernationForNextWind
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		// Get fresh copy of the cluster
 		fresh := &apiv1.PerconaServerMySQL{}
-		if err := r.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, fresh); err != nil {
+		if err := r.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, fresh); err != nil {
 			log.Error(err, "Failed to get fresh cluster copy for next window scheduling", "cluster", cr.Name, "namespace", cr.Namespace)
 			return err
 		}
@@ -262,7 +262,7 @@ func (r *PerconaServerMySQLHibernationReconciler) synchronizeHibernationState(ct
 
 	// Get fresh copy of the cluster to check current state
 	fresh := &apiv1.PerconaServerMySQL{}
-	if err := r.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, fresh); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, fresh); err != nil {
 		return err
 	}
 
@@ -809,10 +809,10 @@ func (r *PerconaServerMySQLHibernationReconciler) updateHibernationScheduleIfCha
 					// Check if the new schedule time is very close in the future (within 5 minutes)
 					// This handles the case where user changes schedule to a time very close to now
 					now := time.Now()
-					if expectedNextPauseTime.Time.After(now) && expectedNextPauseTime.Time.Sub(now) <= 5*time.Minute {
+					if expectedNextPauseTime.After(now) && expectedNextPauseTime.Sub(now) <= 5*time.Minute {
 						needsUpdate = true
 						log.Info("Schedule changed to very near future time, updating to pause soon", "cluster", cr.Name, "namespace", cr.Namespace,
-							"oldTime", currentNextPauseTime, "newTime", expectedNextPauseTime, "timeUntilPause", expectedNextPauseTime.Time.Sub(now))
+							"oldTime", currentNextPauseTime, "newTime", expectedNextPauseTime, "timeUntilPause", expectedNextPauseTime.Sub(now))
 					}
 				}
 			}
@@ -841,10 +841,10 @@ func (r *PerconaServerMySQLHibernationReconciler) updateHibernationScheduleIfCha
 					// Check if the new schedule time is very close in the future (within 5 minutes)
 					// This handles the case where user changes schedule to a time very close to now
 					now := time.Now()
-					if expectedNextUnpauseTime.Time.After(now) && expectedNextUnpauseTime.Time.Sub(now) <= 5*time.Minute {
+					if expectedNextUnpauseTime.After(now) && expectedNextUnpauseTime.Sub(now) <= 5*time.Minute {
 						needsUpdate = true
 						log.Info("Unpause schedule changed to very near future time, updating to unpause soon", "cluster", cr.Name, "namespace", cr.Namespace,
-							"oldTime", currentNextUnpauseTime, "newTime", expectedNextUnpauseTime, "timeUntilUnpause", expectedNextUnpauseTime.Time.Sub(now))
+							"oldTime", currentNextUnpauseTime, "newTime", expectedNextUnpauseTime, "timeUntilUnpause", expectedNextUnpauseTime.Sub(now))
 					}
 				}
 			}
