@@ -582,7 +582,7 @@ func (r *PerconaServerMySQLHibernationReconciler) pauseCluster(ctx context.Conte
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		// Get fresh copy of the cluster
 		fresh := &apiv1.PerconaServerMySQL{}
-		if err := r.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, fresh); err != nil {
+		if err := r.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, fresh); err != nil {
 			log.Error(err, "Failed to get fresh cluster copy", "cluster", cr.Name, "namespace", cr.Namespace)
 			return err
 		}
@@ -591,7 +591,7 @@ func (r *PerconaServerMySQLHibernationReconciler) pauseCluster(ctx context.Conte
 		fresh.Spec.Pause = true
 
 		// Update the cluster
-		if err := r.Client.Update(ctx, fresh); err != nil {
+		if err := r.Update(ctx, fresh); err != nil {
 			log.Error(err, "Failed to update cluster spec", "cluster", cr.Name, "namespace", cr.Namespace)
 			return err
 		}
@@ -632,7 +632,7 @@ func (r *PerconaServerMySQLHibernationReconciler) unpauseCluster(ctx context.Con
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		// Get fresh copy of the cluster
 		fresh := &apiv1.PerconaServerMySQL{}
-		if err := r.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, fresh); err != nil {
+		if err := r.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, fresh); err != nil {
 			log.Error(err, "Failed to get fresh cluster copy", "cluster", cr.Name, "namespace", cr.Namespace)
 			return err
 		}
@@ -641,7 +641,7 @@ func (r *PerconaServerMySQLHibernationReconciler) unpauseCluster(ctx context.Con
 		fresh.Spec.Pause = false
 
 		// Update the cluster
-		if err := r.Client.Update(ctx, fresh); err != nil {
+		if err := r.Update(ctx, fresh); err != nil {
 			log.Error(err, "Failed to update cluster spec", "cluster", cr.Name, "namespace", cr.Namespace)
 			return err
 		}
@@ -682,7 +682,7 @@ func (r *PerconaServerMySQLHibernationReconciler) updateHibernationState(ctx con
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		// Get fresh copy of the cluster
 		fresh := &apiv1.PerconaServerMySQL{}
-		if err := r.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, fresh); err != nil {
+		if err := r.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, fresh); err != nil {
 			log.Error(err, "Failed to get fresh cluster copy for status update", "cluster", cr.Name, "namespace", cr.Namespace)
 			return err
 		}
@@ -725,7 +725,7 @@ func (r *PerconaServerMySQLHibernationReconciler) initializeHibernationStatus(ct
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		// Get fresh copy of the cluster
 		fresh := &apiv1.PerconaServerMySQL{}
-		if err := r.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, fresh); err != nil {
+		if err := r.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, fresh); err != nil {
 			log.Error(err, "Failed to get fresh cluster copy for status initialization", "cluster", cr.Name, "namespace", cr.Namespace)
 			return err
 		}
@@ -866,7 +866,7 @@ func (r *PerconaServerMySQLHibernationReconciler) updateHibernationNextTimes(ctx
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		// Get fresh copy of the cluster
 		fresh := &apiv1.PerconaServerMySQL{}
-		if err := r.Client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, fresh); err != nil {
+		if err := r.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, fresh); err != nil {
 			log.Error(err, "Failed to get fresh cluster copy for schedule update", "cluster", cr.Name, "namespace", cr.Namespace)
 			return err
 		}

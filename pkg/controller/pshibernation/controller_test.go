@@ -798,7 +798,7 @@ func TestPerconaServerMySQLHibernationReconciler_shouldUnpauseCluster(t *testing
 					t.Logf("  Schedule: %s", tt.schedule)
 					t.Logf("  Current time: %s", tt.now.Format(time.RFC3339))
 					if tt.cr.Status.Hibernation != nil && tt.cr.Status.Hibernation.LastPauseTime != nil {
-						t.Logf("  LastPauseTime: %s", tt.cr.Status.Hibernation.LastPauseTime.Time.Format(time.RFC3339))
+						t.Logf("  LastPauseTime: %s", tt.cr.Status.Hibernation.LastPauseTime.Format(time.RFC3339))
 					}
 				}
 				assert.Equal(t, tt.expectedResult, result)
