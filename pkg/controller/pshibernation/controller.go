@@ -75,19 +75,30 @@ func (r *PerconaServerMySQLHibernationReconciler) Reconcile(ctx context.Context,
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, err
 	}
 
-	// Skip hibernation processing if cluster is still initializing
-	// This prevents hibernation state from flipping during cluster startup
-	if cr.Status.State == apiv1.StateInitializing {
+	// Skip hibernation processing if cluster is still initializing or in error state
+	// This prevents hibernation state from flipping during cluster startup/recovery
+	// BUT we need to proactively schedule for next window if the scheduled time is approaching or has passed
+	if cr.Status.State == apiv1.StateInitializing || cr.Status.State == apiv1.StateError {
+		// Proactively check and update nextPauseTime to next window if needed
+		if err := r.proactivelyScheduleForNextWindow(ctx, cr); err != nil {
+			log.Error(err, "Failed to proactively schedule for next window during cluster issues", "cluster", cr.Name, "namespace", cr.Namespace, "state", cr.Status.State)
+		}
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
+	// When cluster becomes ready, check if we need to proactively schedule for next window
+	// This handles the case where the cluster was unready during the scheduled time
+	if cr.Status.State == apiv1.StateReady {
+		if err := r.proactivelyScheduleForNextWindow(ctx, cr); err != nil {
+			log.Error(err, "Failed to proactively schedule for next window when cluster became ready", "cluster", cr.Name, "namespace", cr.Namespace)
+		}
+	}
+
 	// Process hibernation logic
-	log.Info("🔄 DEBUG: About to call processHibernation", "cluster", cr.Name, "namespace", cr.Namespace)
 	if err := r.processHibernation(ctx, cr); err != nil {
 		log.Error(err, "Failed to process hibernation", "cluster", cr.Name, "namespace", cr.Namespace)
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
-	log.Info("✅ DEBUG: processHibernation completed successfully", "cluster", cr.Name, "namespace", cr.Namespace)
 
 	// Requeue after 1 minute to check again
 	return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
@@ -99,18 +110,13 @@ func (r *PerconaServerMySQLHibernationReconciler) processHibernation(ctx context
 	now := time.Now()
 	hibernation := cr.Spec.Hibernation
 
-	log.Info("🔄 DEBUG: processHibernation started", "cluster", cr.Name, "namespace", cr.Namespace, "currentTime", now.Format("15:04:05"))
-
 	// Check if it's time to pause
 	if hibernation.Schedule.Pause != "" {
-		log.Info("🔄 DEBUG: Checking pause schedule", "cluster", cr.Name, "namespace", cr.Namespace, "schedule", hibernation.Schedule.Pause)
 		if shouldPause, err := r.shouldPauseCluster(ctx, cr, hibernation.Schedule.Pause, now); err != nil {
 			log.Error(err, "Failed to check pause schedule", "cluster", cr.Name, "namespace", cr.Namespace, "schedule", hibernation.Schedule.Pause)
 			return errors.Wrap(err, "failed to check pause schedule")
 		} else {
-			log.Info("🔄 DEBUG: shouldPauseCluster result", "cluster", cr.Name, "namespace", cr.Namespace, "shouldPause", shouldPause)
 			if shouldPause {
-				log.Info("🔄 DEBUG: Should pause cluster", "cluster", cr.Name, "namespace", cr.Namespace)
 				if canPause, reason, err := r.canPauseCluster(ctx, cr); err != nil {
 					log.Error(err, "Failed to check if cluster can be paused", "cluster", cr.Name, "namespace", cr.Namespace)
 					return errors.Wrap(err, "failed to check if cluster can be paused")
@@ -119,20 +125,26 @@ func (r *PerconaServerMySQLHibernationReconciler) processHibernation(ctx context
 						log.Error(err, "Failed to pause cluster", "cluster", cr.Name, "namespace", cr.Namespace)
 						return errors.Wrap(err, "failed to pause cluster")
 					}
-					log.Info("✅ Cluster paused by hibernation", "cluster", cr.Name, "namespace", cr.Namespace, "schedule", hibernation.Schedule.Pause)
+					log.Info("Cluster paused by hibernation", "cluster", cr.Name, "namespace", cr.Namespace, "schedule", hibernation.Schedule.Pause)
 				} else {
-					// Check if the reason is cluster not ready - if so, schedule for next window
-					if strings.Contains(reason, "cluster not ready") {
-						log.Info("⏰ Cluster not ready, scheduling hibernation for next window", "cluster", cr.Name, "namespace", cr.Namespace, "reason", reason, "schedule", hibernation.Schedule.Pause)
+					// Check if the reason is cluster not ready or active operations - if so, schedule for next window
+					if strings.Contains(reason, "cluster not ready") || strings.Contains(reason, "active backup") || strings.Contains(reason, "active restore") {
+						log.Info("Cluster not ready or active operations, scheduling hibernation for next window", "cluster", cr.Name, "namespace", cr.Namespace, "reason", reason, "schedule", hibernation.Schedule.Pause)
 						if err := r.scheduleHibernationForNextWindow(ctx, cr, hibernation.Schedule.Pause, reason); err != nil {
 							log.Error(err, "Failed to schedule hibernation for next window", "cluster", cr.Name, "namespace", cr.Namespace)
 						}
 					} else {
-						log.Info("⚠️ Skipped pause due to active operations", "cluster", cr.Name, "namespace", cr.Namespace, "reason", reason, "schedule", hibernation.Schedule.Pause)
+						log.Info("⚠️ Skipped pause due to other reasons", "cluster", cr.Name, "namespace", cr.Namespace, "reason", reason, "schedule", hibernation.Schedule.Pause)
 						if err := r.updateHibernationState(ctx, cr, apiv1.HibernationStateBlocked, reason); err != nil {
 							log.Error(err, "Failed to update hibernation status", "cluster", cr.Name, "namespace", cr.Namespace)
 						}
 					}
+				}
+			} else {
+				// shouldPauseCluster returned false - check if we need to schedule for next window
+				// This handles the case where the scheduled time has passed beyond the 5-minute window
+				if err := r.checkAndScheduleForNextWindow(ctx, cr, hibernation.Schedule.Pause, now); err != nil {
+					log.Error(err, "Failed to check and schedule for next window", "cluster", cr.Name, "namespace", cr.Namespace)
 				}
 			}
 		}
@@ -140,17 +152,17 @@ func (r *PerconaServerMySQLHibernationReconciler) processHibernation(ctx context
 
 	// Check if it's time to unpause
 	if hibernation.Schedule.Unpause != "" {
-		log.Info("🔄 DEBUG: Checking unpause schedule", "cluster", cr.Name, "namespace", cr.Namespace, "schedule", hibernation.Schedule.Unpause)
 		if shouldUnpause, err := r.shouldUnpauseCluster(ctx, cr, hibernation.Schedule.Unpause, now); err != nil {
 			log.Error(err, "Failed to check unpause schedule", "cluster", cr.Name, "namespace", cr.Namespace, "schedule", hibernation.Schedule.Unpause)
 			return errors.Wrap(err, "failed to check unpause schedule")
-		} else if shouldUnpause {
-			log.Info("🔄 DEBUG: Should unpause cluster", "cluster", cr.Name, "namespace", cr.Namespace)
-			if err := r.unpauseCluster(ctx, cr); err != nil {
-				log.Error(err, "Failed to unpause cluster", "cluster", cr.Name, "namespace", cr.Namespace)
-				return errors.Wrap(err, "failed to unpause cluster")
+		} else {
+			if shouldUnpause {
+				if err := r.unpauseCluster(ctx, cr); err != nil {
+					log.Error(err, "Failed to unpause cluster", "cluster", cr.Name, "namespace", cr.Namespace)
+					return errors.Wrap(err, "failed to unpause cluster")
+				}
+				log.Info("Cluster unpaused by hibernation", "cluster", cr.Name, "namespace", cr.Namespace, "schedule", hibernation.Schedule.Unpause)
 			}
-			log.Info("✅ Cluster unpaused by hibernation", "cluster", cr.Name, "namespace", cr.Namespace, "schedule", hibernation.Schedule.Unpause)
 		}
 	}
 
@@ -169,7 +181,7 @@ func (r *PerconaServerMySQLHibernationReconciler) processHibernation(ctx context
 			if cr.Spec.Hibernation.Schedule.Unpause != "" {
 				unpauseSchedule = cr.Spec.Hibernation.Schedule.Unpause
 			}
-			log.Info("🔄 Hibernation enabled", "cluster", cr.Name, "namespace", cr.Namespace,
+			log.Info("Hibernation enabled", "cluster", cr.Name, "namespace", cr.Namespace,
 				"pauseSchedule", pauseSchedule, "unpauseSchedule", unpauseSchedule)
 		}
 
@@ -211,11 +223,21 @@ func (r *PerconaServerMySQLHibernationReconciler) scheduleHibernationForNextWind
 		}
 
 		// Calculate next available window (tomorrow's schedule)
-		now := time.Now()
+		now := time.Now().UTC()
 		nextWindow := r.calculateNextScheduleTime(now, cronSchedule)
 
 		// Update the next pause time to the next window
 		fresh.Status.Hibernation.NextPauseTime = &nextWindow
+
+		// Also update the unpause time to the next window if unpause schedule exists
+		// BUT only if the cluster is not currently paused (to avoid overriding today's unpause time)
+		if fresh.Spec.Hibernation != nil && fresh.Spec.Hibernation.Schedule.Unpause != "" && !fresh.Spec.Pause {
+			if unpauseCronSchedule, err := cron.ParseStandard(fresh.Spec.Hibernation.Schedule.Unpause); err == nil {
+				nextUnpauseWindow := r.calculateNextScheduleTime(now, unpauseCronSchedule)
+				fresh.Status.Hibernation.NextUnpauseTime = &nextUnpauseWindow
+				log.Info("Also updated next unpause time for next window", "cluster", cr.Name, "namespace", cr.Namespace, "nextUnpauseWindow", nextUnpauseWindow)
+			}
+		}
 
 		// Set state to indicate we're waiting for next window
 		fresh.Status.Hibernation.State = apiv1.HibernationStateScheduled
@@ -227,7 +249,7 @@ func (r *PerconaServerMySQLHibernationReconciler) scheduleHibernationForNextWind
 			return err
 		}
 
-		log.Info("📅 Hibernation scheduled for next window", "cluster", cr.Name, "namespace", cr.Namespace,
+		log.Info("Hibernation scheduled for next window", "cluster", cr.Name, "namespace", cr.Namespace,
 			"nextWindow", nextWindow, "reason", reason)
 
 		return nil
@@ -259,12 +281,17 @@ func (r *PerconaServerMySQLHibernationReconciler) synchronizeHibernationState(ct
 	if isClusterPaused {
 		expectedState = apiv1.HibernationStatePaused
 	} else {
-		expectedState = apiv1.HibernationStateActive
+		// If hibernation state is Scheduled, preserve it - don't change to Active
+		if currentHibernationState == apiv1.HibernationStateScheduled {
+			expectedState = apiv1.HibernationStateScheduled
+		} else {
+			expectedState = apiv1.HibernationStateActive
+		}
 	}
 
 	// Update hibernation state if it doesn't match the actual cluster state
 	if currentHibernationState != expectedState {
-		log.Info("🔄 Synchronizing hibernation state with cluster state",
+		log.Info("Synchronizing hibernation state with cluster state",
 			"cluster", cr.Name, "namespace", cr.Namespace,
 			"clusterState", fresh.Status.State,
 			"currentHibernationState", currentHibernationState,
@@ -294,6 +321,24 @@ func (r *PerconaServerMySQLHibernationReconciler) shouldPauseCluster(ctx context
 		return false, nil
 	}
 
+	// Check if hibernation is scheduled for next window - if so, don't pause until that time
+	if cr.Status.Hibernation != nil && cr.Status.Hibernation.State == apiv1.HibernationStateScheduled {
+		// If we have a next pause time scheduled, only pause if that time has arrived
+		if cr.Status.Hibernation.NextPauseTime != nil {
+			if now.Before(cr.Status.Hibernation.NextPauseTime.Time) {
+				log.Info("Hibernation scheduled for next window, waiting", "cluster", cr.Name, "namespace", cr.Namespace,
+					"scheduledTime", cr.Status.Hibernation.NextPauseTime.Time, "currentTime", now)
+				return false, nil
+			}
+			// The scheduled time has arrived, we can proceed with pausing
+			log.Info("Scheduled hibernation time has arrived, proceeding with pause", "cluster", cr.Name, "namespace", cr.Namespace,
+				"scheduledTime", cr.Status.Hibernation.NextPauseTime.Time, "currentTime", now)
+		} else {
+			// No next pause time set, but state is scheduled - this shouldn't happen, but be safe
+			return false, nil
+		}
+	}
+
 	// Get reference time for calculating next pause
 	var referenceTime time.Time
 	if cr.Status.Hibernation != nil && cr.Status.Hibernation.LastPauseTime != nil {
@@ -316,12 +361,26 @@ func (r *PerconaServerMySQLHibernationReconciler) shouldPauseCluster(ctx context
 
 		if isToday {
 			// For first-time evaluation, check if the scheduled time has arrived
-			if now.After(todaySchedule) || now.Equal(todaySchedule) {
-				// Scheduled time has arrived, we should pause
+			if now.Before(todaySchedule) {
+				// Scheduled time is in the future, don't pause yet
+				return false, nil
+			}
+			// For first-time evaluation, only pause if we're exactly at the scheduled time
+			// or within a very small window (1 minute) to account for controller reconciliation
+			if now.Equal(todaySchedule) {
+				// If times are equal, we should pause
 				return true, nil
 			}
-			// Scheduled time hasn't arrived yet, don't pause
-			return false, nil
+			// If time has passed, check if it's within a very small window (1 minute)
+			// This is more restrictive for first-time evaluation to prevent immediate pausing
+			if now.After(todaySchedule) {
+				timeSinceSchedule := now.Sub(todaySchedule)
+				if timeSinceSchedule <= 1*time.Minute {
+					return true, nil
+				}
+				// Time has passed beyond the reasonable window, wait for next window
+				return false, nil
+			}
 		}
 
 		// Schedule doesn't apply to today, don't pause
@@ -373,6 +432,24 @@ func (r *PerconaServerMySQLHibernationReconciler) shouldUnpauseCluster(ctx conte
 		return false, nil
 	}
 
+	// Check if hibernation is scheduled for next window - if so, don't unpause until that time
+	if cr.Status.Hibernation != nil && cr.Status.Hibernation.State == apiv1.HibernationStateScheduled {
+		// If we have a next unpause time scheduled, only unpause if that time has arrived
+		if cr.Status.Hibernation.NextUnpauseTime != nil {
+			if now.Before(cr.Status.Hibernation.NextUnpauseTime.Time) {
+				log.Info("Hibernation scheduled for next window, waiting", "cluster", cr.Name, "namespace", cr.Namespace,
+					"scheduledTime", cr.Status.Hibernation.NextUnpauseTime.Time, "currentTime", now)
+				return false, nil
+			}
+			// The scheduled time has arrived, we can proceed with unpausing
+			log.Info("Scheduled hibernation time has arrived, proceeding with unpause", "cluster", cr.Name, "namespace", cr.Namespace,
+				"scheduledTime", cr.Status.Hibernation.NextUnpauseTime.Time, "currentTime", now)
+		} else {
+			// No next unpause time set, but state is scheduled - this shouldn't happen, but be safe
+			return false, nil
+		}
+	}
+
 	// Get reference time for calculating next unpause
 	var referenceTime time.Time
 	if cr.Status.Hibernation != nil && cr.Status.Hibernation.LastUnpauseTime != nil {
@@ -408,11 +485,22 @@ func (r *PerconaServerMySQLHibernationReconciler) shouldUnpauseCluster(ctx conte
 	nextUnpauseTime := cronSchedule.Next(referenceTime)
 	shouldUnpause := now.After(nextUnpauseTime) || now.Equal(nextUnpauseTime)
 
+	// If time has passed, check if it's within a reasonable window (5 minutes)
+	// This accounts for the controller's reconciliation interval
+	if now.After(nextUnpauseTime) && !now.Equal(nextUnpauseTime) {
+		timeSinceSchedule := now.Sub(nextUnpauseTime)
+		if timeSinceSchedule <= 5*time.Minute {
+			shouldUnpause = true
+		} else {
+			shouldUnpause = false
+		}
+	}
+
 	// Additional check: if we have a reference time but current time is after today's scheduled unpause time,
 	// we should still unpause (this handles the case where the cluster was paused earlier today)
 	// BUT only if the reference time is NOT today's scheduled unpause time (to avoid double-unpausing)
-	// AND only if the reference time is a LastUnpauseTime, not a LastPauseTime
-	if !shouldUnpause && referenceTime != (time.Time{}) && cr.Status.Hibernation != nil && cr.Status.Hibernation.LastUnpauseTime != nil {
+	// This works for both LastUnpauseTime and LastPauseTime as reference
+	if !shouldUnpause && referenceTime != (time.Time{}) && cr.Status.Hibernation != nil {
 		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 		todaySchedule := cronSchedule.Next(today.Add(-time.Second))
 		isToday := todaySchedule.Year() == now.Year() &&
@@ -424,8 +512,19 @@ func (r *PerconaServerMySQLHibernationReconciler) shouldUnpauseCluster(ctx conte
 		timeDiff := referenceTime.Sub(todaySchedule)
 		referenceIsTodaySchedule := timeDiff >= -1*time.Minute && timeDiff <= 1*time.Minute
 
-		if isToday && !referenceIsTodaySchedule && (now.After(todaySchedule) || now.Equal(todaySchedule)) {
-			shouldUnpause = true
+		if isToday && !referenceIsTodaySchedule {
+			if now.Equal(todaySchedule) {
+				shouldUnpause = true
+			} else if now.After(todaySchedule) {
+				// For unpause, use a longer window (1 hour) since we want to get the cluster running
+				// This is more lenient than pause operations
+				timeSinceSchedule := now.Sub(todaySchedule)
+				if timeSinceSchedule <= 1*time.Hour {
+					shouldUnpause = true
+				} else {
+					shouldUnpause = false
+				}
+			}
 		}
 	}
 
@@ -451,7 +550,7 @@ func (r *PerconaServerMySQLHibernationReconciler) canPauseCluster(ctx context.Co
 	for _, backup := range backupList.Items {
 		if backup.Spec.ClusterName == cr.Name {
 			switch backup.Status.State {
-			case apiv1.BackupStarting, apiv1.BackupRunning:
+			case apiv1.BackupStarting, apiv1.BackupRunning, apiv1.BackupNew:
 				return false, fmt.Sprintf("active backup: %s (state: %s)", backup.Name, backup.Status.State), nil
 			}
 		}
@@ -467,7 +566,7 @@ func (r *PerconaServerMySQLHibernationReconciler) canPauseCluster(ctx context.Co
 	for _, restore := range restoreList.Items {
 		if restore.Spec.ClusterName == cr.Name {
 			switch restore.Status.State {
-			case apiv1.RestoreStarting, apiv1.RestoreRunning:
+			case apiv1.RestoreStarting, apiv1.RestoreRunning, apiv1.RestoreNew:
 				return false, fmt.Sprintf("active restore: %s (state: %s)", restore.Name, restore.Status.State), nil
 			}
 		}
@@ -521,7 +620,7 @@ func (r *PerconaServerMySQLHibernationReconciler) pauseCluster(ctx context.Conte
 			return err
 		}
 
-		log.Info("✅ Hibernation status updated after pause", "cluster", cr.Name, "namespace", cr.Namespace, "state", fresh.Status.Hibernation.State, "lastPauseTime", fresh.Status.Hibernation.LastPauseTime)
+		log.Info("Hibernation status updated after pause", "cluster", cr.Name, "namespace", cr.Namespace, "state", fresh.Status.Hibernation.State, "lastPauseTime", fresh.Status.Hibernation.LastPauseTime)
 		return nil
 	})
 }
@@ -571,7 +670,7 @@ func (r *PerconaServerMySQLHibernationReconciler) unpauseCluster(ctx context.Con
 			return err
 		}
 
-		log.Info("✅ Hibernation status updated after unpause", "cluster", cr.Name, "namespace", cr.Namespace, "state", fresh.Status.Hibernation.State, "lastUnpauseTime", fresh.Status.Hibernation.LastUnpauseTime)
+		log.Info("Hibernation status updated after unpause", "cluster", cr.Name, "namespace", cr.Namespace, "state", fresh.Status.Hibernation.State, "lastUnpauseTime", fresh.Status.Hibernation.LastUnpauseTime)
 		return nil
 	})
 }
@@ -676,11 +775,6 @@ func (r *PerconaServerMySQLHibernationReconciler) initializeHibernationStatus(ct
 	})
 }
 
-// updateHibernationStatus updates the hibernation status with a reason (deprecated, use updateHibernationState)
-func (r *PerconaServerMySQLHibernationReconciler) updateHibernationStatus(ctx context.Context, cr *apiv1.PerconaServerMySQL, reason string) error {
-	return r.updateHibernationState(ctx, cr, "", reason)
-}
-
 // updateHibernationScheduleIfChanged checks if the hibernation schedule has changed and updates next times if needed
 func (r *PerconaServerMySQLHibernationReconciler) updateHibernationScheduleIfChanged(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("updateHibernationScheduleIfChanged")
@@ -697,7 +791,7 @@ func (r *PerconaServerMySQLHibernationReconciler) updateHibernationScheduleIfCha
 	if cr.Spec.Hibernation.Schedule.Pause != "" {
 		if cr.Status.Hibernation.NextPauseTime == nil {
 			needsUpdate = true
-			log.Info("📅 Initializing missing next pause time", "cluster", cr.Name, "namespace", cr.Namespace)
+			log.Info("Initializing missing next pause time", "cluster", cr.Name, "namespace", cr.Namespace)
 		} else {
 			// Check if the schedule string has changed by comparing with current calculated time
 			if cronSchedule, err := cron.ParseStandard(cr.Spec.Hibernation.Schedule.Pause); err == nil {
@@ -709,8 +803,17 @@ func (r *PerconaServerMySQLHibernationReconciler) updateHibernationScheduleIfCha
 				timeDiff := expectedNextPauseTime.Sub(currentNextPauseTime.Time)
 				if timeDiff > time.Hour || timeDiff < -time.Hour {
 					needsUpdate = true
-					log.Info("📅 Pause schedule changed, updating next pause time", "cluster", cr.Name, "namespace", cr.Namespace,
+					log.Info("Pause schedule changed, updating next pause time", "cluster", cr.Name, "namespace", cr.Namespace,
 						"oldTime", currentNextPauseTime, "newTime", expectedNextPauseTime)
+				} else {
+					// Check if the new schedule time is very close in the future (within 5 minutes)
+					// This handles the case where user changes schedule to a time very close to now
+					now := time.Now()
+					if expectedNextPauseTime.Time.After(now) && expectedNextPauseTime.Time.Sub(now) <= 5*time.Minute {
+						needsUpdate = true
+						log.Info("Schedule changed to very near future time, updating to pause soon", "cluster", cr.Name, "namespace", cr.Namespace,
+							"oldTime", currentNextPauseTime, "newTime", expectedNextPauseTime, "timeUntilPause", expectedNextPauseTime.Time.Sub(now))
+					}
 				}
 			}
 		}
@@ -720,7 +823,7 @@ func (r *PerconaServerMySQLHibernationReconciler) updateHibernationScheduleIfCha
 	if cr.Spec.Hibernation.Schedule.Unpause != "" {
 		if cr.Status.Hibernation.NextUnpauseTime == nil {
 			needsUpdate = true
-			log.Info("📅 Initializing missing next unpause time", "cluster", cr.Name, "namespace", cr.Namespace)
+			log.Info("Initializing missing next unpause time", "cluster", cr.Name, "namespace", cr.Namespace)
 		} else {
 			// Check if the schedule string has changed by comparing with current calculated time
 			if cronSchedule, err := cron.ParseStandard(cr.Spec.Hibernation.Schedule.Unpause); err == nil {
@@ -732,8 +835,17 @@ func (r *PerconaServerMySQLHibernationReconciler) updateHibernationScheduleIfCha
 				timeDiff := expectedNextUnpauseTime.Sub(currentNextUnpauseTime.Time)
 				if timeDiff > time.Hour || timeDiff < -time.Hour {
 					needsUpdate = true
-					log.Info("📅 Unpause schedule changed, updating next unpause time", "cluster", cr.Name, "namespace", cr.Namespace,
+					log.Info("Unpause schedule changed, updating next unpause time", "cluster", cr.Name, "namespace", cr.Namespace,
 						"oldTime", currentNextUnpauseTime, "newTime", expectedNextUnpauseTime)
+				} else {
+					// Check if the new schedule time is very close in the future (within 5 minutes)
+					// This handles the case where user changes schedule to a time very close to now
+					now := time.Now()
+					if expectedNextUnpauseTime.Time.After(now) && expectedNextUnpauseTime.Time.Sub(now) <= 5*time.Minute {
+						needsUpdate = true
+						log.Info("Unpause schedule changed to very near future time, updating to unpause soon", "cluster", cr.Name, "namespace", cr.Namespace,
+							"oldTime", currentNextUnpauseTime, "newTime", expectedNextUnpauseTime, "timeUntilUnpause", expectedNextUnpauseTime.Time.Sub(now))
+					}
 				}
 			}
 		}
@@ -792,7 +904,7 @@ func (r *PerconaServerMySQLHibernationReconciler) updateHibernationNextTimes(ctx
 			return err
 		}
 
-		log.Info("✅ Hibernation next times updated", "cluster", cr.Name, "namespace", cr.Namespace,
+		log.Info("Hibernation next times updated", "cluster", cr.Name, "namespace", cr.Namespace,
 			"nextPauseTime", fresh.Status.Hibernation.NextPauseTime,
 			"nextUnpauseTime", fresh.Status.Hibernation.NextUnpauseTime)
 
@@ -800,22 +912,125 @@ func (r *PerconaServerMySQLHibernationReconciler) updateHibernationNextTimes(ctx
 	})
 }
 
+// checkAndScheduleForNextWindow checks if the scheduled time has passed and schedules for next window if needed
+func (r *PerconaServerMySQLHibernationReconciler) checkAndScheduleForNextWindow(ctx context.Context, cr *apiv1.PerconaServerMySQL, schedule string, now time.Time) error {
+	log := logf.FromContext(ctx).WithName("checkAndScheduleForNextWindow")
+
+	// Parse cron schedule
+	cronSchedule, err := cron.ParseStandard(schedule)
+	if err != nil {
+		return errors.Wrap(err, "invalid schedule")
+	}
+
+	// Check if this is a first-time evaluation (no previous pause/unpause times)
+	if cr.Status.Hibernation == nil || (cr.Status.Hibernation.LastPauseTime == nil && cr.Status.Hibernation.LastUnpauseTime == nil) {
+		// Calculate today's scheduled time
+		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		todaySchedule := cronSchedule.Next(today.Add(-time.Second))
+
+		// Check if the schedule applies to today
+		isToday := todaySchedule.Year() == now.Year() &&
+			todaySchedule.Month() == now.Month() &&
+			todaySchedule.Day() == now.Day()
+
+		if isToday {
+			// Check if the scheduled time has passed beyond the 5-minute window
+			if now.After(todaySchedule) {
+				timeSinceSchedule := now.Sub(todaySchedule)
+				if timeSinceSchedule > 5*time.Minute {
+					// The scheduled time has passed beyond the reasonable window
+					// Schedule for the next window
+					reason := fmt.Sprintf("Scheduled time passed beyond 5-minute window (passed %v ago)", timeSinceSchedule)
+					log.Info("Scheduled time has passed, scheduling for next window", "cluster", cr.Name, "namespace", cr.Namespace,
+						"schedule", schedule, "todaySchedule", todaySchedule, "timeSince", timeSinceSchedule)
+
+					return r.scheduleHibernationForNextWindow(ctx, cr, schedule, reason)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // calculateNextScheduleTime calculates the next schedule time, considering if today's time is still available
 func (r *PerconaServerMySQLHibernationReconciler) calculateNextScheduleTime(now time.Time, cronSchedule cron.Schedule) metav1.Time {
-	// Get today's start time
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	// Use UTC for all calculations to ensure consistency
+	utcNow := now.UTC()
+
+	// Get today's start time in UTC
+	today := time.Date(utcNow.Year(), utcNow.Month(), utcNow.Day(), 0, 0, 0, 0, time.UTC)
 
 	// Calculate today's scheduled time
 	todaySchedule := cronSchedule.Next(today.Add(-time.Second))
 
 	// If today's scheduled time is still in the future, use it
-	if todaySchedule.After(now) {
+	if todaySchedule.After(utcNow) {
 		return metav1.NewTime(todaySchedule)
 	}
 
-	// Otherwise, use the next occurrence (tomorrow or later)
-	nextSchedule := cronSchedule.Next(now)
+	// If today's scheduled time has passed, return the next occurrence (next window)
+	nextSchedule := cronSchedule.Next(utcNow)
 	return metav1.NewTime(nextSchedule)
+}
+
+// proactivelyScheduleForNextWindow proactively schedules hibernation for the next window when cluster is in unready state
+// This prevents immediate pausing when the cluster becomes ready
+func (r *PerconaServerMySQLHibernationReconciler) proactivelyScheduleForNextWindow(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
+	log := logf.FromContext(ctx).WithName("proactivelyScheduleForNextWindow")
+
+	// Only check if hibernation is enabled and has a pause schedule
+	if !cr.IsHibernationEnabled() || cr.Spec.Hibernation == nil || cr.Spec.Hibernation.Schedule.Pause == "" {
+		return nil
+	}
+
+	// Parse cron schedule
+	cronSchedule, err := cron.ParseStandard(cr.Spec.Hibernation.Schedule.Pause)
+	if err != nil {
+		log.Error(err, "Invalid pause schedule during proactive scheduling", "cluster", cr.Name, "namespace", cr.Namespace, "schedule", cr.Spec.Hibernation.Schedule.Pause)
+		return err
+	}
+
+	now := time.Now().UTC()
+
+	// Calculate today's scheduled time
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	todaySchedule := cronSchedule.Next(today.Add(-time.Second))
+
+	// Check if the schedule applies to today
+	isToday := todaySchedule.Year() == now.Year() &&
+		todaySchedule.Month() == now.Month() &&
+		todaySchedule.Day() == now.Day()
+
+	if !isToday {
+		return nil // Schedule doesn't apply to today
+	}
+
+	// Check if we have a nextPauseTime set and if it's still today's time
+	if cr.Status.Hibernation != nil && cr.Status.Hibernation.NextPauseTime != nil {
+		currentNextPauseTime := cr.Status.Hibernation.NextPauseTime.Time
+
+		// If the current nextPauseTime is still today's scheduled time, we need to update it to next window
+		if currentNextPauseTime.Year() == now.Year() &&
+			currentNextPauseTime.Month() == now.Month() &&
+			currentNextPauseTime.Day() == now.Day() &&
+			currentNextPauseTime.Hour() == todaySchedule.Hour() &&
+			currentNextPauseTime.Minute() == todaySchedule.Minute() {
+
+			// Check if the scheduled time has passed
+			if now.After(todaySchedule) {
+				// The nextPauseTime is still set to today's schedule, but the time has passed
+				// Proactively update it to next window
+				reason := fmt.Sprintf("Scheduled time passed while cluster was unready, proactively scheduling for next window (state: %s)", cr.Status.State)
+				log.Info("Scheduled time passed while cluster was unready, proactively scheduling for next window", "cluster", cr.Name, "namespace", cr.Namespace,
+					"schedule", cr.Spec.Hibernation.Schedule.Pause, "todaySchedule", todaySchedule, "currentNextPauseTime", currentNextPauseTime, "clusterState", cr.Status.State, "currentTime", now)
+
+				return r.scheduleHibernationForNextWindow(ctx, cr, cr.Spec.Hibernation.Schedule.Pause, reason)
+			}
+		}
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
