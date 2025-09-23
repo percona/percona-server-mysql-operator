@@ -35,7 +35,7 @@ func (h *handlerBackup) deleteBackup(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "delete failed: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	defer req.Body.Close()
+	defer req.Body.Close() //nolint:errcheck
 
 	backupConf := xb.BackupConfig{}
 	if err = json.Unmarshal(data, &backupConf); err != nil {

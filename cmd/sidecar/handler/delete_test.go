@@ -79,7 +79,7 @@ func TestHandlerDelete(t *testing.T) {
 		h.deleteBackup(w, req)
 
 		res := w.Result()
-		defer res.Body.Close()
+		defer res.Body.Close() //nolint:errcheck
 
 		resBody, err := io.ReadAll(res.Body)
 		require.NoError(t, err)
@@ -118,7 +118,7 @@ func TestHandlerDelete(t *testing.T) {
 		h.deleteBackup(w, req)
 
 		res := w.Result()
-		defer res.Body.Close()
+		defer res.Body.Close() //nolint:errcheck
 
 		resBody, err := io.ReadAll(res.Body)
 		require.NoError(t, err)

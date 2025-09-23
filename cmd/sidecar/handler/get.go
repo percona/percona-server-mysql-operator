@@ -8,7 +8,7 @@ import (
 )
 
 func (h *handlerBackup) getBackup(w http.ResponseWriter, req *http.Request) {
-	defer req.Body.Close()
+	defer req.Body.Close() //nolint:errcheck
 	log := logf.Log.WithName("sidecar").WithName("get backup")
 
 	if !h.status.isRunning.Load() {

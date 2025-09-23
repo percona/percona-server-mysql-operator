@@ -52,7 +52,7 @@ func (h *handlerBackup) createBackup(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "backup failed", http.StatusBadRequest)
 		return
 	}
-	defer req.Body.Close()
+	defer req.Body.Close() //nolint:errcheck
 
 	backupConf := xb.BackupConfig{}
 	if err := json.Unmarshal(data, &backupConf); err != nil {
@@ -102,7 +102,7 @@ func (h *handlerBackup) createBackup(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
-	defer xbOut.Close()
+	defer xbOut.Close() //nolint:errcheck
 
 	xbErr, err := xtrabackup.StderrPipe()
 	if err != nil {
@@ -110,7 +110,7 @@ func (h *handlerBackup) createBackup(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
-	defer xbErr.Close()
+	defer xbErr.Close() //nolint:errcheck
 
 	backupLog, err := os.Create(filepath.Join(mysql.BackupLogDir, backupName+".log"))
 	if err != nil {
@@ -118,7 +118,7 @@ func (h *handlerBackup) createBackup(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
-	defer backupLog.Close()
+	defer backupLog.Close() //nolint:errcheck
 	logWriter := io.MultiWriter(backupLog, os.Stderr)
 
 	xbcloud := exec.CommandContext(gCtx, "xbcloud", xb.XBCloudArgs(xb.XBCloudActionPut, &backupConf)...)
@@ -131,7 +131,7 @@ func (h *handlerBackup) createBackup(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
-	defer xbcloudErr.Close()
+	defer xbcloudErr.Close() //nolint:errcheck
 
 	log.Info(
 		"Backup starting",
@@ -241,7 +241,7 @@ func (h *handlerBackup) checkBackupMD5Size(ctx context.Context, cfg *xb.BackupCo
 	if err != nil {
 		return errors.Wrap(err, "get object")
 	}
-	defer r.Close()
+	defer r.Close() //nolint:errcheck
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return errors.Wrap(err, "read all")

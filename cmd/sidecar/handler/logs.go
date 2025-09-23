@@ -24,14 +24,17 @@ func LogsHandlerFunc(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "failed to open log file", http.StatusInternalServerError)
 		return
 	}
-	defer logFile.Close()
+	defer logFile.Close() //nolint:errcheck
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("Connection", "keep-alive")
 
 	buf := bufio.NewScanner(logFile)
 	for buf.Scan() {
-		fmt.Fprintln(w, buf.Text())
+		if _, err := fmt.Fprintln(w, buf.Text()); err != nil {
+			http.Error(w, "failed to scan log", http.StatusInternalServerError)
+			return
+		}
 	}
 	if err := buf.Err(); err != nil {
 		http.Error(w, "failed to scan log", http.StatusInternalServerError)

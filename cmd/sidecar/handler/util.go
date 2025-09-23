@@ -60,7 +60,7 @@ func deleteBackup(ctx context.Context, cfg *xb.BackupConfig, backupName string) 
 		if err != nil {
 			return errors.Wrap(err, "failed to open log file")
 		}
-		defer backupLog.Close()
+		defer backupLog.Close() //nolint:errcheck
 		logWriter = io.MultiWriter(backupLog, os.Stderr)
 	}
 	xbcloud := exec.CommandContext(ctx, "xbcloud", xb.XBCloudArgs(xb.XBCloudActionDelete, cfg)...)
@@ -69,7 +69,7 @@ func deleteBackup(ctx context.Context, cfg *xb.BackupConfig, backupName string) 
 	if err != nil {
 		return errors.Wrap(err, "xbcloud stderr pipe failed")
 	}
-	defer xbcloudErr.Close()
+	defer xbcloudErr.Close() //nolint:errcheck
 	log.Info(
 		"Deleting Backup",
 		"destination", cfg.Destination,
