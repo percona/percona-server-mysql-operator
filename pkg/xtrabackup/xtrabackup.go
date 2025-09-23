@@ -823,28 +823,34 @@ type BackupConfig struct {
 	Type             apiv1.BackupStorageType       `json:"type"`
 	VerifyTLS        bool                          `json:"verifyTLS,omitempty"`
 	ContainerOptions *apiv1.BackupContainerOptions `json:"containerOptions,omitempty"`
-	S3               struct {
-		Bucket       string `json:"bucket"`
-		Region       string `json:"region,omitempty"`
-		EndpointURL  string `json:"endpointUrl,omitempty"`
-		StorageClass string `json:"storageClass,omitempty"`
-		AccessKey    string `json:"accessKey,omitempty"`
-		SecretKey    string `json:"secretKey,omitempty"`
-	} `json:"s3,omitempty"`
-	GCS struct {
-		Bucket       string `json:"bucket"`
-		EndpointURL  string `json:"endpointUrl,omitempty"`
-		StorageClass string `json:"storageClass,omitempty"`
-		AccessKey    string `json:"accessKey,omitempty"`
-		SecretKey    string `json:"secretKey,omitempty"`
-	} `json:"gcs,omitempty"`
-	Azure struct {
-		ContainerName  string `json:"containerName"`
-		EndpointURL    string `json:"endpointUrl,omitempty"`
-		StorageClass   string `json:"storageClass,omitempty"`
-		StorageAccount string `json:"storageAccount,omitempty"`
-		AccessKey      string `json:"accessKey,omitempty"`
-	} `json:"azure,omitempty"`
+	S3               BackupConfigS3                `json:"s3"`
+	GCS              BackupConfigGCS               `json:"gcs"`
+	Azure            BackupConfigAzure             `json:"azure"`
+}
+
+type BackupConfigS3 struct {
+	Bucket       string `json:"bucket"`
+	Region       string `json:"region,omitempty"`
+	EndpointURL  string `json:"endpointUrl,omitempty"`
+	StorageClass string `json:"storageClass,omitempty"`
+	AccessKey    string `json:"accessKey,omitempty"`
+	SecretKey    string `json:"secretKey,omitempty"`
+}
+
+type BackupConfigGCS struct {
+	Bucket       string `json:"bucket"`
+	EndpointURL  string `json:"endpointUrl,omitempty"`
+	StorageClass string `json:"storageClass,omitempty"`
+	AccessKey    string `json:"accessKey,omitempty"`
+	SecretKey    string `json:"secretKey,omitempty"`
+}
+
+type BackupConfigAzure struct {
+	ContainerName  string `json:"containerName"`
+	EndpointURL    string `json:"endpointUrl,omitempty"`
+	StorageClass   string `json:"storageClass,omitempty"`
+	StorageAccount string `json:"storageAccount,omitempty"`
+	AccessKey      string `json:"accessKey,omitempty"`
 }
 
 func GetBackupConfig(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQLBackup) (*BackupConfig, error) {
