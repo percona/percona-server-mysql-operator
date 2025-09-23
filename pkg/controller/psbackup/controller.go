@@ -484,7 +484,7 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 
 	switch cr.Status.State {
 	case apiv1.BackupError, apiv1.BackupNew:
-		if len(cr.Finalizers) == 0 {
+		if cr.Finalizers == nil {
 			return nil
 		}
 	}
