@@ -3,7 +3,7 @@ kind: CustomResourceDefinition
 metadata:
   name: perconaservermysqlrestores.ps.percona.com
   labels:
-    app.kubernetes.io/version: v0.12.0
+    app.kubernetes.io/version: v1.0.0
     app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
     app.kubernetes.io/component: crd

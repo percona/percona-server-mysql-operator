@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
-    app.kubernetes.io/version: v0.12.0
+    app.kubernetes.io/version: v1.0.0
   name: perconaservermysqlbackups.ps.percona.com
 spec:
   group: ps.percona.com
@@ -1173,7 +1173,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
-    app.kubernetes.io/version: v0.12.0
+    app.kubernetes.io/version: v1.0.0
   name: perconaservermysqlrestores.ps.percona.com
 spec:
   group: ps.percona.com
@@ -2336,7 +2336,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
-    app.kubernetes.io/version: v0.12.0
+    app.kubernetes.io/version: v1.0.0
   name: perconaservermysqls.ps.percona.com
 spec:
   group: ps.percona.com
@@ -13476,7 +13476,7 @@ spec:
           value: ""
         - name: DISABLE_TELEMETRY
           value: "false"
-        image: percona/percona-server-mysql-operator:0.12.0
+        image: perconalab/percona-server-mysql-operator:main
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
