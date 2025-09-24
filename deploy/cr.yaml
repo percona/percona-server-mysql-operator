@@ -5,7 +5,7 @@ metadata:
   finalizers:
     - percona.com/delete-mysql-pods-in-order
     # - percona.com/delete-ssl
-    - percona.com/delete-mysql-pvc
+    # - percona.com/delete-mysql-pvc
 spec:
 #  metadata:
 #    annotations:
