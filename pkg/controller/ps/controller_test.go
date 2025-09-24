@@ -26,7 +26,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	gs "github.com/onsi/gomega/gstruct"
-	"github.com/percona/percona-server-mysql-operator/pkg/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -50,6 +49,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 var _ = Describe("Sidecars", Ordered, func() {
@@ -567,7 +567,89 @@ var _ = Describe("CR validations", Ordered, func() {
 		_ = k8sClient.Delete(ctx, namespace)
 	})
 
-	Context("cr creation based on mysql cluster configuration", Ordered, func() {
+	Context("cr creation based on CheckNSetDefaults", Ordered, func() {
+		defaultCR := new(psv1.PerconaServerMySQL)
+		defaultCR.Namespace = ns
+		defaultCR.Spec.InitContainer.Image = "init-image"
+		defaultCR.Spec.Backup = &psv1.BackupSpec{
+			Image: "backup-image",
+		}
+		defaultCR.Spec.MySQL.VolumeSpec = &psv1.VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+				},
+			},
+		}
+		nn := func(name string) types.NamespacedName { return types.NamespacedName{Name: name, Namespace: ns} }
+		When("defaults are used", Ordered, func() {
+			cr := defaultCR.DeepCopy()
+			cr.Name = "defaults-1"
+
+			err := cr.CheckNSetDefaults(ctx, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			It("should fail the creation of cr", func() {
+				err := k8sClient.Create(ctx, cr)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("spec.mysql.size: Required value"))
+				Expect(err.Error()).To(ContainSubstring("spec.proxy.haproxy.size: Required value"))
+				Expect(err.Error()).To(ContainSubstring("spec.proxy.router.size"))
+				Expect(err.Error()).To(ContainSubstring("spec.orchestrator.size"))
+			})
+		})
+		When("group-replication cluster", Ordered, func() {
+			cr := defaultCR.DeepCopy()
+			cr.Name = "gr-1"
+
+			err := cr.CheckNSetDefaults(ctx, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.Size = 3
+			cr.Spec.Proxy.Router.Size = 3
+			cr.Spec.Proxy.HAProxy.Size = 3
+			cr.Spec.Orchestrator.Size = 3
+			cr.Spec.Proxy.HAProxy.Enabled = true
+
+			It("should create and reconcile", func() {
+				err := k8sClient.Create(ctx, cr)
+				Expect(err).To(Succeed())
+
+				_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: nn(cr.Name)})
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+		When("async cluster", Ordered, func() {
+			cr := defaultCR.DeepCopy()
+			cr.Name = "async-1"
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+
+			err := cr.CheckNSetDefaults(ctx, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.Size = 3
+			cr.Spec.Proxy.Router.Size = 3
+			cr.Spec.Proxy.HAProxy.Size = 3
+			cr.Spec.Orchestrator.Size = 3
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.Proxy.HAProxy.Enabled = true
+
+			It("should create and reconcile", func() {
+				err := k8sClient.Create(ctx, cr)
+				Expect(err).To(Succeed())
+
+				_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: nn(cr.Name)})
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+	})
+
+	Context("cr creation based on default mysql cluster file", Ordered, func() {
 		When("the cr is configured using default values and async cluster type", Ordered, func() {
 			cr, err := readDefaultCR("cr-validation-1", ns)
 			Expect(err).NotTo(HaveOccurred())
