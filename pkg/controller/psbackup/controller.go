@@ -121,7 +121,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	r.checkFinalizers(ctx, cr)
 
 	switch cr.Status.State {
-	case apiv1.BackupFailed, apiv1.BackupSucceeded:
+	case apiv1.BackupFailed, apiv1.BackupSucceeded, apiv1.BackupError:
 		return rr, nil
 	}
 

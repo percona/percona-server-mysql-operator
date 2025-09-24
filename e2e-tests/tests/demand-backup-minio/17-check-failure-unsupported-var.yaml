@@ -1,0 +1,21 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # Check that unsupported arg was passed to backup.
+
+      backup_name="demand-backup-minio-minio-fail"
+
+      backup_source_pod=$(kubectl get ps-backup -n ${NAMESPACE} $backup_name -o jsonpath='{.status.backupSource}' | awk -F'.' '{print $1}')
+
+      # Logs of unsuccessful backups are stored only on the backup source pod. Use it to check logs.
+      xtrabackup_flag_count=$(kubectl logs -n ${NAMESPACE} $backup_source_pod -c xtrabackup | grep -c -- "--customnotsupported")
+      if [ "$xtrabackup_flag_count" -eq 0 ]; then
+        echo "custom flag --customnotsupported was provided to the backup but it's not mentioned in the logs"
+        exit 1
+      fi
