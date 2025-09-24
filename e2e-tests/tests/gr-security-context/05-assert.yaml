@@ -9,7 +9,10 @@ metadata:
 status:
   state: Succeeded
   storage:
+    containerSecurityContext:
+      privileged: true
     podSecurityContext:
+      fsGroup: 1001
       supplementalGroups:
       - 1001
       - 1002

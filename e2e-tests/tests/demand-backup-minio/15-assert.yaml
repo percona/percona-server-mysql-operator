@@ -1,0 +1,87 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 30
+---
+kind: PerconaServerMySQLBackup
+apiVersion: ps.percona.com/v1
+metadata:
+  name: demand-backup-minio-minio-fail
+  finalizers:
+    - percona.com/delete-backup
+status:
+  state: Starting
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: demand-backup-minio-mysql
+status:
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: demand-backup-minio-orc
+status:
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: demand-backup-minio-haproxy
+status:
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: demand-backup-minio
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+status:
+  haproxy:
+    ready: 3
+    size: 3
+    state: ready
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  orchestrator:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+metadata:
+  name: check-operator-deploy-status
+timeout: 120
+commands:
+  - script: |-
+      set -e
+
+      # Use orchestrator-client to check that source backup pod is in downtimed state during backup
+      backup_name="demand-backup-minio-minio-fail"
+      backup_source_pod=$(kubectl get ps-backup -n ${NAMESPACE} $backup_name -o jsonpath='{.status.backupSource}' | awk -F'.' '{print $1}')
+
+      source_downtimed=$(kubectl exec demand-backup-minio-orc-0 -n ${NAMESPACE} -c orchestrator -- bash -c 'orchestrator-client -c topology -i $(orchestrator-client -c clusters)' | grep $backup_source_pod | grep -c 'downtimed')
+ 
+      if [[ $source_downtimed != 1 ]]; then
+        echo "Downtime did not start!"
+        echo $source_downtimed
+        exit 1
+      fi

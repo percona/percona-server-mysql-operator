@@ -301,7 +301,7 @@ func EnsureComponent(
 	}
 
 	pdb := podDisruptionBudget(cr, podSpec.PodDisruptionBudget, c.Labels(), c.MatchLabels())
-	if err := EnsureObjectWithHash(ctx, cl, obj, pdb, cl.Scheme()); err != nil {
+	if err := EnsureObjectWithHash(ctx, cl, cr, pdb, cl.Scheme()); err != nil {
 		return errors.Wrap(err, "failed to create pdb")
 	}
 
