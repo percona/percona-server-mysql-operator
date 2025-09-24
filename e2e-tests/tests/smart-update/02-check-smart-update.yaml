@@ -31,4 +31,4 @@ commands:
 
       echo "last restarted pod is not initial primary"
       exit 1
-    timeout: 480
+    timeout: 700

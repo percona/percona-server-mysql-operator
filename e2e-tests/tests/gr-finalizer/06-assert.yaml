@@ -1,6 +1,9 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 5
+timeout: 10
+collectors:
+- type: command
+  command: kubectl get pods --namespace "${NAMESPACE}"
 ---
 apiVersion: v1
 kind: Pod

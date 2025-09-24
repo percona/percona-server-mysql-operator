@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	batchv1 "k8s.io/api/batch/v1"
@@ -135,8 +136,42 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			if cr.Status.State != apiv1.BackupError {
 				t.Fatalf("expected state %s, got %s", apiv1.RestoreError, cr.Status.State)
 			}
+
+			// Backup with an error state should not be reconciled.
+			// We can verify this by using clientWithGetCount.
+			//
+			// If the reconcile loop calls Get more than once,
+			// it means the loop continued running instead of stopping
+			// after the state check.
+			r.Client = &clientWithGetCount{
+				Count:  1,
+				Client: r.Client,
+			}
+			_, err = r.Reconcile(ctx, controllerruntime.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      tt.cr.Name,
+					Namespace: tt.cr.Namespace,
+				},
+			})
+			if err != nil {
+				t.Fatal(err, "failed to reconcile")
+			}
 		})
 	}
+}
+
+type clientWithGetCount struct {
+	Count int
+
+	client.Client
+}
+
+func (c *clientWithGetCount) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if c.Count <= 0 {
+		return errors.New("unexpected Get call from client")
+	}
+	c.Count--
+	return c.Client.Get(ctx, key, obj, opts...)
 }
 
 func TestCheckFinalizers(t *testing.T) {

@@ -1043,15 +1043,20 @@ check_passwords_leak() {
 }
 
 deploy_chaos_mesh() {
-	local container_runtime="containerd"
-	local socket_path="/run/containerd/containerd.sock"
+	local current_runtime=$(kubectl get nodes -o jsonpath='{range .items[0]}{.status.nodeInfo.containerRuntimeVersion}{"\n"}{end}' | awk -F':' '{print $1}')
 
-	if [ -n "${MINIKUBE}" ]; then
+	if [[ $current_runtime == 'containerd' ]]; then
+		container_runtime="containerd"
+		socket_path="/run/containerd/containerd.sock"
+	elif [[ $current_runtime == 'docker' ]]; then
 		container_runtime=docker
 		socket_path=/var/run/docker.sock
-	elif [ -n "${OPENSHIFT}" ]; then
+	elif [[ $current_runtime == 'cri-o' ]]; then
 		container_runtime=crio
 		socket_path=/var/run/crio/crio.sock
+	else
+		echo "Unknown runtime: $current_runtime"
+		exit 1
 	fi
 
 	destroy_chaos_mesh
