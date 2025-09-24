@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	batchv1 "k8s.io/api/batch/v1"
@@ -23,6 +24,7 @@ import (
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
@@ -135,6 +137,146 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			if cr.Status.State != apiv1.BackupError {
 				t.Fatalf("expected state %s, got %s", apiv1.RestoreError, cr.Status.State)
 			}
+
+			// Backup with an error state should not be reconciled.
+			// We can verify this by using clientWithGetCount.
+			//
+			// If the reconcile loop calls Get more than once,
+			// it means the loop continued running instead of stopping
+			// after the state check.
+			r.Client = &clientWithGetCount{
+				Count:  1,
+				Client: r.Client,
+			}
+			_, err = r.Reconcile(ctx, controllerruntime.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      tt.cr.Name,
+					Namespace: tt.cr.Namespace,
+				},
+			})
+			if err != nil {
+				t.Fatal(err, "failed to reconcile")
+			}
+		})
+	}
+}
+
+type clientWithGetCount struct {
+	Count int
+
+	client.Client
+}
+
+func (c *clientWithGetCount) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if c.Count <= 0 {
+		return errors.New("unexpected Get call from client")
+	}
+	c.Count--
+	return c.Client.Get(ctx, key, obj, opts...)
+}
+
+func TestStateDescCleanup(t *testing.T) {
+	ctx := t.Context()
+	scheme := runtime.NewScheme()
+
+	err := clientgoscheme.AddToScheme(scheme)
+	require.NoError(t, err)
+
+	err = apiv1.AddToScheme(scheme)
+	require.NoError(t, err)
+
+	const namespace = "state-desc-cleanup"
+	const storageName = "s3-us-west"
+
+	cluster, err := readDefaultCR("ps-cluster1", namespace)
+	require.NoError(t, err)
+
+	cluster.Status.MySQL.State = apiv1.StateReady
+	cluster.Spec.InitContainer.Image = "init-image"
+
+	cr, err := readDefaultCRBackup("some-name", namespace)
+	require.NoError(t, err)
+
+	cr.Spec.ClusterName = cluster.Name
+	cr.Spec.StorageName = storageName
+
+	storage := cluster.Spec.Backup.Storages[storageName]
+
+	newSecret := func(name string, data map[string][]byte) *corev1.Secret {
+		return &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+			Data:       data,
+		}
+	}
+
+	s3Secret := newSecret(storage.S3.CredentialsSecret, map[string][]byte{
+		secret.CredentialsAWSAccessKey: []byte("access-key"),
+		secret.CredentialsAWSSecretKey: []byte("secret-key"),
+	})
+	userSecret := newSecret(cluster.InternalSecretName(), map[string][]byte{
+		string(apiv1.UserOperator): []byte("access-key"),
+	})
+
+	tests := []struct {
+		name          string
+		cr            *apiv1.PerconaServerMySQLBackup
+		expectedState apiv1.BackupState
+		failedJob     bool
+	}{
+		{
+			name: "clean description on success",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+				cr.Status.State = apiv1.BackupRunning
+				cr.Status.StateDesc = "to-delete"
+			}),
+			expectedState: apiv1.BackupSucceeded,
+		},
+		{
+			name: "clean description on fail",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+				cr.Status.State = apiv1.BackupRunning
+				cr.Status.StateDesc = "to-delete"
+			}),
+			failedJob:     true,
+			expectedState: apiv1.BackupFailed,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cond := batchv1.JobCondition{
+				Type:   batchv1.JobComplete,
+				Status: corev1.ConditionTrue,
+			}
+			if tt.failedJob {
+				cond.Type = batchv1.JobFailed
+			}
+
+			job, err := xtrabackup.Job(cluster.DeepCopy(), tt.cr, "dest", "init-image", storage)
+			require.NoError(t, err)
+
+			job.Status.Conditions = append(job.Status.Conditions, cond)
+
+			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr, cluster.DeepCopy(), s3Secret, userSecret, job).WithStatusSubresource(tt.cr, cluster.DeepCopy(), s3Secret, job)
+			r := PerconaServerMySQLBackupReconciler{
+				Client:        cb.Build(),
+				Scheme:        scheme,
+				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+			}
+
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
+			require.NoError(t, err)
+
+			cr := new(apiv1.PerconaServerMySQLBackup)
+			err = r.Get(ctx, types.NamespacedName{Name: tt.cr.Name, Namespace: tt.cr.Namespace}, cr)
+			require.NoError(t, err)
+
+			if cr.Status.State != apiv1.BackupFailed && cr.Status.State != apiv1.BackupSucceeded {
+				t.Fatalf("wrong test setup. backup should succeeded or failed. Got: %s", cr.Status.State)
+			}
+
+			assert.Equal(t, cr.Status.State, tt.expectedState)
+			assert.Empty(t, cr.Status.StateDesc)
 		})
 	}
 }
