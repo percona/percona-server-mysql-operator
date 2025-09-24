@@ -11,7 +11,7 @@ import (
 	xb "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
 
-func (h *handlerBackup) deleteBackup(w http.ResponseWriter, req *http.Request) {
+func (h *handlerBackup) deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 	log := logf.Log.WithName("handlerBackup").WithName("deleteBackup")
 
 	ns, err := h.getNamespaceFunc()

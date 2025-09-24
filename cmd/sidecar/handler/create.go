@@ -21,7 +21,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 )
 
-func (h *handlerBackup) createBackup(w http.ResponseWriter, req *http.Request) {
+func (h *handlerBackup) createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	log := logf.Log.WithName("sidecar").WithName("create backup")
 
 	if !h.status.TryRunBackup() {
@@ -249,8 +249,9 @@ func (h *handlerBackup) checkBackupMD5Size(ctx context.Context, cfg *xb.BackupCo
 
 	// Q: what value we should use here?
 	// size of the `demand-backup` test md5 file is 4575
-	if len(data) < 3000 {
-		return errors.Errorf("backup was finished unsuccessful: md5 size: %d", len(data))
+	minSize := 3000
+	if len(data) < minSize {
+		return errors.Errorf("backup was finished unsuccessful: small md5 size: %d: expected to be >= %d", len(data), minSize)
 	}
 	return nil
 }

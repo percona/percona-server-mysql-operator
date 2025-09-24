@@ -7,7 +7,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func (h *handlerBackup) getBackup(w http.ResponseWriter, req *http.Request) {
+func (h *handlerBackup) getBackupHandler(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close() //nolint:errcheck
 	log := logf.Log.WithName("sidecar").WithName("get backup")
 

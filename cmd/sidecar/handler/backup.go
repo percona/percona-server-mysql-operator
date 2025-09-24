@@ -42,9 +42,8 @@ func (s *Status) RemoveBackupConfig() {
 
 func (s *Status) GetBackupConfig() *xb.BackupConfig {
 	s.mu.Lock()
-	cfg := *s.currentBackupConf
-	s.mu.Unlock()
-	return &cfg
+	defer s.mu.Unlock()
+	return s.currentBackupConf
 }
 
 type handlerBackup struct {
@@ -73,11 +72,11 @@ func NewBackupHandler() http.Handler {
 func (h *handlerBackup) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case http.MethodGet:
-		h.getBackup(w, req)
+		h.getBackupHandler(w, req)
 	case http.MethodPost:
-		h.createBackup(w, req)
+		h.createBackupHandler(w, req)
 	case http.MethodDelete:
-		h.deleteBackup(w, req)
+		h.deleteBackupHandler(w, req)
 	default:
 		http.Error(w, "method not supported", http.StatusMethodNotAllowed)
 	}

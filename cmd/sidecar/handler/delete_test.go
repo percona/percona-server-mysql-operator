@@ -76,7 +76,7 @@ func TestHandlerDelete(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/backup/name", bytes.NewBuffer(body))
 		w := httptest.NewRecorder()
 
-		h.deleteBackup(w, req)
+		h.deleteBackupHandler(w, req)
 
 		res := w.Result()
 		defer res.Body.Close() //nolint:errcheck
@@ -115,7 +115,7 @@ func TestHandlerDelete(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/backup/name", bytes.NewBuffer(body))
 		w := httptest.NewRecorder()
 
-		h.deleteBackup(w, req)
+		h.deleteBackupHandler(w, req)
 
 		res := w.Result()
 		defer res.Body.Close() //nolint:errcheck
