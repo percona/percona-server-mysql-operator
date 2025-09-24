@@ -12,5 +12,9 @@ commands:
 
       source ../../functions
 
+      if [[ -n ${OPENSHIFT} ]]; then
+          oc adm policy remove-scc-from-user privileged -z default -n "${NAMESPACE}"
+      fi
+
       destroy_operator
     timeout: 60
