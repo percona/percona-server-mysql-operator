@@ -206,8 +206,8 @@ void makeReport() {
         TestsReportXML = TestsReportXML + '<testcase name=\\"' + testName + '\\" time=\\"' + testTime + '\\"><'+ testResult +'/></testcase>\n'
     }
     TestsReport = TestsReport + "\r\n| We run $startedTestAmount out of $wholeTestAmount|"
-    TestsReport = TestsReport + "\r\n| Job duration |" + currentBuild.durationString + " |"
-    TestsReport = TestsReport + "\r\n| Total Test Time |"  + formatTime(totalTestTime) + " |"
+    TestsReport = TestsReport + "\r\n| Job duration | |" + formatTime(currentBuild.duration / 1000) + " |"
+    TestsReport = TestsReport + "\r\n| Total Test Time | |"  + formatTime(totalTestTime) + " |"
     TestsReportXML = TestsReportXML + '</testsuite>\n'
 
     sh """
