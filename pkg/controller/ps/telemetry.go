@@ -67,7 +67,7 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 
 	err = r.sendTelemetry(ctx, cr)
 	if err != nil {
-		logger.Error(err, "failed to send telemetry report")
+		logger.V(1).Info("failed to send telemetry report", "error", err)
 	}
 
 	return nil
