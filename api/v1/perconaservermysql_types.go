@@ -348,19 +348,7 @@ func (b *BackupContainerOptions) GetEnv() []corev1.EnvVar {
 	if b == nil {
 		return nil
 	}
-	return util.MergeEnvLists(b.Env, b.Args.Env())
-}
-
-func (b *BackupContainerOptions) GetEnvVar(storage *BackupStorageSpec) []corev1.EnvVar {
-	if b != nil {
-		return b.GetEnv()
-	}
-
-	if storage == nil || storage.ContainerOptions == nil {
-		return nil
-	}
-
-	return storage.ContainerOptions.GetEnv()
+	return util.MergeEnvLists(b.Env, b.Args.env())
 }
 
 type BackupContainerArgs struct {
@@ -369,7 +357,7 @@ type BackupContainerArgs struct {
 	Xbstream   []string `json:"xbstream,omitempty"`
 }
 
-func (b *BackupContainerArgs) Env() []corev1.EnvVar {
+func (b *BackupContainerArgs) env() []corev1.EnvVar {
 	envs := []corev1.EnvVar{}
 	if len(b.Xtrabackup) > 0 {
 		envs = append(envs, corev1.EnvVar{

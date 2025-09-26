@@ -213,26 +213,7 @@ func xtrabackupContainer(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaSer
 		verifyTLS = *storage.VerifyTLS
 	}
 
-	containerOptions := storage.DeepCopy().ContainerOptions
-	if containerOptions == nil {
-		containerOptions = new(apiv1.BackupContainerOptions)
-	}
-	backupContainerOptions := cr.DeepCopy().Spec.ContainerOptions
-	if backupContainerOptions != nil {
-		if backupContainerOptions.Args.Xbcloud != nil {
-			containerOptions.Args.Xbcloud = backupContainerOptions.Args.Xbcloud
-		}
-		if backupContainerOptions.Args.Xbstream != nil {
-			containerOptions.Args.Xbstream = backupContainerOptions.Args.Xbstream
-		}
-		if backupContainerOptions.Args.Xtrabackup != nil {
-			containerOptions.Args.Xtrabackup = backupContainerOptions.Args.Xtrabackup
-		}
-		if backupContainerOptions.Env != nil {
-			containerOptions.Env = backupContainerOptions.Env
-		}
-	}
-	containerOptionsJSON, err := json.Marshal(containerOptions)
+	containerOptionsJSON, err := json.Marshal(cr.GetContainerOptions(storage))
 	if err != nil {
 		return corev1.Container{}, errors.Wrap(err, "marshal container options")
 	}
@@ -349,7 +330,7 @@ func XBCloudArgs(action XBCloudAction, conf *BackupConfig) []string {
 	return args
 }
 
-func deleteContainer(image string, conf *BackupConfig, storage *apiv1.BackupStorageSpec) corev1.Container {
+func deleteContainer(image string, conf *BackupConfig, cr *apiv1.PerconaServerMySQLBackup, storage *apiv1.BackupStorageSpec) corev1.Container {
 	return corev1.Container{
 		Name:            appName,
 		Image:           image,
@@ -360,7 +341,7 @@ func deleteContainer(image string, conf *BackupConfig, storage *apiv1.BackupStor
 				MountPath: apiv1.BinVolumePath,
 			},
 		},
-		Env:                      storage.ContainerOptions.GetEnv(),
+		Env:                      cr.GetContainerOptions(storage).GetEnv(),
 		Command:                  append([]string{"xbcloud"}, XBCloudArgs(XBCloudActionDelete, conf)...),
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
@@ -518,7 +499,7 @@ func GetDeleteJob(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQ
 					ShareProcessNamespace: &t,
 					SetHostnameAsFQDN:     &t,
 					Containers: []corev1.Container{
-						deleteContainer(cr.Status.Image, conf, storage),
+						deleteContainer(cr.Status.Image, conf, cr, storage),
 					},
 					SecurityContext:           storage.PodSecurityContext,
 					Affinity:                  storage.Affinity,
@@ -575,7 +556,7 @@ func restoreContainer(
 				Value: fmt.Sprintf("%s/keyring_vault.cnf", vaultSecretMountPath),
 			},
 		},
-		restore.Spec.ContainerOptions.GetEnvVar(storage),
+		restore.GetContainerOptions(storage).GetEnv(),
 	)
 
 	volumeMounts := []corev1.VolumeMount{
@@ -861,30 +842,10 @@ func GetBackupConfig(ctx context.Context, cl client.Client, cr *apiv1.PerconaSer
 		return nil, errors.Wrap(err, "get backup destination")
 	}
 
-	containerOptions := cr.DeepCopy().Status.Storage.ContainerOptions
-	if containerOptions == nil {
-		containerOptions = new(apiv1.BackupContainerOptions)
-	}
-	backupContainerOptions := cr.DeepCopy().Spec.ContainerOptions
-	if backupContainerOptions != nil {
-		if backupContainerOptions.Args.Xbcloud != nil {
-			containerOptions.Args.Xbcloud = backupContainerOptions.Args.Xbcloud
-		}
-		if backupContainerOptions.Args.Xbstream != nil {
-			containerOptions.Args.Xbstream = backupContainerOptions.Args.Xbstream
-		}
-		if backupContainerOptions.Args.Xtrabackup != nil {
-			containerOptions.Args.Xtrabackup = backupContainerOptions.Args.Xtrabackup
-		}
-		if backupContainerOptions.Env != nil {
-			containerOptions.Env = backupContainerOptions.Env
-		}
-	}
-
 	conf := &BackupConfig{
 		Destination:      destination.PathWithoutBucket(),
 		VerifyTLS:        verifyTLS,
-		ContainerOptions: containerOptions,
+		ContainerOptions: cr.GetContainerOptions(storage),
 	}
 	s := new(corev1.Secret)
 	nn := types.NamespacedName{
