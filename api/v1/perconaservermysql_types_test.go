@@ -1,12 +1,52 @@
 package v1
 
 import (
+	"testing"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"testing"
 )
+
+func TestCheckNSetDefaults(t *testing.T) {
+	t.Run("empty cr", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.EqualError(t, err, "backup.image can't be empty")
+	})
+	t.Run("with backup image", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.Backup = &BackupSpec{
+			Image: "backup-image",
+		}
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.EqualError(t, err, "reconcile mysql volumeSpec: volumeSpec provided is nil")
+	})
+	t.Run("with backup image and volume spec", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.Backup = &BackupSpec{
+			Image: "backup-image",
+		}
+		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+				},
+			},
+		}
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.NoError(t, err)
+	})
+}
 
 func TestValidateVolume(t *testing.T) {
 	tests := map[string]struct {
