@@ -10,9 +10,7 @@ status:
   observedGeneration: 2
   replicas: 3
   readyReplicas: 3
-  currentReplicas: 3
   updatedReplicas: 3
-  collisionCount: 0
 ---
 kind: StatefulSet
 apiVersion: apps/v1
@@ -32,9 +30,7 @@ status:
   observedGeneration: 2
   replicas: 3
   readyReplicas: 3
-  currentReplicas: 3
   updatedReplicas: 3
-  collisionCount: 0
 ---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
