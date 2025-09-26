@@ -172,9 +172,7 @@ func TestJob(t *testing.T) {
 			idx := slices.IndexFunc(xbContainer.Env, func(env corev1.EnvVar) bool {
 				return env.Name == "CONTAINER_OPTIONS"
 			})
-			if idx == -1 {
-				t.Fatal("missing CONTAINER_OPTIONS env var")
-			}
+			require.Positive(t, idx, "missing CONTAINER_OPTIONS env var")
 			return xbContainer.Env[idx].Value
 		}
 
