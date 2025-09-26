@@ -100,6 +100,9 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		if status.State == cr.Status.State && status.Destination == cr.Status.Destination {
 			return
 		}
+		if status.State != cr.Status.State && status.StateDesc == cr.Status.StateDesc {
+			status.StateDesc = ""
+		}
 
 		err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 			cr := &apiv1.PerconaServerMySQLBackup{}
@@ -121,7 +124,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	switch cr.Status.State {
-	case apiv1.BackupFailed, apiv1.BackupSucceeded:
+	case apiv1.BackupFailed, apiv1.BackupSucceeded, apiv1.BackupError:
 		return rr, nil
 	}
 

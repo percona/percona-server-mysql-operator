@@ -107,7 +107,7 @@ func (r *PerconaServerMySQLReconciler) upgradeVersions(ctx context.Context, cr *
 	if telemetryEnabled() && (!versionUpgradeEnabled(cr) || cr.Spec.UpgradeOptions.VersionServiceEndpoint != vs.GetDefaultVersionServiceEndpoint()) {
 		_, err := vs.GetVersion(ctx, cr, vs.GetDefaultVersionServiceEndpoint(), r.ServerVersion)
 		if err != nil {
-			log.Error(err, "failed to send telemetry to "+vs.GetDefaultVersionServiceEndpoint())
+			log.V(1).Info("failed to send telemetry to " + vs.GetDefaultVersionServiceEndpoint())
 		}
 	}
 
