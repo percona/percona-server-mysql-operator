@@ -8,8 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/percona/percona-server-mysql-operator/cmd/sidecar/handler/backup"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
+
+func Backup() http.Handler {
+	return new(backup.Handler)
+}
 
 func LogsHandlerFunc(w http.ResponseWriter, req *http.Request) {
 	path := strings.Split(req.URL.Path, "/")

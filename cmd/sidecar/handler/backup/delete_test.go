@@ -1,4 +1,4 @@
-package handler
+package backup
 
 import (
 	"bytes"
@@ -52,7 +52,7 @@ func TestHandlerDelete(t *testing.T) {
 
 	t.Run("backup exists", func(t *testing.T) {
 		backupDeleted := false
-		h := handlerBackup{
+		h := &Handler{
 			newStorageFunc: func(ctx context.Context, opts storage.Options) (storage.Storage, error) {
 				defaultFakeClient, err := fakestorage.NewFakeClient(ctx, opts)
 				if err != nil {
@@ -91,7 +91,7 @@ func TestHandlerDelete(t *testing.T) {
 
 	t.Run("backup doesn't exist", func(t *testing.T) {
 		backupDeleted := false
-		h := handlerBackup{
+		h := &Handler{
 			newStorageFunc: func(ctx context.Context, opts storage.Options) (storage.Storage, error) {
 				defaultFakeClient, err := fakestorage.NewFakeClient(ctx, opts)
 				if err != nil {

@@ -1,4 +1,4 @@
-package handler
+package backup
 
 import (
 	"context"
@@ -21,15 +21,15 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 )
 
-func (h *handlerBackup) createBackupHandler(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	log := logf.Log.WithName("sidecar").WithName("create backup")
 
-	if !h.status.TryRunBackup() {
+	if !h.status.tryRunBackup() {
 		log.Info("backup is already running", "host", req.RemoteAddr)
 		http.Error(w, "backup is already running", http.StatusConflict)
 		return
 	}
-	defer h.status.DoneBackup()
+	defer h.status.doneBackup()
 
 	ns, err := h.getNamespaceFunc()
 	if err != nil {
@@ -61,9 +61,9 @@ func (h *handlerBackup) createBackupHandler(w http.ResponseWriter, req *http.Req
 		return
 	}
 
-	h.status.SetBackupConfig(backupConf)
+	h.status.setBackupConfig(backupConf)
 	defer func() {
-		h.status.RemoveBackupConfig()
+		h.status.removeBackupConfig()
 	}()
 	log.Info("Checking if backup exists")
 	exists, err := h.backupExists(req.Context(), &backupConf)
@@ -223,7 +223,7 @@ func getClusterType() apiv1.ClusterType {
 	return apiv1.ClusterType(cType)
 }
 
-func (h *handlerBackup) checkBackupMD5Size(ctx context.Context, cfg *xb.BackupConfig) error {
+func (h *Handler) checkBackupMD5Size(ctx context.Context, cfg *xb.BackupConfig) error {
 	// xbcloud doesn't create md5 file for azure
 	if cfg.Type == apiv1.BackupStorageAzure {
 		return nil
@@ -277,4 +277,14 @@ func startReplicaSQLThread(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func getSecret(username apiv1.SystemUser) (string, error) {
+	path := filepath.Join(mysql.CredsMountPath, string(username))
+	sBytes, err := os.ReadFile(path)
+	if err != nil {
+		return "", errors.Wrapf(err, "read %s", path)
+	}
+
+	return strings.TrimSpace(string(sBytes)), nil
 }

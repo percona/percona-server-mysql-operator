@@ -1,4 +1,4 @@
-package handler
+package backup
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func (h *handlerBackup) getBackupHandler(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) getBackupHandler(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close() //nolint:errcheck
 	log := logf.Log.WithName("sidecar").WithName("get backup")
 
@@ -16,7 +16,7 @@ func (h *handlerBackup) getBackupHandler(w http.ResponseWriter, req *http.Reques
 		return
 	}
 
-	data, err := json.Marshal(h.status.GetBackupConfig())
+	data, err := json.Marshal(h.status.getBackupConfig())
 	if err != nil {
 		log.Error(err, "failed to marshal data")
 		http.Error(w, "get backup failed", http.StatusInternalServerError)

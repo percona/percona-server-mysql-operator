@@ -24,7 +24,7 @@ func startServer() *http.Server {
 	mux.HandleFunc("/health/", func(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintf(w, "OK")
 	})
-	mux.Handle("/backup/", handler.NewBackupHandler())
+	mux.Handle("/backup/", handler.Backup())
 	mux.HandleFunc("/logs/", handler.LogsHandlerFunc)
 
 	srv := &http.Server{Addr: ":" + strconv.Itoa(mysql.SidecarHTTPPort), Handler: mux}
