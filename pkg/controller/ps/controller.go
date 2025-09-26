@@ -894,6 +894,12 @@ func (r *PerconaServerMySQLReconciler) reconcileServices(ctx context.Context, cr
 func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileReplication")
 
+	// Skip replication reconciliation when cluster is paused
+	if cr.Spec.Pause {
+		log.V(1).Info("Skipping replication reconciliation - cluster is paused", "cluster", cr.Name, "namespace", cr.Namespace)
+		return nil
+	}
+
 	if err := r.reconcileGroupReplication(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile group replication")
 	}
@@ -1004,6 +1010,12 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
+	// Skip bootstrap status reconciliation when cluster is paused
+	if cr.Spec.Pause {
+		log.V(1).Info("Skipping bootstrap status reconciliation - cluster is paused", "cluster", cr.Name, "namespace", cr.Namespace)
+		return nil
+	}
+
 	if cr.Status.MySQL.Ready == 0 || cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
 		log.V(1).Info("Waiting for all MySQL pods to be ready", "ready", cr.Status.MySQL.Ready, "expected", cr.Spec.MySQL.Size)
 		return nil
@@ -1074,6 +1086,12 @@ func (r *PerconaServerMySQLReconciler) rescanClusterIfNeeded(ctx context.Context
 	}
 
 	log := logf.FromContext(ctx)
+
+	// Skip cluster rescan when cluster is paused
+	if cr.Spec.Pause {
+		log.V(1).Info("Skipping cluster rescan - cluster is paused", "cluster", cr.Name, "namespace", cr.Namespace)
+		return nil
+	}
 
 	pod, err := mysql.GetReadyPod(ctx, r.Client, cr)
 	if err != nil {
@@ -1265,6 +1283,12 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		return nil
 	}
 
+	// Skip router reconciliation when cluster is paused
+	if cr.Spec.Pause {
+		log.V(1).Info("Skipping router reconciliation - cluster is paused", "cluster", cr.Name, "namespace", cr.Namespace)
+		return nil
+	}
+
 	if cr.Spec.Proxy.Router.Size > 0 {
 		if cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
 			log.V(1).Info("Waiting for MySQL pods to be ready")
@@ -1415,6 +1439,12 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 
 func (r *PerconaServerMySQLReconciler) getPrimaryFromOrchestrator(ctx context.Context, cr *apiv1.PerconaServerMySQL) (*orchestrator.Instance, error) {
 	log := logf.FromContext(ctx)
+
+	// Skip getting primary from orchestrator when cluster is paused
+	if cr.Spec.Pause {
+		return nil, errors.New("cluster is paused")
+	}
+
 	pod, err := getReadyOrcPod(ctx, r.Client, cr)
 	if err != nil {
 		return nil, err
