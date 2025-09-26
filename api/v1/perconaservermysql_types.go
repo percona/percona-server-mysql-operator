@@ -216,6 +216,27 @@ type PodSpec struct {
 	ContainerSpec `json:",inline"`
 }
 
+func (s *PodSpec) Core(selector map[string]string, volumes []corev1.Volume, initContainers []corev1.Container, containers []corev1.Container) corev1.PodSpec {
+	return corev1.PodSpec{
+		Volumes:                       volumes,
+		InitContainers:                initContainers,
+		Containers:                    containers,
+		RestartPolicy:                 corev1.RestartPolicyAlways,
+		TerminationGracePeriodSeconds: s.GetTerminationGracePeriodSeconds(),
+		DNSPolicy:                     corev1.DNSClusterFirst,
+		NodeSelector:                  s.NodeSelector,
+		ServiceAccountName:            s.ServiceAccountName,
+		SecurityContext:               s.PodSecurityContext,
+		ImagePullSecrets:              s.ImagePullSecrets,
+		Affinity:                      s.GetAffinity(selector),
+		SchedulerName:                 s.SchedulerName,
+		Tolerations:                   s.Tolerations,
+		PriorityClassName:             s.PriorityClassName,
+		RuntimeClassName:              s.RuntimeClassName,
+		TopologySpreadConstraints:     s.GetTopologySpreadConstraints(selector),
+	}
+}
+
 type Metadata struct {
 	// Map of string keys and values that can be used to organize and categorize
 	// (scope and select) objects. May match selectors of replication controllers

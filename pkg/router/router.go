@@ -140,8 +140,10 @@ func Deployment(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash str
 					Labels:      Labels(cr),
 					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
 				},
-				Spec: corev1.PodSpec{
-					InitContainers: []corev1.Container{
+				Spec: spec.Core(
+					selector,
+					volumes(cr),
+					[]corev1.Container{
 						k8s.InitContainer(
 							cr,
 							AppName,
@@ -153,21 +155,8 @@ func Deployment(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash str
 							nil,
 						),
 					},
-					Containers:                    containers(cr),
-					NodeSelector:                  cr.Spec.Proxy.Router.NodeSelector,
-					Tolerations:                   cr.Spec.Proxy.Router.Tolerations,
-					Affinity:                      spec.GetAffinity(selector),
-					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(selector),
-					ImagePullSecrets:              spec.ImagePullSecrets,
-					TerminationGracePeriodSeconds: spec.GetTerminationGracePeriodSeconds(),
-					RestartPolicy:                 corev1.RestartPolicyAlways,
-					SchedulerName:                 spec.SchedulerName,
-					RuntimeClassName:              spec.RuntimeClassName,
-					ServiceAccountName:            spec.ServiceAccountName,
-					DNSPolicy:                     corev1.DNSClusterFirst,
-					SecurityContext:               spec.PodSecurityContext,
-					Volumes:                       volumes(cr),
-				},
+					containers(cr),
+				),
 			},
 		},
 	}

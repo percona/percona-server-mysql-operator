@@ -167,8 +167,10 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 					Labels:      Labels(cr),
 					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
 				},
-				Spec: corev1.PodSpec{
-					InitContainers: []corev1.Container{
+				Spec: spec.Core(
+					selector,
+					append(volumes(cr), spec.SidecarVolumes...),
+					[]corev1.Container{
 						k8s.InitContainer(
 							cr,
 							AppName,
@@ -180,25 +182,8 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 							nil,
 						),
 					},
-					Containers:                    containers(cr, secret),
-					ServiceAccountName:            cr.Spec.MySQL.ServiceAccountName,
-					NodeSelector:                  cr.Spec.MySQL.NodeSelector,
-					Tolerations:                   cr.Spec.MySQL.Tolerations,
-					Affinity:                      spec.GetAffinity(selector),
-					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(selector),
-					ImagePullSecrets:              spec.ImagePullSecrets,
-					TerminationGracePeriodSeconds: spec.GetTerminationGracePeriodSeconds(),
-					PriorityClassName:             spec.PriorityClassName,
-					RuntimeClassName:              spec.RuntimeClassName,
-					RestartPolicy:                 corev1.RestartPolicyAlways,
-					SchedulerName:                 spec.SchedulerName,
-					DNSPolicy:                     corev1.DNSClusterFirst,
-					Volumes: append(
-						volumes(cr),
-						spec.SidecarVolumes...,
-					),
-					SecurityContext: spec.PodSecurityContext,
-				},
+					containers(cr, secret),
+				),
 			},
 		},
 	}
