@@ -63,7 +63,7 @@ func (r *PerconaServerMySQLReconciler) reconcileScheduledTelemetrySending(ctx co
 		cronSchedule: configuredSchedule,
 	})
 
-	logger.Info("sending telemetry on cluster start")
+	logger.V(1).Info("sending telemetry on cluster start")
 
 	err = r.sendTelemetry(ctx, cr)
 	if err != nil {
@@ -86,20 +86,20 @@ func (r *PerconaServerMySQLReconciler) telemetrySendingHandlerFunc(ctx context.C
 			return
 		}
 		if err != nil {
-			logger.Error(err, "failed to get cr")
+			logger.Error(err, "failed to get cr while running the telemetry job")
 			return
 		}
 
 		if localCr.Status.State != apiv1.StateReady {
-			logger.Info("cluster is not ready yet")
+			logger.V(1).Info("cluster is not ready yet")
 			return
 		}
 
-		logger.Info("sending telemetry on schedule...", "job name", jobName)
+		logger.V(1).Info("sending telemetry on schedule...", "job name", jobName)
 
 		err = r.sendTelemetry(ctx, localCr)
 		if err != nil {
-			logger.Error(err, "failed to send telemetry report")
+			logger.V(1).Info("failed to send telemetry report", "error", err)
 		}
 	}
 }
