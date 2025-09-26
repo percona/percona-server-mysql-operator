@@ -9,8 +9,9 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/pkg/errors"
+
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
 type SidecarClient interface {
@@ -90,7 +91,7 @@ func (c *sidecarClient) DeleteBackup(ctx context.Context, name string, cfg Backu
 		if err != nil {
 			return errors.Wrap(err, "read response body")
 		}
-		return errors.Errorf("delete backup failed: %s", string(body))
+		return errors.Errorf("delete backup failed: %s (status: %d)", string(body), resp.StatusCode)
 	}
 	return nil
 }
