@@ -145,6 +145,16 @@ type PerconaServerMySQLBackup struct {
 	Status PerconaServerMySQLBackupStatus `json:"status,omitempty"`
 }
 
+func (b *PerconaServerMySQLBackup) GetContainerOptions(storage *BackupStorageSpec) *BackupContainerOptions {
+	if c := b.Spec.ContainerOptions; c != nil {
+		return c
+	}
+	if storage != nil && storage.ContainerOptions != nil {
+		return storage.ContainerOptions
+	}
+	return nil
+}
+
 //+kubebuilder:object:root=true
 
 // PerconaServerMySQLBackupList contains a list of PerconaServerMySQLBackup
@@ -160,13 +170,13 @@ func init() {
 }
 
 // Labels returns a standardized set of labels for the PerconaServerMySQLBackup custom resource.
-func (cr *PerconaServerMySQLBackup) Labels(name, component string) map[string]string {
-	return naming.Labels(name, cr.Name, "percona-server-backup", component)
+func (b *PerconaServerMySQLBackup) Labels(name, component string) map[string]string {
+	return naming.Labels(name, b.Name, "percona-server-backup", component)
 }
 
 // Hash returns FNV hash of the PerconaServerMySQLBackup UID
-func (cr *PerconaServerMySQLBackup) Hash() string {
-	hash := FNVHash([]byte(string(cr.UID)))
+func (b *PerconaServerMySQLBackup) Hash() string {
+	hash := FNVHash([]byte(string(b.UID)))
 
 	// We use only first 7 digits to give a space for pod number which is
 	// appended to all server ids. If we don't do this, it can cause a

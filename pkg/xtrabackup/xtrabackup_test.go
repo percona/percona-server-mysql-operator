@@ -1,9 +1,11 @@
 package xtrabackup
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
 
@@ -144,6 +146,67 @@ func TestJob(t *testing.T) {
 		assert.Equal(t, expectedLabels, j.Labels)
 		assert.Equal(t, expectedAnnotations, j.Annotations)
 	})
+	t.Run("container options", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		cr := backup.DeepCopy()
+
+		storage := cluster.Spec.Backup.Storages[storageName]
+		storage.ContainerOptions = &apiv1.BackupContainerOptions{
+			Env: []corev1.EnvVar{
+				{
+					Name:  "STORAGE_ENV_VAR",
+					Value: "VALUE",
+				},
+			},
+			Args: apiv1.BackupContainerArgs{
+				Xtrabackup: []string{"storage-arg-xbcloud"},
+				Xbcloud:    []string{"storage-arg-xtrabackup"},
+				Xbstream:   []string{"storage-arg-xbcloud"},
+			},
+		}
+
+		j, err := Job(cluster, cr, destination, initImage, storage)
+		require.NoError(t, err)
+		getEnv := func() string {
+			xbContainer := j.Spec.Template.Spec.Containers[0]
+			idx := slices.IndexFunc(xbContainer.Env, func(env corev1.EnvVar) bool {
+				return env.Name == "CONTAINER_OPTIONS"
+			})
+			require.Positive(t, idx, "missing CONTAINER_OPTIONS env var")
+			return xbContainer.Env[idx].Value
+		}
+
+		assert.Equal(t, `{"env":[{"name":"STORAGE_ENV_VAR","value":"VALUE"}],"args":{"xtrabackup":["storage-arg-xbcloud"],"xbcloud":["storage-arg-xtrabackup"],"xbstream":["storage-arg-xbcloud"]}}`, getEnv())
+
+		cr.Spec.ContainerOptions = &apiv1.BackupContainerOptions{
+			Env: []corev1.EnvVar{
+				{
+					Name:  "BACKUP_ENV_VAR",
+					Value: "VALUE",
+				},
+			},
+			Args: apiv1.BackupContainerArgs{
+				Xtrabackup: []string{"backup-arg-xbcloud"},
+				Xbcloud:    []string{"backup-arg-xtrabackup"},
+				Xbstream:   []string{"backup-arg-xbcloud"},
+			},
+		}
+
+		j, err = Job(cluster, cr, destination, initImage, storage)
+		require.NoError(t, err)
+
+		assert.Equal(t, `{"env":[{"name":"BACKUP_ENV_VAR","value":"VALUE"}],"args":{"xtrabackup":["backup-arg-xbcloud"],"xbcloud":["backup-arg-xtrabackup"],"xbstream":["backup-arg-xbcloud"]}}`, getEnv())
+
+		cr.Spec.ContainerOptions = &apiv1.BackupContainerOptions{
+			Env:  []corev1.EnvVar{},
+			Args: apiv1.BackupContainerArgs{},
+		}
+
+		j, err = Job(cluster, cr, destination, initImage, storage)
+		require.NoError(t, err)
+
+		assert.Equal(t, `{"args":{}}`, getEnv())
+	})
 }
 
 func TestDeleteJob(t *testing.T) {
@@ -211,6 +274,109 @@ func TestDeleteJob(t *testing.T) {
 		assert.Equal(t, expectedLabels, j.Labels)
 		assert.Equal(t, expectedAnnotations, j.Annotations)
 	})
+	t.Run("container options", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		cr := backup.DeepCopy()
+
+		storage := cr.Status.Storage
+		storage.ContainerOptions = &apiv1.BackupContainerOptions{
+			Env: []corev1.EnvVar{
+				{
+					Name:  "STORAGE_ENV_VAR",
+					Value: "VALUE",
+				},
+			},
+			Args: apiv1.BackupContainerArgs{
+				Xtrabackup: []string{"storage-arg-xtrabackup"},
+				Xbcloud:    []string{"storage-arg-xbcloud"},
+				Xbstream:   []string{"storage-arg-xbstream"},
+			},
+		}
+
+		cfg, err := GetBackupConfig(ctx, nil, cr)
+		require.NoError(t, err)
+
+		j := GetDeleteJob(cluster, cr, cfg)
+
+		getEnv := func() []corev1.EnvVar {
+			xbContainer := j.Spec.Template.Spec.Containers[0]
+			return xbContainer.Env
+		}
+		getCmd := func() []string {
+			xbContainer := j.Spec.Template.Spec.Containers[0]
+			return xbContainer.Command
+		}
+
+		assert.Equal(t, []corev1.EnvVar{
+			{
+				Name:  "STORAGE_ENV_VAR",
+				Value: "VALUE",
+			},
+			{
+				Name:  "XB_EXTRA_ARGS",
+				Value: "storage-arg-xtrabackup",
+			},
+			{
+				Name:  "XBCLOUD_EXTRA_ARGS",
+				Value: "storage-arg-xbcloud",
+			},
+			{
+				Name:  "XBSTREAM_EXTRA_ARGS",
+				Value: "storage-arg-xbstream",
+			},
+		}, getEnv())
+		assert.Equal(t, []string{"xbcloud", "delete", "--parallel=10", "--curl-retriable-errors=7", "storage-arg-xbcloud", "--md5", "--storage=s3", "--s3-bucket=bucket", "--s3-region=region", "--s3-access-key=", "--s3-secret-key=", "--s3-endpoint=endpoint", "prefix/ps-cluster1-0001-01-01-00:00:00-full"}, getCmd())
+
+		cr.Spec.ContainerOptions = &apiv1.BackupContainerOptions{
+			Env: []corev1.EnvVar{
+				{
+					Name:  "BACKUP_ENV_VAR",
+					Value: "VALUE",
+				},
+			},
+			Args: apiv1.BackupContainerArgs{
+				Xtrabackup: []string{"backup-arg-xtrabackup"},
+				Xbcloud:    []string{"backup-arg-xbcloud"},
+				Xbstream:   []string{"backup-arg-xbstream"},
+			},
+		}
+
+		cfg, err = GetBackupConfig(ctx, nil, cr)
+		require.NoError(t, err)
+		j = GetDeleteJob(cluster, cr, cfg)
+
+		assert.Equal(t, []corev1.EnvVar{
+			{
+				Name:  "BACKUP_ENV_VAR",
+				Value: "VALUE",
+			},
+			{
+				Name:  "XB_EXTRA_ARGS",
+				Value: "backup-arg-xtrabackup",
+			},
+			{
+				Name:  "XBCLOUD_EXTRA_ARGS",
+				Value: "backup-arg-xbcloud",
+			},
+			{
+				Name:  "XBSTREAM_EXTRA_ARGS",
+				Value: "backup-arg-xbstream",
+			},
+		}, getEnv())
+		assert.Equal(t, []string{"xbcloud", "delete", "--parallel=10", "--curl-retriable-errors=7", "backup-arg-xbcloud", "--md5", "--storage=s3", "--s3-bucket=bucket", "--s3-region=region", "--s3-access-key=", "--s3-secret-key=", "--s3-endpoint=endpoint", "prefix/ps-cluster1-0001-01-01-00:00:00-full"}, getCmd())
+
+		cr.Spec.ContainerOptions = &apiv1.BackupContainerOptions{
+			Env:  []corev1.EnvVar{},
+			Args: apiv1.BackupContainerArgs{},
+		}
+
+		cfg, err = GetBackupConfig(ctx, nil, cr)
+		require.NoError(t, err)
+		j = GetDeleteJob(cluster, cr, cfg)
+
+		assert.Equal(t, []corev1.EnvVar{}, getEnv())
+		assert.Equal(t, []string{"xbcloud", "delete", "--parallel=10", "--curl-retriable-errors=7", "--md5", "--storage=s3", "--s3-bucket=bucket", "--s3-region=region", "--s3-access-key=", "--s3-secret-key=", "--s3-endpoint=endpoint", "prefix/ps-cluster1-0001-01-01-00:00:00-full"}, getCmd())
+	})
 }
 
 func TestRestoreJob(t *testing.T) {
@@ -272,5 +438,140 @@ func TestRestoreJob(t *testing.T) {
 		}
 		assert.Equal(t, expectedLabels, j.Labels)
 		assert.Equal(t, expectedAnnotations, j.Annotations)
+	})
+
+	t.Run("container options", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		cr := backup.DeepCopy()
+
+		storage := cluster.Spec.Backup.Storages[storageName]
+		storage.ContainerOptions = &apiv1.BackupContainerOptions{
+			Env: []corev1.EnvVar{
+				{
+					Name:  "STORAGE_ENV_VAR",
+					Value: "VALUE",
+				},
+			},
+			Args: apiv1.BackupContainerArgs{
+				Xtrabackup: []string{"storage-arg-xtrabackup"},
+				Xbcloud:    []string{"storage-arg-xbcloud"},
+				Xbstream:   []string{"storage-arg-xbstream"},
+			},
+		}
+
+		j := RestoreJob(cluster, destination, cr, storage, initImage, "pvc-name")
+
+		getEnv := func() []corev1.EnvVar {
+			xbContainer := j.Spec.Template.Spec.Containers[0]
+			return xbContainer.Env
+		}
+
+		assert.Equal(t, []corev1.EnvVar{
+			{
+				Name:  "RESTORE_NAME",
+				Value: "backup",
+			},
+			{
+				Name:  "BACKUP_DEST",
+				Value: "destination",
+			},
+			{
+				Name:  "VERIFY_TLS",
+				Value: "true",
+			},
+			{
+				Name:  "KEYRING_VAULT_PATH",
+				Value: "/etc/mysql/vault-keyring-secret/keyring_vault.cnf",
+			},
+			{
+				Name:  "STORAGE_ENV_VAR",
+				Value: "VALUE",
+			},
+			{
+				Name:  "XB_EXTRA_ARGS",
+				Value: "storage-arg-xtrabackup",
+			},
+			{
+				Name:  "XBCLOUD_EXTRA_ARGS",
+				Value: "storage-arg-xbcloud",
+			},
+			{
+				Name:  "XBSTREAM_EXTRA_ARGS",
+				Value: "storage-arg-xbstream",
+			},
+		}, getEnv())
+
+		cr.Spec.ContainerOptions = &apiv1.BackupContainerOptions{
+			Env: []corev1.EnvVar{
+				{
+					Name:  "RESTORE_ENV_VAR",
+					Value: "VALUE",
+				},
+			},
+			Args: apiv1.BackupContainerArgs{
+				Xtrabackup: []string{"restore-arg-xtrabackup"},
+				Xbcloud:    []string{"restore-arg-xbcloud"},
+				Xbstream:   []string{"restore-arg-xbstream"},
+			},
+		}
+		j = RestoreJob(cluster, destination, cr, storage, initImage, "pvc-name")
+		assert.Equal(t, []corev1.EnvVar{
+			{
+				Name:  "RESTORE_NAME",
+				Value: "backup",
+			},
+			{
+				Name:  "BACKUP_DEST",
+				Value: "destination",
+			},
+			{
+				Name:  "VERIFY_TLS",
+				Value: "true",
+			},
+			{
+				Name:  "KEYRING_VAULT_PATH",
+				Value: "/etc/mysql/vault-keyring-secret/keyring_vault.cnf",
+			},
+			{
+				Name:  "RESTORE_ENV_VAR",
+				Value: "VALUE",
+			},
+			{
+				Name:  "XB_EXTRA_ARGS",
+				Value: "restore-arg-xtrabackup",
+			},
+			{
+				Name:  "XBCLOUD_EXTRA_ARGS",
+				Value: "restore-arg-xbcloud",
+			},
+			{
+				Name:  "XBSTREAM_EXTRA_ARGS",
+				Value: "restore-arg-xbstream",
+			},
+		}, getEnv())
+
+		cr.Spec.ContainerOptions = &apiv1.BackupContainerOptions{
+			Env:  []corev1.EnvVar{},
+			Args: apiv1.BackupContainerArgs{},
+		}
+		j = RestoreJob(cluster, destination, cr, storage, initImage, "pvc-name")
+		assert.Equal(t, []corev1.EnvVar{
+			{
+				Name:  "RESTORE_NAME",
+				Value: "backup",
+			},
+			{
+				Name:  "BACKUP_DEST",
+				Value: "destination",
+			},
+			{
+				Name:  "VERIFY_TLS",
+				Value: "true",
+			},
+			{
+				Name:  "KEYRING_VAULT_PATH",
+				Value: "/etc/mysql/vault-keyring-secret/keyring_vault.cnf",
+			},
+		}, getEnv())
 	})
 }
