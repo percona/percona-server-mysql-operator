@@ -14,7 +14,7 @@ metadata:
     app.kubernetes.io/part-of: percona-server
   name: limits-no-requests-mysql
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL
@@ -108,7 +108,7 @@ spec:
           timeoutSeconds: 3
         resources:
           limits:
-            memory: 4G
+            memory: 4Gi
         startupProbe:
           exec:
             command:
@@ -243,7 +243,7 @@ spec:
       - ReadWriteOnce
       resources:
         requests:
-          storage: 2G
+          storage: 2Gi
       volumeMode: Filesystem
     status:
       phase: Pending
@@ -260,7 +260,7 @@ metadata:
     app.kubernetes.io/part-of: percona-server
   name: limits-no-requests-orc
   ownerReferences:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
     kind: PerconaServerMySQL

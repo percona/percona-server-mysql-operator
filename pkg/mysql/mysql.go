@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/pmm"
@@ -44,19 +44,19 @@ const (
 )
 
 type User struct {
-	Username apiv1alpha1.SystemUser
+	Username apiv1.SystemUser
 	Password string
 	Hosts    []string
 }
 
-type Exposer apiv1alpha1.PerconaServerMySQL
+type Exposer apiv1.PerconaServerMySQL
 
 func (e *Exposer) Exposed() bool {
 	return e.Spec.MySQL.Expose.Enabled
 }
 
 func (e *Exposer) Name(index string) string {
-	cr := apiv1alpha1.PerconaServerMySQL(*e)
+	cr := apiv1.PerconaServerMySQL(*e)
 	return Name(&cr) + "-" + index
 }
 
@@ -65,73 +65,73 @@ func (e *Exposer) Size() int32 {
 }
 
 func (e *Exposer) MatchLabels() map[string]string {
-	cr := apiv1alpha1.PerconaServerMySQL(*e)
+	cr := apiv1.PerconaServerMySQL(*e)
 	return MatchLabels(&cr)
 }
 
 func (e *Exposer) Service(name string) *corev1.Service {
-	cr := apiv1alpha1.PerconaServerMySQL(*e)
+	cr := apiv1.PerconaServerMySQL(*e)
 	return PodService(&cr, cr.Spec.MySQL.Expose.Type, name)
 }
 
 func (e *Exposer) SaveOldMeta() bool {
-	cr := apiv1alpha1.PerconaServerMySQL(*e)
+	cr := apiv1.PerconaServerMySQL(*e)
 	return cr.MySQLSpec().Expose.SaveOldMeta()
 }
 
-func Name(cr *apiv1alpha1.PerconaServerMySQL) string {
+func Name(cr *apiv1.PerconaServerMySQL) string {
 	return cr.Name + "-" + AppName
 }
 
-func NamespacedName(cr *apiv1alpha1.PerconaServerMySQL) types.NamespacedName {
+func NamespacedName(cr *apiv1.PerconaServerMySQL) types.NamespacedName {
 	return types.NamespacedName{Name: Name(cr), Namespace: cr.Namespace}
 }
 
-func ServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
+func ServiceName(cr *apiv1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
-func UnreadyServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
+func UnreadyServiceName(cr *apiv1.PerconaServerMySQL) string {
 	return Name(cr) + "-unready"
 }
 
-func ProxyServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
+func ProxyServiceName(cr *apiv1.PerconaServerMySQL) string {
 	return Name(cr) + "-proxy"
 }
 
-func PrimaryServiceName(cr *apiv1alpha1.PerconaServerMySQL) string {
+func PrimaryServiceName(cr *apiv1.PerconaServerMySQL) string {
 	return Name(cr) + "-primary"
 }
 
-func ConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
+func ConfigMapName(cr *apiv1.PerconaServerMySQL) string {
 	return Name(cr)
 }
 
-func AutoConfigMapName(cr *apiv1alpha1.PerconaServerMySQL) string {
+func AutoConfigMapName(cr *apiv1.PerconaServerMySQL) string {
 	return "auto-" + Name(cr)
 }
 
-func PodName(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
+func PodName(cr *apiv1.PerconaServerMySQL, idx int) string {
 	return fmt.Sprintf("%s-%d", Name(cr), idx)
 }
 
-func FQDN(cr *apiv1alpha1.PerconaServerMySQL, idx int) string {
+func FQDN(cr *apiv1.PerconaServerMySQL, idx int) string {
 	return fmt.Sprintf("%s.%s.%s", PodName(cr, idx), ServiceName(cr), cr.Namespace)
 }
 
-func PodFQDN(cr *apiv1alpha1.PerconaServerMySQL, pod *corev1.Pod) string {
+func PodFQDN(cr *apiv1.PerconaServerMySQL, pod *corev1.Pod) string {
 	return fmt.Sprintf("%s.%s.%s", pod.Name, ServiceName(cr), cr.Namespace)
 }
 
-func Labels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
+func Labels(cr *apiv1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(cr.GlobalLabels(), cr.MySQLSpec().Labels, MatchLabels(cr))
 }
 
-func MatchLabels(cr *apiv1alpha1.PerconaServerMySQL) map[string]string {
+func MatchLabels(cr *apiv1.PerconaServerMySQL) map[string]string {
 	return cr.Labels(AppName, naming.ComponentDatabase)
 }
 
-func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsHash string, secret *corev1.Secret) *appsv1.StatefulSet {
+func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash string, secret *corev1.Secret) *appsv1.StatefulSet {
 	selector := MatchLabels(cr)
 	spec := cr.MySQLSpec()
 	replicas := spec.Size
@@ -229,10 +229,10 @@ func StatefulSet(cr *apiv1alpha1.PerconaServerMySQL, initImage, configHash, tlsH
 	return sts
 }
 
-func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
+func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 	volumes := []corev1.Volume{
 		{
-			Name: apiv1alpha1.BinVolumeName,
+			Name: apiv1.BinVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
@@ -333,11 +333,11 @@ func volumes(cr *apiv1alpha1.PerconaServerMySQL) []corev1.Volume {
 	return volumes
 }
 
-func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrategy {
+func updateStrategy(cr *apiv1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrategy {
 	switch cr.Spec.UpdateStrategy {
 	case appsv1.OnDeleteStatefulSetStrategyType:
 		return appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
-	case apiv1alpha1.SmartUpdateStatefulSetStrategyType:
+	case apiv1.SmartUpdateStatefulSetStrategyType:
 		return appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType}
 	default:
 		var zero int32 = 0
@@ -350,7 +350,7 @@ func updateStrategy(cr *apiv1alpha1.PerconaServerMySQL) appsv1.StatefulSetUpdate
 	}
 }
 
-func volumeClaimTemplates(cr *apiv1alpha1.PerconaServerMySQL, spec *apiv1alpha1.MySQLSpec) []corev1.PersistentVolumeClaim {
+func volumeClaimTemplates(cr *apiv1.PerconaServerMySQL, spec *apiv1.MySQLSpec) []corev1.PersistentVolumeClaim {
 	var pvcs []corev1.PersistentVolumeClaim
 
 	if spec.VolumeSpec.PersistentVolumeClaim == nil {
@@ -369,7 +369,7 @@ func volumeClaimTemplates(cr *apiv1alpha1.PerconaServerMySQL, spec *apiv1alpha1.
 	return pvcs
 }
 
-func servicePorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ServicePort {
+func servicePorts(cr *apiv1.PerconaServerMySQL) []corev1.ServicePort {
 	ports := []corev1.ServicePort{
 		{
 			Name: AppName,
@@ -396,7 +396,7 @@ func servicePorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ServicePort {
 	return ports
 }
 
-func containerPorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ContainerPort {
+func containerPorts(cr *apiv1.PerconaServerMySQL) []corev1.ContainerPort {
 	ports := []corev1.ContainerPort{
 		{
 			Name:          AppName,
@@ -419,7 +419,7 @@ func containerPorts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.ContainerPort {
 	return ports
 }
 
-func UnreadyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
+func UnreadyService(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 	selector := MatchLabels(cr)
 
 	return &corev1.Service{
@@ -442,7 +442,7 @@ func UnreadyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
-func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
+func HeadlessService(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 	selector := MatchLabels(cr)
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -465,7 +465,7 @@ func HeadlessService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
-func ProxyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
+func ProxyService(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 	selector := MatchLabels(cr)
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -488,7 +488,7 @@ func ProxyService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
-func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podName string) *corev1.Service {
+func PodService(cr *apiv1.PerconaServerMySQL, t corev1.ServiceType, podName string) *corev1.Service {
 	expose := cr.Spec.MySQL.Expose
 
 	labels := MatchLabels(cr)
@@ -532,7 +532,7 @@ func PodService(cr *apiv1alpha1.PerconaServerMySQL, t corev1.ServiceType, podNam
 
 // PrimaryService constructs a service which exposes the pods that has the primary label.
 // For now this service should be available only for group replication.
-func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
+func PrimaryService(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 	expose := cr.Spec.MySQL.ExposePrimary
 
 	labels := MatchLabels(cr)
@@ -573,7 +573,7 @@ func PrimaryService(cr *apiv1alpha1.PerconaServerMySQL) *corev1.Service {
 	}
 }
 
-func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []corev1.Container {
+func containers(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) []corev1.Container {
 	containers := []corev1.Container{mysqldContainer(cr)}
 
 	if backup := cr.Spec.Backup; backup != nil && backup.Enabled {
@@ -597,11 +597,11 @@ func containers(cr *apiv1alpha1.PerconaServerMySQL, secret *corev1.Secret) []cor
 	return appendUniqueContainers(containers, cr.Spec.MySQL.Sidecars...)
 }
 
-func mysqldVolumeMounts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.VolumeMount {
+func mysqldVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
 		{
-			Name:      apiv1alpha1.BinVolumeName,
-			MountPath: apiv1alpha1.BinVolumePath,
+			Name:      apiv1.BinVolumeName,
+			MountPath: apiv1.BinVolumePath,
 		},
 		{
 			Name:      DataVolumeName,
@@ -635,7 +635,7 @@ func mysqldVolumeMounts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.VolumeMount
 	return mounts
 }
 
-func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
+func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	spec := cr.MySQLSpec()
 
 	env := []corev1.EnvVar{
@@ -717,11 +717,11 @@ func mysqldContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 	return container
 }
 
-func backupVolumeMounts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.VolumeMount {
+func backupVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
 		{
-			Name:      apiv1alpha1.BinVolumeName,
-			MountPath: apiv1alpha1.BinVolumePath,
+			Name:      apiv1.BinVolumeName,
+			MountPath: apiv1.BinVolumePath,
 		},
 		{
 			Name:      DataVolumeName,
@@ -747,8 +747,8 @@ func backupVolumeMounts(cr *apiv1alpha1.PerconaServerMySQL) []corev1.VolumeMount
 	return mounts
 }
 
-func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
-	return corev1.Container{
+func backupContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
+	container := corev1.Container{
 		Name:            "xtrabackup",
 		Image:           cr.Spec.Backup.Image,
 		ImagePullPolicy: cr.Spec.Backup.ImagePullPolicy,
@@ -766,9 +766,18 @@ func backupContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 		SecurityContext:          cr.Spec.Backup.ContainerSecurityContext,
 		Resources:                cr.Spec.Backup.Resources,
 	}
+
+	if cr.CompareVersion("0.12.0") >= 0 {
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  "CLUSTER_TYPE",
+			Value: string(cr.Spec.MySQL.ClusterType),
+		})
+	}
+
+	return container
 }
 
-func heartbeatContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
+func heartbeatContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	return corev1.Container{
 		Name:            "pt-heartbeat",
 		Image:           cr.Spec.Toolkit.Image,
@@ -779,15 +788,15 @@ func heartbeatContainer(cr *apiv1alpha1.PerconaServerMySQL) corev1.Container {
 			{
 				Name: "HEARTBEAT_PASSWORD",
 				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: k8s.SecretKeySelector(cr.InternalSecretName(), string(apiv1alpha1.UserHeartbeat)),
+					SecretKeyRef: k8s.SecretKeySelector(cr.InternalSecretName(), string(apiv1.UserHeartbeat)),
 				},
 			},
 		},
 		Ports: []corev1.ContainerPort{},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      apiv1alpha1.BinVolumeName,
-				MountPath: apiv1alpha1.BinVolumePath,
+				Name:      apiv1.BinVolumeName,
+				MountPath: apiv1.BinVolumePath,
 			},
 			{
 				Name:      DataVolumeName,

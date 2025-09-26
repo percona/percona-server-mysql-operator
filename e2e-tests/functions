@@ -4,6 +4,7 @@
 ROOT_REPO=${ROOT_REPO:-$(realpath ../../..)}
 test_name=$(basename "$(pwd)")
 source "${ROOT_REPO}/e2e-tests/vars.sh"
+sed=$(which gsed || which sed)
 
 if oc get projects 2>/dev/null; then
 	OPENSHIFT=4
@@ -224,7 +225,7 @@ get_pmm_server_token() {
 		-w "\n%{http_code}")
 
 	create_status_code=$(echo "$create_response" | tail -n1)
-	create_json_response=$(echo "$create_response" | sed '$ d')
+	create_json_response=$(echo "$create_response" | $sed '$ d')
 
 	if [[ $create_status_code -ne 201 ]]; then
 		echo "Error: Failed to create PMM service account. HTTP Status: $create_status_code" >&2
@@ -248,7 +249,7 @@ get_pmm_server_token() {
 		-w "\n%{http_code}")
 
 	token_status_code=$(echo "$token_response" | tail -n1)
-	token_json_response=$(echo "$token_response" | sed '$ d')
+	token_json_response=$(echo "$token_response" | $sed '$ d')
 
 	if [[ $token_status_code -ne 200 ]]; then
 		echo "Error: Failed to create token. HTTP Status: $token_status_code" >&2
@@ -282,7 +283,7 @@ delete_pmm_server_token() {
 		-w "\n%{http_code}")
 
 	service_accounts_status=$(echo "$service_accounts_response" | tail -n1)
-	service_accounts_json=$(echo "$service_accounts_response" | sed '$ d')
+	service_accounts_json=$(echo "$service_accounts_response" | $sed '$ d')
 
 	if [[ $service_accounts_status -ne 200 ]]; then
 		echo "Error: Failed to fetch service accounts. HTTP Status: $service_accounts_status" >&2
@@ -304,7 +305,7 @@ delete_pmm_server_token() {
 		-w "\n%{http_code}")
 
 	tokens_status=$(echo "$tokens_response" | tail -n1)
-	tokens_json=$(echo "$tokens_response" | sed '$ d')
+	tokens_json=$(echo "$tokens_response" | $sed '$ d')
 
 	if [[ $tokens_status -ne 200 ]]; then
 		echo "Error: Failed to fetch tokens. HTTP Status: $tokens_status" >&2
@@ -581,17 +582,17 @@ deploy_vault() {
 	fi
 
 	cat ${secret} \
-		| sed -e "s/#token/$token/" \
-		| sed -e "s/#vault_url/$protocol:\/\/$name.$name.svc.cluster.local:8200/" \
-		| sed -e "s/#secret/secret/" >"${tmp_dir}/vault-secret.yaml"
+		| $sed -e "s/#token/$token/" \
+		| $sed -e "s/#vault_url/$protocol:\/\/$name.$name.svc.cluster.local:8200/" \
+		| $sed -e "s/#secret/secret/" >"${tmp_dir}/vault-secret.yaml"
 
 	if [ $protocol == "https" ]; then
-		sed -e 's/^/    /' ${tmp_dir}/vault.ca >${tmp_dir}/vault.new.ca
-		sed -i "s/#vault_ca/vault_ca/" "${tmp_dir}/vault-secret.yaml"
-		sed -i "/#certVal/r ${tmp_dir}/vault.new.ca" "${tmp_dir}/vault-secret.yaml"
-		sed -i "/#certVal/d" "${tmp_dir}/vault-secret.yaml"
+		$sed -e 's/^/    /' ${tmp_dir}/vault.ca >${tmp_dir}/vault.new.ca
+		$sed -i "s/#vault_ca/vault_ca/" "${tmp_dir}/vault-secret.yaml"
+		$sed -i "/#certVal/r ${tmp_dir}/vault.new.ca" "${tmp_dir}/vault-secret.yaml"
+		$sed -i "/#certVal/d" "${tmp_dir}/vault-secret.yaml"
 	else
-		sed -i "/#vault_ca/d" "${tmp_dir}/vault-secret.yaml"
+		$sed -i "/#vault_ca/d" "${tmp_dir}/vault-secret.yaml"
 	fi
 
 	kubectl apply -n "${NAMESPACE}" -f ${tmp_dir}/vault-secret.yaml
@@ -685,7 +686,7 @@ run_mysql() {
 
 	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
 		bash -c "printf '%s\n' \"${command}\" | mysql -sN $uri" 2>&1 \
-		| sed -e 's/mysql: //' \
+		| $sed -e 's/mysql: //' \
 		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
 }
 
@@ -748,7 +749,7 @@ get_gr_status() {
 	client_pod=$(get_client_pod)
 
 	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- mysqlsh --js --uri $uri --cluster --result-format json -- cluster status \
-		| sed -e 's/mysql: //' \
+		| $sed -e 's/mysql: //' \
 		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
 }
 
@@ -848,7 +849,7 @@ get_qan20_values() {
 EOF
 	)
 
-	run_curl -XPOST -d "'$(echo ${payload} | sed 's/\n//g')'" "-H 'Authorization: Bearer ${token}'" "https://${user_pass}@${endpoint}/v1/qan/metrics:getReport" \
+	run_curl -XPOST -d "'$(echo ${payload} | $sed 's/\n//g')'" "-H 'Authorization: Bearer ${token}'" "https://${user_pass}@${endpoint}/v1/qan/metrics:getReport" \
 		| jq '.rows[].fingerprint'
 }
 
@@ -1115,15 +1116,20 @@ check_passwords_leak() {
 }
 
 deploy_chaos_mesh() {
-	local container_runtime="containerd"
-	local socket_path="/run/containerd/containerd.sock"
+	local current_runtime=$(kubectl get nodes -o jsonpath='{range .items[0]}{.status.nodeInfo.containerRuntimeVersion}{"\n"}{end}' | awk -F':' '{print $1}')
 
-	if [ -n "${MINIKUBE}" ]; then
+	if [[ $current_runtime == 'containerd' ]]; then
+		container_runtime="containerd"
+		socket_path="/run/containerd/containerd.sock"
+	elif [[ $current_runtime == 'docker' ]]; then
 		container_runtime=docker
 		socket_path=/var/run/docker.sock
-	elif [ -n "${OPENSHIFT}" ]; then
+	elif [[ $current_runtime == 'cri-o' ]]; then
 		container_runtime=crio
 		socket_path=/var/run/crio/crio.sock
+	else
+		echo "Unknown runtime: $current_runtime"
+		exit 1
 	fi
 
 	destroy_chaos_mesh
@@ -1142,7 +1148,7 @@ deploy_chaos_mesh() {
 }
 
 destroy_chaos_mesh() {
-	local chaos_mesh_ns=$(helm list --all-namespaces --filter chaos-mesh | tail -n1 | awk -F' ' '{print $2}' | sed 's/NAMESPACE//')
+	local chaos_mesh_ns=$(helm list --all-namespaces --filter chaos-mesh | tail -n1 | awk -F' ' '{print $2}' | $sed 's/NAMESPACE//')
 
 	if [ -n "${chaos_mesh_ns}" ]; then
 		helm uninstall --wait --timeout 60s chaos-mesh --namespace ${chaos_mesh_ns} || :
@@ -1325,7 +1331,7 @@ check_primary_chaos() {
 		| jq .defaultReplicaSet.topology[].status \
 		| grep ONLINE \
 		| wc -l \
-		| sed 's/ //g')
+		| $sed 's/ //g')
 
 	if [[ ${online_members} != 3 ]]; then
 		echo "expected 3 online members, got ${online_members}"
@@ -1358,7 +1364,7 @@ renew_certificate() {
 deploy_cmctl() {
 	local service_account="cmctl"
 
-	sed -e "s/percona-server-mysql-operator/$service_account/g" "${DEPLOY_DIR}/rbac.yaml" \
+	$sed -e "s/percona-server-mysql-operator/$service_account/g" "${DEPLOY_DIR}/rbac.yaml" \
 		| yq '(select(.rules).rules[] | select(contains({"apiGroups": ["cert-manager.io"]}))).resources += "certificates/status"' \
 		| kubectl apply -n "${NAMESPACE}" -f -
 	kubectl apply -n "${NAMESPACE}" -f "${TESTS_CONFIG_DIR}/cmctl.yml"
@@ -1518,4 +1524,60 @@ get_cr_with_latest_versions_in_vs() {
 		${image_haproxy} \
 		${image_pmm_client} \
 		${TEMP_DIR}/cr.yaml
+}
+
+get_telemetry_report_by_id() {
+	local token=$1
+	local report_id=$2
+
+	if [[ -z $token || -z $report_id ]]; then
+		echo "Token and report_id are required"
+		return 1
+	fi
+
+	local sql="select * from generic_reports where id = '${report_id}' FORMAT JSON"
+	local encoded_sql
+	encoded_sql="$(printf "%s" "$sql" | jq -sRr @uri)"
+
+	local url="https://pmm.check-dev.percona.com/graph/api/datasources/proxy/33/?query=${encoded_sql}&database=telemetryd"
+
+	local retry=0 resp rows
+
+	while :; do
+		resp="$(curl -fsS -k -H "Authorization: Bearer ${token}" "$url" 2>&1)"
+		rows="$(echo "$resp" | jq '.rows')"
+
+		if [[ $rows =~ ^[1-9][0-9]*$ ]]; then
+			echo "Report data found:"
+			echo "$resp" | jq '.data'
+			return 0
+		fi
+
+		((retry++))
+		if ((retry >= 10)); then
+			echo "Max retry count $retry reached. Report data was not found!"
+			return 1
+		fi
+
+		sleep 5
+	done
+}
+
+wait_for_generation() {
+	local resource="$1"
+	local target_generation="$2"
+
+	echo "Waiting for $resource to reach generation $target_generation..."
+
+	while true; do
+		current_generation=$(kubectl -n ${NAMESPACE} get "$resource" -o jsonpath='{.metadata.generation}')
+
+		if [ "$current_generation" -eq "$target_generation" ]; then
+			echo "Resource $resource has reached generation $target_generation."
+			break
+		else
+			echo "Resource $resource is at generation $current_generation. Waiting..."
+			sleep 5
+		fi
+	done
 }

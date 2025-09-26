@@ -1,0 +1,44 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 180
+commands:
+  - script: |-
+      set -o errexit
+
+      source ../../functions
+
+      echo "Waiting for telemetry to be sent..."
+
+      # TELEMETRY_SCHEDULE is set to * * * * *, so we wait...
+      sleep 120
+
+      OPERATOR_POD=$(get_operator_pod)
+      echo "Operator pod: $OPERATOR_POD"
+
+      echo "Checking operator logs for telemetry reports..."
+
+      REPORT_IDS=$(kubectl logs -n "${OPERATOR_NS:-$NAMESPACE}" "$OPERATOR_POD" | grep -oE '"report_id": "[^"]+"' | awk -F': ' '{print $2}' | tr -d '"' | head -n 10)
+
+      if [[ -z "$REPORT_IDS" ]]; then
+        echo "No report IDs found in operator logs"
+        exit 1
+      fi
+
+      if kubectl logs -n "${OPERATOR_NS:-$NAMESPACE}" "$OPERATOR_POD" | grep -i "sending telemetry on cluster start"; then
+        echo "Found telemetry report generation in logs for cluster start"
+      else
+        echo "Telemetry report generation not found"
+        exit 1
+      fi
+
+      if kubectl logs -n "${OPERATOR_NS:-$NAMESPACE}" "$OPERATOR_POD" | grep -i "sending telemetry on schedule"; then
+        echo "Found telemetry report generation in logs for schedule"
+      else
+        echo "Telemetry report generation not found"
+        exit 1
+      fi
+
+      for report_id in $REPORT_IDS; do
+        get_telemetry_report_by_id ${PMM_TELEMETRY_TOKEN:?PMM_TELEMETRY_TOKEN env var is required} $report_id
+        echo "verified report ID: $report_id"
+      done

@@ -1,11 +1,21 @@
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLBackup
 metadata:
   name: backup1
   finalizers:
     - percona.com/delete-backup
 spec:
-
-#  sourceHost: cluster1-mysql-0.<mysql_service_name>.<namespace>
   clusterName: ps-cluster1
   storageName: minio
+#  sourcePod: ps-cluster1-mysql-1
+#  containerOptions:
+#    env:
+#    - name: CUSTOM_VAR
+#      value: "false"
+#    args:
+#      xtrabackup:
+#      - "--someflag=abc"
+#      xbcloud:
+#      - "--someflag=abc"
+#      xbstream:
+#      - "--someflag=abc"

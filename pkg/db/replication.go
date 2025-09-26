@@ -12,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 )
@@ -39,7 +39,7 @@ type ReplicationDBManager struct {
 	db *db
 }
 
-func NewReplicationManager(pod *corev1.Pod, cliCmd clientcmd.Client, user apiv1alpha1.SystemUser, pass, host string) *ReplicationDBManager {
+func NewReplicationManager(pod *corev1.Pod, cliCmd clientcmd.Client, user apiv1.SystemUser, pass, host string) *ReplicationDBManager {
 	return &ReplicationDBManager{db: newDB(pod, cliCmd, user, pass, host)}
 }
 
@@ -77,7 +77,7 @@ func (m *ReplicationDBManager) ChangeReplicationSource(ctx context.Context, host
 			SOURCE_AUTO_POSITION=1,
 			SOURCE_RETRY_COUNT=3,
 			SOURCE_CONNECT_RETRY=60
-		`, apiv1alpha1.UserReplication, replicaPass, host, port)
+		`, apiv1.UserReplication, replicaPass, host, port)
 	err := m.db.exec(ctx, q, &outb, &errb)
 
 	if err != nil {

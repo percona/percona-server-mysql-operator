@@ -1,7 +1,0 @@
-apiVersion: ps.percona.com/v1alpha1
-kind: PerconaServerMySQLBackup
-metadata:
-  name: gr-demand-backup-s3
-spec:
-  clusterName: gr-demand-backup
-  storageName: aws-s3

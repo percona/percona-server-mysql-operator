@@ -24,7 +24,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	xb "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
@@ -118,7 +118,7 @@ func main() {
 	os.Exit(0)
 }
 
-func getSecret(username apiv1alpha1.SystemUser) (string, error) {
+func getSecret(username apiv1.SystemUser) (string, error) {
 	path := filepath.Join(mysql.CredsMountPath, string(username))
 	sBytes, err := os.ReadFile(path)
 	if err != nil {
@@ -187,14 +187,14 @@ func getBackupHandler(w http.ResponseWriter, req *http.Request) {
 	data, err := json.Marshal(status.GetBackupConfig())
 	if err != nil {
 		log.Error(err, "failed to marshal data")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
+		http.Error(w, "get backup failed", http.StatusInternalServerError)
 		return
 	}
 
 	_, err = w.Write(data)
 	if err != nil {
 		log.Error(err, "failed to write data")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
+		http.Error(w, "get backup failed", http.StatusInternalServerError)
 		return
 	}
 }
@@ -203,7 +203,7 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 	ns, err := getNamespace()
 	if err != nil {
 		log.Error(err, "failed to detect namespace")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
+		http.Error(w, "delete failed", http.StatusInternalServerError)
 		return
 	}
 
@@ -218,7 +218,7 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 	data, err := io.ReadAll(req.Body)
 	if err != nil {
 		log.Error(err, "failed to read request data")
-		http.Error(w, "backup failed", http.StatusBadRequest)
+		http.Error(w, "delete failed", http.StatusBadRequest)
 		return
 	}
 	defer req.Body.Close()
@@ -226,13 +226,13 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 	backupConf := xb.BackupConfig{}
 	if err = json.Unmarshal(data, &backupConf); err != nil {
 		log.Error(err, "failed to unmarshal backup config")
-		http.Error(w, "backup failed", http.StatusBadRequest)
+		http.Error(w, "delete failed", http.StatusBadRequest)
 		return
 	}
 
 	if err := deleteBackup(req.Context(), &backupConf, backupName); err != nil {
 		log.Error(err, "failed to delete backup")
-		http.Error(w, "backup failed", http.StatusInternalServerError)
+		http.Error(w, "delete failed", http.StatusInternalServerError)
 		return
 	}
 
@@ -242,7 +242,9 @@ func deleteBackupHandler(w http.ResponseWriter, req *http.Request) {
 func deleteBackup(ctx context.Context, cfg *xb.BackupConfig, backupName string) error {
 	logWriter := io.Writer(os.Stderr)
 	if backupName != "" {
-		backupLog, err := os.OpenFile(filepath.Join(mysql.BackupLogDir, backupName+".log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+		backupLog, err := os.OpenFile(
+			filepath.Join(mysql.BackupLogDir, backupName+".log"),
+			os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
 		if err != nil {
 			return errors.Wrap(err, "failed to open log file")
 		}
@@ -297,7 +299,7 @@ func backupExists(ctx context.Context, cfg *xb.BackupConfig) (bool, error) {
 
 func checkBackupMD5Size(ctx context.Context, cfg *xb.BackupConfig) error {
 	// xbcloud doesn't create md5 file for azure
-	if cfg.Type == apiv1alpha1.BackupStorageAzure {
+	if cfg.Type == apiv1.BackupStorageAzure {
 		return nil
 	}
 
@@ -324,6 +326,27 @@ func checkBackupMD5Size(ctx context.Context, cfg *xb.BackupConfig) error {
 	if len(data) < 3000 {
 		return errors.Errorf("backup was finished unsuccessful: md5 size: %d", len(data))
 	}
+	return nil
+}
+
+func startReplicaSQLThread(ctx context.Context) error {
+	backupUser := apiv1.UserXtraBackup
+
+	backupPass, err := getSecret(backupUser)
+	if err != nil {
+		return errors.Wrap(err, "get password")
+	}
+
+	startSQL := "START REPLICA SQL_THREAD"
+	cmd := exec.CommandContext(ctx, "mysql", "-u", string(backupUser), "-p", "-e", startSQL)
+	cmd.Stdin = strings.NewReader(backupPass + "\n")
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Error(err, "failed to start SQL thread", "output", string(out))
+		return errors.Wrap(err, startSQL)
+	}
+
 	return nil
 }
 
@@ -369,7 +392,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	defer func() {
 		status.RemoveBackupConfig()
 	}()
-	log.V(1).Info("Checking if backup exists")
+	log.Info("Checking if backup exists")
 	exists, err := backupExists(req.Context(), &backupConf)
 	if err != nil {
 		log.Error(err, "failed to check if backup exists")
@@ -377,7 +400,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if exists {
-		log.V(1).Info("Backup exists. Deleting backup")
+		log.Info("Backup exists. Deleting backup")
 		if err := deleteBackup(req.Context(), &backupConf, backupName); err != nil {
 			log.Error(err, "failed to delete existing backup")
 			http.Error(w, "backup failed", http.StatusBadRequest)
@@ -388,7 +411,7 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Connection", "keep-alive")
 
-	backupUser := apiv1alpha1.UserXtraBackup
+	backupUser := apiv1.UserXtraBackup
 	backupPass, err := getSecret(backupUser)
 	if err != nil {
 		log.Error(err, "failed to get backup password")
@@ -475,13 +498,22 @@ func createBackupHandler(w http.ResponseWriter, req *http.Request) {
 		}
 
 		if err := xtrabackup.Wait(); err != nil {
-			log.Error(err, "failed waiting for xtrabackup to finish")
+			log.Error(err, "failed to wait for xtrabackup to finish")
 			return err
 		}
 		return nil
 	})
 
 	if err := g.Wait(); err != nil {
+		log.Error(err, "backup failed")
+
+		if getClusterType() == apiv1.ClusterTypeAsync {
+			// --safe-slave-backup stops SQL thread but it's not started
+			// if xtrabackup command fails
+			log.Info("starting replication SQL thread")
+			startReplicaSQLThread(req.Context()) // nolint:errcheck
+		}
+
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
@@ -529,4 +561,13 @@ func envs(cfg xb.BackupConfig) []string {
 		}
 	}
 	return envs
+}
+
+func getClusterType() apiv1.ClusterType {
+	cType, ok := os.LookupEnv("CLUSTER_TYPE")
+	if !ok {
+		return apiv1.ClusterTypeGR
+	}
+
+	return apiv1.ClusterType(cType)
 }

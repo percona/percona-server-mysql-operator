@@ -4,16 +4,17 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
-func podDisruptionBudget(cr *apiv1alpha1.PerconaServerMySQL, spec *apiv1alpha1.PodDisruptionBudgetSpec, ls, selector map[string]string) *policyv1.PodDisruptionBudget {
+func podDisruptionBudget(cr *apiv1.PerconaServerMySQL, spec *apiv1.PodDisruptionBudgetSpec, ls, selector map[string]string) *policyv1.PodDisruptionBudget {
 	return &policyv1.PodDisruptionBudget{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-" + ls[naming.LabelName],
-			Namespace: cr.Namespace,
-			Labels:    ls,
+			Name:        cr.Name + "-" + ls[naming.LabelName],
+			Namespace:   cr.Namespace,
+			Labels:      ls,
+			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: policyv1.PodDisruptionBudgetSpec{
 			MinAvailable:   spec.MinAvailable,

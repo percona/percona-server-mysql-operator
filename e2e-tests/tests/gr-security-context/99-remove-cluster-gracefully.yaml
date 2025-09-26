@@ -1,7 +1,7 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 delete:
-  - apiVersion: ps.percona.com/v1alpha1
+  - apiVersion: ps.percona.com/v1
     kind: PerconaServerMySQL
     metadata:
       name: gr-security-context
@@ -11,6 +11,10 @@ commands:
       set -o xtrace
 
       source ../../functions
+
+      if [[ -n ${OPENSHIFT} ]]; then
+          oc adm policy remove-scc-from-user privileged -z default -n "${NAMESPACE}"
+      fi
 
       destroy_operator
     timeout: 60

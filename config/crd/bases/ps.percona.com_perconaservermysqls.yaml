@@ -41,7 +41,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         properties:
@@ -1688,7 +1688,7 @@ spec:
                     type: array
                   serviceAccountName:
                     type: string
-                  sourceHost:
+                  sourcePod:
                     type: string
                   storages:
                     additionalProperties:

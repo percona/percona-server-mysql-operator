@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
-    app.kubernetes.io/version: v0.12.0
+    app.kubernetes.io/version: v1.0.0
   name: perconaservermysqlbackups.ps.percona.com
 spec:
   group: ps.percona.com
@@ -37,7 +37,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         properties:
@@ -152,7 +152,7 @@ spec:
                       type: object
                     type: array
                 type: object
-              sourceHost:
+              sourcePod:
                 type: string
               storageName:
                 type: string
@@ -162,6 +162,8 @@ spec:
             type: object
           status:
             properties:
+              backupSource:
+                type: string
               completed:
                 format: date-time
                 type: string
@@ -1171,7 +1173,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
-    app.kubernetes.io/version: v0.12.0
+    app.kubernetes.io/version: v1.0.0
   name: perconaservermysqlrestores.ps.percona.com
 spec:
   group: ps.percona.com
@@ -1191,7 +1193,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         properties:
@@ -1207,6 +1209,8 @@ spec:
                 type: string
               backupSource:
                 properties:
+                  backupSource:
+                    type: string
                   completed:
                     format: date-time
                     type: string
@@ -2332,7 +2336,7 @@ metadata:
     app.kubernetes.io/component: crd
     app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
-    app.kubernetes.io/version: v0.12.0
+    app.kubernetes.io/version: v1.0.0
   name: perconaservermysqls.ps.percona.com
 spec:
   group: ps.percona.com
@@ -2370,7 +2374,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         properties:
@@ -4017,7 +4021,7 @@ spec:
                     type: array
                   serviceAccountName:
                     type: string
-                  sourceHost:
+                  sourcePod:
                     type: string
                   storages:
                     additionalProperties:

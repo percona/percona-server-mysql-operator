@@ -1,12 +1,16 @@
 version-service
 async-ignore-annotations
+async-global-metadata
 auto-config
 config
 config-router
-demand-backup
+demand-backup-minio
+demand-backup-cloud
 async-data-at-rest-encryption
+gr-global-metadata
 gr-data-at-rest-encryption
-gr-demand-backup
+gr-demand-backup-minio
+gr-demand-backup-cloud
 gr-demand-backup-haproxy
 gr-finalizer
 gr-haproxy
@@ -35,6 +39,7 @@ service-per-pod
 sidecars
 smart-update
 storage
+telemetry
 tls-cert-manager
 users
 pvc-resize

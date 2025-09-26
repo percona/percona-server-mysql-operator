@@ -43,7 +43,7 @@ status:
   updatedReplicas: 3
   collisionCount: 0
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
   name: init-deploy
@@ -76,11 +76,11 @@ metadata:
     app.kubernetes.io/part-of: percona-server
   name: init-deploy-haproxy
   ownerReferences:
-  - apiVersion: apps/v1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
-    kind: StatefulSet
-    name: init-deploy-haproxy
+    kind: PerconaServerMySQL
+    name: init-deploy
 spec:
   minAvailable: 1
   selector:
@@ -115,11 +115,11 @@ metadata:
     app.kubernetes.io/part-of: percona-server
   name: init-deploy-mysql
   ownerReferences:
-  - apiVersion: apps/v1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
-    kind: StatefulSet
-    name: init-deploy-mysql
+    kind: PerconaServerMySQL
+    name: init-deploy
 spec:
   maxUnavailable: 1
   selector:
@@ -154,11 +154,11 @@ metadata:
     app.kubernetes.io/part-of: percona-server
   name: init-deploy-orchestrator
   ownerReferences:
-  - apiVersion: apps/v1
+  - apiVersion: ps.percona.com/v1
     blockOwnerDeletion: true
     controller: true
-    kind: StatefulSet
-    name: init-deploy-orc
+    kind: PerconaServerMySQL
+    name: init-deploy
 spec:
   maxUnavailable: 1
   selector:

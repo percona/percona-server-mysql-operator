@@ -3,13 +3,16 @@ kind: TestAssert
 timeout: 300
 ---
 kind: PerconaServerMySQLBackup
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 metadata:
   name: gr-security-context-minio
 status:
   state: Succeeded
   storage:
+    containerSecurityContext:
+      privileged: true
     podSecurityContext:
+      fsGroup: 1001
       supplementalGroups:
       - 1001
       - 1002

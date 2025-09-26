@@ -2,7 +2,7 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 360
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
   name: gr-one-pod
@@ -19,7 +19,7 @@ status:
   state: ready
 ---
 kind: PerconaServerMySQLRestore
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 metadata:
   name: gr-one-pod-restore-minio
 status:

@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 120
+timeout: 200
 ---
 kind: StatefulSet
 apiVersion: apps/v1
@@ -26,7 +26,7 @@ status:
   updatedReplicas: 3
   collisionCount: 0
 ---
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
   name: scaling
@@ -63,7 +63,7 @@ spec:
   - ReadWriteOnce
   resources:
     requests:
-      storage: 2G
+      storage: 2Gi
   volumeMode: Filesystem
 status:
   accessModes:
@@ -92,7 +92,7 @@ spec:
   - ReadWriteOnce
   resources:
     requests:
-      storage: 2G
+      storage: 2Gi
   volumeMode: Filesystem
 status:
   accessModes:

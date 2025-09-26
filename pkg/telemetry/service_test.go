@@ -14,7 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/telemetry/client/models"
 	"github.com/percona/percona-server-mysql-operator/pkg/telemetry/client/reporter_api"
@@ -201,24 +201,24 @@ func TestServiceURL(t *testing.T) {
 	}
 }
 
-func defaultCR() *apiv1alpha1.PerconaServerMySQL {
-	return &apiv1alpha1.PerconaServerMySQL{
+func defaultCR() *apiv1.PerconaServerMySQL {
+	return &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
 			UID: types.UID(defaultUID),
 		},
-		Spec: apiv1alpha1.PerconaServerMySQLSpec{
+		Spec: apiv1.PerconaServerMySQLSpec{
 			CRVersion: "1.12.0",
-			UpgradeOptions: apiv1alpha1.UpgradeOptions{
+			UpgradeOptions: apiv1.UpgradeOptions{
 				Apply: "disabled",
 			},
 		},
-		Status: apiv1alpha1.PerconaServerMySQLStatus{
+		Status: apiv1.PerconaServerMySQLStatus{
 			BackupVersion: "1.10.0",
-			MySQL: apiv1alpha1.StatefulAppStatus{
+			MySQL: apiv1.StatefulAppStatus{
 				Version: "8.0.35",
 			},
 			PMMVersion: "2.41.0",
-			HAProxy: apiv1alpha1.StatefulAppStatus{
+			HAProxy: apiv1.StatefulAppStatus{
 				Version: "2.8.3",
 			},
 		},

@@ -252,6 +252,10 @@ catalog-build: opm ## Build a catalog image.
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
 
+.PHONY: update-version
+update-version:
+	echo $(NEXT_VER) > pkg/version/version.txt
+
 # Prepare release
 include e2e-tests/release_versions
 CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
@@ -260,37 +264,36 @@ release: manifests
 	echo $(VERSION) > pkg/version/version.txt
 	$(SED) -i \
 		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(VERSION)/}" \
-		-e "/^  mysql:/,/^    image:/{s#image: .*#image: $(IMAGE_MYSQL80)#}" \
+		-e "/^  mysql:/,/^    image:/{s#image: .*#image: $(IMAGE_MYSQL84)#}" \
 		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: $(IMAGE_HAPROXY)#}" \
-		-e "/^    router:/,/^      image:/{s#image: .*#image: $(IMAGE_ROUTER80)#}" \
+		-e "/^    router:/,/^      image:/{s#image: .*#image: $(IMAGE_ROUTER84)#}" \
 		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: $(IMAGE_ORCHESTRATOR)#}" \
-		-e "/^  backup:/,/^    image:/{s#image: .*#image: $(IMAGE_BACKUP80)#}" \
+		-e "/^  backup:/,/^    image:/{s#image: .*#image: $(IMAGE_BACKUP84)#}" \
 		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: $(IMAGE_TOOLKIT)#}" \
-		-e "s#initImage: .*#initImage: percona/percona-server-mysql-operator:$(VERSION)#g" \
+		-e "/initContainer:/,/image:/{s#image: .*#image: $(IMAGE_OPERATOR)#}" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: $(IMAGE_PMM_CLIENT)#}" \
 		deploy/cr.yaml
 	$(SED) -i \
 		-e "s|image: .*|image: $(IMAGE_OPERATOR)|g" \
 		config/manager/manager.yaml config/manager/cluster/manager.yaml
 	$(SED) -i \
-		-e "s|cr.Spec.InitImage = .*|cr.Spec.InitImage = \"$(IMAGE_OPERATOR)\"|g" \
+		-e "s|cr.Spec.InitContainer.Image = .*|cr.Spec.InitContainer.Image = \"$(IMAGE_OPERATOR)\"|g" \
 		pkg/controller/ps/suite_test.go
 
 # Prepare main branch after release
 MAJOR_VER := $(shell grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" pkg/version/version.txt|cut -d'.' -f1)
 MINOR_VER := $(shell grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" pkg/version/version.txt|cut -d'.' -f2)
 NEXT_VER ?= $(MAJOR_VER).$$(($(MINOR_VER) + 1)).0
-after-release: manifests
-	echo $(NEXT_VER) > pkg/version/version.txt
+after-release: update-version manifests
 	$(SED) -i \
 		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(NEXT_VER)/}" \
-		-e "/^  mysql:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-psmysql8.0#}" \
+		-e "/^  mysql:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-psmysql8.4#}" \
 		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-haproxy#}" \
-		-e "/^    router:/,/^      image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-router8.0#}" \
+		-e "/^    router:/,/^      image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-router8.4#}" \
 		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-orchestrator#}" \
-		-e "/^  backup:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-backup8.0#}" \
+		-e "/^  backup:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-backup8.4#}" \
 		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-toolkit#}" \
-		-e "s#initImage: .*#initImage: perconalab/percona-server-mysql-operator:main#g" \
+		-e "/initContainer:/,/image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main#}" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: perconalab/pmm-client:3-dev-latest#}" \
 		deploy/cr.yaml
 	$(SED) -i \

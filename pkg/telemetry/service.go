@@ -14,7 +14,7 @@ import (
 	"github.com/robfig/cron/v3"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	apiv1alpha1 "github.com/percona/percona-server-mysql-operator/api/v1alpha1"
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	telemetryclient "github.com/percona/percona-server-mysql-operator/pkg/telemetry/client"
 	"github.com/percona/percona-server-mysql-operator/pkg/telemetry/client/models"
@@ -56,7 +56,7 @@ func NewTelemetryService() (*Service, error) {
 }
 
 // SendReport sends the report with the custom metric data to the telemetry service.
-func (s Service) SendReport(ctx context.Context, cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.ServerVersion) error {
+func (s Service) SendReport(ctx context.Context, cr *apiv1.PerconaServerMySQL, serverVersion *platform.ServerVersion) error {
 	logger := logf.FromContext(ctx)
 
 	report := createReport(cr, serverVersion)
@@ -79,7 +79,7 @@ func (s Service) SendReport(ctx context.Context, cr *apiv1alpha1.PerconaServerMy
 	return nil
 }
 
-func createReport(cr *apiv1alpha1.PerconaServerMySQL, serverVersion *platform.ServerVersion) models.Genericv1GenericReport {
+func createReport(cr *apiv1.PerconaServerMySQL, serverVersion *platform.ServerVersion) models.Genericv1GenericReport {
 	metrics := []*models.GenericReportMetric{
 		{
 			Key:   metricUpgradeOptionsApply,

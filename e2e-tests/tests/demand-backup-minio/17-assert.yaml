@@ -1,0 +1,19 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+metadata:
+  name: check-operator-deploy-status
+timeout: 120
+commands:
+  - script: |-
+      # Use orchestrator-client to check that downtime for source node finished after the backup failed.
+
+      backup_name="demand-backup-minio-minio-fail"
+
+      backup_source_pod=$(kubectl get ps-backup -n ${NAMESPACE} $backup_name -o jsonpath='{.status.backupSource}' | awk -F'.' '{print $1}')
+
+      source_downtimed=$(kubectl exec demand-backup-minio-orc-0 -n ${NAMESPACE} -c orchestrator -- bash -c 'orchestrator-client -c topology -i $(orchestrator-client -c clusters)' | grep -c 'downtimed')
+  
+      if [[ $source_downtimed != 0 ]]; then
+        echo "Downtime did not finish!"
+        exit 1
+      fi

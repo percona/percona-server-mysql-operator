@@ -1,0 +1,14 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 600
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+status:
+  mysql:
+    ready: 3
+    state: ready
+  router:
+    ready: 3
+    state: ready
+  state: ready

@@ -1,4 +1,4 @@
-apiVersion: ps.percona.com/v1alpha1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLRestore
 metadata:
   name: restore1
@@ -7,7 +7,7 @@ spec:
   backupName: backup1
 #  containerOptions:
 #    env:
-#    - name: VERIFY_TLS
+#    - name: CUSTOM_VAR
 #      value: "false"
 #    args:
 #      xtrabackup:
