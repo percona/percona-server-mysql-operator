@@ -15,7 +15,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                     kubectl cluster-info || true
                     kubectl config current-context || true
                     kubectl --request-timeout 60 get nodes -v=9 || true
-                    ping -t10 \$(gcloud container clusters list --filter="name=$CLUSTER_NAME-${CLUSTER_SUFFIX}" '--format=csv[no-heading](MASTER_IP)') || true
+                    ping -c 10 \$(gcloud container clusters list --filter="name=$CLUSTER_NAME-${CLUSTER_SUFFIX}" '--format=csv[no-heading](MASTER_IP)') || true
                 fi
                 gcloud container clusters list --filter="name=$CLUSTER_NAME-${CLUSTER_SUFFIX}" --zone $region --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $region --quiet || true
                 gcloud container clusters create $CLUSTER_NAME-${CLUSTER_SUFFIX} \
