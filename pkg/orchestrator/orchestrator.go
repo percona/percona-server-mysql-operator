@@ -29,7 +29,7 @@ const (
 	configVolumeName       = "config"
 	configMountPath        = "/etc/orchestrator/config"
 	customConfigMountPath  = "/etc/orchestrator/custom"
-	ConfigFileName         = "orchestrator.conf.json"
+	ConfigFileKey          = "orchestrator.conf.json"
 	credsVolumeName        = "users"
 	CredsMountPath         = "/etc/orchestrator/orchestrator-users-secret"
 	tlsVolumeName          = "tls"
