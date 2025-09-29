@@ -34,13 +34,15 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
 		return nil
 	}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(cr), cr); err != nil {
+		return errors.Wrap(err, "get cluster")
+	}
 
 	initialState := cr.Status.State
 
 	clusterCondition := metav1.Condition{
-		Status:             metav1.ConditionTrue,
-		Type:               apiv1.StateInitializing.String(),
-		LastTransitionTime: metav1.Now(),
+		Status: metav1.ConditionTrue,
+		Type:   apiv1.StateInitializing.String(),
 	}
 
 	if reconcileErr != nil {

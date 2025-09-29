@@ -1037,7 +1037,6 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 			Reason: apiv1.ConditionInnoDBClusterBootstrapped,
 			Message: fmt.Sprintf("InnoDB cluster successfully bootstrapped with %d nodes",
 				cr.MySQLSpec().Size),
-			LastTransitionTime: metav1.Now(),
 		})
 
 		nn := types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}
