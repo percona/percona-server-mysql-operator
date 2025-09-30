@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
@@ -118,7 +119,9 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		}
 	}()
 
-	r.checkFinalizers(ctx, cr)
+	if err := r.checkFinalizers(ctx, cr); err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "run finalizers")
+	}
 
 	switch cr.Status.State {
 	case apiv1.BackupFailed, apiv1.BackupSucceeded, apiv1.BackupError:
@@ -474,25 +477,21 @@ func (r *PerconaServerMySQLBackupReconciler) runPostFinishTasks(
 	return nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) {
+func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) error {
 	if cr.DeletionTimestamp == nil || cr.Status.State == apiv1.BackupStarting || cr.Status.State == apiv1.BackupRunning {
-		return
+		return nil
 	}
 	log := logf.FromContext(ctx).WithName("checkFinalizers")
 
-	defer func() {
-		if err := r.Update(ctx, cr); err != nil {
-			log.Error(err, "failed to update finalizers for backup", "backup", cr.Name)
-		}
-	}()
+	finalizers := sets.NewString()
 
 	switch cr.Status.State {
 	case apiv1.BackupError, apiv1.BackupNew:
-		cr.Finalizers = nil
-		return
+		if cr.Finalizers == nil {
+			return nil
+		}
 	}
 
-	finalizers := sets.NewString()
 	for _, finalizer := range cr.GetFinalizers() {
 		var err error
 		switch finalizer {
@@ -510,7 +509,17 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 			finalizers.Insert(finalizer)
 		}
 	}
+
 	cr.Finalizers = finalizers.List()
+	if len(cr.Finalizers) == 0 {
+		cr.Finalizers = nil
+	}
+
+	if err := r.Update(ctx, cr); err != nil {
+		return errors.Wrap(err, "failed to update finalizers for backup")
+	}
+
+	return nil
 }
 
 func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) (bool, error) {
