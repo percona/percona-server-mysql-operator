@@ -1,10 +1,12 @@
 package k8s
 
 import (
-	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
-	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
 func ConfigMap(cr *apiv1.PerconaServerMySQL, name, filename, data string, component string) *corev1.ConfigMap {
@@ -23,14 +25,16 @@ func ConfigMap(cr *apiv1.PerconaServerMySQL, name, filename, data string, compon
 			filename: data,
 		},
 	}
+
 	if cr.CompareVersion("0.12.0") >= 0 {
 		if cm.Labels == nil {
 			cm.Labels = map[string]string{}
 		}
-		for k, v := range naming.Labels(name, cr.Name, "percona-server", component) {
-			if _, exists := cm.Labels[k]; !exists { // global labels have priority
-				cm.Labels[k] = v
-			}
+
+		cm.Labels = util.SSMapMerge(naming.Labels(name, cr.Name, "percona-server", component), cm.Labels)
+
+		if cr.CompareVersion("1.0.0") >= 0 {
+			cm.Labels = util.SSMapMerge(cm.Labels, naming.Labels(name, cr.Name, "percona-server", component))
 		}
 	}
 
