@@ -23,8 +23,8 @@ func SSMapMerge(ms ...map[string]string) map[string]string {
 		return make(map[string]string)
 	}
 
-	rv := maps.Clone(ms[0])
-	for _, m := range ms[1:] {
+	rv := make(map[string]string)
+	for _, m := range ms {
 		maps.Copy(rv, m)
 	}
 
