@@ -97,6 +97,19 @@ func TestDeployment(t *testing.T) {
 		assert.Equal(t, runtimeClassName, *deployment.Spec.Template.Spec.RuntimeClassName)
 	})
 
+	t.Run("service account name", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		deployment := Deployment(cluster, initImage, configHash, tlsHash)
+		var e string
+		assert.Equal(t, e, deployment.Spec.Template.Spec.ServiceAccountName)
+
+		const serviceAccountName = "service"
+		cluster.Spec.Proxy.Router.ServiceAccountName = serviceAccountName
+
+		deployment = Deployment(cluster, initImage, configHash, tlsHash)
+		assert.Equal(t, serviceAccountName, deployment.Spec.Template.Spec.ServiceAccountName)
+	})
+
 	t.Run("tolerations", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 		deployment := Deployment(cluster, initImage, configHash, tlsHash)

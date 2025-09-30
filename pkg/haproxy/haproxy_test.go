@@ -113,6 +113,19 @@ func TestStatefulset(t *testing.T) {
 		assert.Equal(t, runtimeClassName, *sts.Spec.Template.Spec.RuntimeClassName)
 	})
 
+	t.Run("service account name", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		var e string
+		assert.Equal(t, e, sts.Spec.Template.Spec.ServiceAccountName)
+
+		const serviceAccountName = "service"
+		cluster.Spec.Proxy.HAProxy.ServiceAccountName = serviceAccountName
+
+		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		assert.Equal(t, serviceAccountName, sts.Spec.Template.Spec.ServiceAccountName)
+	})
+
 	t.Run("tolerations", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
