@@ -287,7 +287,7 @@ void runTest(Integer TEST_ID) {
             def durationSec = (timeStop - timeStart) / 1000
             tests[TEST_ID]["time"] = durationSec
             pushLogFile("$testNameWithMysqlVersion")
-            echo "Test $testNameWithMysqlVersion has finished!"
+            echo "Test $testName-$mysqlVer has finished!"
         }
     }
 }
