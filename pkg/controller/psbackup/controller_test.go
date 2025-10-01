@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -357,7 +356,7 @@ func TestCheckFinalizers(t *testing.T) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1.BackupSucceeded
 			}),
-			expectedFinalizers: []string{},
+			expectedFinalizers: nil,
 		},
 		{
 			name: "with successful finalizer, unknown finalizer and succeeded state",
@@ -374,7 +373,7 @@ func TestCheckFinalizers(t *testing.T) {
 				cr.Status.State = apiv1.BackupFailed
 			}),
 			finalizerJobFail:   true,
-			expectedFinalizers: []string{},
+			expectedFinalizers: nil,
 		},
 		{
 			name: "with successful finalizer and failed state",
@@ -382,7 +381,7 @@ func TestCheckFinalizers(t *testing.T) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1.BackupFailed
 			}),
-			expectedFinalizers: []string{},
+			expectedFinalizers: nil,
 		},
 		{
 			name: "with successful finalizer, unknown finalizer and failed state",
@@ -446,9 +445,7 @@ func TestCheckFinalizers(t *testing.T) {
 			}
 
 			r.checkFinalizers(ctx, cr)
-			if !reflect.DeepEqual(cr.Finalizers, tt.expectedFinalizers) {
-				t.Fatalf("expected finalizers %v, got %v", tt.expectedFinalizers, cr.Finalizers)
-			}
+			assert.Equal(t, tt.expectedFinalizers, cr.Finalizers)
 		})
 	}
 }

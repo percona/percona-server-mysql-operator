@@ -80,39 +80,62 @@ func (s Service) SendReport(ctx context.Context, cr *apiv1.PerconaServerMySQL, s
 }
 
 func createReport(cr *apiv1.PerconaServerMySQL, serverVersion *platform.ServerVersion) models.Genericv1GenericReport {
-	metrics := []*models.GenericReportMetric{
-		{
+	var metrics []*models.GenericReportMetric
+
+	if cr.Spec.UpgradeOptions.Apply != "" {
+		metrics = append(metrics, &models.GenericReportMetric{
 			Key:   metricUpgradeOptionsApply,
 			Value: cr.Spec.UpgradeOptions.Apply,
-		},
-		{
+		})
+	}
+
+	if cr.Status.BackupVersion != "" {
+		metrics = append(metrics, &models.GenericReportMetric{
 			Key:   metricBackupVersion,
 			Value: cr.Status.BackupVersion,
-		},
-		{
+		})
+	}
+
+	if cr.Status.MySQL.Version != "" {
+		metrics = append(metrics, &models.GenericReportMetric{
 			Key:   metricDatabaseVersion,
 			Value: cr.Status.MySQL.Version,
-		},
-		{
+		})
+	}
+
+	if serverVersion.Info.GitVersion != "" {
+		metrics = append(metrics, &models.GenericReportMetric{
 			Key:   metricKubernetesVersion,
 			Value: serverVersion.Info.GitVersion,
-		},
-		{
+		})
+	}
+
+	if cr.Spec.CRVersion != "" {
+		metrics = append(metrics, &models.GenericReportMetric{
 			Key:   metricOperatorVersion,
 			Value: cr.Spec.CRVersion,
-		},
-		{
+		})
+	}
+
+	if serverVersion.Platform != "" {
+		metrics = append(metrics, &models.GenericReportMetric{
 			Key:   metricPlatform,
 			Value: string(serverVersion.Platform),
-		},
-		{
+		})
+	}
+
+	if cr.Status.PMMVersion != "" {
+		metrics = append(metrics, &models.GenericReportMetric{
 			Key:   metricPMMVersion,
 			Value: cr.Status.PMMVersion,
-		},
-		{
+		})
+	}
+
+	if cr.Status.HAProxy.Version != "" {
+		metrics = append(metrics, &models.GenericReportMetric{
 			Key:   metricHAProxyVersion,
 			Value: cr.Status.HAProxy.Version,
-		},
+		})
 	}
 
 	return models.Genericv1GenericReport{
