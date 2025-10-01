@@ -119,7 +119,7 @@ void initTests() {
     def records = readCSV file: 'e2e-tests/run-pr.csv'
 
     for (int i=0; i<records.size(); i++) {
-        tests.add(["name": records[i][0], "cluster": "NA", "result": "skipped", "time": "0"])
+        tests.add(["name": records[i][0], "mysql_ver": records[i][1], "cluster": "NA", "result": "skipped", "time": "0"])
     }
 
     markPassedTests()
@@ -135,7 +135,8 @@ void markPassedTests() {
 
         for (int i=0; i<tests.size(); i++) {
             def testName = tests[i]["name"]
-            def file="${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName"
+            def testNameWithMysqlVersion = tests[i]["name"] +"-"+ tests[i]["mysql_ver"].replace(".", "-")
+            def file="${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testNameWithMysqlVersion"
             def retFileExists = sh(script: "aws s3api head-object --bucket percona-jenkins-artifactory --key ${JOB_NAME}/${env.GIT_SHORT_COMMIT}/${file} >/dev/null 2>&1", returnStatus: true)
 
             if (retFileExists == 0) {
@@ -190,10 +191,10 @@ void makeReport() {
     def totalTestTime = 0
 
     for (int i=0; i<tests.size(); i++) {
-        def testName = tests[i]["name"]
+        def testNameWithMysqlVersion = tests[i]["name"] +"-"+ tests[i]["mysql_ver"].replace(".", "-")
         def testResult = tests[i]["result"]
         def testTime = tests[i]["time"]
-        def testUrl = "${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${testName}.log"
+        def testUrl = "${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${testNameWithMysqlVersion}.log"
 
         if (testTime instanceof Number) {
             totalTestTime += testTime
@@ -202,8 +203,8 @@ void makeReport() {
         if (tests[i]["result"] != "skipped") {
             startedTestAmount++
         }
-        TestsReport = TestsReport + "\r\n| " + testName + " | [" + testResult + "](" + testUrl + ") | " + formatTime(testTime) + " |"
-        TestsReportXML = TestsReportXML + '<testcase name=\\"' + testName + '\\" time=\\"' + testTime + '\\"><'+ testResult +'/></testcase>\n'
+        TestsReport = TestsReport + "\r\n| " + testNameWithMysqlVersion + " | [" + testResult + "](" + testUrl + ") | " + formatTime(testTime) + " |"
+        TestsReportXML = TestsReportXML + '<testcase name=\\"' + testNameWithMysqlVersion + '\\" time=\\"' + testTime + '\\"><'+ testResult +'/></testcase>\n'
     }
 
     TestsReport = TestsReport + "\r\n\r\n| Summary | Value |\r\n| ------- | ----- |"
@@ -241,12 +242,14 @@ void clusterRunner(String cluster) {
 void runTest(Integer TEST_ID) {
     def retryCount = 0
     def testName = tests[TEST_ID]["name"]
+    def mysqlVer = tests[TEST_ID]["mysql_ver"]
     def clusterSuffix = tests[TEST_ID]["cluster"]
+    def testNameWithMysqlVersion = "$testName-$mysqlVer".replace(".", "-")
 
     waitUntil {
         def timeStart = new Date().getTime()
         try {
-            echo "Test $testName has started on cluster $CLUSTER_NAME-$clusterSuffix !"
+            echo "The $testName-$mysqlVer test was started on cluster $CLUSTER_NAME-$clusterSuffix !"
             tests[TEST_ID]["result"] = "failure"
 
             timeout(time: 90, unit: 'MINUTES') {
@@ -256,6 +259,7 @@ void runTest(Integer TEST_ID) {
                     fi
                     export KUBECONFIG=/tmp/$CLUSTER_NAME-$clusterSuffix
                     export PATH="\${KREW_ROOT:-\$HOME/.krew}/bin:\$PATH"
+                    export MYSQL_VERSION="$mysqlVer"
                     set -o pipefail
                     if [ -f ./e2e-tests/kuttl.yaml ]; then
                         kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "^${testName}\$" |& tee e2e-tests/logs/${testName}.log
@@ -264,7 +268,7 @@ void runTest(Integer TEST_ID) {
                     fi
                 """
             }
-            pushArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testName")
+            pushArtifactFile("${env.GIT_BRANCH}-${env.GIT_SHORT_COMMIT}-$testNameWithMysqlVersion")
             tests[TEST_ID]["result"] = "passed"
             return true
         }
@@ -282,8 +286,8 @@ void runTest(Integer TEST_ID) {
             def timeStop = new Date().getTime()
             def durationSec = (timeStop - timeStart) / 1000
             tests[TEST_ID]["time"] = durationSec
-            pushLogFile("$testName")
-            echo "Test $testName has finished!"
+            pushLogFile("$testNameWithMysqlVersion")
+            echo "Test $testNameWithMysqlVersion has finished!"
         }
     }
 }
