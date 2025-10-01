@@ -155,7 +155,7 @@ uninstall: manifests ## Uninstall CRDs, rbac
 .PHONY: deploy
 deploy: manifests ## Deploy operator
 	yq eval \
-		'(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG" | (select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "true"' \
+		'(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "VERBOSE" | (select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "true"' \
 		$(DEPLOYDIR)/operator.yaml | kubectl apply -f -
 
 undeploy: manifests ## Undeploy operator
