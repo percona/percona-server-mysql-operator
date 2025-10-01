@@ -30,7 +30,7 @@ func Name(cr *apiv1.PerconaServerMySQL) string {
 	return cr.Name + "-" + AppName
 }
 
-func CustomConfigMapName(cr *apiv1.PerconaServerMySQL) string {
+func customConfigMapName(cr *apiv1.PerconaServerMySQL) string {
 	return cr.Name + "-" + AppName + "-config"
 }
 

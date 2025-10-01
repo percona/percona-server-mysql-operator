@@ -42,7 +42,7 @@ type Configurable apiv1.PerconaServerMySQL
 
 func (c *Configurable) GetConfigMapName() string {
 	cr := apiv1.PerconaServerMySQL(*c)
-	return CustomConfigMapName(&cr)
+	return customConfigMapName(&cr)
 }
 
 func (c *Configurable) GetConfigMapKey() string {

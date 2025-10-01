@@ -30,7 +30,7 @@ func TestConfigMap(t *testing.T) {
 		cr := cluster.DeepCopy()
 
 		cfg := ConfigMap(cr, name, filename, data, component)
-		assert.Equal(t, name, cfg.Name, name)
+		assert.Equal(t, name, cfg.Name)
 		assert.Equal(t, cluster.Namespace, cfg.Namespace)
 		assert.Equal(t, map[string]string{
 			"app.kubernetes.io/component":  "some-component",
