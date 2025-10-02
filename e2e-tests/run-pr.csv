@@ -17,8 +17,10 @@ gr-demand-backup-minio,8.4
 gr-demand-backup-cloud,8.4
 gr-demand-backup-haproxy,8.4
 gr-finalizer,8.4
+gr-haproxy,8.0
 gr-haproxy,8.4
 gr-ignore-annotations,8.4
+gr-init-deploy,8.0
 gr-init-deploy,8.4
 gr-one-pod,8.4
 gr-recreate,8.4
