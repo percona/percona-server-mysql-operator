@@ -114,14 +114,26 @@ func TestStatefulSet(t *testing.T) {
 	t.Run("runtime class name", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 		sts := StatefulSet(cluster, initImage, configHash, tlsHash)
-		var e *string
-		assert.Equal(t, e, sts.Spec.Template.Spec.RuntimeClassName)
+		assert.Empty(t, sts.Spec.Template.Spec.RuntimeClassName)
 
 		const runtimeClassName = "runtimeClassName"
 		cluster.Spec.Orchestrator.RuntimeClassName = ptr.To(runtimeClassName)
 
 		sts = StatefulSet(cluster, initImage, configHash, tlsHash)
 		assert.Equal(t, runtimeClassName, *sts.Spec.Template.Spec.RuntimeClassName)
+	})
+
+	t.Run("service account name", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		cluster.Spec.Orchestrator.ServiceAccountName = ""
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash)
+		assert.Empty(t, sts.Spec.Template.Spec.ServiceAccountName)
+
+		const serviceAccountName = "service"
+		cluster.Spec.Orchestrator.ServiceAccountName = serviceAccountName
+
+		sts = StatefulSet(cluster, initImage, configHash, tlsHash)
+		assert.Equal(t, serviceAccountName, sts.Spec.Template.Spec.ServiceAccountName)
 	})
 
 	t.Run("tolerations", func(t *testing.T) {
