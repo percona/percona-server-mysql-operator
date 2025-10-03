@@ -478,19 +478,12 @@ func (r *PerconaServerMySQLBackupReconciler) runPostFinishTasks(
 }
 
 func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) error {
-	if cr.DeletionTimestamp == nil || cr.Status.State == apiv1.BackupStarting || cr.Status.State == apiv1.BackupRunning {
+	if cr.DeletionTimestamp == nil || cr.Status.State == apiv1.BackupStarting || cr.Status.State == apiv1.BackupRunning || len(cr.Finalizers) == 0 {
 		return nil
 	}
 	log := logf.FromContext(ctx).WithName("checkFinalizers")
 
 	finalizers := sets.NewString()
-
-	switch cr.Status.State {
-	case apiv1.BackupError, apiv1.BackupNew:
-		if cr.Finalizers == nil {
-			return nil
-		}
-	}
 
 	for _, finalizer := range cr.GetFinalizers() {
 		var err error
@@ -510,12 +503,22 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 		}
 	}
 
-	cr.Finalizers = finalizers.List()
-	if len(cr.Finalizers) == 0 {
-		cr.Finalizers = nil
-	}
+	err := k8sretry.OnError(k8sretry.DefaultRetry, func(error) bool { return true }, func() error {
+		c := new(apiv1.PerconaServerMySQLBackup)
+		if err := r.Client.Get(ctx, client.ObjectKeyFromObject(cr), c); err != nil {
+			if k8serrors.IsNotFound(err) {
+				return nil
+			}
+			return errors.Wrapf(err, "get %v", client.ObjectKeyFromObject(cr).String())
+		}
 
-	if err := r.Update(ctx, cr); err != nil {
+		c.Finalizers = finalizers.List()
+		if len(c.Finalizers) == 0 {
+			c.Finalizers = nil
+		}
+		return r.Client.Update(ctx, c)
+	})
+	if err != nil {
 		return errors.Wrap(err, "failed to update finalizers for backup")
 	}
 
@@ -524,6 +527,7 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 
 func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) (bool, error) {
 	if cr.Status.State != apiv1.BackupSucceeded {
+		fmt.Println("TEST 4", cr.Name)
 		return true, nil
 	}
 
@@ -557,6 +561,7 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 			if err := r.Client.Create(ctx, job); err != nil {
 				return false, errors.Wrapf(err, "create job %s/%s", job.Namespace, job.Name)
 			}
+			fmt.Println("TEST 1", cr.Name)
 			return false, nil
 		}
 
@@ -573,6 +578,7 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 				complete = true
 			}
 		}
+		fmt.Println("TEST 2", cr.Name, complete)
 		return complete, nil
 	}
 
@@ -586,6 +592,7 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 	if err := sc.DeleteBackup(ctx, cr.Name, *backupConf); err != nil {
 		return false, errors.Wrap(err, "delete backup")
 	}
+	fmt.Println("TEST 3", cr.Name)
 	return true, nil
 }
 
