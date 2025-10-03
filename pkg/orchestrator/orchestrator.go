@@ -29,7 +29,7 @@ const (
 	configVolumeName       = "config"
 	configMountPath        = "/etc/orchestrator/config"
 	customConfigMountPath  = "/etc/orchestrator/custom"
-	ConfigFileName         = "orchestrator.conf.json"
+	ConfigFileKey          = "orchestrator.conf.json"
 	credsVolumeName        = "users"
 	CredsMountPath         = "/etc/orchestrator/orchestrator-users-secret"
 	tlsVolumeName          = "tls"
@@ -440,33 +440,6 @@ func PodService(cr *apiv1.PerconaServerMySQL, t corev1.ServiceType, podName stri
 	}
 }
 
-func ConfigMap(cr *apiv1.PerconaServerMySQL, data map[string]string) *corev1.ConfigMap {
-	cm := &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        ConfigMapName(cr),
-			Namespace:   cr.Namespace,
-			Labels:      cr.GlobalLabels(),
-			Annotations: cr.GlobalAnnotations(),
-		},
-		Data: data,
-	}
-	if cr.CompareVersion("0.12.0") >= 0 {
-		if cm.Labels == nil {
-			cm.Labels = map[string]string{}
-		}
-		for k, v := range naming.Labels(ConfigMapName(cr), cr.Name, "percona-server", "orchestrator") {
-			if _, exists := cm.Labels[k]; !exists { // global labels have priority
-				cm.Labels[k] = v
-			}
-		}
-	}
-	return cm
-}
-
 func RaftNodes(cr *apiv1.PerconaServerMySQL) []string {
 	nodes := make([]string, cr.Spec.Orchestrator.Size)
 
@@ -477,7 +450,7 @@ func RaftNodes(cr *apiv1.PerconaServerMySQL) []string {
 	return nodes
 }
 
-func orcConfig(cr *apiv1.PerconaServerMySQL) (string, error) {
+func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 	config := make(map[string]interface{}, 0)
 
 	config["RaftNodes"] = RaftNodes(cr)
@@ -495,19 +468,6 @@ func orcConfig(cr *apiv1.PerconaServerMySQL) (string, error) {
 	}
 
 	return string(configJson), nil
-}
-
-func ConfigMapData(cr *apiv1.PerconaServerMySQL) (map[string]string, error) {
-	cmData := make(map[string]string)
-
-	config, err := orcConfig(cr)
-	if err != nil {
-		return cmData, errors.Wrap(err, "get raft nodes")
-	}
-
-	cmData[ConfigFileName] = config
-
-	return cmData, nil
 }
 
 func RBAC(cr *apiv1.PerconaServerMySQL) (*rbacv1.Role, *rbacv1.RoleBinding, *corev1.ServiceAccount) {

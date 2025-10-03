@@ -23,14 +23,14 @@ const (
 	configMountPath        = "/etc/binlog_server/config"
 	storageCredsVolumeName = "storage"
 	ConfigKey              = "config.json"
-	CustomConfigKey        = "custom.json"
+	customConfigKey        = "custom.json"
 )
 
 func Name(cr *apiv1.PerconaServerMySQL) string {
 	return cr.Name + "-" + AppName
 }
 
-func CustomConfigMapName(cr *apiv1.PerconaServerMySQL) string {
+func customConfigMapName(cr *apiv1.PerconaServerMySQL) string {
 	return cr.Name + "-" + AppName + "-config"
 }
 
@@ -103,6 +103,8 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 
 	spec := cr.Spec.Backup.PiTR.BinlogServer
 
+	conf := Configurable(*cr)
+
 	return []corev1.Volume{
 		{
 			Name: apiv1.BinVolumeName,
@@ -155,12 +157,12 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 						{
 							ConfigMap: &corev1.ConfigMapProjection{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: CustomConfigMapName(cr),
+									Name: conf.GetConfigMapName(),
 								},
 								Items: []corev1.KeyToPath{
 									{
-										Key:  CustomConfigKey,
-										Path: CustomConfigKey,
+										Key:  conf.GetConfigMapKey(),
+										Path: conf.GetConfigMapKey(),
 									},
 								},
 								Optional: &t,
@@ -187,7 +189,7 @@ func binlogServerContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		},
 		{
 			Name:  "CUSTOM_CONFIG_PATH",
-			Value: path.Join(configMountPath, CustomConfigKey),
+			Value: path.Join(configMountPath, customConfigKey),
 		},
 	}
 	env = append(env, spec.Env...)
