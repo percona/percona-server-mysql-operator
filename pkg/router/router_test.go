@@ -87,8 +87,7 @@ func TestDeployment(t *testing.T) {
 	t.Run("runtime class name", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 		deployment := Deployment(cluster, initImage, configHash, tlsHash)
-		var e *string
-		assert.Equal(t, e, deployment.Spec.Template.Spec.RuntimeClassName)
+		assert.Empty(t, deployment.Spec.Template.Spec.RuntimeClassName)
 
 		const runtimeClassName = "runtimeClassName"
 		cluster.Spec.Proxy.Router.RuntimeClassName = ptr.To(runtimeClassName)
@@ -100,8 +99,7 @@ func TestDeployment(t *testing.T) {
 	t.Run("service account name", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 		deployment := Deployment(cluster, initImage, configHash, tlsHash)
-		var e string
-		assert.Equal(t, e, deployment.Spec.Template.Spec.ServiceAccountName)
+		assert.Empty(t, deployment.Spec.Template.Spec.ServiceAccountName)
 
 		const serviceAccountName = "service"
 		cluster.Spec.Proxy.Router.ServiceAccountName = serviceAccountName

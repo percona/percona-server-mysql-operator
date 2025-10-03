@@ -103,8 +103,7 @@ func TestStatefulset(t *testing.T) {
 	t.Run("runtime class name", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
-		var e *string
-		assert.Equal(t, e, sts.Spec.Template.Spec.RuntimeClassName)
+		assert.Empty(t, sts.Spec.Template.Spec.RuntimeClassName)
 
 		const runtimeClassName = "runtimeClassName"
 		cluster.Spec.Proxy.HAProxy.RuntimeClassName = ptr.To(runtimeClassName)
@@ -116,8 +115,7 @@ func TestStatefulset(t *testing.T) {
 	t.Run("service account name", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
-		var e string
-		assert.Equal(t, e, sts.Spec.Template.Spec.ServiceAccountName)
+		assert.Empty(t, sts.Spec.Template.Spec.ServiceAccountName)
 
 		const serviceAccountName = "service"
 		cluster.Spec.Proxy.HAProxy.ServiceAccountName = serviceAccountName
