@@ -505,7 +505,7 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 
 	err := k8sretry.OnError(k8sretry.DefaultRetry, func(error) bool { return true }, func() error {
 		c := new(apiv1.PerconaServerMySQLBackup)
-		if err := r.Client.Get(ctx, client.ObjectKeyFromObject(cr), c); err != nil {
+		if err := r.Get(ctx, client.ObjectKeyFromObject(cr), c); err != nil {
 			if k8serrors.IsNotFound(err) {
 				return nil
 			}
@@ -516,7 +516,7 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 		if len(c.Finalizers) == 0 {
 			c.Finalizers = nil
 		}
-		return r.Client.Update(ctx, c)
+		return r.Update(ctx, c)
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to update finalizers for backup")
