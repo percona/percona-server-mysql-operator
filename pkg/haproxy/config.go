@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	CustomConfigKey  = "haproxy.cfg"
+	customConfigKey  = "haproxy.cfg"
 	configVolumeName = "config"
 	configMountPath  = "/etc/haproxy-custom/"
 )
@@ -23,7 +23,7 @@ func (c *Configurable) GetConfigMapName() string {
 }
 
 func (c *Configurable) GetConfigMapKey() string {
-	return CustomConfigKey
+	return customConfigKey
 }
 
 func (c *Configurable) GetConfiguration() string {
