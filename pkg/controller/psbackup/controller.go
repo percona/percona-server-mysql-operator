@@ -527,7 +527,6 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 
 func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) (bool, error) {
 	if cr.Status.State != apiv1.BackupSucceeded {
-		fmt.Println("TEST 4", cr.Name)
 		return true, nil
 	}
 
@@ -561,7 +560,6 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 			if err := r.Client.Create(ctx, job); err != nil {
 				return false, errors.Wrapf(err, "create job %s/%s", job.Namespace, job.Name)
 			}
-			fmt.Println("TEST 1", cr.Name)
 			return false, nil
 		}
 
@@ -578,7 +576,6 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 				complete = true
 			}
 		}
-		fmt.Println("TEST 2", cr.Name, complete)
 		return complete, nil
 	}
 
@@ -592,7 +589,6 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 	if err := sc.DeleteBackup(ctx, cr.Name, *backupConf); err != nil {
 		return false, errors.Wrap(err, "delete backup")
 	}
-	fmt.Println("TEST 3", cr.Name)
 	return true, nil
 }
 
