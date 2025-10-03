@@ -24,7 +24,7 @@ const (
 	tlsMountPath     = "/etc/mysql/mysql-tls-secret"
 	configVolumeName = "config"
 	configMountPath  = "/etc/mysql/config"
-	CustomConfigKey  = "mysqlrouter.conf"
+	customConfigKey  = "mysqlrouter.conf"
 )
 
 const (
@@ -176,6 +176,8 @@ func Deployment(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash str
 func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 	t := true
 
+	conf := Configurable(*cr)
+
 	return []corev1.Volume{
 		{
 			Name: apiv1.BinVolumeName,
@@ -207,12 +209,12 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 						{
 							ConfigMap: &corev1.ConfigMapProjection{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: Name(cr),
+									Name: conf.GetConfigMapName(),
 								},
 								Items: []corev1.KeyToPath{
 									{
-										Key:  CustomConfigKey,
-										Path: "mysqlrouter.conf",
+										Key:  conf.GetConfigMapKey(),
+										Path: conf.GetConfigMapKey(),
 									},
 								},
 								Optional: &t,

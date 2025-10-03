@@ -199,6 +199,8 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 	t := true
 
+	conf := Configurable(*cr)
+
 	return []corev1.Volume{
 		{
 			Name: "bin",
@@ -236,12 +238,12 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 						{
 							ConfigMap: &corev1.ConfigMapProjection{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: Name(cr),
+									Name: conf.GetConfigMapName(),
 								},
 								Items: []corev1.KeyToPath{
 									{
-										Key:  CustomConfigKey,
-										Path: "haproxy.cfg",
+										Key:  conf.GetConfigMapKey(),
+										Path: conf.GetConfigMapKey(),
 									},
 								},
 								Optional: &t,

@@ -735,13 +735,12 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return errors.Wrap(err, "get config map")
 	}
 
-	cmData, err := orchestrator.ConfigMapData(cr)
+	config, err := orchestrator.ConfigMapData(cr)
 	if err != nil {
-		return errors.Wrap(err, "get ConfigMap data")
+		return errors.Wrap(err, "get orchestrator config")
 	}
-
-	configMap := orchestrator.ConfigMap(cr, cmData)
-	if !reflect.DeepEqual(cmap.Data, cmData) {
+	configMap := k8s.ConfigMap(cr, orchestrator.ConfigMapName(cr), orchestrator.ConfigFileKey, config, naming.ComponentOrchestrator)
+	if !reflect.DeepEqual(cmap.Data, configMap.Data) {
 		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
 			return errors.Wrap(err, "reconcile ConfigMap")
 		}
@@ -751,9 +750,9 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 
 	existingNodes := make([]string, 0)
 	if !k8serrors.IsNotFound(err) {
-		cfg, ok := cmap.Data[orchestrator.ConfigFileName]
+		cfg, ok := cmap.Data[orchestrator.ConfigFileKey]
 		if !ok {
-			return errors.Errorf("key %s not found in ConfigMap", orchestrator.ConfigFileName)
+			return errors.Errorf("key %s not found in ConfigMap", orchestrator.ConfigFileKey)
 		}
 
 		config := make(map[string]interface{}, 0)
