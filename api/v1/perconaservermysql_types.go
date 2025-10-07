@@ -643,8 +643,9 @@ type PerconaServerMySQL struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   PerconaServerMySQLSpec   `json:"spec,omitempty"`
-	Status PerconaServerMySQLStatus `json:"status,omitempty"`
+	Spec PerconaServerMySQLSpec `json:"spec,omitempty"`
+
+	Status PerconaServerMySQLStatus `json:"status,omitempty"` // Make sure that the Status is updated after making changes. See the description of `(*PerconaServerMySQLReconciler) reconcileCRStatus` method for details.
 }
 
 //+kubebuilder:object:root=true

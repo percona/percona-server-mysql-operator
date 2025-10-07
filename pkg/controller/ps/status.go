@@ -30,10 +30,16 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 )
 
+// reconcileCRStatus does not apply any changes made to the status in the provided
+// cr *apiv1.PerconaServerMySQL, due to an issue described in this PR:
+// https://github.com/percona/percona-server-mysql-operator/pull/1102
+//
+// Use the writeStatus function to apply status changes outside of this function.
 func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1.PerconaServerMySQL, reconcileErr error) error {
 	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
 		return nil
 	}
+	cr = cr.DeepCopy()
 	if err := r.Get(ctx, client.ObjectKeyFromObject(cr), cr); err != nil {
 		return errors.Wrap(err, "get cluster")
 	}
