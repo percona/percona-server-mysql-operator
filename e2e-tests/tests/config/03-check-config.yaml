@@ -7,8 +7,8 @@ commands:
 
       source ../../functions
 
-      mysql_args="-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
-      max_connections=$(run_mysql "SELECT @@max_connections" "${mysql_args}")
+      mysql_args="-h $(get_haproxy_svc $(get_cluster_name))"
+      max_connections=$(run_mysql_with_root "SELECT @@max_connections" "${mysql_args}")
 
       kubectl create configmap -n "${NAMESPACE}" 03-check-config \
           --from-literal=max_connections="${max_connections}"

@@ -10,16 +10,16 @@ commands:
       password=$(get_user_pass root)
       haproxy_svc=$(get_haproxy_svc $(get_cluster_name))
 
-      run_mysql \
+      run_mysql_with_root \
           "CREATE DATABASE IF NOT EXISTS metadata;
            CREATE TABLE IF NOT EXISTS metadata.name (
              id VARCHAR(255) PRIMARY KEY
            );" \
-          "-h $haproxy_svc -uroot -p'$password'"
+          "-h $haproxy_svc"
 
-      run_mysql \
+      run_mysql_with_root \
           "INSERT INTO metadata.name (id) VALUES ('annotation2')
            ON DUPLICATE KEY UPDATE id='annotation2';
            INSERT INTO metadata.name (id) VALUES ('label2')
            ON DUPLICATE KEY UPDATE id='label2';" \
-          "-h $haproxy_svc -uroot -p'$password'"
+          "-h $haproxy_svc"

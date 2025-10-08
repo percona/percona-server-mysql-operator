@@ -7,12 +7,12 @@ commands:
 
       source ../../functions
 
-      run_mysql \
+      run_mysql_with_root \
           "INSERT myDB.myTable (id) VALUES (100502)" \
-          "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+          "-h $(get_haproxy_svc $(get_cluster_name))"
 
       for i in 0 1 2; do
           host=$(get_mysql_headless_fqdn $(get_cluster_name) $i)
-          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${host} -uroot -proot_password")
+          data=$(run_mysql_with_root "SELECT * FROM myDB.myTable" "-h ${host}")
           kubectl create configmap -n "${NAMESPACE}" 11-write-data-${i} --from-literal=data="${data}"
       done

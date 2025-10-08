@@ -8,8 +8,8 @@ commands:
       source ../../functions
 
       # Check if table is encrypted by examining create options in information schema
-      data=$(run_mysql \
+      data=$(run_mysql_with_root \
           "SELECT CREATE_OPTIONS FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='myDB' AND TABLE_NAME='myTable'" \
-          "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password")
+          "-h $(get_haproxy_svc $(get_cluster_name))")
 
       kubectl create configmap -n "${NAMESPACE}" 04-check-encryption --from-literal=myTable="${data}"

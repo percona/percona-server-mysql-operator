@@ -98,10 +98,6 @@ destroy_operator() {
 	fi
 }
 
-deploy_non_tls_cluster_secrets() {
-	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/secrets.yaml"
-}
-
 deploy_tls_cluster_secrets() {
 	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/ssl-secret.yaml"
 }
@@ -614,6 +610,20 @@ run_mysql() {
 
 	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
 		bash -c "printf '%s\n' \"${command}\" | mysql -sN $uri" 2>&1 \
+		| $sed -e 's/mysql: //' \
+		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
+}
+
+run_mysql_with_root() {
+	local command="$1"
+	local uri="$2"
+	local pod="$3"
+
+	client_pod=$(get_client_pod)
+	wait_pod $client_pod 1>&2
+
+	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
+		bash -c "printf '%s\n' \"${command}\" | mysql -sN $uri -uroot -p\"$(get_user_pass root)\"" 2>&1 \
 		| $sed -e 's/mysql: //' \
 		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
 }

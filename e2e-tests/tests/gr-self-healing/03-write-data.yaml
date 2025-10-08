@@ -7,11 +7,11 @@ commands:
 
       source ../../functions
 
-      run_mysql \
+      run_mysql_with_root \
           "CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable (id int PRIMARY KEY)" \
-          "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password"
+          "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446"
 
-      run_mysql \
+      run_mysql_with_root \
           "INSERT myDB.myTable (id) VALUES (100500)" \
-          "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password"
+          "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446"
       sleep 5

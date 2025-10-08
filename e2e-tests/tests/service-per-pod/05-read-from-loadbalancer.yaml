@@ -13,7 +13,7 @@ commands:
       for i in $(seq 0 $((size - 1))); do
           ip=$(get_service_ip ${test_name}-mysql-$i)
           host=$(get_mysql_headless_fqdn ${test_name} $i)
-          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${ip} -uroot -proot_password")
+          data=$(run_mysql_with_root "SELECT * FROM myDB.myTable" "-h ${ip}")
           args="${args} --from-literal=${host}=${data}"
       done
 

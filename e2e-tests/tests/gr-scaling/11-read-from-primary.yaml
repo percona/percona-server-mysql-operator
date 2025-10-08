@@ -8,6 +8,6 @@ commands:
 
       source ../../functions
 
-      data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_mysql_router_service $(get_cluster_name)) -uroot -proot_password")
+      data=$(run_mysql_with_root "SELECT * FROM myDB.myTable" "-h $(get_mysql_router_service $(get_cluster_name))")
 
       kubectl create configmap -n "${NAMESPACE}" 11-read-from-primary --from-literal=data="${data}"

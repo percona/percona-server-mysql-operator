@@ -9,20 +9,20 @@ commands:
 
       args=""
 
-      primary=$(run_mysql "SELECT count(*) FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password")
+      primary=$(run_mysql_with_root "SELECT count(*) FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name))")
       args="${args} --from-literal=primary=${primary}"
 
-      replica=$(run_mysql "SELECT count(*) FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -P 3307 -uroot -proot_password")
+      replica=$(run_mysql_with_root "SELECT count(*) FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -P 3307")
       args="${args} --from-literal=replica=${replica}"
 
       # uncomment after https://jira.percona.com/browse/K8SPS-284
-      # proxy_protocol=$(run_mysql "SELECT count(*) FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -P 3309 -uroot -proot_password")
+      # proxy_protocol=$(run_mysql_with_root "SELECT count(*) FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -P 3309")
       # args="${args} --from-literal=proxy_protocol=${proxy_protocol}"
 
-      mysqlx=$(run_mysqlsh "SELECT count(*) FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -P 33060 -uroot -proot_password")
+      mysqlx=$(run_mysql_with_root "SELECT count(*) FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -P 33060")
       args="${args} --from-literal=mysqlx=${mysqlx}"
 
-      mysql_admin=$(run_mysql "SELECT count(*) FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -P 33062 -uroot -proot_password")
+      mysql_admin=$(run_mysql_with_root "SELECT count(*) FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name)) -P 33062")
       args="${args} --from-literal=mysql_admin=${mysql_admin}"
 
       kubectl create configmap -n "${NAMESPACE}" 03-check-connections $args

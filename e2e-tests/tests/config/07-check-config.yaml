@@ -14,9 +14,9 @@ commands:
       echo "config-mysql-2"
       kubectl exec -n "${NAMESPACE}" config-mysql-2 -- cat /etc/my.cnf.d/node.cnf
 
-      mysql_args="-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
-      max_connections=$(run_mysql "SELECT @@max_connections" "${mysql_args}")
-      max_connect_errors=$(run_mysql "SELECT @@max_connect_errors" "${mysql_args}")
+      mysql_args="-h $(get_haproxy_svc $(get_cluster_name))"
+      max_connections=$(run_mysql_with_root "SELECT @@max_connections" "${mysql_args}")
+      max_connect_errors=$(run_mysql_with_root "SELECT @@max_connect_errors" "${mysql_args}")
 
       kubectl create configmap -n "${NAMESPACE}" 07-check-config \
           --from-literal=max_connections="${max_connections}" \
