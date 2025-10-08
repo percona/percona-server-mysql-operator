@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"hash/crc32"
 	"sort"
 	"strconv"
@@ -14,7 +15,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -75,22 +75,28 @@ func (r *CronRegistry) createBackupJobFunc(ctx context.Context, cl client.Client
 	log := logf.FromContext(ctx)
 
 	return func() {
-		cr := &apiv1.PerconaServerMySQL{}
-		err := cl.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, cr)
-		if err != nil {
+		cr := new(apiv1.PerconaServerMySQL)
+		if err := cl.Get(ctx, client.ObjectKeyFromObject(cluster), cr); err != nil {
 			if k8serrors.IsNotFound(err) {
 				log.Info("Cluster is not found. Deleting the job", "name", backupJob.Name, "cluster", cluster.Name, "namespace", cluster.Namespace)
 				r.deleteBackupJob(backupJob.Name)
 				return
 			}
 			log.Error(err, "failed to get cluster")
+			return
+		}
+
+		name, err := generateBackupName(cr, backupJob, time.Now())
+		if err != nil {
+			log.Error(err, "failed to generate backup name")
+			return
 		}
 
 		bcp := &apiv1.PerconaServerMySQLBackup{
 			ObjectMeta: metav1.ObjectMeta{
 				Finalizers: []string{naming.FinalizerDeleteBackup},
 				Namespace:  cr.Namespace,
-				Name:       generateBackupName(cr, backupJob),
+				Name:       name,
 				Labels: util.SSMapMerge(cr.GlobalLabels(), map[string]string{
 					naming.LabelBackupAncestor: backupJob.Name,
 					naming.LabelCluster:        cr.Name,
@@ -220,23 +226,35 @@ func (r *PerconaServerMySQLReconciler) oldScheduledBackups(ctx context.Context, 
 	return backups, nil
 }
 
-func generateBackupName(cr *apiv1.PerconaServerMySQL, backupJob apiv1.BackupSchedule) string {
-	result := "cron-"
-	if len(cr.Name) > 16 {
-		result += cr.Name[:16]
-	} else {
-		result += cr.Name
+func generateBackupName(cr *apiv1.PerconaServerMySQL, schedule apiv1.BackupSchedule, t time.Time) (string, error) {
+	truncate := func(s string, limit int) string {
+		if len(s) > limit {
+			return s[:limit]
+		}
+		return s
 	}
-	storageName := backupJob.StorageName
-	if len(storageName) > 16 {
-		storageName = storageName[:16]
+
+	suffix := strconv.FormatUint(uint64(crc32.ChecksumIEEE([]byte(schedule.Schedule))), 32)[:5]
+
+	if cr.CompareVersion("1.0.0") >= 0 {
+		scheduleJson, err := json.Marshal(schedule)
+		if err != nil {
+			return "", errors.Wrap(err, "marshal")
+		}
+		hashInput := client.ObjectKeyFromObject(cr).String() + string(scheduleJson)
+		suffix = strconv.FormatUint(uint64(crc32.ChecksumIEEE([]byte(hashInput))), 32)
+		// Take the last 5 characters instead of the first ones, because the lower bits
+		// of a CRC32 value change more frequently and carry more entropy across inputs.
+		if len(suffix) > 5 {
+			suffix = suffix[len(suffix)-5:]
+		}
 	}
-	result += "-" + storageName + "-"
 
-	tnow := time.Now()
-	result += tnow.Format("20060102150405")
-
-	result += "-" + strconv.FormatUint(uint64(crc32.ChecksumIEEE([]byte(backupJob.Schedule))), 32)[:5]
-
-	return result
+	return strings.Join([]string{
+		"cron",
+		truncate(cr.Name, 16),
+		truncate(schedule.StorageName, 16),
+		t.Format("20060102150405"),
+		suffix,
+	}, "-"), nil
 }
