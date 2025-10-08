@@ -24,7 +24,7 @@ const (
 	tlsMountPath     = "/etc/mysql/mysql-tls-secret"
 	configVolumeName = "config"
 	configMountPath  = "/etc/mysql/config"
-	CustomConfigKey  = "mysqlrouter.conf"
+	customConfigKey  = "mysqlrouter.conf"
 )
 
 const (
@@ -140,8 +140,10 @@ func Deployment(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash str
 					Labels:      Labels(cr),
 					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
 				},
-				Spec: corev1.PodSpec{
-					InitContainers: []corev1.Container{
+				Spec: spec.Core(
+					selector,
+					volumes(cr),
+					[]corev1.Container{
 						k8s.InitContainer(
 							cr,
 							AppName,
@@ -153,21 +155,8 @@ func Deployment(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash str
 							nil,
 						),
 					},
-					Containers:                    containers(cr),
-					NodeSelector:                  cr.Spec.Proxy.Router.NodeSelector,
-					Tolerations:                   cr.Spec.Proxy.Router.Tolerations,
-					Affinity:                      spec.GetAffinity(selector),
-					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(selector),
-					ImagePullSecrets:              spec.ImagePullSecrets,
-					TerminationGracePeriodSeconds: spec.GetTerminationGracePeriodSeconds(),
-					RestartPolicy:                 corev1.RestartPolicyAlways,
-					SchedulerName:                 spec.SchedulerName,
-					RuntimeClassName:              spec.RuntimeClassName,
-					ServiceAccountName:            spec.ServiceAccountName,
-					DNSPolicy:                     corev1.DNSClusterFirst,
-					SecurityContext:               spec.PodSecurityContext,
-					Volumes:                       volumes(cr),
-				},
+					containers(cr),
+				),
 			},
 		},
 	}
@@ -175,6 +164,8 @@ func Deployment(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash str
 
 func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 	t := true
+
+	conf := Configurable(*cr)
 
 	return []corev1.Volume{
 		{
@@ -207,12 +198,12 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 						{
 							ConfigMap: &corev1.ConfigMapProjection{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: Name(cr),
+									Name: conf.GetConfigMapName(),
 								},
 								Items: []corev1.KeyToPath{
 									{
-										Key:  CustomConfigKey,
-										Path: "mysqlrouter.conf",
+										Key:  conf.GetConfigMapKey(),
+										Path: conf.GetConfigMapKey(),
 									},
 								},
 								Optional: &t,

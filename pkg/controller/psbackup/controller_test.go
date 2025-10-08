@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -282,19 +281,13 @@ func TestStateDescCleanup(t *testing.T) {
 }
 
 func TestCheckFinalizers(t *testing.T) {
-	ctx := context.Background()
 	scheme := runtime.NewScheme()
-	if err := clientgoscheme.AddToScheme(scheme); err != nil {
-		t.Fatal(err, "failed to add client-go scheme")
-	}
-	if err := apiv1.AddToScheme(scheme); err != nil {
-		t.Fatal(err, "failed to add apis scheme")
-	}
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
 	namespace := "some-namespace"
+
 	cr, err := readDefaultCRBackup("some-name", namespace)
-	if err != nil {
-		t.Fatal(err, "failed to read default backup")
-	}
+	require.NoError(t, err)
 
 	tests := []struct {
 		name               string
@@ -357,7 +350,7 @@ func TestCheckFinalizers(t *testing.T) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1.BackupSucceeded
 			}),
-			expectedFinalizers: []string{},
+			expectedFinalizers: nil,
 		},
 		{
 			name: "with successful finalizer, unknown finalizer and succeeded state",
@@ -374,7 +367,7 @@ func TestCheckFinalizers(t *testing.T) {
 				cr.Status.State = apiv1.BackupFailed
 			}),
 			finalizerJobFail:   true,
-			expectedFinalizers: []string{},
+			expectedFinalizers: nil,
 		},
 		{
 			name: "with successful finalizer and failed state",
@@ -382,7 +375,7 @@ func TestCheckFinalizers(t *testing.T) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1.BackupFailed
 			}),
-			expectedFinalizers: []string{},
+			expectedFinalizers: nil,
 		},
 		{
 			name: "with successful finalizer, unknown finalizer and failed state",
@@ -415,9 +408,10 @@ func TestCheckFinalizers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.cr.Status.Storage = storage
+			cr := tt.cr.DeepCopy()
+			cr.Status.Storage = storage
 
-			job := xtrabackup.GetDeleteJob(new(apiv1.PerconaServerMySQL), tt.cr, new(xtrabackup.BackupConfig))
+			job := xtrabackup.GetDeleteJob(new(apiv1.PerconaServerMySQL), cr, new(xtrabackup.BackupConfig))
 			cond := batchv1.JobCondition{
 				Type:   batchv1.JobComplete,
 				Status: corev1.ConditionTrue,
@@ -427,28 +421,34 @@ func TestCheckFinalizers(t *testing.T) {
 			}
 			job.Status.Conditions = append(job.Status.Conditions, cond)
 
-			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr, sec, job)
+			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, sec, job)
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cb.Build(),
 				Scheme:        scheme,
 				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
 			}
-			err := r.Delete(ctx, tt.cr)
-			if err != nil {
-				t.Fatal(err)
-			}
-			cr := new(apiv1.PerconaServerMySQLBackup)
-			if err := r.Get(ctx, types.NamespacedName{Name: tt.cr.Name, Namespace: tt.cr.Namespace}, cr); err != nil {
-				if k8serrors.IsNotFound(err) && len(cr.Finalizers) == 0 {
+
+			require.NoError(t, r.Delete(t.Context(), cr))
+
+			// Getting backup with deletion timestamp
+			if err := r.Get(t.Context(), client.ObjectKeyFromObject(cr), cr); err != nil {
+				if k8serrors.IsNotFound(err) && len(tt.expectedFinalizers) == 0 {
 					return
 				}
 				t.Fatal(err)
 			}
 
-			r.checkFinalizers(ctx, cr)
-			if !reflect.DeepEqual(cr.Finalizers, tt.expectedFinalizers) {
-				t.Fatalf("expected finalizers %v, got %v", tt.expectedFinalizers, cr.Finalizers)
+			assert.NoError(t, r.checkFinalizers(t.Context(), cr))
+
+			// Getting backup with updated finalizers
+			if err := r.Get(t.Context(), client.ObjectKeyFromObject(cr), cr); err != nil {
+				if k8serrors.IsNotFound(err) && len(tt.expectedFinalizers) == 0 {
+					return
+				}
+				t.Fatal(err)
 			}
+
+			assert.Equal(t, tt.expectedFinalizers, cr.Finalizers)
 		})
 	}
 }
