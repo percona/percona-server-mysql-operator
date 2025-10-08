@@ -921,12 +921,12 @@ check_auto_tuning() {
 	local CUSTOM_INNODB_SIZE=$2
 	local CUSTOM_CONNECTIONS=$3
 
-	local INNODB_SIZE=$(run_mysql \
+	local INNODB_SIZE=$(run_mysql_with_root \
 		'SELECT @@innodb_buffer_pool_size;' \
-		"-h $(get_haproxy_svc "$(get_cluster_name)") -uroot -proot_password")
-	local CONNECTIONS=$(run_mysql \
+		"-h $(get_haproxy_svc "$(get_cluster_name)")")
+	local CONNECTIONS=$(run_mysql_with_root \
 		'SELECT @@max_connections;' \
-		"-h $(get_haproxy_svc "$(get_cluster_name)") -uroot -proot_password")
+		"-h $(get_haproxy_svc "$(get_cluster_name)")")
 
 	if [[ -n ${CUSTOM_INNODB_SIZE} ]]; then
 		if [[ ${INNODB_SIZE} != ${CUSTOM_INNODB_SIZE} ]]; then
@@ -988,13 +988,13 @@ get_primary_from_haproxy() {
 	local haproxy_pod=$1
 	local haproxy_pod_ip=$(kubectl -n "${NAMESPACE}" get pods ${haproxy_pod} -o jsonpath="{.status.podIP}")
 
-	run_mysql "SHOW VARIABLES LIKE '%hostname%';" "-h ${haproxy_pod_ip} -P3306 -uroot -proot_password" | awk '{print $2}'
+	run_mysql_with_root "SHOW VARIABLES LIKE '%hostname%';" "-h ${haproxy_pod_ip} -P3306" | awk '{print $2}'
 }
 
 get_primary_from_group_replication() {
-	run_mysql \
+	run_mysql_with_root \
 		"SELECT MEMBER_HOST FROM performance_schema.replication_group_members where MEMBER_ROLE='PRIMARY';" \
-		"-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password" \
+		"-h $(get_mysql_router_service $(get_cluster_name)) -P 6446" \
 		| cut -d'.' -f1
 }
 
