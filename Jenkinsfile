@@ -262,9 +262,9 @@ void runTest(Integer TEST_ID) {
                     export MYSQL_VERSION="$mysqlVer"
                     set -o pipefail
                     if [ -f ./e2e-tests/kuttl.yaml ]; then
-                        kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "^${testName}\$" |& tee e2e-tests/logs/${testName}.log
+                        kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "^${testName}\$" |& tee e2e-tests/logs/${testNameWithMysqlVersion}.log
                     else
-                        chainsaw test "./e2e-tests/tests/${testName}" |& tee e2e-tests/logs/${testName}.log
+                        chainsaw test "./e2e-tests/tests/${testName}" |& tee e2e-tests/logs/${testNameWithMysqlVersion}.log
                     fi
                 """
             }
