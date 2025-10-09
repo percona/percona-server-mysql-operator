@@ -98,6 +98,12 @@ destroy_operator() {
 	fi
 }
 
+deploy_cluster_secrets() {
+	# Use this function only on tests that required fixed passwords
+	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/secrets.yaml"
+}
+
+
 deploy_tls_cluster_secrets() {
 	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/ssl-secret.yaml"
 }
@@ -623,7 +629,7 @@ run_mysql_with_root() {
 	wait_pod $client_pod 1>&2
 
 	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
-		bash -c "printf '%s\n' \"${command}\" | mysql -sN $uri -uroot -p\"$(get_user_pass root)\"" 2>&1 \
+		bash -c "printf '%s\n' \"${command}\" | mysql -sN $uri -uroot -p'$(get_user_pass root)'" 2>&1 \
 		| $sed -e 's/mysql: //' \
 		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
 }
@@ -671,14 +677,13 @@ get_innodb_cluster_name() {
 get_mysqlsh_uri_for_pod() {
 	local pod=$1
 
-	root_password=$(get_user_pass root)
-	echo "\"root:$(get_user_pass root)@${pod}.$(get_cluster_name)-mysql.${NAMESPACE}\""
+	echo "'root:$(get_user_pass root)@${pod}.$(get_cluster_name)-mysql.${NAMESPACE}'"
 }
 
 get_mysqlsh_uri() {
 	local idx=${1:-0}
 
-	echo "\"root:$(get_user_pass root)@$(get_cluster_name)-mysql-${idx}.$(get_cluster_name)-mysql.${NAMESPACE}\""
+	echo "'root:$(get_user_pass root)@$(get_cluster_name)-mysql-${idx}.$(get_cluster_name)-mysql.${NAMESPACE}'"
 }
 
 get_gr_status() {
