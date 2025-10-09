@@ -10206,8 +10206,10 @@ spec:
                   issuerConf:
                     properties:
                       group:
+                        default: cert-manager.io
                         type: string
                       kind:
+                        default: Issuer
                         type: string
                       name:
                         type: string
