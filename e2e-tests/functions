@@ -677,13 +677,17 @@ get_innodb_cluster_name() {
 get_mysqlsh_uri_for_pod() {
 	local pod=$1
 
-	echo "'root:$(get_user_pass root)@${pod}.$(get_cluster_name)-mysql.${NAMESPACE}'"
+	root_password=$(get_user_pass root)
+	encoded_password=$(jq -rn --arg s "$root_password" '$s|@uri')
+	echo "root:${encoded_password}@${pod}.$(get_cluster_name)-mysql.${NAMESPACE}"
 }
 
 get_mysqlsh_uri() {
 	local idx=${1:-0}
 
-	echo "'root:$(get_user_pass root)@$(get_cluster_name)-mysql-${idx}.$(get_cluster_name)-mysql.${NAMESPACE}'"
+	root_password=$(get_user_pass root)
+	encoded_password=$(jq -rn --arg s "$root_password" '$s|@uri')
+	echo "root:${encoded_password}@$(get_cluster_name)-mysql-${idx}.$(get_cluster_name)-mysql.${NAMESPACE}"
 }
 
 get_gr_status() {
