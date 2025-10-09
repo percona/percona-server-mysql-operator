@@ -167,8 +167,10 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 					Labels:      Labels(cr),
 					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
 				},
-				Spec: corev1.PodSpec{
-					InitContainers: []corev1.Container{
+				Spec: spec.Core(
+					selector,
+					append(volumes(cr), spec.SidecarVolumes...),
+					[]corev1.Container{
 						k8s.InitContainer(
 							cr,
 							AppName,
@@ -180,25 +182,8 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 							nil,
 						),
 					},
-					Containers:                    containers(cr, secret),
-					ServiceAccountName:            cr.Spec.MySQL.ServiceAccountName,
-					NodeSelector:                  cr.Spec.MySQL.NodeSelector,
-					Tolerations:                   cr.Spec.MySQL.Tolerations,
-					Affinity:                      spec.GetAffinity(selector),
-					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(selector),
-					ImagePullSecrets:              spec.ImagePullSecrets,
-					TerminationGracePeriodSeconds: spec.GetTerminationGracePeriodSeconds(),
-					PriorityClassName:             spec.PriorityClassName,
-					RuntimeClassName:              spec.RuntimeClassName,
-					RestartPolicy:                 corev1.RestartPolicyAlways,
-					SchedulerName:                 spec.SchedulerName,
-					DNSPolicy:                     corev1.DNSClusterFirst,
-					Volumes: append(
-						volumes(cr),
-						spec.SidecarVolumes...,
-					),
-					SecurityContext: spec.PodSecurityContext,
-				},
+					containers(cr, secret),
+				),
 			},
 		},
 	}
@@ -230,6 +215,8 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 }
 
 func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
+	conf := Configurable(*cr)
+
 	volumes := []corev1.Volume{
 		{
 			Name: apiv1.BinVolumeName,
@@ -267,11 +254,11 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 						{
 							ConfigMap: &corev1.ConfigMapProjection{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: ConfigMapName(cr),
+									Name: conf.GetConfigMapName(),
 								},
 								Items: []corev1.KeyToPath{
 									{
-										Key:  CustomConfigKey,
+										Key:  conf.GetConfigMapKey(),
 										Path: "my-config.cnf",
 									},
 								},
@@ -285,7 +272,7 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 								},
 								Items: []corev1.KeyToPath{
 									{
-										Key:  CustomConfigKey,
+										Key:  conf.GetConfigMapKey(),
 										Path: "auto-config.cnf",
 									},
 								},
@@ -295,11 +282,11 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 						{
 							Secret: &corev1.SecretProjection{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: ConfigMapName(cr),
+									Name: conf.GetConfigMapName(),
 								},
 								Items: []corev1.KeyToPath{
 									{
-										Key:  CustomConfigKey,
+										Key:  conf.GetConfigMapKey(),
 										Path: "my-secret.cnf",
 									},
 								},

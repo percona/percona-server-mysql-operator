@@ -189,15 +189,13 @@ var _ = Describe("Sidecars", Ordered, func() {
 	})
 
 	Context("Sidecar container specified with a PVC mounted", func() {
-		It("should get latest CR", func() {
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, crNamespacedName, cr)
-				return err == nil
-			}, time.Second*15, time.Millisecond*250).Should(BeTrue())
-		})
-
 		const pvcName = "pvc-vol"
 		const mountPath = "/var/app/pvc"
+
+		cr, err := readDefaultCR(crName+"-pvc-vol", ns)
+		It("should read default cr.yaml", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
 
 		sidecarPVC := corev1.Container{
 			Name:    "sidecar-pvc",
@@ -210,28 +208,26 @@ var _ = Describe("Sidecars", Ordered, func() {
 				},
 			},
 		}
-		cr.MySQLSpec().Sidecars = append(cr.Spec.MySQL.Sidecars, sidecarPVC)
-		cr.MySQLSpec().SidecarPVCs = []psv1.SidecarPVC{
-			{
-				Name: pvcName,
-				Spec: corev1.PersistentVolumeClaimSpec{
-					Resources: corev1.VolumeResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: resource.Quantity{
-								Format: "1G",
+
+		Specify("CR should be updated", func() {
+			cr.MySQLSpec().Sidecars = append(cr.Spec.MySQL.Sidecars, sidecarPVC)
+			cr.MySQLSpec().SidecarPVCs = []psv1.SidecarPVC{
+				{
+					Name: pvcName,
+					Spec: corev1.PersistentVolumeClaimSpec{
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("1G"),
 							},
 						},
 					},
 				},
-			},
-		}
-
-		Specify("CR should be updated", func() {
-			Expect(k8sClient.Update(ctx, cr)).Should(Succeed())
+			}
+			Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 		})
 
 		Specify("controller should add specified sidecar and volume to mysql STS", func() {
-			_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
+			_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
 			Expect(err).NotTo(HaveOccurred())
 
 			sts := &appsv1.StatefulSet{}
@@ -616,6 +612,10 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr.Spec.Orchestrator.Size = 3
 			cr.Spec.Proxy.HAProxy.Enabled = true
 
+			cr.Spec.MySQL.Image = "mysql-image"
+			cr.Spec.Proxy.HAProxy.Image = "haproxy-image"
+			cr.Spec.Orchestrator.Image = "orc-image"
+
 			It("should create and reconcile", func() {
 				err := k8sClient.Create(ctx, cr)
 				Expect(err).To(Succeed())
@@ -638,6 +638,11 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr.Spec.Orchestrator.Size = 3
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.Proxy.HAProxy.Enabled = true
+
+			cr.Spec.MySQL.Image = "mysql-image"
+			cr.Spec.Toolkit.Image = "backup-image"
+			cr.Spec.Proxy.HAProxy.Image = "haproxy-image"
+			cr.Spec.Orchestrator.Image = "orc-image"
 
 			It("should create and reconcile", func() {
 				err := k8sClient.Create(ctx, cr)
