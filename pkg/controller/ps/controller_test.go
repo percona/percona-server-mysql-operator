@@ -611,6 +611,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr.Spec.Proxy.HAProxy.Size = 3
 			cr.Spec.Orchestrator.Size = 3
 			cr.Spec.Proxy.HAProxy.Enabled = true
+			cr.Spec.Proxy.Router.Enabled = false
 
 			cr.Spec.MySQL.Image = "mysql-image"
 			cr.Spec.Proxy.HAProxy.Image = "haproxy-image"
@@ -819,6 +820,7 @@ var _ = Describe("CR validations", Ordered, func() {
 
 			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
 			cr.Spec.Proxy.Router.Enabled = true
+			cr.Spec.Proxy.HAProxy.Enabled = false
 			cr.Spec.Proxy.Router.Size = 1
 			cr.Spec.Unsafe.ProxySize = true
 			It("should create the cluster successfully", func() {
@@ -929,6 +931,20 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr.Spec.Orchestrator.Enabled = true
 			It("should create the cluster successfully", func() {
 				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("MySQL Router and HAProxy can't be enabled at the same time", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-20", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
+			cr.Spec.Proxy.HAProxy.Enabled = true
+			cr.Spec.Proxy.Router.Enabled = true
+			It("the creation of the cluster should fail with error message", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("Invalid configuration: MySQL Router and HAProxy can't be enabled at the same time"))
 			})
 		})
 	})
