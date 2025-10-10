@@ -15,6 +15,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/pkg/errors"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
@@ -51,7 +52,7 @@ func NewClient(ctx context.Context, opts Options) (Storage, error) {
 		if !ok {
 			return nil, errors.New("invalid options type")
 		}
-		return NewAzure(opts.StorageAccount, opts.AccessKey, opts.Endpoint, opts.Container, opts.Prefix)
+		return NewAzure(ctx, opts.StorageAccount, opts.AccessKey, opts.Endpoint, opts.Container, opts.Prefix)
 	}
 	return nil, errors.New("invalid storage type")
 }
@@ -74,6 +75,7 @@ func NewGCS(ctx context.Context, endpoint, accessKeyID, secretAccessKey, bucketN
 
 // NewS3 return new Manager, useSSL using ssl for connection with storage
 func NewS3(ctx context.Context, endpoint, accessKeyID, secretAccessKey, bucketName, prefix, region string, verifyTLS bool) (Storage, error) {
+	log := logf.FromContext(ctx)
 	if endpoint == "" {
 		endpoint = "https://s3.amazonaws.com"
 		// We can't use default endpoint if region is not us-east-1
@@ -100,8 +102,15 @@ func NewS3(ctx context.Context, endpoint, accessKeyID, secretAccessKey, bucketNa
 
 	bucketExists, err := minioClient.BucketExists(ctx, bucketName)
 	if err != nil {
-		if merr, ok := err.(minio.ErrorResponse); ok && merr.Code == "301 Moved Permanently" {
-			return nil, errors.Errorf("%s region: %s bucket: %s", merr.Code, merr.Region, merr.BucketName)
+		if merr, ok := err.(minio.ErrorResponse); ok {
+			switch merr.StatusCode {
+			case http.StatusMovedPermanently:
+				return nil, errors.Errorf("%s region: %s bucket: %s", merr.Code, merr.Region, merr.BucketName)
+			case http.StatusBadRequest, http.StatusForbidden:
+				log.Info("Failed to check if the bucket exists. This may indicate missing permissions or invalid credentials",
+					"http_status", merr.StatusCode,
+					"error_code", merr.Code)
+			}
 		}
 		return nil, errors.Wrap(err, "failed to check if bucket exists")
 	}
@@ -208,7 +217,9 @@ type Azure struct {
 	prefix    string
 }
 
-func NewAzure(storageAccount, accessKey, endpoint, container, prefix string) (Storage, error) {
+func NewAzure(ctx context.Context, storageAccount, accessKey, endpoint, container, prefix string) (Storage, error) {
+	log := logf.FromContext(ctx)
+
 	credential, err := azblob.NewSharedKeyCredential(storageAccount, accessKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "new credentials")
@@ -219,6 +230,11 @@ func NewAzure(storageAccount, accessKey, endpoint, container, prefix string) (St
 	cli, err := azblob.NewClientWithSharedKeyCredential(endpoint, credential, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "new client")
+	}
+	_, err = cli.ServiceClient().GetProperties(ctx, nil)
+	if err != nil {
+		log.Info("Failed getting storage properties. This may indicate missing permissions or invalid credentials")
+		return nil, errors.Wrap(err, "get properties")
 	}
 
 	return &Azure{
