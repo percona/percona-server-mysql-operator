@@ -7,6 +7,6 @@ commands:
 
       source ../../functions
 
-      run_mysql_with_root \
+      run_mysql \
           "DROP TABLE myDB.myTable; DROP DATABASE myDB" \
           "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446"

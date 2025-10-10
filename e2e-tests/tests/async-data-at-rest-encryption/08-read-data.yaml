@@ -7,7 +7,7 @@ commands:
 
       source ../../functions
 
-      data=$(run_mysql_with_root \
+      data=$(run_mysql \
           "SELECT * FROM myDB.myTable" \
           "-h $(get_haproxy_svc $(get_cluster_name))")
 

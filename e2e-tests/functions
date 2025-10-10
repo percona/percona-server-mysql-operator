@@ -607,56 +607,30 @@ get_client_pod() {
 
 run_mysql() {
 	local command="$1"
-	local uri="$2"
-	local pod="$3"
+	local host="$2"
+	local user="${3--uroot -p'$(get_user_pass root)'}"
+	local pod="$4"
 
 	client_pod=$(get_client_pod)
 	wait_pod $client_pod 1>&2
 
 	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
-		bash -c "printf '%s\n' \"${command}\" | mysql -sN $uri" 2>&1 \
-		| $sed -e 's/mysql: //' \
-		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
-}
-
-run_mysql_with_root() {
-	local command="$1"
-	local uri="$2"
-	local pod="$3"
-
-	client_pod=$(get_client_pod)
-	wait_pod $client_pod 1>&2
-
-	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
-		bash -c "printf '%s\n' \"${command}\" | mysql -sN $uri -uroot -p'$(get_user_pass root)'" 2>&1 \
+		bash -c "printf '%s\n' \"${command}\" | mysql -sN $host $user" 2>&1 \
 		| $sed -e 's/mysql: //' \
 		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
 }
 
 run_mysqlsh() {
 	local command="$1"
-	local uri="$2"
-	local pod="$3"
-
-	client_pod=$(get_client_pod)
-	wait_pod $client_pod 1>&2
-
-	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
-		bash -c "printf '%s\n' \"${command}\" | mysqlsh --sql --quiet-start=2 $uri" 2>/dev/null \
-		| tail -n +2
-}
-
-run_mysqlsh_with_root() {
-	local command="$1"
 	local host="$2"
-	local pod="$3"
+	local user="${3:--uroot -p'$(get_user_pass)'}"
+	local pod="$4"
 
 	client_pod=$(get_client_pod)
 	wait_pod $client_pod 1>&2
 
-	root_password=$(get_user_pass root)
 	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
-		bash -c "printf '%s\n' \"${command}\" | mysqlsh --sql --quiet-start=2 $host -uroot -p'${root_password}'" 2>/dev/null \
+		bash -c "printf '%s\n' \"${command}\" | mysqlsh --sql --quiet-start=2 $host $user" 2>/dev/null \
 		| tail -n +2
 }
 
@@ -823,9 +797,10 @@ get_router_pods() {
 }
 
 get_mysql_users() {
-	local args=$1
+	local host=$1
+	local user="${3--uroot -p'$(get_user_pass root)'}"
 
-	run_mysql "SELECT user FROM mysql.user" "${args}" | grep -vE "mysql|root|percona.telemetry"
+	run_mysql "SELECT user FROM mysql.user" "${host}" "${user}" | grep -vE "mysql|root|percona.telemetry"
 }
 
 get_service_ip() {

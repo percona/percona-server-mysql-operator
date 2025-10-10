@@ -7,16 +7,16 @@ commands:
 
       source ../../functions
 
-      run_mysql_with_root \
+      run_mysql \
           "CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable (id int PRIMARY KEY)" \
           "-h $(get_haproxy_svc $(get_cluster_name))"
 
-      run_mysql_with_root \
+      run_mysql \
           "INSERT myDB.myTable (id) VALUES (100500)" \
           "-h $(get_haproxy_svc $(get_cluster_name))"
 
       for i in 0 1 2; do
           host=$(get_mysql_headless_fqdn $(get_cluster_name) $i)
-          data=$(run_mysql_with_root "SELECT * FROM myDB.myTable" "-h ${host}")
+          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${host}")
           kubectl create configmap -n "${NAMESPACE}" 02-write-data-${i} --from-literal=data="${data}"
       done

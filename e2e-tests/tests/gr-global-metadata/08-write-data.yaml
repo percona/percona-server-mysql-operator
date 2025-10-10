@@ -9,14 +9,14 @@ commands:
       source ../../functions
       router_service=$(get_router_service $(get_cluster_name))
 
-      run_mysql_with_root \
+      run_mysql \
           "CREATE DATABASE IF NOT EXISTS metadata;
            CREATE TABLE IF NOT EXISTS metadata.name (
              id VARCHAR(255) PRIMARY KEY
            );" \
           "-h $router_service"
 
-      run_mysql_with_root \
+      run_mysql \
           "INSERT INTO metadata.name (id) VALUES ('annotation2')
            ON DUPLICATE KEY UPDATE id='annotation2';
            INSERT INTO metadata.name (id) VALUES ('label2')

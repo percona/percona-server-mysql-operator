@@ -12,7 +12,7 @@ commands:
       size=3
       for i in $(seq 0 $((size - 1))); do
           host=$(get_mysql_headless_fqdn $(get_cluster_name) $i)
-          data=$(run_mysql_with_root "SELECT * FROM myDB.myTable" "-h ${host}")
+          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${host}")
           args="${args} --from-literal=${host}=${data}"
       done
 

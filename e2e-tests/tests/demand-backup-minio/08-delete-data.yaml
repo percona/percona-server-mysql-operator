@@ -6,12 +6,12 @@ commands:
       set -o xtrace
 
       source ../../functions
-      run_mysql_with_root \
+      run_mysql \
           "TRUNCATE TABLE myDB.myTable" \
           "-h $(get_haproxy_svc $(get_cluster_name))"
 
       cluster_name=$(get_cluster_name)
       for i in 0 1 2; do
-          data=$(run_mysql_with_root "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql")
+          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql")
           kubectl create configmap -n "${NAMESPACE}" 08-delete-data-minio-${i} --from-literal=data="${data}"
       done

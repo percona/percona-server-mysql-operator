@@ -8,7 +8,7 @@ commands:
       source ../../functions
 
       # Check if table is encrypted by examining create options in information schema
-      data=$(run_mysql_with_root \
+      data=$(run_mysql \
           "SELECT CREATE_OPTIONS FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='myDB' AND TABLE_NAME='myTable'" \
           "-h $(get_haproxy_svc $(get_cluster_name))")
 

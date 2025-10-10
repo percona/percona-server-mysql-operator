@@ -8,6 +8,6 @@ commands:
 
       source ../../functions
 
-      data=$(run_mysql_with_root "SELECT * FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name))")
+      data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_haproxy_svc $(get_cluster_name))")
 
       kubectl create configmap -n "${NAMESPACE}" 04-read-from-primary --from-literal=data="${data}"
