@@ -34,7 +34,12 @@ func gtidSubtract(ctx context.Context, shell SQLRunner, a, b string) (string, er
 		return "", errors.Errorf("unexpected output: %+v", result)
 	}
 
-	return v, nil
+	s, ok := v.(string)
+	if !ok {
+		return "", errors.Errorf("unexpected type: %T", v)
+	}
+
+	return s, nil
 }
 
 func gtidSubtractIntersection(ctx context.Context, shell SQLRunner, a, b string) (string, error) {
@@ -53,7 +58,12 @@ func gtidSubtractIntersection(ctx context.Context, shell SQLRunner, a, b string)
 		return "", errors.Errorf("unexpected output: %+v", result)
 	}
 
-	return v, nil
+	s, ok := v.(string)
+	if !ok {
+		return "", errors.Errorf("unexpected type: %T", v)
+	}
+
+	return s, nil
 }
 
 type GTIDSetRelation string
@@ -114,25 +124,30 @@ func compareGTIDs(ctx context.Context, shell SQLRunner, a, b string) (GTIDSetRel
 
 // If purged has more gtids than the executed on the replica
 // it means some data will not be recoverable
-func comparePrimaryPurged(ctx context.Context, shell SQLRunner, purged, executed string) bool {
+func comparePrimaryPurged(ctx context.Context, shell SQLRunner, purged, executed string) (bool, error) {
 	query := fmt.Sprintf("SELECT GTID_SUBTRACT('%s', '%s') = ''", purged, executed)
 
 	result, err := shell.runSQL(ctx, query)
 	if err != nil {
-		return false
+		return false, errors.Wrap(err, "run sql")
 	}
 
 	v, ok := result.Rows[0]["GTID_SUBTRACT"]
 	if !ok {
-		return false
+		return false, errors.Errorf("unexpected output: %+v", result)
 	}
 
-	sub, err := strconv.Atoi(v)
+	s, ok := v.(string)
+	if !ok {
+		return false, errors.Errorf("unexpected type: %T", v)
+	}
+
+	sub, err := strconv.Atoi(s)
 	if err != nil {
-		return false
+		return false, errors.Wrap(err, "atoi")
 	}
 
-	return sub == 0
+	return sub == 0, nil
 }
 
 func checkReplicaState(ctx context.Context, primary, replica SQLRunner) (innodbcluster.ReplicaGtidState, error) {
@@ -169,7 +184,14 @@ func checkReplicaState(ctx context.Context, primary, replica SQLRunner) (innodbc
 	case GTIDSetEqual:
 		return innodbcluster.ReplicaGtidIdentical, nil
 	case GTIDSetContains:
-		if primaryPurged == "" || comparePrimaryPurged(ctx, primary, primaryPurged, replicaExecuted) {
+		if primaryPurged == "" {
+			return innodbcluster.ReplicaGtidRecoverable, nil
+		}
+		compareRes, err := comparePrimaryPurged(ctx, primary, primaryPurged, replicaExecuted)
+		if err != nil {
+			return "", errors.Wrap(err, "compare primary purged")
+		}
+		if compareRes {
 			return innodbcluster.ReplicaGtidRecoverable, nil
 		}
 		return innodbcluster.ReplicaGtidIrrecoverable, nil

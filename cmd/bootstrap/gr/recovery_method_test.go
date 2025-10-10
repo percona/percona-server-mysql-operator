@@ -27,7 +27,7 @@ func newMockSQLRunner() *mockSQLRunner {
 func (m *mockSQLRunner) runSQL(ctx context.Context, sql string) (SQLResult, error) {
 	if result, ok := m.sqlResponses[sql]; ok {
 		return SQLResult{
-			Rows: []map[string]string{
+			Rows: []map[string]any{
 				{
 					"sub":           result,
 					"GTID_SUBTRACT": result, // for comparePrimaryPurged
@@ -66,7 +66,6 @@ func TestCompareGTIDs_Equal(t *testing.T) {
 	mock.setGTIDSubtractResponse("b:1-3", "a:1-5", "")
 
 	result, err := compareGTIDs(ctx, mock, "a:1-5", "b:1-3")
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -84,7 +83,6 @@ func TestCompareGTIDs_AContainsB(t *testing.T) {
 	mock.setGTIDSubtractResponse("a:1-5", "a:1-10", "")
 
 	result, err := compareGTIDs(ctx, mock, "a:1-10", "a:1-5")
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -102,7 +100,6 @@ func TestCompareGTIDs_BContainsA(t *testing.T) {
 	mock.setGTIDSubtractResponse("a:1-10", "a:1-5", "a:6-10")
 
 	result, err := compareGTIDs(ctx, mock, "a:1-5", "a:1-10")
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -122,7 +119,6 @@ func TestCompareGTIDs_Disjoint(t *testing.T) {
 	mock.setGTIDSubtractIntersectionResponse("a:1-5", "b:1-5", "")
 
 	result, err := compareGTIDs(ctx, mock, "a:1-5", "b:1-5")
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -142,7 +138,6 @@ func TestCompareGTIDs_Intersects(t *testing.T) {
 	mock.setGTIDSubtractIntersectionResponse("a:1-10", "a:6-15", "a:6-10")
 
 	result, err := compareGTIDs(ctx, mock, "a:1-10", "a:6-15")
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -156,7 +151,6 @@ func TestCompareGTIDs_BothEmpty(t *testing.T) {
 	mock := newMockSQLRunner()
 
 	result, err := compareGTIDs(ctx, mock, "", "")
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -170,7 +164,6 @@ func TestCompareGTIDs_AEmpty(t *testing.T) {
 	mock := newMockSQLRunner()
 
 	result, err := compareGTIDs(ctx, mock, "", "b:1-5")
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -184,7 +177,6 @@ func TestCompareGTIDs_BEmpty(t *testing.T) {
 	mock := newMockSQLRunner()
 
 	result, err := compareGTIDs(ctx, mock, "a:1-5", "")
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -207,7 +199,6 @@ func TestCheckReplicaState_New(t *testing.T) {
 	replica := newMockSQLRunnerWithGTIDs("", "")
 
 	result, err := checkReplicaState(ctx, primary, replica)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -226,7 +217,6 @@ func TestCheckReplicaState_Identical(t *testing.T) {
 	primary.setGTIDSubtractResponse("a:1-10", "a:1-10", "")
 
 	result, err := checkReplicaState(ctx, primary, replica)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -245,7 +235,6 @@ func TestCheckReplicaState_Recoverable_NoPurged(t *testing.T) {
 	primary.setGTIDSubtractResponse("a:1-5", "a:1-10", "")
 
 	result, err := checkReplicaState(ctx, primary, replica)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -267,7 +256,6 @@ func TestCheckReplicaState_Recoverable_WithPurgedButOK(t *testing.T) {
 	primary.sqlResponses["SELECT GTID_SUBTRACT('a:1-3', 'a:1-5') = ''"] = "0"
 
 	result, err := checkReplicaState(ctx, primary, replica)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -289,7 +277,6 @@ func TestCheckReplicaState_Irrecoverable(t *testing.T) {
 	primary.sqlResponses["SELECT GTID_SUBTRACT('a:1-8', 'a:1-5') = ''"] = "1"
 
 	result, err := checkReplicaState(ctx, primary, replica)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -309,7 +296,6 @@ func TestCheckReplicaState_Diverged_Intersects(t *testing.T) {
 	primary.setGTIDSubtractIntersectionResponse("a:1-10", "a:5-15", "a:5-10")
 
 	result, err := checkReplicaState(ctx, primary, replica)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -329,7 +315,6 @@ func TestCheckReplicaState_Diverged_Disjoint(t *testing.T) {
 	primary.setGTIDSubtractIntersectionResponse("a:1-5", "b:1-5", "")
 
 	result, err := checkReplicaState(ctx, primary, replica)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -348,7 +333,6 @@ func TestCheckReplicaState_Diverged_Contained(t *testing.T) {
 	primary.setGTIDSubtractResponse("a:1-10", "a:1-5", "a:6-10")
 
 	result, err := checkReplicaState(ctx, primary, replica)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
