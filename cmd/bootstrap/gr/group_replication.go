@@ -116,14 +116,14 @@ func (m *mysqlsh) rescanCluster(ctx context.Context) error {
 }
 
 type SQLResult struct {
-	Error string              `json:"error,omitempty"`
-	Rows  []map[string]string `json:"rows,omitempty"`
+	Error string           `json:"error,omitempty"`
+	Rows  []map[string]any `json:"rows,omitempty"`
 }
 
 func (m *mysqlsh) runSQL(ctx context.Context, sql string) (SQLResult, error) {
 	var stdoutb, stderrb bytes.Buffer
 
-	cmd := fmt.Sprintf("session.runSql(\"%s\")", sql)
+	cmd := fmt.Sprintf("session.runSql(`%s`)", sql)
 	args := []string{"--uri", m.getURI(), "--js", "--json=raw", "--interactive", "--quiet-start", "2", "-e", cmd}
 
 	c := exec.CommandContext(ctx, "mysqlsh", args...)
@@ -158,7 +158,12 @@ func (m *mysqlsh) getGTIDExecuted(ctx context.Context) (string, error) {
 		return "", errors.Errorf("unexpected output: %+v", result)
 	}
 
-	return v, nil
+	s, ok := v.(string)
+	if !ok {
+		return "", errors.Errorf("unexpected type: %T", v)
+	}
+
+	return s, nil
 }
 
 func (m *mysqlsh) getGTIDPurged(ctx context.Context) (string, error) {
@@ -172,21 +177,12 @@ func (m *mysqlsh) getGTIDPurged(ctx context.Context) (string, error) {
 		return "", errors.Errorf("unexpected output: %+v", result)
 	}
 
-	return v, nil
-}
-
-func (m *mysqlsh) getGroupSeeds(ctx context.Context) (string, error) {
-	result, err := m.runSQL(ctx, "SELECT @@group_replication_group_seeds")
-	if err != nil {
-		return "", err
-	}
-
-	v, ok := result.Rows[0]["@@group_replication_group_seeds"]
+	s, ok := v.(string)
 	if !ok {
-		return "", errors.Errorf("unexpected output: %+v", result)
+		return "", errors.Errorf("unexpected type: %T", v)
 	}
 
-	return v, nil
+	return s, nil
 }
 
 func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) error {
@@ -321,7 +317,49 @@ func (m *mysqlsh) removeInstance(ctx context.Context, instanceDef string, force 
 	return nil
 }
 
-func connectToLocal(ctx context.Context, version *v.Version) (*mysqlsh, error) {
+func (m *mysqlsh) checkIfInPrimaryPartition(ctx context.Context) (bool, error) {
+	result, err := m.runSQL(ctx, `SELECT
+		MEMBER_STATE = 'ONLINE'
+		AND (
+			(
+				SELECT
+					COUNT(*)
+				FROM
+					performance_schema.replication_group_members
+				WHERE
+					MEMBER_STATE NOT IN ('ONLINE', 'RECOVERING')
+			) >= (
+				(
+					SELECT
+						COUNT(*)
+					FROM
+						performance_schema.replication_group_members
+				) / 2
+			) = 0
+		) AS in_primary
+	FROM
+		performance_schema.replication_group_members
+		JOIN performance_schema.replication_group_member_stats USING(member_id)
+	WHERE
+		member_id = @@global.server_uuid;`)
+	if err != nil {
+		return false, err
+	}
+
+	v, ok := result.Rows[0]["in_primary"]
+	if !ok {
+		return false, errors.Errorf("unexpected output: %+v", result)
+	}
+
+	f, ok := v.(float64)
+	if !ok {
+		return false, errors.Errorf("unexpected type: %T", v)
+	}
+
+	return f == 1, nil
+}
+
+func connectToLocal(version *v.Version) (*mysqlsh, error) {
 	fqdn, err := utils.GetFQDN(os.Getenv("SERVICE_NAME"))
 	if err != nil {
 		return nil, errors.Wrap(err, "get FQDN")
@@ -346,7 +384,7 @@ func connectToCluster(ctx context.Context, peers sets.Set[string], version *v.Ve
 }
 
 func handleFullClusterCrash(ctx context.Context, version *v.Version) error {
-	localShell, err := connectToLocal(ctx, version)
+	localShell, err := connectToLocal(version)
 	if err != nil {
 		return errors.Wrap(err, "connect to local")
 	}
@@ -416,7 +454,7 @@ func Bootstrap(ctx context.Context) error {
 	}
 	log.Println("mysql-shell version:", mysqlshVer)
 
-	localShell, err := connectToLocal(ctx, mysqlshVer)
+	localShell, err := connectToLocal(mysqlshVer)
 	if err != nil {
 		return errors.Wrap(err, "connect to local")
 	}
@@ -562,6 +600,21 @@ func Bootstrap(ctx context.Context) error {
 		}
 
 		log.Println("Cluster rescanned")
+	}
+
+	inPrimary, err := shell.checkIfInPrimaryPartition(ctx)
+	if err != nil {
+		return errors.Wrap(err, "check if member in primary partition")
+	}
+	if !inPrimary {
+		log.Printf("Instance (%s) is not in primary partition. Starting full cluster crash recovery...", localShell.host)
+
+		if err := handleFullClusterCrash(ctx, mysqlshVer); err != nil {
+			return errors.Wrap(err, "handle full cluster crash")
+		}
+
+		// force restart container
+		os.Exit(1)
 	}
 
 	return nil
