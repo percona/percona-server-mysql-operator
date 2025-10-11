@@ -578,7 +578,7 @@ get_cr() {
 
 	yq eval "$(printf '.metadata.name="%s"' "${test_name}${name_suffix:+-$name_suffix}")" "${DEPLOY_DIR}/cr.yaml" \
 		| yq eval "$(printf '.spec.initContainer.image="%s"' "${IMAGE}")" - \
-		| yq eval '.spec.secretsName="test-secrets"' - \
+		| yq eval 'del(.spec.secretsName)' - \
 		| yq eval '.spec.sslSecretName="test-ssl"' - \
 		| yq eval '.spec.upgradeOptions.apply="disabled"' - \
 		| yq eval '.spec.mysql.clusterType="async"' - \
@@ -1307,7 +1307,9 @@ deploy_cmctl() {
 
 get_user_pass() {
 	local user="${1:-root}"
-	kubectl -n "${NAMESPACE}" get secret test-secrets -o jsonpath="{.data.${user}}" | base64 --decode
+	local secret="${2:-$(get_cluster_name)-secrets}"
+
+	kubectl -n "${NAMESPACE}" get secret ${secret} -o jsonpath="{.data.${user}}" | base64 --decode
 }
 
 get_operator_version() {
