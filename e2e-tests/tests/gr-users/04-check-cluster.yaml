@@ -10,24 +10,26 @@ commands:
 
       sleep 30 # wait for cluster status to change to initializing
       wait_cluster_consistency_gr "${test_name}" "3" "3"
-      mysql_args="-h $(get_router_service $(get_cluster_name)) -uroot -proot_password_updated"
-      users=($(get_mysql_users "${mysql_args}"))
+      cluster_name= $(get_cluster_name)
+      mysql_host="-h $(get_router_service ${cluster_name})"
+      mysql_user="-uroot -proot_password_updated"
+      users=($(get_mysql_users "${mysql_host}" "${mysql_user}"))
 
       # check connection
       args=""
       set +o errexit
       for user in "${users[@]}"; do
-          mysql_args="-h $(get_router_service $(get_cluster_name)) -u${user} -p${user}_password_updated"
+          mysql_user="-u${user} -p${user}_password_updated"
 
           pod=mysql-client
           case $user in
               heartbeat | xtrabackup)
-                  mysql_args="-h localhost -u${user} -p${user}_password_updated"
-                  pod="$(get_cluster_name)-mysql-0"
+                  mysql_host="-h localhost"
+                  pod="${cluster_name}-mysql-0"
                   ;;
           esac
 
-          run_mysql "SELECT 1" "${mysql_args}" "${pod}"
+          run_mysql "SELECT 1" "${mysql_host}" "${mysql_user}" "${pod}"
 
           args="${args} --from-literal=${user}=$([ $? -eq 0 ] && echo 'success' || echo 'fail')"
       done

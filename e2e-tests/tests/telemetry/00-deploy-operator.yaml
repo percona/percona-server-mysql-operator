@@ -39,6 +39,5 @@ commands:
       }
 
       deploy_operator_with_telemetry
-      deploy_non_tls_cluster_secrets
       deploy_tls_cluster_secrets
       deploy_client
