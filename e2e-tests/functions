@@ -608,7 +608,7 @@ get_client_pod() {
 run_mysql() {
 	local command="$1"
 	local host="$2"
-	local user="${3--uroot -p'$(get_user_pass root)'}"
+	local user="${3:--uroot -p'$(get_user_pass root)'}"
 	local pod="$4"
 
 	client_pod=$(get_client_pod)
@@ -919,10 +919,10 @@ check_auto_tuning() {
 	local CUSTOM_INNODB_SIZE=$2
 	local CUSTOM_CONNECTIONS=$3
 
-	local INNODB_SIZE=$(run_mysql_with_root \
+	local INNODB_SIZE=$(run_mysql \
 		'SELECT @@innodb_buffer_pool_size;' \
 		"-h $(get_haproxy_svc "$(get_cluster_name)")")
-	local CONNECTIONS=$(run_mysql_with_root \
+	local CONNECTIONS=$(run_mysql \
 		'SELECT @@max_connections;' \
 		"-h $(get_haproxy_svc "$(get_cluster_name)")")
 
@@ -986,11 +986,11 @@ get_primary_from_haproxy() {
 	local haproxy_pod=$1
 	local haproxy_pod_ip=$(kubectl -n "${NAMESPACE}" get pods ${haproxy_pod} -o jsonpath="{.status.podIP}")
 
-	run_mysql_with_root "SHOW VARIABLES LIKE '%hostname%';" "-h ${haproxy_pod_ip} -P3306" | awk '{print $2}'
+	run_mysql "SHOW VARIABLES LIKE '%hostname%';" "-h ${haproxy_pod_ip} -P3306" | awk '{print $2}'
 }
 
 get_primary_from_group_replication() {
-	run_mysql_with_root \
+	run_mysql \
 		"SELECT MEMBER_HOST FROM performance_schema.replication_group_members where MEMBER_ROLE='PRIMARY';" \
 		"-h $(get_mysql_router_service $(get_cluster_name)) -P 6446" \
 		| cut -d'.' -f1
