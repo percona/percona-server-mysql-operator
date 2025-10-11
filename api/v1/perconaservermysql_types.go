@@ -61,6 +61,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', MySQL size must be 3 or greater unless 'unsafeFlags.mysqlSize' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && has(self.orchestrator.size) && (self.orchestrator.size < 3 || self.orchestrator.size % 2 == 0) && self.orchestrator.size > 0) || self.unsafeFlags.orchestratorSize",message="Invalid configuration: For 'async' replication, Orchestrator size must be 3 or greater and odd unless 'unsafeFlags.orchestratorSize' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && self.updateStrategy == 'SmartUpdate') || self.orchestrator.enabled",message="Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.proxy.router != null && has(self.proxy.router.enabled) && self.proxy.router.enabled && self.proxy.haproxy != null && has(self.proxy.haproxy.enabled) && self.proxy.haproxy.enabled)",message="Invalid configuration: MySQL Router and HAProxy can't be enabled at the same time"
 type PerconaServerMySQLSpec struct {
 	Metadata               *Metadata                            `json:"metadata,omitempty"`
 	CRVersion              string                               `json:"crVersion,omitempty"`
