@@ -483,7 +483,6 @@ func TestRestorerClusterDefaults(t *testing.T) {
 			},
 		},
 	}
-	cluster.Spec.Backup.Storages["s3-us-west"].S3.CredentialsSecret = s3SecretName
 
 	bcp := readDefaultBackup(t, backupName, namespace)
 	bcp.Spec.StorageName = "s3-us-west"
