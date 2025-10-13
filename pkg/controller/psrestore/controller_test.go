@@ -6,17 +6,22 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	controllerruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 	fakestorage "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage/fake"
 )
@@ -439,6 +444,103 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRestorerClusterDefaults(t *testing.T) {
+	ctx := t.Context()
+
+	const clusterName = "test-cluster"
+	const namespace = "namespace"
+	const backupName = clusterName + "-backup"
+	const restoreName = clusterName + "-restore"
+	const s3SecretName = "my-cluster-name-backup-s3"
+
+	cluster := new(apiv1.PerconaServerMySQL)
+	cluster.Name = clusterName
+	cluster.Namespace = namespace
+	cluster.Spec.CRVersion = version.Version()
+	cluster.Spec.InitContainer.Image = "some-image"
+	cluster.Spec.Backup = &apiv1.BackupSpec{
+		Image: "backup-image",
+		Storages: map[string]*apiv1.BackupStorageSpec{
+			"s3-us-west": {
+				Type: apiv1.BackupStorageS3,
+				S3: &apiv1.BackupStorageS3Spec{
+					CredentialsSecret: s3SecretName,
+				},
+			},
+		},
+	}
+	cluster.Spec.MySQL.VolumeSpec = &apiv1.VolumeSpec{
+		PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+			Resources: corev1.VolumeResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse("1G"),
+				},
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse("1G"),
+				},
+			},
+		},
+	}
+	cluster.Spec.Backup.Storages["s3-us-west"].S3.CredentialsSecret = s3SecretName
+
+	bcp := readDefaultBackup(t, backupName, namespace)
+	bcp.Spec.StorageName = "s3-us-west"
+	bcp.Status.Destination.SetS3Destination("some-dest", "dest")
+	bcp.Status.Storage.S3 = &apiv1.BackupStorageS3Spec{
+		Bucket:            "some-bucket",
+		CredentialsSecret: s3SecretName,
+	}
+	bcp.Status.State = apiv1.BackupSucceeded
+	bcp.Status.Storage.Type = apiv1.BackupStorageS3
+
+	cr := readDefaultRestore(t, restoreName, namespace)
+	cr.Spec.BackupName = backupName
+	cr.Spec.ClusterName = clusterName
+
+	s3Secret := readDefaultS3Secret(t, s3SecretName, namespace)
+
+	cl := buildFakeClient(t, cr, cluster, bcp, s3Secret, &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      mysql.Name(cluster),
+			Namespace: cluster.Namespace,
+		},
+	})
+
+	r := reconciler(cl)
+	r.NewStorageClient = func(ctx context.Context, opts storage.Options) (storage.Storage, error) {
+		defaultFakeClient, err := fakestorage.NewFakeClient(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+		return &fakeStorageClient{defaultFakeClient, false, false}, nil
+	}
+
+	_, err := r.Reconcile(ctx, controllerruntime.Request{
+		NamespacedName: client.ObjectKeyFromObject(cr),
+	})
+	require.NoError(t, err)
+
+	restorer, err := r.getRestorer(ctx, cr, cluster)
+	require.NoError(t, err)
+
+	job, err := restorer.Job()
+	require.NoError(t, err)
+
+	require.NoError(t, r.Get(ctx, client.ObjectKeyFromObject(job), job))
+
+	findVolume := func(name string) *corev1.Volume {
+		for _, v := range job.Spec.Template.Spec.Volumes {
+			if v.Name == name {
+				return &v
+			}
+		}
+		return nil
+	}
+
+	assert.NotEmpty(t, findVolume("users").VolumeSource.Secret.SecretName)
+	assert.NotEmpty(t, findVolume("tls").VolumeSource.Secret.SecretName)
 }
 
 func TestRestorerValidate(t *testing.T) {
