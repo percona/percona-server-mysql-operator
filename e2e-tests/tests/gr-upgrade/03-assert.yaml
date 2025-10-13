@@ -2,57 +2,10 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 60
 ---
-kind: StatefulSet
-apiVersion: apps/v1
-metadata:
-  name: gr-upgrade-mysql
-status:
-  observedGeneration: 1
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
-  collisionCount: 0
----
-kind: StatefulSet
-apiVersion: apps/v1
-metadata:
-  name: gr-upgrade-haproxy
-status:
-  observedGeneration: 1
-  replicas: 3
-  readyReplicas: 3
-  updatedReplicas: 3
----
-apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQL
-metadata:
-  name: gr-upgrade
-  finalizers:
-    - percona.com/delete-mysql-pods-in-order
-status:
-  mysql:
-    ready: 3
-    size: 3
-    state: ready
-  haproxy:
-    ready: 3
-    size: 3
-    state: ready
-  state: ready
----
 apiVersion: v1
-kind: Service
+kind: ConfigMap
 metadata:
-  name: gr-upgrade-mysql
-spec:
-  sessionAffinity: None
-  type: ClusterIP
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: gr-upgrade-haproxy
-spec:
-  sessionAffinity: None
-  type: ClusterIP
+  name: 03-read-data
+data:
+  data: |-
+    100500

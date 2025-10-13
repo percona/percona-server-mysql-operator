@@ -5,7 +5,8 @@ timeout: 60
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: 03-read-data
+  name: 08-read-data
 data:
   data: |-
     100500
+    100501
