@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -125,29 +124,24 @@ func compareGTIDs(ctx context.Context, shell SQLRunner, a, b string) (GTIDSetRel
 // If purged has more gtids than the executed on the replica
 // it means some data will not be recoverable
 func comparePrimaryPurged(ctx context.Context, shell SQLRunner, purged, executed string) (bool, error) {
-	query := fmt.Sprintf("SELECT GTID_SUBTRACT('%s', '%s') = ''", purged, executed)
+	query := fmt.Sprintf("SELECT GTID_SUBTRACT('%s', '%s') = '' AS result", purged, executed)
 
 	result, err := shell.runSQL(ctx, query)
 	if err != nil {
 		return false, errors.Wrap(err, "run sql")
 	}
 
-	v, ok := result.Rows[0]["GTID_SUBTRACT"]
+	v, ok := result.Rows[0]["result"]
 	if !ok {
 		return false, errors.Errorf("unexpected output: %+v", result)
 	}
 
-	s, ok := v.(string)
+	s, ok := v.(float64)
 	if !ok {
 		return false, errors.Errorf("unexpected type: %T", v)
 	}
 
-	sub, err := strconv.Atoi(s)
-	if err != nil {
-		return false, errors.Wrap(err, "atoi")
-	}
-
-	return sub == 0, nil
+	return s == 0, nil
 }
 
 func checkReplicaState(ctx context.Context, primary, replica SQLRunner) (innodbcluster.ReplicaGtidState, error) {
