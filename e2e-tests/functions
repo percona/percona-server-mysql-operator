@@ -92,7 +92,7 @@ deploy_operator() {
 	if [ -n "$OPERATOR_NS" ]; then
 		operator_file="${DEPLOY_DIR}/cw-operator.yaml"
 	else
-		operator_file="${DEPLOY_DIR}/-operator.yaml"
+		operator_file="${DEPLOY_DIR}/operator.yaml"
 	fi
 
 	yq eval \
