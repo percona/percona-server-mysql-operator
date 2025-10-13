@@ -235,7 +235,7 @@ func (d *DB) getCloneStatusDetails(ctx context.Context) (map[string]interface{},
 	defer func() {
 		err := rows.Close()
 		if err != nil {
-			log.Error(err, "close rows while getting clone status")
+			log.Error(err, "close rows while getting clone status details")
 		}
 	}()
 
