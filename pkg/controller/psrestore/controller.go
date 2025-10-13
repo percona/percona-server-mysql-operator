@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -34,8 +35,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	"github.com/pkg/errors"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
@@ -291,11 +290,10 @@ func (r *PerconaServerMySQLRestoreReconciler) removeBootstrapCondition(ctx conte
 		}
 
 		meta.SetStatusCondition(&c.Status.Conditions, metav1.Condition{
-			Type:               apiv1.ConditionInnoDBClusterBootstrapped,
-			Status:             metav1.ConditionFalse,
-			Reason:             apiv1.ConditionInnoDBClusterBootstrapped,
-			Message:            "InnoDB cluster is not bootstrapped after restore",
-			LastTransitionTime: metav1.Now(),
+			Type:    apiv1.ConditionInnoDBClusterBootstrapped,
+			Status:  metav1.ConditionFalse,
+			Reason:  apiv1.ConditionInnoDBClusterBootstrapped,
+			Message: "InnoDB cluster is not bootstrapped after restore",
 		})
 
 		return r.Client.Status().Update(ctx, c)
