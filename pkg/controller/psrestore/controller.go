@@ -293,11 +293,10 @@ func (r *PerconaServerMySQLRestoreReconciler) removeBootstrapCondition(ctx conte
 		}
 
 		meta.SetStatusCondition(&c.Status.Conditions, metav1.Condition{
-			Type:               apiv1.ConditionInnoDBClusterBootstrapped,
-			Status:             metav1.ConditionFalse,
-			Reason:             apiv1.ConditionInnoDBClusterBootstrapped,
-			Message:            "InnoDB cluster is not bootstrapped after restore",
-			LastTransitionTime: metav1.Now(),
+			Type:    apiv1.ConditionInnoDBClusterBootstrapped,
+			Status:  metav1.ConditionFalse,
+			Reason:  apiv1.ConditionInnoDBClusterBootstrapped,
+			Message: "InnoDB cluster is not bootstrapped after restore",
 		})
 
 		return r.Client.Status().Update(ctx, c)
