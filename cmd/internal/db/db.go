@@ -14,7 +14,16 @@ import (
 	defs "github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
-const defaultChannelName = ""
+const (
+	defaultChannelName = ""
+
+	errCodeRestartFailed            = 3707
+	errCodeQueryInterrupted         = 1317
+	errCodeReadCommunicationPackets = 1160
+
+	cloneStateCompleted = "Completed"
+	cloneStateFailed    = "Failed"
+)
 
 var ErrRestartAfterClone = errors.New("Error 3707: Restart server failed (mysqld is not managed by supervisor process).")
 
@@ -182,7 +191,7 @@ func (d *DB) CloneInProgress(ctx context.Context) (bool, error) {
 			return false, errors.Wrap(err, "scan rows")
 		}
 
-		if state != "Completed" && state != "Failed" {
+		if state != cloneStateCompleted && state != cloneStateFailed {
 			return true, nil
 		}
 	}
@@ -250,44 +259,35 @@ func (d *DB) Clone(ctx context.Context, donor, user, pass string, port int32, cl
 		cloneCtx, cancel = context.WithTimeout(ctx, time.Duration(cloneTimeoutSeconds)*time.Second)
 		defer cancel()
 	} else {
-		cloneCtx = ctx // Use original context without timeout (original behavior)
+		cloneCtx = ctx
 	}
 
 	_, err = d.db.ExecContext(cloneCtx, "CLONE INSTANCE FROM ?@?:? IDENTIFIED BY ?", user, donor, port, pass)
 
-	// Check for MySQL errors first
 	if err != nil {
 		mErr, ok := err.(*mysql.MySQLError)
 		if !ok {
 			return errors.Wrap(err, "clone instance")
 		}
 
-		// Error 3707: Restart server failed (mysqld is not managed by supervisor process).
-		if mErr.Number == uint16(3707) {
+		switch mErr.Number {
+		case errCodeRestartFailed:
 			return ErrRestartAfterClone
-		}
-
-		// Error 1317: Query execution was interrupted (often due to timeout)
-		if mErr.Number == uint16(1317) {
+		case errCodeQueryInterrupted:
 			return errors.Wrapf(err, "clone instance was interrupted (likely due to timeout) - MySQL error %d: %s", mErr.Number, mErr.Message)
-		}
-
-		// Error 1160: Got an error reading communication packets
-		if mErr.Number == uint16(1160) {
+		case errCodeReadCommunicationPackets:
 			return errors.Wrapf(err, "clone instance communication error - MySQL error %d: %s", mErr.Number, mErr.Message)
+		default:
+			return errors.Wrapf(err, "clone instance failed with MySQL error %d: %s", mErr.Number, mErr.Message)
 		}
-
-		// Return other MySQL errors
-		return errors.Wrapf(err, "clone instance failed with MySQL error %d: %s", mErr.Number, mErr.Message)
 	}
 
-	// If no error from the clone command, check the clone status to ensure it completed successfully
 	cloneStatus, err := d.getCloneStatus(ctx)
 	if err != nil {
 		return errors.Wrap(err, "check clone status after operation")
 	}
 
-	if cloneStatus != "Completed" {
+	if cloneStatus != cloneStateCompleted {
 		// Get detailed clone status for better error reporting
 		details, detailErr := d.getCloneStatusDetails(ctx)
 		if detailErr != nil {

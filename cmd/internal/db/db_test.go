@@ -12,9 +12,6 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
-// For testing purposes, we'll focus on testing the DBParams logic
-// and the Clone method signature/parameter handling
-
 func TestDBParams_setDefaults(t *testing.T) {
 	tests := []struct {
 		name     string
