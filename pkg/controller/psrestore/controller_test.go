@@ -394,7 +394,20 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 				if tt.cluster.Spec.Backup.InitContainer == nil {
 					tt.cluster.Spec.Backup.InitContainer = &apiv1.InitContainerSpec{}
 				}
+				tt.cluster.Spec.Backup.Image = "backup-image"
 				tt.cluster.Spec.Backup.InitContainer.Image = "operator-image"
+				tt.cluster.Spec.MySQL.VolumeSpec = &apiv1.VolumeSpec{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+						Resources: corev1.VolumeResourceRequirements{
+							Limits: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("1G"),
+							},
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: resource.MustParse("1G"),
+							},
+						},
+					},
+				}
 				tt.objects = append(tt.objects, tt.cluster)
 				tt.objects = append(tt.objects,
 					&appsv1.StatefulSet{
