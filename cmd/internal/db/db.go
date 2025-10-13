@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/db"
@@ -201,11 +202,17 @@ func (d *DB) CloneInProgress(ctx context.Context) (bool, error) {
 
 // getCloneStatus returns the current clone status
 func (d *DB) getCloneStatus(ctx context.Context) (string, error) {
+	log := logf.FromContext(ctx)
 	rows, err := d.db.QueryContext(ctx, "SELECT STATE FROM clone_status")
 	if err != nil {
 		return "", errors.Wrap(err, "fetch clone status")
 	}
-	defer func() { _ = rows.Close() }()
+	defer func() {
+		err := rows.Close()
+		if err != nil {
+			log.Error(err, "close rows while getting clone status")
+		}
+	}()
 
 	if rows.Next() {
 		var state string
@@ -220,11 +227,17 @@ func (d *DB) getCloneStatus(ctx context.Context) (string, error) {
 
 // getCloneStatusDetails returns detailed clone status information for debugging
 func (d *DB) getCloneStatusDetails(ctx context.Context) (map[string]interface{}, error) {
+	log := logf.FromContext(ctx)
 	rows, err := d.db.QueryContext(ctx, "SELECT STATE, BEGIN_TIME, END_TIME, SOURCE, DESTINATION, ERROR_NO, ERROR_MESSAGE FROM clone_status")
 	if err != nil {
 		return nil, errors.Wrap(err, "fetch clone status details")
 	}
-	defer func() { _ = rows.Close() }()
+	defer func() {
+		err := rows.Close()
+		if err != nil {
+			log.Error(err, "close rows while getting clone status details")
+		}
+	}()
 
 	details := make(map[string]interface{})
 	if rows.Next() {
