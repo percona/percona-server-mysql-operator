@@ -538,8 +538,8 @@ func TestRestorerClusterDefaults(t *testing.T) {
 		return nil
 	}
 
-	assert.NotEmpty(t, findVolume("users").VolumeSource.Secret.SecretName)
-	assert.NotEmpty(t, findVolume("tls").VolumeSource.Secret.SecretName)
+	assert.NotEmpty(t, findVolume("users").Secret.SecretName)
+	assert.NotEmpty(t, findVolume("tls").Secret.SecretName)
 }
 
 func TestRestorerValidate(t *testing.T) {
