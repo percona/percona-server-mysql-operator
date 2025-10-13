@@ -5,9 +5,9 @@ jobs:
     name: runner / suggester / golangci-lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: '^1.24'
+          go-version: '^1.25'
       - uses: actions/checkout@v5
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: gofmt -w -s $(find . -not -path "*/vendor/*" -name "*.go")
-      - uses: reviewdog/action-suggester@v1.22.0
+      - uses: reviewdog/action-suggester@v1.24.0
         with:
           tool_name: gofmt
 
@@ -32,13 +32,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: '^1.24'
+          go-version: '^1.25'
       - run: go install mvdan.cc/sh/v3/cmd/shfmt@latest
       - run: $(go env GOPATH)/bin/shfmt -f . | grep -v 'vendor' | xargs $(go env GOPATH)/bin/shfmt -bn -ci -s -w
       - name: suggester / shfmt
-        uses: reviewdog/action-suggester@v1.22.0
+        uses: reviewdog/action-suggester@v1.24.0
         with:
           tool_name: shfmt
 
@@ -83,9 +83,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: '^1.24'
+          go-version: '^1.25'
       - name: check on release branch
         if: ${{ contains(github.base_ref, 'release-') }}
         run: |

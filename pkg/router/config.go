@@ -17,7 +17,7 @@ func (c *Configurable) GetConfigMapName() string {
 }
 
 func (c *Configurable) GetConfigMapKey() string {
-	return CustomConfigKey
+	return customConfigKey
 }
 
 func (c *Configurable) GetConfiguration() string {

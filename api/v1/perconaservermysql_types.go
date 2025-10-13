@@ -61,6 +61,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', MySQL size must be 3 or greater unless 'unsafeFlags.mysqlSize' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && has(self.orchestrator.size) && (self.orchestrator.size < 3 || self.orchestrator.size % 2 == 0) && self.orchestrator.size > 0) || self.unsafeFlags.orchestratorSize",message="Invalid configuration: For 'async' replication, Orchestrator size must be 3 or greater and odd unless 'unsafeFlags.orchestratorSize' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && self.updateStrategy == 'SmartUpdate') || self.orchestrator.enabled",message="Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.proxy.router != null && has(self.proxy.router.enabled) && self.proxy.router.enabled && self.proxy.haproxy != null && has(self.proxy.haproxy.enabled) && self.proxy.haproxy.enabled)",message="Invalid configuration: MySQL Router and HAProxy can't be enabled at the same time"
 type PerconaServerMySQLSpec struct {
 	Metadata               *Metadata                            `json:"metadata,omitempty"`
 	CRVersion              string                               `json:"crVersion,omitempty"`
@@ -216,6 +217,27 @@ type PodSpec struct {
 	ContainerSpec `json:",inline"`
 }
 
+func (s *PodSpec) Core(selector map[string]string, volumes []corev1.Volume, initContainers []corev1.Container, containers []corev1.Container) corev1.PodSpec {
+	return corev1.PodSpec{
+		Volumes:                       volumes,
+		InitContainers:                initContainers,
+		Containers:                    containers,
+		RestartPolicy:                 corev1.RestartPolicyAlways,
+		TerminationGracePeriodSeconds: s.GetTerminationGracePeriodSeconds(),
+		DNSPolicy:                     corev1.DNSClusterFirst,
+		NodeSelector:                  s.NodeSelector,
+		ServiceAccountName:            s.ServiceAccountName,
+		SecurityContext:               s.PodSecurityContext,
+		ImagePullSecrets:              s.ImagePullSecrets,
+		Affinity:                      s.GetAffinity(selector),
+		SchedulerName:                 s.SchedulerName,
+		Tolerations:                   s.Tolerations,
+		PriorityClassName:             s.PriorityClassName,
+		RuntimeClassName:              s.RuntimeClassName,
+		TopologySpreadConstraints:     s.GetTopologySpreadConstraints(selector),
+	}
+}
+
 type Metadata struct {
 	// Map of string keys and values that can be used to organize and categorize
 	// (scope and select) objects. May match selectors of replication controllers
@@ -348,19 +370,7 @@ func (b *BackupContainerOptions) GetEnv() []corev1.EnvVar {
 	if b == nil {
 		return nil
 	}
-	return util.MergeEnvLists(b.Env, b.Args.Env())
-}
-
-func (b *BackupContainerOptions) GetEnvVar(storage *BackupStorageSpec) []corev1.EnvVar {
-	if b != nil {
-		return b.GetEnv()
-	}
-
-	if storage == nil || storage.ContainerOptions == nil {
-		return nil
-	}
-
-	return storage.ContainerOptions.GetEnv()
+	return util.MergeEnvLists(b.Env, b.Args.env())
 }
 
 type BackupContainerArgs struct {
@@ -369,7 +379,7 @@ type BackupContainerArgs struct {
 	Xbstream   []string `json:"xbstream,omitempty"`
 }
 
-func (b *BackupContainerArgs) Env() []corev1.EnvVar {
+func (b *BackupContainerArgs) env() []corev1.EnvVar {
 	envs := []corev1.EnvVar{}
 	if len(b.Xtrabackup) > 0 {
 		envs = append(envs, corev1.EnvVar{
