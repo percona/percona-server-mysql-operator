@@ -51,7 +51,7 @@ func GetReadTimeout() (uint32, error) {
 }
 
 func GetCloneTimeout() (uint32, error) {
-	s, ok := os.LookupEnv("BOOTSTRAP_CLONE_TIMEOUT")
+	s, ok := os.LookupEnv(naming.EnvBootstrapCloneTimeout)
 	if !ok {
 		return 0, nil // Will use default from DBParams
 	}
