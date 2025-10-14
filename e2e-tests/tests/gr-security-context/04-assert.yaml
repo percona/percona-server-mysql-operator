@@ -79,7 +79,7 @@ spec:
       - name: users
         secret:
           defaultMode: 420
-          secretName: gr-security-context
+          secretName: gr-security-context-secrets
       - name: tls
         secret:
           defaultMode: 420

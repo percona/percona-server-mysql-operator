@@ -9,7 +9,6 @@ commands:
       source ../../functions
 
       get_cr \
-          | yq eval '.spec.secretsName="test-secrets"' - \
           | yq eval '.spec.mysql.clusterType="group-replication"' - \
           | yq eval '.spec.mysql.affinity.antiAffinityTopologyKey="none"' - \
           | yq eval '.spec.proxy.router.enabled=true' - \
