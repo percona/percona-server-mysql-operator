@@ -21,7 +21,7 @@ MYSQL_CMDLINE="/usr/bin/timeout 10 /usr/bin/mysql -nNE -u$MYSQL_USER"
 
 for i in {1..5}; do
 	CLONE_STATUS=$(MYSQL_PWD=${MYSQL_PASSWORD} $MYSQL_CMDLINE -P$MYSQL_ADMIN_PORT -e 'SELECT STATE FROM performance_schema.clone_status;' | sed -n -e '2p' | tr -d '\n')
-	if [[ "$CLONE_STATUS" == "Completed" || -z "$CLONE_IN_PROGRESS" ]]; then
+	if [[ $CLONE_STATUS == "Completed" || -z $CLONE_IN_PROGRESS ]]; then
 		echo '[INFO] Started pt-heartbeat'
 		break
 	else
