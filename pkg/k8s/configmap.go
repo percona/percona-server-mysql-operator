@@ -1,6 +1,8 @@
 package k8s
 
 import (
+	"reflect"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -39,4 +41,19 @@ func ConfigMap(cr *apiv1.PerconaServerMySQL, name, filename, data string, compon
 	}
 
 	return cm
+}
+
+func EqualConfigMaps(cfgs ...*corev1.ConfigMap) bool {
+	if len(cfgs) <= 1 {
+		return true
+	}
+
+	configMap := cfgs[0]
+
+	for i := 1; i < len(cfgs); i++ {
+		if !reflect.DeepEqual(configMap.Data, cfgs[i].Data) || !EqualMetadata(configMap.ObjectMeta, cfgs[i].ObjectMeta) {
+			return false
+		}
+	}
+	return true
 }

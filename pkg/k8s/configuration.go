@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -96,8 +95,7 @@ func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 	}
 
 	cm := ConfigMap(cr, cmName, configurable.GetConfigMapKey(), configuration, component)
-
-	if !reflect.DeepEqual(currCm.Data, cm.Data) {
+	if !EqualConfigMaps(currCm, cm) {
 		if err := EnsureObject(ctx, cl, cr, cm, cl.Scheme()); err != nil {
 			return "", errors.Wrapf(err, "ensure ConfigMap/%s", cmName)
 		}
