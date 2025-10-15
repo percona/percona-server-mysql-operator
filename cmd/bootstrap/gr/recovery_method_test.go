@@ -11,14 +11,14 @@ import (
 )
 
 type mockSQLRunner struct {
-	sqlResponses map[string]string
+	sqlResponses map[string]any
 	gtidExecuted string
 	gtidPurged   string
 }
 
 func newMockSQLRunner() *mockSQLRunner {
 	return &mockSQLRunner{
-		sqlResponses: make(map[string]string),
+		sqlResponses: make(map[string]any),
 		gtidExecuted: "",
 		gtidPurged:   "",
 	}
@@ -29,8 +29,8 @@ func (m *mockSQLRunner) runSQL(ctx context.Context, sql string) (SQLResult, erro
 		return SQLResult{
 			Rows: []map[string]any{
 				{
-					"sub":           result,
-					"GTID_SUBTRACT": result, // for comparePrimaryPurged
+					"sub":       result,
+					"is_subset": result, // for comparePrimaryPurged
 				},
 			},
 		}, nil
@@ -253,7 +253,7 @@ func TestCheckReplicaState_Recoverable_WithPurgedButOK(t *testing.T) {
 	primary.setGTIDSubtractResponse("a:1-5", "a:1-10", "")
 
 	// comparePrimaryPurged check - purged is subset of replica executed
-	primary.sqlResponses["SELECT GTID_SUBTRACT('a:1-3', 'a:1-5') = ''"] = "0"
+	primary.sqlResponses["SELECT GTID_SUBTRACT('a:1-3', 'a:1-5') = '' AS is_subset"] = float64(1.0)
 
 	result, err := checkReplicaState(ctx, primary, replica)
 	if err != nil {
@@ -274,7 +274,7 @@ func TestCheckReplicaState_Irrecoverable(t *testing.T) {
 	primary.setGTIDSubtractResponse("a:1-5", "a:1-10", "")
 
 	// comparePrimaryPurged check fails - purged has more than replica executed
-	primary.sqlResponses["SELECT GTID_SUBTRACT('a:1-8', 'a:1-5') = ''"] = "1"
+	primary.sqlResponses["SELECT GTID_SUBTRACT('a:1-8', 'a:1-5') = '' AS is_subset"] = float64(0.0)
 
 	result, err := checkReplicaState(ctx, primary, replica)
 	if err != nil {
