@@ -229,24 +229,20 @@ func (d *DB) CheckIfInPrimaryPartition(ctx context.Context) (bool, error) {
 
 	err := d.db.QueryRowContext(ctx, `
 	SELECT
-		MEMBER_STATE = 'ONLINE'
+		MEMBER_STATE IN ('ONLINE', 'RECOVERING')
 		AND (
-			(
-				SELECT
-					COUNT(*)
-				FROM
-					performance_schema.replication_group_members
-				WHERE
-					MEMBER_STATE NOT IN ('ONLINE', 'RECOVERING')
-			) >= (
-				(
-					SELECT
-						COUNT(*)
-					FROM
-						performance_schema.replication_group_members
-				) / 2
-			) = 0
-		)
+			SELECT
+				COUNT(*)
+			FROM
+				performance_schema.replication_group_members
+			WHERE
+				MEMBER_STATE IN ('ONLINE', 'RECOVERING')
+		) > (
+			SELECT
+				COUNT(*)
+			FROM
+				performance_schema.replication_group_members
+		) / 2
 	FROM
 		performance_schema.replication_group_members
 		JOIN performance_schema.replication_group_member_stats USING(member_id)
