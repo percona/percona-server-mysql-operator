@@ -614,7 +614,7 @@ func Bootstrap(ctx context.Context) error {
 		}
 
 		// force restart container
-		os.Exit(1)
+		return errors.New("instance is not in primary partition")
 	}
 
 	return nil
