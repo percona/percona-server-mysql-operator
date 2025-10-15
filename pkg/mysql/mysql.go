@@ -780,7 +780,7 @@ func heartbeatContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 
 	if cr.CompareVersion("1.0.0") >= 0 {
 		t, err := utils.GetCloneTimeout()
-		if err != nil {
+		if err != nil || t <= 0 {
 			t = DefaultCloneTimeoutSecondsSeconds
 		}
 		env = append(env, corev1.EnvVar{
