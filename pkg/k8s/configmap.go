@@ -44,13 +44,22 @@ func ConfigMap(cr *apiv1.PerconaServerMySQL, name, filename, data string, compon
 }
 
 func EqualConfigMaps(cfgs ...*corev1.ConfigMap) bool {
-	if len(cfgs) <= 1 {
+	if len(cfgs) == 0 {
+		return false
+	}
+	if len(cfgs) == 1 {
 		return true
 	}
 
 	configMap := cfgs[0]
 
 	for i := 1; i < len(cfgs); i++ {
+		if configMap == nil && cfgs[i] == nil {
+			continue
+		}
+		if configMap == nil || cfgs[i] == nil {
+			return false
+		}
 		if !reflect.DeepEqual(configMap.Data, cfgs[i].Data) || !EqualMetadata(configMap.ObjectMeta, cfgs[i].ObjectMeta) {
 			return false
 		}
