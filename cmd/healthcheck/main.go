@@ -17,7 +17,7 @@ import (
 	state "github.com/percona/percona-server-mysql-operator/cmd/internal/naming"
 	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 const (
@@ -270,7 +270,7 @@ func checkReplication(ctx context.Context) error {
 }
 
 func getSecret(username string) (string, error) {
-	path := filepath.Join(mysql.CredsMountPath, username)
+	path := filepath.Join(naming.CredsMountPath, username)
 	sBytes, err := os.ReadFile(path)
 	if err != nil {
 		return "", errors.Wrapf(err, "read %s", path)

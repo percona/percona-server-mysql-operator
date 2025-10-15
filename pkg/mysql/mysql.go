@@ -3,7 +3,9 @@ package mysql
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 
+	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,7 +27,6 @@ const (
 	configVolumeName      = "config"
 	configMountPath       = "/etc/mysql/config"
 	credsVolumeName       = "users"
-	CredsMountPath        = "/etc/mysql/mysql-users-secret"
 	mysqlshVolumeName     = "mysqlsh"
 	mysqlshMountPath      = "/.mysqlsh"
 	tlsVolumeName         = "tls"
@@ -41,6 +42,9 @@ const (
 	DefaultAdminPort = 33062
 	DefaultXPort     = 33060
 	SidecarHTTPPort  = 6450
+
+	DefaultReadTimeoutSecondsSeconds  = 3600
+	DefaultCloneTimeoutSecondsSeconds = 3600
 )
 
 type User struct {
@@ -600,7 +604,7 @@ func mysqldVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 		},
 		{
 			Name:      credsVolumeName,
-			MountPath: CredsMountPath,
+			MountPath: naming.CredsMountPath,
 		},
 		{
 			Name:      tlsVolumeName,
@@ -716,7 +720,7 @@ func backupVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 		},
 		{
 			Name:      credsVolumeName,
-			MountPath: CredsMountPath,
+			MountPath: naming.CredsMountPath,
 		},
 		{
 			Name:      "backup-logs",
@@ -765,21 +769,34 @@ func backupContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 }
 
 func heartbeatContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
+	env := []corev1.EnvVar{
+		{
+			Name: "HEARTBEAT_PASSWORD",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: k8s.SecretKeySelector(cr.InternalSecretName(), string(apiv1.UserHeartbeat)),
+			},
+		},
+	}
+
+	if cr.CompareVersion("1.0.0") >= 0 {
+		t, err := utils.GetCloneTimeout()
+		if err != nil {
+			t = DefaultCloneTimeoutSecondsSeconds
+		}
+		env = append(env, corev1.EnvVar{
+			Name:  "CLONE_TIMEOUT_SECONDS",
+			Value: strconv.Itoa(int(t)),
+		})
+	}
+
 	return corev1.Container{
 		Name:            "pt-heartbeat",
 		Image:           cr.Spec.Toolkit.Image,
 		ImagePullPolicy: cr.Spec.Toolkit.ImagePullPolicy,
 		SecurityContext: cr.Spec.Toolkit.ContainerSecurityContext,
 		Resources:       cr.Spec.Toolkit.Resources,
-		Env: []corev1.EnvVar{
-			{
-				Name: "HEARTBEAT_PASSWORD",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: k8s.SecretKeySelector(cr.InternalSecretName(), string(apiv1.UserHeartbeat)),
-				},
-			},
-		},
-		Ports: []corev1.ContainerPort{},
+		Env:             env,
+		Ports:           []corev1.ContainerPort{},
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      apiv1.BinVolumeName,
@@ -791,7 +808,7 @@ func heartbeatContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 			},
 			{
 				Name:      credsVolumeName,
-				MountPath: CredsMountPath,
+				MountPath: naming.CredsMountPath,
 			},
 		},
 		Command:                  []string{"/opt/percona/heartbeat-entrypoint.sh"},

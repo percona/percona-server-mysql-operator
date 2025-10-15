@@ -16,7 +16,6 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	state "github.com/percona/percona-server-mysql-operator/cmd/internal/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
@@ -67,7 +66,7 @@ func GetCloneTimeout() (uint32, error) {
 }
 
 func GetSecret(username apiv1.SystemUser) (string, error) {
-	path := filepath.Join(mysql.CredsMountPath, string(username))
+	path := filepath.Join(naming.CredsMountPath, string(username))
 	sBytes, err := os.ReadFile(path)
 	if err != nil {
 		return "", errors.Wrapf(err, "read %s", path)

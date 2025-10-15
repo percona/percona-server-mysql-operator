@@ -50,11 +50,11 @@ func (p *DBParams) setDefaults() {
 	}
 
 	if p.ReadTimeoutSeconds == 0 {
-		p.ReadTimeoutSeconds = 3600 // 1 hour for long-running operations like clone
+		p.ReadTimeoutSeconds = defs.DefaultReadTimeoutSecondsSeconds // 1 hour for long-running operations like clone
 	}
 
 	if p.CloneTimeoutSeconds == 0 {
-		p.CloneTimeoutSeconds = 3600 // 1 hour for clone operations (large databases can take time)
+		p.CloneTimeoutSeconds = defs.DefaultCloneTimeoutSecondsSeconds // 1 hour for clone operations (large databases can take time)
 	}
 }
 

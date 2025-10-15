@@ -17,6 +17,7 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	xb "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 )
@@ -280,7 +281,7 @@ func startReplicaSQLThread(ctx context.Context) error {
 }
 
 func getSecret(username apiv1.SystemUser) (string, error) {
-	path := filepath.Join(mysql.CredsMountPath, string(username))
+	path := filepath.Join(naming.CredsMountPath, string(username))
 	sBytes, err := os.ReadFile(path)
 	if err != nil {
 		return "", errors.Wrapf(err, "read %s", path)
