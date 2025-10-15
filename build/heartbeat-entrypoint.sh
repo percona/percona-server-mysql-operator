@@ -16,7 +16,7 @@ fi
 MYSQL_ADMIN_PORT='33062'
 MYSQL_USER="${MYSQL_USERNAME:-monitor}"
 MYSQL_PASSWORD=$(cat /etc/mysql/mysql-users-secret/monitor || :)
-TIMEOUT=10
+TIMEOUT="${CLONE_TIMEOUT_SECONDS:-3600}"
 MYSQL_CMDLINE="/usr/bin/timeout 10 /usr/bin/mysql -nNE -u$MYSQL_USER"
 
 for i in {1..5}; do
