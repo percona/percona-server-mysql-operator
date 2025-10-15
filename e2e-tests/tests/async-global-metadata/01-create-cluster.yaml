@@ -10,5 +10,7 @@ commands:
 
       get_cr \
         | yq eval '.spec.mysql.clusterType="async"' - \
+        | yq eval '.spec.mysql.configuration=strload("conf/mysql-config.txt")' - \
         | yq eval '.spec.proxy.haproxy.enabled=true' - \
+        | yq eval '.spec.proxy.haproxy.configuration=strload("conf/haproxy-config.txt")' - \
         | kubectl -n "${NAMESPACE}" apply -f -

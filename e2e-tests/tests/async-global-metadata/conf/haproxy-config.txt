@@ -1,0 +1,7 @@
+  global
+    log stdout format raw local0
+    maxconn 2048
+    external-check
+    insecure-fork-wanted
+    hard-stop-after 10
+    stats socket /etc/haproxy/mysql/haproxy.sock mode 600 expose-fd listeners level admin

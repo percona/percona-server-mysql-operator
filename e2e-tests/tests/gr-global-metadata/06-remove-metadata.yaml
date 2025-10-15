@@ -10,8 +10,10 @@ commands:
 
       get_cr \
         | yq eval '.spec.mysql.clusterType="group-replication"' - \
+        | yq eval '.spec.mysql.configuration=strload("conf/mysql-config.txt")' - \
         | yq eval '.spec.proxy.haproxy.enabled=false' - \
         | yq eval '.spec.proxy.router.enabled=true' - \
+        | yq eval '.spec.proxy.router.configuration=strload("conf/router-config.txt")' - \
         | yq eval '.spec.metadata.labels={}' - \
         | yq eval '.spec.metadata.annotations={}' - \
         | yq eval '.spec.backup.storages.minio.type="s3"' - \
