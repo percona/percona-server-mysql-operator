@@ -136,6 +136,9 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		}
 		return ctrl.Result{}, errors.Wrapf(err, "get cluster %s", nn)
 	}
+	if err := cluster.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "check n set defaults")
+	}
 
 	restoreList := &apiv1.PerconaServerMySQLRestoreList{}
 	if err := r.List(ctx, restoreList, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
