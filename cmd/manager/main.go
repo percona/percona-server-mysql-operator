@@ -44,6 +44,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/ps"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psbackup"
+	"github.com/percona/percona-server-mysql-operator/pkg/controller/pshibernation"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
@@ -179,6 +180,14 @@ func main() {
 		NewStorageClient: storage.NewClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLRestore")
+		os.Exit(1)
+	}
+	if err = (&pshibernation.PerconaServerMySQLHibernationReconciler{
+		Client:        nsClient,
+		Scheme:        mgr.GetScheme(),
+		ServerVersion: serverVersion,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "pshibernation-controller")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
