@@ -450,6 +450,48 @@ func RaftNodes(cr *apiv1.PerconaServerMySQL) []string {
 	return nodes
 }
 
+func ExistingNodes(cmap *corev1.ConfigMap) ([]string, error) {
+	cfg, ok := cmap.Data[ConfigFileKey]
+	if !ok {
+		return nil, errors.Errorf("key %s not found in ConfigMap", ConfigFileKey)
+	}
+
+	config := make(map[string]any, 0)
+	if err := json.Unmarshal([]byte(cfg), &config); err != nil {
+		return nil, errors.Wrap(err, "unmarshal ConfigMap data to json")
+	}
+
+	nodes, ok := config["RaftNodes"]
+	if !ok {
+		return nil, errors.New("key RaftNodes not found in ConfigMap")
+	}
+
+	nodesSlice, ok := nodes.([]any)
+	if !ok {
+		return nil, errors.Errorf("invalid RaftNodes: expected []any, got %T", nodes)
+	}
+
+	existingNodes := make([]string, 0, len(nodesSlice))
+	for _, v := range nodesSlice {
+		node, ok := v.(string)
+		if !ok {
+			return nil, errors.Errorf("invalid node: expected string, got %T", v)
+		}
+
+		existingNodes = append(existingNodes, node)
+	}
+
+	return existingNodes, nil
+}
+
+func ConfigMap(cr *apiv1.PerconaServerMySQL) (*corev1.ConfigMap, error) {
+	config, err := ConfigMapData(cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "get orchestrator config")
+	}
+	return k8s.ConfigMap(cr, ConfigMapName(cr), ConfigFileKey, config, naming.ComponentOrchestrator), nil
+}
+
 func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 	config := make(map[string]interface{}, 0)
 
