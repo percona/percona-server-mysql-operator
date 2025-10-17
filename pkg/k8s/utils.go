@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -561,6 +563,7 @@ func setCRVersion(
 	logf.FromContext(ctx).Info("Set CR version", "version", cr.Spec.CRVersion)
 	return nil
 }
+
 func EqualMetadata(m ...metav1.ObjectMeta) bool {
 	if len(m) <= 1 {
 		return true
@@ -579,7 +582,7 @@ func EqualMetadata(m ...metav1.ObjectMeta) bool {
 	}
 	first := m[0]
 	for i := 1; i < len(m); i++ {
-		if !reflect.DeepEqual(filter(first), filter(m[i])) {
+		if !cmp.Equal(filter(first), filter(m[i]), cmpopts.EquateEmpty()) {
 			return false
 		}
 	}
