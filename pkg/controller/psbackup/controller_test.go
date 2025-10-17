@@ -754,7 +754,7 @@ func readDefaultCR(name, namespace string) (*apiv1.PerconaServerMySQL, error) {
 }
 
 func readDefaultCRBackup(name, namespace string) (*apiv1.PerconaServerMySQLBackup, error) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "backup.yaml"))
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "backup", "backup.yaml"))
 	if err != nil {
 		return nil, err
 	}
