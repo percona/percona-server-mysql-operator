@@ -7,9 +7,9 @@ commands:
 
       source ../../functions
 
-      password=$(get_user_pass root)
-      mysql_args="-h $(get_haproxy_svc $(get_cluster_name)) -uroot -p'$password'"
-      users=($(get_mysql_users "${mysql_args}"))
+      mysql_host="-h $(get_haproxy_svc $(get_cluster_name))"
+      users=($(get_mysql_users "${mysql_host}"))
+      echo "$users"
 
       args=''
       for user in "${users[@]}"; do
@@ -21,7 +21,7 @@ commands:
           esac
           query="SHOW GRANTS FOR '${user}'@'${host}';"
 
-          run_mysql "${query}" "${mysql_args}" \
+          run_mysql "${query}" "${mysql_host}" \
               | $sed -E "s/'(10|192)[.][0-9][^']*'//; s/'[^']*[.]internal'//" \
                   >"${TEMP_DIR}/${user}.sql"
 
