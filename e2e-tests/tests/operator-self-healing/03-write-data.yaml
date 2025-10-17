@@ -9,9 +9,9 @@ commands:
 
       run_mysql \
           "CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable (id int PRIMARY KEY)" \
-          "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+          "-h $(get_haproxy_svc $(get_cluster_name))"
 
       run_mysql \
           "INSERT myDB.myTable (id) VALUES (100500)" \
-          "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+          "-h $(get_haproxy_svc $(get_cluster_name))"
       sleep 5
