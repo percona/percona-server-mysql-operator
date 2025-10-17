@@ -16,12 +16,12 @@ fi
 MYSQL_ADMIN_PORT='33062'
 MYSQL_USER="${MYSQL_USERNAME:-monitor}"
 MYSQL_PASSWORD=$(cat /etc/mysql/mysql-users-secret/monitor || :)
-TIMEOUT=10
+TIMEOUT="${CLONE_TIMEOUT_SECONDS:-3600}"
 MYSQL_CMDLINE="/usr/bin/timeout 10 /usr/bin/mysql -nNE -u$MYSQL_USER"
 
 for i in {1..5}; do
 	CLONE_STATUS=$(MYSQL_PWD=${MYSQL_PASSWORD} $MYSQL_CMDLINE -P$MYSQL_ADMIN_PORT -e 'SELECT STATE FROM performance_schema.clone_status;' | sed -n -e '2p' | tr -d '\n')
-	if [ "${CLONE_STATUS}" == 'Completed' -o -z "$CLONE_IN_PROGRESS" ]; then
+	if [[ $CLONE_STATUS == "Completed" || -z $CLONE_IN_PROGRESS ]]; then
 		echo '[INFO] Started pt-heartbeat'
 		break
 	else
