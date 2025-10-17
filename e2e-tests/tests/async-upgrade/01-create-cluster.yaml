@@ -1,0 +1,22 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      version=$(latest_operator_version_in_vs)
+      init_image=$(get_operator_image)
+
+      if [[ -z ${init_image} ]]; then
+        echo "failed to get operator image"
+        exit 1
+      fi
+
+      get_cr_with_latest_versions_in_vs \
+          | yq eval "$(printf '.spec.initImage="%s"' "${init_image}")" - \
+          | yq eval "$(printf '.spec.crVersion="%s"' "${version}")" - \
+          | yq eval '.spec.mysql.clusterType="async"' - \
+          | kubectl -n "${NAMESPACE}" apply -f -
