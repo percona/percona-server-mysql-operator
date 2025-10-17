@@ -8,11 +8,21 @@ commands:
 
       source ../../functions
 
+      export labels='{"app.kubernetes.io/component":"test",'
+      labels+='"app.kubernetes.io/instance":"test",'
+      labels+='"app.kubernetes.io/managed-by":"test",'
+      labels+='"app.kubernetes.io/name":"test",'
+      labels+='"app.kubernetes.io/part-of":"test",'
+      labels+='"label1":"label1",'
+      labels+='"label2":"label2"}'
+
       get_cr \
         | yq eval '.spec.mysql.clusterType="group-replication"' - \
+        | yq eval '.spec.mysql.configuration=strload("conf/mysql-config.txt")' - \
         | yq eval '.spec.proxy.haproxy.enabled=false' - \
         | yq eval '.spec.proxy.router.enabled=true' - \
-        | yq eval '.spec.metadata.labels={"label1":"label1","label2":"label2"}' - \
+        | yq eval '.spec.proxy.router.configuration=strload("conf/router-config.txt")' - \
+        | yq eval '.spec.metadata.labels=env(labels)' - \
         | yq eval '.spec.metadata.annotations={"annotation1":"annotation1","annotation2":"annotation2"}' - \
         | yq eval '.spec.backup.storages.minio.type="s3"' - \
         | yq eval '.spec.backup.storages.minio.s3.bucket="operator-testing"' - \
