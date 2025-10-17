@@ -734,7 +734,7 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 	}
 
 	currentConfigMap := &corev1.ConfigMap{}
-	if err := r.Client.Get(ctx, client.ObjectKeyFromObject(configMap), currentConfigMap); client.IgnoreNotFound(err) != nil {
+	if err := r.Get(ctx, client.ObjectKeyFromObject(configMap), currentConfigMap); client.IgnoreNotFound(err) != nil {
 		return errors.Wrap(err, "get config map")
 	}
 
