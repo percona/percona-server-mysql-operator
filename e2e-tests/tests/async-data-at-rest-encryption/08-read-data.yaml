@@ -9,6 +9,6 @@ commands:
 
       data=$(run_mysql \
           "SELECT * FROM myDB.myTable" \
-          "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password")
+          "-h $(get_haproxy_svc $(get_cluster_name))")
 
       kubectl create configmap -n "${NAMESPACE}" 08-read-data --from-literal=data="${data}"

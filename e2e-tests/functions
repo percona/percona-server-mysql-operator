@@ -98,7 +98,8 @@ destroy_operator() {
 	fi
 }
 
-deploy_non_tls_cluster_secrets() {
+deploy_cluster_secrets() {
+	# Use this function only on tests that required fixed passwords
 	kubectl -n "${NAMESPACE}" apply -f "${TESTS_CONFIG_DIR}/secrets.yaml"
 }
 
@@ -577,7 +578,7 @@ get_cr() {
 
 	yq eval "$(printf '.metadata.name="%s"' "${test_name}${name_suffix:+-$name_suffix}")" "${DEPLOY_DIR}/cr.yaml" \
 		| yq eval "$(printf '.spec.initContainer.image="%s"' "${IMAGE}")" - \
-		| yq eval '.spec.secretsName="test-secrets"' - \
+		| yq eval 'del(.spec.secretsName)' - \
 		| yq eval '.spec.sslSecretName="test-ssl"' - \
 		| yq eval '.spec.upgradeOptions.apply="disabled"' - \
 		| yq eval '.spec.mysql.clusterType="async"' - \
@@ -606,28 +607,30 @@ get_client_pod() {
 
 run_mysql() {
 	local command="$1"
-	local uri="$2"
-	local pod="$3"
+	local host="$2"
+	local user="${3:--uroot -p'$(get_user_pass root)'}"
+	local pod="$4"
 
 	client_pod=$(get_client_pod)
 	wait_pod $client_pod 1>&2
 
 	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
-		bash -c "printf '%s\n' \"${command}\" | mysql -sN $uri" 2>&1 \
+		bash -c "printf '%s\n' \"${command}\" | mysql -sN $host $user" 2>&1 \
 		| $sed -e 's/mysql: //' \
 		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
 }
 
 run_mysqlsh() {
 	local command="$1"
-	local uri="$2"
-	local pod="$3"
+	local host="$2"
+	local user="${3:--uroot -p'$(get_user_pass)'}"
+	local pod="$4"
 
 	client_pod=$(get_client_pod)
 	wait_pod $client_pod 1>&2
 
 	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
-		bash -c "printf '%s\n' \"${command}\" | mysqlsh --sql --quiet-start=2 $uri" 2>/dev/null \
+		bash -c "printf '%s\n' \"${command}\" | mysqlsh --sql --quiet-start=2 $host $user" 2>/dev/null \
 		| tail -n +2
 }
 
@@ -661,13 +664,17 @@ get_innodb_cluster_name() {
 get_mysqlsh_uri_for_pod() {
 	local pod=$1
 
-	echo "root:root_password@${pod}.$(get_cluster_name)-mysql.${NAMESPACE}"
+	root_password=$(get_user_pass root)
+	encoded_password=$(jq -rn --arg s "$root_password" '$s|@uri')
+	echo "root:${encoded_password}@${pod}.$(get_cluster_name)-mysql.${NAMESPACE}"
 }
 
 get_mysqlsh_uri() {
 	local idx=${1:-0}
 
-	echo "root:root_password@$(get_cluster_name)-mysql-${idx}.$(get_cluster_name)-mysql.${NAMESPACE}"
+	root_password=$(get_user_pass root)
+	encoded_password=$(jq -rn --arg s "$root_password" '$s|@uri')
+	echo "root:${encoded_password}@$(get_cluster_name)-mysql-${idx}.$(get_cluster_name)-mysql.${NAMESPACE}"
 }
 
 get_gr_status() {
@@ -790,9 +797,10 @@ get_router_pods() {
 }
 
 get_mysql_users() {
-	local args=$1
+	local host=$1
+	local user="${3--uroot -p'$(get_user_pass root)'}"
 
-	run_mysql "SELECT user FROM mysql.user" "${args}" | grep -vE "mysql|root|percona.telemetry"
+	run_mysql "SELECT user FROM mysql.user" "${host}" "${user}" | grep -vE "mysql|root|percona.telemetry"
 }
 
 get_service_ip() {
@@ -913,10 +921,10 @@ check_auto_tuning() {
 
 	local INNODB_SIZE=$(run_mysql \
 		'SELECT @@innodb_buffer_pool_size;' \
-		"-h $(get_haproxy_svc "$(get_cluster_name)") -uroot -proot_password")
+		"-h $(get_haproxy_svc "$(get_cluster_name)")")
 	local CONNECTIONS=$(run_mysql \
 		'SELECT @@max_connections;' \
-		"-h $(get_haproxy_svc "$(get_cluster_name)") -uroot -proot_password")
+		"-h $(get_haproxy_svc "$(get_cluster_name)")")
 
 	if [[ -n ${CUSTOM_INNODB_SIZE} ]]; then
 		if [[ ${INNODB_SIZE} != ${CUSTOM_INNODB_SIZE} ]]; then
@@ -978,13 +986,13 @@ get_primary_from_haproxy() {
 	local haproxy_pod=$1
 	local haproxy_pod_ip=$(kubectl -n "${NAMESPACE}" get pods ${haproxy_pod} -o jsonpath="{.status.podIP}")
 
-	run_mysql "SHOW VARIABLES LIKE '%hostname%';" "-h ${haproxy_pod_ip} -P3306 -uroot -proot_password" | awk '{print $2}'
+	run_mysql "SHOW VARIABLES LIKE '%hostname%';" "-h ${haproxy_pod_ip} -P3306" | awk '{print $2}'
 }
 
 get_primary_from_group_replication() {
 	run_mysql \
 		"SELECT MEMBER_HOST FROM performance_schema.replication_group_members where MEMBER_ROLE='PRIMARY';" \
-		"-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password" \
+		"-h $(get_mysql_router_service $(get_cluster_name)) -P 6446" \
 		| cut -d'.' -f1
 }
 
@@ -1299,7 +1307,9 @@ deploy_cmctl() {
 
 get_user_pass() {
 	local user="${1:-root}"
-	kubectl -n "${NAMESPACE}" get secret test-secrets -o jsonpath="{.data.${user}}" | base64 --decode
+	local secret="${2:-$(get_cluster_name)-secrets}"
+
+	kubectl -n "${NAMESPACE}" get secret ${secret} -o jsonpath="{.data.${user}}" | base64 --decode
 }
 
 get_operator_version() {
