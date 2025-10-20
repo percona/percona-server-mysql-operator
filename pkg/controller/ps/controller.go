@@ -745,9 +745,12 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		log.Info("ConfigMap updated", "name", configMap.Name, "data", configMap.Data)
 	}
 
-	existingNodes, err := orchestrator.ExistingNodes(currentConfigMap)
-	if err != nil {
-		return errors.Wrap(err, "get existing nodes")
+	existingNodes := []string{}
+	if len(currentConfigMap.Data) != 0 {
+		existingNodes, err = orchestrator.ExistingNodes(currentConfigMap)
+		if err != nil {
+			return errors.Wrap(err, "get existing nodes")
+		}
 	}
 
 	component := orchestrator.Component(*cr)
