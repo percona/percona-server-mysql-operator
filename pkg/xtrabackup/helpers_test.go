@@ -26,7 +26,7 @@ func readDefaultBackup(t *testing.T, name, namespace string) *apiv1.PerconaServe
 	t.Helper()
 
 	cr := &apiv1.PerconaServerMySQLBackup{}
-	readDefaultFile(t, "backup.yaml", cr)
+	readDefaultFile(t, "backup/backup.yaml", cr)
 
 	cr.Status.Storage = new(apiv1.BackupStorageSpec)
 	cr.Name = name
@@ -38,7 +38,7 @@ func readDefaultRestore(t *testing.T, name, namespace string) *apiv1.PerconaServ
 	t.Helper()
 
 	cr := &apiv1.PerconaServerMySQLRestore{}
-	readDefaultFile(t, "restore.yaml", cr)
+	readDefaultFile(t, "backup/restore.yaml", cr)
 
 	cr.Name = name
 	cr.Namespace = namespace

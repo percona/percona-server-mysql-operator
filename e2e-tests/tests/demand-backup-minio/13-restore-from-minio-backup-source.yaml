@@ -13,7 +13,7 @@ commands:
       cluster_name="${test_name}${name_suffix:+-$name_suffix}"
       destination=$(kubectl -n "${NAMESPACE}" get ps-backup "${backup_name}" -o jsonpath='{.status.destination}')
 
-      cat "${DEPLOY_DIR}/restore.yaml" \
+      cat "${DEPLOY_DIR}/backup/restore.yaml" \
           | yq eval "$(printf '.metadata.name="%s"' "${restore_name}")" - \
           | yq eval "$(printf '.spec.clusterName="%s"' "${cluster_name}")" - \
           | yq eval "del(.spec.backupName)" - \
