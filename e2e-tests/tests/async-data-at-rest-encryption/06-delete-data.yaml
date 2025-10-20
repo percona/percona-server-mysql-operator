@@ -9,4 +9,4 @@ commands:
 
       run_mysql \
           "DROP TABLE myDB.myTable; DROP DATABASE myDB" \
-          "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+          "-h $(get_haproxy_svc $(get_cluster_name))"
