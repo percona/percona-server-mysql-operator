@@ -5,7 +5,7 @@ timeout: 400
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  generation: 5
+  generation: 4
   name: gr-global-metadata-mysql
   labels:
     app.kubernetes.io/component: database
