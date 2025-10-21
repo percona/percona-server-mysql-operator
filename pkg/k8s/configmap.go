@@ -1,6 +1,12 @@
 package k8s
 
 import (
+	"crypto/md5"
+	"encoding/json"
+	"fmt"
+	"reflect"
+
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -8,6 +14,16 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
+
+func ConfigMapHash(cm *corev1.ConfigMap) (string, error) {
+	d := struct{ Data map[string]string }{Data: cm.Data}
+	data, err := json.Marshal(d)
+	if err != nil {
+		return "", errors.Wrap(err, "marshal configmap data to json")
+	}
+
+	return fmt.Sprintf("%x", md5.Sum(data)), nil
+}
 
 func ConfigMap(cr *apiv1.PerconaServerMySQL, name, filename, data string, component string) *corev1.ConfigMap {
 	cm := &corev1.ConfigMap{
@@ -39,4 +55,25 @@ func ConfigMap(cr *apiv1.PerconaServerMySQL, name, filename, data string, compon
 	}
 
 	return cm
+}
+
+func EqualConfigMaps(cfgs ...*corev1.ConfigMap) bool {
+	if len(cfgs) <= 1 {
+		return false
+	}
+
+	configMap := cfgs[0]
+
+	for i := 1; i < len(cfgs); i++ {
+		if configMap == nil && cfgs[i] == nil {
+			continue
+		}
+		if configMap == nil || cfgs[i] == nil {
+			return false
+		}
+		if !reflect.DeepEqual(configMap.Data, cfgs[i].Data) || !EqualMetadata(configMap.ObjectMeta, cfgs[i].ObjectMeta) {
+			return false
+		}
+	}
+	return true
 }
