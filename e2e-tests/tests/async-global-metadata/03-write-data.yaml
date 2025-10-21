@@ -7,7 +7,6 @@ commands:
       set -o xtrace
 
       source ../../functions
-      password=$(get_user_pass root)
       haproxy_svc=$(get_haproxy_svc $(get_cluster_name))
 
       run_mysql \
@@ -15,11 +14,11 @@ commands:
            CREATE TABLE IF NOT EXISTS metadata.name (
              id VARCHAR(255) PRIMARY KEY
            );" \
-          "-h $haproxy_svc -uroot -p'$password'"
+          "-h $haproxy_svc"
 
       run_mysql \
           "INSERT INTO metadata.name (id) VALUES ('annotation1')
            ON DUPLICATE KEY UPDATE id='annotation1';
            INSERT INTO metadata.name (id) VALUES ('label1')
            ON DUPLICATE KEY UPDATE id='label1';" \
-          "-h $haproxy_svc -uroot -p'$password'"
+          "-h $haproxy_svc"

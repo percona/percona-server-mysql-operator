@@ -11,7 +11,6 @@ commands:
 
       apply_s3_storage_secrets
       deploy_operator
-      deploy_non_tls_cluster_secrets
       deploy_tls_cluster_secrets
       deploy_client
       deploy_minio
