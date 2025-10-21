@@ -58,11 +58,8 @@ func ConfigMap(cr *apiv1.PerconaServerMySQL, name, filename, data string, compon
 }
 
 func EqualConfigMaps(cfgs ...*corev1.ConfigMap) bool {
-	if len(cfgs) == 0 {
+	if len(cfgs) <= 1 {
 		return false
-	}
-	if len(cfgs) == 1 {
-		return true
 	}
 
 	configMap := cfgs[0]

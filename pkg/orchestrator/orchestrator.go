@@ -29,7 +29,7 @@ const (
 	configVolumeName       = "config"
 	configMountPath        = "/etc/orchestrator/config"
 	customConfigMountPath  = "/etc/orchestrator/custom"
-	ConfigFileKey          = "orchestrator.conf.json"
+	configFileKey          = "orchestrator.conf.json"
 	credsVolumeName        = "users"
 	CredsMountPath         = "/etc/orchestrator/orchestrator-users-secret"
 	tlsVolumeName          = "tls"
@@ -451,9 +451,9 @@ func RaftNodes(cr *apiv1.PerconaServerMySQL) []string {
 }
 
 func ExistingNodes(cmap *corev1.ConfigMap) ([]string, error) {
-	cfg, ok := cmap.Data[ConfigFileKey]
+	cfg, ok := cmap.Data[configFileKey]
 	if !ok {
-		return nil, errors.Errorf("key %s not found in ConfigMap", ConfigFileKey)
+		return nil, errors.Errorf("key %s not found in ConfigMap", configFileKey)
 	}
 
 	config := make(map[string]any, 0)
@@ -489,7 +489,7 @@ func ConfigMap(cr *apiv1.PerconaServerMySQL) (*corev1.ConfigMap, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "get orchestrator config")
 	}
-	return k8s.ConfigMap(cr, ConfigMapName(cr), ConfigFileKey, config, naming.ComponentOrchestrator), nil
+	return k8s.ConfigMap(cr, ConfigMapName(cr), configFileKey, config, naming.ComponentOrchestrator), nil
 }
 
 func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
