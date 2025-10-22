@@ -207,6 +207,48 @@ metadata:
   name: auto-gr-global-metadata-mysql
 ---
 apiVersion: v1
+data:
+  my.cnf: |-
+    [mysqld]
+    innodb_buffer_pool_size=2147483648
+    innodb_buffer_pool_chunk_size=268435456
+    max_connections=341
+kind: ConfigMap
+metadata:
+  annotations:
+    annotation1: annotation1
+    annotation2: annotation2
+  labels:
+    app.kubernetes.io/component: database
+    app.kubernetes.io/instance: gr-global-metadata
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: gr-global-metadata-mysql
+    app.kubernetes.io/part-of: percona-server
+    label1: label1
+    label2: label2
+  name: gr-global-metadata-mysql
+---
+apiVersion: v1
+data:
+  mysqlrouter.conf: |-
+    [logger]
+    level=INFO
+kind: ConfigMap
+metadata:
+  annotations:
+    annotation1: annotation1
+    annotation2: annotation2
+  labels:
+    app.kubernetes.io/component: proxy
+    app.kubernetes.io/instance: gr-global-metadata
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: gr-global-metadata-router
+    app.kubernetes.io/part-of: percona-server
+    label1: label1
+    label2: label2
+  name: gr-global-metadata-router
+---
+apiVersion: v1
 kind: Secret
 metadata:
   annotations:
