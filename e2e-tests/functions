@@ -1499,18 +1499,24 @@ latest_operator_image_in_vs() {
 }
 
 get_cr_with_latest_versions_in_vs() {
-	local version=$(latest_operator_version_in_vs)
-	local latest_versions=$(curl -s https://check.percona.com/versions/v1/ps-operator/${version}/latest)
+	local operator_version=$(latest_operator_version_in_vs)
+	local git_tag="v${operator_version}"
+	local versions=$(curl -s  https://check.percona.com/versions/v1/ps-operator/${operator_version})
 
-	local image_mysql=$(echo ${latest_versions} | jq -r '.versions[].matrix.mysql[].imagePath')
-	local image_backup=$(echo ${latest_versions} | jq -r '.versions[].matrix.backup[].imagePath')
-	local image_orchestrator=$(echo ${latest_versions} | jq -r '.versions[].matrix.orchestrator[].imagePath')
-	local image_router=$(echo ${latest_versions} | jq -r '.versions[].matrix.orchestrator[].imagePath')
-	local image_toolkit=$(echo ${latest_versions} | jq -r '.versions[].matrix.toolkit[].imagePath')
-	local image_haproxy=$(echo ${latest_versions} | jq -r '.versions[].matrix.haproxy[].imagePath')
-	local image_pmm_client=$(echo ${latest_versions} | jq -r '.versions[].matrix.pmm[].imagePath')
+	local image_mysql=$(echo ${versions} \
+    | jq -r '.versions[].matrix.mysql | with_entries(select(.key | startswith("'${MYSQL_VERSION}'"))) | .[] | select(.status=="available") | .imagePath' \
+    | sort -r \
+    | head -n 1)
+	local image_backup=$(echo ${versions} \
+    | jq -r '.versions[].matrix.backup | with_entries(select(.key | startswith("'${MYSQL_VERSION}'"))) | .[].imagePath' \
+    | sort -r \
+    | head -n 1)
 
-	local git_tag="v${version}"
+	local image_orchestrator=$(echo ${versions} | jq -r '.versions[].matrix.orchestrator[].imagePath' | head -n 1)
+	local image_router=$(echo ${versions} | jq -r '.versions[].matrix.orchestrator[].imagePath' | head -n 1)
+	local image_toolkit=$(echo ${versions} | jq -r '.versions[].matrix.toolkit[].imagePath' | head -n 1)
+	local image_haproxy=$(echo ${versions} | jq -r '.versions[].matrix.haproxy[].imagePath' | head -n 1)
+	local image_pmm_client=$(echo ${versions} | jq -r '.versions[].matrix.pmm[].imagePath' | head -n 1)
 
 	curl "https://raw.githubusercontent.com/percona/percona-server-mysql-operator/${git_tag}/deploy/cr.yaml" \
 		-o ${TEMP_DIR}/cr.yaml
