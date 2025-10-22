@@ -37,7 +37,6 @@ func TestJob(t *testing.T) {
 				CredentialsSecret: "secret",
 				Region:            "region",
 				EndpointURL:       "endpoint",
-				StorageClass:      "storage-class",
 			},
 		},
 	}
@@ -233,7 +232,6 @@ func TestDeleteJob(t *testing.T) {
 				CredentialsSecret: "secret",
 				Region:            "region",
 				EndpointURL:       "endpoint",
-				StorageClass:      "storage-class",
 			},
 		},
 	}
@@ -403,7 +401,6 @@ func TestRestoreJob(t *testing.T) {
 				CredentialsSecret: "secret",
 				Region:            "region",
 				EndpointURL:       "endpoint",
-				StorageClass:      "storage-class",
 			},
 		},
 	}

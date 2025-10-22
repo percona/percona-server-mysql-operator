@@ -103,7 +103,11 @@ kuttl-shfmt:
 e2e-test: kuttl-shfmt
 	ROOT_REPO=$(ROOT_REPO) kubectl kuttl test --config e2e-tests/kuttl.yaml
 
-manifests: kustomize generate ## Generate Kubernetes manifests (CRDs, RBAC, operator deployment)
+.PHONY: generate-cr-yaml
+generate-cr-yaml:
+	./cmd/example-gen/generate.sh
+
+manifests: kustomize generate generate-cr-yaml ## Generate Kubernetes manifests (CRDs, RBAC, operator deployment)
 	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml
 	echo "---" >> $(DEPLOYDIR)/crd.yaml
 

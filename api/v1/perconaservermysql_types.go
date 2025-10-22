@@ -147,6 +147,8 @@ type MySQLSpec struct {
 
 	VaultSecretName string `json:"vaultSecretName,omitempty"`
 
+	VolumeSpec *VolumeSpec `json:"volumeSpec,omitempty"`
+
 	PodSpec `json:",inline"`
 }
 
@@ -194,7 +196,6 @@ type PodSpec struct {
 	Size        int32             `json:"size,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
-	VolumeSpec  *VolumeSpec       `json:"volumeSpec,omitempty"`
 
 	// Deprecated: not supported since v0.12.0. Use initContainer instead
 	InitImage     string             `json:"initImage,omitempty"`
@@ -409,7 +410,6 @@ type BackupStorageS3Spec struct {
 	CredentialsSecret string           `json:"credentialsSecret"`
 	Region            string           `json:"region,omitempty"`
 	EndpointURL       string           `json:"endpointUrl,omitempty"`
-	StorageClass      string           `json:"storageClass,omitempty"`
 }
 
 // BucketAndPrefix returns bucket name and backup prefix from Bucket concatenated with Prefix.

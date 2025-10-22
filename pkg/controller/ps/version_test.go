@@ -74,17 +74,17 @@ func TestReconcileVersions(t *testing.T) {
 					},
 					MySQL: apiv1.MySQLSpec{
 						ClusterType: apiv1.ClusterTypeGR,
-						PodSpec: apiv1.PodSpec{
-							Size: 3,
-							VolumeSpec: &apiv1.VolumeSpec{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-									Resources: corev1.VolumeResourceRequirements{
-										Requests: map[corev1.ResourceName]resource.Quantity{
-											corev1.ResourceStorage: q,
-										},
+						VolumeSpec: &apiv1.VolumeSpec{
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+								Resources: corev1.VolumeResourceRequirements{
+									Requests: map[corev1.ResourceName]resource.Quantity{
+										corev1.ResourceStorage: q,
 									},
 								},
 							},
+						},
+						PodSpec: apiv1.PodSpec{
+							Size: 3,
 						},
 					},
 					Proxy: apiv1.ProxySpec{
@@ -118,17 +118,17 @@ func TestReconcileVersions(t *testing.T) {
 					},
 					MySQL: apiv1.MySQLSpec{
 						ClusterType: apiv1.ClusterTypeGR,
-						PodSpec: apiv1.PodSpec{
-							Size: 3,
-							VolumeSpec: &apiv1.VolumeSpec{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-									Resources: corev1.VolumeResourceRequirements{
-										Requests: map[corev1.ResourceName]resource.Quantity{
-											corev1.ResourceStorage: q,
-										},
+						VolumeSpec: &apiv1.VolumeSpec{
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+								Resources: corev1.VolumeResourceRequirements{
+									Requests: map[corev1.ResourceName]resource.Quantity{
+										corev1.ResourceStorage: q,
 									},
 								},
 							},
+						},
+						PodSpec: apiv1.PodSpec{
+							Size: 3,
 						},
 					},
 					Proxy: apiv1.ProxySpec{
@@ -162,17 +162,17 @@ func TestReconcileVersions(t *testing.T) {
 					},
 					MySQL: apiv1.MySQLSpec{
 						ClusterType: apiv1.ClusterTypeGR,
-						PodSpec: apiv1.PodSpec{
-							Size: 3,
-							VolumeSpec: &apiv1.VolumeSpec{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-									Resources: corev1.VolumeResourceRequirements{
-										Requests: map[corev1.ResourceName]resource.Quantity{
-											corev1.ResourceStorage: q,
-										},
+						VolumeSpec: &apiv1.VolumeSpec{
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+								Resources: corev1.VolumeResourceRequirements{
+									Requests: map[corev1.ResourceName]resource.Quantity{
+										corev1.ResourceStorage: q,
 									},
 								},
 							},
+						},
+						PodSpec: apiv1.PodSpec{
+							Size: 3,
 						},
 					},
 					Proxy: apiv1.ProxySpec{
@@ -207,17 +207,17 @@ func TestReconcileVersions(t *testing.T) {
 					},
 					MySQL: apiv1.MySQLSpec{
 						ClusterType: apiv1.ClusterTypeGR,
-						PodSpec: apiv1.PodSpec{
-							Size: 3,
-							VolumeSpec: &apiv1.VolumeSpec{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-									Resources: corev1.VolumeResourceRequirements{
-										Requests: map[corev1.ResourceName]resource.Quantity{
-											corev1.ResourceStorage: q,
-										},
+						VolumeSpec: &apiv1.VolumeSpec{
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+								Resources: corev1.VolumeResourceRequirements{
+									Requests: map[corev1.ResourceName]resource.Quantity{
+										corev1.ResourceStorage: q,
 									},
 								},
 							},
+						},
+						PodSpec: apiv1.PodSpec{
+							Size: 3,
 						},
 					},
 					Proxy: apiv1.ProxySpec{
@@ -349,17 +349,17 @@ func TestGetVersion(t *testing.T) {
 					},
 					MySQL: apiv1.MySQLSpec{
 						ClusterType: apiv1.ClusterTypeGR,
-						PodSpec: apiv1.PodSpec{
-							Size: 3,
-							VolumeSpec: &apiv1.VolumeSpec{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-									Resources: corev1.VolumeResourceRequirements{
-										Requests: map[corev1.ResourceName]resource.Quantity{
-											corev1.ResourceStorage: q,
-										},
+						VolumeSpec: &apiv1.VolumeSpec{
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+								Resources: corev1.VolumeResourceRequirements{
+									Requests: map[corev1.ResourceName]resource.Quantity{
+										corev1.ResourceStorage: q,
 									},
 								},
 							},
+						},
+						PodSpec: apiv1.PodSpec{
+							Size: 3,
 						},
 					},
 					Proxy: apiv1.ProxySpec{
