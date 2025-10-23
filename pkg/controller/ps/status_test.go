@@ -386,15 +386,6 @@ func TestReconcileStatusAsync(t *testing.T) {
 				},
 			}
 
-			// reconcileCRStatus should get the latest cr
-			// We can verify this by passing an empty cluster
-			cr = &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cr.Name,
-					Namespace: cr.Namespace,
-				},
-			}
-
 			err = r.reconcileCRStatus(ctx, cr, nil)
 			if err != nil {
 				t.Fatal(err)

@@ -16,6 +16,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	state "github.com/percona/percona-server-mysql-operator/cmd/internal/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
@@ -49,24 +50,8 @@ func GetReadTimeout() (uint32, error) {
 	return uint32(readTimeout), nil
 }
 
-func GetCloneTimeout() (uint32, error) {
-	s, ok := os.LookupEnv(naming.EnvBootstrapCloneTimeout)
-	if !ok {
-		return 0, nil // Will use default from DBParams
-	}
-	cloneTimeout, err := strconv.Atoi(s)
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to parse BOOTSTRAP_CLONE_TIMEOUT")
-	}
-	if cloneTimeout < 0 {
-		return 0, errors.New("BOOTSTRAP_CLONE_TIMEOUT should be a positive value")
-	}
-
-	return uint32(cloneTimeout), nil
-}
-
 func GetSecret(username apiv1.SystemUser) (string, error) {
-	path := filepath.Join(naming.CredsMountPath, string(username))
+	path := filepath.Join(mysql.CredsMountPath, string(username))
 	sBytes, err := os.ReadFile(path)
 	if err != nil {
 		return "", errors.Wrapf(err, "read %s", path)

@@ -7,8 +7,9 @@ commands:
 
       source ../../functions
 
-      mysql_host="-h $(get_router_service $(get_cluster_name))"
-      users=($(get_mysql_users "${mysql_host}"))
+      password=$(get_user_pass root)
+      mysql_args="-h $(get_router_service $(get_cluster_name)) -uroot -p'$password'"
+      users=($(get_mysql_users "${mysql_args}"))
 
       args=''
       for user in "${users[@]}"; do
@@ -20,7 +21,7 @@ commands:
           esac
           query="SHOW GRANTS FOR '${user}'@'${host}';"
 
-          run_mysql "${query}" "${mysql_host}" \
+          run_mysql "${query}" "${mysql_args}" \
               | $sed -E "s/'(10|192)[.][0-9][^']*'//; s/'[^']*[.]internal'//" \
                   >"${TEMP_DIR}/${user}.sql"
 

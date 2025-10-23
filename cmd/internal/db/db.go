@@ -4,27 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/db"
 	defs "github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
-const (
-	defaultChannelName = ""
-
-	errCodeRestartFailed            = 3707
-	errCodeQueryInterrupted         = 1317
-	errCodeReadCommunicationPackets = 1160
-
-	cloneStateCompleted = "Completed"
-	cloneStateFailed    = "Failed"
-)
+const defaultChannelName = ""
 
 var ErrRestartAfterClone = errors.New("Error 3707: Restart server failed (mysqld is not managed by supervisor process).")
 
@@ -40,8 +29,7 @@ type DBParams struct {
 	Host string
 	Port int32
 
-	ReadTimeoutSeconds  uint32
-	CloneTimeoutSeconds uint32
+	ReadTimeoutSeconds uint32
 }
 
 func (p *DBParams) setDefaults() {
@@ -50,11 +38,7 @@ func (p *DBParams) setDefaults() {
 	}
 
 	if p.ReadTimeoutSeconds == 0 {
-		p.ReadTimeoutSeconds = defs.DefaultReadTimeoutSecondsSeconds // 1 hour for long-running operations like clone
-	}
-
-	if p.CloneTimeoutSeconds == 0 {
-		p.CloneTimeoutSeconds = defs.DefaultCloneTimeoutSecondsSeconds // 1 hour for clone operations (large databases can take time)
+		p.ReadTimeoutSeconds = 10
 	}
 }
 
@@ -72,7 +56,7 @@ func (p *DBParams) DSN() string {
 		"interpolateParams": "true",
 		"timeout":           "10s",
 		"readTimeout":       fmt.Sprintf("%ds", p.ReadTimeoutSeconds),
-		"writeTimeout":      fmt.Sprintf("%ds", p.ReadTimeoutSeconds), // Use same timeout for write operations
+		"writeTimeout":      "10s",
 		"tls":               "preferred",
 	}
 
@@ -192,7 +176,7 @@ func (d *DB) CloneInProgress(ctx context.Context) (bool, error) {
 			return false, errors.Wrap(err, "scan rows")
 		}
 
-		if state != cloneStateCompleted && state != cloneStateFailed {
+		if state != "Completed" && state != "Failed" {
 			return true, nil
 		}
 	}
@@ -200,122 +184,22 @@ func (d *DB) CloneInProgress(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
-// getCloneStatus returns the current clone status
-func (d *DB) getCloneStatus(ctx context.Context) (string, error) {
-	log := logf.FromContext(ctx)
-	rows, err := d.db.QueryContext(ctx, "SELECT STATE FROM clone_status")
-	if err != nil {
-		return "", errors.Wrap(err, "fetch clone status")
-	}
-	defer func() {
-		err := rows.Close()
-		if err != nil {
-			log.Error(err, "close rows while getting clone status")
-		}
-	}()
-
-	if rows.Next() {
-		var state string
-		if err := rows.Scan(&state); err != nil {
-			return "", errors.Wrap(err, "scan rows")
-		}
-		return state, nil
-	}
-
-	return "", errors.New("no clone status found")
-}
-
-// getCloneStatusDetails returns detailed clone status information for debugging
-func (d *DB) getCloneStatusDetails(ctx context.Context) (map[string]interface{}, error) {
-	log := logf.FromContext(ctx)
-	rows, err := d.db.QueryContext(ctx, "SELECT STATE, BEGIN_TIME, END_TIME, SOURCE, DESTINATION, ERROR_NO, ERROR_MESSAGE FROM clone_status")
-	if err != nil {
-		return nil, errors.Wrap(err, "fetch clone status details")
-	}
-	defer func() {
-		err := rows.Close()
-		if err != nil {
-			log.Error(err, "close rows while getting clone status details")
-		}
-	}()
-
-	details := make(map[string]interface{})
-	if rows.Next() {
-		var state, beginTime, endTime, source, destination, errorNo, errorMessage sql.NullString
-		if err := rows.Scan(&state, &beginTime, &endTime, &source, &destination, &errorNo, &errorMessage); err != nil {
-			return nil, errors.Wrap(err, "scan clone status details")
-		}
-
-		details["state"] = state.String
-		details["begin_time"] = beginTime.String
-		details["end_time"] = endTime.String
-		details["source"] = source.String
-		details["destination"] = destination.String
-		details["error_no"] = errorNo.String
-		details["error_message"] = errorMessage.String
-	}
-
-	return details, nil
-}
-
-func (d *DB) Clone(ctx context.Context, donor, user, pass string, port int32, cloneTimeoutSeconds uint32) error {
+func (d *DB) Clone(ctx context.Context, donor, user, pass string, port int32) error {
 	_, err := d.db.ExecContext(ctx, "SET GLOBAL clone_valid_donor_list=?", fmt.Sprintf("%s:%d", donor, port))
 	if err != nil {
 		return errors.Wrap(err, "set clone_valid_donor_list")
 	}
 
-	// Use the original context if no timeout is specified, otherwise create a timeout context
-	var cloneCtx context.Context
-	var cancel context.CancelFunc
+	_, err = d.db.ExecContext(ctx, "CLONE INSTANCE FROM ?@?:? IDENTIFIED BY ?", user, donor, port, pass)
 
-	if cloneTimeoutSeconds > 0 {
-		cloneCtx, cancel = context.WithTimeout(ctx, time.Duration(cloneTimeoutSeconds)*time.Second)
-		defer cancel()
-	} else {
-		cloneCtx = ctx
+	mErr, ok := err.(*mysql.MySQLError)
+	if !ok {
+		return errors.Wrap(err, "clone instance")
 	}
 
-	_, err = d.db.ExecContext(cloneCtx, "CLONE INSTANCE FROM ?@?:? IDENTIFIED BY ?", user, donor, port, pass)
-
-	if err != nil {
-		mErr, ok := err.(*mysql.MySQLError)
-		if !ok {
-			return errors.Wrap(err, "clone instance")
-		}
-
-		switch mErr.Number {
-		case errCodeRestartFailed:
-			return ErrRestartAfterClone
-		case errCodeQueryInterrupted:
-			return errors.Wrapf(err, "clone instance was interrupted (likely due to timeout) - MySQL error %d: %s", mErr.Number, mErr.Message)
-		case errCodeReadCommunicationPackets:
-			return errors.Wrapf(err, "clone instance communication error - MySQL error %d: %s", mErr.Number, mErr.Message)
-		default:
-			return errors.Wrapf(err, "clone instance failed with MySQL error %d: %s", mErr.Number, mErr.Message)
-		}
-	}
-
-	cloneStatus, err := d.getCloneStatus(ctx)
-	if err != nil {
-		return errors.Wrap(err, "check clone status after operation")
-	}
-
-	if cloneStatus != cloneStateCompleted {
-		// Get detailed clone status for better error reporting
-		details, detailErr := d.getCloneStatusDetails(ctx)
-		if detailErr != nil {
-			return errors.Errorf("clone operation did not complete successfully, status: %s (failed to get details: %v)", cloneStatus, detailErr)
-		}
-
-		errorMsg := fmt.Sprintf("clone operation did not complete successfully, status: %s", cloneStatus)
-		if errorNo, ok := details["error_no"].(string); ok && errorNo != "" {
-			errorMsg += fmt.Sprintf(", error_no: %s", errorNo)
-		}
-		if errorMessage, ok := details["error_message"].(string); ok && errorMessage != "" {
-			errorMsg += fmt.Sprintf(", error_message: %s", errorMessage)
-		}
-
-		return errors.New(errorMsg)
+	// Error 3707: Restart server failed (mysqld is not managed by supervisor process).
+	if mErr.Number == uint16(3707) {
+		return ErrRestartAfterClone
 	}
 
 	return nil

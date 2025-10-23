@@ -8,17 +8,16 @@ commands:
 
       source ../../functions
 
-      haproxy_svc="$(get_haproxy_svc $(get_cluster_name))"
       run_mysql \
           "CREATE DATABASE IF NOT EXISTS pvctest; CREATE TABLE IF NOT EXISTS pvctest.data (id int PRIMARY KEY, data text)" \
-          "-h $haproxy_svc"
+          "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
 
       for i in {1..50}; do
           run_mysql \
               "INSERT pvctest.data (id, data) VALUES ($i, 'test data row $i with some content to use storage space')" \
-              "-h $haproxy_svc"
+              "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
       done
 
       # Store initial data count for verification
-      count=$(run_mysql "SELECT COUNT(*) FROM pvctest.data" "-h $haproxy_svc")
+      count=$(run_mysql "SELECT COUNT(*) FROM pvctest.data" "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password")
       kubectl create configmap -n "${NAMESPACE}" initial-data-count --from-literal=count="${count}"

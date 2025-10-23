@@ -2,6 +2,10 @@ package k8s
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/json"
+	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -46,6 +50,10 @@ func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 
 		if exists && !metav1.IsControlledBy(currCm, cr) {
 			// ConfigMap exists and is created by the user, not the operator
+
+			d := struct{ Data map[string]string }{Data: currCm.Data}
+			data, err := json.Marshal(d)
+
 			if cmName == cr.Name+"-mysql" && currCm.Data["my.cnf"] == "" {
 				return "", errors.New("Failed to update config map. Please use my.cnf as a config name. Only in this case config map will be applied to the cluster")
 			}
@@ -54,7 +62,7 @@ func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 				return "", errors.Wrap(err, "marshal configmap data to json")
 			}
 
-			return ConfigMapHash(currCm)
+			return fmt.Sprintf("%x", md5.Sum(data)), nil
 		}
 
 		if err := cl.Delete(ctx, currCm); err != nil {
@@ -88,7 +96,8 @@ func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 	}
 
 	cm := ConfigMap(cr, cmName, configurable.GetConfigMapKey(), configuration, component)
-	if !EqualConfigMaps(currCm, cm) {
+
+	if !reflect.DeepEqual(currCm.Data, cm.Data) {
 		if err := EnsureObject(ctx, cl, cr, cm, cl.Scheme()); err != nil {
 			return "", errors.Wrapf(err, "ensure ConfigMap/%s", cmName)
 		}
@@ -96,5 +105,11 @@ func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 		log.Info("ConfigMap updated", "name", cmName, "data", cm.Data)
 	}
 
-	return ConfigMapHash(cm)
+	d := struct{ Data map[string]string }{Data: cm.Data}
+	data, err := json.Marshal(d)
+	if err != nil {
+		return "", errors.Wrap(err, "marshal configmap data to json")
+	}
+
+	return fmt.Sprintf("%x", md5.Sum(data)), nil
 }
