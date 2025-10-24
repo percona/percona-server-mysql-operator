@@ -17,8 +17,6 @@ gr-security-context
 gr-self-healing
 gr-tls-cert-manager
 gr-users
-gr-upgrade
-async-upgrade
 haproxy
 init-deploy
 one-pod

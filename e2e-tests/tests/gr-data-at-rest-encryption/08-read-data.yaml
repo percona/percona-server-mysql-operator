@@ -9,6 +9,6 @@ commands:
 
       data=$(run_mysql \
           "SELECT * FROM myDB.myTable" \
-          "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446 -uroot -proot_password")
+          "-h $(get_mysql_router_service $(get_cluster_name)) -P 6446")
 
       kubectl create configmap -n "${NAMESPACE}" 08-read-data --from-literal=data="${data}"
