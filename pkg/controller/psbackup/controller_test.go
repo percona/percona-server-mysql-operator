@@ -1298,8 +1298,6 @@ func TestValidateStorage(t *testing.T) {
 		return fakestorage.NewFakeClient(ctx, opts)
 	}
 
-	const ns = "validate-storage"
-
 	tests := []struct {
 		name      string
 		status    apiv1.PerconaServerMySQLBackupStatus
