@@ -13,7 +13,6 @@ import (
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -130,6 +129,8 @@ func EnsureObject(
 	o client.Object,
 	s *runtime.Scheme,
 ) error {
+	log := logf.FromContext(ctx)
+
 	if err := controllerutil.SetControllerReference(cr, o, s); err != nil {
 		return errors.Wrapf(err, "set controller reference to %s/%s",
 			o.GetObjectKind().GroupVersionKind().Kind,
@@ -148,11 +149,18 @@ func EnsureObject(
 			return errors.Wrapf(err, "get %s/%s", o.GetObjectKind().GroupVersionKind().Kind, o.GetName())
 		}
 
+		log.V(1).Info("Creating object", "kind", o.GetObjectKind(), "name", o.GetName())
+
 		if err := cl.Create(ctx, o); err != nil {
 			return errors.Wrapf(err, "create %s/%s", o.GetObjectKind().GroupVersionKind().Kind, o.GetName())
 		}
 
 		return nil
+	}
+
+	log.V(1).Info("Updating object", "kind", o.GetObjectKind(), "name", o.GetName())
+	if util.IsLogLevelVerbose() && !util.IsLogStructured() {
+		fmt.Println(cmp.Diff(oldObject, o))
 	}
 
 	if err := cl.Update(ctx, o); err != nil {
@@ -255,6 +263,9 @@ func EnsureObjectWithHash(
 		}
 
 		log.V(1).Info("Patching object", "name", obj.GetName(), "kind", obj.GetObjectKind())
+		if util.IsLogLevelVerbose() && !util.IsLogStructured() {
+			fmt.Println(cmp.Diff(oldObject, obj))
+		}
 
 		if err := cl.Patch(ctx, obj, patch); err != nil {
 			return errors.Wrapf(err, "patch %v", nn.String())
@@ -563,7 +574,6 @@ func setCRVersion(
 	logf.FromContext(ctx).Info("Set CR version", "version", cr.Spec.CRVersion)
 	return nil
 }
-
 func EqualMetadata(m ...metav1.ObjectMeta) bool {
 	if len(m) <= 1 {
 		return true
@@ -582,7 +592,7 @@ func EqualMetadata(m ...metav1.ObjectMeta) bool {
 	}
 	first := m[0]
 	for i := 1; i < len(m); i++ {
-		if !cmp.Equal(filter(first), filter(m[i]), cmpopts.EquateEmpty()) {
+		if !reflect.DeepEqual(filter(first), filter(m[i])) {
 			return false
 		}
 	}

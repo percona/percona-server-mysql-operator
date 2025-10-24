@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
-	"maps"
 	"path"
 	"regexp"
 	"strconv"
@@ -666,9 +665,8 @@ type PerconaServerMySQL struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec PerconaServerMySQLSpec `json:"spec,omitempty"`
-
-	Status PerconaServerMySQLStatus `json:"status,omitempty"` // Make sure that the Status is updated after making changes. See the description of `(*PerconaServerMySQLReconciler) reconcileCRStatus` method for details.
+	Spec   PerconaServerMySQLSpec   `json:"spec,omitempty"`
+	Status PerconaServerMySQLStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
@@ -709,25 +707,19 @@ func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 }
 
 func (cr *PerconaServerMySQL) GlobalLabels() map[string]string {
-	if cr.Spec.Metadata == nil || cr.Spec.Metadata.Labels == nil {
+	if cr.Spec.Metadata == nil {
 		return nil
 	}
 
-	m := make(map[string]string, len(cr.Spec.Metadata.Labels))
-	maps.Copy(m, cr.Spec.Metadata.Labels)
-
-	return m
+	return cr.Spec.Metadata.Labels
 }
 
 func (cr *PerconaServerMySQL) GlobalAnnotations() map[string]string {
-	if cr.Spec.Metadata == nil || cr.Spec.Metadata.Annotations == nil {
+	if cr.Spec.Metadata == nil {
 		return nil
 	}
 
-	m := make(map[string]string, len(cr.Spec.Metadata.Annotations))
-	maps.Copy(m, cr.Spec.Metadata.Annotations)
-
-	return m
+	return cr.Spec.Metadata.Annotations
 }
 
 func (cr *PerconaServerMySQL) Version() *v.Version {

@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sysbench-tpcc
+spec:
+  restartPolicy: Never
+  containers:
+    - name: sysbench
+      image: perconalab/percona-server-mysql-operator:sysbench
+      imagePullPolicy: Always
+      env:
+        - name: MYSQL_USER
+          value: root
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: cluster1-secrets
+              key: root
+        - name: MYSQL_HOSTNAME
+          value: cluster1-haproxy
+        - name: MYSQL_DATABASE
+          value: sbtest
+        - name: SB_THREADS
+          value: "10"
+        - name: SB_TABLES
+          value: "20"
+        - name: SB_SCALE
+          value: "20"
+      command: ["bash"]
+      args:
+        - "-c"
+        - |
+          set -ex
+          cd ./sysbench-tpcc
+          sed -i 's/con:query("SET SESSION sql_log_bin = 0")/con:query("SET SESSION sql_log_bin = 1")/' ./tpcc_common.lua
+          mysql \
+            --host="${MYSQL_HOSTNAME}" \
+            --port=3306 \
+            --user="${MYSQL_USER}" \
+            --password="${MYSQL_PASSWORD}" \
+            -e "DROP DATABASE IF EXISTS ${MYSQL_DATABASE}; CREATE DATABASE IF NOT EXISTS ${MYSQL_DATABASE};"
+          sysbench ./tpcc.lua \
+              --db-driver=mysql \
+              --mysql-host="${MYSQL_HOSTNAME}" \
+              --mysql-user="${MYSQL_USER}" \
+              --mysql-password="${MYSQL_PASSWORD}" \
+              --mysql-db="${MYSQL_DATABASE}" \
+              --threads="${SB_THREADS}" \
+              --tables="${SB_TABLES}" \
+              --scale="${SB_SCALE}" \
+              --force_pk=1 \
+              --rand-type=zipfian \
+              --rand-zipfian-exp=0 \
+              --report-interval=1 \
+              --report_csv=yes \
+              --histogram \
+              prepare

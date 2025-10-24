@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -35,6 +34,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/pkg/errors"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
@@ -135,9 +136,6 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, errors.Wrapf(err, "get cluster %s", nn)
-	}
-	if err := cluster.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "check n set defaults")
 	}
 
 	restoreList := &apiv1.PerconaServerMySQLRestoreList{}
@@ -293,10 +291,11 @@ func (r *PerconaServerMySQLRestoreReconciler) removeBootstrapCondition(ctx conte
 		}
 
 		meta.SetStatusCondition(&c.Status.Conditions, metav1.Condition{
-			Type:    apiv1.ConditionInnoDBClusterBootstrapped,
-			Status:  metav1.ConditionFalse,
-			Reason:  apiv1.ConditionInnoDBClusterBootstrapped,
-			Message: "InnoDB cluster is not bootstrapped after restore",
+			Type:               apiv1.ConditionInnoDBClusterBootstrapped,
+			Status:             metav1.ConditionFalse,
+			Reason:             apiv1.ConditionInnoDBClusterBootstrapped,
+			Message:            "InnoDB cluster is not bootstrapped after restore",
+			LastTransitionTime: metav1.Now(),
 		})
 
 		return r.Client.Status().Update(ctx, c)
