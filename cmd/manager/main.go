@@ -168,6 +168,7 @@ func main() {
 		ServerVersion:    serverVersion,
 		ClientCmd:        cliCmd,
 		NewSidecarClient: xtrabackup.NewSidecarClient,
+		NewStorageClient: storage.NewClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLBackup")
 		os.Exit(1)

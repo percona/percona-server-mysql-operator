@@ -49,24 +49,24 @@ func GetOptionsFromBackupConfig(cfg *xtrabackup.BackupConfig) (Options, error) {
 	return nil, errors.Errorf("storage type %s is not supported", cfg.Type)
 }
 
-func GetOptionsFromBackup(ctx context.Context, cl client.Client, cluster *apiv1.PerconaServerMySQL, backup *apiv1.PerconaServerMySQLBackup) (Options, error) {
+func GetOptionsFromBackupStatus(ctx context.Context, cl client.Client, cluster *apiv1.PerconaServerMySQL, storageName string, status apiv1.PerconaServerMySQLBackupStatus) (Options, error) {
 	switch {
-	case backup.Status.Storage.S3 != nil:
-		return getS3Options(ctx, cl, cluster, backup)
-	case backup.Status.Storage.GCS != nil:
-		return getGCSOptions(ctx, cl, cluster, backup)
-	case backup.Status.Storage.Azure != nil:
-		return getAzureOptions(ctx, cl, backup)
+	case status.Storage.S3 != nil:
+		return getS3Options(ctx, cl, cluster, storageName, status)
+	case status.Storage.GCS != nil:
+		return getGCSOptions(ctx, cl, cluster, storageName, status)
+	case status.Storage.Azure != nil:
+		return getAzureOptions(ctx, cl, cluster.Namespace, status)
 	default:
-		return nil, errors.Errorf("unknown storage type %s", backup.Status.Storage.Type)
+		return nil, errors.Errorf("unknown storage type %s", status.Storage.Type)
 	}
 }
 
-func getGCSOptions(ctx context.Context, cl client.Client, cluster *apiv1.PerconaServerMySQL, backup *apiv1.PerconaServerMySQLBackup) (Options, error) {
+func getGCSOptions(ctx context.Context, cl client.Client, cluster *apiv1.PerconaServerMySQL, storageName string, backupStatus apiv1.PerconaServerMySQLBackupStatus) (Options, error) {
 	secret := new(corev1.Secret)
 	err := cl.Get(ctx, types.NamespacedName{
-		Name:      backup.Status.Storage.GCS.CredentialsSecret,
-		Namespace: backup.Namespace,
+		Name:      backupStatus.Storage.GCS.CredentialsSecret,
+		Namespace: cluster.Namespace,
 	}, secret)
 	if client.IgnoreNotFound(err) != nil {
 		return nil, errors.Wrap(err, "failed to get secret")
@@ -74,9 +74,9 @@ func getGCSOptions(ctx context.Context, cl client.Client, cluster *apiv1.Percona
 	accessKeyID := string(secret.Data["AWS_ACCESS_KEY_ID"])
 	secretAccessKey := string(secret.Data["AWS_SECRET_ACCESS_KEY"])
 
-	bucket, prefix := backup.Status.Storage.GCS.BucketAndPrefix()
+	bucket, prefix := backupStatus.Storage.GCS.BucketAndPrefix()
 	if bucket == "" {
-		bucket, prefix = backup.Status.Destination.BucketAndPrefix()
+		bucket, prefix = backupStatus.Destination.BucketAndPrefix()
 	}
 
 	if bucket == "" {
@@ -84,18 +84,18 @@ func getGCSOptions(ctx context.Context, cl client.Client, cluster *apiv1.Percona
 	}
 
 	verifyTLS := true
-	if backup.Status.Storage.VerifyTLS != nil && !*backup.Status.Storage.VerifyTLS {
+	if backupStatus.Storage.VerifyTLS != nil && !*backupStatus.Storage.VerifyTLS {
 		verifyTLS = false
 	}
 	if cluster != nil && cluster.Spec.Backup != nil && len(cluster.Spec.Backup.Storages) > 0 {
-		storage, ok := cluster.Spec.Backup.Storages[backup.Spec.StorageName]
+		storage, ok := cluster.Spec.Backup.Storages[storageName]
 		if ok && storage.VerifyTLS != nil {
 			verifyTLS = *storage.VerifyTLS
 		}
 	}
 
 	return &GCSOptions{
-		Endpoint:        backup.Status.Storage.GCS.EndpointURL,
+		Endpoint:        backupStatus.Storage.GCS.EndpointURL,
 		AccessKeyID:     accessKeyID,
 		SecretAccessKey: secretAccessKey,
 		BucketName:      bucket,
@@ -104,11 +104,11 @@ func getGCSOptions(ctx context.Context, cl client.Client, cluster *apiv1.Percona
 	}, nil
 }
 
-func getAzureOptions(ctx context.Context, cl client.Client, backup *apiv1.PerconaServerMySQLBackup) (*AzureOptions, error) {
+func getAzureOptions(ctx context.Context, cl client.Client, ns string, backupStatus apiv1.PerconaServerMySQLBackupStatus) (*AzureOptions, error) {
 	secret := new(corev1.Secret)
 	err := cl.Get(ctx, types.NamespacedName{
-		Name:      backup.Status.Storage.Azure.CredentialsSecret,
-		Namespace: backup.Namespace,
+		Name:      backupStatus.Storage.Azure.CredentialsSecret,
+		Namespace: ns,
 	}, secret)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get secret")
@@ -116,9 +116,9 @@ func getAzureOptions(ctx context.Context, cl client.Client, backup *apiv1.Percon
 	accountName := string(secret.Data["AZURE_STORAGE_ACCOUNT_NAME"])
 	accountKey := string(secret.Data["AZURE_STORAGE_ACCOUNT_KEY"])
 
-	container, prefix := backup.Status.Storage.Azure.ContainerAndPrefix()
+	container, prefix := backupStatus.Storage.Azure.ContainerAndPrefix()
 	if container == "" {
-		container, prefix = backup.Status.Destination.BucketAndPrefix()
+		container, prefix = backupStatus.Destination.BucketAndPrefix()
 	}
 
 	if container == "" {
@@ -128,17 +128,17 @@ func getAzureOptions(ctx context.Context, cl client.Client, backup *apiv1.Percon
 	return &AzureOptions{
 		StorageAccount: accountName,
 		AccessKey:      accountKey,
-		Endpoint:       backup.Status.Storage.Azure.EndpointURL,
+		Endpoint:       backupStatus.Storage.Azure.EndpointURL,
 		Container:      container,
 		Prefix:         prefix,
 	}, nil
 }
 
-func getS3Options(ctx context.Context, cl client.Client, cluster *apiv1.PerconaServerMySQL, backup *apiv1.PerconaServerMySQLBackup) (*S3Options, error) {
+func getS3Options(ctx context.Context, cl client.Client, cluster *apiv1.PerconaServerMySQL, storageName string, backupStatus apiv1.PerconaServerMySQLBackupStatus) (*S3Options, error) {
 	secret := new(corev1.Secret)
 	err := cl.Get(ctx, types.NamespacedName{
-		Name:      backup.Status.Storage.S3.CredentialsSecret,
-		Namespace: backup.Namespace,
+		Name:      backupStatus.Storage.S3.CredentialsSecret,
+		Namespace: cluster.Namespace,
 	}, secret)
 	if client.IgnoreNotFound(err) != nil {
 		return nil, errors.Wrap(err, "failed to get secret")
@@ -146,33 +146,33 @@ func getS3Options(ctx context.Context, cl client.Client, cluster *apiv1.PerconaS
 	accessKeyID := string(secret.Data["AWS_ACCESS_KEY_ID"])
 	secretAccessKey := string(secret.Data["AWS_SECRET_ACCESS_KEY"])
 
-	bucket, prefix := backup.Status.Storage.S3.BucketAndPrefix()
+	bucket, prefix := backupStatus.Storage.S3.BucketAndPrefix()
 	if bucket == "" {
-		bucket, prefix = backup.Status.Destination.BucketAndPrefix()
+		bucket, prefix = backupStatus.Destination.BucketAndPrefix()
 	}
 
 	if bucket == "" {
 		return nil, errors.New("bucket name is not set")
 	}
 
-	region := backup.Status.Storage.S3.Region
+	region := backupStatus.Storage.S3.Region
 	if region == "" {
 		region = "us-east-1"
 	}
 
 	verifyTLS := true
-	if backup.Status.Storage.VerifyTLS != nil && !*backup.Status.Storage.VerifyTLS {
+	if backupStatus.Storage.VerifyTLS != nil && !*backupStatus.Storage.VerifyTLS {
 		verifyTLS = false
 	}
 	if cluster != nil && cluster.Spec.Backup != nil && len(cluster.Spec.Backup.Storages) > 0 {
-		storage, ok := cluster.Spec.Backup.Storages[backup.Spec.StorageName]
+		storage, ok := cluster.Spec.Backup.Storages[storageName]
 		if ok && storage.VerifyTLS != nil {
 			verifyTLS = *storage.VerifyTLS
 		}
 	}
 
 	return &S3Options{
-		Endpoint:        backup.Status.Storage.S3.EndpointURL,
+		Endpoint:        backupStatus.Storage.S3.EndpointURL,
 		AccessKeyID:     accessKeyID,
 		SecretAccessKey: secretAccessKey,
 		BucketName:      bucket,
