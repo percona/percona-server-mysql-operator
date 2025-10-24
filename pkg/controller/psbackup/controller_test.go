@@ -31,24 +31,31 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
+	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
+	fakestorage "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage/fake"
 )
 
 func TestBackupStatusErrStateDesc(t *testing.T) {
 	namespace := "some-namespace"
 
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
 	cr, err := readDefaultCRBackup("some-name", namespace)
-	if err != nil {
-		t.Fatal(err, "failed to read default backup")
-	}
+	require.NoError(t, err)
 	cluster, err := readDefaultCR("ps-cluster1", namespace)
-	if err != nil {
-		t.Fatal(err, "failed to read default cr")
+	require.NoError(t, err)
+
+	fakeValidateStorageClient := func(ctx context.Context, opts storage.Options) (storage.Storage, error) {
+		return nil, errors.New("fake error")
 	}
 
 	tests := []struct {
 		name      string
 		cluster   *apiv1.PerconaServerMySQL
 		cr        *apiv1.PerconaServerMySQLBackup
+		obj       []client.Object
 		stateDesc string
 	}{
 		{
@@ -89,53 +96,93 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			),
 			stateDesc: fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", cr.Spec.StorageName),
 		},
+		{
+			name: "without secret",
+			cr:   cr,
+			cluster: updateResource(
+				cluster.DeepCopy(),
+				func(cluster *apiv1.PerconaServerMySQL) {
+					cluster.Namespace = namespace
+					cluster.Spec.Backup = &apiv1.BackupSpec{
+						Image:   "some-image",
+						Enabled: true,
+						Storages: map[string]*apiv1.BackupStorageSpec{
+							cr.Spec.StorageName: {},
+						},
+					}
+				},
+			),
+			stateDesc: fmt.Sprintf("failed to get the source host for backup: get operator password: get secret/internal-%s: secrets \"internal-%s\" not found", cluster.Name, cluster.Name),
+		},
+		{
+			name: "failed validation",
+			cr: updateResource(cr.DeepCopy(),
+				func(cr *apiv1.PerconaServerMySQLBackup) {
+					cr.Status.Storage = &apiv1.BackupStorageSpec{
+						GCS: &apiv1.BackupStorageGCSSpec{
+							Bucket:            "some-bucket",
+							CredentialsSecret: "some-secret",
+						},
+					}
+				}),
+			cluster: updateResource(
+				cluster.DeepCopy(),
+				func(cluster *apiv1.PerconaServerMySQL) {
+					cluster.Namespace = namespace
+					cluster.Spec.Backup = &apiv1.BackupSpec{
+						Image:   "some-image",
+						Enabled: true,
+						Storages: map[string]*apiv1.BackupStorageSpec{
+							cr.Spec.StorageName: {
+								Type: apiv1.BackupStorageGCS,
+								GCS: &apiv1.BackupStorageGCSSpec{
+									Bucket: "bucket",
+								},
+							},
+						},
+					}
+					cluster.Status.MySQL.State = apiv1.StateReady
+				},
+			),
+			obj: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      cluster.InternalSecretName(),
+						Namespace: cluster.Namespace,
+					},
+					Data: map[string][]byte{
+						string(apiv1.UserOperator): []byte("operator-pass"),
+					},
+				},
+			},
+			stateDesc: "failed to validate storage: new client: fake error",
+		},
 	}
-
-	scheme := runtime.NewScheme()
-	if err := clientgoscheme.AddToScheme(scheme); err != nil {
-		t.Fatal(err, "failed to add client-go scheme")
-	}
-	if err := apiv1.AddToScheme(scheme); err != nil {
-		t.Fatal(err, "failed to add apis scheme")
-	}
-
-	ctx := context.Background()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr).WithStatusSubresource(tt.cr)
+			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr).WithStatusSubresource(tt.cr, tt.cluster).WithObjects(tt.obj...)
 			if tt.cluster != nil {
 				cb.WithObjects(tt.cluster)
 			}
 
 			r := PerconaServerMySQLBackupReconciler{
-				Client:        cb.Build(),
-				Scheme:        scheme,
-				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				Client:           cb.Build(),
+				Scheme:           scheme,
+				ServerVersion:    &platform.ServerVersion{Platform: platform.PlatformKubernetes},
+				NewStorageClient: fakeValidateStorageClient,
 			}
-			_, err := r.Reconcile(ctx, controllerruntime.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      tt.cr.Name,
-					Namespace: tt.cr.Namespace,
-				},
+			_, err := r.Reconcile(t.Context(), controllerruntime.Request{
+				NamespacedName: client.ObjectKeyFromObject(tt.cr),
 			})
 			if err != nil {
 				t.Fatal(err, "failed to reconcile")
 			}
 			cr := &apiv1.PerconaServerMySQLBackup{}
-			err = r.Get(ctx, types.NamespacedName{
-				Name:      tt.cr.Name,
-				Namespace: tt.cr.Namespace,
-			}, cr)
-			if err != nil {
-				t.Fatal(err, "failed to get backup")
-			}
-			if cr.Status.StateDesc != tt.stateDesc {
-				t.Fatalf("expected stateDesc %s, got %s", tt.stateDesc, cr.Status.StateDesc)
-			}
-			if cr.Status.State != apiv1.BackupError {
-				t.Fatalf("expected state %s, got %s", apiv1.RestoreError, cr.Status.State)
-			}
+			err = r.Get(t.Context(), client.ObjectKeyFromObject(tt.cr), cr)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.stateDesc, cr.Status.StateDesc)
+			assert.Equal(t, apiv1.BackupError, cr.Status.State)
 
 			// Backup with an error state should not be reconciled.
 			// We can verify this by using clientWithGetCount.
@@ -147,15 +194,10 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 				Count:  1,
 				Client: r.Client,
 			}
-			_, err = r.Reconcile(ctx, controllerruntime.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      tt.cr.Name,
-					Namespace: tt.cr.Namespace,
-				},
+			_, err = r.Reconcile(t.Context(), controllerruntime.Request{
+				NamespacedName: client.ObjectKeyFromObject(tt.cr),
 			})
-			if err != nil {
-				t.Fatal(err, "failed to reconcile")
-			}
+			require.NoError(t, err)
 		})
 	}
 }
@@ -1240,6 +1282,67 @@ func TestRunPostFinishTasks(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestValidateStorage(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	fakeValidateStorageClient := func(ctx context.Context, opts storage.Options) (storage.Storage, error) {
+		if opts.Type() != apiv1.BackupStorageS3 {
+			return nil, errors.New("fake error")
+		}
+		return fakestorage.NewFakeClient(ctx, opts)
+	}
+
+	const ns = "validate-storage"
+
+	tests := []struct {
+		name      string
+		status    apiv1.PerconaServerMySQLBackupStatus
+		shouldErr bool
+	}{
+		{
+			name: "s3 - successful validation",
+			status: apiv1.PerconaServerMySQLBackupStatus{
+				Storage: &apiv1.BackupStorageSpec{
+					S3: &apiv1.BackupStorageS3Spec{
+						Bucket:            "some-bucket",
+						CredentialsSecret: "some-secret",
+					},
+				},
+			},
+		},
+		{
+			name: "gcs - failed validation",
+			status: apiv1.PerconaServerMySQLBackupStatus{
+				Storage: &apiv1.BackupStorageSpec{
+					GCS: &apiv1.BackupStorageGCSSpec{
+						Bucket:            "some-bucket",
+						CredentialsSecret: "some-secret",
+					},
+				},
+			},
+			shouldErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := PerconaServerMySQLBackupReconciler{
+				Client:           fake.NewClientBuilder().WithScheme(scheme).Build(),
+				Scheme:           scheme,
+				NewStorageClient: fakeValidateStorageClient,
+			}
+
+			if tt.shouldErr {
+				assert.Error(t, r.validateStorage(t.Context(), "", new(apiv1.PerconaServerMySQL), tt.status))
+				return
+			}
+			assert.NoError(t, r.validateStorage(t.Context(), "", new(apiv1.PerconaServerMySQL), tt.status))
 		})
 	}
 }

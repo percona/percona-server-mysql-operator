@@ -180,19 +180,13 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	if k8serrors.IsNotFound(err) {
-		if err := r.prepareStatus(cr, cluster, storage, &status); err != nil {
+		if err := r.prepareStatus(cr, cluster, storage, &status, backupSource); err != nil {
 			status.State = apiv1.BackupError
 			status.StateDesc = "failed to prepare backup job: " + err.Error()
 			return rr, nil
 		}
 
-		storageOpts, err := xbstorage.GetOptionsFromBackupStatus(ctx, r.Client, cluster, cr.Spec.StorageName, status)
-		if err != nil {
-			status.State = apiv1.BackupError
-			status.StateDesc = "failed to validate storage: " + err.Error()
-			return rr, nil
-		}
-		if _, err = r.NewStorageClient(ctx, storageOpts); err != nil {
+		if err := r.validateStorage(ctx, cr.Spec.StorageName, cluster, status); err != nil {
 			status.State = apiv1.BackupError
 			status.StateDesc = "failed to validate storage: " + err.Error()
 			return rr, nil
@@ -258,6 +252,17 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	return rr, nil
 }
 
+func (r *PerconaServerMySQLBackupReconciler) validateStorage(ctx context.Context, storageName string, cluster *apiv1.PerconaServerMySQL, status apiv1.PerconaServerMySQLBackupStatus) error {
+	storageOpts, err := xbstorage.GetOptionsFromBackupStatus(ctx, r.Client, cluster, storageName, status)
+	if err != nil {
+		return errors.Wrap(err, "get options")
+	}
+	if _, err = r.NewStorageClient(ctx, storageOpts); err != nil {
+		return errors.Wrap(err, "new client")
+	}
+	return nil
+}
+
 func (r *PerconaServerMySQLBackupReconciler) isBackupJobRunning(ctx context.Context, job *batchv1.Job) (bool, error) {
 	if len(job.Spec.Template.Spec.Containers) == 0 {
 		return false, nil
@@ -292,6 +297,7 @@ func (r *PerconaServerMySQLBackupReconciler) prepareStatus(
 	cluster *apiv1.PerconaServerMySQL,
 	storage *apiv1.BackupStorageSpec,
 	status *apiv1.PerconaServerMySQLBackupStatus,
+	backupSource string,
 ) error {
 	destination, err := xtrabackup.GetDestination(storage, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
 	if err != nil {
@@ -301,6 +307,7 @@ func (r *PerconaServerMySQLBackupReconciler) prepareStatus(
 	status.Destination = destination
 	status.Image = cluster.Spec.Backup.Image
 	status.Storage = storage
+	status.BackupSource = backupSource
 	return nil
 }
 
