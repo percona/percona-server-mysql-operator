@@ -1,0 +1,16 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      get_cr \
+          | yq eval "$(printf '.spec.initImage="%s"' "${IMAGE}")" - \
+          | yq eval "$(printf '.spec.crVersion="%s"' "${OPERATOR_VERSION}")" - \
+          | yq eval '.spec.mysql.clusterType="group-replication"' - \
+          | yq eval '.spec.proxy.router.enabled=false' - \
+          | yq eval '.spec.proxy.haproxy.enabled=true' - \
+          | kubectl -n "${NAMESPACE}" apply -f -
