@@ -161,9 +161,9 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr).WithStatusSubresource(tt.cr, tt.cluster).WithObjects(tt.obj...)
+			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr).WithStatusSubresource(tt.cr).WithObjects(tt.obj...)
 			if tt.cluster != nil {
-				cb.WithObjects(tt.cluster)
+				cb.WithObjects(tt.cluster).WithStatusSubresource(tt.cluster)
 			}
 
 			r := PerconaServerMySQLBackupReconciler{
