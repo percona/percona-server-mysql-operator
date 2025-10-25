@@ -61,6 +61,11 @@ spec:
     image: perconalab/percona-server-mysql-operator:main-psmysql8.4
     imagePullPolicy: Always
 #    runtimeClassName: image-rc
+#    schedulerName: mycustom-scheduler
+#    priorityClassName: high-priority
+#    nodeSelector:
+#      disktype: ssd
+#    serviceAccountName: percona-server-mysql-operator-orchestrator
 #    tolerations:
 #    - key: "node.alpha.kubernetes.io/unreachable"
 #      operator: "Exists"
@@ -97,6 +102,13 @@ spec:
       limits:
         memory: 4Gi
 
+#    startupProbe:
+#      initialDelaySeconds: 15
+#      timeoutSeconds: 43200
+#      periodSeconds: 10
+#      failureThreshold: 1
+#      successThreshold: 1
+#
 #    readinessProbe:
 #      initialDelaySeconds: 30
 #      timeoutSeconds: 10
@@ -214,6 +226,11 @@ spec:
       image: perconalab/percona-server-mysql-operator:main-haproxy
       imagePullPolicy: Always
 #      runtimeClassName: image-rc
+#      schedulerName: mycustom-scheduler
+#      priorityClassName: high-priority
+#      nodeSelector:
+#        disktype: ssd
+#      serviceAccountName: percona-server-mysql-operator-orchestrator
 #      tolerations:
 #      - key: "node.alpha.kubernetes.io/unreachable"
 #        operator: "Exists"
@@ -242,6 +259,13 @@ spec:
 #      - secretRef:
 #          name: haproxy-env-secret
 
+#      startupProbe:
+#        initialDelaySeconds: 15
+#        timeoutSeconds: 43200
+#        periodSeconds: 10
+#        failureThreshold: 1
+#        successThreshold: 1
+#
 #      readinessProbe:
 #        timeoutSeconds: 3
 #        periodSeconds: 5
@@ -335,6 +359,27 @@ spec:
       image: perconalab/percona-server-mysql-operator:main-router8.4
       imagePullPolicy: Always
 #      runtimeClassName: image-rc
+#      schedulerName: mycustom-scheduler
+#      priorityClassName: high-priority
+#      nodeSelector:
+#        disktype: ssd
+#      serviceAccountName: percona-server-mysql-operator-orchestrator
+#      startupProbe:
+#        initialDelaySeconds: 15
+#        timeoutSeconds: 43200
+#        periodSeconds: 10
+#        failureThreshold: 1
+#        successThreshold: 1
+#      readinessProbe:
+#        timeoutSeconds: 3
+#        periodSeconds: 5
+#        failureThreshold: 3
+#        successThreshold: 1
+#      livenessProbe:
+#        timeoutSeconds: 3
+#        periodSeconds: 5
+#        failureThreshold: 3
+#        successThreshold: 1
 #      tolerations:
 #      - key: "node.alpha.kubernetes.io/unreachable"
 #        operator: "Exists"
@@ -435,12 +480,39 @@ spec:
 #          rack: rack-22
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
+#      containerSecurityContext:
+#        privileged: false
+#        runAsUser: 1001
+#        runAsGroup: 1001
+#      podSecurityContext:
+#        fsGroup: 1001
+#        supplementalGroups: [1001, 1002, 1003]
 
   orchestrator:
     enabled: false
     image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 #    runtimeClassName: image-rc
+#    schedulerName: mycustom-scheduler
+#    priorityClassName: high-priority
+#    nodeSelector:
+#      disktype: ssd
+#    startupProbe:
+#      initialDelaySeconds: 15
+#      timeoutSeconds: 43200
+#      periodSeconds: 10
+#      failureThreshold: 1
+#      successThreshold: 1
+#    readinessProbe:
+#      timeoutSeconds: 3
+#      periodSeconds: 5
+#      failureThreshold: 3
+#      successThreshold: 1
+#    livenessProbe:
+#      timeoutSeconds: 3
+#      periodSeconds: 5
+#      failureThreshold: 3
+#      successThreshold: 1
 #    tolerations:
 #    - key: "node.alpha.kubernetes.io/unreachable"
 #      operator: "Exists"
@@ -497,6 +569,13 @@ spec:
 #        rack: rack-22
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
+#    containerSecurityContext:
+#      privileged: false
+#      runAsUser: 1001
+#      runAsGroup: 1001
+#    podSecurityContext:
+#      fsGroup: 1001
+#      supplementalGroups: [1001, 1002, 1003]
 
     podDisruptionBudget:
       maxUnavailable: 1

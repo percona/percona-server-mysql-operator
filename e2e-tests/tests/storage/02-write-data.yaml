@@ -11,11 +11,11 @@ commands:
 
       run_mysql \
           "CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable (id int PRIMARY KEY)" \
-          "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+          "-h $(get_haproxy_svc $(get_cluster_name))"
 
       run_mysql \
           "INSERT myDB.myTable (id) VALUES (100500)" \
-          "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+          "-h $(get_haproxy_svc $(get_cluster_name))"
 
       mysql_data=$(kubectl exec -n "${NAMESPACE}" "$test_name"-mysql-0 -- \
           find /var/lib/mysql/myDB -type f -size +0)

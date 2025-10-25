@@ -19,4 +19,5 @@ commands:
           | yq eval "$(printf '.spec.initImage="%s"' "${init_image}")" - \
           | yq eval "$(printf '.spec.crVersion="%s"' "${version}")" - \
           | yq eval '.spec.mysql.clusterType="async"' - \
+          | yq eval '.spec.secretsName="async-upgrade-secrets"' - \
           | kubectl -n "${NAMESPACE}" apply -f -

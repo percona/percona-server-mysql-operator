@@ -38,6 +38,8 @@ spec:
           name: datadir
         - mountPath: /etc/mysql/mysql-tls-secret
           name: tls
+        - mountPath: /etc/mysql/vault-keyring-secret
+          name: vault-keyring-secret
       dnsPolicy: ClusterFirst
       initContainers:
       - command:
@@ -76,11 +78,16 @@ spec:
       - name: users
         secret:
           defaultMode: 420
-          secretName: test-secrets
+          secretName: gr-security-context-secrets
       - name: tls
         secret:
           defaultMode: 420
           secretName: test-ssl
+      - name: vault-keyring-secret
+        secret:
+          defaultMode: 420
+          optional: true
+          secretName: gr-security-context-vault
 status:
   active: 1
   ready: 0

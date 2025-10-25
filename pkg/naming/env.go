@@ -9,4 +9,6 @@ const (
 	EnvMySQLClusterType = "CLUSTER_TYPE"
 
 	EnvBootstrapReadTimeout = "BOOTSTRAP_READ_TIMEOUT"
+
+	EnvBootstrapCloneTimeout = "BOOTSTRAP_CLONE_TIMEOUT"
 )

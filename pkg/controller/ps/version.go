@@ -80,6 +80,9 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLVersion(
 	cr.Status.MySQL.Version = version.String()
 	log.V(1).Info("MySQL Server Version: " + cr.Status.MySQL.Version)
 
+	if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), cr.Status); err != nil {
+		return errors.Wrap(err, "write status")
+	}
 	return nil
 }
 

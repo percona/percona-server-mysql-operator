@@ -8,9 +8,19 @@ commands:
 
       source ../../functions
 
+      export labels='{"app.kubernetes.io/component":"test",'
+      labels+='"app.kubernetes.io/instance":"test",'
+      labels+='"app.kubernetes.io/managed-by":"test",'
+      labels+='"app.kubernetes.io/name":"test",'
+      labels+='"app.kubernetes.io/part-of":"test",'
+      labels+='"label1":"label1",'
+      labels+='"label2":"label2"}'
+
       get_cr \
         | yq eval '.spec.mysql.clusterType="async"' - \
+        | yq eval '.spec.mysql.configuration=strload("conf/mysql-config.txt")' - \
         | yq eval '.spec.proxy.haproxy.enabled=true' - \
-        | yq eval '.spec.metadata.labels={"label1":"label1","label2":"label2"}' - \
+        | yq eval '.spec.proxy.haproxy.configuration=strload("conf/haproxy-config.txt")' - \
+        | yq eval '.spec.metadata.labels=env(labels)' - \
         | yq eval '.spec.metadata.annotations={"annotation1":"annotation1","annotation2":"annotation2"}' - \
         | kubectl -n "${NAMESPACE}" apply -f -
