@@ -179,6 +179,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.backup.initContainer)" \
 		| yq "del(.spec.backup.containerSecurityContext)" \
 		| yq "del(.spec.backup.resources)" \
+		| yq "del(.spec.backup.serviceAccountName)" \
 		| yq "del(.spec.backup.storages.azure-blob)" \
 		| yq "del(.spec.backup.storages.s3-us-west.resources)" \
 		| yq "del(.spec.backup.storages.s3-us-west.topologySpreadConstraints)" \

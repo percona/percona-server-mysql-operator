@@ -79,7 +79,7 @@ spec:
 #      topology.kubernetes.io/zone: us-east-1a
 #    priorityClassName: high-priority
 #    schedulerName: default-scheduler
-#    serviceAccountName: percona-server-mysql-operator-orchestrator
+#    serviceAccountName: some-service-account
     gracePeriod: 600
 #    initContainer:
 #      containerSecurityContext:
@@ -105,9 +105,9 @@ spec:
 #      minAvailable: 0
     resources:
       limits:
-        memory: 2Gi
-      requests:
         memory: 4Gi
+      requests:
+        memory: 2Gi
 #    startupProbe:
 #      failureThreshold: 1
 #      initialDelaySeconds: 15
@@ -274,7 +274,7 @@ spec:
 #        topology.kubernetes.io/zone: us-east-1a
 #      priorityClassName: high-priority
 #      schedulerName: default-scheduler
-#      serviceAccountName: percona-server-mysql-operator-orchestrator
+#      serviceAccountName: some-service-account
       gracePeriod: 30
 #      initContainer:
 #        containerSecurityContext:
@@ -420,7 +420,7 @@ spec:
 #        topology.kubernetes.io/zone: us-east-1a
 #      priorityClassName: high-priority
 #      schedulerName: default-scheduler
-#      serviceAccountName: percona-server-mysql-operator-orchestrator
+#      serviceAccountName: some-service-account
       gracePeriod: 30
 #      initContainer:
 #        containerSecurityContext:
@@ -679,7 +679,7 @@ spec:
 #        schedule: 0 0 * * *
 #        storageName: s3
 #    backoffLimit: 6
-    serviceAccountName: percona-server-mysql-operator-orchestrator
+#    serviceAccountName: some-service-account
 #    initContainer:
 #      containerSecurityContext:
 #        privileged: false
