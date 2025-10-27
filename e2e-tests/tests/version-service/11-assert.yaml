@@ -1,12 +1,12 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 100
+timeout: 500
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 1
-  name: cluster-recommended-mysql
+  name: cluster-80-latest-mysql
 status:
   observedGeneration: 1
   replicas: 3
@@ -16,7 +16,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   generation: 1
-  name: cluster-recommended-orc
+  name: cluster-80-latest-orc
 status:
   observedGeneration: 1
   replicas: 3
@@ -25,24 +25,24 @@ status:
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
-  generation: 4
-  name: cluster-recommended
+  generation: 2
+  name: cluster-80-latest
 spec:
   mysql:
-    image: percona/percona-server:8.4.6-6.1
+    image: percona/percona-server:8.0.28-20
 status:
   mysql:
     ready: 3
     size: 3
     state: ready
-    version: 8.4.6-6
+    version: 8.0.28-20
   state: ready
 ---
 apiVersion: v1
 kind: Pod
 metadata:
-  name: cluster-recommended-mysql-0
+  name: cluster-80-latest-mysql-0
 spec:
   containers:
-    - image: percona/percona-server:8.4.6-6.1
+    - image: percona/percona-server:8.0.28-20
     - name: pt-heartbeat
