@@ -12,9 +12,9 @@ import (
 	"github.com/percona/percona-server-mysql-operator/cmd/example-gen/internal/fill"
 )
 
-// PresetDefaults assigns default values to fields in example cr.yaml based on their types.
+// PresetCluster assigns default values to fields in example cr.yaml based on their types.
 // The internal presets slice defines the default value associated with each type.
-func PresetDefaults(cr *apiv1.PerconaServerMySQL) error {
+func PresetCluster(cr *apiv1.PerconaServerMySQL) error {
 	presets := []any{
 		apiv1.Metadata{
 			Labels: map[string]string{

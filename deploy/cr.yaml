@@ -5,7 +5,6 @@ metadata:
     - percona.com/delete-mysql-pods-in-order
 #    - percona.com/delete-ssl
 #    - percona.com/delete-mysql-pvc
-
   name: ps-cluster1
 spec:
 #  metadata:
@@ -168,22 +167,6 @@ spec:
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
 #      type: ClusterIP
-#      labels:
-#        rack: rack-22
-#      loadBalancerSourceRanges:
-#        - 10.0.0.0/8
-#      type: ClusterIP
-#      internalTrafficPolicy: Cluster
-#      labels:
-#        rack: rack-22
-#      loadBalancerSourceRanges:
-#        - 10.0.0.0/8
-#      type: ClusterIP
-#      labels:
-#        rack: rack-22
-#      loadBalancerSourceRanges:
-#        - 10.0.0.0/8
-#      type: ClusterIP
 #    expose:
 #      annotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
@@ -207,103 +190,55 @@ spec:
         resources:
           requests:
             storage: 2Gi
-#            storageClassName: standard
-#            configuration: |-
-#              max_connections=250
-#              innodb_buffer_pool_size={{containerMemoryLimit * 3/4}}
-#            sidecars:
-#              - command:
-#                  - sleep
-#                  - 30d
-#                image: busybox
-#                imagePullPolicy: Always
-#                lifecycle: {}
-#                livenessProbe: {}
-#                name: noop-memory
-#                readinessProbe: {}
-#                resources:
-#                  requests:
-#                    memory: 16M
-#                securityContext: {}
-#                startupProbe: {}
-#                volumeMounts:
-#                  - mountPath: /var/log/app/memory
-#                    name: memory-vol
-#              - command:
-#                  - sleep
-#                  - 30d
-#                image: busybox
-#                imagePullPolicy: Always
-#                lifecycle: {}
-#                livenessProbe: {}
-#                name: noop-pvc
-#                readinessProbe: {}
-#                resources:
-#                  requests:
-#                    memory: 16M
-#                securityContext: {}
-#                startupProbe: {}
-#                volumeMounts:
-#                  - mountPath: /var/log/app/memory
-#                    name: memory-vol
-#            sidecarVolumes:
-#              - emptyDir:
-#                  medium: Memory
-#                name: memory-vol
-#            sidecarPVCs:
-#              - name: pvc-vol
-#                spec:
-#                  resources:
-#                    requests:
-#                      storage: 1Gi
-#            configuration: |-
-#              max_connections=250
-#              innodb_buffer_pool_size={{containerMemoryLimit * 3/4}}
-#            sidecars:
-#              - command:
-#                  - sleep
-#                  - 30d
-#                image: busybox
-#                imagePullPolicy: Always
-#                lifecycle: {}
-#                livenessProbe: {}
-#                name: noop-memory
-#                readinessProbe: {}
-#                resources:
-#                  requests:
-#                    memory: 16M
-#                securityContext: {}
-#                startupProbe: {}
-#                volumeMounts:
-#                  - mountPath: /var/log/app/memory
-#                    name: memory-vol
-#              - command:
-#                  - sleep
-#                  - 30d
-#                image: busybox
-#                imagePullPolicy: Always
-#                lifecycle: {}
-#                livenessProbe: {}
-#                name: noop-pvc
-#                readinessProbe: {}
-#                resources:
-#                  requests:
-#                    memory: 16M
-#                securityContext: {}
-#                startupProbe: {}
-#                volumeMounts:
-#                  - mountPath: /var/log/app/memory
-#                    name: memory-vol
-#            sidecarVolumes:
-#              - emptyDir:
-#                  medium: Memory
-#                name: memory-vol
-#            sidecarPVCs:
-#              - name: pvc-vol
-#                spec:
-#                  resources:
-#                    requests:
-#                      storage: 1Gi
+#        storageClassName: standard
+#    configuration: |-
+#      max_connections=250
+#      innodb_buffer_pool_size={{containerMemoryLimit * 3/4}}
+#    sidecars:
+#      - command:
+#          - sleep
+#          - 30d
+#        image: busybox
+#        imagePullPolicy: Always
+#        lifecycle: {}
+#        livenessProbe: {}
+#        name: noop-memory
+#        readinessProbe: {}
+#        resources:
+#          requests:
+#            memory: 16M
+#        securityContext: {}
+#        startupProbe: {}
+#        volumeMounts:
+#          - mountPath: /var/log/app/memory
+#            name: memory-vol
+#      - command:
+#          - sleep
+#          - 30d
+#        image: busybox
+#        imagePullPolicy: Always
+#        lifecycle: {}
+#        livenessProbe: {}
+#        name: noop-pvc
+#        readinessProbe: {}
+#        resources:
+#          requests:
+#            memory: 16M
+#        securityContext: {}
+#        startupProbe: {}
+#        volumeMounts:
+#          - mountPath: /var/log/app/memory
+#            name: memory-vol
+#    sidecarVolumes:
+#      - emptyDir:
+#          medium: Memory
+#        name: memory-vol
+#    sidecarPVCs:
+#      - name: pvc-vol
+#        spec:
+#          resources:
+#            requests:
+#              storage: 1Gi
   proxy:
     haproxy:
       enabled: true
@@ -399,57 +334,58 @@ spec:
 #                        - e2e-az1
 #                        - e2e-az2
         antiAffinityTopologyKey: kubernetes.io/hostname
-#        topologySpreadConstraints:
-#          - labelSelector:
-#              matchLabels:
-#                app.kubernetes.io/name: percona-server
-#            maxSkew: 1
-#            topologyKey: kubernetes.io/hostname
-#            whenUnsatisfiable: DoNotSchedule
-#        containerSecurityContext:
-#          privileged: false
-#          runAsGroup: 1001
-#          runAsUser: 1001
-#        podSecurityContext:
-#          fsGroup: 1001
-#          supplementalGroups:
-#            - 1001
-#            - 1002
-#            - 1003
-#        configuration: |-
-#          #      the actual default configuration file can be found here https://github.com/percona/percona-server-mysql-operator/blob/main/build/haproxy-global.cfg
-#      global
-#        maxconn 2048
-#        external-check
-#        insecure-fork-wanted
-#        stats socket /etc/haproxy/mysql/haproxy.sock mode 600 expose-fd listeners level admin
-
-#      defaults
-#        default-server init-addr last,libc,none
-#        log global
-#        mode tcp
-#        retries 10
-#        timeout client 28800s
-#        timeout connect 100500
-#        timeout server 28800s
-
-#      frontend mysql-primary-in
-#        bind *:3309 accept-proxy
-#        bind *:3306
-#        mode tcp
-#        option clitcpka
-#        default_backend mysql-primary
-
-#      frontend mysql-replicas-in
-#        bind *:3307
-#        mode tcp
-#        option clitcpka
-#        default_backend mysql-replicas
-
-#      frontend stats
-#        bind *:8404
-#        mode http
-#        http-request use-service prometheus-exporter if { path /metrics }
+#      topologySpreadConstraints:
+#        - labelSelector:
+#            matchLabels:
+#              app.kubernetes.io/name: percona-server
+#          maxSkew: 1
+#          topologyKey: kubernetes.io/hostname
+#          whenUnsatisfiable: DoNotSchedule
+#      containerSecurityContext:
+#        privileged: false
+#        runAsGroup: 1001
+#        runAsUser: 1001
+#      podSecurityContext:
+#        fsGroup: 1001
+#        supplementalGroups:
+#          - 1001
+#          - 1002
+#          - 1003
+#      configuration: |-
+#        #      the actual default configuration file can be found here https://github.com/percona/percona-server-mysql-operator/blob/main/build/haproxy-global.cfg
+#
+#        global
+#          maxconn 2048
+#          external-check
+#          insecure-fork-wanted
+#          stats socket /etc/haproxy/mysql/haproxy.sock mode 600 expose-fd listeners level admin
+#
+#        defaults
+#          default-server init-addr last,libc,none
+#          log global
+#          mode tcp
+#          retries 10
+#          timeout client 28800s
+#          timeout connect 100500
+#          timeout server 28800s
+#
+#        frontend mysql-primary-in
+#          bind *:3309 accept-proxy
+#          bind *:3306
+#          mode tcp
+#          option clitcpka
+#          default_backend mysql-primary
+#
+#        frontend mysql-replicas-in
+#          bind *:3307
+#          mode tcp
+#          option clitcpka
+#          default_backend mysql-replicas
+#
+#        frontend stats
+#          bind *:8404
+#          mode http
+#          http-request use-service prometheus-exporter if { path /metrics }
     router:
       enabled: true
 #      expose:
@@ -541,56 +477,56 @@ spec:
 #                        - e2e-az1
 #                        - e2e-az2
         antiAffinityTopologyKey: kubernetes.io/hostname
-#        topologySpreadConstraints:
-#          - labelSelector:
-#              matchLabels:
-#                app.kubernetes.io/name: percona-server
-#            maxSkew: 1
-#            topologyKey: kubernetes.io/hostname
-#            whenUnsatisfiable: DoNotSchedule
-#        containerSecurityContext:
-#          privileged: false
-#          runAsGroup: 1001
-#          runAsUser: 1001
-#        podSecurityContext:
-#          fsGroup: 1001
-#          supplementalGroups:
-#            - 1001
-#            - 1002
-#            - 1003
-#        ports:
-#          - name: http
-#            port: 8443
-#            targetPort: 0
-#          - name: rw-default
-#            port: 3306
-#            targetPort: 6446
-#          - name: read-write
-#            port: 6446
-#            targetPort: 0
-#          - name: read-only
-#            port: 6447
-#            targetPort: 0
-#          - name: x-read-write
-#            port: 6448
-#            targetPort: 0
-#          - name: x-read-only
-#            port: 6449
-#            targetPort: 0
-#          - name: x-default
-#            port: 33060
-#            targetPort: 0
-#          - name: rw-admin
-#            port: 33062
-#            targetPort: 0
-#          - name: custom-port
-#            port: 1111
-#            targetPort: 6446
-#            # configuration: |-
-#            #   [default]
-#            #   logging_folder=/tmp/router/log
-#            #   [logger]
-#            #   level=DEBUG
+#      topologySpreadConstraints:
+#        - labelSelector:
+#            matchLabels:
+#              app.kubernetes.io/name: percona-server
+#          maxSkew: 1
+#          topologyKey: kubernetes.io/hostname
+#          whenUnsatisfiable: DoNotSchedule
+#      containerSecurityContext:
+#        privileged: false
+#        runAsGroup: 1001
+#        runAsUser: 1001
+#      podSecurityContext:
+#        fsGroup: 1001
+#        supplementalGroups:
+#          - 1001
+#          - 1002
+#          - 1003
+#      ports:
+#        - name: http
+#          port: 8443
+#          targetPort: 0
+#        - name: rw-default
+#          port: 3306
+#          targetPort: 6446
+#        - name: read-write
+#          port: 6446
+#          targetPort: 0
+#        - name: read-only
+#          port: 6447
+#          targetPort: 0
+#        - name: x-read-write
+#          port: 6448
+#          targetPort: 0
+#        - name: x-read-only
+#          port: 6449
+#          targetPort: 0
+#        - name: x-default
+#          port: 33060
+#          targetPort: 0
+#        - name: rw-admin
+#          port: 33062
+#          targetPort: 0
+#        - name: custom-port
+#          port: 1111
+#          targetPort: 6446
+#      configuration: |-
+#        [default]
+#        logging_folder=/tmp/router/log
+#        [logger]
+#        level=DEBUG
   orchestrator:
     enabled: true
 #    expose:
@@ -713,16 +649,16 @@ spec:
       requests:
         cpu: 300m
         memory: 150M
-#        readinessProbes:
-#          failureThreshold: 3
-#          periodSeconds: 5
-#          successThreshold: 1
-#          timeoutSeconds: 3
-#        livenessProbes:
-#          failureThreshold: 3
-#          periodSeconds: 5
-#          successThreshold: 1
-#          timeoutSeconds: 3
+#    readinessProbes:
+#      failureThreshold: 3
+#      periodSeconds: 5
+#      successThreshold: 1
+#      timeoutSeconds: 3
+#    livenessProbes:
+#      failureThreshold: 3
+#      periodSeconds: 5
+#      successThreshold: 1
+#      timeoutSeconds: 3
   backup:
     enabled: true
     pitr:

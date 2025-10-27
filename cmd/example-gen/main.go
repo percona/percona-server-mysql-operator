@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -16,12 +18,15 @@ import (
 )
 
 func main() {
-	if err := printExample(); err != nil {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	if err := printPerconaServerMySQL(ctx); err != nil {
 		panic(err)
 	}
 }
 
-func printExample() error {
+func printPerconaServerMySQL(ctx context.Context) error {
 	cr := &apiv1.PerconaServerMySQL{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PerconaServerMySQL",
@@ -48,11 +53,13 @@ func printExample() error {
 		Status: apiv1.PerconaServerMySQLStatus{},
 	}
 
-	if err := cr.CheckNSetDefaults(context.TODO(), nil); err != nil {
+	if err := cr.CheckNSetDefaults(ctx, nil); err != nil {
 		return errors.Wrap(err, "check and set defaults")
 	}
-	defaults.SetManual(cr)
-	defaults.PresetDefaults(cr)
+	defaults.ManualCluster(cr)
+	if err := defaults.PresetCluster(cr); err != nil {
+		return errors.Wrap(err, "preset defaults")
+	}
 
 	jsonBytes, err := marshal.MarshalIgnoreOmitEmpty(cr,
 		metav1.ObjectMeta{},
@@ -74,13 +81,13 @@ func printExample() error {
 		corev1.Container{},
 	)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "marshal")
 	}
 	b, err := yaml.JSONToYAML(jsonBytes)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "json to yaml")
 	}
 
 	_, err = os.Stdout.Write(b)
-	return err
+	return errors.Wrap(err, "write")
 }

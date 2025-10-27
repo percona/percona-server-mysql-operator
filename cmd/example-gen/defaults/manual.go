@@ -10,9 +10,9 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
-// SetManual sets default values for empty fields in example cr.yaml
+// ManualCluster sets default values for empty fields in example cr.yaml
 // that are not set by CheckNSetDefaults and cannot be set via PresetDefaults.
-func SetManual(cr *apiv1.PerconaServerMySQL) {
+func ManualCluster(cr *apiv1.PerconaServerMySQL) {
 	cr.Spec.Unsafe = apiv1.UnsafeFlags{
 		MySQLSize:        false,
 		Proxy:            false,

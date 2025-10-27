@@ -52,190 +52,222 @@ remove_fields() {
 		| yq 'del(.spec.backup.storages.s3-us-west.gcs)'
 }
 
-comment_field() {
-	local field_path="$1"
-	shift || true
-
+del_fields_to_comment() {
 	yq - "$@" \
-		| yq "($field_path | key) head_comment = (($field_path | key) as \$key | (($field_path | parent) | pick([\$key])) | to_yaml)" \
-		| yq "$field_path=null" \
-		| yq "$field_path=\"SEDSHOULDDELETEIT\"" \
-		| sed '/SEDSHOULDDELETEIT/d'
-}
-
-comment_arr_value() {
-	local value_path="$1"
-	shift || true
-
-	query='
-('$value_path' | parent | key) foot_comment =
-(
-  ('$value_path' | parent | key | foot_comment) as $existing_comment |
-    (($existing_comment | select(length > 1) | from_yaml) // []) + ['$value_path'] as $resulting_list |
-    {"SEDSHOULDDELETEIT": $resulting_list}
-    | to_yaml
-)
-'
-
-	yq - "$@" \
-		| yq "$query" \
-		| yq "$value_path=\"SEDSHOULDDELETEIT\"" \
-		| sed '/SEDSHOULDDELETEIT/d'
-}
-
-normalize_comments() {
-	sed -r 's/^([[:space:]]*)# (.*)$/#\1\2/' - "$@"
+		| yq "del(.metadata.finalizers[1])" \
+		| yq "del(.metadata.finalizers[1])" \
+		| yq "del(.spec.metadata)" \
+		| yq "del(.spec.unsafeFlags)" \
+		| yq "del(.spec.pause)" \
+		| yq "del(.spec.enableVolumeExpansion)" \
+		| yq "del(.spec.initContainer)" \
+		| yq "del(.spec.ignoreAnnotations)" \
+		| yq "del(.spec.ignoreLabels)" \
+		| yq "del(.spec.tls)" \
+		| yq "del(.spec.mysql.runtimeClassName)" \
+		| yq "del(.spec.mysql.tolerations)" \
+		| yq "del(.spec.mysql.annotations)" \
+		| yq "del(.spec.mysql.labels)" \
+		| yq "del(.spec.mysql.nodeSelector)" \
+		| yq "del(.spec.mysql.priorityClassName)" \
+		| yq "del(.spec.mysql.schedulerName)" \
+		| yq "del(.spec.mysql.serviceAccountName)" \
+		| yq "del(.spec.mysql.imagePullSecrets)" \
+		| yq "del(.spec.mysql.initContainer)" \
+		| yq "del(.spec.mysql.vaultSecretName)" \
+		| yq "del(.spec.mysql.env)" \
+		| yq "del(.spec.mysql.envFrom)" \
+		| yq "del(.spec.mysql.podDisruptionBudget.minAvailable)" \
+		| yq "del(.spec.mysql.startupProbe)" \
+		| yq "del(.spec.mysql.readinessProbe)" \
+		| yq "del(.spec.mysql.livenessProbe)" \
+		| yq "del(.spec.mysql.affinity.advanced)" \
+		| yq "del(.spec.mysql.topologySpreadConstraints)" \
+		| yq "del(.spec.mysql.expose)" \
+		| yq "del(.spec.mysql.exposePrimary.annotations)" \
+		| yq "del(.spec.mysql.exposePrimary.labels)" \
+		| yq "del(.spec.mysql.exposePrimary.loadBalancerSourceRanges)" \
+		| yq "del(.spec.mysql.exposePrimary.type)" \
+		| yq "del(.spec.mysql.exposePrimary.internalTrafficPolicy)" \
+		| yq "del(.spec.mysql.exposePrimary.externalTrafficPolicy)" \
+		| yq "del(.spec.mysql.containerSecurityContext)" \
+		| yq "del(.spec.mysql.podSecurityContext)" \
+		| yq "del(.spec.mysql.configuration)" \
+		| yq "del(.spec.mysql.sidecars)" \
+		| yq "del(.spec.mysql.sidecarVolumes)" \
+		| yq "del(.spec.mysql.sidecarPVCs)" \
+		| yq "del(.spec.mysql.volumeSpec.emptyDir)" \
+		| yq "del(.spec.mysql.volumeSpec.hostPath)" \
+		| yq "del(.spec.mysql.volumeSpec.persistentVolumeClaim.storageClassName)" \
+		| yq "del(.spec.mysql.volumeSpec.persistentVolumeClaim.accessModes)" \
+		| yq "del(.spec.proxy.haproxy.runtimeClassName)" \
+		| yq "del(.spec.proxy.haproxy.tolerations)" \
+		| yq "del(.spec.proxy.haproxy.annotations)" \
+		| yq "del(.spec.proxy.haproxy.labels)" \
+		| yq "del(.spec.proxy.haproxy.nodeSelector)" \
+		| yq "del(.spec.proxy.haproxy.priorityClassName)" \
+		| yq "del(.spec.proxy.haproxy.schedulerName)" \
+		| yq "del(.spec.proxy.haproxy.serviceAccountName)" \
+		| yq "del(.spec.proxy.haproxy.imagePullSecrets)" \
+		| yq "del(.spec.proxy.haproxy.podDisruptionBudget.minAvailable)" \
+		| yq "del(.spec.proxy.haproxy.resources.limits)" \
+		| yq "del(.spec.proxy.haproxy.env)" \
+		| yq "del(.spec.proxy.haproxy.envFrom)" \
+		| yq "del(.spec.proxy.haproxy.startupProbe)" \
+		| yq "del(.spec.proxy.haproxy.readinessProbe)" \
+		| yq "del(.spec.proxy.haproxy.livenessProbe)" \
+		| yq "del(.spec.proxy.haproxy.affinity.advanced)" \
+		| yq "del(.spec.proxy.haproxy.expose)" \
+		| yq "del(.spec.proxy.haproxy.topologySpreadConstraints)" \
+		| yq "del(.spec.proxy.haproxy.initContainer)" \
+		| yq "del(.spec.proxy.haproxy.containerSecurityContext)" \
+		| yq "del(.spec.proxy.haproxy.podSecurityContext)" \
+		| yq "del(.spec.proxy.haproxy.configuration)" \
+		| yq "del(.spec.proxy.router.runtimeClassName)" \
+		| yq "del(.spec.proxy.router.tolerations)" \
+		| yq "del(.spec.proxy.router.annotations)" \
+		| yq "del(.spec.proxy.router.labels)" \
+		| yq "del(.spec.proxy.router.nodeSelector)" \
+		| yq "del(.spec.proxy.router.priorityClassName)" \
+		| yq "del(.spec.proxy.router.schedulerName)" \
+		| yq "del(.spec.proxy.router.serviceAccountName)" \
+		| yq "del(.spec.proxy.router.imagePullSecrets)" \
+		| yq "del(.spec.proxy.router.podDisruptionBudget.minAvailable)" \
+		| yq "del(.spec.proxy.router.resources.limits)" \
+		| yq "del(.spec.proxy.router.env)" \
+		| yq "del(.spec.proxy.router.envFrom)" \
+		| yq "del(.spec.proxy.router.startupProbe)" \
+		| yq "del(.spec.proxy.router.readinessProbe)" \
+		| yq "del(.spec.proxy.router.livenessProbe)" \
+		| yq "del(.spec.proxy.router.affinity.advanced)" \
+		| yq "del(.spec.proxy.router.expose)" \
+		| yq "del(.spec.proxy.router.topologySpreadConstraints)" \
+		| yq "del(.spec.proxy.router.initContainer)" \
+		| yq "del(.spec.proxy.router.containerSecurityContext)" \
+		| yq "del(.spec.proxy.router.podSecurityContext)" \
+		| yq "del(.spec.proxy.router.configuration)" \
+		| yq "del(.spec.proxy.router.ports)" \
+		| yq "del(.spec.orchestrator.runtimeClassName)" \
+		| yq "del(.spec.orchestrator.tolerations)" \
+		| yq "del(.spec.orchestrator.annotations)" \
+		| yq "del(.spec.orchestrator.labels)" \
+		| yq "del(.spec.orchestrator.nodeSelector)" \
+		| yq "del(.spec.orchestrator.priorityClassName)" \
+		| yq "del(.spec.orchestrator.schedulerName)" \
+		| yq "del(.spec.orchestrator.serviceAccountName)" \
+		| yq "del(.spec.orchestrator.imagePullSecrets)" \
+		| yq "del(.spec.orchestrator.podDisruptionBudget.minAvailable)" \
+		| yq "del(.spec.orchestrator.resources.limits)" \
+		| yq "del(.spec.orchestrator.env)" \
+		| yq "del(.spec.orchestrator.envFrom)" \
+		| yq "del(.spec.orchestrator.startupProbe)" \
+		| yq "del(.spec.orchestrator.readinessProbe)" \
+		| yq "del(.spec.orchestrator.livenessProbe)" \
+		| yq "del(.spec.orchestrator.affinity.advanced)" \
+		| yq "del(.spec.orchestrator.expose)" \
+		| yq "del(.spec.orchestrator.topologySpreadConstraints)" \
+		| yq "del(.spec.orchestrator.initContainer)" \
+		| yq "del(.spec.orchestrator.containerSecurityContext)" \
+		| yq "del(.spec.orchestrator.podSecurityContext)" \
+		| yq "del(.spec.pmm.mysqlParams)" \
+		| yq "del(.spec.pmm.readinessProbes)" \
+		| yq "del(.spec.pmm.livenessProbes)" \
+		| yq "del(.spec.pmm.containerSecurityContext)" \
+		| yq "del(.spec.backup.sourcePod)" \
+		| yq "del(.spec.backup.schedule)" \
+		| yq "del(.spec.backup.backoffLimit)" \
+		| yq "del(.spec.backup.imagePullSecrets)" \
+		| yq "del(.spec.backup.initContainer)" \
+		| yq "del(.spec.backup.containerSecurityContext)" \
+		| yq "del(.spec.backup.storages.azure-blob)" \
+		| yq "del(.spec.backup.storages.s3-us-west.resources)" \
+		| yq "del(.spec.backup.storages.s3-us-west.topologySpreadConstraints)" \
+		| yq "del(.spec.backup.storages.s3-us-west.tolerations)" \
+		| yq "del(.spec.backup.storages.s3-us-west.containerSecurityContext)" \
+		| yq "del(.spec.backup.storages.s3-us-west.labels)" \
+		| yq "del(.spec.backup.storages.s3-us-west.nodeSelector)" \
+		| yq "del(.spec.backup.storages.s3-us-west.podSecurityContext)" \
+		| yq "del(.spec.backup.storages.s3-us-west.priorityClassName)" \
+		| yq "del(.spec.backup.storages.s3-us-west.annotations)" \
+		| yq "del(.spec.backup.storages.s3-us-west.containerOptions)" \
+		| yq "del(.spec.backup.storages.s3-us-west.volumeSpec)" \
+		| yq "del(.spec.toolkit.imagePullSecrets)" \
+		| yq "del(.spec.toolkit.env)" \
+		| yq "del(.spec.toolkit.envFrom)" \
+		| yq "del(.spec.toolkit.resources)" \
+		| yq "del(.spec.toolkit.containerSecurityContext)" \
+		| yq "del(.spec.toolkit.startupProbe)" \
+		| yq "del(.spec.toolkit.readinessProbe)" \
+		| yq "del(.spec.toolkit.livenessProbe)"
 }
 
 # TODO: Refactor this function. We should introduce an allowlist of fields to keep uncommented and comment everything else.
 comment_cr_yaml() {
-	yq - "$@" \
-		| comment_arr_value ".metadata.finalizers[1]" \
-		| comment_arr_value ".metadata.finalizers[1]" \
-		| comment_field ".spec.metadata" \
-		| comment_field ".spec.unsafeFlags" \
-		| comment_field ".spec.pause" \
-		| comment_field ".spec.enableVolumeExpansion" \
-		| comment_field ".spec.initContainer" \
-		| comment_field ".spec.ignoreAnnotations" \
-		| comment_field ".spec.ignoreLabels" \
-		| comment_field ".spec.tls" \
-		| comment_field ".spec.mysql.runtimeClassName" \
-		| comment_field ".spec.mysql.tolerations" \
-		| comment_field ".spec.mysql.annotations" \
-		| comment_field ".spec.mysql.labels" \
-		| comment_field ".spec.mysql.nodeSelector" \
-		| comment_field ".spec.mysql.priorityClassName" \
-		| comment_field ".spec.mysql.schedulerName" \
-		| comment_field ".spec.mysql.serviceAccountName" \
-		| comment_field ".spec.mysql.imagePullSecrets" \
-		| comment_field ".spec.mysql.initContainer" \
-		| comment_field ".spec.mysql.vaultSecretName" \
-		| comment_field ".spec.mysql.env" \
-		| comment_field ".spec.mysql.envFrom" \
-		| comment_field ".spec.mysql.podDisruptionBudget.minAvailable" \
-		| comment_field ".spec.mysql.startupProbe" \
-		| comment_field ".spec.mysql.readinessProbe" \
-		| comment_field ".spec.mysql.livenessProbe" \
-		| comment_field ".spec.mysql.affinity.advanced" \
-		| comment_field ".spec.mysql.topologySpreadConstraints" \
-		| comment_field ".spec.mysql.expose" \
-		| comment_field ".spec.mysql.exposePrimary.annotations" \
-		| comment_field ".spec.mysql.exposePrimary.labels" \
-		| comment_field ".spec.mysql.exposePrimary.loadBalancerSourceRanges" \
-		| comment_field ".spec.mysql.exposePrimary.type" \
-		| comment_field ".spec.mysql.exposePrimary.internalTrafficPolicy" \
-		| comment_field ".spec.mysql.exposePrimary.externalTrafficPolicy" \
-		| comment_field ".spec.mysql.containerSecurityContext" \
-		| comment_field ".spec.mysql.podSecurityContext" \
-		| comment_field ".spec.mysql.configuration" \
-		| comment_field ".spec.mysql.sidecars" \
-		| comment_field ".spec.mysql.sidecarVolumes" \
-		| comment_field ".spec.mysql.sidecarPVCs" \
-		| comment_field ".spec.mysql.volumeSpec.emptyDir" \
-		| comment_field ".spec.mysql.volumeSpec.hostPath" \
-		| comment_field ".spec.mysql.volumeSpec.persistentVolumeClaim.storageClassName" \
-		| comment_field ".spec.mysql.volumeSpec.persistentVolumeClaim.accessModes" \
-		| comment_field ".spec.proxy.haproxy.runtimeClassName" \
-		| comment_field ".spec.proxy.haproxy.tolerations" \
-		| comment_field ".spec.proxy.haproxy.annotations" \
-		| comment_field ".spec.proxy.haproxy.labels" \
-		| comment_field ".spec.proxy.haproxy.nodeSelector" \
-		| comment_field ".spec.proxy.haproxy.priorityClassName" \
-		| comment_field ".spec.proxy.haproxy.schedulerName" \
-		| comment_field ".spec.proxy.haproxy.serviceAccountName" \
-		| comment_field ".spec.proxy.haproxy.imagePullSecrets" \
-		| comment_field ".spec.proxy.haproxy.podDisruptionBudget.minAvailable" \
-		| comment_field ".spec.proxy.haproxy.resources.limits" \
-		| comment_field ".spec.proxy.haproxy.env" \
-		| comment_field ".spec.proxy.haproxy.envFrom" \
-		| comment_field ".spec.proxy.haproxy.startupProbe" \
-		| comment_field ".spec.proxy.haproxy.readinessProbe" \
-		| comment_field ".spec.proxy.haproxy.livenessProbe" \
-		| comment_field ".spec.proxy.haproxy.affinity.advanced" \
-		| comment_field ".spec.proxy.haproxy.expose" \
-		| comment_field ".spec.proxy.haproxy.topologySpreadConstraints" \
-		| comment_field ".spec.proxy.haproxy.initContainer" \
-		| comment_field ".spec.proxy.haproxy.containerSecurityContext" \
-		| comment_field ".spec.proxy.haproxy.podSecurityContext" \
-		| comment_field ".spec.proxy.haproxy.configuration" \
-		| comment_field ".spec.proxy.router.runtimeClassName" \
-		| comment_field ".spec.proxy.router.tolerations" \
-		| comment_field ".spec.proxy.router.annotations" \
-		| comment_field ".spec.proxy.router.labels" \
-		| comment_field ".spec.proxy.router.nodeSelector" \
-		| comment_field ".spec.proxy.router.priorityClassName" \
-		| comment_field ".spec.proxy.router.schedulerName" \
-		| comment_field ".spec.proxy.router.serviceAccountName" \
-		| comment_field ".spec.proxy.router.imagePullSecrets" \
-		| comment_field ".spec.proxy.router.podDisruptionBudget.minAvailable" \
-		| comment_field ".spec.proxy.router.resources.limits" \
-		| comment_field ".spec.proxy.router.env" \
-		| comment_field ".spec.proxy.router.envFrom" \
-		| comment_field ".spec.proxy.router.startupProbe" \
-		| comment_field ".spec.proxy.router.readinessProbe" \
-		| comment_field ".spec.proxy.router.livenessProbe" \
-		| comment_field ".spec.proxy.router.affinity.advanced" \
-		| comment_field ".spec.proxy.router.expose" \
-		| comment_field ".spec.proxy.router.topologySpreadConstraints" \
-		| comment_field ".spec.proxy.router.initContainer" \
-		| comment_field ".spec.proxy.router.containerSecurityContext" \
-		| comment_field ".spec.proxy.router.podSecurityContext" \
-		| comment_field ".spec.proxy.router.configuration" \
-		| comment_field ".spec.proxy.router.ports" \
-		| comment_field ".spec.orchestrator.runtimeClassName" \
-		| comment_field ".spec.orchestrator.tolerations" \
-		| comment_field ".spec.orchestrator.annotations" \
-		| comment_field ".spec.orchestrator.labels" \
-		| comment_field ".spec.orchestrator.nodeSelector" \
-		| comment_field ".spec.orchestrator.priorityClassName" \
-		| comment_field ".spec.orchestrator.schedulerName" \
-		| comment_field ".spec.orchestrator.serviceAccountName" \
-		| comment_field ".spec.orchestrator.imagePullSecrets" \
-		| comment_field ".spec.orchestrator.podDisruptionBudget.minAvailable" \
-		| comment_field ".spec.orchestrator.resources.limits" \
-		| comment_field ".spec.orchestrator.env" \
-		| comment_field ".spec.orchestrator.envFrom" \
-		| comment_field ".spec.orchestrator.startupProbe" \
-		| comment_field ".spec.orchestrator.readinessProbe" \
-		| comment_field ".spec.orchestrator.livenessProbe" \
-		| comment_field ".spec.orchestrator.affinity.advanced" \
-		| comment_field ".spec.orchestrator.expose" \
-		| comment_field ".spec.orchestrator.topologySpreadConstraints" \
-		| comment_field ".spec.orchestrator.initContainer" \
-		| comment_field ".spec.orchestrator.containerSecurityContext" \
-		| comment_field ".spec.orchestrator.podSecurityContext" \
-		| comment_field ".spec.pmm.mysqlParams" \
-		| comment_field ".spec.pmm.readinessProbes" \
-		| comment_field ".spec.pmm.livenessProbes" \
-		| comment_field ".spec.pmm.containerSecurityContext" \
-		| comment_field ".spec.backup.sourcePod" \
-		| comment_field ".spec.backup.schedule" \
-		| comment_field ".spec.backup.backoffLimit" \
-		| comment_field ".spec.backup.imagePullSecrets" \
-		| comment_field ".spec.backup.initContainer" \
-		| comment_field ".spec.backup.containerSecurityContext" \
-		| comment_field ".spec.backup.storages.azure-blob" \
-		| comment_field ".spec.backup.storages.s3-us-west.resources" \
-		| comment_field ".spec.backup.storages.s3-us-west.topologySpreadConstraints" \
-		| comment_field ".spec.backup.storages.s3-us-west.tolerations" \
-		| comment_field ".spec.backup.storages.s3-us-west.containerSecurityContext" \
-		| comment_field ".spec.backup.storages.s3-us-west.labels" \
-		| comment_field ".spec.backup.storages.s3-us-west.nodeSelector" \
-		| comment_field ".spec.backup.storages.s3-us-west.podSecurityContext" \
-		| comment_field ".spec.backup.storages.s3-us-west.priorityClassName" \
-		| comment_field ".spec.backup.storages.s3-us-west.annotations" \
-		| comment_field ".spec.backup.storages.s3-us-west.containerOptions" \
-		| comment_field ".spec.backup.storages.s3-us-west.volumeSpec" \
-		| comment_field ".spec.toolkit.imagePullSecrets" \
-		| comment_field ".spec.toolkit.env" \
-		| comment_field ".spec.toolkit.envFrom" \
-		| comment_field ".spec.toolkit.resources" \
-		| comment_field ".spec.toolkit.containerSecurityContext" \
-		| comment_field ".spec.toolkit.startupProbe" \
-		| comment_field ".spec.toolkit.readinessProbe" \
-		| comment_field ".spec.toolkit.livenessProbe" \
-		| normalize_comments
+	local tmp_old tmp_new tmp_diff tmp_out
+
+	tmp_old=$(mktemp)
+	tmp_new=$(mktemp)
+	tmp_diff=$(mktemp)
+	tmp_out=$(mktemp)
+
+	yq - "$@" >"$tmp_old"
+	del_fields_to_comment <"$tmp_old" >"$tmp_new"
+
+	diff "$tmp_old" "$tmp_new" >"$tmp_diff"
+
+	# convert delete-only hunks into change hunks with identical new-range,
+	# and duplicate "< ..." lines as "> # ..."
+	awk '
+/^[0-9]+(,[0-9]+)?[acd][0-9]+(,[0-9]+)?$/ {
+  if (inblock) process()
+  hdr = $0; inblock = 1; n = 0
+  next
+}
+inblock { block[++n] = $0; next }
+{ print }
+
+END { if (inblock) process() }
+
+function process(i, ln, has_lt, has_gt, has_sep, pos, ch, left) {
+  has_lt = has_gt = has_sep = 0
+  for (i = 1; i <= n; i++) {
+    ln = block[i]
+    if (ln ~ /^</) has_lt = 1
+    else if (ln ~ /^>/) has_gt = 1
+    else if (ln ~ /^---$/) has_sep = 1
+  }
+
+  if (has_lt && !has_gt) {
+    # if header was a delete, make it a change with identical new-range
+    pos = 0
+    for (i = 1; i <= length(hdr); i++) { ch = substr(hdr, i, 1); if (ch=="a"||ch=="c"||ch=="d"){ pos = i; break } }
+    if (pos && substr(hdr, pos, 1) == "d") {
+      left = substr(hdr, 1, pos-1)
+      hdr = left "c" left
+    } else if (match(hdr, /[acd]/)) {
+      pos = RSTART
+      if (substr(hdr, pos, 1) != "c") hdr = substr(hdr,1,pos-1) "c" substr(hdr,pos+1)
+    }
+
+    print hdr
+    for (i = 1; i <= n; i++) print block[i]
+    if (!has_sep) print "---"
+    for (i = 1; i <= n; i++) {
+      ln = block[i]
+      if (ln ~ /^</) { sub(/^< ?/, "", ln); print "> #" ln }
+    }
+  } else {
+    print hdr
+    for (i = 1; i <= n; i++) print block[i]
+  }
+  inblock = 0; n = 0
+}' "$tmp_diff" >"$tmp_out"
+
+	mv "$tmp_out" "$tmp_diff"
+
+	patch -s -i "$tmp_diff" "$tmp_old"
+
+	cat "$tmp_old"
 }
 
 yq --version
