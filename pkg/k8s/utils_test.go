@@ -506,6 +506,22 @@ func TestEqualMetadata(t *testing.T) {
 				{Finalizers: []string{"test-fin-2"}},
 			},
 		},
+		{
+			name: "nil and empty annotations",
+			input: []metav1.ObjectMeta{
+				{Annotations: nil},
+				{Annotations: map[string]string{}},
+			},
+			output: true,
+		},
+		{
+			name: "nil and empty labels",
+			input: []metav1.ObjectMeta{
+				{Labels: nil},
+				{Labels: map[string]string{}},
+			},
+			output: true,
+		},
 	}
 
 	for _, tt := range tests {

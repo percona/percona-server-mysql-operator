@@ -21,7 +21,6 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -702,7 +701,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 	}
 
 	configMap := k8s.ConfigMap(cr, mysql.AutoConfigMapName(cr), mysql.CustomConfigKey, config, naming.ComponentDatabase)
-	if !reflect.DeepEqual(currentConfigMap.Data, configMap.Data) || !k8s.EqualMetadata(currentConfigMap.ObjectMeta, configMap.ObjectMeta) {
+	if !k8s.EqualConfigMaps(currentConfigMap, configMap) {
 		if err := k8s.EnsureObject(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
 			return errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
 		}
@@ -729,44 +728,28 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestrator(ctx context.Context
 		return errors.Wrap(err, "create role binding")
 	}
 
-	cmap := &corev1.ConfigMap{}
-	err := r.Client.Get(ctx, orchestrator.NamespacedName(cr), cmap)
-	if client.IgnoreNotFound(err) != nil {
-		return errors.Wrap(err, "get config map")
-	}
-
-	config, err := orchestrator.ConfigMapData(cr)
+	configMap, err := orchestrator.ConfigMap(cr)
 	if err != nil {
 		return errors.Wrap(err, "get orchestrator config")
 	}
-	configMap := k8s.ConfigMap(cr, orchestrator.ConfigMapName(cr), orchestrator.ConfigFileKey, config, naming.ComponentOrchestrator)
-	if !reflect.DeepEqual(cmap.Data, configMap.Data) {
+
+	currentConfigMap := &corev1.ConfigMap{}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(configMap), currentConfigMap); client.IgnoreNotFound(err) != nil {
+		return errors.Wrap(err, "get config map")
+	}
+
+	if !k8s.EqualConfigMaps(currentConfigMap, configMap) {
 		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
 			return errors.Wrap(err, "reconcile ConfigMap")
 		}
 		log.Info("ConfigMap updated", "name", configMap.Name, "data", configMap.Data)
-		return nil
 	}
 
-	existingNodes := make([]string, 0)
-	if !k8serrors.IsNotFound(err) {
-		cfg, ok := cmap.Data[orchestrator.ConfigFileKey]
-		if !ok {
-			return errors.Errorf("key %s not found in ConfigMap", orchestrator.ConfigFileKey)
-		}
-
-		config := make(map[string]interface{}, 0)
-		if err := json.Unmarshal([]byte(cfg), &config); err != nil {
-			return errors.Wrap(err, "unmarshal ConfigMap data to json")
-		}
-
-		nodes, ok := config["RaftNodes"].([]interface{})
-		if !ok {
-			return errors.New("key RaftNodes not found in ConfigMap")
-		}
-
-		for _, v := range nodes {
-			existingNodes = append(existingNodes, v.(string))
+	existingNodes := []string{}
+	if len(currentConfigMap.Data) != 0 {
+		existingNodes, err = orchestrator.ExistingNodes(currentConfigMap)
+		if err != nil {
+			return errors.Wrap(err, "get existing nodes")
 		}
 	}
 

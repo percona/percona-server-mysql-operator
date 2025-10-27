@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"maps"
 	"path"
 	"regexp"
 	"strconv"
@@ -708,19 +709,25 @@ func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 }
 
 func (cr *PerconaServerMySQL) GlobalLabels() map[string]string {
-	if cr.Spec.Metadata == nil {
+	if cr.Spec.Metadata == nil || cr.Spec.Metadata.Labels == nil {
 		return nil
 	}
 
-	return cr.Spec.Metadata.Labels
+	m := make(map[string]string, len(cr.Spec.Metadata.Labels))
+	maps.Copy(m, cr.Spec.Metadata.Labels)
+
+	return m
 }
 
 func (cr *PerconaServerMySQL) GlobalAnnotations() map[string]string {
-	if cr.Spec.Metadata == nil {
+	if cr.Spec.Metadata == nil || cr.Spec.Metadata.Annotations == nil {
 		return nil
 	}
 
-	return cr.Spec.Metadata.Annotations
+	m := make(map[string]string, len(cr.Spec.Metadata.Annotations))
+	maps.Copy(m, cr.Spec.Metadata.Annotations)
+
+	return m
 }
 
 func (cr *PerconaServerMySQL) Version() *v.Version {
