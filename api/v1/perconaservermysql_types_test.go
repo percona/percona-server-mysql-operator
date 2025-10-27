@@ -168,3 +168,139 @@ func TestGetTerminationGracePeriodSeconds(t *testing.T) {
 		})
 	}
 }
+
+func TestGlobalLabels(t *testing.T) {
+	tests := map[string]struct {
+		cr       *PerconaServerMySQL
+		expected map[string]string
+	}{
+		"nil metadata": {
+			cr: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					Metadata: nil,
+				},
+			},
+			expected: nil,
+		},
+		"nil labels": {
+			cr: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					Metadata: &Metadata{
+						Labels: nil,
+					},
+				},
+			},
+			expected: nil,
+		},
+		"empty labels": {
+			cr: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					Metadata: &Metadata{
+						Labels: map[string]string{},
+					},
+				},
+			},
+			expected: map[string]string{},
+		},
+		"with labels": {
+			cr: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					Metadata: &Metadata{
+						Labels: map[string]string{
+							"app":         "myapp",
+							"environment": "production",
+							"team":        "platform",
+						},
+					},
+				},
+			},
+			expected: map[string]string{
+				"app":         "myapp",
+				"environment": "production",
+				"team":        "platform",
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := tc.cr.GlobalLabels()
+			assert.Equal(t, tc.expected, result)
+
+			// Verify that the returned map is a copy, not the original
+			if result != nil && tc.cr.Spec.Metadata != nil && tc.cr.Spec.Metadata.Labels != nil {
+				result["new-key"] = "new-value"
+				_, exists := tc.cr.Spec.Metadata.Labels["new-key"]
+				assert.False(t, exists)
+			}
+		})
+	}
+}
+
+func TestGlobalAnnotations(t *testing.T) {
+	tests := map[string]struct {
+		cr       *PerconaServerMySQL
+		expected map[string]string
+	}{
+		"nil metadata": {
+			cr: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					Metadata: nil,
+				},
+			},
+			expected: nil,
+		},
+		"nil annotations": {
+			cr: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					Metadata: &Metadata{
+						Annotations: nil,
+					},
+				},
+			},
+			expected: nil,
+		},
+		"empty annotations": {
+			cr: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					Metadata: &Metadata{
+						Annotations: map[string]string{},
+					},
+				},
+			},
+			expected: map[string]string{},
+		},
+		"with annotations": {
+			cr: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					Metadata: &Metadata{
+						Annotations: map[string]string{
+							"app":         "myapp",
+							"environment": "production",
+							"team":        "platform",
+						},
+					},
+				},
+			},
+			expected: map[string]string{
+				"app":         "myapp",
+				"environment": "production",
+				"team":        "platform",
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := tc.cr.GlobalAnnotations()
+			assert.Equal(t, tc.expected, result)
+
+			// Verify that the returned map is a copy, not the original
+			if result != nil && tc.cr.Spec.Metadata != nil && tc.cr.Spec.Metadata.Annotations != nil {
+				result["new-key"] = "new-value"
+				_, exists := tc.cr.Spec.Metadata.Annotations["new-key"]
+				assert.False(t, exists)
+			}
+		})
+	}
+}

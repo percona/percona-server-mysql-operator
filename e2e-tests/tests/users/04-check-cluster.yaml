@@ -10,24 +10,28 @@ commands:
 
       sleep 30 # wait for cluster status to change to initializing
       wait_cluster_consistency_async "${test_name}" "3" "3"
-      mysql_args="-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password_updated"
-      users=($(get_mysql_users "${mysql_args}"))
+
+      cluster_name=$(get_cluster_name)
+      haproxy_svc=$(get_haproxy_svc ${cluster_name})
+      mysql_host="-h ${haproxy_svc}"
+      mysql_user="-uroot -proot_password_updated"
+      users=($(get_mysql_users "${mysql_host}" "${mysql_user}"))
 
       # check connection
       args=""
       set +o errexit
       for user in "${users[@]}"; do
-          mysql_args="-h $(get_haproxy_svc $(get_cluster_name)) -u${user} -p${user}_password_updated"
+          mysql_user="-u${user} -p${user}_password_updated"
 
           pod=mysql-client
           case $user in
               heartbeat | xtrabackup)
-                  mysql_args="-h localhost -u${user} -p${user}_password_updated"
-                  pod="$(get_cluster_name)-mysql-0"
+                  mysql_host="-h localhost"
+                  pod="${cluster_name}-mysql-0"
                   ;;
           esac
 
-          run_mysql "SELECT 1" "${mysql_args}" "${pod}"
+          run_mysql "SELECT 1" "${mysql_host}" "${mysql_user}" "${pod}"
 
           args="${args} --from-literal=${user}=$([ $? -eq 0 ] && echo 'success' || echo 'fail')"
       done
@@ -38,7 +42,7 @@ commands:
 
       # check replication
       wait_cluster_consistency_async "${test_name}" "3" "3"
-      orc_host=$(get_orc_headless_fqdn $(get_cluster_name) 0)
+      orc_host=$(get_orc_headless_fqdn ${cluster_name} 0)
       cluster=$(run_curl "http://${orc_host}:3000/api/clusters/" | jq -r .[0])
 
       replicating=$(run_curl "http://${orc_host}:3000/api/cluster/${cluster}/" \

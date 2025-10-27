@@ -10,6 +10,5 @@ commands:
 
       git_tag="v$(latest_operator_version_in_vs)"
       deploy_operator_gh ${git_tag}
-      deploy_non_tls_cluster_secrets
       deploy_tls_cluster_secrets
       deploy_client
