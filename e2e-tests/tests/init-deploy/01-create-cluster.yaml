@@ -22,6 +22,7 @@ commands:
       source ../../functions
 
       get_cr \
+          | yq eval '.spec.secretsName="test-secrets"' - \
           | yq eval '.spec.mysql.clusterType="async"' - \
           | yq eval '.spec.mysql.size=3' - \
           | yq eval '.spec.proxy.haproxy.enabled=true' - \
