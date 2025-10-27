@@ -19,7 +19,7 @@ spec:
 #    orchestratorSize: false
 #    proxy: false
 #    proxySize: false
-#  pause: true
+#  pause: false
   crVersion: 1.0.0
 #  enableVolumeExpansion: true
   secretsName: ps-cluster1-secrets
@@ -387,7 +387,7 @@ spec:
 #          mode http
 #          http-request use-service prometheus-exporter if { path /metrics }
     router:
-      enabled: true
+      enabled: false
 #      expose:
 #        annotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
@@ -445,8 +445,8 @@ spec:
         maxUnavailable: 1
 #        minAvailable: 0
       resources:
-#        limits:
-#          memory: 256M
+        limits:
+          memory: 256M
         requests:
           memory: 256M
 #      startupProbe:
@@ -528,7 +528,7 @@ spec:
 #        [logger]
 #        level=DEBUG
   orchestrator:
-    enabled: true
+    enabled: false
 #    expose:
 #      annotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
@@ -586,8 +586,8 @@ spec:
       maxUnavailable: 1
 #      minAvailable: 0
     resources:
-#      limits:
-#        memory: 256M
+      limits:
+        memory: 256M
       requests:
         memory: 128M
 #    startupProbe:
@@ -643,9 +643,9 @@ spec:
 #      runAsGroup: 1001
 #      runAsUser: 1001
     resources:
-      limits:
-        cpu: 400m
-        memory: 256M
+#      limits:
+#        cpu: 400m
+#        memory: 256M
       requests:
         cpu: 300m
         memory: 150M
@@ -697,13 +697,13 @@ spec:
 #      privileged: false
 #      runAsGroup: 1001
 #      runAsUser: 1001
-    resources:
-      limits:
-        cpu: 100m
-        memory: 100M
-      requests:
-        cpu: 200m
-        memory: 200M
+#    resources:
+#      limits:
+#        cpu: 100m
+#        memory: 100M
+#      requests:
+#        cpu: 200m
+#        memory: 200M
     storages:
 #      azure-blob:
 #        azure:
@@ -755,16 +755,16 @@ spec:
 #        type: azure
 #        verifyTLS: null
       s3-us-west:
-        affinity:
-          nodeAffinity:
-            requiredDuringSchedulingIgnoredDuringExecution:
-              nodeSelectorTerms:
-                - matchExpressions:
-                    - key: kubernetes.io/e2e-az-name
-                      operator: In
-                      values:
-                        - e2e-az1
-                        - e2e-az2
+#        affinity:
+#          nodeAffinity:
+#            requiredDuringSchedulingIgnoredDuringExecution:
+#              nodeSelectorTerms:
+#                - matchExpressions:
+#                    - key: kubernetes.io/e2e-az-name
+#                      operator: In
+#                      values:
+#                        - e2e-az1
+#                        - e2e-az2
 #        annotations:
 #          testName: scheduled-backup
 #        containerOptions:
@@ -800,14 +800,14 @@ spec:
 #          requests:
 #            cpu: 200m
 #            memory: 200M
-        runtimeClassName: image-rc
+#        runtimeClassName: image-rc
         s3:
           bucket: S3-BACKUP-BUCKET-NAME-HERE
           credentialsSecret: ps-cluster1-s3-credentials
-          endpointUrl: https://s3.amazonaws.com
-          prefix: PREFIX_NAME
+#          endpointUrl: https://s3.amazonaws.com
+#          prefix: PREFIX_NAME
           region: us-west-2
-        schedulerName: default-scheduler
+#        schedulerName: default-scheduler
 #        tolerations:
 #          - effect: NoExecute
 #            key: node.alpha.kubernetes.io/unreachable

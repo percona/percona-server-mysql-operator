@@ -133,7 +133,6 @@ del_fields_to_comment() {
 		| yq "del(.spec.proxy.router.serviceAccountName)" \
 		| yq "del(.spec.proxy.router.imagePullSecrets)" \
 		| yq "del(.spec.proxy.router.podDisruptionBudget.minAvailable)" \
-		| yq "del(.spec.proxy.router.resources.limits)" \
 		| yq "del(.spec.proxy.router.env)" \
 		| yq "del(.spec.proxy.router.envFrom)" \
 		| yq "del(.spec.proxy.router.startupProbe)" \
@@ -157,7 +156,6 @@ del_fields_to_comment() {
 		| yq "del(.spec.orchestrator.serviceAccountName)" \
 		| yq "del(.spec.orchestrator.imagePullSecrets)" \
 		| yq "del(.spec.orchestrator.podDisruptionBudget.minAvailable)" \
-		| yq "del(.spec.orchestrator.resources.limits)" \
 		| yq "del(.spec.orchestrator.env)" \
 		| yq "del(.spec.orchestrator.envFrom)" \
 		| yq "del(.spec.orchestrator.startupProbe)" \
@@ -173,12 +171,14 @@ del_fields_to_comment() {
 		| yq "del(.spec.pmm.readinessProbes)" \
 		| yq "del(.spec.pmm.livenessProbes)" \
 		| yq "del(.spec.pmm.containerSecurityContext)" \
+		| yq "del(.spec.pmm.resources.limits)" \
 		| yq "del(.spec.backup.sourcePod)" \
 		| yq "del(.spec.backup.schedule)" \
 		| yq "del(.spec.backup.backoffLimit)" \
 		| yq "del(.spec.backup.imagePullSecrets)" \
 		| yq "del(.spec.backup.initContainer)" \
 		| yq "del(.spec.backup.containerSecurityContext)" \
+		| yq "del(.spec.backup.resources)" \
 		| yq "del(.spec.backup.storages.azure-blob)" \
 		| yq "del(.spec.backup.storages.s3-us-west.resources)" \
 		| yq "del(.spec.backup.storages.s3-us-west.topologySpreadConstraints)" \
@@ -191,6 +191,11 @@ del_fields_to_comment() {
 		| yq "del(.spec.backup.storages.s3-us-west.annotations)" \
 		| yq "del(.spec.backup.storages.s3-us-west.containerOptions)" \
 		| yq "del(.spec.backup.storages.s3-us-west.volumeSpec)" \
+		| yq "del(.spec.backup.storages.s3-us-west.affinity)" \
+		| yq "del(.spec.backup.storages.s3-us-west.s3.prefix)" \
+		| yq "del(.spec.backup.storages.s3-us-west.s3.endpointUrl)" \
+		| yq "del(.spec.backup.storages.s3-us-west.schedulerName)" \
+		| yq "del(.spec.backup.storages.s3-us-west.runtimeClassName)" \
 		| yq "del(.spec.toolkit.imagePullSecrets)" \
 		| yq "del(.spec.toolkit.env)" \
 		| yq "del(.spec.toolkit.envFrom)" \

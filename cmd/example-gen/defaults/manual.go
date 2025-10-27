@@ -20,7 +20,7 @@ func ManualCluster(cr *apiv1.PerconaServerMySQL) {
 		Orchestrator:     false,
 		OrchestratorSize: false,
 	}
-	cr.Spec.Pause = true
+	cr.Spec.Pause = false
 	cr.Spec.CRVersion = version.Version()
 	cr.Spec.VolumeExpansionEnabled = true
 	cr.Spec.UpdateStrategy = "SmartUpdate"
@@ -232,7 +232,7 @@ frontend stats
 }
 
 func routerDefaults(spec *apiv1.MySQLRouterSpec) {
-	spec.Enabled = true
+	spec.Enabled = false
 	spec.Size = 3
 	spec.Image = "perconalab/percona-server-mysql-operator:main-router8.4"
 	spec.RuntimeClassName = ptr.To("image-rc")
@@ -320,7 +320,7 @@ level=DEBUG`
 }
 
 func orchestratorDefaults(spec *apiv1.OrchestratorSpec) {
-	spec.Enabled = true
+	spec.Enabled = false
 	spec.Image = "perconalab/percona-server-mysql-operator:main-orchestrator"
 	spec.Size = 3
 	spec.TerminationGracePeriodSeconds = ptr.To(int64(30))
