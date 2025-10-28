@@ -421,6 +421,13 @@ func Bootstrap(ctx context.Context) error {
 		return errors.Wrap(err, "connect to local")
 	}
 
+	// Clear group_replication_group_seeds early to prevent any stale entries
+	// from causing "Peer address is not valid" errors during cluster operations
+	log.Printf("Clearing any stale group_replication_group_seeds")
+	if err := localShell.setGroupSeeds(ctx, ""); err != nil {
+		log.Printf("WARNING: failed to clear group_replication_group_seeds: %v", err)
+	}
+
 	err = localShell.configureInstance(ctx)
 	if err != nil {
 		return err
@@ -460,6 +467,7 @@ func Bootstrap(ctx context.Context) error {
 			}
 		} else {
 			log.Printf("Can't connect to any of the peers, we need to reboot")
+
 			if err := handleFullClusterCrash(ctx, mysqlshVer); err != nil {
 				return errors.Wrap(err, "handle full cluster crash")
 			}

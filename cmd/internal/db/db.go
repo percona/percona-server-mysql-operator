@@ -341,39 +341,30 @@ func (d *DB) GetMemberState(ctx context.Context, host string) (db.MemberState, e
 }
 
 func (d *DB) CheckIfInPrimaryPartition(ctx context.Context) (bool, error) {
-	var in bool
+	var hasQuorum bool
 
 	err := d.db.QueryRowContext(ctx, `
 	SELECT
-		MEMBER_STATE = 'ONLINE'
-		AND (
-			(
-				SELECT
-					COUNT(*)
-				FROM
-					performance_schema.replication_group_members
-				WHERE
-					MEMBER_STATE NOT IN ('ONLINE', 'RECOVERING')
-			) >= (
-				(
-					SELECT
-						COUNT(*)
-					FROM
-						performance_schema.replication_group_members
-				) / 2
-			) = 0
+		(
+			SELECT COUNT(*)
+			FROM performance_schema.replication_group_members
+			WHERE MEMBER_STATE IN ('ONLINE', 'RECOVERING')
+		) * 2 > (
+			SELECT COUNT(*)
+			FROM performance_schema.replication_group_members
+			WHERE MEMBER_STATE IN ('ONLINE', 'RECOVERING')
 		)
+		AND MEMBER_STATE IN ('ONLINE', 'RECOVERING')
 	FROM
 		performance_schema.replication_group_members
-		JOIN performance_schema.replication_group_member_stats USING(member_id)
 	WHERE
-		member_id = @@global.server_uuid;
-	`).Scan(&in)
+		member_id = @@global.server_uuid
+	`).Scan(&hasQuorum)
 	if err != nil {
 		return false, err
 	}
 
-	return in, nil
+	return hasQuorum, nil
 }
 
 func (d *DB) EnableSuperReadonly(ctx context.Context) error {
