@@ -35,10 +35,11 @@ func parseMyCnf(myCnfFile io.ReadCloser) (*ini.Section, error) {
 		return nil, errors.Wrapf(err, "load %s", customMyCnfPath)
 	}
 
-	section, err := myCnf.GetSection("")
+	sectionName := ""
 	if myCnf.HasSection("mysqld") {
-		section, err = myCnf.GetSection("mysqld")
+		sectionName = "mysqld"
 	}
+	section, err := myCnf.GetSection(sectionName)
 	if err != nil {
 		return nil, errors.Wrap(err, "get section")
 	}
