@@ -35,11 +35,9 @@ func parseMyCnf(myCnfFile io.ReadCloser) (*ini.Section, error) {
 		return nil, errors.Wrapf(err, "load %s", customMyCnfPath)
 	}
 
-	var section *ini.Section
+	section, err := myCnf.GetSection("")
 	if myCnf.HasSection("mysqld") {
 		section, err = myCnf.GetSection("mysqld")
-	} else {
-		section, err = myCnf.GetSection("")
 	}
 	if err != nil {
 		return nil, errors.Wrap(err, "get section")
@@ -59,6 +57,10 @@ func getKeyValue(myCnf *ini.Section, option string) (string, error) {
 	}
 	if err != nil {
 		return "", errors.Wrapf(err, "get %s", option)
+	}
+
+	if key == nil {
+		return "", nil
 	}
 
 	return key.Value(), nil
@@ -109,7 +111,12 @@ func setCommunicationStack(opts *createClusterOpts, myCnf *ini.Section) error {
 		return errors.Wrapf(err, "get %s", option)
 	}
 
-	opts.communicationStack = value
+	switch {
+	case value != "":
+		opts.communicationStack = value
+	default:
+		opts.communicationStack = "MYSQL"
+	}
 
 	return nil
 }
