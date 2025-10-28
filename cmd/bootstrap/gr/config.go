@@ -94,7 +94,7 @@ func setPaxosSingleLeader(opts *createClusterOpts, myCnf *ini.Section) error {
 	}
 
 	switch strings.ToUpper(value) {
-	case "ON", "TRUE", "1":
+	case "", "ON", "TRUE", "1":
 		opts.paxosSingleLeader = true
 	default:
 		opts.paxosSingleLeader = false
