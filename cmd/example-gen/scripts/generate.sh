@@ -6,15 +6,15 @@ SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
 case "$resource" in
 	ps)
-		# shellcheck source=lib/ps.sh
+		# shellcheck source=cmd/example-gen/scripts/lib/ps.sh
 		. "$SCRIPT_DIR/lib/ps.sh"
 		;;
 	ps-backup)
-		# shellcheck source=lib/ps-backup.sh
+		# shellcheck source=cmd/example-gen/scripts/lib/ps-backup.sh
 		. "$SCRIPT_DIR/lib/ps-backup.sh"
 		;;
 	ps-restore)
-		# shellcheck source=lib/ps-restore.sh
+		# shellcheck source=cmd/example-gen/scripts/lib/ps-restore.sh
 		. "$SCRIPT_DIR/lib/ps-restore.sh"
 		;;
 	*)

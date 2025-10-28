@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# shellcheck source=util.sh
+# shellcheck source=cmd/example-gen/scripts/lib/util.sh
 . "$SCRIPT_DIR/lib/util.sh"
 
 export RESOURCE_PATH="deploy/backup/backup.yaml"
