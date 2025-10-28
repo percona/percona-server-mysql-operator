@@ -1,0 +1,16 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      yq eval "
+        (.spec.template.spec.containers[].env[] | select(.name == \"MYSQL_HOST\")).value = \"${cluster_name}-haproxy\" |
+        (.spec.template.spec.containers[].env[] | select(.name == \"MYSQL_PASSWORD\")).valueFrom.secretKeyRef.name = \"${cluster_name}-secrets\" |
+        .
+      " ../../conf/sysbench-oltp-write.yaml | kubectl apply -n "${NAMESPACE}" -f -

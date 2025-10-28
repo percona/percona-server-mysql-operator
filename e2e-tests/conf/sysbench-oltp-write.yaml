@@ -1,0 +1,70 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sysbench-data
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: sysbench
+        image: perconalab/percona-server-mysql-operator:sysbench
+        env:
+        - name: MYSQL_USER
+          value: root
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ps-cluster1-secrets
+              key: root
+        - name: MYSQL_HOST
+          value: ps-cluster1-haproxy
+        - name: MYSQL_DB
+          value: "testdb"
+        - name: TABLE_NUMBER
+          value: "120"
+        - name: TABLE_SIZE
+          value: "50000"
+        - name: THREADS
+          value: "3"
+        command:
+        - /bin/bash
+        args:
+        - -c
+        - |
+          set -euo pipefail
+
+          echo "Waiting application stability"
+          sleep 20
+
+          echo "Creating database $MYSQL_DB..."
+          mysql \
+            --host="${MYSQL_HOST}" \
+            --port=3306 \
+            --user="${MYSQL_USER}" \
+            --password="${MYSQL_PASSWORD}" \
+            -e "DROP DATABASE IF EXISTS ${MYSQL_DB}; CREATE DATABASE IF NOT EXISTS ${MYSQL_DB};"
+
+          echo "Populating database $MYSQL_DB..."
+          output=$(sysbench \
+            --db-driver=mysql \
+            --mysql-host="$MYSQL_HOST" \
+            --mysql-user="$MYSQL_USER" \
+            --mysql-password="$MYSQL_PASSWORD" \
+            --mysql-storage-engine=innodb \
+            --mysql-db="$MYSQL_DB" \
+            --tables=$TABLE_NUMBER \
+            --table-size=$TABLE_SIZE \
+            --threads=$THREADS \
+            ./src/lua/oltp_write_only.lua prepare)
+          
+          if echo "$output" | grep -q -E "FATAL|ERROR|failed"; then
+            echo "sysbench detected failure. Exiting with code 1."
+            exit 1
+          fi
+          
+          
+
+          
+

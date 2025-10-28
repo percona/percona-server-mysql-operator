@@ -1,0 +1,16 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 100
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: demand-backup-retry
+spec:
+  clusterName: demand-backup-retry
+  storageName: minio
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: xb-demand-backup-retry-minio

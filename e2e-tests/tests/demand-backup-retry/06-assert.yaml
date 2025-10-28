@@ -1,0 +1,10 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 20
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: xb-demand-backup-retry-minio
+status:
+  failed: 1

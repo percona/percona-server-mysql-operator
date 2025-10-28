@@ -358,7 +358,7 @@ deploy_minio() {
 		--set "users[0].policy"=consoleAdmin \
 		--set service.type=ClusterIP \
 		--set configPathmc=/tmp/.minio/ \
-		--set persistence.size=2G \
+		--set persistence.size=10G \
 		--set securityContext.enabled=false \
 		minio/minio
 	MINIO_POD=$(kubectl -n "${NAMESPACE}" get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
