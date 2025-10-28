@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
+# shellcheck source=util.sh
 . "$SCRIPT_DIR/lib/util.sh"
 
-RESOURCE_PATH="deploy/cr.yaml"
+export RESOURCE_PATH="deploy/cr.yaml"
 
 sort_yaml() {
 	GENERAL_ORDER='"metadata", "unsafeFlags", "pause", "crVersion", "enableVolumeExpansion", "secretsName", "sslSecretName", "updateStrategy", "upgradeOptions", "initContainer", "ignoreAnnotations", "ignoreLabels", "tls", "mysql", "proxy", "orchestrator", "pmm", "backup", "toolkit"'
@@ -17,7 +18,7 @@ sort_yaml() {
 	BACKUP_ORDER='"enabled","pitr","sourcePod","image","imagePullPolicy","imagePullSecrets","schedule","backoffLimit", "serviceAccountName", "initContainer", "containerSecurityContext", "resources","storages","pitr"'
 	TOOLKIT_ORDER='"image","imagePullPolicy","imagePullSecrets","env","envFrom","resources","containerSecurityContext", "startupProbe", "readinessProbe", "livenessProbe"'
 
-	yq - "$@" \
+	yq - \
 		| yq '.spec |= pick((['"$GENERAL_ORDER"'] + keys) | unique)' \
 		| yq '.spec.mysql |= pick((['"$MYSQL_ORDER"'] + keys) | unique)' \
 		| yq '.spec.proxy.haproxy |= pick((['"$HAPROXY_ORDER"'] + keys) | unique)' \
@@ -33,7 +34,7 @@ remove_fields() {
 	# - removing binlogServer is not used
 	# - removing azure-blob fields to reduce size
 	# - removing non-s3 fields in s3-us-west
-	yq - "$@" \
+	yq - \
 		| yq 'del(.status)' \
 		| yq 'del(.spec.backup.initImage)' \
 		| yq 'del(.spec.initImage)' \
@@ -57,7 +58,7 @@ remove_fields() {
 }
 
 del_fields_to_comment() {
-	yq - "$@" \
+	yq - \
 		| yq "del(.metadata.finalizers[1])" \
 		| yq "del(.metadata.finalizers[1])" \
 		| yq "del(.spec.metadata)" \

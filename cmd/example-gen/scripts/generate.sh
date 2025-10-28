@@ -5,10 +5,18 @@ resource=${1:-}
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
 case "$resource" in
-	ps | ps-backup | ps-restore)
-		. "$SCRIPT_DIR/lib/$resource.sh"
+	ps)
+		# shellcheck source=lib/ps.sh
+		. "$SCRIPT_DIR/lib/ps.sh"
 		;;
-
+	ps-backup)
+		# shellcheck source=lib/ps-backup.sh
+		. "$SCRIPT_DIR/lib/ps-backup.sh"
+		;;
+	ps-restore)
+		# shellcheck source=lib/ps-restore.sh
+		. "$SCRIPT_DIR/lib/ps-restore.sh"
+		;;
 	*)
 		echo "Usage: $0 {ps|ps-backup|ps-restore}" >&2
 		exit 2

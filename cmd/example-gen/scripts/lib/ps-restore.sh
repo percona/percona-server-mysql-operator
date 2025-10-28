@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 
+# shellcheck source=util.sh
 . "$SCRIPT_DIR/lib/util.sh"
 
-RESOURCE_PATH="deploy/backup/restore.yaml"
+export RESOURCE_PATH="deploy/backup/restore.yaml"
 
 sort_yaml() {
 	SPEC_ORDER='"clusterName", "backupName", "containerOptions", "backupSource"'
 	CONTAINER_OPTS_ORDER='"env", "args"'
 
-	yq - "$@" \
+	yq - \
 		| yq '.spec |= pick((['"$SPEC_ORDER"'] + keys) | unique)' \
 		| yq '.spec.containerOptions |= pick((['"$CONTAINER_OPTS_ORDER"'] + keys) | unique)'
 }
 
 remove_fields() {
-	yq - "$@" \
+	yq - \
 		| yq "del(.status)" \
 		| yq "del(.spec.backupSource.backupSource)" \
 		| yq "del(.spec.backupSource.completed)" \
@@ -26,7 +27,7 @@ remove_fields() {
 }
 
 del_fields_to_comment() {
-	yq - "$@" \
+	yq - \
 		| yq "del(.spec.containerOptions)" \
 		| yq "del(.spec.backupSource)"
 }
