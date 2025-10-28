@@ -317,48 +317,6 @@ func (m *mysqlsh) removeInstance(ctx context.Context, instanceDef string, force 
 	return nil
 }
 
-func (m *mysqlsh) checkIfInPrimaryPartition(ctx context.Context) (bool, error) {
-	result, err := m.runSQL(ctx, `SELECT
-		MEMBER_STATE = 'ONLINE'
-		AND (
-			(
-				SELECT
-					COUNT(*)
-				FROM
-					performance_schema.replication_group_members
-				WHERE
-					MEMBER_STATE NOT IN ('ONLINE', 'RECOVERING')
-			) >= (
-				(
-					SELECT
-						COUNT(*)
-					FROM
-						performance_schema.replication_group_members
-				) / 2
-			) = 0
-		) AS in_primary
-	FROM
-		performance_schema.replication_group_members
-		JOIN performance_schema.replication_group_member_stats USING(member_id)
-	WHERE
-		member_id = @@global.server_uuid;`)
-	if err != nil {
-		return false, err
-	}
-
-	v, ok := result.Rows[0]["in_primary"]
-	if !ok {
-		return false, errors.Errorf("unexpected output: %+v", result)
-	}
-
-	f, ok := v.(float64)
-	if !ok {
-		return false, errors.Errorf("unexpected type: %T", v)
-	}
-
-	return f == 1, nil
-}
-
 func connectToLocal(version *v.Version) (*mysqlsh, error) {
 	fqdn, err := utils.GetFQDN(os.Getenv("SERVICE_NAME"))
 	if err != nil {
@@ -600,21 +558,6 @@ func Bootstrap(ctx context.Context) error {
 		}
 
 		log.Println("Cluster rescanned")
-	}
-
-	inPrimary, err := shell.checkIfInPrimaryPartition(ctx)
-	if err != nil {
-		return errors.Wrap(err, "check if member in primary partition")
-	}
-	if !inPrimary {
-		log.Printf("Instance (%s) is not in primary partition. Starting full cluster crash recovery...", localShell.host)
-
-		if err := handleFullClusterCrash(ctx, mysqlshVer); err != nil {
-			return errors.Wrap(err, "handle full cluster crash")
-		}
-
-		// force restart container
-		return errors.New("instance is not in primary partition")
 	}
 
 	return nil
