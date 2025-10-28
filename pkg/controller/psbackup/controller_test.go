@@ -1299,9 +1299,9 @@ func TestValidateStorage(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		status    apiv1.PerconaServerMySQLBackupStatus
-		shouldErr bool
+		name   string
+		status apiv1.PerconaServerMySQLBackupStatus
+		err    error
 	}{
 		{
 			name: "s3 - successful validation",
@@ -1324,7 +1324,7 @@ func TestValidateStorage(t *testing.T) {
 					},
 				},
 			},
-			shouldErr: true,
+			err: errors.New("new client: fake error"),
 		},
 	}
 
@@ -1335,12 +1335,12 @@ func TestValidateStorage(t *testing.T) {
 				Scheme:           scheme,
 				NewStorageClient: fakeValidateStorageClient,
 			}
-
-			if tt.shouldErr {
-				assert.Error(t, r.validateStorage(t.Context(), "", new(apiv1.PerconaServerMySQL), tt.status))
+			err := r.validateStorage(t.Context(), "", new(apiv1.PerconaServerMySQL), tt.status)
+			if tt.err == nil {
+				assert.NoError(t, err)
 				return
 			}
-			assert.NoError(t, r.validateStorage(t.Context(), "", new(apiv1.PerconaServerMySQL), tt.status))
+			assert.Equal(t, tt.err.Error(), err.Error())
 		})
 	}
 }
