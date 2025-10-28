@@ -12,18 +12,13 @@ import (
 	"github.com/percona/percona-server-mysql-operator/cmd/example-gen/internal/fill"
 )
 
-// PresetCluster assigns default values to fields in example cr.yaml based on their types.
+// FromPresets assigns default values to fields in provided custom resource based on their types.
 // The internal presets slice defines the default value associated with each type.
-func PresetCluster(cr *apiv1.PerconaServerMySQL) error {
+func FromPresets(cr any) error {
 	presets := []any{
 		apiv1.Metadata{
-			Labels: map[string]string{
-				"rack": "rack-22",
-			},
-			Annotations: map[string]string{
-				"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "tcp",
-				"service.beta.kubernetes.io/aws-load-balancer-type":             "nlb",
-			},
+			Labels:      Labels,
+			Annotations: Annotations,
 		},
 		corev1.SecurityContext{
 			Privileged: ptr.To(false),
@@ -92,13 +87,8 @@ func PresetCluster(cr *apiv1.PerconaServerMySQL) error {
 			LoadBalancerSourceRanges: []string{
 				"10.0.0.0/8",
 			},
-			Annotations: map[string]string{
-				"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "tcp",
-				"service.beta.kubernetes.io/aws-load-balancer-type":             "nlb",
-			},
-			Labels: map[string]string{
-				"rack": "rack-22",
-			},
+			Annotations:           Annotations,
+			Labels:                Labels,
 			InternalTrafficPolicy: ptr.To(corev1.ServiceInternalTrafficPolicyCluster),
 			ExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyCluster,
 		},
@@ -134,13 +124,6 @@ func PresetCluster(cr *apiv1.PerconaServerMySQL) error {
 			FSGroup:            ptr.To(int64(1001)),
 			SupplementalGroups: []int64{1001, 1002, 1003},
 		},
-		apiv1.UnsafeFlags{
-			MySQLSize:        false,
-			Proxy:            false,
-			ProxySize:        false,
-			Orchestrator:     false,
-			OrchestratorSize: false,
-		},
 		apiv1.UpgradeOptions{
 			VersionServiceEndpoint: "https://check.percona.com",
 			Apply:                  "disabled",
@@ -154,16 +137,12 @@ func PresetCluster(cr *apiv1.PerconaServerMySQL) error {
 			},
 		},
 		[]corev1.LocalObjectReference{
-			{
-				Name: "my-secret-1",
-			},
-			{
-				Name: "my-secret-2",
-			},
+			{Name: "my-secret-1"},
+			{Name: "my-secret-2"},
 		},
 		corev1.PullAlways,
 		apiv1.InitContainerSpec{
-			Image: "perconalab/percona-server-mysql-operator:main",
+			Image: ImageInitContainer,
 		},
 		[]apiv1.SidecarPVC{
 			{

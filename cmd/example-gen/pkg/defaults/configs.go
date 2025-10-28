@@ -1,7 +1,7 @@
 package defaults
 
 const (
-	ConfigurationHAProxy = `#      the actual default configuration file can be found here https://github.com/percona/percona-server-mysql-operator/blob/main/build/haproxy-global.cfg
+	configurationHAProxy = `#      the actual default configuration file can be found here https://github.com/percona/percona-server-mysql-operator/blob/main/build/haproxy-global.cfg
 
 global
   maxconn 2048
@@ -36,10 +36,10 @@ frontend stats
   mode http
   http-request use-service prometheus-exporter if { path /metrics }`
 
-	ConfigurationMySQL = `max_connections=250
+	configurationMySQL = `max_connections=250
 innodb_buffer_pool_size={{containerMemoryLimit * 3/4}}`
 
-	ConfigurationRouter = `[default]
+	configurationRouter = `[default]
 logging_folder=/tmp/router/log
 [logger]
 level=DEBUG`

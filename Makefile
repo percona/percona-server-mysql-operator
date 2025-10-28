@@ -105,9 +105,17 @@ e2e-test: kuttl-shfmt
 
 .PHONY: generate-cr-yaml
 generate-cr-yaml:
-	./cmd/example-gen/generate.sh
+	./cmd/example-gen/scripts/generate.sh ps
 
-manifests: kustomize generate generate-cr-yaml ## Generate Kubernetes manifests (CRDs, RBAC, operator deployment)
+.PHONY: generate-restore-yaml
+generate-restore-yaml:
+	./cmd/example-gen/scripts/generate.sh ps-restore
+
+.PHONY: generate-backup-yaml
+generate-backup-yaml:
+	./cmd/example-gen/scripts/generate.sh ps-backup
+
+manifests: kustomize generate generate-cr-yaml generate-restore-yaml generate-backup-yaml ## Generate Kubernetes manifests (CRDs, RBAC, operator deployment)
 	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml
 	echo "---" >> $(DEPLOYDIR)/crd.yaml
 

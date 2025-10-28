@@ -1,6 +1,8 @@
 package defaults
 
 import (
+	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
@@ -29,7 +31,7 @@ func ManualCluster(cr *apiv1.PerconaServerMySQL) {
 }
 
 func mysqlDefaults(spec *apiv1.MySQLSpec) {
-	podSpecDefaults(&spec.PodSpec, ImageMySQL, resources("2Gi", "", "4Gi", ""), ConfigurationMySQL, 600, envList("BOOTSTRAP_READ_TIMEOUT", "600"), envFromList("mysql-env-secret"))
+	podSpecDefaults(&spec.PodSpec, ImageMySQL, resources("2Gi", "", "4Gi", ""), configurationMySQL, 600, envList("BOOTSTRAP_READ_TIMEOUT", "600"), envFromList("mysql-env-secret"))
 
 	spec.AutoRecovery = true
 	spec.VolumeSpec = nil
@@ -71,13 +73,13 @@ func mysqlDefaults(spec *apiv1.MySQLSpec) {
 }
 
 func haproxyDefaults(spec *apiv1.HAProxySpec) {
-	podSpecDefaults(&spec.PodSpec, ImageHAProxy, resources("1Gi", "600m", "1Gi", "700m"), ConfigurationHAProxy, 30, envList("HA_CONNECTION_TIMEOUT", "600"), envFromList("haproxy-env-secret"))
+	podSpecDefaults(&spec.PodSpec, ImageHAProxy, resources("1Gi", "600m", "1Gi", "700m"), configurationHAProxy, 30, envList("HA_CONNECTION_TIMEOUT", "600"), envFromList("haproxy-env-secret"))
 
 	spec.Enabled = true
 }
 
 func routerDefaults(spec *apiv1.MySQLRouterSpec) {
-	podSpecDefaults(&spec.PodSpec, ImageRouter, resources("256M", "", "256M", ""), ConfigurationRouter, 30, envList("ROUTER_ENV", "VALUE"), envFromList("router-env-secret"))
+	podSpecDefaults(&spec.PodSpec, ImageRouter, resources("256M", "", "256M", ""), configurationRouter, 30, envList("ROUTER_ENV", "VALUE"), envFromList("router-env-secret"))
 
 	spec.Enabled = false
 	p := func(name string, port int32, targetPort int) corev1.ServicePort {
@@ -120,7 +122,7 @@ func pmmDefaults(spec *apiv1.PMMSpec) {
 func backupDefaults(spec *apiv1.BackupSpec) {
 	spec.Image = ImageBackup
 	spec.Enabled = true
-	spec.SourcePod = "ps-cluster1-mysql-1"
+	spec.SourcePod = SourcePod
 	spec.ServiceAccountName = "some-service-account"
 	spec.BackoffLimit = ptr.To(int32(6))
 	spec.Schedule = []apiv1.BackupSchedule{
@@ -153,7 +155,7 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 			S3: &apiv1.BackupStorageS3Spec{
 				Bucket:            "S3-BACKUP-BUCKET-NAME-HERE",
 				Prefix:            "PREFIX_NAME",
-				CredentialsSecret: "ps-cluster1-s3-credentials",
+				CredentialsSecret: fmt.Sprintf("%s-s3-credentials", NameCluster),
 				Region:            "us-west-2",
 				EndpointURL:       "https://s3.amazonaws.com",
 			},
@@ -163,13 +165,11 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 			Labels: map[string]string{
 				"backupWorker": "True",
 			},
-			PriorityClassName: "high-priority",
-			RuntimeClassName:  ptr.To("image-rc"),
-			SchedulerName:     "default-scheduler",
-			VerifyTLS:         ptr.To(true),
-			NodeSelector: map[string]string{
-				"topology.kubernetes.io/zone": "us-east-1a",
-			},
+			PriorityClassName: PriorityClassName,
+			RuntimeClassName:  RuntimeClassName,
+			SchedulerName:     SchedulerName,
+			VerifyTLS:         VerifyTLS,
+			NodeSelector:      NodeSelector,
 		},
 	}
 }
@@ -190,22 +190,14 @@ func podSpecDefaults(spec *apiv1.PodSpec, image string, resources corev1.Resourc
 	spec.EnvFrom = envFrom
 
 	spec.Size = 3
-	spec.RuntimeClassName = ptr.To("image-rc")
-	spec.Labels = map[string]string{
-		"rack": "rack-22",
-	}
-	spec.Annotations = map[string]string{
-		"service.beta.kubernetes.io/aws-load-balancer-backend-protocol": "tcp",
-		"service.beta.kubernetes.io/aws-load-balancer-type":             "nlb",
-	}
 
-	spec.PriorityClassName = "high-priority"
+	spec.RuntimeClassName = RuntimeClassName
+	spec.Labels = Labels
+	spec.Annotations = Annotations
+	spec.PriorityClassName = PriorityClassName
+	spec.SchedulerName = SchedulerName
+	spec.NodeSelector = NodeSelector
 
-	spec.SchedulerName = "default-scheduler"
 	spec.ServiceAccountName = "some-service-account"
-	spec.NodeSelector = map[string]string{
-		"topology.kubernetes.io/zone": "us-east-1a",
-	}
-
 	spec.PodSecurityContext = nil
 }
