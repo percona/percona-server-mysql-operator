@@ -2,7 +2,7 @@
 
 resource=${1:-}
 
-SCRIPT_DIR="$(dirname ${BASH_SOURCE[0]})"
+SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
 case "$resource" in
 	ps | ps-backup | ps-restore)
@@ -19,4 +19,4 @@ go run cmd/example-gen/main.go "$resource" \
 	| sort_yaml \
 	| remove_fields \
 	| comment_fields \
-		>$RESOURCE_PATH
+		>"$RESOURCE_PATH"
