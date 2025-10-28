@@ -1,6 +1,7 @@
-version-service,8.4
 async-ignore-annotations,8.4
 async-global-metadata,8.4
+async-upgrade,8.0
+async-upgrade,8.4
 auto-config,8.4
 config,8.4
 config-router,8.0
@@ -30,6 +31,8 @@ gr-security-context,8.4
 gr-self-healing,8.4
 gr-tls-cert-manager,8.4
 gr-users,8.4
+gr-upgrade,8.0
+gr-upgrade,8.4
 haproxy,8.0
 haproxy,8.4
 init-deploy,8.0
@@ -52,3 +55,4 @@ telemetry,8.4
 tls-cert-manager,8.4
 users,8.0
 users,8.4
+version-service,8.4

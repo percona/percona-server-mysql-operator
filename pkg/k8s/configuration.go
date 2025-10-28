@@ -50,10 +50,6 @@ func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 				return "", errors.New("Failed to update config map. Please use my.cnf as a config name. Only in this case config map will be applied to the cluster")
 			}
 
-			if err != nil {
-				return "", errors.Wrap(err, "marshal configmap data to json")
-			}
-
 			return ConfigMapHash(currCm)
 		}
 
