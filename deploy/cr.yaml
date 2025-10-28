@@ -4,7 +4,6 @@ metadata:
   finalizers:
     - percona.com/delete-mysql-pods-in-order
 #    - percona.com/delete-ssl
-#    - percona.com/delete-mysql-pvc
   name: ps-cluster1
 spec:
 #  metadata:
