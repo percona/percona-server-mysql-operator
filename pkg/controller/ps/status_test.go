@@ -15,6 +15,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -412,25 +413,15 @@ func TestReconcileStatusAsync(t *testing.T) {
 }
 
 func TestReconcileStatusHAProxyGR(t *testing.T) {
-	ctx := context.Background()
-
 	cr, err := readDefaultCR("ps-cluster1", "status-1")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
 	cr.Spec.Proxy.HAProxy.Enabled = true
 	cr.Spec.Proxy.Router.Enabled = false
 
 	scheme := runtime.NewScheme()
-	err = clientgoscheme.AddToScheme(scheme)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = apiv1.AddToScheme(scheme)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
 
 	const operatorPass = "test"
 	secret := &corev1.Secret{
@@ -454,7 +445,7 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 	}{
 		{
 			name: "without pods",
-			cr:   cr,
+			cr:   cr.DeepCopy(),
 			expected: apiv1.PerconaServerMySQLStatus{
 				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
@@ -482,7 +473,9 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 		},
 		{
 			name: "with all ready pods and ok cluster status",
-			cr:   cr,
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQL) {
+				cr.Status.MySQL.Ready = cr.Spec.MySQL.Size
+			}),
 			objects: appendSlices(
 				makeFakeReadyPods(cr, 3, "mysql"),
 				makeFakeReadyPods(cr, 3, "haproxy"),
@@ -523,7 +516,9 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 		},
 		{
 			name: "with all ready pods, ok cluster status and invalid database",
-			cr:   cr,
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQL) {
+				cr.Status.MySQL.Ready = cr.Spec.MySQL.Size
+			}),
 			objects: appendSlices(
 				makeFakeReadyPods(cr, 3, "mysql"),
 				makeFakeReadyPods(cr, 3, "haproxy"),
@@ -565,7 +560,9 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 		},
 		{
 			name: "with all ready pods and offline cluster status",
-			cr:   cr,
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQL) {
+				cr.Status.MySQL.Ready = cr.Spec.MySQL.Size
+			}),
 			objects: appendSlices(
 				makeFakeReadyPods(cr, 3, "mysql"),
 				makeFakeReadyPods(cr, 3, "haproxy"),
@@ -606,7 +603,9 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 		},
 		{
 			name: "with all ready pods and partial ok cluster status",
-			cr:   cr,
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQL) {
+				cr.Status.MySQL.Ready = cr.Spec.MySQL.Size
+			}),
 			objects: appendSlices(
 				makeFakeReadyPods(cr, 3, "mysql"),
 				makeFakeReadyPods(cr, 3, "haproxy"),
@@ -651,9 +650,7 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 			cr := tt.cr.DeepCopy()
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).WithStatusSubresource(cr).WithObjects(tt.objects...).WithStatusSubresource(tt.objects...)
 			cliCmd, err := getFakeClient(cr, tt.innodbClusterState, tt.mysqlMemberStates, tt.noMetadataDB, false)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			r := &PerconaServerMySQLReconciler{
 				Client: cb.Build(),
 				Scheme: scheme,
@@ -664,13 +661,10 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 				Recorder:  new(record.FakeRecorder),
 			}
 
-			err = r.reconcileCRStatus(ctx, cr, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := r.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, cr); err != nil {
-				t.Fatal(err)
-			}
+			err = r.reconcileCRStatus(t.Context(), cr, nil)
+			require.NoError(t, err)
+
+			require.NoError(t, r.Get(t.Context(), client.ObjectKeyFromObject(cr), cr))
 
 			opt := cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime", "Message")
 			if diff := cmp.Diff(cr.Status, tt.expected, opt); diff != "" {
@@ -681,25 +675,16 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 }
 
 func TestReconcileStatusRouterGR(t *testing.T) {
-	ctx := context.Background()
-
 	cr, err := readDefaultCR("ps-cluster1", "status-1")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
 	cr.Spec.Proxy.HAProxy.Enabled = false
 	cr.Spec.Proxy.Router.Enabled = true
 
 	scheme := runtime.NewScheme()
-	err = clientgoscheme.AddToScheme(scheme)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = apiv1.AddToScheme(scheme)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
 
 	const operatorPass = "test"
 	secret := &corev1.Secret{
@@ -723,7 +708,7 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 	}{
 		{
 			name: "without pods",
-			cr:   cr,
+			cr:   cr.DeepCopy(),
 			expected: apiv1.PerconaServerMySQLStatus{
 				MySQL: apiv1.StatefulAppStatus{
 					Size:  3,
@@ -751,7 +736,9 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 		},
 		{
 			name: "with all ready pods and ok cluster status",
-			cr:   cr,
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQL) {
+				cr.Status.MySQL.Ready = cr.Spec.MySQL.Size
+			}),
 			objects: appendSlices(
 				makeFakeReadyPods(cr, 3, "mysql"),
 				makeFakeReadyPods(cr, 3, "router"),
@@ -792,7 +779,9 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 		},
 		{
 			name: "with all ready pods, ok cluster status and invalid databaes",
-			cr:   cr,
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQL) {
+				cr.Status.MySQL.Ready = cr.Spec.MySQL.Size
+			}),
 			objects: appendSlices(
 				makeFakeReadyPods(cr, 3, "mysql"),
 				makeFakeReadyPods(cr, 3, "router"),
@@ -834,7 +823,9 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 		},
 		{
 			name: "with all ready pods and offline cluster status",
-			cr:   cr,
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQL) {
+				cr.Status.MySQL.Ready = cr.Spec.MySQL.Size
+			}),
 			objects: appendSlices(
 				makeFakeReadyPods(cr, 3, "mysql"),
 				makeFakeReadyPods(cr, 3, "router"),
@@ -875,7 +866,9 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 		},
 		{
 			name: "with all ready pods and partial ok cluster status",
-			cr:   cr,
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQL) {
+				cr.Status.MySQL.Ready = cr.Spec.MySQL.Size
+			}),
 			objects: appendSlices(
 				makeFakeReadyPods(cr, 3, "mysql"),
 				makeFakeReadyPods(cr, 3, "router"),
@@ -920,9 +913,7 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 			cr := tt.cr.DeepCopy()
 			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).WithStatusSubresource(cr).WithObjects(tt.objects...).WithStatusSubresource(tt.objects...)
 			cliCmd, err := getFakeClient(cr, tt.innodbClusterState, tt.mysqlMemberStates, tt.noMetadataDB, false)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			r := &PerconaServerMySQLReconciler{
 				Client: cb.Build(),
 				Scheme: scheme,
@@ -933,13 +924,8 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 				Recorder:  new(record.FakeRecorder),
 			}
 
-			err = r.reconcileCRStatus(ctx, cr, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := r.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, cr); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, r.reconcileCRStatus(t.Context(), cr, nil))
+			require.NoError(t, r.Get(t.Context(), client.ObjectKeyFromObject(cr), cr))
 
 			opt := cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime", "Message")
 			if diff := cmp.Diff(cr.Status, tt.expected, opt); diff != "" {
@@ -1036,6 +1022,7 @@ type fakeClient struct {
 // It writes the `scripts[execCount].stdout`, `scripts[execCount].stderr` to `stdin` and `stderr` parameters.
 // fakeClient should have the array of fakeClientScript objects in order they are going to be executed in the tested function.
 func (c *fakeClient) Exec(_ context.Context, _ *corev1.Pod, _ string, command []string, stdin io.Reader, stdout, stderr io.Writer, _ bool) error {
+	fmt.Println("TEST", command)
 	if c.execCount >= len(c.scripts) {
 		return errors.Errorf("unexpected exec call")
 	}
