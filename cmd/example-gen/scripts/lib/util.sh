@@ -8,7 +8,7 @@ comment_fields() {
 	tmp_diff=$(mktemp)
 	tmp_out=$(mktemp)
 
-	yq - "$@" >"$tmp_old"
+	yq - >"$tmp_old"
 	del_fields_to_comment <"$tmp_old" >"$tmp_new"
 
 	diff "$tmp_old" "$tmp_new" >"$tmp_diff"
