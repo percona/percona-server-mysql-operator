@@ -96,11 +96,6 @@ func Container(
 }
 
 func pmmLivenessProbe(cr *apiv1.PerconaServerMySQL) *corev1.Probe {
-	if cr.CompareVersion("1.0.0") < 0 {
-		if cr.Spec.PMM.LivenessProbes != nil {
-			return cr.Spec.PMM.LivenessProbes
-		}
-	}
 	if cr.Spec.PMM.LivenessProbe != nil {
 		return cr.Spec.PMM.LivenessProbe
 	}
@@ -108,11 +103,6 @@ func pmmLivenessProbe(cr *apiv1.PerconaServerMySQL) *corev1.Probe {
 }
 
 func pmmReadinessProbe(cr *apiv1.PerconaServerMySQL) *corev1.Probe {
-	if cr.CompareVersion("1.0.0") < 0 {
-		if cr.Spec.PMM.ReadinessProbes != nil {
-			return cr.Spec.PMM.ReadinessProbes
-		}
-	}
 	if cr.Spec.PMM.ReadinessProbe != nil {
 		return cr.Spec.PMM.ReadinessProbe
 	}

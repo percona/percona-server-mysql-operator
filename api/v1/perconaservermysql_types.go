@@ -285,12 +285,8 @@ type PMMSpec struct {
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
-	// Deprecated, use LivenessProbe instead.
-	LivenessProbes *corev1.Probe `json:"livenessProbes,omitempty"`
-	LivenessProbe  *corev1.Probe `json:"livenessProbe,omitempty"`
-	// Deprecated, use ReadinessProbe instead.
-	ReadinessProbes *corev1.Probe `json:"readinessProbes,omitempty"`
-	ReadinessProbe  *corev1.Probe `json:"readinessProbe,omitempty"`
+	LivenessProbe            *corev1.Probe               `json:"livenessProbe,omitempty"`
+	ReadinessProbe           *corev1.Probe               `json:"readinessProbe,omitempty"`
 }
 
 type BackupSpec struct {

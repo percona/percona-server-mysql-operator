@@ -113,39 +113,6 @@ func TestContainer_CustomProbes(t *testing.T) {
 				return cr.DeepCopy()
 			},
 		},
-		"custom probes  <1.0.0": {
-			cr: func() *apiv1.PerconaServerMySQL {
-				cr := cr.DeepCopy()
-				cr.Spec.CRVersion = "0.12.0"
-				cr.Spec.PMM.ReadinessProbes = rp
-				cr.Spec.PMM.LivenessProbes = lp
-				cr.Spec.PMM.ReadinessProbe = nil
-				cr.Spec.PMM.LivenessProbe = nil
-				return cr
-			},
-		},
-		"custom probes configured both  >=1.0.0": {
-			cr: func() *apiv1.PerconaServerMySQL {
-				cr := cr.DeepCopy()
-				cr.Spec.PMM.ReadinessProbes = &corev1.Probe{
-					InitialDelaySeconds: 50,
-					TimeoutSeconds:      40,
-					PeriodSeconds:       25,
-					SuccessThreshold:    20,
-					FailureThreshold:    10,
-				}
-				cr.Spec.PMM.LivenessProbes = &corev1.Probe{
-					InitialDelaySeconds: 10,
-					TimeoutSeconds:      20,
-					PeriodSeconds:       30,
-					SuccessThreshold:    40,
-					FailureThreshold:    50,
-				}
-				cr.Spec.PMM.ReadinessProbe = rp
-				cr.Spec.PMM.LivenessProbe = lp
-				return cr
-			},
-		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
