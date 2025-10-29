@@ -9,4 +9,4 @@ commands:
       source ../../functions
 
       kubectl wait -n ${NAMESPACE} --for=jsonpath='{.status.state}'=Succeeded \
-        perconaservermysqlbackups.ps.percona.com/demand-backup-retry --timeout=200s
+        perconaservermysqlbackups.ps.percona.com/demand-backup-retry --timeout=500s

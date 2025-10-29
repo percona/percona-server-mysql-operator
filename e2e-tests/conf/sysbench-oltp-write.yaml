@@ -57,14 +57,9 @@ spec:
             --tables=$TABLE_NUMBER \
             --table-size=$TABLE_SIZE \
             --threads=$THREADS \
-            ./src/lua/oltp_write_only.lua prepare)
-          
+            ./src/lua/oltp_write_only.lua prepare | tee /dev/stderr)
+
           if echo "$output" | grep -q -E "FATAL|ERROR|failed"; then
             echo "sysbench detected failure. Exiting with code 1."
             exit 1
           fi
-          
-          
-
-          
-
