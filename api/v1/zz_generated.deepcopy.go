@@ -545,8 +545,18 @@ func (in *PMMSpec) DeepCopyInto(out *PMMSpec) {
 		*out = new(corev1.Probe)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.LivenessProbe != nil {
+		in, out := &in.LivenessProbe, &out.LivenessProbe
+		*out = new(corev1.Probe)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.ReadinessProbes != nil {
 		in, out := &in.ReadinessProbes, &out.ReadinessProbes
+		*out = new(corev1.Probe)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.ReadinessProbe != nil {
+		in, out := &in.ReadinessProbe, &out.ReadinessProbe
 		*out = new(corev1.Probe)
 		(*in).DeepCopyInto(*out)
 	}
