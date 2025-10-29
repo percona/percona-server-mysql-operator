@@ -29,13 +29,13 @@ metadata:
   name: cluster-exact
 spec:
   mysql:
-    image: percona/percona-server:8.0.28-19
+    image: percona/percona-server:8.4.5-5
 status:
   mysql:
     ready: 3
     size: 3
     state: ready
-    version: 8.0.28-19
+    version: 8.4.5-5
   state: ready
 ---
 apiVersion: v1
@@ -44,5 +44,5 @@ metadata:
   name: cluster-exact-mysql-0
 spec:
   containers:
-    - image: percona/percona-server:8.0.28-19
+    - image: percona/percona-server:8.4.5-5
     - name: pt-heartbeat
