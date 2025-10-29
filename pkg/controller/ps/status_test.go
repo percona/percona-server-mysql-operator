@@ -1022,7 +1022,6 @@ type fakeClient struct {
 // It writes the `scripts[execCount].stdout`, `scripts[execCount].stderr` to `stdin` and `stderr` parameters.
 // fakeClient should have the array of fakeClientScript objects in order they are going to be executed in the tested function.
 func (c *fakeClient) Exec(_ context.Context, _ *corev1.Pod, _ string, command []string, stdin io.Reader, stdout, stderr io.Writer, _ bool) error {
-	fmt.Println("TEST", command)
 	if c.execCount >= len(c.scripts) {
 		return errors.Errorf("unexpected exec call")
 	}
