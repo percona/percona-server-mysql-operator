@@ -429,6 +429,7 @@ func Bootstrap(ctx context.Context) error {
 
 			customMyCnf, err := os.Open(customMyCnfPath)
 			if err == nil {
+				defer customMyCnf.Close()
 				myCnf, err = parseMyCnf(customMyCnf)
 				if err != nil {
 					return errors.Wrapf(err, "failed to parse %s", customMyCnfPath)

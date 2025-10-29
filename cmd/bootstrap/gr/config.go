@@ -29,6 +29,7 @@ func (o *createClusterOpts) String() string {
 
 const customMyCnfPath = "/etc/mysql/config/my-config.cnf"
 
+// The caller is responsible for closing myCnfFile.
 func parseMyCnf(myCnfFile io.ReadCloser) (*ini.Section, error) {
 	myCnf, err := ini.LoadSources(ini.LoadOptions{AllowBooleanKeys: true}, myCnfFile)
 	if err != nil {
