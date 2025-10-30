@@ -5,6 +5,18 @@
       "product": "ps-operator",
       "matrix": {
         "mysql": {
+          "8.4.6-6": {
+            "image_path": "percona/percona-server:8.4.6-6.1",
+            "image_hash": "dd0c67df12f5b13eac441dfa27b04a49ac449b6946adf100bc1ecebffd8074f4",
+            "status": "recommended",
+            "critical": false
+          },
+          "8.4.5-5": {
+            "image_path": "percona/percona-server:8.4.5-5",
+            "image_hash": "61a6811372d919316640990922188005f92d58639a2472865d59e56b2a6050a1",
+            "status": "available",
+            "critical": false
+          },
           "8.0.28-20": {
             "image_path": "percona/percona-server:8.0.28-20",
             "image_hash": "7f4fc6f0323dcafa4e0efbc3318906d453e432de86f152625024db3ac38ce833",
