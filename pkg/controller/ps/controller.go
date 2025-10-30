@@ -1029,6 +1029,9 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 		err = wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 10*time.Second, false,
 			func(ctx context.Context) (bool, error) {
 				cr, err = k8s.GetCRWithDefaults(ctx, r.Client, client.ObjectKeyFromObject(cr), r.ServerVersion)
+				if err != nil {
+					return false, err
+				}
 				cond := meta.FindStatusCondition(cr.Status.Conditions,
 					apiv1.ConditionInnoDBClusterBootstrapped)
 				return cond != nil, nil
