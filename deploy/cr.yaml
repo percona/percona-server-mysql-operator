@@ -649,16 +649,16 @@ spec:
       requests:
         cpu: 300m
         memory: 150M
-#    readinessProbes:
-#      failureThreshold: 3
-#      periodSeconds: 5
-#      successThreshold: 1
-#      timeoutSeconds: 3
-#    livenessProbes:
-#      failureThreshold: 3
-#      periodSeconds: 5
-#      successThreshold: 1
-#      timeoutSeconds: 3
+    livenessProbe:
+      failureThreshold: 3
+      periodSeconds: 5
+      successThreshold: 1
+      timeoutSeconds: 3
+    readinessProbe:
+      failureThreshold: 3
+      periodSeconds: 5
+      successThreshold: 1
+      timeoutSeconds: 3
   backup:
     enabled: true
     pitr:
