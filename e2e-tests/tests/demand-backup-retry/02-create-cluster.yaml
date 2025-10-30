@@ -1,8 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 10
 commands:
-  - script: |-
+  - timeout: 30
+    script: |-
       set -o errexit
       set -o xtrace
 
@@ -11,7 +11,7 @@ commands:
       get_cr \
           | yq eval '.spec.mysql.clusterType="async"' - \
           | yq eval ".spec.mysql.size=3" - \
-          | yq eval '.spec.mysql.volumeSpec.persistentVolumeClaim.resources.requests.storage="10Gi"' - \
+          | yq eval '.spec.mysql.volumeSpec.persistentVolumeClaim.resources.requests.storage="7Gi"' - \
           | yq eval ".spec.proxy.haproxy.enabled=true" - \
           | yq eval ".spec.proxy.haproxy.size=3" - \
           | yq eval ".spec.orchestrator.enabled=true" - \
