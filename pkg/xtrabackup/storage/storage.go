@@ -107,7 +107,7 @@ func NewS3(ctx context.Context, endpoint, accessKeyID, secretAccessKey, bucketNa
 			case http.StatusMovedPermanently:
 				return nil, errors.Errorf("%s region: %s bucket: %s", merr.Code, merr.Region, merr.BucketName)
 			case http.StatusBadRequest, http.StatusForbidden:
-				log.Info("Failed to check if the bucket exists. This may indicate missing permissions or invalid credentials",
+				log.Error(nil, "Failed to check if the bucket exists. This may indicate missing permissions or invalid credentials",
 					"http_status", merr.StatusCode,
 					"error_code", merr.Code)
 			}

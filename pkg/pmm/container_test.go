@@ -99,32 +99,44 @@ func TestContainer_CustomProbes(t *testing.T) {
 				Image:           "percona/pmm-client:latest",
 				ImagePullPolicy: corev1.PullIfNotPresent,
 				ServerHost:      "pmm-server",
-				LivenessProbes:  lp,
-				ReadinessProbes: rp,
+				LivenessProbe:   lp,
+				ReadinessProbe:  rp,
 			},
 		},
 	}
 
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-secret"},
-		Data: map[string][]byte{
-			string(apiv1.UserPMMServerToken): []byte("token"),
-			string(apiv1.UserMonitor):        []byte("monitor-pass"),
+	tests := map[string]struct {
+		cr func() *apiv1.PerconaServerMySQL
+	}{
+		"custom probes >=1.0.0": {
+			cr: func() *apiv1.PerconaServerMySQL {
+				return cr.DeepCopy()
+			},
 		},
 	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-secret"},
+				Data: map[string][]byte{
+					string(apiv1.UserPMMServerToken): []byte("token"),
+					string(apiv1.UserMonitor):        []byte("monitor-pass"),
+				},
+			}
 
-	c := Container(cr, secret, "mysql", "")
+			c := Container(tt.cr(), secret, "mysql", "")
 
-	assert.Equal(t, int32(15), c.LivenessProbe.InitialDelaySeconds)
-	assert.Equal(t, int32(7), c.LivenessProbe.TimeoutSeconds)
-	assert.Equal(t, int32(11), c.LivenessProbe.PeriodSeconds)
-	assert.Equal(t, intstr.FromInt32(7777), c.LivenessProbe.HTTPGet.Port)
-	assert.Equal(t, "/local/Status", c.LivenessProbe.HTTPGet.Path)
+			assert.Equal(t, int32(15), c.LivenessProbe.InitialDelaySeconds)
+			assert.Equal(t, int32(7), c.LivenessProbe.TimeoutSeconds)
+			assert.Equal(t, int32(11), c.LivenessProbe.PeriodSeconds)
+			assert.Equal(t, intstr.FromInt32(7777), c.LivenessProbe.HTTPGet.Port)
+			assert.Equal(t, "/local/Status", c.LivenessProbe.HTTPGet.Path)
 
-	assert.Equal(t, int32(5), c.ReadinessProbe.InitialDelaySeconds)
-	assert.Equal(t, int32(4), c.ReadinessProbe.TimeoutSeconds)
-	assert.Equal(t, int32(12), c.ReadinessProbe.PeriodSeconds)
-	assert.Equal(t, intstr.FromInt32(7777), c.ReadinessProbe.HTTPGet.Port)
-	assert.Equal(t, "/local/Status", c.ReadinessProbe.HTTPGet.Path)
-
+			assert.Equal(t, int32(5), c.ReadinessProbe.InitialDelaySeconds)
+			assert.Equal(t, int32(4), c.ReadinessProbe.TimeoutSeconds)
+			assert.Equal(t, int32(12), c.ReadinessProbe.PeriodSeconds)
+			assert.Equal(t, intstr.FromInt32(7777), c.ReadinessProbe.HTTPGet.Port)
+			assert.Equal(t, "/local/Status", c.ReadinessProbe.HTTPGet.Path)
+		})
+	}
 }

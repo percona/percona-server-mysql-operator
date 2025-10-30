@@ -204,7 +204,7 @@ func (s *restorerOptions) job() (*batchv1.Job, error) {
 }
 
 func (opts *restorerOptions) validateStorage(ctx context.Context) error {
-	storageOpts, err := storage.GetOptionsFromBackup(ctx, opts.k8sClient, opts.cluster, opts.bcp)
+	storageOpts, err := storage.GetOptionsFromBackupStatus(ctx, opts.k8sClient, opts.cluster, opts.bcp.Spec.StorageName, opts.bcp.Status)
 	if err != nil {
 		return errors.Wrap(err, "failed to get storage options")
 	}

@@ -1,5 +1,5 @@
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
-  name: cluster-exact
+  name: cluster-80-latest
   finalizers: []
