@@ -9,6 +9,7 @@ config-router,8.4
 demand-backup-minio,8.0
 demand-backup-minio,8.4
 demand-backup-cloud,8.4
+demand-backup-retry,8.4
 async-data-at-rest-encryption,8.0
 async-data-at-rest-encryption,8.4
 gr-global-metadata,8.4

@@ -6,6 +6,7 @@ config
 config-router
 demand-backup-minio
 demand-backup-cloud
+demand-backup-retry
 async-data-at-rest-encryption
 gr-global-metadata
 gr-data-at-rest-encryption
