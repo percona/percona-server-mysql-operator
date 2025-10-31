@@ -11,6 +11,8 @@ import (
 	pbVersion "github.com/Percona-Lab/percona-version-service/versionpb"
 	gwRuntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.nhat.io/grpcmock"
 	"google.golang.org/grpc"
 	corev1 "k8s.io/api/core/v1"
@@ -20,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -30,27 +33,20 @@ import (
 )
 
 func TestReconcileVersions(t *testing.T) {
-	ctx := context.Background()
-
 	namespace := "some-namespace"
 	clusterName := "some-cluster"
 	q, err := resource.ParseQuantity("1Gi")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	addr := "127.0.0.1"
 	gwPort := 11000
 	vsServer := fakeVersionService(addr, gwPort, false)
-	if err := vsServer.Start(t); err != nil {
-		t.Fatal(err, "failed to start fake version service server")
-	}
+
+	require.NoError(t, vsServer.Start(t))
 	defaultEndpoint := fmt.Sprintf("http://%s:%d", addr, gwPort)
 
 	customGwPort := 13000
 	customVsServer := fakeVersionService(addr, customGwPort, true)
-	if err := customVsServer.Start(t); err != nil {
-		t.Fatal(err, "failed to start custom fake version service server")
-	}
+	require.NoError(t, customVsServer.Start(t))
 	customEndpoint := fmt.Sprintf("http://%s:%d", addr, customGwPort)
 
 	tests := []struct {
@@ -267,12 +263,8 @@ func TestReconcileVersions(t *testing.T) {
 	}
 
 	scheme := runtime.NewScheme()
-	if err := clientgoscheme.AddToScheme(scheme); err != nil {
-		t.Fatal(err, "failed to add client-go scheme")
-	}
-	if err := apiv1.AddToScheme(scheme); err != nil {
-		t.Fatal(err, "failed to add apis scheme")
-	}
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -283,7 +275,7 @@ func TestReconcileVersions(t *testing.T) {
 			}
 			t.Setenv("PERCONA_VS_FALLBACK_URI", defaultEndpoint)
 
-			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr)
+			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.cr).WithStatusSubresource(tt.cr)
 			r := PerconaServerMySQLReconciler{
 				Client: cb.Build(),
 				Scheme: scheme,
@@ -295,21 +287,19 @@ func TestReconcileVersions(t *testing.T) {
 				},
 			}
 
-			cr, err := k8s.GetCRWithDefaults(ctx, r.Client, types.NamespacedName{Name: tt.cr.Name, Namespace: tt.cr.Namespace}, r.ServerVersion)
-			if err != nil {
-				t.Fatal(err, "failed to get cr")
-			}
+			cr, err := k8s.GetCRWithDefaults(t.Context(), r.Client, client.ObjectKeyFromObject(tt.cr), r.ServerVersion)
+			require.NoError(t, err)
 
-			if err := r.reconcileVersions(ctx, cr); err != nil {
-				if tt.shouldErr {
-					return
-				}
-				t.Fatal(err, "failed to reconcile versions")
+			err = r.reconcileVersions(t.Context(), cr)
+			if tt.shouldErr {
+				assert.Error(t, err)
+				return
 			}
+			assert.NoError(t, err)
 
-			if !reflect.DeepEqual(cr.Status, tt.want) {
-				t.Fatalf("got %v, want %v", cr.Status, tt.want)
-			}
+			require.NoError(t, r.Get(t.Context(), client.ObjectKeyFromObject(cr), cr))
+
+			assert.Equal(t, tt.want, cr.Status)
 		})
 	}
 }
