@@ -1013,23 +1013,25 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 			return nil
 		}
 
-		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
-			Type:   apiv1.ConditionInnoDBClusterBootstrapped,
-			Status: metav1.ConditionTrue,
-			Reason: apiv1.ConditionInnoDBClusterBootstrapped,
-			Message: fmt.Sprintf("InnoDB cluster successfully bootstrapped with %d nodes",
-				cr.MySQLSpec().Size),
-		})
-
-		nn := types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}
-
-		if err := writeStatus(ctx, r.Client, nn, cr.Status); err != nil {
+		if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), func(status *apiv1.PerconaServerMySQLStatus) error {
+			meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+				Type:   apiv1.ConditionInnoDBClusterBootstrapped,
+				Status: metav1.ConditionTrue,
+				Reason: apiv1.ConditionInnoDBClusterBootstrapped,
+				Message: fmt.Sprintf("InnoDB cluster successfully bootstrapped with %d nodes",
+					cr.MySQLSpec().Size),
+			})
+			return nil
+		}); err != nil {
 			return errors.Wrap(err, "write status")
 		}
 
 		err = wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 10*time.Second, false,
 			func(ctx context.Context) (bool, error) {
-				cr, err = k8s.GetCRWithDefaults(ctx, r.Client, nn, r.ServerVersion)
+				cr, err = k8s.GetCRWithDefaults(ctx, r.Client, client.ObjectKeyFromObject(cr), r.ServerVersion)
+				if err != nil {
+					return false, err
+				}
 				cond := meta.FindStatusCondition(cr.Status.Conditions,
 					apiv1.ConditionInnoDBClusterBootstrapped)
 				return cond != nil, nil
