@@ -1,4 +1,4 @@
-# Percona Operator for MySQL
+# Percona Operator for Ege
 
 ![Percona Kubernetes Operators](kubernetes.svg)
 
