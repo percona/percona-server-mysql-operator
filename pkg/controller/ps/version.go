@@ -35,6 +35,12 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLVersion(
 ) error {
 	log := logf.FromContext(ctx)
 
+	// Skip version reconciliation when cluster is paused
+	if cr.Spec.Pause {
+		log.V(1).Info("Skipping MySQL version reconciliation - cluster is paused", "cluster", cr.Name, "namespace", cr.Namespace)
+		return nil
+	}
+
 	pod, err := mysql.GetReadyPod(ctx, r.Client, cr)
 	if err != nil {
 		if errors.Is(err, mysql.ErrNoReadyPods) {
