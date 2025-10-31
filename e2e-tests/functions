@@ -1343,10 +1343,10 @@ check_primary_chaos() {
       exit 1
   fi
 
-  if [[ ${chaos_type} == "network" && ${primary_restart_count_before} == ${primary_restart_count_after} ]]; then
-    echo "old primary pod was not restarted! something went wrong with liveness probe."
-    exit 1
-  fi
+	if [[ ${chaos_type} == "network" && ${primary_restart_count_before} == ${primary_restart_count_after} ]]; then
+		echo "old primary pod was not restarted! something went wrong with liveness probe."
+		exit 1
+	fi
 
 	uri=$(get_mysqlsh_uri_for_pod $(get_primary_from_group_replication))
 	online_members=$(get_innodb_cluster_status ${uri} \
