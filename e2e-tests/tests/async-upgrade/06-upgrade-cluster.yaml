@@ -1,0 +1,14 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      get_cr \
+          | yq eval "$(printf '.spec.initImage="%s"' "${IMAGE}")" - \
+          | yq eval "$(printf '.spec.crVersion="%s"' "${OPERATOR_VERSION}")" - \
+          | yq eval '.spec.mysql.clusterType="async"' - \
+          | kubectl -n "${NAMESPACE}" apply -f -

@@ -64,7 +64,7 @@ func (h *Handler) backupExists(ctx context.Context, cfg *xb.BackupConfig) (bool,
 	if err != nil {
 		return false, errors.Wrap(err, "new storage")
 	}
-	objects, err := storage.ListObjects(ctx, cfg.Destination)
+	objects, err := storage.ListObjects(ctx, cfg.Destination+"/")
 	if err != nil {
 		return false, errors.Wrap(err, "list objects")
 	}

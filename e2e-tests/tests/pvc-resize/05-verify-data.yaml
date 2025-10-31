@@ -12,7 +12,7 @@ commands:
       original_count=$(kubectl get configmap -n "${NAMESPACE}" initial-data-count -o jsonpath='{.data.count}')
       echo "Original data count: $original_count"
 
-      current_count=$(run_mysql "SELECT COUNT(*) FROM pvctest.data" "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password")
+      current_count=$(run_mysql "SELECT COUNT(*) FROM pvctest.data" "-h $(get_haproxy_svc $(get_cluster_name))")
       echo "Current data count: $current_count"
 
       if [[ $original_count != "$current_count" ]]; then
@@ -20,7 +20,7 @@ commands:
           exit 1
       fi
 
-      sample_data=$(run_mysql "SELECT data FROM pvctest.data WHERE id=1" "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password")
+      sample_data=$(run_mysql "SELECT data FROM pvctest.data WHERE id=1" "-h $(get_haproxy_svc $(get_cluster_name))")
       echo "Sample data: $sample_data"
 
       if [[ $sample_data != "test data row 1 with some content to use storage space" ]]; then
@@ -30,9 +30,9 @@ commands:
 
       run_mysql \
           "INSERT pvctest.data (id, data) VALUES (2000, 'post-resize test data')" \
-          "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password"
+          "-h $(get_haproxy_svc $(get_cluster_name))"
 
-      new_data=$(run_mysql "SELECT data FROM pvctest.data WHERE id=2000" "-h $(get_haproxy_svc $(get_cluster_name)) -uroot -proot_password")
+      new_data=$(run_mysql "SELECT data FROM pvctest.data WHERE id=2000" "-h $(get_haproxy_svc $(get_cluster_name))")
       if [[ $new_data != "post-resize test data" ]]; then
           echo "ERROR: Failed to insert data after resize"
           exit 1

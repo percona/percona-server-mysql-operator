@@ -378,7 +378,7 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 		{
 			name:      mysql.AppName,
 			size:      int(cr.MySQLSpec().Size),
-			credsPath: mysql.CredsMountPath,
+			credsPath: naming.CredsMountPath,
 		},
 	}
 

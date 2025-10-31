@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"maps"
 	"path"
 	"regexp"
 	"strconv"
@@ -61,6 +62,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', MySQL size must be 3 or greater unless 'unsafeFlags.mysqlSize' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && has(self.orchestrator.size) && (self.orchestrator.size < 3 || self.orchestrator.size % 2 == 0) && self.orchestrator.size > 0) || self.unsafeFlags.orchestratorSize",message="Invalid configuration: For 'async' replication, Orchestrator size must be 3 or greater and odd unless 'unsafeFlags.orchestratorSize' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && self.updateStrategy == 'SmartUpdate') || self.orchestrator.enabled",message="Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.proxy.router != null && has(self.proxy.router.enabled) && self.proxy.router.enabled && self.proxy.haproxy != null && has(self.proxy.haproxy.enabled) && self.proxy.haproxy.enabled)",message="Invalid configuration: MySQL Router and HAProxy can't be enabled at the same time"
 type PerconaServerMySQLSpec struct {
 	Metadata               *Metadata                            `json:"metadata,omitempty"`
 	CRVersion              string                               `json:"crVersion,omitempty"`
@@ -216,6 +218,27 @@ type PodSpec struct {
 	ContainerSpec `json:",inline"`
 }
 
+func (s *PodSpec) Core(selector map[string]string, volumes []corev1.Volume, initContainers []corev1.Container, containers []corev1.Container) corev1.PodSpec {
+	return corev1.PodSpec{
+		Volumes:                       volumes,
+		InitContainers:                initContainers,
+		Containers:                    containers,
+		RestartPolicy:                 corev1.RestartPolicyAlways,
+		TerminationGracePeriodSeconds: s.GetTerminationGracePeriodSeconds(),
+		DNSPolicy:                     corev1.DNSClusterFirst,
+		NodeSelector:                  s.NodeSelector,
+		ServiceAccountName:            s.ServiceAccountName,
+		SecurityContext:               s.PodSecurityContext,
+		ImagePullSecrets:              s.ImagePullSecrets,
+		Affinity:                      s.GetAffinity(selector),
+		SchedulerName:                 s.SchedulerName,
+		Tolerations:                   s.Tolerations,
+		PriorityClassName:             s.PriorityClassName,
+		RuntimeClassName:              s.RuntimeClassName,
+		TopologySpreadConstraints:     s.GetTopologySpreadConstraints(selector),
+	}
+}
+
 type Metadata struct {
 	// Map of string keys and values that can be used to organize and categorize
 	// (scope and select) objects. May match selectors of replication controllers
@@ -262,8 +285,8 @@ type PMMSpec struct {
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
-	LivenessProbes           *corev1.Probe               `json:"livenessProbes,omitempty"`
-	ReadinessProbes          *corev1.Probe               `json:"readinessProbes,omitempty"`
+	LivenessProbe            *corev1.Probe               `json:"livenessProbe,omitempty"`
+	ReadinessProbe           *corev1.Probe               `json:"readinessProbe,omitempty"`
 }
 
 type BackupSpec struct {
@@ -643,8 +666,9 @@ type PerconaServerMySQL struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   PerconaServerMySQLSpec   `json:"spec,omitempty"`
-	Status PerconaServerMySQLStatus `json:"status,omitempty"`
+	Spec PerconaServerMySQLSpec `json:"spec,omitempty"`
+
+	Status PerconaServerMySQLStatus `json:"status,omitempty"` // Make sure that the Status is updated after making changes. See the description of `(*PerconaServerMySQLReconciler) reconcileCRStatus` method for details.
 }
 
 //+kubebuilder:object:root=true
@@ -685,19 +709,25 @@ func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 }
 
 func (cr *PerconaServerMySQL) GlobalLabels() map[string]string {
-	if cr.Spec.Metadata == nil {
+	if cr.Spec.Metadata == nil || cr.Spec.Metadata.Labels == nil {
 		return nil
 	}
 
-	return cr.Spec.Metadata.Labels
+	m := make(map[string]string, len(cr.Spec.Metadata.Labels))
+	maps.Copy(m, cr.Spec.Metadata.Labels)
+
+	return m
 }
 
 func (cr *PerconaServerMySQL) GlobalAnnotations() map[string]string {
-	if cr.Spec.Metadata == nil {
+	if cr.Spec.Metadata == nil || cr.Spec.Metadata.Annotations == nil {
 		return nil
 	}
 
-	return cr.Spec.Metadata.Annotations
+	m := make(map[string]string, len(cr.Spec.Metadata.Annotations))
+	maps.Copy(m, cr.Spec.Metadata.Annotations)
+
+	return m
 }
 
 func (cr *PerconaServerMySQL) Version() *v.Version {

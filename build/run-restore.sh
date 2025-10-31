@@ -3,7 +3,7 @@
 set -e
 set -o xtrace
 
-XTRABACKUP_VERSION=$(xtrabackup --version 2>&1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
+XTRABACKUP_VERSION=$(xtrabackup --version 2>&1 | awk '/^xtrabackup version/{print $3}' | awk -F'.' '{print $1"."$2}')
 DATADIR=${DATADIR:-/var/lib/mysql}
 PARALLEL=$(grep -c processor /proc/cpuinfo)
 XBCLOUD_ARGS="--curl-retriable-errors=7 --parallel=${PARALLEL} ${XBCLOUD_EXTRA_ARGS}"

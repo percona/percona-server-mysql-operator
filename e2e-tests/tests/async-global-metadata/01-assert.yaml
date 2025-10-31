@@ -225,6 +225,43 @@ metadata:
   name: auto-async-global-metadata-mysql
 ---
 apiVersion: v1
+data:
+  my.cnf: |-
+    [mysqld]
+    innodb_buffer_pool_size=2147483648
+    innodb_buffer_pool_chunk_size=268435456
+    max_connections=341
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/component: database
+    app.kubernetes.io/instance: async-global-metadata
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: async-global-metadata-mysql
+    app.kubernetes.io/part-of: percona-server
+  name: async-global-metadata-mysql
+---
+apiVersion: v1
+data:
+  haproxy.cfg: |2-
+      global
+        log stdout format raw local0
+        maxconn 2048
+        external-check
+        insecure-fork-wanted
+        hard-stop-after 10
+        stats socket /etc/haproxy/mysql/haproxy.sock mode 600 expose-fd listeners level admin
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/component: proxy
+    app.kubernetes.io/instance: async-global-metadata
+    app.kubernetes.io/managed-by: percona-server-mysql-operator
+    app.kubernetes.io/name: async-global-metadata-haproxy
+    app.kubernetes.io/part-of: percona-server
+  name: async-global-metadata-haproxy
+---
+apiVersion: v1
 kind: Secret
 metadata:
   labels:

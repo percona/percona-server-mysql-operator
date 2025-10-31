@@ -30,197 +30,210 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 )
 
+// reconcileCRStatus does not apply any changes made to the status in the provided
+// cr *apiv1.PerconaServerMySQL, due to an issue described in this PR:
+// https://github.com/percona/percona-server-mysql-operator/pull/1102
+//
+// Use the writeStatus function to apply status changes outside of this function.
 func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr *apiv1.PerconaServerMySQL, reconcileErr error) error {
 	if cr == nil || cr.ObjectMeta.DeletionTimestamp != nil {
 		return nil
 	}
-
-	initialState := cr.Status.State
-
-	clusterCondition := metav1.Condition{
-		Status:             metav1.ConditionTrue,
-		Type:               apiv1.StateInitializing.String(),
-		LastTransitionTime: metav1.Now(),
+	cr = cr.DeepCopy()
+	if err := r.Get(ctx, client.ObjectKeyFromObject(cr), cr); err != nil {
+		return errors.Wrap(err, "get cluster")
 	}
 
 	if reconcileErr != nil {
 		if cr.Status.State != apiv1.StateError {
-			clusterCondition.Type = apiv1.StateError.String()
-			clusterCondition.Reason = "ErrorReconcile"
-			clusterCondition.Message = reconcileErr.Error()
+			return writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), func(status *apiv1.PerconaServerMySQLStatus) error {
+				clusterCondition := metav1.Condition{
+					Status:  metav1.ConditionTrue,
+					Type:    apiv1.StateError.String(),
+					Message: reconcileErr.Error(),
+					Reason:  "ErrorReconcile",
+				}
 
-			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
+				meta.SetStatusCondition(&status.Conditions, clusterCondition)
 
-			cr.Status.State = apiv1.StateError
+				status.State = apiv1.StateError
 
-			r.Recorder.Event(cr, corev1.EventTypeWarning, "ReconcileError", "Failed to reconcile cluster")
+				r.Recorder.Event(cr, corev1.EventTypeWarning, "ReconcileError", "Failed to reconcile cluster")
+				return nil
+			})
 		}
-
-		nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
-		return writeStatus(ctx, r.Client, nn, cr.Status)
-	}
-
-	if cr.Status.Conditions != nil {
-		meta.RemoveStatusCondition(&cr.Status.Conditions, apiv1.StateError.String())
+		return nil
 	}
 
 	log := logf.FromContext(ctx).WithName("reconcileCRStatus")
 
-	mysqlStatus, err := r.appStatus(ctx, cr, mysql.Name(cr), cr.MySQLSpec().Size, mysql.MatchLabels(cr), cr.Status.MySQL.Version)
-	if err != nil {
-		return errors.Wrap(err, "get MySQL status")
-	}
-	cr.Status.MySQL = mysqlStatus
+	updateStatusF := func(status *apiv1.PerconaServerMySQLStatus) error {
+		initialState := status.State
 
-	if mysqlStatus.State == apiv1.StateReady {
+		clusterCondition := metav1.Condition{
+			Status: metav1.ConditionTrue,
+			Type:   apiv1.StateInitializing.String(),
+		}
+
+		if status.Conditions != nil {
+			meta.RemoveStatusCondition(&status.Conditions, apiv1.StateError.String())
+		}
+
+		mysqlStatus, err := r.appStatus(ctx, cr, mysql.Name(cr), cr.MySQLSpec().Size, mysql.MatchLabels(cr), status.MySQL.Version)
+		if err != nil {
+			return errors.Wrap(err, "get MySQL status")
+		}
+		mysqlStatus.ImageID = status.MySQL.ImageID
+
+		if mysqlStatus.State == apiv1.StateReady {
+			if cr.Spec.MySQL.IsGR() {
+				ready, err := r.isGRReady(ctx, cr)
+				if err != nil {
+					return errors.Wrap(err, "check if GR is ready")
+				}
+				if !ready {
+					mysqlStatus.State = apiv1.StateInitializing
+				}
+			}
+
+			if cr.Spec.MySQL.IsAsync() && cr.OrchestratorEnabled() {
+				ready, msg, err := r.isAsyncReady(ctx, cr)
+				if err != nil {
+					return errors.Wrap(err, "check if async is ready")
+				}
+				if !ready {
+					mysqlStatus.State = apiv1.StateInitializing
+
+					log.Info(fmt.Sprintf("Async replication not ready: %s", msg))
+					r.Recorder.Event(cr, corev1.EventTypeWarning, "AsyncReplicationNotReady", msg)
+				}
+			}
+		}
+		status.MySQL = mysqlStatus
+
+		orcStatus := apiv1.StatefulAppStatus{}
+		if cr.OrchestratorEnabled() && cr.Spec.MySQL.IsAsync() {
+			orcStatus, err = r.appStatus(ctx, cr, orchestrator.Name(cr), cr.OrchestratorSpec().Size, orchestrator.MatchLabels(cr), status.Orchestrator.Version)
+			if err != nil {
+				return errors.Wrap(err, "get Orchestrator status")
+			}
+		}
+		status.Orchestrator = orcStatus
+
+		routerStatus := apiv1.StatefulAppStatus{}
+		if cr.RouterEnabled() {
+			routerStatus, err = r.appStatus(ctx, cr, router.Name(cr), cr.Spec.Proxy.Router.Size, router.MatchLabels(cr), status.Router.Version)
+			if err != nil {
+				return errors.Wrap(err, "get Router status")
+			}
+		}
+		status.Router = routerStatus
+
+		haproxyStatus := apiv1.StatefulAppStatus{}
+		if cr.HAProxyEnabled() {
+			haproxyStatus, err = r.appStatus(ctx, cr, haproxy.Name(cr), cr.Spec.Proxy.HAProxy.Size, haproxy.MatchLabels(cr), status.HAProxy.Version)
+			if err != nil {
+				return errors.Wrap(err, "get HAProxy status")
+			}
+		}
+		status.HAProxy = haproxyStatus
+
+		status.State = apiv1.StateReady
+		if cr.Spec.MySQL.IsAsync() {
+			if cr.OrchestratorEnabled() && status.Orchestrator.State != apiv1.StateReady {
+				status.State = status.Orchestrator.State
+			}
+			if cr.HAProxyEnabled() && status.HAProxy.State != apiv1.StateReady {
+				status.State = status.HAProxy.State
+			}
+		} else if cr.Spec.MySQL.IsGR() {
+			if cr.RouterEnabled() && status.Router.State != apiv1.StateReady {
+				status.State = status.Router.State
+			}
+			if cr.HAProxyEnabled() && status.HAProxy.State != apiv1.StateReady {
+				status.State = status.HAProxy.State
+			}
+		}
+
+		if status.MySQL.State != apiv1.StateReady {
+			status.State = status.MySQL.State
+		}
+
 		if cr.Spec.MySQL.IsGR() {
-			ready, err := r.isGRReady(ctx, cr)
+			pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
 			if err != nil {
-				return errors.Wrap(err, "check if GR is ready")
-			}
-			if !ready {
-				mysqlStatus.State = apiv1.StateInitializing
-			}
-		}
-
-		if cr.Spec.MySQL.IsAsync() && cr.OrchestratorEnabled() {
-			ready, msg, err := r.isAsyncReady(ctx, cr)
-			if err != nil {
-				return errors.Wrap(err, "check if async is ready")
-			}
-			if !ready {
-				mysqlStatus.State = apiv1.StateInitializing
-
-				log.Info(fmt.Sprintf("Async replication not ready: %s", msg))
-				r.Recorder.Event(cr, corev1.EventTypeWarning, "AsyncReplicationNotReady", msg)
-
-			}
-		}
-	}
-	cr.Status.MySQL = mysqlStatus
-
-	orcStatus := apiv1.StatefulAppStatus{}
-	if cr.OrchestratorEnabled() && cr.Spec.MySQL.IsAsync() {
-		orcStatus, err = r.appStatus(ctx, cr, orchestrator.Name(cr), cr.OrchestratorSpec().Size, orchestrator.MatchLabels(cr), cr.Status.Orchestrator.Version)
-		if err != nil {
-			return errors.Wrap(err, "get Orchestrator status")
-		}
-	}
-	cr.Status.Orchestrator = orcStatus
-
-	routerStatus := apiv1.StatefulAppStatus{}
-	if cr.RouterEnabled() {
-		routerStatus, err = r.appStatus(ctx, cr, router.Name(cr), cr.Spec.Proxy.Router.Size, router.MatchLabels(cr), cr.Status.Router.Version)
-		if err != nil {
-			return errors.Wrap(err, "get Router status")
-		}
-	}
-	cr.Status.Router = routerStatus
-
-	haproxyStatus := apiv1.StatefulAppStatus{}
-	if cr.HAProxyEnabled() {
-		haproxyStatus, err = r.appStatus(ctx, cr, haproxy.Name(cr), cr.Spec.Proxy.HAProxy.Size, haproxy.MatchLabels(cr), cr.Status.HAProxy.Version)
-		if err != nil {
-			return errors.Wrap(err, "get HAProxy status")
-		}
-	}
-	cr.Status.HAProxy = haproxyStatus
-
-	cr.Status.State = apiv1.StateReady
-	if cr.Spec.MySQL.IsAsync() {
-		if cr.OrchestratorEnabled() && cr.Status.Orchestrator.State != apiv1.StateReady {
-			cr.Status.State = cr.Status.Orchestrator.State
-		}
-		if cr.HAProxyEnabled() && cr.Status.HAProxy.State != apiv1.StateReady {
-			cr.Status.State = cr.Status.HAProxy.State
-		}
-	} else if cr.Spec.MySQL.IsGR() {
-		if cr.RouterEnabled() && cr.Status.Router.State != apiv1.StateReady {
-			cr.Status.State = cr.Status.Router.State
-		}
-		if cr.HAProxyEnabled() && cr.Status.HAProxy.State != apiv1.StateReady {
-			cr.Status.State = cr.Status.HAProxy.State
-		}
-	}
-
-	if cr.Status.MySQL.State != apiv1.StateReady {
-		cr.Status.State = cr.Status.MySQL.State
-	}
-
-	if cr.Spec.MySQL.IsGR() {
-		pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
-		if err != nil {
-			return errors.Wrap(err, "get pods")
-		}
-
-		var outb, errb bytes.Buffer
-		cmd := []string{"cat", "/var/lib/mysql/full-cluster-crash"}
-		fullClusterCrash := false
-		for _, pod := range pods {
-			if !k8s.IsPodReady(pod) {
-				continue
+				return errors.Wrap(err, "get pods")
 			}
 
-			err = r.ClientCmd.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false)
-			if err != nil {
-				if strings.Contains(errb.String(), "No such file or directory") {
+			var outb, errb bytes.Buffer
+			cmd := []string{"cat", "/var/lib/mysql/full-cluster-crash"}
+			fullClusterCrash := false
+			for _, pod := range pods {
+				if !k8s.IsPodReady(pod) {
 					continue
 				}
-				return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, outb.String(), errb.String())
+
+				err = r.ClientCmd.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false)
+				if err != nil {
+					if strings.Contains(errb.String(), "No such file or directory") {
+						continue
+					}
+					return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, outb.String(), errb.String())
+				}
+
+				fullClusterCrash = true
 			}
 
-			fullClusterCrash = true
-		}
+			if fullClusterCrash {
+				clusterCondition.Type = apiv1.StateError.String()
+				clusterCondition.Reason = "FullClusterCrashDetected"
+				clusterCondition.Message = "Full cluster crash detected"
 
-		if fullClusterCrash {
-			clusterCondition.Type = apiv1.StateError.String()
-			clusterCondition.Reason = "FullClusterCrashDetected"
-			clusterCondition.Message = "Full cluster crash detected"
+				meta.SetStatusCondition(&status.Conditions, clusterCondition)
 
-			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
+				status.State = apiv1.StateError
 
-			cr.Status.State = apiv1.StateError
-
-			r.Recorder.Event(cr, corev1.EventTypeWarning, "FullClusterCrashDetected", "Full cluster crash detected")
-		}
-	}
-
-	cr.Status.Host, err = appHost(ctx, r.Client, cr)
-	if err != nil {
-		return errors.Wrap(err, "get app host")
-	}
-
-	loadBalancersReady, err := r.allLoadBalancersReady(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "check load balancers")
-	}
-
-	if !loadBalancersReady {
-		log.Info("Not all load balancers are ready, setting state to initializing")
-		cr.Status.State = apiv1.StateInitializing
-	}
-
-	switch cr.Status.State {
-	case apiv1.StateInitializing, apiv1.StateReady:
-		for _, appState := range []apiv1.StatefulAppState{apiv1.StateInitializing, apiv1.StateReady} {
-			clusterCondition.Type = appState.String()
-			clusterCondition.Reason = appState.String()
-			if cr.Status.State == appState {
-				clusterCondition.Status = metav1.ConditionTrue
-			} else {
-				clusterCondition.Status = metav1.ConditionFalse
+				r.Recorder.Event(cr, corev1.EventTypeWarning, "FullClusterCrashDetected", "Full cluster crash detected")
 			}
-			meta.SetStatusCondition(&cr.Status.Conditions, clusterCondition)
 		}
+
+		status.Host, err = appHost(ctx, r.Client, cr)
+		if err != nil {
+			return errors.Wrap(err, "get app host")
+		}
+
+		loadBalancersReady, err := r.allLoadBalancersReady(ctx, cr)
+		if err != nil {
+			return errors.Wrap(err, "check load balancers")
+		}
+
+		if !loadBalancersReady {
+			log.Info("Not all load balancers are ready, setting state to initializing")
+			status.State = apiv1.StateInitializing
+		}
+
+		switch status.State {
+		case apiv1.StateInitializing, apiv1.StateReady:
+			for _, appState := range []apiv1.StatefulAppState{apiv1.StateInitializing, apiv1.StateReady} {
+				clusterCondition.Type = appState.String()
+				clusterCondition.Reason = appState.String()
+				if status.State == appState {
+					clusterCondition.Status = metav1.ConditionTrue
+				} else {
+					clusterCondition.Status = metav1.ConditionFalse
+				}
+				meta.SetStatusCondition(&status.Conditions, clusterCondition)
+			}
+		}
+
+		if status.State != initialState {
+			log.Info("Cluster state changed", "previous", initialState, "current", status.State)
+			r.Recorder.Event(cr, corev1.EventTypeWarning, "ClusterStateChanged", fmt.Sprintf("%s -> %s", initialState, status.State))
+		}
+		return nil
 	}
 
-	if cr.Status.State != initialState {
-		log.Info("Cluster state changed", "previous", initialState, "current", cr.Status.State)
-		r.Recorder.Event(cr, corev1.EventTypeWarning, "ClusterStateChanged", fmt.Sprintf("%s -> %s", initialState, cr.Status.State))
-	}
-
-	nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
-	return writeStatus(ctx, r.Client, nn, cr.Status)
+	return writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), updateStatusF)
 }
 
 func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, error) {
@@ -455,14 +468,16 @@ func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1.
 	return status, nil
 }
 
-func writeStatus(ctx context.Context, cl client.Client, nn types.NamespacedName, status apiv1.PerconaServerMySQLStatus) error {
+func writeStatus(ctx context.Context, cl client.Client, nn types.NamespacedName, updateFunc func(status *apiv1.PerconaServerMySQLStatus) error) error {
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
-		cr := &apiv1.PerconaServerMySQL{}
+		cr := new(apiv1.PerconaServerMySQL)
 		if err := cl.Get(ctx, nn, cr); err != nil {
 			return errors.Wrapf(err, "get %v", nn.String())
 		}
 
-		cr.Status = status
+		if err := updateFunc(&cr.Status); err != nil {
+			return errors.Wrap(err, "update status func")
+		}
 		return cl.Status().Update(ctx, cr)
 	})
 }

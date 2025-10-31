@@ -24,13 +24,13 @@ type fakeStorageClient struct {
 }
 
 func (c *fakeStorageClient) ListObjects(_ context.Context, destination string) ([]string, error) {
-	if destination == "non-existing-backup" {
+	if destination == "non-existing-backup/" {
 		return nil, nil
 	}
 	switch destination {
-	case "non-existing-backup":
+	case "non-existing-backup/":
 		return nil, nil
-	case "existing-backup":
+	case "existing-backup/":
 		return []string{"some-dest/backup1", "some-dest/backup2"}, nil
 	default:
 		return nil, errors.New("fake list objects error")

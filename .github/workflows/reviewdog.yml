@@ -7,7 +7,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v6
         with:
-          go-version: '^1.24'
+          go-version: '^1.25'
       - uses: actions/checkout@v5
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
@@ -34,7 +34,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version: '^1.24'
+          go-version: '^1.25'
       - run: go install mvdan.cc/sh/v3/cmd/shfmt@latest
       - run: $(go env GOPATH)/bin/shfmt -f . | grep -v 'vendor' | xargs $(go env GOPATH)/bin/shfmt -bn -ci -s -w
       - name: suggester / shfmt
@@ -85,7 +85,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version: '^1.24'
+          go-version: '^1.25'
       - name: check on release branch
         if: ${{ contains(github.base_ref, 'release-') }}
         run: |

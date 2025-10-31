@@ -46,16 +46,27 @@ func (c *Component) Object(ctx context.Context, cl client.Client) (client.Object
 		return nil, errors.Wrap(err, "get init image")
 	}
 
-	configMap := &corev1.ConfigMap{}
-	configMapName := client.ObjectKey{Name: ConfigMapName(cr), Namespace: cr.Namespace}
 	configHash := ""
-	if err := cl.Get(ctx, configMapName, configMap); err == nil {
-		configHash, err = k8s.ObjectHash(configMap)
+	if cr.CompareVersion("1.0.0") >= 0 {
+		configMap, err := ConfigMap(cr)
+		if err != nil {
+			return nil, errors.Wrap(err, "get config map")
+		}
+		configHash, err = k8s.ConfigMapHash(configMap)
 		if err != nil {
 			return nil, errors.Wrap(err, "calculate config map hash")
 		}
-	} else if !k8serrors.IsNotFound(err) {
-		return nil, errors.Wrap(err, "get config map")
+	} else {
+		configMap := &corev1.ConfigMap{}
+		configMapName := client.ObjectKey{Name: ConfigMapName(cr), Namespace: cr.Namespace}
+		if err := cl.Get(ctx, configMapName, configMap); err == nil {
+			configHash, err = k8s.ObjectHash(configMap)
+			if err != nil {
+				return nil, errors.Wrap(err, "calculate config map hash")
+			}
+		} else if !k8serrors.IsNotFound(err) {
+			return nil, errors.Wrap(err, "get config map")
+		}
 	}
 
 	tlsHash, err := k8s.GetTLSHash(ctx, cl, cr)

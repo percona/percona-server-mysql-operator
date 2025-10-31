@@ -6,6 +6,7 @@ config
 config-router
 demand-backup-minio
 demand-backup-cloud
+demand-backup-retry
 async-data-at-rest-encryption
 gr-global-metadata
 gr-data-at-rest-encryption
@@ -24,6 +25,8 @@ gr-security-context
 gr-self-healing
 gr-tls-cert-manager
 gr-users
+gr-upgrade
+async-upgrade
 haproxy
 init-deploy
 limits
