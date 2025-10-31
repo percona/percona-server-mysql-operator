@@ -1302,8 +1302,8 @@ check_primary_chaos() {
 	local chaos_type=$1
 	local ns=$2
 	local primary_before_failure=$3
-  local primary_restart_count_before=$(kubectl get pod -n ${NAMESPACE} ${primary_before_failure} -o yaml \
-    | yq '.status.containerStatuses[] | select(.name=="mysql") | .restartCount')
+	local primary_restart_count_before=$(kubectl get pod -n ${NAMESPACE} ${primary_before_failure} -o yaml \
+		| yq '.status.containerStatuses[] | select(.name=="mysql") | .restartCount')
 
 	local chaos_name
 	case ${chaos_type} in
