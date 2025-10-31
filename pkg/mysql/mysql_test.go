@@ -182,18 +182,18 @@ func TestStatefulsetVolumes(t *testing.T) {
 	}{
 		"pvc configured": {
 			mysqlSpec: apiv1.MySQLSpec{
-				PodSpec: apiv1.PodSpec{
-					Size:                          3,
-					TerminationGracePeriodSeconds: ptr.To(int64(30)),
-					VolumeSpec: &apiv1.VolumeSpec{
-						PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
-							Resources: corev1.VolumeResourceRequirements{
-								Requests: map[corev1.ResourceName]resource.Quantity{
-									corev1.ResourceStorage: resource.MustParse("1Gi"),
-								},
+				VolumeSpec: &apiv1.VolumeSpec{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: map[corev1.ResourceName]resource.Quantity{
+								corev1.ResourceStorage: resource.MustParse("1Gi"),
 							},
 						},
 					},
+				},
+				PodSpec: apiv1.PodSpec{
+					Size:                          3,
+					TerminationGracePeriodSeconds: ptr.To(int64(30)),
 				},
 			},
 			expectedStatefulSet: appsv1.StatefulSet{
@@ -224,12 +224,12 @@ func TestStatefulsetVolumes(t *testing.T) {
 		},
 		"host path configured": {
 			mysqlSpec: apiv1.MySQLSpec{
+				VolumeSpec: &apiv1.VolumeSpec{
+					HostPath: &corev1.HostPathVolumeSource{},
+				},
 				PodSpec: apiv1.PodSpec{
 					Size:                          3,
 					TerminationGracePeriodSeconds: ptr.To(int64(30)),
-					VolumeSpec: &apiv1.VolumeSpec{
-						HostPath: &corev1.HostPathVolumeSource{},
-					},
 				},
 			},
 			expectedStatefulSet: appsv1.StatefulSet{
@@ -266,12 +266,12 @@ func TestStatefulsetVolumes(t *testing.T) {
 		},
 		"empty dir configured": {
 			mysqlSpec: apiv1.MySQLSpec{
+				VolumeSpec: &apiv1.VolumeSpec{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
 				PodSpec: apiv1.PodSpec{
 					Size:                          3,
 					TerminationGracePeriodSeconds: ptr.To(int64(30)),
-					VolumeSpec: &apiv1.VolumeSpec{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
 				},
 			},
 			expectedStatefulSet: appsv1.StatefulSet{
@@ -308,13 +308,13 @@ func TestStatefulsetVolumes(t *testing.T) {
 		},
 		"both entry dir and host path provided - only host path is actually configured due to higher priority": {
 			mysqlSpec: apiv1.MySQLSpec{
+				VolumeSpec: &apiv1.VolumeSpec{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+					HostPath: &corev1.HostPathVolumeSource{},
+				},
 				PodSpec: apiv1.PodSpec{
 					Size:                          3,
 					TerminationGracePeriodSeconds: ptr.To(int64(30)),
-					VolumeSpec: &apiv1.VolumeSpec{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-						HostPath: &corev1.HostPathVolumeSource{},
-					},
 				},
 			},
 			expectedStatefulSet: appsv1.StatefulSet{

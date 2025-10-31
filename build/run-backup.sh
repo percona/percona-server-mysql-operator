@@ -18,8 +18,7 @@ request_data() {
 				        "endpointUrl": "$(json_escape "${AWS_ENDPOINT}")",
 				        "accessKey": "$(json_escape "${AWS_ACCESS_KEY_ID}")",
 				        "secretKey": "$(json_escape "${AWS_SECRET_ACCESS_KEY}")",
-				        "region": "$(json_escape "${AWS_DEFAULT_REGION}")",
-				        "storageClass": "$(json_escape "${S3_STORAGE_CLASS}")"
+				        "region": "$(json_escape "${AWS_DEFAULT_REGION}")"
 				    }
 				}
 			EOF
