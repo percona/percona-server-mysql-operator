@@ -7253,7 +7253,7 @@ spec:
                     type: string
                   imagePullPolicy:
                     type: string
-                  livenessProbes:
+                  livenessProbe:
                     properties:
                       exec:
                         properties:
@@ -7336,7 +7336,7 @@ spec:
                     type: object
                   mysqlParams:
                     type: string
-                  readinessProbes:
+                  readinessProbe:
                     properties:
                       exec:
                         properties:

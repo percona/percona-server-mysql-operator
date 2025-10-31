@@ -1,0 +1,21 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 30
+    script: |-
+      set -o errexit
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      data=$(run_mysql_query_file "conf/data-query.sql" "-h $(get_haproxy_svc $(get_cluster_name))")
+      kubectl create configmap -n "${NAMESPACE}" 10-demand-backup-retry-data --from-literal=data="${data}"
+
+      # Compare saved data
+      configmap_step04=$(kubectl get configmap 04-demand-backup-retry-data -n "${NAMESPACE}" -o json | jq -c '.data')
+      configmap_step10=$(kubectl get configmap 10-demand-backup-retry-data -n "${NAMESPACE}" -o json | jq -c '.data')
+
+      if [[ "$configmap_step04" != "$configmap_step10" ]]; then
+        echo "Data after restore is different, check configmaps 04-demand-backup-retry-data and 10-demand-backup-retry-data"
+        exit 1
+      fi

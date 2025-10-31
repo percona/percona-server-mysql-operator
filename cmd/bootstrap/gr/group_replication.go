@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/go-ini/ini"
 	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	"github.com/sjmudd/stopwatch"
@@ -197,7 +198,7 @@ func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) error {
 }
 
 func updateGroupPeers(ctx context.Context, peers sets.Set[string], version *v.Version) error {
-	log.Printf("Updating group seeds in peers: %v", peers)
+	log.Printf("Updating group seeds in peers: %v", peers.UnsortedList())
 
 	seedList := make([]string, 0)
 	for _, peer := range peers.UnsortedList() {
@@ -255,8 +256,8 @@ func (m *mysqlsh) configureInstance(ctx context.Context) error {
 	return nil
 }
 
-func (m *mysqlsh) createCluster(ctx context.Context) error {
-	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.createCluster('%s')", m.clusterName))
+func (m *mysqlsh) createCluster(ctx context.Context, opts *createClusterOpts) error {
+	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.createCluster('%s', %s)", m.clusterName, opts))
 	if err != nil {
 		if strings.Contains(stderr.String(), "dba.rebootClusterFromCompleteOutage") {
 			return errRebootClusterFromCompleteOutage
@@ -432,10 +433,26 @@ func Bootstrap(ctx context.Context) error {
 	shell, err := connectToCluster(ctx, peers, mysqlshVer)
 	if err != nil {
 		log.Printf("Failed to connect to the cluster: %v", err)
-		if peers.Len() == 1 {
-			log.Printf("Creating InnoDB cluster: %s", localShell.clusterName)
 
-			err := localShell.createCluster(ctx)
+		if peers.Len() == 1 {
+			var myCnf *ini.Section
+
+			customMyCnf, err := os.Open(customMyCnfPath)
+			if err == nil {
+				defer customMyCnf.Close() //nolint
+				myCnf, err = parseMyCnf(customMyCnf)
+				if err != nil {
+					return errors.Wrapf(err, "failed to parse %s", customMyCnfPath)
+				}
+			}
+
+			opts, err := getCreateClusterOpts(myCnf)
+			if err != nil {
+				return errors.Wrap(err, "get createCluster options")
+			}
+
+			log.Printf("Creating InnoDB cluster: %s", localShell.clusterName)
+			err = localShell.createCluster(ctx, opts)
 			if err != nil {
 				if errors.Is(err, errRebootClusterFromCompleteOutage) {
 					log.Printf("Cluster already exists, we need to reboot")

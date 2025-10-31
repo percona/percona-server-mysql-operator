@@ -310,10 +310,6 @@ func EnsureComponent(
 		return nil
 	}
 
-	if err := cl.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
-		return errors.Wrap(err, "get statefulset")
-	}
-
 	pdb := podDisruptionBudget(cr, podSpec.PodDisruptionBudget, c.Labels(), c.MatchLabels())
 	if err := EnsureObjectWithHash(ctx, cl, cr, pdb, cl.Scheme()); err != nil {
 		return errors.Wrap(err, "failed to create pdb")

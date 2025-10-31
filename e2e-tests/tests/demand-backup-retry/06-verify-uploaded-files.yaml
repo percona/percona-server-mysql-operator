@@ -1,0 +1,37 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 60
+    script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      backup="demand-backup-retry"
+      accessKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
+      secretKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
+      endpoint="http://minio-service:9000"
+      bucket="operator-testing"
+
+      destination=$(kubectl get ps-backup "$backup" -n "${NAMESPACE}" -o jsonpath='{.status.destination}')
+      
+      MAX_RETRIES=10
+      for i in $(seq 1 $MAX_RETRIES); do
+        echo "Attempt $i/$MAX_RETRIES - Checking S3 for backup files..."
+
+        count=$(kubectl run -n "${NAMESPACE}" -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+          /usr/bin/env AWS_ACCESS_KEY_ID="$accessKey" AWS_SECRET_ACCESS_KEY="$secretKey" AWS_DEFAULT_REGION=us-east-1 \
+          /usr/bin/aws --endpoint-url "http://minio-service:9000" s3 ls "$destination" --recursive 2>/dev/null | wc -l || echo 0)
+
+        if [ "$count" -gt 0 ]; then
+          echo "Found $count files in $destination"
+          exit 0
+        fi
+
+        echo "No files found yet (attempt $i/$MAX_RETRIES). Retrying..."
+        sleep 1
+      done
+
+      echo "No files found after $MAX_RETRIES attempts at $destination"
+      exit 1

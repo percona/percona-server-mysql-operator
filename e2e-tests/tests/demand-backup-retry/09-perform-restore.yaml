@@ -1,0 +1,7 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: demand-backup-retry-restore
+spec:
+  clusterName: demand-backup-retry
+  backupName: demand-backup-retry

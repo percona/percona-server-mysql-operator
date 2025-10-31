@@ -1582,6 +1582,9 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 						if strings.Contains(r.Name, "/") {
 							continue
 						}
+						if strings.HasSuffix(r.Kind, "Event") {
+							continue
+						}
 						if !r.Namespaced {
 							continue
 						}
