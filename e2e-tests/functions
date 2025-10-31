@@ -1332,8 +1332,8 @@ check_primary_chaos() {
 
 	wait_cluster_consistency_gr "$(get_cluster_name)" 3 3
 
-  local primary_restart_count_after=$(kubectl get pod -n ${NAMESPACE} ${primary_before_failure} -o yaml \
-    | yq '.status.containerStatuses[] | select(.name=="mysql") | .restartCount')
+	local primary_restart_count_after=$(kubectl get pod -n ${NAMESPACE} ${primary_before_failure} -o yaml \
+		| yq '.status.containerStatuses[] | select(.name=="mysql") | .restartCount')
 	local primary_after_failure=$(get_primary_from_group_replication)
 	local uri=$(get_mysqlsh_uri_for_pod ${primary_after_failure})
 	wait_until_innodb_ok ${uri}
