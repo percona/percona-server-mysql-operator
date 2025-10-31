@@ -1338,10 +1338,10 @@ check_primary_chaos() {
 	local uri=$(get_mysqlsh_uri_for_pod ${primary_after_failure})
 	wait_until_innodb_ok ${uri}
 
-	if [[ ${chaos_type} != "full-cluster-crash" && "${primary_before_failure}" == "${primary_after_failure}" ]]; then
-      echo "primary pod was not changed! something went wrong re-election."
-      exit 1
-  fi
+	if [[ ${chaos_type} != "full-cluster-crash" && ${primary_before_failure} == "${primary_after_failure}" ]]; then
+		echo "primary pod was not changed! something went wrong re-election."
+		exit 1
+	fi
 
 	if [[ ${chaos_type} == "network" && ${primary_restart_count_before} == ${primary_restart_count_after} ]]; then
 		echo "old primary pod was not restarted! something went wrong with liveness probe."
