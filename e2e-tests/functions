@@ -1302,6 +1302,8 @@ check_primary_chaos() {
 	local chaos_type=$1
 	local ns=$2
 	local primary_before_failure=$3
+	local primary_restart_count_before=$(kubectl get pod -n ${NAMESPACE} ${primary_before_failure} -o yaml \
+		| yq '.status.containerStatuses[] | select(.name=="mysql") | .restartCount')
 
 	local chaos_name
 	case ${chaos_type} in
@@ -1330,12 +1332,19 @@ check_primary_chaos() {
 
 	wait_cluster_consistency_gr "$(get_cluster_name)" 3 3
 
-	primary_after_failure=$(get_primary_from_group_replication)
-	uri=$(get_mysqlsh_uri_for_pod ${primary_after_failure})
+	local primary_restart_count_after=$(kubectl get pod -n ${NAMESPACE} ${primary_before_failure} -o yaml \
+		| yq '.status.containerStatuses[] | select(.name=="mysql") | .restartCount')
+	local primary_after_failure=$(get_primary_from_group_replication)
+	local uri=$(get_mysqlsh_uri_for_pod ${primary_after_failure})
 	wait_until_innodb_ok ${uri}
 
-	if [[ ${primary_before_failure} == "${primary_after_failure}" ]]; then
-		echo "primary pod was not killed! something went wrong."
+	if [[ ${chaos_type} != "full-cluster-crash" && ${primary_before_failure} == "${primary_after_failure}" ]]; then
+		echo "primary pod was not changed! something went wrong re-election."
+		exit 1
+	fi
+
+	if [[ ${chaos_type} == "network" && ${primary_restart_count_before} == ${primary_restart_count_after} ]]; then
+		echo "old primary pod was not restarted! something went wrong with liveness probe."
 		exit 1
 	fi
 
