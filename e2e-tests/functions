@@ -707,7 +707,7 @@ run_mysql_query_file() {
 	wait_pod $client_pod 1>&2
 
 	cat "$file" | kubectl -n "${NAMESPACE}" exec -i "${pod:-mysql-client}" -- \
-		bash -c "mysql -sN $host $user" 2>/dev/null | \
+		bash -c "mysql -sN $host $user 2>&1" 2>/dev/null | \
 		grep -v 'Using a password on the command line interface can be insecure.' || :
 }
 
