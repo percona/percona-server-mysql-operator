@@ -1,5 +1,7 @@
 USE myDB;
-SET SESSION net_read_timeout = 60;
+
+SET SESSION max_allowed_packet = 1073741824;
+
 DROP PROCEDURE IF EXISTS count_rows;
 
 DELIMITER $$

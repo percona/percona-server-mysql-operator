@@ -14,7 +14,7 @@ commands:
         (.spec.template.spec.containers[].env[] | select(.name == \"MYSQL_HOST\")).value = \"${cluster_name}-haproxy\" |
         (.spec.template.spec.containers[].env[] | select(.name == \"MYSQL_PASSWORD\")).valueFrom.secretKeyRef.name = \"${cluster_name}-secrets\" |
         (.spec.template.spec.containers[].env[] | select(.name == \"MYSQL_DB\")).value = \"myDB\" |
-        (.spec.template.spec.containers[].env[] | select(.name == \"TABLE_NUMBER\")).value = \"100\" |
+        (.spec.template.spec.containers[].env[] | select(.name == \"TABLE_NUMBER\")).value = \"130\" |
         (.spec.template.spec.containers[].env[] | select(.name == \"TABLE_SIZE\")).value = \"50000\" |
         .
       " ../../conf/sysbench-oltp-write.yaml | kubectl apply -n "${NAMESPACE}" -f -
