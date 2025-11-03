@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ps-cluster1-gcp-credentials
+type: Opaque
+data:
+  ACCESS_KEY_ID: Z2NwLWFjY2Vzcy1rZXkK
+  SECRET_ACCESS_KEY: Z2NwLXNlY3JldC1rZXkK
