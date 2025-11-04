@@ -1,0 +1,12 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 30
+    script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      pod=$(kubectl get ps-backup demand-backup-retry -n ${NAMESPACE} -o jsonpath='{.status.backupSource}' | cut -d'.' -f1)
+      kubectl delete pod "$pod" -n ${NAMESPACE} --force --grace-period=0

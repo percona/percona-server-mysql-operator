@@ -117,14 +117,14 @@ func (m *mysqlsh) rescanCluster(ctx context.Context) error {
 }
 
 type SQLResult struct {
-	Error string              `json:"error,omitempty"`
-	Rows  []map[string]string `json:"rows,omitempty"`
+	Error string           `json:"error,omitempty"`
+	Rows  []map[string]any `json:"rows,omitempty"`
 }
 
 func (m *mysqlsh) runSQL(ctx context.Context, sql string) (SQLResult, error) {
 	var stdoutb, stderrb bytes.Buffer
 
-	cmd := fmt.Sprintf("session.runSql(\"%s\")", sql)
+	cmd := fmt.Sprintf("session.runSql(`%s`)", sql)
 	args := []string{"--uri", m.getURI(), "--js", "--json=raw", "--interactive", "--quiet-start", "2", "-e", cmd}
 
 	c := exec.CommandContext(ctx, "mysqlsh", args...)
@@ -159,7 +159,12 @@ func (m *mysqlsh) getGTIDExecuted(ctx context.Context) (string, error) {
 		return "", errors.Errorf("unexpected output: %+v", result)
 	}
 
-	return v, nil
+	s, ok := v.(string)
+	if !ok {
+		return "", errors.Errorf("unexpected type: %T", v)
+	}
+
+	return s, nil
 }
 
 func (m *mysqlsh) getGTIDPurged(ctx context.Context) (string, error) {
@@ -173,7 +178,12 @@ func (m *mysqlsh) getGTIDPurged(ctx context.Context) (string, error) {
 		return "", errors.Errorf("unexpected output: %+v", result)
 	}
 
-	return v, nil
+	s, ok := v.(string)
+	if !ok {
+		return "", errors.Errorf("unexpected type: %T", v)
+	}
+
+	return s, nil
 }
 
 func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) error {
@@ -308,7 +318,7 @@ func (m *mysqlsh) removeInstance(ctx context.Context, instanceDef string, force 
 	return nil
 }
 
-func connectToLocal(ctx context.Context, version *v.Version) (*mysqlsh, error) {
+func connectToLocal(version *v.Version) (*mysqlsh, error) {
 	fqdn, err := utils.GetFQDN(os.Getenv("SERVICE_NAME"))
 	if err != nil {
 		return nil, errors.Wrap(err, "get FQDN")
@@ -333,7 +343,7 @@ func connectToCluster(ctx context.Context, peers sets.Set[string], version *v.Ve
 }
 
 func handleFullClusterCrash(ctx context.Context, version *v.Version) error {
-	localShell, err := connectToLocal(ctx, version)
+	localShell, err := connectToLocal(version)
 	if err != nil {
 		return errors.Wrap(err, "connect to local")
 	}
@@ -403,9 +413,16 @@ func Bootstrap(ctx context.Context) error {
 	}
 	log.Println("mysql-shell version:", mysqlshVer)
 
-	localShell, err := connectToLocal(ctx, mysqlshVer)
+	localShell, err := connectToLocal(mysqlshVer)
 	if err != nil {
 		return errors.Wrap(err, "connect to local")
+	}
+
+	// Clear group_replication_group_seeds early to prevent any stale entries
+	// from causing "Peer address is not valid" errors during cluster operations
+	log.Printf("Clearing any stale group_replication_group_seeds")
+	if err := localShell.setGroupSeeds(ctx, ""); err != nil {
+		log.Printf("WARNING: failed to clear group_replication_group_seeds: %v", err)
 	}
 
 	err = localShell.configureInstance(ctx)
@@ -463,6 +480,7 @@ func Bootstrap(ctx context.Context) error {
 			}
 		} else {
 			log.Printf("Can't connect to any of the peers, we need to reboot")
+
 			if err := handleFullClusterCrash(ctx, mysqlshVer); err != nil {
 				return errors.Wrap(err, "handle full cluster crash")
 			}

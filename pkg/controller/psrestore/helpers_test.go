@@ -56,7 +56,7 @@ func readDefaultS3Secret(t *testing.T, name, namespace string) *corev1.Secret {
 	t.Helper()
 
 	secret := new(corev1.Secret)
-	readDefaultFile(t, "backup/backup-s3.yaml", secret)
+	readDefaultFile(t, "backup/backup-secret-s3.yaml", secret)
 
 	secret.Name = name
 	secret.Namespace = namespace

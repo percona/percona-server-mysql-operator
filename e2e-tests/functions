@@ -337,6 +337,7 @@ delete_pmm_server_token() {
 }
 
 deploy_minio() {
+	local storage="${1:-2G}"
 	local access_key
 	local secret_key
 	access_key="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
@@ -358,7 +359,7 @@ deploy_minio() {
 		--set "users[0].policy"=consoleAdmin \
 		--set service.type=ClusterIP \
 		--set configPathmc=/tmp/.minio/ \
-		--set persistence.size=2G \
+		--set persistence.size=$storage \
 		--set securityContext.enabled=false \
 		minio/minio
 	MINIO_POD=$(kubectl -n "${NAMESPACE}" get pods --selector=release=minio-service -o 'jsonpath={.items[].metadata.name}')
@@ -694,6 +695,20 @@ run_mysqlsh() {
 	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
 		bash -c "printf '%s\n' \"${command}\" | mysqlsh --sql --quiet-start=2 $host $user" 2>/dev/null \
 		| tail -n +2
+}
+
+run_mysql_query_file() {
+  local file="$1"
+	local host="$2"
+	local user="${3:--uroot -p'$(get_user_pass root)'}"
+	local pod="$4"
+
+	client_pod=$(get_client_pod)
+	wait_pod $client_pod 1>&2
+
+	cat "$file" | kubectl -n "${NAMESPACE}" exec -i "${pod:-mysql-client}" -- \
+		bash -c "mysql -sN $host $user 2>&1" 2>/dev/null | \
+		grep -v 'Using a password on the command line interface can be insecure.' || :
 }
 
 get_innodb_cluster_status() {
@@ -1287,6 +1302,8 @@ check_primary_chaos() {
 	local chaos_type=$1
 	local ns=$2
 	local primary_before_failure=$3
+	local primary_restart_count_before=$(kubectl get pod -n ${NAMESPACE} ${primary_before_failure} -o yaml \
+		| yq '.status.containerStatuses[] | select(.name=="mysql") | .restartCount')
 
 	local chaos_name
 	case ${chaos_type} in
@@ -1315,12 +1332,19 @@ check_primary_chaos() {
 
 	wait_cluster_consistency_gr "$(get_cluster_name)" 3 3
 
-	primary_after_failure=$(get_primary_from_group_replication)
-	uri=$(get_mysqlsh_uri_for_pod ${primary_after_failure})
+	local primary_restart_count_after=$(kubectl get pod -n ${NAMESPACE} ${primary_before_failure} -o yaml \
+		| yq '.status.containerStatuses[] | select(.name=="mysql") | .restartCount')
+	local primary_after_failure=$(get_primary_from_group_replication)
+	local uri=$(get_mysqlsh_uri_for_pod ${primary_after_failure})
 	wait_until_innodb_ok ${uri}
 
-	if [[ ${primary_before_failure} == "${primary_after_failure}" ]]; then
-		echo "primary pod was not killed! something went wrong."
+	if [[ ${chaos_type} != "full-cluster-crash" && ${primary_before_failure} == "${primary_after_failure}" ]]; then
+		echo "primary pod was not changed! something went wrong re-election."
+		exit 1
+	fi
+
+	if [[ ${chaos_type} == "network" && ${primary_restart_count_before} == ${primary_restart_count_after} ]]; then
+		echo "old primary pod was not restarted! something went wrong with liveness probe."
 		exit 1
 	fi
 
