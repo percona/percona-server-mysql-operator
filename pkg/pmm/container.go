@@ -71,8 +71,8 @@ func Container(
 			},
 		}
 
-		if pmmSpec.LivenessProbes != nil {
-			container.LivenessProbe = pmmSpec.LivenessProbes
+		if probe := pmmLivenessProbe(cr); probe != nil {
+			container.LivenessProbe = probe
 			if reflect.DeepEqual(container.LivenessProbe.ProbeHandler, corev1.ProbeHandler{}) {
 				container.LivenessProbe.HTTPGet = &corev1.HTTPGetAction{
 					Port: intstr.FromInt32(7777),
@@ -81,8 +81,8 @@ func Container(
 			}
 		}
 
-		if pmmSpec.ReadinessProbes != nil {
-			container.ReadinessProbe = pmmSpec.ReadinessProbes
+		if probe := pmmReadinessProbe(cr); probe != nil {
+			container.ReadinessProbe = probe
 			if reflect.DeepEqual(container.ReadinessProbe.ProbeHandler, corev1.ProbeHandler{}) {
 				container.ReadinessProbe.HTTPGet = &corev1.HTTPGetAction{
 					Port: intstr.FromInt32(7777),
@@ -93,6 +93,20 @@ func Container(
 	}
 
 	return container
+}
+
+func pmmLivenessProbe(cr *apiv1.PerconaServerMySQL) *corev1.Probe {
+	if cr.Spec.PMM.LivenessProbe != nil {
+		return cr.Spec.PMM.LivenessProbe
+	}
+	return nil
+}
+
+func pmmReadinessProbe(cr *apiv1.PerconaServerMySQL) *corev1.Probe {
+	if cr.Spec.PMM.ReadinessProbe != nil {
+		return cr.Spec.PMM.ReadinessProbe
+	}
+	return nil
 }
 
 func pmmEnvs(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret, dbType string) []corev1.EnvVar {

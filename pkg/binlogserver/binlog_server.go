@@ -23,14 +23,14 @@ const (
 	configMountPath        = "/etc/binlog_server/config"
 	storageCredsVolumeName = "storage"
 	ConfigKey              = "config.json"
-	CustomConfigKey        = "custom.json"
+	customConfigKey        = "custom.json"
 )
 
 func Name(cr *apiv1.PerconaServerMySQL) string {
 	return cr.Name + "-" + AppName
 }
 
-func CustomConfigMapName(cr *apiv1.PerconaServerMySQL) string {
+func customConfigMapName(cr *apiv1.PerconaServerMySQL) string {
 	return cr.Name + "-" + AppName + "-config"
 }
 
@@ -76,8 +76,10 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash string) *ap
 					Labels:      labels,
 					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
 				},
-				Spec: corev1.PodSpec{
-					InitContainers: []corev1.Container{
+				Spec: spec.Core(
+					labels,
+					volumes(cr),
+					[]corev1.Container{
 						k8s.InitContainer(
 							cr,
 							AppName,
@@ -89,22 +91,8 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash string) *ap
 							nil,
 						),
 					},
-					Containers:                    containers(cr),
-					ServiceAccountName:            spec.ServiceAccountName,
-					NodeSelector:                  spec.NodeSelector,
-					Tolerations:                   spec.Tolerations,
-					Affinity:                      spec.GetAffinity(labels),
-					TopologySpreadConstraints:     spec.GetTopologySpreadConstraints(labels),
-					ImagePullSecrets:              spec.ImagePullSecrets,
-					TerminationGracePeriodSeconds: spec.GetTerminationGracePeriodSeconds(),
-					PriorityClassName:             spec.PriorityClassName,
-					RuntimeClassName:              spec.RuntimeClassName,
-					RestartPolicy:                 corev1.RestartPolicyAlways,
-					SchedulerName:                 spec.SchedulerName,
-					DNSPolicy:                     corev1.DNSClusterFirst,
-					Volumes:                       volumes(cr),
-					SecurityContext:               spec.PodSecurityContext,
-				},
+					containers(cr),
+				),
 			},
 		},
 	}
@@ -114,6 +102,8 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 	t := true
 
 	spec := cr.Spec.Backup.PiTR.BinlogServer
+
+	conf := Configurable(*cr)
 
 	return []corev1.Volume{
 		{
@@ -167,12 +157,12 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 						{
 							ConfigMap: &corev1.ConfigMapProjection{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: CustomConfigMapName(cr),
+									Name: conf.GetConfigMapName(),
 								},
 								Items: []corev1.KeyToPath{
 									{
-										Key:  CustomConfigKey,
-										Path: CustomConfigKey,
+										Key:  conf.GetConfigMapKey(),
+										Path: conf.GetConfigMapKey(),
 									},
 								},
 								Optional: &t,
@@ -199,7 +189,7 @@ func binlogServerContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		},
 		{
 			Name:  "CUSTOM_CONFIG_PATH",
-			Value: path.Join(configMountPath, CustomConfigKey),
+			Value: path.Join(configMountPath, customConfigKey),
 		},
 	}
 	env = append(env, spec.Env...)

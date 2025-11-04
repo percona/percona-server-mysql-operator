@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"maps"
 	"path"
 	"regexp"
 	"strconv"
@@ -61,6 +62,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', MySQL size must be 3 or greater unless 'unsafeFlags.mysqlSize' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && has(self.orchestrator.size) && (self.orchestrator.size < 3 || self.orchestrator.size % 2 == 0) && self.orchestrator.size > 0) || self.unsafeFlags.orchestratorSize",message="Invalid configuration: For 'async' replication, Orchestrator size must be 3 or greater and odd unless 'unsafeFlags.orchestratorSize' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && self.updateStrategy == 'SmartUpdate') || self.orchestrator.enabled",message="Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.proxy.router != null && has(self.proxy.router.enabled) && self.proxy.router.enabled && self.proxy.haproxy != null && has(self.proxy.haproxy.enabled) && self.proxy.haproxy.enabled)",message="Invalid configuration: MySQL Router and HAProxy can't be enabled at the same time"
 type PerconaServerMySQLSpec struct {
 	Metadata               *Metadata                            `json:"metadata,omitempty"`
 	CRVersion              string                               `json:"crVersion,omitempty"`
@@ -217,6 +219,27 @@ type PodSpec struct {
 	ContainerSpec `json:",inline"`
 }
 
+func (s *PodSpec) Core(selector map[string]string, volumes []corev1.Volume, initContainers []corev1.Container, containers []corev1.Container) corev1.PodSpec {
+	return corev1.PodSpec{
+		Volumes:                       volumes,
+		InitContainers:                initContainers,
+		Containers:                    containers,
+		RestartPolicy:                 corev1.RestartPolicyAlways,
+		TerminationGracePeriodSeconds: s.GetTerminationGracePeriodSeconds(),
+		DNSPolicy:                     corev1.DNSClusterFirst,
+		NodeSelector:                  s.NodeSelector,
+		ServiceAccountName:            s.ServiceAccountName,
+		SecurityContext:               s.PodSecurityContext,
+		ImagePullSecrets:              s.ImagePullSecrets,
+		Affinity:                      s.GetAffinity(selector),
+		SchedulerName:                 s.SchedulerName,
+		Tolerations:                   s.Tolerations,
+		PriorityClassName:             s.PriorityClassName,
+		RuntimeClassName:              s.RuntimeClassName,
+		TopologySpreadConstraints:     s.GetTopologySpreadConstraints(selector),
+	}
+}
+
 type Metadata struct {
 	// Map of string keys and values that can be used to organize and categorize
 	// (scope and select) objects. May match selectors of replication controllers
@@ -263,8 +286,8 @@ type PMMSpec struct {
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
-	LivenessProbes           *corev1.Probe               `json:"livenessProbes,omitempty"`
-	ReadinessProbes          *corev1.Probe               `json:"readinessProbes,omitempty"`
+	LivenessProbe            *corev1.Probe               `json:"livenessProbe,omitempty"`
+	ReadinessProbe           *corev1.Probe               `json:"readinessProbe,omitempty"`
 }
 
 type BackupSpec struct {
@@ -349,19 +372,7 @@ func (b *BackupContainerOptions) GetEnv() []corev1.EnvVar {
 	if b == nil {
 		return nil
 	}
-	return util.MergeEnvLists(b.Env, b.Args.Env())
-}
-
-func (b *BackupContainerOptions) GetEnvVar(storage *BackupStorageSpec) []corev1.EnvVar {
-	if b != nil {
-		return b.GetEnv()
-	}
-
-	if storage == nil || storage.ContainerOptions == nil {
-		return nil
-	}
-
-	return storage.ContainerOptions.GetEnv()
+	return util.MergeEnvLists(b.Env, b.Args.env())
 }
 
 type BackupContainerArgs struct {
@@ -370,7 +381,7 @@ type BackupContainerArgs struct {
 	Xbstream   []string `json:"xbstream,omitempty"`
 }
 
-func (b *BackupContainerArgs) Env() []corev1.EnvVar {
+func (b *BackupContainerArgs) env() []corev1.EnvVar {
 	envs := []corev1.EnvVar{}
 	if len(b.Xtrabackup) > 0 {
 		envs = append(envs, corev1.EnvVar{
@@ -657,8 +668,9 @@ type PerconaServerMySQL struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   PerconaServerMySQLSpec   `json:"spec,omitempty"`
-	Status PerconaServerMySQLStatus `json:"status,omitempty"`
+	Spec PerconaServerMySQLSpec `json:"spec,omitempty"`
+
+	Status PerconaServerMySQLStatus `json:"status,omitempty"` // Make sure that the Status is updated after making changes. See the description of `(*PerconaServerMySQLReconciler) reconcileCRStatus` method for details.
 }
 
 //+kubebuilder:object:root=true
@@ -699,19 +711,25 @@ func (cr *PerconaServerMySQL) OrchestratorSpec() *OrchestratorSpec {
 }
 
 func (cr *PerconaServerMySQL) GlobalLabels() map[string]string {
-	if cr.Spec.Metadata == nil {
+	if cr.Spec.Metadata == nil || cr.Spec.Metadata.Labels == nil {
 		return nil
 	}
 
-	return cr.Spec.Metadata.Labels
+	m := make(map[string]string, len(cr.Spec.Metadata.Labels))
+	maps.Copy(m, cr.Spec.Metadata.Labels)
+
+	return m
 }
 
 func (cr *PerconaServerMySQL) GlobalAnnotations() map[string]string {
-	if cr.Spec.Metadata == nil {
+	if cr.Spec.Metadata == nil || cr.Spec.Metadata.Annotations == nil {
 		return nil
 	}
 
-	return cr.Spec.Metadata.Annotations
+	m := make(map[string]string, len(cr.Spec.Metadata.Annotations))
+	maps.Copy(m, cr.Spec.Metadata.Annotations)
+
+	return m
 }
 
 func (cr *PerconaServerMySQL) Version() *v.Version {
@@ -878,7 +896,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 	}
 
 	var fsgroup *int64
-	if serverVersion.Platform != platform.PlatformOpenshift {
+	if serverVersion != nil && serverVersion.Platform != platform.PlatformOpenshift {
 		var tp int64 = 1001
 		fsgroup = &tp
 	}
@@ -952,6 +970,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.Orchestrator.Size = 0
 		cr.Spec.Proxy.Router.Size = 0
 		cr.Spec.Proxy.HAProxy.Size = 0
+	}
+
+	if cr.Spec.SecretsName == "" {
+		cr.Spec.SecretsName = cr.Name + "-secrets"
 	}
 
 	if cr.Spec.SSLSecretName == "" {

@@ -42,7 +42,10 @@ BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
 IMAGE ?= $(IMAGE_TAG_BASE):$(VERSION)
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.26
+# Using a fixed version instead of 'latest' because on GitHub Actions,
+# the 'latest' tag sometimes resolves to an older or incompatible version,
+# leading to test or pipeline failures.
+ENVTEST_K8S_VERSION = 1.34.1
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -155,7 +158,7 @@ uninstall: manifests ## Uninstall CRDs, rbac
 .PHONY: deploy
 deploy: manifests ## Deploy operator
 	yq eval \
-		'(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "DEBUG" | (select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "true"' \
+		'(select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="LOG_LEVEL").value) = "VERBOSE" | (select(documentIndex==1).spec.template.spec.containers[] | select(.name=="manager").env[] | select(.name=="DISABLE_TELEMETRY").value) = "true"' \
 		$(DEPLOYDIR)/operator.yaml | kubectl apply -f -
 
 undeploy: manifests ## Undeploy operator

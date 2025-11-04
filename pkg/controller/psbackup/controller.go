@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
@@ -44,14 +45,16 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
+	xbstorage "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 )
 
 // PerconaServerMySQLBackupReconciler reconciles a PerconaServerMySQLBackup object
 type PerconaServerMySQLBackupReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	ServerVersion *platform.ServerVersion
-	ClientCmd     clientcmd.Client
+	Scheme           *runtime.Scheme
+	ServerVersion    *platform.ServerVersion
+	ClientCmd        clientcmd.Client
+	NewStorageClient xbstorage.NewClientFunc
 
 	NewSidecarClient xtrabackup.NewSidecarClientFunc
 }
@@ -99,6 +102,9 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		if status.State == cr.Status.State && status.Destination == cr.Status.Destination {
 			return
 		}
+		if status.State != cr.Status.State && status.StateDesc == cr.Status.StateDesc {
+			status.StateDesc = ""
+		}
 
 		err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 			cr := &apiv1.PerconaServerMySQLBackup{}
@@ -115,10 +121,12 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		}
 	}()
 
-	r.checkFinalizers(ctx, cr)
+	if err := r.checkFinalizers(ctx, cr); err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "run finalizers")
+	}
 
 	switch cr.Status.State {
-	case apiv1.BackupFailed, apiv1.BackupSucceeded:
+	case apiv1.BackupFailed, apiv1.BackupSucceeded, apiv1.BackupError:
 		return rr, nil
 	}
 
@@ -172,13 +180,25 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	if k8serrors.IsNotFound(err) {
+		if err := r.prepareStatus(cr, cluster, storage, &status, backupSource); err != nil {
+			status.State = apiv1.BackupError
+			status.StateDesc = "failed to prepare backup job: " + err.Error()
+			return rr, nil
+		}
+
+		if err := r.validateStorage(ctx, cr.Spec.StorageName, cluster, status); err != nil {
+			status.State = apiv1.BackupError
+			status.StateDesc = "failed to validate storage: " + err.Error()
+			return rr, nil
+		}
+
 		log.Info("Preparing backup source", "source", backupSource)
 		if err := r.prepareBackupSource(ctx, cr, cluster, backupSource); err != nil {
 			return rr, errors.Wrap(err, "prepare backup source")
 		}
 
 		log.Info("Creating backup job", "jobName", nn.Name)
-		if err := r.createBackupJob(ctx, cr, cluster, backupSource, storage, &status); err != nil {
+		if err := r.createBackupJob(ctx, cr, cluster, storage, status.Destination, backupSource); err != nil {
 			return rr, errors.Wrap(err, "failed to create backup job")
 		}
 
@@ -232,6 +252,17 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	return rr, nil
 }
 
+func (r *PerconaServerMySQLBackupReconciler) validateStorage(ctx context.Context, storageName string, cluster *apiv1.PerconaServerMySQL, status apiv1.PerconaServerMySQLBackupStatus) error {
+	storageOpts, err := xbstorage.GetOptionsFromBackupStatus(ctx, r.Client, cluster, storageName, status)
+	if err != nil {
+		return errors.Wrap(err, "get options")
+	}
+	if _, err = r.NewStorageClient(ctx, storageOpts); err != nil {
+		return errors.Wrap(err, "new client")
+	}
+	return nil
+}
+
 func (r *PerconaServerMySQLBackupReconciler) isBackupJobRunning(ctx context.Context, job *batchv1.Job) (bool, error) {
 	if len(job.Spec.Template.Spec.Containers) == 0 {
 		return false, nil
@@ -261,22 +292,36 @@ func (r *PerconaServerMySQLBackupReconciler) isBackupJobRunning(ctx context.Cont
 	return true, nil
 }
 
+func (r *PerconaServerMySQLBackupReconciler) prepareStatus(
+	cr *apiv1.PerconaServerMySQLBackup,
+	cluster *apiv1.PerconaServerMySQL,
+	storage *apiv1.BackupStorageSpec,
+	status *apiv1.PerconaServerMySQLBackupStatus,
+	backupSource string,
+) error {
+	destination, err := xtrabackup.GetDestination(storage, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
+	if err != nil {
+		return errors.Wrap(err, "get backup destination")
+	}
+
+	status.Destination = destination
+	status.Image = cluster.Spec.Backup.Image
+	status.Storage = storage
+	status.BackupSource = backupSource
+	return nil
+}
+
 func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQLBackup,
 	cluster *apiv1.PerconaServerMySQL,
-	backupSource string,
 	storage *apiv1.BackupStorageSpec,
-	status *apiv1.PerconaServerMySQLBackupStatus,
+	destination apiv1.BackupDestination,
+	backupSource string,
 ) error {
 	initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
 	if err != nil {
 		return errors.Wrap(err, "get operator image")
-	}
-
-	destination, err := xtrabackup.GetDestination(storage, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
-	if err != nil {
-		return errors.Wrap(err, "get backup destination")
 	}
 	job, err := xtrabackup.Job(cluster, cr, destination, initImage, storage)
 	if err != nil {
@@ -303,7 +348,6 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 			return errors.Wrap(err, "set storage S3")
 		}
 
-		status.Destination = destination
 	case apiv1.BackupStorageGCS:
 		if storage.GCS == nil {
 			return errors.New("gcs is required in storage")
@@ -322,8 +366,6 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 		if err := xtrabackup.SetStorageGCS(job, storage.GCS); err != nil {
 			return errors.Wrap(err, "set storage GCS")
 		}
-
-		status.Destination = destination
 	case apiv1.BackupStorageAzure:
 		if storage.Azure == nil {
 			return errors.New("azure is required in storage")
@@ -343,19 +385,13 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 			return errors.Wrap(err, "set storage Azure")
 		}
 
-		status.Destination = destination
 	default:
 		return errors.Errorf("storage type %s is not supported", storage.Type)
 	}
 
-	status.Image = cluster.Spec.Backup.Image
-	status.Storage = storage
-
 	if err := xtrabackup.SetSourceNode(job, backupSource); err != nil {
 		return errors.Wrap(err, "set backup source node")
 	}
-
-	status.BackupSource = backupSource
 
 	if err := controllerutil.SetControllerReference(cr, job, r.Scheme); err != nil {
 		return errors.Wrapf(err, "set controller reference to Job %s/%s", job.Namespace, job.Name)
@@ -471,25 +507,14 @@ func (r *PerconaServerMySQLBackupReconciler) runPostFinishTasks(
 	return nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) {
-	if cr.DeletionTimestamp == nil || cr.Status.State == apiv1.BackupStarting || cr.Status.State == apiv1.BackupRunning {
-		return
+func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) error {
+	if cr.DeletionTimestamp == nil || cr.Status.State == apiv1.BackupStarting || cr.Status.State == apiv1.BackupRunning || len(cr.Finalizers) == 0 {
+		return nil
 	}
 	log := logf.FromContext(ctx).WithName("checkFinalizers")
 
-	defer func() {
-		if err := r.Update(ctx, cr); err != nil {
-			log.Error(err, "failed to update finalizers for backup", "backup", cr.Name)
-		}
-	}()
-
-	switch cr.Status.State {
-	case apiv1.BackupError, apiv1.BackupNew:
-		cr.Finalizers = nil
-		return
-	}
-
 	finalizers := sets.NewString()
+
 	for _, finalizer := range cr.GetFinalizers() {
 		var err error
 		switch finalizer {
@@ -507,7 +532,27 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 			finalizers.Insert(finalizer)
 		}
 	}
-	cr.Finalizers = finalizers.List()
+
+	err := k8sretry.OnError(k8sretry.DefaultRetry, func(error) bool { return true }, func() error {
+		c := new(apiv1.PerconaServerMySQLBackup)
+		if err := r.Get(ctx, client.ObjectKeyFromObject(cr), c); err != nil {
+			if k8serrors.IsNotFound(err) {
+				return nil
+			}
+			return errors.Wrapf(err, "get %v", client.ObjectKeyFromObject(cr).String())
+		}
+
+		c.Finalizers = finalizers.List()
+		if len(c.Finalizers) == 0 {
+			c.Finalizers = nil
+		}
+		return r.Update(ctx, c)
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to update finalizers for backup")
+	}
+
+	return nil
 }
 
 func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) (bool, error) {

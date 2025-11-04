@@ -3,6 +3,7 @@ config
 config-router
 demand-backup-minio
 demand-backup-cloud
+demand-backup-retry
 gr-demand-backup-minio
 gr-demand-backup-cloud
 gr-demand-backup-haproxy
@@ -17,6 +18,8 @@ gr-security-context
 gr-self-healing
 gr-tls-cert-manager
 gr-users
+gr-upgrade
+async-upgrade
 haproxy
 init-deploy
 one-pod

@@ -98,7 +98,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 		err = mysh.RebootClusterFromCompleteOutageWithExec(ctx, cr.InnoDBClusterName())
 		if err == nil {
 			log.Info("Cluster was successfully rebooted", "pod", pod.Name, "host", podFQDN)
-			r.Recorder.Event(cr, "Normal", "FullClusterCrashRecovered", "Cluster recovered from full cluster crash")
+			r.Recorder.Event(cr, corev1.EventTypeNormal, "FullClusterCrashRecovered", "Cluster recovered from full cluster crash")
 			err := r.cleanupFullClusterCrashFile(ctx, cr)
 			if err != nil {
 				log.Error(err, "failed to remove /var/lib/mysql/full-cluster-crash")

@@ -1,0 +1,20 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 30
+    script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      # Configure table number and size and use it as a validation after restore
+      yq eval "
+        (.spec.template.spec.containers[].env[] | select(.name == \"MYSQL_HOST\")).value = \"${cluster_name}-haproxy\" |
+        (.spec.template.spec.containers[].env[] | select(.name == \"MYSQL_PASSWORD\")).valueFrom.secretKeyRef.name = \"${cluster_name}-secrets\" |
+        (.spec.template.spec.containers[].env[] | select(.name == \"MYSQL_DB\")).value = \"myDB\" |
+        (.spec.template.spec.containers[].env[] | select(.name == \"TABLE_NUMBER\")).value = \"100\" |
+        (.spec.template.spec.containers[].env[] | select(.name == \"TABLE_SIZE\")).value = \"50000\" |
+        .
+      " ../../conf/sysbench-oltp-write.yaml | kubectl apply -n "${NAMESPACE}" -f -

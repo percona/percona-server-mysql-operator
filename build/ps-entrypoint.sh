@@ -480,6 +480,7 @@ if [ -f "${recovery_file}" ]; then
 		if [ ! -f "${recovery_file}" ]; then
 			exit 0
 		fi
+		sleep 3
 	done
 fi
 

@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/go-ini/ini"
 	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	"github.com/sjmudd/stopwatch"
@@ -116,14 +117,14 @@ func (m *mysqlsh) rescanCluster(ctx context.Context) error {
 }
 
 type SQLResult struct {
-	Error string              `json:"error,omitempty"`
-	Rows  []map[string]string `json:"rows,omitempty"`
+	Error string           `json:"error,omitempty"`
+	Rows  []map[string]any `json:"rows,omitempty"`
 }
 
 func (m *mysqlsh) runSQL(ctx context.Context, sql string) (SQLResult, error) {
 	var stdoutb, stderrb bytes.Buffer
 
-	cmd := fmt.Sprintf("session.runSql(\"%s\")", sql)
+	cmd := fmt.Sprintf("session.runSql(`%s`)", sql)
 	args := []string{"--uri", m.getURI(), "--js", "--json=raw", "--interactive", "--quiet-start", "2", "-e", cmd}
 
 	c := exec.CommandContext(ctx, "mysqlsh", args...)
@@ -158,7 +159,12 @@ func (m *mysqlsh) getGTIDExecuted(ctx context.Context) (string, error) {
 		return "", errors.Errorf("unexpected output: %+v", result)
 	}
 
-	return v, nil
+	s, ok := v.(string)
+	if !ok {
+		return "", errors.Errorf("unexpected type: %T", v)
+	}
+
+	return s, nil
 }
 
 func (m *mysqlsh) getGTIDPurged(ctx context.Context) (string, error) {
@@ -172,21 +178,12 @@ func (m *mysqlsh) getGTIDPurged(ctx context.Context) (string, error) {
 		return "", errors.Errorf("unexpected output: %+v", result)
 	}
 
-	return v, nil
-}
-
-func (m *mysqlsh) getGroupSeeds(ctx context.Context) (string, error) {
-	result, err := m.runSQL(ctx, "SELECT @@group_replication_group_seeds")
-	if err != nil {
-		return "", err
-	}
-
-	v, ok := result.Rows[0]["@@group_replication_group_seeds"]
+	s, ok := v.(string)
 	if !ok {
-		return "", errors.Errorf("unexpected output: %+v", result)
+		return "", errors.Errorf("unexpected type: %T", v)
 	}
 
-	return v, nil
+	return s, nil
 }
 
 func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) error {
@@ -201,7 +198,7 @@ func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) error {
 }
 
 func updateGroupPeers(ctx context.Context, peers sets.Set[string], version *v.Version) error {
-	log.Printf("Updating group seeds in peers: %v", peers)
+	log.Printf("Updating group seeds in peers: %v", peers.UnsortedList())
 
 	seedList := make([]string, 0)
 	for _, peer := range peers.UnsortedList() {
@@ -259,8 +256,8 @@ func (m *mysqlsh) configureInstance(ctx context.Context) error {
 	return nil
 }
 
-func (m *mysqlsh) createCluster(ctx context.Context) error {
-	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.createCluster('%s')", m.clusterName))
+func (m *mysqlsh) createCluster(ctx context.Context, opts *createClusterOpts) error {
+	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.createCluster('%s', %s)", m.clusterName, opts))
 	if err != nil {
 		if strings.Contains(stderr.String(), "dba.rebootClusterFromCompleteOutage") {
 			return errRebootClusterFromCompleteOutage
@@ -321,7 +318,7 @@ func (m *mysqlsh) removeInstance(ctx context.Context, instanceDef string, force 
 	return nil
 }
 
-func connectToLocal(ctx context.Context, version *v.Version) (*mysqlsh, error) {
+func connectToLocal(version *v.Version) (*mysqlsh, error) {
 	fqdn, err := utils.GetFQDN(os.Getenv("SERVICE_NAME"))
 	if err != nil {
 		return nil, errors.Wrap(err, "get FQDN")
@@ -346,7 +343,7 @@ func connectToCluster(ctx context.Context, peers sets.Set[string], version *v.Ve
 }
 
 func handleFullClusterCrash(ctx context.Context, version *v.Version) error {
-	localShell, err := connectToLocal(ctx, version)
+	localShell, err := connectToLocal(version)
 	if err != nil {
 		return errors.Wrap(err, "connect to local")
 	}
@@ -416,9 +413,16 @@ func Bootstrap(ctx context.Context) error {
 	}
 	log.Println("mysql-shell version:", mysqlshVer)
 
-	localShell, err := connectToLocal(ctx, mysqlshVer)
+	localShell, err := connectToLocal(mysqlshVer)
 	if err != nil {
 		return errors.Wrap(err, "connect to local")
+	}
+
+	// Clear group_replication_group_seeds early to prevent any stale entries
+	// from causing "Peer address is not valid" errors during cluster operations
+	log.Printf("Clearing any stale group_replication_group_seeds")
+	if err := localShell.setGroupSeeds(ctx, ""); err != nil {
+		log.Printf("WARNING: failed to clear group_replication_group_seeds: %v", err)
 	}
 
 	err = localShell.configureInstance(ctx)
@@ -436,10 +440,26 @@ func Bootstrap(ctx context.Context) error {
 	shell, err := connectToCluster(ctx, peers, mysqlshVer)
 	if err != nil {
 		log.Printf("Failed to connect to the cluster: %v", err)
-		if peers.Len() == 1 {
-			log.Printf("Creating InnoDB cluster: %s", localShell.clusterName)
 
-			err := localShell.createCluster(ctx)
+		if peers.Len() == 1 {
+			var myCnf *ini.Section
+
+			customMyCnf, err := os.Open(customMyCnfPath)
+			if err == nil {
+				defer customMyCnf.Close() //nolint
+				myCnf, err = parseMyCnf(customMyCnf)
+				if err != nil {
+					return errors.Wrapf(err, "failed to parse %s", customMyCnfPath)
+				}
+			}
+
+			opts, err := getCreateClusterOpts(myCnf)
+			if err != nil {
+				return errors.Wrap(err, "get createCluster options")
+			}
+
+			log.Printf("Creating InnoDB cluster: %s", localShell.clusterName)
+			err = localShell.createCluster(ctx, opts)
 			if err != nil {
 				if errors.Is(err, errRebootClusterFromCompleteOutage) {
 					log.Printf("Cluster already exists, we need to reboot")
@@ -460,6 +480,7 @@ func Bootstrap(ctx context.Context) error {
 			}
 		} else {
 			log.Printf("Can't connect to any of the peers, we need to reboot")
+
 			if err := handleFullClusterCrash(ctx, mysqlshVer); err != nil {
 				return errors.Wrap(err, "handle full cluster crash")
 			}

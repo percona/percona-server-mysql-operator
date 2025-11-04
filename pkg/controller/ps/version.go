@@ -82,10 +82,14 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLVersion(
 		return errors.Wrap(err, "parse version")
 	}
 
-	cr.Status.MySQL.ImageID = imageId
-	cr.Status.MySQL.Version = version.String()
-	log.V(1).Info("MySQL Server Version: " + cr.Status.MySQL.Version)
-
+	if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), func(status *apiv1.PerconaServerMySQLStatus) error {
+		status.MySQL.ImageID = imageId
+		status.MySQL.Version = version.String()
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "write status")
+	}
+	log.V(1).Info("MySQL Server Version: " + version.String())
 	return nil
 }
 
@@ -113,7 +117,7 @@ func (r *PerconaServerMySQLReconciler) upgradeVersions(ctx context.Context, cr *
 	if telemetryEnabled() && (!versionUpgradeEnabled(cr) || cr.Spec.UpgradeOptions.VersionServiceEndpoint != vs.GetDefaultVersionServiceEndpoint()) {
 		_, err := vs.GetVersion(ctx, cr, vs.GetDefaultVersionServiceEndpoint(), r.ServerVersion)
 		if err != nil {
-			log.Error(err, "failed to send telemetry to "+vs.GetDefaultVersionServiceEndpoint())
+			log.V(1).Info("failed to send telemetry to " + vs.GetDefaultVersionServiceEndpoint())
 		}
 	}
 
@@ -191,12 +195,17 @@ func (r *PerconaServerMySQLReconciler) upgradeVersions(ctx context.Context, cr *
 		return errors.Wrap(err, "failed to update CR")
 	}
 
-	cr.Status.MySQL.Version = version.PSVersion
-	cr.Status.BackupVersion = version.BackupVersion
-	cr.Status.Orchestrator.Version = version.OrchestratorVersion
-	cr.Status.Router.Version = version.RouterVersion
-	cr.Status.PMMVersion = version.PMMVersion
-	cr.Status.HAProxy.Version = version.HAProxyVersion
-	cr.Status.ToolkitVersion = version.ToolkitVersion
+	if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), func(status *apiv1.PerconaServerMySQLStatus) error {
+		status.MySQL.Version = version.PSVersion
+		status.BackupVersion = version.BackupVersion
+		status.Orchestrator.Version = version.OrchestratorVersion
+		status.Router.Version = version.RouterVersion
+		status.PMMVersion = version.PMMVersion
+		status.HAProxy.Version = version.HAProxyVersion
+		status.ToolkitVersion = version.ToolkitVersion
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "write status")
+	}
 	return nil
 }

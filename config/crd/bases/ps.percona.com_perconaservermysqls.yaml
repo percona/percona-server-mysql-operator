@@ -7265,7 +7265,7 @@ spec:
                     type: string
                   imagePullPolicy:
                     type: string
-                  livenessProbes:
+                  livenessProbe:
                     properties:
                       exec:
                         properties:
@@ -7348,7 +7348,7 @@ spec:
                     type: object
                   mysqlParams:
                     type: string
-                  readinessProbes:
+                  readinessProbe:
                     properties:
                       exec:
                         properties:
@@ -10772,6 +10772,11 @@ spec:
                 requires Orchestrator to be enabled'
               rule: '!(self.mysql.clusterType == ''async'' && self.updateStrategy
                 == ''SmartUpdate'') || self.orchestrator.enabled'
+            - message: 'Invalid configuration: MySQL Router and HAProxy can''t be
+                enabled at the same time'
+              rule: '!(self.proxy.router != null && has(self.proxy.router.enabled)
+                && self.proxy.router.enabled && self.proxy.haproxy != null && has(self.proxy.haproxy.enabled)
+                && self.proxy.haproxy.enabled)'
           status:
             properties:
               backupVersion:

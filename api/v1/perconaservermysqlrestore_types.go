@@ -66,6 +66,16 @@ type PerconaServerMySQLRestore struct {
 	Status PerconaServerMySQLRestoreStatus `json:"status,omitempty"`
 }
 
+func (r *PerconaServerMySQLRestore) GetContainerOptions(storage *BackupStorageSpec) *BackupContainerOptions {
+	if c := r.Spec.ContainerOptions; c != nil {
+		return c
+	}
+	if storage != nil && storage.ContainerOptions != nil {
+		return storage.ContainerOptions
+	}
+	return nil
+}
+
 //+kubebuilder:object:root=true
 
 // PerconaServerMySQLRestoreList contains a list of PerconaServerMySQLRestore
@@ -81,6 +91,6 @@ func init() {
 }
 
 // Labels returns a standardized set of labels for the PerconaServerMySQLRestore custom resource.
-func (cr *PerconaServerMySQLRestore) Labels(name, component string) map[string]string {
-	return naming.Labels(name, cr.Name, "percona-server-restore", component)
+func (r *PerconaServerMySQLRestore) Labels(name, component string) map[string]string {
+	return naming.Labels(name, r.Name, "percona-server-restore", component)
 }
