@@ -15,7 +15,6 @@ import (
 // that are not set by CheckNSetDefaults and cannot be set via PresetDefaults.
 func ManualCluster(cr *apiv1.PerconaServerMySQL) {
 	cr.Spec.CRVersion = version.Version()
-	cr.Spec.VolumeExpansionEnabled = true
 	cr.Spec.UpdateStrategy = "SmartUpdate"
 	cr.Spec.InitContainer.Image = ImageInitContainer
 	cr.Spec.IgnoreAnnotations = []string{"service.beta.kubernetes.io/aws-load-balancer-backend-protocol"}

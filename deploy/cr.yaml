@@ -21,7 +21,7 @@ spec:
 #    proxySize: false
 #  pause: false
   crVersion: 1.0.0
-#  enableVolumeExpansion: true
+#  enableVolumeExpansion: false
   secretsName: ps-cluster1-secrets
   sslSecretName: ps-cluster1-ssl
   updateStrategy: SmartUpdate
