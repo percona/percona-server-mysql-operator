@@ -13481,7 +13481,7 @@ spec:
           value: ""
         - name: DISABLE_TELEMETRY
           value: "false"
-        image: perconalab/percona-server-mysql-operator:main
+        image: percona/percona-server-mysql-operator:1.0.0
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
