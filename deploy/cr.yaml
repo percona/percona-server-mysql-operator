@@ -713,7 +713,6 @@ spec:
         s3:
           bucket: S3-BACKUP-BUCKET-NAME-HERE
           credentialsSecret: ps-cluster1-s3-credentials
-#      - "--someflag=abc"
           region: us-west-2
 #          prefix: ""
 
