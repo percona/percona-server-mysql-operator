@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"os"
+	"strings"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -10,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	operatorversion "github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 type ComponentWithInit interface {
@@ -73,7 +75,12 @@ func InitImage(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServerMyS
 	if cr.CompareVersion("0.12.0") < 0 && cr.Spec.InitImage == "" { //nolint:staticcheck
 		return cr.Spec.InitImage, nil //nolint:staticcheck
 	}
-	return OperatorImage(ctx, cl)
+	imageName, err := OperatorImage(ctx, cl)
+	if err != nil {
+		return "", err
+	}
+
+	return adjustInitImageWithCRVersion(cr, imageName), nil
 }
 
 func OperatorImage(ctx context.Context, cl client.Reader) (string, error) {
@@ -107,4 +114,51 @@ func operatorPod(ctx context.Context, cl client.Reader) (*corev1.Pod, error) {
 	}
 
 	return pod, nil
+}
+
+func adjustInitImageWithCRVersion(cr *apiv1.PerconaServerMySQL, imageName string) string {
+	if cr == nil {
+		return imageName
+	}
+
+	if cr.Spec.CRVersion == "" || cr.CompareVersion(operatorversion.Version()) == 0 {
+		return imageName
+	}
+
+	imageName = stripDigest(imageName)
+	if !hasPerconaNamespace(imageName) {
+		return imageName
+	}
+
+	imageBase := stripTag(imageName)
+	if imageBase == "" {
+		return imageName
+	}
+
+	return imageBase + ":" + cr.Spec.CRVersion
+}
+
+func stripDigest(image string) string {
+	if idx := strings.Index(image, "@"); idx != -1 {
+		return image[:idx]
+	}
+	return image
+}
+
+func stripTag(image string) string {
+	lastSlash := strings.LastIndex(image, "/")
+	lastColon := strings.LastIndex(image, ":")
+	if lastColon > lastSlash {
+		return image[:lastColon]
+	}
+	return image
+}
+
+func hasPerconaNamespace(image string) bool {
+	if image == "" {
+		return false
+	}
+
+	normalized := "/" + strings.Trim(image, "/") + "/"
+	return strings.Contains(normalized, "/percona/")
 }
