@@ -24,6 +24,12 @@ import (
 func (r *PerconaServerMySQLReconciler) reconcileGRMySQLPrimaryLabel(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	logger := logf.FromContext(ctx)
 
+	// Skip primary label reconciliation when cluster is paused
+	if cr.Spec.Pause {
+		logger.V(1).Info("Skipping GR primary label reconciliation - cluster is paused", "cluster", cr.Name, "namespace", cr.Namespace)
+		return nil
+	}
+
 	if !cr.Spec.MySQL.IsGR() {
 		return nil
 	}
