@@ -7,11 +7,8 @@ metadata:
 spec:
   unsafeFlags:
     mysqlSize: true
-    orchestrator: false
-    orchestratorSize: false
-    proxy: false
     proxySize: true
-  crVersion: k8sps-593
+  crVersion: 1.0.0
   secretsName: minimal-cluster-secrets
   sslSecretName: minimal-cluster-ssl
   updateStrategy: SmartUpdate
