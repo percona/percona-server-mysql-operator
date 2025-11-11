@@ -1,0 +1,65 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: minimal-cluster
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+spec:
+  unsafeFlags:
+    mysqlSize: true
+    orchestrator: false
+    orchestratorSize: false
+    proxy: false
+    proxySize: true
+  crVersion: k8sps-593
+  secretsName: minimal-cluster-secrets
+  sslSecretName: minimal-cluster-ssl
+  updateStrategy: SmartUpdate
+  upgradeOptions:
+    versionServiceEndpoint: https://check.percona.com
+    apply: disabled
+  mysql:
+    clusterType: group-replication
+    autoRecovery: true
+    image: percona/percona-server:8.4.6-6.1
+    imagePullPolicy: Always
+    size: 1
+    podDisruptionBudget:
+      maxUnavailable: 1
+    resources:
+      requests:
+        memory: 1Gi
+      limits:
+        memory: 2Gi
+    affinity:
+      antiAffinityTopologyKey: "none"
+    exposePrimary:
+      enabled: true
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 2Gi
+    gracePeriod: 600
+  proxy:
+    haproxy:
+      enabled: true
+      size: 1
+      image: percona/haproxy:2.8.15
+      imagePullPolicy: Always
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        requests:
+          memory: 1Gi
+          cpu: 600m
+      gracePeriod: 30
+      affinity:
+        antiAffinityTopologyKey: "none"
+    router:
+      enabled: false
+      size: 1
+      image: percona/percona-mysql-router:8.4.6
+  backup:
+    enabled: false
+    image: percona/percona-xtrabackup:8.4.0-4.1
