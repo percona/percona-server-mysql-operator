@@ -9,8 +9,6 @@ spec:
     mysqlSize: true
     proxySize: true
   crVersion: 1.0.0
-  secretsName: minimal-cluster-secrets
-  sslSecretName: minimal-cluster-ssl
   updateStrategy: SmartUpdate
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
@@ -19,40 +17,17 @@ spec:
     clusterType: group-replication
     autoRecovery: true
     image: perconalab/percona-server-mysql-operator:main-psmysql8.4
-    imagePullPolicy: Always
     size: 1
-    podDisruptionBudget:
-      maxUnavailable: 1
-    resources:
-      requests:
-        memory: 1Gi
-      limits:
-        memory: 2Gi
-    affinity:
-      antiAffinityTopologyKey: "none"
-    exposePrimary:
-      enabled: true
     volumeSpec:
       persistentVolumeClaim:
         resources:
           requests:
             storage: 2Gi
-    gracePeriod: 600
   proxy:
     haproxy:
       enabled: true
       size: 1
       image: perconalab/percona-server-mysql-operator:main-haproxy
-      imagePullPolicy: Always
-      podDisruptionBudget:
-        maxUnavailable: 1
-      resources:
-        requests:
-          memory: 1Gi
-          cpu: 600m
-      gracePeriod: 30
-      affinity:
-        antiAffinityTopologyKey: "none"
     router:
       enabled: false
       size: 1
