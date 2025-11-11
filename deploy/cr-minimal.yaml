@@ -18,7 +18,7 @@ spec:
   mysql:
     clusterType: group-replication
     autoRecovery: true
-    image: percona/percona-server:8.4.6-6.1
+    image: perconalab/percona-server-mysql-operator:main-psmysql8.4
     imagePullPolicy: Always
     size: 1
     podDisruptionBudget:
@@ -42,7 +42,7 @@ spec:
     haproxy:
       enabled: true
       size: 1
-      image: percona/haproxy:2.8.15
+      image: perconalab/percona-server-mysql-operator:main-haproxy
       imagePullPolicy: Always
       podDisruptionBudget:
         maxUnavailable: 1
@@ -56,7 +56,7 @@ spec:
     router:
       enabled: false
       size: 1
-      image: percona/percona-mysql-router:8.4.6
+      image: perconalab/percona-server-mysql-operator:main-router8.4
   backup:
     enabled: false
-    image: percona/percona-xtrabackup:8.4.0-4.1
+    image: perconalab/percona-server-mysql-operator:main-backup8.4
