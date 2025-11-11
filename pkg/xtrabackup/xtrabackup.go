@@ -670,10 +670,6 @@ func SetStorageS3(job *batchv1.Job, s3 *apiv1.BackupStorageS3Spec) error {
 			Name:  "S3_BUCKET",
 			Value: bucket,
 		},
-		{
-			Name:  "S3_STORAGE_CLASS",
-			Value: s3.StorageClass,
-		},
 	}
 
 	for i := range spec.Containers {
@@ -880,7 +876,6 @@ func GetBackupConfig(ctx context.Context, cl client.Client, cr *apiv1.PerconaSer
 		conf.S3.Bucket = bucket
 		conf.S3.Region = s3.Region
 		conf.S3.EndpointURL = s3.EndpointURL
-		conf.S3.StorageClass = s3.StorageClass
 		conf.Type = apiv1.BackupStorageS3
 	case apiv1.BackupStorageGCS:
 		gcs := storage.GCS
