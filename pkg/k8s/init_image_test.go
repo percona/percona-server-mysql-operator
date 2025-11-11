@@ -9,6 +9,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	operatorversion "github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 func TestInitContainer(t *testing.T) {
@@ -151,6 +152,52 @@ func TestInitContainer(t *testing.T) {
 			assert.Equal(t, expectedTerminationMessagePolicy, container.TerminationMessagePolicy)
 			assert.Equal(t, tt.expectedSecurityContext, *container.SecurityContext)
 			assert.Equal(t, tt.expectedResources, container.Resources)
+		})
+	}
+}
+
+func TestAdjustInitImageWithCRVersion(t *testing.T) {
+	currentVersion := operatorversion.Version()
+
+	tests := map[string]struct {
+		crVersion string
+		image     string
+		expected  string
+	}{
+		"percona image retagged": {
+			crVersion: "9.9.9",
+			image:     "percona/percona-server-mysql-operator:1.0.0",
+			expected:  "percona/percona-server-mysql-operator:9.9.9",
+		},
+		"percona image with registry port retagged": {
+			crVersion: "2.2.2",
+			image:     "registry.example.com:5000/percona/percona-server-mysql-operator:1.0.0",
+			expected:  "registry.example.com:5000/percona/percona-server-mysql-operator:2.2.2",
+		},
+		"percona image with digest retagged": {
+			crVersion: "3.3.3",
+			image:     "percona/percona-server-mysql-operator@sha256:abcdef",
+			expected:  "percona/percona-server-mysql-operator:3.3.3",
+		},
+		"non percona image unchanged": {
+			crVersion: "4.4.4",
+			image:     "custom/repo:1.0.0",
+			expected:  "custom/repo:1.0.0",
+		},
+		"matching operator version unchanged": {
+			crVersion: currentVersion,
+			image:     "percona/percona-server-mysql-operator:1.0.0",
+			expected:  "percona/percona-server-mysql-operator:1.0.0",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &apiv1.PerconaServerMySQL{}
+			cr.Spec.CRVersion = tt.crVersion
+
+			result := adjustInitImageWithCRVersion(cr, tt.image)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
