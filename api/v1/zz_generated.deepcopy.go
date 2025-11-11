@@ -501,6 +501,11 @@ func (in *MySQLSpec) DeepCopyInto(out *MySQLSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.VolumeSpec != nil {
+		in, out := &in.VolumeSpec, &out.VolumeSpec
+		*out = new(VolumeSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	in.PodSpec.DeepCopyInto(&out.PodSpec)
 }
 
@@ -995,11 +1000,6 @@ func (in *PodSpec) DeepCopyInto(out *PodSpec) {
 		for key, val := range *in {
 			(*out)[key] = val
 		}
-	}
-	if in.VolumeSpec != nil {
-		in, out := &in.VolumeSpec, &out.VolumeSpec
-		*out = new(VolumeSpec)
-		(*in).DeepCopyInto(*out)
 	}
 	if in.InitContainer != nil {
 		in, out := &in.InitContainer, &out.InitContainer
