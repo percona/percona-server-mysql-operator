@@ -23,6 +23,10 @@ spec:
         resources:
           requests:
             storage: 2Gi
+  orchestrator:
+    enabled: false
+    size: 3
+    image: perconalab/percona-server-mysql-operator:main-orchestrator
   proxy:
     haproxy:
       enabled: true
