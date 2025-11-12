@@ -270,6 +270,7 @@ release: manifests
 		-e "/^  mysql:/,/^    image:/{s#image: .*#image: $(IMAGE_MYSQL84)#}" \
 		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: $(IMAGE_HAPROXY)#}" \
 		-e "/^    router:/,/^      image:/{s#image: .*#image: $(IMAGE_ROUTER84)#}" \
+		-e "/^  orchestrator:/,/^      image:/{s#image: .*#image: $(IMAGE_ORCHESTRATOR)#}" \
 		-e "/^  backup:/,/^    image:/{s#image: .*#image: $(IMAGE_BACKUP84)#}" \
 		deploy/cr-minimal.yaml
 	$(SED) -i \
@@ -311,6 +312,7 @@ after-release: update-version manifests
 		-e "/^  mysql:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-psmysql8.4#}" \
 		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-haproxy#}" \
 		-e "/^    router:/,/^      image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-router8.4#}" \
+		-e "/^  orchestrator:/,/^      image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-orchestrator#}" \
 		-e "/^  backup:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-backup8.4#}" \
 		deploy/cr-minimal.yaml
 	$(SED) -i \
