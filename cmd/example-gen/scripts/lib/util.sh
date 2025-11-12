@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
 comment_fields() {
+	local prefix="${1:-.spec}"
+
 	local tmp_old tmp_new tmp_diff tmp_out
 
 	tmp_old=$(mktemp)
@@ -9,7 +11,7 @@ comment_fields() {
 	tmp_out=$(mktemp)
 
 	yq - >"$tmp_old"
-	del_fields_to_comment <"$tmp_old" >"$tmp_new"
+	del_fields_to_comment "$prefix" <"$tmp_old" >"$tmp_new"
 
 	diff "$tmp_old" "$tmp_new" >"$tmp_diff"
 
