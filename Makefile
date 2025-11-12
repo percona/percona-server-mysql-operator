@@ -118,6 +118,10 @@ generate-restore-yaml:
 generate-backup-yaml:
 	./cmd/example-gen/scripts/generate.sh ps-backup
 
+.PHONY: generate-helm-chart
+generate-helm-chart:
+	./cmd/example-gen/scripts/generate.sh chart
+
 manifests: kustomize generate generate-cr-yaml generate-restore-yaml generate-backup-yaml ## Generate Kubernetes manifests (CRDs, RBAC, operator deployment)
 	$(KUSTOMIZE) build config/crd/ > $(DEPLOYDIR)/crd.yaml
 	echo "---" >> $(DEPLOYDIR)/crd.yaml

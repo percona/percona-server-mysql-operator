@@ -1,0 +1,22 @@
+{{/* vim: filetype=helm */}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "ps-database.fullname" . }}-orchestrator
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "ps-database.labels" . | indent 4 }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - list
+  - patch
+- apiGroups:
+  - ps.percona.com
+  resources:
+  - perconaservermysqls
+  verbs:
+  - get

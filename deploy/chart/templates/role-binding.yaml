@@ -1,0 +1,21 @@
+{{/* vim: filetype=helm */}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "ps-database.fullname" . }}-orchestrator
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ps-database.fullname" . }}-orchestrator
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "ps-database.labels" . | indent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "ps-database.fullname" . }}-orchestrator
+subjects:
+- kind: ServiceAccount
+  name: {{ include "ps-database.fullname" . }}-orchestrator
