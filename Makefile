@@ -282,6 +282,13 @@ release: manifests
 		-e "/^  mysql:/,/^    image:/{s#image: .*#image: $(IMAGE_MYSQL84)#}" \
 		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: $(IMAGE_HAPROXY)#}" \
 		-e "/^    router:/,/^      image:/{s#image: .*#image: $(IMAGE_ROUTER84)#}" \
+		-e "/^  backup:/,/^    image:/{s#image: .*#image: $(IMAGE_BACKUP84)#}" \
+		deploy/cr-minimal.yaml
+	$(SED) -i \
+		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(VERSION)/}" \
+		-e "/^  mysql:/,/^    image:/{s#image: .*#image: $(IMAGE_MYSQL84)#}" \
+		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: $(IMAGE_HAPROXY)#}" \
+		-e "/^    router:/,/^      image:/{s#image: .*#image: $(IMAGE_ROUTER84)#}" \
 		-e "/^  orchestrator:/,/^    image:/{s#image: .*#image: $(IMAGE_ORCHESTRATOR)#}" \
 		-e "/^  backup:/,/^    image:/{s#image: .*#image: $(IMAGE_BACKUP84)#}" \
 		-e "/^  toolkit:/,/^    image:/{s#image: .*#image: $(IMAGE_TOOLKIT)#}" \
@@ -311,6 +318,13 @@ after-release: update-version manifests
 		-e "/initContainer:/,/image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main#}" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: perconalab/pmm-client:3-dev-latest#}" \
 		deploy/cr.yaml
+		$(SED) -i \
+		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(NEXT_VER)/}" \
+		-e "/^  mysql:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-psmysql8.4#}" \
+		-e "/^    haproxy:/,/^      image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-haproxy#}" \
+		-e "/^    router:/,/^      image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-router8.4#}" \
+		-e "/^  backup:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-backup8.4#}" \
+		deploy/cr-minimal.yaml
 	$(SED) -i \
 		-e "s|$(IMAGE_OPERATOR)|perconalab/percona-server-mysql-operator:main|g" \
 		config/manager/manager.yaml config/manager/cluster/manager.yaml deploy/bundle.yaml deploy/cw-bundle.yaml deploy/operator.yaml deploy/cw-operator.yaml
