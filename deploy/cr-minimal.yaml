@@ -1,0 +1,41 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: minimal-cluster
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+spec:
+  unsafeFlags:
+    mysqlSize: true
+    proxySize: true
+  crVersion: 1.0.0
+  updateStrategy: SmartUpdate
+  upgradeOptions:
+    versionServiceEndpoint: https://check.percona.com
+    apply: disabled
+  mysql:
+    clusterType: group-replication
+    autoRecovery: true
+    image: percona/percona-server:8.4.6-6.1
+    size: 1
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 2Gi
+  orchestrator:
+    enabled: false
+    size: 3
+    image: percona/percona-orchestrator:3.2.6-18
+  proxy:
+    haproxy:
+      enabled: true
+      size: 1
+      image: percona/percona-orchestrator:3.2.6-18
+    router:
+      enabled: false
+      size: 1
+      image: percona/percona-mysql-router:8.4.6
+  backup:
+    enabled: false
+    image: percona/percona-xtrabackup:8.4.0-4.1
