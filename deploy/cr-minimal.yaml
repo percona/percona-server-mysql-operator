@@ -16,7 +16,7 @@ spec:
   mysql:
     clusterType: group-replication
     autoRecovery: true
-    image: perconalab/percona-server-mysql-operator:main-psmysql8.4
+    image: percona/percona-server:8.4.6-6.1
     size: 1
     volumeSpec:
       persistentVolumeClaim:
@@ -31,11 +31,11 @@ spec:
     haproxy:
       enabled: true
       size: 1
-      image: perconalab/percona-server-mysql-operator:main-haproxy
+      image: percona/haproxy:2.8.15
     router:
       enabled: false
       size: 1
-      image: perconalab/percona-server-mysql-operator:main-router8.4
+      image: percona/percona-mysql-router:8.4.6
   backup:
     enabled: false
-    image: perconalab/percona-server-mysql-operator:main-backup8.4
+    image: percona/percona-xtrabackup:8.4.0-4.1
