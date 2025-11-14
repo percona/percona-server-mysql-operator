@@ -640,7 +640,6 @@ get_cr() {
 	local cr_file=${9:-${DEPLOY_DIR}/cr.yaml}
 
 	yq eval "$(printf '.metadata.name="%s"' "${test_name}${name_suffix:+-$name_suffix}")" ${cr_file} \
-		| yq eval "$(printf '.spec.initContainer.image="%s"' "${IMAGE}")" - \
 		| yq eval 'del(.spec.secretsName)' - \
 		| yq eval '.spec.sslSecretName="test-ssl"' - \
 		| yq eval '.spec.upgradeOptions.apply="disabled"' - \
