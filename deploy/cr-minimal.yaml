@@ -31,7 +31,7 @@ spec:
     haproxy:
       enabled: true
       size: 1
-      image: perconalab/percona-server-mysql-operator:main-orchestrator
+      image: perconalab/percona-server-mysql-operator:main-haproxy
     router:
       enabled: false
       size: 1
