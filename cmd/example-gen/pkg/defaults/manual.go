@@ -152,7 +152,7 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 		"gcp-cs": {
 			Type: apiv1.BackupStorageGCS,
 			GCS: &apiv1.BackupStorageGCSSpec{
-				Bucket:     "BUCKET-NAME",
+				Bucket:            "BUCKET-NAME",
 				Prefix:            "PREFIX-NAME",
 				CredentialsSecret: "SECRET-NAME",
 				EndpointURL:       "https://storage.googleapis.com",
