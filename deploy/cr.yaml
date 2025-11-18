@@ -20,7 +20,7 @@ spec:
 #    proxy: false
 #    proxySize: false
 #  pause: false
-  crVersion: 1.0.0
+  crVersion: 1.1.0
 #  enableVolumeExpansion: false
   secretsName: ps-cluster1-secrets
   sslSecretName: ps-cluster1-ssl
@@ -29,7 +29,7 @@ spec:
     versionServiceEndpoint: https://check.percona.com
     apply: disabled
 #  initContainer:
-#    image: percona/percona-server-mysql-operator:1.0.0
+#    image: perconalab/percona-server-mysql-operator:main
 #    containerSecurityContext:
 #      privileged: false
 #      runAsUser: 1001
@@ -58,7 +58,7 @@ spec:
   mysql:
     clusterType: group-replication
     autoRecovery: true
-    image: percona/percona-server:8.4.6-6.1
+    image: perconalab/percona-server-mysql-operator:main-psmysql8.4
     imagePullPolicy: Always
 #    runtimeClassName: image-rc
 #    schedulerName: mycustom-scheduler
@@ -75,7 +75,7 @@ spec:
 #      - name: "my-secret-1"
 #      - name: "my-secret-2"
 #    initContainer:
-#      image: percona/percona-server-mysql-operator:1.0.0
+#      image: perconalab/percona-server-mysql-operator:main
 #      containerSecurityContext:
 #        privileged: false
 #        runAsUser: 1001
@@ -223,7 +223,7 @@ spec:
 
       size: 3
 
-      image: percona/haproxy:2.8.15
+      image: perconalab/percona-server-mysql-operator:main-haproxy
       imagePullPolicy: Always
 #      runtimeClassName: image-rc
 #      schedulerName: mycustom-scheduler
@@ -356,7 +356,7 @@ spec:
 
     router:
       enabled: false
-      image: percona/percona-mysql-router:8.4.6
+      image: perconalab/percona-server-mysql-operator:main-router8.4
       imagePullPolicy: Always
 #      runtimeClassName: image-rc
 #      schedulerName: mycustom-scheduler
@@ -389,7 +389,7 @@ spec:
 #        - name: "my-secret-1"
 #        - name: "my-secret-2"
 #      initContainer:
-#        image: percona/percona-server-mysql-operator:1.0.0
+#        image: perconalab/percona-server-mysql-operator:main
 #        containerSecurityContext:
 #          privileged: false
 #          runAsUser: 1001
@@ -490,7 +490,7 @@ spec:
 
   orchestrator:
     enabled: false
-    image: percona/percona-orchestrator:3.2.6-18
+    image: perconalab/percona-server-mysql-operator:main-orchestrator
     imagePullPolicy: Always
 #    runtimeClassName: image-rc
 #    schedulerName: mycustom-scheduler
@@ -523,7 +523,7 @@ spec:
 #      - name: "my-secret-2"
 #    serviceAccountName: percona-server-mysql-operator-orchestrator
 #    initContainer:
-#      image: percona/percona-server-mysql-operator:1.0.0
+#      image: perconalab/percona-server-mysql-operator:main
 #      containerSecurityContext:
 #        privileged: false
 #        runAsUser: 1001
@@ -590,7 +590,7 @@ spec:
 
   pmm:
     enabled: false
-    image: percona/pmm-client:3.4.1
+    image: perconalab/pmm-client:3-dev-latest
     imagePullPolicy: Always
 #    readinessProbe:
 #      initialDelaySeconds: 15
@@ -618,7 +618,7 @@ spec:
   backup:
     enabled: true
 #    sourcePod: ps-cluster1-mysql-1
-    image: percona/percona-xtrabackup:8.4.0-4.1
+    image: perconalab/percona-server-mysql-operator:main-backup8.4
 #    schedule:
 #      - name: "sat-night-backup"
 #        schedule: "0 0 * * 6"
@@ -634,7 +634,7 @@ spec:
 #      - name: "my-secret-1"
 #      - name: "my-secret-2"
 #    initContainer:
-#      image: percona/percona-server-mysql-operator:1.0.0
+#      image: perconalab/percona-server-mysql-operator:main
 #      containerSecurityContext:
 #        privileged: false
 #        runAsUser: 1001
@@ -724,7 +724,7 @@ spec:
 #          prefix: ""
 
   toolkit:
-    image: percona/percona-toolkit:3.7.0-2
+    image: perconalab/percona-server-mysql-operator:main-toolkit
     imagePullPolicy: Always
 #    resources:
 #      requests:
