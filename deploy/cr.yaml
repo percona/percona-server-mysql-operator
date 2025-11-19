@@ -20,7 +20,7 @@ spec:
 #    proxy: false
 #    proxySize: false
 #  pause: false
-  crVersion: 1.0.0
+  crVersion: 1.1.0
 #  enableVolumeExpansion: false
   secretsName: ps-cluster1-secrets
   sslSecretName: ps-cluster1-ssl
@@ -754,6 +754,54 @@ spec:
 #            whenUnsatisfiable: DoNotSchedule
 #        type: azure
 #        verifyTLS: null
+#      gcp-cs:
+#        containerOptions:
+#          args:
+#            xbcloud:
+#              - --someflag=abc
+#            xbstream:
+#              - --someflag=abc
+#            xtrabackup:
+#              - --someflag=abc
+#          env:
+#            - name: CUSTOM_VAR
+#              value: "false"
+#        containerSecurityContext:
+#          privileged: false
+#          runAsGroup: 1001
+#          runAsUser: 1001
+#        gcs:
+#          bucket: BUCKET-NAME
+#          credentialsSecret: SECRET-NAME
+#          endpointUrl: https://storage.googleapis.com
+#          prefix: PREFIX-NAME
+#          storageClass: ""
+#        podSecurityContext:
+#          fsGroup: 1001
+#          supplementalGroups:
+#            - 1001
+#            - 1002
+#            - 1003
+#        resources:
+#          limits:
+#            cpu: 100m
+#            memory: 100M
+#          requests:
+#            cpu: 200m
+#            memory: 200M
+#        tolerations:
+#          - effect: NoExecute
+#            key: node.alpha.kubernetes.io/unreachable
+#            operator: Exists
+#            tolerationSeconds: 6000
+#        topologySpreadConstraints:
+#          - labelSelector:
+#              matchLabels:
+#                app.kubernetes.io/name: percona-server
+#            maxSkew: 1
+#            topologyKey: kubernetes.io/hostname
+#            whenUnsatisfiable: DoNotSchedule
+#        type: gcs
       s3-us-west:
 #        affinity:
 #          nodeAffinity:

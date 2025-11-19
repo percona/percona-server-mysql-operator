@@ -8,7 +8,7 @@ spec:
   unsafeFlags:
     mysqlSize: true
     proxySize: true
-  crVersion: 1.0.0
+  crVersion: 1.1.0
   updateStrategy: SmartUpdate
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com

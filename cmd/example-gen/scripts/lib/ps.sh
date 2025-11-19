@@ -33,6 +33,7 @@ remove_fields() {
 	# - removing initImage as it is deprecated
 	# - removing binlogServer is not used
 	# - removing azure-blob fields to reduce size
+	# - removing gcp-cs fields to reduce size
 	# - removing non-s3 fields in s3-us-west
 	yq - \
 		| yq 'del(.status)' \
@@ -53,6 +54,17 @@ remove_fields() {
 		| yq 'del(.spec.backup.storages.azure-blob.s3)' \
 		| yq 'del(.spec.backup.storages.azure-blob.schedulerName)' \
 		| yq 'del(.spec.backup.storages.azure-blob.volumeSpec)' \
+		| yq 'del(.spec.backup.storages.gcp-cs.affinity)' \
+		| yq 'del(.spec.backup.storages.gcp-cs.azure)' \
+		| yq 'del(.spec.backup.storages.gcp-cs.annotations)' \
+		| yq 'del(.spec.backup.storages.gcp-cs.labels)' \
+		| yq 'del(.spec.backup.storages.gcp-cs.nodeSelector)' \
+		| yq 'del(.spec.backup.storages.gcp-cs.priorityClassName)' \
+		| yq 'del(.spec.backup.storages.gcp-cs.runtimeClassName)' \
+		| yq 'del(.spec.backup.storages.gcp-cs.s3)' \
+		| yq 'del(.spec.backup.storages.gcp-cs.schedulerName)' \
+		| yq 'del(.spec.backup.storages.gcp-cs.volumeSpec)' \
+		| yq 'del(.spec.backup.storages.gcp-cs.verifyTLS)' \
 		| yq 'del(.spec.backup.storages.s3-us-west.azure)' \
 		| yq 'del(.spec.backup.storages.s3-us-west.gcs)'
 }
@@ -186,6 +198,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.backup.resources)" \
 		| yq "del(.spec.backup.serviceAccountName)" \
 		| yq "del(.spec.backup.storages.azure-blob)" \
+		| yq "del(.spec.backup.storages.gcp-cs)" \
 		| yq "del(.spec.backup.storages.s3-us-west.resources)" \
 		| yq "del(.spec.backup.storages.s3-us-west.topologySpreadConstraints)" \
 		| yq "del(.spec.backup.storages.s3-us-west.tolerations)" \
