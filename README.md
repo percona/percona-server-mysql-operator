@@ -23,9 +23,9 @@
 
 ## Status
 
-**This project is in the tech preview state right now. Don't use it on production.**
+As of version 1.0.0, this project reached GA status when using Percona Server for MySQL with the group replication `clusterType`.
 
-As of today, we recommend using [Percona Operator for MySQL based on Percona XtraDB Cluster](https://docs.percona.com/percona-operator-for-mysql/pxc/index.html), which is production-ready and contains everything you need to quickly and consistently deploy and scale MySQL clusters in a Kubernetes-based environment, on-premises or in the cloud.
+The asynchronous replication `clusterType` maintains the tech preview status and we don’t recommend using this replication type in production yet. We welcome our open source community to test this case in real-world environments and provide feedback.
 
 ## Architecture
 
@@ -37,7 +37,7 @@ To learn more about the Operator, check the [Percona Operator for MySQL document
 
 # Quickstart installation
 
-Ready to try out the Operator? Check the [Quickstart tutorials](https://docs.percona.com/percona-operator-for-mysql/ps/helm.html) for easy-to follow steps. 
+Ready to try out the Operator? Check the [Quickstart tutorials](https://docs.percona.com/percona-operator-for-mysql/ps/helm.html) for easy-to follow steps.
 
 Below is one of the ways to deploy the Operator using `kubectl`.
 
@@ -60,7 +60,7 @@ kubectl apply -f https://raw.githubusercontent.com/percona/percona-server-mysql-
 
 **Commercial Support**  | **Community Support** |
 :-: | :-: |
-| <br/>Enterprise-grade assistance for your mission-critical MySQL deployments in Kubernetes. Get expert guidance for complex tasks like multi-cloud replication, database migration and building platforms.<br/><br/>  | <br/>Connect with our engineers and fellow users for general questions, troubleshooting, and sharing feedback and ideas.<br/><br/>  | 
+| <br/>Enterprise-grade assistance for your mission-critical MySQL deployments in Kubernetes. Get expert guidance for complex tasks like multi-cloud replication, database migration and building platforms.<br/><br/>  | <br/>Connect with our engineers and fellow users for general questions, troubleshooting, and sharing feedback and ideas.<br/><br/>  |
 | **[Get Percona Support](https://hubs.ly/Q02ZTHb-0)** | **[Visit our Forum](https://forums.percona.com/c/mysql-mariadb/percona-kubernetes-operator-for-mysql/28)** |
 
 
@@ -76,6 +76,6 @@ We have an experimental public roadmap which can be found [here](https://github.
 
 ## Submitting Bug Reports
 
-If you find a bug in Percona Docker Images or in one of the related projects, please submit a report to that project's [JIRA](https://jira.percona.com/browse/K8SPS) issue tracker or [create a GitHub issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/creating-an-issue#creating-an-issue-from-a-repository) in this repository. 
+If you find a bug in Percona Docker Images or in one of the related projects, please submit a report to that project's [JIRA](https://jira.percona.com/browse/K8SPS) issue tracker or [create a GitHub issue](https://docs.github.com/en/issues/tracking-your-work-with-issues/creating-an-issue#creating-an-issue-from-a-repository) in this repository.
 
 Learn more about submitting bugs, new features ideas and improvements in the [Contribution Guide](CONTRIBUTING.md).
