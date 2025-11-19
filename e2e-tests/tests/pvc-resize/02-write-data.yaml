@@ -1,7 +1,7 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 commands:
-  - timeout: 180
+  - timeout: 60
     script: |-
       set -o errexit
       set -o xtrace
@@ -13,11 +13,7 @@ commands:
           "CREATE DATABASE IF NOT EXISTS pvctest; CREATE TABLE IF NOT EXISTS pvctest.data (id int PRIMARY KEY, data text)" \
           "-h $haproxy_svc"
 
-      for i in {1..50}; do
-          run_mysql \
-              "INSERT pvctest.data (id, data) VALUES ($i, 'test data row $i with some content to use storage space')" \
-              "-h $haproxy_svc"
-      done
+      run_mysql_query_file "conf/initial-data.sql" "-h $haproxy_svc"
 
       # Store initial data count for verification
       count=$(run_mysql "SELECT COUNT(*) FROM pvctest.data" "-h $haproxy_svc")
