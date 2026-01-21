@@ -9,6 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
 
@@ -63,16 +64,16 @@ func GetOptionsFromBackupStatus(ctx context.Context, cl client.Client, cluster *
 }
 
 func getGCSOptions(ctx context.Context, cl client.Client, cluster *apiv1.PerconaServerMySQL, storageName string, backupStatus apiv1.PerconaServerMySQLBackupStatus) (Options, error) {
-	secret := new(corev1.Secret)
+	s := new(corev1.Secret)
 	err := cl.Get(ctx, types.NamespacedName{
 		Name:      backupStatus.Storage.GCS.CredentialsSecret,
 		Namespace: cluster.Namespace,
-	}, secret)
+	}, s)
 	if client.IgnoreNotFound(err) != nil {
 		return nil, errors.Wrap(err, "failed to get secret")
 	}
-	accessKeyID := string(secret.Data["AWS_ACCESS_KEY_ID"])
-	secretAccessKey := string(secret.Data["AWS_SECRET_ACCESS_KEY"])
+	accessKeyID := string(s.Data[secret.CredentialsGCSAccessKey])
+	secretAccessKey := string(s.Data[secret.CredentialsGCSSecretKey])
 
 	bucket, prefix := backupStatus.Storage.GCS.BucketAndPrefix()
 	if bucket == "" {
@@ -105,16 +106,16 @@ func getGCSOptions(ctx context.Context, cl client.Client, cluster *apiv1.Percona
 }
 
 func getAzureOptions(ctx context.Context, cl client.Client, ns string, backupStatus apiv1.PerconaServerMySQLBackupStatus) (*AzureOptions, error) {
-	secret := new(corev1.Secret)
+	s := new(corev1.Secret)
 	err := cl.Get(ctx, types.NamespacedName{
 		Name:      backupStatus.Storage.Azure.CredentialsSecret,
 		Namespace: ns,
-	}, secret)
+	}, s)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get secret")
 	}
-	accountName := string(secret.Data["AZURE_STORAGE_ACCOUNT_NAME"])
-	accountKey := string(secret.Data["AZURE_STORAGE_ACCOUNT_KEY"])
+	accountName := string(s.Data["AZURE_STORAGE_ACCOUNT_NAME"])
+	accountKey := string(s.Data["AZURE_STORAGE_ACCOUNT_KEY"])
 
 	container, prefix := backupStatus.Storage.Azure.ContainerAndPrefix()
 	if container == "" {
@@ -135,16 +136,16 @@ func getAzureOptions(ctx context.Context, cl client.Client, ns string, backupSta
 }
 
 func getS3Options(ctx context.Context, cl client.Client, cluster *apiv1.PerconaServerMySQL, storageName string, backupStatus apiv1.PerconaServerMySQLBackupStatus) (*S3Options, error) {
-	secret := new(corev1.Secret)
+	s := new(corev1.Secret)
 	err := cl.Get(ctx, types.NamespacedName{
 		Name:      backupStatus.Storage.S3.CredentialsSecret,
 		Namespace: cluster.Namespace,
-	}, secret)
+	}, s)
 	if client.IgnoreNotFound(err) != nil {
 		return nil, errors.Wrap(err, "failed to get secret")
 	}
-	accessKeyID := string(secret.Data["AWS_ACCESS_KEY_ID"])
-	secretAccessKey := string(secret.Data["AWS_SECRET_ACCESS_KEY"])
+	accessKeyID := string(s.Data[secret.CredentialsAWSAccessKey])
+	secretAccessKey := string(s.Data[secret.CredentialsAWSSecretKey])
 
 	bucket, prefix := backupStatus.Storage.S3.BucketAndPrefix()
 	if bucket == "" {
