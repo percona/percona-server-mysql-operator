@@ -114,8 +114,8 @@ func getAzureOptions(ctx context.Context, cl client.Client, ns string, backupSta
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get secret")
 	}
-	accountName := string(s.Data["AZURE_STORAGE_ACCOUNT_NAME"])
-	accountKey := string(s.Data["AZURE_STORAGE_ACCOUNT_KEY"])
+	accountName := string(s.Data[secret.CredentialsAzureStorageAccount])
+	accountKey := string(s.Data[secret.CredentialsAzureAccessKey])
 
 	container, prefix := backupStatus.Storage.Azure.ContainerAndPrefix()
 	if container == "" {
