@@ -14,7 +14,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                 gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone $region --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $region --quiet || true
                 gcloud container clusters create $CLUSTER_NAME-${CLUSTER_SUFFIX} \
                     --zone $region \
-                    --cluster-version=1.31 \
+                    --cluster-version=1.32 \
                     --machine-type=c2d-standard-4 \
                     --preemptible \
                     --disk-size 30 \
