@@ -72,8 +72,14 @@ func getGCSOptions(ctx context.Context, cl client.Client, cluster *apiv1.Percona
 	if client.IgnoreNotFound(err) != nil {
 		return nil, errors.Wrap(err, "failed to get secret")
 	}
-	accessKeyID := string(s.Data[secret.CredentialsGCSAccessKey])
-	secretAccessKey := string(s.Data[secret.CredentialsGCSSecretKey])
+	accessKeyID, ok := s.Data[secret.CredentialsGCSAccessKey]
+	if !ok {
+		return nil, errors.Errorf("key %s is not found in the % secret", secret.CredentialsGCSAccessKey, s.Name)
+	}
+	secretAccessKey, ok := s.Data[secret.CredentialsGCSSecretKey]
+	if !ok {
+		return nil, errors.Errorf("key %s is not found in the % secret", secret.CredentialsGCSSecretKey, s.Name)
+	}
 
 	bucket, prefix := backupStatus.Storage.GCS.BucketAndPrefix()
 	if bucket == "" {
@@ -97,8 +103,8 @@ func getGCSOptions(ctx context.Context, cl client.Client, cluster *apiv1.Percona
 
 	return &GCSOptions{
 		Endpoint:        backupStatus.Storage.GCS.EndpointURL,
-		AccessKeyID:     accessKeyID,
-		SecretAccessKey: secretAccessKey,
+		AccessKeyID:     string(accessKeyID),
+		SecretAccessKey: string(secretAccessKey),
 		BucketName:      bucket,
 		Prefix:          prefix,
 		VerifyTLS:       verifyTLS,
@@ -114,8 +120,14 @@ func getAzureOptions(ctx context.Context, cl client.Client, ns string, backupSta
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get secret")
 	}
-	accountName := string(s.Data[secret.CredentialsAzureStorageAccount])
-	accountKey := string(s.Data[secret.CredentialsAzureAccessKey])
+	accountName, ok := s.Data[secret.CredentialsAzureStorageAccount]
+	if !ok {
+		return nil, errors.Errorf("key %s is not found in the % secret", secret.CredentialsAzureStorageAccount, s.Name)
+	}
+	accountKey, ok := s.Data[secret.CredentialsAzureAccessKey]
+	if !ok {
+		return nil, errors.Errorf("key %s is not found in the % secret", secret.CredentialsAzureAccessKey, s.Name)
+	}
 
 	container, prefix := backupStatus.Storage.Azure.ContainerAndPrefix()
 	if container == "" {
@@ -127,8 +139,8 @@ func getAzureOptions(ctx context.Context, cl client.Client, ns string, backupSta
 	}
 
 	return &AzureOptions{
-		StorageAccount: accountName,
-		AccessKey:      accountKey,
+		StorageAccount: string(accountName),
+		AccessKey:      string(accountKey),
 		Endpoint:       backupStatus.Storage.Azure.EndpointURL,
 		Container:      container,
 		Prefix:         prefix,
@@ -144,8 +156,14 @@ func getS3Options(ctx context.Context, cl client.Client, cluster *apiv1.PerconaS
 	if client.IgnoreNotFound(err) != nil {
 		return nil, errors.Wrap(err, "failed to get secret")
 	}
-	accessKeyID := string(s.Data[secret.CredentialsAWSAccessKey])
-	secretAccessKey := string(s.Data[secret.CredentialsAWSSecretKey])
+	accessKeyID, ok := s.Data[secret.CredentialsAWSAccessKey]
+	if !ok {
+		return nil, errors.Errorf("key %s is not found in the % secret", secret.CredentialsAWSAccessKey, s.Name)
+	}
+	secretAccessKey, ok := s.Data[secret.CredentialsAWSSecretKey]
+	if !ok {
+		return nil, errors.Errorf("key %s is not found in the % secret", secret.CredentialsAWSSecretKey, s.Name)
+	}
 
 	bucket, prefix := backupStatus.Storage.S3.BucketAndPrefix()
 	if bucket == "" {
@@ -174,8 +192,8 @@ func getS3Options(ctx context.Context, cl client.Client, cluster *apiv1.PerconaS
 
 	return &S3Options{
 		Endpoint:        backupStatus.Storage.S3.EndpointURL,
-		AccessKeyID:     accessKeyID,
-		SecretAccessKey: secretAccessKey,
+		AccessKeyID:     string(accessKeyID),
+		SecretAccessKey: string(secretAccessKey),
 		BucketName:      bucket,
 		Prefix:          prefix,
 		Region:          region,
