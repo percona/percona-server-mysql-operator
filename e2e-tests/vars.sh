@@ -16,6 +16,12 @@ if [[ -z ${MYSQL_VERSION-} && -n ${IMAGE_MYSQL-} ]]; then
 else
 	export MYSQL_VERSION=${MYSQL_VERSION:-"8.4"}
 fi
+
+# for tests
+export IMAGE_MYSQL="mysql:8.4"
+export IMAGE_ROUTER="percona/percona-mysql-router:8.4"
+export MYSQL_VERSION="8.4"
+
 export IMAGE_MYSQL=${IMAGE_MYSQL:-"perconalab/percona-server-mysql-operator:main-psmysql${MYSQL_VERSION}"}
 export IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mysql-operator:main-backup${MYSQL_VERSION}"}
 export IMAGE_ORCHESTRATOR=${IMAGE_ORCHESTRATOR:-"perconalab/percona-server-mysql-operator:main-orchestrator"}

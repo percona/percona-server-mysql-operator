@@ -139,6 +139,15 @@ CFG=/etc/my.cnf.d/node.cnf
 TLS_DIR=/etc/mysql/mysql-tls-secret
 CUSTOM_CONFIG_FILES=("/etc/mysql/config/auto-config.cnf" "/etc/mysql/config/my-config.cnf" "/etc/mysql/config/my-secret.cnf")
 
+if [[ ${HOSTNAME} =~ "-xb-" ]]; then
+	FQDN=${HOSTNAME}
+else
+	CLUSTER_NAME="${HOSTNAME%-[0-9]}"
+	SERVER_NUM=${HOSTNAME/$CLUSTER_NAME-/}
+	SERVER_ID=${CLUSTER_HASH}${SERVER_NUM}
+	FQDN="${HOSTNAME}.${SERVICE_NAME}.$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)"
+fi
+
 install_keyring_component() {
 	echo -n '{ "components": "file://component_keyring_vault" }' >/var/lib/mysql/mysqld.my
 	cp ${KEYRING_VAULT_PATH} /var/lib/mysql/component_keyring_vault.cnf
@@ -167,17 +176,6 @@ add_encryption_options() {
 }
 
 create_default_cnf() {
-	POD_IP=$(hostname -I | awk '{print $1}')
-
-	if [[ ${HOSTNAME} =~ "-xb-" ]]; then
-		FQDN=${HOSTNAME}
-	else
-		CLUSTER_NAME="$(hostname -f | cut -d'.' -f2)"
-		SERVER_NUM=${HOSTNAME/$CLUSTER_NAME-/}
-		SERVER_ID=${CLUSTER_HASH}${SERVER_NUM}
-		FQDN="${HOSTNAME}.${SERVICE_NAME}.$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)"
-	fi
-
 	echo '[mysqld]' >$CFG
 	sed -i "/\[mysqld\]/a read_only=ON" $CFG
 	sed -i "/\[mysqld\]/a server_id=${SERVER_ID}" $CFG
@@ -218,8 +216,6 @@ create_default_cnf() {
 }
 
 load_group_replication_plugin() {
-	POD_IP=$(hostname -I | awk '{print $1}')
-
 	sed -i "/\[mysqld\]/a plugin_load_add=group_replication.so" $CFG
 	sed -i "/\[mysqld\]/a group_replication_exit_state_action=ABORT_SERVER" $CFG
 }
@@ -227,6 +223,13 @@ load_group_replication_plugin() {
 ensure_read_only() {
 	sed -i "/\[mysqld\]/a read_only=ON" $CFG
 	sed -i "/\[mysqld\]/a super_read_only=ON" $CFG
+}
+
+# Sync node.cnf to /etc/mysql/conf.d so Oracle MySQL image picks it up (it uses !includedir /etc/mysql/conf.d/ only).
+sync_node_cnf_for_oracle() {
+	if [ -d /etc/mysql/conf.d ]; then
+		cp -f "$CFG" /etc/mysql/conf.d/node.cnf
+	fi
 }
 
 escape_special() {
@@ -435,6 +438,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 
 	load_group_replication_plugin
 	ensure_read_only
+	sync_node_cnf_for_oracle
 
 	# exit when MYSQL_INIT_ONLY environment variable is set to avoid starting mysqld
 	if [ -n "$MYSQL_INIT_ONLY" ]; then
@@ -455,7 +459,7 @@ fi
 
 if [[ -f /var/lib/mysql/full-cluster-crash ]]; then
 	set +o xtrace
-	node_name=$(hostname -f)
+	node_name=${HOSTNAME}
 	gtid_executed=$(</var/lib/mysql/full-cluster-crash)
 	namespace=$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)
 
@@ -464,7 +468,7 @@ if [[ -f /var/lib/mysql/full-cluster-crash ]]; then
 	echo "MySQL pods will be up and running in read only mode."
 	echo "Latest GTID_EXECUTED on this node is ${gtid_executed}"
 	echo "If you have spec.mysql.autoRecovery disabled, wait for all pods to be up and running and connect to one of them using mysql-shell:"
-	echo "kubectl -n ${namespace} exec -it $(hostname) -- mysqlsh root:<password>@localhost"
+	echo "kubectl -n ${namespace} exec -it $FQDN -- mysqlsh root:<password>@localhost"
 	echo "and run the following command to reboot cluster:"
 	echo "dba.rebootClusterFromCompleteOutage()"
 	echo "and delete /var/lib/mysql/full-cluster-crash file in each pod."
