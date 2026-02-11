@@ -153,7 +153,7 @@ func getS3Options(ctx context.Context, cl client.Client, cluster *apiv1.PerconaS
 		Name:      backupStatus.Storage.S3.CredentialsSecret,
 		Namespace: cluster.Namespace,
 	}, s)
-	if client.IgnoreNotFound(err) != nil {
+	if err != nil {
 		return nil, errors.Wrap(err, "failed to get secret")
 	}
 	accessKeyID, ok := s.Data[secret.CredentialsAWSAccessKey]
