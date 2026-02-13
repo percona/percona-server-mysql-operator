@@ -136,7 +136,8 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 							cr.Spec.StorageName: {
 								Type: apiv1.BackupStorageGCS,
 								GCS: &apiv1.BackupStorageGCSSpec{
-									Bucket: "bucket",
+									CredentialsSecret: "gcs-secret",
+									Bucket:            "bucket",
 								},
 							},
 						},
@@ -152,6 +153,16 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 					},
 					Data: map[string][]byte{
 						string(apiv1.UserOperator): []byte("operator-pass"),
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "gcs-secret",
+						Namespace: cluster.Namespace,
+					},
+					Data: map[string][]byte{
+						"ACCESS_KEY_ID":     []byte("somekey"),
+						"SECRET_ACCESS_KEY": []byte("somekey"),
 					},
 				},
 			},
@@ -1298,6 +1309,28 @@ func TestValidateStorage(t *testing.T) {
 		return fakestorage.NewFakeClient(ctx, opts)
 	}
 
+	cluster := &apiv1.PerconaServerMySQL{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster",
+			Namespace: "ns",
+		},
+	}
+
+	objects := []client.Object{
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "some-secret",
+				Namespace: cluster.Namespace,
+			},
+			Data: map[string][]byte{
+				"AWS_ACCESS_KEY_ID":     []byte("somekey"),
+				"AWS_SECRET_ACCESS_KEY": []byte("somekey"),
+				"ACCESS_KEY_ID":         []byte("somekey"),
+				"SECRET_ACCESS_KEY":     []byte("somekey"),
+			},
+		},
+	}
+
 	tests := []struct {
 		name   string
 		status apiv1.PerconaServerMySQLBackupStatus
@@ -1331,11 +1364,11 @@ func TestValidateStorage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := PerconaServerMySQLBackupReconciler{
-				Client:           fake.NewClientBuilder().WithScheme(scheme).Build(),
+				Client:           fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build(),
 				Scheme:           scheme,
 				NewStorageClient: fakeValidateStorageClient,
 			}
-			err := r.validateStorage(t.Context(), "", new(apiv1.PerconaServerMySQL), tt.status)
+			err := r.validateStorage(t.Context(), "", cluster, tt.status)
 			if tt.err == nil {
 				assert.NoError(t, err)
 				return
