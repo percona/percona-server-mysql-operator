@@ -10,8 +10,18 @@ import (
 )
 
 func TestCheckNSetDefaults(t *testing.T) {
-	t.Run("empty cr", func(t *testing.T) {
+	t.Run("with invalid cluster type", func(t *testing.T) {
 		cr := new(PerconaServerMySQL)
+		cr.Spec.MySQL.ClusterType = "invalid"
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.EqualError(t, err, "invalid is not a valid clusterType, valid options are group-replication and async")
+	})
+	t.Run("empty cr with backups enabled", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.Backup = &BackupSpec{
+			Enabled: true,
+		}
 
 		err := cr.CheckNSetDefaults(t.Context(), nil)
 		assert.EqualError(t, err, "backup.image can't be empty")
@@ -19,17 +29,62 @@ func TestCheckNSetDefaults(t *testing.T) {
 	t.Run("with backup image", func(t *testing.T) {
 		cr := new(PerconaServerMySQL)
 		cr.Spec.Backup = &BackupSpec{
-			Image: "backup-image",
+			Enabled: true,
+			Image:   "backup-image",
 		}
 
 		err := cr.CheckNSetDefaults(t.Context(), nil)
 		assert.EqualError(t, err, "reconcile mysql volumeSpec: volumeSpec provided is nil")
 	})
+	t.Run("scheduled backups should have different names", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.Backup = &BackupSpec{
+			Enabled: true,
+			Image:   "backup-image",
+			Schedule: []BackupSchedule{
+				{
+					Name:        "backup-schedule-1",
+					StorageName: "name",
+					Schedule:    "* * * * *",
+				},
+				{
+					Name:        "backup-schedule-1",
+					StorageName: "name",
+					Schedule:    "* * * * *",
+				},
+			},
+		}
+		cr.Spec.Backup.Storages = map[string]*BackupStorageSpec{
+			"name": {},
+		}
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.EqualError(t, err, "scheduled backups should have different names: backup-schedule-1 name is used by multiple schedules")
+	})
 	t.Run("with backup image and volume spec", func(t *testing.T) {
 		cr := new(PerconaServerMySQL)
 		cr.Spec.Backup = &BackupSpec{
-			Image: "backup-image",
+			Enabled: true,
+			Image:   "backup-image",
 		}
+		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+				},
+			},
+		}
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.NoError(t, err)
+	})
+	t.Run("without backup image, with volume spec", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
 		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
 			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
 				Resources: corev1.VolumeResourceRequirements{
