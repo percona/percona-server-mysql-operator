@@ -754,24 +754,26 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.Backup = new(BackupSpec)
 	}
 
-	if len(cr.Spec.Backup.Image) == 0 {
-		return errors.New("backup.image can't be empty")
-	}
+	if cr.Spec.Backup.Enabled {
+		if len(cr.Spec.Backup.Image) == 0 {
+			return errors.New("backup.image can't be empty")
+		}
 
-	scheduleNames := make(map[string]struct{}, len(cr.Spec.Backup.Schedule))
-	for _, sch := range cr.Spec.Backup.Schedule {
-		if _, ok := scheduleNames[sch.Name]; ok {
-			return errors.Errorf("scheduled backups should have different names: %s name is used by multiple schedules", sch.Name)
-		}
-		scheduleNames[sch.Name] = struct{}{}
-		_, ok := cr.Spec.Backup.Storages[sch.StorageName]
-		if !ok {
-			return errors.Errorf("storage %s doesn't exist", sch.StorageName)
-		}
-		if sch.Schedule != "" {
-			_, err := cron.ParseStandard(sch.Schedule)
-			if err != nil {
-				return errors.Wrap(err, "invalid schedule format")
+		scheduleNames := make(map[string]struct{}, len(cr.Spec.Backup.Schedule))
+		for _, sch := range cr.Spec.Backup.Schedule {
+			if _, ok := scheduleNames[sch.Name]; ok {
+				return errors.Errorf("scheduled backups should have different names: %s name is used by multiple schedules", sch.Name)
+			}
+			scheduleNames[sch.Name] = struct{}{}
+			_, ok := cr.Spec.Backup.Storages[sch.StorageName]
+			if !ok {
+				return errors.Errorf("storage %s doesn't exist", sch.StorageName)
+			}
+			if sch.Schedule != "" {
+				_, err := cron.ParseStandard(sch.Schedule)
+				if err != nil {
+					return errors.Wrap(err, "invalid schedule format")
+				}
 			}
 		}
 	}
