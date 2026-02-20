@@ -72,7 +72,7 @@ See the [Contribution Guide](CONTRIBUTING.md) and [Building and Testing Guide](e
 
 ## Roadmap
 
-We have an experimental public roadmap which can be found [here](https://github.com/percona/roadmap/projects/1). Please feel free to contribute and propose new features by following the roadmap [guidelines](https://github.com/percona/roadmap).
+We have an experimental public roadmap which can be found [here](https://github.com/orgs/percona/projects/10). Please feel free to contribute and propose new features by following the roadmap [guidelines](https://github.com/percona/roadmap).
 
 ## Submitting Bug Reports
 
