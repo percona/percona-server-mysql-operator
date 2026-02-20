@@ -11,4 +11,6 @@ const (
 	EnvBootstrapReadTimeout = "BOOTSTRAP_READ_TIMEOUT"
 
 	EnvBootstrapCloneTimeout = "BOOTSTRAP_CLONE_TIMEOUT"
+
+	EnvPodIP = "POD_IP"
 )
