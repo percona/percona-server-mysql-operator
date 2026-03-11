@@ -10,6 +10,7 @@ log() {
 	echo "{\"time\":\"${date}\", \"message\": \"${message}\"}"
 }
 
+RLIMIT_NOFILE=${HA_RLIMIT_NOFILE:-'1048576'}
 echo "${CLUSTER_TYPE}" >/tmp/cluster_type
 
 if [ "$1" = 'haproxy' ]; then
@@ -40,4 +41,5 @@ if [ "$1" = 'haproxy' ]; then
   fi
 fi
 
+ulimit -n ${RLIMIT_NOFILE}
 exec "$@" ${haproxy_opt}
