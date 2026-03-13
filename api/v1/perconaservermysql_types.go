@@ -98,6 +98,9 @@ type UnsafeFlags struct {
 	// MySQLSize allows to set MySQL size to a value less than the minimum safe size or higher than the maximum safe size.
 	MySQLSize bool `json:"mysqlSize,omitempty"`
 
+	// BackupIfUnhealthy allows scheduled backups to run even when the cluster is not in ready state.
+	BackupIfUnhealthy bool `json:"backupIfUnhealthy,omitempty"`
+
 	// Proxy allows to disable proxy.
 	Proxy bool `json:"proxy,omitempty"`
 	// ProxySize allows to set proxy (HAProxy / Router) size to a value less than the minimum safe size.
