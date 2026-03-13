@@ -65,6 +65,22 @@ func GetCloneTimeout() (uint32, error) {
 	return uint32(cloneTimeout), nil
 }
 
+func GetSourceRetryCount() (uint32, error) {
+	s, ok := os.LookupEnv(naming.EnvBootstrapSourceRetryCount)
+	if !ok {
+		return 0, nil
+	}
+	sourceRetryCount, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to parse BOOTSTRAP_SOURCE_RETRY_COUNT")
+	}
+	if sourceRetryCount < 0 {
+		return 0, errors.New("BOOTSTRAP_SOURCE_RETRY_COUNT should be a positive value")
+	}
+
+	return uint32(sourceRetryCount), nil
+}
+
 func GetSecret(username apiv1.SystemUser) (string, error) {
 	path := filepath.Join(naming.CredsMountPath, string(username))
 	sBytes, err := os.ReadFile(path)

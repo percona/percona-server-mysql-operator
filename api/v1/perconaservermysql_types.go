@@ -934,15 +934,23 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 
 	if cr.Spec.MySQL.ClusterType == ClusterTypeAsync {
 		for _, env := range cr.Spec.MySQL.Env {
-			if env.Name != naming.EnvBootstrapReadTimeout {
-				continue
-			}
-			readTimeout, err := strconv.Atoi(env.Value)
-			if err != nil {
-				return errors.Wrap(err, "failed to parse BOOTSTRAP_READ_TIMEOUT")
-			}
-			if readTimeout < 0 {
-				return errors.New("BOOTSTRAP_READ_TIMEOUT should be a positive value")
+			switch env.Name {
+			case naming.EnvBootstrapReadTimeout:
+				readTimeout, err := strconv.Atoi(env.Value)
+				if err != nil {
+					return errors.Wrap(err, "failed to parse BOOTSTRAP_READ_TIMEOUT")
+				}
+				if readTimeout < 0 {
+					return errors.New("BOOTSTRAP_READ_TIMEOUT should be a positive value")
+				}
+			case naming.EnvBootstrapSourceRetryCount:
+				sourceRetryCount, err := strconv.Atoi(env.Value)
+				if err != nil {
+					return errors.Wrap(err, "failed to parse BOOTSTRAP_SOURCE_RETRY_COUNT")
+				}
+				if sourceRetryCount < 0 {
+					return errors.New("BOOTSTRAP_SOURCE_RETRY_COUNT should be a positive value")
+				}
 			}
 		}
 	}

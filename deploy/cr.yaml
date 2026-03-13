@@ -97,6 +97,8 @@ spec:
 #    env:
 #      - name: BOOTSTRAP_READ_TIMEOUT
 #        value: "600"
+#      - name: BOOTSTRAP_SOURCE_RETRY_COUNT
+#        value: "3"
 #    envFrom:
 #      - secretRef:
 #          name: mysql-env-secret

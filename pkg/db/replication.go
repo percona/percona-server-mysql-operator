@@ -15,6 +15,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
+	defs "github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
 const defaultChannelName = ""
@@ -64,7 +65,11 @@ func (m *ReplicationDBManager) query(ctx context.Context, query string, out inte
 	return nil
 }
 
-func (m *ReplicationDBManager) ChangeReplicationSource(ctx context.Context, host, replicaPass string, port int32) error {
+func (m *ReplicationDBManager) ChangeReplicationSource(ctx context.Context, host, replicaPass string, port int32, sourceRetryCount int) error {
+	if sourceRetryCount == 0 {
+		sourceRetryCount = defs.DefaultBootstrapSourceRetryCount
+	}
+
 	var errb, outb bytes.Buffer
 	q := fmt.Sprintf(`
 		CHANGE REPLICATION SOURCE TO
@@ -75,11 +80,10 @@ func (m *ReplicationDBManager) ChangeReplicationSource(ctx context.Context, host
 			SOURCE_SSL=1,
 			SOURCE_CONNECTION_AUTO_FAILOVER=1,
 			SOURCE_AUTO_POSITION=1,
-			SOURCE_RETRY_COUNT=3,
+			SOURCE_RETRY_COUNT=%d,
 			SOURCE_CONNECT_RETRY=60
-		`, apiv1.UserReplication, replicaPass, host, port)
+		`, apiv1.UserReplication, replicaPass, host, port, sourceRetryCount)
 	err := m.db.exec(ctx, q, &outb, &errb)
-
 	if err != nil {
 		return errors.Wrap(err, "exec CHANGE REPLICATION SOURCE TO")
 	}

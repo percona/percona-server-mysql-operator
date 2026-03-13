@@ -96,6 +96,12 @@ func Bootstrap(ctx context.Context) error {
 	}
 	params.CloneTimeoutSeconds = cloneTimeout
 
+	sourceRetryCount, err := utils.GetSourceRetryCount()
+	if err != nil {
+		return errors.Wrap(err, "get source retry count")
+	}
+	params.SourceRetryCount = sourceRetryCount
+
 	db, err := database.NewDatabase(ctx, params)
 	if err != nil {
 		return errors.Wrap(err, "connect to database")
@@ -195,7 +201,7 @@ func Bootstrap(ctx context.Context) error {
 			return errors.Wrap(err, "stop replication")
 		}
 
-		if err := db.StartReplication(ctx, primary, replicaPass, mysql.DefaultPort); err != nil {
+		if err := db.StartReplication(ctx, primary, replicaPass, mysql.DefaultPort, params.SourceRetryCount); err != nil {
 			return errors.Wrap(err, "start replication")
 		}
 	}

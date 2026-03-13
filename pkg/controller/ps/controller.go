@@ -53,6 +53,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	defs "github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
@@ -1521,8 +1522,29 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 	return errors.Wrap(g.Wait(), "stop replication on replicas")
 }
 
+func bootstrapSourceRetryCount(cr *apiv1.PerconaServerMySQL) (int, error) {
+	for _, env := range cr.Spec.MySQL.Env {
+		if env.Name != naming.EnvBootstrapSourceRetryCount {
+			continue
+		}
+
+		sourceRetryCount, err := strconv.Atoi(env.Value)
+		if err != nil {
+			return 0, errors.Wrap(err, "failed to parse")
+		}
+
+		return sourceRetryCount, nil
+	}
+
+	return defs.DefaultBootstrapSourceRetryCount, nil
+}
+
 func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context, cr *apiv1.PerconaServerMySQL, replicaPass string, primary *orchestrator.Instance) error {
 	log := logf.FromContext(ctx).WithName("startAsyncReplication")
+	sourceRetryCount, err := bootstrapSourceRetryCount(cr)
+	if err != nil {
+		return errors.Wrapf(err, "failed to get value from %s env var", naming.EnvBootstrapSourceRetryCount)
+	}
 
 	orcPod, err := getReadyOrcPod(ctx, r.Client, cr)
 	if err != nil {
@@ -1550,7 +1572,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 			um := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, hostname)
 
 			log.V(1).Info("Change replication source", "primary", primary.Key.Hostname, "replica", hostname)
-			if err := um.ChangeReplicationSource(ctx, primary.Key.Hostname, replicaPass, primary.Key.Port); err != nil {
+			if err := um.ChangeReplicationSource(ctx, primary.Key.Hostname, replicaPass, primary.Key.Port, sourceRetryCount); err != nil {
 				return errors.Wrapf(err, "change replication source on %s", hostname)
 			}
 

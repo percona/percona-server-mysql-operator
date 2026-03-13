@@ -30,7 +30,7 @@ func ManualCluster(cr *apiv1.PerconaServerMySQL) {
 }
 
 func mysqlDefaults(spec *apiv1.MySQLSpec) {
-	podSpecDefaults(&spec.PodSpec, ImageMySQL, resources("2Gi", "", "4Gi", ""), configurationMySQL, 600, envList("BOOTSTRAP_READ_TIMEOUT", "600"), envFromList("mysql-env-secret"))
+	podSpecDefaults(&spec.PodSpec, ImageMySQL, resources("2Gi", "", "4Gi", ""), configurationMySQL, 600, envList("BOOTSTRAP_READ_TIMEOUT", "600", "BOOTSTRAP_SOURCE_RETRY_COUNT", "3"), envFromList("mysql-env-secret"))
 
 	spec.AutoRecovery = true
 	spec.VolumeSpec = nil

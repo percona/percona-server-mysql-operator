@@ -23,6 +23,7 @@ func TestDBParams_setDefaults(t *testing.T) {
 				Port:                33062,
 				ReadTimeoutSeconds:  3600,
 				CloneTimeoutSeconds: 3600,
+				SourceRetryCount:    3,
 			},
 		},
 		{
@@ -38,6 +39,7 @@ func TestDBParams_setDefaults(t *testing.T) {
 				Port:                3306,
 				ReadTimeoutSeconds:  30,
 				CloneTimeoutSeconds: 300,
+				SourceRetryCount:    3,
 			},
 		},
 		{
@@ -51,6 +53,7 @@ func TestDBParams_setDefaults(t *testing.T) {
 				Port:                33062,
 				ReadTimeoutSeconds:  3600,
 				CloneTimeoutSeconds: 3600,
+				SourceRetryCount:    3,
 			},
 		},
 		{
@@ -66,6 +69,37 @@ func TestDBParams_setDefaults(t *testing.T) {
 				Port:                3306,
 				ReadTimeoutSeconds:  30,
 				CloneTimeoutSeconds: 3600,
+				SourceRetryCount:    3,
+			},
+		},
+		{
+			name: "zero source retry count gets default",
+			params: DBParams{
+				User:             apiv1.UserOperator,
+				Port:             3306,
+				SourceRetryCount: 0,
+			},
+			expected: DBParams{
+				User:                apiv1.UserOperator,
+				Port:                3306,
+				ReadTimeoutSeconds:  3600,
+				CloneTimeoutSeconds: 3600,
+				SourceRetryCount:    3,
+			},
+		},
+		{
+			name: "custom source retry count",
+			params: DBParams{
+				User:             apiv1.UserOperator,
+				Port:             3306,
+				SourceRetryCount: 7,
+			},
+			expected: DBParams{
+				User:                apiv1.UserOperator,
+				Port:                3306,
+				ReadTimeoutSeconds:  3600,
+				CloneTimeoutSeconds: 3600,
+				SourceRetryCount:    7,
 			},
 		},
 	}
