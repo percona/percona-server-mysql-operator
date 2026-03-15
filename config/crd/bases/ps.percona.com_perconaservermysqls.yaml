@@ -10247,6 +10247,8 @@ spec:
                 type: object
               unsafeFlags:
                 properties:
+                  backupIfUnhealthy:
+                    type: boolean
                   mysqlSize:
                     type: boolean
                   orchestrator:
