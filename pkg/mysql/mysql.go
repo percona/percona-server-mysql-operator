@@ -26,6 +26,10 @@ const (
 	CustomConfigKey       = "my.cnf"
 	configVolumeName      = "config"
 	configMountPath       = "/etc/mysql/config"
+	nodeCnfVolumeName     = "node-cnf"
+	nodeCnfMountPath      = "/etc/my.cnf.d"
+	nodeCnfConfDVolumeName = "node-cnf-conf-d"   // Oracle MySQL image uses !includedir /etc/mysql/conf.d/
+	nodeCnfConfDMountPath = "/etc/mysql/conf.d"
 	credsVolumeName       = "users"
 	mysqlshVolumeName     = "mysqlsh"
 	mysqlshMountPath      = "/.mysqlsh"
@@ -307,6 +311,23 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
+	}
+
+	if cr.CompareVersion("1.1.0") >= 0 {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: nodeCnfVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+			corev1.Volume{
+				Name: nodeCnfConfDVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		)
 	}
 
 	if cr.CompareVersion("0.11.0") >= 0 {
@@ -616,6 +637,19 @@ func mysqldVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 		},
 	}
 
+	if cr.CompareVersion("1.1.0") >= 0 {
+		mounts = append(mounts,
+			corev1.VolumeMount{
+				Name:      nodeCnfVolumeName,
+				MountPath: nodeCnfMountPath,
+			},
+			corev1.VolumeMount{
+				Name:      nodeCnfConfDVolumeName,
+				MountPath: nodeCnfConfDMountPath,
+			},
+		)
+	}
+
 	if cr.CompareVersion("0.11.0") >= 0 {
 		mounts = append(mounts, corev1.VolumeMount{
 			Name:      vaultSecretVolumeName,
@@ -668,6 +702,17 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		},
 	}
 	env = append(env, spec.Env...)
+
+	if cr.CompareVersion("1.1.0") >= 0 {
+		env = append(env, corev1.EnvVar{
+			Name: naming.EnvPodIP,
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "status.podIP",
+				},
+			},
+		})
+	}
 
 	if cr.CompareVersion("0.12.0") >= 0 {
 		env = append(env, corev1.EnvVar{
