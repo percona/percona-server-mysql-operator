@@ -242,7 +242,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	if status.State == apiv1.RestoreSucceeded {
-		if cluster.Spec.MySQL.IsGR() {
+		if cluster.CompareVersion("1.1.0") >= 0 || cluster.Spec.MySQL.IsGR() {
 			if err := r.deletePVCs(ctx, cluster); err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "delete PVCs")
 			}
