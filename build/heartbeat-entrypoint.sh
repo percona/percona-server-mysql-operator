@@ -1,13 +1,28 @@
 #!/bin/bash
 
+shutdown_requested=0
+
+handle_shutdown() {
+	shutdown_requested=1
+	echo '[INFO] Shutdown requested, exiting heartbeat entrypoint'
+}
+
+trap handle_shutdown SIGTERM SIGINT
+
 DATA_DIR='/var/lib/mysql'
 until [ ! -f "$DATA_DIR/bootstrap.lock" ] && [ ! -f "$DATA_DIR/clone.lock" ] && [ -S "$DATA_DIR/mysql.sock" ]; do
+	if [ "$shutdown_requested" -eq 1 ]; then
+		exit 0
+	fi
 	echo '[INFO] Waiting for MySQL initialization ...'
 	sleep 10
 done
 
 # wait until bootstrap start clone process
 # we can get situation when ps-entrypoint removed bootstrap.lock but bootstrap has not created clone.lock yet
+if [ "$shutdown_requested" -eq 1 ]; then
+	exit 0
+fi
 sleep 10
 if [ -f /var/lib/mysql/clone.lock ]; then
 	CLONE_IN_PROGRESS='yes'
@@ -24,6 +39,10 @@ CHECK_INTERVAL=5
 ELAPSED=0
 
 while [ $ELAPSED -lt $TIMEOUT ]; do
+	if [ "$shutdown_requested" -eq 1 ]; then
+		exit 0
+	fi
+
 	CLONE_STATUS=$(MYSQL_PWD=${MYSQL_PASSWORD} $MYSQL_CMDLINE -P$MYSQL_ADMIN_PORT -e 'SELECT STATE FROM performance_schema.clone_status;' | sed -n -e '2p' | tr -d '\n')
 	if [[ $CLONE_STATUS == "Completed" || -z $CLONE_IN_PROGRESS ]]; then
 		echo '[INFO] Clone completed, starting pt-heartbeat'
@@ -34,6 +53,9 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
 
 	# Sleep in 1-second intervals to allow signal handling
 	for ((j=0; j<CHECK_INTERVAL; j++)); do
+		if [ "$shutdown_requested" -eq 1 ]; then
+			exit 0
+		fi
 		sleep 1
 	done
 
@@ -47,7 +69,7 @@ HEARTBEAT_USER='heartbeat'
 echo "[INFO] pt-heartbeat --update --replace --fail-successive-errors 20 --check-read-only --create-table --database sys_operator \
 	--table heartbeat --user ${HEARTBEAT_USER} --password XXXX --port ${MYSQL_ADMIN_PORT}"
 
-pt-heartbeat \
+exec pt-heartbeat \
 	--update \
 	--replace \
 	--fail-successive-errors 20 \
