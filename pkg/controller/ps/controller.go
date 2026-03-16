@@ -136,7 +136,7 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 	}
 
 	if err = r.doReconcile(ctx, cr); err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "reconcile")
+		return ctrl.Result{}, util.WrapWithDeepestStack(err, "reconcile")
 	}
 
 	return rr, nil
@@ -913,6 +913,12 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 			return nil
 		case errors.Is(err, orchestrator.ErrNoSuchHost):
 			log.Info("mysql is not ready, host not found. skip")
+			return nil
+		case errors.Is(err, orchestrator.ErrTimeout):
+			log.Info("mysql is not ready, connection timeout. skip")
+			return nil
+		case errors.Is(err, orchestrator.ErrContainerNotFound):
+			log.Info("orchestrator is not ready, container not found. skip")
 			return nil
 		}
 		return errors.Wrap(err, "failed to discover cluster")

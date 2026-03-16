@@ -78,6 +78,10 @@ func main() {
 	opts := zap.Options{
 		Encoder: getLogEncoder(setupLog),
 		Level:   getLogLevel(setupLog),
+		// We rely on github.com/pkg/errors to capture stacktrace on the error itself.
+		// Zap's stacktrace on log.Error only adds the logger call site from controller-runtime,
+		// which is redundant and obscures the real failure stack.
+		StacktraceLevel: zapcore.PanicLevel,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
