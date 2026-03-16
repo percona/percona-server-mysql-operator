@@ -38,7 +38,7 @@ MYSQL_CMDLINE="/usr/bin/timeout 10 /usr/bin/mysql -nNE -u$MYSQL_USER"
 CHECK_INTERVAL=5
 ELAPSED=0
 
-while [ $ELAPSED -lt $TIMEOUT ]; do
+while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
 	if [ "$shutdown_requested" -eq 1 ]; then
 		exit 0
 	fi
@@ -52,7 +52,7 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
 	echo "[INFO] Waiting for MySQL initialization (${ELAPSED}s/${TIMEOUT}s)"
 
 	# Sleep in 1-second intervals to allow signal handling
-	for ((j=0; j<CHECK_INTERVAL; j++)); do
+	for ((j = 0; j < CHECK_INTERVAL; j++)); do
 		if [ "$shutdown_requested" -eq 1 ]; then
 			exit 0
 		fi
