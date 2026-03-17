@@ -156,6 +156,16 @@ func (b *PerconaServerMySQLBackup) GetContainerOptions(storage *BackupStorageSpe
 	return nil
 }
 
+func (b *PerconaServerMySQLBackup) GetEncryption(storage *BackupStorageSpec) *EncryptionSpec {
+	if b.Spec.Encryption != nil {
+		return b.Spec.Encryption
+	}
+	if storage != nil && storage.Encryption != nil {
+		return storage.Encryption
+	}
+	return nil
+}
+
 //+kubebuilder:object:root=true
 
 // PerconaServerMySQLBackupList contains a list of PerconaServerMySQLBackup

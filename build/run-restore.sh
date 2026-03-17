@@ -43,6 +43,14 @@ main() {
 		"azure") run_azure | extract "${tmpdir}" ;;
 	esac
 
+	rm -rf "${tmpdir}/lost+found"
+
+	if [[ -n "${ENCRYPTION_KEY_FILE}" ]]; then
+		echo "Decrypting backup with key file: ${ENCRYPTION_KEY_FILE}"
+		xtrabackup --decrypt=AES256 --encrypt-key-file="${ENCRYPTION_KEY_FILE}" --target-dir="${tmpdir}" --parallel="${PARALLEL}"
+		find "${tmpdir}" -name '*.xbcrypt' -delete
+	fi
+
 	local keyring=""
 	if [[ -f ${KEYRING_VAULT_PATH} ]]; then
 		if [[ ${XTRABACKUP_VERSION} == "8.0" ]]; then

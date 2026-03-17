@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 
 	"github.com/pkg/errors"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	xb "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
@@ -19,9 +21,15 @@ type Handler struct {
 	newStorageFunc   storage.NewClientFunc
 	getNamespaceFunc func() (string, error)
 	deleteBackupFunc func(ctx context.Context, cfg *xb.BackupConfig, backupName string) error
+	k8sClient        client.Client
 }
 
-func (h *Handler) init() {
+func NewHandler() (*Handler, error) {
+	h := &Handler{}
+	return h, h.init()
+}
+
+func (h *Handler) init() error {
 	if h.deleteBackupFunc == nil {
 		h.deleteBackupFunc = deleteBackup
 	}
@@ -38,11 +46,19 @@ func (h *Handler) init() {
 			return string(ns), nil
 		}
 	}
+
+	if h.k8sClient == nil {
+		k8sClient, err := client.New(config.GetConfigOrDie(), client.Options{})
+		if err != nil {
+			return errors.Wrap(err, "new k8s client")
+		}
+		h.k8sClient = k8sClient
+	}
+
+	return nil
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	h.init()
-
 	switch req.Method {
 	case http.MethodGet:
 		h.getBackupHandler(w, req)

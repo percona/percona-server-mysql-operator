@@ -92,9 +92,18 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
+
+	encryptionKeyFile, err := h.createEncryptionKeyFile(req.Context(), &backupConf, ns)
+	if err != nil {
+		log.Error(err, "failed to create encryption key file")
+		http.Error(w, "backup failed", http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(encryptionKeyFile) //nolint:errcheck
+
 	g, gCtx := errgroup.WithContext(req.Context())
 
-	xtrabackup := exec.CommandContext(gCtx, "xtrabackup", xtrabackupArgs(string(backupUser), backupPass, &backupConf)...)
+	xtrabackup := exec.CommandContext(gCtx, "xtrabackup", xtrabackupArgs(string(backupUser), backupPass, &backupConf, encryptionKeyFile)...)
 	xtrabackup.Env = envs(backupConf)
 
 	xbOut, err := xtrabackup.StdoutPipe()
@@ -199,7 +208,7 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 	log.Info("Backup finished successfully", "destination", backupConf.Destination, "storage", backupConf.Type)
 }
 
-func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
+func xtrabackupArgs(user, pass string, conf *xb.BackupConfig, encryptionKeyFile string) []string {
 	args := []string{
 		"--backup",
 		"--stream=xbstream",
@@ -212,6 +221,11 @@ func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
 	if conf != nil && conf.ContainerOptions != nil {
 		args = append(args, conf.ContainerOptions.Args.Xtrabackup...)
 	}
+
+	if encryptionKeyFile != "" {
+		args = append(args, "--encrypt=AES256")
+		args = append(args, fmt.Sprintf("--encrypt-key-file=%s", encryptionKeyFile))
+	}
 	return args
 }
 
@@ -222,6 +236,31 @@ func getClusterType() apiv1.ClusterType {
 	}
 
 	return apiv1.ClusterType(cType)
+}
+
+func (h *Handler) createEncryptionKeyFile(
+	ctx context.Context, cfg *xb.BackupConfig, ns string) (string, error) {
+	if cfg.Encryption == nil || !cfg.Encryption.Enabled {
+		return "", nil
+	}
+
+	key, err := cfg.Encryption.ReadEncryptionKey(ctx, h.k8sClient, ns)
+	if err != nil {
+		return "", errors.Wrap(err, "read encryption key")
+	}
+
+	tempFile, err := os.CreateTemp(os.TempDir(), "encryption-key-*.key")
+	if err != nil {
+		return "", errors.Wrap(err, "create temporary file")
+	}
+
+	if _, err := tempFile.WriteString(key); err != nil {
+		return "", errors.Wrap(err, "write key to file")
+	}
+	if err := tempFile.Close(); err != nil {
+		return "", errors.Wrap(err, "close file")
+	}
+	return tempFile.Name(), nil
 }
 
 func (h *Handler) checkBackupMD5Size(ctx context.Context, cfg *xb.BackupConfig) error {

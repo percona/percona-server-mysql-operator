@@ -24,18 +24,19 @@ import (
 )
 
 const (
-	appName               = "xtrabackup"
-	componentShortName    = "xb"
-	dataVolumeName        = "datadir"
-	dataMountPath         = "/var/lib/mysql"
-	credsVolumeName       = "users"
-	credsMountPath        = "/etc/mysql/mysql-users-secret"
-	tlsVolumeName         = "tls"
-	tlsMountPath          = "/etc/mysql/mysql-tls-secret"
-	backupVolumeName      = appName
-	backupMountPath       = "/backup"
-	vaultSecretVolumeName = "vault-keyring-secret"
-	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
+	appName                      = "xtrabackup"
+	componentShortName           = "xb"
+	dataVolumeName               = "datadir"
+	dataMountPath                = "/var/lib/mysql"
+	credsVolumeName              = "users"
+	credsMountPath               = "/etc/mysql/mysql-users-secret"
+	tlsVolumeName                = "tls"
+	tlsMountPath                 = "/etc/mysql/mysql-tls-secret"
+	backupVolumeName             = appName
+	backupMountPath              = "/backup"
+	vaultSecretVolumeName        = "vault-keyring-secret"
+	vaultSecretMountPath         = "/etc/mysql/vault-keyring-secret"
+	backupEncryptionKeyMountPath = "/etc/mysql/backup-encryption-key"
 )
 
 func Name(cr *apiv1.PerconaServerMySQLBackup) string {
@@ -218,6 +219,11 @@ func xtrabackupContainer(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaSer
 		return corev1.Container{}, errors.Wrap(err, "marshal container options")
 	}
 
+	encryptionOptionsJSON, err := json.Marshal(cr.GetEncryption(storage))
+	if err != nil {
+		return corev1.Container{}, errors.Wrap(err, "marshal encryption options")
+	}
+
 	return corev1.Container{
 		Name:            appName,
 		Image:           spec.Image,
@@ -238,6 +244,10 @@ func xtrabackupContainer(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaSer
 			{
 				Name:  "CONTAINER_OPTIONS",
 				Value: string(containerOptionsJSON),
+			},
+			{
+				Name:  "ENCRYPTION_OPTIONS",
+				Value: string(encryptionOptionsJSON),
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
@@ -465,6 +475,17 @@ func RestoreJob(
 		})
 	}
 
+	if storage.Encryption != nil && storage.Encryption.Enabled {
+		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: "encryption-key",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: storage.Encryption.SecretName,
+				},
+			},
+		})
+	}
+
 	return job
 }
 
@@ -577,6 +598,17 @@ func restoreContainer(
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      vaultSecretVolumeName,
 			MountPath: vaultSecretMountPath,
+		})
+	}
+
+	if storage.Encryption != nil && storage.Encryption.Enabled {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "encryption-key",
+			MountPath: backupEncryptionKeyMountPath,
+		})
+		envs = append(envs, corev1.EnvVar{
+			Name:  "ENCRYPTION_KEY_FILE",
+			Value: fmt.Sprintf("%s/%s", backupEncryptionKeyMountPath, storage.Encryption.Key),
 		})
 	}
 
@@ -803,6 +835,7 @@ type BackupConfig struct {
 	S3               BackupConfigS3                `json:"s3"`
 	GCS              BackupConfigGCS               `json:"gcs"`
 	Azure            BackupConfigAzure             `json:"azure"`
+	Encryption       *apiv1.EncryptionSpec         `json:"encryption,omitempty"`
 }
 
 type BackupConfigS3 struct {

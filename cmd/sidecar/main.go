@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/percona/percona-server-mysql-operator/cmd/sidecar/handler"
+	"github.com/percona/percona-server-mysql-operator/cmd/sidecar/handler/backup"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
@@ -21,10 +22,16 @@ func startServer() *http.Server {
 	log := logf.Log.WithName("startServer")
 	mux := http.NewServeMux()
 
+	backupHandler, err := backup.NewHandler()
+	if err != nil {
+		log.Error(err, "failed to create backup handler")
+		os.Exit(1)
+	}
+
 	mux.HandleFunc("/health/", func(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintf(w, "OK")
 	})
-	mux.Handle("/backup/", handler.Backup())
+	mux.Handle("/backup/", backupHandler)
 	mux.HandleFunc("/logs/", handler.LogsHandlerFunc)
 
 	srv := &http.Server{Addr: ":" + strconv.Itoa(mysql.SidecarHTTPPort), Handler: mux}

@@ -13059,7 +13059,7 @@ spec:
               fieldPath: metadata.namespace
         - name: DISABLE_TELEMETRY
           value: "false"
-        image: asia-south1-docker.pkg.dev/cloud-dev-112233/mayankshah/pg-operator:K8SPG-779
+        image: asia-south1-docker.pkg.dev/cloud-dev-112233/mayankshah/ps-operator:K8SPS-409
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
