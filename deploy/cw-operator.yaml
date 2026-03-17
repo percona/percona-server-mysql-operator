@@ -48,7 +48,7 @@ spec:
           value: ""
         - name: DISABLE_TELEMETRY
           value: "false"
-        image: perconalab/percona-server-mysql-operator:main
+        image: asia-south1-docker.pkg.dev/cloud-dev-112233/mayankshah/pg-operator:K8SPG-779
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

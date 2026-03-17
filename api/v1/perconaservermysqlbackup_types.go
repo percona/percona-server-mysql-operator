@@ -31,6 +31,7 @@ type PerconaServerMySQLBackupSpec struct {
 	StorageName      string                  `json:"storageName"`
 	SourcePod        string                  `json:"sourcePod,omitempty"`
 	ContainerOptions *BackupContainerOptions `json:"containerOptions,omitempty"`
+	Encryption       *EncryptionSpec         `json:"encryption,omitempty"`
 }
 
 type BackupState string

@@ -727,6 +727,7 @@ spec:
 #          privileged: false
 #          runAsGroup: 1001
 #          runAsUser: 1001
+#        encryption: null
 #        podSecurityContext:
 #          fsGroup: 1001
 #          supplementalGroups:
@@ -770,6 +771,7 @@ spec:
 #          privileged: false
 #          runAsGroup: 1001
 #          runAsUser: 1001
+#        encryption: null
 #        gcs:
 #          bucket: BUCKET-NAME
 #          credentialsSecret: SECRET-NAME
@@ -830,6 +832,7 @@ spec:
 #          privileged: false
 #          runAsGroup: 1001
 #          runAsUser: 1001
+        encryption: null
 #        labels:
 #          backupWorker: "True"
 #        nodeSelector:

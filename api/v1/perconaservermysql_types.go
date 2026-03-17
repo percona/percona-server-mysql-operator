@@ -359,6 +359,13 @@ type BackupStorageSpec struct {
 	RuntimeClassName          *string                           `json:"runtimeClassName,omitempty"`
 	VerifyTLS                 *bool                             `json:"verifyTLS,omitempty"`
 	ContainerOptions          *BackupContainerOptions           `json:"containerOptions,omitempty"`
+	Encryption                *EncryptionSpec                   `json:"encryption,omitempty"`
+}
+
+type EncryptionSpec struct {
+	Enabled    bool   `json:"enabled,omitempty"`
+	SecretName string `json:"secretName,omitempty"`
+	Key        string `json:"key,omitempty"`
 }
 
 type BackupContainerOptions struct {
