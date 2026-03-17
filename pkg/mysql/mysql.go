@@ -150,7 +150,7 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 	}
 
 	if cr.CompareVersion("1.1.0") >= 0 {
-		sa, _, _ := RBAC(cr)
+		_, _, sa := RBAC(cr)
 		spec.ServiceAccountName = sa.GetName()
 	}
 
@@ -846,7 +846,7 @@ func appendUniqueContainers(containers []corev1.Container, more ...corev1.Contai
 	return containers
 }
 
-func RBAC(cr *apiv1.PerconaServerMySQL) (*corev1.ServiceAccount, *rbacv1.Role, *rbacv1.RoleBinding) {
+func RBAC(cr *apiv1.PerconaServerMySQL) (*rbacv1.Role, *rbacv1.RoleBinding, *corev1.ServiceAccount) {
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      Name(cr),
@@ -887,5 +887,5 @@ func RBAC(cr *apiv1.PerconaServerMySQL) (*corev1.ServiceAccount, *rbacv1.Role, *
 		},
 	}
 
-	return sa, role, roleBinding
+	return role, roleBinding, sa
 }
