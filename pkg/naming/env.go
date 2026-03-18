@@ -12,5 +12,7 @@ const (
 
 	EnvBootstrapCloneTimeout = "BOOTSTRAP_CLONE_TIMEOUT"
 
-	EnvBootstrapSourceRetryCount = "ASYNC_SOURCE_RETRY_COUNT"
+	EnvAsyncSourceRetryCount = "ASYNC_SOURCE_RETRY_COUNT"
+
+	EnvAsyncSourceConnectRetry = "ASYNC_SOURCE_CONNECT_RETRY"
 )

@@ -201,7 +201,7 @@ func Bootstrap(ctx context.Context) error {
 			return errors.Wrap(err, "stop replication")
 		}
 
-		if err := db.StartReplication(ctx, primary, replicaPass, mysql.DefaultPort, params.SourceRetryCount); err != nil {
+		if err := db.StartReplication(ctx, primary, replicaPass, mysql.DefaultPort, params.SourceRetryCount, params.SourceConnectRetry); err != nil {
 			return errors.Wrap(err, "start replication")
 		}
 	}

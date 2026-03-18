@@ -46,7 +46,8 @@ const (
 	DefaultReadTimeoutSecondsSeconds  = 3600
 	DefaultCloneTimeoutSecondsSeconds = 3600
 
-	DefaultBootstrapSourceRetryCount = 3
+	DefaultAsyncSourceRetryCount   = 3
+	DefaultAsyncSourceConnectRetry = 60
 )
 
 type User struct {

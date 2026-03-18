@@ -24,6 +24,7 @@ func TestDBParams_setDefaults(t *testing.T) {
 				ReadTimeoutSeconds:  3600,
 				CloneTimeoutSeconds: 3600,
 				SourceRetryCount:    3,
+				SourceConnectRetry:  60,
 			},
 		},
 		{
@@ -33,6 +34,7 @@ func TestDBParams_setDefaults(t *testing.T) {
 				Port:                3306,
 				ReadTimeoutSeconds:  30,
 				CloneTimeoutSeconds: 300,
+				SourceConnectRetry:  60,
 			},
 			expected: DBParams{
 				User:                apiv1.UserOperator,
@@ -40,6 +42,7 @@ func TestDBParams_setDefaults(t *testing.T) {
 				ReadTimeoutSeconds:  30,
 				CloneTimeoutSeconds: 300,
 				SourceRetryCount:    3,
+				SourceConnectRetry:  60,
 			},
 		},
 		{
@@ -54,6 +57,7 @@ func TestDBParams_setDefaults(t *testing.T) {
 				ReadTimeoutSeconds:  3600,
 				CloneTimeoutSeconds: 3600,
 				SourceRetryCount:    3,
+				SourceConnectRetry:  60,
 			},
 		},
 		{
@@ -70,6 +74,7 @@ func TestDBParams_setDefaults(t *testing.T) {
 				ReadTimeoutSeconds:  30,
 				CloneTimeoutSeconds: 3600,
 				SourceRetryCount:    3,
+				SourceConnectRetry:  60,
 			},
 		},
 		{
@@ -85,6 +90,7 @@ func TestDBParams_setDefaults(t *testing.T) {
 				ReadTimeoutSeconds:  3600,
 				CloneTimeoutSeconds: 3600,
 				SourceRetryCount:    3,
+				SourceConnectRetry:  60,
 			},
 		},
 		{
@@ -100,6 +106,39 @@ func TestDBParams_setDefaults(t *testing.T) {
 				ReadTimeoutSeconds:  3600,
 				CloneTimeoutSeconds: 3600,
 				SourceRetryCount:    7,
+				SourceConnectRetry:  60,
+			},
+		},
+		{
+			name: "zero source connect retry gets default",
+			params: DBParams{
+				User:               apiv1.UserOperator,
+				Port:               3306,
+				SourceConnectRetry: 0,
+			},
+			expected: DBParams{
+				User:                apiv1.UserOperator,
+				Port:                3306,
+				ReadTimeoutSeconds:  3600,
+				CloneTimeoutSeconds: 3600,
+				SourceRetryCount:    3,
+				SourceConnectRetry:  60,
+			},
+		},
+		{
+			name: "custom source connect retry",
+			params: DBParams{
+				User:               apiv1.UserOperator,
+				Port:               3306,
+				SourceConnectRetry: 120,
+			},
+			expected: DBParams{
+				User:                apiv1.UserOperator,
+				Port:                3306,
+				ReadTimeoutSeconds:  3600,
+				CloneTimeoutSeconds: 3600,
+				SourceRetryCount:    3,
+				SourceConnectRetry:  120,
 			},
 		},
 	}

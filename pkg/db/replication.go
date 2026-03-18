@@ -65,9 +65,12 @@ func (m *ReplicationDBManager) query(ctx context.Context, query string, out inte
 	return nil
 }
 
-func (m *ReplicationDBManager) ChangeReplicationSource(ctx context.Context, host, replicaPass string, port int32, sourceRetryCount int) error {
+func (m *ReplicationDBManager) ChangeReplicationSource(ctx context.Context, host, replicaPass string, port int32, sourceRetryCount, sourceConnectRetry uint32) error {
 	if sourceRetryCount == 0 {
-		sourceRetryCount = defs.DefaultBootstrapSourceRetryCount
+		sourceRetryCount = defs.DefaultAsyncSourceRetryCount
+	}
+	if sourceConnectRetry == 0 {
+		sourceConnectRetry = defs.DefaultAsyncSourceConnectRetry
 	}
 
 	var errb, outb bytes.Buffer
@@ -81,8 +84,8 @@ func (m *ReplicationDBManager) ChangeReplicationSource(ctx context.Context, host
 			SOURCE_CONNECTION_AUTO_FAILOVER=1,
 			SOURCE_AUTO_POSITION=1,
 			SOURCE_RETRY_COUNT=%d,
-			SOURCE_CONNECT_RETRY=60
-		`, apiv1.UserReplication, replicaPass, host, port, sourceRetryCount)
+			SOURCE_CONNECT_RETRY=%d
+		`, apiv1.UserReplication, replicaPass, host, port, sourceRetryCount, sourceConnectRetry)
 	err := m.db.exec(ctx, q, &outb, &errb)
 	if err != nil {
 		return errors.Wrap(err, "exec CHANGE REPLICATION SOURCE TO")

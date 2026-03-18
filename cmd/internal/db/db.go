@@ -43,6 +43,7 @@ type DBParams struct {
 	ReadTimeoutSeconds  uint32
 	CloneTimeoutSeconds uint32
 	SourceRetryCount    uint32
+	SourceConnectRetry  uint32
 }
 
 func (p *DBParams) setDefaults() {
@@ -59,7 +60,10 @@ func (p *DBParams) setDefaults() {
 	}
 
 	if p.SourceRetryCount == 0 {
-		p.SourceRetryCount = defs.DefaultBootstrapSourceRetryCount
+		p.SourceRetryCount = defs.DefaultAsyncSourceRetryCount
+	}
+	if p.SourceConnectRetry == 0 {
+		p.SourceConnectRetry = defs.DefaultAsyncSourceConnectRetry
 	}
 }
 
@@ -97,9 +101,12 @@ func NewDatabase(ctx context.Context, params DBParams) (*DB, error) {
 	return &DB{db}, nil
 }
 
-func (d *DB) StartReplication(ctx context.Context, host, replicaPass string, port int32, sourceRetryCount uint32) error {
+func (d *DB) StartReplication(ctx context.Context, host, replicaPass string, port int32, sourceRetryCount, sourceConnectRetry uint32) error {
 	if sourceRetryCount == 0 {
-		sourceRetryCount = defs.DefaultBootstrapSourceRetryCount
+		sourceRetryCount = defs.DefaultAsyncSourceRetryCount
+	}
+	if sourceConnectRetry == 0 {
+		sourceConnectRetry = defs.DefaultAsyncSourceConnectRetry
 	}
 
 	_, err := d.db.ExecContext(ctx, `
@@ -112,8 +119,8 @@ func (d *DB) StartReplication(ctx context.Context, host, replicaPass string, por
                 SOURCE_CONNECTION_AUTO_FAILOVER=1,
                 SOURCE_AUTO_POSITION=1,
                 SOURCE_RETRY_COUNT=?,
-                SOURCE_CONNECT_RETRY=60
-        `, apiv1.UserReplication, replicaPass, host, port, sourceRetryCount)
+                SOURCE_CONNECT_RETRY=?
+        `, apiv1.UserReplication, replicaPass, host, port, sourceRetryCount, sourceConnectRetry)
 	if err != nil {
 		return errors.Wrap(err, "exec CHANGE REPLICATION SOURCE TO")
 	}
