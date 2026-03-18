@@ -105,7 +105,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 					mysqlStatus.State = apiv1.StateInitializing
 
 					log.Info(fmt.Sprintf("Async replication not ready: %s", msg))
-					r.Recorder.Event(cr, corev1.EventTypeWarning, "AsyncReplicationNotReady", msg)
+					r.Recorder.Event(cr, corev1.EventTypeNormal, "AsyncReplicationNotReady", msg)
 				}
 			}
 		}
@@ -228,7 +228,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 		if status.State != initialState {
 			log.Info("Cluster state changed", "previous", initialState, "current", status.State)
-			r.Recorder.Event(cr, corev1.EventTypeWarning, "ClusterStateChanged", fmt.Sprintf("%s -> %s", initialState, status.State))
+			r.Recorder.Event(cr, corev1.EventTypeNormal, "ClusterStateChanged", fmt.Sprintf("%s -> %s", initialState, status.State))
 		}
 		return nil
 	}

@@ -194,6 +194,10 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 						Name:      "aws-secret",
 						Namespace: namespace,
 					},
+					Data: map[string][]byte{
+						"AWS_ACCESS_KEY_ID":     []byte("somekey"),
+						"AWS_SECRET_ACCESS_KEY": []byte("somekey"),
+					},
 				},
 			},
 			cluster: &apiv1.PerconaServerMySQL{
@@ -296,6 +300,10 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "aws-secret",
 						Namespace: namespace,
+					},
+					Data: map[string][]byte{
+						"AWS_ACCESS_KEY_ID":     []byte("somekey"),
+						"AWS_SECRET_ACCESS_KEY": []byte("somekey"),
 					},
 				},
 				&apiv1.PerconaServerMySQLRestore{
