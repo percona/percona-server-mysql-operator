@@ -46,6 +46,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 	require.NoError(t, err)
 	cluster, err := readDefaultCR("ps-cluster1", namespace)
 	require.NoError(t, err)
+	cluster.Status.State = apiv1.StateReady
 
 	fakeValidateStorageClient := func(ctx context.Context, opts storage.Options) (storage.Storage, error) {
 		return nil, errors.New("fake error")
