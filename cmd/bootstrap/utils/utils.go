@@ -72,10 +72,10 @@ func GetSourceRetryCount() (uint32, error) {
 	}
 	sourceRetryCount, err := strconv.Atoi(s)
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to parse BOOTSTRAP_SOURCE_RETRY_COUNT")
+		return 0, errors.Wrap(err, "failed to parse ASYNC_SOURCE_RETRY_COUNT")
 	}
 	if sourceRetryCount < 0 {
-		return 0, errors.New("BOOTSTRAP_SOURCE_RETRY_COUNT should be a positive value")
+		return 0, errors.New("ASYNC_SOURCE_RETRY_COUNT should be a positive value")
 	}
 
 	return uint32(sourceRetryCount), nil

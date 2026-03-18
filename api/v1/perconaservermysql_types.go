@@ -943,13 +943,13 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 				if readTimeout < 0 {
 					return errors.New("BOOTSTRAP_READ_TIMEOUT should be a positive value")
 				}
-			case naming.EnvBootstrapSourceRetryCount:
+			case naming.EnvAsyncSourceRetryCount:
 				sourceRetryCount, err := strconv.Atoi(env.Value)
 				if err != nil {
-					return errors.Wrap(err, "failed to parse BOOTSTRAP_SOURCE_RETRY_COUNT")
+					return errors.Wrap(err, "failed to parse ASYNC_SOURCE_RETRY_COUNT")
 				}
 				if sourceRetryCount < 0 {
-					return errors.New("BOOTSTRAP_SOURCE_RETRY_COUNT should be a positive value")
+					return errors.New("ASYNC_SOURCE_RETRY_COUNT should be a positive value")
 				}
 			}
 		}

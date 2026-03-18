@@ -33,7 +33,6 @@ func TestGetCloneTimeout(t *testing.T) {
 			expectedError:  errors.New("BOOTSTRAP_CLONE_TIMEOUT should be a positive value"),
 		},
 		"invalid non-numeric timeout": {
-
 			envValue:       "abc",
 			expectedResult: 0,
 			expectedError:  errors.New("failed to parse BOOTSTRAP_CLONE_TIMEOUT: strconv.Atoi: parsing \"abc\": invalid syntax"),
@@ -90,24 +89,24 @@ func TestGetSourceRetryCount(t *testing.T) {
 		"invalid negative retry count": {
 			envValue:       "-1",
 			expectedResult: 0,
-			expectedError:  errors.New("BOOTSTRAP_SOURCE_RETRY_COUNT should be a positive value"),
+			expectedError:  errors.New("ASYNC_SOURCE_RETRY_COUNT should be a positive value"),
 		},
 		"invalid non-numeric retry count": {
 			envValue:       "abc",
 			expectedResult: 0,
-			expectedError:  errors.New("failed to parse BOOTSTRAP_SOURCE_RETRY_COUNT: strconv.Atoi: parsing \"abc\": invalid syntax"),
+			expectedError:  errors.New("failed to parse ASYNC_SOURCE_RETRY_COUNT: strconv.Atoi: parsing \"abc\": invalid syntax"),
 		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := os.Unsetenv("BOOTSTRAP_SOURCE_RETRY_COUNT")
+			err := os.Unsetenv("ASYNC_SOURCE_RETRY_COUNT")
 			require.NoError(t, err)
 
 			if tt.envValue != "" {
-				_ = os.Setenv("BOOTSTRAP_SOURCE_RETRY_COUNT", tt.envValue)
+				_ = os.Setenv("ASYNC_SOURCE_RETRY_COUNT", tt.envValue)
 				defer func() {
-					err := os.Unsetenv("BOOTSTRAP_SOURCE_RETRY_COUNT")
+					err := os.Unsetenv("ASYNC_SOURCE_RETRY_COUNT")
 					require.NoError(t, err)
 				}()
 			}

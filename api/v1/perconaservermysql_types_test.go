@@ -55,7 +55,7 @@ func TestCheckNSetDefaults(t *testing.T) {
 		}
 		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
 		cr.Spec.MySQL.Env = []corev1.EnvVar{{
-			Name:  naming.EnvBootstrapSourceRetryCount,
+			Name:  naming.EnvAsyncSourceRetryCount,
 			Value: "-1",
 		}}
 		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
@@ -69,7 +69,7 @@ func TestCheckNSetDefaults(t *testing.T) {
 		}
 
 		err := cr.CheckNSetDefaults(t.Context(), nil)
-		assert.EqualError(t, err, "BOOTSTRAP_SOURCE_RETRY_COUNT should be a positive value")
+		assert.EqualError(t, err, "ASYNC_SOURCE_RETRY_COUNT should be a positive value")
 	})
 }
 
