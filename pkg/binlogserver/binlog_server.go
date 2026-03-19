@@ -6,6 +6,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -18,7 +19,9 @@ const (
 	credsVolumeName        = "users"
 	CredsMountPath         = "/etc/mysql/mysql-users-secret"
 	tlsVolumeName          = "tls"
-	tlsMountPath           = "/etc/mysql/mysql-tls-secret"
+	TLSMountPath           = "/etc/mysql/mysql-tls-secret"
+	bufferVolumeName       = "buffer"
+	BufferMountPath        = "/var/lib/binlogsrv"
 	configVolumeName       = "config"
 	configMountPath        = "/etc/binlog_server/config"
 	storageCredsVolumeName = "storage"
@@ -67,7 +70,7 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash string) *ap
 			Annotations: cr.GlobalAnnotations(),
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas: &spec.Size,
+			Replicas: ptr.To(int32(1)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: labels,
 			},
@@ -108,6 +111,12 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 	return []corev1.Volume{
 		{
 			Name: apiv1.BinVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: bufferVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
@@ -212,15 +221,19 @@ func binlogServerContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 			},
 			{
 				Name:      tlsVolumeName,
-				MountPath: tlsMountPath,
+				MountPath: TLSMountPath,
 			},
 			{
 				Name:      configVolumeName,
 				MountPath: configMountPath,
 			},
+			{
+				Name:      bufferVolumeName,
+				MountPath: BufferMountPath,
+			},
 		},
 		Command:                  []string{"/opt/percona/binlog-server-entrypoint.sh"},
-		Args:                     []string{"/usr/local/bin/binlog_server", "pull", path.Join(configMountPath, ConfigKey)},
+		Args:                     []string{"/usr/bin/binlog_server", "pull", path.Join(configMountPath, ConfigKey)},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          spec.ContainerSecurityContext,
