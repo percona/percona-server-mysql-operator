@@ -1,6 +1,7 @@
 package pitr
 
 import (
+	"encoding/json"
 	"fmt"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -9,6 +10,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -17,17 +19,53 @@ import (
 )
 
 const (
-	appName         = "pitr"
-	dataVolumeName  = "datadir"
-	dataMountPath   = "/var/lib/mysql"
-	credsVolumeName = "users"
-	credsMountPath  = "/etc/mysql/mysql-users-secret"
-	tlsVolumeName   = "tls"
-	tlsMountPath    = "/etc/mysql/mysql-tls-secret"
+	appName           = "pitr"
+	dataVolumeName    = "datadir"
+	dataMountPath     = "/var/lib/mysql"
+	credsVolumeName   = "users"
+	credsMountPath    = "/etc/mysql/mysql-users-secret"
+	tlsVolumeName     = "tls"
+	tlsMountPath      = "/etc/mysql/mysql-tls-secret"
+	binlogsVolumeName = "binlogs"
+	binlogsMountPath  = "/etc/pitr"
+	binlogsKey        = "binlogs.json"
 )
 
 func JobName(cluster *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) string {
 	return fmt.Sprintf("pitr-restore-%s", restore.Name)
+}
+
+func BinlogsConfigMapName(restore *apiv1.PerconaServerMySQLRestore) string {
+	return fmt.Sprintf("pitr-binlogs-%s", restore.Name)
+}
+
+func BinlogsConfigMap(
+	cluster *apiv1.PerconaServerMySQL,
+	restore *apiv1.PerconaServerMySQLRestore,
+	binlogs []binlogserver.BinlogEntry,
+) (*corev1.ConfigMap, error) {
+	data, err := json.Marshal(binlogs)
+	if err != nil {
+		return nil, fmt.Errorf("marshal binlog entries: %w", err)
+	}
+
+	labels := util.SSMapMerge(cluster.GlobalLabels(), restore.Labels(appName, naming.ComponentPITR))
+
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        BinlogsConfigMapName(restore),
+			Namespace:   cluster.Namespace,
+			Labels:      labels,
+			Annotations: cluster.GlobalAnnotations(),
+		},
+		Data: map[string]string{
+			binlogsKey: string(data),
+		},
+	}, nil
 }
 
 func RestoreJob(
@@ -130,6 +168,16 @@ func RestoreJob(
 								},
 							},
 						},
+						{
+							Name: binlogsVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: BinlogsConfigMapName(restore),
+									},
+								},
+							},
+						},
 					},
 				},
 			},
@@ -149,6 +197,10 @@ func restoreContainer(
 		{
 			Name:  "RESTORE_NAME",
 			Value: restore.Name,
+		},
+		{
+			Name:  "BINLOGS_PATH",
+			Value: fmt.Sprintf("%s/%s", binlogsMountPath, binlogsKey),
 		},
 	}
 
@@ -229,6 +281,10 @@ func restoreContainer(
 			{
 				Name:      tlsVolumeName,
 				MountPath: tlsMountPath,
+			},
+			{
+				Name:      binlogsVolumeName,
+				MountPath: binlogsMountPath,
 			},
 		},
 		Command:                  []string{"/opt/percona/run-pitr-restore.sh"},

@@ -38,6 +38,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -54,6 +56,7 @@ type PerconaServerMySQLRestoreReconciler struct {
 	client.Client
 	Scheme           *runtime.Scheme
 	ServerVersion    *platform.ServerVersion
+	ClientCmd        clientcmd.Client
 	NewStorageClient storage.NewClientFunc
 
 	sm sync.Map
@@ -283,6 +286,25 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRJob(
 
 		log.Info("Creating PITR restore job", "jobName", nn.Name)
 
+		binlogs, err := r.searchBinlogs(ctx, cr, cluster)
+		if err != nil {
+			return "", errors.Wrap(err, "search binlogs")
+		}
+		if len(binlogs) == 0 {
+			return "", errors.New("no binlogs found for the given PITR target")
+		}
+
+		cm, err := pitr.BinlogsConfigMap(cluster, cr, binlogs)
+		if err != nil {
+			return "", errors.Wrap(err, "create binlogs configmap")
+		}
+		if err := controllerutil.SetControllerReference(cr, cm, r.Scheme); err != nil {
+			return "", errors.Wrapf(err, "set controller reference to ConfigMap %s/%s", cm.Namespace, cm.Name)
+		}
+		if err := r.Create(ctx, cm); err != nil {
+			return "", errors.Wrapf(err, "create binlogs configmap %s/%s", cm.Namespace, cm.Name)
+		}
+
 		bcp, err := getBackup(ctx, r.Client, cr, cluster)
 		if err != nil {
 			return "", errors.Wrap(err, "get backup")
@@ -323,6 +345,37 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRJob(
 	}
 
 	return apiv1.RestoreRunning, nil
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) searchBinlogs(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLRestore,
+	cluster *apiv1.PerconaServerMySQL,
+) ([]binlogserver.BinlogEntry, error) {
+	if cr.Spec.PITR == nil {
+		return nil, errors.New("pitr spec is not set")
+	}
+
+	var resp *binlogserver.SearchResponse
+	var err error
+
+	switch cr.Spec.PITR.Type {
+	case apiv1.PITRDate:
+		resp, err = binlogserver.SearchByTimestamp(ctx, r.Client, r.ClientCmd, cluster, cr.Spec.PITR.Date)
+	case apiv1.PITRGtid:
+		resp, err = binlogserver.SearchByGTID(ctx, r.Client, r.ClientCmd, cluster, cr.Spec.PITR.GTID)
+	default:
+		return nil, errors.Errorf("unknown PITR type: %s", cr.Spec.PITR.Type)
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "search binlogs")
+	}
+
+	if resp.Status != "success" {
+		return nil, errors.Errorf("binlog search failed with status: %s", resp.Status)
+	}
+
+	return resp.Result, nil
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cluster *apiv1.PerconaServerMySQL) error {
