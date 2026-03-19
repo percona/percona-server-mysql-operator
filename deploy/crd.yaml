@@ -156,6 +156,12 @@ spec:
                 type: string
               storageName:
                 type: string
+              type:
+                default: full
+                enum:
+                - full
+                - incremental
+                type: string
             required:
             - clusterName
             - storageName
@@ -164,12 +170,18 @@ spec:
             properties:
               backupSource:
                 type: string
+              baseBackupName:
+                type: string
               completed:
                 format: date-time
                 type: string
               destination:
                 type: string
               image:
+                type: string
+              lsn:
+                type: string
+              previousBackupName:
                 type: string
               state:
                 type: string
@@ -1155,6 +1167,10 @@ spec:
                 required:
                 - type
                 type: object
+              type:
+                type: string
+            required:
+            - type
             type: object
         type: object
     served: true
@@ -1209,12 +1225,18 @@ spec:
                 properties:
                   backupSource:
                     type: string
+                  baseBackupName:
+                    type: string
                   completed:
                     format: date-time
                     type: string
                   destination:
                     type: string
                   image:
+                    type: string
+                  lsn:
+                    type: string
+                  previousBackupName:
                     type: string
                   state:
                     type: string
@@ -2200,6 +2222,10 @@ spec:
                     required:
                     - type
                     type: object
+                  type:
+                    type: string
+                required:
+                - type
                 type: object
               clusterName:
                 type: string

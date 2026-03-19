@@ -19,3 +19,4 @@ spec:
 #        - --someflag=abc
 #      xtrabackup:
 #        - --someflag=abc
+  type: ""

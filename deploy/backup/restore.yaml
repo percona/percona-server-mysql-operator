@@ -17,7 +17,10 @@ spec:
 #      xtrabackup:
 #        - --someflag=abc
 #  backupSource:
+#    baseBackupName: null
 #    destination: s3://S3-BACKUP-BUCKET-NAME-HERE/backup-path
+#    lsn: null
+#    previousBackupName: null
 #    storage:
 #      affinity:
 #        nodeAffinity:
@@ -99,3 +102,4 @@ spec:
 #            requests:
 #              storage: 2Gi
 #          storageClassName: standard
+#    type: ""

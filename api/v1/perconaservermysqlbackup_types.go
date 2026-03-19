@@ -27,6 +27,9 @@ import (
 
 // PerconaServerMySQLBackupSpec defines the desired state of PerconaServerMySQLBackup
 type PerconaServerMySQLBackupSpec struct {
+	// +kubebuilder:validation:Enum=full;incremental
+	// +kubebuilder:default:=full
+	Type             BackupType              `json:"type,omitempty"`
 	ClusterName      string                  `json:"clusterName"`
 	StorageName      string                  `json:"storageName"`
 	SourcePod        string                  `json:"sourcePod,omitempty"`
@@ -47,8 +50,16 @@ const (
 	BackupFailed BackupState = "Failed"
 )
 
+type BackupType string
+
+const (
+	BackupTypeFull        BackupType = "full"
+	BackupTypeIncremental BackupType = "incremental"
+)
+
 // PerconaServerMySQLBackupStatus defines the observed state of PerconaServerMySQLBackup
 type PerconaServerMySQLBackupStatus struct {
+	Type         BackupType         `json:"type"`
 	State        BackupState        `json:"state,omitempty"`
 	StateDesc    string             `json:"stateDescription,omitempty"`
 	Destination  BackupDestination  `json:"destination,omitempty"`
@@ -56,6 +67,18 @@ type PerconaServerMySQLBackupStatus struct {
 	CompletedAt  *metav1.Time       `json:"completed,omitempty"`
 	Image        string             `json:"image,omitempty"`
 	BackupSource string             `json:"backupSource,omitempty"`
+
+	// Lsn is the log sequence number at the end of this backup.
+	// Used as a starting point for the next incremental backup.
+	Lsn *string `json:"lsn,omitempty"`
+
+	// BaseBackupName is the name of the base backup for this incremental backup.
+	// This is set only if type is incremental.
+	BaseBackupName *string `json:"baseBackupName,omitempty"`
+
+	// PreviousBackupName is the name of the previous backup in the chain.
+	// This is set only if type is incremental.
+	PreviousBackupName *string `json:"previousBackupName,omitempty"`
 }
 
 const (
