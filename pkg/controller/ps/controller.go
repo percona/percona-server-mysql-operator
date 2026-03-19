@@ -21,6 +21,7 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -1289,6 +1290,11 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 
 	logger := logf.FromContext(ctx)
 
+	if cr.Status.MySQL.Ready < 1 {
+		logger.V(1).Info("Waiting for at least one MySQL pod to be ready")
+		return nil
+	}
+
 	if len(cr.Status.Host) == 0 {
 		logger.V(1).Info("Waiting for .status.host to be populated")
 		return nil
@@ -1314,7 +1320,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 	accessKey := s3Secret.Data[secret.CredentialsAWSAccessKey]
 	secretKey := s3Secret.Data[secret.CredentialsAWSSecretKey]
 
-	s3Uri := fmt.Sprintf("s3://%s:%s@%s.%s", accessKey, secretKey, s3.Bucket, s3.Region)
+	s3Uri := fmt.Sprintf("https://%s:%s@%s", accessKey, secretKey, s3.EndpointURL)
 	if len(s3.Prefix) > 0 {
 		s3Uri += fmt.Sprintf("/%s", s3.Prefix)
 	}
@@ -1347,13 +1353,29 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 			ConnectTimeout: cr.Spec.Backup.PiTR.BinlogServer.ConnectTimeout,
 			WriteTimeout:   cr.Spec.Backup.PiTR.BinlogServer.WriteTimeout,
 			ReadTimeout:    cr.Spec.Backup.PiTR.BinlogServer.ReadTimeout,
+			SSL: &binlogserver.ConnectionSSL{
+				Mode: "verify_identity",
+				CA:   path.Join(binlogserver.TLSMountPath, "ca.crt"),
+				Cert: path.Join(binlogserver.TLSMountPath, "tls.crt"),
+				Key:  path.Join(binlogserver.TLSMountPath, "tls.key"),
+			},
 		},
 		Replication: binlogserver.Replication{
-			ServerID: cr.Spec.Backup.PiTR.BinlogServer.ServerID,
-			IdleTime: cr.Spec.Backup.PiTR.BinlogServer.IdleTime,
+			Mode:           binlogserver.ReplicationModeGTID,
+			ServerID:       cr.Spec.Backup.PiTR.BinlogServer.ServerID,
+			IdleTime:       cr.Spec.Backup.PiTR.BinlogServer.IdleTime,
+			VerifyChecksum: true,
+			Rewrite: binlogserver.Rewrite{
+				BaseFileName: "binlog",
+				FileSize:     "128M",
+			},
 		},
 		Storage: binlogserver.Storage{
-			URI: s3Uri,
+			Backend:            "s3",
+			URI:                s3Uri,
+			CheckpointSize:     "2M",
+			CheckpointInterval: "30s",
+			FsBufferDirectory:  binlogserver.BufferMountPath,
 		},
 	}
 
