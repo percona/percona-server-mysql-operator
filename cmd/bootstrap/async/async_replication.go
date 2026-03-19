@@ -102,6 +102,12 @@ func Bootstrap(ctx context.Context) error {
 	}
 	params.SourceRetryCount = sourceRetryCount
 
+	sourceConnectRetry, err := utils.GetSourceConnectRetry()
+	if err != nil {
+		return errors.Wrap(err, "get source connect retry")
+	}
+	params.SourceConnectRetry = sourceConnectRetry
+
 	db, err := database.NewDatabase(ctx, params)
 	if err != nil {
 		return errors.Wrap(err, "connect to database")

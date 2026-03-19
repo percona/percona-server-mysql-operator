@@ -953,6 +953,14 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 				if sourceRetryCount < 0 {
 					return errors.New("ASYNC_SOURCE_RETRY_COUNT should be a positive value")
 				}
+			case naming.EnvAsyncSourceConnectRetry:
+				connectRetry, err := strconv.Atoi(env.Value)
+				if err != nil {
+					return errors.Wrap(err, "failed to parse ASYNC_SOURCE_CONNECT_RETRY")
+				}
+				if connectRetry < 0 {
+					return errors.New("ASYNC_SOURCE_CONNECT_RETRY should be a positive value")
+				}
 			}
 		}
 	}
