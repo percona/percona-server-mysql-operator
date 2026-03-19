@@ -2,8 +2,24 @@
 
 set -e
 
+# TODO: Add support for data at rest encryption
+
+echo "Starting mysqld"
+mysqld \
+  --admin-address=$(hostname -I) \
+  --skip-replica-start \
+  --user=mysql \
+  --read-only=ON \
+  --super-read-only=ON \
+  --gtid-mode=ON \
+  --enforce-gtid-consistency=ON >/tmp/mysqld.log 2>&1 &
+
+until mysqladmin -u operator -p$(</etc/mysql/mysql-users-secret/operator) ping --silent 2>/dev/null; do
+    sleep 1;
+done
+
 /opt/percona/pitr setup
-mysqld --skip-replica-start --user=mysql &
-until mysqladmin ping --silent 2>/dev/null; do sleep 1; done
 /opt/percona/pitr apply
-mysqladmin shutdown
+
+echo "Stopping mysqld"
+mysqladmin -u operator -p$(</etc/mysql/mysql-users-secret/operator) shutdown
