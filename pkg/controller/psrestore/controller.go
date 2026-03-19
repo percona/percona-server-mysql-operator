@@ -18,6 +18,7 @@ package psrestore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -178,6 +179,12 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 	defer r.sm.Delete(cr.Spec.ClusterName)
 
+	if cr.Spec.PITR != nil {
+		if err := r.reconcilePITRConfig(ctx, cr, cluster); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "reconcile pitr config")
+		}
+	}
+
 	log.Info("Pausing cluster", "cluster", cluster.Name)
 	if err := r.pauseCluster(ctx, cluster); err != nil {
 		if errors.Is(err, ErrWaitingTermination) {
@@ -269,6 +276,41 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	return ctrl.Result{}, nil
 }
 
+func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRConfig(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLRestore,
+	cluster *apiv1.PerconaServerMySQL,
+) error {
+	cm := pitr.BinlogsConfigMap(cluster, cr)
+	if err := r.Get(ctx, client.ObjectKeyFromObject(cm), new(corev1.ConfigMap)); err == nil {
+		return nil
+	}
+
+	binlogs, err := r.searchBinlogs(ctx, cr, cluster)
+	if err != nil {
+		return errors.Wrap(err, "search binlogs")
+	}
+	if len(binlogs) == 0 {
+		return errors.New("no binlogs found for the given PITR target")
+	}
+
+	data, err := json.Marshal(binlogs)
+	if err != nil {
+		return errors.Wrap(err, "marshal binlog entries")
+	}
+
+	cm.Data[pitr.BinlogsConfigKey] = string(data)
+
+	if err := controllerutil.SetControllerReference(cr, cm, r.Scheme); err != nil {
+		return errors.Wrapf(err, "set controller reference to ConfigMap %s/%s", cm.Namespace, cm.Name)
+	}
+	if err := r.Create(ctx, cm); err != nil {
+		return errors.Wrapf(err, "create binlogs configmap %s/%s", cm.Namespace, cm.Name)
+	}
+
+	return nil
+}
+
 func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRJob(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQLRestore,
@@ -285,25 +327,6 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRJob(
 		}
 
 		log.Info("Creating PITR restore job", "jobName", nn.Name)
-
-		binlogs, err := r.searchBinlogs(ctx, cr, cluster)
-		if err != nil {
-			return "", errors.Wrap(err, "search binlogs")
-		}
-		if len(binlogs) == 0 {
-			return "", errors.New("no binlogs found for the given PITR target")
-		}
-
-		cm, err := pitr.BinlogsConfigMap(cluster, cr, binlogs)
-		if err != nil {
-			return "", errors.Wrap(err, "create binlogs configmap")
-		}
-		if err := controllerutil.SetControllerReference(cr, cm, r.Scheme); err != nil {
-			return "", errors.Wrapf(err, "set controller reference to ConfigMap %s/%s", cm.Namespace, cm.Name)
-		}
-		if err := r.Create(ctx, cm); err != nil {
-			return "", errors.Wrapf(err, "create binlogs configmap %s/%s", cm.Namespace, cm.Name)
-		}
 
 		bcp, err := getBackup(ctx, r.Client, cr, cluster)
 		if err != nil {
