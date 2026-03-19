@@ -394,3 +394,64 @@ func (d *DB) EnableSuperReadonly(ctx context.Context) error {
 	_, err := d.db.ExecContext(ctx, "SET GLOBAL SUPER_READ_ONLY=1")
 	return errors.Wrap(err, "set global super_read_only param to 1")
 }
+
+func (d *DB) ChangeReplicationSourceRelay(ctx context.Context, relayLogFile string, relayLogPos int) error {
+	_, err := d.db.ExecContext(ctx, fmt.Sprintf(
+		"CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE='%s', RELAY_LOG_POS=%d, SOURCE_HOST='dummy'",
+		relayLogFile, relayLogPos))
+	return errors.Wrap(err, "change replication source to relay log")
+}
+
+func (d *DB) StartReplicaUntilGTID(ctx context.Context, gtid string) error {
+	_, err := d.db.ExecContext(ctx, fmt.Sprintf(
+		"START REPLICA SQL_THREAD UNTIL SQL_BEFORE_GTIDS='%s'", gtid))
+	return errors.Wrap(err, "start replica until GTID")
+}
+
+func (d *DB) StartReplicaUntilPosition(ctx context.Context, relayLogFile string, relayLogPos int) error {
+	_, err := d.db.ExecContext(ctx, fmt.Sprintf(
+		"START REPLICA SQL_THREAD UNTIL RELAY_LOG_FILE='%s', RELAY_LOG_POS=%d",
+		relayLogFile, relayLogPos))
+	return errors.Wrap(err, "start replica until position")
+}
+
+func (d *DB) WaitReplicaSQLThreadStop(ctx context.Context, pollInterval time.Duration) error {
+	for {
+		var serviceState string
+		err := d.db.QueryRowContext(ctx,
+			"SELECT SERVICE_STATE FROM replication_applier_status WHERE CHANNEL_NAME=''").Scan(&serviceState)
+		if err != nil {
+			return errors.Wrap(err, "query replication applier status")
+		}
+
+		if serviceState == "OFF" {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(pollInterval):
+		}
+	}
+
+	rows, err := d.db.QueryContext(ctx,
+		"SELECT LAST_ERROR_NUMBER, LAST_ERROR_MESSAGE FROM replication_applier_status_by_worker WHERE CHANNEL_NAME=''")
+	if err != nil {
+		return errors.Wrap(err, "query replication applier worker status")
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var errNum int
+		var errMsg string
+		if err := rows.Scan(&errNum, &errMsg); err != nil {
+			return errors.Wrap(err, "scan worker status")
+		}
+		if errNum != 0 {
+			return errors.Errorf("replication worker error %d: %s", errNum, errMsg)
+		}
+	}
+
+	return rows.Err()
+}
