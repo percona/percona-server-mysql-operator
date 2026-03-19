@@ -1320,7 +1320,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 	accessKey := s3Secret.Data[secret.CredentialsAWSAccessKey]
 	secretKey := s3Secret.Data[secret.CredentialsAWSSecretKey]
 
-	s3Uri := fmt.Sprintf("https://%s:%s@%s", accessKey, secretKey, s3.EndpointURL)
+	s3Uri := fmt.Sprintf("https://%s:%s@%s/%s", accessKey, secretKey, s3.EndpointURL, s3.Bucket)
 	if len(s3.Prefix) > 0 {
 		s3Uri += fmt.Sprintf("/%s", s3.Prefix)
 	}
