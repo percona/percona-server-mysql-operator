@@ -233,7 +233,7 @@ func binlogServerContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 			},
 		},
 		Command:                  []string{"/opt/percona/binlog-server-entrypoint.sh"},
-		Args:                     []string{"/usr/bin/binlog_server", "pull", path.Join(configMountPath, ConfigKey)},
+		Args:                     []string{binlogServerBinary, "pull", path.Join(configMountPath, ConfigKey)},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          spec.ContainerSecurityContext,
