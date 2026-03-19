@@ -276,9 +276,9 @@ The added complexity is not justified. Users needing different storage tiers sho
 
 ---
 
-## 7. User Experience
+## 6. User Experience
 
-### 7.1 Existing CR (Unchanged)
+### 6.1 Existing CR (Unchanged)
 
 ```yaml
 # Full backup — identical to today. backupType defaults to "full".
@@ -291,7 +291,7 @@ spec:
   storageName: s3-us
 ```
 
-### 7.2 On-Demand Incremental Backup
+### 6.2 On-Demand Incremental Backup
 
 ```yaml
 apiVersion: ps.percona.com/v1
@@ -306,7 +306,7 @@ spec:
   # for my-cluster + s3-us as the base of the chain.
 ```
 
-### 7.3 Scheduled Full + Incremental
+### 6.3 Scheduled Full + Incremental
 
 ```yaml
 apiVersion: ps.percona.com/v1
@@ -329,7 +329,7 @@ spec:
         # No baseBackupName needed — operator auto-resolves
 ```
 
-### 7.4 Restore from Incremental
+### 6.4 Restore from Incremental
 
 ```yaml
 apiVersion: ps.percona.com/v1
@@ -345,9 +345,9 @@ spec:
 
 ---
 
-## 8. Error Handling and Edge Cases
+## 7. Error Handling and Edge Cases
 
-### 8.1 Chain Breakage (Mid-Chain Deletion)
+### 7.1 Chain Breakage (Mid-Chain Deletion)
 
 **Scenario:** A mid-chain backup is deleted or corrupted.
 
@@ -357,7 +357,7 @@ spec:
 - Allow cascade deletion: deleting the base (full) backup deletes all dependent incrementals.
 - If a backup is externally deleted (e.g., S3 object removed outside the operator), the chain breakage is detected at restore time when the restore controller validates all chain members.
 
-### 8.2 Failed Incremental Backup
+### 7.2 Failed Incremental Backup
 
 **Scenario:** An incremental backup fails mid-execution.
 
@@ -367,7 +367,7 @@ spec:
 - The next incremental references the last succeeded backup, not the failed one.
 - The controller skips failed backups when resolving the chain.
 
-### 8.3 Concurrent Backups on Same Chain
+### 7.3 Concurrent Backups on Same Chain
 
 **Scenario:** Two incremental backups targeting the same chain run concurrently.
 
@@ -375,7 +375,7 @@ spec:
 
 **Rationale:** Concurrent incremental backups would produce two backups with the same `from_lsn`, creating an ambiguous chain fork.
 
-### 8.4 No Full Backup Exists for Incremental
+### 7.4 No Full Backup Exists for Incremental
 
 **Scenario:** User creates an incremental backup but no succeeded full backup exists for the same `clusterName` + `storageName`.
 
@@ -383,7 +383,7 @@ spec:
 - Validation rejects the incremental backup with a descriptive error: "no succeeded full backup found for cluster X with storage Y".
 - For scheduled incrementals, the backup is skipped with a warning event (see Decision 5.6).
 
-### 8.5 Storage Mismatch
+### 7.5 Storage Mismatch
 
 **Scenario:** Incremental backup references a chain whose full backup uses a different storage backend.
 
@@ -393,31 +393,31 @@ spec:
 
 ---
 
-## 9. Migration and Backward Compatibility
+## 8. Migration and Backward Compatibility
 
-### 9.1 Existing Clusters
+### 8.1 Existing Clusters
 
 - All existing `PerconaServerMySQLBackup` CRs have no `backupType` field — treated as `full`.
 - No migration needed; existing backups continue to work unchanged.
 - Existing restore workflows are fully backward compatible (empty `RESTORE_TYPE` env var triggers the existing restore code path).
 
-### 9.2 CRD Compatibility
+### 8.2 CRD Compatibility
 
 - All changes are additive: new optional fields with sensible defaults.
 - `backupType` defaults to `full`.
 - No breaking changes to existing CRD schema.
 - Requires `make generate manifests` to regenerate CRDs and deepcopy.
 
-### 9.3 Operator Version Skew
+### 8.3 Operator Version Skew
 
 - **New operator, old sidecar:** The new `backupType` and `incrementalLsn` fields in BackupConfig are ignored by old sidecars (standard JSON unmarshaling). Incremental backups will fail because the sidecar won't pass `--incremental-lsn` to xtrabackup. The controller should handle 404 from the checkpoints endpoint gracefully.
 - **Old operator, new sidecar:** New sidecars are backward compatible — empty incremental fields mean full backup.
 
 ---
 
-## 10. Testing Strategy
+## 9. Testing Strategy
 
-### 10.1 E2E Test Scenarios
+### 9.1 E2E Test Scenarios
 
 | Scenario | Cluster Type | What It Validates |
 |----------|-------------|-------------------|
@@ -435,7 +435,7 @@ spec:
 
 ---
 
-## 11. Open Questions
+## 10. Open Questions
 
 1. Should we enforce a maximum number of incrementals in a chain?
    - *Option A:* No limit.
@@ -445,7 +445,7 @@ spec:
    - *Option A:* Skip with warning.
    - *Option B:* Auto-promote to full backup.
 
-4. When `keep=4` on full backups with dependent incrementals, should we count chains or individual backups?
+3. When `keep=4` on full backups with dependent incrementals, should we count chains or individual backups?
    - *Option A:* Count individual backup CRs.
    - *Option B:* Count chains (keep 4 full backups and all their incrementals).
 
