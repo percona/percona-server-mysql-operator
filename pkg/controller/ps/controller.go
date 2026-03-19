@@ -1402,6 +1402,27 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 	return nil
 }
 
+func (r *PerconaServerMySQLReconciler) cleanupBinlogServer(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
+	if cr.Spec.Backup.PiTR.Enabled {
+		return nil
+	}
+
+	if err := r.Delete(ctx, binlogserver.StatefulSet(cr, "", "")); err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to delete binlog server statefulset")
+	}
+
+	if err := r.Delete(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      binlogserver.ConfigSecretName(cr),
+			Namespace: cr.Namespace,
+		},
+	}); err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to delete binlog server config secret")
+	}
+
+	return nil
+}
+
 func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	if err := r.cleanupMysql(ctx, cr); err != nil {
 		return errors.Wrap(err, "cleanup mysql")
@@ -1413,6 +1434,10 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 
 	if err := r.cleanupProxies(ctx, cr); err != nil {
 		return errors.Wrap(err, "cleanup proxies")
+	}
+
+	if err := r.cleanupBinlogServer(ctx, cr); err != nil {
+		return errors.Wrap(err, "cleanup binlog server")
 	}
 
 	return nil
