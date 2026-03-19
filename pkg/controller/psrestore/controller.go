@@ -34,6 +34,7 @@ import (
 	k8sretry "k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -41,6 +42,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
+	"github.com/percona/percona-server-mysql-operator/pkg/pitr"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
@@ -96,7 +98,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		err := k8sretry.OnError(k8sretry.DefaultRetry, retriable, func() error {
 			cr := &apiv1.PerconaServerMySQLRestore{}
 			if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
-				return errors.Wrapf(err, "get %v", req.NamespacedName.String())
+				return errors.Wrapf(err, "get %v", req.String())
 			}
 
 			cr.Status = status
@@ -232,7 +234,15 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			case batchv1.JobFailed:
 				status.State = apiv1.RestoreFailed
 			case batchv1.JobComplete:
-				status.State = apiv1.RestoreSucceeded
+				if cr.Spec.PITR != nil {
+					pitrState, err := r.reconcilePITRJob(ctx, cr, cluster)
+					if err != nil {
+						return ctrl.Result{}, errors.Wrap(err, "reconcile pitr job")
+					}
+					status.State = pitrState
+				} else {
+					status.State = apiv1.RestoreSucceeded
+				}
 			}
 		}
 	case apiv1.RestoreFailed, apiv1.RestoreSucceeded:
@@ -254,6 +264,65 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRJob(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLRestore,
+	cluster *apiv1.PerconaServerMySQL,
+) (apiv1.RestoreState, error) {
+	log := logf.FromContext(ctx)
+
+	pitrJob := &batchv1.Job{}
+	nn := types.NamespacedName{Name: pitr.JobName(cluster, cr), Namespace: cr.Namespace}
+	err := r.Get(ctx, nn, pitrJob)
+	if err != nil {
+		if !k8serrors.IsNotFound(err) {
+			return "", errors.Wrapf(err, "get pitr job %s", nn)
+		}
+
+		log.Info("Creating PITR restore job", "jobName", nn.Name)
+
+		bcp, err := getBackup(ctx, r.Client, cr, cluster)
+		if err != nil {
+			return "", errors.Wrap(err, "get backup")
+		}
+
+		initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
+		if err != nil {
+			return "", errors.Wrap(err, "get operator image")
+		}
+
+		job := pitr.RestoreJob(cluster, cr, bcp.Status.Storage, initImage)
+		if err := controllerutil.SetControllerReference(cr, job, r.Scheme); err != nil {
+			return "", errors.Wrapf(err, "set controller reference to Job %s/%s", job.Namespace, job.Name)
+		}
+
+		if err := r.Create(ctx, job); err != nil {
+			return "", errors.Wrapf(err, "create pitr job %s/%s", job.Namespace, job.Name)
+		}
+
+		return apiv1.RestoreRunning, nil
+	}
+
+	if pitrJob.Status.Active > 0 {
+		return apiv1.RestoreRunning, nil
+	}
+
+	for _, cond := range pitrJob.Status.Conditions {
+		if cond.Status != corev1.ConditionTrue {
+			continue
+		}
+
+		switch cond.Type {
+		case batchv1.JobFailed:
+			return apiv1.RestoreFailed, nil
+		case batchv1.JobComplete:
+			return apiv1.RestoreSucceeded, nil
+		}
+	}
+
+	return apiv1.RestoreRunning, nil
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cluster *apiv1.PerconaServerMySQL) error {
@@ -378,13 +447,13 @@ func (r *PerconaServerMySQLRestoreReconciler) unpauseCluster(ctx context.Context
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		c := &apiv1.PerconaServerMySQL{}
 		nn := types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}
-		if err := r.Client.Get(ctx, nn, c); err != nil {
+		if err := r.Get(ctx, nn, c); err != nil {
 			return err
 		}
 
 		c.Spec.Pause = false
 
-		if err := r.Client.Patch(ctx, c, client.MergeFrom(cluster)); err != nil {
+		if err := r.Patch(ctx, c, client.MergeFrom(cluster)); err != nil {
 			return err
 		}
 
