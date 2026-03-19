@@ -74,7 +74,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	log := logf.FromContext(ctx).WithName("PerconaServerMySQLRestore").WithValues("name", req.Name, "namespace", req.Namespace)
 
 	cr := &apiv1.PerconaServerMySQLRestore{}
-	err := r.Client.Get(ctx, req.NamespacedName, cr)
+	err := r.Get(ctx, req.NamespacedName, cr)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "get CR %s", req.NamespacedName)
 	}
@@ -95,18 +95,18 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		}
 		err := k8sretry.OnError(k8sretry.DefaultRetry, retriable, func() error {
 			cr := &apiv1.PerconaServerMySQLRestore{}
-			if err := r.Client.Get(ctx, req.NamespacedName, cr); err != nil {
+			if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 				return errors.Wrapf(err, "get %v", req.NamespacedName.String())
 			}
 
 			cr.Status = status
 			log.Info("Updating status", "state", cr.Status.State)
-			if err := r.Client.Status().Update(ctx, cr); err != nil {
+			if err := r.Status().Update(ctx, cr); err != nil {
 				return errors.Wrap(err, "update status")
 			}
 
-			if err := r.Client.Get(ctx, req.NamespacedName, cr); err != nil {
-				return errors.Wrapf(err, "get %v", req.NamespacedName.String())
+			if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
+				return errors.Wrapf(err, "get %v", req.String())
 			}
 			if cr.Status.State != status.State {
 				return errors.Errorf("status %s was not updated to %s", cr.Status.State, status.State)
@@ -128,7 +128,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 
 	cluster := &apiv1.PerconaServerMySQL{}
 	nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
-	if err := r.Client.Get(ctx, nn, cluster); err != nil {
+	if err := r.Get(ctx, nn, cluster); err != nil {
 		if k8serrors.IsNotFound(err) {
 			status.State = apiv1.RestoreError
 			status.StateDesc = fmt.Sprintf("PerconaServerMySQL %s in namespace %s is not found", cr.Spec.ClusterName, cr.Namespace)
@@ -190,7 +190,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 
 	job := &batchv1.Job{}
 	nn = types.NamespacedName{Name: xtrabackup.RestoreJobName(cluster, cr), Namespace: req.Namespace}
-	err = r.Client.Get(ctx, nn, job)
+	err = r.Get(ctx, nn, job)
 	if client.IgnoreNotFound(err) != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "get job %s", nn)
 	}
@@ -269,7 +269,7 @@ func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cl
 			continue
 		}
 
-		if err := r.Client.Delete(ctx, &pvc); err != nil {
+		if err := r.Delete(ctx, &pvc); err != nil {
 			if !k8serrors.IsNotFound(err) {
 				log.Error(err, "failed to delete PVC")
 			}
@@ -288,7 +288,7 @@ func (r *PerconaServerMySQLRestoreReconciler) removeBootstrapCondition(ctx conte
 	err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		c := &apiv1.PerconaServerMySQL{}
 		nn := types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}
-		if err := r.Client.Get(ctx, nn, c); err != nil {
+		if err := r.Get(ctx, nn, c); err != nil {
 			return err
 		}
 
@@ -311,13 +311,13 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 	err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		c := &apiv1.PerconaServerMySQL{}
 		nn := types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}
-		if err := r.Client.Get(ctx, nn, c); err != nil {
+		if err := r.Get(ctx, nn, c); err != nil {
 			return err
 		}
 
 		c.Spec.Pause = true
 
-		if err := r.Client.Patch(ctx, c, client.MergeFrom(cluster)); err != nil {
+		if err := r.Patch(ctx, c, client.MergeFrom(cluster)); err != nil {
 			return err
 		}
 
@@ -329,7 +329,7 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 
 	sts := &appsv1.StatefulSet{}
 	nn := types.NamespacedName{Name: mysql.Name(cluster), Namespace: cluster.Namespace}
-	if err := r.Client.Get(ctx, nn, sts); err != nil {
+	if err := r.Get(ctx, nn, sts); err != nil {
 		return errors.Wrapf(err, "get statefulset %s", nn)
 	}
 
@@ -340,7 +340,7 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 	switch cluster.Spec.MySQL.ClusterType {
 	case apiv1.ClusterTypeAsync:
 		nn = types.NamespacedName{Name: orchestrator.Name(cluster), Namespace: cluster.Namespace}
-		err := r.Client.Get(ctx, nn, sts)
+		err := r.Get(ctx, nn, sts)
 		if client.IgnoreNotFound(err) != nil {
 			return errors.Wrapf(err, "get statefulset %s", nn)
 		}
@@ -351,7 +351,7 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 		if cluster.HAProxyEnabled() {
 			sts := new(appsv1.StatefulSet)
 			nn = types.NamespacedName{Name: haproxy.Name(cluster), Namespace: cluster.Namespace}
-			if err := r.Client.Get(ctx, nn, sts); err != nil {
+			if err := r.Get(ctx, nn, sts); err != nil {
 				return errors.Wrapf(err, "get deployment %s", nn)
 			}
 			if sts.Status.Replicas != 0 {
@@ -362,7 +362,7 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 		if cluster.RouterEnabled() {
 			deployment := new(appsv1.Deployment)
 			nn = types.NamespacedName{Name: router.Name(cluster), Namespace: cluster.Namespace}
-			if err := r.Client.Get(ctx, nn, deployment); err != nil {
+			if err := r.Get(ctx, nn, deployment); err != nil {
 				return errors.Wrapf(err, "get deployment %s", nn)
 			}
 			if deployment.Status.Replicas != 0 {
