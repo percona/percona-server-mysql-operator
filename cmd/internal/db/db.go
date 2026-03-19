@@ -381,6 +381,11 @@ func (d *DB) EnableSuperReadonly(ctx context.Context) error {
 	return errors.Wrap(err, "set global super_read_only param to 1")
 }
 
+func (d *DB) ResetBinaryLogAndGTIDs(ctx context.Context) error {
+	_, err := d.db.ExecContext(ctx, "RESET BINARY LOGS AND GTIDS")
+	return errors.Wrap(err, "reset binary logs and gtids")
+}
+
 func (d *DB) ChangeReplicationSourceRelay(ctx context.Context, relayLogFile string, relayLogPos int) error {
 	_, err := d.db.ExecContext(ctx, fmt.Sprintf(
 		"CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE='%s', RELAY_LOG_POS=%d, SOURCE_HOST='dummy'",
