@@ -67,6 +67,12 @@ func TestContainer(t *testing.T) {
 		assert.True(t, foundEnv[env])
 	}
 
+	envValues := map[string]string{}
+	for _, env := range container.Env {
+		envValues[env.Name] = env.Value
+	}
+	assert.Equal(t, "/tmp/pmm", envValues["PMM_AGENT_PATHS_TEMPDIR"])
+
 	assert.NotNil(t, container.Lifecycle)
 	assert.Equal(t, []string{"bash", "-c", "pmm-admin unregister --force"}, container.Lifecycle.PreStop.Exec.Command)
 
