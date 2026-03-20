@@ -299,6 +299,7 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRConfig(
 		return errors.Wrap(err, "marshal binlog entries")
 	}
 
+	cm.Data = make(map[string]string)
 	cm.Data[pitr.BinlogsConfigKey] = string(data)
 
 	if err := controllerutil.SetControllerReference(cr, cm, r.Scheme); err != nil {
