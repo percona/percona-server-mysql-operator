@@ -813,6 +813,21 @@ func SetStorageAzure(job *batchv1.Job, azure *apiv1.BackupStorageAzureSpec) erro
 	return errors.Errorf("no container named %s in Job spec", appName)
 }
 
+func SetIncrementalLsn(job *batchv1.Job, lsn string) error {
+	spec := &job.Spec.Template.Spec
+
+	for i := range spec.Containers {
+		container := &spec.Containers[i]
+
+		if container.Name == appName {
+			container.Env = append(container.Env, corev1.EnvVar{Name: "INCREMENTAL_LSN", Value: lsn})
+			return nil
+		}
+	}
+
+	return errors.Errorf("no container named %s in Job spec", appName)
+}
+
 func SetSourceNode(job *batchv1.Job, src string) error {
 	spec := &job.Spec.Template.Spec
 
@@ -836,6 +851,9 @@ type BackupConfig struct {
 	S3               BackupConfigS3                `json:"s3"`
 	GCS              BackupConfigGCS               `json:"gcs"`
 	Azure            BackupConfigAzure             `json:"azure"`
+
+	// Specify for incremental backups
+	IncrementalLsn string `json:"incrementalLsn,omitempty"`
 }
 
 type BackupConfigS3 struct {

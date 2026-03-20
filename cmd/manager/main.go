@@ -184,17 +184,8 @@ func main() {
 	}
 	//+kubebuilder:scaffold:builder
 
-	err = mgr.GetFieldIndexer().IndexField(
-		context.Background(),
-		&eventsv1.Event{},
-		"regarding.name",
-		func(rawObj client.Object) []string {
-			event := rawObj.(*eventsv1.Event)
-			return []string{event.Regarding.Name}
-		},
-	)
-	if err != nil {
-		setupLog.Error(err, "unable to index field")
+	if err := setupFieldIndexers(context.Background(), mgr); err != nil {
+		setupLog.Error(err, "unable to setup field indexers")
 		os.Exit(1)
 	}
 
@@ -257,4 +248,44 @@ func getLogLevel(log logr.Logger) zapcore.LevelEnabler {
 		log.Info("Unsupported log level, using INFO", "level", l)
 		return zapcore.InfoLevel
 	}
+}
+
+func setupFieldIndexers(ctx context.Context, mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&eventsv1.Event{},
+		"regarding.name",
+		func(rawObj client.Object) []string {
+			event := rawObj.(*eventsv1.Event)
+			return []string{event.Regarding.Name}
+		},
+	); err != nil {
+		setupLog.Error(err, "unable to index field")
+		os.Exit(1)
+	}
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&eventsv1.Event{},
+		"regarding.namespace",
+		func(rawObj client.Object) []string {
+			event := rawObj.(*eventsv1.Event)
+			return []string{event.Regarding.Namespace}
+		},
+	); err != nil {
+		setupLog.Error(err, "unable to index field")
+		os.Exit(1)
+	}
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&apiv1.PerconaServerMySQLBackup{},
+		"spec.clusterName",
+		func(rawObj client.Object) []string {
+			backup := rawObj.(*apiv1.PerconaServerMySQLBackup)
+			return []string{backup.Spec.ClusterName}
+		},
+	); err != nil {
+		setupLog.Error(err, "unable to index field")
+		os.Exit(1)
+	}
+	return nil
 }

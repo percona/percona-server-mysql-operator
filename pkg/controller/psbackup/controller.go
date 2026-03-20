@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	k8sretry "k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -44,6 +45,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	k8sutil "github.com/percona/percona-server-mysql-operator/pkg/util/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 	xbstorage "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 )
@@ -145,11 +147,22 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 	switch cr.Status.State {
 	case apiv1.BackupSucceeded:
+		// Set the LSN for the backup.
 		lsn, err := r.getBackupLSN(ctx, cr, backupSource)
 		if err != nil {
 			return rr, errors.Wrap(err, "failed to get backup LSN")
 		}
 		status.Lsn = &lsn
+
+		// Set the name of the previous backup in chain (for incremental backups).
+		if cr.Spec.Type == apiv1.BackupTypeIncremental && cr.Status.PreviousBackupName == nil {
+			chain, err := r.newBackupChain(ctx, cr, cluster)
+			if err != nil {
+				return rr, errors.Wrap(err, "new backup chain")
+			}
+			status.PreviousBackupName = ptr.To(chain.Tail().Name)
+		}
+
 		return rr, nil
 	case apiv1.BackupFailed, apiv1.BackupError:
 		return rr, nil
@@ -187,6 +200,31 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	if k8serrors.IsNotFound(err) {
+		if err := r.assignBackupChain(ctx, cr, cluster); err != nil {
+			status.State = apiv1.BackupError
+			status.StateDesc = "failed to resolve backup chain: " + err.Error()
+			return rr, errors.Wrap(err, "resolve backup chain")
+		}
+
+		incrementalLsn := ""
+		if cr.Spec.Type == apiv1.BackupTypeIncremental {
+			chain, err := r.newBackupChain(ctx, cr, cluster)
+			if err != nil {
+				status.State = apiv1.BackupError
+				status.StateDesc = "failed to prepare backup chain: " + err.Error()
+				return rr, errors.Wrap(err, "new backup chain")
+			}
+			// TODO: walk the chain and validate each backup existence.
+			status.BaseBackupName = ptr.To(chain.Head().Name)
+			lsn := chain.Tail().Status.Lsn
+			if lsn == nil {
+				status.State = apiv1.BackupError
+				status.StateDesc = "LSN of last backup not known"
+				return rr, nil
+			}
+			incrementalLsn = *lsn
+		}
+
 		if err := r.prepareStatus(cr, cluster, storage, &status, backupSource); err != nil {
 			status.State = apiv1.BackupError
 			status.StateDesc = "failed to prepare backup job: " + err.Error()
@@ -199,19 +237,13 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return rr, nil
 		}
 
-		if err := r.assignBackupChain(ctx, cr, cluster); err != nil {
-			status.State = apiv1.BackupError
-			status.StateDesc = "failed to resolve backup chain: " + err.Error()
-			return rr, errors.Wrap(err, "resolve backup chain")
-		}
-
 		log.Info("Preparing backup source", "source", backupSource)
 		if err := r.prepareBackupSource(ctx, cr, cluster, backupSource); err != nil {
 			return rr, errors.Wrap(err, "prepare backup source")
 		}
 
 		log.Info("Creating backup job", "jobName", nn.Name)
-		if err := r.createBackupJob(ctx, cr, cluster, storage, status.Destination, backupSource); err != nil {
+		if err := r.createBackupJob(ctx, cr, cluster, storage, status.Destination, backupSource, incrementalLsn); err != nil {
 			return rr, errors.Wrap(err, "failed to create backup job")
 		}
 
@@ -332,6 +364,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 	storage *apiv1.BackupStorageSpec,
 	destination apiv1.BackupDestination,
 	backupSource string,
+	incrementalLsn string,
 ) error {
 	initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
 	if err != nil {
@@ -405,6 +438,12 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 
 	if err := xtrabackup.SetSourceNode(job, backupSource); err != nil {
 		return errors.Wrap(err, "set backup source node")
+	}
+
+	if incrementalLsn != "" {
+		if err := xtrabackup.SetIncrementalLsn(job, incrementalLsn); err != nil {
+			return errors.Wrap(err, "set incremental LSN")
+		}
 	}
 
 	if err := controllerutil.SetControllerReference(cr, job, r.Scheme); err != nil {
@@ -662,8 +701,14 @@ func (r *PerconaServerMySQLBackupReconciler) assignBackupChain(ctx context.Conte
 		return nil
 	}
 	chain := backup.GetName()
-
-	// TODO: resolve for incremental backups
+	if backup.Spec.Type == apiv1.BackupTypeIncremental {
+		// TODO: allow user to specify the base backup name.
+		lastFullBackup, err := k8sutil.GetLastFullBackup(ctx, r.Client, cluster.Name)
+		if err != nil {
+			return errors.Wrap(err, "get last full backup")
+		}
+		chain = lastFullBackup.GetName()
+	}
 
 	labels := backup.GetLabels()
 	if labels == nil {
@@ -698,4 +743,20 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupLSN(ctx context.Context, c
 	}
 
 	return info.ToLSN, nil
+}
+
+func (r *PerconaServerMySQLBackupReconciler) newBackupChain(
+	ctx context.Context,
+	backup *apiv1.PerconaServerMySQLBackup,
+	cluster *apiv1.PerconaServerMySQL,
+) (*xtrabackup.BackupChain, error) {
+	chainName, ok := backup.GetLabels()[naming.LabelBackupChain]
+	if !ok {
+		return nil, errors.New("chain name is not set")
+	}
+	chain, err := xtrabackup.NewBackupChain(ctx, r.Client, chainName, cluster.Name)
+	if err != nil {
+		return nil, errors.Wrap(err, "new backup chain")
+	}
+	return chain, nil
 }

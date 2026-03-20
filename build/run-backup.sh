@@ -20,7 +20,7 @@ request_data() {
 				        "accessKey": "$(json_escape "${AWS_ACCESS_KEY_ID}")",
 				        "secretKey": "$(json_escape "${AWS_SECRET_ACCESS_KEY}")",
 				        "region": "$(json_escape "${AWS_DEFAULT_REGION}")"
-				    },
+				    }
 				}
 			EOF
 			;;
@@ -38,7 +38,7 @@ request_data() {
 				        "accessKey": "$(json_escape "${ACCESS_KEY_ID}")",
 				        "secretKey": "$(json_escape "${SECRET_ACCESS_KEY}")",
 				        "storageClass": "$(json_escape "${GCS_STORAGE_CLASS}")"
-				    },
+				    }
 				}
 			EOF
 			;;
