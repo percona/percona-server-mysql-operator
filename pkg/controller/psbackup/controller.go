@@ -99,7 +99,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	status := cr.Status
 
 	defer func() {
-		if status.State == cr.Status.State && status.Destination == cr.Status.Destination {
+		if status.Equals(&cr.Status) {
 			return
 		}
 		if status.State != cr.Status.State && status.StateDesc == cr.Status.StateDesc {
@@ -125,11 +125,6 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return reconcile.Result{}, errors.Wrap(err, "run finalizers")
 	}
 
-	switch cr.Status.State {
-	case apiv1.BackupFailed, apiv1.BackupSucceeded, apiv1.BackupError:
-		return rr, nil
-	}
-
 	cluster := &apiv1.PerconaServerMySQL{}
 	nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
 	if err := r.Client.Get(ctx, nn, cluster); err != nil {
@@ -139,6 +134,25 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return rr, nil
 		}
 		return rr, errors.Wrapf(err, "get %v", nn.String())
+	}
+
+	backupSource, err := r.getBackupSource(ctx, cr, cluster)
+	if err != nil {
+		status.State = apiv1.BackupError
+		status.StateDesc = fmt.Sprintf("failed to get the source host for backup: %v", err)
+		return rr, nil
+	}
+
+	switch cr.Status.State {
+	case apiv1.BackupSucceeded:
+		lsn, err := r.getBackupLSN(ctx, cr, backupSource)
+		if err != nil {
+			return rr, errors.Wrap(err, "failed to get backup LSN")
+		}
+		status.Lsn = &lsn
+		return rr, nil
+	case apiv1.BackupFailed, apiv1.BackupError:
+		return rr, nil
 	}
 
 	if err := cluster.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
@@ -155,13 +169,6 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	if !ok {
 		status.State = apiv1.BackupError
 		status.StateDesc = fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", cr.Spec.StorageName)
-		return rr, nil
-	}
-
-	backupSource, err := r.getBackupSource(ctx, cr, cluster)
-	if err != nil {
-		status.State = apiv1.BackupError
-		status.StateDesc = fmt.Sprintf("failed to get the source host for backup: %v", err)
 		return rr, nil
 	}
 
@@ -190,6 +197,12 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			status.State = apiv1.BackupError
 			status.StateDesc = "failed to validate storage: " + err.Error()
 			return rr, nil
+		}
+
+		if err := r.assignBackupChain(ctx, cr, cluster); err != nil {
+			status.State = apiv1.BackupError
+			status.StateDesc = "failed to resolve backup chain: " + err.Error()
+			return rr, errors.Wrap(err, "resolve backup chain")
 		}
 
 		log.Info("Preparing backup source", "source", backupSource)
@@ -299,7 +312,7 @@ func (r *PerconaServerMySQLBackupReconciler) prepareStatus(
 	status *apiv1.PerconaServerMySQLBackupStatus,
 	backupSource string,
 ) error {
-	destination, err := xtrabackup.GetDestination(storage, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
+	destination, err := xtrabackup.GetDestination(storage, cr.Spec.Type, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
 	if err != nil {
 		return errors.Wrap(err, "get backup destination")
 	}
@@ -308,6 +321,7 @@ func (r *PerconaServerMySQLBackupReconciler) prepareStatus(
 	status.Image = cluster.Spec.Backup.Image
 	status.Storage = storage
 	status.BackupSource = backupSource
+	status.Type = cr.Spec.Type
 	return nil
 }
 
@@ -641,4 +655,47 @@ func getBackupSourcePod(ctx context.Context, cl client.Client, namespace, src st
 	}
 
 	return pod, nil
+}
+
+func (r *PerconaServerMySQLBackupReconciler) assignBackupChain(ctx context.Context, backup *apiv1.PerconaServerMySQLBackup, cluster *apiv1.PerconaServerMySQL) error {
+	if _, ok := backup.GetLabels()[naming.LabelBackupChain]; ok {
+		return nil
+	}
+	chain := backup.GetName()
+
+	// TODO: resolve for incremental backups
+
+	labels := backup.GetLabels()
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	labels[naming.LabelBackupChain] = chain
+	backup.SetLabels(labels)
+	if err := r.Update(ctx, backup); err != nil {
+		return errors.Wrap(err, "update backup")
+	}
+	return nil
+}
+
+func (r *PerconaServerMySQLBackupReconciler) getBackupLSN(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup, backupSource string) (string, error) {
+	if cr.Status.Lsn != nil {
+		return *cr.Status.Lsn, nil
+	}
+
+	req, err := xtrabackup.GetBackupConfig(ctx, r.Client, cr)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create sidecar backup config")
+	}
+
+	sc := r.NewSidecarClient(backupSource)
+	info, err := sc.GetCheckpointInfo(ctx, *req)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get checkpoint info")
+	}
+
+	if info.FromLSN == "" {
+		return "", errors.New("from LSN is empty")
+	}
+
+	return info.ToLSN, nil
 }

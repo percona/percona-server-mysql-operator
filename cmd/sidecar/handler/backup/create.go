@@ -122,7 +122,7 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 	defer backupLog.Close() //nolint:errcheck
 	logWriter := io.MultiWriter(backupLog, os.Stderr)
 
-	xbcloud := exec.CommandContext(gCtx, "xbcloud", xb.XBCloudArgs(xb.XBCloudActionPut, &backupConf)...)
+	xbcloud := exec.CommandContext(gCtx, "xbcloud", backupConf.XbcloudPutArgs()...)
 	xbcloud.Env = envs(backupConf)
 	xbcloud.Stdin = xbOut
 

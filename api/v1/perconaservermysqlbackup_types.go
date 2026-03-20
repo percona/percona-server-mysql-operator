@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
@@ -210,4 +211,16 @@ func (b *PerconaServerMySQLBackup) Hash() string {
 	}
 
 	return hash
+}
+
+func (s *PerconaServerMySQLBackupStatus) Equals(other *PerconaServerMySQLBackupStatus) bool {
+	return s.Type == other.Type &&
+		s.State == other.State &&
+		s.StateDesc == other.StateDesc &&
+		s.Destination == other.Destination &&
+		s.Image == other.Image &&
+		s.BackupSource == other.BackupSource &&
+		ptr.Deref(s.Lsn, "") == ptr.Deref(other.Lsn, "") &&
+		ptr.Deref(s.BaseBackupName, "") == ptr.Deref(other.BaseBackupName, "") &&
+		ptr.Deref(s.PreviousBackupName, "") == ptr.Deref(other.PreviousBackupName, "")
 }

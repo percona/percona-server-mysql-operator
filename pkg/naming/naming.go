@@ -17,6 +17,7 @@ const (
 const (
 	LabelBackupType     = perconaPrefix + "backup-type"
 	LabelBackupAncestor = perconaPrefix + "backup-ancestor"
+	LabelBackupChain    = perconaPrefix + "backup-chain"
 )
 
 const (

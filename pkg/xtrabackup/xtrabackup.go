@@ -1,11 +1,14 @@
 package xtrabackup
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"path"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
@@ -267,17 +270,13 @@ type XBCloudAction string
 const (
 	XBCloudActionPut    XBCloudAction = "put"
 	XBCloudActionDelete XBCloudAction = "delete"
+	XBCloudActionGet    XBCloudAction = "get"
 )
 
-func XBCloudArgs(action XBCloudAction, conf *BackupConfig) []string {
-	args := []string{string(action), "--parallel=10", "--curl-retriable-errors=7"}
-
+func xbcloudCloudOpts(conf *BackupConfig) []string {
+	args := []string{}
 	if !conf.VerifyTLS {
 		args = append(args, "--insecure")
-	}
-
-	if conf.ContainerOptions != nil {
-		args = append(args, conf.ContainerOptions.Args.Xbcloud...)
 	}
 
 	switch conf.Type {
@@ -324,8 +323,42 @@ func XBCloudArgs(action XBCloudAction, conf *BackupConfig) []string {
 			args = append(args, fmt.Sprintf("--azure-endpoint=%s", conf.Azure.EndpointURL))
 		}
 	}
+	return args
+}
 
+func (conf *BackupConfig) XbcloudPutArgs() []string {
+	args := []string{string(XBCloudActionPut), "--parallel=10", "--curl-retriable-errors=7"}
+	if conf.ContainerOptions != nil {
+		args = append(args, conf.ContainerOptions.Args.Xbcloud...)
+	}
+
+	args = append(args, xbcloudCloudOpts(conf)...)
 	args = append(args, conf.Destination)
+
+	return args
+}
+
+func (conf *BackupConfig) XbcloudDeleteArgs() []string {
+	args := []string{string(XBCloudActionDelete), "--parallel=10", "--curl-retriable-errors=7"}
+	if conf.ContainerOptions != nil {
+		args = append(args, conf.ContainerOptions.Args.Xbcloud...)
+	}
+
+	args = append(args, xbcloudCloudOpts(conf)...)
+	args = append(args, conf.Destination)
+
+	return args
+}
+
+func (conf *BackupConfig) XbcloudGetArgs(files ...string) []string {
+	args := []string{string(XBCloudActionGet)}
+
+	args = append(args, xbcloudCloudOpts(conf)...)
+	args = append(args, conf.Destination)
+
+	for _, file := range files {
+		args = append(args, file)
+	}
 
 	return args
 }
@@ -342,7 +375,7 @@ func deleteContainer(image string, conf *BackupConfig, cr *apiv1.PerconaServerMy
 			},
 		},
 		Env:                      cr.GetContainerOptions(storage).GetEnv(),
-		Command:                  append([]string{"xbcloud"}, XBCloudArgs(XBCloudActionDelete, conf)...),
+		Command:                  append([]string{"xbcloud"}, conf.XbcloudDeleteArgs()...),
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          storage.ContainerSecurityContext,
@@ -839,7 +872,7 @@ func GetBackupConfig(ctx context.Context, cl client.Client, cr *apiv1.PerconaSer
 	if storage.VerifyTLS != nil {
 		verifyTLS = *storage.VerifyTLS
 	}
-	destination, err := GetDestination(storage, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
+	destination, err := GetDestination(storage, cr.Spec.Type, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
 	if err != nil {
 		return nil, errors.Wrap(err, "get backup destination")
 	}
@@ -929,8 +962,17 @@ func GetBackupConfig(ctx context.Context, cl client.Client, cr *apiv1.PerconaSer
 	return conf, nil
 }
 
-func GetDestination(storage *apiv1.BackupStorageSpec, clusterName, creationTimeStamp string) (apiv1.BackupDestination, error) {
-	backupName := fmt.Sprintf("%s-%s-full", clusterName, creationTimeStamp)
+func GetDestination(
+	storage *apiv1.BackupStorageSpec,
+	backupType apiv1.BackupType,
+	clusterName,
+	creationTimeStamp string,
+) (apiv1.BackupDestination, error) {
+	suffix := "full"
+	if backupType == apiv1.BackupTypeIncremental {
+		suffix = "incr"
+	}
+	backupName := fmt.Sprintf("%s-%s-%s", clusterName, creationTimeStamp, suffix)
 
 	var d apiv1.BackupDestination
 	switch storage.Type {
@@ -948,4 +990,48 @@ func GetDestination(storage *apiv1.BackupStorageSpec, clusterName, creationTimeS
 	}
 
 	return d, nil
+}
+
+type CheckpointInfo struct {
+	BackupType string `json:"backup_type"`
+	FromLSN    string `json:"from_lsn"`
+	ToLSN      string `json:"to_lsn"`
+	LastLSN    string `json:"last_lsn"`
+	FlushedLSN string `json:"flushed_lsn"`
+	RedoMemory string `json:"redo_memory"`
+	RedoFrames string `json:"redo_frames"`
+}
+
+func (info *CheckpointInfo) ReadFrom(r io.Reader) error {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		switch {
+		case strings.Contains(key, "backup_type"):
+			info.BackupType = value
+		case strings.Contains(key, "from_lsn"):
+			info.FromLSN = value
+		case strings.Contains(key, "to_lsn"):
+			info.ToLSN = value
+		case strings.Contains(key, "last_lsn"):
+			info.LastLSN = value
+		case strings.Contains(key, "flushed_lsn"):
+			info.FlushedLSN = value
+		case strings.Contains(key, "redo_memory"):
+			info.RedoMemory = value
+		case strings.Contains(key, "redo_frames"):
+			info.RedoFrames = value
+		default:
+			continue
+		}
+	}
+
+	return scanner.Err()
 }

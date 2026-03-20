@@ -789,6 +789,18 @@ func (f *fakeSidecarClient) DeleteBackup(ctx context.Context, name string, cfg x
 	return nil
 }
 
+func (f *fakeSidecarClient) GetCheckpointInfo(ctx context.Context, cfg xtrabackup.BackupConfig) (*xtrabackup.CheckpointInfo, error) {
+	return &xtrabackup.CheckpointInfo{
+		BackupType: "full",
+		FromLSN:    "1000",
+		ToLSN:      "2000",
+		LastLSN:    "3000",
+		FlushedLSN: "4000",
+		RedoMemory: "5000",
+		RedoFrames: "6000",
+	}, nil
+}
+
 func readDefaultCR(name, namespace string) (*apiv1.PerconaServerMySQL, error) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "cr.yaml"))
 	if err != nil {
