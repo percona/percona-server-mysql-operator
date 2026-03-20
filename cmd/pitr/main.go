@@ -173,11 +173,6 @@ func runApply(ctx context.Context) error {
 
 	firstRelayLog := fmt.Sprintf("%s-relay-bin.000001", hostname)
 
-	log.Println("running 'RESET BINARY LOGS AND GTIDS'")
-	if err := database.ResetBinaryLogAndGTIDs(ctx); err != nil {
-		return err
-	}
-
 	log.Println("running 'CHANGE REPLICATION SOURCE'")
 	if err := database.ChangeReplicationSourceRelay(ctx, firstRelayLog, 4); err != nil {
 		return fmt.Errorf("change replication source: %w", err)
