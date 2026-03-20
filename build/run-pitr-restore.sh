@@ -6,7 +6,7 @@ set -e
 
 echo "Starting mysqld"
 mysqld \
-  --admin-address=$(hostname -I) \
+  --admin-address=127.0.0.1 \
   --skip-replica-start \
   --user=mysql \
   --read-only=ON \
