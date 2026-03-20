@@ -212,6 +212,9 @@ func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
 	if conf != nil && conf.ContainerOptions != nil {
 		args = append(args, conf.ContainerOptions.Args.Xtrabackup...)
 	}
+	if conf != nil && conf.IncrementalLsn != "" {
+		args = append(args, fmt.Sprintf("--incremental-lsn=%s", conf.IncrementalLsn))
+	}
 	return args
 }
 

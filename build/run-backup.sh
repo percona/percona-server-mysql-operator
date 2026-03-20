@@ -13,13 +13,14 @@ request_data() {
 				    "type": "$(json_escape "${STORAGE_TYPE}")",
 				    "containerOptions": ${CONTAINER_OPTIONS},
 				    "verifyTLS": $(json_escape "${VERIFY_TLS}"),
+					"incrementalLsn": "$(json_escape "${INCREMENTAL_LSN}")",
 				    "s3": {
 				        "bucket": "$(json_escape "${S3_BUCKET}")",
 				        "endpointUrl": "$(json_escape "${AWS_ENDPOINT}")",
 				        "accessKey": "$(json_escape "${AWS_ACCESS_KEY_ID}")",
 				        "secretKey": "$(json_escape "${AWS_SECRET_ACCESS_KEY}")",
 				        "region": "$(json_escape "${AWS_DEFAULT_REGION}")"
-				    }
+				    },
 				}
 			EOF
 			;;
@@ -30,13 +31,14 @@ request_data() {
 				    "verifyTLS": $(json_escape "${VERIFY_TLS}"),
 				    "type": "$(json_escape "${STORAGE_TYPE}")",
 				    "containerOptions": ${CONTAINER_OPTIONS},
+					"incrementalLsn": "$(json_escape "${INCREMENTAL_LSN}")",
 				    "gcs": {
 				        "bucket": "$(json_escape "${GCS_BUCKET}")",
 				        "endpointUrl": "$(json_escape "${GCS_ENDPOINT}")",
 				        "accessKey": "$(json_escape "${ACCESS_KEY_ID}")",
 				        "secretKey": "$(json_escape "${SECRET_ACCESS_KEY}")",
 				        "storageClass": "$(json_escape "${GCS_STORAGE_CLASS}")"
-				    }
+				    },
 				}
 			EOF
 			;;
@@ -47,6 +49,7 @@ request_data() {
 				    "verifyTLS": $(json_escape "${VERIFY_TLS}"),
 				    "type": "$(json_escape "${STORAGE_TYPE}")",
 				    "containerOptions": ${CONTAINER_OPTIONS},
+					"incrementalLsn": "$(json_escape "${INCREMENTAL_LSN}")",
 				    "azure": {
 				        "containerName": "$(json_escape "${AZURE_CONTAINER_NAME}")",
 				        "storageAccount": "$(json_escape "${AZURE_STORAGE_ACCOUNT}")",
