@@ -430,25 +430,31 @@ spec:
    - *Recommendation:* Option B for production readiness, but requires testing with the binlog_server binary's reconnection behavior.
    - *Resolution:* Pending.
 
-2. **Binlog retention in S3:** Binlogs accumulate indefinitely. Should the operator implement a retention policy?
+2. **Replicating from primary:** Even if we resolve the question above we also need to decide if PBS will replicate from a secondary or the primary.
+   - *Option A:* Use a headless service that matches all MySQL pods. It's okay if the primary is used to replica from.
+   - *Option B:* Prefer a secondary to minimize the load on the primary.
+   - *Recommendation:* Option B might be better depending on implementation complexity.
+   - *Resolution:* Pending.
+
+3. **Binlog retention in S3:** Binlogs accumulate indefinitely. Should the operator implement a retention policy?
    - *Recommendation:* Add retention support in a follow-up. Users can manually clean up S3 for now.
    - *Resolution:* Deferred.
 
-3. **PITR for non-S3 storage:** Should the binlog server support GCS and Azure?
+4. **PITR for non-S3 storage:** Should the binlog server support GCS and Azure?
    - *Recommendation:* Depends on upstream `binlog_server` support. Not a blocker for initial release.
    - *Resolution:* Deferred.
 
-4. **`SQL_BEFORE_GTIDS` semantics clarity:** The GTID target uses `SQL_BEFORE_GTIDS`, meaning the specified transaction is *excluded*. Should the CRD documentation make this explicit, or should we offer both "before" and "at" semantics?
+5. **`SQL_BEFORE_GTIDS` semantics clarity:** The GTID target uses `SQL_BEFORE_GTIDS`, meaning the specified transaction is *excluded*. Should the CRD documentation make this explicit, or should we offer both "before" and "at" semantics?
    - *Recommendation:* Document the exclusion semantic clearly. This is consistent with the behavior in K8SPXC.
    - *Resolution:* Pending.
 
-5. **Parallel replay workers:** Should the operator let users to configure `replica_parallel_workers`?
+6. **Parallel replay workers:** Should the operator let users to configure `replica_parallel_workers`?
    - *Option A:* Use MySQL defaults (4 workers in 8.4).
    - *Option B:* Add a `parallelWorkers` field to `RestorePITRSpec`.
    - *Recommendation:* Start with Option A, add Option B based on user feedback about PITR speed.
    - *Resolution:* Pending.
 
-6. **Downloading binary logs:** Operator downloads all binary logs collected by PBS without considering if they are needed or not. Should we implement a smarter logic to decide which slice of binary logs needs to be downloaded?
+7. **Downloading binary logs:** Operator downloads all binary logs collected by PBS without considering if they are needed or not. Should we implement a smarter logic to decide which slice of binary logs needs to be downloaded?
     - *Option A:* Relay log based recovery already handles transactions that are already applied to database. No need to overcomplicate.
     - *Option B*: If PBS is collecting binary logs for a long time, `pitr` binary might need to download a lot of files and this might delay the recovery. Operator needs to be smarter to understand last write and/or last GTID of the backup and decide from where it needs to start downloading files.
    - *Recommendation:* Check the possibility of implementing Option B. If possible, we should do it.
