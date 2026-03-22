@@ -1138,6 +1138,17 @@ spec:
                       type: object
                     type: array
                 type: object
+              pitr:
+                properties:
+                  date:
+                    type: string
+                  gtid:
+                    type: string
+                  type:
+                    type: string
+                required:
+                - type
+                type: object
             required:
             - clusterName
             type: object
