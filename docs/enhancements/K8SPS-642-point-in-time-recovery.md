@@ -460,6 +460,26 @@ spec:
    - *Recommendation:* Check the possibility of implementing Option B. If possible, we should do it.
    - *Resolution:* Pending.
 
+8. **Deciding the binlog position when recovering to a datetime:** `pitr` binary runs `mysqlbinlog --stop-datetime='<datetime>'` and gets the latest `end_log_pos` in the output. 
+
+Consider the following output:
+```
+#260320  9:00:00 server id 28835510  end_log_pos 3424182 CRC32 0xd23f147e       GTID    last_committed=128      sequence_number=1477    rbr_only=yes original_committed_timestamp=1773986400992915   immediate_commit_timestamp=1773986400996419     transaction_length=326
+#260320  9:00:00 server id 28835510  end_log_pos 3424262 CRC32 0xd67f946e       Query   thread_id=3773  exec_time=0     error_code=0
+#260320  9:00:00 server id 28835510  end_log_pos 3424318 CRC32 0xfba8b5b1       Table_map: `test`.`t1` mapped to number 144
+#260320  9:00:00 server id 28835510  end_log_pos 3424391 CRC32 0x62b0bc69       Write_rows: table id 144 flags: STMT_END_F
+#260320  9:00:00 server id 28835510  end_log_pos 3424422 CRC32 0x503a9439       Xid = 31875
+```
+
+The position of the commit is `3424182` but the latest position is `3424422`. Currently operator will recover **until** `3424422`. 
+
+What is the right approach?
+- *Option A:* Add a second to target datetime and get the **first** position in `mysqlbinlog --stop-datetime=<datetime+1s>` output.
+- *Option B*: Recover **until** the position at the line with `GTID` (see example above).
+- *Option C*: What we do right now is correct.
+- *Recommendation:* Option A feels like the correct one to me.
+- *Resolution:* Pending.
+
 ---
 
 ## Appendix
