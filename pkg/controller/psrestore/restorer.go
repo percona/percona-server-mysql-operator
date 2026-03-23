@@ -268,6 +268,11 @@ func getBackup(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMyS
 		status := cr.Spec.BackupSource.DeepCopy()
 		status.State = apiv1.BackupSucceeded
 		status.CompletedAt = nil
+		status.Type = apiv1.BackupTypeFull
+		if status.Destination.IsIncremental() {
+			status.Type = apiv1.BackupTypeIncremental
+		}
+
 		return &apiv1.PerconaServerMySQLBackup{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      cr.Name,
@@ -275,6 +280,7 @@ func getBackup(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMyS
 			},
 			Spec: apiv1.PerconaServerMySQLBackupSpec{
 				ClusterName: cr.Spec.ClusterName,
+				Type:        status.Type,
 			},
 			Status: *status,
 		}, nil
