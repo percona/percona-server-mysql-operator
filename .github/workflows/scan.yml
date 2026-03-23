@@ -50,7 +50,7 @@ jobs:
           ./e2e-tests/build
 
       - name: Run Trivy vulnerability scanner image (linux/amd64)
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@915b19816132ea30288fd9dca5f3e88a2bc498a5
         with:
           image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-amd64'
           format: 'table'
