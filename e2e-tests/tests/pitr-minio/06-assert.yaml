@@ -17,10 +17,6 @@ status:
     ready: 3
     size: 3
     state: ready
-  orchestrator:
-    ready: 3
-    size: 3
-    state: ready
   state: ready
 ---
 kind: PerconaServerMySQLRestore
