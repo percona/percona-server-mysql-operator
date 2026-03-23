@@ -83,6 +83,24 @@ func TestCheckNSetDefaults(t *testing.T) {
 		err := cr.CheckNSetDefaults(t.Context(), nil)
 		assert.NoError(t, err)
 	})
+	t.Run("backups disabled without image should succeed", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.Backup = &BackupSpec{
+			Enabled: false,
+		}
+		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+				},
+			},
+		}
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.NoError(t, err)
+	})
 	t.Run("without backup image, with volume spec", func(t *testing.T) {
 		cr := new(PerconaServerMySQL)
 		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
