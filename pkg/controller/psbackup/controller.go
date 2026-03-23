@@ -543,7 +543,7 @@ func (r *PerconaServerMySQLBackupReconciler) runPostFinishTasks(
 }
 
 func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) error {
-	if cr.DeletionTimestamp == nil || cr.Status.State == apiv1.BackupStarting || cr.Status.State == apiv1.BackupRunning || len(cr.Finalizers) == 0 {
+	if cr.DeletionTimestamp == nil || cr.Status.State == apiv1.BackupRunning || len(cr.Finalizers) == 0 {
 		return nil
 	}
 	log := logf.FromContext(ctx).WithName("checkFinalizers")
