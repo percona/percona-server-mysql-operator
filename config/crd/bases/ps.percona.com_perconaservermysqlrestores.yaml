@@ -1036,8 +1036,6 @@ spec:
                     type: string
                   type:
                     type: string
-                required:
-                - type
                 type: object
               clusterName:
                 type: string

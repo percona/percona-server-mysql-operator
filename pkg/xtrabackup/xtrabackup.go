@@ -597,10 +597,6 @@ func restoreContainer(
 	if len(destination.Incrementals) > 0 {
 		baseEnvs = append(baseEnvs,
 			corev1.EnvVar{
-				Name:  "RESTORE_TYPE",
-				Value: "incremental",
-			},
-			corev1.EnvVar{
 				Name:  "BACKUP_INCREMENTALS_DEST",
 				Value: strings.Join(destination.Incrementals, ","),
 			},

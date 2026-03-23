@@ -60,7 +60,7 @@ const (
 
 // PerconaServerMySQLBackupStatus defines the observed state of PerconaServerMySQLBackup
 type PerconaServerMySQLBackupStatus struct {
-	Type         BackupType         `json:"type"`
+	Type         BackupType         `json:"type,omitempty"`
 	State        BackupState        `json:"state,omitempty"`
 	StateDesc    string             `json:"stateDescription,omitempty"`
 	Destination  BackupDestination  `json:"destination,omitempty"`

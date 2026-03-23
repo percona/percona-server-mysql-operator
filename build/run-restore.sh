@@ -125,7 +125,7 @@ restore_incremental() {
 }
 
 main() {
-	if [ "${RESTORE_TYPE}" = "incremental" ]; then
+	if [ -n "${BACKUP_INCREMENTALS_DEST}" ]; then
 		restore_incremental
 	else
 		restore_full

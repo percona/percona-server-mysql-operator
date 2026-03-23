@@ -26,10 +26,19 @@ func GetLastFullBackup(
 			continue
 		}
 
+		if backup.Status.State != apiv1.BackupSucceeded {
+			continue
+		}
+
 		if lastFullBackup == nil {
 			lastFullBackup = &backupList.Items[i]
 			continue
 		}
+
+		if backup.Status.CompletedAt == nil {
+			return nil, errors.Errorf("backup '%s' is succeeded but completedAt is not set", backup.GetName())
+		}
+
 		if backup.Status.CompletedAt.After(lastFullBackup.Status.CompletedAt.Time) {
 			lastFullBackup = &backupList.Items[i]
 		}
@@ -58,10 +67,16 @@ func GetLastSuccessfulBackup(
 		if backup.Status.State != apiv1.BackupSucceeded {
 			continue
 		}
+
 		if lastFullBackup == nil {
 			lastFullBackup = &backupList.Items[i]
 			continue
 		}
+
+		if backup.Status.CompletedAt == nil {
+			return nil, errors.Errorf("backup '%s' is succeeded but completedAt is not set", backup.GetName())
+		}
+
 		if backup.Status.CompletedAt.After(lastFullBackup.Status.CompletedAt.Time) {
 			lastFullBackup = &backupList.Items[i]
 		}
