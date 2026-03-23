@@ -15,12 +15,18 @@ download() {
 	local dest=$1
 
 	case ${STORAGE_TYPE} in
-		# shellcheck disable=SC2086
-		"s3") xbcloud get ${XBCLOUD_ARGS} "${dest}" --storage=s3 --s3-bucket="${S3_BUCKET}" ;;
-		# shellcheck disable=SC2086
-		"gcs") xbcloud get ${XBCLOUD_ARGS} "${dest}" --storage=google --google-bucket="${GCS_BUCKET}" ;;
-		# shellcheck disable=SC2086
-		"azure") xbcloud get ${XBCLOUD_ARGS} "${dest}" --storage=azure ;;
+		"s3")
+			# shellcheck disable=SC2086
+			xbcloud get ${XBCLOUD_ARGS} "${dest}" --storage=s3 --s3-bucket="${S3_BUCKET}"
+			;;
+		"gcs")
+			# shellcheck disable=SC2086
+			xbcloud get ${XBCLOUD_ARGS} "${dest}" --storage=google --google-bucket="${GCS_BUCKET}"
+			;;
+		"azure")
+			# shellcheck disable=SC2086
+			xbcloud get ${XBCLOUD_ARGS} "${dest}" --storage=azure
+			;;
 	esac
 }
 

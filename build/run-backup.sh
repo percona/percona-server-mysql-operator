@@ -65,8 +65,8 @@ request_data() {
 
 # json_escape takes a string and replaces `\` to `\\` and `"` to `\"` to make it safe to insert provided argument into a json string
 json_escape() {
-	escaped_backslash=${1//'\'/'\\'}
-	escaped_quotes=${escaped_backslash//'"'/'\"'}
+	escaped_backslash=${1//\\/\\\\}
+	escaped_quotes=${escaped_backslash//\"/\\\"}
 	echo -n "$escaped_quotes"
 }
 
