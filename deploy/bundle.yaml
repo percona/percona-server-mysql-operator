@@ -170,18 +170,12 @@ spec:
             properties:
               backupSource:
                 type: string
-              baseBackupName:
-                type: string
               completed:
                 format: date-time
                 type: string
               destination:
                 type: string
               image:
-                type: string
-              lsn:
-                type: string
-              previousBackupName:
                 type: string
               state:
                 type: string
@@ -1167,6 +1161,8 @@ spec:
                 required:
                 - type
                 type: object
+              toLsn:
+                type: string
               type:
                 type: string
             required:
@@ -1225,18 +1221,12 @@ spec:
                 properties:
                   backupSource:
                     type: string
-                  baseBackupName:
-                    type: string
                   completed:
                     format: date-time
                     type: string
                   destination:
                     type: string
                   image:
-                    type: string
-                  lsn:
-                    type: string
-                  previousBackupName:
                     type: string
                   state:
                     type: string
@@ -2222,6 +2212,8 @@ spec:
                     required:
                     - type
                     type: object
+                  toLsn:
+                    type: string
                   type:
                     type: string
                 required:
@@ -13049,7 +13041,7 @@ spec:
               fieldPath: metadata.namespace
         - name: DISABLE_TELEMETRY
           value: "false"
-        image: perconalab/percona-server-mysql-operator:main
+        image: asia-south1-docker.pkg.dev/cloud-dev-112233/mayankshah/ps-operator:K8SPS-410
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

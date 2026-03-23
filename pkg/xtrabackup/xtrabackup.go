@@ -890,7 +890,7 @@ func GetBackupConfig(ctx context.Context, cl client.Client, cr *apiv1.PerconaSer
 	if storage.VerifyTLS != nil {
 		verifyTLS = *storage.VerifyTLS
 	}
-	destination, err := GetDestination(storage, cr.Spec.Type, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
+	destination, err := GetDestination(storage, cr)
 	if err != nil {
 		return nil, errors.Wrap(err, "get backup destination")
 	}
@@ -980,17 +980,32 @@ func GetBackupConfig(ctx context.Context, cl client.Client, cr *apiv1.PerconaSer
 	return conf, nil
 }
 
+func getIncrementalBackupName(cr *apiv1.PerconaServerMySQLBackup, clusterName, creationTimeStamp string) (string, error) {
+	backupName := fmt.Sprintf("%s-%s-%s", clusterName, creationTimeStamp, "incr")
+	annots := cr.GetAnnotations()
+	baseBackupName, ok := annots[string(naming.AnnotationBaseBackupName)]
+	if !ok {
+		return "", errors.New("base backup name not known in annotations")
+	}
+	backupName = path.Join(baseBackupName+".incr/", backupName)
+	return backupName, nil
+}
+
 func GetDestination(
 	storage *apiv1.BackupStorageSpec,
-	backupType apiv1.BackupType,
-	clusterName,
-	creationTimeStamp string,
+	cr *apiv1.PerconaServerMySQLBackup,
 ) (apiv1.BackupDestination, error) {
-	suffix := "full"
-	if backupType == apiv1.BackupTypeIncremental {
-		suffix = "incr"
+	clusterName := cr.Spec.ClusterName
+	creationTimestamp := cr.CreationTimestamp.Format("2006-01-02-15:04:05")
+	backupName := fmt.Sprintf("%s-%s-%s", clusterName, creationTimestamp, "full")
+
+	if cr.Spec.Type == apiv1.BackupTypeIncremental {
+		name, err := getIncrementalBackupName(cr, clusterName, creationTimestamp)
+		if err != nil {
+			return "", errors.Wrap(err, "get incremental backup name")
+		}
+		backupName = name
 	}
-	backupName := fmt.Sprintf("%s-%s-%s", clusterName, creationTimeStamp, suffix)
 
 	var d apiv1.BackupDestination
 	switch storage.Type {

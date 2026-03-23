@@ -17,7 +17,6 @@ const (
 const (
 	LabelBackupType     = perconaPrefix + "backup-type"
 	LabelBackupAncestor = perconaPrefix + "backup-ancestor"
-	LabelBackupChain    = perconaPrefix + "backup-chain"
 )
 
 const (
@@ -41,4 +40,5 @@ const (
 	AnnotationLastConfigHash      AnnotationKey = perconaPrefix + "last-config-hash"
 	AnnotationRescanNeeded        AnnotationKey = perconaPrefix + "rescan-needed"
 	AnnotationPVCResizeInProgress AnnotationKey = perconaPrefix + "pvc-resize-in-progress"
+	AnnotationBaseBackupName      AnnotationKey = perconaPrefix + "base-backup-name"
 )

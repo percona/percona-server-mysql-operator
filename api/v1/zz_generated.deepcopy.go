@@ -685,18 +685,8 @@ func (in *PerconaServerMySQLBackupStatus) DeepCopyInto(out *PerconaServerMySQLBa
 		in, out := &in.CompletedAt, &out.CompletedAt
 		*out = (*in).DeepCopy()
 	}
-	if in.Lsn != nil {
-		in, out := &in.Lsn, &out.Lsn
-		*out = new(string)
-		**out = **in
-	}
-	if in.BaseBackupName != nil {
-		in, out := &in.BaseBackupName, &out.BaseBackupName
-		*out = new(string)
-		**out = **in
-	}
-	if in.PreviousBackupName != nil {
-		in, out := &in.PreviousBackupName, &out.PreviousBackupName
+	if in.ToLsn != nil {
+		in, out := &in.ToLsn, &out.ToLsn
 		*out = new(string)
 		**out = **in
 	}

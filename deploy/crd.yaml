@@ -170,18 +170,12 @@ spec:
             properties:
               backupSource:
                 type: string
-              baseBackupName:
-                type: string
               completed:
                 format: date-time
                 type: string
               destination:
                 type: string
               image:
-                type: string
-              lsn:
-                type: string
-              previousBackupName:
                 type: string
               state:
                 type: string
@@ -1167,6 +1161,8 @@ spec:
                 required:
                 - type
                 type: object
+              toLsn:
+                type: string
               type:
                 type: string
             required:
@@ -1225,18 +1221,12 @@ spec:
                 properties:
                   backupSource:
                     type: string
-                  baseBackupName:
-                    type: string
                   completed:
                     format: date-time
                     type: string
                   destination:
                     type: string
                   image:
-                    type: string
-                  lsn:
-                    type: string
-                  previousBackupName:
                     type: string
                   state:
                     type: string
@@ -2222,6 +2212,8 @@ spec:
                     required:
                     - type
                     type: object
+                  toLsn:
+                    type: string
                   type:
                     type: string
                 required:

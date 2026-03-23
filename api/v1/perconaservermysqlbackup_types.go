@@ -68,18 +68,7 @@ type PerconaServerMySQLBackupStatus struct {
 	CompletedAt  *metav1.Time       `json:"completed,omitempty"`
 	Image        string             `json:"image,omitempty"`
 	BackupSource string             `json:"backupSource,omitempty"`
-
-	// Lsn is the log sequence number at the end of this backup.
-	// Used as a starting point for the next incremental backup.
-	Lsn *string `json:"lsn,omitempty"`
-
-	// BaseBackupName is the name of the base backup for this incremental backup.
-	// This is set only if type is incremental.
-	BaseBackupName *string `json:"baseBackupName,omitempty"`
-
-	// PreviousBackupName is the name of the previous backup in the chain.
-	// This is set only if type is incremental.
-	PreviousBackupName *string `json:"previousBackupName,omitempty"`
+	ToLsn        *string            `json:"toLsn,omitempty"`
 }
 
 const (
@@ -220,7 +209,5 @@ func (s *PerconaServerMySQLBackupStatus) Equals(other *PerconaServerMySQLBackupS
 		s.Destination == other.Destination &&
 		s.Image == other.Image &&
 		s.BackupSource == other.BackupSource &&
-		ptr.Deref(s.Lsn, "") == ptr.Deref(other.Lsn, "") &&
-		ptr.Deref(s.BaseBackupName, "") == ptr.Deref(other.BaseBackupName, "") &&
-		ptr.Deref(s.PreviousBackupName, "") == ptr.Deref(other.PreviousBackupName, "")
+		ptr.Deref(s.ToLsn, "") == ptr.Deref(other.ToLsn, "")
 }

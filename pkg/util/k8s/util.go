@@ -40,3 +40,35 @@ func GetLastFullBackup(
 	}
 	return lastFullBackup, nil
 }
+
+func GetLastSuccessfulBackup(
+	ctx context.Context,
+	cl client.Client,
+	clusterName string,
+) (*apiv1.PerconaServerMySQLBackup, error) {
+	backupList := &apiv1.PerconaServerMySQLBackupList{}
+	if err := cl.List(ctx, backupList, client.MatchingFields{
+		"spec.clusterName": clusterName,
+	}); err != nil {
+		return nil, errors.Wrap(err, "list backups")
+	}
+
+	var lastFullBackup *apiv1.PerconaServerMySQLBackup
+	for _, backup := range backupList.Items {
+		if backup.Status.State != apiv1.BackupSucceeded {
+			continue
+		}
+		if lastFullBackup == nil {
+			lastFullBackup = &backup
+			continue
+		}
+		if backup.Status.CompletedAt.After(lastFullBackup.Status.CompletedAt.Time) {
+			lastFullBackup = &backup
+		}
+	}
+
+	if lastFullBackup == nil {
+		return nil, errors.New("no previous backup found")
+	}
+	return lastFullBackup, nil
+}
