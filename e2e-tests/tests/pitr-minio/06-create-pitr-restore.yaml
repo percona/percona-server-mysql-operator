@@ -1,0 +1,29 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 180
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+
+      PITR_GTID=$(run_mysql "SELECT @@GLOBAL.gtid_executed" "-h $(get_haproxy_svc ${cluster_name})" | tr -d '\n')
+
+      run_mysql \
+          "INSERT myDB.myTable (id) VALUES (100502)" \
+          "-h $(get_haproxy_svc ${cluster_name})"
+
+      sleep 60
+
+      echo '{}' \
+          | yq eval '.apiVersion = "ps.percona.com/v1"' - \
+          | yq eval '.kind = "PerconaServerMySQLRestore"' - \
+          | yq eval '.metadata.name = "pitr-minio-restore"' - \
+          | yq eval ".spec.clusterName = \"${cluster_name}\"" - \
+          | yq eval '.spec.backupName = "pitr-minio-backup"' - \
+          | yq eval '.spec.pitr.type = "gtid"' - \
+          | yq eval ".spec.pitr.gtid = \"${PITR_GTID}\"" - \
+          | kubectl apply -n "${NAMESPACE}" -f -
