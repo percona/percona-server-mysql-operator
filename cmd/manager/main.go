@@ -25,6 +25,7 @@ import (
 
 	cmscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
 	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
 	uzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	eventsv1 "k8s.io/api/events/v1"
@@ -260,8 +261,7 @@ func setupFieldIndexers(ctx context.Context, mgr ctrl.Manager) error {
 			return []string{event.Regarding.Name}
 		},
 	); err != nil {
-		setupLog.Error(err, "unable to index field")
-		os.Exit(1)
+		return errors.Wrap(err, "unable to index field 'regarding.name'")
 	}
 	if err := mgr.GetFieldIndexer().IndexField(
 		ctx,
@@ -272,8 +272,7 @@ func setupFieldIndexers(ctx context.Context, mgr ctrl.Manager) error {
 			return []string{event.Regarding.Namespace}
 		},
 	); err != nil {
-		setupLog.Error(err, "unable to index field")
-		os.Exit(1)
+		return errors.Wrap(err, "unable to index field 'regarding.name'")
 	}
 	if err := mgr.GetFieldIndexer().IndexField(
 		ctx,

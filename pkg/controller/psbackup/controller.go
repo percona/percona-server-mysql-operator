@@ -694,8 +694,8 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupLSN(ctx context.Context, c
 		return "", errors.Wrap(err, "failed to get checkpoint info")
 	}
 
-	if info.FromLSN == "" {
-		return "", errors.New("from LSN is empty")
+	if info.ToLSN == "" {
+		return "", errors.New("to_lsn is empty")
 	}
 
 	return info.ToLSN, nil

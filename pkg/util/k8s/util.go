@@ -21,17 +21,17 @@ func GetLastFullBackup(
 	}
 
 	var lastFullBackup *apiv1.PerconaServerMySQLBackup
-	for _, backup := range backupList.Items {
-		if backup.Spec.Type != apiv1.BackupTypeFull {
+	for i, backup := range backupList.Items {
+		if backup.Spec.Type != apiv1.BackupTypeFull && backup.Spec.Type != apiv1.BackupTypeIncremental {
 			continue
 		}
 
 		if lastFullBackup == nil {
-			lastFullBackup = &backup
+			lastFullBackup = &backupList.Items[i]
 			continue
 		}
 		if backup.Status.CompletedAt.After(lastFullBackup.Status.CompletedAt.Time) {
-			lastFullBackup = &backup
+			lastFullBackup = &backupList.Items[i]
 		}
 	}
 
@@ -54,16 +54,16 @@ func GetLastSuccessfulBackup(
 	}
 
 	var lastFullBackup *apiv1.PerconaServerMySQLBackup
-	for _, backup := range backupList.Items {
+	for i, backup := range backupList.Items {
 		if backup.Status.State != apiv1.BackupSucceeded {
 			continue
 		}
 		if lastFullBackup == nil {
-			lastFullBackup = &backup
+			lastFullBackup = &backupList.Items[i]
 			continue
 		}
 		if backup.Status.CompletedAt.After(lastFullBackup.Status.CompletedAt.Time) {
-			lastFullBackup = &backup
+			lastFullBackup = &backupList.Items[i]
 		}
 	}
 
