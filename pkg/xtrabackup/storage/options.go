@@ -166,7 +166,7 @@ func getS3Options(ctx context.Context, cl client.Client, cluster *apiv1.PerconaS
 	}
 
 	bucket, prefix := backupStatus.Storage.S3.BucketAndPrefix()
-	if bucket == "" {
+	if bucket == "" || prefix == "" {
 		bucket, prefix = backupStatus.Destination.BucketAndPrefix()
 	}
 

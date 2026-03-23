@@ -383,8 +383,11 @@ func TestDeleteJob(t *testing.T) {
 func TestRestoreJob(t *testing.T) {
 	const ns = "restore-job-ns"
 	const storageName = "some-storage"
-	const destination = "prefix/destination"
 	const initImage = "init-image"
+
+	destination := DestinationInfo{
+		Base: "prefix/destination",
+	}
 
 	cr := readDefaultCluster(t, "cluster", ns)
 	if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{

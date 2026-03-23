@@ -545,7 +545,7 @@ func TestRestorerClusterDefaults(t *testing.T) {
 	restorer, err := r.getRestorer(ctx, cr, cluster)
 	require.NoError(t, err)
 
-	job, err := restorer.Job()
+	job, err := restorer.Job(ctx)
 	require.NoError(t, err)
 
 	require.NoError(t, r.Get(ctx, client.ObjectKeyFromObject(job), job))

@@ -3,6 +3,7 @@ package psrestore
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -24,7 +26,7 @@ import (
 )
 
 type Restorer interface {
-	Job() (*batchv1.Job, error)
+	Job(ctx context.Context) (*batchv1.Job, error)
 	Validate(ctx context.Context) error
 }
 
@@ -40,7 +42,7 @@ func (s *s3) Validate(ctx context.Context) error {
 		return nil
 	}
 
-	job, err := s.Job()
+	job, err := s.Job(ctx)
 	if err != nil {
 		return errors.Wrap(err, "get job")
 	}
@@ -54,8 +56,8 @@ func (s *s3) Validate(ctx context.Context) error {
 	return nil
 }
 
-func (s *s3) Job() (*batchv1.Job, error) {
-	job, err := s.job()
+func (s *s3) Job(ctx context.Context) (*batchv1.Job, error) {
+	job, err := s.job(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +80,7 @@ type gcs struct {
 }
 
 func (g *gcs) Validate(ctx context.Context) error {
-	job, err := g.Job()
+	job, err := g.Job(ctx)
 	if err != nil {
 		return errors.Wrap(err, "get job")
 	}
@@ -91,8 +93,8 @@ func (g *gcs) Validate(ctx context.Context) error {
 	return nil
 }
 
-func (g *gcs) Job() (*batchv1.Job, error) {
-	job, err := g.job()
+func (g *gcs) Job(ctx context.Context) (*batchv1.Job, error) {
+	job, err := g.job(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +117,7 @@ type azure struct {
 }
 
 func (a *azure) Validate(ctx context.Context) error {
-	job, err := a.Job()
+	job, err := a.Job(ctx)
 	if err != nil {
 		return errors.Wrap(err, "get job")
 	}
@@ -128,8 +130,8 @@ func (a *azure) Validate(ctx context.Context) error {
 	return nil
 }
 
-func (a *azure) Job() (*batchv1.Job, error) {
-	job, err := a.job()
+func (a *azure) Job(ctx context.Context) (*batchv1.Job, error) {
+	job, err := a.job(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -193,14 +195,85 @@ func (r *PerconaServerMySQLRestoreReconciler) getRestorer(
 	return nil, errors.Errorf("unknown backup storage type")
 }
 
-func (s *restorerOptions) job() (*batchv1.Job, error) {
+func (s *restorerOptions) job(ctx context.Context) (*batchv1.Job, error) {
 	pvcName := fmt.Sprintf("%s-%s-mysql-0", mysql.DataVolumeName, s.cluster.Name)
-	storage := s.bcp.Status.Storage
-	job := xtrabackup.RestoreJob(s.cluster, s.bcp.Status.Destination, s.cr, storage, s.initImage, pvcName)
+	bcpStorage := s.bcp.Status.Storage
+
+	destination := xtrabackup.DestinationInfo{
+		Base: s.bcp.Status.Destination.PathWithoutBucket(),
+	}
+	if s.bcp.Status.Type == apiv1.BackupTypeIncremental {
+		var err error
+		destination, err = s.resolveIncrementalChain(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "resolve incremental chain")
+		}
+	}
+
+	job := xtrabackup.RestoreJob(s.cluster, destination, s.cr, bcpStorage, s.initImage, pvcName)
 	if err := controllerutil.SetControllerReference(s.cr, job, s.scheme); err != nil {
 		return nil, errors.Wrapf(err, "set controller reference to Job %s/%s", job.Namespace, job.Name)
 	}
 	return job, nil
+}
+
+// resolveIncrementalChain discovers all incremental backups in the chain up to (and including)
+// the target backup's destination, and returns the base + ordered incremental paths.
+func (s *restorerOptions) resolveIncrementalChain(ctx context.Context) (xtrabackup.DestinationInfo, error) {
+	dest := s.bcp.Status.Destination
+	baseDest := dest.IncrementalBaseDestination()
+
+	incrementalsDirFull := dest.IncrementalsDir()
+	if incrementalsDirFull == "" {
+		return xtrabackup.DestinationInfo{}, errors.New("could not parse incremental destination path")
+	}
+	incrementalsDirPath := ptr.To(apiv1.BackupDestination(incrementalsDirFull)).PathWithoutBucket()
+
+	storageOpts, err := storage.GetOptionsFromBackupStatus(ctx, s.k8sClient, s.cluster, s.bcp.Spec.StorageName, s.bcp.Status)
+	if err != nil {
+		return xtrabackup.DestinationInfo{}, errors.Wrap(err, "get storage options")
+	}
+
+	storageClient, err := s.newStorageClient(ctx, storageOpts)
+	if err != nil {
+		return xtrabackup.DestinationInfo{}, errors.Wrap(err, "create storage client")
+	}
+
+	objects, err := storageClient.ListObjects(ctx, "")
+	if err != nil {
+		return xtrabackup.DestinationInfo{}, errors.Wrap(err, "list incremental backups")
+	}
+
+	var allIncrementals []string
+	for _, obj := range objects {
+		rel := strings.TrimPrefix(obj, incrementalsDirPath)
+		rel = strings.TrimPrefix(rel, "/")
+		ts, _, _ := strings.Cut(rel, "/")
+		if ts != "" && strings.HasSuffix(ts, "-incr") {
+			allIncrementals = append(allIncrementals, ts)
+		}
+	}
+	slices.Sort(allIncrementals)
+	allIncrementals = slices.Compact(allIncrementals)
+
+	var incrementalDests []string
+	// Timestamps are in RFC3339-like format, so lexicographic order == chronological order.
+	for _, ts := range allIncrementals {
+		if ts > dest.BackupName() {
+			break
+		}
+		incrDest := apiv1.BackupDestination(incrementalsDirFull + ts)
+		incrementalDests = append(incrementalDests, incrDest.PathWithoutBucket())
+	}
+
+	if len(incrementalDests) == 0 {
+		return xtrabackup.DestinationInfo{}, errors.New("no incremental backups found in chain")
+	}
+
+	return xtrabackup.DestinationInfo{
+		Base:         baseDest.PathWithoutBucket(),
+		Incrementals: incrementalDests,
+	}, nil
 }
 
 func (opts *restorerOptions) validateStorage(ctx context.Context) error {
@@ -213,6 +286,7 @@ func (opts *restorerOptions) validateStorage(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to create s3 client")
 	}
+
 	backupName := opts.bcp.Status.Destination.BackupName() + "/"
 	objs, err := storageClient.ListObjects(ctx, backupName)
 	if err != nil {

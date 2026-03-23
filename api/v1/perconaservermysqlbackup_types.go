@@ -86,6 +86,36 @@ func (dest *BackupDestination) set(value string) {
 	*dest = BackupDestination(value)
 }
 
+func (dest *BackupDestination) IsIncremental() bool {
+	return strings.Contains(dest.String(), ".incr")
+}
+
+// IncrementalBaseDestination returns the full destination of the base (full) backup for an incremental backup.
+// For example, given "s3://bucket/prefix/weekly-full-1.incr/2026-03-17T000000",
+// it returns "s3://bucket/prefix/weekly-full-1".
+// Returns the destination unchanged if it's not incremental.
+func (dest *BackupDestination) IncrementalBaseDestination() BackupDestination {
+	s := dest.String()
+	idx := strings.Index(s, ".incr")
+	if idx == -1 {
+		return *dest
+	}
+	return BackupDestination(s[:idx])
+}
+
+// IncrementalsDir returns the ".incr/" directory prefix used to list all incremental backups
+// for a given base backup. For example, given "s3://bucket/prefix/weekly-full-1.incr/2026-03-17T000000",
+// it returns "s3://bucket/prefix/weekly-full-1.incr/".
+// Returns empty string if the destination is not incremental.
+func (dest *BackupDestination) IncrementalsDir() string {
+	s := dest.String()
+	idx := strings.Index(s, ".incr")
+	if idx == -1 {
+		return ""
+	}
+	return s[:idx] + ".incr/"
+}
+
 func (dest *BackupDestination) SetGCSDestination(bucket, backupName string) {
 	dest.set(GCSStoragePrefix + bucket + "/" + backupName)
 }

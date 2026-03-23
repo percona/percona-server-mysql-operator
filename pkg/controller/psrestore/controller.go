@@ -204,7 +204,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			status.StateDesc = err.Error()
 			return ctrl.Result{}, nil
 		}
-		job, err := restorer.Job()
+		job, err := restorer.Job(ctx)
 		if err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "get job")
 		}

@@ -383,9 +383,14 @@ func deleteContainer(image string, conf *BackupConfig, cr *apiv1.PerconaServerMy
 	}
 }
 
+type DestinationInfo struct {
+	Base         string
+	Incrementals []string
+}
+
 func RestoreJob(
 	cluster *apiv1.PerconaServerMySQL,
-	destination apiv1.BackupDestination,
+	destination DestinationInfo,
 	restore *apiv1.PerconaServerMySQLRestore,
 	storage *apiv1.BackupStorageSpec,
 	initImage string,
@@ -560,7 +565,7 @@ func GetDeleteJob(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQ
 func restoreContainer(
 	cluster *apiv1.PerconaServerMySQL,
 	restore *apiv1.PerconaServerMySQLRestore,
-	destination apiv1.BackupDestination,
+	destination DestinationInfo,
 	storage *apiv1.BackupStorageSpec,
 ) corev1.Container {
 	spec := cluster.Spec.Backup
@@ -570,25 +575,40 @@ func restoreContainer(
 		verifyTLS = *storage.VerifyTLS
 	}
 
-	envs := util.MergeEnvLists(
-		[]corev1.EnvVar{
-			{
-				Name:  "RESTORE_NAME",
-				Value: restore.Name,
-			},
-			{
-				Name:  "BACKUP_DEST",
-				Value: destination.PathWithoutBucket(),
-			},
-			{
-				Name:  "VERIFY_TLS",
-				Value: strconv.FormatBool(verifyTLS),
-			},
-			{
-				Name:  "KEYRING_VAULT_PATH",
-				Value: fmt.Sprintf("%s/keyring_vault.cnf", vaultSecretMountPath),
-			},
+	baseEnvs := []corev1.EnvVar{
+		{
+			Name:  "RESTORE_NAME",
+			Value: restore.Name,
 		},
+		{
+			Name:  "BACKUP_DEST",
+			Value: destination.Base,
+		},
+		{
+			Name:  "VERIFY_TLS",
+			Value: strconv.FormatBool(verifyTLS),
+		},
+		{
+			Name:  "KEYRING_VAULT_PATH",
+			Value: fmt.Sprintf("%s/keyring_vault.cnf", vaultSecretMountPath),
+		},
+	}
+
+	if len(destination.Incrementals) > 0 {
+		baseEnvs = append(baseEnvs,
+			corev1.EnvVar{
+				Name:  "RESTORE_TYPE",
+				Value: "incremental",
+			},
+			corev1.EnvVar{
+				Name:  "BACKUP_INCREMENTALS_DEST",
+				Value: strings.Join(destination.Incrementals, ","),
+			},
+		)
+	}
+
+	envs := util.MergeEnvLists(
+		baseEnvs,
 		restore.GetContainerOptions(storage).GetEnv(),
 	)
 
