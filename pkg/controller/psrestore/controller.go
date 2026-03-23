@@ -180,9 +180,12 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	defer r.sm.Delete(cr.Spec.ClusterName)
 
 	if cr.Spec.PITR != nil {
+		status.State = apiv1.RestoreStarting
 		if err := r.reconcilePITRConfig(ctx, cr, cluster); err != nil {
+			status.StateDesc = errors.Wrap(err, "reconcile pitr config").Error()
 			return ctrl.Result{}, errors.Wrap(err, "reconcile pitr config")
 		}
+		status.StateDesc = ""
 	}
 
 	log.Info("Pausing cluster", "cluster", cluster.Name)

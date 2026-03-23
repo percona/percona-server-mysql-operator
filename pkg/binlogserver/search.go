@@ -53,7 +53,7 @@ func execSearch(ctx context.Context, cl client.Client, cliCmd clientcmd.Client, 
 
 	var stdout, stderr bytes.Buffer
 	if err := cliCmd.Exec(ctx, pod, AppName, cmd, nil, &stdout, &stderr, false); err != nil {
-		return nil, errors.Wrapf(err, "exec binlog_server %s: stderr: %s", subcommand, stderr.String())
+		return nil, errors.Wrapf(err, "exec binlog_server %s: stdout: %s stderr: %s", subcommand, stdout.String(), stderr.String())
 	}
 
 	var resp SearchResponse
