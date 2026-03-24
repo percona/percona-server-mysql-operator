@@ -291,13 +291,18 @@ func (opts *restorerOptions) validateStorage(ctx context.Context) error {
 		return errors.Wrap(err, "failed to create s3 client")
 	}
 
+	if opts.bcp.Status.Type == apiv1.BackupTypeIncremental {
+		_, prefix := opts.bcp.Status.Destination.BucketAndPrefix()
+		storageClient.SetPrefix(prefix)
+	}
+
 	backupName := opts.bcp.Status.Destination.BackupName() + "/"
 	objs, err := storageClient.ListObjects(ctx, backupName)
 	if err != nil {
 		return errors.Wrap(err, "failed to list objects")
 	}
 	if len(objs) == 0 {
-		return errors.New("backup not found")
+		return errors.New("backup not found in storage")
 	}
 
 	return nil
