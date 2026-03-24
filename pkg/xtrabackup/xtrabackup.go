@@ -355,11 +355,7 @@ func (conf *BackupConfig) XbcloudGetArgs(files ...string) []string {
 
 	args = append(args, xbcloudCloudOpts(conf)...)
 	args = append(args, conf.Destination)
-
-	for _, file := range files {
-		args = append(args, file)
-	}
-
+	args = append(args, files...)
 	return args
 }
 
@@ -1051,7 +1047,7 @@ type CheckpointInfo struct {
 	RedoFrames string `json:"redo_frames"`
 }
 
-func (info *CheckpointInfo) ReadFrom(r io.Reader) error {
+func (info *CheckpointInfo) ReadFrom(r io.Reader) error { //nolint:govet
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())

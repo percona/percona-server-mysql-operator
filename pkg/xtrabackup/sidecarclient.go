@@ -116,7 +116,7 @@ func (c *sidecarClient) GetCheckpointInfo(ctx context.Context, cfg BackupConfig)
 	if err != nil {
 		return nil, errors.Wrap(err, "get checkpoint info")
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		body, err := io.ReadAll(resp.Body)
