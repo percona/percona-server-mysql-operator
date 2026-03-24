@@ -272,7 +272,7 @@ func setupFieldIndexers(ctx context.Context, mgr ctrl.Manager) error {
 			return []string{event.Regarding.Namespace}
 		},
 	); err != nil {
-		return errors.Wrap(err, "unable to index field 'regarding.name'")
+		return errors.Wrap(err, "unable to index field 'regarding.namespace'")
 	}
 	if err := mgr.GetFieldIndexer().IndexField(
 		ctx,
