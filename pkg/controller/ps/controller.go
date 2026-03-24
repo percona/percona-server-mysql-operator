@@ -1290,16 +1290,6 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 
 	logger := logf.FromContext(ctx)
 
-	if cr.Status.MySQL.Ready < 1 {
-		logger.V(1).Info("Waiting for at least one MySQL pod to be ready")
-		return nil
-	}
-
-	if len(cr.Status.Host) == 0 {
-		logger.V(1).Info("Waiting for .status.host to be populated")
-		return nil
-	}
-
 	s3 := cr.Spec.Backup.PiTR.BinlogServer.Storage.S3
 
 	if s3 == nil || len(s3.CredentialsSecret) == 0 {
@@ -1394,6 +1384,16 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 		return errors.Wrap(err, "reconcile secret")
 	}
 
+	if cr.Status.MySQL.Ready < 1 {
+		logger.V(1).Info("Waiting for at least one MySQL pod to be ready")
+		return nil
+	}
+
+	if len(cr.Status.Host) == 0 {
+		logger.V(1).Info("Waiting for .status.host to be populated")
+		return nil
+	}
+
 	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Backup.PiTR.BinlogServer.PodSpec)
 	if err != nil {
 		return errors.Wrap(err, "get init image")
@@ -1422,7 +1422,12 @@ func (r *PerconaServerMySQLReconciler) cleanupBinlogServer(ctx context.Context, 
 		return nil
 	}
 
-	if err := r.Delete(ctx, binlogserver.StatefulSet(cr, "", "")); err != nil && !k8serrors.IsNotFound(err) {
+	if err := r.Delete(ctx, &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      binlogserver.Name(cr),
+			Namespace: cr.Namespace,
+		},
+	}); err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrap(err, "failed to delete binlog server statefulset")
 	}
 

@@ -989,7 +989,7 @@ var _ = Describe("Reconcile Binlog Server", Ordered, func() {
 				S3: &psv1.BackupStorageS3Spec{
 					Bucket:            "s3-test-bucket",
 					Region:            "us-west-1",
-					EndpointURL:       "s3.amazonaws.com",
+					EndpointURL:       "https://s3.amazonaws.com",
 					CredentialsSecret: "s3-test-credentials",
 				},
 			},
@@ -1019,6 +1019,14 @@ var _ = Describe("Reconcile Binlog Server", Ordered, func() {
 
 			_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should set MySQL status as ready", func() {
+			fetchedCR := cr.DeepCopy()
+			Expect(k8sClient.Get(ctx, crNamespacedName, fetchedCR)).Should(Succeed())
+			fetchedCR.Status.MySQL.Ready = 1
+			fetchedCR.Status.Host = mysql.FQDN(fetchedCR, 0)
+			Expect(k8sClient.Status().Update(ctx, fetchedCR)).Should(Succeed())
 		})
 
 		It("should create secret for Binlog Server configuration", func() {
