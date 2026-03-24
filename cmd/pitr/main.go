@@ -83,7 +83,7 @@ func runSetup(ctx context.Context) error {
 		relayLogName := fmt.Sprintf("%s-relay-bin.%06d", hostname, i+1)
 		relayLogPath := fmt.Sprintf("/var/lib/mysql/%s", relayLogName)
 
-		objectKey, err := objectKeyFromURI(entry.URI)
+		objectKey, err := objectKeyFromURI(entry.URI, bucket)
 		if err != nil {
 			return fmt.Errorf("parse URI %s: %w", entry.URI, err)
 		}
@@ -226,12 +226,13 @@ func getLatestGTIDByDatetime(relayLogPath, stopDatetime string) (string, error) 
 }
 
 // objectKeyFromURI extracts the S3 object key from a full URI.
-// e.g. "https://minio-service:9000/binlogs/binlog.000001" -> "binlogs/binlog.000001"
-func objectKeyFromURI(uri string) (string, error) {
+// e.g. "https://minio-service:9000/bucket/binlogs/binlog.000001" -> "binlogs/binlog.000001"
+func objectKeyFromURI(uri, bucket string) (string, error) {
 	u, err := url.Parse(uri)
 	if err != nil {
 		return "", fmt.Errorf("parse URL: %w", err)
 	}
-	// Path starts with "/", trim the leading slash to get the object key
-	return strings.TrimPrefix(u.Path, "/"), nil
+	// Path is "/<bucket>/<key>", strip the leading "/<bucket>/" to get the object key
+	key := strings.TrimPrefix(u.Path, "/"+bucket+"/")
+	return key, nil
 }
