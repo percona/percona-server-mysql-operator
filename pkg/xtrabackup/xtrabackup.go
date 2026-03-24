@@ -1047,7 +1047,7 @@ type CheckpointInfo struct {
 	RedoFrames string `json:"redo_frames"`
 }
 
-func (info *CheckpointInfo) ReadFrom(r io.Reader) error { //nolint:govet
+func (info *CheckpointInfo) ParseFrom(r io.Reader) error {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())

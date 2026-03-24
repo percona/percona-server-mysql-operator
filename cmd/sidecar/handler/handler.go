@@ -99,7 +99,7 @@ func GetCheckpointInfoFunc(w http.ResponseWriter, req *http.Request) {
 	}()
 
 	info := xb.CheckpointInfo{}
-	if err := info.ReadFrom(xbOut); err != nil {
+	if err := info.ParseFrom(xbOut); err != nil {
 		log.Error(err, "failed to read checkpoint info")
 		http.Error(w, "failed to read checkpoint info", http.StatusInternalServerError)
 		return
