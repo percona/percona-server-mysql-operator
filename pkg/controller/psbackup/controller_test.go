@@ -110,6 +110,11 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 							cr.Spec.StorageName: {},
 						},
 					}
+					cluster.Status = apiv1.PerconaServerMySQLStatus{
+						MySQL: apiv1.StatefulAppStatus{
+							State: apiv1.StateReady,
+						},
+					}
 				},
 			),
 			stateDesc: fmt.Sprintf("failed to get the source host for backup: get operator password: get secret/internal-%s: secrets \"internal-%s\" not found", cluster.Name, cluster.Name),
@@ -198,11 +203,11 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			// Backup with an error state should not be reconciled.
 			// We can verify this by using clientWithGetCount.
 			//
-			// If the reconcile loop calls Get more than once,
+			// If the reconcile loop calls Get more than twice (once for backup and once for cluster),
 			// it means the loop continued running instead of stopping
 			// after the state check.
 			r.Client = &clientWithGetCount{
-				Count:  1,
+				Count:  2,
 				Client: r.Client,
 			}
 			_, err = r.Reconcile(t.Context(), controllerruntime.Request{

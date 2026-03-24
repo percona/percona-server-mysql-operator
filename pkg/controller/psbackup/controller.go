@@ -181,18 +181,18 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, nil
 	}
 
-	job := &batchv1.Job{}
-	nn = xtrabackup.JobNamespacedName(cr)
-	err := r.Get(ctx, nn, job)
-	if err != nil && !k8serrors.IsNotFound(err) {
-		return rr, errors.Wrapf(err, "get job %v", nn.String())
-	}
-
 	backupSource, err := r.getBackupSource(ctx, cr, cluster)
 	if err != nil {
 		status.State = apiv1.BackupError
 		status.StateDesc = fmt.Sprintf("failed to get the source host for backup: %v", err)
 		return rr, nil
+	}
+
+	job := &batchv1.Job{}
+	nn = xtrabackup.JobNamespacedName(cr)
+	err = r.Get(ctx, nn, job)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return rr, errors.Wrapf(err, "get job %v", nn.String())
 	}
 
 	if k8serrors.IsNotFound(err) {
