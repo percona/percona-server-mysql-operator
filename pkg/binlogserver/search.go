@@ -19,9 +19,9 @@ import (
 const binlogServerBinary = "/usr/bin/binlog_server"
 
 type SearchResponse struct {
-	Version int            `json:"version"`
-	Status  string         `json:"status"`
-	Result  []BinlogEntry  `json:"result"`
+	Version int           `json:"version"`
+	Status  string        `json:"status"`
+	Result  []BinlogEntry `json:"result"`
 }
 
 type BinlogEntry struct {
