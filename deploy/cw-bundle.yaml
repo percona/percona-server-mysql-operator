@@ -22,6 +22,9 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .status.type
+      name: Type
+      type: string
     - jsonPath: .spec.storageName
       name: Storage
       type: string

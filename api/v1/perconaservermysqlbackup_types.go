@@ -172,6 +172,7 @@ func (dest *BackupDestination) BackupName() string {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Type",type=string,JSONPath=".status.type"
 // +kubebuilder:printcolumn:name="Storage",type=string,JSONPath=".spec.storageName"
 // +kubebuilder:printcolumn:name="Destination",type=string,JSONPath=".status.destination"
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
