@@ -9,8 +9,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -162,13 +160,12 @@ func runApply(ctx context.Context) error {
 	lastRelayLog := fmt.Sprintf("%s-relay-bin.%06d", hostname, len(entries))
 	lastRelayLogPath := fmt.Sprintf("/var/lib/mysql/%s", lastRelayLog)
 
-	var stopPos int
 	if pitrType == "date" {
-		stopPos, err = getStopPosition(lastRelayLogPath, pitrDate)
+		pitrGTID, err = getLatestGTIDByDatetime(lastRelayLogPath, pitrDate)
 		if err != nil {
-			return fmt.Errorf("get stop position: %w", err)
+			return fmt.Errorf("get latest GTID for date %s: %w", pitrDate, err)
 		}
-		log.Printf("stop position for date %s: %s %d", pitrDate, lastRelayLog, stopPos)
+		log.Printf("latest GTID for date %s: %s", pitrDate, pitrGTID)
 	}
 
 	firstRelayLog := fmt.Sprintf("%s-relay-bin.000001", hostname)
@@ -178,19 +175,9 @@ func runApply(ctx context.Context) error {
 		return fmt.Errorf("change replication source: %w", err)
 	}
 
-	switch pitrType {
-	case "gtid":
-		log.Printf("starting replica until GTID: %s", pitrGTID)
-		if err := database.StartReplicaUntilGTID(ctx, pitrGTID); err != nil {
-			return fmt.Errorf("start replica until GTID: %w", err)
-		}
-	case "date":
-		log.Printf("starting replica until position: %s:%d", lastRelayLog, stopPos)
-		if err := database.StartReplicaUntilPosition(ctx, lastRelayLog, stopPos); err != nil {
-			return fmt.Errorf("start replica until position: %w", err)
-		}
-	default:
-		return fmt.Errorf("unsupported PITR type: %s", pitrType)
+	log.Printf("starting replica until GTID: %s", pitrGTID)
+	if err := database.StartReplicaUntilGTID(ctx, pitrGTID); err != nil {
+		return fmt.Errorf("start replica until GTID: %w", err)
 	}
 
 	log.Println("waiting for replication to complete...")
@@ -212,26 +199,30 @@ func runApply(ctx context.Context) error {
 	return nil
 }
 
-func getStopPosition(relayLogPath, stopDatetime string) (int, error) {
-	cmd := exec.Command("mysqlbinlog", "--stop-datetime="+stopDatetime, relayLogPath)
-	out, err := cmd.Output()
+func getLatestGTIDByDatetime(relayLogPath, stopDatetime string) (string, error) {
+	cmd := exec.Command("bash", "-c",
+		fmt.Sprintf("mysqlbinlog --stop-datetime='%s' %s | grep GTID_NEXT | grep -v AUTOMATIC | tail -n 1",
+			stopDatetime, relayLogPath))
+
+	output, err := cmd.Output()
 	if err != nil {
-		return 0, fmt.Errorf("run mysqlbinlog: %w", err)
+		return "", fmt.Errorf("failed to execute mysqlbinlog pipeline: %w", err)
 	}
 
-	re := regexp.MustCompile(`end_log_pos (\d+)`)
-	matches := re.FindAllStringSubmatch(string(out), -1)
-	if len(matches) == 0 {
-		return 0, fmt.Errorf("no end_log_pos found in mysqlbinlog output")
+	line := strings.TrimSpace(string(output))
+	if line == "" {
+		return "", fmt.Errorf("no GTID found before %s in %s", stopDatetime, relayLogPath)
 	}
 
-	lastMatch := matches[len(matches)-1]
-	pos, err := strconv.Atoi(lastMatch[1])
-	if err != nil {
-		return 0, fmt.Errorf("parse end_log_pos: %w", err)
+	// Extract GTID from: SET @@SESSION.GTID_NEXT= 'uuid:n,uuid:n'/*!*/;
+	start := strings.Index(line, "'")
+	end := strings.LastIndex(line, "'")
+	if start == -1 || end == -1 || start == end {
+		return "", fmt.Errorf("failed to parse GTID from line: %s", line)
 	}
 
-	return pos, nil
+	gtid := line[start+1 : end]
+	return gtid, nil
 }
 
 // objectKeyFromURI extracts the S3 object key from a full URI.

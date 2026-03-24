@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -388,7 +389,8 @@ func (r *PerconaServerMySQLRestoreReconciler) searchBinlogs(
 
 	switch cr.Spec.PITR.Type {
 	case apiv1.PITRDate:
-		resp, err = binlogserver.SearchByTimestamp(ctx, r.Client, r.ClientCmd, cluster, cr.Spec.PITR.Date)
+		ts := strings.Replace(cr.Spec.PITR.Date, " ", "T", 1)
+		resp, err = binlogserver.SearchByTimestamp(ctx, r.Client, r.ClientCmd, cluster, ts)
 	case apiv1.PITRGtid:
 		resp, err = binlogserver.SearchByGTID(ctx, r.Client, r.ClientCmd, cluster, cr.Spec.PITR.GTID)
 	default:
