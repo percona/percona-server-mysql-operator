@@ -386,7 +386,7 @@ func TestRestoreJob(t *testing.T) {
 	const initImage = "init-image"
 
 	destination := DestinationInfo{
-		Base: "prefix/destination",
+		Base: "destination",
 	}
 
 	cr := readDefaultCluster(t, "cluster", ns)
