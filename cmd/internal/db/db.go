@@ -445,7 +445,11 @@ func (d *DB) WaitReplicaSQLThreadStop(ctx context.Context, pollInterval time.Dur
 	if err != nil {
 		return errors.Wrap(err, "query replication applier worker status")
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			logf.FromContext(ctx).Error(err, "close rows")
+		}
+	}()
 
 	for rows.Next() {
 		var errNum int

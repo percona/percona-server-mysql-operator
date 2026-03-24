@@ -97,13 +97,19 @@ func runSetup(ctx context.Context) error {
 
 		f, err := os.Create(relayLogPath)
 		if err != nil {
-			obj.Close()
+			if closeErr := obj.Close(); closeErr != nil {
+				log.Printf("close object %s: %v", entry.URI, closeErr)
+			}
 			return fmt.Errorf("create relay log file %s: %w", relayLogPath, err)
 		}
 
 		_, err = io.Copy(f, obj)
-		obj.Close()
-		f.Close()
+		if closeErr := obj.Close(); closeErr != nil {
+			log.Printf("close object %s: %v", entry.URI, closeErr)
+		}
+		if closeErr := f.Close(); closeErr != nil {
+			log.Printf("close relay log file %s: %v", relayLogPath, closeErr)
+		}
 		if err != nil {
 			return fmt.Errorf("write relay log file %s: %w", relayLogPath, err)
 		}
@@ -144,7 +150,11 @@ func runApply(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("connect to MySQL: %w", err)
 	}
-	defer database.Close()
+	defer func() {
+		if err := database.Close(); err != nil {
+			log.Printf("close database: %v", err)
+		}
+	}()
 
 	binlogsPath := os.Getenv("BINLOGS_PATH")
 	data, err := os.ReadFile(binlogsPath)
