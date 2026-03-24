@@ -14,7 +14,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -227,7 +226,6 @@ func (s *restorerOptions) resolveIncrementalChain(ctx context.Context) (xtraback
 	if incrementalsDirFull == "" {
 		return xtrabackup.DestinationInfo{}, errors.New("could not parse incremental destination path")
 	}
-	incrementalsDirPath := ptr.To(apiv1.BackupDestination(incrementalsDirFull)).PathWithoutBucket()
 
 	storageOpts, err := storage.GetOptionsFromBackupStatus(ctx, s.k8sClient, s.cluster, s.bcp.Spec.StorageName, s.bcp.Status)
 	if err != nil {
@@ -239,15 +237,21 @@ func (s *restorerOptions) resolveIncrementalChain(ctx context.Context) (xtraback
 		return xtrabackup.DestinationInfo{}, errors.Wrap(err, "create storage client")
 	}
 
-	objects, err := storageClient.ListObjects(ctx, "")
+	// The storage client was initialized with a prefix derived from the incremental
+	// destination (e.g. "pfx/base-backup.incr/"). Reset it to the base backup's
+	// prefix so that listing paths align with the backup name directly.
+	_, basePrefix := baseDest.BucketAndPrefix()
+	storageClient.SetPrefix(basePrefix)
+
+	incrListPrefix := baseDest.BackupName() + ".incr/"
+	objects, err := storageClient.ListObjects(ctx, incrListPrefix)
 	if err != nil {
 		return xtrabackup.DestinationInfo{}, errors.Wrap(err, "list incremental backups")
 	}
 
 	var allIncrementals []string
 	for _, obj := range objects {
-		rel := strings.TrimPrefix(obj, incrementalsDirPath)
-		rel = strings.TrimPrefix(rel, "/")
+		rel := strings.TrimPrefix(obj, incrListPrefix)
 		ts, _, _ := strings.Cut(rel, "/")
 		if ts != "" && strings.HasSuffix(ts, "-incr") {
 			allIncrementals = append(allIncrementals, ts)
