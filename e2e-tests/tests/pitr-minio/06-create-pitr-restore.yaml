@@ -14,6 +14,8 @@ commands:
           "INSERT myDB.myTable (id) VALUES (100502)" \
           "-h $(get_haproxy_svc ${cluster_name})"
 
+      PITR_GTID=$(run_mysql "SELECT @@GLOBAL.gtid_executed" "-h $(get_haproxy_svc ${cluster_name})" | tr -d '\n')
+
       sleep 60
 
       echo '{}' \
