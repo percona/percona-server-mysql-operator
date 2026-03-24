@@ -1248,6 +1248,9 @@ func (s *BackupStorageSpec) Equals(other *BackupStorageSpec) bool {
 	if s.Type != other.Type {
 		return false
 	}
+	if s == nil || other == nil {
+		return false
+	}
 
 	switch s.Type {
 	case BackupStorageS3:
