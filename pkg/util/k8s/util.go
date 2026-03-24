@@ -22,7 +22,11 @@ func GetLastFullBackup(
 
 	var lastFullBackup *apiv1.PerconaServerMySQLBackup
 	for i, backup := range backupList.Items {
-		if backup.Spec.Type != apiv1.BackupTypeFull && backup.Spec.Type != apiv1.BackupTypeIncremental {
+		backupType := backup.Spec.Type
+		if backupType == "" {
+			backupType = apiv1.BackupTypeFull
+		}
+		if backupType != apiv1.BackupTypeFull {
 			continue
 		}
 
