@@ -888,3 +888,271 @@ func (c *fakeStorageClient) ListObjects(_ context.Context, _ string) ([]string, 
 	}
 	return []string{"some-dest/backup1", "some-dest/backup2"}, nil
 }
+
+type incrFakeStorageClient struct {
+	storage.Storage
+	objects       []string
+	listErr       error
+	prefixHistory []string
+}
+
+func (c *incrFakeStorageClient) SetPrefix(prefix string) {
+	c.prefixHistory = append(c.prefixHistory, prefix)
+}
+
+func (c *incrFakeStorageClient) GetPrefix() string {
+	if len(c.prefixHistory) == 0 {
+		return ""
+	}
+	return c.prefixHistory[len(c.prefixHistory)-1]
+}
+
+func (c *incrFakeStorageClient) ListObjects(_ context.Context, _ string) ([]string, error) {
+	if c.listErr != nil {
+		return nil, c.listErr
+	}
+	return c.objects, nil
+}
+
+func TestResolveIncrementalChain(t *testing.T) {
+	ctx := context.Background()
+
+	const (
+		clusterName  = "test-cluster"
+		namespace    = "test-ns"
+		storageName  = "s3-us-west"
+		s3SecretName = "s3-secret"
+		bucket       = "my-bucket"
+	)
+
+	baseCluster := &apiv1.PerconaServerMySQL{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: namespace,
+		},
+		Spec: apiv1.PerconaServerMySQLSpec{
+			Backup: &apiv1.BackupSpec{
+				Storages: map[string]*apiv1.BackupStorageSpec{
+					storageName: {
+						Type: apiv1.BackupStorageS3,
+						S3: &apiv1.BackupStorageS3Spec{
+							Bucket:            bucket,
+							CredentialsSecret: s3SecretName,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	s3Secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      s3SecretName,
+			Namespace: namespace,
+		},
+		Data: map[string][]byte{
+			"AWS_ACCESS_KEY_ID":     []byte("test-key"),
+			"AWS_SECRET_ACCESS_KEY": []byte("test-secret"),
+		},
+	}
+
+	tests := []struct {
+		name           string
+		destination    apiv1.BackupDestination
+		storageObjects []string
+		listErr        error
+		wantBase       string
+		wantIncrs      []string
+		wantErr        string
+		wantSetPrefix  string
+	}{
+		{
+			name:        "chain with multiple incrementals, restoring to middle one",
+			destination: apiv1.BackupDestination("s3://my-bucket/pfx/base-backup.incr/2026-03-17T000000-incr"),
+			storageObjects: []string{
+				"base-backup.incr/2026-03-15T000000-incr/xtrabackup_checkpoints",
+				"base-backup.incr/2026-03-16T000000-incr/xtrabackup_checkpoints",
+				"base-backup.incr/2026-03-17T000000-incr/xtrabackup_checkpoints",
+				"base-backup.incr/2026-03-18T000000-incr/xtrabackup_checkpoints",
+			},
+			wantBase: "pfx/base-backup",
+			wantIncrs: []string{
+				"pfx/base-backup.incr/2026-03-15T000000-incr",
+				"pfx/base-backup.incr/2026-03-16T000000-incr",
+				"pfx/base-backup.incr/2026-03-17T000000-incr",
+			},
+			wantSetPrefix: "pfx/",
+		},
+		{
+			name:        "chain with single incremental",
+			destination: apiv1.BackupDestination("s3://my-bucket/pfx/base-backup.incr/2026-03-15T000000-incr"),
+			storageObjects: []string{
+				"base-backup.incr/2026-03-15T000000-incr/xtrabackup_checkpoints",
+			},
+			wantBase: "pfx/base-backup",
+			wantIncrs: []string{
+				"pfx/base-backup.incr/2026-03-15T000000-incr",
+			},
+			wantSetPrefix: "pfx/",
+		},
+		{
+			name:        "restoring to last incremental includes all",
+			destination: apiv1.BackupDestination("s3://my-bucket/pfx/base-backup.incr/2026-03-18T000000-incr"),
+			storageObjects: []string{
+				"base-backup.incr/2026-03-15T000000-incr/xtrabackup_checkpoints",
+				"base-backup.incr/2026-03-16T000000-incr/xtrabackup_checkpoints",
+				"base-backup.incr/2026-03-17T000000-incr/xtrabackup_checkpoints",
+				"base-backup.incr/2026-03-18T000000-incr/xtrabackup_checkpoints",
+			},
+			wantBase: "pfx/base-backup",
+			wantIncrs: []string{
+				"pfx/base-backup.incr/2026-03-15T000000-incr",
+				"pfx/base-backup.incr/2026-03-16T000000-incr",
+				"pfx/base-backup.incr/2026-03-17T000000-incr",
+				"pfx/base-backup.incr/2026-03-18T000000-incr",
+			},
+			wantSetPrefix: "pfx/",
+		},
+		{
+			name:           "no incremental backups found",
+			destination:    apiv1.BackupDestination("s3://my-bucket/pfx/base-backup.incr/2026-03-17T000000-incr"),
+			storageObjects: []string{},
+			wantErr:        "no incremental backups found in chain",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cl := buildFakeClient(t, baseCluster.DeepCopy(), s3Secret.DeepCopy())
+
+			fakeClient := &incrFakeStorageClient{
+				objects: tt.storageObjects,
+				listErr: tt.listErr,
+			}
+
+			opts := &restorerOptions{
+				cluster:   baseCluster.DeepCopy(),
+				k8sClient: cl,
+				bcp: &apiv1.PerconaServerMySQLBackup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-backup",
+						Namespace: namespace,
+					},
+					Spec: apiv1.PerconaServerMySQLBackupSpec{
+						ClusterName: clusterName,
+						StorageName: storageName,
+					},
+					Status: apiv1.PerconaServerMySQLBackupStatus{
+						Destination: tt.destination,
+						Type:        apiv1.BackupTypeIncremental,
+						Storage: &apiv1.BackupStorageSpec{
+							Type: apiv1.BackupStorageS3,
+							S3: &apiv1.BackupStorageS3Spec{
+								Bucket:            bucket,
+								CredentialsSecret: s3SecretName,
+							},
+						},
+					},
+				},
+				newStorageClient: func(_ context.Context, _ storage.Options) (storage.Storage, error) {
+					return fakeClient, nil
+				},
+			}
+
+			result, err := opts.resolveIncrementalChain(ctx)
+
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantBase, result.Base)
+			assert.Equal(t, tt.wantIncrs, result.Incrementals)
+
+			if tt.wantSetPrefix != "" {
+				require.NotEmpty(t, fakeClient.prefixHistory, "expected SetPrefix to be called")
+				assert.Equal(t, tt.wantSetPrefix, fakeClient.prefixHistory[0])
+			}
+		})
+	}
+}
+
+func TestResolveIncrementalChainStorageClientError(t *testing.T) {
+	ctx := context.Background()
+
+	const (
+		clusterName  = "test-cluster"
+		namespace    = "test-ns"
+		storageName  = "s3-us-west"
+		s3SecretName = "s3-secret"
+		bucket       = "my-bucket"
+	)
+
+	cluster := &apiv1.PerconaServerMySQL{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: namespace,
+		},
+		Spec: apiv1.PerconaServerMySQLSpec{
+			Backup: &apiv1.BackupSpec{
+				Storages: map[string]*apiv1.BackupStorageSpec{
+					storageName: {
+						Type: apiv1.BackupStorageS3,
+						S3: &apiv1.BackupStorageS3Spec{
+							Bucket:            bucket,
+							CredentialsSecret: s3SecretName,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	s3Secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      s3SecretName,
+			Namespace: namespace,
+		},
+		Data: map[string][]byte{
+			"AWS_ACCESS_KEY_ID":     []byte("test-key"),
+			"AWS_SECRET_ACCESS_KEY": []byte("test-secret"),
+		},
+	}
+
+	cl := buildFakeClient(t, cluster, s3Secret)
+
+	opts := &restorerOptions{
+		cluster:   cluster,
+		k8sClient: cl,
+		bcp: &apiv1.PerconaServerMySQLBackup{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-backup",
+				Namespace: namespace,
+			},
+			Spec: apiv1.PerconaServerMySQLBackupSpec{
+				ClusterName: clusterName,
+				StorageName: storageName,
+			},
+			Status: apiv1.PerconaServerMySQLBackupStatus{
+				Destination: apiv1.BackupDestination("s3://my-bucket/pfx/base.incr/2026-03-17T000000-incr"),
+				Type:        apiv1.BackupTypeIncremental,
+				Storage: &apiv1.BackupStorageSpec{
+					Type: apiv1.BackupStorageS3,
+					S3: &apiv1.BackupStorageS3Spec{
+						Bucket:            bucket,
+						CredentialsSecret: s3SecretName,
+					},
+				},
+			},
+		},
+		newStorageClient: func(_ context.Context, _ storage.Options) (storage.Storage, error) {
+			return nil, errors.New("auth failure")
+		},
+	}
+
+	_, err := opts.resolveIncrementalChain(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "create storage client: auth failure")
+}
