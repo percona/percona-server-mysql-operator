@@ -1,0 +1,20 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 30
+delete:
+- apiVersion: ps.percona.com/v1
+  kind: PerconaServerMySQLBackup
+  metadata:
+    name: incr-3
+- apiVersion: ps.percona.com/v1
+  kind: PerconaServerMySQLBackup
+  metadata:
+    name: incr-2
+- apiVersion: ps.percona.com/v1
+  kind: PerconaServerMySQLBackup
+  metadata:
+    name: incr-1
+- apiVersion: ps.percona.com/v1
+  kind: PerconaServerMySQLBackup
+  metadata:
+    name: base-backup
