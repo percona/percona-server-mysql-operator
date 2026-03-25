@@ -27,6 +27,7 @@ import (
 )
 
 // PerconaServerMySQLBackupSpec defines the desired state of PerconaServerMySQLBackup
+// +kubebuilder:validation:XValidation:rule="!has(self.incrementalBaseBackupName) || self.incrementalBaseBackupName == \"\" || self.type == 'incremental'",message="Invalid configuration: incrementalBaseBackupName is only allowed for incremental backups"
 type PerconaServerMySQLBackupSpec struct {
 	// +kubebuilder:validation:Enum=full;incremental
 	// +kubebuilder:default:=full
@@ -35,6 +36,12 @@ type PerconaServerMySQLBackupSpec struct {
 	StorageName      string                  `json:"storageName"`
 	SourcePod        string                  `json:"sourcePod,omitempty"`
 	ContainerOptions *BackupContainerOptions `json:"containerOptions,omitempty"`
+
+	// Name of the base (full) backup for incremental backups
+	// Only used for incremental backups
+	// When set, the incremental backup will be deleted if the base backup is deleted
+	// If unset, uses the latest full backup as the base.
+	IncrementalBaseBackupName *string `json:"incrementalBaseBackupName,omitempty"`
 }
 
 type BackupState string

@@ -151,6 +151,8 @@ spec:
                       type: object
                     type: array
                 type: object
+              incrementalBaseBackupName:
+                type: string
               sourcePod:
                 type: string
               storageName:
@@ -165,6 +167,11 @@ spec:
             - clusterName
             - storageName
             type: object
+            x-kubernetes-validations:
+            - message: 'Invalid configuration: incrementalBaseBackupName is only allowed
+                for incremental backups'
+              rule: '!has(self.incrementalBaseBackupName) || self.incrementalBaseBackupName
+                == "" || self.type == ''incremental'''
           status:
             properties:
               backupSource:
