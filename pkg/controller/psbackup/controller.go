@@ -590,6 +590,24 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 	return nil
 }
 
+// canDeleteIncrBackup checks if the incremental backup can be deleted.
+// An incremental backup can be deleted ONLY if it is the latest one in the chain.
+// This is done to prevent deleting from the middle of a chain, which would make the entire chain unusable.
+func (r *PerconaServerMySQLBackupReconciler) canDeleteIncrBackup(
+	ctx context.Context,
+	backup *apiv1.PerconaServerMySQLBackup,
+) (bool, error) {
+	if backup.Status.Type != apiv1.BackupTypeIncremental {
+		return true, nil
+	}
+
+	latestIncrementalBackup, err := k8sutil.GetLatestIncrementalBackupInChain(ctx, r.Client, backup)
+	if err != nil {
+		return false, errors.Wrap(err, "get latest incremental backup in chain")
+	}
+	return latestIncrementalBackup.GetName() == backup.GetName(), nil
+}
+
 func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) (bool, error) {
 	if cr.Status.State != apiv1.BackupSucceeded {
 		return true, nil
@@ -597,6 +615,13 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 
 	log := logf.FromContext(ctx)
 	log.Info("Deleting backup")
+
+	if can, err := r.canDeleteIncrBackup(ctx, cr); err != nil {
+		return false, errors.Wrap(err, "failed to check if can delete incremental backup")
+	} else if !can {
+		log.Info("Cannot delete incremental backup which is in middle of the chain")
+		return false, nil
+	}
 
 	backupConf, err := xtrabackup.GetBackupConfig(ctx, r.Client, cr)
 	if err != nil {
@@ -720,6 +745,22 @@ func (r *PerconaServerMySQLBackupReconciler) getLastBackupLSN(
 	return *lastBackup.Status.ToLsn, nil
 }
 
+func (r *PerconaServerMySQLBackupReconciler) getIncrementalBaseBackup(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) (*apiv1.PerconaServerMySQLBackup, error) {
+	if cr.Spec.IncrementalBaseBackupName != nil && *cr.Spec.IncrementalBaseBackupName != "" {
+		backup := &apiv1.PerconaServerMySQLBackup{}
+		nn := types.NamespacedName{Name: *cr.Spec.IncrementalBaseBackupName, Namespace: cr.Namespace}
+		if err := r.Get(ctx, nn, backup); err != nil {
+			return nil, errors.Wrapf(err, "get backup %s", nn)
+		}
+		return backup, nil
+	}
+	lastFullBackup, err := k8sutil.GetLastFullBackup(ctx, r.Client, cr.Spec.ClusterName)
+	if err != nil {
+		return nil, errors.Wrap(err, "get last full backup")
+	}
+	return lastFullBackup, nil
+}
+
 func (r *PerconaServerMySQLBackupReconciler) setIncrementalBaseAnnotations(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQLBackup,
@@ -738,18 +779,18 @@ func (r *PerconaServerMySQLBackupReconciler) setIncrementalBaseAnnotations(
 		return nil
 	}
 
-	lastFullBackup, err := k8sutil.GetLastFullBackup(ctx, r.Client, cr.Spec.ClusterName)
+	baseBackup, err := r.getIncrementalBaseBackup(ctx, cr)
 	if err != nil {
-		return errors.Wrap(err, "get last full backup")
+		return errors.Wrap(err, "get incremental base backup")
 	}
-	if lastFullBackup.Status.State != apiv1.BackupSucceeded {
-		return errors.New("last full backup is not succeeded")
+	if baseBackup.Status.State != apiv1.BackupSucceeded {
+		return errors.New("base backup is not succeeded")
 	}
-	if lastFullBackup.Status.ToLsn == nil {
-		return errors.New("last full backup LSN not known")
+	if baseBackup.Status.ToLsn == nil {
+		return errors.New("base backup LSN not known")
 	}
-	if !storage.Equals(lastFullBackup.Status.Storage) {
-		return errors.New("incremental backup cannot have different storage that base backup")
+	if !storage.Equals(baseBackup.Status.Storage) {
+		return errors.New("base backup has different storage than the incremental backup")
 	}
 
 	if err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
@@ -761,7 +802,7 @@ func (r *PerconaServerMySQLBackupReconciler) setIncrementalBaseAnnotations(
 		if annots == nil {
 			annots = make(map[string]string)
 		}
-		annots[string(naming.AnnotationBaseBackupName)] = lastFullBackup.Status.Destination.BackupName()
+		annots[string(naming.AnnotationBaseBackupName)] = baseBackup.Status.Destination.BackupName()
 		backup.SetAnnotations(annots)
 		return r.Update(ctx, backup)
 	}); err != nil {
