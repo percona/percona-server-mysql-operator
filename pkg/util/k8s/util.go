@@ -144,3 +144,40 @@ func GetLatestIncrementalBackupInChain(
 	}
 	return latest, nil
 }
+
+func ListIncrementalBackupsInChain(
+	ctx context.Context,
+	cl client.Client,
+	backup *apiv1.PerconaServerMySQLBackup,
+) ([]*apiv1.PerconaServerMySQLBackup, error) {
+	backupList := &apiv1.PerconaServerMySQLBackupList{}
+	if err := cl.List(ctx, backupList, client.MatchingFields{
+		"spec.clusterName": backup.Spec.ClusterName,
+	}); err != nil {
+		return nil, errors.Wrap(err, "list backups")
+	}
+	target := backup.Status.Destination.BackupName()
+	if backup.Spec.Type == apiv1.BackupTypeIncremental {
+		val, ok := backup.GetAnnotations()[string(naming.AnnotationBaseBackupName)]
+		if !ok {
+			return nil, errors.New("base backup name not known in annotations")
+		}
+		target = val
+	}
+
+	var result []*apiv1.PerconaServerMySQLBackup
+	for i, b := range backupList.Items {
+		if b.Spec.Type != apiv1.BackupTypeIncremental {
+			continue
+		}
+		dest, ok := b.GetAnnotations()[string(naming.AnnotationBaseBackupName)]
+		if !ok {
+			continue
+		}
+		if dest != target {
+			continue
+		}
+		result = append(result, &backupList.Items[i])
+	}
+	return result, nil
+}

@@ -608,6 +608,33 @@ func (r *PerconaServerMySQLBackupReconciler) canDeleteIncrBackup(
 	return latestIncrementalBackup.GetName() == backup.GetName(), nil
 }
 
+func (r *PerconaServerMySQLBackupReconciler) deleteIncrementalChain(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLBackup,
+) (bool, error) {
+	if cr.GetType() == apiv1.BackupTypeIncremental {
+		return true, nil
+	}
+
+	backups, err := k8sutil.ListIncrementalBackupsInChain(ctx, r.Client, cr)
+	if err != nil {
+		return false, errors.Wrap(err, "list incremental backups in chain")
+	}
+	if len(backups) == 0 {
+		return true, nil
+	}
+
+	for _, b := range backups {
+		if !b.GetDeletionTimestamp().IsZero() {
+			continue
+		}
+		if err := r.Delete(ctx, b); err != nil {
+			return false, errors.Wrap(err, "delete backup")
+		}
+	}
+	return false, nil
+}
+
 func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) (bool, error) {
 	if cr.Status.State != apiv1.BackupSucceeded {
 		return true, nil
@@ -620,6 +647,13 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 		return false, errors.Wrap(err, "failed to check if can delete incremental backup")
 	} else if !can {
 		log.Info("Cannot delete incremental backup which is in middle of the chain")
+		return false, nil
+	}
+
+	if ok, err := r.deleteIncrementalChain(ctx, cr); err != nil {
+		return false, errors.Wrap(err, "failed to delete incremental chain")
+	} else if !ok {
+		log.Info("Awaiting deletion of incremental backup chain")
 		return false, nil
 	}
 

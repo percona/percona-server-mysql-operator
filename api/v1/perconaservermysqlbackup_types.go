@@ -206,6 +206,13 @@ func (b *PerconaServerMySQLBackup) GetContainerOptions(storage *BackupStorageSpe
 	return nil
 }
 
+func (b *PerconaServerMySQLBackup) GetType() BackupType {
+	if b.Status.Type == "" {
+		return BackupTypeFull
+	}
+	return b.Status.Type
+}
+
 //+kubebuilder:object:root=true
 
 // PerconaServerMySQLBackupList contains a list of PerconaServerMySQLBackup
