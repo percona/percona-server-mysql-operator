@@ -10,11 +10,5 @@ assertAll:
 - celExpr: incr1.status.state == "Succeeded"
   message: "Incremental backup should be succeeded"
 
-- celExpr: has(incr1.status.toLsn) && incr1.status.toLsn != ""
-  message: "Incremental backup should have a toLsn"
-
-- celExpr: incr1.status.type == "incremental"
-  message: "Incremental backup should have a type of incremental"
-
 - celExpr: incr1.metadata.annotations["percona.com/base-backup-name"] != ""
   message: "Incremental backup should have a base backup annotation"

@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
@@ -75,7 +74,6 @@ type PerconaServerMySQLBackupStatus struct {
 	CompletedAt  *metav1.Time       `json:"completed,omitempty"`
 	Image        string             `json:"image,omitempty"`
 	BackupSource string             `json:"backupSource,omitempty"`
-	ToLsn        *string            `json:"toLsn,omitempty"`
 }
 
 const (
@@ -253,6 +251,5 @@ func (s *PerconaServerMySQLBackupStatus) Equals(other *PerconaServerMySQLBackupS
 		s.StateDesc == other.StateDesc &&
 		s.Destination == other.Destination &&
 		s.Image == other.Image &&
-		s.BackupSource == other.BackupSource &&
-		ptr.Deref(s.ToLsn, "") == ptr.Deref(other.ToLsn, "")
+		s.BackupSource == other.BackupSource
 }

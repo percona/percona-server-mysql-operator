@@ -138,15 +138,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	switch cr.Status.State {
-	case apiv1.BackupSucceeded:
-		// Set the LSN for the backup.
-		lsn, err := r.getBackupLSN(ctx, cr, cluster)
-		if err != nil {
-			return rr, errors.Wrap(err, "failed to get backup LSN")
-		}
-		status.ToLsn = &lsn
-		return rr, nil
-	case apiv1.BackupFailed, apiv1.BackupError:
+	case apiv1.BackupFailed, apiv1.BackupSucceeded, apiv1.BackupError:
 		return rr, nil
 	}
 
@@ -199,7 +191,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		// Set an incremental LSN for incremental backups.
 		var incrementalLsn string
 		if cr.Spec.Type == apiv1.BackupTypeIncremental {
-			lsn, err := r.getLastBackupLSN(ctx, cluster.Name)
+			lsn, err := r.getLastBackupLSN(ctx, cluster.Name, backupSource)
 			if err != nil {
 				return rr, errors.Wrap(err, "get last backup LSN")
 			}
@@ -737,19 +729,19 @@ func getBackupSourcePod(ctx context.Context, cl client.Client, namespace, src st
 	return pod, nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) getBackupLSN(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup, cluster *apiv1.PerconaServerMySQL) (string, error) {
-	if cr.Status.ToLsn != nil {
-		return *cr.Status.ToLsn, nil
+func (r *PerconaServerMySQLBackupReconciler) getLastBackupLSN(
+	ctx context.Context,
+	clusterName string,
+	backupSource string,
+) (string, error) {
+	lastBackup, err := k8sutil.GetLastSuccessfulBackup(ctx, r.Client, clusterName)
+	if err != nil {
+		return "", errors.Wrap(err, "get last successful backup")
 	}
 
-	req, err := xtrabackup.GetBackupConfig(ctx, r.Client, cr)
+	req, err := xtrabackup.GetBackupConfig(ctx, r.Client, lastBackup)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to create sidecar backup config")
-	}
-
-	backupSource, err := r.getBackupSource(ctx, cr, cluster)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to get backup source")
 	}
 
 	sc := r.NewSidecarClient(backupSource)
@@ -763,20 +755,6 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupLSN(ctx context.Context, c
 	}
 
 	return info.ToLSN, nil
-}
-
-func (r *PerconaServerMySQLBackupReconciler) getLastBackupLSN(
-	ctx context.Context,
-	clusterName string,
-) (string, error) {
-	lastBackup, err := k8sutil.GetLastSuccessfulBackup(ctx, r.Client, clusterName)
-	if err != nil {
-		return "", errors.Wrap(err, "get last successful backup")
-	}
-	if lastBackup.Status.ToLsn == nil {
-		return "", errors.New("last successful backup LSN not known")
-	}
-	return *lastBackup.Status.ToLsn, nil
 }
 
 func (r *PerconaServerMySQLBackupReconciler) getIncrementalBaseBackup(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) (*apiv1.PerconaServerMySQLBackup, error) {
@@ -819,9 +797,6 @@ func (r *PerconaServerMySQLBackupReconciler) setIncrementalBaseAnnotations(
 	}
 	if baseBackup.Status.State != apiv1.BackupSucceeded {
 		return errors.New("base backup is not succeeded")
-	}
-	if baseBackup.Status.ToLsn == nil {
-		return errors.New("base backup LSN not known")
 	}
 	if !storage.Equals(baseBackup.Status.Storage) {
 		return errors.New("base backup has different storage than the incremental backup")

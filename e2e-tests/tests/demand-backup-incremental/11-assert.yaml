@@ -10,9 +10,6 @@ assertAll:
 - celExpr: incr3.status.state == "Succeeded"
   message: "Incremental backup should be succeeded"
 
-- celExpr: has(incr3.status.toLsn) && incr3.status.toLsn != ""
-  message: "Incremental backup should have a toLsn"
-
 - celExpr: incr3.status.type == "incremental"
   message: "Incremental backup should have a type of incremental"
 

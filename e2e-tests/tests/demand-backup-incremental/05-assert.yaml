@@ -10,8 +10,5 @@ assertAll:
 - celExpr: bcp.status.state == "Succeeded"
   message: "Base backup should be succeeded"
 
-- celExpr: has(bcp.status.toLsn) && bcp.status.toLsn != ""
-  message: "Base backup should have a toLsn"
-
 - celExpr: bcp.status.type == "full"
   message: "Base backup should be a full backup"

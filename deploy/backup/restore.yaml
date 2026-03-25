@@ -99,5 +99,4 @@ spec:
 #            requests:
 #              storage: 2Gi
 #          storageClassName: standard
-#    toLsn: null
 #    type: ""
