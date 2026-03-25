@@ -5,7 +5,7 @@ timeout: 400
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
-  name: demand-backup-incremental-from-source
+  name: demand-backup-incremental
   finalizers:
     - percona.com/delete-mysql-pods-in-order
 status:
