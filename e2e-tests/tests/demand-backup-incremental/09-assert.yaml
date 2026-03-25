@@ -1,0 +1,20 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+resourceRefs:
+- apiVersion: ps.percona.com/v1
+  kind: PerconaServerMySQLBackup
+  name: incr-2
+  ref: incr2
+assertAll:
+- celExpr: incr2.status.state == "Succeeded"
+  message: "Incremental backup should be succeeded"
+
+- celExpr: has(incr2.status.toLsn) && incr2.status.toLsn != ""
+  message: "Incremental backup should have a toLsn"
+
+- celExpr: incr2.status.type == "incremental"
+  message: "Incremental backup should have a type of incremental"
+
+- celExpr: incr2.metadata.annotations["percona.com/base-backup-name"] != ""
+  message: "Incremental backup should have a base backup annotation"

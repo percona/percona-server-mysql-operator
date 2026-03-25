@@ -1,0 +1,28 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      backup_dest=$(kubectl -n "${NAMESPACE}" get ps-backup incr-3 -ojsonpath='{.status.destination}'")      
+      
+      cat <<EOF | kubectl apply -f -
+      apiVersion: ps.percona.com/v1
+      kind: PerconaServerMySQLRestore
+      metadata:
+        name: restore-from-source
+      spec:
+        clusterName: demand-backup-incremental-from-source
+        backupSource:
+          destination: "${backup_dest}"
+          storage:
+            s3:
+              bucket: "operator-testing"
+              credentialsSecret: "minio-secret"
+              endpointUrl: "http://minio-service.${NAMESPACE}:9000"
+              region: "us-east-1"
+      EOF
+
