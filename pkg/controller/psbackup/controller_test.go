@@ -561,7 +561,7 @@ func TestRunningState(t *testing.T) {
 			cluster: cluster.DeepCopy(),
 			state:   apiv1.BackupRunning,
 			sidecarClient: &fakeSidecarClient{
-				destination: "s3://bucket/container",
+				destination: "container",
 			},
 		},
 	}
