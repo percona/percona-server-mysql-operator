@@ -637,7 +637,8 @@ get_cr() {
 	local image_toolkit=${6:-${IMAGE_TOOLKIT}}
 	local image_haproxy=${7:-${IMAGE_HAPROXY}}
 	local image_pmm_client=${8:-${IMAGE_PMM_CLIENT}}
-	local cr_file=${9:-${DEPLOY_DIR}/cr.yaml}
+	local image_binlog_server=${9:-${IMAGE_BINLOG_SERVER}}
+	local cr_file=${10:-${DEPLOY_DIR}/cr.yaml}
 
 	yq eval "$(printf '.metadata.name="%s"' "${test_name}${name_suffix:+-$name_suffix}")" ${cr_file} \
 		| yq eval "$(printf '.spec.initContainer.image="%s"' "${IMAGE}")" - \
@@ -654,6 +655,7 @@ get_cr() {
 		| yq eval "$(printf '.spec.toolkit.image="%s"' "${image_toolkit}")" - \
 		| yq eval "$(printf '.spec.proxy.haproxy.image="%s"' "${image_haproxy}")" - \
 		| yq eval "$(printf '.spec.pmm.image="%s"' "${image_pmm_client}")" - \
+		| yq eval "$(printf '.spec.backup.pitr.binlogServer.image="%s"' "${image_binlog_server}")" - \
 		| if [ -n "${MINIKUBE}" ]; then
 			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) |= "none"' - \
 				| yq eval '.spec.proxy.haproxy.resources.requests.cpu="300m"' -
@@ -1553,6 +1555,7 @@ get_cr_with_latest_versions_in_vs() {
 		${image_toolkit} \
 		${image_haproxy} \
 		${image_pmm_client} \
+		${image_binlog_server} \
 		${TEMP_DIR}/cr.yaml
 }
 
