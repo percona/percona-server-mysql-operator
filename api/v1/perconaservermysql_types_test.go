@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 func TestCheckNSetDefaults(t *testing.T) {
@@ -82,6 +84,51 @@ func TestCheckNSetDefaults(t *testing.T) {
 
 		err := cr.CheckNSetDefaults(t.Context(), nil)
 		assert.NoError(t, err)
+	})
+	t.Run("invalid async source retry count", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.Backup = &BackupSpec{
+			Image: "backup-image",
+		}
+		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
+		cr.Spec.MySQL.Env = []corev1.EnvVar{{
+			Name:  naming.EnvAsyncSourceRetryCount,
+			Value: "-1",
+		}}
+		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+				},
+			},
+		}
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.EqualError(t, err, "ASYNC_SOURCE_RETRY_COUNT should be a positive value")
+	})
+	t.Run("invalid async source connect retry", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.Backup = &BackupSpec{
+			Image: "backup-image",
+		}
+		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
+		cr.Spec.MySQL.Env = []corev1.EnvVar{{
+			Name:  naming.EnvAsyncSourceConnectRetry,
+			Value: "-1",
+		}}
+		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+				},
+			},
+		}
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.EqualError(t, err, "ASYNC_SOURCE_CONNECT_RETRY should be a positive value")
 	})
 	t.Run("backups disabled without image should succeed", func(t *testing.T) {
 		cr := new(PerconaServerMySQL)
