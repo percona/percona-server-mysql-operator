@@ -244,6 +244,7 @@ func TestStateDescCleanup(t *testing.T) {
 	cluster, err := readDefaultCR("ps-cluster1", namespace)
 	require.NoError(t, err)
 
+	cluster.Status.State = apiv1.StateReady
 	cluster.Status.MySQL.State = apiv1.StateReady
 	cluster.Spec.InitContainer.Image = "init-image"
 
@@ -529,6 +530,7 @@ func TestRunningState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err, "failed to read default cr")
 	}
+	cluster.Status.State = apiv1.StateReady
 	cluster.Status.MySQL.State = apiv1.StateReady
 	tests := []struct {
 		name          string
@@ -559,7 +561,7 @@ func TestRunningState(t *testing.T) {
 			cluster: cluster.DeepCopy(),
 			state:   apiv1.BackupRunning,
 			sidecarClient: &fakeSidecarClient{
-				destination: "container",
+				destination: "s3://bucket/container",
 			},
 		},
 	}
