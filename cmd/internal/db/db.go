@@ -42,6 +42,8 @@ type DBParams struct {
 
 	ReadTimeoutSeconds  uint32
 	CloneTimeoutSeconds uint32
+	SourceRetryCount    uint32
+	SourceConnectRetry  uint32
 }
 
 func (p *DBParams) setDefaults() {
@@ -55,6 +57,13 @@ func (p *DBParams) setDefaults() {
 
 	if p.CloneTimeoutSeconds == 0 {
 		p.CloneTimeoutSeconds = defs.DefaultCloneTimeoutSecondsSeconds // 1 hour for clone operations (large databases can take time)
+	}
+
+	if p.SourceRetryCount == 0 {
+		p.SourceRetryCount = defs.DefaultAsyncSourceRetryCount
+	}
+	if p.SourceConnectRetry == 0 {
+		p.SourceConnectRetry = defs.DefaultAsyncSourceConnectRetry
 	}
 }
 
@@ -92,8 +101,14 @@ func NewDatabase(ctx context.Context, params DBParams) (*DB, error) {
 	return &DB{db}, nil
 }
 
-func (d *DB) StartReplication(ctx context.Context, host, replicaPass string, port int32) error {
-	// TODO: Make retries configurable
+func (d *DB) StartReplication(ctx context.Context, host, replicaPass string, port int32, sourceRetryCount, sourceConnectRetry uint32) error {
+	if sourceRetryCount == 0 {
+		sourceRetryCount = defs.DefaultAsyncSourceRetryCount
+	}
+	if sourceConnectRetry == 0 {
+		sourceConnectRetry = defs.DefaultAsyncSourceConnectRetry
+	}
+
 	_, err := d.db.ExecContext(ctx, `
             CHANGE REPLICATION SOURCE TO
                 SOURCE_USER=?,
@@ -103,9 +118,9 @@ func (d *DB) StartReplication(ctx context.Context, host, replicaPass string, por
                 SOURCE_SSL=1,
                 SOURCE_CONNECTION_AUTO_FAILOVER=1,
                 SOURCE_AUTO_POSITION=1,
-                SOURCE_RETRY_COUNT=3,
-                SOURCE_CONNECT_RETRY=60
-        `, apiv1.UserReplication, replicaPass, host, port)
+                SOURCE_RETRY_COUNT=?,
+                SOURCE_CONNECT_RETRY=?
+        `, apiv1.UserReplication, replicaPass, host, port, sourceRetryCount, sourceConnectRetry)
 	if err != nil {
 		return errors.Wrap(err, "exec CHANGE REPLICATION SOURCE TO")
 	}
@@ -276,7 +291,6 @@ func (d *DB) Clone(ctx context.Context, donor, user, pass string, port int32, cl
 	}
 
 	_, err = d.db.ExecContext(cloneCtx, "CLONE INSTANCE FROM ?@?:? IDENTIFIED BY ?", user, donor, port, pass)
-
 	if err != nil {
 		mErr, ok := err.(*mysql.MySQLError)
 		if !ok {

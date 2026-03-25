@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,6 +12,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/pmm"
@@ -45,6 +45,9 @@ const (
 
 	DefaultReadTimeoutSecondsSeconds  = 3600
 	DefaultCloneTimeoutSecondsSeconds = 3600
+
+	DefaultAsyncSourceRetryCount   = 3
+	DefaultAsyncSourceConnectRetry = 60
 )
 
 type User struct {

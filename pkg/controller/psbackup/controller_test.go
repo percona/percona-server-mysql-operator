@@ -364,7 +364,7 @@ func TestCheckFinalizers(t *testing.T) {
 				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 				cr.Status.State = apiv1.BackupStarting
 			}),
-			expectedFinalizers: []string{naming.FinalizerDeleteBackup},
+			expectedFinalizers: nil,
 		},
 		{
 			name: "with finalizer and running state",

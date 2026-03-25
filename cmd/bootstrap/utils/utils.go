@@ -65,6 +65,38 @@ func GetCloneTimeout() (uint32, error) {
 	return uint32(cloneTimeout), nil
 }
 
+func GetSourceRetryCount() (uint32, error) {
+	s, ok := os.LookupEnv(naming.EnvAsyncSourceRetryCount)
+	if !ok {
+		return 0, nil
+	}
+	sourceRetryCount, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to parse ASYNC_SOURCE_RETRY_COUNT")
+	}
+	if sourceRetryCount < 0 {
+		return 0, errors.New("ASYNC_SOURCE_RETRY_COUNT should be a positive value")
+	}
+
+	return uint32(sourceRetryCount), nil
+}
+
+func GetSourceConnectRetry() (uint32, error) {
+	s, ok := os.LookupEnv(naming.EnvAsyncSourceConnectRetry)
+	if !ok {
+		return 0, nil
+	}
+	sourceConnectRetry, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to parse ASYNC_SOURCE_CONNECT_RETRY")
+	}
+	if sourceConnectRetry < 0 {
+		return 0, errors.New("ASYNC_SOURCE_CONNECT_RETRY should be a positive value")
+	}
+
+	return uint32(sourceConnectRetry), nil
+}
+
 func GetSecret(username apiv1.SystemUser) (string, error) {
 	path := filepath.Join(naming.CredsMountPath, string(username))
 	sBytes, err := os.ReadFile(path)
