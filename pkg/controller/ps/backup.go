@@ -208,7 +208,7 @@ func (r *PerconaServerMySQLReconciler) oldScheduledBackups(ctx context.Context, 
 
 	backups := []apiv1.PerconaServerMySQLBackup{}
 	for _, bcp := range bcpList.Items {
-		if bcp.Status.State == apiv1.BackupSucceeded {
+		if bcp.Status.State == apiv1.BackupSucceeded && bcp.GetType() == apiv1.BackupTypeFull {
 			backups = append(backups, bcp)
 		}
 	}
