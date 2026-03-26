@@ -2559,8 +2559,6 @@ spec:
                       - type
                       type: object
                     type: object
-                required:
-                - image
                 type: object
               crVersion:
                 type: string
