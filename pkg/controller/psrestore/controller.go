@@ -324,7 +324,7 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRJob(
 	log := logf.FromContext(ctx)
 
 	pitrJob := &batchv1.Job{}
-	nn := types.NamespacedName{Name: pitr.JobName(cluster, cr), Namespace: cr.Namespace}
+	nn := types.NamespacedName{Name: pitr.JobName(cr), Namespace: cr.Namespace}
 	err := r.Get(ctx, nn, pitrJob)
 	if err != nil {
 		if !k8serrors.IsNotFound(err) {

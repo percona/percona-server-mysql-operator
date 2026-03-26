@@ -29,7 +29,7 @@ const (
 	BinlogsConfigKey  = "binlogs.json"
 )
 
-func JobName(cluster *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) string {
+func JobName(restore *apiv1.PerconaServerMySQLRestore) string {
 	return fmt.Sprintf("pitr-restore-%s", restore.Name)
 }
 
@@ -70,7 +70,7 @@ func RestoreJob(
 			Kind:       "Job",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        JobName(cluster, restore),
+			Name:        JobName(restore),
 			Namespace:   cluster.Namespace,
 			Labels:      labels,
 			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), storage.Annotations),
