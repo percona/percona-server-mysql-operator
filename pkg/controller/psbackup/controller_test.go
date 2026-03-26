@@ -204,11 +204,11 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			// Backup with an error state should not be reconciled.
 			// We can verify this by using clientWithGetCount.
 			//
-			// If the reconcile loop calls Get more than twice (once for backup and once for cluster),
+			// If the reconcile loop calls Get more than once,
 			// it means the loop continued running instead of stopping
 			// after the state check.
 			r.Client = &clientWithGetCount{
-				Count:  2,
+				Count:  1,
 				Client: r.Client,
 			}
 			_, err = r.Reconcile(t.Context(), controllerruntime.Request{

@@ -126,6 +126,11 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return reconcile.Result{}, errors.Wrap(err, "run finalizers")
 	}
 
+	switch cr.Status.State {
+	case apiv1.BackupFailed, apiv1.BackupSucceeded, apiv1.BackupError:
+		return rr, nil
+	}
+
 	cluster := &apiv1.PerconaServerMySQL{}
 	nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
 	if err := r.Client.Get(ctx, nn, cluster); err != nil {
@@ -135,11 +140,6 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return rr, nil
 		}
 		return rr, errors.Wrapf(err, "get %v", nn.String())
-	}
-
-	switch cr.Status.State {
-	case apiv1.BackupFailed, apiv1.BackupSucceeded, apiv1.BackupError:
-		return rr, nil
 	}
 
 	if err := cluster.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
@@ -169,7 +169,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	// Set annotations on incremental backups.
 	if err := r.setIncrementalBaseAnnotations(ctx, cr, storage); err != nil {
 		status.State = apiv1.BackupError
-		status.StateDesc = "failed to set incremental base labels: " + err.Error()
+		status.StateDesc = "failed to set incremental base annotations: " + err.Error()
 		return rr, nil
 	}
 
@@ -193,6 +193,8 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		if cr.Spec.Type == apiv1.BackupTypeIncremental {
 			lsn, err := r.getLastBackupLSN(ctx, cluster.Name, backupSource)
 			if err != nil {
+				status.State = apiv1.BackupError
+				status.StateDesc = "failed to get LSN from previous backup: " + err.Error()
 				return rr, errors.Wrap(err, "get last backup LSN")
 			}
 			incrementalLsn = lsn

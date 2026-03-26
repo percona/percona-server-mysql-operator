@@ -27,6 +27,10 @@ download() {
 			# shellcheck disable=SC2086
 			xbcloud get ${XBCLOUD_ARGS} "${dest}" --storage=azure
 			;;
+		*)
+			echo "Error: unknown storage type: ${STORAGE_TYPE}"
+			exit 1
+			;;
 	esac
 }
 

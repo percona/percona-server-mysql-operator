@@ -283,8 +283,7 @@ func setupFieldIndexers(ctx context.Context, mgr ctrl.Manager) error {
 			return []string{backup.Spec.ClusterName}
 		},
 	); err != nil {
-		setupLog.Error(err, "unable to index field")
-		os.Exit(1)
+		return errors.Wrap(err, "unable to index field 'spec.clusterName'")
 	}
 	return nil
 }
