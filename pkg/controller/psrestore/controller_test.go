@@ -701,7 +701,7 @@ func TestRestorerValidate(t *testing.T) {
 			cr:          cr.DeepCopy(),
 			cluster:     cluster.DeepCopy(),
 			bcp:         s3Bcp.DeepCopy(),
-			expectedErr: "failed to validate storage: backup not found",
+			expectedErr: "failed to validate storage: backup not found in storage",
 			objects: []runtime.Object{
 				s3Secret,
 			},
@@ -762,7 +762,7 @@ func TestRestorerValidate(t *testing.T) {
 			cr:          cr.DeepCopy(),
 			cluster:     cluster.DeepCopy(),
 			bcp:         gcsBcp.DeepCopy(),
-			expectedErr: "failed to validate storage: backup not found",
+			expectedErr: "failed to validate storage: backup not found in storage",
 			objects: []runtime.Object{
 				gcsSecret,
 			},
@@ -823,7 +823,7 @@ func TestRestorerValidate(t *testing.T) {
 			cr:          cr.DeepCopy(),
 			cluster:     cluster.DeepCopy(),
 			bcp:         azureBcp,
-			expectedErr: "failed to validate storage: backup not found",
+			expectedErr: "failed to validate storage: backup not found in storage",
 			objects: []runtime.Object{
 				azureSecret,
 			},
