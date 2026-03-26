@@ -1270,10 +1270,10 @@ const (
 )
 
 func (s *BackupStorageSpec) Equals(other *BackupStorageSpec) bool {
-	if s.Type != other.Type {
+	if s == nil || other == nil {
 		return false
 	}
-	if s == nil || other == nil {
+	if s.Type != other.Type {
 		return false
 	}
 
