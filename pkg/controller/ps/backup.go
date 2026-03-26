@@ -107,6 +107,7 @@ func (r *CronRegistry) createBackupJobFunc(ctx context.Context, cl client.Client
 			Spec: apiv1.PerconaServerMySQLBackupSpec{
 				ClusterName: cr.Name,
 				StorageName: backupJob.StorageName,
+				Type:        backupJob.Type,
 			},
 		}
 

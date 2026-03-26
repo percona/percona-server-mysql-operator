@@ -317,6 +317,9 @@ type BackupSchedule struct {
 	Keep     int    `json:"keep,omitempty"`
 	// +kubebuilder:validation:Required
 	StorageName string `json:"storageName,omitempty"`
+	// +kubebuilder:validation:Enum=full;incremental
+	// +kubebuilder:default:=full
+	Type BackupType `json:"type,omitempty"`
 }
 
 func (s *BackupSpec) GetInitSpec(cr *PerconaServerMySQL) InitContainerSpec {
@@ -774,6 +777,12 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 				if err != nil {
 					return errors.Wrap(err, "invalid schedule format")
 				}
+			}
+		}
+
+		for i, sch := range cr.Spec.Backup.Schedule {
+			if sch.Type == "" {
+				cr.Spec.Backup.Schedule[i].Type = BackupTypeFull
 			}
 		}
 	}

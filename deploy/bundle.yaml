@@ -3916,6 +3916,12 @@ spec:
                           type: string
                         storageName:
                           type: string
+                        type:
+                          default: full
+                          enum:
+                          - full
+                          - incremental
+                          type: string
                       required:
                       - name
                       - schedule
