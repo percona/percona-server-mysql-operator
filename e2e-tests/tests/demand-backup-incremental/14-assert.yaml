@@ -25,7 +25,7 @@ data:
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 14-read-data-0
+  name: 14-read-data-2
 data:
   data: |-
     100500
