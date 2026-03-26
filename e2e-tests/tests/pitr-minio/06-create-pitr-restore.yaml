@@ -16,6 +16,10 @@ commands:
 
       PITR_GTID=$(run_mysql "SELECT @@GLOBAL.gtid_executed" "-h $(get_haproxy_svc ${cluster_name})" | tr -d '\n')
 
+      sleep 1
+      PITR_DATE=$(date -u '+%Y-%m-%d %H:%M:%S')
+      kubectl create configmap -n "${NAMESPACE}" pitr-date --from-literal=date="${PITR_DATE}"
+
       sleep 60
 
       echo '{}' \

@@ -1,0 +1,23 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 90
+    script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+
+      PITR_DATE=$(kubectl get configmap -n "${NAMESPACE}" pitr-date -o jsonpath='{.data.date}')
+
+      echo '{}' \
+          | yq eval '.apiVersion = "ps.percona.com/v1"' - \
+          | yq eval '.kind = "PerconaServerMySQLRestore"' - \
+          | yq eval '.metadata.name = "pitr-minio-restore-date"' - \
+          | yq eval ".spec.clusterName = \"${cluster_name}\"" - \
+          | yq eval '.spec.backupName = "pitr-minio-backup"' - \
+          | yq eval '.spec.pitr.type = "date"' - \
+          | yq eval ".spec.pitr.date = \"${PITR_DATE}\"" - \
+          | kubectl apply -n "${NAMESPACE}" -f -
