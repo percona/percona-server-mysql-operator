@@ -1310,14 +1310,9 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 	accessKey := s3Secret.Data[secret.CredentialsAWSAccessKey]
 	secretKey := s3Secret.Data[secret.CredentialsAWSSecretKey]
 
-	protocol, host, err := parseEndpointURL(s3.EndpointURL)
+	s3Uri, err := s3URI(*s3, accessKey, secretKey)
 	if err != nil {
-		return errors.Wrap(err, "parse endpoint URL")
-	}
-
-	s3Uri := fmt.Sprintf("%s://%s:%s@%s/%s", protocol, accessKey, secretKey, host, s3.Bucket)
-	if len(s3.Prefix) > 0 {
-		s3Uri += fmt.Sprintf("/%s", s3.Prefix)
+		return errors.Wrap(err, "get s3 uri")
 	}
 
 	replPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserReplication)
@@ -1696,4 +1691,24 @@ func getPodIndexFromHostname(hostname string) (int, error) {
 	}
 
 	return idx, nil
+}
+
+func s3URI(s3 apiv1.BackupStorageS3Spec, accessKey, secretKey []byte) (string, error) {
+	bucket := string(s3.Bucket)
+	if len(s3.Region) > 0 {
+		bucket = fmt.Sprintf("%s.%s", s3.Bucket, s3.Region)
+	}
+	uri := fmt.Sprintf("s3://%s:%s@%s", accessKey, secretKey, bucket)
+	if len(s3.EndpointURL) != 0 {
+		protocol, host, err := parseEndpointURL(s3.EndpointURL)
+		if err != nil {
+			return "", errors.Wrap(err, "parse endpoint URL")
+		}
+		uri = fmt.Sprintf("%s://%s:%s@%s/%s", protocol, accessKey, secretKey, host, s3.Bucket)
+	}
+	if len(s3.Prefix) > 0 {
+		uri += fmt.Sprintf("/%s", s3.Prefix)
+	}
+
+	return uri, nil
 }
