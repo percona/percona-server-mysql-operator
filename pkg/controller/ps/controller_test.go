@@ -18,6 +18,7 @@ package ps
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -26,6 +27,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	gs "github.com/onsi/gomega/gstruct"
+	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
+	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -1932,5 +1935,123 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 				}
 			}
 		})
+	})
+})
+
+var _ = Describe("BinlogServer", Ordered, func() {
+	ctx := context.Background()
+
+	const crName = "pitr-test"
+	const ns = crName
+	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ns,
+		},
+	}
+
+	BeforeAll(func() {
+		By("Creating the Namespace")
+		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+	})
+
+	AfterAll(func() {
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	cr, err := readDefaultCR(crName, ns)
+	It("should read default cr.yaml", func() {
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should configure PiTR and create the CR", func() {
+		cr.Spec.Backup.PiTR.Enabled = true
+		cr.Spec.Backup.PiTR.BinlogServer = &psv1.BinlogServerSpec{
+			Storage: psv1.BinlogServerStorageSpec{
+				S3: &psv1.BackupStorageS3Spec{
+					Bucket:            "test-bucket",
+					Region:            "us-east-1",
+					EndpointURL:       "s3://s3.amazonaws.com",
+					CredentialsSecret: "s3-secret",
+				},
+			},
+			PodSpec: psv1.PodSpec{
+				Size: 1,
+				ContainerSpec: psv1.ContainerSpec{
+					Image: "perconalab/percona-binlog-server:0.2.0",
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+	})
+
+	It("should create the S3 credentials secret", func() {
+		s3Secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "s3-secret",
+				Namespace: ns,
+			},
+			Data: map[string][]byte{
+				secret.CredentialsAWSAccessKey: []byte("access-key"),
+				secret.CredentialsAWSSecretKey: []byte("secret-key"),
+			},
+		}
+		Expect(k8sClient.Create(ctx, s3Secret)).To(Succeed())
+	})
+
+	It("should create the internal secret with the replication user password", func() {
+		internalSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cr.InternalSecretName(),
+				Namespace: ns,
+			},
+			Data: map[string][]byte{
+				string(psv1.UserReplication): []byte("repl-password"),
+			},
+		}
+		Expect(k8sClient.Create(ctx, internalSecret)).To(Succeed())
+	})
+
+	It("should set the binlog server connection host to the primary service", func() {
+		Expect(k8sClient.Get(ctx, crNamespacedName, cr)).To(Succeed())
+
+		Expect(reconciler().reconcileBinlogServer(ctx, cr)).To(Succeed())
+
+		configSecret := &corev1.Secret{}
+		Eventually(func() bool {
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      binlogserver.ConfigSecretName(cr),
+				Namespace: ns,
+			}, configSecret)
+			return err == nil
+		}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+		var config binlogserver.Configuration
+		Expect(json.Unmarshal(configSecret.Data[binlogserver.ConfigKey], &config)).To(Succeed())
+
+		Expect(config.Connection.Host).To(Equal(fmt.Sprintf("%s.%s", mysql.PrimaryServiceName(cr), ns)))
+	})
+
+	It("should create the binlog server StatefulSet once MySQL is ready", func() {
+		Expect(k8sClient.Get(ctx, crNamespacedName, cr)).To(Succeed())
+
+		cr.Status.MySQL.Ready = 1
+		cr.Status.Host = "pitr-test-haproxy.pitr-test"
+		Expect(k8sClient.Status().Update(ctx, cr)).To(Succeed())
+
+		Expect(k8sClient.Get(ctx, crNamespacedName, cr)).To(Succeed())
+		Expect(reconciler().reconcileBinlogServer(ctx, cr)).To(Succeed())
+
+		sts := &appsv1.StatefulSet{}
+		Eventually(func() bool {
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      binlogserver.Name(cr),
+				Namespace: ns,
+			}, sts)
+			return err == nil
+		}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+		Expect(sts.Spec.Replicas).To(gs.PointTo(BeEquivalentTo(1)))
 	})
 })

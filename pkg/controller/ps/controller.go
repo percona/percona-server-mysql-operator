@@ -1341,7 +1341,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 			File:  "/dev/stdout",
 		},
 		Connection: binlogserver.Connection{
-			Host:           mysql.FQDN(cr, 0),
+			Host:           fmt.Sprintf("%s.%s", mysql.PrimaryServiceName(cr), cr.Namespace),
 			Port:           3306,
 			User:           string(apiv1.UserReplication),
 			Password:       replPass,
