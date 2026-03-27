@@ -1,0 +1,24 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 60
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+
+      run_mysql \
+          "INSERT myDB.myTable (id) VALUES (200500)" \
+          "-h $(get_router_service ${cluster_name})"
+
+      echo '{}' \
+          | yq eval '.apiVersion = "ps.percona.com/v1"' - \
+          | yq eval '.kind = "PerconaServerMySQLBackup"' - \
+          | yq eval '.metadata.name = "pitr-minio-backup-2"' - \
+          | yq eval '.metadata.finalizers[0] = "percona.com/delete-backup"' - \
+          | yq eval ".spec.clusterName = \"${cluster_name}\"" - \
+          | yq eval '.spec.storageName = "minio"' - \
+          | kubectl apply -n "${NAMESPACE}" -f -

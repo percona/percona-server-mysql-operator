@@ -9,7 +9,7 @@ metadata:
   finalizers:
     - percona.com/delete-mysql-pods-in-order
 status:
-  haproxy:
+  router:
     ready: 3
     size: 3
     state: ready

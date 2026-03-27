@@ -19,9 +19,9 @@ status:
     state: ready
   state: ready
 ---
-kind: PerconaServerMySQLRestore
+kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
 metadata:
-  name: pitr-minio-restore
+  name: pitr-minio-backup-2
 status:
   state: Succeeded
