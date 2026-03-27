@@ -99,3 +99,4 @@ spec:
 #            requests:
 #              storage: 2Gi
 #          storageClassName: standard
+#    type: ""

@@ -123,3 +123,61 @@ func TestPerconaServerMySQLBackup_GetContainerOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestDestination_BackupName(t *testing.T) {
+	tests := map[string]struct {
+		dest     BackupDestination
+		expected string
+	}{
+		"s3": {
+			dest:     BackupDestination("s3://bucket/prefix/cluster-2026-03-23-08:40:16-full"),
+			expected: "cluster-2026-03-23-08:40:16-full",
+		},
+		"s3 incremental": {
+			dest:     BackupDestination("s3://bucket/prefix/cluster-2026-03-23-08:40:16-full.incr/cluster-2026-03-23-09:09:47-incr"),
+			expected: "cluster-2026-03-23-09:09:47-incr",
+		},
+		"gcs": {
+			dest:     BackupDestination("gs://bucket/prefix/cluster-2026-03-23-08:40:16-full"),
+			expected: "cluster-2026-03-23-08:40:16-full",
+		},
+		"azure": {
+			dest:     BackupDestination("container/prefix/cluster-2026-03-23-08:40:16-full"),
+			expected: "cluster-2026-03-23-08:40:16-full",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := tt.dest.BackupName()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestDestination_BucketAndPrefix(t *testing.T) {
+	tests := map[string]struct {
+		dest           BackupDestination
+		expectedBucket string
+		expectedPrefix string
+	}{
+		"s3": {
+			dest:           BackupDestination("s3://bucket/prefix/cluster-2026-03-23-08:40:16-full"),
+			expectedBucket: "bucket",
+			expectedPrefix: "prefix/",
+		},
+		"s3 incremental": {
+			dest:           BackupDestination("s3://bucket/prefix/cluster-2026-03-23-08:40:16-full.incr/cluster-2026-03-23-09:09:47-incr"),
+			expectedBucket: "bucket",
+			expectedPrefix: "prefix/cluster-2026-03-23-08:40:16-full.incr/",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			bucket, prefix := tt.dest.BucketAndPrefix()
+			assert.Equal(t, tt.expectedBucket, bucket)
+			assert.Equal(t, tt.expectedPrefix, prefix)
+		})
+	}
+}

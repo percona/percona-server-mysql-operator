@@ -3,13 +3,16 @@ package xtrabackup
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 )
 
@@ -380,8 +383,11 @@ func TestDeleteJob(t *testing.T) {
 func TestRestoreJob(t *testing.T) {
 	const ns = "restore-job-ns"
 	const storageName = "some-storage"
-	const destination = "prefix/destination"
 	const initImage = "init-image"
+
+	destination := DestinationInfo{
+		Base: "destination",
+	}
 
 	cr := readDefaultCluster(t, "cluster", ns)
 	if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
@@ -570,5 +576,154 @@ func TestRestoreJob(t *testing.T) {
 				Value: "/etc/mysql/vault-keyring-secret/keyring_vault.cnf",
 			},
 		}, getEnv())
+	})
+}
+
+func TestGetDestination(t *testing.T) {
+	ts := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+
+	newBackup := func(clusterName string, backupType apiv1.BackupType) *apiv1.PerconaServerMySQLBackup {
+		return &apiv1.PerconaServerMySQLBackup{
+			ObjectMeta: metav1.ObjectMeta{
+				CreationTimestamp: metav1.NewTime(ts),
+			},
+			Spec: apiv1.PerconaServerMySQLBackupSpec{
+				Type:        backupType,
+				ClusterName: clusterName,
+			},
+		}
+	}
+
+	t.Run("s3 full backup", func(t *testing.T) {
+		storage := &apiv1.BackupStorageSpec{
+			Type: apiv1.BackupStorageS3,
+			S3: &apiv1.BackupStorageS3Spec{
+				Bucket: "my-bucket",
+				Prefix: "backups",
+			},
+		}
+		cr := newBackup("my-cluster", apiv1.BackupTypeFull)
+
+		dest, err := GetDestination(storage, cr)
+		require.NoError(t, err)
+		assert.Equal(t, apiv1.BackupDestination("s3://my-bucket/backups/my-cluster-2024-06-15-10:30:00-full"), dest)
+	})
+
+	t.Run("s3 full backup without prefix", func(t *testing.T) {
+		storage := &apiv1.BackupStorageSpec{
+			Type: apiv1.BackupStorageS3,
+			S3: &apiv1.BackupStorageS3Spec{
+				Bucket: "my-bucket",
+			},
+		}
+		cr := newBackup("my-cluster", apiv1.BackupTypeFull)
+
+		dest, err := GetDestination(storage, cr)
+		require.NoError(t, err)
+		assert.Equal(t, apiv1.BackupDestination("s3://my-bucket/my-cluster-2024-06-15-10:30:00-full"), dest)
+	})
+
+	t.Run("gcs full backup", func(t *testing.T) {
+		storage := &apiv1.BackupStorageSpec{
+			Type: apiv1.BackupStorageGCS,
+			GCS: &apiv1.BackupStorageGCSSpec{
+				Bucket: "gcs-bucket",
+				Prefix: "db-backups",
+			},
+		}
+		cr := newBackup("cluster1", apiv1.BackupTypeFull)
+
+		dest, err := GetDestination(storage, cr)
+		require.NoError(t, err)
+		assert.Equal(t, apiv1.BackupDestination("gs://gcs-bucket/db-backups/cluster1-2024-06-15-10:30:00-full"), dest)
+	})
+
+	t.Run("azure full backup", func(t *testing.T) {
+		storage := &apiv1.BackupStorageSpec{
+			Type: apiv1.BackupStorageAzure,
+			Azure: &apiv1.BackupStorageAzureSpec{
+				ContainerName: "my-container",
+				Prefix:        "azure-backups",
+			},
+		}
+		cr := newBackup("cluster1", apiv1.BackupTypeFull)
+
+		dest, err := GetDestination(storage, cr)
+		require.NoError(t, err)
+		assert.Equal(t, apiv1.BackupDestination("my-container/azure-backups/cluster1-2024-06-15-10:30:00-full"), dest)
+	})
+
+	t.Run("unsupported storage type", func(t *testing.T) {
+		storage := &apiv1.BackupStorageSpec{
+			Type: apiv1.BackupStorageType("unsupported"),
+		}
+		cr := newBackup("my-cluster", apiv1.BackupTypeFull)
+
+		_, err := GetDestination(storage, cr)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unsupported")
+	})
+
+	t.Run("incremental backup with prefix", func(t *testing.T) {
+		storage := &apiv1.BackupStorageSpec{
+			Type: apiv1.BackupStorageS3,
+			S3: &apiv1.BackupStorageS3Spec{
+				Bucket: "my-bucket",
+				Prefix: "backups",
+			},
+		}
+		cr := newBackup("my-cluster", apiv1.BackupTypeIncremental)
+		cr.SetAnnotations(map[string]string{
+			string(naming.AnnotationBaseBackupName): "my-cluster-2024-06-14-08:00:00-full",
+		})
+
+		dest, err := GetDestination(storage, cr)
+		require.NoError(t, err)
+		assert.Equal(t, apiv1.BackupDestination("s3://my-bucket/backups/my-cluster-2024-06-14-08:00:00-full.incr/my-cluster-2024-06-15-10:30:00-incr"), dest)
+	})
+
+	t.Run("incremental backup without prefix", func(t *testing.T) {
+		storage := &apiv1.BackupStorageSpec{
+			Type: apiv1.BackupStorageS3,
+			S3: &apiv1.BackupStorageS3Spec{
+				Bucket: "my-bucket",
+			},
+		}
+		cr := newBackup("my-cluster", apiv1.BackupTypeIncremental)
+		cr.SetAnnotations(map[string]string{
+			string(naming.AnnotationBaseBackupName): "my-cluster-2024-06-14-08:00:00-full",
+		})
+
+		dest, err := GetDestination(storage, cr)
+		require.NoError(t, err)
+		assert.Equal(t, apiv1.BackupDestination("s3://my-bucket/my-cluster-2024-06-14-08:00:00-full.incr/my-cluster-2024-06-15-10:30:00-incr"), dest)
+	})
+
+	t.Run("incremental backup missing base label", func(t *testing.T) {
+		storage := &apiv1.BackupStorageSpec{
+			Type: apiv1.BackupStorageS3,
+			S3: &apiv1.BackupStorageS3Spec{
+				Bucket: "my-bucket",
+			},
+		}
+		cr := newBackup("my-cluster", apiv1.BackupTypeIncremental)
+
+		_, err := GetDestination(storage, cr)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "base backup name")
+	})
+
+	t.Run("s3 bucket with embedded prefix", func(t *testing.T) {
+		storage := &apiv1.BackupStorageSpec{
+			Type: apiv1.BackupStorageS3,
+			S3: &apiv1.BackupStorageS3Spec{
+				Bucket: "my-bucket/sub-path",
+			},
+		}
+		cr := newBackup("cluster1", apiv1.BackupTypeFull)
+
+		dest, err := GetDestination(storage, cr)
+		require.NoError(t, err)
+		assert.Equal(t, apiv1.BackupDestination("s3://my-bucket/sub-path/cluster1-2024-06-15-10:30:00-full"), dest)
 	})
 }

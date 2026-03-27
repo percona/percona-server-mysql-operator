@@ -26,11 +26,21 @@ import (
 )
 
 // PerconaServerMySQLBackupSpec defines the desired state of PerconaServerMySQLBackup
+// +kubebuilder:validation:XValidation:rule="!has(self.incrementalBaseBackupName) || self.incrementalBaseBackupName == \"\" || self.type == 'incremental'",message="Invalid configuration: incrementalBaseBackupName is only allowed for incremental backups"
 type PerconaServerMySQLBackupSpec struct {
+	// +kubebuilder:validation:Enum=full;incremental
+	// +kubebuilder:default:=full
+	Type             BackupType              `json:"type,omitempty"`
 	ClusterName      string                  `json:"clusterName"`
 	StorageName      string                  `json:"storageName"`
 	SourcePod        string                  `json:"sourcePod,omitempty"`
 	ContainerOptions *BackupContainerOptions `json:"containerOptions,omitempty"`
+
+	// Name of the base (full) backup for incremental backups
+	// Only used for incremental backups
+	// When set, the incremental backup will be deleted if the base backup is deleted
+	// If unset, uses the latest full backup as the base.
+	IncrementalBaseBackupName *string `json:"incrementalBaseBackupName,omitempty"`
 }
 
 type BackupState string
@@ -47,8 +57,16 @@ const (
 	BackupFailed BackupState = "Failed"
 )
 
+type BackupType string
+
+const (
+	BackupTypeFull        BackupType = "full"
+	BackupTypeIncremental BackupType = "incremental"
+)
+
 // PerconaServerMySQLBackupStatus defines the observed state of PerconaServerMySQLBackup
 type PerconaServerMySQLBackupStatus struct {
+	Type         BackupType         `json:"type,omitempty"`
 	State        BackupState        `json:"state,omitempty"`
 	StateDesc    string             `json:"stateDescription,omitempty"`
 	Destination  BackupDestination  `json:"destination,omitempty"`
@@ -71,6 +89,36 @@ func (dest *BackupDestination) set(value string) {
 		return
 	}
 	*dest = BackupDestination(value)
+}
+
+func (dest *BackupDestination) IsIncremental() bool {
+	return strings.Contains(dest.String(), ".incr")
+}
+
+// IncrementalBaseDestination returns the full destination of the base (full) backup for an incremental backup.
+// For example, given "s3://bucket/prefix/weekly-full-1.incr/2026-03-17T000000",
+// it returns "s3://bucket/prefix/weekly-full-1".
+// Returns the destination unchanged if it's not incremental.
+func (dest *BackupDestination) IncrementalBaseDestination() BackupDestination {
+	s := dest.String()
+	idx := strings.Index(s, ".incr")
+	if idx == -1 {
+		return *dest
+	}
+	return BackupDestination(s[:idx])
+}
+
+// IncrementalsDir returns the ".incr/" directory prefix used to list all incremental backups
+// for a given base backup. For example, given "s3://bucket/prefix/weekly-full-1.incr/2026-03-17T000000",
+// it returns "s3://bucket/prefix/weekly-full-1.incr/".
+// Returns empty string if the destination is not incremental.
+func (dest *BackupDestination) IncrementalsDir() string {
+	s := dest.String()
+	idx := strings.Index(s, ".incr")
+	if idx == -1 {
+		return ""
+	}
+	return s[:idx] + ".incr/"
 }
 
 func (dest *BackupDestination) SetGCSDestination(bucket, backupName string) {
@@ -129,6 +177,7 @@ func (dest *BackupDestination) BackupName() string {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Type",type=string,JSONPath=".status.type"
 // +kubebuilder:printcolumn:name="Storage",type=string,JSONPath=".spec.storageName"
 // +kubebuilder:printcolumn:name="Destination",type=string,JSONPath=".status.destination"
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state"
@@ -153,6 +202,13 @@ func (b *PerconaServerMySQLBackup) GetContainerOptions(storage *BackupStorageSpe
 		return storage.ContainerOptions
 	}
 	return nil
+}
+
+func (b *PerconaServerMySQLBackup) GetType() BackupType {
+	if b.Status.Type == "" {
+		return BackupTypeFull
+	}
+	return b.Status.Type
 }
 
 //+kubebuilder:object:root=true
@@ -187,4 +243,13 @@ func (b *PerconaServerMySQLBackup) Hash() string {
 	}
 
 	return hash
+}
+
+func (s *PerconaServerMySQLBackupStatus) Equals(other *PerconaServerMySQLBackupStatus) bool {
+	return s.Type == other.Type &&
+		s.State == other.State &&
+		s.StateDesc == other.StateDesc &&
+		s.Destination == other.Destination &&
+		s.Image == other.Image &&
+		s.BackupSource == other.BackupSource
 }

@@ -44,6 +44,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
+	k8sutil "github.com/percona/percona-server-mysql-operator/pkg/util/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 	xbstorage "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 )
@@ -99,7 +100,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	status := cr.Status
 
 	defer func() {
-		if status.State == cr.Status.State && status.Destination == cr.Status.Destination {
+		if status.Equals(&cr.Status) {
 			return
 		}
 		if status.State != cr.Status.State && status.StateDesc == cr.Status.StateDesc {
@@ -158,17 +159,24 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, nil
 	}
 
-	backupSource, err := r.getBackupSource(ctx, cr, cluster)
-	if err != nil {
-		status.State = apiv1.BackupError
-		status.StateDesc = fmt.Sprintf("failed to get the source host for backup: %v", err)
-		return rr, nil
-	}
-
 	if cluster.Status.MySQL.State != apiv1.StateReady {
 		log.Info("Cluster is not ready", "cluster", cr.Name)
 		status.State = apiv1.BackupNew
 		status.StateDesc = "cluster is not ready"
+		return rr, nil
+	}
+
+	// Set annotations on incremental backups.
+	if err := r.setIncrementalBaseAnnotations(ctx, cr, storage); err != nil {
+		status.State = apiv1.BackupError
+		status.StateDesc = "failed to set incremental base annotations: " + err.Error()
+		return rr, nil
+	}
+
+	backupSource, err := r.getBackupSource(ctx, cr, cluster)
+	if err != nil {
+		status.State = apiv1.BackupError
+		status.StateDesc = fmt.Sprintf("failed to get the source host for backup: %v", err)
 		return rr, nil
 	}
 
@@ -180,6 +188,19 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	if k8serrors.IsNotFound(err) {
+		// Set an incremental LSN for incremental backups.
+		var incrementalLsn string
+		if cr.Spec.Type == apiv1.BackupTypeIncremental {
+			lsn, err := r.getLastBackupLSN(ctx, cluster.Name, backupSource)
+			if err != nil {
+				status.State = apiv1.BackupError
+				status.StateDesc = "failed to get LSN from previous backup: " + err.Error()
+				return rr, errors.Wrap(err, "get last backup LSN")
+			}
+			incrementalLsn = lsn
+			log.Info("Using LSN from last backup", "lsn", lsn)
+		}
+
 		if err := r.prepareStatus(cr, cluster, storage, &status, backupSource); err != nil {
 			status.State = apiv1.BackupError
 			status.StateDesc = "failed to prepare backup job: " + err.Error()
@@ -198,7 +219,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		}
 
 		log.Info("Creating backup job", "jobName", nn.Name)
-		if err := r.createBackupJob(ctx, cr, cluster, storage, status.Destination, backupSource); err != nil {
+		if err := r.createBackupJob(ctx, cr, cluster, storage, status.Destination, backupSource, incrementalLsn); err != nil {
 			return rr, errors.Wrap(err, "failed to create backup job")
 		}
 
@@ -299,7 +320,7 @@ func (r *PerconaServerMySQLBackupReconciler) prepareStatus(
 	status *apiv1.PerconaServerMySQLBackupStatus,
 	backupSource string,
 ) error {
-	destination, err := xtrabackup.GetDestination(storage, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
+	destination, err := xtrabackup.GetDestination(storage, cr)
 	if err != nil {
 		return errors.Wrap(err, "get backup destination")
 	}
@@ -308,6 +329,7 @@ func (r *PerconaServerMySQLBackupReconciler) prepareStatus(
 	status.Image = cluster.Spec.Backup.Image
 	status.Storage = storage
 	status.BackupSource = backupSource
+	status.Type = cr.Spec.Type
 	return nil
 }
 
@@ -318,6 +340,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 	storage *apiv1.BackupStorageSpec,
 	destination apiv1.BackupDestination,
 	backupSource string,
+	incrementalLsn string,
 ) error {
 	initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
 	if err != nil {
@@ -391,6 +414,12 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 
 	if err := xtrabackup.SetSourceNode(job, backupSource); err != nil {
 		return errors.Wrap(err, "set backup source node")
+	}
+
+	if incrementalLsn != "" {
+		if err := xtrabackup.SetIncrementalLsn(job, incrementalLsn); err != nil {
+			return errors.Wrap(err, "set incremental LSN")
+		}
 	}
 
 	if err := controllerutil.SetControllerReference(cr, job, r.Scheme); err != nil {
@@ -555,6 +584,51 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 	return nil
 }
 
+// canDeleteIncrBackup checks if the incremental backup can be deleted.
+// An incremental backup can be deleted ONLY if it is the latest one in the chain.
+// This is done to prevent deleting from the middle of a chain, which would make the entire chain unusable.
+func (r *PerconaServerMySQLBackupReconciler) canDeleteIncrBackup(
+	ctx context.Context,
+	backup *apiv1.PerconaServerMySQLBackup,
+) (bool, error) {
+	if backup.Status.Type != apiv1.BackupTypeIncremental {
+		return true, nil
+	}
+
+	latestIncrementalBackup, err := k8sutil.GetLatestIncrementalBackupInChain(ctx, r.Client, backup)
+	if err != nil {
+		return false, errors.Wrap(err, "get latest incremental backup in chain")
+	}
+	return latestIncrementalBackup.GetName() == backup.GetName(), nil
+}
+
+func (r *PerconaServerMySQLBackupReconciler) deleteIncrementalChain(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLBackup,
+) (bool, error) {
+	if cr.GetType() == apiv1.BackupTypeIncremental {
+		return true, nil
+	}
+
+	backups, err := k8sutil.ListIncrementalBackupsInChain(ctx, r.Client, cr)
+	if err != nil {
+		return false, errors.Wrap(err, "list incremental backups in chain")
+	}
+	if len(backups) == 0 {
+		return true, nil
+	}
+
+	for _, b := range backups {
+		if !b.GetDeletionTimestamp().IsZero() {
+			continue
+		}
+		if err := r.Delete(ctx, b); err != nil {
+			return false, errors.Wrap(err, "delete backup")
+		}
+	}
+	return false, nil
+}
+
 func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) (bool, error) {
 	if cr.Status.State != apiv1.BackupSucceeded {
 		return true, nil
@@ -562,6 +636,20 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 
 	log := logf.FromContext(ctx)
 	log.Info("Deleting backup")
+
+	if can, err := r.canDeleteIncrBackup(ctx, cr); err != nil {
+		return false, errors.Wrap(err, "failed to check if can delete incremental backup")
+	} else if !can {
+		log.Info("Cannot delete incremental backup which is in middle of the chain")
+		return false, nil
+	}
+
+	if ok, err := r.deleteIncrementalChain(ctx, cr); err != nil {
+		return false, errors.Wrap(err, "failed to delete incremental chain")
+	} else if !ok {
+		log.Info("Awaiting deletion of incremental backup chain")
+		return false, nil
+	}
 
 	backupConf, err := xtrabackup.GetBackupConfig(ctx, r.Client, cr)
 	if err != nil {
@@ -641,4 +729,95 @@ func getBackupSourcePod(ctx context.Context, cl client.Client, namespace, src st
 	}
 
 	return pod, nil
+}
+
+func (r *PerconaServerMySQLBackupReconciler) getLastBackupLSN(
+	ctx context.Context,
+	clusterName string,
+	backupSource string,
+) (string, error) {
+	lastBackup, err := k8sutil.GetLastSuccessfulBackup(ctx, r.Client, clusterName)
+	if err != nil {
+		return "", errors.Wrap(err, "get last successful backup")
+	}
+
+	req, err := xtrabackup.GetBackupConfig(ctx, r.Client, lastBackup)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create sidecar backup config")
+	}
+
+	sc := r.NewSidecarClient(backupSource)
+	info, err := sc.GetCheckpointInfo(ctx, *req)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get checkpoint info")
+	}
+
+	if info.ToLSN == "" {
+		return "", errors.New("to_lsn is empty")
+	}
+
+	return info.ToLSN, nil
+}
+
+func (r *PerconaServerMySQLBackupReconciler) getIncrementalBaseBackup(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) (*apiv1.PerconaServerMySQLBackup, error) {
+	if cr.Spec.IncrementalBaseBackupName != nil && *cr.Spec.IncrementalBaseBackupName != "" {
+		backup := &apiv1.PerconaServerMySQLBackup{}
+		nn := types.NamespacedName{Name: *cr.Spec.IncrementalBaseBackupName, Namespace: cr.Namespace}
+		if err := r.Get(ctx, nn, backup); err != nil {
+			return nil, errors.Wrapf(err, "get backup %s", nn)
+		}
+		return backup, nil
+	}
+	lastFullBackup, err := k8sutil.GetLastFullBackup(ctx, r.Client, cr.Spec.ClusterName)
+	if err != nil {
+		return nil, errors.Wrap(err, "get last full backup")
+	}
+	return lastFullBackup, nil
+}
+
+func (r *PerconaServerMySQLBackupReconciler) setIncrementalBaseAnnotations(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLBackup,
+	storage *apiv1.BackupStorageSpec,
+) error {
+	if cr.Spec.Type != apiv1.BackupTypeIncremental {
+		return nil
+	}
+
+	annots := cr.GetAnnotations()
+	if annots == nil {
+		annots = make(map[string]string)
+	}
+
+	if _, ok := annots[string(naming.AnnotationBaseBackupName)]; ok {
+		return nil
+	}
+
+	baseBackup, err := r.getIncrementalBaseBackup(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "get incremental base backup")
+	}
+	if baseBackup.Status.State != apiv1.BackupSucceeded {
+		return errors.New("base backup is not succeeded")
+	}
+	if !storage.Equals(baseBackup.Status.Storage) {
+		return errors.New("base backup has different storage than the incremental backup")
+	}
+
+	if err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
+		backup := &apiv1.PerconaServerMySQLBackup{}
+		if err := r.Get(ctx, client.ObjectKeyFromObject(cr), backup); err != nil {
+			return errors.Wrap(err, "get backup")
+		}
+		annots := backup.GetAnnotations()
+		if annots == nil {
+			annots = make(map[string]string)
+		}
+		annots[string(naming.AnnotationBaseBackupName)] = baseBackup.Status.Destination.BackupName()
+		backup.SetAnnotations(annots)
+		return r.Update(ctx, backup)
+	}); err != nil {
+		return errors.Wrap(err, "update backup")
+	}
+	return nil
 }

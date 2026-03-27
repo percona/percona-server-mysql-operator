@@ -317,6 +317,9 @@ type BackupSchedule struct {
 	Keep     int    `json:"keep,omitempty"`
 	// +kubebuilder:validation:Required
 	StorageName string `json:"storageName,omitempty"`
+	// +kubebuilder:validation:Enum=full;incremental
+	// +kubebuilder:default:=full
+	Type BackupType `json:"type,omitempty"`
 }
 
 func (s *BackupSpec) GetInitSpec(cr *PerconaServerMySQL) InitContainerSpec {
@@ -774,6 +777,12 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 				if err != nil {
 					return errors.Wrap(err, "invalid schedule format")
 				}
+			}
+		}
+
+		for i, sch := range cr.Spec.Backup.Schedule {
+			if sch.Type == "" {
+				cr.Spec.Backup.Schedule[i].Type = BackupTypeFull
 			}
 		}
 	}
@@ -1259,3 +1268,71 @@ const (
 	UpgradeStrategyRecommended = "recommended"
 	UpgradeStrategyLatest      = "latest"
 )
+
+func (s *BackupStorageSpec) Equals(other *BackupStorageSpec) bool {
+	if s == nil || other == nil {
+		return false
+	}
+	if s.Type != other.Type {
+		return false
+	}
+
+	switch s.Type {
+	case BackupStorageS3:
+		return s.S3.Equals(other.S3)
+	case BackupStorageGCS:
+		return s.GCS.Equals(other.GCS)
+	case BackupStorageAzure:
+		return s.Azure.Equals(other.Azure)
+	default:
+		return false
+	}
+}
+
+func (s *BackupStorageS3Spec) Equals(other *BackupStorageS3Spec) bool {
+	if s.Bucket != other.Bucket {
+		return false
+	}
+	if s.Prefix != other.Prefix {
+		return false
+	}
+	if s.Region != other.Region {
+		return false
+	}
+	if s.EndpointURL != other.EndpointURL {
+		return false
+	}
+	return true
+}
+
+func (s *BackupStorageGCSSpec) Equals(other *BackupStorageGCSSpec) bool {
+	if s.Bucket != other.Bucket {
+		return false
+	}
+	if s.Prefix != other.Prefix {
+		return false
+	}
+	if s.EndpointURL != other.EndpointURL {
+		return false
+	}
+	if s.StorageClass != other.StorageClass {
+		return false
+	}
+	return true
+}
+
+func (s *BackupStorageAzureSpec) Equals(other *BackupStorageAzureSpec) bool {
+	if s.ContainerName != other.ContainerName {
+		return false
+	}
+	if s.Prefix != other.Prefix {
+		return false
+	}
+	if s.EndpointURL != other.EndpointURL {
+		return false
+	}
+	if s.StorageClass != other.StorageClass {
+		return false
+	}
+	return true
+}
