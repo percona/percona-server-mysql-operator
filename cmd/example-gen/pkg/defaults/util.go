@@ -36,13 +36,22 @@ func resources(requestsMemory, requestsCPU, limitsMemory, limitsCPU string) core
 	return r
 }
 
-func envList(name, value string) []corev1.EnvVar {
-	return []corev1.EnvVar{
+func envList(name, value string, pairs ...string) []corev1.EnvVar {
+	envs := []corev1.EnvVar{
 		{
 			Name:  name,
 			Value: value,
 		},
 	}
+
+	for i := 0; i+1 < len(pairs); i += 2 {
+		envs = append(envs, corev1.EnvVar{
+			Name:  pairs[i],
+			Value: pairs[i+1],
+		})
+	}
+
+	return envs
 }
 
 func envFromList(name string) []corev1.EnvFromSource {

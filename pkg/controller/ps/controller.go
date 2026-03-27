@@ -1527,8 +1527,38 @@ func (r *PerconaServerMySQLReconciler) stopAsyncReplication(ctx context.Context,
 	return errors.Wrap(g.Wait(), "stop replication on replicas")
 }
 
+func asyncSourceEnvValues(cr *apiv1.PerconaServerMySQL) (uint32, uint32, error) {
+	sourceRetryCount := mysql.DefaultAsyncSourceRetryCount
+	sourceConnectRetry := mysql.DefaultAsyncSourceConnectRetry
+	var err error
+	for _, env := range cr.Spec.MySQL.Env {
+		switch env.Name {
+		case naming.EnvAsyncSourceRetryCount:
+			sourceRetryCount, err = strconv.Atoi(env.Value)
+		case naming.EnvAsyncSourceConnectRetry:
+			sourceConnectRetry, err = strconv.Atoi(env.Value)
+		}
+		if err != nil {
+			return 0, 0, errors.Wrapf(err, "failed to parse %s env var", env.Name)
+		}
+	}
+
+	if sourceRetryCount < 0 {
+		return 0, 0, errors.Errorf("%s should be a positive value", naming.EnvAsyncSourceRetryCount)
+	}
+	if sourceConnectRetry < 0 {
+		return 0, 0, errors.Errorf("%s should be a positive value", naming.EnvAsyncSourceConnectRetry)
+	}
+
+	return uint32(sourceRetryCount), uint32(sourceConnectRetry), nil
+}
+
 func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context, cr *apiv1.PerconaServerMySQL, replicaPass string, primary *orchestrator.Instance) error {
 	log := logf.FromContext(ctx).WithName("startAsyncReplication")
+	sourceRetryCount, sourceConnectRetry, err := asyncSourceEnvValues(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse env vars")
+	}
 
 	orcPod, err := getReadyOrcPod(ctx, r.Client, cr)
 	if err != nil {
@@ -1556,7 +1586,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 			um := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, hostname)
 
 			log.V(1).Info("Change replication source", "primary", primary.Key.Hostname, "replica", hostname)
-			if err := um.ChangeReplicationSource(ctx, primary.Key.Hostname, replicaPass, primary.Key.Port); err != nil {
+			if err := um.ChangeReplicationSource(ctx, primary.Key.Hostname, replicaPass, primary.Key.Port, sourceRetryCount, sourceConnectRetry); err != nil {
 				return errors.Wrapf(err, "change replication source on %s", hostname)
 			}
 
