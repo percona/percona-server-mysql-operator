@@ -20,6 +20,8 @@ gr-data-at-rest-encryption,8.4
 gr-demand-backup-minio,8.4
 gr-demand-backup-cloud,8.4
 gr-demand-backup-haproxy,8.4
+gr-demand-backup-incremental,8.0
+gr-demand-backup-incremental,8.4
 gr-finalizer,8.4
 gr-haproxy,8.0
 gr-haproxy,8.4

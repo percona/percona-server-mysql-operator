@@ -14,6 +14,7 @@ gr-data-at-rest-encryption
 gr-demand-backup-minio
 gr-demand-backup-cloud
 gr-demand-backup-haproxy
+gr-demand-backup-incremental
 gr-finalizer
 gr-haproxy
 gr-ignore-annotations
