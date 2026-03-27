@@ -1,0 +1,37 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 600
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      primary_before=$(get_primary_from_label)
+
+      kubectl -n "${NAMESPACE}" delete pod "${primary_before}"
+
+      wait_cluster_consistency_gr "${cluster_name}" 3 3
+
+      primary_after=$(get_primary_from_label)
+
+      if [[ "${primary_before}" == "${primary_after}" ]]; then
+          echo "Primary pod did not change after failover: was ${primary_before}, still ${primary_after}"
+          exit 1
+      fi
+      echo "Primary changed from ${primary_before} to ${primary_after}"
+
+      retry=0
+      until [[ "$(kubectl -n "${NAMESPACE}" get endpoints "${cluster_name}-mysql-primary" \
+          -o jsonpath='{.subsets[0].addresses[0].targetRef.name}' 2>/dev/null)" == "${primary_after}" ]]; do
+          sleep 5
+          retry=$((retry + 1))
+          if [ $retry -ge 24 ]; then
+              echo "Primary service endpoint did not update to ${primary_after} after 2 minutes"
+              kubectl -n "${NAMESPACE}" get endpoints "${cluster_name}-mysql-primary" -o yaml
+              exit 1
+          fi
+      done
+      echo "Primary service endpoint correctly points to new primary: ${primary_after}"
