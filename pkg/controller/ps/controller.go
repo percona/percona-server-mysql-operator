@@ -21,6 +21,8 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -1289,11 +1291,6 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 
 	logger := logf.FromContext(ctx)
 
-	if len(cr.Status.Host) == 0 {
-		logger.V(1).Info("Waiting for .status.host to be populated")
-		return nil
-	}
-
 	s3 := cr.Spec.Backup.PiTR.BinlogServer.Storage.S3
 
 	if s3 == nil || len(s3.CredentialsSecret) == 0 {
@@ -1314,9 +1311,9 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 	accessKey := s3Secret.Data[secret.CredentialsAWSAccessKey]
 	secretKey := s3Secret.Data[secret.CredentialsAWSSecretKey]
 
-	s3Uri := fmt.Sprintf("s3://%s:%s@%s.%s", accessKey, secretKey, s3.Bucket, s3.Region)
-	if len(s3.Prefix) > 0 {
-		s3Uri += fmt.Sprintf("/%s", s3.Prefix)
+	s3Uri, err := s3URI(*s3, accessKey, secretKey)
+	if err != nil {
+		return errors.Wrap(err, "get s3 uri")
 	}
 
 	replPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserReplication)
@@ -1340,20 +1337,36 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 			File:  "/dev/stdout",
 		},
 		Connection: binlogserver.Connection{
-			Host:           mysql.FQDN(cr, 0),
+			Host:           fmt.Sprintf("%s.%s", mysql.PrimaryServiceName(cr), cr.Namespace),
 			Port:           3306,
 			User:           string(apiv1.UserReplication),
 			Password:       replPass,
 			ConnectTimeout: cr.Spec.Backup.PiTR.BinlogServer.ConnectTimeout,
 			WriteTimeout:   cr.Spec.Backup.PiTR.BinlogServer.WriteTimeout,
 			ReadTimeout:    cr.Spec.Backup.PiTR.BinlogServer.ReadTimeout,
+			SSL: &binlogserver.ConnectionSSL{
+				Mode: "verify_identity",
+				CA:   path.Join(binlogserver.TLSMountPath, "ca.crt"),
+				Cert: path.Join(binlogserver.TLSMountPath, "tls.crt"),
+				Key:  path.Join(binlogserver.TLSMountPath, "tls.key"),
+			},
 		},
 		Replication: binlogserver.Replication{
-			ServerID: cr.Spec.Backup.PiTR.BinlogServer.ServerID,
-			IdleTime: cr.Spec.Backup.PiTR.BinlogServer.IdleTime,
+			Mode:           binlogserver.ReplicationModeGTID,
+			ServerID:       cr.Spec.Backup.PiTR.BinlogServer.ServerID,
+			IdleTime:       cr.Spec.Backup.PiTR.BinlogServer.IdleTime,
+			VerifyChecksum: true,
+			Rewrite: binlogserver.Rewrite{
+				BaseFileName: "binlog",
+				FileSize:     "128M",
+			},
 		},
 		Storage: binlogserver.Storage{
-			URI: s3Uri,
+			Backend:            "s3",
+			URI:                s3Uri,
+			CheckpointSize:     "2M",
+			CheckpointInterval: "30s",
+			FsBufferDirectory:  binlogserver.BufferMountPath,
 		},
 	}
 
@@ -1367,6 +1380,16 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 		return errors.Wrap(err, "reconcile secret")
 	}
 
+	if cr.Status.MySQL.Ready < 1 {
+		logger.V(1).Info("Waiting for at least one MySQL pod to be ready")
+		return nil
+	}
+
+	if len(cr.Status.Host) == 0 {
+		logger.V(1).Info("Waiting for .status.host to be populated")
+		return nil
+	}
+
 	initImage, err := k8s.InitImage(ctx, r.Client, cr, &cr.Spec.Backup.PiTR.BinlogServer.PodSpec)
 	if err != nil {
 		return errors.Wrap(err, "get init image")
@@ -1375,6 +1398,42 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, binlogserver.StatefulSet(cr, initImage, fmt.Sprintf("%x", md5.Sum(configBytes))), r.Scheme)
 	if err != nil {
 		return errors.Wrap(err, "reconcile statefulset")
+	}
+
+	return nil
+}
+
+// parseEndpointURL extracts the protocol and host from an endpoint URL.
+// Expected formats: "s3://s3.amazonaws.com", "https://minio-service:9000"
+func parseEndpointURL(endpointURL string) (protocol, host string, err error) {
+	idx := strings.Index(endpointURL, "://")
+	if idx < 0 {
+		return "", "", fmt.Errorf("endpoint URL %q must include protocol (e.g. s3://... or https://...)", endpointURL)
+	}
+	return endpointURL[:idx], endpointURL[idx+3:], nil
+}
+
+func (r *PerconaServerMySQLReconciler) cleanupBinlogServer(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
+	if cr.Spec.Backup.PiTR.Enabled {
+		return nil
+	}
+
+	if err := r.Delete(ctx, &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      binlogserver.Name(cr),
+			Namespace: cr.Namespace,
+		},
+	}); err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to delete binlog server statefulset")
+	}
+
+	if err := r.Delete(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      binlogserver.ConfigSecretName(cr),
+			Namespace: cr.Namespace,
+		},
+	}); err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "failed to delete binlog server config secret")
 	}
 
 	return nil
@@ -1391,6 +1450,10 @@ func (r *PerconaServerMySQLReconciler) cleanupOutdated(ctx context.Context, cr *
 
 	if err := r.cleanupProxies(ctx, cr); err != nil {
 		return errors.Wrap(err, "cleanup proxies")
+	}
+
+	if err := r.cleanupBinlogServer(ctx, cr); err != nil {
+		return errors.Wrap(err, "cleanup binlog server")
 	}
 
 	return nil
@@ -1629,4 +1692,26 @@ func getPodIndexFromHostname(hostname string) (int, error) {
 	}
 
 	return idx, nil
+}
+
+func s3URI(s3 apiv1.BackupStorageS3Spec, accessKey, secretKey []byte) (string, error) {
+	bucket := string(s3.Bucket)
+	if len(s3.Region) > 0 {
+		bucket = fmt.Sprintf("%s.%s", s3.Bucket, s3.Region)
+	}
+	encodedAccessKey := url.QueryEscape(string(accessKey))
+	encodedSecretKey := url.QueryEscape(string(secretKey))
+	uri := fmt.Sprintf("s3://%s:%s@%s", encodedAccessKey, encodedSecretKey, bucket)
+	if len(s3.EndpointURL) != 0 {
+		protocol, host, err := parseEndpointURL(s3.EndpointURL)
+		if err != nil {
+			return "", errors.Wrap(err, "parse endpoint URL")
+		}
+		uri = fmt.Sprintf("%s://%s:%s@%s/%s", protocol, encodedAccessKey, encodedSecretKey, host, s3.Bucket)
+	}
+	if len(s3.Prefix) > 0 {
+		uri += fmt.Sprintf("/%s", s3.Prefix)
+	}
+
+	return uri, nil
 }

@@ -18,7 +18,9 @@ package psrestore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,13 +36,17 @@ import (
 	k8sretry "k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
+	"github.com/percona/percona-server-mysql-operator/pkg/pitr"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
@@ -52,6 +58,7 @@ type PerconaServerMySQLRestoreReconciler struct {
 	client.Client
 	Scheme           *runtime.Scheme
 	ServerVersion    *platform.ServerVersion
+	ClientCmd        clientcmd.Client
 	NewStorageClient storage.NewClientFunc
 
 	sm sync.Map
@@ -74,7 +81,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	log := logf.FromContext(ctx).WithName("PerconaServerMySQLRestore").WithValues("name", req.Name, "namespace", req.Namespace)
 
 	cr := &apiv1.PerconaServerMySQLRestore{}
-	err := r.Client.Get(ctx, req.NamespacedName, cr)
+	err := r.Get(ctx, req.NamespacedName, cr)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "get CR %s", req.NamespacedName)
 	}
@@ -95,18 +102,18 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		}
 		err := k8sretry.OnError(k8sretry.DefaultRetry, retriable, func() error {
 			cr := &apiv1.PerconaServerMySQLRestore{}
-			if err := r.Client.Get(ctx, req.NamespacedName, cr); err != nil {
-				return errors.Wrapf(err, "get %v", req.NamespacedName.String())
+			if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
+				return errors.Wrapf(err, "get %v", req.String())
 			}
 
 			cr.Status = status
 			log.Info("Updating status", "state", cr.Status.State)
-			if err := r.Client.Status().Update(ctx, cr); err != nil {
+			if err := r.Status().Update(ctx, cr); err != nil {
 				return errors.Wrap(err, "update status")
 			}
 
-			if err := r.Client.Get(ctx, req.NamespacedName, cr); err != nil {
-				return errors.Wrapf(err, "get %v", req.NamespacedName.String())
+			if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
+				return errors.Wrapf(err, "get %v", req.String())
 			}
 			if cr.Status.State != status.State {
 				return errors.Errorf("status %s was not updated to %s", cr.Status.State, status.State)
@@ -128,7 +135,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 
 	cluster := &apiv1.PerconaServerMySQL{}
 	nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
-	if err := r.Client.Get(ctx, nn, cluster); err != nil {
+	if err := r.Get(ctx, nn, cluster); err != nil {
 		if k8serrors.IsNotFound(err) {
 			status.State = apiv1.RestoreError
 			status.StateDesc = fmt.Sprintf("PerconaServerMySQL %s in namespace %s is not found", cr.Spec.ClusterName, cr.Namespace)
@@ -173,6 +180,15 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 	defer r.sm.Delete(cr.Spec.ClusterName)
 
+	if cr.Spec.PITR != nil {
+		status.State = apiv1.RestoreStarting
+		if err := r.reconcilePITRConfig(ctx, cr, cluster); err != nil {
+			status.StateDesc = errors.Wrap(err, "reconcile pitr config").Error()
+			return ctrl.Result{}, errors.Wrap(err, "reconcile pitr config")
+		}
+		status.StateDesc = ""
+	}
+
 	log.Info("Pausing cluster", "cluster", cluster.Name)
 	if err := r.pauseCluster(ctx, cluster); err != nil {
 		if errors.Is(err, ErrWaitingTermination) {
@@ -190,7 +206,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 
 	job := &batchv1.Job{}
 	nn = types.NamespacedName{Name: xtrabackup.RestoreJobName(cluster, cr), Namespace: req.Namespace}
-	err = r.Client.Get(ctx, nn, job)
+	err = r.Get(ctx, nn, job)
 	if client.IgnoreNotFound(err) != nil {
 		return ctrl.Result{}, errors.Wrapf(err, "get job %s", nn)
 	}
@@ -232,7 +248,15 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			case batchv1.JobFailed:
 				status.State = apiv1.RestoreFailed
 			case batchv1.JobComplete:
-				status.State = apiv1.RestoreSucceeded
+				if cr.Spec.PITR != nil {
+					pitrState, err := r.reconcilePITRJob(ctx, cr, cluster)
+					if err != nil {
+						return ctrl.Result{}, errors.Wrap(err, "reconcile pitr job")
+					}
+					status.State = pitrState
+				} else {
+					status.State = apiv1.RestoreSucceeded
+				}
 			}
 		}
 	case apiv1.RestoreFailed, apiv1.RestoreSucceeded:
@@ -256,6 +280,133 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	return ctrl.Result{}, nil
 }
 
+func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRConfig(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLRestore,
+	cluster *apiv1.PerconaServerMySQL,
+) error {
+	cm := pitr.BinlogsConfigMap(cluster, cr)
+	if err := r.Get(ctx, client.ObjectKeyFromObject(cm), new(corev1.ConfigMap)); err == nil {
+		return nil
+	}
+
+	binlogs, err := r.searchBinlogs(ctx, cr, cluster)
+	if err != nil {
+		return errors.Wrap(err, "search binlogs")
+	}
+	if len(binlogs) == 0 {
+		return errors.New("no binlogs found for the given PITR target")
+	}
+
+	data, err := json.Marshal(binlogs)
+	if err != nil {
+		return errors.Wrap(err, "marshal binlog entries")
+	}
+
+	cm.Data = make(map[string]string)
+	cm.Data[pitr.BinlogsConfigKey] = string(data)
+
+	if err := controllerutil.SetControllerReference(cr, cm, r.Scheme); err != nil {
+		return errors.Wrapf(err, "set controller reference to ConfigMap %s/%s", cm.Namespace, cm.Name)
+	}
+	if err := r.Create(ctx, cm); err != nil {
+		return errors.Wrapf(err, "create binlogs configmap %s/%s", cm.Namespace, cm.Name)
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRJob(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLRestore,
+	cluster *apiv1.PerconaServerMySQL,
+) (apiv1.RestoreState, error) {
+	log := logf.FromContext(ctx)
+
+	pitrJob := &batchv1.Job{}
+	nn := types.NamespacedName{Name: pitr.JobName(cr), Namespace: cr.Namespace}
+	err := r.Get(ctx, nn, pitrJob)
+	if err != nil {
+		if !k8serrors.IsNotFound(err) {
+			return "", errors.Wrapf(err, "get pitr job %s", nn)
+		}
+
+		log.Info("Creating PITR restore job", "jobName", nn.Name)
+
+		bcp, err := getBackup(ctx, r.Client, cr, cluster)
+		if err != nil {
+			return "", errors.Wrap(err, "get backup")
+		}
+
+		initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
+		if err != nil {
+			return "", errors.Wrap(err, "get operator image")
+		}
+
+		job := pitr.RestoreJob(cluster, cr, bcp.Status.Storage, initImage)
+		if err := controllerutil.SetControllerReference(cr, job, r.Scheme); err != nil {
+			return "", errors.Wrapf(err, "set controller reference to Job %s/%s", job.Namespace, job.Name)
+		}
+
+		if err := r.Create(ctx, job); err != nil {
+			return "", errors.Wrapf(err, "create pitr job %s/%s", job.Namespace, job.Name)
+		}
+
+		return apiv1.RestoreRunning, nil
+	}
+
+	if pitrJob.Status.Active > 0 {
+		return apiv1.RestoreRunning, nil
+	}
+
+	for _, cond := range pitrJob.Status.Conditions {
+		if cond.Status != corev1.ConditionTrue {
+			continue
+		}
+
+		switch cond.Type {
+		case batchv1.JobFailed:
+			return apiv1.RestoreFailed, nil
+		case batchv1.JobComplete:
+			return apiv1.RestoreSucceeded, nil
+		}
+	}
+
+	return apiv1.RestoreRunning, nil
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) searchBinlogs(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLRestore,
+	cluster *apiv1.PerconaServerMySQL,
+) ([]binlogserver.BinlogEntry, error) {
+	if cr.Spec.PITR == nil {
+		return nil, errors.New("pitr spec is not set")
+	}
+
+	var resp *binlogserver.SearchResponse
+	var err error
+
+	switch cr.Spec.PITR.Type {
+	case apiv1.PITRDate:
+		ts := strings.Replace(cr.Spec.PITR.Date, " ", "T", 1)
+		resp, err = binlogserver.SearchByTimestamp(ctx, r.Client, r.ClientCmd, cluster, ts)
+	case apiv1.PITRGtid:
+		resp, err = binlogserver.SearchByGTID(ctx, r.Client, r.ClientCmd, cluster, cr.Spec.PITR.GTID)
+	default:
+		return nil, errors.Errorf("unknown PITR type: %s", cr.Spec.PITR.Type)
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "search binlogs")
+	}
+
+	if resp.Status != "success" {
+		return nil, errors.Errorf("binlog search failed with status: %s", resp.Status)
+	}
+
+	return resp.Result, nil
+}
+
 func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cluster *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
@@ -269,7 +420,7 @@ func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cl
 			continue
 		}
 
-		if err := r.Client.Delete(ctx, &pvc); err != nil {
+		if err := r.Delete(ctx, &pvc); err != nil {
 			if !k8serrors.IsNotFound(err) {
 				log.Error(err, "failed to delete PVC")
 			}
@@ -288,7 +439,7 @@ func (r *PerconaServerMySQLRestoreReconciler) removeBootstrapCondition(ctx conte
 	err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		c := &apiv1.PerconaServerMySQL{}
 		nn := types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}
-		if err := r.Client.Get(ctx, nn, c); err != nil {
+		if err := r.Get(ctx, nn, c); err != nil {
 			return err
 		}
 
@@ -311,13 +462,13 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 	err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		c := &apiv1.PerconaServerMySQL{}
 		nn := types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}
-		if err := r.Client.Get(ctx, nn, c); err != nil {
+		if err := r.Get(ctx, nn, c); err != nil {
 			return err
 		}
 
 		c.Spec.Pause = true
 
-		if err := r.Client.Patch(ctx, c, client.MergeFrom(cluster)); err != nil {
+		if err := r.Patch(ctx, c, client.MergeFrom(cluster)); err != nil {
 			return err
 		}
 
@@ -329,7 +480,7 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 
 	sts := &appsv1.StatefulSet{}
 	nn := types.NamespacedName{Name: mysql.Name(cluster), Namespace: cluster.Namespace}
-	if err := r.Client.Get(ctx, nn, sts); err != nil {
+	if err := r.Get(ctx, nn, sts); err != nil {
 		return errors.Wrapf(err, "get statefulset %s", nn)
 	}
 
@@ -340,7 +491,7 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 	switch cluster.Spec.MySQL.ClusterType {
 	case apiv1.ClusterTypeAsync:
 		nn = types.NamespacedName{Name: orchestrator.Name(cluster), Namespace: cluster.Namespace}
-		err := r.Client.Get(ctx, nn, sts)
+		err := r.Get(ctx, nn, sts)
 		if client.IgnoreNotFound(err) != nil {
 			return errors.Wrapf(err, "get statefulset %s", nn)
 		}
@@ -351,7 +502,7 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 		if cluster.HAProxyEnabled() {
 			sts := new(appsv1.StatefulSet)
 			nn = types.NamespacedName{Name: haproxy.Name(cluster), Namespace: cluster.Namespace}
-			if err := r.Client.Get(ctx, nn, sts); err != nil {
+			if err := r.Get(ctx, nn, sts); err != nil {
 				return errors.Wrapf(err, "get deployment %s", nn)
 			}
 			if sts.Status.Replicas != 0 {
@@ -362,7 +513,7 @@ func (r *PerconaServerMySQLRestoreReconciler) pauseCluster(ctx context.Context, 
 		if cluster.RouterEnabled() {
 			deployment := new(appsv1.Deployment)
 			nn = types.NamespacedName{Name: router.Name(cluster), Namespace: cluster.Namespace}
-			if err := r.Client.Get(ctx, nn, deployment); err != nil {
+			if err := r.Get(ctx, nn, deployment); err != nil {
 				return errors.Wrapf(err, "get deployment %s", nn)
 			}
 			if deployment.Status.Replicas != 0 {
@@ -378,13 +529,13 @@ func (r *PerconaServerMySQLRestoreReconciler) unpauseCluster(ctx context.Context
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		c := &apiv1.PerconaServerMySQL{}
 		nn := types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}
-		if err := r.Client.Get(ctx, nn, c); err != nil {
+		if err := r.Get(ctx, nn, c); err != nil {
 			return err
 		}
 
 		c.Spec.Pause = false
 
-		if err := r.Client.Patch(ctx, c, client.MergeFrom(cluster)); err != nil {
+		if err := r.Patch(ctx, c, client.MergeFrom(cluster)); err != nil {
 			return err
 		}
 

@@ -178,6 +178,7 @@ func main() {
 		Client:           nsClient,
 		Scheme:           mgr.GetScheme(),
 		ServerVersion:    serverVersion,
+		ClientCmd:        cliCmd,
 		NewStorageClient: storage.NewClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLRestore")

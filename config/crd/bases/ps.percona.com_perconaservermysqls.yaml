@@ -10329,6 +10329,21 @@ spec:
             properties:
               backupVersion:
                 type: string
+              binlogServer:
+                properties:
+                  imageID:
+                    type: string
+                  ready:
+                    format: int32
+                    type: integer
+                  size:
+                    format: int32
+                    type: integer
+                  state:
+                    type: string
+                  version:
+                    type: string
+                type: object
               conditions:
                 items:
                   properties:

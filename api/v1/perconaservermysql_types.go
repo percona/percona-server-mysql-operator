@@ -637,6 +637,7 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	Orchestrator   StatefulAppStatus  `json:"orchestrator,omitempty"`
 	HAProxy        StatefulAppStatus  `json:"haproxy,omitempty"`
 	Router         StatefulAppStatus  `json:"router,omitempty"`
+	BinlogServer   StatefulAppStatus  `json:"binlogServer,omitempty"`
 	State          StatefulAppState   `json:"state,omitempty"`
 	BackupVersion  string             `json:"backupVersion,omitempty"`
 	PMMVersion     string             `json:"pmmVersion,omitempty"`
@@ -995,6 +996,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.Orchestrator.Size = 0
 		cr.Spec.Proxy.Router.Size = 0
 		cr.Spec.Proxy.HAProxy.Size = 0
+		cr.Spec.Backup.PiTR.Enabled = false
 	}
 
 	if cr.Spec.SecretsName == "" {
