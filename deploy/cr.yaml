@@ -668,6 +668,20 @@ spec:
     enabled: true
     pitr:
       enabled: false
+#      binlogServer:
+#        size: 1
+#        serverId: 100
+#        storage:
+#          s3:
+#            bucket: S3-BACKUP-BUCKET-NAME-HERE
+#            credentialsSecret: ps-cluster1-s3-credentials
+#            endpointUrl: https://s3.amazonaws.com
+#            prefix: PREFIX_NAME
+#            region: us-west-2
+#        connectTimeout: 10
+#        readTimeout: 10
+#        writeTimeout: 10
+#        idleTime: 3
 #    sourcePod: ps-cluster1-mysql-1
     image: perconalab/percona-server-mysql-operator:main-backup8.4
     imagePullPolicy: Always
