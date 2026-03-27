@@ -113,7 +113,7 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 	var err error
 
 	defer func() {
-		if err := r.reconcileCRStatus(ctx, cr, err); err != nil {
+		if err := util.WrapWithDeepestStack(r.reconcileCRStatus(ctx, cr, err), ""); err != nil {
 			log.Error(err, "failed to update status")
 		}
 	}()
@@ -135,8 +135,8 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 		return rr, nil
 	}
 
-	if err = r.doReconcile(ctx, cr); err != nil {
-		return ctrl.Result{}, util.WrapWithDeepestStack(err, "reconcile")
+	if err = util.WrapWithDeepestStack(r.doReconcile(ctx, cr), "reconcile"); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	return rr, nil
