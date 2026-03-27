@@ -12,9 +12,9 @@ commands:
 
       run_mysql \
           "INSERT myDB.myTable (id) VALUES (100502)" \
-          "-h $(get_haproxy_svc ${cluster_name})"
+          "-h $(get_router_service ${cluster_name})"
 
-      PITR_GTID=$(run_mysql "SELECT @@GLOBAL.gtid_executed" "-h $(get_haproxy_svc ${cluster_name})" | tr -d '\n')
+      PITR_GTID=$(run_mysql "SELECT @@GLOBAL.gtid_executed" "-h $(get_router_service ${cluster_name})" | tr -d '\n')
 
       sleep 1
       PITR_DATE=$(date -u '+%Y-%m-%d %H:%M:%S')

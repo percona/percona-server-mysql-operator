@@ -9,4 +9,4 @@ commands:
 
       run_mysql \
           "INSERT myDB.myTable (id) VALUES (100501)" \
-          "-h $(get_haproxy_svc $(get_cluster_name))"
+          "-h $(get_router_service $(get_cluster_name))"
