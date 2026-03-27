@@ -4,6 +4,10 @@ timeout: 300
 resourceRefs:
 - apiVersion: ps.percona.com/v1
   kind: PerconaServerMySQLBackup
+  name: base-backup
+  ref: base
+- apiVersion: ps.percona.com/v1
+  kind: PerconaServerMySQLBackup
   name: incr-2
   ref: incr2
 assertAll:
@@ -13,5 +17,5 @@ assertAll:
 - celExpr: incr2.status.type == "incremental"
   message: "Incremental backup should have a type of incremental"
 
-- celExpr: incr2.metadata.annotations["percona.com/base-backup-name"] != ""
-  message: "Incremental backup should have a base backup annotation"
+- celExpr: base.status.destination.contains(incr1.metadata.annotations["percona.com/base-backup-name"])
+  message: "Base backup annotation should reference the correct base backup"
