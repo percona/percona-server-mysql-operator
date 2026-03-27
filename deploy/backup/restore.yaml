@@ -100,3 +100,4 @@ spec:
 #            requests:
 #              storage: 2Gi
 #          storageClassName: standard
+  pitr: null

@@ -668,21 +668,6 @@ spec:
     enabled: true
     pitr:
       enabled: false
-      binlogServer:
-        size: 1
-        image: perconalab/percona-binlog-server:0.2.0
-        connectTimeout: 60
-        readTimeout: 60
-        writeTimeout: 60
-        serverId: 42
-        idleTime: 60
-        storage:
-          s3:
-            bucket: S3-BACKUP-BUCKET-NAME-HERE
-            credentialsSecret: ps-cluster1-s3-credentials
-  #          endpointUrl: https://s3.amazonaws.com
-  #          prefix: PREFIX_NAME
-            region: us-west-2
 #    sourcePod: ps-cluster1-mysql-1
     image: perconalab/percona-server-mysql-operator:main-backup8.4
     imagePullPolicy: Always
