@@ -237,12 +237,15 @@ func getLatestGTIDByDatetime(relayLogPath, stopDatetime string) (string, error) 
 
 // objectKeyFromURI extracts the S3 object key from a full URI.
 // e.g. "https://minio-service:9000/bucket/binlogs/binlog.000001" -> "binlogs/binlog.000001"
+// e.g. "s3://bucket/prefix/binlog.000001" -> "prefix/binlog.000001"
 func objectKeyFromURI(uri, bucket string) (string, error) {
 	u, err := url.Parse(uri)
 	if err != nil {
 		return "", fmt.Errorf("parse URL: %w", err)
 	}
-	// Path is "/<bucket>/<key>", strip the leading "/<bucket>/" to get the object key
+	if u.Scheme == "s3" {
+		return strings.TrimPrefix(u.Path, "/"), nil
+	}
 	key := strings.TrimPrefix(u.Path, "/"+bucket+"/")
 	return key, nil
 }
