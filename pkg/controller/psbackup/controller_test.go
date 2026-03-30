@@ -57,11 +57,13 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 		cluster   *apiv1.PerconaServerMySQL
 		cr        *apiv1.PerconaServerMySQLBackup
 		obj       []client.Object
+		state     apiv1.BackupState
 		stateDesc string
 	}{
 		{
 			name:      "without cluster",
 			cr:        cr,
+			state:     apiv1.BackupError,
 			stateDesc: fmt.Sprintf("PerconaServerMySQL %s in namespace %s is not found", cr.Spec.ClusterName, namespace),
 		},
 		{
@@ -79,7 +81,22 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 					}
 				},
 			),
+			state:     apiv1.BackupError,
 			stateDesc: "spec.backup not found in PerconaServerMySQL CustomResource or backups are disabled",
+		},
+		{
+			name: "cluster is not ready for backup",
+			cr:   cr,
+			cluster: updateResource(
+				cluster.DeepCopy(),
+				func(cr *apiv1.PerconaServerMySQL) {
+					cr.Namespace = namespace
+					cr.Status.State = apiv1.StateInitializing
+					cr.Status.MySQL.State = apiv1.StateReady
+				},
+			),
+			state:     apiv1.BackupNew,
+			stateDesc: "cluster is not ready",
 		},
 		{
 			name: "without storage",
@@ -88,6 +105,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 				cluster.DeepCopy(),
 				func(cr *apiv1.PerconaServerMySQL) {
 					cr.Namespace = namespace
+					cr.Status.State = apiv1.StateReady
 					cr.Spec.Backup = &apiv1.BackupSpec{
 						Image:    "some-image",
 						Enabled:  true,
@@ -95,6 +113,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 					}
 				},
 			),
+			state:     apiv1.BackupError,
 			stateDesc: fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", cr.Spec.StorageName),
 		},
 		{
@@ -113,6 +132,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 					}
 				},
 			),
+			state:     apiv1.BackupError,
 			stateDesc: fmt.Sprintf("failed to get the source host for backup: get operator password: get secret/internal-%s: secrets \"internal-%s\" not found", cluster.Name, cluster.Name),
 		},
 		{
@@ -167,6 +187,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 					},
 				},
 			},
+			state:     apiv1.BackupError,
 			stateDesc: "failed to validate storage: new client: fake error",
 		},
 	}
@@ -194,22 +215,24 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			err = r.Get(t.Context(), client.ObjectKeyFromObject(tt.cr), cr)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.stateDesc, cr.Status.StateDesc)
-			assert.Equal(t, apiv1.BackupError, cr.Status.State)
+			assert.Equal(t, tt.state, cr.Status.State)
 
-			// Backup with an error state should not be reconciled.
-			// We can verify this by using clientWithGetCount.
-			//
-			// If the reconcile loop calls Get more than once,
-			// it means the loop continued running instead of stopping
-			// after the state check.
-			r.Client = &clientWithGetCount{
-				Count:  1,
-				Client: r.Client,
+			if tt.state == apiv1.BackupError {
+				// Backup with an error state should not be reconciled.
+				// We can verify this by using clientWithGetCount.
+				//
+				// If the reconcile loop calls Get more than once,
+				// it means the loop continued running instead of stopping
+				// after the state check.
+				r.Client = &clientWithGetCount{
+					Count:  1,
+					Client: r.Client,
+				}
+				_, err = r.Reconcile(t.Context(), controllerruntime.Request{
+					NamespacedName: client.ObjectKeyFromObject(tt.cr),
+				})
+				require.NoError(t, err)
 			}
-			_, err = r.Reconcile(t.Context(), controllerruntime.Request{
-				NamespacedName: client.ObjectKeyFromObject(tt.cr),
-			})
-			require.NoError(t, err)
 		})
 	}
 }

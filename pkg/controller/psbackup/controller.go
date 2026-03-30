@@ -99,7 +99,9 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	status := cr.Status
 
 	defer func() {
-		if status.State == cr.Status.State && status.Destination == cr.Status.Destination {
+		if status.State == cr.Status.State &&
+			status.StateDesc == cr.Status.StateDesc &&
+			status.Destination == cr.Status.Destination {
 			return
 		}
 		if status.State != cr.Status.State && status.StateDesc == cr.Status.StateDesc {
@@ -154,6 +156,8 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	if err := cluster.CanBackup(); err != nil {
 		log.Info("PerconaServerMySQL is not ready for backup", "backup", cr.Name, "cluster", cluster.Name, "namespace", cluster.Namespace, "reason", err.Error())
 
+		status.State = apiv1.BackupNew
+		status.StateDesc = "cluster is not ready"
 		return rr, nil
 	}
 
@@ -168,13 +172,6 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	if err != nil {
 		status.State = apiv1.BackupError
 		status.StateDesc = fmt.Sprintf("failed to get the source host for backup: %v", err)
-		return rr, nil
-	}
-
-	if cluster.Status.MySQL.State != apiv1.StateReady {
-		log.Info("Cluster is not ready", "cluster", cr.Name)
-		status.State = apiv1.BackupNew
-		status.StateDesc = "cluster is not ready"
 		return rr, nil
 	}
 
