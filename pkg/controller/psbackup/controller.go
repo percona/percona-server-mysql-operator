@@ -584,10 +584,12 @@ func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context
 	return nil
 }
 
-// canDeleteIncrBackup checks if the incremental backup can be deleted.
-// An incremental backup can be deleted ONLY if it is the latest one in the chain.
-// This is done to prevent deleting from the middle of a chain, which would make the entire chain unusable.
-func (r *PerconaServerMySQLBackupReconciler) canDeleteIncrBackup(
+// canDeleteIncrementalBackup checks whether an incremental backup is safe to delete.
+// Incremental backups form an ordered chain (each depends on its predecessor's LSN).
+// Only the latest (most recent) backup in the chain can be deleted; removing one from the
+// middle would leave a gap that makes all later incrementals in the chain unrestorable.
+// Returns true immediately for non-incremental (full) backups.
+func (r *PerconaServerMySQLBackupReconciler) canDeleteIncrementalBackup(
 	ctx context.Context,
 	backup *apiv1.PerconaServerMySQLBackup,
 ) (bool, error) {
@@ -602,7 +604,13 @@ func (r *PerconaServerMySQLBackupReconciler) canDeleteIncrBackup(
 	return latestIncrementalBackup.GetName() == backup.GetName(), nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) deleteIncrementalChain(
+// deleteDependentIncrementalBackups cascades deletion to all incremental backups that depend
+// on this full backup as their base. Incremental backups are useless without their base full
+// backup, so they must be cleaned up first.
+// Returns (true, nil) when there are no remaining dependent backups (or when the backup
+// itself is incremental, since incrementals don't have dependents).
+// Returns (false, nil) when deletion has been initiated but dependents are still being removed.
+func (r *PerconaServerMySQLBackupReconciler) deleteDependentIncrementalBackups(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQLBackup,
 ) (bool, error) {
@@ -610,7 +618,7 @@ func (r *PerconaServerMySQLBackupReconciler) deleteIncrementalChain(
 		return true, nil
 	}
 
-	backups, err := k8sutil.ListIncrementalBackupsInChain(ctx, r.Client, cr)
+	backups, err := k8sutil.ListDependentIncrementalBackups(ctx, r.Client, cr)
 	if err != nil {
 		return false, errors.Wrap(err, "list incremental backups in chain")
 	}
@@ -637,17 +645,24 @@ func (r *PerconaServerMySQLBackupReconciler) deleteBackup(ctx context.Context, c
 	log := logf.FromContext(ctx)
 	log.Info("Deleting backup")
 
-	if can, err := r.canDeleteIncrBackup(ctx, cr); err != nil {
+	// Incremental backups form a chain rooted at a full backup. Deletion must respect chain ordering.
+	// If this backup is incremental, only allow deletion if it is the latest (tail) of its chain.
+	// Deleting from the middle would leave a gap, making subsequent incrementals in the chain unusable.
+	// This check runs only if the deleted backup is an incremental backup.
+	if can, err := r.canDeleteIncrementalBackup(ctx, cr); err != nil {
 		return false, errors.Wrap(err, "failed to check if can delete incremental backup")
 	} else if !can {
 		log.Info("Cannot delete incremental backup which is in middle of the chain")
 		return false, nil
 	}
 
-	if ok, err := r.deleteIncrementalChain(ctx, cr); err != nil {
-		return false, errors.Wrap(err, "failed to delete incremental chain")
+	// If this backup is a full backup, all dependent incremental backups in the chain must be
+	// deleted first, since they reference this backup as their base and are useless without it.
+	// This check runs only if the deleted backup is a full backup.
+	if ok, err := r.deleteDependentIncrementalBackups(ctx, cr); err != nil {
+		return false, errors.Wrap(err, "failed to delete dependent incremental backups")
 	} else if !ok {
-		log.Info("Awaiting deletion of incremental backup chain")
+		log.Info("Awaiting deletion of dependent incremental backups")
 		return false, nil
 	}
 

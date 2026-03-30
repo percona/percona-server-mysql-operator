@@ -93,12 +93,16 @@ func GetLastSuccessfulBackup(
 	return latest, nil
 }
 
+// GetLatestIncrementalBackupInChain returns the most recently completed incremental backup
+// that shares the same base (full) backup as the given backup. The "chain" is identified by
+// the AnnotationBaseBackupName annotation: all incremental backups pointing to the same base
+// belong to the same chain. If the input is a full backup, its destination name is used as
+// the chain identifier; if incremental, the base annotation value is used instead.
 func GetLatestIncrementalBackupInChain(
 	ctx context.Context,
 	cl client.Client,
 	backup *apiv1.PerconaServerMySQLBackup,
 ) (*apiv1.PerconaServerMySQLBackup, error) {
-	// List all backups for this cluster
 	backupList := &apiv1.PerconaServerMySQLBackupList{}
 	if err := cl.List(ctx, backupList, client.MatchingFields{
 		"spec.clusterName": backup.Spec.ClusterName,
@@ -145,7 +149,11 @@ func GetLatestIncrementalBackupInChain(
 	return latest, nil
 }
 
-func ListIncrementalBackupsInChain(
+// ListDependentIncrementalBackups returns all incremental backups that belong to the same chain
+// as the given backup, i.e. all incrementals whose AnnotationBaseBackupName matches this backup's
+// base. For a full backup this lists all incrementals that depend on it; for an incremental
+// backup this lists all siblings in the same chain.
+func ListDependentIncrementalBackups(
 	ctx context.Context,
 	cl client.Client,
 	backup *apiv1.PerconaServerMySQLBackup,
