@@ -67,7 +67,7 @@ func GetLastSuccessfulBackup(
 		return nil, errors.Wrap(err, "list backups")
 	}
 
-	var lastFullBackup *apiv1.PerconaServerMySQLBackup
+	var latest *apiv1.PerconaServerMySQLBackup
 	for i, backup := range backupList.Items {
 		if backup.Status.State != apiv1.BackupSucceeded {
 			continue
@@ -77,20 +77,20 @@ func GetLastSuccessfulBackup(
 			return nil, errors.Errorf("backup '%s' is succeeded but completedAt is not set", backup.GetName())
 		}
 
-		if lastFullBackup == nil {
-			lastFullBackup = &backupList.Items[i]
+		if latest == nil {
+			latest = &backupList.Items[i]
 			continue
 		}
 
-		if backup.Status.CompletedAt.After(lastFullBackup.Status.CompletedAt.Time) {
-			lastFullBackup = &backupList.Items[i]
+		if backup.Status.CompletedAt.After(latest.Status.CompletedAt.Time) {
+			latest = &backupList.Items[i]
 		}
 	}
 
-	if lastFullBackup == nil {
+	if latest == nil {
 		return nil, errors.New("no previous backup found")
 	}
-	return lastFullBackup, nil
+	return latest, nil
 }
 
 func GetLatestIncrementalBackupInChain(
