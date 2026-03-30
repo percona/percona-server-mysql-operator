@@ -377,6 +377,96 @@ func TestDeleteJob(t *testing.T) {
 	})
 }
 
+func TestGetDestination(t *testing.T) {
+	const clusterName = "cluster1"
+	const creationTimeStamp = "2025-01-01-00:00:00"
+
+	t.Run("s3 storage", func(t *testing.T) {
+		storage := &apiv1.BackupStorageSpec{
+			Type: apiv1.BackupStorageS3,
+			S3: &apiv1.BackupStorageS3Spec{
+				Bucket: "my-bucket",
+				Prefix: "my-prefix",
+			},
+		}
+		d, err := GetDestination(storage, clusterName, creationTimeStamp)
+		require.NoError(t, err)
+		assert.NotEmpty(t, d)
+	})
+
+	t.Run("gcs storage", func(t *testing.T) {
+		storage := &apiv1.BackupStorageSpec{
+			Type: apiv1.BackupStorageGCS,
+			GCS: &apiv1.BackupStorageGCSSpec{
+				Bucket: "my-bucket",
+			},
+		}
+		d, err := GetDestination(storage, clusterName, creationTimeStamp)
+		require.NoError(t, err)
+		assert.NotEmpty(t, d)
+	})
+
+	t.Run("azure storage", func(t *testing.T) {
+		storage := &apiv1.BackupStorageSpec{
+			Type: apiv1.BackupStorageAzure,
+			Azure: &apiv1.BackupStorageAzureSpec{
+				ContainerName: "my-container",
+			},
+		}
+		d, err := GetDestination(storage, clusterName, creationTimeStamp)
+		require.NoError(t, err)
+		assert.NotEmpty(t, d)
+	})
+
+	t.Run("s3 type with nil s3 spec", func(t *testing.T) {
+		storage := &apiv1.BackupStorageSpec{
+			Type: apiv1.BackupStorageS3,
+		}
+		_, err := GetDestination(storage, clusterName, creationTimeStamp)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "s3 configuration is not specified")
+	})
+
+	t.Run("gcs type with nil gcs spec", func(t *testing.T) {
+		storage := &apiv1.BackupStorageSpec{
+			Type: apiv1.BackupStorageGCS,
+		}
+		_, err := GetDestination(storage, clusterName, creationTimeStamp)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "gcs configuration is not specified")
+	})
+
+	t.Run("azure type with nil azure spec", func(t *testing.T) {
+		storage := &apiv1.BackupStorageSpec{
+			Type: apiv1.BackupStorageAzure,
+		}
+		_, err := GetDestination(storage, clusterName, creationTimeStamp)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "azure configuration is not specified")
+	})
+
+	t.Run("gcs type with s3 spec only", func(t *testing.T) {
+		storage := &apiv1.BackupStorageSpec{
+			Type: apiv1.BackupStorageGCS,
+			S3: &apiv1.BackupStorageS3Spec{
+				Bucket: "my-bucket",
+			},
+		}
+		_, err := GetDestination(storage, clusterName, creationTimeStamp)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "gcs configuration is not specified")
+	})
+
+	t.Run("unsupported storage type", func(t *testing.T) {
+		storage := &apiv1.BackupStorageSpec{
+			Type: "unknown",
+		}
+		_, err := GetDestination(storage, clusterName, creationTimeStamp)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not supported")
+	})
+}
+
 func TestRestoreJob(t *testing.T) {
 	const ns = "restore-job-ns"
 	const storageName = "some-storage"
