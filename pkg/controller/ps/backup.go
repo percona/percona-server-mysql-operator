@@ -41,7 +41,10 @@ func (r *CronRegistry) stopBackupJob(name string) {
 	if !ok {
 		return
 	}
-	r.crons.Remove(job.(backupScheduleJob).jobID)
+	j := job.(backupScheduleJob)
+	r.crons.Remove(j.jobID)
+	j.Schedule = ""
+	r.backupJobs.Store(name, j)
 }
 
 func (r *CronRegistry) getBackupJob(bcp apiv1.BackupSchedule) backupScheduleJob {
