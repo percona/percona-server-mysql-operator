@@ -2,6 +2,7 @@ package xtrabackup
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -726,4 +727,92 @@ func TestGetDestination(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, apiv1.BackupDestination("s3://my-bucket/sub-path/cluster1-2024-06-15-10:30:00-full"), dest)
 	})
+}
+
+func TestCheckpointInfoParseFrom(t *testing.T) {
+	t.Run("full checkpoint file", func(t *testing.T) {
+		input := `backup_type = full-backuped
+from_lsn = 0
+to_lsn = 18446744073709551615
+last_lsn = 18446744073709551615
+flushed_lsn = 18446744073709551615
+redo_memory = 0
+redo_frames = 0
+`
+		var info CheckpointInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, "full-backuped", info.BackupType)
+		assert.Equal(t, "0", info.FromLSN)
+		assert.Equal(t, "18446744073709551615", info.ToLSN)
+		assert.Equal(t, "18446744073709551615", info.LastLSN)
+		assert.Equal(t, "18446744073709551615", info.FlushedLSN)
+		assert.Equal(t, "0", info.RedoMemory)
+		assert.Equal(t, "0", info.RedoFrames)
+	})
+
+	t.Run("incremental checkpoint file", func(t *testing.T) {
+		input := `backup_type = incremental
+from_lsn = 27655332
+to_lsn = 27660845
+last_lsn = 27660855
+flushed_lsn = 27660855
+redo_memory = 0
+redo_frames = 0
+`
+		var info CheckpointInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, "incremental", info.BackupType)
+		assert.Equal(t, "27655332", info.FromLSN)
+		assert.Equal(t, "27660845", info.ToLSN)
+		assert.Equal(t, "27660855", info.LastLSN)
+		assert.Equal(t, "27660855", info.FlushedLSN)
+	})
+
+	t.Run("extra whitespace", func(t *testing.T) {
+		input := "  backup_type  =  full-prepared  \n  from_lsn  =  100  \n"
+
+		var info CheckpointInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, "full-prepared", info.BackupType)
+		assert.Equal(t, "100", info.FromLSN)
+	})
+
+	t.Run("lines without equals are skipped", func(t *testing.T) {
+		input := "this line has no separator\nbackup_type = full-backuped\nmalformed line\n"
+
+		var info CheckpointInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, "full-backuped", info.BackupType)
+	})
+
+	t.Run("empty input", func(t *testing.T) {
+		var info CheckpointInfo
+		err := info.ParseFrom(strings.NewReader(""))
+		require.NoError(t, err)
+
+		assert.Equal(t, CheckpointInfo{}, info)
+	})
+
+	t.Run("partial fields", func(t *testing.T) {
+		input := "to_lsn = 999\nredo_frames = 42\n"
+
+		var info CheckpointInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, "", info.BackupType)
+		assert.Equal(t, "", info.FromLSN)
+		assert.Equal(t, "999", info.ToLSN)
+		assert.Equal(t, "", info.LastLSN)
+		assert.Equal(t, "42", info.RedoFrames)
+	})
+
 }
