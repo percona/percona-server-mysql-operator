@@ -32,6 +32,7 @@ gr-one-pod,8.4
 gr-recreate,8.4
 gr-scaling,8.4
 gr-scheduled-backup,8.4
+gr-scheduled-backup-incremental,8.4
 gr-security-context,8.4
 gr-self-healing,8.4
 gr-tls-cert-manager,8.4
@@ -52,6 +53,8 @@ recreate,8.4
 scaling,8.4
 scheduled-backup,8.0
 scheduled-backup,8.4
+scheduled-backup-incremental,8.0
+scheduled-backup-incremental,8.4
 service-per-pod,8.4
 sidecars,8.4
 smart-update,8.4

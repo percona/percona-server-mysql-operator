@@ -23,6 +23,7 @@ gr-one-pod
 gr-recreate
 gr-scaling
 gr-scheduled-backup
+gr-scheduled-backup-incremental
 gr-security-context
 gr-self-healing
 gr-tls-cert-manager
@@ -38,6 +39,7 @@ operator-self-healing
 recreate
 scaling
 scheduled-backup
+scheduled-backup-incremental
 service-per-pod
 sidecars
 smart-update
