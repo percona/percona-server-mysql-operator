@@ -168,6 +168,73 @@ func TestCheckNSetDefaults(t *testing.T) {
 	})
 }
 
+func TestCanBackup(t *testing.T) {
+	tests := map[string]struct {
+		cr          *PerconaServerMySQL
+		expectedErr string
+	}{
+		"ready cluster": {
+			cr: &PerconaServerMySQL{
+				Status: PerconaServerMySQLStatus{
+					State: StateReady,
+				},
+			},
+		},
+		"unready cluster without unsafe flag": {
+			cr: &PerconaServerMySQL{
+				Status: PerconaServerMySQLStatus{
+					State: StateInitializing,
+				},
+			},
+			expectedErr: "unsafe.backupIfUnhealthy must be true to run backup on cluster with status Initializing",
+		},
+		"unready cluster with unsafe flag and no ready mysql nodes": {
+			cr: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					Unsafe: UnsafeFlags{
+						BackupIfUnhealthy: true,
+					},
+				},
+				Status: PerconaServerMySQLStatus{
+					State: StateInitializing,
+					MySQL: StatefulAppStatus{
+						Ready: 0,
+					},
+				},
+			},
+			expectedErr: "there are no ready MySQL nodes",
+		},
+		"unready cluster with unsafe flag and ready mysql nodes": {
+			cr: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					Unsafe: UnsafeFlags{
+						BackupIfUnhealthy: true,
+					},
+				},
+				Status: PerconaServerMySQLStatus{
+					State: StateInitializing,
+					MySQL: StatefulAppStatus{
+						Ready: 1,
+					},
+				},
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := tc.cr.CanBackup()
+
+			if tc.expectedErr != "" {
+				assert.EqualError(t, err, tc.expectedErr)
+				return
+			}
+
+			assert.NoError(t, err)
+		})
+	}
+}
+
 func TestValidateVolume(t *testing.T) {
 	tests := map[string]struct {
 		input       *VolumeSpec
