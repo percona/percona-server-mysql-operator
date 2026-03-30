@@ -172,9 +172,6 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		status.StateDesc = "failed to set incremental base annotations: " + err.Error()
 		return rr, nil
 	}
-	if err := r.Get(ctx, client.ObjectKeyFromObject(cr), cr); err != nil {
-		return rr, errors.Wrapf(err, "get backup %s", req.NamespacedName.String())
-	}
 
 	backupSource, err := r.getBackupSource(ctx, cr, cluster)
 	if err != nil {
@@ -833,7 +830,12 @@ func (r *PerconaServerMySQLBackupReconciler) setIncrementalBaseAnnotations(
 		}
 		annots[string(naming.AnnotationBaseBackupName)] = baseBackup.Status.Destination.BackupName()
 		backup.SetAnnotations(annots)
-		return r.Update(ctx, backup)
+		if err := r.Update(ctx, backup); err != nil {
+			return errors.Wrap(err, "update backup")
+		}
+
+		*cr = *backup.DeepCopy()
+		return nil
 	}); err != nil {
 		return errors.Wrap(err, "update backup")
 	}
