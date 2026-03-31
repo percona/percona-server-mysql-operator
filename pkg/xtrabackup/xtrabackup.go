@@ -935,12 +935,21 @@ func GetDestination(storage *apiv1.BackupStorageSpec, clusterName, creationTimeS
 	var d apiv1.BackupDestination
 	switch storage.Type {
 	case apiv1.BackupStorageS3:
+		if storage.S3 == nil {
+			return d, errors.Errorf("storage type is %s, but s3 configuration is not specified", storage.Type)
+		}
 		bucket, prefix := storage.S3.BucketAndPrefix()
 		d.SetS3Destination(path.Join(bucket, prefix), backupName)
 	case apiv1.BackupStorageGCS:
+		if storage.GCS == nil {
+			return d, errors.Errorf("storage type is %s, but gcs configuration is not specified", storage.Type)
+		}
 		bucket, prefix := storage.GCS.BucketAndPrefix()
 		d.SetGCSDestination(path.Join(bucket, prefix), backupName)
 	case apiv1.BackupStorageAzure:
+		if storage.Azure == nil {
+			return d, errors.Errorf("storage type is %s, but azure configuration is not specified", storage.Type)
+		}
 		container, prefix := storage.Azure.ContainerAndPrefix()
 		d.SetAzureDestination(path.Join(container, prefix), backupName)
 	default:
