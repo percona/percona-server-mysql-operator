@@ -205,6 +205,11 @@ func runApply(ctx context.Context) error {
 		return errors.Wrap(err, "reset replication")
 	}
 
+	log.Println("setting GTID_NEXT to AUTOMATIC")
+	if err := database.SetGTIDNextAutomatic(ctx); err != nil {
+		return fmt.Errorf("set GTID_NEXT to AUTOMATIC: %w", err)
+	}
+
 	log.Println("PITR apply complete")
 	return nil
 }
