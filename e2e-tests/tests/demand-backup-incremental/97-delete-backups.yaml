@@ -5,5 +5,4 @@ delete:
 # Deleting base backup should clear the entire chain
 - apiVersion: ps.percona.com/v1
   kind: PerconaServerMySQLBackup
-  metadata:
-    name: base-backup
+  name: base-backup

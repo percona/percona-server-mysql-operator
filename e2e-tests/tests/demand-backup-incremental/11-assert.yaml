@@ -19,3 +19,33 @@ assertAll:
 
 - celExpr: base.status.destination.contains(incr3.metadata.annotations["percona.com/base-backup-name"])
   message: "Base backup annotation should reference the correct base backup"
+
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      accessKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
+      secretKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
+
+      destination=$(kubectl get ps-backup incr-3 -n "${NAMESPACE}" -o jsonpath='{.status.destination}')
+
+      listing=$(kubectl run -n "${NAMESPACE}" -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
+        /usr/bin/env AWS_ACCESS_KEY_ID="$accessKey" AWS_SECRET_ACCESS_KEY="$secretKey" AWS_DEFAULT_REGION=us-east-1 \
+        /usr/bin/aws --endpoint-url "http://minio-service:9000" s3 ls "$destination/" --recursive 2>/dev/null)
+
+      count=$(echo "$listing" | wc -l)
+      if [ "$count" -le 0 ]; then
+        echo "No backup files found in storage at $destination"
+        exit 1
+      fi
+
+      echo "Found $count files in $destination"
+
+      delta_count=$(echo "$listing" | grep -c '\.delta\.' || true)
+      if [ "$delta_count" -eq 0 ]; then
+        echo "No .delta files found in backup — this is not an incremental backup"
+        exit 1
+      fi
+
+      echo "Confirmed incremental backup: found $delta_count .delta files in storage"
