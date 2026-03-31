@@ -95,7 +95,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 					cr.Status.MySQL.State = apiv1.StateReady
 				},
 			),
-			state:     apiv1.BackupNew,
+			state:     apiv1.BackupError,
 			stateDesc: "cluster is not ready",
 		},
 		{
