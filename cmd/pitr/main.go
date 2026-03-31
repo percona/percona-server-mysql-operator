@@ -222,8 +222,8 @@ func getLatestGTIDByDatetime(relayLogPath, startDatetime string) (string, error)
 	stopDatetime := t.Add(time.Second).Format("2006-01-02 15:04:05")
 
 	cmd := exec.Command("bash", "-c",
-		fmt.Sprintf("mysqlbinlog --start-datetime='%s' --stop-datetime='%s' %s | grep GTID_NEXT | grep -v AUTOMATIC | head -n 1",
-			startDatetime, stopDatetime, relayLogPath))
+		fmt.Sprintf("mysqlbinlog --stop-datetime='%s' %s | grep GTID_NEXT | grep -v AUTOMATIC | tail -n 1",
+			stopDatetime, relayLogPath))
 
 	output, err := cmd.Output()
 	if err != nil {
