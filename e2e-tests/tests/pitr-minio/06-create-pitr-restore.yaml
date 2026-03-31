@@ -22,7 +22,7 @@ commands:
           "INSERT myDB.myTable (id) VALUES (100503)" \
           "-h $(get_router_service ${cluster_name})"
 
-      sleep 1
+      sleep 10
       PITR_DATE=$(date -u '+%Y-%m-%d %H:%M:%S')
       kubectl create configmap -n "${NAMESPACE}" pitr-date --from-literal=date="${PITR_DATE}"
 
