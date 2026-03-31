@@ -420,6 +420,11 @@ func (d *DB) StartReplicaUntilPosition(ctx context.Context, relayLogFile string,
 	return errors.Wrap(err, "start replica until position")
 }
 
+func (d *DB) SetGTIDNextAutomatic(ctx context.Context) error {
+	_, err := d.db.ExecContext(ctx, "SET GTID_NEXT='AUTOMATIC'")
+	return errors.Wrap(err, "set GTID_NEXT to AUTOMATIC")
+}
+
 func (d *DB) WaitReplicaSQLThreadStop(ctx context.Context, pollInterval time.Duration) error {
 	for {
 		var serviceState string
