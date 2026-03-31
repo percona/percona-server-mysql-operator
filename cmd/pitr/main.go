@@ -209,10 +209,16 @@ func runApply(ctx context.Context) error {
 	return nil
 }
 
-func getLatestGTIDByDatetime(relayLogPath, stopDatetime string) (string, error) {
+func getLatestGTIDByDatetime(relayLogPath, startDatetime string) (string, error) {
+	t, err := time.ParseInLocation("2006-01-02 15:04:05", startDatetime, time.UTC)
+	if err != nil {
+		return "", fmt.Errorf("parse datetime %q: %w", startDatetime, err)
+	}
+	stopDatetime := t.Add(time.Second).Format("2006-01-02 15:04:05")
+
 	cmd := exec.Command("bash", "-c",
-		fmt.Sprintf("mysqlbinlog --stop-datetime='%s' %s | grep GTID_NEXT | grep -v AUTOMATIC | tail -n 1",
-			stopDatetime, relayLogPath))
+		fmt.Sprintf("mysqlbinlog --start-datetime='%s' --stop-datetime='%s' %s | grep GTID_NEXT | grep -v AUTOMATIC | head -n 1",
+			startDatetime, stopDatetime, relayLogPath))
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -221,7 +227,7 @@ func getLatestGTIDByDatetime(relayLogPath, stopDatetime string) (string, error) 
 
 	line := strings.TrimSpace(string(output))
 	if line == "" {
-		return "", fmt.Errorf("no GTID found before %s in %s", stopDatetime, relayLogPath)
+		return "", fmt.Errorf("no GTID found at %s in %s", startDatetime, relayLogPath)
 	}
 
 	// Extract GTID from: SET @@SESSION.GTID_NEXT= 'uuid:n,uuid:n'/*!*/;
