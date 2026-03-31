@@ -153,18 +153,11 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, nil
 	}
 
-	if err := r.reconcileBackupJob(ctx, cr, cluster, &status); err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "reconcile backup job")
-	}
-
 	if err := cluster.CanBackup(); err != nil {
 		log.Info("PerconaServerMySQL is not ready for backup", "backup", cr.Name, "cluster", cluster.Name, "namespace", cluster.Namespace, "reason", err.Error())
 
-		if status.State != apiv1.BackupSuspended {
-			status.State = apiv1.BackupNew
-			status.StateDesc = "cluster is not ready"
-		}
-
+		status.State = apiv1.BackupNew
+		status.StateDesc = "cluster is not ready"
 		return rr, nil
 	}
 
