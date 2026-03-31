@@ -40,6 +40,7 @@ const (
 	BackupStarting  BackupState = "Starting"
 	BackupRunning   BackupState = "Running"
 	BackupSucceeded BackupState = "Succeeded"
+	BackupSuspended BackupState = "Suspended"
 
 	// Used for backups that failed to start at all
 	BackupError BackupState = "Error"
