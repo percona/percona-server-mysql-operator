@@ -183,8 +183,9 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	if cr.Spec.PITR != nil {
 		status.State = apiv1.RestoreStarting
 		if err := r.reconcilePITRConfig(ctx, cr, cluster); err != nil {
+			status.State = apiv1.RestoreError
 			status.StateDesc = errors.Wrap(err, "reconcile pitr config").Error()
-			return ctrl.Result{}, errors.Wrap(err, "reconcile pitr config")
+			return ctrl.Result{}, nil
 		}
 		status.StateDesc = ""
 	}
