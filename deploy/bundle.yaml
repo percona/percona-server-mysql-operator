@@ -12574,7 +12574,7 @@ spec:
                 type: object
               unsafeFlags:
                 properties:
-                  backupIfUnhealthy:
+                  backupNonReadyCluster:
                     type: boolean
                   mysqlSize:
                     type: boolean

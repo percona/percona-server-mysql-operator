@@ -186,13 +186,13 @@ func TestCanBackup(t *testing.T) {
 					State: StateInitializing,
 				},
 			},
-			expectedErr: "unsafe.backupIfUnhealthy must be true to run backup on cluster with status Initializing",
+			expectedErr: "unsafeFlags.backupNonReadyCluster must be true to run backup on cluster with status Initializing",
 		},
 		"unready cluster with unsafe flag and no ready mysql nodes": {
 			cr: &PerconaServerMySQL{
 				Spec: PerconaServerMySQLSpec{
 					Unsafe: UnsafeFlags{
-						BackupIfUnhealthy: true,
+						BackupNonReadyCluster: true,
 					},
 				},
 				Status: PerconaServerMySQLStatus{
@@ -208,7 +208,7 @@ func TestCanBackup(t *testing.T) {
 			cr: &PerconaServerMySQL{
 				Spec: PerconaServerMySQLSpec{
 					Unsafe: UnsafeFlags{
-						BackupIfUnhealthy: true,
+						BackupNonReadyCluster: true,
 					},
 				},
 				Status: PerconaServerMySQLStatus{

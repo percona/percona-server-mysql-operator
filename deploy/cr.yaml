@@ -14,7 +14,7 @@ spec:
 #    labels:
 #      rack: rack-22
 #  unsafeFlags:
-#    backupIfUnhealthy: false
+#    backupNonReadyCluster: false
 #    mysqlSize: false
 #    orchestrator: false
 #    orchestratorSize: false

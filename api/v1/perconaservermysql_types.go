@@ -98,8 +98,8 @@ type UnsafeFlags struct {
 	// MySQLSize allows to set MySQL size to a value less than the minimum safe size or higher than the maximum safe size.
 	MySQLSize bool `json:"mysqlSize,omitempty"`
 
-	// BackupIfUnhealthy allows backups to run even when the cluster is not in ready state.
-	BackupIfUnhealthy bool `json:"backupIfUnhealthy,omitempty"`
+	// BackupNonReadyCluster allows backups to run even when the cluster is not in ready state.
+	BackupNonReadyCluster bool `json:"backupNonReadyCluster,omitempty"`
 
 	// Proxy allows to disable proxy.
 	Proxy bool `json:"proxy,omitempty"`
@@ -738,8 +738,8 @@ func (cr *PerconaServerMySQL) CanBackup() error {
 		return nil
 	}
 
-	if !cr.Spec.Unsafe.BackupIfUnhealthy {
-		return errors.Errorf("unsafe.backupIfUnhealthy must be true to run backup on cluster with status %s", cr.Status.State)
+	if !cr.Spec.Unsafe.BackupNonReadyCluster {
+		return errors.Errorf("unsafeFlags.backupNonReadyCluster must be true to run backup on cluster with status %s", cr.Status.State)
 	}
 
 	if cr.Status.MySQL.Ready < int32(1) {
