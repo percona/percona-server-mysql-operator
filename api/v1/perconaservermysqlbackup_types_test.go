@@ -214,6 +214,45 @@ func TestDestination_IncrementalBaseDestination(t *testing.T) {
 	}
 }
 
+func TestDestination_IncrementalsDir(t *testing.T) {
+	tests := map[string]struct {
+		dest     BackupDestination
+		expected string
+	}{
+		"incremental s3 backup": {
+			dest:     BackupDestination("s3://bucket/prefix/weekly-full-1.incr/2026-03-17T000000"),
+			expected: "s3://bucket/prefix/weekly-full-1.incr/",
+		},
+		"incremental gcs backup": {
+			dest:     BackupDestination("gs://bucket/prefix/weekly-full-1.incr/2026-03-17T000000"),
+			expected: "gs://bucket/prefix/weekly-full-1.incr/",
+		},
+		"incremental azure backup": {
+			dest:     BackupDestination("container/prefix/weekly-full-1.incr/2026-03-17T000000"),
+			expected: "container/prefix/weekly-full-1.incr/",
+		},
+		"full backup returns empty": {
+			dest:     BackupDestination("s3://bucket/prefix/cluster-2026-03-23-08:40:16-full"),
+			expected: "",
+		},
+		"empty destination": {
+			dest:     BackupDestination(""),
+			expected: "",
+		},
+		"multiple .incr segments uses first occurrence": {
+			dest:     BackupDestination("s3://bucket/prefix/base.incr/sub.incr/timestamp"),
+			expected: "s3://bucket/prefix/base.incr/",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := tt.dest.IncrementalsDir()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestDestination_BackupName(t *testing.T) {
 	tests := map[string]struct {
 		dest     BackupDestination
