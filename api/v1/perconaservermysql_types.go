@@ -141,6 +141,8 @@ func (t ClusterType) isValid() bool {
 	return false
 }
 
+// +kubebuilder:validation:XValidation:rule="has(self.image) && self.image != ''",message="mysql.image is required"
+// +kubebuilder:validation:XValidation:rule="has(self.size) && self.size > 0",message="mysql.size must be greater than 0"
 type MySQLSpec struct {
 	// +kubebuilder:validation:Enum=group-replication;async
 	// +kubebuilder:default=group-replication
@@ -176,6 +178,8 @@ type SidecarPVC struct {
 	Spec corev1.PersistentVolumeClaimSpec `json:"spec"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && self.image != '')",message="orchestrator.image is required when orchestrator is enabled"
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.size) && self.size > 0)",message="orchestrator.size must be greater than 0 when orchestrator is enabled"
 type OrchestratorSpec struct {
 	Enabled bool          `json:"enabled,omitempty"`
 	Expose  ServiceExpose `json:"expose,omitempty"`
@@ -184,7 +188,7 @@ type OrchestratorSpec struct {
 }
 
 type ContainerSpec struct {
-	Image            string                        `json:"image"`
+	Image            string                        `json:"image,omitempty"`
 	ImagePullPolicy  corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	Resources        corev1.ResourceRequirements   `json:"resources,omitempty"`
@@ -200,7 +204,6 @@ type ContainerSpec struct {
 }
 
 type PodSpec struct {
-	// +kubebuilder:validation:Required
 	Size        int32             `json:"size,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
@@ -286,9 +289,10 @@ func (s *PodSpec) GetInitSpec(cr *PerconaServerMySQL) InitContainerSpec {
 	return *s.InitContainer
 }
 
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && self.image != '')",message="pmm.image is required when pmm is enabled"
 type PMMSpec struct {
 	Enabled                  bool                        `json:"enabled,omitempty"`
-	Image                    string                      `json:"image"`
+	Image                    string                      `json:"image,omitempty"`
 	MySQLParams              string                      `json:"mysqlParams,omitempty"`
 	ServerHost               string                      `json:"serverHost,omitempty"`
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
@@ -513,6 +517,9 @@ func (b *BackupStorageAzureSpec) ContainerAndPrefix() (string, string) {
 	return container, prefix
 }
 
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || has(self.binlogServer)",message="binlogServer is required when pitr is enabled"
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || !has(self.binlogServer) || (has(self.binlogServer.image) && self.binlogServer.image != '')",message="binlogServer.image is required when pitr is enabled"
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || !has(self.binlogServer) || (has(self.binlogServer.size) && self.binlogServer.size > 0)",message="binlogServer.size is required when pitr is enabled"
 type PiTRSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 
@@ -523,7 +530,7 @@ type BinlogServerStorageSpec struct {
 	S3 *BackupStorageS3Spec `json:"s3,omitempty"`
 }
 
-// +kubebuilder:validation:XValidation:rule="self.size <= 1",message="binlogServer size cannot be more than 1"
+// +kubebuilder:validation:XValidation:rule="!has(self.size) || self.size <= 1",message="binlogServer size cannot be more than 1"
 type BinlogServerSpec struct {
 	Storage BinlogServerStorageSpec `json:"storage,omitempty"`
 
@@ -546,6 +553,8 @@ type ProxySpec struct {
 	HAProxy *HAProxySpec     `json:"haproxy,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && self.image != '')",message="router.image is required when router is enabled"
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.size) && self.size > 0)",message="router.size must be greater than 0 when router is enabled"
 type MySQLRouterSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 
@@ -556,10 +565,13 @@ type MySQLRouterSpec struct {
 	PodSpec `json:",inline"`
 }
 
+// +kubebuilder:validation:XValidation:rule="has(self.image) && self.image != ''",message="toolkit.image is required"
 type ToolkitSpec struct {
 	ContainerSpec `json:",inline"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && self.image != '')",message="haproxy.image is required when haproxy is enabled"
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.size) && self.size > 0)",message="haproxy.size must be greater than 0 when haproxy is enabled"
 type HAProxySpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 
