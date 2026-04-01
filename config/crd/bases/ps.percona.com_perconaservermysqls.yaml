@@ -3148,6 +3148,10 @@ spec:
                   autoRecovery:
                     type: boolean
                   clusterType:
+                    default: group-replication
+                    enum:
+                    - group-replication
+                    - async
                     type: string
                   configuration:
                     type: string

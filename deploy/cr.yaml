@@ -55,7 +55,7 @@ spec:
 #      kind: ClusterIssuer
 #      name: special-selfsigned-issuer
   mysql:
-    clusterType: group-replication
+#    clusterType: group-replication
     autoRecovery: true
 #    vaultSecretName: ps-cluster1-vault
     size: 3
