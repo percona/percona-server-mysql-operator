@@ -65,7 +65,7 @@ func GetCheckpointInfoFunc(w http.ResponseWriter, req *http.Request) {
 	data, err := io.ReadAll(req.Body)
 	if err != nil {
 		log.Error(err, "failed to read request body")
-		http.Error(w, "failed to read request body", http.StatusBadRequest)
+		http.Error(w, "failed to read request body", http.StatusInternalServerError)
 		return
 	}
 
