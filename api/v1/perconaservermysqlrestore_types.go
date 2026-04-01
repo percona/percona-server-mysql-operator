@@ -35,6 +35,7 @@ type PerconaServerMySQLRestoreSpec struct {
 }
 
 type RestorePITRSpec struct {
+	// +kubebuilder:validation:Enum=gtid;date
 	Type PITRType `json:"type"`
 	Date string   `json:"date,omitempty"`
 	GTID string   `json:"gtid,omitempty"`
