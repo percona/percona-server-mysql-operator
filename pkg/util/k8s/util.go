@@ -12,12 +12,13 @@ import (
 func GetLastFullBackup(
 	ctx context.Context,
 	cl client.Client,
-	clusterName string,
+	clusterName,
+	namespace string,
 ) (*apiv1.PerconaServerMySQLBackup, error) {
 	backupList := &apiv1.PerconaServerMySQLBackupList{}
 	if err := cl.List(ctx, backupList, client.MatchingFields{
 		"spec.clusterName": clusterName,
-	}); err != nil {
+	}, client.InNamespace(namespace)); err != nil {
 		return nil, errors.Wrap(err, "list backups")
 	}
 
@@ -70,7 +71,7 @@ func GetLatestIncrementalBackupInChain(
 	backupList := &apiv1.PerconaServerMySQLBackupList{}
 	if err := cl.List(ctx, backupList, client.MatchingFields{
 		"spec.clusterName": backup.Spec.ClusterName,
-	}); err != nil {
+	}, client.InNamespace(backup.GetNamespace())); err != nil {
 		return nil, errors.Wrap(err, "list backups")
 	}
 
@@ -125,7 +126,7 @@ func ListDependentIncrementalBackups(
 	backupList := &apiv1.PerconaServerMySQLBackupList{}
 	if err := cl.List(ctx, backupList, client.MatchingFields{
 		"spec.clusterName": backup.Spec.ClusterName,
-	}); err != nil {
+	}, client.InNamespace(backup.GetNamespace())); err != nil {
 		return nil, errors.Wrap(err, "list backups")
 	}
 	target := backup.Status.Destination.BackupName()

@@ -151,7 +151,7 @@ func TestGetLastFullBackup(t *testing.T) {
 			}
 
 			cl := buildTestClient(objs...)
-			result, err := GetLastFullBackup(t.Context(), cl, tt.clusterName)
+			result, err := GetLastFullBackup(t.Context(), cl, tt.clusterName, "default")
 
 			if tt.wantErr != "" {
 				require.Error(t, err)

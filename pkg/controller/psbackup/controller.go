@@ -792,7 +792,7 @@ func (r *PerconaServerMySQLBackupReconciler) getIncrementalBaseBackup(ctx contex
 		}
 		return backup, nil
 	}
-	lastFullBackup, err := k8sutil.GetLastFullBackup(ctx, r.Client, cr.Spec.ClusterName)
+	lastFullBackup, err := k8sutil.GetLastFullBackup(ctx, r.Client, cr.Spec.ClusterName, cr.GetNamespace())
 	if err != nil {
 		return nil, errors.Wrap(err, "get last full backup")
 	}
