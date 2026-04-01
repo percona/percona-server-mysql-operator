@@ -54,6 +54,11 @@ func LogsHandlerFunc(w http.ResponseWriter, req *http.Request) {
 }
 
 func GetCheckpointInfoFunc(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		http.Error(w, "method not supported", http.StatusMethodNotAllowed)
+		return
+	}
+
 	log := logf.Log.WithName("GetCheckpointInfo")
 
 	defer req.Body.Close() //nolint:errcheck
@@ -118,6 +123,7 @@ func GetCheckpointInfoFunc(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	if _, err = w.Write(infoB); err != nil {
 		log.Error(err, "failed to write response")
 	}
