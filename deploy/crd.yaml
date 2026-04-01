@@ -3873,16 +3873,24 @@ spec:
                           writeTimeout:
                             format: int32
                             type: integer
-                        required:
-                        - image
-                        - size
                         type: object
                         x-kubernetes-validations:
                         - message: binlogServer size cannot be more than 1
-                          rule: self.size <= 1
+                          rule: '!has(self.size) || self.size <= 1'
                       enabled:
                         type: boolean
                     type: object
+                    x-kubernetes-validations:
+                    - message: binlogServer is required when pitr is enabled
+                      rule: '!(has(self.enabled) && self.enabled) || has(self.binlogServer)'
+                    - message: binlogServer.image is required when pitr is enabled
+                      rule: '!(has(self.enabled) && self.enabled) || !has(self.binlogServer)
+                        || (has(self.binlogServer.image) && self.binlogServer.image
+                        != '''')'
+                    - message: binlogServer.size is required when pitr is enabled
+                      rule: '!(has(self.enabled) && self.enabled) || !has(self.binlogServer)
+                        || (has(self.binlogServer.size) && self.binlogServer.size
+                        > 0)'
                   resources:
                     properties:
                       claims:
@@ -8069,10 +8077,12 @@ spec:
                             type: string
                         type: object
                     type: object
-                required:
-                - image
-                - size
                 type: object
+                x-kubernetes-validations:
+                - message: mysql.image is required
+                  rule: has(self.image) && self.image != ''
+                - message: mysql.size must be greater than 0
+                  rule: has(self.size) && self.size > 0
               orchestrator:
                 properties:
                   affinity:
@@ -9313,10 +9323,15 @@ spec:
                       - whenUnsatisfiable
                       type: object
                     type: array
-                required:
-                - image
-                - size
                 type: object
+                x-kubernetes-validations:
+                - message: orchestrator.image is required when orchestrator is enabled
+                  rule: '!(has(self.enabled) && self.enabled) || (has(self.image)
+                    && self.image != '''')'
+                - message: orchestrator.size must be greater than 0 when orchestrator
+                    is enabled
+                  rule: '!(has(self.enabled) && self.enabled) || (has(self.size) &&
+                    self.size > 0)'
               pause:
                 type: boolean
               pmm:
@@ -9598,9 +9613,11 @@ spec:
                     type: object
                   serverHost:
                     type: string
-                required:
-                - image
                 type: object
+                x-kubernetes-validations:
+                - message: pmm.image is required when pmm is enabled
+                  rule: '!(has(self.enabled) && self.enabled) || (has(self.image)
+                    && self.image != '''')'
               proxy:
                 properties:
                   haproxy:
@@ -10843,10 +10860,15 @@ spec:
                           - whenUnsatisfiable
                           type: object
                         type: array
-                    required:
-                    - image
-                    - size
                     type: object
+                    x-kubernetes-validations:
+                    - message: haproxy.image is required when haproxy is enabled
+                      rule: '!(has(self.enabled) && self.enabled) || (has(self.image)
+                        && self.image != '''')'
+                    - message: haproxy.size must be greater than 0 when haproxy is
+                        enabled
+                      rule: '!(has(self.enabled) && self.enabled) || (has(self.size)
+                        && self.size > 0)'
                   router:
                     properties:
                       affinity:
@@ -12112,10 +12134,14 @@ spec:
                           - whenUnsatisfiable
                           type: object
                         type: array
-                    required:
-                    - image
-                    - size
                     type: object
+                    x-kubernetes-validations:
+                    - message: router.image is required when router is enabled
+                      rule: '!(has(self.enabled) && self.enabled) || (has(self.image)
+                        && self.image != '''')'
+                    - message: router.size must be greater than 0 when router is enabled
+                      rule: '!(has(self.enabled) && self.enabled) || (has(self.size)
+                        && self.size > 0)'
                 type: object
               secretsName:
                 type: string
@@ -12610,9 +12636,10 @@ spec:
                         format: int32
                         type: integer
                     type: object
-                required:
-                - image
                 type: object
+                x-kubernetes-validations:
+                - message: toolkit.image is required
+                  rule: has(self.image) && self.image != ''
               unsafeFlags:
                 properties:
                   backupNonReadyCluster:
