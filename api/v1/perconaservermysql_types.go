@@ -1279,17 +1279,17 @@ func (s *BackupStorageSpec) Equals(other *BackupStorageSpec) bool {
 
 	switch s.Type {
 	case BackupStorageS3:
-		return s.S3.Equals(other.S3)
+		return s.S3.equals(other.S3)
 	case BackupStorageGCS:
-		return s.GCS.Equals(other.GCS)
+		return s.GCS.equals(other.GCS)
 	case BackupStorageAzure:
-		return s.Azure.Equals(other.Azure)
+		return s.Azure.equals(other.Azure)
 	default:
 		return false
 	}
 }
 
-func (s *BackupStorageS3Spec) Equals(other *BackupStorageS3Spec) bool {
+func (s *BackupStorageS3Spec) equals(other *BackupStorageS3Spec) bool {
 	if s.Bucket != other.Bucket {
 		return false
 	}
@@ -1305,7 +1305,7 @@ func (s *BackupStorageS3Spec) Equals(other *BackupStorageS3Spec) bool {
 	return true
 }
 
-func (s *BackupStorageGCSSpec) Equals(other *BackupStorageGCSSpec) bool {
+func (s *BackupStorageGCSSpec) equals(other *BackupStorageGCSSpec) bool {
 	if s.Bucket != other.Bucket {
 		return false
 	}
@@ -1321,7 +1321,7 @@ func (s *BackupStorageGCSSpec) Equals(other *BackupStorageGCSSpec) bool {
 	return true
 }
 
-func (s *BackupStorageAzureSpec) Equals(other *BackupStorageAzureSpec) bool {
+func (s *BackupStorageAzureSpec) equals(other *BackupStorageAzureSpec) bool {
 	if s.ContainerName != other.ContainerName {
 		return false
 	}
