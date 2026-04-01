@@ -124,6 +124,53 @@ func TestPerconaServerMySQLBackup_GetContainerOptions(t *testing.T) {
 	}
 }
 
+func TestDestination_IsIncremental(t *testing.T) {
+	tests := map[string]struct {
+		dest     BackupDestination
+		expected bool
+	}{
+		"full s3 backup": {
+			dest:     BackupDestination("s3://bucket/prefix/cluster-2026-03-23-08:40:16-full"),
+			expected: false,
+		},
+		"incremental s3 backup": {
+			dest:     BackupDestination("s3://bucket/prefix/cluster-2026-03-23-08:40:16-full.incr/cluster-2026-03-23-09:09:47-incr"),
+			expected: true,
+		},
+		"full gcs backup": {
+			dest:     BackupDestination("gs://bucket/prefix/cluster-2026-03-23-08:40:16-full"),
+			expected: false,
+		},
+		"incremental gcs backup": {
+			dest:     BackupDestination("gs://bucket/prefix/cluster-2026-03-23-08:40:16-full.incr/cluster-2026-03-23-09:09:47-incr"),
+			expected: true,
+		},
+		"full azure backup": {
+			dest:     BackupDestination("container/prefix/cluster-2026-03-23-08:40:16-full"),
+			expected: false,
+		},
+		"incremental azure backup": {
+			dest:     BackupDestination("container/prefix/cluster-2026-03-23-08:40:16-full.incr/cluster-2026-03-23-09:09:47-incr"),
+			expected: true,
+		},
+		"empty destination": {
+			dest:     BackupDestination(""),
+			expected: false,
+		},
+		".incr in bucket name": {
+			dest:     BackupDestination("s3://my-bucket.incr/prefix/cluster-full"),
+			expected: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := tt.dest.IsIncremental()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestDestination_BackupName(t *testing.T) {
 	tests := map[string]struct {
 		dest     BackupDestination
