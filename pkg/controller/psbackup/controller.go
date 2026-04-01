@@ -188,19 +188,6 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}
 
 	if k8serrors.IsNotFound(err) {
-		// Set an incremental LSN for incremental backups.
-		var incrementalLsn string
-		if cr.Spec.Type == apiv1.BackupTypeIncremental {
-			lsn, err := r.getPreviousBackupLSN(ctx, cr, backupSource)
-			if err != nil {
-				status.State = apiv1.BackupError
-				status.StateDesc = "failed to get LSN from previous backup: " + err.Error()
-				return rr, errors.Wrap(err, "get last backup LSN")
-			}
-			incrementalLsn = lsn
-			log.Info("Using LSN from last backup", "lsn", lsn)
-		}
-
 		if err := r.prepareStatus(cr, cluster, storage, &status, backupSource); err != nil {
 			status.State = apiv1.BackupError
 			status.StateDesc = "failed to prepare backup job: " + err.Error()
@@ -219,7 +206,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		}
 
 		log.Info("Creating backup job", "jobName", nn.Name)
-		if err := r.createBackupJob(ctx, cr, cluster, storage, status.Destination, backupSource, incrementalLsn); err != nil {
+		if err := r.createBackupJob(ctx, cr, cluster, storage, status.Destination, backupSource); err != nil {
 			return rr, errors.Wrap(err, "failed to create backup job")
 		}
 
@@ -340,7 +327,6 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 	storage *apiv1.BackupStorageSpec,
 	destination apiv1.BackupDestination,
 	backupSource string,
-	incrementalLsn string,
 ) error {
 	initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
 	if err != nil {
@@ -416,8 +402,12 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 		return errors.Wrap(err, "set backup source node")
 	}
 
-	if incrementalLsn != "" {
-		if err := xtrabackup.SetIncrementalLsn(job, incrementalLsn); err != nil {
+	if cr.Spec.Type == apiv1.BackupTypeIncremental {
+		lsn, err := r.getPreviousBackupLSN(ctx, cr, backupSource)
+		if err != nil {
+			return errors.Wrap(err, "get previous backup LSN")
+		}
+		if err := xtrabackup.SetIncrementalLsn(job, lsn); err != nil {
 			return errors.Wrap(err, "set incremental LSN")
 		}
 	}
