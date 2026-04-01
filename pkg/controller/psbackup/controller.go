@@ -191,7 +191,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		// Set an incremental LSN for incremental backups.
 		var incrementalLsn string
 		if cr.Spec.Type == apiv1.BackupTypeIncremental {
-			lsn, err := r.getLastBackupLSN(ctx, cluster.Name, backupSource)
+			lsn, err := r.getPreviousBackupLSN(ctx, cr, backupSource)
 			if err != nil {
 				status.State = apiv1.BackupError
 				status.StateDesc = "failed to get LSN from previous backup: " + err.Error()
@@ -746,17 +746,26 @@ func getBackupSourcePod(ctx context.Context, cl client.Client, namespace, src st
 	return pod, nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) getLastBackupLSN(
+func (r *PerconaServerMySQLBackupReconciler) getPreviousBackupLSN(
 	ctx context.Context,
-	clusterName string,
+	cr *apiv1.PerconaServerMySQLBackup,
 	backupSource string,
 ) (string, error) {
-	lastBackup, err := k8sutil.GetLastSuccessfulBackup(ctx, r.Client, clusterName)
+	// Start by using the base as the previous backup.
+	prevBackup, err := r.getIncrementalBaseBackup(ctx, cr)
 	if err != nil {
-		return "", errors.Wrap(err, "get last successful backup")
+		return "", errors.Wrap(err, "get incremental base backup")
 	}
 
-	req, err := xtrabackup.GetBackupConfig(ctx, r.Client, lastBackup)
+	// If an incremental backup exists in the same chain, use the latest as the previous backup.
+	lastIncremental, err := k8sutil.GetLatestIncrementalBackupInChain(ctx, r.Client, prevBackup)
+	if err != nil && !errors.Is(err, k8sutil.ErrNoIncrBackupFound) {
+		return "", errors.Wrap(err, "get latest incremental backup in chain")
+	} else if err == nil {
+		prevBackup = lastIncremental
+	}
+
+	req, err := xtrabackup.GetBackupConfig(ctx, r.Client, prevBackup)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to create sidecar backup config")
 	}

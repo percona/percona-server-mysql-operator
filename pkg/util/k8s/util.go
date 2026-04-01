@@ -55,43 +55,7 @@ func GetLastFullBackup(
 	return lastFullBackup, nil
 }
 
-func GetLastSuccessfulBackup(
-	ctx context.Context,
-	cl client.Client,
-	clusterName string,
-) (*apiv1.PerconaServerMySQLBackup, error) {
-	backupList := &apiv1.PerconaServerMySQLBackupList{}
-	if err := cl.List(ctx, backupList, client.MatchingFields{
-		"spec.clusterName": clusterName,
-	}); err != nil {
-		return nil, errors.Wrap(err, "list backups")
-	}
-
-	var latest *apiv1.PerconaServerMySQLBackup
-	for i, backup := range backupList.Items {
-		if backup.Status.State != apiv1.BackupSucceeded {
-			continue
-		}
-
-		if backup.Status.CompletedAt == nil {
-			return nil, errors.Errorf("backup '%s' is succeeded but completedAt is not set", backup.GetName())
-		}
-
-		if latest == nil {
-			latest = &backupList.Items[i]
-			continue
-		}
-
-		if backup.Status.CompletedAt.After(latest.Status.CompletedAt.Time) {
-			latest = &backupList.Items[i]
-		}
-	}
-
-	if latest == nil {
-		return nil, errors.New("no previous backup found")
-	}
-	return latest, nil
-}
+var ErrNoIncrBackupFound = errors.New("no incremental backup found in chain")
 
 // GetLatestIncrementalBackupInChain returns the most recently completed incremental backup
 // that shares the same base (full) backup as the given backup. The "chain" is identified by
@@ -144,7 +108,7 @@ func GetLatestIncrementalBackupInChain(
 		}
 	}
 	if latest == nil {
-		return nil, errors.New("no incremental backup found in chain")
+		return nil, ErrNoIncrBackupFound
 	}
 	return latest, nil
 }
