@@ -1511,15 +1511,12 @@ spec:
                             format: int32
                             type: integer
                         required:
-                        - connectTimeout
-                        - idleTime
                         - image
-                        - readTimeout
-                        - serverId
                         - size
-                        - storage
-                        - writeTimeout
                         type: object
+                        x-kubernetes-validations:
+                        - message: binlogServer size cannot be more than 1
+                          rule: self.size <= 1
                       enabled:
                         type: boolean
                     type: object

@@ -1143,6 +1143,9 @@ spec:
                   gtid:
                     type: string
                   type:
+                    enum:
+                    - gtid
+                    - date
                     type: string
                 required:
                 - type

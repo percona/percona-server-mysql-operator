@@ -121,6 +121,27 @@ func pmmDefaults(spec *apiv1.PMMSpec) {
 func backupDefaults(spec *apiv1.BackupSpec) {
 	spec.Image = ImageBackup
 	spec.Enabled = true
+	spec.PiTR = apiv1.PiTRSpec{
+		Enabled: false,
+		BinlogServer: &apiv1.BinlogServerSpec{
+			Storage: apiv1.BinlogServerStorageSpec{
+				S3: &apiv1.BackupStorageS3Spec{
+					Bucket:            "S3-BACKUP-BUCKET-NAME-HERE",
+					Prefix:            "PREFIX_NAME",
+					CredentialsSecret: fmt.Sprintf("%s-s3-credentials", NameCluster),
+					Region:            "us-west-2",
+					EndpointURL:       "https://s3.amazonaws.com",
+				},
+			},
+			ConnectTimeout: 10,
+			ReadTimeout:    10,
+			WriteTimeout:   10,
+			ServerID:       100,
+			IdleTime:       3,
+		},
+	}
+	podSpecDefaults(&spec.PiTR.BinlogServer.PodSpec, ImageBinlogServer, corev1.ResourceRequirements{}, "", 30, nil, nil)
+	spec.PiTR.BinlogServer.Size = 1
 	spec.SourcePod = SourcePod
 	spec.ServiceAccountName = "some-service-account"
 	spec.BackoffLimit = ptr.To(int32(6))
