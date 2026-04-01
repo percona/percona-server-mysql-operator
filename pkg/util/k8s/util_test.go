@@ -1,7 +1,6 @@
 package k8s
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -152,7 +151,7 @@ func TestGetLastFullBackup(t *testing.T) {
 			}
 
 			cl := buildTestClient(objs...)
-			result, err := GetLastFullBackup(context.Background(), cl, tt.clusterName)
+			result, err := GetLastFullBackup(t.Context(), cl, tt.clusterName)
 
 			if tt.wantErr != "" {
 				require.Error(t, err)
@@ -307,7 +306,7 @@ func TestGetLatestIncrementalBackupInChain(t *testing.T) {
 			}
 
 			cl := buildTestClient(objs...)
-			result, err := GetLatestIncrementalBackupInChain(context.Background(), cl, tt.inputBackup)
+			result, err := GetLatestIncrementalBackupInChain(t.Context(), cl, tt.inputBackup)
 
 			if tt.wantErr != "" {
 				require.Error(t, err)
