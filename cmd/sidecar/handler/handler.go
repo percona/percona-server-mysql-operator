@@ -15,6 +15,7 @@ import (
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/go-logr/logr"
 	"github.com/percona/percona-server-mysql-operator/cmd/sidecar/handler/backup"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	xb "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
@@ -63,7 +64,7 @@ func GetCheckpointInfoFunc(w http.ResponseWriter, req *http.Request) {
 
 	log := logf.Log.WithName("GetCheckpointInfo")
 
-	defer req.Body.Close() //nolint:errcheck
+	defer logClose(log, req.Body)
 	data, err := io.ReadAll(req.Body)
 	if err != nil {
 		log.Error(err, "failed to read request body")
@@ -78,7 +79,7 @@ func GetCheckpointInfoFunc(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	info, err := fetchCheckpointInfo(req.Context(), &backupConf)
+	info, err := fetchCheckpointInfo(req.Context(), log, &backupConf)
 	if err != nil {
 		log.Error(err, "failed to get checkpoint info")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -98,20 +99,29 @@ func GetCheckpointInfoFunc(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func fetchCheckpointInfo(ctx context.Context, conf *xb.BackupConfig) (xb.CheckpointInfo, error) {
+func logClose(log logr.Logger, closer io.Closer) {
+	if err := closer.Close(); err != nil {
+		log.Error(err, "failed to close")
+	}
+}
+
+func fetchCheckpointInfo(
+	ctx context.Context,
+	log logr.Logger,
+	conf *xb.BackupConfig) (xb.CheckpointInfo, error) {
 	xbcloud := exec.CommandContext(ctx, "xbcloud", conf.XbcloudGetArgs("xtrabackup_checkpoints")...)
 
 	xbOut, err := xbcloud.StdoutPipe()
 	if err != nil {
 		return xb.CheckpointInfo{}, fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
-	defer xbOut.Close() //nolint:errcheck
+	defer logClose(log, xbOut)
 
 	xbErr, err := xbcloud.StderrPipe()
 	if err != nil {
 		return xb.CheckpointInfo{}, fmt.Errorf("failed to create stderr pipe: %w", err)
 	}
-	defer xbErr.Close() //nolint:errcheck
+	defer logClose(log, xbErr)
 
 	if err := xbcloud.Start(); err != nil {
 		return xb.CheckpointInfo{}, fmt.Errorf("failed to start xbcloud: %w", err)
