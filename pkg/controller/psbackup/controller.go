@@ -35,7 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
@@ -124,7 +123,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	}()
 
 	if err := r.checkFinalizers(ctx, cr); err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "run finalizers")
+		return ctrl.Result{}, errors.Wrap(err, "run finalizers")
 	}
 
 	switch cr.Status.State {
@@ -138,7 +137,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		if k8serrors.IsNotFound(err) {
 			status.State = apiv1.BackupError
 			status.StateDesc = fmt.Sprintf("PerconaServerMySQL %s in namespace %s is not found", cr.Spec.ClusterName, cr.Namespace)
-			return rr, nil
+			return ctrl.Result{}, nil
 		}
 		return rr, errors.Wrapf(err, "get %v", nn.String())
 	}
@@ -150,49 +149,49 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	if cluster.Spec.Backup == nil || !cluster.Spec.Backup.Enabled {
 		status.State = apiv1.BackupError
 		status.StateDesc = "spec.backup not found in PerconaServerMySQL CustomResource or backups are disabled"
-		return rr, nil
-	}
-
-	if err := cluster.CanBackup(); err != nil {
-		log.Info("PerconaServerMySQL is not ready for backup", "backup", cr.Name, "cluster", cluster.Name, "namespace", cluster.Namespace, "reason", err.Error())
-
-		status.State = apiv1.BackupError
-		status.StateDesc = "cluster is not ready"
-		return rr, nil
-	}
-
-	storage, ok := cluster.Spec.Backup.Storages[cr.Spec.StorageName]
-	if !ok {
-		status.State = apiv1.BackupError
-		status.StateDesc = fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", cr.Spec.StorageName)
-		return rr, nil
-	}
-
-	backupSource, err := r.getBackupSource(ctx, cr, cluster)
-	if err != nil {
-		status.State = apiv1.BackupError
-		status.StateDesc = fmt.Sprintf("failed to get the source host for backup: %v", err)
-		return rr, nil
+		return ctrl.Result{}, nil
 	}
 
 	job := &batchv1.Job{}
 	nn = xtrabackup.JobNamespacedName(cr)
-	err = r.Get(ctx, nn, job)
+	err := r.Get(ctx, nn, job)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return rr, errors.Wrapf(err, "get job %v", nn.String())
 	}
 
 	if k8serrors.IsNotFound(err) {
+		if err := cluster.CanBackup(); err != nil {
+			log.Info("PerconaServerMySQL is not ready for backup", "backup", cr.Name, "cluster", cluster.Name, "namespace", cluster.Namespace, "reason", err.Error())
+
+			status.State = apiv1.BackupError
+			status.StateDesc = "cluster is not ready"
+			return ctrl.Result{}, nil
+		}
+
+		storage, ok := cluster.Spec.Backup.Storages[cr.Spec.StorageName]
+		if !ok {
+			status.State = apiv1.BackupError
+			status.StateDesc = fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", cr.Spec.StorageName)
+			return ctrl.Result{}, nil
+		}
+
+		backupSource, err := r.getBackupSource(ctx, cr, cluster)
+		if err != nil {
+			status.State = apiv1.BackupError
+			status.StateDesc = fmt.Sprintf("failed to get the source host for backup: %v", err)
+			return ctrl.Result{}, nil
+		}
+
 		if err := r.prepareStatus(cr, cluster, storage, &status, backupSource); err != nil {
 			status.State = apiv1.BackupError
 			status.StateDesc = "failed to prepare backup job: " + err.Error()
-			return rr, nil
+			return ctrl.Result{}, nil
 		}
 
 		if err := r.validateStorage(ctx, cr.Spec.StorageName, cluster, status); err != nil {
 			status.State = apiv1.BackupError
 			status.StateDesc = "failed to validate storage: " + err.Error()
-			return rr, nil
+			return ctrl.Result{}, nil
 		}
 
 		log.Info("Preparing backup source", "source", backupSource)
