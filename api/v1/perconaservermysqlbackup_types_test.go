@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestPerconaServerMySQLBackup_GetContainerOptions(t *testing.T) {
@@ -307,6 +308,106 @@ func TestDestination_BucketAndPrefix(t *testing.T) {
 			bucket, prefix := tt.dest.BucketAndPrefix()
 			assert.Equal(t, tt.expectedBucket, bucket)
 			assert.Equal(t, tt.expectedPrefix, prefix)
+		})
+	}
+}
+
+func TestPerconaServerMySQLBackupStatus_Equals(t *testing.T) {
+	base := PerconaServerMySQLBackupStatus{
+		Type:         BackupTypeFull,
+		State:        BackupSucceeded,
+		StateDesc:    "completed successfully",
+		Destination:  BackupDestination("s3://bucket/prefix/backup-1"),
+		Image:        "percona/xtrabackup:8.0",
+		BackupSource: "cluster-mysql-0",
+	}
+
+	tests := map[string]struct {
+		a        PerconaServerMySQLBackupStatus
+		b        PerconaServerMySQLBackupStatus
+		expected bool
+	}{
+		"all fields equal": {
+			a:        base,
+			b:        base,
+			expected: true,
+		},
+		"both zero value": {
+			a:        PerconaServerMySQLBackupStatus{},
+			b:        PerconaServerMySQLBackupStatus{},
+			expected: true,
+		},
+		"different Type": {
+			a: base,
+			b: func() PerconaServerMySQLBackupStatus {
+				s := base
+				s.Type = BackupTypeIncremental
+				return s
+			}(),
+			expected: false,
+		},
+		"different State": {
+			a: base,
+			b: func() PerconaServerMySQLBackupStatus {
+				s := base
+				s.State = BackupRunning
+				return s
+			}(),
+			expected: false,
+		},
+		"different StateDesc": {
+			a: base,
+			b: func() PerconaServerMySQLBackupStatus {
+				s := base
+				s.StateDesc = "something else"
+				return s
+			}(),
+			expected: false,
+		},
+		"different Destination": {
+			a: base,
+			b: func() PerconaServerMySQLBackupStatus {
+				s := base
+				s.Destination = BackupDestination("gs://other-bucket/backup-2")
+				return s
+			}(),
+			expected: false,
+		},
+		"different Image": {
+			a: base,
+			b: func() PerconaServerMySQLBackupStatus {
+				s := base
+				s.Image = "percona/xtrabackup:8.4"
+				return s
+			}(),
+			expected: false,
+		},
+		"different BackupSource": {
+			a: base,
+			b: func() PerconaServerMySQLBackupStatus {
+				s := base
+				s.BackupSource = "cluster-mysql-1"
+				return s
+			}(),
+			expected: false,
+		},
+		"ignored fields differ (Storage and CompletedAt)": {
+			a: base,
+			b: func() PerconaServerMySQLBackupStatus {
+				s := base
+				s.Storage = &BackupStorageSpec{}
+				now := metav1.Now()
+				s.CompletedAt = &now
+				return s
+			}(),
+			expected: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := tt.a.Equals(&tt.b)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
