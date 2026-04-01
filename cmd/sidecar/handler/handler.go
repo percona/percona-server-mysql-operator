@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -76,43 +78,10 @@ func GetCheckpointInfoFunc(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	xbcloud := exec.CommandContext(req.Context(), "xbcloud", backupConf.XbcloudGetArgs("xtrabackup_checkpoints")...)
-	xbOut, err := xbcloud.StdoutPipe()
+	info, err := fetchCheckpointInfo(req.Context(), &backupConf)
 	if err != nil {
-		log.Error(err, "failed to create stdout pipe")
-		http.Error(w, "failed to create stdout pipe", http.StatusInternalServerError)
-		return
-	}
-	defer xbOut.Close() //nolint:errcheck
-
-	xbErr, err := xbcloud.StderrPipe()
-	if err != nil {
-		log.Error(err, "failed to create stderr pipe")
-		http.Error(w, "failed to create stderr pipe", http.StatusInternalServerError)
-		return
-	}
-	defer xbErr.Close() //nolint:errcheck
-
-	if err := xbcloud.Start(); err != nil {
-		log.Error(err, "failed to start xbcloud")
-		http.Error(w, "failed to start xbcloud", http.StatusInternalServerError)
-		return
-	}
-
-	go func() {
-		io.Copy(os.Stderr, xbErr) //nolint:errcheck
-	}()
-
-	info := xb.CheckpointInfo{}
-	if err := info.ParseFrom(xbOut); err != nil {
-		log.Error(err, "failed to read checkpoint info")
-		http.Error(w, "failed to read checkpoint info", http.StatusInternalServerError)
-		return
-	}
-
-	if err := xbcloud.Wait(); err != nil {
-		log.Error(err, "xbcloud command failed")
-		http.Error(w, "xbcloud command failed", http.StatusInternalServerError)
+		log.Error(err, "failed to get checkpoint info")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -127,4 +96,44 @@ func GetCheckpointInfoFunc(w http.ResponseWriter, req *http.Request) {
 	if _, err = w.Write(infoB); err != nil {
 		log.Error(err, "failed to write response")
 	}
+}
+
+func fetchCheckpointInfo(ctx context.Context, conf *xb.BackupConfig) (xb.CheckpointInfo, error) {
+	xbcloud := exec.CommandContext(ctx, "xbcloud", conf.XbcloudGetArgs("xtrabackup_checkpoints")...)
+
+	xbOut, err := xbcloud.StdoutPipe()
+	if err != nil {
+		return xb.CheckpointInfo{}, fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+	defer xbOut.Close() //nolint:errcheck
+
+	xbErr, err := xbcloud.StderrPipe()
+	if err != nil {
+		return xb.CheckpointInfo{}, fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+	defer xbErr.Close() //nolint:errcheck
+
+	if err := xbcloud.Start(); err != nil {
+		return xb.CheckpointInfo{}, fmt.Errorf("failed to start xbcloud: %w", err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		io.Copy(os.Stderr, xbErr) //nolint:errcheck
+	}()
+
+	var info xb.CheckpointInfo
+	if err := info.ParseFrom(xbOut); err != nil {
+		return xb.CheckpointInfo{}, fmt.Errorf("failed to read checkpoint info: %w", err)
+	}
+
+	wg.Wait()
+
+	if err := xbcloud.Wait(); err != nil {
+		return xb.CheckpointInfo{}, fmt.Errorf("xbcloud command failed: %w", err)
+	}
+
+	return info, nil
 }
