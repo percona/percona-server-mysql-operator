@@ -583,6 +583,19 @@ func TestBackupStorageSpecEquals(t *testing.T) {
 			b:         &BackupStorageSpec{Type: "unknown", S3: &BackupStorageS3Spec{Bucket: "b"}},
 			wantEqual: false,
 		},
+
+		"self is nil": {
+			a: nil,
+			b: baseS3,
+		},
+		"other is nil": {
+			a: baseS3,
+			b: nil,
+		},
+		"both are nil": {
+			a: nil,
+			b: nil,
+		},
 	}
 
 	for name, tc := range tests {
