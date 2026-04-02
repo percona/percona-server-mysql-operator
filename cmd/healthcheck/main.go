@@ -121,16 +121,19 @@ func checkReadinessAsync(ctx context.Context) error {
 		return errors.Wrap(err, "check read only status")
 	}
 
-	// if isReplica is true, replication is active
-	isReplica, err := db.IsReplica(ctx)
+	replStatus, _, err := db.ReplicationStatus(ctx)
 	if err != nil {
-		return errors.Wrap(err, "check replica status")
+		return errors.Wrap(err, "get replication status")
 	}
 
-	if isReplica && !readOnly {
+	switch {
+	case replStatus == mysqldb.ReplicationStatusActive && !readOnly:
 		return errors.New("replica is not read only")
+	case replStatus == mysqldb.ReplicationStatusStopped:
+		return errors.New("replication is stopped")
+	case replStatus == mysqldb.ReplicationStatusNotInitiated && readOnly:
+		return nil
 	}
-
 	return nil
 }
 

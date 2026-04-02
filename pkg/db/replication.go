@@ -26,6 +26,7 @@ const (
 	ReplicationStatusActive ReplicationStatus = iota
 	ReplicationStatusError
 	ReplicationStatusNotInitiated
+	ReplicationStatusStopped
 )
 
 type MemberState string
@@ -125,7 +126,7 @@ func (m *ReplicationDBManager) ReplicationStatus(ctx context.Context) (Replicati
 		return ReplicationStatusActive, rows[0].Host, nil
 	}
 
-	return ReplicationStatusNotInitiated, "", err
+	return ReplicationStatusStopped, "", err
 }
 
 func (m *ReplicationDBManager) GetGroupReplicationPrimary(ctx context.Context) (string, error) {
