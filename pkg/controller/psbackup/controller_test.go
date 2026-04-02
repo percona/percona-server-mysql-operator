@@ -132,6 +132,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 						},
 					}
 					cluster.Status = apiv1.PerconaServerMySQLStatus{
+						State: apiv1.StateReady,
 						MySQL: apiv1.StatefulAppStatus{
 							State: apiv1.StateReady,
 						},
@@ -140,6 +141,41 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			),
 			state:     apiv1.BackupError,
 			stateDesc: fmt.Sprintf("failed to get the source host for backup: get operator password: get secret/internal-%s: secrets \"internal-%s\" not found", cluster.Name, cluster.Name),
+		},
+		{
+			name: "incremental backup with non-succeeded base",
+			cr: updateResource(cr.DeepCopy(),
+				func(cr *apiv1.PerconaServerMySQLBackup) {
+					baseName := "base-backup"
+					cr.Spec.Type = apiv1.BackupTypeIncremental
+					cr.Spec.IncrementalBaseBackupName = &baseName
+				}),
+			cluster: updateResource(
+				cluster.DeepCopy(),
+				func(cluster *apiv1.PerconaServerMySQL) {
+					cluster.Namespace = namespace
+					cluster.Spec.Backup = &apiv1.BackupSpec{
+						Image:   "some-image",
+						Enabled: true,
+						Storages: map[string]*apiv1.BackupStorageSpec{
+							cr.Spec.StorageName: {},
+						},
+					}
+				},
+			),
+			obj: []client.Object{
+				&apiv1.PerconaServerMySQLBackup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "base-backup",
+						Namespace: namespace,
+					},
+					Status: apiv1.PerconaServerMySQLBackupStatus{
+						State: apiv1.BackupFailed,
+					},
+				},
+			},
+			state:     apiv1.BackupError,
+			stateDesc: "failed to set incremental base annotations: base backup is not succeeded",
 		},
 		{
 			name: "failed validation",
