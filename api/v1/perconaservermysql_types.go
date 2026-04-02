@@ -122,10 +122,13 @@ type ClusterType string
 const (
 	ClusterTypeGR    ClusterType = "group-replication"
 	ClusterTypeAsync ClusterType = "async"
-	MinSafeProxySize             = 2
-	MinSafeGRSize                = 3
-	MaxSafeGRSize                = 9
-	MinSafeAsyncSize             = 2
+)
+
+const (
+	MinSafeProxySize = 2
+	MinSafeGRSize    = 3
+	MaxSafeGRSize    = 9
+	MinSafeAsyncSize = 2
 )
 
 // Checks if the provided ClusterType is valid.
@@ -139,6 +142,8 @@ func (t ClusterType) isValid() bool {
 }
 
 type MySQLSpec struct {
+	// +kubebuilder:validation:Enum=group-replication;async
+	// +kubebuilder:default=group-replication
 	ClusterType   ClusterType            `json:"clusterType,omitempty"`
 	ExposePrimary ServiceExposeTogglable `json:"exposePrimary,omitempty"`
 	Expose        ServiceExposeTogglable `json:"expose,omitempty"`
