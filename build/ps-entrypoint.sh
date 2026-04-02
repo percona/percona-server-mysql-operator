@@ -179,6 +179,11 @@ create_default_cnf() {
 	fi
 
 	echo '[mysqld]' >$CFG
+	if [[ "${CLUSTER_TYPE}" == "async" ]]; then
+		# Ensures replication is not automatically started on mysql startup,
+		# giving the orchrestrator full control over replication start.
+		sed -i "/\[mysqld\]/a skip-replica-start=ON" $CFG
+	fi
 	sed -i "/\[mysqld\]/a read_only=ON" $CFG
 	sed -i "/\[mysqld\]/a server_id=${SERVER_ID}" $CFG
 	sed -i "/\[mysqld\]/a admin-address=${POD_IP}" $CFG
