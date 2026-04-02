@@ -33,10 +33,6 @@ func JobName(restore *apiv1.PerconaServerMySQLRestore) string {
 	return fmt.Sprintf("pitr-restore-%s", restore.Name)
 }
 
-func BinlogsConfigMapName(restore *apiv1.PerconaServerMySQLRestore) string {
-	return fmt.Sprintf("pitr-binlogs-%s", restore.Name)
-}
-
 func BinlogsConfigMap(cluster *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) *corev1.ConfigMap {
 	labels := util.SSMapMerge(cluster.GlobalLabels(), restore.Labels(appName, naming.ComponentPITR))
 
@@ -46,7 +42,7 @@ func BinlogsConfigMap(cluster *apiv1.PerconaServerMySQL, restore *apiv1.PerconaS
 			Kind:       "ConfigMap",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        BinlogsConfigMapName(restore),
+			Name:        binlogsConfigMapName(restore),
 			Namespace:   cluster.Namespace,
 			Labels:      labels,
 			Annotations: cluster.GlobalAnnotations(),
@@ -159,7 +155,7 @@ func RestoreJob(
 							VolumeSource: corev1.VolumeSource{
 								ConfigMap: &corev1.ConfigMapVolumeSource{
 									LocalObjectReference: corev1.LocalObjectReference{
-										Name: BinlogsConfigMapName(restore),
+										Name: binlogsConfigMapName(restore),
 									},
 								},
 							},
@@ -279,4 +275,8 @@ func restoreContainer(
 		SecurityContext:          storage.ContainerSecurityContext,
 		Resources:                storage.Resources,
 	}
+}
+
+func binlogsConfigMapName(restore *apiv1.PerconaServerMySQLRestore) string {
+	return fmt.Sprintf("pitr-binlogs-%s", restore.Name)
 }
