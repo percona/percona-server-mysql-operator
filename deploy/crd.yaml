@@ -152,6 +152,15 @@ spec:
                       type: object
                     type: array
                 type: object
+              encryption:
+                properties:
+                  enabled:
+                    type: boolean
+                  key:
+                    type: string
+                  secretName:
+                    type: string
+                type: object
               sourcePod:
                 type: string
               storageName:
@@ -808,6 +817,15 @@ spec:
                           runAsUserName:
                             type: string
                         type: object
+                    type: object
+                  encryption:
+                    properties:
+                      enabled:
+                        type: boolean
+                      key:
+                        type: string
+                      secretName:
+                        type: string
                     type: object
                   gcs:
                     properties:
@@ -1853,6 +1871,15 @@ spec:
                               runAsUserName:
                                 type: string
                             type: object
+                        type: object
+                      encryption:
+                        properties:
+                          enabled:
+                            type: boolean
+                          key:
+                            type: string
+                          secretName:
+                            type: string
                         type: object
                       gcs:
                         properties:
@@ -4540,6 +4567,15 @@ spec:
                                 runAsUserName:
                                   type: string
                               type: object
+                          type: object
+                        encryption:
+                          properties:
+                            enabled:
+                              type: boolean
+                            key:
+                              type: string
+                            secretName:
+                              type: string
                           type: object
                         gcs:
                           properties:

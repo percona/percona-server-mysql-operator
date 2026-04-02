@@ -2212,6 +2212,15 @@ spec:
                                   type: string
                               type: object
                           type: object
+                        encryption:
+                          properties:
+                            enabled:
+                              type: boolean
+                            key:
+                              type: string
+                            secretName:
+                              type: string
+                          type: object
                         gcs:
                           properties:
                             bucket:

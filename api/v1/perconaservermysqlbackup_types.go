@@ -31,6 +31,7 @@ type PerconaServerMySQLBackupSpec struct {
 	StorageName      string                  `json:"storageName"`
 	SourcePod        string                  `json:"sourcePod,omitempty"`
 	ContainerOptions *BackupContainerOptions `json:"containerOptions,omitempty"`
+	Encryption       *EncryptionSpec         `json:"encryption,omitempty"`
 }
 
 type BackupState string
@@ -151,6 +152,16 @@ func (b *PerconaServerMySQLBackup) GetContainerOptions(storage *BackupStorageSpe
 	}
 	if storage != nil && storage.ContainerOptions != nil {
 		return storage.ContainerOptions
+	}
+	return nil
+}
+
+func (b *PerconaServerMySQLBackup) GetEncryption(storage *BackupStorageSpec) *EncryptionSpec {
+	if b.Spec.Encryption != nil {
+		return b.Spec.Encryption
+	}
+	if storage != nil && storage.Encryption != nil {
+		return storage.Encryption
 	}
 	return nil
 }

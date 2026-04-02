@@ -545,6 +545,19 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 		return nil
 	}
 
+	if cr.CompareVersion("1.1.0") >= 0 {
+		role, binding, sa := mysql.RBAC(cr)
+		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, role, r.Scheme); err != nil {
+			return errors.Wrap(err, "create role")
+		}
+		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, sa, r.Scheme); err != nil {
+			return errors.Wrap(err, "create service account")
+		}
+		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, binding, r.Scheme); err != nil {
+			return errors.Wrap(err, "create role binding")
+		}
+	}
+
 	component := mysql.Component(*cr)
 	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
 		return errors.Wrap(err, "ensure component")

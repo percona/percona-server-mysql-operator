@@ -35,6 +35,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -362,6 +363,30 @@ type BackupStorageSpec struct {
 	RuntimeClassName          *string                           `json:"runtimeClassName,omitempty"`
 	VerifyTLS                 *bool                             `json:"verifyTLS,omitempty"`
 	ContainerOptions          *BackupContainerOptions           `json:"containerOptions,omitempty"`
+	Encryption                *EncryptionSpec                   `json:"encryption,omitempty"`
+}
+
+type EncryptionSpec struct {
+	Enabled    bool   `json:"enabled,omitempty"`
+	SecretName string `json:"secretName,omitempty"`
+	Key        string `json:"key,omitempty"`
+}
+
+func (e *EncryptionSpec) ReadEncryptionKey(ctx context.Context, cl client.Reader, namespace string) (string, error) {
+	if !e.Enabled {
+		return "", fmt.Errorf("encryption is not enabled")
+	}
+
+	secret := &corev1.Secret{}
+	if err := cl.Get(ctx, types.NamespacedName{Namespace: namespace, Name: e.SecretName}, secret); err != nil {
+		return "", errors.Wrap(err, "get encryption secret")
+	}
+
+	value := secret.Data[e.Key]
+	if len(value) == 0 {
+		return "", fmt.Errorf("encryption key not found in secret")
+	}
+	return string(value), nil
 }
 
 type BackupContainerOptions struct {

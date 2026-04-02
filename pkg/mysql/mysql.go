@@ -7,6 +7,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
@@ -149,6 +150,11 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 	}
 	if tlsHash != "" {
 		annotations[string(naming.AnnotationTLSHash)] = tlsHash
+	}
+
+	if cr.CompareVersion("1.1.0") >= 0 {
+		_, _, sa := RBAC(cr)
+		spec.ServiceAccountName = sa.GetName()
 	}
 
 	sts := &appsv1.StatefulSet{
@@ -841,4 +847,48 @@ func appendUniqueContainers(containers []corev1.Container, more ...corev1.Contai
 	}
 
 	return containers
+}
+
+func RBAC(cr *apiv1.PerconaServerMySQL) (*rbacv1.Role, *rbacv1.RoleBinding, *corev1.ServiceAccount) {
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      Name(cr),
+			Namespace: cr.Namespace,
+		},
+	}
+
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      Name(cr),
+			Namespace: cr.Namespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{corev1.SchemeGroupVersion.Group},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get", "list"},
+			},
+		},
+	}
+
+	roleBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      Name(cr),
+			Namespace: cr.Namespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: rbacv1.SchemeGroupVersion.Group,
+			Kind:     "Role",
+			Name:     Name(cr),
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      sa.GetName(),
+				Namespace: sa.GetNamespace(),
+			},
+		},
+	}
+
+	return role, roleBinding, sa
 }
