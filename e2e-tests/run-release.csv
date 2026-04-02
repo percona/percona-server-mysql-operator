@@ -7,12 +7,14 @@ config-router
 demand-backup-minio
 demand-backup-cloud
 demand-backup-retry
+demand-backup-incremental
 async-data-at-rest-encryption
 gr-global-metadata
 gr-data-at-rest-encryption
 gr-demand-backup-minio
 gr-demand-backup-cloud
 gr-demand-backup-haproxy
+gr-demand-backup-incremental
 gr-finalizer
 gr-haproxy
 gr-ignore-annotations
@@ -21,6 +23,7 @@ gr-one-pod
 gr-recreate
 gr-scaling
 gr-scheduled-backup
+gr-scheduled-backup-incremental
 gr-security-context
 gr-self-healing
 gr-tls-cert-manager
@@ -36,6 +39,7 @@ operator-self-healing
 recreate
 scaling
 scheduled-backup
+scheduled-backup-incremental
 service-per-pod
 sidecars
 smart-update

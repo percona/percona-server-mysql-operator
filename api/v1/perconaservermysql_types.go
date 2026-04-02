@@ -98,6 +98,9 @@ type UnsafeFlags struct {
 	// MySQLSize allows to set MySQL size to a value less than the minimum safe size or higher than the maximum safe size.
 	MySQLSize bool `json:"mysqlSize,omitempty"`
 
+	// BackupNonReadyCluster allows backups to run even when the cluster is not in ready state.
+	BackupNonReadyCluster bool `json:"backupNonReadyCluster,omitempty"`
+
 	// Proxy allows to disable proxy.
 	Proxy bool `json:"proxy,omitempty"`
 	// ProxySize allows to set proxy (HAProxy / Router) size to a value less than the minimum safe size.
@@ -119,10 +122,13 @@ type ClusterType string
 const (
 	ClusterTypeGR    ClusterType = "group-replication"
 	ClusterTypeAsync ClusterType = "async"
-	MinSafeProxySize             = 2
-	MinSafeGRSize                = 3
-	MaxSafeGRSize                = 9
-	MinSafeAsyncSize             = 2
+)
+
+const (
+	MinSafeProxySize = 2
+	MinSafeGRSize    = 3
+	MaxSafeGRSize    = 9
+	MinSafeAsyncSize = 2
 )
 
 // Checks if the provided ClusterType is valid.
@@ -136,6 +142,8 @@ func (t ClusterType) isValid() bool {
 }
 
 type MySQLSpec struct {
+	// +kubebuilder:validation:Enum=group-replication;async
+	// +kubebuilder:default=group-replication
 	ClusterType   ClusterType            `json:"clusterType,omitempty"`
 	ExposePrimary ServiceExposeTogglable `json:"exposePrimary,omitempty"`
 	Expose        ServiceExposeTogglable `json:"expose,omitempty"`
@@ -317,6 +325,9 @@ type BackupSchedule struct {
 	Keep     int    `json:"keep,omitempty"`
 	// +kubebuilder:validation:Required
 	StorageName string `json:"storageName,omitempty"`
+	// +kubebuilder:validation:Enum=full;incremental
+	// +kubebuilder:default:=full
+	Type BackupType `json:"type,omitempty"`
 }
 
 func (s *BackupSpec) GetInitSpec(cr *PerconaServerMySQL) InitContainerSpec {
@@ -730,6 +741,22 @@ func (cr *PerconaServerMySQL) GlobalAnnotations() map[string]string {
 	return m
 }
 
+func (cr *PerconaServerMySQL) CanBackup() error {
+	if cr.Status.State == StateReady {
+		return nil
+	}
+
+	if !cr.Spec.Unsafe.BackupNonReadyCluster {
+		return errors.Errorf("unsafeFlags.backupNonReadyCluster must be true to run backup on cluster with status %s", cr.Status.State)
+	}
+
+	if cr.Status.MySQL.Ready < int32(1) {
+		return errors.New("there are no ready MySQL nodes")
+	}
+
+	return nil
+}
+
 func (cr *PerconaServerMySQL) Version() *v.Version {
 	return v.Must(v.NewVersion(cr.Spec.CRVersion))
 }
@@ -774,6 +801,12 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 				if err != nil {
 					return errors.Wrap(err, "invalid schedule format")
 				}
+			}
+		}
+
+		for i, sch := range cr.Spec.Backup.Schedule {
+			if sch.Type == "" {
+				cr.Spec.Backup.Schedule[i].Type = BackupTypeFull
 			}
 		}
 	}
@@ -1259,3 +1292,71 @@ const (
 	UpgradeStrategyRecommended = "recommended"
 	UpgradeStrategyLatest      = "latest"
 )
+
+func (s *BackupStorageSpec) Equals(other *BackupStorageSpec) bool {
+	if s == nil || other == nil {
+		return false
+	}
+	if s.Type != other.Type {
+		return false
+	}
+
+	switch s.Type {
+	case BackupStorageS3:
+		return s.S3.equals(other.S3)
+	case BackupStorageGCS:
+		return s.GCS.equals(other.GCS)
+	case BackupStorageAzure:
+		return s.Azure.equals(other.Azure)
+	default:
+		return false
+	}
+}
+
+func (s *BackupStorageS3Spec) equals(other *BackupStorageS3Spec) bool {
+	if s.Bucket != other.Bucket {
+		return false
+	}
+	if s.Prefix != other.Prefix {
+		return false
+	}
+	if s.Region != other.Region {
+		return false
+	}
+	if s.EndpointURL != other.EndpointURL {
+		return false
+	}
+	return true
+}
+
+func (s *BackupStorageGCSSpec) equals(other *BackupStorageGCSSpec) bool {
+	if s.Bucket != other.Bucket {
+		return false
+	}
+	if s.Prefix != other.Prefix {
+		return false
+	}
+	if s.EndpointURL != other.EndpointURL {
+		return false
+	}
+	if s.StorageClass != other.StorageClass {
+		return false
+	}
+	return true
+}
+
+func (s *BackupStorageAzureSpec) equals(other *BackupStorageAzureSpec) bool {
+	if s.ContainerName != other.ContainerName {
+		return false
+	}
+	if s.Prefix != other.Prefix {
+		return false
+	}
+	if s.EndpointURL != other.EndpointURL {
+		return false
+	}
+	if s.StorageClass != other.StorageClass {
+		return false
+	}
+	return true
+}
