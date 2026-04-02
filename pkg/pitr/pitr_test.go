@@ -48,8 +48,8 @@ func TestRestoreJob(t *testing.T) {
 			verify: func(t *testing.T, job *batchv1.Job) {
 				assert.Equal(t, "pitr-restore-my-restore", job.Name)
 				assert.Equal(t, "test-ns", job.Namespace)
-				assert.Equal(t, "batch/v1", job.TypeMeta.APIVersion)
-				assert.Equal(t, "Job", job.TypeMeta.Kind)
+				assert.Equal(t, "batch/v1", job.APIVersion)
+				assert.Equal(t, "Job", job.Kind)
 			},
 		},
 		"job spec parallelism and completions": {

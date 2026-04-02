@@ -50,8 +50,8 @@ func TestStatefulSet(t *testing.T) {
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
 				sts := StatefulSet(cr, "init:latest", "abc123")
 
-				assert.Equal(t, "apps/v1", sts.TypeMeta.APIVersion)
-				assert.Equal(t, "StatefulSet", sts.TypeMeta.Kind)
+				assert.Equal(t, "apps/v1", sts.APIVersion)
+				assert.Equal(t, "StatefulSet", sts.Kind)
 				assert.Equal(t, "my-cluster-binlog-server", sts.Name)
 				assert.Equal(t, "test-ns", sts.Namespace)
 			},
