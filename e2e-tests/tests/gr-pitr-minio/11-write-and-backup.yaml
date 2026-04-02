@@ -17,7 +17,7 @@ commands:
       echo '{}' \
           | yq eval '.apiVersion = "ps.percona.com/v1"' - \
           | yq eval '.kind = "PerconaServerMySQLBackup"' - \
-          | yq eval '.metadata.name = "pitr-minio-backup-2"' - \
+          | yq eval '.metadata.name = "gr-pitr-minio-backup-2"' - \
           | yq eval '.metadata.finalizers[0] = "percona.com/delete-backup"' - \
           | yq eval ".spec.clusterName = \"${cluster_name}\"" - \
           | yq eval '.spec.storageName = "minio"' - \
