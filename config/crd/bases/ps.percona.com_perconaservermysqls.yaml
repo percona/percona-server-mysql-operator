@@ -3154,6 +3154,10 @@ spec:
                   autoRecovery:
                     type: boolean
                   clusterType:
+                    default: group-replication
+                    enum:
+                    - group-replication
+                    - async
                     type: string
                   configuration:
                     type: string
@@ -10251,6 +10255,8 @@ spec:
                 type: object
               unsafeFlags:
                 properties:
+                  backupNonReadyCluster:
+                    type: boolean
                   mysqlSize:
                     type: boolean
                   orchestrator:
