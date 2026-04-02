@@ -151,20 +151,6 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return ctrl.Result{}, nil
 	}
 
-	storage, ok := cluster.Spec.Backup.Storages[cr.Spec.StorageName]
-	if !ok {
-		status.State = apiv1.BackupError
-		status.StateDesc = fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", cr.Spec.StorageName)
-		return rr, nil
-	}
-
-	// Set annotations on incremental backups.
-	if err := r.setIncrementalBaseAnnotations(ctx, cr, storage); err != nil {
-		status.State = apiv1.BackupError
-		status.StateDesc = "failed to set incremental base annotations: " + err.Error()
-		return rr, nil
-	}
-
 	job := &batchv1.Job{}
 	nn = xtrabackup.JobNamespacedName(cr)
 	err := r.Get(ctx, nn, job)
@@ -179,6 +165,19 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			status.State = apiv1.BackupError
 			status.StateDesc = "cluster is not ready"
 			return ctrl.Result{}, nil
+		}
+
+		storage, ok := cluster.Spec.Backup.Storages[cr.Spec.StorageName]
+		if !ok {
+			status.State = apiv1.BackupError
+			status.StateDesc = fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", cr.Spec.StorageName)
+			return rr, nil
+		}
+
+		if err := r.setIncrementalBaseAnnotations(ctx, cr, storage); err != nil {
+			status.State = apiv1.BackupError
+			status.StateDesc = "failed to set incremental base annotations: " + err.Error()
+			return rr, nil
 		}
 
 		backupSource, err := r.getBackupSource(ctx, cr, cluster)
