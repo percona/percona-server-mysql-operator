@@ -25,6 +25,7 @@ import (
 
 	cmscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
 	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
 	uzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	eventsv1 "k8s.io/api/events/v1"
@@ -85,6 +86,8 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	setupLog.Info("Build info", "GitCommit", GitCommit, "BuildTime", BuildTime)
+
+	ctx := ctrl.SetupSignalHandler()
 
 	namespace, err := k8s.GetWatchNamespace()
 	if err != nil {
@@ -184,17 +187,8 @@ func main() {
 	}
 	//+kubebuilder:scaffold:builder
 
-	err = mgr.GetFieldIndexer().IndexField(
-		context.Background(),
-		&eventsv1.Event{},
-		"regarding.name",
-		func(rawObj client.Object) []string {
-			event := rawObj.(*eventsv1.Event)
-			return []string{event.Regarding.Name}
-		},
-	)
-	if err != nil {
-		setupLog.Error(err, "unable to index field")
+	if err := setupFieldIndexers(ctx, mgr); err != nil {
+		setupLog.Error(err, "unable to setup field indexers")
 		os.Exit(1)
 	}
 
@@ -214,7 +208,7 @@ func main() {
 		"Platform", serverVersion.Platform,
 		"Version", serverVersion.Info,
 	)
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
@@ -257,4 +251,41 @@ func getLogLevel(log logr.Logger) zapcore.LevelEnabler {
 		log.Info("Unsupported log level, using INFO", "level", l)
 		return zapcore.InfoLevel
 	}
+}
+
+func setupFieldIndexers(ctx context.Context, mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&eventsv1.Event{},
+		"regarding.name",
+		func(rawObj client.Object) []string {
+			event := rawObj.(*eventsv1.Event)
+			return []string{event.Regarding.Name}
+		},
+	); err != nil {
+		return errors.Wrap(err, "unable to index field 'regarding.name'")
+	}
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&eventsv1.Event{},
+		"regarding.namespace",
+		func(rawObj client.Object) []string {
+			event := rawObj.(*eventsv1.Event)
+			return []string{event.Regarding.Namespace}
+		},
+	); err != nil {
+		return errors.Wrap(err, "unable to index field 'regarding.namespace'")
+	}
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&apiv1.PerconaServerMySQLBackup{},
+		"spec.clusterName",
+		func(rawObj client.Object) []string {
+			backup := rawObj.(*apiv1.PerconaServerMySQLBackup)
+			return []string{backup.Spec.ClusterName}
+		},
+	); err != nil {
+		return errors.Wrap(err, "unable to index field 'spec.clusterName'")
+	}
+	return nil
 }

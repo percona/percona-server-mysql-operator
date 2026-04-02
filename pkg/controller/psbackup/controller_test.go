@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -46,6 +47,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 	require.NoError(t, err)
 	cluster, err := readDefaultCR("ps-cluster1", namespace)
 	require.NoError(t, err)
+	cluster.Status.State = apiv1.StateReady
 
 	fakeValidateStorageClient := func(ctx context.Context, opts storage.Options) (storage.Storage, error) {
 		return nil, errors.New("fake error")
@@ -56,11 +58,13 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 		cluster   *apiv1.PerconaServerMySQL
 		cr        *apiv1.PerconaServerMySQLBackup
 		obj       []client.Object
+		state     apiv1.BackupState
 		stateDesc string
 	}{
 		{
 			name:      "without cluster",
 			cr:        cr,
+			state:     apiv1.BackupError,
 			stateDesc: fmt.Sprintf("PerconaServerMySQL %s in namespace %s is not found", cr.Spec.ClusterName, namespace),
 		},
 		{
@@ -78,7 +82,22 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 					}
 				},
 			),
+			state:     apiv1.BackupError,
 			stateDesc: "spec.backup not found in PerconaServerMySQL CustomResource or backups are disabled",
+		},
+		{
+			name: "cluster is not ready for backup",
+			cr:   cr,
+			cluster: updateResource(
+				cluster.DeepCopy(),
+				func(cr *apiv1.PerconaServerMySQL) {
+					cr.Namespace = namespace
+					cr.Status.State = apiv1.StateInitializing
+					cr.Status.MySQL.State = apiv1.StateReady
+				},
+			),
+			state:     apiv1.BackupError,
+			stateDesc: "cluster is not ready",
 		},
 		{
 			name: "without storage",
@@ -87,6 +106,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 				cluster.DeepCopy(),
 				func(cr *apiv1.PerconaServerMySQL) {
 					cr.Namespace = namespace
+					cr.Status.State = apiv1.StateReady
 					cr.Spec.Backup = &apiv1.BackupSpec{
 						Image:    "some-image",
 						Enabled:  true,
@@ -94,6 +114,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 					}
 				},
 			),
+			state:     apiv1.BackupError,
 			stateDesc: fmt.Sprintf("%s not found in spec.backup.storages in PerconaServerMySQL CustomResource", cr.Spec.StorageName),
 		},
 		{
@@ -110,8 +131,14 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 							cr.Spec.StorageName: {},
 						},
 					}
+					cluster.Status = apiv1.PerconaServerMySQLStatus{
+						MySQL: apiv1.StatefulAppStatus{
+							State: apiv1.StateReady,
+						},
+					}
 				},
 			),
+			state:     apiv1.BackupError,
 			stateDesc: fmt.Sprintf("failed to get the source host for backup: get operator password: get secret/internal-%s: secrets \"internal-%s\" not found", cluster.Name, cluster.Name),
 		},
 		{
@@ -166,6 +193,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 					},
 				},
 			},
+			state:     apiv1.BackupError,
 			stateDesc: "failed to validate storage: new client: fake error",
 		},
 	}
@@ -193,22 +221,24 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			err = r.Get(t.Context(), client.ObjectKeyFromObject(tt.cr), cr)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.stateDesc, cr.Status.StateDesc)
-			assert.Equal(t, apiv1.BackupError, cr.Status.State)
+			assert.Equal(t, tt.state, cr.Status.State)
 
-			// Backup with an error state should not be reconciled.
-			// We can verify this by using clientWithGetCount.
-			//
-			// If the reconcile loop calls Get more than once,
-			// it means the loop continued running instead of stopping
-			// after the state check.
-			r.Client = &clientWithGetCount{
-				Count:  1,
-				Client: r.Client,
+			if tt.state == apiv1.BackupError {
+				// Backup with an error state should not be reconciled.
+				// We can verify this by using clientWithGetCount.
+				//
+				// If the reconcile loop calls Get more than once,
+				// it means the loop continued running instead of stopping
+				// after the state check.
+				r.Client = &clientWithGetCount{
+					Count:  1,
+					Client: r.Client,
+				}
+				_, err = r.Reconcile(t.Context(), controllerruntime.Request{
+					NamespacedName: client.ObjectKeyFromObject(tt.cr),
+				})
+				require.NoError(t, err)
 			}
-			_, err = r.Reconcile(t.Context(), controllerruntime.Request{
-				NamespacedName: client.ObjectKeyFromObject(tt.cr),
-			})
-			require.NoError(t, err)
 		})
 	}
 }
@@ -243,6 +273,7 @@ func TestStateDescCleanup(t *testing.T) {
 	cluster, err := readDefaultCR("ps-cluster1", namespace)
 	require.NoError(t, err)
 
+	cluster.Status.State = apiv1.StateReady
 	cluster.Status.MySQL.State = apiv1.StateReady
 	cluster.Spec.InitContainer.Image = "init-image"
 
@@ -347,6 +378,7 @@ func TestCheckFinalizers(t *testing.T) {
 		cr                 *apiv1.PerconaServerMySQLBackup
 		expectedFinalizers []string
 		finalizerJobFail   bool
+		additionalObjs     []client.Object
 	}{
 		{
 			name: "without finalizers",
@@ -438,6 +470,71 @@ func TestCheckFinalizers(t *testing.T) {
 			}),
 			expectedFinalizers: []string{"unknown-finalizer"},
 		},
+		{
+			name: "base backup with incremental chain",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
+				cr.Status.State = apiv1.BackupSucceeded
+				cr.Status.Destination = "s3://bucket/prefix/some-full-backup"
+			}),
+			additionalObjs: []client.Object{
+				updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+					cr.Name = "incr-1"
+					cr.Spec.Type = apiv1.BackupTypeIncremental
+					cr.Annotations = map[string]string{
+						string(naming.AnnotationBaseBackupName): "some-full-backup",
+					}
+					cr.Status.Destination = "s3://bucket/prefix/some-full-backup.incr/incr-1"
+					cr.Status.Type = apiv1.BackupTypeIncremental
+				}),
+			},
+			expectedFinalizers: []string{naming.FinalizerDeleteBackup},
+		},
+		{
+			name: "incremental backup in middle of chain",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+				cr.Name = "incr-2"
+				cr.Finalizers = []string{naming.FinalizerDeleteBackup}
+				cr.Spec.Type = apiv1.BackupTypeIncremental
+				cr.Annotations = map[string]string{
+					string(naming.AnnotationBaseBackupName): "some-full-backup",
+				}
+				cr.Status.State = apiv1.BackupSucceeded
+				cr.Status.Destination = "s3://bucket/prefix/some-full-backup.incr/incr-2"
+				cr.Status.Type = apiv1.BackupTypeIncremental
+				cr.Status.CompletedAt = &metav1.Time{Time: time.Now().Add(-time.Hour)}
+			}),
+			additionalObjs: []client.Object{
+				updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+					cr.Finalizers = []string{naming.FinalizerDeleteBackup}
+					cr.Status.State = apiv1.BackupSucceeded
+					cr.Status.Destination = "s3://bucket/prefix/some-full-backup"
+				}),
+				updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+					cr.Name = "incr-1"
+					cr.Spec.Type = apiv1.BackupTypeIncremental
+					cr.Annotations = map[string]string{
+						string(naming.AnnotationBaseBackupName): "some-full-backup",
+					}
+					cr.Status.State = apiv1.BackupSucceeded
+					cr.Status.Destination = "s3://bucket/prefix/some-full-backup.incr/incr-1"
+					cr.Status.Type = apiv1.BackupTypeIncremental
+					cr.Status.CompletedAt = &metav1.Time{Time: time.Now().Add(-time.Hour * 2)}
+				}),
+				updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+					cr.Name = "incr-3"
+					cr.Spec.Type = apiv1.BackupTypeIncremental
+					cr.Annotations = map[string]string{
+						string(naming.AnnotationBaseBackupName): "some-full-backup",
+					}
+					cr.Status.State = apiv1.BackupSucceeded
+					cr.Status.Destination = "s3://bucket/prefix/some-full-backup.incr/incr-3"
+					cr.Status.Type = apiv1.BackupTypeIncremental
+					cr.Status.CompletedAt = &metav1.Time{Time: time.Now()}
+				}),
+			},
+			expectedFinalizers: []string{naming.FinalizerDeleteBackup},
+		},
 	}
 
 	sec := &corev1.Secret{
@@ -474,7 +571,16 @@ func TestCheckFinalizers(t *testing.T) {
 			}
 			job.Status.Conditions = append(job.Status.Conditions, cond)
 
-			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, sec, job)
+			objs := []client.Object{cr, sec, job}
+			objs = append(objs, tt.additionalObjs...)
+			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).
+				WithIndex(&apiv1.PerconaServerMySQLBackup{}, "spec.clusterName", func(o client.Object) []string {
+					b, ok := o.(*apiv1.PerconaServerMySQLBackup)
+					if !ok {
+						return nil
+					}
+					return []string{b.Spec.ClusterName}
+				})
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cb.Build(),
 				Scheme:        scheme,
@@ -528,6 +634,7 @@ func TestRunningState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err, "failed to read default cr")
 	}
+	cluster.Status.State = apiv1.StateReady
 	cluster.Status.MySQL.State = apiv1.StateReady
 	tests := []struct {
 		name          string
@@ -787,6 +894,18 @@ func (f *fakeSidecarClient) GetRunningBackupConfig(ctx context.Context) (*xtraba
 
 func (f *fakeSidecarClient) DeleteBackup(ctx context.Context, name string, cfg xtrabackup.BackupConfig) error {
 	return nil
+}
+
+func (f *fakeSidecarClient) GetCheckpointInfo(ctx context.Context, cfg xtrabackup.BackupConfig) (*xtrabackup.CheckpointInfo, error) {
+	return &xtrabackup.CheckpointInfo{
+		BackupType: "full",
+		FromLSN:    "1000",
+		ToLSN:      "2000",
+		LastLSN:    "3000",
+		FlushedLSN: "4000",
+		RedoMemory: "5000",
+		RedoFrames: "6000",
+	}, nil
 }
 
 func readDefaultCR(name, namespace string) (*apiv1.PerconaServerMySQL, error) {

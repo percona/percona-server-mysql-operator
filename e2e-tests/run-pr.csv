@@ -10,6 +10,8 @@ demand-backup-minio,8.0
 demand-backup-minio,8.4
 demand-backup-cloud,8.4
 demand-backup-retry,8.4
+demand-backup-incremental,8.0
+demand-backup-incremental,8.4
 async-data-at-rest-encryption,8.0
 async-data-at-rest-encryption,8.4
 gr-global-metadata,8.4
@@ -18,6 +20,8 @@ gr-data-at-rest-encryption,8.4
 gr-demand-backup-minio,8.4
 gr-demand-backup-cloud,8.4
 gr-demand-backup-haproxy,8.4
+gr-demand-backup-incremental,8.0
+gr-demand-backup-incremental,8.4
 gr-finalizer,8.4
 gr-haproxy,8.0
 gr-haproxy,8.4
@@ -28,6 +32,7 @@ gr-one-pod,8.4
 gr-recreate,8.4
 gr-scaling,8.4
 gr-scheduled-backup,8.4
+gr-scheduled-backup-incremental,8.4
 gr-security-context,8.4
 gr-self-healing,8.4
 gr-tls-cert-manager,8.4
@@ -48,6 +53,8 @@ recreate,8.4
 scaling,8.4
 scheduled-backup,8.0
 scheduled-backup,8.4
+scheduled-backup-incremental,8.0
+scheduled-backup-incremental,8.4
 service-per-pod,8.4
 sidecars,8.4
 smart-update,8.4
