@@ -3072,6 +3072,10 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
+                          checkpointInterval:
+                            type: string
+                          checkpointSize:
+                            type: string
                           configuration:
                             type: string
                           connectTimeout:
@@ -3688,6 +3692,8 @@ spec:
                                   x-kubernetes-int-or-string: true
                                 type: object
                             type: object
+                          rewriteFileSize:
+                            type: string
                           runtimeClassName:
                             type: string
                           schedulerName:
@@ -3700,6 +3706,8 @@ spec:
                           size:
                             format: int32
                             type: integer
+                          sslMode:
+                            type: string
                           startupProbe:
                             properties:
                               exec:
@@ -3870,6 +3878,8 @@ spec:
                               - whenUnsatisfiable
                               type: object
                             type: array
+                          verifyChecksum:
+                            type: boolean
                           writeTimeout:
                             format: int32
                             type: integer
