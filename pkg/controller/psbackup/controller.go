@@ -148,7 +148,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	if cluster.Spec.Backup == nil || !cluster.Spec.Backup.Enabled {
 		status.State = apiv1.BackupError
 		status.StateDesc = "spec.backup not found in PerconaServerMySQL CustomResource or backups are disabled"
-		return rr, nil
+		return ctrl.Result{}, nil
 	}
 
 	storage, ok := cluster.Spec.Backup.Storages[cr.Spec.StorageName]
@@ -175,6 +175,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	if k8serrors.IsNotFound(err) {
 		if err := cluster.CanBackup(); err != nil {
 			log.Info("PerconaServerMySQL is not ready for backup", "backup", cr.Name, "cluster", cluster.Name, "namespace", cluster.Namespace, "reason", err.Error())
+
 			status.State = apiv1.BackupError
 			status.StateDesc = "cluster is not ready"
 			return ctrl.Result{}, nil
@@ -184,7 +185,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		if err != nil {
 			status.State = apiv1.BackupError
 			status.StateDesc = fmt.Sprintf("failed to get the source host for backup: %v", err)
-			return rr, nil
+			return ctrl.Result{}, nil
 		}
 
 		if err := r.prepareStatus(cr, cluster, storage, &status, backupSource); err != nil {
