@@ -1268,8 +1268,6 @@ func makeFakeReadyPods(cr *apiv1.PerconaServerMySQL, amount int, podType string)
 }
 
 func TestReconcileStatusBinlogServer(t *testing.T) {
-	ctx := context.Background()
-
 	cr, err := readDefaultCR("ps-cluster1", "status-1")
 	require.NoError(t, err)
 	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
@@ -1437,8 +1435,8 @@ func TestReconcileStatusBinlogServer(t *testing.T) {
 				},
 			}
 
-			require.NoError(t, r.reconcileCRStatus(ctx, cr, nil))
-			require.NoError(t, r.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, cr))
+			require.NoError(t, r.reconcileCRStatus(t.Context(), cr, nil))
+			require.NoError(t, r.Get(t.Context(), types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, cr))
 
 			opt := cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime", "Message")
 			assert.Empty(t, cmp.Diff(cr.Status, tt.expected, opt))
