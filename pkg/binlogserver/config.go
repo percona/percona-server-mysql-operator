@@ -43,8 +43,7 @@ type Connection struct {
 type ReplicationMode string
 
 const (
-	ReplicationModeGTID     ReplicationMode = "gtid"
-	ReplicationModePosition ReplicationMode = "position"
+	ReplicationModeGTID ReplicationMode = "gtid"
 )
 
 type Rewrite struct {
