@@ -3,10 +3,10 @@
 | Field        | Value              |
 |--------------|--------------------|
 | Author       | @mayankshah1607    |
-| Status       | In review          |
+| Status       | [Completed](https://github.com/percona/percona-server-mysql-operator/pull/1254)      |
 | Created      | 2026-03-18         |
-| Last Updated | 2026-03-26         |
-| Reviewers    | [names]            |
+| Last Updated | 2026-04-02         |
+| Reviewers    | @egegunes @gkech @hors            |
 
 ---
 
