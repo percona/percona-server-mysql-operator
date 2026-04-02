@@ -10245,6 +10245,8 @@ spec:
                 type: object
               unsafeFlags:
                 properties:
+                  backupNonReadyCluster:
+                    type: boolean
                   mysqlSize:
                     type: boolean
                   orchestrator:
