@@ -41,7 +41,15 @@ func (r *CronRegistry) stopBackupJob(name string) {
 	if !ok {
 		return
 	}
-	r.crons.Remove(job.(backupScheduleJob).jobID)
+
+	j, ok := job.(backupScheduleJob)
+	if !ok {
+		return
+	}
+
+	r.crons.Remove(j.jobID)
+	j.Schedule = ""
+	r.backupJobs.Store(name, j)
 }
 
 func (r *CronRegistry) getBackupJob(bcp apiv1.BackupSchedule) backupScheduleJob {
@@ -112,6 +120,7 @@ func (r *CronRegistry) createBackupJobFunc(ctx context.Context, cl client.Client
 			Spec: apiv1.PerconaServerMySQLBackupSpec{
 				ClusterName: cr.Name,
 				StorageName: backupJob.StorageName,
+				Type:        backupJob.Type,
 			},
 		}
 
@@ -213,7 +222,7 @@ func (r *PerconaServerMySQLReconciler) oldScheduledBackups(ctx context.Context, 
 
 	backups := []apiv1.PerconaServerMySQLBackup{}
 	for _, bcp := range bcpList.Items {
-		if bcp.Status.State == apiv1.BackupSucceeded {
+		if bcp.Status.State == apiv1.BackupSucceeded && bcp.GetType() == apiv1.BackupTypeFull {
 			backups = append(backups, bcp)
 		}
 	}

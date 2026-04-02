@@ -1,0 +1,15 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-scheduled-backup-incremental
+spec:
+  backup:
+    schedule:
+    - keep: 2
+      name: minio-full
+      schedule: ''
+      storageName: minio
+    - name: minio-incr
+      schedule: '*/2 * * * *'
+      storageName: minio
+      type: incremental

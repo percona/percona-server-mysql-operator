@@ -2,14 +2,19 @@ package xtrabackup
 
 import (
 	"slices"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 )
 
@@ -377,65 +382,14 @@ func TestDeleteJob(t *testing.T) {
 	})
 }
 
-func TestGetDestination(t *testing.T) {
-	const clusterName = "cluster1"
-	const creationTimeStamp = "2025-01-01-00:00:00"
-
-	tests := map[string]struct {
-		storage     *apiv1.BackupStorageSpec
-		errContains string
-	}{
-		"s3 storage": {
-			storage: &apiv1.BackupStorageSpec{
-				Type: apiv1.BackupStorageS3,
-				S3:   &apiv1.BackupStorageS3Spec{Bucket: "my-bucket", Prefix: "my-prefix"},
-			},
-		},
-		"gcs storage": {
-			storage: &apiv1.BackupStorageSpec{
-				Type: apiv1.BackupStorageGCS,
-				GCS:  &apiv1.BackupStorageGCSSpec{Bucket: "my-bucket"},
-			},
-		},
-		"azure storage": {
-			storage: &apiv1.BackupStorageSpec{
-				Type:  apiv1.BackupStorageAzure,
-				Azure: &apiv1.BackupStorageAzureSpec{ContainerName: "my-container"},
-			},
-		},
-		"s3 type with nil s3 spec": {
-			storage:     &apiv1.BackupStorageSpec{Type: apiv1.BackupStorageS3},
-			errContains: "s3 configuration is not specified",
-		},
-		"gcs type with nil gcs spec": {
-			storage:     &apiv1.BackupStorageSpec{Type: apiv1.BackupStorageGCS},
-			errContains: "gcs configuration is not specified",
-		},
-		"azure type with nil azure spec": {
-			storage:     &apiv1.BackupStorageSpec{Type: apiv1.BackupStorageAzure},
-			errContains: "azure configuration is not specified",
-		},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			d, err := GetDestination(tt.storage, clusterName, creationTimeStamp)
-			if tt.errContains != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errContains)
-			} else {
-				require.NoError(t, err)
-				assert.NotEmpty(t, d)
-			}
-		})
-	}
-}
-
 func TestRestoreJob(t *testing.T) {
 	const ns = "restore-job-ns"
 	const storageName = "some-storage"
-	const destination = "prefix/destination"
 	const initImage = "init-image"
+
+	destination := DestinationInfo{
+		Base: "destination",
+	}
 
 	cr := readDefaultCluster(t, "cluster", ns)
 	if err := cr.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
@@ -625,4 +579,276 @@ func TestRestoreJob(t *testing.T) {
 			},
 		}, getEnv())
 	})
+}
+
+func TestGetDestination(t *testing.T) {
+	ts := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+
+	newBackup := func(clusterName string, backupType apiv1.BackupType) *apiv1.PerconaServerMySQLBackup {
+		return &apiv1.PerconaServerMySQLBackup{
+			ObjectMeta: metav1.ObjectMeta{
+				CreationTimestamp: metav1.NewTime(ts),
+			},
+			Spec: apiv1.PerconaServerMySQLBackupSpec{
+				Type:        backupType,
+				ClusterName: clusterName,
+			},
+		}
+	}
+
+	testCases := []struct {
+		desc     string
+		storage  *apiv1.BackupStorageSpec
+		backup   func() *apiv1.PerconaServerMySQLBackup
+		expected apiv1.BackupDestination
+		wantErr  error
+	}{
+		{
+			desc: "s3 full backup",
+			storage: &apiv1.BackupStorageSpec{
+				Type: apiv1.BackupStorageS3,
+				S3: &apiv1.BackupStorageS3Spec{
+					Bucket: "my-bucket",
+					Prefix: "backups",
+				},
+			},
+			backup:   func() *apiv1.PerconaServerMySQLBackup { return newBackup("my-cluster", apiv1.BackupTypeFull) },
+			expected: apiv1.BackupDestination("s3://my-bucket/backups/my-cluster-2024-06-15-10:30:00-full"),
+		},
+		{
+			desc: "s3 full backup without prefix",
+			storage: &apiv1.BackupStorageSpec{
+				Type: apiv1.BackupStorageS3,
+				S3: &apiv1.BackupStorageS3Spec{
+					Bucket: "my-bucket",
+				},
+			},
+			backup:   func() *apiv1.PerconaServerMySQLBackup { return newBackup("my-cluster", apiv1.BackupTypeFull) },
+			expected: apiv1.BackupDestination("s3://my-bucket/my-cluster-2024-06-15-10:30:00-full"),
+		},
+		{
+			desc: "gcs full backup",
+			storage: &apiv1.BackupStorageSpec{
+				Type: apiv1.BackupStorageGCS,
+				GCS: &apiv1.BackupStorageGCSSpec{
+					Bucket: "gcs-bucket",
+					Prefix: "db-backups",
+				},
+			},
+			backup:   func() *apiv1.PerconaServerMySQLBackup { return newBackup("cluster1", apiv1.BackupTypeFull) },
+			expected: apiv1.BackupDestination("gs://gcs-bucket/db-backups/cluster1-2024-06-15-10:30:00-full"),
+		},
+		{
+			desc: "azure full backup",
+			storage: &apiv1.BackupStorageSpec{
+				Type: apiv1.BackupStorageAzure,
+				Azure: &apiv1.BackupStorageAzureSpec{
+					ContainerName: "my-container",
+					Prefix:        "azure-backups",
+				},
+			},
+			backup:   func() *apiv1.PerconaServerMySQLBackup { return newBackup("cluster1", apiv1.BackupTypeFull) },
+			expected: apiv1.BackupDestination("my-container/azure-backups/cluster1-2024-06-15-10:30:00-full"),
+		},
+		{
+			desc: "incremental backup with prefix",
+			storage: &apiv1.BackupStorageSpec{
+				Type: apiv1.BackupStorageS3,
+				S3: &apiv1.BackupStorageS3Spec{
+					Bucket: "my-bucket",
+					Prefix: "backups",
+				},
+			},
+			backup: func() *apiv1.PerconaServerMySQLBackup {
+				bcp := newBackup("my-cluster", apiv1.BackupTypeIncremental)
+				bcp.SetAnnotations(map[string]string{
+					string(naming.AnnotationBaseBackupName): "my-cluster-2024-06-14-08:00:00-full",
+				})
+				return bcp
+			},
+			expected: apiv1.BackupDestination("s3://my-bucket/backups/my-cluster-2024-06-14-08:00:00-full.incr/my-cluster-2024-06-15-10:30:00-incr"),
+		},
+		{
+			desc: "incremental backup without prefix",
+			storage: &apiv1.BackupStorageSpec{
+				Type: apiv1.BackupStorageS3,
+				S3: &apiv1.BackupStorageS3Spec{
+					Bucket: "my-bucket",
+				},
+			},
+			backup: func() *apiv1.PerconaServerMySQLBackup {
+				bcp := newBackup("my-cluster", apiv1.BackupTypeIncremental)
+				bcp.SetAnnotations(map[string]string{
+					string(naming.AnnotationBaseBackupName): "my-cluster-2024-06-14-08:00:00-full",
+				})
+				return bcp
+			},
+			expected: apiv1.BackupDestination("s3://my-bucket/my-cluster-2024-06-14-08:00:00-full.incr/my-cluster-2024-06-15-10:30:00-incr"),
+		},
+		{
+			desc: "incremental backup missing base annotation",
+			storage: &apiv1.BackupStorageSpec{
+				Type: apiv1.BackupStorageS3,
+				S3: &apiv1.BackupStorageS3Spec{
+					Bucket: "my-bucket",
+				},
+			},
+			backup: func() *apiv1.PerconaServerMySQLBackup {
+				return newBackup("my-cluster", apiv1.BackupTypeIncremental)
+			},
+			wantErr: errors.New("base backup name not known in annotations"),
+		},
+		{
+			desc: "s3 bucket with embedded prefix",
+			storage: &apiv1.BackupStorageSpec{
+				Type: apiv1.BackupStorageS3,
+				S3: &apiv1.BackupStorageS3Spec{
+					Bucket: "my-bucket/sub-path",
+				},
+			},
+			backup: func() *apiv1.PerconaServerMySQLBackup {
+				return newBackup("cluster1", apiv1.BackupTypeFull)
+			},
+			expected: apiv1.BackupDestination("s3://my-bucket/sub-path/cluster1-2024-06-15-10:30:00-full"),
+		},
+		{
+			desc: "s3 type with nil s3 spec",
+			storage: &apiv1.BackupStorageSpec{
+				Type: apiv1.BackupStorageS3,
+			},
+			backup: func() *apiv1.PerconaServerMySQLBackup {
+				return newBackup("cluster1", apiv1.BackupTypeFull)
+			},
+			wantErr: errors.New("storage type is s3, but s3 configuration is not specified"),
+		},
+		{
+			desc: "gcs type with nil gcs spec",
+			storage: &apiv1.BackupStorageSpec{
+				Type: apiv1.BackupStorageGCS,
+			},
+			backup: func() *apiv1.PerconaServerMySQLBackup {
+				return newBackup("cluster1", apiv1.BackupTypeFull)
+			},
+			wantErr: errors.New("storage type is gcs, but gcs configuration is not specified"),
+		},
+		{
+			desc: "azure type with nil azure spec",
+			storage: &apiv1.BackupStorageSpec{
+				Type: apiv1.BackupStorageAzure,
+			},
+			backup: func() *apiv1.PerconaServerMySQLBackup {
+				return newBackup("cluster1", apiv1.BackupTypeFull)
+			},
+			wantErr: errors.New("storage type is azure, but azure configuration is not specified"),
+		},
+		{
+			desc: "unsupported storage type",
+			storage: &apiv1.BackupStorageSpec{
+				Type: apiv1.BackupStorageType("unsupported"),
+			},
+			backup:  func() *apiv1.PerconaServerMySQLBackup { return newBackup("my-cluster", apiv1.BackupTypeFull) },
+			wantErr: errors.New("storage type unsupported is not supported"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			dest, err := GetDestination(tc.storage, tc.backup())
+			if tc.wantErr != nil {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.wantErr.Error())
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tc.expected, dest)
+			}
+		})
+	}
+}
+
+func TestCheckpointInfoParseFrom(t *testing.T) {
+	t.Run("full checkpoint file", func(t *testing.T) {
+		input := `backup_type = full-backuped
+from_lsn = 0
+to_lsn = 18446744073709551615
+last_lsn = 18446744073709551615
+flushed_lsn = 18446744073709551615
+redo_memory = 0
+redo_frames = 0
+`
+		var info CheckpointInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, "full-backuped", info.BackupType)
+		assert.Equal(t, "0", info.FromLSN)
+		assert.Equal(t, "18446744073709551615", info.ToLSN)
+		assert.Equal(t, "18446744073709551615", info.LastLSN)
+		assert.Equal(t, "18446744073709551615", info.FlushedLSN)
+		assert.Equal(t, "0", info.RedoMemory)
+		assert.Equal(t, "0", info.RedoFrames)
+	})
+
+	t.Run("incremental checkpoint file", func(t *testing.T) {
+		input := `backup_type = incremental
+from_lsn = 27655332
+to_lsn = 27660845
+last_lsn = 27660855
+flushed_lsn = 27660855
+redo_memory = 0
+redo_frames = 0
+`
+		var info CheckpointInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, "incremental", info.BackupType)
+		assert.Equal(t, "27655332", info.FromLSN)
+		assert.Equal(t, "27660845", info.ToLSN)
+		assert.Equal(t, "27660855", info.LastLSN)
+		assert.Equal(t, "27660855", info.FlushedLSN)
+	})
+
+	t.Run("extra whitespace", func(t *testing.T) {
+		input := "  backup_type  =  full-prepared  \n  from_lsn  =  100  \n"
+
+		var info CheckpointInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, "full-prepared", info.BackupType)
+		assert.Equal(t, "100", info.FromLSN)
+	})
+
+	t.Run("lines without equals are skipped", func(t *testing.T) {
+		input := "this line has no separator\nbackup_type = full-backuped\nmalformed line\n"
+
+		var info CheckpointInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, "full-backuped", info.BackupType)
+	})
+
+	t.Run("empty input", func(t *testing.T) {
+		var info CheckpointInfo
+		err := info.ParseFrom(strings.NewReader(""))
+		require.NoError(t, err)
+
+		assert.Equal(t, CheckpointInfo{}, info)
+	})
+
+	t.Run("partial fields", func(t *testing.T) {
+		input := "to_lsn = 999\nredo_frames = 42\n"
+
+		var info CheckpointInfo
+		err := info.ParseFrom(strings.NewReader(input))
+		require.NoError(t, err)
+
+		assert.Equal(t, "", info.BackupType)
+		assert.Equal(t, "", info.FromLSN)
+		assert.Equal(t, "999", info.ToLSN)
+		assert.Equal(t, "", info.LastLSN)
+		assert.Equal(t, "42", info.RedoFrames)
+	})
+
 }
