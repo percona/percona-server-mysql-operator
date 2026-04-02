@@ -4,7 +4,7 @@ delete:
   - apiVersion: ps.percona.com/v1
     kind: PerconaServerMySQL
     metadata:
-      name: pitr-minio
+      name: gr-pitr-minio
 commands:
   - script: |-
       set -o errexit

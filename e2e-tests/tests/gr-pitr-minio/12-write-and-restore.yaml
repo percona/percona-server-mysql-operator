@@ -22,9 +22,9 @@ commands:
       echo '{}' \
           | yq eval '.apiVersion = "ps.percona.com/v1"' - \
           | yq eval '.kind = "PerconaServerMySQLRestore"' - \
-          | yq eval '.metadata.name = "pitr-minio-restore-post-failover"' - \
+          | yq eval '.metadata.name = "gr-pitr-minio-restore-post-failover"' - \
           | yq eval ".spec.clusterName = \"${cluster_name}\"" - \
-          | yq eval '.spec.backupName = "pitr-minio-backup-2"' - \
+          | yq eval '.spec.backupName = "gr-pitr-minio-backup-2"' - \
           | yq eval '.spec.pitr.type = "date"' - \
           | yq eval ".spec.pitr.date = \"${PITR_DATE_POST}\"" - \
           | kubectl apply -n "${NAMESPACE}" -f -

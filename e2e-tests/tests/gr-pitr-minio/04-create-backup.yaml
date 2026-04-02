@@ -1,9 +1,9 @@
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLBackup
 metadata:
-  name: pitr-minio-backup
+  name: gr-pitr-minio-backup
   finalizers:
     - percona.com/delete-backup
 spec:
-  clusterName: pitr-minio
+  clusterName: gr-pitr-minio
   storageName: minio
