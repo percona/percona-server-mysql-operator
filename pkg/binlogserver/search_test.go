@@ -35,7 +35,7 @@ func (f *fakeExecClient) Exec(_ context.Context, _ *corev1.Pod, _ string, cmd []
 	}
 	if stdout != nil && f.response != nil {
 		data, _ := json.Marshal(f.response)
-		stdout.Write(data)
+		_, _ = stdout.Write(data)
 	}
 	return nil
 }
