@@ -125,8 +125,7 @@ func (m *ReplicationDBManager) ReplicationStatus(ctx context.Context) (Replicati
 	if rows[0].IoState == "ON" && rows[0].SqlState == "ON" {
 		return ReplicationStatusActive, rows[0].Host, nil
 	}
-
-	return ReplicationStatusStopped, "", err
+	return ReplicationStatusStopped, "", nil
 }
 
 func (m *ReplicationDBManager) GetGroupReplicationPrimary(ctx context.Context) (string, error) {
