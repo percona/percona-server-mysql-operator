@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/pkg/errors"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
@@ -17,6 +18,7 @@ import (
 type SidecarClient interface {
 	GetRunningBackupConfig(ctx context.Context) (*BackupConfig, error)
 	DeleteBackup(ctx context.Context, name string, cfg BackupConfig) error
+	GetCheckpointInfo(ctx context.Context, cfg BackupConfig) (*CheckpointInfo, error)
 }
 
 type NewSidecarClientFunc func(srcNode string) SidecarClient
@@ -94,4 +96,45 @@ func (c *sidecarClient) DeleteBackup(ctx context.Context, name string, cfg Backu
 		return errors.Errorf("delete backup failed: %s (status: %d)", string(body), resp.StatusCode)
 	}
 	return nil
+}
+
+func (c *sidecarClient) GetCheckpointInfo(ctx context.Context, cfg BackupConfig) (*CheckpointInfo, error) {
+	log := logf.FromContext(ctx).WithName("GetCheckpointInfo")
+	sidecarURL := url.URL{
+		Host:   c.srcNode + ":" + c.port(),
+		Scheme: "http",
+		Path:   "/backup/checkpoint-info",
+	}
+	reqData, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal backup config")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, sidecarURL.String(), bytes.NewReader(reqData))
+	if err != nil {
+		return nil, errors.Wrap(err, "create http request")
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "get checkpoint info")
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Error(err, "failed to close response body")
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, errors.Wrap(err, "read response body")
+		}
+		return nil, errors.Errorf("get checkpoint info failed: %s (status: %d)", string(body), resp.StatusCode)
+	}
+
+	info := new(CheckpointInfo)
+	if err := json.NewDecoder(resp.Body).Decode(info); err != nil {
+		return nil, errors.Wrap(err, "decode checkpoint info")
+	}
+	return info, nil
 }

@@ -14,6 +14,7 @@ spec:
 #    labels:
 #      rack: rack-22
 #  unsafeFlags:
+#    backupNonReadyCluster: false
 #    mysqlSize: false
 #    orchestrator: false
 #    orchestratorSize: false
@@ -778,10 +779,12 @@ spec:
 #        name: sat-night-backup
 #        schedule: 0 0 * * 6
 #        storageName: s3-us-west
+#        type: full
 #      - keep: 5
 #        name: daily-backup
 #        schedule: 0 0 * * *
 #        storageName: s3
+#        type: incremental
 #    backoffLimit: 6
 #    serviceAccountName: some-service-account
 #    initContainer:

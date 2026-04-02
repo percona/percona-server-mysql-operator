@@ -1582,6 +1582,12 @@ spec:
                           type: string
                         storageName:
                           type: string
+                        type:
+                          default: full
+                          enum:
+                          - full
+                          - incremental
+                          type: string
                       required:
                       - name
                       - schedule
@@ -3163,6 +3169,10 @@ spec:
                   autoRecovery:
                     type: boolean
                   clusterType:
+                    default: group-replication
+                    enum:
+                    - group-replication
+                    - async
                     type: string
                   configuration:
                     type: string
@@ -10279,6 +10289,8 @@ spec:
                   rule: has(self.image) && self.image != ''
               unsafeFlags:
                 properties:
+                  backupNonReadyCluster:
+                    type: boolean
                   mysqlSize:
                     type: boolean
                   orchestrator:

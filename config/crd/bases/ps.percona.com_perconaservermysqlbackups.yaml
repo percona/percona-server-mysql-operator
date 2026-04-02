@@ -18,6 +18,9 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .status.type
+      name: Type
+      type: string
     - jsonPath: .spec.storageName
       name: Storage
       type: string
@@ -148,14 +151,27 @@ spec:
                       type: object
                     type: array
                 type: object
+              incrementalBaseBackupName:
+                type: string
               sourcePod:
                 type: string
               storageName:
+                type: string
+              type:
+                default: full
+                enum:
+                - full
+                - incremental
                 type: string
             required:
             - clusterName
             - storageName
             type: object
+            x-kubernetes-validations:
+            - message: 'Invalid configuration: incrementalBaseBackupName is only allowed
+                for incremental backups'
+              rule: '!has(self.incrementalBaseBackupName) || self.incrementalBaseBackupName
+                == "" || self.type == ''incremental'''
           status:
             properties:
               backupSource:
@@ -1151,6 +1167,8 @@ spec:
                 required:
                 - type
                 type: object
+              type:
+                type: string
             type: object
         type: object
     served: true
