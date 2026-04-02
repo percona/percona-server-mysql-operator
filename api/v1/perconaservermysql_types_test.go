@@ -166,6 +166,69 @@ func TestCheckNSetDefaults(t *testing.T) {
 		err := cr.CheckNSetDefaults(t.Context(), nil)
 		assert.NoError(t, err)
 	})
+	t.Run("binlog server defaults are set when binlogServer is configured", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+				},
+			},
+		}
+		cr.Spec.Backup = &BackupSpec{
+			PiTR: PiTRSpec{
+				BinlogServer: &BinlogServerSpec{},
+			},
+		}
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.NoError(t, err)
+
+		bls := cr.Spec.Backup.PiTR.BinlogServer
+		assert.Equal(t, "verify_identity", bls.SSLMode)
+		assert.NotNil(t, bls.VerifyChecksum)
+		assert.True(t, *bls.VerifyChecksum)
+		assert.Equal(t, "128M", bls.RewriteFileSize)
+		assert.Equal(t, "2M", bls.CheckpointSize)
+		assert.Equal(t, "30s", bls.CheckpointInterval)
+	})
+	t.Run("binlog server explicit values are not overridden by defaults", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+				},
+			},
+		}
+		f := false
+		cr.Spec.Backup = &BackupSpec{
+			PiTR: PiTRSpec{
+				BinlogServer: &BinlogServerSpec{
+					SSLMode:            "required",
+					VerifyChecksum:     &f,
+					RewriteFileSize:    "256M",
+					CheckpointSize:     "4M",
+					CheckpointInterval: "60s",
+				},
+			},
+		}
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.NoError(t, err)
+
+		bls := cr.Spec.Backup.PiTR.BinlogServer
+		assert.Equal(t, "required", bls.SSLMode)
+		assert.NotNil(t, bls.VerifyChecksum)
+		assert.False(t, *bls.VerifyChecksum)
+		assert.Equal(t, "256M", bls.RewriteFileSize)
+		assert.Equal(t, "4M", bls.CheckpointSize)
+		assert.Equal(t, "60s", bls.CheckpointInterval)
+	})
 }
 
 func TestValidateVolume(t *testing.T) {

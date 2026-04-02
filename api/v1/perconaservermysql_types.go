@@ -533,6 +533,16 @@ type BinlogServerSpec struct {
 	ServerID int32 `json:"serverId,omitempty"`
 	// The number of seconds the utility will spend in disconnected mode between reconnection attempts.
 	IdleTime int32 `json:"idleTime,omitempty"`
+	// SSLMode specifies the SSL mode for the connection to MySQL. Defaults to "verify_identity".
+	SSLMode string `json:"sslMode,omitempty"`
+	// VerifyChecksum enables checksum verification during replication. Defaults to true.
+	VerifyChecksum *bool `json:"verifyChecksum,omitempty"`
+	// RewriteFileSize specifies the maximum binlog file size for rewrite. Defaults to "128M".
+	RewriteFileSize string `json:"rewriteFileSize,omitempty"`
+	// CheckpointSize specifies the storage checkpoint size. Defaults to "2M".
+	CheckpointSize string `json:"checkpointSize,omitempty"`
+	// CheckpointInterval specifies the storage checkpoint interval. Defaults to "30s".
+	CheckpointInterval string `json:"checkpointInterval,omitempty"`
 
 	PodSpec `json:",inline"`
 }
@@ -993,6 +1003,26 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 
 	if cr.Spec.Backup.PiTR.Enabled && cr.Spec.Backup.PiTR.BinlogServer == nil {
 		cr.Spec.Backup.PiTR.BinlogServer = new(BinlogServerSpec)
+	}
+
+	if cr.Spec.Backup.PiTR.BinlogServer != nil {
+		bls := cr.Spec.Backup.PiTR.BinlogServer
+		if bls.SSLMode == "" {
+			bls.SSLMode = "verify_identity"
+		}
+		if bls.VerifyChecksum == nil {
+			t := true
+			bls.VerifyChecksum = &t
+		}
+		if bls.RewriteFileSize == "" {
+			bls.RewriteFileSize = "128M"
+		}
+		if bls.CheckpointSize == "" {
+			bls.CheckpointSize = "2M"
+		}
+		if bls.CheckpointInterval == "" {
+			bls.CheckpointInterval = "30s"
+		}
 	}
 
 	if cr.Spec.Pause {
