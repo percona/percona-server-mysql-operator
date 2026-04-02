@@ -131,8 +131,6 @@ func checkReadinessAsync(ctx context.Context) error {
 		return errors.New("replica is not read only")
 	case replStatus == mysqldb.ReplicationStatusStopped:
 		return errors.New("replication is stopped")
-	case replStatus == mysqldb.ReplicationStatusNotInitiated && readOnly:
-		return nil
 	}
 	return nil
 }
