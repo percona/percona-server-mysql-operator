@@ -132,6 +132,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 						},
 					}
 					cluster.Status = apiv1.PerconaServerMySQLStatus{
+						State: apiv1.StateReady,
 						MySQL: apiv1.StatefulAppStatus{
 							State: apiv1.StateReady,
 						},
