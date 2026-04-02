@@ -31,9 +31,9 @@ commands:
       echo '{}' \
           | yq eval '.apiVersion = "ps.percona.com/v1"' - \
           | yq eval '.kind = "PerconaServerMySQLRestore"' - \
-          | yq eval '.metadata.name = "pitr-minio-restore"' - \
+          | yq eval '.metadata.name = "gr-pitr-minio-restore"' - \
           | yq eval ".spec.clusterName = \"${cluster_name}\"" - \
-          | yq eval '.spec.backupName = "pitr-minio-backup"' - \
+          | yq eval '.spec.backupName = "gr-pitr-minio-backup"' - \
           | yq eval '.spec.pitr.type = "gtid"' - \
           | yq eval ".spec.pitr.gtid = \"${PITR_GTID}\"" - \
           | kubectl apply -n "${NAMESPACE}" -f -

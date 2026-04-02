@@ -5,7 +5,7 @@ timeout: 600
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: pitr-minio-mysql
+  name: gr-pitr-minio-mysql
 status:
   observedGeneration: 1
   replicas: 3
@@ -17,7 +17,7 @@ status:
 kind: Deployment
 apiVersion: apps/v1
 metadata:
-  name: pitr-minio-router
+  name: gr-pitr-minio-router
 status:
   observedGeneration: 1
   replicas: 3
@@ -27,7 +27,7 @@ status:
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: pitr-minio-binlog-server
+  name: gr-pitr-minio-binlog-server
 status:
   observedGeneration: 1
   replicas: 1
@@ -39,7 +39,7 @@ status:
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
-  name: pitr-minio
+  name: gr-pitr-minio
   finalizers:
     - percona.com/delete-mysql-pods-in-order
 status:

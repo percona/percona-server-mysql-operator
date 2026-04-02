@@ -5,7 +5,7 @@ timeout: 600
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
-  name: pitr-minio
+  name: gr-pitr-minio
   finalizers:
     - percona.com/delete-mysql-pods-in-order
 status:
@@ -19,9 +19,9 @@ status:
     state: ready
   state: ready
 ---
-kind: PerconaServerMySQLBackup
+kind: PerconaServerMySQLRestore
 apiVersion: ps.percona.com/v1
 metadata:
-  name: pitr-minio-backup-2
+  name: gr-pitr-minio-restore-date
 status:
   state: Succeeded

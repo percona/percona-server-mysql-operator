@@ -3,7 +3,7 @@ auto-config
 config
 config-router
 demand-backup
-pitr-minio
+gr-pitr-minio
 demand-backup-cloud
 demand-backup-retry
 gr-demand-backup
