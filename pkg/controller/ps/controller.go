@@ -1345,7 +1345,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 			WriteTimeout:   cr.Spec.Backup.PiTR.BinlogServer.WriteTimeout,
 			ReadTimeout:    cr.Spec.Backup.PiTR.BinlogServer.ReadTimeout,
 			SSL: &binlogserver.ConnectionSSL{
-				Mode: "verify_identity",
+				Mode: cr.Spec.Backup.PiTR.BinlogServer.SSLMode,
 				CA:   path.Join(binlogserver.TLSMountPath, "ca.crt"),
 				Cert: path.Join(binlogserver.TLSMountPath, "tls.crt"),
 				Key:  path.Join(binlogserver.TLSMountPath, "tls.key"),
@@ -1355,17 +1355,17 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 			Mode:           binlogserver.ReplicationModeGTID,
 			ServerID:       cr.Spec.Backup.PiTR.BinlogServer.ServerID,
 			IdleTime:       cr.Spec.Backup.PiTR.BinlogServer.IdleTime,
-			VerifyChecksum: true,
+			VerifyChecksum: *cr.Spec.Backup.PiTR.BinlogServer.VerifyChecksum,
 			Rewrite: binlogserver.Rewrite{
 				BaseFileName: "binlog",
-				FileSize:     "128M",
+				FileSize:     cr.Spec.Backup.PiTR.BinlogServer.RewriteFileSize,
 			},
 		},
 		Storage: binlogserver.Storage{
 			Backend:            "s3",
 			URI:                s3Uri,
-			CheckpointSize:     "2M",
-			CheckpointInterval: "30s",
+			CheckpointSize:     cr.Spec.Backup.PiTR.BinlogServer.CheckpointSize,
+			CheckpointInterval: cr.Spec.Backup.PiTR.BinlogServer.CheckpointInterval,
 			FsBufferDirectory:  binlogserver.BufferMountPath,
 		},
 	}

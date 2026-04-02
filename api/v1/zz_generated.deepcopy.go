@@ -304,6 +304,11 @@ func (in *BackupStorageSpec) DeepCopy() *BackupStorageSpec {
 func (in *BinlogServerSpec) DeepCopyInto(out *BinlogServerSpec) {
 	*out = *in
 	in.Storage.DeepCopyInto(&out.Storage)
+	if in.VerifyChecksum != nil {
+		in, out := &in.VerifyChecksum, &out.VerifyChecksum
+		*out = new(bool)
+		**out = **in
+	}
 	in.PodSpec.DeepCopyInto(&out.PodSpec)
 }
 

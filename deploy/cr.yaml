@@ -699,6 +699,8 @@ spec:
 #                          - e2e-az1
 #                          - e2e-az2
 #          antiAffinityTopologyKey: kubernetes.io/hostname
+#        checkpointInterval: ""
+#        checkpointSize: ""
 #        configuration: ""
 #        containerSecurityContext:
 #          privileged: false
@@ -746,6 +748,8 @@ spec:
 #          requests:
 #            cpu: 200m
 #            memory: 200M
+#        rewriteFileSize: ""
+#        sslMode: ""
 #        startupProbe:
 #          failureThreshold: 3
 #          periodSeconds: 5
@@ -763,6 +767,7 @@ spec:
 #            maxSkew: 1
 #            topologyKey: kubernetes.io/hostname
 #            whenUnsatisfiable: DoNotSchedule
+#        verifyChecksum: null
 #    sourcePod: ps-cluster1-mysql-1
     image: perconalab/percona-server-mysql-operator:main-backup8.4
     imagePullPolicy: Always
