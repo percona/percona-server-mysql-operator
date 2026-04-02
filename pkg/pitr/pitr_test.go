@@ -503,10 +503,10 @@ func TestJobName(t *testing.T) {
 		restoreName string
 		expected    string
 	}{
-		"simple name":         {restoreName: "my-restore", expected: "pitr-restore-my-restore"},
-		"name with numbers":   {restoreName: "restore-123", expected: "pitr-restore-restore-123"},
-		"single word name":    {restoreName: "restore", expected: "pitr-restore-restore"},
-		"name with dots":      {restoreName: "restore.v1", expected: "pitr-restore-restore.v1"},
+		"simple name":       {restoreName: "my-restore", expected: "pitr-restore-my-restore"},
+		"name with numbers": {restoreName: "restore-123", expected: "pitr-restore-restore-123"},
+		"single word name":  {restoreName: "restore", expected: "pitr-restore-restore"},
+		"name with dots":    {restoreName: "restore.v1", expected: "pitr-restore-restore.v1"},
 	}
 
 	for name, tt := range tests {
@@ -521,9 +521,9 @@ func TestJobName(t *testing.T) {
 
 func TestBinlogsConfigMap(t *testing.T) {
 	tests := map[string]struct {
-		cluster  *apiv1.PerconaServerMySQL
-		restore  *apiv1.PerconaServerMySQLRestore
-		verify   func(t *testing.T, cm *corev1.ConfigMap)
+		cluster *apiv1.PerconaServerMySQL
+		restore *apiv1.PerconaServerMySQLRestore
+		verify  func(t *testing.T, cm *corev1.ConfigMap)
 	}{
 		"basic metadata": {
 			cluster: &apiv1.PerconaServerMySQL{
