@@ -86,6 +86,11 @@ func (r *CronRegistry) createBackupJobFunc(ctx context.Context, cl client.Client
 			return
 		}
 
+		if err := cr.CanBackup(); err != nil {
+			log.Info("Skipping scheduled backup because cluster is not ready", "cluster", cr.Name, "namespace", cr.Namespace, "state", cr.Status.State, "job", backupJob.Name, "reason", err)
+			return
+		}
+
 		name, err := generateBackupName(cr, backupJob, time.Now())
 		if err != nil {
 			log.Error(err, "failed to generate backup name")
