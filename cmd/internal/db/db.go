@@ -420,6 +420,12 @@ func (d *DB) StartReplicaUntilPosition(ctx context.Context, relayLogFile string,
 	return errors.Wrap(err, "start replica until position")
 }
 
+func (d *DB) GetGTIDExecuted(ctx context.Context) (string, error) {
+	var gtid string
+	err := d.db.QueryRowContext(ctx, "SELECT @@GTID_EXECUTED").Scan(&gtid)
+	return gtid, errors.Wrap(err, "get GTID_EXECUTED")
+}
+
 func (d *DB) SetGTIDNextAutomatic(ctx context.Context) error {
 	_, err := d.db.ExecContext(ctx, "SET GTID_NEXT='AUTOMATIC'")
 	return errors.Wrap(err, "set GTID_NEXT to AUTOMATIC")

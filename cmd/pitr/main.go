@@ -180,6 +180,12 @@ func runApply(ctx context.Context) error {
 
 	firstRelayLog := fmt.Sprintf("%s-relay-bin.000001", hostname)
 
+	currentGTID, err := database.GetGTIDExecuted(ctx)
+	if err != nil {
+		return fmt.Errorf("get current GTID_EXECUTED: %w", err)
+	}
+	log.Printf("GTID_EXECUTED: %s", currentGTID)
+
 	log.Println("running 'CHANGE REPLICATION SOURCE'")
 	if err := database.ChangeReplicationSourceRelay(ctx, firstRelayLog, 4); err != nil {
 		return fmt.Errorf("change replication source: %w", err)
@@ -204,6 +210,12 @@ func runApply(ctx context.Context) error {
 	if err := database.ResetReplication(ctx); err != nil {
 		return errors.Wrap(err, "reset replication")
 	}
+
+	currentGTID, err = database.GetGTIDExecuted(ctx)
+	if err != nil {
+		return fmt.Errorf("get GTID_EXECUTED after restore: %w", err)
+	}
+	log.Printf("GTID_EXECUTED: %s", currentGTID)
 
 	log.Println("setting GTID_NEXT to AUTOMATIC")
 	if err := database.SetGTIDNextAutomatic(ctx); err != nil {
