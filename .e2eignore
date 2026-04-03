@@ -12,3 +12,4 @@ README.md
 .gitignore
 e2e-tests/release_versions
 .e2eignore
+Jenkinsfile
