@@ -45,13 +45,13 @@ func (f *fakeStorage) GetPrefix() string                                        
 
 // fakeDB records method calls and returns configured errors.
 type fakeDB struct {
-	changeRelayErr      error
-	startUntilErr       error
-	waitErr             error
-	stopErr             error
-	resetErr            error
-	setGTIDNextErr      error
-	getGTIDExecutedErr  error
+	changeRelayErr        error
+	startUntilErr         error
+	waitErr               error
+	stopErr               error
+	resetErr              error
+	setGTIDNextErr        error
+	getGTIDExecutedErr    error
 	getGTIDExecutedResult string
 	calls                 []string
 	startUntilGTID        string
