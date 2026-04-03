@@ -53,8 +53,8 @@ type fakeDB struct {
 	setGTIDNextErr      error
 	getGTIDExecutedErr  error
 	getGTIDExecutedResult string
-	calls               []string
-	startUntilGTID      string
+	calls                 []string
+	startUntilGTID        string
 }
 
 func (f *fakeDB) ChangeReplicationSourceRelay(_ context.Context, _ string, _ int) error {
