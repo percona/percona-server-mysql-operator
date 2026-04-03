@@ -535,8 +535,8 @@ func TestBinlogsConfigMap(t *testing.T) {
 			verify: func(t *testing.T, cm *corev1.ConfigMap) {
 				assert.Equal(t, "pitr-binlogs-my-restore", cm.Name)
 				assert.Equal(t, "test-ns", cm.Namespace)
-				assert.Equal(t, "v1", cm.TypeMeta.APIVersion)
-				assert.Equal(t, "ConfigMap", cm.TypeMeta.Kind)
+				assert.Equal(t, "v1", cm.APIVersion)
+				assert.Equal(t, "ConfigMap", cm.Kind)
 			},
 		},
 		"no global labels or annotations": {
