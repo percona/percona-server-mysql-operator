@@ -1,5 +1,6 @@
 #!/bin/bash
 
+#check change
 export ROOT_REPO=${ROOT_REPO:-${PWD}}
 
 export DEPLOY_DIR="${DEPLOY_DIR:-${ROOT_REPO}/deploy}"
