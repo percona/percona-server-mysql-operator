@@ -1331,6 +1331,11 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 	}
 	configSecret.Data = make(map[string][]byte)
 
+	verifyChecksum := true
+	if cr.Spec.Backup.PiTR.BinlogServer.VerifyChecksum != nil {
+		verifyChecksum = *cr.Spec.Backup.PiTR.BinlogServer.VerifyChecksum
+	}
+
 	config := binlogserver.Configuration{
 		Logger: binlogserver.Logger{
 			Level: "debug",
@@ -1355,7 +1360,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 			Mode:           binlogserver.ReplicationModeGTID,
 			ServerID:       cr.Spec.Backup.PiTR.BinlogServer.ServerID,
 			IdleTime:       cr.Spec.Backup.PiTR.BinlogServer.IdleTime,
-			VerifyChecksum: *cr.Spec.Backup.PiTR.BinlogServer.VerifyChecksum,
+			VerifyChecksum: verifyChecksum,
 			Rewrite: binlogserver.Rewrite{
 				BaseFileName: "binlog",
 				FileSize:     cr.Spec.Backup.PiTR.BinlogServer.RewriteFileSize,
