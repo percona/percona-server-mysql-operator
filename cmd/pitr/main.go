@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -20,6 +21,21 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Database defines the MySQL operations needed for PITR apply.
+type Database interface {
+	ChangeReplicationSourceRelay(ctx context.Context, relayLogFile string, relayLogPos int) error
+	StartReplicaUntilGTID(ctx context.Context, gtid string) error
+	WaitReplicaSQLThreadStop(ctx context.Context, pollInterval time.Duration) error
+	StopReplication(ctx context.Context) error
+	ResetReplication(ctx context.Context) error
+	SetGTIDNextAutomatic(ctx context.Context) error
+	GetGTIDExecuted(ctx context.Context) (string, error)
+	Close() error
+}
+
+type newStorageFn func(ctx context.Context, endpoint, accessKey, secretKey, bucket, prefix, region string, verifyTLS bool) (storage.Storage, error)
+type newDatabaseFn func(ctx context.Context, params db.DBParams) (Database, error)
+
 func main() {
 	if len(os.Args) < 2 {
 		log.Fatal("usage: pitr <setup|apply>")
@@ -29,11 +45,14 @@ func main() {
 
 	switch os.Args[1] {
 	case "setup":
-		if err := runSetup(ctx); err != nil {
+		if err := runSetup(ctx, storage.NewS3, "/var/lib/mysql"); err != nil {
 			log.Fatalf("setup failed: %v", err)
 		}
 	case "apply":
-		if err := runApply(ctx); err != nil {
+		newDB := func(ctx context.Context, params db.DBParams) (Database, error) {
+			return db.NewDatabase(ctx, params)
+		}
+		if err := runApply(ctx, newDB, utils.GetSecret, getLatestGTIDByDatetime, "/var/lib/mysql"); err != nil {
 			log.Fatalf("apply failed: %v", err)
 		}
 	default:
@@ -41,7 +60,7 @@ func main() {
 	}
 }
 
-func runSetup(ctx context.Context) error {
+func runSetup(ctx context.Context, newS3 newStorageFn, mysqlDir string) error {
 	binlogsPath := os.Getenv("BINLOGS_PATH")
 	if binlogsPath == "" {
 		return fmt.Errorf("BINLOGS_PATH is not set")
@@ -73,7 +92,7 @@ func runSetup(ctx context.Context) error {
 	bucket := os.Getenv("S3_BUCKET")
 	verifyTLS := os.Getenv("VERIFY_TLS") != "false"
 
-	s3Client, err := storage.NewS3(ctx, endpoint, accessKey, secretKey, bucket, "", region, verifyTLS)
+	s3Client, err := newS3(ctx, endpoint, accessKey, secretKey, bucket, "", region, verifyTLS)
 	if err != nil {
 		return fmt.Errorf("create S3 client: %w", err)
 	}
@@ -81,7 +100,7 @@ func runSetup(ctx context.Context) error {
 	var relayLogFiles []string
 	for i, entry := range entries {
 		relayLogName := fmt.Sprintf("%s-relay-bin.%06d", hostname, i+1)
-		relayLogPath := fmt.Sprintf("/var/lib/mysql/%s", relayLogName)
+		relayLogPath := filepath.Join(mysqlDir, relayLogName)
 
 		objectKey, err := objectKeyFromURI(entry.URI, bucket)
 		if err != nil {
@@ -117,7 +136,7 @@ func runSetup(ctx context.Context) error {
 		relayLogFiles = append(relayLogFiles, "./"+relayLogName)
 	}
 
-	indexPath := fmt.Sprintf("/var/lib/mysql/%s-relay-bin.index", hostname)
+	indexPath := filepath.Join(mysqlDir, fmt.Sprintf("%s-relay-bin.index", hostname))
 	indexContent := strings.Join(relayLogFiles, "\n") + "\n"
 	if err := os.WriteFile(indexPath, []byte(indexContent), 0644); err != nil {
 		return fmt.Errorf("write relay log index: %w", err)
@@ -127,7 +146,7 @@ func runSetup(ctx context.Context) error {
 	return nil
 }
 
-func runApply(ctx context.Context) error {
+func runApply(ctx context.Context, newDB newDatabaseFn, getSecret func(apiv1.SystemUser) (string, error), getGTIDByDatetime func(string, string) (string, error), mysqlDir string) error {
 	pitrType := os.Getenv("PITR_TYPE")
 	pitrDate := os.Getenv("PITR_DATE")
 	pitrGTID := os.Getenv("PITR_GTID")
@@ -137,12 +156,12 @@ func runApply(ctx context.Context) error {
 		return fmt.Errorf("get hostname: %w", err)
 	}
 
-	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
+	operatorPass, err := getSecret(apiv1.UserOperator)
 	if err != nil {
 		return fmt.Errorf("get operator password: %w", err)
 	}
 
-	database, err := db.NewDatabase(ctx, db.DBParams{
+	database, err := newDB(ctx, db.DBParams{
 		User: apiv1.UserOperator,
 		Pass: operatorPass,
 		Host: "127.0.0.1",
@@ -168,10 +187,10 @@ func runApply(ctx context.Context) error {
 	}
 
 	lastRelayLog := fmt.Sprintf("%s-relay-bin.%06d", hostname, len(entries))
-	lastRelayLogPath := fmt.Sprintf("/var/lib/mysql/%s", lastRelayLog)
+	lastRelayLogPath := filepath.Join(mysqlDir, lastRelayLog)
 
 	if pitrType == "date" {
-		pitrGTID, err = getLatestGTIDByDatetime(lastRelayLogPath, pitrDate)
+		pitrGTID, err = getGTIDByDatetime(lastRelayLogPath, pitrDate)
 		if err != nil {
 			return fmt.Errorf("get latest GTID for date %s: %w", pitrDate, err)
 		}
