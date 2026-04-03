@@ -22,4 +22,4 @@ done
 /opt/percona/pitr apply
 
 echo "Stopping mysqld"
-mysqladmin -u operator -p$(</etc/mysql/mysql-users-secret/operator) shutdown
+mysqladmin -u operator -p$(</etc/mysql/mysql-users-secret/operator) shutdown 2>/dev/null
