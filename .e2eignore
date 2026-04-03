@@ -13,3 +13,4 @@ README.md
 e2e-tests/release_versions
 .e2eignore
 Jenkinsfile
+e2e-tests/run-pr.csv
