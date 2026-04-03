@@ -122,7 +122,7 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 	defer backupLog.Close() //nolint:errcheck
 	logWriter := io.MultiWriter(backupLog, os.Stderr)
 
-	xbcloud := exec.CommandContext(gCtx, "xbcloud", xb.XBCloudArgs(xb.XBCloudActionPut, &backupConf)...)
+	xbcloud := exec.CommandContext(gCtx, "xbcloud", backupConf.XbcloudPutArgs()...)
 	xbcloud.Env = envs(backupConf)
 	xbcloud.Stdin = xbOut
 
@@ -211,6 +211,9 @@ func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
 	}
 	if conf != nil && conf.ContainerOptions != nil {
 		args = append(args, conf.ContainerOptions.Args.Xtrabackup...)
+	}
+	if conf != nil && conf.IncrementalLsn != "" {
+		args = append(args, fmt.Sprintf("--incremental-lsn=%s", conf.IncrementalLsn))
 	}
 	return args
 }
