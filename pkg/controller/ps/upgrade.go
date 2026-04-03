@@ -2,6 +2,8 @@ package ps
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -16,7 +18,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
+	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 )
 
 const controllerRevisionHash = "controller-revision-hash"
@@ -54,16 +59,6 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 
 	log.Info("statefulSet was changed, run smart update")
 
-	if cr.HAProxyEnabled() && cr.Status.HAProxy.State != apiv1.StateReady {
-		log.Info("Waiting for HAProxy to be ready before smart update")
-		return nil
-	}
-
-	if cr.RouterEnabled() && cr.Status.Router.State != apiv1.StateReady {
-		log.Info("Waiting for MySQL Router to be ready before smart update")
-		return nil
-	}
-
 	running, err := r.isBackupRunning(ctx, cr)
 	if err != nil {
 		log.Error(err, "can't start 'SmartUpdate'")
@@ -75,7 +70,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	}
 
 	if currentSet.Status.ReadyReplicas < currentSet.Status.Replicas {
-		log.Info("Can't start/continue 'SmartUpdate': waiting for all replicas are ready")
+		log.Info("Can't start/continue 'SmartUpdate': waiting for all replicas to be ready")
 		return nil
 	}
 
@@ -93,54 +88,40 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	}
 	log.Info("primary pod", "name", primPod.Name)
 
-	for _, pod := range pods.Items {
-		pod := pod
-		if pod.Name == primPod.Name {
-			continue
-		}
+	secondaries := slices.DeleteFunc(pods.Items, func(p corev1.Pod) bool {
+		return p.Name == primPod.Name
+	})
 
-		log.Info("apply changes to secondary pod", "pod", pod.Name)
+	for _, pod := range secondaries {
+		pod := pod
+
+		log.Info("apply changes to the secondary pod", "pod", pod.Name)
 
 		if pod.ObjectMeta.Labels[controllerRevisionHash] == sts.Status.UpdateRevision {
 			log.Info("pod updated", "pod", pod.Name)
 			continue
 		}
 
-		return deletePod(ctx, r.Client, &pod, currentSet)
+		return deletePodAndWait(ctx, r.Client, &pod, currentSet)
 	}
 
-	log.Info("apply changes to primary pod", "pod", primPod.Name)
+	target, err := selectPrimaryCandidate(secondaries)
+	if err != nil {
+		return errors.Wrap(err, "select primary candidate")
+	}
 
+	if err := r.switchOverAndWait(logf.IntoContext(ctx, log), cr, primPod, target); err != nil {
+		return errors.Wrap(err, "switchover")
+	}
+
+	log.Info("apply changes to the primary pod", "pod", primPod.Name)
 	if primPod.ObjectMeta.Labels[controllerRevisionHash] != sts.Status.UpdateRevision {
-		// TODO: We need to perform failover before killing the primary
 		log.Info("primary pod was deleted", "pod", primPod.Name)
-		err = deletePod(ctx, r.Client, primPod, currentSet)
+		err = deletePodAndWait(ctx, r.Client, primPod, currentSet)
 		if err != nil {
 			log.Info("primary pod deletion error", "pod", primPod.Name)
 			return err
 		}
-	}
-
-	backoff := wait.Backoff{
-		Steps:    5,
-		Duration: 500 * time.Millisecond,
-		Factor:   5.0,
-		Jitter:   0.1,
-	}
-	err = k8sretry.OnError(backoff, func(err error) bool { return err != nil }, func() error {
-		primPod, err := mysql.GetPod(ctx, r.Client, cr, idx)
-		if err != nil {
-			return errors.Wrap(err, "get primary pod")
-		}
-
-		if primPod.ObjectMeta.Labels[controllerRevisionHash] != sts.Status.UpdateRevision {
-			return errors.New("primary pod controllerRevisionHash not equal sts.Status.UpdateRevision")
-		}
-		return nil
-	})
-	if err != nil {
-		log.Info("smart update of  primary pod did not finish correctly after 5 retries")
-		return err
 	}
 
 	log.Info("primary pod updated", "pod", primPod.Name)
@@ -182,8 +163,118 @@ func (r *PerconaServerMySQLReconciler) isBackupRunning(ctx context.Context, cr *
 	return false, nil
 }
 
-// deletePod deletes the pod and waits for sts.Status.ReadyReplicas to be updated accordingly
-func deletePod(ctx context.Context, cli client.Client, pod *corev1.Pod, sts *appsv1.StatefulSet) error {
+func selectPrimaryCandidate(pods []corev1.Pod) (*corev1.Pod, error) {
+	for _, pod := range pods {
+		if k8s.IsPodReady(pod) {
+			return &pod, nil
+		}
+	}
+
+	return nil, errors.New("no ready secondaries")
+}
+
+func (r *PerconaServerMySQLReconciler) switchOverAndWait(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	primary *corev1.Pod, target *corev1.Pod,
+) error {
+	log := logf.FromContext(ctx)
+
+	log.Info("switchover", "current", primary.Name, "target", target.Name)
+
+	switch {
+	case cr.MySQLSpec().IsAsync():
+		err := r.switchOverAsync(ctx, cr, primary, target)
+		if err != nil {
+			return errors.Wrap(err, "switchover async")
+		}
+	case cr.MySQLSpec().IsGR():
+		err := r.switchOverGR(ctx, cr, primary, target)
+		if err != nil {
+			return errors.Wrap(err, "switchover group-replication")
+		}
+	}
+
+	retry := wait.Backoff{
+		Duration: 3 * time.Second,
+		Steps:    10,
+		Factor:   1.0,
+		Jitter:   0.1,
+	}
+	errPrimaryNotChanged := errors.New("primary not changed")
+	err := k8sretry.OnError(retry, func(err error) bool {
+		return errors.Is(err, errPrimaryNotChanged)
+	}, func() error {
+		primHost, err := r.getPrimaryHost(ctx, cr)
+		if err != nil {
+			return err
+		}
+
+		if !strings.HasPrefix(primHost, target.Name) {
+			return errPrimaryNotChanged
+		}
+
+		return nil
+	})
+	if err != nil {
+		return errors.Wrap(err, "wait for new primary")
+	}
+	log.Info("target is primary", "target", target.Name)
+
+	// in async clusters primary is labelled by orchestrator
+	if cr.MySQLSpec().IsGR() {
+		if err := r.reconcileGRMySQLPrimaryLabel(ctx, cr); err != nil {
+			return errors.Wrap(err, "reconcile primary label")
+		}
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) switchOverAsync(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	primary *corev1.Pod, target *corev1.Pod,
+) error {
+	orcPod, err := getReadyOrcPod(ctx, r.Client, cr)
+	if err != nil {
+		return errors.Wrap(err, "get ready orchestrator pod")
+	}
+
+	err = orchestrator.EnsureNodeIsPrimary(ctx, r.ClientCmd, orcPod, cr.ClusterHint(), target.GetName(), mysql.DefaultPort)
+	if err != nil {
+		return errors.Wrap(err, "ensure node is primary")
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) switchOverGR(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	primary *corev1.Pod, target *corev1.Pod,
+) error {
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+
+	primaryUri := getMySQLURI(apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, primary))
+	mysh, err := mysqlsh.NewWithExec(r.ClientCmd, primary, primaryUri)
+	if err != nil {
+		return err
+	}
+
+	targetFQDN := mysql.PodFQDN(cr, target)
+	if err := mysh.SetPrimaryInstanceWithExec(ctx, cr.InnoDBClusterName(), targetFQDN); err != nil {
+		return errors.Wrap(err, "set primary instance")
+	}
+
+	return nil
+}
+
+// deletePodAndWait deletes the pod and waits for sts.Status.ReadyReplicas to be updated accordingly
+func deletePodAndWait(ctx context.Context, cli client.Client, pod *corev1.Pod, sts *appsv1.StatefulSet) error {
 	err := cli.Delete(ctx, pod)
 	if err != nil {
 		return err
@@ -193,22 +284,29 @@ func deletePod(ctx context.Context, cli client.Client, pod *corev1.Pod, sts *app
 		return err != nil
 	}
 
-	retry := k8sretry.DefaultRetry
-	retry.Duration = 3 * time.Second
-	retry.Steps = 10
+	retry := wait.Backoff{
+		Duration: 10 * time.Second,
+		Steps:    15,
+		Factor:   1.0,
+		Jitter:   0.1,
+	}
 
 	return k8sretry.OnError(retry, retriable, func() error {
-		s := &appsv1.StatefulSet{}
+		p := &corev1.Pod{}
 		err := cli.Get(ctx, types.NamespacedName{
-			Name:      sts.Name,
-			Namespace: sts.Namespace,
-		}, s)
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+		}, p)
 		if err != nil {
-			return errors.Wrap(err, "failed to get sfs")
+			return errors.Wrap(err, "failed to get pod")
 		}
 
-		if s.Status.ReadyReplicas == s.Status.Replicas {
-			return errors.New("sts.Status.readyReplicas not updated")
+		if p.ObjectMeta.Labels[controllerRevisionHash] != sts.Status.UpdateRevision {
+			return errors.New("pod is not updated")
+		}
+
+		if !k8s.IsPodReady(*p) {
+			return errors.New("pod is not ready")
 		}
 
 		return nil
