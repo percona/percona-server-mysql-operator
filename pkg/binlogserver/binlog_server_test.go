@@ -79,10 +79,10 @@ func TestStatefulSet(t *testing.T) {
 		"config hash annotation in pod template": {
 			cr:         newTestCR("cluster", "ns"),
 			initImage:  "init:latest",
-			configHash: "deadbeef",
+			configHash: "2pacisnotdead",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
 				sts := StatefulSet(cr, "init:latest", "2pacisnotdead")
-				assert.Equal(t, "deadbeef", sts.Spec.Template.Annotations[string(naming.AnnotationConfigHash)])
+				assert.Equal(t, "2pacisnotdead", sts.Spec.Template.Annotations[string(naming.AnnotationConfigHash)])
 			},
 		},
 		"empty config hash produces no annotation": {
