@@ -3977,6 +3977,10 @@ spec:
                       rule: '!(has(self.enabled) && self.enabled) || !has(self.binlogServer)
                         || (has(self.binlogServer.size) && self.binlogServer.size
                         > 0)'
+                    - message: binlogServer.serverId is required when pitr is enabled
+                      rule: '!(has(self.enabled) && self.enabled) || !has(self.binlogServer)
+                        || (has(self.binlogServer.serverId) && self.binlogServer.serverId
+                        > 0)'
                   resources:
                     properties:
                       claims:

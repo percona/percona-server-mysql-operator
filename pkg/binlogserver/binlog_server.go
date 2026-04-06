@@ -101,6 +101,10 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash string) *ap
 	}
 }
 
+func sslDisabled(cr *apiv1.PerconaServerMySQL) bool {
+	return cr.Spec.Backup.PiTR.BinlogServer.SSLMode == "disabled"
+}
+
 func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 	t := true
 
@@ -108,7 +112,7 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 
 	conf := Configurable(*cr)
 
-	return []corev1.Volume{
+	vols := []corev1.Volume{
 		{
 			Name: apiv1.BinVolumeName,
 			VolumeSource: corev1.VolumeSource{
@@ -129,15 +133,21 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 				},
 			},
 		},
-		{
+	}
+
+	if !sslDisabled(cr) {
+		vols = append(vols, corev1.Volume{
 			Name: tlsVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: cr.Spec.SSLSecretName,
 				},
 			},
-		},
-		{
+		})
+	}
+
+	vols = append(vols,
+		corev1.Volume{
 			Name: storageCredsVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
@@ -145,7 +155,7 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 				},
 			},
 		},
-		{
+		corev1.Volume{
 			Name: configVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Projected: &corev1.ProjectedVolumeSource{
@@ -181,7 +191,9 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 				},
 			},
 		},
-	}
+	)
+
+	return vols
 }
 
 func containers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
@@ -203,6 +215,33 @@ func binlogServerContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	}
 	env = append(env, spec.Env...)
 
+	mounts := []corev1.VolumeMount{
+		{
+			Name:      apiv1.BinVolumeName,
+			MountPath: apiv1.BinVolumePath,
+		},
+		{
+			Name:      credsVolumeName,
+			MountPath: CredsMountPath,
+		},
+	}
+	if !sslDisabled(cr) {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      tlsVolumeName,
+			MountPath: TLSMountPath,
+		})
+	}
+	mounts = append(mounts,
+		corev1.VolumeMount{
+			Name:      configVolumeName,
+			MountPath: configMountPath,
+		},
+		corev1.VolumeMount{
+			Name:      bufferVolumeName,
+			MountPath: BufferMountPath,
+		},
+	)
+
 	return corev1.Container{
 		Name:            AppName,
 		Image:           spec.Image,
@@ -210,28 +249,7 @@ func binlogServerContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		Resources:       spec.Resources,
 		Env:             env,
 		EnvFrom:         spec.EnvFrom,
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      apiv1.BinVolumeName,
-				MountPath: apiv1.BinVolumePath,
-			},
-			{
-				Name:      credsVolumeName,
-				MountPath: CredsMountPath,
-			},
-			{
-				Name:      tlsVolumeName,
-				MountPath: TLSMountPath,
-			},
-			{
-				Name:      configVolumeName,
-				MountPath: configMountPath,
-			},
-			{
-				Name:      bufferVolumeName,
-				MountPath: BufferMountPath,
-			},
-		},
+		VolumeMounts:    mounts,
 		Command:                  []string{"/opt/percona/binlog-server-entrypoint.sh"},
 		Args:                     []string{binlogServerBinary, "pull", path.Join(configMountPath, ConfigKey)},
 		TerminationMessagePath:   "/dev/termination-log",

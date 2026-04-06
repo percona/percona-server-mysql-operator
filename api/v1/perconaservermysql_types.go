@@ -520,6 +520,7 @@ func (b *BackupStorageAzureSpec) ContainerAndPrefix() (string, string) {
 // +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || has(self.binlogServer)",message="binlogServer is required when pitr is enabled"
 // +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || !has(self.binlogServer) || (has(self.binlogServer.image) && self.binlogServer.image != '')",message="binlogServer.image is required when pitr is enabled"
 // +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || !has(self.binlogServer) || (has(self.binlogServer.size) && self.binlogServer.size > 0)",message="binlogServer.size is required when pitr is enabled"
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || !has(self.binlogServer) || (has(self.binlogServer.serverId) && self.binlogServer.serverId > 0)",message="binlogServer.serverId is required when pitr is enabled"
 type PiTRSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 
