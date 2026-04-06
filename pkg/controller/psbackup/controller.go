@@ -108,7 +108,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 		err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 			actual := &apiv1.PerconaServerMySQLBackup{}
-			if err := r.Client.Get(ctx, req.NamespacedName, actual); err != nil {
+			if err := r.Get(ctx, req.NamespacedName, actual); err != nil {
 				return errors.Wrapf(err, "get %v", req.NamespacedName.String())
 			}
 
