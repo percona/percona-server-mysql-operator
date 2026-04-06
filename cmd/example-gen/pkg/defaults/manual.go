@@ -133,11 +133,13 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 					EndpointURL:       "https://s3.amazonaws.com",
 				},
 			},
-			ConnectTimeout: 10,
-			ReadTimeout:    10,
-			WriteTimeout:   10,
-			ServerID:       100,
-			IdleTime:       3,
+			ConnectTimeout:     30,
+			ReadTimeout:        30,
+			WriteTimeout:       30,
+			ServerID:           100,
+			IdleTime:           30,
+			CheckpointSize:     "16M",
+			CheckpointInterval: "30s",
 		},
 	}
 	podSpecDefaults(&spec.PiTR.BinlogServer.PodSpec, ImageBinlogServer, corev1.ResourceRequirements{}, "", 30, nil, nil)
