@@ -107,14 +107,21 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		}
 
 		err := k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
-			cr := &apiv1.PerconaServerMySQLBackup{}
-			if err := r.Client.Get(ctx, req.NamespacedName, cr); err != nil {
+			actual := &apiv1.PerconaServerMySQLBackup{}
+			if err := r.Client.Get(ctx, req.NamespacedName, actual); err != nil {
 				return errors.Wrapf(err, "get %v", req.NamespacedName.String())
 			}
 
-			cr.Status = status
-			log.Info("Updating status", "state", cr.Status.State)
-			return r.Client.Status().Update(ctx, cr)
+			// The kube API contains a status different from what we observed.
+			// We return an error since we could be reading from a stale cache, and may
+			// potentially forcefully overwrite any previously set status.
+			if !actual.Status.Equals(&cr.Status) {
+				return errors.New("actual status different from initially observed status")
+			}
+
+			actual.Status = status
+			log.Info("Updating status", "state", actual.Status.State)
+			return r.Client.Status().Update(ctx, actual)
 		})
 		if err != nil {
 			log.Error(err, "Failed to update backup status")
