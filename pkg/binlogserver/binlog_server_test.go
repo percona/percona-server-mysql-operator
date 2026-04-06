@@ -138,7 +138,7 @@ func TestStatefulSet(t *testing.T) {
 				assert.Equal(t, "percona/binlog-server:2.0", container.Image)
 			},
 		},
-		"volumes include all expected volumes": {
+		"volumes include all expected volumes when ssl enabled": {
 			cr:        newTestCR("cluster", "ns"),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
@@ -153,6 +153,24 @@ func TestStatefulSet(t *testing.T) {
 				assert.True(t, volumeNames[tlsVolumeName], "missing tls volume")
 				assert.True(t, volumeNames[storageCredsVolumeName], "missing storage volume")
 				assert.True(t, volumeNames[configVolumeName], "missing config volume")
+			},
+		},
+		"tls volume and mount absent when ssl disabled": {
+			cr: func() *apiv1.PerconaServerMySQL {
+				cr := newTestCR("cluster", "ns")
+				cr.Spec.Backup.PiTR.BinlogServer.SSLMode = "disabled"
+				return cr
+			}(),
+			initImage: "init:latest",
+			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
+				sts := StatefulSet(cr, "init:latest", "")
+				for _, v := range sts.Spec.Template.Spec.Volumes {
+					assert.NotEqual(t, tlsVolumeName, v.Name, "tls volume should be absent when ssl is disabled")
+				}
+				container := sts.Spec.Template.Spec.Containers[0]
+				for _, m := range container.VolumeMounts {
+					assert.NotEqual(t, tlsVolumeName, m.Name, "tls volume mount should be absent when ssl is disabled")
+				}
 			},
 		},
 		"creds volume uses internal secret name": {
@@ -250,7 +268,7 @@ func TestStatefulSet(t *testing.T) {
 				assert.Equal(t, "prod", sts.Labels["env"])
 			},
 		},
-		"container volume mounts include all expected mounts": {
+		"container volume mounts include all expected mounts when ssl enabled": {
 			cr:        newTestCR("cluster", "ns"),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {

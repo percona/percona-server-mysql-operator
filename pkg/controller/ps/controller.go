@@ -1284,6 +1284,16 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 	return nil
 }
 
+func binlogServerSSLConfig(sslMode string) *binlogserver.ConnectionSSL {
+	ssl := &binlogserver.ConnectionSSL{Mode: sslMode}
+	if sslMode != "disabled" {
+		ssl.CA = path.Join(binlogserver.TLSMountPath, "ca.crt")
+		ssl.Cert = path.Join(binlogserver.TLSMountPath, "tls.crt")
+		ssl.Key = path.Join(binlogserver.TLSMountPath, "tls.key")
+	}
+	return ssl
+}
+
 func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	if !cr.Spec.Backup.PiTR.Enabled {
 		return nil
@@ -1349,12 +1359,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 			ConnectTimeout: cr.Spec.Backup.PiTR.BinlogServer.ConnectTimeout,
 			WriteTimeout:   cr.Spec.Backup.PiTR.BinlogServer.WriteTimeout,
 			ReadTimeout:    cr.Spec.Backup.PiTR.BinlogServer.ReadTimeout,
-			SSL: &binlogserver.ConnectionSSL{
-				Mode: cr.Spec.Backup.PiTR.BinlogServer.SSLMode,
-				CA:   path.Join(binlogserver.TLSMountPath, "ca.crt"),
-				Cert: path.Join(binlogserver.TLSMountPath, "tls.crt"),
-				Key:  path.Join(binlogserver.TLSMountPath, "tls.key"),
-			},
+			SSL: binlogServerSSLConfig(cr.Spec.Backup.PiTR.BinlogServer.SSLMode),
 		},
 		Replication: binlogserver.Replication{
 			Mode:           binlogserver.ReplicationModeGTID,
