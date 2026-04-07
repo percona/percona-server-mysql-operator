@@ -62,6 +62,7 @@ type PerconaServerMySQLBackupReconciler struct {
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqlbackups;perconaservermysqlbackups/status;perconaservermysqlbackups/finalizers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch
 
 const controllerName = "psbackup-controller"
 
@@ -164,6 +165,16 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 			status.State = apiv1.BackupError
 			status.StateDesc = "cluster is not ready"
+			return ctrl.Result{}, nil
+		}
+
+		lease, err := k8s.GetRestoreLease(ctx, r.Client, cr.Namespace, cr.Spec.ClusterName)
+		if err != nil {
+			return rr, errors.Wrap(err, "get restore lease")
+		}
+		if k8s.IsLeaseActive(lease) {
+			status.State = apiv1.BackupError
+			status.StateDesc = fmt.Sprintf("backup cannot run while restore %s is in progress", *lease.Spec.HolderIdentity)
 			return ctrl.Result{}, nil
 		}
 

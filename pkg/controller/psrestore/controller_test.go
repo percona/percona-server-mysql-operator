@@ -283,6 +283,54 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 			shouldSucceed: true,
 		},
 		{
+			name: "with running backup",
+			cr:   cr,
+			objects: []runtime.Object{
+				&apiv1.PerconaServerMySQLBackup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      backupName,
+						Namespace: namespace,
+					},
+					Spec: apiv1.PerconaServerMySQLBackupSpec{
+						ClusterName: clusterName,
+						StorageName: storageName,
+					},
+					Status: apiv1.PerconaServerMySQLBackupStatus{
+						State: apiv1.BackupRunning,
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "aws-secret",
+						Namespace: namespace,
+					},
+				},
+			},
+			cluster: &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: namespace,
+				},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					Backup: &apiv1.BackupSpec{
+						Storages: map[string]*apiv1.BackupStorageSpec{
+							storageName: {
+								S3: &apiv1.BackupStorageS3Spec{
+									CredentialsSecret: "aws-secret",
+								},
+								Type: apiv1.BackupStorageS3,
+							},
+						},
+						InitContainer: &apiv1.InitContainerSpec{
+							Image: "operator-image",
+						},
+					},
+				},
+			},
+			stateDesc:     "PerconaServerMySQLBackup backup1 is still running",
+			shouldSucceed: true,
+		},
+		{
 			name: "with new, failed, errored and succeeded restore",
 			cr:   cr,
 			objects: []runtime.Object{

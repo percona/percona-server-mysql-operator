@@ -60,6 +60,7 @@ type PerconaServerMySQLRestoreReconciler struct {
 var ErrWaitingTermination error = errors.New("waiting for MySQL pods to terminate")
 
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqlrestores;perconaservermysqlrestores/status;perconaservermysqlrestores/finalizers,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -86,6 +87,10 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	defer func() {
+		if err := k8s.ReleaseRestoreLease(ctx, r.Client, cr); err != nil {
+			log.Error(err, "failed to release restore lease")
+		}
+
 		if status.State == cr.Status.State && status.StateDesc == cr.Status.StateDesc {
 			return
 		}
@@ -140,6 +145,17 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, errors.Wrap(err, "check n set defaults")
 	}
 
+	lease, err := k8s.AcquireRestoreLease(ctx, r.Client, cr)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "acquire restore lease")
+	}
+	if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != cr.Name {
+		status.State = apiv1.RestoreNew
+		status.StateDesc = fmt.Sprintf("PerconaServerMySQLRestore %s is already running", *lease.Spec.HolderIdentity)
+		log.Info("PerconaServerMySQLRestore is already running", "restore", *lease.Spec.HolderIdentity)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
 	restoreList := &apiv1.PerconaServerMySQLRestoreList{}
 	if err := r.List(ctx, restoreList, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "get restore jobs list")
@@ -157,6 +173,17 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			log.Info("PerconaServerMySQLRestore is already running", "restore", restore.Name)
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 		}
+	}
+
+	backup, err := r.getRunningBackup(ctx, cr)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "get running backups list")
+	}
+	if backup != nil {
+		status.State = apiv1.RestoreNew
+		status.StateDesc = fmt.Sprintf("PerconaServerMySQLBackup %s is still running", backup.Name)
+		log.Info("PerconaServerMySQLBackup is still running", "backup", backup.Name)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	if err := r.validate(ctx, cr, cluster); err != nil {
@@ -254,6 +281,26 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) getRunningBackup(ctx context.Context, cr *apiv1.PerconaServerMySQLRestore) (*apiv1.PerconaServerMySQLBackup, error) {
+	backups := new(apiv1.PerconaServerMySQLBackupList)
+	if err := r.List(ctx, backups, client.InNamespace(cr.Namespace)); err != nil {
+		return nil, errors.Wrap(err, "list backups")
+	}
+
+	for _, b := range backups.Items {
+		if b.Spec.ClusterName != cr.Spec.ClusterName {
+			continue
+		}
+
+		switch b.Status.State {
+		case apiv1.BackupStarting, apiv1.BackupRunning:
+			return &b, nil
+		}
+	}
+
+	return nil, nil
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cluster *apiv1.PerconaServerMySQL) error {
