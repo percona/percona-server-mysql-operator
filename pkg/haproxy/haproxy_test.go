@@ -153,7 +153,6 @@ func TestStatefulset(t *testing.T) {
 		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
 		assert.Equal(t, "haproxy-annotation", sts.Annotations["haproxy-annotation"])
 		assert.Equal(t, "haproxy-annotation", sts.Spec.Template.Annotations["haproxy-annotation"])
-		
 	})
 
 	t.Run("probes", func(t *testing.T) {
