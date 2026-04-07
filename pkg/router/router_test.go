@@ -130,7 +130,6 @@ func TestDeployment(t *testing.T) {
 
 	t.Run("annotations", func(t *testing.T) {
 		cluster := cr.DeepCopy()
-	
 		cluster.Spec.Proxy.Router.Annotations = map[string]string{
 			"router-annotation": "router-annotation",
 		}
