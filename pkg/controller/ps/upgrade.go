@@ -26,6 +26,8 @@ import (
 
 const controllerRevisionHash = "controller-revision-hash"
 
+var errPrimaryNotTheLowest = errors.New("The appointed primary member is not the lowest version in the group.")
+
 func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *appsv1.StatefulSet, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("SmartUpdate")
 
@@ -191,6 +193,10 @@ func (r *PerconaServerMySQLReconciler) switchOverAndWait(
 	case cr.MySQLSpec().IsGR():
 		err := r.switchOverGR(ctx, cr, primary, target)
 		if err != nil {
+			if errors.Is(err, errPrimaryNotTheLowest) {
+				log.Info("MySQL version upgrade is in progress. Falling back to failover.")
+				return nil
+			}
 			return errors.Wrap(err, "switchover group-replication")
 		}
 	}
@@ -267,6 +273,9 @@ func (r *PerconaServerMySQLReconciler) switchOverGR(
 
 	targetFQDN := mysql.PodFQDN(cr, target)
 	if err := mysh.SetPrimaryInstanceWithExec(ctx, cr.InnoDBClusterName(), targetFQDN); err != nil {
+		if strings.Contains(err.Error(), "The appointed primary member is not the lowest version in the group.") {
+			return errPrimaryNotTheLowest
+		}
 		return errors.Wrap(err, "set primary instance")
 	}
 
