@@ -683,10 +683,10 @@ spec:
 #            endpointUrl: https://s3.amazonaws.com
 #            prefix: PREFIX_NAME
 #            region: us-west-2
-#        connectTimeout: 10
-#        readTimeout: 10
-#        writeTimeout: 10
-#        idleTime: 3
+#        connectTimeout: 30
+#        readTimeout: 30
+#        writeTimeout: 30
+#        idleTime: 30
 #        affinity:
 #          advanced:
 #            nodeAffinity:
@@ -699,8 +699,8 @@ spec:
 #                          - e2e-az1
 #                          - e2e-az2
 #          antiAffinityTopologyKey: kubernetes.io/hostname
-#        checkpointInterval: ""
-#        checkpointSize: ""
+#        checkpointInterval: 30s
+#        checkpointSize: 16M
 #        configuration: ""
 #        containerSecurityContext:
 #          privileged: false
