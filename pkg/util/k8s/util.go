@@ -56,7 +56,7 @@ func GetLastFullBackup(
 	}
 
 	if lastFullBackup == nil {
-		return nil, errors.New("no full backup found")
+		return nil, errors.New("no full backup found in storage")
 	}
 	return lastFullBackup, nil
 }

@@ -131,7 +131,7 @@ func TestGetLastFullBackup(t *testing.T) {
 				newBackupWithStorage("running", "cluster1", apiv1.BackupTypeFull, apiv1.BackupRunning, metaTime(now)),
 				newBackupWithStorage("error", "cluster1", apiv1.BackupTypeFull, apiv1.BackupError, nil),
 			},
-			wantErr: "no full backup found",
+			wantErr: "no full backup found in storage",
 		},
 		"error when succeeded backup has nil completedAt": {
 			clusterName: "cluster1",
