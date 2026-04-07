@@ -158,8 +158,8 @@ func TestStatefulSet(t *testing.T) {
 		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
 		
 		assert.Equal(t, "mysql-annotation", sts.Annotations["mysql-annotation"])
-        assert.Equal(t, "mysql-annotation", sts.Spec.Template.Annotations["mysql-annotation"])
-		
+		assert.Equal(t, "mysql-annotation", sts.Spec.Template.Annotations["mysql-annotation"])
+
 	})
 }
 
