@@ -1,0 +1,7 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: restore-of-gr-demand-backup
+spec:
+  clusterName: gr-demand-backup
+  backupName: gr-demand-backup

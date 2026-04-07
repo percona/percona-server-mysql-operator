@@ -1,0 +1,12 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # Gets second storage defined and run backup
+      second_storage_name=$(kubectl get ps demand-backup-multi-storage -n ${NAMESPACE} -o yaml | yq '(.spec.backup.storages // {}) | keys | .[1]')
+      run_backup demand-backup-multi-storage-2 $second_storage_name "$(get_cluster_name)"

@@ -1,0 +1,39 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: demand-backup
+spec:
+  mysql:
+    clusterType: async
+    size: 3
+
+  proxy:
+    haproxy:
+      enabled: true
+      size: 3
+
+  orchestrator:
+    enabled: true
+    size: 3
+
+  backup:
+    backoffLimit: 3
+    storages:
+      minio:
+        type: s3
+        s3:
+          bucket: operator-testing
+          credentialsSecret: minio-secret
+          endpointUrl: http://minio-service.<namespace>:9000
+          region: us-east-1
+        containerOptions:
+          env:
+            - name: VERIFY_TLS
+              value: "false"
+            - name: CUSTOM_ENV
+              value: "test"
+          args:
+            xtrabackup:
+              - "--notsupported"
+            xbcloud:
+              - "--insecure"

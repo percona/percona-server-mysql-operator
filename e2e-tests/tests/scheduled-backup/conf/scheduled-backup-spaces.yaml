@@ -1,0 +1,59 @@
+
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-scheduled-backup
+spec:
+  mysql:
+    clusterType: async
+    size: 3
+
+  proxy:
+    haproxy:
+      enabled: true
+      size: 3
+
+  orchestrator:
+    enabled: true
+    size: 3
+
+  backup:
+    storages:
+      minio:
+        type: s3
+        s3:
+          bucket: operator-testing
+          credentialsSecret: minio-secret
+          endpointUrl: http://minio-service.<namespace>:9000
+          region: us-east-1
+          prefix: ps/scheduled-backup
+    
+      spaces-1:
+        type: s3
+        verifyTLS: true
+        s3:
+          bucket: operator-testing
+          credentialsSecret: do-spaces-secret
+          endpointUrl: https://ams3.digitaloceanspaces.com
+          region: ams3
+          prefix: ps/scheduled-backup/spaces-1
+
+      spaces-2:
+        type: s3
+        verifyTLS: true
+        s3:
+          bucket: operator-testing-nyc3
+          credentialsSecret: do-spaces-secret
+          endpointUrl: https://nyc3.digitaloceanspaces.com
+          region: nyc3
+          prefix: ps/scheduled-backup/spaces-2
+
+      spaces-3:
+        type: s3
+        verifyTLS: true
+        s3:
+          bucket: operator-testing-sfo3
+          credentialsSecret: do-spaces-secret
+          endpointUrl: https://sfo3.digitaloceanspaces.com
+          region: sfo3
+          prefix: ps/scheduled-backup/spaces-3

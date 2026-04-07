@@ -1,48 +1,15 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 420
----
-apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQLBackup
-metadata:
-  finalizers:
-  - percona.com/delete-backup
-  generation: 1
-  labels:
-    percona.com/backup-type: cron
-    percona.com/cluster: gr-scheduled-backup
-spec:
-  clusterName: gr-scheduled-backup
-  storageName: gcp-cs
-status:
-  state: Succeeded
----
-apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQLBackup
-metadata:
-  finalizers:
-  - percona.com/delete-backup
-  generation: 1
-  labels:
-    percona.com/backup-type: cron
-    percona.com/cluster: gr-scheduled-backup
-spec:
-  clusterName: gr-scheduled-backup
-  storageName: aws-s3
-status:
-  state: Succeeded
----
-apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQLBackup
-metadata:
-  finalizers:
-  - percona.com/delete-backup
-  generation: 1
-  labels:
-    percona.com/backup-type: cron
-    percona.com/cluster: gr-scheduled-backup
-spec:
-  clusterName: gr-scheduled-backup
-  storageName: minio
-status:
-  state: Succeeded
+commands:
+  - timeout: 30
+    script: |
+      storage_name=$(kubectl get ps gr-scheduled-backup -o yaml -n ${NAMESPACE} | yq eval '.spec.backup.storages | keys | .[3]' -)
+      until kubectl get ps-backup -n ${NAMESPACE} -o json \
+        | jq -e --arg storage "$storage_name" '
+          .items[]
+          | select(.spec.storageName == $storage)
+          | select(.status.state == "Succeeded")
+        ' >/dev/null; do
+        echo "Waiting successful backup with storage $storage_name"
+        sleep 5
+      done
