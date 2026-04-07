@@ -3969,10 +3969,10 @@ spec:
                     x-kubernetes-validations:
                     - message: binlogServer is required when pitr is enabled
                       rule: '!(has(self.enabled) && self.enabled) || has(self.binlogServer)'
-                    - message: binlogServer.image is required when pitr is enabled
-                      rule: '!(has(self.enabled) && self.enabled) || !has(self.binlogServer)
+                    - message: "binlogServer.image is required when pitr is enabled"
+                      rule: "!(has(self.enabled) && self.enabled) || !has(self.binlogServer)
                         || (has(self.binlogServer.image) && self.binlogServer.image
-                        != ”)'
+                        != '')"
                     - message: binlogServer.size is required when pitr is enabled
                       rule: '!(has(self.enabled) && self.enabled) || !has(self.binlogServer)
                         || (has(self.binlogServer.size) && self.binlogServer.size
@@ -8169,8 +8169,8 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-validations:
-                - message: mysql.image is required
-                  rule: has(self.image) && self.image != ”
+                - message: "mysql.image is required"
+                  rule: "has(self.image) && self.image != ''"
                 - message: mysql.size must be greater than 0
                   rule: has(self.size) && self.size > 0
               orchestrator:
@@ -9415,9 +9415,9 @@ spec:
                     type: array
                 type: object
                 x-kubernetes-validations:
-                - message: orchestrator.image is required when orchestrator is enabled
-                  rule: '!(has(self.enabled) && self.enabled) || (has(self.image)
-                    && self.image != ”)'
+                - message: "orchestrator.image is required when orchestrator is enabled"
+                  rule: "!(has(self.enabled) && self.enabled) || (has(self.image)
+                    && self.image != '')"
                 - message: orchestrator.size must be greater than 0 when orchestrator
                     is enabled
                   rule: '!(has(self.enabled) && self.enabled) || (has(self.size) &&
@@ -9705,9 +9705,9 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-validations:
-                - message: pmm.image is required when pmm is enabled
-                  rule: '!(has(self.enabled) && self.enabled) || (has(self.image)
-                    && self.image != ”)'
+                - message: "pmm.image is required when pmm is enabled"
+                  rule: "!(has(self.enabled) && self.enabled) || (has(self.image)
+                    && self.image != '')"
               proxy:
                 properties:
                   haproxy:
@@ -10952,9 +10952,9 @@ spec:
                         type: array
                     type: object
                     x-kubernetes-validations:
-                    - message: haproxy.image is required when haproxy is enabled
-                      rule: '!(has(self.enabled) && self.enabled) || (has(self.image)
-                        && self.image != ”)'
+                    - message: "haproxy.image is required when haproxy is enabled"
+                      rule: "!(has(self.enabled) && self.enabled) || (has(self.image)
+                        && self.image != '')"
                     - message: haproxy.size must be greater than 0 when haproxy is
                         enabled
                       rule: '!(has(self.enabled) && self.enabled) || (has(self.size)
@@ -12226,9 +12226,9 @@ spec:
                         type: array
                     type: object
                     x-kubernetes-validations:
-                    - message: router.image is required when router is enabled
-                      rule: '!(has(self.enabled) && self.enabled) || (has(self.image)
-                        && self.image != ”)'
+                    - message: "router.image is required when router is enabled"
+                      rule: "!(has(self.enabled) && self.enabled) || (has(self.image)
+                        && self.image != '')"
                     - message: router.size must be greater than 0 when router is enabled
                       rule: '!(has(self.enabled) && self.enabled) || (has(self.size)
                         && self.size > 0)'
@@ -12728,8 +12728,8 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-validations:
-                - message: toolkit.image is required
-                  rule: has(self.image) && self.image != ”
+                - message: "toolkit.image is required"
+                  rule: "has(self.image) && self.image != ''"
               unsafeFlags:
                 properties:
                   backupNonReadyCluster:
