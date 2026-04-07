@@ -2158,6 +2158,7 @@ var _ = Describe("BinlogServer", Ordered, func() {
 					CredentialsSecret: "s3-secret",
 				},
 			},
+			ServerID: 1,
 			PodSpec: psv1.PodSpec{
 				Size: 1,
 				ContainerSpec: psv1.ContainerSpec{
