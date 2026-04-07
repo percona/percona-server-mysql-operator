@@ -164,9 +164,9 @@ func (r *PerconaServerMySQLReconciler) isBackupRunning(ctx context.Context, cr *
 }
 
 func selectPrimaryCandidate(pods []corev1.Pod) (*corev1.Pod, error) {
-	for _, pod := range pods {
-		if k8s.IsPodReady(pod) {
-			return &pod, nil
+	for i := range pods {
+		if k8s.IsPodReady(pods[i]) {
+			return &pods[i], nil
 		}
 	}
 
@@ -273,7 +273,7 @@ func (r *PerconaServerMySQLReconciler) switchOverGR(
 	return nil
 }
 
-// deletePodAndWait deletes the pod and waits for sts.Status.ReadyReplicas to be updated accordingly
+// deletePodAndWait deletes the pod and waits for pod to be updated and get ready
 func deletePodAndWait(ctx context.Context, cli client.Client, pod *corev1.Pod, sts *appsv1.StatefulSet) error {
 	err := cli.Delete(ctx, pod)
 	if err != nil {
