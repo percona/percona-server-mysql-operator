@@ -146,7 +146,6 @@ func TestStatefulset(t *testing.T) {
 
 	t.Run("annotations", func(t *testing.T) {
 		cluster := cr.DeepCopy()
-		
 		cluster.Spec.Proxy.HAProxy.Annotations = map[string]string{
 			"haproxy-annotation": "haproxy-annotation",
 		}
