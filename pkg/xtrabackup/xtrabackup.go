@@ -1,11 +1,14 @@
 package xtrabackup
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"path"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
@@ -267,17 +270,13 @@ type XBCloudAction string
 const (
 	XBCloudActionPut    XBCloudAction = "put"
 	XBCloudActionDelete XBCloudAction = "delete"
+	XBCloudActionGet    XBCloudAction = "get"
 )
 
-func XBCloudArgs(action XBCloudAction, conf *BackupConfig) []string {
-	args := []string{string(action), "--parallel=10", "--curl-retriable-errors=7"}
-
+func xbcloudCloudOpts(conf *BackupConfig) []string {
+	args := []string{}
 	if !conf.VerifyTLS {
 		args = append(args, "--insecure")
-	}
-
-	if conf.ContainerOptions != nil {
-		args = append(args, conf.ContainerOptions.Args.Xbcloud...)
 	}
 
 	switch conf.Type {
@@ -324,9 +323,39 @@ func XBCloudArgs(action XBCloudAction, conf *BackupConfig) []string {
 			args = append(args, fmt.Sprintf("--azure-endpoint=%s", conf.Azure.EndpointURL))
 		}
 	}
+	return args
+}
 
+func (conf *BackupConfig) XbcloudPutArgs() []string {
+	args := []string{string(XBCloudActionPut), "--parallel=10", "--curl-retriable-errors=7"}
+	if conf.ContainerOptions != nil {
+		args = append(args, conf.ContainerOptions.Args.Xbcloud...)
+	}
+
+	args = append(args, xbcloudCloudOpts(conf)...)
 	args = append(args, conf.Destination)
 
+	return args
+}
+
+func (conf *BackupConfig) XbcloudDeleteArgs() []string {
+	args := []string{string(XBCloudActionDelete), "--parallel=10", "--curl-retriable-errors=7"}
+	if conf.ContainerOptions != nil {
+		args = append(args, conf.ContainerOptions.Args.Xbcloud...)
+	}
+
+	args = append(args, xbcloudCloudOpts(conf)...)
+	args = append(args, conf.Destination)
+
+	return args
+}
+
+func (conf *BackupConfig) XbcloudGetArgs(files ...string) []string {
+	args := []string{string(XBCloudActionGet)}
+
+	args = append(args, xbcloudCloudOpts(conf)...)
+	args = append(args, conf.Destination)
+	args = append(args, files...)
 	return args
 }
 
@@ -342,7 +371,7 @@ func deleteContainer(image string, conf *BackupConfig, cr *apiv1.PerconaServerMy
 			},
 		},
 		Env:                      cr.GetContainerOptions(storage).GetEnv(),
-		Command:                  append([]string{"xbcloud"}, XBCloudArgs(XBCloudActionDelete, conf)...),
+		Command:                  append([]string{"xbcloud"}, conf.XbcloudDeleteArgs()...),
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          storage.ContainerSecurityContext,
@@ -350,9 +379,14 @@ func deleteContainer(image string, conf *BackupConfig, cr *apiv1.PerconaServerMy
 	}
 }
 
+type DestinationInfo struct {
+	Base         string
+	Incrementals []string
+}
+
 func RestoreJob(
 	cluster *apiv1.PerconaServerMySQL,
-	destination apiv1.BackupDestination,
+	destination DestinationInfo,
 	restore *apiv1.PerconaServerMySQLRestore,
 	storage *apiv1.BackupStorageSpec,
 	initImage string,
@@ -527,7 +561,7 @@ func GetDeleteJob(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQ
 func restoreContainer(
 	cluster *apiv1.PerconaServerMySQL,
 	restore *apiv1.PerconaServerMySQLRestore,
-	destination apiv1.BackupDestination,
+	destination DestinationInfo,
 	storage *apiv1.BackupStorageSpec,
 ) corev1.Container {
 	spec := cluster.Spec.Backup
@@ -537,25 +571,36 @@ func restoreContainer(
 		verifyTLS = *storage.VerifyTLS
 	}
 
-	envs := util.MergeEnvLists(
-		[]corev1.EnvVar{
-			{
-				Name:  "RESTORE_NAME",
-				Value: restore.Name,
-			},
-			{
-				Name:  "BACKUP_DEST",
-				Value: destination.PathWithoutBucket(),
-			},
-			{
-				Name:  "VERIFY_TLS",
-				Value: strconv.FormatBool(verifyTLS),
-			},
-			{
-				Name:  "KEYRING_VAULT_PATH",
-				Value: fmt.Sprintf("%s/keyring_vault.cnf", vaultSecretMountPath),
-			},
+	baseEnvs := []corev1.EnvVar{
+		{
+			Name:  "RESTORE_NAME",
+			Value: restore.Name,
 		},
+		{
+			Name:  "BACKUP_DEST",
+			Value: destination.Base,
+		},
+		{
+			Name:  "VERIFY_TLS",
+			Value: strconv.FormatBool(verifyTLS),
+		},
+		{
+			Name:  "KEYRING_VAULT_PATH",
+			Value: fmt.Sprintf("%s/keyring_vault.cnf", vaultSecretMountPath),
+		},
+	}
+
+	if len(destination.Incrementals) > 0 {
+		baseEnvs = append(baseEnvs,
+			corev1.EnvVar{
+				Name:  "BACKUP_INCREMENTALS_DEST",
+				Value: strings.Join(destination.Incrementals, ","),
+			},
+		)
+	}
+
+	envs := util.MergeEnvLists(
+		baseEnvs,
 		restore.GetContainerOptions(storage).GetEnv(),
 	)
 
@@ -780,6 +825,21 @@ func SetStorageAzure(job *batchv1.Job, azure *apiv1.BackupStorageAzureSpec) erro
 	return errors.Errorf("no container named %s in Job spec", appName)
 }
 
+func SetIncrementalLsn(job *batchv1.Job, lsn string) error {
+	spec := &job.Spec.Template.Spec
+
+	for i := range spec.Containers {
+		container := &spec.Containers[i]
+
+		if container.Name == appName {
+			container.Env = append(container.Env, corev1.EnvVar{Name: "INCREMENTAL_LSN", Value: lsn})
+			return nil
+		}
+	}
+
+	return errors.Errorf("no container named %s in Job spec", appName)
+}
+
 func SetSourceNode(job *batchv1.Job, src string) error {
 	spec := &job.Spec.Template.Spec
 
@@ -803,6 +863,9 @@ type BackupConfig struct {
 	S3               BackupConfigS3                `json:"s3"`
 	GCS              BackupConfigGCS               `json:"gcs"`
 	Azure            BackupConfigAzure             `json:"azure"`
+
+	// Specify for incremental backups
+	IncrementalLsn string `json:"incrementalLsn,omitempty"`
 }
 
 type BackupConfigS3 struct {
@@ -839,7 +902,7 @@ func GetBackupConfig(ctx context.Context, cl client.Client, cr *apiv1.PerconaSer
 	if storage.VerifyTLS != nil {
 		verifyTLS = *storage.VerifyTLS
 	}
-	destination, err := GetDestination(storage, cr.Spec.ClusterName, cr.CreationTimestamp.Format("2006-01-02-15:04:05"))
+	destination, err := GetDestination(storage, cr)
 	if err != nil {
 		return nil, errors.Wrap(err, "get backup destination")
 	}
@@ -929,18 +992,51 @@ func GetBackupConfig(ctx context.Context, cl client.Client, cr *apiv1.PerconaSer
 	return conf, nil
 }
 
-func GetDestination(storage *apiv1.BackupStorageSpec, clusterName, creationTimeStamp string) (apiv1.BackupDestination, error) {
-	backupName := fmt.Sprintf("%s-%s-full", clusterName, creationTimeStamp)
+func getIncrementalBackupName(cr *apiv1.PerconaServerMySQLBackup, clusterName, creationTimeStamp string) (string, error) {
+	backupName := fmt.Sprintf("%s-%s-%s", clusterName, creationTimeStamp, "incr")
+	annots := cr.GetAnnotations()
+	baseBackupName, ok := annots[string(naming.AnnotationBaseBackupName)]
+	if !ok {
+		return "", errors.New("base backup name not known in annotations")
+	}
+	backupName = path.Join(baseBackupName+".incr/", backupName)
+	return backupName, nil
+}
+
+func GetDestination(
+	storage *apiv1.BackupStorageSpec,
+	cr *apiv1.PerconaServerMySQLBackup,
+) (apiv1.BackupDestination, error) {
+	clusterName := cr.Spec.ClusterName
+	creationTimestamp := cr.CreationTimestamp.Format("2006-01-02-15:04:05")
+	backupName := fmt.Sprintf("%s-%s-%s", clusterName, creationTimestamp, "full")
+
+	if cr.Spec.Type == apiv1.BackupTypeIncremental {
+		name, err := getIncrementalBackupName(cr, clusterName, creationTimestamp)
+		if err != nil {
+			return "", errors.Wrap(err, "get incremental backup name")
+		}
+		backupName = name
+	}
 
 	var d apiv1.BackupDestination
 	switch storage.Type {
 	case apiv1.BackupStorageS3:
+		if storage.S3 == nil {
+			return d, errors.Errorf("storage type is %s, but s3 configuration is not specified", storage.Type)
+		}
 		bucket, prefix := storage.S3.BucketAndPrefix()
 		d.SetS3Destination(path.Join(bucket, prefix), backupName)
 	case apiv1.BackupStorageGCS:
+		if storage.GCS == nil {
+			return d, errors.Errorf("storage type is %s, but gcs configuration is not specified", storage.Type)
+		}
 		bucket, prefix := storage.GCS.BucketAndPrefix()
 		d.SetGCSDestination(path.Join(bucket, prefix), backupName)
 	case apiv1.BackupStorageAzure:
+		if storage.Azure == nil {
+			return d, errors.Errorf("storage type is %s, but azure configuration is not specified", storage.Type)
+		}
 		container, prefix := storage.Azure.ContainerAndPrefix()
 		d.SetAzureDestination(path.Join(container, prefix), backupName)
 	default:
@@ -948,4 +1044,48 @@ func GetDestination(storage *apiv1.BackupStorageSpec, clusterName, creationTimeS
 	}
 
 	return d, nil
+}
+
+type CheckpointInfo struct {
+	BackupType string `json:"backup_type"`
+	FromLSN    string `json:"from_lsn"`
+	ToLSN      string `json:"to_lsn"`
+	LastLSN    string `json:"last_lsn"`
+	FlushedLSN string `json:"flushed_lsn"`
+	RedoMemory string `json:"redo_memory"`
+	RedoFrames string `json:"redo_frames"`
+}
+
+func (info *CheckpointInfo) ParseFrom(r io.Reader) error {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		switch {
+		case strings.Contains(key, "backup_type"):
+			info.BackupType = value
+		case strings.Contains(key, "from_lsn"):
+			info.FromLSN = value
+		case strings.Contains(key, "to_lsn"):
+			info.ToLSN = value
+		case strings.Contains(key, "last_lsn"):
+			info.LastLSN = value
+		case strings.Contains(key, "flushed_lsn"):
+			info.FlushedLSN = value
+		case strings.Contains(key, "redo_memory"):
+			info.RedoMemory = value
+		case strings.Contains(key, "redo_frames"):
+			info.RedoFrames = value
+		default:
+			continue
+		}
+	}
+
+	return scanner.Err()
 }
