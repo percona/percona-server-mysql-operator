@@ -1,0 +1,46 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 400
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  generation: 1
+  name: gr-component-metadata-mysql
+  annotations:
+    mysql-annotation: mysql-annotation
+spec:
+  replicas: 3
+  serviceName: gr-component-metadata-mysql
+  template:
+    metadata:
+      annotations:
+        mysql-annotation: mysql-annotation
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    router-annotation: router-annotation
+  name: gr-component-metadata-router
+spec:
+  replicas: 3
+  template:
+    metadata:
+      annotations:
+        router-annotation: router-annotation
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-component-metadata
+status:
+  router:
+    ready: 3
+    size: 3
+    state: ready
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready

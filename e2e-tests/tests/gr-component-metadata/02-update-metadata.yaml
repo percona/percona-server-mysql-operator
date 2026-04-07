@@ -1,0 +1,19 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      get_cr \
+        | yq eval '.spec.mysql.clusterType="group-replication"' - \
+        | yq eval '.spec.mysql.configuration=strload("conf/mysql-config.txt")' - \
+        | yq eval '.spec.proxy.haproxy.enabled=false' - \
+        | yq eval '.spec.proxy.router.enabled=true' - \
+        | yq eval '.spec.proxy.router.configuration=strload("conf/router-config.txt")' - \
+        | yq eval '.spec.mysql.annotations={"mysql-annotation":"mysql-annotation-updated"}' - \
+        | yq eval '.spec.proxy.router.annotations={"router-annotation":"router-annotation-updated"}' - \
+        | kubectl -n "${NAMESPACE}" apply -f -

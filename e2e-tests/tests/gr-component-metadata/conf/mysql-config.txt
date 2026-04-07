@@ -1,0 +1,4 @@
+[mysqld]
+innodb_buffer_pool_size=2147483648
+innodb_buffer_pool_chunk_size=268435456
+max_connections=341
