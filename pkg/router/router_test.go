@@ -127,6 +127,17 @@ func TestDeployment(t *testing.T) {
 		deployment = Deployment(cluster, initImage, configHash, tlsHash)
 		assert.Equal(t, tolerations, deployment.Spec.Template.Spec.Tolerations)
 	})
+
+	t.Run("annotations", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+	
+		cluster.Spec.Proxy.Router.Annotations = map[string]string{
+			"router-annotation": "router-annotation",
+		}
+		deployment := Deployment(cluster, initImage, configHash, tlsHash)
+		assert.Equal(t, "router-annotation", deployment.Annotations["router-annotation"])
+		assert.Equal(t, "router-annotation", deployment.Spec.Template.Annotations["router-annotation"])
+	})
 }
 
 func TestPorts(t *testing.T) {
