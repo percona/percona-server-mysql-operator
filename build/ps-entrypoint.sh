@@ -59,6 +59,7 @@ process_init_file() {
 	case "$f" in
 		*.sh)
 			echo "$0: running $f"
+			# shellcheck disable=SC1090
 			. "$f"
 			;;
 		*.sql)
@@ -141,7 +142,7 @@ CUSTOM_CONFIG_FILES=("/etc/mysql/config/auto-config.cnf" "/etc/mysql/config/my-c
 
 install_keyring_component() {
 	echo -n '{ "components": "file://component_keyring_vault" }' >/var/lib/mysql/mysqld.my
-	cp ${KEYRING_VAULT_PATH} /var/lib/mysql/component_keyring_vault.cnf
+	cp "${KEYRING_VAULT_PATH}" /var/lib/mysql/component_keyring_vault.cnf
 }
 
 uninstall_keyring_component() {
@@ -179,6 +180,11 @@ create_default_cnf() {
 	fi
 
 	echo '[mysqld]' >$CFG
+	if [[ ${CLUSTER_TYPE} == "async" ]]; then
+		# Ensures replication is not automatically started on mysql startup,
+		# giving the orchestrator full control over replication start.
+		sed -i "/\[mysqld\]/a skip-replica-start=ON" $CFG
+	fi
 	sed -i "/\[mysqld\]/a read_only=ON" $CFG
 	sed -i "/\[mysqld\]/a server_id=${SERVER_ID}" $CFG
 	sed -i "/\[mysqld\]/a admin-address=${POD_IP}" $CFG
@@ -245,7 +251,7 @@ if [[ "$MYSQL_VERSION" != '8.0' ]] && [[ "${MYSQL_VERSION}" != '8.4' ]]; then
 	exit 1
 fi
 
-if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
+if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 	# still need to check config, container may have started with --user
 	_check_config "$@"
 
@@ -261,7 +267,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		touch /var/lib/mysql/bootstrap.lock
 		file_env 'MYSQL_ROOT_PASSWORD' '' 'root'
 		{ set +x; } 2>/dev/null
-		if [ -z "$MYSQL_ROOT_PASSWORD" -a -z "$MYSQL_ALLOW_EMPTY_PASSWORD" -a -z "$MYSQL_RANDOM_ROOT_PASSWORD" ]; then
+		if [ -z "$MYSQL_ROOT_PASSWORD" ] && [ -z "$MYSQL_ALLOW_EMPTY_PASSWORD" ] && [ -z "$MYSQL_RANDOM_ROOT_PASSWORD" ]; then
 			echo >&2 'error: database is uninitialized and password option is not specified '
 			echo >&2 '  You need to specify one of MYSQL_ROOT_PASSWORD, MYSQL_ALLOW_EMPTY_PASSWORD and MYSQL_RANDOM_ROOT_PASSWORD'
 			exit 1
@@ -318,7 +324,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		rootCreate=
 		# default root to listen for connections from anywhere
 		file_env 'MYSQL_ROOT_HOST' '%'
-		if [ -n "$MYSQL_ROOT_HOST" -a "$MYSQL_ROOT_HOST" != 'localhost' ]; then
+		if [ -n "$MYSQL_ROOT_HOST" ] && [ "$MYSQL_ROOT_HOST" != 'localhost' ]; then
 			# no, we don't care if read finds a terminating character in this heredoc
 			# https://unix.stackexchange.com/questions/265149/why-is-set-o-errexit-breaking-this-read-heredoc-expression/265151#265151
 			read -r -d '' rootCreate <<-EOSQL || true
@@ -399,7 +405,7 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 		file_env 'MYSQL_USER'
 		file_env 'MYSQL_PASSWORD'
 		{ set +x; } 2>/dev/null
-		if [ "$MYSQL_USER" -a "$MYSQL_PASSWORD" ]; then
+		if [ "$MYSQL_USER" ] && [ "$MYSQL_PASSWORD" ]; then
 			echo "CREATE USER '$MYSQL_USER'@'%' IDENTIFIED BY '$MYSQL_PASSWORD' ;" | "${mysql[@]}"
 
 			if [ "$MYSQL_DATABASE" ]; then
