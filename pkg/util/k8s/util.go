@@ -14,6 +14,7 @@ func GetLastFullBackup(
 	cl client.Client,
 	clusterName,
 	namespace string,
+	storage *apiv1.BackupStorageSpec,
 ) (*apiv1.PerconaServerMySQLBackup, error) {
 	backupList := &apiv1.PerconaServerMySQLBackupList{}
 	if err := cl.List(ctx, backupList, client.MatchingFields{
@@ -33,6 +34,10 @@ func GetLastFullBackup(
 		}
 
 		if backup.Status.State != apiv1.BackupSucceeded {
+			continue
+		}
+
+		if storage != nil && !storage.Equals(backup.Status.Storage) {
 			continue
 		}
 
