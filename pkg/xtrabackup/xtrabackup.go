@@ -391,6 +391,7 @@ func RestoreJob(
 	storage *apiv1.BackupStorageSpec,
 	initImage string,
 	pvcName string,
+	compressed bool,
 ) *batchv1.Job {
 	labels := util.SSMapMerge(cluster.GlobalLabels(), storage.Labels, restore.Labels(appName, naming.ComponentRestore))
 
@@ -438,7 +439,7 @@ func RestoreJob(
 							}),
 					},
 					Containers: []corev1.Container{
-						restoreContainer(cluster, restore, destination, storage),
+						restoreContainer(cluster, restore, destination, storage, compressed),
 					},
 					Affinity:                  storage.Affinity,
 					TopologySpreadConstraints: storage.TopologySpreadConstraints,
@@ -563,6 +564,7 @@ func restoreContainer(
 	restore *apiv1.PerconaServerMySQLRestore,
 	destination DestinationInfo,
 	storage *apiv1.BackupStorageSpec,
+	compressed bool,
 ) corev1.Container {
 	spec := cluster.Spec.Backup
 
@@ -597,6 +599,13 @@ func restoreContainer(
 				Value: strings.Join(destination.Incrementals, ","),
 			},
 		)
+	}
+
+	if compressed {
+		baseEnvs = append(baseEnvs, corev1.EnvVar{
+			Name:  "BACKUP_COMPRESSED",
+			Value: "true",
+		})
 	}
 
 	envs := util.MergeEnvLists(
