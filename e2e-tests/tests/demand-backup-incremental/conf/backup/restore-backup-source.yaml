@@ -3,7 +3,7 @@ kind: PerconaServerMySQLRestore
 metadata:
   name: <restore-name>
 spec:
-  clusterName: demand-backup
+  clusterName: demand-backup-incremental
   backupSource:
     destination: <destination>
     storage:

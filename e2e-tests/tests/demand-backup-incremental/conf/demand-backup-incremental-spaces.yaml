@@ -1,7 +1,7 @@
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
-  name: demand-backup
+  name: demand-backup-incremental
 spec:
   mysql:
     clusterType: async

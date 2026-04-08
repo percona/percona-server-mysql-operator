@@ -5,7 +5,7 @@ timeout: 30
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 14-read-data-0
+  name: 13-read-data-0
 data:
   data: |-
     100500
@@ -15,7 +15,7 @@ data:
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 14-read-data-1
+  name: 13-read-data-1
 data:
   data: |-
     100500
@@ -25,7 +25,7 @@ data:
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 14-read-data-2
+  name: 13-read-data-2
 data:
   data: |-
     100500

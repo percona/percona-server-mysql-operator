@@ -11,5 +11,8 @@ commands:
       deploy_operator
       deploy_tls_cluster_secrets
       deploy_client
-      deploy_minio
+      apply_s3_storage_secrets
+      if has_minio_storage; then
+        deploy_minio
+      fi
     timeout: 300

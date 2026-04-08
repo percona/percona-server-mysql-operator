@@ -331,20 +331,19 @@ has_minio_storage() {
 	local cr_name="${test_name}${name_suffix:+-$name_suffix}"
 	local cr="$(get_test_cr "$cr_name")"
 
-	if [[ -z "$cr" ]]; then
+	if [[ -z $cr ]]; then
 		echo "CR not found for: $cr_name" >&2
 		return 1
 	fi
 
-	local has_minio
-	has_minio="$(yq eval '
+	local has_minio="$(yq eval '
 		(.spec.backup.storages // {})
 		| keys
 		| map(select(test("^minio")))
 		| length > 0
 	' "$cr")"
 
-	if [[ "$has_minio" == "true" ]]; then
+	if [[ $has_minio == "true" ]]; then
 		echo "MinIO enabled in $cr"
 		return 0
 	else
@@ -717,11 +716,11 @@ get_test_cr() {
 	local platform_cr="${TEST_CONFIG_DIR}/${cr_name}-${platform_alias}.yaml"
 	local storage_cr="${TEST_CONFIG_DIR}/${cr_name}-${storage_alias}.yaml"
 
-	if [[ -n "$storage_cr" && -f "$storage_cr" ]]; then
+	if [[ -n $storage_cr && -f $storage_cr ]]; then
 		echo "$storage_cr"
-	elif [[ -n "$platform_cr" && -f "$platform_cr" ]]; then
+	elif [[ -n $platform_cr && -f $platform_cr ]]; then
 		echo "$platform_cr"
-	elif [[ -f "$default_cr" ]]; then
+	elif [[ -f $default_cr ]]; then
 		echo "$default_cr"
 	fi
 }
@@ -765,12 +764,12 @@ get_cr() {
 		.spec.pmm.image = "'"$image_pmm_client"'" |
 		(.. | select(tag == "!!str")) |= sub("<namespace>"; "'"${NAMESPACE}"'")
 	' "${crs[@]}" \
-	| if [[ "$platform" == "minikube" ]]; then
-		yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) = "none"' - \
-		| yq eval '.spec.proxy.haproxy.resources.requests.cpu = "300m"' -
-	else
-		cat
-	fi
+		| if [[ "$platform" == "minikube" ]]; then
+			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) = "none"' - | \
+			yq eval '.spec.proxy.haproxy.resources.requests.cpu = "300m"' -
+		else
+			cat
+		fi
 }
 
 get_client_pod() {
@@ -1731,10 +1730,9 @@ run_backup() {
 	local backup_template="${DEPLOY_DIR}/backup/backup.yaml"
 
 	test_backup_template="${TEST_CONFIG_DIR}/backup/backup${prefix}.yaml"
-	if [[ -f "$test_backup_template" ]]; then
+	if [[ -f $test_backup_template ]]; then
 		backup_template=$test_backup_template
 	fi
-	
 	echo "Running backup $backup_name using storage $storage_name"
 	yq eval '
 		.metadata.name = "'"$backup_name"'" |
@@ -1745,166 +1743,173 @@ run_backup() {
 
 run_restore() {
 	local restore_name=$1
-  local backup_name=$2
+	local backup_name=$2
 	local cluster_name=${3:-$(get_cluster_name)}
-  local prefix=${4:+-${4}}
+	local prefix=${4:+-${4}}
 	local destination=$5
 
 	local platform=$(detect_k8s_platform)
 	local storage_alias=$(get_storage_alias $platform)
-  local platform_alias=$(get_platform_alias $platform)
+	local platform_alias=$(get_platform_alias $platform)
 	local restore_template="${TEST_CONFIG_DIR}/backup/restore${prefix}.yaml"
-	local restore_template_storage="${TEST_CONFIG_DIR}/backup/restore${prefix}-${storage_alias}.yaml" 
-  local restore_template_platform="${TEST_CONFIG_DIR}/backup/restore${prefix}-${platform_alias}.yaml"
+	local restore_template_storage="${TEST_CONFIG_DIR}/backup/restore${prefix}-${storage_alias}.yaml"
+	local restore_template_platform="${TEST_CONFIG_DIR}/backup/restore${prefix}-${platform_alias}.yaml"
 
-	if [[ -f "$restore_template_storage" ]]; then
+	if [[ -f $restore_template_storage ]]; then
 		restore_template="$restore_template_storage"
-	elif [[ -f "$restore_template_platform" ]]; then
-    restore_template="$restore_template_platform"
+	elif [[ -f $restore_template_platform ]]; then
+		restore_template="$restore_template_platform"
 	fi
 
-  if [[ ! -f "$restore_template" ]]; then
-    restore_template="${DEPLOY_DIR}/backup/restore.yaml"
-  fi
+	if [[ ! -f $restore_template ]]; then
+		restore_template="${DEPLOY_DIR}/backup/restore.yaml"
+	fi
 
-  echo "Running restore '$restore_name' from backup '$backup_name' using '$restore_template'"
+	echo "Running restore '$restore_name' from backup '$backup_name' using '$restore_template'"
 	yq eval '
 		.metadata.name = "'"$restore_name"'" |
 		.spec.backupName = "'"$backup_name"'" |
 		.spec.clusterName = "'"$cluster_name"'" |
 		(.. | select(tag == "!!str")) |= sub("<destination>"; "'"$destination"'") |
-		(.. | select(tag == "!!str")) |= sub("<namespace>"; "'"$namespace"'")
+		(.. | select(tag == "!!str")) |= sub("<namespace>"; "'"${NAMESPACE}"'")
 	' "$restore_template" | kubectl apply -n "$NAMESPACE" -f -
 }
 
 get_secret_value() {
-  local secret=$1
-  local key1=$2
-  local key2=$3
+	local secret=$1
+	local key1=$2
+	local key2=$3
 
 	set +x
-  local val="$(kubectl -n "$NAMESPACE" get secret "$secret" -o jsonpath="{.data.${key1}}" 2>/dev/null | base64 -d)"
-  if [[ -z "$val" && -n "$key2" ]]; then
+	local val="$(kubectl -n "$NAMESPACE" get secret "$secret" -o jsonpath="{.data.${key1}}" 2>/dev/null | base64 -d)"
+	if [[ -z $val && -n $key2 ]]; then
 		val="$(kubectl -n "$NAMESPACE" get secret "$secret" -o jsonpath="{.data.${key2}}" 2>/dev/null | base64 -d)"
 	fi
 
-  echo "$val"
+	echo "$val"
 	set -x
 }
 
 run_s3_command() {
-  local secret_name=$1
-  local region=$2
-  local endpoint=$3
-  shift 3
+	local secret_name=$1
+	local region=$2
+	local endpoint=$3
+	shift 3
 
-  set +x
-  local accessKey="$(get_secret_value "$secret_name" "ACCESS_KEY_ID" "AWS_ACCESS_KEY_ID")"
-  local secretKey="$(get_secret_value "$secret_name" "SECRET_ACCESS_KEY" "AWS_SECRET_ACCESS_KEY")"
+	set +x
+	local accessKey="$(get_secret_value "$secret_name" "ACCESS_KEY_ID" "AWS_ACCESS_KEY_ID")"
+	local secretKey="$(get_secret_value "$secret_name" "SECRET_ACCESS_KEY" "AWS_SECRET_ACCESS_KEY")"
 
-  local aws_args=()
-  if [[ -n "$endpoint" ]]; then
-    aws_args+=(--endpoint-url "$endpoint")
-  fi
+	local aws_args=()
+  if [[ -n $endpoint ]]; then
+		aws_args+=(--endpoint-url "$endpoint")
+	fi
 
-  local output=$(
-    kubectl run -n "${NAMESPACE}" -i --rm "aws-cli-$(date +%s%N)" \
-      --image=perconalab/awscli \
-      --restart=Never \
-      --env="AWS_ACCESS_KEY_ID=${accessKey}" \
-      --env="AWS_SECRET_ACCESS_KEY=${secretKey}" \
-      --env="AWS_DEFAULT_REGION=${region}" \
-      --env="PYTHONWARNINGS=ignore" \
-      -- \
-      aws --no-verify-ssl "${aws_args[@]}" "$@" \
-      2>/dev/null | grep -v '^pod '
-  )
-  set -x
+	local output=$(
+		kubectl run -n "${NAMESPACE}" -i --rm "aws-cli-$(date +%s%N)" \
+			--image=perconalab/awscli \
+			--restart=Never \
+			--env="AWS_ACCESS_KEY_ID=${accessKey}" \
+			--env="AWS_SECRET_ACCESS_KEY=${secretKey}" \
+			--env="AWS_DEFAULT_REGION=${region}" \
+			--env="PYTHONWARNINGS=ignore" \
+			-- \
+			aws --no-verify-ssl "${aws_args[@]}" "$@" \
+			2>/dev/null | grep -v '^pod '
+	)
+	set -x
 
-  echo "$output"
+	echo "$output"
 }
 
 s3_count_files() {
-  local bucket=$1
-  local prefix=$2
-  local secret_name=$3
-  local region=$4
-  local endpoint=$5
+	local bucket=$1
+	local prefix=$2
+	local secret_name=$3
+	local region=$4
+	local endpoint=$5
 
-	local output="$(run_s3_command "$secret_name" "$region" "$endpoint" \
-		s3 ls "s3://$bucket/$prefix/" \
-		--recursive \
-		--summarize \
-		2>/dev/null \
-		| awk '/Total Objects/ {print $3}')"
+	local output="$(
+		run_s3_command "$secret_name" "$region" "$endpoint" \
+			s3 ls "s3://$bucket/$prefix" \
+			--recursive \
+			--summarize \
+			2>/dev/null \
+		| awk '/Total Objects/ {print $3}'
+	)"
 
 	echo "$output"
 }
 
 count_files_on_storage() {
 	local storage_type=$1
-  local bucket=$2
-  local prefix=$3
-  local secret_name=$4
-  local region=$5
-  local endpoint=$6
+	local bucket=$2
+	local prefix=$3
+	local secret_name=$4
+	local region=$5
+	local endpoint=$6
 
-  case "$storage_type" in
-    s3|gcs)
+	prefix="${prefix:+${prefix%/}/}"
+	case "$storage_type" in
+		s3 | gcs)
 			s3_count_files "$bucket" "$prefix" "$secret_name" "$region" "$endpoint"
-      ;;
-    *)
-      echo "Unsupported storage type: $storage_type"
-      exit 1
-      ;;
-  esac
+      		;;
+		*)
+			echo "Unsupported storage type: $storage_type"
+			exit 1
+			;;
+	esac
 }
 
 s3_list_files() {
-  local bucket=$1
-  local prefix=$2
-  local secret_name=$3
-  local region=$4
-  local endpoint=$5
+	local bucket=$1
+	local prefix=$2
+	local secret_name=$3
+	local region=$4
+	local endpoint=$5
 
-	local output="$(run_s3_command "$secret_name" "$region" "$endpoint" \
-    s3 ls "s3://$bucket/$prefix/" \
-		--recursive
+	local output="$(
+		run_s3_command "$secret_name" "$region" "$endpoint" \
+			s3api list-objects-v2 \
+			--bucket "$bucket" \
+			--prefix "$prefix" \
+			--query 'Contents[].Key' \
+			--output text
 	)"
 
-	echo "$output"
+	echo "$output" | tr '\t' '\n'
 }
 
 list_files_on_storage() {
 	local storage_type=$1
-  local bucket=$2
-  local prefix=$3
-  local secret_name=$4
-  local region=$5
-  local endpoint=$6
+	local bucket=$2
+	local prefix=$3
+	local secret_name=$4
+	local region=$5
+	local endpoint=$6
 
-  case "$storage_type" in
-    s3|gcs)
-			s3_list_files "$bucket" "$prefix/" "$secret_name" "$region" "$endpoint"
-      ;;
-    *)
-      echo "Unsupported storage type: $storage_type"
-      exit 1
-      ;;
-  esac
+	prefix="${prefix:+${prefix%/}/}"
+	case "$storage_type" in
+		s3 | gcs)
+			s3_list_files "$bucket" "$prefix" "$secret_name" "$region" "$endpoint"
+			;;
+		*)
+			echo "Unsupported storage type: $storage_type"
+			exit 1
+			;;
+	esac
 }
 
 verify_all_backups_deletion() {
-	kubectl get ps-backup -n "$NAMESPACE" -o json | yq -r '.items[].metadata.name' | while read -r backup; do
+	for backup in $(kubectl get ps-backup -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}'); do
 		echo "Checking backup: $backup"
-
-		read -r storage_type bucket secret_name endpoint region destination <<< "$(
-			kubectl get ps-backup "$backup" -n "$NAMESPACE" -o json |
-			yq -r '
+		read -r storage_type bucket secret_name endpoint region destination <<<"$(
+			kubectl get ps-backup "$backup" -n "$NAMESPACE" -o json
+			| yq -r '
 				.status.storage as $storage |
 				[
 					$storage.type,
-					($storage[.type].bucket // $sstorage[.type].container // ""),
+					($storage[.type].bucket // $storage[.type].container // ""),
 					($storage[.type].credentialsSecret // ""),
 					($storage[.type].endpointUrl // ""),
 					($storage[.type].region // ""),
@@ -1912,8 +1917,9 @@ verify_all_backups_deletion() {
 				] | @tsv
 			'
 		)"
+
 		prefix="${destination#*://*/}"
-		if [[ -z "$destination" ]]; then
+		if [[ -z $destination ]]; then
 			echo "Backup $backup is missing destination"
 			exit 1
 		fi

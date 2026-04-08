@@ -9,4 +9,4 @@ commands:
 
       # Gets first storage defined and run backup
       storage_name=$(kubectl get ps gr-demand-backup-haproxy -n ${NAMESPACE} -o yaml | yq '(.spec.backup.storages // {}) | keys | .[0]')
-      run_backup gr-demand-backup $storage_name
+      run_backup gr-demand-backup-haproxy $storage_name
