@@ -8,12 +8,11 @@ commands:
 
       source ../../functions
       
-      bcp_count=$(count_backups_in_schedule "minio-full" "$(get_cluster_name)")
-      if [[ ! $bcp_count -eq 2 ]]; then
-        echo "There are $bcp_count full ps-backups but should be 2"
+      bcp_count=$(count_backups_in_schedule "incr" "$(get_cluster_name)")
+      if [[ $bcp_count -lt 6 ]]; then
+        echo "There are $bcp_count incremental ps-backups but should be at least 6"
         exit 1
       fi
-    timeout: 420
 ---
 kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
@@ -22,5 +21,5 @@ metadata:
     percona.com/backup-type: cron
     percona.com/cluster: gr-scheduled-backup-incremental
 status:
-  type: full
+  type: incremental
   state: Succeeded

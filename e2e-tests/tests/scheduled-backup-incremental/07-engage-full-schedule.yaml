@@ -1,0 +1,24 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 30
+    script: |
+      kubectl get ps scheduled-backup-incremental -n ${NAMESPACE} -o json \
+        | yq '
+          (.spec.backup.storages | keys | .[0]) as $storage
+          | .spec.backup.schedule = [
+            {
+              "name": "full",
+              "keep": 2,
+              "schedule": "*/2 * * * *",
+              "storageName": $storage
+            },
+            {
+              "name": "incr",
+              "type": "incremental",
+              "schedule": "",
+              "storageName": $storage
+            }
+          ]
+        ' \
+        | kubectl apply -f -

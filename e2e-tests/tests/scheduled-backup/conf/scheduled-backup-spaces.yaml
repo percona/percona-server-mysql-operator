@@ -2,7 +2,7 @@
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
-  name: gr-scheduled-backup
+  name: scheduled-backup
 spec:
   mysql:
     clusterType: async

@@ -3,14 +3,19 @@ kind: TestStep
 commands:
   - timeout: 30
     script: |
-      storage_name=$(kubectl get ps gr-scheduled-backup -o yaml -n ${NAMESPACE} | yq eval '.spec.backup.storages | keys | .[3]' -)
       kubectl get ps gr-scheduled-backup -n ${NAMESPACE} -o json \
-      | jq --arg storage "$storage_name" '
-        .spec.backup.schedule = [{
-          keep: 3,
-          name: "storage-3",
-          schedule: "*/2 * * * *",
-          storageName: $storage
-        }]
-      ' \
-      | kubectl apply -f -
+        | yq '
+          (
+            .spec.backup.storages
+            | keys
+            | map(select(. != "minio"))
+            | .[2] // ""
+          ) as $storage
+          | .spec.backup.schedule = [{
+              "keep": 3,
+              "name": "storage-3",
+              "schedule": "*/2 * * * *",
+              "storageName": $storage
+            }]
+        ' \
+        | kubectl apply -f -
