@@ -216,7 +216,8 @@ func (r *PerconaServerMySQLReconciler) switchOverAndWait(
 			return err
 		}
 
-		if !strings.HasPrefix(primHost, target.Name) {
+		hostParts := strings.SplitN(primHost, ".", 2)
+		if len(hostParts) == 0 || hostParts[0] != target.Name {
 			return errPrimaryNotChanged
 		}
 
