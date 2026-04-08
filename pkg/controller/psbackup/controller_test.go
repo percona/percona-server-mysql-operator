@@ -400,6 +400,70 @@ func TestStateDescCleanup(t *testing.T) {
 	}
 }
 
+func TestPrepareStatusCompressed(t *testing.T) {
+	const namespace = "prepare-status-compressed"
+	const storageName = "s3-us-west"
+
+	cluster, err := readDefaultCR("ps-cluster1", namespace)
+	require.NoError(t, err)
+
+	cr, err := readDefaultCRBackup("some-name", namespace)
+	require.NoError(t, err)
+	cr.Spec.ClusterName = cluster.Name
+	cr.Spec.StorageName = storageName
+
+	storage := cluster.Spec.Backup.Storages[storageName]
+
+	r := PerconaServerMySQLBackupReconciler{}
+
+	tests := []struct {
+		name               string
+		cr                 *apiv1.PerconaServerMySQLBackup
+		storage            *apiv1.BackupStorageSpec
+		expectedCompressed bool
+	}{
+		{
+			name: "compressed via backup spec args",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+				cr.Spec.ContainerOptions = &apiv1.BackupContainerOptions{
+					Args: apiv1.BackupContainerArgs{
+						Xtrabackup: []string{"--compress"},
+					},
+				}
+			}),
+			storage:            storage.DeepCopy(),
+			expectedCompressed: true,
+		},
+		{
+			name: "compressed via storage args",
+			cr:   cr.DeepCopy(),
+			storage: updateResource(storage.DeepCopy(), func(s *apiv1.BackupStorageSpec) {
+				s.ContainerOptions = &apiv1.BackupContainerOptions{
+					Args: apiv1.BackupContainerArgs{
+						Xtrabackup: []string{"--compress=zstd"},
+					},
+				}
+			}),
+			expectedCompressed: true,
+		},
+		{
+			name:               "not compressed",
+			cr:                 cr.DeepCopy(),
+			storage:            storage.DeepCopy(),
+			expectedCompressed: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var status apiv1.PerconaServerMySQLBackupStatus
+			err := r.prepareStatus(tt.cr, cluster, tt.storage, &status, "some-source")
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedCompressed, status.Compressed)
+		})
+	}
+}
+
 func TestCheckFinalizers(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, clientgoscheme.AddToScheme(scheme))
