@@ -1908,3 +1908,12 @@ verify_all_backups_deletion() {
 		fi
 	done
 }
+
+count_backups_in_schedule() {
+	local schedule_name="$1"
+	local cluster_name="$2"
+	
+	local prefix=$(printf '%s' "${NAMESPACE}-${cluster_name}" | sha1sum | awk '{print $1}' | head -c 5)
+	local bcp_count=$(kubectl get ps-backup -n ${NAMESPACE} -l percona.com/backup-ancestor=${prefix}-${schedule_name} -o yaml | yq '.items | length')
+	echo $bcp_count
+}
