@@ -191,7 +191,7 @@ func TestCheckNSetDefaults(t *testing.T) {
 		assert.NotNil(t, bls.VerifyChecksum)
 		assert.True(t, *bls.VerifyChecksum)
 		assert.Equal(t, "128M", bls.RewriteFileSize)
-		assert.Equal(t, "2M", bls.CheckpointSize)
+		assert.Equal(t, "16M", bls.CheckpointSize)
 		assert.Equal(t, "30s", bls.CheckpointInterval)
 	})
 	t.Run("binlog server explicit values are not overridden by defaults", func(t *testing.T) {
