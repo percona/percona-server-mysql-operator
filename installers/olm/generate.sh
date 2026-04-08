@@ -213,6 +213,16 @@ if [ "${DISTRIBUTION}" == "community" ]; then
 	update_yaml_images "bundles/$DISTRIBUTION/manifests/${file_name}.v${VERSION}.clusterserviceversion.yaml"
 elif [ "${DISTRIBUTION}" == "redhat" ]; then
 	yq eval --inplace '
+        .metadata.annotations["features.operators.openshift.io/disconnected"] = "true" |
+        .metadata.annotations["features.operators.openshift.io/fips-compliant"] = "false" |
+        .metadata.annotations["features.operators.openshift.io/proxy-aware"] = "false" |
+        .metadata.annotations["features.operators.openshift.io/tls-profiles"] = "false" |
+        .metadata.annotations["features.operators.openshift.io/token-auth-aws"] = "false" |
+        .metadata.annotations["features.operators.openshift.io/token-auth-azure"] = "false" |
+        .metadata.annotations["features.operators.openshift.io/token-auth-gcp"] = "false" |
+        .metadata.annotations["features.operators.openshift.io/cnf"] = "false" |
+        .metadata.annotations["features.operators.openshift.io/cni"] = "false" |
+        .metadata.annotations["features.operators.openshift.io/csi"] = "false" |
         .spec.relatedImages = env(relatedImages) |
         .metadata.annotations.certified = "true" |
         .metadata.annotations["containerImage"] = "registry.connect.redhat.com/percona/percona-server-mysql-operator@sha256:<update_operator_SHA_value>" |
@@ -223,6 +233,16 @@ elif [ "${DISTRIBUTION}" == "marketplace" ]; then
 	# Annotations needed when targeting Red Hat Marketplace
 	export package_url="https://marketplace.redhat.com/en-us/operators/${file_name}"
 	yq --inplace '
+        .metadata.annotations["features.operators.openshift.io/disconnected"] = "true" |
+        .metadata.annotations["features.operators.openshift.io/fips-compliant"] = "false" |
+        .metadata.annotations["features.operators.openshift.io/proxy-aware"] = "false" |
+        .metadata.annotations["features.operators.openshift.io/tls-profiles"] = "false" |
+        .metadata.annotations["features.operators.openshift.io/token-auth-aws"] = "false" |
+        .metadata.annotations["features.operators.openshift.io/token-auth-azure"] = "false" |
+        .metadata.annotations["features.operators.openshift.io/token-auth-gcp"] = "false" |
+        .metadata.annotations["features.operators.openshift.io/cnf"] = "false" |
+        .metadata.annotations["features.operators.openshift.io/cni"] = "false" |
+        .metadata.annotations["features.operators.openshift.io/csi"] = "false" |
         .metadata.name = env(name_certified_rhmp) |
         .metadata.annotations["containerImage"] = "registry.connect.redhat.com/percona/percona-server-mysql-operator@sha256:<update_operator_SHA_value>" |
         .metadata.annotations["marketplace.openshift.io/remote-workflow"] =

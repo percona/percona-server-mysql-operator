@@ -3,22 +3,12 @@
 # https://redhat-connect.gitbook.io/certified-operator-guide/ocp-deployment/operator-metadata/creating-the-csv
 # https://pkg.go.dev/github.com/operator-framework/api@v0.10.1/pkg/operators/v1alpha1#ClusterServiceVersion
 ---
-apiVersion: operators.coreos.com/v1alpha1
+apiVersion: operators.coreos.com/v1
 kind: ClusterServiceVersion
 metadata:
   name: ''
   namespace: default
   annotations:
-    features.operators.openshift.io/disconnected: "true"
-    features.operators.openshift.io/fips-compliant: "false"
-    features.operators.openshift.io/proxy-aware: "false"
-    features.operators.openshift.io/tls-profiles: "false"
-    features.operators.openshift.io/token-auth-aws: "false"
-    features.operators.openshift.io/token-auth-azure: "false"
-    features.operators.openshift.io/token-auth-gcp: "false"
-    features.operators.openshift.io/cnf: "false"
-    features.operators.openshift.io/cni: "false"
-    features.operators.openshift.io/csi: "false"
     support: Percona
     # The following affect how the package is indexed at OperatorHub.io:
     # https://operatorhub.io/?category=Database
