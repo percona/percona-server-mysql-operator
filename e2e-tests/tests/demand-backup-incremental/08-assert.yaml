@@ -23,25 +23,40 @@ assertAll:
 commands:
   - script: |-
       set -o errexit
-      set -o xtrace
 
-      accessKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)"
-      secretKey="$(kubectl -n "${NAMESPACE}" get secret minio-secret -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)"
+      source ../../functions
+      
+      backup=incr-2
+      read -r storage_type bucket secret_name endpoint region destination <<< "$(
+        kubectl get ps-backup "$backup" -n "$NAMESPACE" -o json |
+        yq -r '
+          .status.storage as $storage |
+          [
+            $storage.type,
+            ($storage[.type].bucket // $sstorage[.type].container // ""),
+            ($storage[.type].credentialsSecret // ""),
+            ($storage[.type].endpointUrl // ""),
+            ($storage[.type].region // ""),
+            (.status.destination // "")
+          ] | @tsv
+        '
+      )"
 
-      destination=$(kubectl get ps-backup incr-2 -n "${NAMESPACE}" -o jsonpath='{.status.destination}')
+      prefix="${destination#*://*/}"
+      if [[ -z "$destination" ]]; then
+        echo "Backup $backup is missing destination"
+        exit 1
+      fi
 
-      listing=$(kubectl run -n "${NAMESPACE}" -i --rm aws-cli --image=perconalab/awscli --restart=Never -- \
-        /usr/bin/env AWS_ACCESS_KEY_ID="$accessKey" AWS_SECRET_ACCESS_KEY="$secretKey" AWS_DEFAULT_REGION=us-east-1 \
-        /usr/bin/aws --endpoint-url "http://minio-service:9000" s3 ls "$destination/" --recursive 2>/dev/null)
-
-      count=$(echo "$listing" | wc -l)
-      if [ "$count" -le 0 ]; then
+      count=$(count_files_on_storage "$storage_type" "$bucket" "$prefix" "$secret_name" "$region" "$endpoint")
+      if [[ "$count" != "0" ]]; then
+        echo "$count backup files found for $backup at $destination"
+      else
         echo "No backup files found in storage at $destination"
         exit 1
       fi
 
-      echo "Found $count files in $destination"
-
+      listing=$(list_files_on_storage "$storage_type" "$bucket" "$prefix" "$secret_name" "$region" "$endpoint")
       delta_count=$(echo "$listing" | grep -c '\.delta\.' || true)
       if [ "$delta_count" -eq 0 ]; then
         echo "No .delta files found in backup — this is not an incremental backup"

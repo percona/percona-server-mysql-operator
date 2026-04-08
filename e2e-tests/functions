@@ -1751,11 +1751,11 @@ run_restore() {
 	local destination=$5
 
 	local platform=$(detect_k8s_platform)
+	local storage_alias=$(get_storage_alias $platform)
   local platform_alias=$(get_platform_alias $platform)
-	local storage_alias=$(get_platform_alias $platform)
-	local restore_template="${TEST_CONFIG_DIR}/backup/restore${prefix}.yaml" 
-  local restore_template_platform="${TEST_CONFIG_DIR}/backup/restore${prefix}-${platform_alias}.yaml"
+	local restore_template="${TEST_CONFIG_DIR}/backup/restore${prefix}.yaml"
 	local restore_template_storage="${TEST_CONFIG_DIR}/backup/restore${prefix}-${storage_alias}.yaml" 
+  local restore_template_platform="${TEST_CONFIG_DIR}/backup/restore${prefix}-${platform_alias}.yaml"
 
 	if [[ -f "$restore_template_storage" ]]; then
 		restore_template="$restore_template_storage"
@@ -1824,7 +1824,7 @@ run_s3_command() {
   echo "$output"
 }
 
-check_prefix_empty_s3() {
+s3_count_files() {
   local bucket=$1
   local prefix=$2
   local secret_name=$3
@@ -1832,30 +1832,60 @@ check_prefix_empty_s3() {
   local endpoint=$5
 
 	local output="$(run_s3_command "$secret_name" "$region" "$endpoint" \
-    s3api list-objects-v2 \
-    --bucket "$bucket" \
-    --prefix "$prefix" \
-    --max-items 1 \
-   --query 'length(Contents || `[]`)' \
-    --output text \
-	)"
+		s3 ls "s3://$bucket/$prefix/" \
+		--recursive \
+		--summarize \
+		2>/dev/null \
+		| awk '/Total Objects/ {print $3}')"
 
-
-  [[ -n "$output" && "$output" == "0" ]]
+	echo "$output"
 }
 
-check_prefix_empty_on_storage() {
-	local backup=$1
-	local storage_type=$2
-  local bucket=$3
-  local prefix=$4
-  local secret_name=$5
-  local region=$6
-  local endpoint=$7
+count_files_on_storage() {
+	local storage_type=$1
+  local bucket=$2
+  local prefix=$3
+  local secret_name=$4
+  local region=$5
+  local endpoint=$6
 
   case "$storage_type" in
     s3|gcs)
-      check_prefix_empty_s3 "$bucket" "$prefix/" "$secret_name" "$region" "$endpoint"
+			s3_count_files "$bucket" "$prefix" "$secret_name" "$region" "$endpoint"
+      ;;
+    *)
+      echo "Unsupported storage type: $storage_type"
+      exit 1
+      ;;
+  esac
+}
+
+s3_list_files() {
+  local bucket=$1
+  local prefix=$2
+  local secret_name=$3
+  local region=$4
+  local endpoint=$5
+
+	local output="$(run_s3_command "$secret_name" "$region" "$endpoint" \
+    s3 ls "s3://$bucket/$prefix/" \
+		--recursive
+	)"
+
+	echo "$output"
+}
+
+list_files_on_storage() {
+	local storage_type=$1
+  local bucket=$2
+  local prefix=$3
+  local secret_name=$4
+  local region=$5
+  local endpoint=$6
+
+  case "$storage_type" in
+    s3|gcs)
+			s3_list_files "$bucket" "$prefix/" "$secret_name" "$region" "$endpoint"
       ;;
     *)
       echo "Unsupported storage type: $storage_type"
@@ -1892,7 +1922,7 @@ verify_all_backups_deletion() {
 
 		local removed=false
 		for i in {1..5}; do
-			if check_prefix_empty_on_storage "$backup" "$storage_type" "$bucket" "$prefix" "$secret_name" "$region" "$endpoint"; then
+			if [[ "$(count_files_on_storage "$storage_type" "$bucket" "$prefix" "$secret_name" "$region" "$endpoint")" == "0" ]]; then
 				echo "Backup removed: $backup"
 				removed=true
 				break

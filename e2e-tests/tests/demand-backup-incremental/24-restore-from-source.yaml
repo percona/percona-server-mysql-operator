@@ -7,8 +7,8 @@ commands:
 
       source ../../functions
 
-      backup_name="demand-backup"
-      restore_name="restore-of-demand-backup-with-backup-source"
+      backup_name=incr-3
+      restore_name="restore-from-source"
       cluster_name=$(get_cluster_name)
       destination=$(kubectl -n "${NAMESPACE}" get ps-backup "${backup_name}" -o jsonpath='{.status.destination}')
 

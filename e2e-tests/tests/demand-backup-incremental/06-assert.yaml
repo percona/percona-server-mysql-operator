@@ -1,0 +1,66 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+resourceRefs:
+- apiVersion: ps.percona.com/v1
+  kind: PerconaServerMySQLBackup
+  name: base-backup
+  ref: base
+- apiVersion: ps.percona.com/v1
+  kind: PerconaServerMySQLBackup
+  name: incr-1
+  ref: incr1
+assertAll:
+- celExpr: incr1.status.state == "Succeeded"
+  message: "Incremental backup should be succeeded"
+
+- celExpr: incr1.status.type == "incremental"
+  message: "Incremental backup should have a type of incremental"
+
+- celExpr: base.status.destination.contains(incr1.metadata.annotations["percona.com/base-backup-name"])
+  message: "Base backup annotation should reference the correct base backup"
+commands:
+  - timeout: 60
+    script: |-
+      set -o errexit
+
+      source ../../functions
+
+      backup=incr-1
+      read -r storage_type bucket secret_name endpoint region destination <<< "$(
+        kubectl get ps-backup "$backup" -n "$NAMESPACE" -o json |
+        yq -r '
+          .status.storage as $storage |
+          [
+            $storage.type,
+            ($storage[.type].bucket // $sstorage[.type].container // ""),
+            ($storage[.type].credentialsSecret // ""),
+            ($storage[.type].endpointUrl // ""),
+            ($storage[.type].region // ""),
+            (.status.destination // "")
+          ] | @tsv
+        '
+      )"
+
+      prefix="${destination#*://*/}"
+      if [[ -z "$destination" ]]; then
+        echo "Backup $backup is missing destination"
+        exit 1
+      fi
+
+      count=$(count_files_on_storage "$storage_type" "$bucket" "$prefix" "$secret_name" "$region" "$endpoint")
+      if [[ "$count" != "0" ]]; then
+        echo "$count backup files found for $backup at $destination"
+      else
+        echo "No backup files found in storage at $destination"
+        exit 1
+      fi
+
+      listing=$(list_files_on_storage "$storage_type" "$bucket" "$prefix" "$secret_name" "$region" "$endpoint")
+      delta_count=$(echo "$listing" | grep -c '\.delta\.' || true)
+      if [ "$delta_count" -eq 0 ]; then
+        echo "No .delta files found in backup — this is not an incremental backup"
+        exit 1
+      fi
+
+      echo "Confirmed incremental backup: found $delta_count .delta files in storage"

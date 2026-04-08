@@ -1,15 +1,25 @@
 apiVersion: kuttl.dev/v1beta1
-kind: TestStep
+kind: TestAssert
+timeout: 300
+resourceRefs:
+- apiVersion: ps.percona.com/v1
+  kind: PerconaServerMySQLBackup
+  name: base-backup
+  ref: bcp
+assertAll:
+- celExpr: bcp.status.state == "Succeeded"
+  message: "Base backup should be succeeded"
+
+- celExpr: bcp.status.type == "full"
+  message: "Base backup should be a full backup"
+
 commands:
-  - timeout: 60
-    script: |-
+  - script: |-
       set -o errexit
-      set -o xtrace
 
       source ../../functions
 
-      backup="demand-backup-retry"
-
+      backup=base-backup
       read -r storage_type bucket secret_name endpoint region destination <<< "$(
         kubectl get ps-backup "$backup" -n "$NAMESPACE" -o json |
         yq -r '
@@ -31,20 +41,10 @@ commands:
         exit 1
       fi
 
-      backup_exists=false
-      for i in {1..5}; do
-        if [[ "$(count_files_on_storage "$storage_type" "$bucket" "$prefix" "$secret_name" "$region" "$endpoint")" != "0" ]]; then
-          echo "Backup files found for: $backup"
-          backup_exists=true
-          break
-        fi
-
-        echo "Waiting for backup prefix to be available ($i/5): $backup"
-        sleep 5
-      done
-
-      if ! $backup_exists; then
-        echo "Backup isn't present in storage: $backup"
+      count=$(count_files_on_storage "$storage_type" "$bucket" "$prefix" "$secret_name" "$region" "$endpoint")
+      if [[ "$count" != "0" ]]; then
+        echo "$count backup files found for $backup at $destination"
+      else
+        echo "No backup files found in storage at $destination"
         exit 1
       fi
-
