@@ -59,6 +59,20 @@ func metaTime(t time.Time) *metav1.Time {
 func TestGetLastFullBackup(t *testing.T) {
 	now := time.Now()
 
+	storage := &apiv1.BackupStorageSpec{
+		Type: apiv1.BackupStorageS3,
+		S3: &apiv1.BackupStorageS3Spec{
+			Bucket: "test-bucket",
+			Prefix: "test-prefix",
+			Region: "us-east-1",
+		},
+	}
+	newBackupWithStorage := func(name, clusterName string, backupType apiv1.BackupType, state apiv1.BackupState, completedAt *metav1.Time) *apiv1.PerconaServerMySQLBackup {
+		b := newBackup(name, clusterName, backupType, state, completedAt)
+		b.Status.Storage = storage
+		return b
+	}
+
 	tests := map[string]struct {
 		backups     []*apiv1.PerconaServerMySQLBackup
 		clusterName string
@@ -68,41 +82,41 @@ func TestGetLastFullBackup(t *testing.T) {
 		"returns latest full backup among multiple": {
 			clusterName: "cluster1",
 			backups: []*apiv1.PerconaServerMySQLBackup{
-				newBackup("older-full", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now.Add(-2*time.Hour))),
-				newBackup("newer-full", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now.Add(-1*time.Hour))),
+				newBackupWithStorage("older-full", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now.Add(-2*time.Hour))),
+				newBackupWithStorage("newer-full", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now.Add(-1*time.Hour))),
 			},
 			wantName: "newer-full",
 		},
 		"returns latest full backup even when older than incremental": {
 			clusterName: "cluster1",
 			backups: []*apiv1.PerconaServerMySQLBackup{
-				newBackup("old-full", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now.Add(-3*time.Hour))),
-				newBackup("new-incr", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded, metaTime(now.Add(-1*time.Hour))),
+				newBackupWithStorage("old-full", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now.Add(-3*time.Hour))),
+				newBackupWithStorage("new-incr", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded, metaTime(now.Add(-1*time.Hour))),
 			},
 			wantName: "old-full",
 		},
 		"returns full backup when newer than incremental": {
 			clusterName: "cluster1",
 			backups: []*apiv1.PerconaServerMySQLBackup{
-				newBackup("new-full", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now.Add(-1*time.Hour))),
-				newBackup("old-incr", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded, metaTime(now.Add(-3*time.Hour))),
+				newBackupWithStorage("new-full", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now.Add(-1*time.Hour))),
+				newBackupWithStorage("old-incr", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded, metaTime(now.Add(-3*time.Hour))),
 			},
 			wantName: "new-full",
 		},
 		"skips non-succeeded backups": {
 			clusterName: "cluster1",
 			backups: []*apiv1.PerconaServerMySQLBackup{
-				newBackup("running", "cluster1", apiv1.BackupTypeFull, apiv1.BackupRunning, metaTime(now)),
-				newBackup("failed", "cluster1", apiv1.BackupTypeFull, apiv1.BackupFailed, metaTime(now)),
-				newBackup("succeeded", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now.Add(-2*time.Hour))),
+				newBackupWithStorage("running", "cluster1", apiv1.BackupTypeFull, apiv1.BackupRunning, metaTime(now)),
+				newBackupWithStorage("failed", "cluster1", apiv1.BackupTypeFull, apiv1.BackupFailed, metaTime(now)),
+				newBackupWithStorage("succeeded", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now.Add(-2*time.Hour))),
 			},
 			wantName: "succeeded",
 		},
 		"unknown type is treated as full": {
 			clusterName: "cluster1",
 			backups: []*apiv1.PerconaServerMySQLBackup{
-				newBackup("older-full", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now.Add(-2*time.Hour))),
-				newBackup("newer-full", "cluster1", "", apiv1.BackupSucceeded, metaTime(now.Add(-1*time.Hour))),
+				newBackupWithStorage("older-full", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now.Add(-2*time.Hour))),
+				newBackupWithStorage("newer-full", "cluster1", "", apiv1.BackupSucceeded, metaTime(now.Add(-1*time.Hour))),
 			},
 			wantName: "newer-full",
 		},
@@ -114,32 +128,52 @@ func TestGetLastFullBackup(t *testing.T) {
 		"error when only non-succeeded backups exist": {
 			clusterName: "cluster1",
 			backups: []*apiv1.PerconaServerMySQLBackup{
-				newBackup("running", "cluster1", apiv1.BackupTypeFull, apiv1.BackupRunning, metaTime(now)),
-				newBackup("error", "cluster1", apiv1.BackupTypeFull, apiv1.BackupError, nil),
+				newBackupWithStorage("running", "cluster1", apiv1.BackupTypeFull, apiv1.BackupRunning, metaTime(now)),
+				newBackupWithStorage("error", "cluster1", apiv1.BackupTypeFull, apiv1.BackupError, nil),
 			},
-			wantErr: "no full backup found",
+			wantErr: "no full backup found in storage",
 		},
 		"error when succeeded backup has nil completedAt": {
 			clusterName: "cluster1",
 			backups: []*apiv1.PerconaServerMySQLBackup{
-				newBackup("bad-backup", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, nil),
+				newBackupWithStorage("bad-backup", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, nil),
 			},
 			wantErr: "backup 'bad-backup' is succeeded but completedAt is not set",
 		},
 		"filters by cluster name": {
 			clusterName: "cluster1",
 			backups: []*apiv1.PerconaServerMySQLBackup{
-				newBackup("cluster2-backup", "cluster2", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now)),
-				newBackup("cluster1-backup", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now.Add(-1*time.Hour))),
+				newBackupWithStorage("cluster2-backup", "cluster2", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now)),
+				newBackupWithStorage("cluster1-backup", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now.Add(-1*time.Hour))),
 			},
 			wantName: "cluster1-backup",
 		},
 		"single succeeded full backup": {
 			clusterName: "cluster1",
 			backups: []*apiv1.PerconaServerMySQLBackup{
-				newBackup("only-one", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now)),
+				newBackupWithStorage("only-one", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now)),
 			},
 			wantName: "only-one",
+		},
+		"filters by storage": {
+			clusterName: "cluster1",
+			backups: []*apiv1.PerconaServerMySQLBackup{
+				newBackupWithStorage("older-full", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now.Add(-2*time.Hour))),
+				func() *apiv1.PerconaServerMySQLBackup {
+					b := newBackup("newer-full", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded, metaTime(now.Add(-1*time.Hour)))
+					b.Status.Storage = &apiv1.BackupStorageSpec{
+						Type: apiv1.BackupStorageGCS,
+						GCS: &apiv1.BackupStorageGCSSpec{
+							Bucket:            "test-bucket",
+							Prefix:            "test-prefix",
+							EndpointURL:       "https://gcs.example.com",
+							CredentialsSecret: "test-secret",
+						},
+					}
+					return b
+				}(),
+			},
+			wantName: "older-full",
 		},
 	}
 
@@ -151,7 +185,7 @@ func TestGetLastFullBackup(t *testing.T) {
 			}
 
 			cl := buildTestClient(objs...)
-			result, err := GetLastFullBackup(t.Context(), cl, tt.clusterName, "default")
+			result, err := GetLastFullBackup(t.Context(), cl, tt.clusterName, "default", storage)
 
 			if tt.wantErr != "" {
 				require.Error(t, err)
