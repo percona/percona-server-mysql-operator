@@ -14,7 +14,6 @@ commands:
           | yq eval '.spec.backup.storages.minio.s3.credentialsSecret="minio-secret"' - \
           | yq eval ".spec.backup.storages.minio.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
           | yq eval '.spec.backup.storages.minio.s3.region="us-east-1"' - \
-          | yq eval '.spec.backup.storages.minio.containerOptions.args.xtrabackup[0]="--compress"' - \
           | yq eval '.spec.mysql.clusterType="group-replication"' - \
           | yq eval ".spec.proxy.router.enabled=true" - \
           | yq eval ".spec.proxy.haproxy.enabled=false" - \
