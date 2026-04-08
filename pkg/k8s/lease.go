@@ -129,6 +129,6 @@ func IsLeaseActive(lease *coordv1.Lease) bool {
 		return false
 	}
 
-	expiry := lastRenew.Time.Add(time.Duration(*lease.Spec.LeaseDurationSeconds) * time.Second)
+	expiry := lastRenew.Add(time.Duration(*lease.Spec.LeaseDurationSeconds) * time.Second)
 	return time.Now().Before(expiry)
 }
