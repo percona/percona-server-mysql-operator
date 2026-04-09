@@ -31,7 +31,7 @@ export MINIO_VER="5.4.0"
 export CHAOS_MESH_VER="2.7.2"
 export VAULT_VER="0.16.1"
 
-date=$(which gdate || which date)
+export date=$(which gdate || which date)
 
 oc get projects &> /dev/null && export OPENSHIFT=4 || :
 

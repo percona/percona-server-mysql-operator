@@ -581,13 +581,7 @@ deploy_vault() {
 	local tmp_dir=/tmp/vault
 	echo "Using tmp dir: ${tmp_dir}"
 
-	if [[ -n ${OPENSHIFT} ]]; then
-		platform=openshift
-	fi
-
-	if [ "$EKS" = 1 ]; then
-		platform=eks
-	fi
+	platform=$(detect_k8s_platform)
 
 	_deploy_vault ${name} ${protocol} ${platform} ${namespace} ${tmp_dir}
 
@@ -764,9 +758,9 @@ get_cr() {
 		.spec.pmm.image = "'"$image_pmm_client"'" |
 		(.. | select(tag == "!!str")) |= sub("<namespace>"; "'"${NAMESPACE}"'")
 	' "${crs[@]}" \
-		| if [[ "$platform" == "minikube" ]]; then
-			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) = "none"' - | \
-			yq eval '.spec.proxy.haproxy.resources.requests.cpu = "300m"' -
+		| if [[ $platform == "minikube" ]]; then
+			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) = "none"' - \
+				| yq eval '.spec.proxy.haproxy.resources.requests.cpu = "300m"' -
 		else
 			cat
 		fi
@@ -1801,7 +1795,7 @@ run_s3_command() {
 	local secretKey="$(get_secret_value "$secret_name" "SECRET_ACCESS_KEY" "AWS_SECRET_ACCESS_KEY")"
 
 	local aws_args=()
-  if [[ -n $endpoint ]]; then
+	if [[ -n $endpoint ]]; then
 		aws_args+=(--endpoint-url "$endpoint")
 	fi
 
@@ -1835,7 +1829,7 @@ s3_count_files() {
 			--recursive \
 			--summarize \
 			2>/dev/null \
-		| awk '/Total Objects/ {print $3}'
+			| awk '/Total Objects/ {print $3}'
 	)"
 
 	echo "$output"
@@ -1853,7 +1847,7 @@ count_files_on_storage() {
 	case "$storage_type" in
 		s3 | gcs)
 			s3_count_files "$bucket" "$prefix" "$secret_name" "$region" "$endpoint"
-      		;;
+			;;
 		*)
 			echo "Unsupported storage type: $storage_type"
 			exit 1
@@ -1903,20 +1897,23 @@ list_files_on_storage() {
 verify_all_backups_deletion() {
 	for backup in $(kubectl get ps-backup -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}'); do
 		echo "Checking backup: $backup"
-		read -r storage_type bucket secret_name endpoint region destination <<< "$(
-		kubectl get ps-backup "$backup" -n "$NAMESPACE" -o json |
-		yq -r '
-			.status.storage as $storage |
-			[
-			$storage.type,
-			($storage[.type].bucket // $storage[.type].container // ""),
-			($storage[.type].credentialsSecret // ""),
-			($storage[.type].endpointUrl // ""),
-			($storage[.type].region // ""),
-			(.status.destination // "")
-			] | @tsv
-		'
-		)"
+
+		output=$(
+			kubectl get ps-backup "$backup" -n "$NAMESPACE" -o json \
+				| yq -r '
+					.status.storage as $storage |
+					[
+						$storage.type,
+						($storage[.type].bucket // $storage[.type].container // ""),
+						($storage[.type].credentialsSecret // ""),
+						($storage[.type].endpointUrl // ""),
+						($storage[.type].region // ""),
+						(.status.destination // "")
+					] | @tsv
+				'
+		)
+
+		read -r storage_type bucket secret_name endpoint region destination <<<"$output"
 
 		prefix="${destination#*://*/}"
 		if [[ -z $destination ]]; then
@@ -1924,7 +1921,7 @@ verify_all_backups_deletion() {
 			break
 		fi
 
-		kubectl delete ps-backup $backup -n "$NAMESPACE"
+		kubectl delete ps-backup "$backup" -n "$NAMESPACE"
 
 		local removed=false
 		for i in {1..5}; do
