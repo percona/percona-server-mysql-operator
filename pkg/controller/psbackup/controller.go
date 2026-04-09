@@ -891,7 +891,7 @@ func (r *PerconaServerMySQLBackupReconciler) tryAcquireLease(
 		}
 
 		holderBackup := &apiv1.PerconaServerMySQLBackup{}
-		if err := r.Client.Get(ctx, client.ObjectKey{Name: backupName, Namespace: backup.GetNamespace()}, holderBackup); k8serrors.IsNotFound(err) {
+		if err := r.Get(ctx, client.ObjectKey{Name: backupName, Namespace: backup.GetNamespace()}, holderBackup); k8serrors.IsNotFound(err) {
 			return true, nil
 		} else if err != nil {
 			return false, errors.Wrap(err, "failed to get backup")
