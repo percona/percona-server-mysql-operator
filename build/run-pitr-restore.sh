@@ -18,6 +18,15 @@ until mysqladmin -u operator -p$(</etc/mysql/mysql-users-secret/operator) ping -
     sleep 1;
 done
 
+if [[ -n ${SLEEP_FOREVER} ]]; then
+  echo "Sleeping forever..."
+  touch /var/lib/mysql/sleep-forever
+  while [[ -f /var/lib/mysql/sleep-forever ]]; do
+    sleep 10
+  done
+  exit 0
+fi
+
 /opt/percona/pitr setup
 /opt/percona/pitr apply
 
