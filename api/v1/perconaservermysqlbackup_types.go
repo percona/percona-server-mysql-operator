@@ -264,9 +264,6 @@ func ConditionsEqual(a, b []metav1.Condition) bool {
 		if other == nil {
 			return false
 		}
-		if other.Status != a[i].Status {
-			return false
-		}
 		if a[i].Type != other.Type ||
 			a[i].Status != other.Status ||
 			a[i].ObservedGeneration != other.ObservedGeneration ||
