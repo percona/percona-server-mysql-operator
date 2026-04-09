@@ -205,12 +205,12 @@ func runApply(ctx context.Context, newDB newDatabaseFn, getSecret func(apiv1.Sys
 	}
 	log.Printf("GTID_EXECUTED: %s", currentGTID)
 
-	log.Println("running 'CHANGE REPLICATION SOURCE'")
+	log.Printf("CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE='%s', RELAY_LOG_POS=%d, SOURCE_HOST='dummy'", firstRelayLog, 4)
 	if err := database.ChangeReplicationSourceRelay(ctx, firstRelayLog, 4); err != nil {
 		return fmt.Errorf("change replication source: %w", err)
 	}
 
-	log.Printf("starting replica until GTID: %s", pitrGTID)
+	log.Printf("START REPLICA SQL_THREAD UNTIL SQL_AFTER_GTIDS='%s'", pitrGTID)
 	if err := database.StartReplicaUntilGTID(ctx, pitrGTID); err != nil {
 		return fmt.Errorf("start replica until GTID: %w", err)
 	}

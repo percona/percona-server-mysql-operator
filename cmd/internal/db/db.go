@@ -409,7 +409,7 @@ func (d *DB) ChangeReplicationSourceRelay(ctx context.Context, relayLogFile stri
 
 func (d *DB) StartReplicaUntilGTID(ctx context.Context, gtid string) error {
 	_, err := d.db.ExecContext(ctx, fmt.Sprintf(
-		"START REPLICA SQL_THREAD UNTIL SQL_BEFORE_GTIDS='%s'", gtid))
+		"START REPLICA SQL_THREAD UNTIL SQL_AFTER_GTIDS='%s'", gtid))
 	return errors.Wrap(err, "start replica until GTID")
 }
 
