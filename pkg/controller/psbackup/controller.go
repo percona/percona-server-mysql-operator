@@ -944,7 +944,7 @@ func (r *PerconaServerMySQLBackupReconciler) releaseLeaseIfNeeded(
 		return nil
 	}
 
-	if err := k8s.ReleaseLease(ctx, r.Client, backupLeaseName(backup.Spec.ClusterName), backupLeaseHolder(backup), backup.GetNamespace()); err != nil {
+	if err := k8s.ReleaseLease(ctx, r.Client, backupLeaseName(backup.Spec.ClusterName), backupLeaseHolder(backup), backup.GetNamespace()); err != nil && !errors.Is(err, k8s.ErrLeaseAlreadyHeld) {
 		return errors.Wrap(err, "failed to release lease")
 	}
 	meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionBackupLeaseAcquired)
