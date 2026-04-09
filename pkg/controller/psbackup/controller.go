@@ -26,6 +26,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -134,6 +135,15 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 	switch cr.Status.State {
 	case apiv1.BackupFailed, apiv1.BackupSucceeded, apiv1.BackupError:
+		if err := r.releaseLeaseIfNeeded(ctx, cr); err != nil {
+			return rr, errors.Wrap(err, "release lease")
+		}
+		return rr, nil
+	}
+
+	if ok, err := r.tryAcquireLease(ctx, &status, cr); err != nil {
+		return rr, errors.Wrap(err, "try to acquire lease")
+	} else if !ok {
 		return rr, nil
 	}
 
@@ -845,5 +855,90 @@ func (r *PerconaServerMySQLBackupReconciler) setIncrementalBaseAnnotations(
 	}); err != nil {
 		return errors.Wrap(err, "update backup")
 	}
+	return nil
+}
+
+func backupLeaseName(clusterName string) string {
+	return "ps-" + clusterName + "-backup-lock"
+}
+
+func backupLeaseHolder(backup *apiv1.PerconaServerMySQLBackup) string {
+	return fmt.Sprintf("%s|%s", backup.GetName(), backup.GetUID())
+}
+
+func parseBackupLeaseHolder(holder string) (string, types.UID) {
+	parts := strings.Split(holder, "|")
+	if len(parts) != 2 {
+		return "", ""
+	}
+	return parts[0], types.UID(parts[1])
+}
+
+func (r *PerconaServerMySQLBackupReconciler) tryAcquireLease(
+	ctx context.Context,
+	status *apiv1.PerconaServerMySQLBackupStatus,
+	backup *apiv1.PerconaServerMySQLBackup,
+) (bool, error) {
+	log := logf.FromContext(ctx).WithName("tryAcquireLease")
+	leaseName := backupLeaseName(backup.Spec.ClusterName)
+	leaseHolderID := backupLeaseHolder(backup)
+
+	checkStale := func(ctx context.Context, currentHolder string) (bool, error) {
+		backupName, backupUID := parseBackupLeaseHolder(currentHolder)
+		if backupName == "" || backupUID == "" {
+			log.Info("Backup lease holder is malformed, acquiring lease anyway")
+			return true, nil
+		}
+
+		holderBackup := &apiv1.PerconaServerMySQLBackup{}
+		if err := r.Client.Get(ctx, client.ObjectKey{Name: backupName, Namespace: backup.GetNamespace()}, holderBackup); k8serrors.IsNotFound(err) {
+			return true, nil
+		} else if err != nil {
+			return false, errors.Wrap(err, "failed to get backup")
+		} else if holderBackup.GetUID() != backupUID {
+			// We found a backup with the same name, but different UID.
+			// So this isn't the same backup that was holding the lease.
+			return true, nil
+		}
+
+		// We found the backup that holds the lease. Check if it has completed fully before we acquire the lease.
+		return holderBackup.Status.State.IsTerminal(), nil
+	}
+
+	acquired := true
+	if err := k8s.AcquireLease(ctx, r.Client, leaseName, leaseHolderID, backup.GetNamespace(), checkStale); err != nil {
+		if errors.Is(err, k8s.ErrLeaseAlreadyHeld) || k8serrors.IsAlreadyExists(err) || k8serrors.IsConflict(err) {
+			acquired = false
+		} else {
+			return false, errors.Wrap(err, "failed to acquire lease")
+		}
+	}
+
+	cond := metav1.Condition{
+		Type:               apiv1.ConditionBackupLeaseAcquired,
+		Status:             metav1.ConditionTrue,
+		Reason:             "LeaseAcquired",
+		ObservedGeneration: backup.GetGeneration(),
+	}
+	if !acquired {
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = "LeaseAlreadyHeld"
+	}
+
+	meta.SetStatusCondition(&status.Conditions, cond)
+	return acquired, nil
+}
+
+func (r *PerconaServerMySQLBackupReconciler) releaseLeaseIfNeeded(ctx context.Context, backup *apiv1.PerconaServerMySQLBackup) error {
+	log := logf.FromContext(ctx).WithName("releaseLeaseIfNeeded")
+	if !meta.IsStatusConditionPresentAndEqual(backup.Status.Conditions, apiv1.ConditionBackupLeaseAcquired, metav1.ConditionTrue) {
+		return nil
+	}
+
+	if err := k8s.ReleaseLease(ctx, r.Client, backupLeaseName(backup.Spec.ClusterName), backupLeaseHolder(backup), backup.GetNamespace()); err != nil {
+		return errors.Wrap(err, "failed to release lease")
+	}
+	meta.RemoveStatusCondition(&backup.Status.Conditions, apiv1.ConditionBackupLeaseAcquired)
+	log.Info("Backup lease released")
 	return nil
 }
