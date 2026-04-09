@@ -69,7 +69,7 @@ func RestoreJob(
 			Name:        JobName(restore),
 			Namespace:   cluster.Namespace,
 			Labels:      labels,
-			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), storage.Annotations),
+			Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), restore.Annotations, storage.Annotations),
 		},
 		Spec: batchv1.JobSpec{
 			Parallelism: ptr.To(int32(1)),
@@ -77,7 +77,7 @@ func RestoreJob(
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
-					Annotations: cluster.GlobalAnnotations(),
+					Annotations: util.SSMapMerge(cluster.GlobalAnnotations(), restore.Annotations, storage.Annotations),
 				},
 				Spec: corev1.PodSpec{
 					RestartPolicy:    corev1.RestartPolicyNever,
@@ -184,6 +184,13 @@ func restoreContainer(
 			Name:  "BINLOGS_PATH",
 			Value: fmt.Sprintf("%s/%s", binlogsMountPath, BinlogsConfigKey),
 		},
+	}
+
+	if _, ok := restore.Annotations["percona.com/pitr-sleep-forever"]; ok {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "SLEEP_FOREVER",
+			Value: "true",
+		})
 	}
 
 	if restore.Spec.PITR != nil {
