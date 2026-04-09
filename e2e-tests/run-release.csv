@@ -5,14 +5,14 @@ auto-config
 config
 config-router
 demand-backup
-demand-backup-cloud
+demand-backup-multi-storage
 demand-backup-retry
 demand-backup-incremental
 async-data-at-rest-encryption
 gr-global-metadata
 gr-data-at-rest-encryption
 gr-demand-backup
-gr-demand-backup-cloud
+gr-demand-backup-multi-storage
 gr-demand-backup-haproxy
 gr-demand-backup-incremental
 gr-finalizer

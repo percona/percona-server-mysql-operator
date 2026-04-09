@@ -1,0 +1,49 @@
+
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-demand-backup-multi-storage
+spec:
+  mysql:
+    clusterType: group-replication
+    size: 3
+
+  proxy:
+    haproxy:
+      enabled: false
+    router:
+      enabled: true
+      size: 3
+
+  orchestrator:
+    enabled: true
+    size: 3
+
+  backup:
+    backoffLimit: 3
+    storages:
+      aws-s3:
+        type: s3
+        verifyTLS: true
+        s3:
+          bucket: operator-testing
+          credentialsSecret: aws-s3-secret
+          region: us-east-1
+          prefix: ps
+
+      gcp-cs:
+        type: gcs
+        verifyTLS: true
+        gcs:
+          bucket: operator-testing
+          credentialsSecret: gcp-cs-secret
+          endpointUrl: https://storage.googleapis.com
+          prefix: ps
+
+      azure-blob:
+        type: azure
+        verifyTLS: true
+        azure:
+          container: operator-testing
+          credentialsSecret: azure-secret
+          prefix: ps

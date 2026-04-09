@@ -2,10 +2,10 @@ auto-config
 config
 config-router
 demand-backup
-demand-backup-cloud
+demand-backup-multi-storage
 demand-backup-retry
 gr-demand-backup
-gr-demand-backup-cloud
+gr-demand-backup-multi-storage
 gr-demand-backup-haproxy
 gr-haproxy
 gr-init-deploy
