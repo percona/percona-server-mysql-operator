@@ -160,9 +160,17 @@ func ListDependentIncrementalBackups(
 		result = append(result, &backupList.Items[i])
 	}
 
-	// Sort by CompletedAt (oldest to newest)
+	// Sort by CompletedAt (oldest to newest), falling back to CreationTimestamp if CompletedAt is not set
 	sort.SliceStable(result, func(i, j int) bool {
-		return result[i].Status.CompletedAt.Before(result[j].Status.CompletedAt)
+		ti := result[i].Status.CompletedAt
+		if ti == nil {
+			ti = &result[i].CreationTimestamp
+		}
+		tj := result[j].Status.CompletedAt
+		if tj == nil {
+			tj = &result[j].CreationTimestamp
+		}
+		return ti.Before(tj)
 	})
 	return result, nil
 }

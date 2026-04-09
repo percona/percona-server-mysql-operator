@@ -462,6 +462,21 @@ func TestListDependentIncrementalBackups(t *testing.T) {
 				metaTime(now), "", nil),
 			wantErr: "base backup name not known in annotations",
 		},
+		"sorts by creationTimestamp when completedAt is nil": {
+			inputBackup: newBackupWithMeta("full-1", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded,
+				metaTime(now.Add(-4*time.Hour)), "s3://bucket/prefix/full-1", nil),
+			listBackups: []*apiv1.PerconaServerMySQLBackup{
+				func() *apiv1.PerconaServerMySQLBackup {
+					b := newBackupWithMeta("incr-no-completed", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupRunning,
+						nil, "", map[string]string{baseAnno: "full-1"})
+					b.CreationTimestamp = metav1.Time{Time: now.Add(-2 * time.Hour)}
+					return b
+				}(),
+				newBackupWithMeta("incr-completed", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded,
+					metaTime(now.Add(-3*time.Hour)), "", map[string]string{baseAnno: "full-1"}),
+			},
+			wantNames: []string{"incr-completed", "incr-no-completed"},
+		},
 	}
 
 	for name, tt := range tests {
