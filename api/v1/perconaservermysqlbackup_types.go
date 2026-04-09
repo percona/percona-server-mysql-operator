@@ -260,7 +260,19 @@ func ConditionsEqual(a, b []metav1.Condition) bool {
 		return false
 	}
 	for i := range a {
-		if !meta.IsStatusConditionPresentAndEqual(b, a[i].Type, a[i].Status) {
+		other := meta.FindStatusCondition(b, a[i].Type)
+		if other == nil {
+			return false
+		}
+		if other.Status != a[i].Status {
+			return false
+		}
+		if a[i].Type != other.Type ||
+			a[i].Status != other.Status ||
+			a[i].ObservedGeneration != other.ObservedGeneration ||
+			a[i].LastTransitionTime != other.LastTransitionTime ||
+			a[i].Reason != other.Reason ||
+			a[i].Message != other.Message {
 			return false
 		}
 	}
