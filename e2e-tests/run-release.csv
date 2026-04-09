@@ -4,14 +4,14 @@ async-global-metadata
 auto-config
 config
 config-router
-demand-backup-minio
+demand-backup
 demand-backup-cloud
 demand-backup-retry
 demand-backup-incremental
 async-data-at-rest-encryption
 gr-global-metadata
 gr-data-at-rest-encryption
-gr-demand-backup-minio
+gr-demand-backup
 gr-demand-backup-cloud
 gr-demand-backup-haproxy
 gr-demand-backup-incremental
