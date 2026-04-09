@@ -209,7 +209,7 @@ func (s *restorerOptions) job(ctx context.Context) (*batchv1.Job, error) {
 		}
 	}
 
-	job := xtrabackup.RestoreJob(s.cluster, destination, s.cr, bcpStorage, s.initImage, pvcName, s.bcp.Status.Compressed)
+	job := xtrabackup.RestoreJob(s.cluster, destination, s.cr, bcpStorage, s.initImage, pvcName)
 	if err := controllerutil.SetControllerReference(s.cr, job, s.scheme); err != nil {
 		return nil, errors.Wrapf(err, "set controller reference to Job %s/%s", job.Namespace, job.Name)
 	}

@@ -427,7 +427,7 @@ func TestRestoreJob(t *testing.T) {
 			},
 		}
 
-		j := RestoreJob(cluster, destination, cr, cluster.Spec.Backup.Storages[storageName], initImage, "pvc-name", false)
+		j := RestoreJob(cluster, destination, cr, cluster.Spec.Backup.Storages[storageName], initImage, "pvc-name")
 
 		expectedLabels := map[string]string{
 			"app.kubernetes.io/component":  "restore",
@@ -464,7 +464,7 @@ func TestRestoreJob(t *testing.T) {
 			},
 		}
 
-		j := RestoreJob(cluster, destination, cr, storage, initImage, "pvc-name", false)
+		j := RestoreJob(cluster, destination, cr, storage, initImage, "pvc-name")
 
 		getEnv := func() []corev1.EnvVar {
 			xbContainer := j.Spec.Template.Spec.Containers[0]
@@ -519,7 +519,7 @@ func TestRestoreJob(t *testing.T) {
 				Xbstream:   []string{"restore-arg-xbstream"},
 			},
 		}
-		j = RestoreJob(cluster, destination, cr, storage, initImage, "pvc-name", false)
+		j = RestoreJob(cluster, destination, cr, storage, initImage, "pvc-name")
 		assert.Equal(t, []corev1.EnvVar{
 			{
 				Name:  "RESTORE_NAME",
@@ -559,7 +559,7 @@ func TestRestoreJob(t *testing.T) {
 			Env:  []corev1.EnvVar{},
 			Args: apiv1.BackupContainerArgs{},
 		}
-		j = RestoreJob(cluster, destination, cr, storage, initImage, "pvc-name", false)
+		j = RestoreJob(cluster, destination, cr, storage, initImage, "pvc-name")
 		assert.Equal(t, []corev1.EnvVar{
 			{
 				Name:  "RESTORE_NAME",
@@ -580,25 +580,6 @@ func TestRestoreJob(t *testing.T) {
 		}, getEnv())
 	})
 
-	t.Run("compressed flag", func(t *testing.T) {
-		cluster := cr.DeepCopy()
-		restore := backup.DeepCopy()
-		storage := cluster.Spec.Backup.Storages[storageName]
-
-		hasEnv := func(envs []corev1.EnvVar, name, value string) bool {
-			return slices.ContainsFunc(envs, func(e corev1.EnvVar) bool {
-				return e.Name == name && e.Value == value
-			})
-		}
-
-		j := RestoreJob(cluster, destination, restore, storage, initImage, "pvc-name", true)
-		envs := j.Spec.Template.Spec.Containers[0].Env
-		assert.True(t, hasEnv(envs, "BACKUP_COMPRESSED", "true"))
-
-		j = RestoreJob(cluster, destination, restore, storage, initImage, "pvc-name", false)
-		envs = j.Spec.Template.Spec.Containers[0].Env
-		assert.False(t, hasEnv(envs, "BACKUP_COMPRESSED", "true"))
-	})
 }
 
 func TestGetDestination(t *testing.T) {
