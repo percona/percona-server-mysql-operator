@@ -97,7 +97,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		return rr, errors.Wrapf(err, "get %v", req.NamespacedName.String())
 	}
 
-	status := cr.Status
+	status := *cr.Status.DeepCopy()
 
 	defer func() {
 		if status.Equals(&cr.Status) {
@@ -135,13 +135,13 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 
 	switch cr.Status.State {
 	case apiv1.BackupFailed, apiv1.BackupSucceeded, apiv1.BackupError:
-		if err := r.releaseLeaseIfNeeded(ctx, cr); err != nil {
+		if err := r.releaseLeaseIfNeeded(ctx, cr, &status); err != nil {
 			return rr, errors.Wrap(err, "release lease")
 		}
 		return rr, nil
 	}
 
-	if ok, err := r.tryAcquireLease(ctx, &status, cr); err != nil {
+	if ok, err := r.tryAcquireLease(ctx, cr, &status); err != nil {
 		return rr, errors.Wrap(err, "try to acquire lease")
 	} else if !ok {
 		return rr, nil
@@ -323,7 +323,7 @@ func (r *PerconaServerMySQLBackupReconciler) prepareStatus(
 	status *apiv1.PerconaServerMySQLBackupStatus,
 	backupSource string,
 ) error {
-	destination, err := xtrabackup.GetDestination(storage, cr)
+	destination, err := xtrabackup.GetDestination(storage, cr, time.Now())
 	if err != nil {
 		return errors.Wrap(err, "get backup destination")
 	}
@@ -632,13 +632,13 @@ func (r *PerconaServerMySQLBackupReconciler) deleteDependentIncrementalBackups(
 		return true, nil
 	}
 
-	for _, b := range backups {
-		if !b.GetDeletionTimestamp().IsZero() {
-			continue
-		}
-		if err := r.Delete(ctx, b); err != nil {
-			return false, errors.Wrap(err, "delete backup")
-		}
+	latestBackup := backups[len(backups)-1]
+	if !latestBackup.GetDeletionTimestamp().IsZero() { // already being deleted
+		return false, nil
+	}
+
+	if err := r.Delete(ctx, latestBackup); err != nil {
+		return false, errors.Wrap(err, "delete latest incremental backup")
 	}
 	return false, nil
 }
@@ -876,8 +876,8 @@ func parseBackupLeaseHolder(holder string) (string, types.UID) {
 
 func (r *PerconaServerMySQLBackupReconciler) tryAcquireLease(
 	ctx context.Context,
-	status *apiv1.PerconaServerMySQLBackupStatus,
 	backup *apiv1.PerconaServerMySQLBackup,
+	status *apiv1.PerconaServerMySQLBackupStatus,
 ) (bool, error) {
 	log := logf.FromContext(ctx).WithName("tryAcquireLease")
 	leaseName := backupLeaseName(backup.Spec.ClusterName)
@@ -924,21 +924,30 @@ func (r *PerconaServerMySQLBackupReconciler) tryAcquireLease(
 		cond.Status = metav1.ConditionFalse
 		cond.Reason = "LeaseAlreadyHeld"
 	}
-
 	meta.SetStatusCondition(&status.Conditions, cond)
+
+	// Log the first time we acquire the lease
+	currentCond := meta.FindStatusCondition(backup.Status.Conditions, apiv1.ConditionBackupLeaseAcquired)
+	if acquired && (currentCond == nil || currentCond.Status == metav1.ConditionFalse) {
+		log.Info("Backup lease acquired")
+	}
 	return acquired, nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) releaseLeaseIfNeeded(ctx context.Context, backup *apiv1.PerconaServerMySQLBackup) error {
+func (r *PerconaServerMySQLBackupReconciler) releaseLeaseIfNeeded(
+	ctx context.Context,
+	backup *apiv1.PerconaServerMySQLBackup,
+	status *apiv1.PerconaServerMySQLBackupStatus,
+) error {
 	log := logf.FromContext(ctx).WithName("releaseLeaseIfNeeded")
-	if !meta.IsStatusConditionPresentAndEqual(backup.Status.Conditions, apiv1.ConditionBackupLeaseAcquired, metav1.ConditionTrue) {
+	if !meta.IsStatusConditionPresentAndEqual(status.Conditions, apiv1.ConditionBackupLeaseAcquired, metav1.ConditionTrue) {
 		return nil
 	}
 
 	if err := k8s.ReleaseLease(ctx, r.Client, backupLeaseName(backup.Spec.ClusterName), backupLeaseHolder(backup), backup.GetNamespace()); err != nil {
 		return errors.Wrap(err, "failed to release lease")
 	}
-	meta.RemoveStatusCondition(&backup.Status.Conditions, apiv1.ConditionBackupLeaseAcquired)
+	meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionBackupLeaseAcquired)
 	log.Info("Backup lease released")
 	return nil
 }

@@ -753,7 +753,7 @@ func TestGetDestination(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			dest, err := GetDestination(tc.storage, tc.backup())
+			dest, err := GetDestination(tc.storage, tc.backup(), ts)
 			if tc.wantErr != nil {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tc.wantErr.Error())

@@ -391,6 +391,44 @@ func TestPerconaServerMySQLBackupStatus_Equals(t *testing.T) {
 			}(),
 			expected: false,
 		},
+		"different Conditions (missing ConditionBackupLeaseAcquired)": {
+			a: base,
+			b: func() PerconaServerMySQLBackupStatus {
+				s := base
+				s.Conditions = []metav1.Condition{{Type: ConditionBackupLeaseAcquired, Status: metav1.ConditionTrue}}
+				return s
+			}(),
+			expected: false,
+		},
+		"different Conditions (ConditionBackupLeaseAcquired different status)": {
+			a: func() PerconaServerMySQLBackupStatus {
+				s := base
+				s.Conditions = []metav1.Condition{{Type: ConditionBackupLeaseAcquired, Status: metav1.ConditionFalse}}
+				return s
+			}(),
+			b: func() PerconaServerMySQLBackupStatus {
+				s := base
+				s.Conditions = []metav1.Condition{{Type: ConditionBackupLeaseAcquired, Status: metav1.ConditionTrue}}
+				return s
+			}(),
+			expected: false,
+		},
+		"different Conditions (length different)": {
+			a: func() PerconaServerMySQLBackupStatus {
+				s := base
+				s.Conditions = []metav1.Condition{
+					{Type: ConditionBackupLeaseAcquired, Status: metav1.ConditionFalse},
+					{Type: "SomeCondition", Status: metav1.ConditionFalse},
+				}
+				return s
+			}(),
+			b: func() PerconaServerMySQLBackupStatus {
+				s := base
+				s.Conditions = []metav1.Condition{{Type: ConditionBackupLeaseAcquired, Status: metav1.ConditionTrue}}
+				return s
+			}(),
+			expected: false,
+		},
 		"ignored fields differ (Storage and CompletedAt)": {
 			a: base,
 			b: func() PerconaServerMySQLBackupStatus {

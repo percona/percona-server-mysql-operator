@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"sort"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -123,6 +124,7 @@ func GetLatestIncrementalBackupInChain(
 // as the given backup, i.e. all incrementals whose AnnotationBaseBackupName matches this backup's
 // base. For a full backup this lists all incrementals that depend on it; for an incremental
 // backup this lists all siblings in the same chain.
+// Backups are sorted by CompletedAt (oldest to newest).
 func ListDependentIncrementalBackups(
 	ctx context.Context,
 	cl client.Client,
@@ -157,5 +159,10 @@ func ListDependentIncrementalBackups(
 		}
 		result = append(result, &backupList.Items[i])
 	}
+
+	// Sort by CompletedAt (oldest to newest)
+	sort.SliceStable(result, func(i, j int) bool {
+		return result[i].Status.CompletedAt.Before(result[j].Status.CompletedAt)
+	})
 	return result, nil
 }
