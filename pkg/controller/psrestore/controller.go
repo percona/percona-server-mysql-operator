@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -40,6 +41,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
@@ -87,8 +89,12 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	defer func() {
-		if err := k8s.ReleaseRestoreLease(ctx, r.Client, cr); err != nil {
-			log.Error(err, "failed to release restore lease")
+		switch cr.Status.State {
+		case apiv1.RestoreNew, apiv1.RestoreStarting, apiv1.RestoreRunning:
+		default:
+			if err := k8s.ReleaseLease(ctx, r.Client, naming.RestoreLeaseName(cr.Spec.ClusterName), cr.Name, cr.Namespace); err != nil && !errors.Is(err, k8s.ErrLeaseAlreadyHeld) {
+				log.Error(err, "failed to release restore lease")
+			}
 		}
 
 		if status.State == cr.Status.State && status.StateDesc == cr.Status.StateDesc {
@@ -145,34 +151,10 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, errors.Wrap(err, "check n set defaults")
 	}
 
-	lease, err := k8s.AcquireRestoreLease(ctx, r.Client, cr)
-	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "acquire restore lease")
-	}
-	if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != cr.Name {
-		status.State = apiv1.RestoreNew
-		status.StateDesc = fmt.Sprintf("PerconaServerMySQLRestore %s is already running", *lease.Spec.HolderIdentity)
-		log.Info("PerconaServerMySQLRestore is already running", "restore", *lease.Spec.HolderIdentity)
+	if ok, err := r.tryAcquireLease(ctx, cr, &status); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "try to acquire lease")
+	} else if !ok {
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-	}
-
-	restoreList := &apiv1.PerconaServerMySQLRestoreList{}
-	if err := r.List(ctx, restoreList, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "get restore jobs list")
-	}
-	for _, restore := range restoreList.Items {
-		if restore.Spec.ClusterName != cr.Spec.ClusterName || restore.Name == cr.Name {
-			continue
-		}
-
-		switch restore.Status.State {
-		case apiv1.RestoreSucceeded, apiv1.RestoreFailed, apiv1.RestoreError, apiv1.RestoreNew:
-		default:
-			status.State = apiv1.RestoreNew
-			status.StateDesc = fmt.Sprintf("PerconaServerMySQLRestore %s is already running", restore.Name)
-			log.Info("PerconaServerMySQLRestore is already running", "restore", restore.Name)
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-		}
 	}
 
 	backup, err := r.getRunningBackup(ctx, cr)
@@ -483,4 +465,40 @@ func (r *PerconaServerMySQLRestoreReconciler) validate(ctx context.Context, cr *
 	}
 
 	return nil
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) tryAcquireLease(ctx context.Context, cr *apiv1.PerconaServerMySQLRestore, status *apiv1.PerconaServerMySQLRestoreStatus) (bool, error) {
+	log := logf.FromContext(ctx).WithName("tryAcquireLease")
+
+	leaseHolder := new(apiv1.PerconaServerMySQLRestore)
+	checkStale := func(ctx context.Context, lease *coordv1.Lease) (bool, error) {
+		if cr.Name == *lease.Spec.HolderIdentity || !k8s.IsLeaseActive(lease) {
+			return true, nil
+		}
+
+		if err := r.Get(ctx, types.NamespacedName{Name: *lease.Spec.HolderIdentity, Namespace: lease.Namespace}, leaseHolder); err != nil {
+			if k8serrors.IsNotFound(err) {
+				return true, nil
+			}
+			return false, err
+		}
+
+		switch leaseHolder.Status.State {
+		case apiv1.RestoreSucceeded, apiv1.RestoreFailed, apiv1.RestoreError:
+			return true, nil
+		}
+		return false, nil
+	}
+
+	if err := k8s.AcquireLease(ctx, r.Client, naming.RestoreLeaseName(cr.Spec.ClusterName), cr.Name, cr.Namespace, checkStale); err != nil {
+		if errors.Is(err, k8s.ErrLeaseAlreadyHeld) || k8serrors.IsAlreadyExists(err) || k8serrors.IsConflict(err) {
+			status.State = apiv1.RestoreNew
+			status.StateDesc = fmt.Sprintf("PerconaServerMySQLRestore %s is already running", leaseHolder.Name)
+			log.Info("PerconaServerMySQLRestore is already running", "restore", leaseHolder.Name)
+			return false, nil
+		} else {
+			return false, errors.Wrap(err, "failed to acquire lease")
+		}
+	}
+	return true, nil
 }

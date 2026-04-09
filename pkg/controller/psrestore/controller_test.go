@@ -9,17 +9,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
@@ -255,6 +258,18 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 					},
 					Status: apiv1.PerconaServerMySQLRestoreStatus{
 						State: apiv1.RestoreRunning,
+					},
+				},
+				&coordv1.Lease{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      naming.RestoreLeaseName(clusterName),
+						Namespace: namespace,
+					},
+					Spec: coordv1.LeaseSpec{
+						HolderIdentity:       ptr.To("running-restore"),
+						LeaseDurationSeconds: ptr.To(int32(30)),
+						AcquireTime:          &metav1.MicroTime{Time: metav1.Now().Time},
+						RenewTime:            &metav1.MicroTime{Time: metav1.Now().Time},
 					},
 				},
 			},

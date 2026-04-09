@@ -175,7 +175,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return ctrl.Result{}, nil
 		}
 
-		lease, err := k8s.GetRestoreLease(ctx, r.Client, cr.Namespace, cr.Spec.ClusterName)
+		lease, err := k8s.GetLease(ctx, r.Client, cr.Namespace, cr.Spec.ClusterName)
 		if err != nil {
 			return rr, errors.Wrap(err, "get restore lease")
 		}

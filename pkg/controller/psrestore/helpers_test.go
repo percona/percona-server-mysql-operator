@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -119,6 +120,9 @@ func buildFakeClient(t *testing.T, objs ...runtime.Object) client.Client {
 	scheme := runtime.NewScheme()
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add client-go scheme")
+	}
+	if err := coordv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err, "failed to add coordination scheme")
 	}
 	if err := apiv1.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add apis scheme")
