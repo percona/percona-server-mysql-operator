@@ -1,12 +1,14 @@
+# This is test change
 # K8SPS-410: Incremental Backup Support
 
 | Field        | Value              |
 |--------------|--------------------|
 | Author       | @mayankshah1607    |
-| Status       | In review          |
+| Status       | Completed          |
 | Created      | 2026-03-18         |
-| Last Updated | 2026-03-26         |
-| Reviewers    | [names]            |
+| Last Updated | 2026-04-02         |
+| Reviewers    | @egegunes @gkech @hors            |
+| Implementation    | https://github.com/percona/percona-server-mysql-operator/pull/1269            |
 
 ---
 
