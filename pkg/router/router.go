@@ -122,7 +122,7 @@ func Deployment(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash str
 			Name:        Name(cr),
 			Namespace:   cr.Namespace,
 			Labels:      Labels(cr),
-			Annotations: cr.GlobalAnnotations(),
+			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), spec.Annotations),
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -138,7 +138,7 @@ func Deployment(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash str
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      Labels(cr),
-					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
+					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), spec.Annotations, annotations),
 				},
 				Spec: spec.Core(
 					selector,
