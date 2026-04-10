@@ -175,11 +175,11 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return ctrl.Result{}, nil
 		}
 
-		lease, err := k8s.GetLease(ctx, r.Client, cr.Namespace, cr.Spec.ClusterName)
-		if err != nil {
+		lease, err := k8s.GetLease(ctx, r.Client, naming.RestoreLeaseName(cr.Spec.ClusterName), cr.Namespace)
+		if client.IgnoreNotFound(err) != nil {
 			return rr, errors.Wrap(err, "get restore lease")
 		}
-		if k8s.IsLeaseActive(lease) {
+		if !k8serrors.IsNotFound(err) && k8s.IsLeaseActive(lease) {
 			status.State = apiv1.BackupError
 			status.StateDesc = fmt.Sprintf("backup cannot run while restore %s is in progress", *lease.Spec.HolderIdentity)
 			return ctrl.Result{}, nil

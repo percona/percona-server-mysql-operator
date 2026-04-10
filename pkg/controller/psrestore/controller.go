@@ -45,6 +45,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
+	utilk8s "github.com/percona/percona-server-mysql-operator/pkg/util/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 )
@@ -89,7 +90,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	defer func() {
-		switch cr.Status.State {
+		switch status.State {
 		case apiv1.RestoreNew, apiv1.RestoreStarting, apiv1.RestoreRunning:
 		default:
 			if err := k8s.ReleaseLease(ctx, r.Client, naming.RestoreLeaseName(cr.Spec.ClusterName), cr.Name, cr.Namespace); err != nil && !errors.Is(err, k8s.ErrLeaseAlreadyHeld) {
@@ -157,7 +158,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	backup, err := r.getRunningBackup(ctx, cr)
+	backup, err := utilk8s.GetRunningBackup(ctx, r.Client, cr.Spec.ClusterName, cr.Namespace)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "get running backups list")
 	}

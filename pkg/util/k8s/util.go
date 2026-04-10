@@ -3,10 +3,11 @@ package k8s
 import (
 	"context"
 
-	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
-	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/pkg/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 func GetLastFullBackup(
@@ -59,6 +60,29 @@ func GetLastFullBackup(
 		return nil, errors.New("no full backup found in storage")
 	}
 	return lastFullBackup, nil
+}
+
+func GetRunningBackup(
+	ctx context.Context,
+	cl client.Client,
+	clusterName,
+	namespace string,
+) (*apiv1.PerconaServerMySQLBackup, error) {
+	backupList := &apiv1.PerconaServerMySQLBackupList{}
+	if err := cl.List(ctx, backupList, client.MatchingFields{
+		"spec.clusterName": clusterName,
+	}, client.InNamespace(namespace)); err != nil {
+		return nil, errors.Wrap(err, "list backups")
+	}
+
+	for _, backup := range backupList.Items {
+		switch backup.Status.State {
+		case apiv1.BackupStarting, apiv1.BackupRunning:
+			return &backup, nil
+		}
+	}
+
+	return nil, nil
 }
 
 var ErrNoIncrBackupFound = errors.New("no incremental backup found in chain")
