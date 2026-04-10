@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -83,6 +85,27 @@ func GetRunningBackup(
 	}
 
 	return nil, nil
+}
+
+func IsRestoreActive(ctx context.Context, cl client.Client, restoreName, namespace string) (bool, error) {
+	if restoreName == "" {
+		return false, nil
+	}
+
+	restore := new(apiv1.PerconaServerMySQLRestore)
+	if err := cl.Get(ctx, types.NamespacedName{Name: restoreName, Namespace: namespace}, restore); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	switch restore.Status.State {
+	case apiv1.RestoreSucceeded, apiv1.RestoreFailed, apiv1.RestoreError:
+		return false, nil
+	}
+
+	return true, nil
 }
 
 var ErrNoIncrBackupFound = errors.New("no incremental backup found in chain")

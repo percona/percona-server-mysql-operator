@@ -43,6 +43,9 @@ func TestAcquireLease(t *testing.T) {
 		require.NotNil(t, got)
 		require.NotNil(t, got.Spec.HolderIdentity)
 		assert.Equal(t, restore.Name, *got.Spec.HolderIdentity)
+		assert.Nil(t, got.Spec.LeaseDurationSeconds)
+		assert.NotNil(t, got.Spec.AcquireTime)
+		assert.NotNil(t, got.Spec.RenewTime)
 	})
 
 	t.Run("returns already held when lease is owned by another holder", func(t *testing.T) {
@@ -175,26 +178,4 @@ func TestReleaseLease(t *testing.T) {
 		err := ReleaseLease(t.Context(), cl, naming.RestoreLeaseName("cluster1"), "restore2", "ns")
 		require.ErrorIs(t, err, ErrLeaseAlreadyHeld)
 	})
-}
-
-func TestIsLeaseActive(t *testing.T) {
-	now := time.Now()
-
-	active := &coordv1.Lease{
-		Spec: coordv1.LeaseSpec{
-			HolderIdentity:       ptr.To("restore1"),
-			LeaseDurationSeconds: ptr.To(int32(30)),
-			RenewTime:            &metav1.MicroTime{Time: now},
-		},
-	}
-	assert.True(t, IsLeaseActive(active))
-
-	expired := &coordv1.Lease{
-		Spec: coordv1.LeaseSpec{
-			HolderIdentity:       ptr.To("restore1"),
-			LeaseDurationSeconds: ptr.To(int32(30)),
-			RenewTime:            &metav1.MicroTime{Time: now.Add(-time.Minute)},
-		},
-	}
-	assert.False(t, IsLeaseActive(expired))
 }

@@ -253,6 +253,15 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 				},
 			),
 			obj: []client.Object{
+				&apiv1.PerconaServerMySQLRestore{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "restore1",
+						Namespace: namespace,
+					},
+					Status: apiv1.PerconaServerMySQLRestoreStatus{
+						State: apiv1.RestoreRunning,
+					},
+				},
 				&coordv1.Lease{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "restore-lock-" + cr.Spec.ClusterName,
@@ -267,6 +276,47 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			},
 			state:     apiv1.BackupError,
 			stateDesc: "backup cannot run while restore restore1 is in progress",
+		},
+		{
+			name: "finished restore lease does not block backup",
+			cr:   cr,
+			cluster: updateResource(
+				cluster.DeepCopy(),
+				func(cluster *apiv1.PerconaServerMySQL) {
+					cluster.Namespace = namespace
+					cluster.Status.State = apiv1.StateReady
+					cluster.Status.MySQL.State = apiv1.StateReady
+					cluster.Spec.Backup = &apiv1.BackupSpec{
+						Image:   "some-image",
+						Enabled: true,
+						Storages: map[string]*apiv1.BackupStorageSpec{
+							cr.Spec.StorageName: {},
+						},
+					}
+				},
+			),
+			obj: []client.Object{
+				&apiv1.PerconaServerMySQLRestore{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "restore1",
+						Namespace: namespace,
+					},
+					Status: apiv1.PerconaServerMySQLRestoreStatus{
+						State: apiv1.RestoreSucceeded,
+					},
+				},
+				&coordv1.Lease{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "restore-lock-" + cr.Spec.ClusterName,
+						Namespace: namespace,
+					},
+					Spec: coordv1.LeaseSpec{
+						HolderIdentity: ptr.To("restore1"),
+					},
+				},
+			},
+			state:     apiv1.BackupError,
+			stateDesc: fmt.Sprintf("failed to get the source host for backup: get operator password: get secret/internal-%s: secrets \"internal-%s\" not found", cluster.Name, cluster.Name),
 		},
 	}
 

@@ -9,12 +9,9 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
-
-const leaseDurationSeconds int32 = 30
 
 var ErrLeaseAlreadyHeld = errors.New("lease held by another holder")
 
@@ -52,12 +49,11 @@ func AcquireLease(ctx context.Context, cl client.Client, leaseName, holder, name
 			}
 		}
 
-		if lease.Spec.AcquireTime == nil || lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity != holder {
+		if lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity != holder {
 			lease.Spec.HolderIdentity = &holder
 			lease.Spec.AcquireTime = &metav1.MicroTime{Time: now}
+			lease.Spec.RenewTime = &metav1.MicroTime{Time: now}
 		}
-		lease.Spec.RenewTime = &metav1.MicroTime{Time: now}
-		lease.Spec.LeaseDurationSeconds = ptr.To(leaseDurationSeconds)
 		return nil
 	})
 	return err
@@ -87,18 +83,4 @@ func ReleaseLease(ctx context.Context, cl client.Client, leaseName, holder, name
 		return errors.Wrap(err, "delete lease")
 	}
 	return nil
-}
-
-func IsLeaseActive(lease *coordv1.Lease) bool {
-	if lease == nil || lease.Spec.HolderIdentity == nil || lease.Spec.LeaseDurationSeconds == nil {
-		return false
-	}
-
-	lastRenew := lease.Spec.RenewTime
-	if lastRenew == nil {
-		return false
-	}
-
-	expiry := lastRenew.Add(time.Duration(*lease.Spec.LeaseDurationSeconds) * time.Second)
-	return time.Now().Before(expiry)
 }
