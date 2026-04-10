@@ -18,6 +18,7 @@ import (
 	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
 
 const (
@@ -126,10 +127,15 @@ func checkReadinessAsync(ctx context.Context) error {
 		return errors.Wrap(err, "get replication status")
 	}
 
+	backupRunning, err := isBackupRunning(ctx)
+	if err != nil {
+		return errors.Wrap(err, "check backup running")
+	}
+
 	switch {
 	case replStatus == mysqldb.ReplicationStatusActive && !readOnly:
 		return errors.New("replica is not read only")
-	case replStatus == mysqldb.ReplicationStatusStopped:
+	case replStatus == mysqldb.ReplicationStatusStopped && !backupRunning:
 		return errors.New("replication is stopped")
 	}
 	return nil
@@ -326,4 +332,13 @@ func fileExists(name string) (bool, error) {
 		return false, errors.Wrap(err, "os stat")
 	}
 	return true, nil
+}
+
+func isBackupRunning(ctx context.Context) (bool, error) {
+	sc := xtrabackup.NewSidecarClient("localhost")
+	bcp, err := sc.GetRunningBackupConfig(ctx)
+	if err != nil {
+		return false, errors.Wrap(err, "get running backup config")
+	}
+	return bcp != nil, nil
 }
