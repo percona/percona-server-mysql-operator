@@ -7,10 +7,7 @@ set -e
 echo "Starting mysqld"
 mysqld \
   --admin-address=127.0.0.1 \
-  --skip-replica-start \
   --user=mysql \
-  --read-only=ON \
-  --super-read-only=ON \
   --gtid-mode=ON \
   --enforce-gtid-consistency=ON >/tmp/mysqld.log 2>&1 &
 
@@ -27,8 +24,7 @@ if [[ -n ${SLEEP_FOREVER} ]]; then
   exit 0
 fi
 
-/opt/percona/pitr setup
-/opt/percona/pitr apply
+/opt/percona/pitr
 
 echo "Stopping mysqld"
 mysqladmin -u operator -p$(</etc/mysql/mysql-users-secret/operator) shutdown 2>/dev/null
