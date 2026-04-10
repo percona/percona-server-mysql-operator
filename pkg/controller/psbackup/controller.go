@@ -879,7 +879,7 @@ func (r *PerconaServerMySQLBackupReconciler) tryAcquireLease(
 	backup *apiv1.PerconaServerMySQLBackup,
 	status *apiv1.PerconaServerMySQLBackupStatus,
 ) (bool, error) {
-	log := logf.FromContext(ctx).WithName("tryAcquireLease")
+	log := logf.FromContext(ctx)
 	leaseName := backupLeaseName(backup.Spec.ClusterName)
 	leaseHolderID := backupLeaseHolder(backup)
 
@@ -919,17 +919,19 @@ func (r *PerconaServerMySQLBackupReconciler) tryAcquireLease(
 		Status:             metav1.ConditionTrue,
 		Reason:             "LeaseAcquired",
 		ObservedGeneration: backup.GetGeneration(),
+		Message:            fmt.Sprintf("Lease '%s' acquired", leaseName),
 	}
 	if !acquired {
 		cond.Status = metav1.ConditionFalse
 		cond.Reason = "LeaseAlreadyHeld"
+		cond.Message = fmt.Sprintf("Lease '%s' already held", leaseName)
 	}
 	meta.SetStatusCondition(&status.Conditions, cond)
 
 	// Log the first time we acquire the lease
 	currentCond := meta.FindStatusCondition(backup.Status.Conditions, apiv1.ConditionBackupLeaseAcquired)
 	if acquired && (currentCond == nil || currentCond.Status == metav1.ConditionFalse) {
-		log.Info("Backup lease acquired")
+		log.Info("Backup lease acquired", "leaseName", leaseName)
 	}
 	return acquired, nil
 }
@@ -939,15 +941,16 @@ func (r *PerconaServerMySQLBackupReconciler) releaseLeaseIfNeeded(
 	backup *apiv1.PerconaServerMySQLBackup,
 	status *apiv1.PerconaServerMySQLBackupStatus,
 ) error {
-	log := logf.FromContext(ctx).WithName("releaseLeaseIfNeeded")
+	log := logf.FromContext(ctx)
 	if !meta.IsStatusConditionPresentAndEqual(status.Conditions, apiv1.ConditionBackupLeaseAcquired, metav1.ConditionTrue) {
 		return nil
 	}
 
-	if err := k8s.ReleaseLease(ctx, r.Client, backupLeaseName(backup.Spec.ClusterName), backupLeaseHolder(backup), backup.GetNamespace()); err != nil && !errors.Is(err, k8s.ErrLeaseAlreadyHeld) {
+	leaseName := backupLeaseName(backup.Spec.ClusterName)
+	if err := k8s.ReleaseLease(ctx, r.Client, leaseName, backupLeaseHolder(backup), backup.GetNamespace()); err != nil && !errors.Is(err, k8s.ErrLeaseAlreadyHeld) {
 		return errors.Wrap(err, "failed to release lease")
 	}
 	meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionBackupLeaseAcquired)
-	log.Info("Backup lease released")
+	log.Info("Backup lease released", "leaseName", leaseName)
 	return nil
 }
