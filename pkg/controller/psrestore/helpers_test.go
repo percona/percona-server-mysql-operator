@@ -143,6 +143,13 @@ func buildFakeClient(t *testing.T, objs ...runtime.Object) client.Client {
 		WithScheme(scheme).
 		WithRuntimeObjects(objs...).
 		WithStatusSubresource(toClientObj(objs)...).
+		WithIndex(&apiv1.PerconaServerMySQLBackup{}, "spec.clusterName", func(o client.Object) []string {
+			b, ok := o.(*apiv1.PerconaServerMySQLBackup)
+			if !ok {
+				return nil
+			}
+			return []string{b.Spec.ClusterName}
+		}).
 		Build()
 
 	return cl

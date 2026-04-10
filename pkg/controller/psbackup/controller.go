@@ -217,6 +217,13 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return ctrl.Result{}, nil
 		}
 
+		if cr.Status.State != apiv1.BackupStarting {
+			// Set the state before creating the Job so restore can see that backup is starting.
+			status.State = apiv1.BackupStarting
+			status.StateDesc = ""
+			return rr, nil
+		}
+
 		log.Info("Preparing backup source", "source", backupSource)
 		if err := r.prepareBackupSource(ctx, cr, cluster, backupSource); err != nil {
 			return rr, errors.Wrap(err, "prepare backup source")
