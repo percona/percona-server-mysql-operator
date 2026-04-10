@@ -410,7 +410,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 	}
 
 	if cr.Spec.Type == apiv1.BackupTypeIncremental {
-		lsn, err := r.getPreviousBackupLSN(ctx, cr, backupSource)
+		lsn, err := r.getPreviousBackupLSN(ctx, cr, backupSource, storage)
 		if err != nil {
 			return errors.Wrap(err, "get previous backup LSN")
 		}
@@ -747,9 +747,10 @@ func (r *PerconaServerMySQLBackupReconciler) getPreviousBackupLSN(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQLBackup,
 	backupSource string,
+	storage *apiv1.BackupStorageSpec,
 ) (string, error) {
 	// Start by using the base as the previous backup.
-	prevBackup, err := r.getIncrementalBaseBackup(ctx, cr)
+	prevBackup, err := r.getIncrementalBaseBackup(ctx, cr, storage)
 	if err != nil {
 		return "", errors.Wrap(err, "get incremental base backup")
 	}
@@ -780,7 +781,7 @@ func (r *PerconaServerMySQLBackupReconciler) getPreviousBackupLSN(
 	return info.ToLSN, nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) getIncrementalBaseBackup(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) (*apiv1.PerconaServerMySQLBackup, error) {
+func (r *PerconaServerMySQLBackupReconciler) getIncrementalBaseBackup(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup, storage *apiv1.BackupStorageSpec) (*apiv1.PerconaServerMySQLBackup, error) {
 	if cr.Spec.IncrementalBaseBackupName != nil && *cr.Spec.IncrementalBaseBackupName != "" {
 		backup := &apiv1.PerconaServerMySQLBackup{}
 		nn := types.NamespacedName{Name: *cr.Spec.IncrementalBaseBackupName, Namespace: cr.Namespace}
@@ -789,7 +790,7 @@ func (r *PerconaServerMySQLBackupReconciler) getIncrementalBaseBackup(ctx contex
 		}
 		return backup, nil
 	}
-	lastFullBackup, err := k8sutil.GetLastFullBackup(ctx, r.Client, cr.Spec.ClusterName, cr.GetNamespace())
+	lastFullBackup, err := k8sutil.GetLastFullBackup(ctx, r.Client, cr.Spec.ClusterName, cr.GetNamespace(), storage)
 	if err != nil {
 		return nil, errors.Wrap(err, "get last full backup")
 	}
@@ -814,7 +815,7 @@ func (r *PerconaServerMySQLBackupReconciler) setIncrementalBaseAnnotations(
 		return nil
 	}
 
-	baseBackup, err := r.getIncrementalBaseBackup(ctx, cr)
+	baseBackup, err := r.getIncrementalBaseBackup(ctx, cr, storage)
 	if err != nil {
 		return errors.Wrap(err, "get incremental base backup")
 	}
