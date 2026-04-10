@@ -264,7 +264,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 				},
 				&coordv1.Lease{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "restore-lock-" + cr.Spec.ClusterName,
+						Name:      naming.RestoreLeaseName(cr.Spec.ClusterName),
 						Namespace: namespace,
 					},
 					Spec: coordv1.LeaseSpec{
@@ -307,7 +307,7 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 				},
 				&coordv1.Lease{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "restore-lock-" + cr.Spec.ClusterName,
+						Name:      naming.RestoreLeaseName(cr.Spec.ClusterName),
 						Namespace: namespace,
 					},
 					Spec: coordv1.LeaseSpec{
