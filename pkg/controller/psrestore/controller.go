@@ -266,26 +266,6 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	return ctrl.Result{}, nil
 }
 
-func (r *PerconaServerMySQLRestoreReconciler) getRunningBackup(ctx context.Context, cr *apiv1.PerconaServerMySQLRestore) (*apiv1.PerconaServerMySQLBackup, error) {
-	backups := new(apiv1.PerconaServerMySQLBackupList)
-	if err := r.List(ctx, backups, client.InNamespace(cr.Namespace)); err != nil {
-		return nil, errors.Wrap(err, "list backups")
-	}
-
-	for _, b := range backups.Items {
-		if b.Spec.ClusterName != cr.Spec.ClusterName {
-			continue
-		}
-
-		switch b.Status.State {
-		case apiv1.BackupStarting, apiv1.BackupRunning:
-			return &b, nil
-		}
-	}
-
-	return nil, nil
-}
-
 func (r *PerconaServerMySQLRestoreReconciler) deletePVCs(ctx context.Context, cluster *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx)
 
