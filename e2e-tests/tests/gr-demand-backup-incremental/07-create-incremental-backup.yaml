@@ -8,3 +8,7 @@ spec:
   clusterName: gr-demand-backup-incremental
   storageName: minio
   type: incremental
+  containerOptions:
+    args:
+      xtrabackup:
+        - "--compress=lz4"
