@@ -6,16 +6,6 @@ test_name=$(basename "$(pwd)")
 source "${ROOT_REPO}/e2e-tests/vars.sh"
 sed=$(which gsed || which sed)
 
-if oc get projects 2>/dev/null; then
-	OPENSHIFT=4
-fi
-
-if [ $(kubectl version -o json | jq -r '.serverVersion.gitVersion' | grep "\-eks\-") ]; then
-	EKS=1
-else
-	EKS=0
-fi
-
 init_temp_dir() {
 	rm -rf "$TEMP_DIR"
 	mkdir -p "$TEMP_DIR"
@@ -336,6 +326,32 @@ delete_pmm_server_token() {
 	fi
 }
 
+has_minio_storage() {
+	local name_suffix=${1:-""}
+	local cr_name="${test_name}${name_suffix:+-$name_suffix}"
+	local cr="$(get_test_cr "$cr_name")"
+
+	if [[ -z $cr ]]; then
+		echo "CR not found for: $cr_name" >&2
+		return 1
+	fi
+
+	local has_minio="$(yq eval '
+		(.spec.backup.storages // {})
+		| keys
+		| map(select(test("^minio")))
+		| length > 0
+	' "$cr")"
+
+	if [[ $has_minio == "true" ]]; then
+		echo "MinIO enabled in $cr"
+		return 0
+	else
+		echo "MinIO NOT enabled in $cr"
+		return 1
+	fi
+}
+
 deploy_minio() {
 	local storage="${1:-2G}"
 	local access_key
@@ -565,13 +581,7 @@ deploy_vault() {
 	local tmp_dir=/tmp/vault
 	echo "Using tmp dir: ${tmp_dir}"
 
-	if [[ -n ${OPENSHIFT} ]]; then
-		platform=openshift
-	fi
-
-	if [ "$EKS" = 1 ]; then
-		platform=eks
-	fi
+	platform=$(detect_k8s_platform)
 
 	_deploy_vault ${name} ${protocol} ${platform} ${namespace} ${tmp_dir}
 
@@ -628,6 +638,87 @@ get_operator_image() {
 		-o 'jsonpath={.items[].spec.containers[].image}'
 }
 
+detect_k8s_platform() {
+	set +x
+
+	local platform=""
+
+	if kubectl get nodes -o json | jq -r '.items[0].spec.providerID' | grep -q "gce://"; then
+		platform="gke"
+
+	elif oc get projects >/dev/null 2>&1; then
+		platform="openshift"
+
+	elif kubectl get nodes -o json | jq -r '.items[0].spec.providerID' | grep -q "aws://"; then
+		platform="eks"
+
+	elif kubectl get nodes -o json | jq -r '.items[0].spec.providerID' | grep -q "digitalocean://"; then
+		platform="digitalocean"
+
+	elif kubectl get nodes -o json | jq -r '.items[0].spec.providerID' | grep -q "azure://"; then
+		platform="aks"
+
+	else
+		platform="unknown"
+	fi
+
+	set -x
+	echo "${platform}"
+}
+
+get_platform_alias() {
+	set +x
+
+	local platform=${1:-$(detect_k8s_platform)}
+
+	case "$platform" in
+		"digitalocean")
+			platform="doks"
+			;;
+		"openshift")
+			platform="op"
+			;;
+	esac
+
+	set -x
+	echo "$platform"
+}
+
+get_storage_alias() {
+	set +x
+
+	local platform=${1:-$(detect_k8s_platform)}
+	local storage="default"
+
+	case "$platform" in
+		"digitalocean")
+			storage="spaces"
+			;;
+	esac
+
+	set -x
+	echo "$storage"
+}
+
+get_test_cr() {
+	local cr_name=${1:-$test_name}
+	local platform=${2:-$(detect_k8s_platform)}
+
+	platform_alias="$(get_platform_alias $platform)"
+	storage_alias="$(get_storage_alias $platform)"
+	local default_cr="${TEST_CONFIG_DIR}/${cr_name}.yaml"
+	local platform_cr="${TEST_CONFIG_DIR}/${cr_name}-${platform_alias}.yaml"
+	local storage_cr="${TEST_CONFIG_DIR}/${cr_name}-${storage_alias}.yaml"
+
+	if [[ -n $storage_cr && -f $storage_cr ]]; then
+		echo "$storage_cr"
+	elif [[ -n $platform_cr && -f $platform_cr ]]; then
+		echo "$platform_cr"
+	elif [[ -f $default_cr ]]; then
+		echo "$default_cr"
+	fi
+}
+
 get_cr() {
 	local name_suffix=$1
 	local image_mysql=${2:-${IMAGE_MYSQL}}
@@ -639,26 +730,39 @@ get_cr() {
 	local image_pmm_client=${8:-${IMAGE_PMM_CLIENT}}
 	local cr_file=${9:-${DEPLOY_DIR}/cr.yaml}
 
-	yq eval "$(printf '.metadata.name="%s"' "${test_name}${name_suffix:+-$name_suffix}")" ${cr_file} \
-		| yq eval "$(printf '.spec.initContainer.image="%s"' "${IMAGE}")" - \
-		| yq eval 'del(.spec.secretsName)' - \
-		| yq eval '.spec.sslSecretName="test-ssl"' - \
-		| yq eval '.spec.upgradeOptions.apply="disabled"' - \
-		| yq eval '.spec.mysql.clusterType="async"' - \
-		| yq eval '.spec.mysql.gracePeriod=30' - \
-		| yq eval '.spec.orchestrator.enabled=true' - \
-		| yq eval "$(printf '.spec.mysql.image="%s"' "${image_mysql}")" - \
-		| yq eval "$(printf '.spec.backup.image="%s"' "${image_backup}")" - \
-		| yq eval "$(printf '.spec.orchestrator.image="%s"' "${image_orchestrator}")" - \
-		| yq eval "$(printf '.spec.proxy.router.image="%s"' "${image_router}")" - \
-		| yq eval "$(printf '.spec.toolkit.image="%s"' "${image_toolkit}")" - \
-		| yq eval "$(printf '.spec.proxy.haproxy.image="%s"' "${image_haproxy}")" - \
-		| yq eval "$(printf '.spec.pmm.image="%s"' "${image_pmm_client}")" - \
-		| if [ -n "${MINIKUBE}" ]; then
-			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) |= "none"' - \
-				| yq eval '.spec.proxy.haproxy.resources.requests.cpu="300m"' -
+	local platform="$(detect_k8s_platform)"
+	local cr_name="${test_name}${name_suffix:+-$name_suffix}"
+	local crs=("$cr_file")
+	local test_cr="$(get_test_cr "$cr_name")"
+	[[ -f $test_cr ]] && crs+=("$test_cr")
+
+	yq eval-all '
+		select(fileIndex == 0) as $base |
+		select(fileIndex == 1) as $test |
+		($base * ($test // {})) |
+		.spec.backup.storages = ($test.spec.backup.storages // $base.spec.backup.storages // {}) |
+		.spec.mysql.clusterType = ($test.spec.mysql.clusterType // "async") |
+		.metadata.name = "'"${cr_name}"'" |
+		.spec.initContainer.image = "'"$IMAGE"'" |
+		del(.spec.secretsName) |
+		.spec.sslSecretName = "test-ssl" |
+		.spec.upgradeOptions.apply = "disabled" |
+		.spec.mysql.gracePeriod = 30 |
+		.spec.orchestrator.enabled = true |
+		.spec.mysql.image = "'"$image_mysql"'" |
+		.spec.backup.image = "'"$image_backup"'" |
+		.spec.orchestrator.image = "'"$image_orchestrator"'" |
+		.spec.proxy.router.image = "'"$image_router"'" |
+		.spec.toolkit.image = "'"$image_toolkit"'" |
+		.spec.proxy.haproxy.image = "'"$image_haproxy"'" |
+		.spec.pmm.image = "'"$image_pmm_client"'" |
+		(.. | select(tag == "!!str")) |= sub("<namespace>"; "'"${NAMESPACE}"'")
+	' "${crs[@]}" \
+		| if [[ $platform == "minikube" ]]; then
+			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) = "none"' - \
+				| yq eval '.spec.proxy.haproxy.resources.requests.cpu = "300m"' -
 		else
-			yq eval -
+			cat
 		fi
 }
 
@@ -1608,6 +1712,232 @@ wait_for_generation() {
 		else
 			echo "Resource $resource is at generation $current_generation. Waiting..."
 			sleep 5
+		fi
+	done
+}
+
+run_backup() {
+	local backup_name=$1
+	local storage_name=$2
+	local cluster_name=${3:-$(get_cluster_name)}
+	local prefix=${4:+-${4}}
+	local backup_template="${DEPLOY_DIR}/backup/backup.yaml"
+
+	test_backup_template="${TEST_CONFIG_DIR}/backup/backup${prefix}.yaml"
+	if [[ -f $test_backup_template ]]; then
+		backup_template=$test_backup_template
+	fi
+	echo "Running backup $backup_name using storage $storage_name"
+	yq eval '
+		.metadata.name = "'"$backup_name"'" |
+		.spec.storageName = "'"$storage_name"'" |
+		.spec.clusterName = "'"$cluster_name"'"
+	' "$backup_template" | kubectl apply -n "$NAMESPACE" -f -
+}
+
+run_restore() {
+	local restore_name=$1
+	local backup_name=$2
+	local cluster_name=${3:-$(get_cluster_name)}
+	local prefix=${4:+-${4}}
+	local destination=$5
+
+	local platform=$(detect_k8s_platform)
+	local storage_alias=$(get_storage_alias $platform)
+	local platform_alias=$(get_platform_alias $platform)
+	local restore_template="${TEST_CONFIG_DIR}/backup/restore${prefix}.yaml"
+	local restore_template_storage="${TEST_CONFIG_DIR}/backup/restore${prefix}-${storage_alias}.yaml"
+	local restore_template_platform="${TEST_CONFIG_DIR}/backup/restore${prefix}-${platform_alias}.yaml"
+
+	if [[ -f $restore_template_storage ]]; then
+		restore_template="$restore_template_storage"
+	elif [[ -f $restore_template_platform ]]; then
+		restore_template="$restore_template_platform"
+	fi
+
+	if [[ ! -f $restore_template ]]; then
+		restore_template="${DEPLOY_DIR}/backup/restore.yaml"
+	fi
+
+	echo "Running restore '$restore_name' from backup '$backup_name' using '$restore_template'"
+	yq eval '
+		.metadata.name = "'"$restore_name"'" |
+		.spec.backupName = "'"$backup_name"'" |
+		.spec.clusterName = "'"$cluster_name"'" |
+		(.. | select(tag == "!!str")) |= sub("<destination>"; "'"$destination"'") |
+		(.. | select(tag == "!!str")) |= sub("<namespace>"; "'"${NAMESPACE}"'")
+	' "$restore_template" | kubectl apply -n "$NAMESPACE" -f -
+}
+
+get_secret_value() {
+	local secret=$1
+	local key1=$2
+	local key2=$3
+
+	set +x
+	local val="$(kubectl -n "$NAMESPACE" get secret "$secret" -o jsonpath="{.data.${key1}}" 2>/dev/null | base64 -d)"
+	if [[ -z $val && -n $key2 ]]; then
+		val="$(kubectl -n "$NAMESPACE" get secret "$secret" -o jsonpath="{.data.${key2}}" 2>/dev/null | base64 -d)"
+	fi
+
+	echo "$val"
+	set -x
+}
+
+run_s3_command() {
+	local secret_name=$1
+	local region=$2
+	local endpoint=$3
+	shift 3
+
+	set +x
+	local accessKey="$(get_secret_value "$secret_name" "ACCESS_KEY_ID" "AWS_ACCESS_KEY_ID")"
+	local secretKey="$(get_secret_value "$secret_name" "SECRET_ACCESS_KEY" "AWS_SECRET_ACCESS_KEY")"
+
+	local aws_args=()
+	if [[ -n $endpoint ]]; then
+		aws_args+=(--endpoint-url "$endpoint")
+	fi
+
+	local output=$(
+		kubectl run -n "${NAMESPACE}" -i --rm "aws-cli-$(date +%s%N)" \
+			--image=perconalab/awscli \
+			--restart=Never \
+			--env="AWS_ACCESS_KEY_ID=${accessKey}" \
+			--env="AWS_SECRET_ACCESS_KEY=${secretKey}" \
+			--env="AWS_DEFAULT_REGION=${region}" \
+			--env="PYTHONWARNINGS=ignore" \
+			-- \
+			aws --no-verify-ssl "${aws_args[@]}" "$@" \
+			2>/dev/null | grep -v '^pod '
+	)
+	set -x
+
+	echo "$output"
+}
+
+s3_count_files() {
+	local bucket=$1
+	local prefix=$2
+	local secret_name=$3
+	local region=$4
+	local endpoint=$5
+
+	local output="$(
+		run_s3_command "$secret_name" "$region" "$endpoint" \
+			s3 ls "s3://$bucket/$prefix" \
+			--recursive \
+			--summarize \
+			2>/dev/null \
+			| awk '/Total Objects/ {print $3}'
+	)"
+
+	echo "$output"
+}
+
+count_files_on_storage() {
+	local storage_type=$1
+	local bucket=$2
+	local prefix=$3
+	local secret_name=$4
+	local region=$5
+	local endpoint=$6
+
+	prefix="${prefix:+${prefix%/}/}"
+	case "$storage_type" in
+		s3 | gcs)
+			s3_count_files "$bucket" "$prefix" "$secret_name" "$region" "$endpoint"
+			;;
+		*)
+			echo "Unsupported storage type: $storage_type"
+			exit 1
+			;;
+	esac
+}
+
+s3_list_files() {
+	local bucket=$1
+	local prefix=$2
+	local secret_name=$3
+	local region=$4
+	local endpoint=$5
+
+	local output="$(
+		run_s3_command "$secret_name" "$region" "$endpoint" \
+			s3api list-objects-v2 \
+			--bucket "$bucket" \
+			--prefix "$prefix" \
+			--query 'Contents[].Key' \
+			--output text
+	)"
+
+	echo "$output" | tr '\t' '\n'
+}
+
+list_files_on_storage() {
+	local storage_type=$1
+	local bucket=$2
+	local prefix=$3
+	local secret_name=$4
+	local region=$5
+	local endpoint=$6
+
+	prefix="${prefix:+${prefix%/}/}"
+	case "$storage_type" in
+		s3 | gcs)
+			s3_list_files "$bucket" "$prefix" "$secret_name" "$region" "$endpoint"
+			;;
+		*)
+			echo "Unsupported storage type: $storage_type"
+			exit 1
+			;;
+	esac
+}
+
+verify_all_backups_deletion() {
+	for backup in $(kubectl get ps-backup -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}'); do
+		echo "Checking backup: $backup"
+
+		output=$(
+			kubectl get ps-backup "$backup" -n "$NAMESPACE" -o json \
+				| yq -r '
+					.status.storage as $storage |
+					[
+						$storage.type,
+						($storage[.type].bucket // $storage[.type].container // ""),
+						($storage[.type].credentialsSecret // ""),
+						($storage[.type].endpointUrl // ""),
+						($storage[.type].region // ""),
+						(.status.destination // "")
+					] | @tsv
+				'
+		)
+
+		read -r storage_type bucket secret_name endpoint region destination <<<"$output"
+
+		prefix="${destination#*://*/}"
+		if [[ -z $destination ]]; then
+			echo "Backup $backup is missing destination"
+			break
+		fi
+
+		kubectl delete ps-backup "$backup" -n "$NAMESPACE"
+
+		local removed=false
+		for i in {1..5}; do
+			if [[ "$(count_files_on_storage "$storage_type" "$bucket" "$prefix" "$secret_name" "$region" "$endpoint")" == "0" ]]; then
+				echo "Backup removed: $backup"
+				removed=true
+				break
+			fi
+
+			echo "Waiting for backup removal ($i/5): $backup"
+			sleep 5
+		done
+
+		if ! $removed; then
+			echo "Backup still present: $backup"
+			exit 1
 		fi
 	done
 }
