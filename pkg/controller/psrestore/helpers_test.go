@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -120,6 +121,9 @@ func buildFakeClient(t *testing.T, objs ...runtime.Object) client.Client {
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add client-go scheme")
 	}
+	if err := coordv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err, "failed to add coordination scheme")
+	}
 	if err := apiv1.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add apis scheme")
 	}
@@ -139,6 +143,13 @@ func buildFakeClient(t *testing.T, objs ...runtime.Object) client.Client {
 		WithScheme(scheme).
 		WithRuntimeObjects(objs...).
 		WithStatusSubresource(toClientObj(objs)...).
+		WithIndex(&apiv1.PerconaServerMySQLBackup{}, "spec.clusterName", func(o client.Object) []string {
+			b, ok := o.(*apiv1.PerconaServerMySQLBackup)
+			if !ok {
+				return nil
+			}
+			return []string{b.Spec.ClusterName}
+		}).
 		Build()
 
 	return cl

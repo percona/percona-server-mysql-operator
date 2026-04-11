@@ -62,6 +62,7 @@ type PerconaServerMySQLBackupReconciler struct {
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqlbackups;perconaservermysqlbackups/status;perconaservermysqlbackups/finalizers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch
 
 const controllerName = "psbackup-controller"
 
@@ -174,6 +175,27 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return ctrl.Result{}, nil
 		}
 
+		lease, err := k8s.GetLease(ctx, r.Client, naming.RestoreLeaseName(cr.Spec.ClusterName), cr.Namespace)
+		if client.IgnoreNotFound(err) != nil {
+			return rr, errors.Wrap(err, "get restore lease")
+		}
+		if !k8serrors.IsNotFound(err) {
+			restoreName := ""
+			if lease.Spec.HolderIdentity != nil {
+				restoreName = *lease.Spec.HolderIdentity
+			}
+			isRestoreActive, err := k8sutil.IsRestoreActive(ctx, r.Client, restoreName, lease.Namespace)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrapf(err, "get lease holder %s", restoreName)
+			}
+
+			if isRestoreActive {
+				status.State = apiv1.BackupError
+				status.StateDesc = fmt.Sprintf("backup cannot run while restore %s is in progress", restoreName)
+				return ctrl.Result{}, nil
+			}
+		}
+
 		storage, ok := cluster.Spec.Backup.Storages[cr.Spec.StorageName]
 		if !ok {
 			status.State = apiv1.BackupError
@@ -204,6 +226,13 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			status.State = apiv1.BackupError
 			status.StateDesc = "failed to validate storage: " + err.Error()
 			return ctrl.Result{}, nil
+		}
+
+		if cr.Status.State != apiv1.BackupStarting {
+			// Set the state before creating the Job so restore can see that backup is starting.
+			status.State = apiv1.BackupStarting
+			status.StateDesc = ""
+			return rr, nil
 		}
 
 		log.Info("Preparing backup source", "source", backupSource)

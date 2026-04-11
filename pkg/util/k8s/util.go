@@ -3,10 +3,13 @@ package k8s
 import (
 	"context"
 
+	"github.com/pkg/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
-	"github.com/pkg/errors"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func GetLastFullBackup(
@@ -59,6 +62,50 @@ func GetLastFullBackup(
 		return nil, errors.New("no full backup found in storage")
 	}
 	return lastFullBackup, nil
+}
+
+func GetRunningBackup(
+	ctx context.Context,
+	cl client.Client,
+	clusterName,
+	namespace string,
+) (*apiv1.PerconaServerMySQLBackup, error) {
+	backupList := &apiv1.PerconaServerMySQLBackupList{}
+	if err := cl.List(ctx, backupList, client.MatchingFields{
+		"spec.clusterName": clusterName,
+	}, client.InNamespace(namespace)); err != nil {
+		return nil, errors.Wrap(err, "list backups")
+	}
+
+	for _, backup := range backupList.Items {
+		switch backup.Status.State {
+		case apiv1.BackupStarting, apiv1.BackupRunning:
+			return &backup, nil
+		}
+	}
+
+	return nil, nil
+}
+
+func IsRestoreActive(ctx context.Context, cl client.Client, restoreName, namespace string) (bool, error) {
+	if restoreName == "" {
+		return false, nil
+	}
+
+	restore := new(apiv1.PerconaServerMySQLRestore)
+	if err := cl.Get(ctx, types.NamespacedName{Name: restoreName, Namespace: namespace}, restore); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	switch restore.Status.State {
+	case apiv1.RestoreSucceeded, apiv1.RestoreFailed, apiv1.RestoreError:
+		return false, nil
+	}
+
+	return true, nil
 }
 
 var ErrNoIncrBackupFound = errors.New("no incremental backup found in chain")

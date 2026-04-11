@@ -9,17 +9,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
@@ -257,6 +260,18 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 						State: apiv1.RestoreRunning,
 					},
 				},
+				&coordv1.Lease{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      naming.RestoreLeaseName(clusterName),
+						Namespace: namespace,
+					},
+					Spec: coordv1.LeaseSpec{
+						HolderIdentity:       ptr.To("running-restore"),
+						LeaseDurationSeconds: ptr.To(int32(30)),
+						AcquireTime:          &metav1.MicroTime{Time: metav1.Now().Time},
+						RenewTime:            &metav1.MicroTime{Time: metav1.Now().Time},
+					},
+				},
 			},
 			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
@@ -280,6 +295,54 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 				},
 			},
 			stateDesc:     "PerconaServerMySQLRestore running-restore is already running",
+			shouldSucceed: true,
+		},
+		{
+			name: "with running backup",
+			cr:   cr,
+			objects: []runtime.Object{
+				&apiv1.PerconaServerMySQLBackup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      backupName,
+						Namespace: namespace,
+					},
+					Spec: apiv1.PerconaServerMySQLBackupSpec{
+						ClusterName: clusterName,
+						StorageName: storageName,
+					},
+					Status: apiv1.PerconaServerMySQLBackupStatus{
+						State: apiv1.BackupRunning,
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "aws-secret",
+						Namespace: namespace,
+					},
+				},
+			},
+			cluster: &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: namespace,
+				},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					Backup: &apiv1.BackupSpec{
+						Storages: map[string]*apiv1.BackupStorageSpec{
+							storageName: {
+								S3: &apiv1.BackupStorageS3Spec{
+									CredentialsSecret: "aws-secret",
+								},
+								Type: apiv1.BackupStorageS3,
+							},
+						},
+						InitContainer: &apiv1.InitContainerSpec{
+							Image: "operator-image",
+						},
+					},
+				},
+			},
+			stateDesc:     "PerconaServerMySQLBackup backup1 is still running",
 			shouldSucceed: true,
 		},
 		{
