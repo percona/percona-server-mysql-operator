@@ -5,6 +5,7 @@ export ROOT_REPO=${ROOT_REPO:-${PWD}}
 export DEPLOY_DIR="${DEPLOY_DIR:-${ROOT_REPO}/deploy}"
 export TESTS_DIR="${TESTS_DIR:-${ROOT_REPO}/e2e-tests}"
 export TESTS_CONFIG_DIR="${TESTS_CONFIG_DIR:-${TESTS_DIR}/conf}"
+export TEST_CONFIG_DIR="${TEST_CONFIG_DIR:-${TESTS_DIR}/tests/${test_name}/conf}"
 export TEMP_DIR="/tmp/kuttl/ps/${test_name}"
 
 export GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
@@ -30,7 +31,7 @@ export MINIO_VER="5.4.0"
 export CHAOS_MESH_VER="2.7.2"
 export VAULT_VER="0.16.1"
 
-date=$(which gdate || which date)
+export date=$(which gdate || which date)
 
 oc get projects &> /dev/null && export OPENSHIFT=4 || :
 
