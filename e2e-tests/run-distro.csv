@@ -1,10 +1,10 @@
 auto-config
 config
 config-router
-demand-backup-minio
+demand-backup
 demand-backup-cloud
 demand-backup-retry
-gr-demand-backup-minio
+gr-demand-backup
 gr-demand-backup-cloud
 gr-demand-backup-haproxy
 gr-finalizer

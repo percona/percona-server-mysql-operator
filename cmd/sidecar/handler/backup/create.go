@@ -206,6 +206,7 @@ func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
 		"--safe-slave-backup",
 		"--slave-info",
 		"--target-dir=/backup/",
+		"--databases-exclude=lost+found",
 		fmt.Sprintf("--user=%s", user),
 		fmt.Sprintf("--password=%s", pass),
 	}

@@ -183,6 +183,8 @@ spec:
               completed:
                 format: date-time
                 type: string
+              compressed:
+                type: boolean
               destination:
                 type: string
               image:
@@ -1230,6 +1232,8 @@ spec:
                   completed:
                     format: date-time
                     type: string
+                  compressed:
+                    type: boolean
                   destination:
                     type: string
                   image:
