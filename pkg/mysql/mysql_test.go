@@ -149,6 +149,17 @@ func TestStatefulSet(t *testing.T) {
 		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
 		assert.Equal(t, tolerations, sts.Spec.Template.Spec.Tolerations)
 	})
+
+	t.Run("annotations", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		cluster.Spec.MySQL.Annotations = map[string]string{
+			"mysql-annotation": "mysql-annotation",
+		}
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		assert.Equal(t, "mysql-annotation", sts.Annotations["mysql-annotation"])
+		assert.Equal(t, "mysql-annotation", sts.Spec.Template.Annotations["mysql-annotation"])
+
+	})
 }
 
 func TestStatefulsetVolumes(t *testing.T) {

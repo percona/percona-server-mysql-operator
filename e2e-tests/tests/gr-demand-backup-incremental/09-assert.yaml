@@ -17,5 +17,8 @@ assertAll:
 - celExpr: incr2.status.type == "incremental"
   message: "Incremental backup should have a type of incremental"
 
+- celExpr: incr2.status.compressed == true
+  message: "Incremental backup should have compressed=true in status"
+
 - celExpr: base.status.destination.contains(incr2.metadata.annotations["percona.com/base-backup-name"])
   message: "Incremental backup should have a base backup annotation"
