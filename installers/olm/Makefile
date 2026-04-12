@@ -15,7 +15,7 @@ SHELL := /bin/bash
 NAME ?= percona-server-mysql-operator
 IMAGE_TAG_OWNER ?= perconalab
 IMAGE_TAG_BASE ?= $(IMAGE_TAG_OWNER)/$(NAME)
-MODE ?= namespace
+MODE ?= cluster
 
 # Version detection
 SED := $(shell which gsed || which sed)

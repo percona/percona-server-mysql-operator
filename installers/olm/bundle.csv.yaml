@@ -134,15 +134,11 @@ spec:
 
 
       ```
-
       apiVersion: v1
-
       kind: Secret
-
       metadata:
         name: ps-cluster1-secrets
       type: Opaque
-
       data:
         root: cm9vdF9wYXNzd29yZA==
         xtrabackup: YmFja3VwX3Bhc3N3b3Jk
@@ -274,5 +270,6 @@ spec:
   install:
     strategy: deployment
     spec:
+      clusterPermissions:
       permissions:
       deployments:

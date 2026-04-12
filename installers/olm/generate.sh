@@ -33,14 +33,10 @@ file_name='percona-server-mysql-operator'
 
 if [ "${MODE}" == "cluster" ]; then
 	suffix="-cw"
-	mode="Cluster"
-	rulesLevel="ClusterPermissions"
 	rbac_file="../../deploy/cw-rbac.yaml"
 	operator_file="../../deploy/cw-operator.yaml"
 elif [ "${MODE}" == "namespace" ]; then
 	suffix=""
-	mode=""
-	rulesLevel="permissions"
 	rbac_file="../../deploy/rbac.yaml"
 	operator_file="../../deploy/operator.yaml"
 else
@@ -49,10 +45,10 @@ else
 fi
 
 # Parse deploy files directly into temporary files (don't modify config/ originals)
-export role="${mode}Role"
 yq eval '. | select(.kind == "Deployment")' "$operator_file" >operator_deployments.yaml
 yq eval '. | select(.kind == "ServiceAccount")' "$rbac_file" >operator_accounts.yaml
-yq eval '. | select(.kind == env(role))' "$rbac_file" >operator_roles${suffix}.yaml
+yq eval '. | select(.kind == "ClusterRole")' "$rbac_file" >operator_cluster_roles.yaml
+yq eval '. | select(.kind == "Role")' "$rbac_file" >operator_ns_roles.yaml
 
 update_yaml_images() {
 	local yaml_file="$1"
@@ -62,8 +58,8 @@ update_yaml_images() {
 		return 1
 	fi
 
-    local temp_file
-    temp_file=$(mktemp)
+	local temp_file
+	temp_file=$(mktemp)
 
 	sed -E 's/(("image":|containerImage:|image:)[ ]*"?)([^"]+)("?)/\1docker.io\/\3\4/g' "$yaml_file" >"$temp_file"
 	mv "$temp_file" "$yaml_file"
@@ -132,7 +128,6 @@ labels="${labels}
 LABEL com.redhat.delivery.backport=true
 LABEL com.redhat.delivery.operator.bundle=true"
 
-
 LABELS="${labels}" envsubst <bundle.Dockerfile >"${bundle_directory}/Dockerfile"
 
 awk '{gsub(/^[ \t]+/, "    "); print}' "${bundle_directory}/Dockerfile" >"${bundle_directory}/Dockerfile.new" && mv "${bundle_directory}/Dockerfile.new" "${bundle_directory}/Dockerfile"
@@ -175,22 +170,23 @@ yq eval -i '[.]' operator_deployments.yaml && yq eval 'length == 1' operator_dep
 
 yq eval -i '[.]' operator_accounts.yaml && yq eval 'length == 1' operator_accounts.yaml --exit-status >/dev/null || abort "too many service accounts!" $'\n'"$(yq eval . operator_accounts.yaml)"
 
-# PS has multiple roles (main + leader election), collect all of them into a single array
-yq eval-all '[.]' operator_roles${suffix}.yaml > operator_roles${suffix}_arr.yaml && mv operator_roles${suffix}_arr.yaml operator_roles${suffix}.yaml
+# Wrap roles into arrays
+yq eval-all '[.]' operator_cluster_roles.yaml >operator_cluster_roles_arr.yaml && mv operator_cluster_roles_arr.yaml operator_cluster_roles.yaml
+yq eval-all '[.]' operator_ns_roles.yaml >operator_ns_roles_arr.yaml && mv operator_ns_roles_arr.yaml operator_ns_roles.yaml
 
 # Render bundle CSV and strip comments.
 export stem=$(yq -r '.projectName' "${project_directory}/PROJECT")
 export version="${VERSION}${suffix}"
-export timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.%3Z")
+export timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 export name="${stem}.v${VERSION}${suffix}"
 export name_certified="${stem}-certified.v${VERSION}${suffix}"
 export name_certified_rhmp="${stem}-certified-rhmp.v${VERSION}${suffix}"
 export skip_range="<v${VERSION}"
 export containerImage=$(yq eval '.[0].spec.template.spec.containers[0].image' operator_deployments.yaml)
-export rulesLevel=${rulesLevel}
 export deployment=$(yq eval operator_deployments.yaml)
 export account=$(yq eval '.[0] | .metadata.name' operator_accounts.yaml)
-export rules=$(yq eval '[.[] | {"serviceAccountName": strenv(account), "rules": .rules}]' operator_roles${suffix}.yaml)
+export clusterRules=$(yq eval '[.[] | {"serviceAccountName": strenv(account), "rules": .rules}]' operator_cluster_roles.yaml)
+export nsRules=$(yq eval '[.[] | {"serviceAccountName": strenv(account), "rules": .rules}]' operator_ns_roles.yaml)
 export relatedImages=$(yq eval bundle.relatedImages.yaml)
 
 export examples=$(jq -n "[
@@ -201,13 +197,21 @@ export examples=$(jq -n "[
 
 yq eval '
   .metadata.annotations["alm-examples"] = strenv(examples) |
+  .metadata.annotations["alm-examples"] style="literal" |
   .metadata.annotations["containerImage"] = env(containerImage) |
   .metadata.annotations["olm.skipRange"] = env(skip_range) |
-  .metadata.annotations["createdAt"] = env(timestamp) |
+  .metadata.annotations["createdAt"] = strenv(timestamp) |
   .metadata.name = env(name) |
-  .spec.install.spec[strenv(rulesLevel)] = env(rules) |
+  .spec.install.spec.clusterPermissions = env(clusterRules) |
+  .spec.install.spec.permissions = env(nsRules) |
   .spec.install.spec.deployments = [( env(deployment) | .[] |{ "name": .metadata.name, "spec": .spec} )] |
   .spec.version = env(version)' bundle.csv.yaml >"${bundle_directory}/manifests/${file_name}.v${VERSION}.clusterserviceversion.yaml"
+
+# Patch WATCH_NAMESPACE to use OLM targetNamespaces annotation
+yq eval --inplace '
+  (.spec.install.spec.deployments[].spec.template.spec.containers[].env[] | select(.name == "WATCH_NAMESPACE")) |=
+  {"name": "WATCH_NAMESPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.annotations['"'"'olm.targetNamespaces'"'"']"}}}
+' "${bundle_directory}/manifests/${file_name}.v${VERSION}.clusterserviceversion.yaml"
 
 if [ "${DISTRIBUTION}" == "community" ]; then
 	update_yaml_images "bundles/$DISTRIBUTION/manifests/${file_name}.v${VERSION}.clusterserviceversion.yaml"
