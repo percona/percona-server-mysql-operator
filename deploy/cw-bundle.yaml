@@ -183,6 +183,8 @@ spec:
               completed:
                 format: date-time
                 type: string
+              compressed:
+                type: boolean
               conditions:
                 items:
                   properties:
@@ -1266,6 +1268,8 @@ spec:
                   completed:
                     format: date-time
                     type: string
+                  compressed:
+                    type: boolean
                   conditions:
                     items:
                       properties:

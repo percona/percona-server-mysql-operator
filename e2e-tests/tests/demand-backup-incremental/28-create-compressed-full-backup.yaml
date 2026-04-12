@@ -1,0 +1,13 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: base-backup-compressed
+  finalizers:
+    - percona.com/delete-backup
+spec:
+  clusterName: demand-backup-incremental
+  storageName: minio
+  containerOptions:
+    args:
+      xtrabackup:
+        - "--compress=lz4"

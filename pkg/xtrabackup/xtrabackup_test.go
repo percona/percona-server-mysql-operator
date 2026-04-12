@@ -580,6 +580,7 @@ func TestRestoreJob(t *testing.T) {
 			},
 		}, getEnv())
 	})
+
 }
 
 func TestGetDestination(t *testing.T) {

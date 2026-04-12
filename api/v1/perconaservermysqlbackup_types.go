@@ -83,6 +83,7 @@ type PerconaServerMySQLBackupStatus struct {
 	CompletedAt  *metav1.Time       `json:"completed,omitempty"`
 	Image        string             `json:"image,omitempty"`
 	BackupSource string             `json:"backupSource,omitempty"`
+	Compressed   bool               `json:"compressed,omitempty"`
 	Conditions   []metav1.Condition `json:"conditions,omitempty"`
 }
 
@@ -214,6 +215,20 @@ func (b *PerconaServerMySQLBackup) GetContainerOptions(storage *BackupStorageSpe
 	return nil
 }
 
+// IsCompressed reports whether the xtrabackup args contain --compress.
+func (b *PerconaServerMySQLBackup) IsCompressed(storage *BackupStorageSpec) bool {
+	opts := b.GetContainerOptions(storage)
+	if opts == nil {
+		return false
+	}
+	for _, arg := range opts.Args.Xtrabackup {
+		if arg == "--compress" || strings.HasPrefix(arg, "--compress=") {
+			return true
+		}
+	}
+	return false
+}
+
 func (b *PerconaServerMySQLBackup) GetType() BackupType {
 	if b.Status.Type == "" {
 		return BackupTypeFull
@@ -283,5 +298,6 @@ func (s *PerconaServerMySQLBackupStatus) Equals(other *PerconaServerMySQLBackupS
 		s.Destination == other.Destination &&
 		s.Image == other.Image &&
 		s.BackupSource == other.BackupSource &&
+		s.Compressed == other.Compressed &&
 		ConditionsEqual(s.Conditions, other.Conditions)
 }

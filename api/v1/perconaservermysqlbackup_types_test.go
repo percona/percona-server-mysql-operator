@@ -440,11 +440,113 @@ func TestPerconaServerMySQLBackupStatus_Equals(t *testing.T) {
 			}(),
 			expected: true,
 		},
+		"different Compressed": {
+			a: base,
+			b: func() PerconaServerMySQLBackupStatus {
+				s := base
+				s.Compressed = true
+				return s
+			}(),
+			expected: false,
+		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			result := tt.a.Equals(&tt.b)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestPerconaServerMySQLBackup_IsCompressed(t *testing.T) {
+	tests := map[string]struct {
+		backup   *PerconaServerMySQLBackup
+		storage  *BackupStorageSpec
+		expected bool
+	}{
+		"compress flag in backup spec args": {
+			backup: &PerconaServerMySQLBackup{
+				Spec: PerconaServerMySQLBackupSpec{
+					ContainerOptions: &BackupContainerOptions{
+						Args: BackupContainerArgs{
+							Xtrabackup: []string{"--compress", "--compress-threads=4"},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		"compress flag with algorithm value": {
+			backup: &PerconaServerMySQLBackup{
+				Spec: PerconaServerMySQLBackupSpec{
+					ContainerOptions: &BackupContainerOptions{
+						Args: BackupContainerArgs{
+							Xtrabackup: []string{"--compress=lz4"},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		"compress flag in storage args": {
+			backup: &PerconaServerMySQLBackup{
+				Spec: PerconaServerMySQLBackupSpec{
+					ContainerOptions: nil,
+				},
+			},
+			storage: &BackupStorageSpec{
+				ContainerOptions: &BackupContainerOptions{
+					Args: BackupContainerArgs{
+						Xtrabackup: []string{"--compress"},
+					},
+				},
+			},
+			expected: true,
+		},
+		"spec args take precedence, no compress there": {
+			backup: &PerconaServerMySQLBackup{
+				Spec: PerconaServerMySQLBackupSpec{
+					ContainerOptions: &BackupContainerOptions{
+						Args: BackupContainerArgs{
+							Xtrabackup: []string{"--some-other-flag"},
+						},
+					},
+				},
+			},
+			storage: &BackupStorageSpec{
+				ContainerOptions: &BackupContainerOptions{
+					Args: BackupContainerArgs{
+						Xtrabackup: []string{"--compress"},
+					},
+				},
+			},
+			expected: false,
+		},
+		"compress-threads alone does not count": {
+			backup: &PerconaServerMySQLBackup{
+				Spec: PerconaServerMySQLBackupSpec{
+					ContainerOptions: &BackupContainerOptions{
+						Args: BackupContainerArgs{
+							Xtrabackup: []string{"--compress-threads=4"},
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		"no container options": {
+			backup: &PerconaServerMySQLBackup{
+				Spec: PerconaServerMySQLBackupSpec{},
+			},
+			storage:  nil,
+			expected: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := tt.backup.IsCompressed(tt.storage)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

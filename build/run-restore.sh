@@ -65,6 +65,9 @@ restore_full() {
 
 	download "${BACKUP_DEST}" | extract "${tmpdir}"
 
+	# shellcheck disable=SC2086
+	xtrabackup --decompress --remove-original --parallel="${PARALLEL}" --target-dir="${tmpdir}" ${XB_EXTRA_ARGS}
+
 	local keyring
 	keyring=$(get_keyring_arg)
 
@@ -91,6 +94,9 @@ restore_incremental() {
 	echo "Downloading base backup: ${BACKUP_DEST}"
 	download "${BACKUP_DEST}" | extract "${basedir}"
 
+	# shellcheck disable=SC2086
+	xtrabackup --decompress --remove-original --parallel="${PARALLEL}" --target-dir="${basedir}" ${XB_EXTRA_ARGS}
+
 	local keyring
 	keyring=$(get_keyring_arg)
 
@@ -111,6 +117,9 @@ restore_incremental() {
 		incrdir=$(mktemp --directory "${DATADIR}/${RESTORE_NAME}_incr${count}_XXXX")
 
 		download "${incr_dest}" | extract "${incrdir}"
+
+		# shellcheck disable=SC2086
+		xtrabackup --decompress --remove-original --parallel="${PARALLEL}" --target-dir="${incrdir}" ${XB_EXTRA_ARGS}
 
 		if [ "${count}" -lt "${total}" ]; then
 			# Not the last incremental: use --apply-log-only
