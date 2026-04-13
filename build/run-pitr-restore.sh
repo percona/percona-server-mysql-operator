@@ -11,7 +11,8 @@ mysqld \
   --gtid-mode=ON \
   --enforce-gtid-consistency=ON >/tmp/mysqld.log 2>&1 &
 
-until mysqladmin -u operator -p$(</etc/mysql/mysql-users-secret/operator) ping --silent 2>/dev/null; do
+echo "Waiting for mysqld to be ready"
+until mysqladmin -u operator -p"$(</etc/mysql/mysql-users-secret/operator)" ping --silent 2>/dev/null; do
     sleep 1;
 done
 
@@ -27,4 +28,4 @@ fi
 /opt/percona/pitr
 
 echo "Stopping mysqld"
-mysqladmin -u operator -p$(</etc/mysql/mysql-users-secret/operator) shutdown 2>/dev/null
+mysqladmin -u operator -p"$(</etc/mysql/mysql-users-secret/operator)" shutdown 2>/dev/null
