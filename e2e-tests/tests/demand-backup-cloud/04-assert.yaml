@@ -5,7 +5,7 @@ timeout: 300
 kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
 metadata:
-  name: demand-backup-cloud-2
+  name: demand-backup-cloud-1
   finalizers:
     - percona.com/delete-backup
 status:
