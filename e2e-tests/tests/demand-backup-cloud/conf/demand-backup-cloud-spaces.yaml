@@ -2,7 +2,7 @@
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
-  name: demand-backup-muiti-storage
+  name: demand-backup-cloud
 spec:
   mysql:
     clusterType: async
