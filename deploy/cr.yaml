@@ -34,7 +34,7 @@ spec:
 #      privileged: false
 #      runAsGroup: 1001
 #      runAsUser: 1001
-#    image: perconalab/percona-server-mysql-operator:main
+#    image: perconalab/percona-server-mysql-operator:preview-v1.1.0-2-3e0bb790
 #    resources:
 #      limits:
 #        cpu: 100m
