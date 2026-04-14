@@ -259,6 +259,12 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			assert.Equal(t, tt.stateDesc, cr.Status.StateDesc)
 			assert.Equal(t, tt.state, cr.Status.State)
 
+			// Reconcile once more since the Lease condition status needs to be updated
+			_, err = r.Reconcile(t.Context(), controllerruntime.Request{
+				NamespacedName: client.ObjectKeyFromObject(tt.cr),
+			})
+			require.NoError(t, err)
+
 			if tt.state == apiv1.BackupError {
 				// Backup with an error state should not be reconciled.
 				// We can verify this by using clientWithGetCount.
@@ -289,6 +295,7 @@ func (c *clientWithGetCount) Get(ctx context.Context, key client.ObjectKey, obj 
 	if c.Count <= 0 {
 		return errors.New("unexpected Get call from client")
 	}
+
 	c.Count--
 	return c.Client.Get(ctx, key, obj, opts...)
 }
