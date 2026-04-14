@@ -1413,16 +1413,6 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 	return nil
 }
 
-// parseEndpointURL extracts the protocol and host from an endpoint URL.
-// Expected formats: "s3://s3.amazonaws.com", "https://minio-service:9000"
-func parseEndpointURL(endpointURL string) (protocol, host string, err error) {
-	idx := strings.Index(endpointURL, "://")
-	if idx < 0 {
-		return "", "", fmt.Errorf("endpoint URL %q must include protocol (e.g. s3://... or https://...)", endpointURL)
-	}
-	return endpointURL[:idx], endpointURL[idx+3:], nil
-}
-
 func (r *PerconaServerMySQLReconciler) cleanupBinlogServer(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	if cr.Spec.Backup.PiTR.Enabled {
 		return nil
