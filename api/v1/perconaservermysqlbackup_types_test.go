@@ -423,10 +423,10 @@ func TestPerconaServerMySQLBackupStatus_Equals(t *testing.T) {
 
 func TestPerconaServerMySQLBackup_IsCompressed(t *testing.T) {
 	tests := map[string]struct {
-		backup             *PerconaServerMySQLBackup
-		storage            *BackupStorageSpec
-		mysqlConfiguration string
-		expected           bool
+		backup   *PerconaServerMySQLBackup
+		storage  *BackupStorageSpec
+		cluster  *PerconaServerMySQL
+		expected bool
 	}{
 		"compress flag in backup spec args": {
 			backup: &PerconaServerMySQLBackup{
@@ -438,6 +438,7 @@ func TestPerconaServerMySQLBackup_IsCompressed(t *testing.T) {
 					},
 				},
 			},
+			cluster:  &PerconaServerMySQL{},
 			expected: true,
 		},
 		"compress flag with algorithm value": {
@@ -450,6 +451,7 @@ func TestPerconaServerMySQLBackup_IsCompressed(t *testing.T) {
 					},
 				},
 			},
+			cluster:  &PerconaServerMySQL{},
 			expected: true,
 		},
 		"compress flag in storage args": {
@@ -465,6 +467,7 @@ func TestPerconaServerMySQLBackup_IsCompressed(t *testing.T) {
 					},
 				},
 			},
+			cluster:  &PerconaServerMySQL{},
 			expected: true,
 		},
 		"spec args take precedence, no compress there": {
@@ -484,6 +487,7 @@ func TestPerconaServerMySQLBackup_IsCompressed(t *testing.T) {
 					},
 				},
 			},
+			cluster:  &PerconaServerMySQL{},
 			expected: false,
 		},
 		"compress-threads alone does not count": {
@@ -496,6 +500,7 @@ func TestPerconaServerMySQLBackup_IsCompressed(t *testing.T) {
 					},
 				},
 			},
+			cluster:  &PerconaServerMySQL{},
 			expected: false,
 		},
 		"no container options": {
@@ -503,42 +508,86 @@ func TestPerconaServerMySQLBackup_IsCompressed(t *testing.T) {
 				Spec: PerconaServerMySQLBackupSpec{},
 			},
 			storage:  nil,
+			cluster:  &PerconaServerMySQL{},
 			expected: false,
 		},
 		"compress in mysql configuration xtrabackup section": {
 			backup: &PerconaServerMySQLBackup{
 				Spec: PerconaServerMySQLBackupSpec{},
 			},
-			mysqlConfiguration: "[mysqld]\nsome=val\n[xtrabackup]\ncompress=zstd\n",
-			expected:           true,
+			cluster: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					MySQL: MySQLSpec{
+						PodSpec: PodSpec{Configuration: "[mysqld]\nsome=val\n[xtrabackup]\ncompress=zstd\n"},
+					},
+				},
+			},
+			expected: true,
 		},
 		"compress in mysql configuration xtrabackup section with spaces": {
 			backup: &PerconaServerMySQLBackup{
 				Spec: PerconaServerMySQLBackupSpec{},
 			},
-			mysqlConfiguration: "[xtrabackup]\ncompress = lz4\n",
-			expected:           true,
+			cluster: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					MySQL: MySQLSpec{
+						PodSpec: PodSpec{Configuration: "[xtrabackup]\ncompress = lz4\n"},
+					},
+				},
+			},
+			expected: true,
+		},
+		"compress in mysql configuration with spaces inside section brackets": {
+			backup: &PerconaServerMySQLBackup{
+				Spec: PerconaServerMySQLBackupSpec{},
+			},
+			cluster: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					MySQL: MySQLSpec{
+						PodSpec: PodSpec{Configuration: "[ xtrabackup ]\ncompress=zstd\n"},
+					},
+				},
+			},
+			expected: true,
 		},
 		"compress key without value in mysql configuration": {
 			backup: &PerconaServerMySQLBackup{
 				Spec: PerconaServerMySQLBackupSpec{},
 			},
-			mysqlConfiguration: "[xtrabackup]\ncompress=\n",
-			expected:           false,
+			cluster: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					MySQL: MySQLSpec{
+						PodSpec: PodSpec{Configuration: "[xtrabackup]\ncompress=\n"},
+					},
+				},
+			},
+			expected: false,
 		},
 		"compress-threads alone in mysql configuration does not count": {
 			backup: &PerconaServerMySQLBackup{
 				Spec: PerconaServerMySQLBackupSpec{},
 			},
-			mysqlConfiguration: "[xtrabackup]\ncompress-threads=4\n",
-			expected:           false,
+			cluster: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					MySQL: MySQLSpec{
+						PodSpec: PodSpec{Configuration: "[xtrabackup]\ncompress-threads=4\n"},
+					},
+				},
+			},
+			expected: false,
 		},
 		"compress in wrong section of mysql configuration": {
 			backup: &PerconaServerMySQLBackup{
 				Spec: PerconaServerMySQLBackupSpec{},
 			},
-			mysqlConfiguration: "[mysqld]\ncompress=zstd\n",
-			expected:           false,
+			cluster: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					MySQL: MySQLSpec{
+						PodSpec: PodSpec{Configuration: "[mysqld]\ncompress=zstd\n"},
+					},
+				},
+			},
+			expected: false,
 		},
 		"args take precedence over mysql configuration": {
 			backup: &PerconaServerMySQLBackup{
@@ -550,15 +599,16 @@ func TestPerconaServerMySQLBackup_IsCompressed(t *testing.T) {
 					},
 				},
 			},
-			mysqlConfiguration: "",
-			expected:           true,
+			cluster:  &PerconaServerMySQL{},
+			expected: true,
 		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			result := tt.backup.IsCompressed(tt.storage, tt.mysqlConfiguration)
-			assert.Equal(t, tt.expected, result)
+			var status PerconaServerMySQLBackupStatus
+			status.Compressed = tt.backup.IsCompressed(tt.storage, tt.cluster.Spec.MySQL.Configuration)
+			assert.Equal(t, tt.expected, status.Compressed)
 		})
 	}
 }

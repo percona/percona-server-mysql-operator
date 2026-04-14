@@ -227,7 +227,7 @@ func isCompressedInMySQLConfig(configuration string) bool {
 			continue
 		}
 		if strings.HasPrefix(line, "[") {
-			inSection = line == "[xtrabackup]"
+			inSection = strings.TrimSpace(strings.Trim(line, "[]")) == "xtrabackup"
 			continue
 		}
 		if !inSection {
