@@ -1076,7 +1076,9 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.Orchestrator.Size = 0
 		cr.Spec.Proxy.Router.Size = 0
 		cr.Spec.Proxy.HAProxy.Size = 0
-		cr.Spec.Backup.PiTR.Enabled = false
+		if cr.Spec.Backup.PiTR.BinlogServer != nil {
+			cr.Spec.Backup.PiTR.BinlogServer.Size = 0
+		}
 	}
 
 	if cr.Spec.SecretsName == "" {

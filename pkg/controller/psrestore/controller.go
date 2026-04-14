@@ -181,7 +181,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	defer r.sm.Delete(cr.Spec.ClusterName)
 
 	if cr.Spec.PITR != nil {
-		if cluster.Spec.Backup.PiTR.BinlogServer == nil {
+		if !cluster.Spec.Backup.PiTR.Enabled || cluster.Spec.Backup.PiTR.BinlogServer == nil {
 			status.State = apiv1.RestoreError
 			status.StateDesc = "Binlog server is not enabled for the cluster"
 			return ctrl.Result{}, nil
