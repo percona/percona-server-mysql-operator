@@ -31,7 +31,7 @@ type newDatabaseFn func(ctx context.Context, params db.DBParams) (Database, erro
 
 // applyBinlogsFn starts a single mysql client process and for each binlog file
 // runs mysqlbinlog with the given args, piping the output into mysql's stdin.
-type applyBinlogsFn func(ctx context.Context, binlogPaths []string, mysqlbinlogArgs []string, mysqlArgs []string) error
+type applyBinlogsFn func(ctx context.Context, binlogPaths []string, mysqlbinlogArgs []string, mysqlArgs []string, mysqlPass string) error
 
 func main() {
 	ctx := context.Background()
@@ -92,7 +92,6 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 	log.Printf("GTID_EXECUTED from backup: %s", gtidExecuted)
 	database.Close()
 
-	// Create S3 client and download binlogs on the fly.
 	endpoint := os.Getenv("AWS_ENDPOINT")
 	accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
 	secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
@@ -162,14 +161,13 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 	// Build mysql client args.
 	mysqlArgs := []string{
 		"-u", string(apiv1.UserOperator),
-		fmt.Sprintf("-p%s", operatorPass),
 		"-h", "127.0.0.1",
 		"-P", "33062",
 	}
 
 	log.Printf("applying %d binlog(s) with mysqlbinlog args: %v", len(binlogPaths), mysqlbinlogArgs)
 
-	if err := apply(ctx, binlogPaths, mysqlbinlogArgs, mysqlArgs); err != nil {
+	if err := apply(ctx, binlogPaths, mysqlbinlogArgs, mysqlArgs, operatorPass); err != nil {
 		return fmt.Errorf("apply binlogs: %w", err)
 	}
 
@@ -196,8 +194,9 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 
 // applyBinlogs starts a single mysql client and for each binlog file
 // spawns mysqlbinlog, piping its output into mysql's stdin.
-func applyBinlogs(ctx context.Context, binlogPaths []string, mysqlbinlogArgs []string, mysqlArgs []string) error {
+func applyBinlogs(ctx context.Context, binlogPaths []string, mysqlbinlogArgs []string, mysqlArgs []string, mysqlPass string) error {
 	mysqlCmd := exec.CommandContext(ctx, "mysql", mysqlArgs...)
+	mysqlCmd.Env = append(os.Environ(), fmt.Sprintf("MYSQL_PWD=%s", mysqlPass))
 	mysqlStdin, err := mysqlCmd.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("create mysql stdin pipe: %w", err)

@@ -269,7 +269,7 @@ func TestRun(t *testing.T) {
 			}
 
 			var captured applyCall
-			apply := func(_ context.Context, binlogPaths []string, mysqlbinlogArgs []string, mysqlArgs []string) error {
+			apply := func(_ context.Context, binlogPaths []string, mysqlbinlogArgs []string, mysqlArgs []string, _ string) error {
 				captured = applyCall{
 					binlogPaths:     binlogPaths,
 					mysqlbinlogArgs: mysqlbinlogArgs,
