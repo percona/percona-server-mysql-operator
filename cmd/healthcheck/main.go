@@ -127,9 +127,15 @@ func checkReadinessAsync(ctx context.Context) error {
 		return errors.Wrap(err, "get replication status")
 	}
 
-	backupRunning, err := isBackupRunning(ctx)
-	if err != nil {
-		return errors.Wrap(err, "check backup running")
+	backupsEnabled := os.Getenv("BACKUPS_ENABLED")
+	backupRunning := false
+
+	if backupsEnabled == "true" {
+		var err error
+		backupRunning, err = isBackupRunning(ctx)
+		if err != nil {
+			return errors.Wrap(err, "check backup running")
+		}
 	}
 
 	switch {
