@@ -128,14 +128,12 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 		{
 			Name:        "sat-night-backup",
 			Schedule:    "0 0 * * 6",
-			Keep:        3,
 			StorageName: "s3-us-west",
 			Type:        apiv1.BackupTypeFull,
 		},
 		{
 			Name:        "daily-backup",
 			Schedule:    "0 0 * * *",
-			Keep:        5,
 			StorageName: "s3",
 			Type:        apiv1.BackupTypeIncremental,
 		},

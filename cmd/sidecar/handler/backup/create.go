@@ -201,6 +201,7 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 
 func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
 	args := []string{
+		"--defaults-extra-file=/etc/mysql/config/my-config.cnf",
 		"--backup",
 		"--stream=xbstream",
 		"--safe-slave-backup",
