@@ -1942,6 +1942,40 @@ verify_all_backups_deletion() {
 	done
 }
 
+verify_incremental_backup_delta_files() {
+	local backup_name=$1
+
+	eval "$(
+		kubectl get ps-backup "$backup" -n "$NAMESPACE" -o json \
+			| jq -r '
+				.status.storage.type as $t |
+				(if $t then .status.storage[$t] else {} end) as $s |
+				"storage_type=\($t // "")",
+				"bucket=\($s.bucket // $s.container // "")",
+				"secret_name=\($s.credentialsSecret // "")",
+				"endpoint=\($s.endpointUrl // "")",
+				"region=\($s.region // "")",
+				"destination=\(.status.destination // "")"
+			'
+	)"
+
+	local prefix="${destination#*://}"
+	prefix="${prefix#*/}"
+	if [[ -z $destination ]]; then
+		echo "Backup $backup is missing destination"
+		continue
+	fi
+
+	listing=$(list_files_on_storage "$storage_type" "$bucket" "$prefix" "$secret_name" "$region" "$endpoint")
+	file_count=$(echo "$listing" | grep -c . || true)
+	delta_count=$(echo "$listing" | grep -c '\.delta\.' || true)
+	if [ "$delta_count" -eq 0 ]; then
+		echo "No .delta files found in backup — this is not an incremental backup. Backup file count is $file_count"
+		exit 1
+	fi
+	echo "Confirmed incremental backup: found $delta_count .delta files on storage. Backup file count is $file_count"
+}
+
 count_backups_in_schedule() {
 	local schedule_name="$1"
 	local cluster_name="$2"
