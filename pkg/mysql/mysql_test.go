@@ -686,3 +686,28 @@ func TestPrimaryServiceName(t *testing.T) {
 	serviceName := PrimaryServiceName(cr)
 	assert.Equal(t, "my-cluster-mysql-primary", serviceName)
 }
+
+func TestBackupVolumeMounts(t *testing.T) {
+	cr := &apiv1.PerconaServerMySQL{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ps-cluster1",
+			Namespace: "test-ns",
+		},
+		Spec: apiv1.PerconaServerMySQLSpec{
+			CRVersion: version.Version(),
+		},
+	}
+
+	expected := []corev1.VolumeMount{
+		{Name: apiv1.BinVolumeName, MountPath: apiv1.BinVolumePath},
+		{Name: DataVolumeName, MountPath: DataMountPath},
+		{Name: credsVolumeName, MountPath: naming.CredsMountPath},
+		{Name: configVolumeName, MountPath: configMountPath},
+		{Name: "backup-logs", MountPath: BackupLogDir},
+		{Name: vaultSecretVolumeName, MountPath: vaultSecretMountPath},
+	}
+
+	mounts := backupVolumeMounts(cr)
+
+	assert.Equal(t, expected, mounts)
+}

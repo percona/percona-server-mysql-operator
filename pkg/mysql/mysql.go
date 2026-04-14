@@ -726,6 +726,10 @@ func backupVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 			MountPath: naming.CredsMountPath,
 		},
 		{
+			Name:      configVolumeName,
+			MountPath: configMountPath,
+		},
+		{
 			Name:      "backup-logs",
 			MountPath: BackupLogDir,
 		},
