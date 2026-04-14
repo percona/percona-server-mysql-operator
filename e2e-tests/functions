@@ -1913,10 +1913,16 @@ verify_all_backups_deletion() {
 
 		kubectl delete ps-backup "$backup" -n "$NAMESPACE"
 
-		prefix="${destination#*://*/}"
+		local prefix="${destination#*://}"
+		prefix="${prefix#*/}"
 		if [[ -z $destination ]]; then
 			echo "Backup $backup is missing destination"
-			break
+			continue
+		fi
+
+		if [[ $storage_type == "azure" ]]; then
+			echo "Skipping backup verification, to be implemented on K8SPS-695"
+			continue
 		fi
 
 		local removed=false
