@@ -400,19 +400,6 @@ func (d *DB) ResetBinaryLogAndGTIDs(ctx context.Context) error {
 	return errors.Wrap(err, "reset binary logs and gtids")
 }
 
-func (d *DB) ChangeReplicationSourceRelay(ctx context.Context, relayLogFile string, relayLogPos int) error {
-	_, err := d.db.ExecContext(ctx, fmt.Sprintf(
-		"CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE='%s', RELAY_LOG_POS=%d, SOURCE_HOST='dummy'",
-		relayLogFile, relayLogPos))
-	return errors.Wrap(err, "change replication source to relay log")
-}
-
-func (d *DB) StartReplicaUntilGTID(ctx context.Context, gtid string) error {
-	_, err := d.db.ExecContext(ctx, fmt.Sprintf(
-		"START REPLICA SQL_THREAD UNTIL SQL_AFTER_GTIDS='%s'", gtid))
-	return errors.Wrap(err, "start replica until GTID")
-}
-
 func (d *DB) StartReplicaUntilPosition(ctx context.Context, relayLogFile string, relayLogPos int) error {
 	_, err := d.db.ExecContext(ctx, fmt.Sprintf(
 		"START REPLICA SQL_THREAD UNTIL RELAY_LOG_FILE='%s', RELAY_LOG_POS=%d",
