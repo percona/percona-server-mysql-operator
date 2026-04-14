@@ -88,11 +88,15 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 
 	gtidExecuted, err := database.GetGTIDExecuted(ctx)
 	if err != nil {
-		database.Close()
+		if closeErr := database.Close(); closeErr != nil {
+			log.Printf("close database: %v", closeErr)
+		}
 		return fmt.Errorf("get GTID_EXECUTED: %w", err)
 	}
 	log.Printf("GTID_EXECUTED from backup: %s", gtidExecuted)
-	database.Close()
+	if err := database.Close(); err != nil {
+		log.Printf("close database: %v", err)
+	}
 
 	endpoint := os.Getenv("AWS_ENDPOINT")
 	accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
@@ -186,8 +190,12 @@ func applyBinlogs(ctx context.Context, objectKeys []string, getObject getObjectF
 
 		obj, err := getObject(ctx, objectKey)
 		if err != nil {
-			mysqlStdin.Close()
-			mysqlCmd.Wait()
+			if closeErr := mysqlStdin.Close(); closeErr != nil {
+				log.Printf("close mysql stdin: %v", closeErr)
+			}
+			if waitErr := mysqlCmd.Wait(); waitErr != nil {
+				log.Printf("wait for mysql: %v", waitErr)
+			}
 			return fmt.Errorf("fetch binlog %s: %w", objectKey, err)
 		}
 
@@ -200,15 +208,25 @@ func applyBinlogs(ctx context.Context, objectKeys []string, getObject getObjectF
 		binlogCmd.Stderr = &binlogStderr
 
 		if err := binlogCmd.Run(); err != nil {
-			obj.Close()
-			mysqlStdin.Close()
-			mysqlCmd.Wait()
+			if closeErr := obj.Close(); closeErr != nil {
+				log.Printf("close object %s: %v", objectKey, closeErr)
+			}
+			if closeErr := mysqlStdin.Close(); closeErr != nil {
+				log.Printf("close mysql stdin: %v", closeErr)
+			}
+			if waitErr := mysqlCmd.Wait(); waitErr != nil {
+				log.Printf("wait for mysql: %v", waitErr)
+			}
 			return fmt.Errorf("mysqlbinlog %s failed: %w, stderr: %s", objectKey, err, binlogStderr.String())
 		}
-		obj.Close()
+		if err := obj.Close(); err != nil {
+			log.Printf("close object %s: %v", objectKey, err)
+		}
 	}
 
-	mysqlStdin.Close()
+	if err := mysqlStdin.Close(); err != nil {
+		log.Printf("close mysql stdin: %v", err)
+	}
 
 	if err := mysqlCmd.Wait(); err != nil {
 		return fmt.Errorf("mysql failed: %w, stderr: %s", err, mysqlStderr.String())
