@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -29,9 +28,12 @@ type Database interface {
 type newStorageFn func(ctx context.Context, endpoint, accessKey, secretKey, bucket, prefix, region string, verifyTLS bool) (storage.Storage, error)
 type newDatabaseFn func(ctx context.Context, params db.DBParams) (Database, error)
 
-// applyBinlogsFn starts a single mysql client process and for each binlog file
-// runs mysqlbinlog with the given args, piping the output into mysql's stdin.
-type applyBinlogsFn func(ctx context.Context, binlogPaths []string, mysqlbinlogArgs []string, mysqlArgs []string, mysqlPass string) error
+// getObjectFn fetches a single object by key and returns a streaming reader.
+type getObjectFn func(ctx context.Context, objectKey string) (io.ReadCloser, error)
+
+// applyBinlogsFn starts a single mysql client process and for each object key
+// fetches the binlog via getObject and streams it through mysqlbinlog into mysql.
+type applyBinlogsFn func(ctx context.Context, objectKeys []string, getObject getObjectFn, mysqlbinlogArgs []string, mysqlArgs []string, mysqlPass string) error
 
 func main() {
 	ctx := context.Background()
@@ -104,43 +106,13 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 		return fmt.Errorf("create S3 client: %w", err)
 	}
 
-	tmpDir, err := os.MkdirTemp("", "pitr-binlogs-")
-	if err != nil {
-		return fmt.Errorf("create temp dir: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	var binlogPaths []string
-	for i, entry := range entries {
-		binlogName := fmt.Sprintf("binlog.%06d", i+1)
-		binlogPath := filepath.Join(tmpDir, binlogName)
-
+	var objectKeys []string
+	for _, entry := range entries {
 		objectKey, err := objectKeyFromURI(entry.URI, bucket)
 		if err != nil {
 			return fmt.Errorf("parse URI %s: %w", entry.URI, err)
 		}
-
-		log.Printf("downloading binlog %s to %s", objectKey, binlogPath)
-
-		obj, err := s3Client.GetObject(ctx, objectKey)
-		if err != nil {
-			return fmt.Errorf("download binlog %s: %w", entry.URI, err)
-		}
-
-		f, err := os.Create(binlogPath)
-		if err != nil {
-			obj.Close()
-			return fmt.Errorf("create binlog file %s: %w", binlogPath, err)
-		}
-
-		_, err = io.Copy(f, obj)
-		obj.Close()
-		f.Close()
-		if err != nil {
-			return fmt.Errorf("write binlog file %s: %w", binlogPath, err)
-		}
-
-		binlogPaths = append(binlogPaths, binlogPath)
+		objectKeys = append(objectKeys, objectKey)
 	}
 
 	// Build mysqlbinlog args.
@@ -165,9 +137,9 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 		"-P", "33062",
 	}
 
-	log.Printf("applying %d binlog(s) with mysqlbinlog args: %v", len(binlogPaths), mysqlbinlogArgs)
+	log.Printf("applying %d binlog(s) with mysqlbinlog args: %v", len(objectKeys), mysqlbinlogArgs)
 
-	if err := apply(ctx, binlogPaths, mysqlbinlogArgs, mysqlArgs, operatorPass); err != nil {
+	if err := apply(ctx, objectKeys, s3Client.GetObject, mysqlbinlogArgs, mysqlArgs, operatorPass); err != nil {
 		return fmt.Errorf("apply binlogs: %w", err)
 	}
 
@@ -192,9 +164,9 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 	return nil
 }
 
-// applyBinlogs starts a single mysql client and for each binlog file
-// spawns mysqlbinlog, piping its output into mysql's stdin.
-func applyBinlogs(ctx context.Context, binlogPaths []string, mysqlbinlogArgs []string, mysqlArgs []string, mysqlPass string) error {
+// applyBinlogs starts a single mysql client and for each object key
+// fetches the binlog from storage and streams it through mysqlbinlog into mysql.
+func applyBinlogs(ctx context.Context, objectKeys []string, getObject getObjectFn, mysqlbinlogArgs []string, mysqlArgs []string, mysqlPass string) error {
 	mysqlCmd := exec.CommandContext(ctx, "mysql", mysqlArgs...)
 	mysqlCmd.Env = append(os.Environ(), fmt.Sprintf("MYSQL_PWD=%s", mysqlPass))
 	mysqlStdin, err := mysqlCmd.StdinPipe()
@@ -209,21 +181,31 @@ func applyBinlogs(ctx context.Context, binlogPaths []string, mysqlbinlogArgs []s
 		return fmt.Errorf("start mysql: %w", err)
 	}
 
-	for _, binlogPath := range binlogPaths {
-		args := append(mysqlbinlogArgs, binlogPath)
+	for _, objectKey := range objectKeys {
+		log.Printf("streaming binlog %s", objectKey)
+
+		obj, err := getObject(ctx, objectKey)
+		if err != nil {
+			mysqlStdin.Close()
+			mysqlCmd.Wait()
+			return fmt.Errorf("fetch binlog %s: %w", objectKey, err)
+		}
+
+		args := append(mysqlbinlogArgs, "-")
 		binlogCmd := exec.CommandContext(ctx, "mysqlbinlog", args...)
+		binlogCmd.Stdin = obj
 
 		var binlogStderr bytes.Buffer
 		binlogCmd.Stdout = mysqlStdin
 		binlogCmd.Stderr = &binlogStderr
 
-		log.Printf("running: mysqlbinlog %s", binlogPath)
-
 		if err := binlogCmd.Run(); err != nil {
+			obj.Close()
 			mysqlStdin.Close()
 			mysqlCmd.Wait()
-			return fmt.Errorf("mysqlbinlog %s failed: %w, stderr: %s", binlogPath, err, binlogStderr.String())
+			return fmt.Errorf("mysqlbinlog %s failed: %w, stderr: %s", objectKey, err, binlogStderr.String())
 		}
+		obj.Close()
 	}
 
 	mysqlStdin.Close()

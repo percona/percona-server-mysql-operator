@@ -66,7 +66,7 @@ func writeBinlogsFile(t *testing.T, entries []binlogserver.BinlogEntry) string {
 }
 
 type applyCall struct {
-	binlogPaths     []string
+	objectKeys      []string
 	mysqlbinlogArgs []string
 	mysqlArgs       []string
 }
@@ -154,13 +154,8 @@ func TestRun(t *testing.T) {
 			pitrType: "gtid",
 			pitrGTID: "uuid:1",
 			db:       &fakeDB{getGTIDExecutedResult: "uuid:1-5"},
-			newS3: func(fake *fakeStorage) newStorageFn {
-				fake.getErr = errors.New("download failed")
-				return func(_ context.Context, _, _, _, _, _, _ string, _ bool) (storage.Storage, error) {
-					return fake, nil
-				}
-			},
-			expectedError: "download binlog",
+			applyErr: errors.New("fetch binlog binlogs/binlog.000001: download failed"),
+			expectedError: "apply binlogs",
 		},
 		"unknown PITR type": {
 			entries:       defaultEntries,
@@ -182,7 +177,7 @@ func TestRun(t *testing.T) {
 			pitrGTID: "aaaaaaaa-0000-0000-0000-000000000001:1-10",
 			db:       &fakeDB{getGTIDExecutedResult: "aaaaaaaa-0000-0000-0000-000000000001:1-5"},
 			checkApply: func(t *testing.T, call applyCall) {
-				assert.Len(t, call.binlogPaths, 2)
+				assert.Len(t, call.objectKeys, 2)
 				assert.Contains(t, call.mysqlbinlogArgs, "--disable-log-bin")
 				assert.Contains(t, call.mysqlbinlogArgs, "--exclude-gtids=aaaaaaaa-0000-0000-0000-000000000001:1-5")
 				assert.Contains(t, call.mysqlbinlogArgs, "--include-gtids=aaaaaaaa-0000-0000-0000-000000000001:1-10")
@@ -195,7 +190,7 @@ func TestRun(t *testing.T) {
 			pitrDate: "2024-01-15 12:00:00",
 			db:       &fakeDB{getGTIDExecutedResult: "bbbbbbbb-0000-0000-0000-000000000002:1-5"},
 			checkApply: func(t *testing.T, call applyCall) {
-				assert.Len(t, call.binlogPaths, 2)
+				assert.Len(t, call.objectKeys, 2)
 				assert.Contains(t, call.mysqlbinlogArgs, "--disable-log-bin")
 				assert.Contains(t, call.mysqlbinlogArgs, "--exclude-gtids=bbbbbbbb-0000-0000-0000-000000000002:1-5")
 				assert.Contains(t, call.mysqlbinlogArgs, "--stop-datetime=2024-01-15 12:00:00")
@@ -269,9 +264,9 @@ func TestRun(t *testing.T) {
 			}
 
 			var captured applyCall
-			apply := func(_ context.Context, binlogPaths []string, mysqlbinlogArgs []string, mysqlArgs []string, _ string) error {
+			apply := func(_ context.Context, objectKeys []string, _ getObjectFn, mysqlbinlogArgs []string, mysqlArgs []string, _ string) error {
 				captured = applyCall{
-					binlogPaths:     binlogPaths,
+					objectKeys:      objectKeys,
 					mysqlbinlogArgs: mysqlbinlogArgs,
 					mysqlArgs:       mysqlArgs,
 				}
