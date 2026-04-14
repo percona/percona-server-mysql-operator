@@ -9,6 +9,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
@@ -902,10 +903,7 @@ func GetBackupConfig(ctx context.Context, cl client.Client, cr *apiv1.PerconaSer
 	if storage.VerifyTLS != nil {
 		verifyTLS = *storage.VerifyTLS
 	}
-	destination, err := GetDestination(storage, cr)
-	if err != nil {
-		return nil, errors.Wrap(err, "get backup destination")
-	}
+	destination := cr.Status.Destination
 
 	conf := &BackupConfig{
 		Destination:      destination.PathWithoutBucket(),
@@ -1003,16 +1001,18 @@ func getIncrementalBackupName(cr *apiv1.PerconaServerMySQLBackup, clusterName, c
 	return backupName, nil
 }
 
+// GetDestination returns the destination for the backup.
 func GetDestination(
 	storage *apiv1.BackupStorageSpec,
 	cr *apiv1.PerconaServerMySQLBackup,
+	ts time.Time,
 ) (apiv1.BackupDestination, error) {
 	clusterName := cr.Spec.ClusterName
-	creationTimestamp := cr.CreationTimestamp.Format("2006-01-02-15:04:05")
-	backupName := fmt.Sprintf("%s-%s-%s", clusterName, creationTimestamp, "full")
+	tsSfx := ts.Format("2006-01-02-15:04:05")
+	backupName := fmt.Sprintf("%s-%s-%s", clusterName, tsSfx, "full")
 
 	if cr.Spec.Type == apiv1.BackupTypeIncremental {
-		name, err := getIncrementalBackupName(cr, clusterName, creationTimestamp)
+		name, err := getIncrementalBackupName(cr, clusterName, tsSfx)
 		if err != nil {
 			return "", errors.Wrap(err, "get incremental backup name")
 		}
