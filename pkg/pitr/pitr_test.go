@@ -274,6 +274,58 @@ func TestRestoreJob(t *testing.T) {
 				assert.Equal(t, []corev1.LocalObjectReference{{Name: "registry-secret"}}, job.Spec.Template.Spec.ImagePullSecrets)
 			},
 		},
+		"sleep forever annotation sets SLEEP_FOREVER env var": {
+			cluster: &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					SecretsName:   "secrets",
+					SSLSecretName: "ssl",
+					Backup: &apiv1.BackupSpec{
+						PiTR: apiv1.PiTRSpec{
+							BinlogServer: &apiv1.BinlogServerSpec{},
+						},
+					},
+				},
+			},
+			restore: &apiv1.PerconaServerMySQLRestore{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "my-restore",
+					Namespace:   "ns",
+					Annotations: map[string]string{"percona.com/pitr-sleep-forever": "true"},
+				},
+			},
+			storage:   &apiv1.BackupStorageSpec{},
+			initImage: "init:latest",
+			verify: func(t *testing.T, job *batchv1.Job) {
+				container := job.Spec.Template.Spec.Containers[0]
+				envMap := envToMap(container.Env)
+				assert.Equal(t, "true", envMap["SLEEP_FOREVER"])
+			},
+		},
+		"no sleep forever annotation omits SLEEP_FOREVER env var": {
+			cluster: &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					SecretsName:   "secrets",
+					SSLSecretName: "ssl",
+					Backup: &apiv1.BackupSpec{
+						PiTR: apiv1.PiTRSpec{
+							BinlogServer: &apiv1.BinlogServerSpec{},
+						},
+					},
+				},
+			},
+			restore: &apiv1.PerconaServerMySQLRestore{
+				ObjectMeta: metav1.ObjectMeta{Name: "my-restore", Namespace: "ns"},
+			},
+			storage:   &apiv1.BackupStorageSpec{},
+			initImage: "init:latest",
+			verify: func(t *testing.T, job *batchv1.Job) {
+				container := job.Spec.Template.Spec.Containers[0]
+				envMap := envToMap(container.Env)
+				assert.NotContains(t, envMap, "SLEEP_FOREVER")
+			},
+		},
 		"restore container has correct env vars without pitr spec": {
 			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
