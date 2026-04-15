@@ -4,9 +4,6 @@ delete:
   - apiVersion: ps.percona.com/v1
     kind: PerconaServerMySQL
     name: demand-backup-incremental
-  - apiVersion: ps.percona.com/v1
-    kind: PerconaServerMySQL
-    name: demand-backup-incremental-from-source
 commands:
   - script: |-
       set -o errexit
