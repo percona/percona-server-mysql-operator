@@ -6,7 +6,5 @@ kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
 metadata:
   name: async-pitr-minio-backup
-  finalizers:
-    - percona.com/delete-backup
 status:
   state: Succeeded
