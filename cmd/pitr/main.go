@@ -166,7 +166,11 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 	if err != nil {
 		return fmt.Errorf("reconnect to MySQL: %w", err)
 	}
-	defer database.Close()
+	defer func() {
+		if err := database.Close(); err != nil {
+			log.Printf("close db connection: %v", err)
+		}
+	}()
 
 	gtidExecuted, err = database.GetGTIDExecuted(ctx)
 	if err != nil {
