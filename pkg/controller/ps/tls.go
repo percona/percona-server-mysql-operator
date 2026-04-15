@@ -39,6 +39,13 @@ func (r *PerconaServerMySQLReconciler) ensureTLSSecret(ctx context.Context, cr *
 		if c, err := tls.IsSecretCreatedByUser(ctx, r.Client, cr, &secret); err != nil || c {
 			return err
 		}
+		// If the secret already exists, is not managed by cert-manager, and no custom
+		// issuer is configured, go directly to manual TLS to avoid a costly waitForCert
+		// call on every reconcile when cert-manager is unavailable.
+		isCertManagerManaged := secret.Labels[cm.PartOfCertManagerControllerLabelKey] == "true"
+		if !isCertManagerManaged && (cr.Spec.TLS == nil || cr.Spec.TLS.IssuerConf == nil) {
+			return r.ensureManualTLS(ctx, cr)
+		}
 	}
 
 	err = r.ensureSSLByCertManager(ctx, cr)
@@ -224,12 +231,14 @@ func (r *PerconaServerMySQLReconciler) ensureIssuer(ctx context.Context, cr *api
 
 func (r *PerconaServerMySQLReconciler) waitForCert(ctx context.Context, cr *apiv1.PerconaServerMySQL, certName, secretName string) error {
 	ticker := time.NewTicker(3 * time.Second)
-	timeoutTimer := time.NewTimer(30 * time.Second)
+	timeoutTimer := time.NewTimer(10 * time.Second)
 	defer timeoutTimer.Stop()
 	defer ticker.Stop()
 	secretFound := false
 	for {
 		select {
+		case <-ctx.Done():
+			return ctx.Err()
 		case <-timeoutTimer.C:
 			if !secretFound {
 				return errors.Errorf("timeout: can't get tls certificate from certmanager: %s", secretName)
