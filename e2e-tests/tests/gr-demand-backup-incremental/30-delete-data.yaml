@@ -1,6 +1,5 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 100
 commands:
   - script: |-
       set -o errexit
@@ -8,4 +7,7 @@ commands:
 
       source ../../functions
 
-      kubectl delete ps-backup --all -n "${NAMESPACE}"
+      run_mysql \
+          "TRUNCATE TABLE myDB.myTable" \
+          "-h $(get_mysql_router_service $(get_cluster_name))"
+      sleep 5

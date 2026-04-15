@@ -3,8 +3,10 @@ kind: TestStep
 delete:
   - apiVersion: ps.percona.com/v1
     kind: PerconaServerMySQL
-    metadata:
-      name: gr-demand-backup-incremental
+    name: gr-demand-backup-incremental
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQL
+    name: gr-demand-backup-incremental-from-source
 commands:
   - script: |-
       set -o errexit
