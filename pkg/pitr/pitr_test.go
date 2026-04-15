@@ -417,6 +417,68 @@ func TestRestoreJob(t *testing.T) {
 				assert.Equal(t, "gtid", envMap["PITR_TYPE"])
 				assert.Equal(t, "abc123:1-100", envMap["PITR_GTID"])
 				assert.NotContains(t, envMap, "PITR_DATE")
+				assert.NotContains(t, envMap, "PITR_FORCE")
+			},
+		},
+		"restore container has PITR_FORCE env var when force is true": {
+			cluster: &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					SecretsName:   "secrets",
+					SSLSecretName: "ssl",
+					Backup: &apiv1.BackupSpec{
+						PiTR: apiv1.PiTRSpec{
+							BinlogServer: &apiv1.BinlogServerSpec{},
+						},
+					},
+				},
+			},
+			restore: &apiv1.PerconaServerMySQLRestore{
+				ObjectMeta: metav1.ObjectMeta{Name: "my-restore", Namespace: "ns"},
+				Spec: apiv1.PerconaServerMySQLRestoreSpec{
+					PITR: &apiv1.RestorePITRSpec{
+						Type:  apiv1.PITRDate,
+						Date:  "2024-01-15 10:00:00",
+						Force: true,
+					},
+				},
+			},
+			storage:   &apiv1.BackupStorageSpec{},
+			initImage: "init:latest",
+			verify: func(t *testing.T, job *batchv1.Job) {
+				container := job.Spec.Template.Spec.Containers[0]
+				envMap := envToMap(container.Env)
+				assert.Equal(t, "true", envMap["PITR_FORCE"])
+			},
+		},
+		"restore container omits PITR_FORCE env var when force is false": {
+			cluster: &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					SecretsName:   "secrets",
+					SSLSecretName: "ssl",
+					Backup: &apiv1.BackupSpec{
+						PiTR: apiv1.PiTRSpec{
+							BinlogServer: &apiv1.BinlogServerSpec{},
+						},
+					},
+				},
+			},
+			restore: &apiv1.PerconaServerMySQLRestore{
+				ObjectMeta: metav1.ObjectMeta{Name: "my-restore", Namespace: "ns"},
+				Spec: apiv1.PerconaServerMySQLRestoreSpec{
+					PITR: &apiv1.RestorePITRSpec{
+						Type: apiv1.PITRGtid,
+						GTID: "abc123:1-100",
+					},
+				},
+			},
+			storage:   &apiv1.BackupStorageSpec{},
+			initImage: "init:latest",
+			verify: func(t *testing.T, job *batchv1.Job) {
+				container := job.Spec.Template.Spec.Containers[0]
+				envMap := envToMap(container.Env)
+				assert.NotContains(t, envMap, "PITR_FORCE")
 			},
 		},
 		"restore container has s3 env vars when binlog server has s3 storage": {

@@ -146,10 +146,12 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 	}
 
 	mysqlArgs := []string{
-		"--force",
 		"-u", string(apiv1.UserOperator),
 		"-h", "127.0.0.1",
 		"-P", "33062",
+	}
+	if os.Getenv("PITR_FORCE") == "true" {
+		mysqlArgs = append([]string{"--force"}, mysqlArgs...)
 	}
 
 	log.Printf("applying %d binlog(s) with mysqlbinlog args: %v", len(objectKeys), mysqlbinlogArgs)

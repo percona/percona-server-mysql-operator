@@ -210,6 +210,12 @@ func restoreContainer(
 				Value: restore.Spec.PITR.GTID,
 			})
 		}
+		if restore.Spec.PITR.Force {
+			envs = append(envs, corev1.EnvVar{
+				Name:  "PITR_FORCE",
+				Value: "true",
+			})
+		}
 	}
 
 	if binlogServer.Storage.S3 != nil {

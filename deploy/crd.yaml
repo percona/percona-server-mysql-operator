@@ -2404,6 +2404,8 @@ spec:
                 properties:
                   date:
                     type: string
+                  force:
+                    type: boolean
                   gtid:
                     type: string
                   type:

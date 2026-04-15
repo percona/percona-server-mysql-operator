@@ -95,6 +95,7 @@ func TestRun(t *testing.T) {
 		pitrType      string
 		pitrGTID      string
 		pitrDate      string
+		pitrForce     string
 		db            *fakeDB
 		newDB         func(ctx context.Context, params db.DBParams) (Database, error)
 		newS3         func(*fakeStorage) newStorageFn
@@ -182,6 +183,17 @@ func TestRun(t *testing.T) {
 				assert.Contains(t, call.mysqlbinlogArgs, "--exclude-gtids=aaaaaaaa-0000-0000-0000-000000000001:1-5")
 				assert.Contains(t, call.mysqlbinlogArgs, "--include-gtids=aaaaaaaa-0000-0000-0000-000000000001:1-10")
 				assert.NotContains(t, call.mysqlbinlogArgs, "--stop-datetime")
+				assert.NotContains(t, call.mysqlArgs, "--force")
+			},
+		},
+		"GTID mode with force": {
+			entries:   defaultEntries,
+			pitrType:  "gtid",
+			pitrGTID:  "aaaaaaaa-0000-0000-0000-000000000001:1-10",
+			pitrForce: "true",
+			db:        &fakeDB{getGTIDExecutedResult: "aaaaaaaa-0000-0000-0000-000000000001:1-5"},
+			checkApply: func(t *testing.T, call applyCall) {
+				assert.Contains(t, call.mysqlArgs, "--force")
 			},
 		},
 		"date mode success": {
@@ -198,6 +210,17 @@ func TestRun(t *testing.T) {
 				for _, arg := range call.mysqlbinlogArgs {
 					assert.False(t, strings.HasPrefix(arg, "--include-gtids"), "date mode should not have --include-gtids")
 				}
+				assert.NotContains(t, call.mysqlArgs, "--force")
+			},
+		},
+		"date mode with force": {
+			entries:   defaultEntries,
+			pitrType:  "date",
+			pitrDate:  "2024-01-15 12:00:00",
+			pitrForce: "true",
+			db:        &fakeDB{getGTIDExecutedResult: "bbbbbbbb-0000-0000-0000-000000000002:1-5"},
+			checkApply: func(t *testing.T, call applyCall) {
+				assert.Contains(t, call.mysqlArgs, "--force")
 			},
 		},
 		"empty GTID_EXECUTED": {
@@ -239,6 +262,7 @@ func TestRun(t *testing.T) {
 			t.Setenv("PITR_TYPE", tc.pitrType)
 			t.Setenv("PITR_GTID", tc.pitrGTID)
 			t.Setenv("PITR_DATE", tc.pitrDate)
+			t.Setenv("PITR_FORCE", tc.pitrForce)
 			t.Setenv("S3_BUCKET", bucket)
 
 			fakeDatabase := tc.db
