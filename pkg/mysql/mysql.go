@@ -679,6 +679,17 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		})
 	}
 
+	if cr.CompareVersion("1.1.0") >= 0 {
+		backupsEnabled := false
+		if cr.Spec.Backup != nil {
+			backupsEnabled = cr.Spec.Backup.Enabled
+		}
+		env = append(env, corev1.EnvVar{
+			Name:  naming.EnvBackupsEnabled,
+			Value: strconv.FormatBool(backupsEnabled),
+		})
+	}
+
 	container := corev1.Container{
 		Name:                     AppName,
 		Image:                    spec.Image,
@@ -732,10 +743,21 @@ func backupVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 	}
 
 	if cr.CompareVersion("0.11.0") >= 0 {
-		mounts = append(mounts, corev1.VolumeMount{
-			Name:      vaultSecretVolumeName,
-			MountPath: vaultSecretMountPath,
-		})
+		mounts = append(mounts,
+			corev1.VolumeMount{
+				Name:      vaultSecretVolumeName,
+				MountPath: vaultSecretMountPath,
+			},
+		)
+	}
+
+	if cr.CompareVersion("1.1.0") >= 0 {
+		mounts = append(mounts,
+			corev1.VolumeMount{
+				Name:      configVolumeName,
+				MountPath: configMountPath,
+			},
+		)
 	}
 
 	return mounts
