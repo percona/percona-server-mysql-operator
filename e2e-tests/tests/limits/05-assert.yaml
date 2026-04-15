@@ -151,6 +151,8 @@ spec:
           name: datadir
         - mountPath: /etc/mysql/mysql-users-secret
           name: users
+        - mountPath: /etc/mysql/config
+          name: config
         - mountPath: /var/log/xtrabackup
           name: backup-logs
         - mountPath: /etc/mysql/vault-keyring-secret
