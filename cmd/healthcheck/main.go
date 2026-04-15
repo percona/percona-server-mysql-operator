@@ -127,22 +127,16 @@ func checkReadinessAsync(ctx context.Context) error {
 		return errors.Wrap(err, "get replication status")
 	}
 
-	backupsEnabled := os.Getenv(naming.EnvBackupsEnabled)
-	backupRunning := false
-
-	if backupsEnabled == "true" {
-		var err error
-		backupRunning, err = isBackupRunning(ctx)
-		if err != nil {
-			return errors.Wrap(err, "check backup running")
-		}
-	}
-
 	switch {
 	case replStatus == mysqldb.ReplicationStatusActive && !readOnly:
 		return errors.New("replica is not read only")
-	case replStatus == mysqldb.ReplicationStatusStopped && !backupRunning:
-		return errors.New("replication is stopped")
+	case replStatus == mysqldb.ReplicationStatusStopped:
+		// If replication is stopped, check if it is because of a running backup
+		if running, err := isBackupRunning(ctx); err != nil {
+			return errors.Wrap(err, "check backup running")
+		} else if !running {
+			return errors.New("replication is stopped")
+		}
 	}
 	return nil
 }
@@ -341,6 +335,10 @@ func fileExists(name string) (bool, error) {
 }
 
 func isBackupRunning(ctx context.Context) (bool, error) {
+	backupsEnabled := os.Getenv(naming.EnvBackupsEnabled)
+	if backupsEnabled != "true" {
+		return false, nil
+	}
 	sc := xtrabackup.NewSidecarClient("localhost")
 	bcp, err := sc.GetRunningBackupConfig(ctx)
 	if err != nil {
