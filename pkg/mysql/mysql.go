@@ -160,7 +160,7 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 			Name:        Name(cr),
 			Namespace:   cr.Namespace,
 			Labels:      Labels(cr),
-			Annotations: cr.GlobalAnnotations(),
+			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), spec.Annotations),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
@@ -172,7 +172,7 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      Labels(cr),
-					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
+					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), spec.Annotations, annotations),
 				},
 				Spec: spec.Core(
 					selector,
@@ -676,6 +676,17 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		env = append(env, corev1.EnvVar{
 			Name:  "KEYRING_VAULT_PATH",
 			Value: fmt.Sprintf("%s/keyring_vault.cnf", vaultSecretMountPath),
+		})
+	}
+
+	if cr.CompareVersion("1.1.0") >= 0 {
+		backupsEnabled := false
+		if cr.Spec.Backup != nil {
+			backupsEnabled = cr.Spec.Backup.Enabled
+		}
+		env = append(env, corev1.EnvVar{
+			Name:  naming.EnvBackupsEnabled,
+			Value: strconv.FormatBool(backupsEnabled),
 		})
 	}
 

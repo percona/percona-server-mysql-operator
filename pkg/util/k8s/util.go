@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"sort"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -14,6 +15,7 @@ func GetLastFullBackup(
 	cl client.Client,
 	clusterName,
 	namespace string,
+	storage *apiv1.BackupStorageSpec,
 ) (*apiv1.PerconaServerMySQLBackup, error) {
 	backupList := &apiv1.PerconaServerMySQLBackupList{}
 	if err := cl.List(ctx, backupList, client.MatchingFields{
@@ -36,6 +38,10 @@ func GetLastFullBackup(
 			continue
 		}
 
+		if storage != nil && !storage.Equals(backup.Status.Storage) {
+			continue
+		}
+
 		if backup.Status.CompletedAt == nil {
 			return nil, errors.Errorf("backup '%s' is succeeded but completedAt is not set", backup.GetName())
 		}
@@ -51,7 +57,7 @@ func GetLastFullBackup(
 	}
 
 	if lastFullBackup == nil {
-		return nil, errors.New("no full backup found")
+		return nil, errors.New("no full backup found in storage")
 	}
 	return lastFullBackup, nil
 }
@@ -118,6 +124,7 @@ func GetLatestIncrementalBackupInChain(
 // as the given backup, i.e. all incrementals whose AnnotationBaseBackupName matches this backup's
 // base. For a full backup this lists all incrementals that depend on it; for an incremental
 // backup this lists all siblings in the same chain.
+// Backups are sorted by CompletedAt (oldest to newest).
 func ListDependentIncrementalBackups(
 	ctx context.Context,
 	cl client.Client,
@@ -152,5 +159,18 @@ func ListDependentIncrementalBackups(
 		}
 		result = append(result, &backupList.Items[i])
 	}
+
+	// Sort by CompletedAt (oldest to newest), falling back to CreationTimestamp if CompletedAt is not set
+	sort.SliceStable(result, func(i, j int) bool {
+		ti := result[i].Status.CompletedAt
+		if ti == nil {
+			ti = &result[i].CreationTimestamp
+		}
+		tj := result[j].Status.CompletedAt
+		if tj == nil {
+			tj = &result[j].CreationTimestamp
+		}
+		return ti.Before(tj)
+	})
 	return result, nil
 }

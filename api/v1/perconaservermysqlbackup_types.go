@@ -20,6 +20,7 @@ import (
 	"path"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -57,11 +58,19 @@ const (
 	BackupFailed BackupState = "Failed"
 )
 
+func (state BackupState) IsTerminal() bool {
+	return state == BackupSucceeded || state == BackupFailed || state == BackupError
+}
+
 type BackupType string
 
 const (
 	BackupTypeFull        BackupType = "full"
 	BackupTypeIncremental BackupType = "incremental"
+)
+
+const (
+	ConditionBackupLeaseAcquired = "BackupLeaseAcquired"
 )
 
 // PerconaServerMySQLBackupStatus defines the observed state of PerconaServerMySQLBackup
@@ -74,6 +83,8 @@ type PerconaServerMySQLBackupStatus struct {
 	CompletedAt  *metav1.Time       `json:"completed,omitempty"`
 	Image        string             `json:"image,omitempty"`
 	BackupSource string             `json:"backupSource,omitempty"`
+	Compressed   bool               `json:"compressed,omitempty"`
+	Conditions   []metav1.Condition `json:"conditions,omitempty"`
 }
 
 const (
@@ -204,6 +215,20 @@ func (b *PerconaServerMySQLBackup) GetContainerOptions(storage *BackupStorageSpe
 	return nil
 }
 
+// IsCompressed reports whether the xtrabackup args contain --compress.
+func (b *PerconaServerMySQLBackup) IsCompressed(storage *BackupStorageSpec) bool {
+	opts := b.GetContainerOptions(storage)
+	if opts == nil {
+		return false
+	}
+	for _, arg := range opts.Args.Xtrabackup {
+		if arg == "--compress" || strings.HasPrefix(arg, "--compress=") {
+			return true
+		}
+	}
+	return false
+}
+
 func (b *PerconaServerMySQLBackup) GetType() BackupType {
 	if b.Status.Type == "" {
 		return BackupTypeFull
@@ -245,11 +270,34 @@ func (b *PerconaServerMySQLBackup) Hash() string {
 	return hash
 }
 
+func ConditionsEqual(a, b []metav1.Condition) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		other := meta.FindStatusCondition(b, a[i].Type)
+		if other == nil {
+			return false
+		}
+		if a[i].Type != other.Type ||
+			a[i].Status != other.Status ||
+			a[i].ObservedGeneration != other.ObservedGeneration ||
+			a[i].LastTransitionTime != other.LastTransitionTime ||
+			a[i].Reason != other.Reason ||
+			a[i].Message != other.Message {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *PerconaServerMySQLBackupStatus) Equals(other *PerconaServerMySQLBackupStatus) bool {
 	return s.Type == other.Type &&
 		s.State == other.State &&
 		s.StateDesc == other.StateDesc &&
 		s.Destination == other.Destination &&
 		s.Image == other.Image &&
-		s.BackupSource == other.BackupSource
+		s.BackupSource == other.BackupSource &&
+		s.Compressed == other.Compressed &&
+		ConditionsEqual(s.Conditions, other.Conditions)
 }
