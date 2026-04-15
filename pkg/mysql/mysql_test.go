@@ -702,9 +702,9 @@ func TestBackupVolumeMounts(t *testing.T) {
 		{Name: apiv1.BinVolumeName, MountPath: apiv1.BinVolumePath},
 		{Name: DataVolumeName, MountPath: DataMountPath},
 		{Name: credsVolumeName, MountPath: naming.CredsMountPath},
-		{Name: configVolumeName, MountPath: configMountPath},
 		{Name: "backup-logs", MountPath: BackupLogDir},
 		{Name: vaultSecretVolumeName, MountPath: vaultSecretMountPath},
+		{Name: configVolumeName, MountPath: configMountPath},
 	}
 
 	mounts := backupVolumeMounts(cr)
