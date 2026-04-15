@@ -679,10 +679,14 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		})
 	}
 
-	if cr.CompareVersion("1.1.0") >= 0 && cr.Spec.Backup != nil {
+	if cr.CompareVersion("1.1.0") >= 0 {
+		backupsEnabled := false
+		if cr.Spec.Backup != nil {
+			backupsEnabled = cr.Spec.Backup.Enabled
+		}
 		env = append(env, corev1.EnvVar{
 			Name:  naming.EnvBackupsEnabled,
-			Value: strconv.FormatBool(cr.Spec.Backup.Enabled),
+			Value: strconv.FormatBool(backupsEnabled),
 		})
 	}
 
