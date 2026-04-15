@@ -827,7 +827,7 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 		return errors.Wrapf(err, "check if pod %s ready", nn.String())
 	}
 
-	if !firstMySQLPodReady {
+	if !firstMySQLPodReady && !cr.Spec.Pause {
 		log.V(1).Info("Waiting for pod to be ready", "pod", nn.Name)
 		return nil
 	}
@@ -986,7 +986,7 @@ func (r *PerconaServerMySQLReconciler) reconcileGroupReplication(ctx context.Con
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
-	log := logf.FromContext(ctx)
+	log := logf.FromContext(ctx).WithName("Bootstrap")
 
 	if cr.Status.MySQL.Ready == 0 || cr.Status.MySQL.Ready != cr.Spec.MySQL.Size {
 		log.V(1).Info("Waiting for all MySQL pods to be ready", "ready", cr.Status.MySQL.Ready, "expected", cr.Spec.MySQL.Size)
@@ -1299,7 +1299,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 		return nil
 	}
 
-	logger := logf.FromContext(ctx)
+	logger := logf.FromContext(ctx).WithName("BinlogServer")
 
 	s3 := cr.Spec.Backup.PiTR.BinlogServer.Storage.S3
 
@@ -1359,7 +1359,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 			ConnectTimeout: cr.Spec.Backup.PiTR.BinlogServer.ConnectTimeout,
 			WriteTimeout:   cr.Spec.Backup.PiTR.BinlogServer.WriteTimeout,
 			ReadTimeout:    cr.Spec.Backup.PiTR.BinlogServer.ReadTimeout,
-			SSL: binlogServerSSLConfig(cr.Spec.Backup.PiTR.BinlogServer.SSLMode),
+			SSL:            binlogServerSSLConfig(cr.Spec.Backup.PiTR.BinlogServer.SSLMode),
 		},
 		Replication: binlogserver.Replication{
 			Mode:           binlogserver.ReplicationModeGTID,
