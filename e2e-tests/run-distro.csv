@@ -2,12 +2,12 @@ async-upgrade
 auto-config
 config
 config-router
-demand-backup-minio
+demand-backup
 gr-pitr-minio
 async-pitr-minio
 demand-backup-cloud
 demand-backup-retry
-gr-demand-backup-minio
+gr-demand-backup
 gr-demand-backup-cloud
 gr-demand-backup-haproxy
 gr-finalizer

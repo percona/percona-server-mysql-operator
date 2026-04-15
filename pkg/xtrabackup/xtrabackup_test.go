@@ -242,6 +242,7 @@ func TestDeleteJob(t *testing.T) {
 	}
 	backup := readDefaultBackup(t, "backup", ns)
 	backup.Status.Storage = cr.Spec.Backup.Storages[storageName]
+	backup.Status.Destination = "s3://bucket/prefix/ps-cluster1-0001-01-01-00:00:00-full"
 
 	t.Run("global labels and annotations", func(t *testing.T) {
 		cluster := cr.DeepCopy()
@@ -579,6 +580,7 @@ func TestRestoreJob(t *testing.T) {
 			},
 		}, getEnv())
 	})
+
 }
 
 func TestGetDestination(t *testing.T) {
@@ -753,7 +755,7 @@ func TestGetDestination(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			dest, err := GetDestination(tc.storage, tc.backup())
+			dest, err := GetDestination(tc.storage, tc.backup(), ts)
 			if tc.wantErr != nil {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tc.wantErr.Error())

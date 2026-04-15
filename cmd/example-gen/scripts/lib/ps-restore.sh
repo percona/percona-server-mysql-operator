@@ -24,7 +24,8 @@ remove_fields() {
 		| yq "del(.spec.backupSource.stateDescription)" \
 		| yq "del(.spec.backupSource.storage.azure)" \
 		| yq "del(.spec.backupSource.storage.gcs)" \
-		| yq "del(.spec.backupSource.type)"
+		| yq "del(.spec.backupSource.type)" \
+		| yq "del(.spec.backupSource.conditions)"
 }
 
 del_fields_to_comment() {

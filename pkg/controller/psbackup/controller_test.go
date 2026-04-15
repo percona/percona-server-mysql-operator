@@ -259,6 +259,12 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			assert.Equal(t, tt.stateDesc, cr.Status.StateDesc)
 			assert.Equal(t, tt.state, cr.Status.State)
 
+			// Reconcile once more since the Lease condition status needs to be updated
+			_, err = r.Reconcile(t.Context(), controllerruntime.Request{
+				NamespacedName: client.ObjectKeyFromObject(tt.cr),
+			})
+			require.NoError(t, err)
+
 			if tt.state == apiv1.BackupError {
 				// Backup with an error state should not be reconciled.
 				// We can verify this by using clientWithGetCount.
@@ -289,6 +295,7 @@ func (c *clientWithGetCount) Get(ctx context.Context, key client.ObjectKey, obj 
 	if c.Count <= 0 {
 		return errors.New("unexpected Get call from client")
 	}
+
 	c.Count--
 	return c.Client.Get(ctx, key, obj, opts...)
 }
@@ -396,6 +403,70 @@ func TestStateDescCleanup(t *testing.T) {
 
 			assert.Equal(t, cr.Status.State, tt.expectedState)
 			assert.Empty(t, cr.Status.StateDesc)
+		})
+	}
+}
+
+func TestPrepareStatusCompressed(t *testing.T) {
+	const namespace = "prepare-status-compressed"
+	const storageName = "s3-us-west"
+
+	cluster, err := readDefaultCR("ps-cluster1", namespace)
+	require.NoError(t, err)
+
+	cr, err := readDefaultCRBackup("some-name", namespace)
+	require.NoError(t, err)
+	cr.Spec.ClusterName = cluster.Name
+	cr.Spec.StorageName = storageName
+
+	storage := cluster.Spec.Backup.Storages[storageName]
+
+	r := PerconaServerMySQLBackupReconciler{}
+
+	tests := []struct {
+		name               string
+		cr                 *apiv1.PerconaServerMySQLBackup
+		storage            *apiv1.BackupStorageSpec
+		expectedCompressed bool
+	}{
+		{
+			name: "compressed via backup spec args",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLBackup) {
+				cr.Spec.ContainerOptions = &apiv1.BackupContainerOptions{
+					Args: apiv1.BackupContainerArgs{
+						Xtrabackup: []string{"--compress"},
+					},
+				}
+			}),
+			storage:            storage.DeepCopy(),
+			expectedCompressed: true,
+		},
+		{
+			name: "compressed via storage args",
+			cr:   cr.DeepCopy(),
+			storage: updateResource(storage.DeepCopy(), func(s *apiv1.BackupStorageSpec) {
+				s.ContainerOptions = &apiv1.BackupContainerOptions{
+					Args: apiv1.BackupContainerArgs{
+						Xtrabackup: []string{"--compress=zstd"},
+					},
+				}
+			}),
+			expectedCompressed: true,
+		},
+		{
+			name:               "not compressed",
+			cr:                 cr.DeepCopy(),
+			storage:            storage.DeepCopy(),
+			expectedCompressed: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var status apiv1.PerconaServerMySQLBackupStatus
+			err := r.prepareStatus(tt.cr, cluster, tt.storage, &status, "some-source")
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedCompressed, status.Compressed)
 		})
 	}
 }
