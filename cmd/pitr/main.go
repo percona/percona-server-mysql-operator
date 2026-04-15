@@ -149,6 +149,7 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 
 	// Build mysql client args.
 	mysqlArgs := []string{
+		"--force",
 		"-u", string(apiv1.UserOperator),
 		"-h", "127.0.0.1",
 		"-P", "33062",
