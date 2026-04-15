@@ -1,7 +1,7 @@
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLRestore
 metadata:
-  name: gr-demand-backup-haproxy-restore-minio
+  name: restore-of-gr-demand-backup-haproxy
 spec:
   clusterName: gr-demand-backup-haproxy
-  backupName: gr-demand-backup-haproxy-minio
+  backupName: gr-demand-backup-haproxy
