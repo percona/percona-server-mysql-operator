@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
@@ -35,8 +36,20 @@ type getObjectFn func(ctx context.Context, objectKey string) (io.ReadCloser, err
 // fetches the binlog via getObject and streams it through mysqlbinlog into mysql.
 type applyBinlogsFn func(ctx context.Context, objectKeys []string, getObject getObjectFn, mysqlbinlogArgs []string, mysqlArgs []string, mysqlPass string) error
 
+type logWriter struct{}
+
+func (lw *logWriter) Write(bs []byte) (int, error) {
+	return fmt.Print(time.Now().UTC().Format(time.RFC3339Nano), " 0 [Info] [K8SPS-642] [Recovery] ", string(bs))
+}
+
 func main() {
 	ctx := context.Background()
+
+	// we use a custom writer to match mysqld log format.
+	// mysqld and pitr logs are printed to together to stdout/stderr
+	// and it should be possible to parse them together
+	log.SetFlags(0)
+	log.SetOutput(new(logWriter))
 
 	newDB := func(ctx context.Context, params db.DBParams) (Database, error) {
 		return db.NewDatabase(ctx, params)
