@@ -84,7 +84,6 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 	pitrDate := os.Getenv("PITR_DATE")
 	pitrGTID := os.Getenv("PITR_GTID")
 
-	// Connect to MySQL to get the backup's GTID_EXECUTED.
 	operatorPass, err := getSecret(apiv1.UserOperator)
 	if err != nil {
 		return fmt.Errorf("get operator password: %w", err)
@@ -132,7 +131,6 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 		objectKeys = append(objectKeys, objectKey)
 	}
 
-	// Build mysqlbinlog args.
 	mysqlbinlogArgs := []string{"--disable-log-bin"}
 	if gtidExecuted != "" {
 		mysqlbinlogArgs = append(mysqlbinlogArgs, fmt.Sprintf("--exclude-gtids=%s", gtidExecuted))
@@ -147,7 +145,6 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 		return fmt.Errorf("unknown PITR_TYPE: %s", pitrType)
 	}
 
-	// Build mysql client args.
 	mysqlArgs := []string{
 		"--force",
 		"-u", string(apiv1.UserOperator),
@@ -161,7 +158,6 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 		return fmt.Errorf("apply binlogs: %w", err)
 	}
 
-	// Reconnect to log the final GTID state.
 	database, err = newDB(ctx, db.DBParams{
 		User: apiv1.UserOperator,
 		Pass: operatorPass,
