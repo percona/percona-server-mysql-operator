@@ -6,6 +6,5 @@ commands:
       set -o xtrace
 
       source ../../functions
-      kubectl delete ps-backup --all -n "${NAMESPACE}"
-      sleep 60
-    timeout: 180
+
+      get_cr | kubectl -n "${NAMESPACE}" apply -f -

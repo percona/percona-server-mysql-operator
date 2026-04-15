@@ -4,8 +4,4 @@ metadata:
   name: gr-scheduled-backup-incremental
 spec:
   backup:
-    schedule:
-    - keep: 2
-      name: minio-full
-      schedule: ''
-      storageName: minio
+    schedule: []

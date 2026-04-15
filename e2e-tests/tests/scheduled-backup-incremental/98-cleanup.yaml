@@ -3,8 +3,7 @@ kind: TestStep
 delete:
   - apiVersion: ps.percona.com/v1
     kind: PerconaServerMySQL
-    metadata:
-      name: scheduled-backup-incremental
+    name: scheduled-backup-incremental
 commands:
   - script: |-
       set -o errexit

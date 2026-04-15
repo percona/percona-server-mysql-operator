@@ -4,8 +4,4 @@ metadata:
   name: scheduled-backup-incremental
 spec:
   backup:
-    schedule:
-    - keep: 2
-      name: minio-full
-      schedule: '*/2 * * * *'
-      storageName: minio
+    schedule: []
