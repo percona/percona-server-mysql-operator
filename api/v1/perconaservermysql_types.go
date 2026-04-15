@@ -536,24 +536,33 @@ type BinlogServerSpec struct {
 	Storage BinlogServerStorageSpec `json:"storage,omitempty"`
 
 	// The number of seconds the MySQL client library will wait to establish a connection with a remote host
+	// +kubebuilder:default=30
 	ConnectTimeout int32 `json:"connectTimeout,omitempty"`
 	// The number of seconds the MySQL client library will wait to read data from a remote server.
+	// +kubebuilder:default=30
 	ReadTimeout int32 `json:"readTimeout,omitempty"`
 	// The number of seconds the MySQL client library will wait to write data to a remote server.
+	// +kubebuilder:default=30
 	WriteTimeout int32 `json:"writeTimeout,omitempty"`
 	// Specifies the server ID that the utility will be using when connecting to a remote MySQL server
 	ServerID int32 `json:"serverId,omitempty"`
 	// The number of seconds the utility will spend in disconnected mode between reconnection attempts.
+	// +kubebuilder:default=30
 	IdleTime int32 `json:"idleTime,omitempty"`
 	// SSLMode specifies the SSL mode for the connection to MySQL.
+	// +kubebuilder:default="verify_identity"
 	SSLMode string `json:"sslMode,omitempty"`
 	// VerifyChecksum enables checksum verification during replication.
+	// +kubebuilder:default=true
 	VerifyChecksum *bool `json:"verifyChecksum,omitempty"`
 	// RewriteFileSize specifies the maximum binlog file size for rewrite.
+	// +kubebuilder:default="128M"
 	RewriteFileSize string `json:"rewriteFileSize,omitempty"`
 	// CheckpointSize specifies the storage checkpoint size.
+	// +kubebuilder:default="16M"
 	CheckpointSize string `json:"checkpointSize,omitempty"`
 	// CheckpointInterval specifies the storage checkpoint interval.
+	// +kubebuilder:default="30s"
 	CheckpointInterval string `json:"checkpointInterval,omitempty"`
 
 	PodSpec `json:",inline"`

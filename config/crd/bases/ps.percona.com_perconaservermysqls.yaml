@@ -710,12 +710,15 @@ spec:
                               type: string
                             type: object
                           checkpointInterval:
+                            default: 30s
                             type: string
                           checkpointSize:
+                            default: 16M
                             type: string
                           configuration:
                             type: string
                           connectTimeout:
+                            default: 30
                             format: int32
                             type: integer
                           containerSecurityContext:
@@ -902,6 +905,7 @@ spec:
                             format: int64
                             type: integer
                           idleTime:
+                            default: 30
                             format: int32
                             type: integer
                           image:
@@ -1213,6 +1217,7 @@ spec:
                           priorityClassName:
                             type: string
                           readTimeout:
+                            default: 30
                             format: int32
                             type: integer
                           readinessProbe:
@@ -1330,6 +1335,7 @@ spec:
                                 type: object
                             type: object
                           rewriteFileSize:
+                            default: 128M
                             type: string
                           runtimeClassName:
                             type: string
@@ -1344,6 +1350,7 @@ spec:
                             format: int32
                             type: integer
                           sslMode:
+                            default: verify_identity
                             type: string
                           startupProbe:
                             properties:
@@ -1516,8 +1523,10 @@ spec:
                               type: object
                             type: array
                           verifyChecksum:
+                            default: true
                             type: boolean
                           writeTimeout:
+                            default: 30
                             format: int32
                             type: integer
                         type: object
