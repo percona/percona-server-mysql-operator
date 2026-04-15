@@ -74,6 +74,8 @@ spec:
           value: /var/lib/mysql/mysql.state
         - name: KEYRING_VAULT_PATH
           value: /etc/mysql/vault-keyring-secret/keyring_vault.cnf
+        - name: BACKUPS_ENABLED
+          value: "true"
         imagePullPolicy: Always
         livenessProbe:
           exec:

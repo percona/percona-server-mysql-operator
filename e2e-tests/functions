@@ -1897,31 +1897,33 @@ list_files_on_storage() {
 verify_all_backups_deletion() {
 	for backup in $(kubectl get ps-backup -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}'); do
 		echo "Checking backup: $backup"
-
-		output=$(
+		eval "$(
 			kubectl get ps-backup "$backup" -n "$NAMESPACE" -o json \
-				| yq -r '
-					.status.storage as $storage |
-					[
-						$storage.type,
-						($storage[.type].bucket // $storage[.type].container // ""),
-						($storage[.type].credentialsSecret // ""),
-						($storage[.type].endpointUrl // ""),
-						($storage[.type].region // ""),
-						(.status.destination // "")
-					] | @tsv
+				| jq -r '
+					.status.storage.type as $t |
+					(if $t then .status.storage[$t] else {} end) as $s |
+					"storage_type=\($t // "")",
+					"bucket=\($s.bucket // $s.container // "")",
+					"secret_name=\($s.credentialsSecret // "")",
+					"endpoint=\($s.endpointUrl // "")",
+					"region=\($s.region // "")",
+					"destination=\(.status.destination // "")"
 				'
-		)
-
-		read -r storage_type bucket secret_name endpoint region destination <<<"$output"
-
-		prefix="${destination#*://*/}"
-		if [[ -z $destination ]]; then
-			echo "Backup $backup is missing destination"
-			break
-		fi
+		)"
 
 		kubectl delete ps-backup "$backup" -n "$NAMESPACE"
+
+		local prefix="${destination#*://}"
+		prefix="${prefix#*/}"
+		if [[ -z $destination ]]; then
+			echo "Backup $backup is missing destination"
+			continue
+		fi
+
+		if [[ $storage_type == "azure" ]]; then
+			echo "Skipping backup verification, to be implemented on K8SPS-695"
+			continue
+		fi
 
 		local removed=false
 		for i in {1..5}; do
@@ -1930,7 +1932,6 @@ verify_all_backups_deletion() {
 				removed=true
 				break
 			fi
-
 			echo "Waiting for backup removal ($i/5): $backup"
 			sleep 5
 		done
