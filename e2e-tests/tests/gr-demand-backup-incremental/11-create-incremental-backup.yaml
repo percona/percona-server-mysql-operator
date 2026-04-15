@@ -11,4 +11,4 @@ spec:
   containerOptions:
     args:
       xtrabackup:
-        - "--compress=lz4"
+        - "--compress"

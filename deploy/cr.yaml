@@ -775,12 +775,12 @@ spec:
 #      - name: my-secret-1
 #      - name: my-secret-2
 #    schedule:
-#      - keep: 3
+#      - keep: 0
 #        name: sat-night-backup
 #        schedule: 0 0 * * 6
 #        storageName: s3-us-west
 #        type: full
-#      - keep: 5
+#      - keep: 0
 #        name: daily-backup
 #        schedule: 0 0 * * *
 #        storageName: s3

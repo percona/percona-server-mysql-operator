@@ -215,14 +215,36 @@ func (b *PerconaServerMySQLBackup) GetContainerOptions(storage *BackupStorageSpe
 	return nil
 }
 
-// IsCompressed reports whether the xtrabackup args contain --compress.
-func (b *PerconaServerMySQLBackup) IsCompressed(storage *BackupStorageSpec) bool {
+// IsCompressed reports whether compression is enabled via xtrabackup args or
+// via the [xtrabackup] section of the MySQL configuration.
+func (b *PerconaServerMySQLBackup) IsCompressed(storage *BackupStorageSpec, mysqlConfiguration string) bool {
 	opts := b.GetContainerOptions(storage)
-	if opts == nil {
-		return false
+	if opts != nil {
+		for _, arg := range opts.Args.Xtrabackup {
+			if arg == "--compress" || strings.HasPrefix(arg, "--compress=") {
+				return true
+			}
+		}
 	}
-	for _, arg := range opts.Args.Xtrabackup {
-		if arg == "--compress" || strings.HasPrefix(arg, "--compress=") {
+	return isCompressedInMySQLConfig(mysqlConfiguration)
+}
+
+func isCompressedInMySQLConfig(configuration string) bool {
+	inSection := false
+	for _, line := range strings.Split(configuration, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			inSection = strings.TrimSpace(strings.Trim(line, "[]")) == "xtrabackup"
+			continue
+		}
+		if !inSection {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if strings.TrimSpace(parts[0]) == "compress" && len(parts) == 2 && strings.TrimSpace(parts[1]) != "" {
 			return true
 		}
 	}
