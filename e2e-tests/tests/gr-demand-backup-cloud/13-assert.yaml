@@ -1,24 +1,25 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 30
+timeout: 500
 ---
-kind: ConfigMap
-apiVersion: v1
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
 metadata:
-  name: 13-delete-data-azure-0
-data:
-  data: ""
+  name: gr-demand-backup-cloud
+status:
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  router:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
 ---
-kind: ConfigMap
-apiVersion: v1
+kind: PerconaServerMySQLRestore
+apiVersion: ps.percona.com/v1
 metadata:
-  name: 13-delete-data-azure-1
-data:
-  data: ""
----
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: 13-delete-data-azure-2
-data:
-  data: ""
+  name: restore-of-gr-demand-backup-cloud-3
+status:
+  state: Succeeded
