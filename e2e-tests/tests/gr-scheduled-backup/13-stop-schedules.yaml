@@ -4,8 +4,4 @@ metadata:
   name: gr-scheduled-backup
 spec:
   backup:
-    schedule:
-    - keep: 3
-      name: azure
-      schedule: '*/2 * * * *'
-      storageName: azure-blob
+    schedule: []

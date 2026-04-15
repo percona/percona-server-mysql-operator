@@ -4,7 +4,7 @@ commands:
   - timeout: 150
     script: |
       storage_name=$(kubectl get ps scheduled-backup -n "$NAMESPACE" -o yaml \
-        | yq -r '.spec.backup.storages | keys | map(select(. != "minio")) | .[2] // ""')
+        | yq -r '.spec.backup.storages | keys | map(select(. != "minio")) | .[0] // ""')
 
       until kubectl get ps-backup -n ${NAMESPACE} -o json \
         | jq -e --arg storage "$storage_name" '

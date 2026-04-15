@@ -3,8 +3,7 @@ kind: TestStep
 delete:
   - apiVersion: ps.percona.com/v1
     kind: PerconaServerMySQL
-    metadata:
-      name: gr-scheduled-backup
+    name: gr-scheduled-backup
 commands:
   - script: |-
       set -o errexit
