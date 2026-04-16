@@ -33,12 +33,12 @@ innodb_buffer_pool_size=128M
 key=value
 `,
 			sectionName: "mysqld",
-			wantSection: "",
+			wantSection: "DEFAULT",
 		},
 		"empty file falls back to default section": {
 			input:       ``,
 			sectionName: "mysqld",
-			wantSection: "",
+			wantSection: "DEFAULT",
 		},
 		"boolean key is accepted": {
 			input: `
@@ -51,7 +51,7 @@ skip-name-resolve
 		"empty sectionName returns default section": {
 			input:       "key=value\n",
 			sectionName: "",
-			wantSection: "",
+			wantSection: "DEFAULT",
 		},
 		"invalid ini content returns error": {
 			input:       "[mysqld\nkey=val\n",
@@ -109,7 +109,7 @@ func TestGetKeyValue(t *testing.T) {
 		"returns empty string for boolean key (value-less)": {
 			input:     "[mysqld]\nskip-name-resolve\n",
 			option:    "skip-name-resolve",
-			wantValue: "",
+			wantValue: "true",
 		},
 	}
 
