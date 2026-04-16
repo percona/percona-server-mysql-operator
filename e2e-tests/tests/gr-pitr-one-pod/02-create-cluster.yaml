@@ -1,0 +1,36 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      get_cr \
+          | yq eval '.spec.mysql.clusterType="group-replication"' - \
+          | yq eval ".spec.mysql.size=3" - \
+          | yq eval ".spec.proxy.haproxy.enabled=true" - \
+          | yq eval ".spec.proxy.haproxy.size=3" - \
+          | yq eval ".spec.backup.backoffLimit=1" - \
+          | yq eval '.spec.backup.storages.minio.type="s3"' - \
+          | yq eval '.spec.backup.storages.minio.s3.bucket="operator-testing"' - \
+          | yq eval '.spec.backup.storages.minio.s3.credentialsSecret="minio-secret"' - \
+          | yq eval ".spec.backup.storages.minio.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
+          | yq eval '.spec.backup.storages.minio.s3.region="us-east-1"' - \
+          | yq eval '.spec.backup.storages.minio.containerOptions.env[0].name="VERIFY_TLS"' - \
+          | yq eval '.spec.backup.storages.minio.containerOptions.env[0].value="false"' - \
+          | yq eval '.spec.backup.pitr.enabled=true' - \
+          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.bucket="operator-testing"' - \
+          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.prefix="binlogs"' - \
+          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.credentialsSecret="minio-secret"' - \
+          | yq eval ".spec.backup.pitr.binlogServer.storage.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
+          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.region="us-east-1"' - \
+          | yq eval '.spec.backup.pitr.binlogServer.size=1' - \
+          | yq eval '.spec.backup.pitr.binlogServer.serverId=100' - \
+          | yq eval '.spec.backup.pitr.binlogServer.connectTimeout=10' - \
+          | yq eval '.spec.backup.pitr.binlogServer.readTimeout=10' - \
+          | yq eval '.spec.backup.pitr.binlogServer.writeTimeout=10' - \
+          | yq eval '.spec.backup.pitr.binlogServer.idleTime=3' - \
+          | kubectl -n "${NAMESPACE}" apply -f -

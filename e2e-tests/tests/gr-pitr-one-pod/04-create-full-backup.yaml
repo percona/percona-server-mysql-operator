@@ -1,0 +1,7 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: gr-pitr-one-pod-full
+spec:
+  clusterName: gr-pitr-one-pod
+  storageName: minio

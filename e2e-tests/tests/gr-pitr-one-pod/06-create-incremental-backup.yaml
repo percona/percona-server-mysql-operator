@@ -1,0 +1,8 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: gr-pitr-one-pod-incr
+spec:
+  clusterName: gr-pitr-one-pod
+  storageName: minio
+  type: incremental
