@@ -151,11 +151,11 @@ func TestRun(t *testing.T) {
 			expectedError: "create S3 client",
 		},
 		"S3 download error": {
-			entries:  defaultEntries,
-			pitrType: "gtid",
-			pitrGTID: "uuid:1",
-			db:       &fakeDB{getGTIDExecutedResult: "uuid:1-5"},
-			applyErr: errors.New("fetch binlog binlogs/binlog.000001: download failed"),
+			entries:       defaultEntries,
+			pitrType:      "gtid",
+			pitrGTID:      "uuid:1",
+			db:            &fakeDB{getGTIDExecutedResult: "uuid:1-5"},
+			applyErr:      errors.New("fetch binlog binlogs/binlog.000001: download failed"),
 			expectedError: "apply binlogs",
 		},
 		"unknown PITR type": {

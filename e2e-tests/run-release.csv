@@ -6,6 +6,7 @@ config
 config-router
 demand-backup
 gr-pitr-minio
+gr-pitr-one-pod
 async-pitr-minio
 demand-backup-cloud
 demand-backup-retry

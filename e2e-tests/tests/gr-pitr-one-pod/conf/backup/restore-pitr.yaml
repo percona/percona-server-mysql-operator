@@ -1,0 +1,19 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: <restore-name>
+spec:
+  clusterName: gr-pitr-one-pod-restore
+  backupSource:
+    destination: "<destination>"
+    storage:
+      type: s3
+      s3:
+        bucket: "operator-testing"
+        credentialsSecret: "minio-secret"
+        endpointUrl: "http://minio-service.<namespace>:9000"
+        region: "us-east-1"
+        prefix: ps/gr-pitr-one-pod
+  pitr:
+    type: date
+    date: "<pitr-date>"

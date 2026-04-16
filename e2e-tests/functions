@@ -745,7 +745,7 @@ get_cr() {
 		.spec.mysql.clusterType = ($test.spec.mysql.clusterType // "async") |
 		.metadata.name = "'"${cr_name}"'" |
 		.spec.initContainer.image = "'"$IMAGE"'" |
-		del(.spec.secretsName) |
+		.spec.secretsName = ($test.spec.secretsName // null) |
 		.spec.sslSecretName = "test-ssl" |
 		.spec.upgradeOptions.apply = "disabled" |
 		.spec.mysql.gracePeriod = 30 |
@@ -1744,6 +1744,7 @@ run_restore() {
 	local cluster_name=${3:-$(get_cluster_name)}
 	local prefix=${4:+-${4}}
 	local destination=$5
+	local pitr_date=$6
 
 	local platform=$(detect_k8s_platform)
 	local storage_alias=$(get_storage_alias $platform)
@@ -1767,6 +1768,7 @@ run_restore() {
 		.metadata.name = "'"$restore_name"'" |
 		.spec.backupName = "'"$backup_name"'" |
 		.spec.clusterName = "'"$cluster_name"'" |
+		(.. | select(tag == "!!str")) |= sub("<pitr-date>"; "'"$pitr_date"'") |
 		(.. | select(tag == "!!str")) |= sub("<destination>"; "'"$destination"'") |
 		(.. | select(tag == "!!str")) |= sub("<namespace>"; "'"${NAMESPACE}"'")
 	' "$restore_template" | kubectl apply -n "$NAMESPACE" -f -
@@ -1987,4 +1989,12 @@ count_backups_in_schedule() {
 	local prefix=$(printf '%s' "${NAMESPACE}-${cluster_name}" | sha1sum | awk '{print $1}' | head -c 5)
 	local bcp_count=$(kubectl get ps-backup -n ${NAMESPACE} -l percona.com/backup-ancestor=${prefix}-${schedule_name} -o yaml | yq '.items | length')
 	echo $bcp_count
+}
+
+remove_resource_finalizers() {
+	local resource=$1
+
+	for r in $(kubectl -n ${NAMESPACE} get $resource | grep -v NAME | awk '{print $1}'); do
+		kubectl -n ${NAMESPACE} patch $resource $r --type merge -p '{"metadata":{"finalizers":null}}'
+	done
 }

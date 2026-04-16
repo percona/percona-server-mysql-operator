@@ -23,15 +23,15 @@ commands:
           | yq eval '.spec.backup.storages.minio.containerOptions.env[0].name="VERIFY_TLS"' - \
           | yq eval '.spec.backup.storages.minio.containerOptions.env[0].value="false"' - \
           | yq eval '.spec.backup.pitr.enabled=true' - \
+          | yq eval '.spec.backup.pitr.binlogServer.size=1' - \
           | yq eval '.spec.backup.pitr.binlogServer.storage.s3.bucket="operator-testing"' - \
           | yq eval '.spec.backup.pitr.binlogServer.storage.s3.prefix="binlogs"' - \
           | yq eval '.spec.backup.pitr.binlogServer.storage.s3.credentialsSecret="minio-secret"' - \
           | yq eval ".spec.backup.pitr.binlogServer.storage.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
           | yq eval '.spec.backup.pitr.binlogServer.storage.s3.region="us-east-1"' - \
-          | yq eval '.spec.backup.pitr.binlogServer.size=1' - \
-          | yq eval '.spec.backup.pitr.binlogServer.serverId=100' - \
           | yq eval '.spec.backup.pitr.binlogServer.connectTimeout=10' - \
           | yq eval '.spec.backup.pitr.binlogServer.readTimeout=10' - \
           | yq eval '.spec.backup.pitr.binlogServer.writeTimeout=10' - \
           | yq eval '.spec.backup.pitr.binlogServer.idleTime=3' - \
+          | yq eval '.spec.backup.pitr.binlogServer.logLevel="debug"' - \
           | kubectl -n "${NAMESPACE}" apply -f -

@@ -151,6 +151,7 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 		"-P", "33062",
 	}
 	if os.Getenv("PITR_FORCE") == "true" {
+		log.Println("Running mysql with --force, SQL errors will be ignored!!!")
 		mysqlArgs = append([]string{"--force"}, mysqlArgs...)
 	}
 

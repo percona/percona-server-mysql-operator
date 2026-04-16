@@ -1104,21 +1104,6 @@ var _ = Describe("CR validations", Ordered, func() {
 			})
 		})
 
-		When("pitr is enabled but binlogServer serverId is 0", Ordered, func() {
-			cr, err := readDefaultCR("pitr-enabled-no-serverid", ns)
-			Expect(err).NotTo(HaveOccurred())
-
-			cr.Spec.Backup.PiTR.Enabled = true
-			cr.Spec.Backup.PiTR.BinlogServer = &psv1.BinlogServerSpec{}
-			cr.Spec.Backup.PiTR.BinlogServer.Image = "binlog-server-image"
-			cr.Spec.Backup.PiTR.BinlogServer.Size = 1
-			It("should fail with serverId required error", func() {
-				createErr := k8sClient.Create(ctx, cr)
-				Expect(createErr).To(HaveOccurred())
-				Expect(createErr.Error()).To(ContainSubstring("binlogServer.serverId is required when pitr is enabled"))
-			})
-		})
-
 		When("pitr is enabled with all required fields set", Ordered, func() {
 			cr, err := readDefaultCR("pitr-enabled-valid", ns)
 			Expect(err).NotTo(HaveOccurred())

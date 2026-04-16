@@ -136,10 +136,10 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 			ConnectTimeout:     30,
 			ReadTimeout:        30,
 			WriteTimeout:       30,
-			ServerID:           100,
 			IdleTime:           30,
 			CheckpointSize:     "16M",
 			CheckpointInterval: "30s",
+			LogLevel:           "info",
 		},
 	}
 	podSpecDefaults(&spec.PiTR.BinlogServer.PodSpec, ImageBinlogServer, corev1.ResourceRequirements{}, "", 30, nil, nil)
