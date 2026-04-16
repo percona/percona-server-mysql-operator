@@ -669,6 +669,7 @@ spec:
     pitr:
       enabled: false
 #      binlogServer:
+#        size: 1
 #        image: perconalab/percona-binlog-server:0.2.1
 #        imagePullPolicy: Always
 #        imagePullSecrets:

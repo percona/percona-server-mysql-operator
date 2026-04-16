@@ -14,5 +14,6 @@ commands:
 
       source ../../functions
 
+      remove_resource_finalizers ps-backup
       destroy_operator
     timeout: 180

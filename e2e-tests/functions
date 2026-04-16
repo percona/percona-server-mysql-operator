@@ -1990,3 +1990,11 @@ count_backups_in_schedule() {
 	local bcp_count=$(kubectl get ps-backup -n ${NAMESPACE} -l percona.com/backup-ancestor=${prefix}-${schedule_name} -o yaml | yq '.items | length')
 	echo $bcp_count
 }
+
+remove_resource_finalizers() {
+	local resource=$1
+
+	for r in $(kubectl -n ${NAMESPACE} get $resource | grep -v NAME | awk '{print $1}'); do
+		kubectl -n ${NAMESPACE} patch $resource $r --type merge -p '{"metadata":{"finalizers":null}}'
+	done
+}
