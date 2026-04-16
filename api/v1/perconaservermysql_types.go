@@ -141,7 +141,7 @@ func (t ClusterType) isValid() bool {
 	return false
 }
 
-// +kubebuilder:validation:XValidation:rule=”has(self.image) && self.image != ””,message=”mysql.image is required”
+// +kubebuilder:validation:XValidation:rule=”has(self.image) && self.image != ''”,message=”mysql.image is required”
 // +kubebuilder:validation:XValidation:rule="has(self.size) && self.size > 0",message="mysql.size must be greater than 0"
 type MySQLSpec struct {
 	// +kubebuilder:validation:Enum=group-replication;async
