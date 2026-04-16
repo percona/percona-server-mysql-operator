@@ -18,6 +18,7 @@ package ps
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -26,6 +27,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	gs "github.com/onsi/gomega/gstruct"
+	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
+	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -593,10 +596,8 @@ var _ = Describe("CR validations", Ordered, func() {
 			It("should fail the creation of cr", func() {
 				err := k8sClient.Create(ctx, cr)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("spec.mysql.size: Required value"))
-				Expect(err.Error()).To(ContainSubstring("spec.proxy.haproxy.size: Required value"))
-				Expect(err.Error()).To(ContainSubstring("spec.proxy.router.size"))
-				Expect(err.Error()).To(ContainSubstring("spec.orchestrator.size"))
+				Expect(err.Error()).To(ContainSubstring("mysql.image is required"))
+				Expect(err.Error()).To(ContainSubstring("mysql.size must be greater than 0"))
 			})
 		})
 		When("group-replication cluster", Ordered, func() {
@@ -614,6 +615,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr.Spec.Proxy.Router.Enabled = false
 
 			cr.Spec.MySQL.Image = "mysql-image"
+			cr.Spec.Toolkit.Image = "toolkit-image"
 			cr.Spec.Proxy.HAProxy.Image = "haproxy-image"
 			cr.Spec.Orchestrator.Image = "orc-image"
 
@@ -947,6 +949,189 @@ var _ = Describe("CR validations", Ordered, func() {
 				Expect(createErr.Error()).To(ContainSubstring("Invalid configuration: MySQL Router and HAProxy can't be enabled at the same time"))
 			})
 		})
+
+		When("component image/size is missing but component is disabled", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-comp-disabled", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
+			cr.Spec.Proxy.HAProxy.Enabled = true
+			cr.Spec.Proxy.Router.Enabled = false
+			cr.Spec.Proxy.Router.Image = ""
+			cr.Spec.Proxy.Router.Size = 0
+			cr.Spec.Orchestrator.Enabled = false
+			cr.Spec.Orchestrator.Image = ""
+			cr.Spec.Orchestrator.Size = 0
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("haproxy is enabled but image is missing", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-haproxy-no-image", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Proxy.HAProxy.Enabled = true
+			cr.Spec.Proxy.HAProxy.Image = ""
+			It("should fail with image required error", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("haproxy.image is required when haproxy is enabled"))
+			})
+		})
+
+		When("haproxy is enabled but size is 0", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-haproxy-no-size", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Proxy.HAProxy.Enabled = true
+			cr.Spec.Proxy.HAProxy.Size = 0
+			It("should fail with size required error", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("haproxy.size must be greater than 0 when haproxy is enabled"))
+			})
+		})
+
+		When("orchestrator is enabled but image is missing", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-orc-no-image", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.Orchestrator.Image = ""
+			It("should fail with image required error", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("orchestrator.image is required when orchestrator is enabled"))
+			})
+		})
+
+		When("router is enabled but image is missing", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-router-no-image", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeGR
+			cr.Spec.Proxy.Router.Enabled = true
+			cr.Spec.Proxy.Router.Image = ""
+			It("should fail with image required error", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("router.image is required when router is enabled"))
+			})
+		})
+	})
+
+	Context("PITR validation rules", Ordered, func() {
+		ns := "validate-pitr"
+
+		namespace := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: ns,
+			},
+		}
+
+		BeforeAll(func() {
+			By("Creating the Namespace to perform the tests")
+			err := k8sClient.Create(ctx, namespace)
+			Expect(err).To(Not(HaveOccurred()))
+		})
+
+		AfterAll(func() {
+			By("Deleting the Namespace")
+			_ = k8sClient.Delete(ctx, namespace)
+		})
+
+		When("pitr is disabled, no binlogServer required", Ordered, func() {
+			cr, err := readDefaultCR("pitr-disabled-no-binlog", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Backup.PiTR.Enabled = false
+			It("should create successfully without any binlogServer fields", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("pitr is disabled, binlogServer provided without image and size", Ordered, func() {
+			cr, err := readDefaultCR("pitr-disabled-empty-binlog", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Backup.PiTR.Enabled = false
+			cr.Spec.Backup.PiTR.BinlogServer = &psv1.BinlogServerSpec{}
+			It("should create successfully since pitr is disabled", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("pitr is enabled but binlogServer is missing", Ordered, func() {
+			cr, err := readDefaultCR("pitr-enabled-no-binlog", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Backup.PiTR.Enabled = true
+			cr.Spec.Backup.PiTR.BinlogServer = nil
+			It("should fail with binlogServer required error", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("binlogServer is required when pitr is enabled"))
+			})
+		})
+
+		When("pitr is enabled but binlogServer image is missing", Ordered, func() {
+			cr, err := readDefaultCR("pitr-enabled-no-image", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Backup.PiTR.Enabled = true
+			cr.Spec.Backup.PiTR.BinlogServer = &psv1.BinlogServerSpec{}
+			cr.Spec.Backup.PiTR.BinlogServer.Size = 1
+			It("should fail with image required error", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("binlogServer.image is required when pitr is enabled"))
+			})
+		})
+
+		When("pitr is enabled but binlogServer size is 0", Ordered, func() {
+			cr, err := readDefaultCR("pitr-enabled-no-size", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Backup.PiTR.Enabled = true
+			cr.Spec.Backup.PiTR.BinlogServer = &psv1.BinlogServerSpec{}
+			cr.Spec.Backup.PiTR.BinlogServer.Image = "binlog-server-image"
+			It("should fail with size required error", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("binlogServer.size is required when pitr is enabled"))
+			})
+		})
+
+		When("pitr is enabled but binlogServer serverId is 0", Ordered, func() {
+			cr, err := readDefaultCR("pitr-enabled-no-serverid", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Backup.PiTR.Enabled = true
+			cr.Spec.Backup.PiTR.BinlogServer = &psv1.BinlogServerSpec{}
+			cr.Spec.Backup.PiTR.BinlogServer.Image = "binlog-server-image"
+			cr.Spec.Backup.PiTR.BinlogServer.Size = 1
+			It("should fail with serverId required error", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("binlogServer.serverId is required when pitr is enabled"))
+			})
+		})
+
+		When("pitr is enabled with all required fields set", Ordered, func() {
+			cr, err := readDefaultCR("pitr-enabled-valid", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Backup.PiTR.Enabled = true
+			cr.Spec.Backup.PiTR.BinlogServer = &psv1.BinlogServerSpec{}
+			cr.Spec.Backup.PiTR.BinlogServer.Image = "binlog-server-image"
+			cr.Spec.Backup.PiTR.BinlogServer.Size = 1
+			cr.Spec.Backup.PiTR.BinlogServer.ServerID = 100
+			It("should create successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
 	})
 })
 
@@ -989,7 +1174,7 @@ var _ = Describe("Reconcile Binlog Server", Ordered, func() {
 				S3: &psv1.BackupStorageS3Spec{
 					Bucket:            "s3-test-bucket",
 					Region:            "us-west-1",
-					EndpointURL:       "s3.amazonaws.com",
+					EndpointURL:       "https://s3.amazonaws.com",
 					CredentialsSecret: "s3-test-credentials",
 				},
 			},
@@ -1019,6 +1204,14 @@ var _ = Describe("Reconcile Binlog Server", Ordered, func() {
 
 			_, err = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: crNamespacedName})
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should set MySQL status as ready", func() {
+			fetchedCR := cr.DeepCopy()
+			Expect(k8sClient.Get(ctx, crNamespacedName, fetchedCR)).Should(Succeed())
+			fetchedCR.Status.MySQL.Ready = 1
+			fetchedCR.Status.Host = mysql.FQDN(fetchedCR, 0)
+			Expect(k8sClient.Status().Update(ctx, fetchedCR)).Should(Succeed())
 		})
 
 		It("should create secret for Binlog Server configuration", func() {
@@ -1924,5 +2117,124 @@ var _ = Describe("Global labels and annotations", Ordered, func() {
 				}
 			}
 		})
+	})
+})
+
+var _ = Describe("BinlogServer", Ordered, func() {
+	ctx := context.Background()
+
+	const crName = "pitr-test"
+	const ns = crName
+	crNamespacedName := types.NamespacedName{Name: crName, Namespace: ns}
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ns,
+		},
+	}
+
+	BeforeAll(func() {
+		By("Creating the Namespace")
+		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+	})
+
+	AfterAll(func() {
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	cr, err := readDefaultCR(crName, ns)
+	It("should read default cr.yaml", func() {
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should configure PiTR and create the CR", func() {
+		cr.Spec.Backup.PiTR.Enabled = true
+		cr.Spec.Backup.PiTR.BinlogServer = &psv1.BinlogServerSpec{
+			Storage: psv1.BinlogServerStorageSpec{
+				S3: &psv1.BackupStorageS3Spec{
+					Bucket:            "test-bucket",
+					Region:            "us-east-1",
+					EndpointURL:       "s3://s3.amazonaws.com",
+					CredentialsSecret: "s3-secret",
+				},
+			},
+			ServerID: 1,
+			PodSpec: psv1.PodSpec{
+				Size: 1,
+				ContainerSpec: psv1.ContainerSpec{
+					Image: "perconalab/percona-binlog-server:0.2.0",
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+	})
+
+	It("should create the S3 credentials secret", func() {
+		s3Secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "s3-secret",
+				Namespace: ns,
+			},
+			Data: map[string][]byte{
+				secret.CredentialsAWSAccessKey: []byte("access-key"),
+				secret.CredentialsAWSSecretKey: []byte("secret-key"),
+			},
+		}
+		Expect(k8sClient.Create(ctx, s3Secret)).To(Succeed())
+	})
+
+	It("should create the internal secret with the replication user password", func() {
+		internalSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      cr.InternalSecretName(),
+				Namespace: ns,
+			},
+			Data: map[string][]byte{
+				string(psv1.UserReplication): []byte("repl-password"),
+			},
+		}
+		Expect(k8sClient.Create(ctx, internalSecret)).To(Succeed())
+	})
+
+	It("should set the binlog server connection host to the primary service", func() {
+		Expect(k8sClient.Get(ctx, crNamespacedName, cr)).To(Succeed())
+
+		Expect(reconciler().reconcileBinlogServer(ctx, cr)).To(Succeed())
+
+		configSecret := &corev1.Secret{}
+		Eventually(func() bool {
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      binlogserver.ConfigSecretName(cr),
+				Namespace: ns,
+			}, configSecret)
+			return err == nil
+		}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+		var config binlogserver.Configuration
+		Expect(json.Unmarshal(configSecret.Data[binlogserver.ConfigKey], &config)).To(Succeed())
+
+		Expect(config.Connection.Host).To(Equal(fmt.Sprintf("%s.%s", mysql.PrimaryServiceName(cr), ns)))
+	})
+
+	It("should create the binlog server StatefulSet once MySQL is ready", func() {
+		Expect(k8sClient.Get(ctx, crNamespacedName, cr)).To(Succeed())
+
+		cr.Status.MySQL.Ready = 1
+		cr.Status.Host = "pitr-test-haproxy.pitr-test"
+		Expect(k8sClient.Status().Update(ctx, cr)).To(Succeed())
+
+		Expect(k8sClient.Get(ctx, crNamespacedName, cr)).To(Succeed())
+		Expect(reconciler().reconcileBinlogServer(ctx, cr)).To(Succeed())
+
+		sts := &appsv1.StatefulSet{}
+		Eventually(func() bool {
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      binlogserver.Name(cr),
+				Namespace: ns,
+			}, sts)
+			return err == nil
+		}, time.Second*15, time.Millisecond*250).Should(BeTrue())
+
+		Expect(sts.Spec.Replicas).To(gs.PointTo(BeEquivalentTo(1)))
 	})
 })

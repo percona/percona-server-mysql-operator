@@ -728,7 +728,8 @@ get_cr() {
 	local image_toolkit=${6:-${IMAGE_TOOLKIT}}
 	local image_haproxy=${7:-${IMAGE_HAPROXY}}
 	local image_pmm_client=${8:-${IMAGE_PMM_CLIENT}}
-	local cr_file=${9:-${DEPLOY_DIR}/cr.yaml}
+	local image_binlog_server=${9:-${IMAGE_BINLOG_SERVER}}
+	local cr_file=${10:-${DEPLOY_DIR}/cr.yaml}
 
 	local platform="$(detect_k8s_platform)"
 	local cr_name="${test_name}${name_suffix:+-$name_suffix}"
@@ -756,6 +757,7 @@ get_cr() {
 		.spec.toolkit.image = "'"$image_toolkit"'" |
 		.spec.proxy.haproxy.image = "'"$image_haproxy"'" |
 		.spec.pmm.image = "'"$image_pmm_client"'" |
+		.spec.backup.pitr.binlogServer.image="'"${image_binlog_server}"'" |
 		(.. | select(tag == "!!str")) |= sub("<namespace>"; "'"${NAMESPACE}"'")
 	' "${crs[@]}" \
 		| if [[ $platform == "minikube" ]]; then
@@ -1657,6 +1659,7 @@ get_cr_with_latest_versions_in_vs() {
 		${image_toolkit} \
 		${image_haproxy} \
 		${image_pmm_client} \
+		${image_binlog_server} \
 		${TEMP_DIR}/cr.yaml
 }
 
@@ -1980,7 +1983,7 @@ verify_incremental_backup_delta_files() {
 count_backups_in_schedule() {
 	local schedule_name="$1"
 	local cluster_name="$2"
-	
+
 	local prefix=$(printf '%s' "${NAMESPACE}-${cluster_name}" | sha1sum | awk '{print $1}' | head -c 5)
 	local bcp_count=$(kubectl get ps-backup -n ${NAMESPACE} -l percona.com/backup-ancestor=${prefix}-${schedule_name} -o yaml | yq '.items | length')
 	echo $bcp_count
