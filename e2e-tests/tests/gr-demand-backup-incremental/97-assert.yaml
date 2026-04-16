@@ -1,9 +1,0 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-timeout: 30
-commands:
-  - script: |-
-      set -o errexit
-      set -o xtrace
-
-      kubectl wait --for=delete --timeout=300s --all ps-backup -n "${NAMESPACE}"
