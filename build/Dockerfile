@@ -50,6 +50,11 @@ RUN GOOS=$GOOS GOARCH=$TARGETARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAG
     -o build/_output/bin/mysql-state-monitor \
     cmd/mysql-state-monitor/main.go \
     && cp -r build/_output/bin/mysql-state-monitor /usr/local/bin/mysql-state-monitor
+RUN GOOS=$GOOS GOARCH=$TARGETARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
+    go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
+    -o build/_output/bin/pitr \
+    ./cmd/pitr/ \
+    && cp -r build/_output/bin/pitr /usr/local/bin/pitr
 
 FROM redhat/ubi9-minimal AS ubi9
 RUN microdnf -y update && microdnf clean all
@@ -91,5 +96,7 @@ COPY build/haproxy.cfg /opt/percona-server-mysql-operator/haproxy.cfg
 COPY build/haproxy-global.cfg /opt/percona-server-mysql-operator/haproxy-global.cfg
 COPY build/pmm-prerun.sh /opt/percona-server-mysql-operator/pmm-prerun.sh
 COPY build/binlog-server-entrypoint.sh /opt/percona-server-mysql-operator/binlog-server-entrypoint.sh
+COPY --from=go_builder /usr/local/bin/pitr /opt/percona-server-mysql-operator/pitr
+COPY build/run-pitr-restore.sh /opt/percona-server-mysql-operator/run-pitr-restore.sh
 
 USER 2
