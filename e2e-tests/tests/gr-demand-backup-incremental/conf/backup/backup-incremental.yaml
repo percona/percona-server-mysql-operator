@@ -8,7 +8,3 @@ spec:
   clusterName: gr-demand-backup-incremental
   storageName: <storage-name>
   type: incremental
-  containerOptions:
-    args:
-      xtrabackup:
-        - "--compress=lz4"
