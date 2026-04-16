@@ -6,8 +6,3 @@ kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
 status:
   state: Running
----
-kind: PerconaServerMySQLBackup
-apiVersion: ps.percona.com/v1
-status:
-  state: Succeeded

@@ -1,0 +1,10 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 180
+    script: |-
+      set -o errexit
+
+      source ../../functions
+
+      verify_all_backups_deletion

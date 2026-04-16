@@ -1,11 +1,11 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
+timeout: 10
 commands:
   - script: |-
       set -o errexit
       set -o xtrace
 
       source ../../functions
-      kubectl delete ps-backup --all -n "${NAMESPACE}"
-      sleep 60
-    timeout: 180
+
+      get_cr | kubectl -n "${NAMESPACE}" apply -f -
