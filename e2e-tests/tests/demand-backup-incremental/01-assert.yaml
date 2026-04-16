@@ -1,26 +1,60 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 150
+timeout: 600
 ---
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
+kind: StatefulSet
+apiVersion: apps/v1
 metadata:
-  name: perconaservermysqls.ps.percona.com
-spec:
-  group: ps.percona.com
-  names:
-    kind: PerconaServerMySQL
-    listKind: PerconaServerMySQLList
-    plural: perconaservermysqls
-    shortNames:
-    - ps
-    singular: perconaservermysql
-  scope: Namespaced
+  name: demand-backup-incremental-mysql
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
 ---
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
+kind: StatefulSet
+apiVersion: apps/v1
 metadata:
-  name: check-operator-deploy-status
-timeout: 120
-commands:
-  - script: kubectl assert exist-enhanced deployment percona-server-mysql-operator -n ${OPERATOR_NS:-$NAMESPACE} --field-selector status.readyReplicas=1
+  name: demand-backup-incremental-orc
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: demand-backup-incremental-haproxy
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: demand-backup-incremental
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+status:
+  haproxy:
+    ready: 3
+    size: 3
+    state: ready
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  orchestrator:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
