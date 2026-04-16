@@ -8,26 +8,10 @@ commands:
 
       source ../../functions
 
-      backup_dest=$(kubectl -n "${NAMESPACE}" get ps-backup gr-pitr-one-pod-incr -o jsonpath='{.status.destination}')
-      PITR_DATE=$(kubectl get configmap -n "${NAMESPACE}" pitr-date -o jsonpath='{.data.date}')
+      backup_name="gr-pitr-one-pod-incr"
+      restore_name="gr-pitr-one-pod-restore"
+      cluster_name="gr-pitr-one-pod-restore"
+      destination=$(kubectl -n "${NAMESPACE}" get ps-backup "${backup_name}" -o jsonpath='{.status.destination}')
+      pitr_date=$(kubectl get configmap -n "${NAMESPACE}" pitr-date -o jsonpath='{.data.date}')
 
-      cat <<EOF | kubectl apply -n "${NAMESPACE}" -f -
-      apiVersion: ps.percona.com/v1
-      kind: PerconaServerMySQLRestore
-      metadata:
-        name: gr-pitr-one-pod-restore
-      spec:
-        clusterName: gr-pitr-one-pod-restore
-        backupSource:
-          destination: "${backup_dest}"
-          storage:
-            type: s3
-            s3:
-              bucket: "operator-testing"
-              credentialsSecret: "minio-secret"
-              endpointUrl: "http://minio-service.${NAMESPACE}:9000"
-              region: "us-east-1"
-        pitr:
-          type: date
-          date: "${PITR_DATE}"
-      EOF
+      run_restore "$restore_name" "" "$cluster_name" "pitr" "$destination" "$pitr_date"

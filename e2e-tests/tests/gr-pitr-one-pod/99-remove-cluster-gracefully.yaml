@@ -3,12 +3,10 @@ kind: TestStep
 delete:
   - apiVersion: ps.percona.com/v1
     kind: PerconaServerMySQL
-    metadata:
-      name: gr-pitr-one-pod
+    name: gr-pitr-one-pod
   - apiVersion: ps.percona.com/v1
     kind: PerconaServerMySQL
-    metadata:
-      name: gr-pitr-one-pod-restore
+    name: gr-pitr-one-pod-restore
 commands:
   - script: |-
       set -o errexit

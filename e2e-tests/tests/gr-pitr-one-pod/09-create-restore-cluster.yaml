@@ -8,32 +8,13 @@ commands:
 
       source ../../functions
 
+      get_binlogs_prefix() {
+        echo $(kubectl -n "$NAMESPACE" get configmap binlogs-prefix -o jsonpath='{.data.prefix}')
+      }
+
       get_cr "restore" \
-          | yq eval ".spec.unsafeFlags.mysqlSize=true" - \
-          | yq eval ".spec.unsafeFlags.proxySize=true" - \
-          | yq eval ".spec.mysql.size=1" - \
-          | yq eval '.spec.mysql.clusterType="group-replication"' - \
-          | yq eval '.spec.secretsName="gr-pitr-one-pod-secrets"' - \
-          | yq eval ".spec.proxy.haproxy.enabled=true" - \
-          | yq eval ".spec.proxy.haproxy.size=1" - \
-          | yq eval ".spec.backup.backoffLimit=1" - \
-          | yq eval '.spec.backup.storages.minio.type="s3"' - \
-          | yq eval '.spec.backup.storages.minio.s3.bucket="operator-testing"' - \
-          | yq eval '.spec.backup.storages.minio.s3.credentialsSecret="minio-secret"' - \
-          | yq eval ".spec.backup.storages.minio.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
-          | yq eval '.spec.backup.storages.minio.s3.region="us-east-1"' - \
-          | yq eval '.spec.backup.storages.minio.containerOptions.env[0].name="VERIFY_TLS"' - \
-          | yq eval '.spec.backup.storages.minio.containerOptions.env[0].value="false"' - \
-          | yq eval '.spec.backup.pitr.enabled=true' - \
-          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.bucket="operator-testing"' - \
-          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.prefix="binlogs"' - \
-          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.credentialsSecret="minio-secret"' - \
-          | yq eval ".spec.backup.pitr.binlogServer.storage.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
-          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.region="us-east-1"' - \
-          | yq eval '.spec.backup.pitr.binlogServer.size=1' - \
-          | yq eval '.spec.backup.pitr.binlogServer.serverId=200' - \
-          | yq eval '.spec.backup.pitr.binlogServer.connectTimeout=10' - \
-          | yq eval '.spec.backup.pitr.binlogServer.readTimeout=10' - \
-          | yq eval '.spec.backup.pitr.binlogServer.writeTimeout=10' - \
-          | yq eval '.spec.backup.pitr.binlogServer.idleTime=3' - \
-          | kubectl -n "${NAMESPACE}" apply -f -
+        |  yq eval '
+            (.. | select(tag == "!!str")) |= sub("<prefix>"; "'"$(get_binlogs_prefix)"'")
+          ' - \
+        | kubectl -n "$NAMESPACE" apply -f -
+
