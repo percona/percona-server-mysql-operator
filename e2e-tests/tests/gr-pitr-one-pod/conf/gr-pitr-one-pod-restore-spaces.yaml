@@ -1,0 +1,52 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-pitr-one-pod-restore 
+spec:
+  secretsName: gr-pitr-one-pod-secrets
+
+  unsafeFlags:
+    mysqlSize: true
+    proxySize: true
+
+  mysql:
+    clusterType: group-replication
+    size: 1
+
+  proxy:
+    haproxy:
+      enabled: true
+      size: 1
+
+  backup:
+    backoffLimit: 1
+    storages:
+      spaces:
+        type: s3
+        s3:
+          bucket: "operator-testing"
+          credentialsSecret: do-spaces-secret
+          endpointUrl: https://ams3.digitaloceanspaces.com
+          region: ams3
+          prefix: ps/gr-pitr-one-pod
+        containerOptions:
+          env:
+            - name: VERIFY_TLS
+              value: "true"
+
+    pitr:
+      enabled: true
+      binlogServer:
+        size: 1
+        serverId: 200
+        connectTimeout: 10
+        readTimeout: 10
+        writeTimeout: 10
+        idleTime: 3
+        storage:
+          s3:
+            bucket: "operator-testing"
+            credentialsSecret: do-spaces-secret
+            endpointUrl: https://ams3.digitaloceanspaces.com
+            region: ams3
+            prefix: ps/gr-pitr-one-pod/<prefix>/binlogs

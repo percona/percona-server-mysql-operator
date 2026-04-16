@@ -11,5 +11,12 @@ commands:
       apply_s3_storage_secrets
       deploy_operator
       deploy_client
-      deploy_minio
+      if has_minio_storage; then
+        deploy_minio
+      fi
+
+      # Configmap used to define binlogs random prefix to avoid tests conflict
+      kubectl create configmap binlogs-prefix \
+        --from-literal=prefix=${RANDOM} \
+        -n ${NAMESPACE}
     timeout: 300
