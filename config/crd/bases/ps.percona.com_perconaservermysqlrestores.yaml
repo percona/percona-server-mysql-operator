@@ -1192,13 +1192,6 @@ spec:
                 required:
                 - type
                 type: object
-                x-kubernetes-validations:
-                - message: When type is 'date', 'date' must be set and 'gtid' must
-                    not be set
-                  rule: self.type != 'date' || (self.date != '' && self.gtid == '')
-                - message: When type is 'gtid', 'gtid' must be set and 'date' must
-                    not be set
-                  rule: self.type != 'gtid' || (self.gtid != '' && self.date == '')
             required:
             - clusterName
             type: object

@@ -34,8 +34,6 @@ type PerconaServerMySQLRestoreSpec struct {
 	PITR             *RestorePITRSpec                `json:"pitr,omitempty"`
 }
 
-// +kubebuilder:validation:XValidation:rule="self.type != 'date' || (self.date != '' && self.gtid == '')",message="When type is 'date', 'date' must be set and 'gtid' must not be set"
-// +kubebuilder:validation:XValidation:rule="self.type != 'gtid' || (self.gtid != '' && self.date == '')",message="When type is 'gtid', 'gtid' must be set and 'date' must not be set"
 type RestorePITRSpec struct {
 	// +kubebuilder:validation:Enum=gtid;date
 	Type  PITRType `json:"type"`
