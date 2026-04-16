@@ -199,6 +199,8 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 	log.Info("Backup finished successfully", "destination", backupConf.Destination, "storage", backupConf.Type)
 }
 
+const customMyCnfPath = "/etc/mysql/config/my-config.cnf"
+
 func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
 	args := []string{
 		"--backup",
@@ -209,6 +211,9 @@ func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
 		"--databases-exclude=lost+found",
 		fmt.Sprintf("--user=%s", user),
 		fmt.Sprintf("--password=%s", pass),
+	}
+	if _, err := os.Stat(customMyCnfPath); err == nil {
+		args = append([]string{"--defaults-extra-file=" + customMyCnfPath}, args...)
 	}
 	if conf != nil && conf.ContainerOptions != nil {
 		args = append(args, conf.ContainerOptions.Args.Xtrabackup...)
