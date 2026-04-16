@@ -1,7 +1,21 @@
-apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQL
-metadata:
-  name: scheduled-backup
-spec:
-  backup:
-    schedule: []
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 30
+    script: |   
+      kubectl get ps scheduled-backup -n ${NAMESPACE} -o json \
+        | yq '
+          (
+            .spec.backup.storages
+            | keys
+            | map(select(. != "minio"))
+            | .[1] // ""
+          ) as $storage
+          | .spec.backup.schedule = [{
+              "keep": 3,
+              "name": "storage-2",
+              "schedule": "",
+              "storageName": $storage
+            }]
+        ' \
+        | kubectl apply -f -

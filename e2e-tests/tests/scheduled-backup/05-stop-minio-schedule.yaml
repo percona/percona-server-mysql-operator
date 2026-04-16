@@ -4,5 +4,8 @@ metadata:
   name: scheduled-backup
 spec:
   backup:
-    schedule: []
-
+    schedule:
+    - keep: 3
+      name: minio
+      schedule: ''
+      storageName: minio
