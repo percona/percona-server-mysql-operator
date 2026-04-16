@@ -25,6 +25,7 @@ commands:
           | yq eval '.metadata.name = "gr-pitr-minio-restore-post-failover"' - \
           | yq eval ".spec.clusterName = \"${cluster_name}\"" - \
           | yq eval '.spec.backupName = "gr-pitr-minio-backup-2"' - \
+          | yq eval '.spec.pitr.force = true' - \
           | yq eval '.spec.pitr.type = "date"' - \
           | yq eval ".spec.pitr.date = \"${PITR_DATE_POST}\"" - \
           | kubectl apply -n "${NAMESPACE}" -f -
