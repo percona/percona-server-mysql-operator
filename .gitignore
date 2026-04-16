@@ -94,3 +94,8 @@ kind-logs-*/
 
 # Other
 gke_gcloud_auth_plugin_cache
+
+projects/
+installers/olm/operator_*.yaml
+installers/olm/bundles
+installers/olm/bundles/tools
