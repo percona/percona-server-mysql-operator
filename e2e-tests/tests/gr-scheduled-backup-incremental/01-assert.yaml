@@ -1,26 +1,54 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 150
+timeout: 420
 ---
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
+kind: StatefulSet
+apiVersion: apps/v1
 metadata:
-  name: perconaservermysqls.ps.percona.com
+  name: gr-scheduled-backup-incremental-mysql
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: gr-scheduled-backup-incremental-router
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  updatedReplicas: 3
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-scheduled-backup-incremental
 spec:
-  group: ps.percona.com
-  names:
-    kind: PerconaServerMySQL
-    listKind: PerconaServerMySQLList
-    plural: perconaservermysqls
-    shortNames:
-    - ps
-    singular: perconaservermysql
-  scope: Namespaced
----
-apiVersion: kuttl.dev/v1beta1
-kind: TestAssert
-metadata:
-  name: check-operator-deploy-status
-timeout: 120
-commands:
-  - script: kubectl assert exist-enhanced deployment percona-server-mysql-operator -n ${OPERATOR_NS:-$NAMESPACE} --field-selector status.readyReplicas=1
+  backup:
+    backoffLimit: 3
+status:
+  conditions:
+  - reason: Initializing
+    status: "False"
+    type: Initializing
+  - reason: Ready
+    status: "True"
+    type: Ready
+  - message: InnoDB cluster successfully bootstrapped with 3 nodes
+    reason: InnoDBClusterBootstrapped
+    status: "True"
+    type: InnoDBClusterBootstrapped
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  router:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready

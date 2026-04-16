@@ -1,24 +1,48 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 300
-resourceRefs:
-- apiVersion: ps.percona.com/v1
-  kind: PerconaServerMySQLBackup
-  name: base-backup-compressed
-  ref: base
-- apiVersion: ps.percona.com/v1
-  kind: PerconaServerMySQLBackup
-  name: incr-compressed-1
-  ref: incr
-assertAll:
-- celExpr: incr.status.state == "Succeeded"
-  message: "Compressed incremental backup should be succeeded"
-
-- celExpr: incr.status.type == "incremental"
-  message: "Compressed incremental backup should have a type of incremental"
-
-- celExpr: incr.status.compressed == true
-  message: "Compressed incremental backup should have compressed=true in status"
-
-- celExpr: base.status.destination.contains(incr.metadata.annotations["percona.com/base-backup-name"])
-  message: "Incremental backup annotation should reference the correct base backup"
+timeout: 30
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 32-read-data-0
+data:
+  data: |-
+    100500
+    100501
+    100502
+    100503
+    100504
+    100505
+    100506
+    100507
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 32-read-data-1
+data:
+  data: |-
+    100500
+    100501
+    100502
+    100503
+    100504
+    100505
+    100506
+    100507
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 32-read-data-2
+data:
+  data: |-
+    100500
+    100501
+    100502
+    100503
+    100504
+    100505
+    100506
+    100507
