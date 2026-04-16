@@ -21,7 +21,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/percona/percona-server-mysql-operator/pkg/util"
+	"github.com/percona/percona-server-mysql-operator/pkg/config"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -232,11 +232,11 @@ func (b *PerconaServerMySQLBackup) IsCompressed(storage *BackupStorageSpec, mysq
 }
 
 func isCompressedInMySQLConfig(configuration string) bool {
-	section, err := util.ParseSection(io.NopCloser(strings.NewReader(configuration)), "xtrabackup")
+	section, err := config.ParseSection(io.NopCloser(strings.NewReader(configuration)), "xtrabackup")
 	if err != nil {
 		return false
 	}
-	val, err := util.GetKeyValue(section, "compress")
+	val, err := config.GetKeyValue(section, "compress")
 	if err != nil || val == "" {
 		return false
 	}

@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-ini/ini"
-	"github.com/percona/percona-server-mysql-operator/pkg/util"
+	"github.com/percona/percona-server-mysql-operator/pkg/config"
 	"github.com/pkg/errors"
 )
 
@@ -30,7 +30,7 @@ func (o *createClusterOpts) String() string {
 func setMultiPrimary(opts *createClusterOpts, myCnf *ini.Section) error {
 	option := "group_replication_single_primary_mode"
 
-	value, err := util.GetKeyValue(myCnf, option)
+	value, err := config.GetKeyValue(myCnf, option)
 	if err != nil {
 		return errors.Wrapf(err, "get %s", option)
 	}
@@ -49,7 +49,7 @@ func setMultiPrimary(opts *createClusterOpts, myCnf *ini.Section) error {
 func setPaxosSingleLeader(opts *createClusterOpts, myCnf *ini.Section) error {
 	option := "group_replication_paxos_single_leader"
 
-	value, err := util.GetKeyValue(myCnf, option)
+	value, err := config.GetKeyValue(myCnf, option)
 	if err != nil {
 		return errors.Wrapf(err, "get %s", option)
 	}
@@ -67,7 +67,7 @@ func setPaxosSingleLeader(opts *createClusterOpts, myCnf *ini.Section) error {
 func setCommunicationStack(opts *createClusterOpts, myCnf *ini.Section) error {
 	option := "group_replication_communication_stack"
 
-	value, err := util.GetKeyValue(myCnf, option)
+	value, err := config.GetKeyValue(myCnf, option)
 	if err != nil {
 		return errors.Wrapf(err, "get %s", option)
 	}

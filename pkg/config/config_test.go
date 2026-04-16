@@ -1,4 +1,4 @@
-package util
+package config
 
 import (
 	"io"
@@ -9,14 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type nopCloser struct {
-	io.Reader
-}
-
-func (nopCloser) Close() error { return nil }
-
 func newReader(s string) io.ReadCloser {
-	return nopCloser{strings.NewReader(s)}
+	return io.NopCloser(strings.NewReader(s))
 }
 
 func TestParseSection(t *testing.T) {
