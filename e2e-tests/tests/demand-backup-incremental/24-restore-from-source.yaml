@@ -1,0 +1,15 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      backup_name=incr-3
+      restore_name="restore-from-source"
+      cluster_name=$(get_cluster_name)
+      destination=$(kubectl -n "${NAMESPACE}" get ps-backup "${backup_name}" -o jsonpath='{.status.destination}')
+
+      run_restore $restore_name "" $cluster_name "backup-source" $destination

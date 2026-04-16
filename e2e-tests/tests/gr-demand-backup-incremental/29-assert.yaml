@@ -5,13 +5,20 @@ resourceRefs:
 - apiVersion: ps.percona.com/v1
   kind: PerconaServerMySQLBackup
   name: base-backup-compressed
-  ref: bcp
+  ref: base
+- apiVersion: ps.percona.com/v1
+  kind: PerconaServerMySQLBackup
+  name: incr-compressed-1
+  ref: incr
 assertAll:
-- celExpr: bcp.status.state == "Succeeded"
-  message: "Compressed base backup should be succeeded"
+- celExpr: incr.status.state == "Succeeded"
+  message: "Compressed incremental backup should be succeeded"
 
-- celExpr: bcp.status.type == "full"
-  message: "Compressed base backup should be a full backup"
+- celExpr: incr.status.type == "incremental"
+  message: "Compressed incremental backup should have a type of incremental"
 
-- celExpr: bcp.status.compressed == true
-  message: "Compressed base backup should have compressed=true in status"
+- celExpr: incr.status.compressed == true
+  message: "Compressed incremental backup should have compressed=true in status"
+
+- celExpr: base.status.destination.contains(incr.metadata.annotations["percona.com/base-backup-name"])
+  message: "Incremental backup annotation should reference the correct base backup"

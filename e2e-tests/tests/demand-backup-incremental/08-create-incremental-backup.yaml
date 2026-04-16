@@ -1,0 +1,15 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 30
+    script: |
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # Gets first storage defined and run backup
+      storage_name=$(kubectl get ps demand-backup-incremental -n ${NAMESPACE} -o yaml \
+        | yq '(.spec.backup.storages // {}) | keys | .[0]')
+
+      run_backup incr-2 $storage_name "$(get_cluster_name)" "incremental"
