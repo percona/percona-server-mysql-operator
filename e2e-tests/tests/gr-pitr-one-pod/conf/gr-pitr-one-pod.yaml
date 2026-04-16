@@ -42,4 +42,4 @@ spec:
             credentialsSecret: minio-secret
             endpointUrl: http://minio-service.<namespace>:9000
             region: us-east-1
-            prefix: ps/gr-pitr-one-pod/<prefix>binlogs
+            prefix: ps/gr-pitr-one-pod/<prefix>/binlogs
