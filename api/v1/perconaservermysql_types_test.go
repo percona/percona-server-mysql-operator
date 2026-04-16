@@ -193,6 +193,12 @@ func TestCheckNSetDefaults(t *testing.T) {
 		assert.Equal(t, "128M", bls.RewriteFileSize)
 		assert.Equal(t, "16M", bls.CheckpointSize)
 		assert.Equal(t, "30s", bls.CheckpointInterval)
+		assert.Equal(t, int32(30), bls.ConnectTimeout)
+		assert.Equal(t, int32(30), bls.ReadTimeout)
+		assert.Equal(t, int32(30), bls.WriteTimeout)
+		assert.Equal(t, int32(30), bls.IdleTime)
+		assert.Equal(t, "info", bls.LogLevel)
+		assert.Equal(t, int32(100), bls.ServerID)
 	})
 	t.Run("binlog server explicit values are not overridden by defaults", func(t *testing.T) {
 		cr := new(PerconaServerMySQL)
@@ -214,6 +220,12 @@ func TestCheckNSetDefaults(t *testing.T) {
 					RewriteFileSize:    "256M",
 					CheckpointSize:     "4M",
 					CheckpointInterval: "60s",
+					ConnectTimeout:     10,
+					ReadTimeout:        10,
+					WriteTimeout:       10,
+					IdleTime:           10,
+					LogLevel:           "debug",
+					ServerID:           200,
 				},
 			},
 		}
@@ -228,6 +240,12 @@ func TestCheckNSetDefaults(t *testing.T) {
 		assert.Equal(t, "256M", bls.RewriteFileSize)
 		assert.Equal(t, "4M", bls.CheckpointSize)
 		assert.Equal(t, "60s", bls.CheckpointInterval)
+		assert.Equal(t, int32(10), bls.ConnectTimeout)
+		assert.Equal(t, int32(10), bls.ReadTimeout)
+		assert.Equal(t, int32(10), bls.WriteTimeout)
+		assert.Equal(t, int32(10), bls.IdleTime)
+		assert.Equal(t, "debug", bls.LogLevel)
+		assert.Equal(t, int32(200), bls.ServerID)
 	})
 }
 

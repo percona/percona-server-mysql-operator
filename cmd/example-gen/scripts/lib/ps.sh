@@ -48,12 +48,22 @@ remove_fields() {
 		| yq 'del(.spec.proxy.router.initImage)' \
 		| yq 'del(.spec.backup.pitr.binlogServer.runtimeClassName)' \
 		| yq 'del(.spec.backup.pitr.binlogServer.labels)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.size)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.serverId)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.verifyChecksum)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.topologySpreadConstraints)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.tolerations)' \
 		| yq 'del(.spec.backup.pitr.binlogServer.annotations)' \
 		| yq 'del(.spec.backup.pitr.binlogServer.nodeSelector)' \
 		| yq 'del(.spec.backup.pitr.binlogServer.priorityClassName)' \
 		| yq 'del(.spec.backup.pitr.binlogServer.schedulerName)' \
 		| yq 'del(.spec.backup.pitr.binlogServer.serviceAccountName)' \
 		| yq 'del(.spec.backup.pitr.binlogServer.gracePeriod)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.startupProbe)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.readinessProbe)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.livenessProbe)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.podDisruptionBudget)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.configuration)' \
 		| yq 'del(.spec.backup.storages.azure-blob.affinity)' \
 		| yq 'del(.spec.backup.storages.azure-blob.annotations)' \
 		| yq 'del(.spec.backup.storages.azure-blob.gcs)' \

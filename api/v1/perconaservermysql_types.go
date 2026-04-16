@@ -141,7 +141,7 @@ func (t ClusterType) isValid() bool {
 	return false
 }
 
-// +kubebuilder:validation:XValidation:rule="has(self.image) && self.image != ''",message="mysql.image is required"
+// +kubebuilder:validation:XValidation:rule="has(self.image) && self.image != ”",message="mysql.image is required"
 // +kubebuilder:validation:XValidation:rule="has(self.size) && self.size > 0",message="mysql.size must be greater than 0"
 type MySQLSpec struct {
 	// +kubebuilder:validation:Enum=group-replication;async
@@ -178,7 +178,7 @@ type SidecarPVC struct {
 	Spec corev1.PersistentVolumeClaimSpec `json:"spec"`
 }
 
-// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && self.image != '')",message="orchestrator.image is required when orchestrator is enabled"
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && self.image != ”)",message="orchestrator.image is required when orchestrator is enabled"
 // +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.size) && self.size > 0)",message="orchestrator.size must be greater than 0 when orchestrator is enabled"
 type OrchestratorSpec struct {
 	Enabled bool          `json:"enabled,omitempty"`
@@ -289,7 +289,7 @@ func (s *PodSpec) GetInitSpec(cr *PerconaServerMySQL) InitContainerSpec {
 	return *s.InitContainer
 }
 
-// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && self.image != '')",message="pmm.image is required when pmm is enabled"
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && self.image != ”)",message="pmm.image is required when pmm is enabled"
 type PMMSpec struct {
 	Enabled                  bool                        `json:"enabled,omitempty"`
 	Image                    string                      `json:"image,omitempty"`
@@ -520,7 +520,7 @@ func (b *BackupStorageAzureSpec) ContainerAndPrefix() (string, string) {
 // +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || has(self.binlogServer)",message="binlogServer is required when pitr is enabled"
 // +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || !has(self.binlogServer) || (has(self.binlogServer.image) && self.binlogServer.image != '')",message="binlogServer.image is required when pitr is enabled"
 // +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || !has(self.binlogServer) || (has(self.binlogServer.size) && self.binlogServer.size > 0)",message="binlogServer.size is required when pitr is enabled"
-// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || !has(self.binlogServer) || (has(self.binlogServer.serverId) && self.binlogServer.serverId > 0)",message="binlogServer.serverId is required when pitr is enabled"
+
 type PiTRSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 
@@ -564,6 +564,9 @@ type BinlogServerSpec struct {
 	// CheckpointInterval specifies the storage checkpoint interval.
 	// +kubebuilder:default="30s"
 	CheckpointInterval string `json:"checkpointInterval,omitempty"`
+	// LogLevel specifies the log level.
+	// +kubebuilder:default="info"
+	LogLevel string `json:"logLevel,omitempty"`
 
 	PodSpec `json:",inline"`
 }
@@ -573,7 +576,7 @@ type ProxySpec struct {
 	HAProxy *HAProxySpec     `json:"haproxy,omitempty"`
 }
 
-// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && self.image != '')",message="router.image is required when router is enabled"
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && self.image != ”)",message="router.image is required when router is enabled"
 // +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.size) && self.size > 0)",message="router.size must be greater than 0 when router is enabled"
 type MySQLRouterSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
@@ -585,12 +588,12 @@ type MySQLRouterSpec struct {
 	PodSpec `json:",inline"`
 }
 
-// +kubebuilder:validation:XValidation:rule="has(self.image) && self.image != ''",message="toolkit.image is required"
+// +kubebuilder:validation:XValidation:rule="has(self.image) && self.image != ”",message="toolkit.image is required"
 type ToolkitSpec struct {
 	ContainerSpec `json:",inline"`
 }
 
-// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && self.image != '')",message="haproxy.image is required when haproxy is enabled"
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && self.image != ”)",message="haproxy.image is required when haproxy is enabled"
 // +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.size) && self.size > 0)",message="haproxy.size must be greater than 0 when haproxy is enabled"
 type HAProxySpec struct {
 	Enabled bool `json:"enabled,omitempty"`
@@ -1077,6 +1080,12 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		}
 		if bls.IdleTime == 0 {
 			bls.IdleTime = 30
+		}
+		if bls.LogLevel == "" {
+			bls.LogLevel = "info"
+		}
+		if bls.ServerID == 0 {
+			bls.ServerID = 100
 		}
 	}
 
