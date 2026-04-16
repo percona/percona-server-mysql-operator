@@ -34,7 +34,7 @@ spec:
 #      privileged: false
 #      runAsGroup: 1001
 #      runAsUser: 1001
-#    image: perconalab/percona-server-mysql-operator:main
+#    image: percona/percona-server-mysql-operator:1.1.0
 #    resources:
 #      limits:
 #        cpu: 100m
@@ -60,7 +60,7 @@ spec:
     autoRecovery: true
 #    vaultSecretName: ps-cluster1-vault
     size: 3
-    image: perconalab/percona-server-mysql-operator:main-psmysql8.4
+    image: percona/percona-server:8.4.8-8.1
     imagePullPolicy: Always
 #    imagePullSecrets:
 #      - name: my-secret-1
@@ -87,7 +87,7 @@ spec:
 #        privileged: false
 #        runAsGroup: 1001
 #        runAsUser: 1001
-#      image: perconalab/percona-server-mysql-operator:main
+#      image: percona/percona-server-mysql-operator:1.1.0
 #      resources:
 #        limits:
 #          cpu: 100m
@@ -259,7 +259,7 @@ spec:
 #          - 10.0.0.0/8
 #        type: ClusterIP
       size: 3
-      image: perconalab/percona-server-mysql-operator:main-haproxy
+      image: percona/haproxy:2.8.18-1
       imagePullPolicy: Always
 #      imagePullSecrets:
 #        - name: my-secret-1
@@ -286,7 +286,7 @@ spec:
 #          privileged: false
 #          runAsGroup: 1001
 #          runAsUser: 1001
-#        image: perconalab/percona-server-mysql-operator:main
+#        image: percona/percona-server-mysql-operator:1.1.0
 #        resources:
 #          limits:
 #            cpu: 100m
@@ -405,7 +405,7 @@ spec:
 #          - 10.0.0.0/8
 #        type: ClusterIP
       size: 3
-      image: perconalab/percona-server-mysql-operator:main-router8.4
+      image: percona/percona-mysql-router:8.4.8
       imagePullPolicy: Always
 #      imagePullSecrets:
 #        - name: my-secret-1
@@ -432,7 +432,7 @@ spec:
 #          privileged: false
 #          runAsGroup: 1001
 #          runAsUser: 1001
-#        image: perconalab/percona-server-mysql-operator:main
+#        image: percona/percona-server-mysql-operator:1.1.0
 #        resources:
 #          limits:
 #            cpu: 100m
@@ -546,7 +546,7 @@ spec:
 #        - 10.0.0.0/8
 #      type: ClusterIP
     size: 3
-    image: perconalab/percona-server-mysql-operator:main-orchestrator
+    image: percona/percona-orchestrator:3.2.6-20
     imagePullPolicy: Always
 #    imagePullSecrets:
 #      - name: my-secret-1
@@ -573,7 +573,7 @@ spec:
 #        privileged: false
 #        runAsGroup: 1001
 #        runAsUser: 1001
-#      image: perconalab/percona-server-mysql-operator:main
+#      image: percona/percona-server-mysql-operator:1.1.0
 #      resources:
 #        limits:
 #          cpu: 100m
@@ -639,7 +639,7 @@ spec:
     configuration: ""
   pmm:
     enabled: false
-    image: perconalab/pmm-client:3-dev-latest
+    image: percona/pmm-client:3.7.0
     imagePullPolicy: Always
     serverHost: monitoring-service
 #    mysqlParams: PMM_ADMIN_CUSTOM_PARAMS
@@ -670,7 +670,7 @@ spec:
       enabled: false
 #      binlogServer:
 #        size: 1
-#        image: perconalab/percona-binlog-server:0.2.1
+#        image: percona/percona-server-mysql-operator:1.1.0-binlog-server-0.2.1
 #        imagePullPolicy: Always
 #        imagePullSecrets:
 #          - name: my-secret-1
@@ -711,7 +711,7 @@ spec:
 #            privileged: false
 #            runAsGroup: 1001
 #            runAsUser: 1001
-#          image: perconalab/percona-server-mysql-operator:main
+#          image: percona/percona-server-mysql-operator:1.1.0
 #          resources:
 #            limits:
 #              cpu: 100m
@@ -719,7 +719,6 @@ spec:
 #            requests:
 #              cpu: 200m
 #              memory: 200M
-#        initImage: ""
 #        logLevel: info
 #        podSecurityContext:
 #          fsGroup: 1001
@@ -737,7 +736,7 @@ spec:
 #        rewriteFileSize: ""
 #        sslMode: ""
 #    sourcePod: ps-cluster1-mysql-1
-    image: perconalab/percona-server-mysql-operator:main-backup8.4
+    image: percona/percona-xtrabackup:8.4.0-5.1
     imagePullPolicy: Always
 #    imagePullSecrets:
 #      - name: my-secret-1
@@ -760,7 +759,7 @@ spec:
 #        privileged: false
 #        runAsGroup: 1001
 #        runAsUser: 1001
-#      image: perconalab/percona-server-mysql-operator:main
+#      image: percona/percona-server-mysql-operator:1.1.0
 #      resources:
 #        limits:
 #          cpu: 100m
@@ -958,7 +957,7 @@ spec:
 #                storage: 2Gi
 #            storageClassName: standard
   toolkit:
-    image: perconalab/percona-server-mysql-operator:main-toolkit
+    image: percona/percona-toolkit:3.7.1
     imagePullPolicy: Always
 #    imagePullSecrets:
 #      - name: my-secret-1
