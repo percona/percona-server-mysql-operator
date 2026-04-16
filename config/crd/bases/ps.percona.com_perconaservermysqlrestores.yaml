@@ -1176,6 +1176,22 @@ spec:
                       type: object
                     type: array
                 type: object
+              pitr:
+                properties:
+                  date:
+                    type: string
+                  force:
+                    type: boolean
+                  gtid:
+                    type: string
+                  type:
+                    enum:
+                    - gtid
+                    - date
+                    type: string
+                required:
+                - type
+                type: object
             required:
             - clusterName
             type: object
