@@ -1358,7 +1358,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 		},
 		Replication: binlogserver.Replication{
 			Mode:           binlogserver.ReplicationModeGTID,
-			ServerID:       100,
+			ServerID:       cr.Spec.Backup.PiTR.BinlogServer.ServerID,
 			IdleTime:       cr.Spec.Backup.PiTR.BinlogServer.IdleTime,
 			VerifyChecksum: true,
 			Rewrite: binlogserver.Rewrite{
