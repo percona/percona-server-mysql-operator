@@ -1,20 +1,20 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 420
+timeout: 600
 commands:
   - script: |-
       set -o errexit
 
       source ../../functions
-      
-      backup_count=$(count_backups_in_schedule "full" "$(get_cluster_name)")
-      until [[ $backup_count -eq 2 ]]; do
-        echo "There are $backup_count full ps-backups but should be 2"
+
+      backup_count=$(count_backups_in_schedule "incr" "$(get_cluster_name)")
+      until [[ $backup_count -ge 3 ]]; do
+        echo "There are $backup_count incremental ps-backups but should be at least 3"
         sleep 5
 
-        backup_count=$(count_backups_in_schedule "full" "$(get_cluster_name)")
+        backup_count=$(count_backups_in_schedule "incr" "$(get_cluster_name)")
       done
-    timeout: 420
+    timeout: 600
 ---
 kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
@@ -23,5 +23,5 @@ metadata:
     percona.com/backup-type: cron
     percona.com/cluster: scheduled-backup-incremental
 status:
-  type: full
+  type: incremental
   state: Succeeded
