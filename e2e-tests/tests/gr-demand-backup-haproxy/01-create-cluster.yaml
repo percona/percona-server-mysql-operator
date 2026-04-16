@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 100
+timeout: 10
 commands:
   - script: |-
       set -o errexit
@@ -8,4 +8,4 @@ commands:
 
       source ../../functions
 
-      verify_all_backups_deletion
+      get_cr | kubectl -n "${NAMESPACE}" apply -f -

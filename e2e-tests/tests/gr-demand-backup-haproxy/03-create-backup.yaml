@@ -8,7 +8,7 @@ commands:
       source ../../functions
 
       # Gets first storage defined and run backup
-      storage_name=$(kubectl get ps demand-backup-retry -n ${NAMESPACE} -o yaml \
+      storage_name=$(kubectl get ps gr-demand-backup-haproxy -n ${NAMESPACE} -o yaml \
         | yq '(.spec.backup.storages // {}) | keys | .[0]')
 
-      run_backup demand-backup-retry $storage_name
+      run_backup gr-demand-backup-haproxy $storage_name

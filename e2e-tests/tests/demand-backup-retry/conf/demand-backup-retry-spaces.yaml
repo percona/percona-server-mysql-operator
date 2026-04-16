@@ -1,0 +1,34 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: demand-backup-retry
+spec:
+  mysql:
+    clusterType: async
+    size: 3
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 7Gi
+
+  proxy:
+    haproxy:
+      enabled: true
+      size: 3
+
+  orchestrator:
+    enabled: true
+    size: 3
+
+  backup:
+    backoffLimit: 5
+    storages:
+      spaces:
+        type: s3
+        s3:
+          bucket: "operator-testing"
+          credentialsSecret: do-spaces-secret
+          endpointUrl: https://ams3.digitaloceanspaces.com
+          region: ams3
+          prefix: ps/demand-backup

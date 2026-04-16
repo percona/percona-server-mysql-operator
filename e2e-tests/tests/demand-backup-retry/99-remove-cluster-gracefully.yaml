@@ -3,8 +3,7 @@ kind: TestStep
 delete:
   - apiVersion: ps.percona.com/v1
     kind: PerconaServerMySQL
-    metadata:
-      name: demand-backup-retry
+    name: demand-backup-retry
 commands:
   - script: |-
       set -o errexit

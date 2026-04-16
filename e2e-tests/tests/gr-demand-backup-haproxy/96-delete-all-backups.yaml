@@ -4,7 +4,6 @@ timeout: 100
 commands:
   - script: |-
       set -o errexit
-      set -o xtrace
 
       source ../../functions
 
