@@ -8,9 +8,11 @@ metadata:
   name: demand-backup-retry
 spec:
   clusterName: demand-backup-retry
-  storageName: minio
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: xb-demand-backup-retry-minio
+  ownerReferences:
+  - controller: true
+    kind: PerconaServerMySQLBackup
+    name: demand-backup-retry

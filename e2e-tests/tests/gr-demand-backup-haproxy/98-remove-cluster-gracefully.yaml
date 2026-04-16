@@ -3,8 +3,7 @@ kind: TestStep
 delete:
   - apiVersion: ps.percona.com/v1
     kind: PerconaServerMySQL
-    metadata:
-      name: gr-demand-backup-haproxy
+    name: gr-demand-backup-haproxy
 commands:
   - script: |-
       set -o errexit
