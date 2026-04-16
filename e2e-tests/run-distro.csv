@@ -1,7 +1,10 @@
+async-upgrade
 auto-config
 config
 config-router
 demand-backup
+gr-pitr-minio
+async-pitr-minio
 demand-backup-cloud
 demand-backup-retry
 gr-demand-backup
@@ -19,7 +22,6 @@ gr-self-healing
 gr-tls-cert-manager
 gr-users
 gr-upgrade
-async-upgrade
 haproxy
 init-deploy
 one-pod
