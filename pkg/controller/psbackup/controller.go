@@ -333,7 +333,7 @@ func (r *PerconaServerMySQLBackupReconciler) prepareStatus(
 	status.Storage = storage
 	status.BackupSource = backupSource
 	status.Type = cr.Spec.Type
-	status.Compressed = cr.IsCompressed(storage)
+	status.Compressed = cr.IsCompressed(storage, cluster.Spec.MySQL.Configuration)
 	return nil
 }
 
