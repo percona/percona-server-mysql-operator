@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-ini/ini"
 	v "github.com/hashicorp/go-version"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/pkg/errors"
 	"github.com/sjmudd/stopwatch"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -444,12 +445,12 @@ func Bootstrap(ctx context.Context) error {
 		if peers.Len() == 1 {
 			var myCnf *ini.Section
 
-			customMyCnf, err := os.Open(customMyCnfPath)
+			customMyCnf, err := os.Open(mysql.CustomMyCnfPath)
 			if err == nil {
 				defer customMyCnf.Close() //nolint
-				myCnf, err = parseMyCnf(customMyCnf)
+				myCnf, err = util.ParseSection(customMyCnf, "mysqld")
 				if err != nil {
-					return errors.Wrapf(err, "failed to parse %s", customMyCnfPath)
+					return errors.Wrapf(err, "failed to parse %s", mysql.CustomMyCnfPath)
 				}
 			}
 

@@ -17,9 +17,11 @@ limitations under the License.
 package v1
 
 import (
+	"io"
 	"path"
 	"strings"
 
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -230,25 +232,15 @@ func (b *PerconaServerMySQLBackup) IsCompressed(storage *BackupStorageSpec, mysq
 }
 
 func isCompressedInMySQLConfig(configuration string) bool {
-	inSection := false
-	for _, line := range strings.Split(configuration, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
-			continue
-		}
-		if strings.HasPrefix(line, "[") {
-			inSection = strings.TrimSpace(strings.Trim(line, "[]")) == "xtrabackup"
-			continue
-		}
-		if !inSection {
-			continue
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if strings.TrimSpace(parts[0]) == "compress" && len(parts) == 2 && strings.TrimSpace(parts[1]) != "" {
-			return true
-		}
+	section, err := util.ParseSection(io.NopCloser(strings.NewReader(configuration)), "xtrabackup")
+	if err != nil {
+		return false
 	}
-	return false
+	val, err := util.GetKeyValue(section, "compress")
+	if err != nil || val == "" {
+		return false
+	}
+	return true
 }
 
 func (b *PerconaServerMySQLBackup) GetType() BackupType {

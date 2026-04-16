@@ -2,11 +2,11 @@ package gr
 
 import (
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 
 	"github.com/go-ini/ini"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 	"github.com/pkg/errors"
 )
 
@@ -27,51 +27,10 @@ func (o *createClusterOpts) String() string {
 	)
 }
 
-const customMyCnfPath = "/etc/mysql/config/my-config.cnf"
-
-// The caller is responsible for closing myCnfFile.
-func parseMyCnf(myCnfFile io.ReadCloser) (*ini.Section, error) {
-	myCnf, err := ini.LoadSources(ini.LoadOptions{AllowBooleanKeys: true}, myCnfFile)
-	if err != nil {
-		return nil, errors.Wrapf(err, "load %s", customMyCnfPath)
-	}
-
-	sectionName := ""
-	if myCnf.HasSection("mysqld") {
-		sectionName = "mysqld"
-	}
-	section, err := myCnf.GetSection(sectionName)
-	if err != nil {
-		return nil, errors.Wrap(err, "get section")
-	}
-
-	return section, nil
-}
-
-func getKeyValue(myCnf *ini.Section, option string) (string, error) {
-	var key *ini.Key
-	var err error
-
-	if myCnf.HasKey(option) {
-		key, err = myCnf.GetKey(option)
-	} else if myCnf.HasKey("loose_" + option) {
-		key, err = myCnf.GetKey("loose_" + option)
-	}
-	if err != nil {
-		return "", errors.Wrapf(err, "get %s", option)
-	}
-
-	if key == nil {
-		return "", nil
-	}
-
-	return key.Value(), nil
-}
-
 func setMultiPrimary(opts *createClusterOpts, myCnf *ini.Section) error {
 	option := "group_replication_single_primary_mode"
 
-	value, err := getKeyValue(myCnf, option)
+	value, err := util.GetKeyValue(myCnf, option)
 	if err != nil {
 		return errors.Wrapf(err, "get %s", option)
 	}
@@ -90,7 +49,7 @@ func setMultiPrimary(opts *createClusterOpts, myCnf *ini.Section) error {
 func setPaxosSingleLeader(opts *createClusterOpts, myCnf *ini.Section) error {
 	option := "group_replication_paxos_single_leader"
 
-	value, err := getKeyValue(myCnf, option)
+	value, err := util.GetKeyValue(myCnf, option)
 	if err != nil {
 		return errors.Wrapf(err, "get %s", option)
 	}
@@ -108,7 +67,7 @@ func setPaxosSingleLeader(opts *createClusterOpts, myCnf *ini.Section) error {
 func setCommunicationStack(opts *createClusterOpts, myCnf *ini.Section) error {
 	option := "group_replication_communication_stack"
 
-	value, err := getKeyValue(myCnf, option)
+	value, err := util.GetKeyValue(myCnf, option)
 	if err != nil {
 		return errors.Wrapf(err, "get %s", option)
 	}
