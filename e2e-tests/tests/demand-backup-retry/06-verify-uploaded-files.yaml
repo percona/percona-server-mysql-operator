@@ -9,7 +9,6 @@ commands:
       source ../../functions
 
       backup="demand-backup-retry"
-
       eval "$(
         kubectl get ps-backup "$backup" -n "$NAMESPACE" -o json \
           | jq -r '
@@ -33,7 +32,8 @@ commands:
 
       backup_exists=false
       for i in {1..5}; do
-        if [[ "$(count_files_on_storage "$storage_type" "$bucket" "$prefix" "$secret_name" "$region" "$endpoint")" != "0" ]]; then
+        count="$(count_files_on_storage "$storage_type" "$bucket" "$prefix" "$secret_name" "$region" "$endpoint")"
+        if [[ $count -gt 0 ]]; then
           echo "Backup files found for: $backup"
           backup_exists=true
           break
