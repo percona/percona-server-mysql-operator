@@ -1,0 +1,31 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 600
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: async-pitr-minio
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+status:
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  haproxy:
+    ready: 3
+    size: 3
+    state: ready
+  orchestrator:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
+---
+kind: PerconaServerMySQLBackup
+apiVersion: ps.percona.com/v1
+metadata:
+  name: async-pitr-minio-backup-2
+status:
+  state: Succeeded

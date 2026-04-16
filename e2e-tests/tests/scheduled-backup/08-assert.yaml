@@ -1,0 +1,17 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+commands:
+  - timeout: 150
+    script: |
+      storage_name=$(kubectl get ps scheduled-backup -n "$NAMESPACE" -o yaml \
+        | yq -r '.spec.backup.storages | keys | map(select(. != "minio")) | .[0] // ""')
+
+      until kubectl get ps-backup -n ${NAMESPACE} -o json \
+        | jq -e --arg storage "$storage_name" '
+          .items[]
+          | select(.spec.storageName == $storage)
+          | select(.status.state == "Succeeded")
+        ' >/dev/null; do
+        echo "Waiting successful backup with storage $storage_name"
+        sleep 5
+      done

@@ -1,27 +1,42 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 400
+timeout: 30
 ---
-apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQL
+kind: ConfigMap
+apiVersion: v1
 metadata:
-  name: gr-demand-backup-incremental
-  finalizers:
-    - percona.com/delete-mysql-pods-in-order
-status:
-  mysql:
-    ready: 3
-    size: 3
-    state: ready
-  router:
-    ready: 3
-    size: 3
-    state: ready
-  state: ready
+  name: 22-read-data-0
+data:
+  data: |-
+    100500
+    100501
+    100502
+    100503
+    100504
+    100505
 ---
-kind: PerconaServerMySQLRestore
-apiVersion: ps.percona.com/v1
+kind: ConfigMap
+apiVersion: v1
 metadata:
-  name: restore-incr-3
-status:
-  state: Succeeded
+  name: 22-read-data-1
+data:
+  data: |-
+    100500
+    100501
+    100502
+    100503
+    100504
+    100505
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 22-read-data-2
+data:
+  data: |-
+    100500
+    100501
+    100502
+    100503
+    100504
+    100505
