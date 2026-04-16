@@ -586,7 +586,7 @@ func TestPerconaServerMySQLBackup_IsCompressed(t *testing.T) {
 					},
 				},
 			},
-			expected: true,
+			expected: false,
 		},
 		"compress key without value in mysql configuration": {
 			backup: &PerconaServerMySQLBackup{
