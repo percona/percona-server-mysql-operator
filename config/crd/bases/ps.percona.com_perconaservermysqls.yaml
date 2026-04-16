@@ -1118,6 +1118,9 @@ spec:
                                 format: int32
                                 type: integer
                             type: object
+                          logLevel:
+                            default: info
+                            type: string
                           nodeSelector:
                             additionalProperties:
                               type: string
@@ -1546,10 +1549,6 @@ spec:
                     - message: binlogServer.size is required when pitr is enabled
                       rule: '!(has(self.enabled) && self.enabled) || !has(self.binlogServer)
                         || (has(self.binlogServer.size) && self.binlogServer.size
-                        > 0)'
-                    - message: binlogServer.serverId is required when pitr is enabled
-                      rule: '!(has(self.enabled) && self.enabled) || !has(self.binlogServer)
-                        || (has(self.binlogServer.serverId) && self.binlogServer.serverId
                         > 0)'
                   resources:
                     properties:
@@ -5740,7 +5739,7 @@ spec:
                 type: object
                 x-kubernetes-validations:
                 - message: mysql.image is required
-                  rule: has(self.image) && self.image != ''
+                  rule: has(self.image) && self.image != ”
                 - message: mysql.size must be greater than 0
                   rule: has(self.size) && self.size > 0
               orchestrator:
@@ -6987,7 +6986,7 @@ spec:
                 x-kubernetes-validations:
                 - message: orchestrator.image is required when orchestrator is enabled
                   rule: '!(has(self.enabled) && self.enabled) || (has(self.image)
-                    && self.image != '''')'
+                    && self.image != ”)'
                 - message: orchestrator.size must be greater than 0 when orchestrator
                     is enabled
                   rule: '!(has(self.enabled) && self.enabled) || (has(self.size) &&
@@ -7277,7 +7276,7 @@ spec:
                 x-kubernetes-validations:
                 - message: pmm.image is required when pmm is enabled
                   rule: '!(has(self.enabled) && self.enabled) || (has(self.image)
-                    && self.image != '''')'
+                    && self.image != ”)'
               proxy:
                 properties:
                   haproxy:
@@ -8524,7 +8523,7 @@ spec:
                     x-kubernetes-validations:
                     - message: haproxy.image is required when haproxy is enabled
                       rule: '!(has(self.enabled) && self.enabled) || (has(self.image)
-                        && self.image != '''')'
+                        && self.image != ”)'
                     - message: haproxy.size must be greater than 0 when haproxy is
                         enabled
                       rule: '!(has(self.enabled) && self.enabled) || (has(self.size)
@@ -9798,7 +9797,7 @@ spec:
                     x-kubernetes-validations:
                     - message: router.image is required when router is enabled
                       rule: '!(has(self.enabled) && self.enabled) || (has(self.image)
-                        && self.image != '''')'
+                        && self.image != ”)'
                     - message: router.size must be greater than 0 when router is enabled
                       rule: '!(has(self.enabled) && self.enabled) || (has(self.size)
                         && self.size > 0)'
@@ -10299,7 +10298,7 @@ spec:
                 type: object
                 x-kubernetes-validations:
                 - message: toolkit.image is required
-                  rule: has(self.image) && self.image != ''
+                  rule: has(self.image) && self.image != ”
               unsafeFlags:
                 properties:
                   backupNonReadyCluster:
