@@ -957,7 +957,7 @@ spec:
 #                storage: 2Gi
 #            storageClassName: standard
   toolkit:
-    image: percona/percona-toolkit:3.7.1
+    image: percona/percona-toolkit:3.7.1-3
     imagePullPolicy: Always
 #    imagePullSecrets:
 #      - name: my-secret-1
