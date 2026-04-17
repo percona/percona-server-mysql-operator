@@ -1,0 +1,10 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 30
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: 11-read-data
+data:
+  max_id: "100502"

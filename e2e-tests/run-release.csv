@@ -1,10 +1,13 @@
-version-service
 async-ignore-annotations
 async-global-metadata
+async-upgrade
 auto-config
 config
 config-router
 demand-backup
+gr-pitr-minio
+gr-pitr-one-pod
+async-pitr-minio
 demand-backup-cloud
 demand-backup-retry
 demand-backup-incremental
@@ -29,13 +32,13 @@ gr-self-healing
 gr-tls-cert-manager
 gr-users
 gr-upgrade
-async-upgrade
 haproxy
 init-deploy
 limits
 monitoring
 one-pod
 operator-self-healing
+pvc-resize
 recreate
 scaling
 scheduled-backup
@@ -47,4 +50,4 @@ storage
 telemetry
 tls-cert-manager
 users
-pvc-resize
+version-service

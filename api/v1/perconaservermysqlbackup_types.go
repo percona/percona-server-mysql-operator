@@ -17,9 +17,11 @@ limitations under the License.
 package v1
 
 import (
+	"io"
 	"path"
 	"strings"
 
+	"github.com/percona/percona-server-mysql-operator/pkg/config"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -215,18 +217,30 @@ func (b *PerconaServerMySQLBackup) GetContainerOptions(storage *BackupStorageSpe
 	return nil
 }
 
-// IsCompressed reports whether the xtrabackup args contain --compress.
-func (b *PerconaServerMySQLBackup) IsCompressed(storage *BackupStorageSpec) bool {
+// IsCompressed reports whether compression is enabled via xtrabackup args or
+// via the [xtrabackup] section of the MySQL configuration.
+func (b *PerconaServerMySQLBackup) IsCompressed(storage *BackupStorageSpec, mysqlConfiguration string) bool {
 	opts := b.GetContainerOptions(storage)
-	if opts == nil {
-		return false
-	}
-	for _, arg := range opts.Args.Xtrabackup {
-		if arg == "--compress" || strings.HasPrefix(arg, "--compress=") {
-			return true
+	if opts != nil {
+		for _, arg := range opts.Args.Xtrabackup {
+			if arg == "--compress" || strings.HasPrefix(arg, "--compress=") {
+				return true
+			}
 		}
 	}
-	return false
+	return isCompressedInMySQLConfig(mysqlConfiguration)
+}
+
+func isCompressedInMySQLConfig(configuration string) bool {
+	section, err := config.ParseSection(io.NopCloser(strings.NewReader(configuration)), "xtrabackup")
+	if err != nil {
+		return false
+	}
+	val, err := config.GetKeyValue(section, "compress")
+	if err != nil || val == "" {
+		return false
+	}
+	return true
 }
 
 func (b *PerconaServerMySQLBackup) GetType() BackupType {

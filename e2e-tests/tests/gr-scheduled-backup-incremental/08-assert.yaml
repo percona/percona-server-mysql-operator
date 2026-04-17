@@ -4,16 +4,16 @@ timeout: 420
 commands:
   - script: |-
       set -o errexit
-      set -o xtrace
 
       source ../../functions
       
-      bcp_count=$(count_backups_in_schedule "minio-full" "$(get_cluster_name)")
-      if [[ ! $bcp_count -eq 2 ]]; then
-        echo "There are $bcp_count full ps-backups but should be 2"
-        exit 1
-      fi
-    timeout: 420
+      backup_count=$(count_backups_in_schedule "incr" "$(get_cluster_name)") 
+      until [[ $(count_backups_in_schedule "incr" "$(get_cluster_name)") -ge 6 ]]; do
+        echo "There are $backup_count incremental ps-backups but should be at least 6"
+        sleep 5
+
+        backup_count=$(count_backups_in_schedule "incr" "$(get_cluster_name)") 
+      done
 ---
 kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
@@ -22,5 +22,5 @@ metadata:
     percona.com/backup-type: cron
     percona.com/cluster: gr-scheduled-backup-incremental
 status:
-  type: full
+  type: incremental
   state: Succeeded

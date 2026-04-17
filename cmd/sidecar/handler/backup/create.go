@@ -210,6 +210,9 @@ func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
 		fmt.Sprintf("--user=%s", user),
 		fmt.Sprintf("--password=%s", pass),
 	}
+	if _, err := os.Stat(mysql.CustomMyCnfPath); err == nil {
+		args = append([]string{"--defaults-extra-file=" + mysql.CustomMyCnfPath}, args...)
+	}
 	if conf != nil && conf.ContainerOptions != nil {
 		args = append(args, conf.ContainerOptions.Args.Xtrabackup...)
 	}

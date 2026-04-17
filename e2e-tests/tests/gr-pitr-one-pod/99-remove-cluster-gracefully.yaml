@@ -1,0 +1,19 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+delete:
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQL
+    name: gr-pitr-one-pod
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQL
+    name: gr-pitr-one-pod-restore
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      remove_resource_finalizers ps-backup
+      destroy_operator
+    timeout: 180

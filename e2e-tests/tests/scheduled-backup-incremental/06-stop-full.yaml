@@ -1,7 +1,0 @@
-apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQL
-metadata:
-  name: scheduled-backup-incremental
-spec:
-  backup:
-    schedule: []
