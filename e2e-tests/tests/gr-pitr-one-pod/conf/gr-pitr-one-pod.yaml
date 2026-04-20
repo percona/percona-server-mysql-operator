@@ -1,0 +1,45 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-pitr-one-pod
+spec:
+  mysql:
+    clusterType: group-replication
+    size: 3
+
+  proxy:
+    haproxy:
+      enabled: true
+      size: 3
+
+  backup:
+    backoffLimit: 1
+    storages:
+      minio:
+        type: s3
+        s3:
+          bucket: operator-testing
+          credentialsSecret: minio-secret
+          endpointUrl: http://minio-service.<namespace>:9000
+          region: us-east-1
+          prefix: ps/gr-pitr-one-pod
+        containerOptions:
+          env:
+            - name: VERIFY_TLS
+              value: "false"
+    pitr:
+      enabled: true
+      binlogServer:
+        size: 1
+        serverId: 200
+        connectTimeout: 10
+        readTimeout: 10
+        writeTimeout: 10
+        idleTime: 3
+        storage:
+          s3:
+            bucket: operator-testing
+            credentialsSecret: minio-secret
+            endpointUrl: http://minio-service.<namespace>:9000
+            region: us-east-1
+            prefix: ps/gr-pitr-one-pod/<prefix>/binlogs

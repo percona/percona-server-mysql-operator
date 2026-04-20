@@ -15,7 +15,9 @@ sort_yaml() {
 	ORCHESTRATOR_ORDER='"enabled", "expose", '"$POD_SPEC_ORDER"
 
 	PMM_ORDER='"enabled","image","imagePullPolicy","serverHost","mysqlParams","containerSecurityContext", "resources", "readinessProbes", "livenessProbes"'
-	BACKUP_ORDER='"enabled","pitr","sourcePod","image","imagePullPolicy","imagePullSecrets","schedule","backoffLimit", "serviceAccountName", "initContainer", "containerSecurityContext", "resources","storages","pitr"'
+	BINLOG_SERVER_ORDER='"enabled","binlogServer"'
+	BINLOG_SERVER_SPEC_ORDER='"size","image","imagePullPolicy","imagePullSecrets","serverId","storage","connectTimeout","readTimeout","writeTimeout","idleTime"'
+	BACKUP_ORDER='"enabled","pitr","sourcePod","image","imagePullPolicy","imagePullSecrets","schedule","backoffLimit", "serviceAccountName", "initContainer", "containerSecurityContext", "resources","storages"'
 	TOOLKIT_ORDER='"image","imagePullPolicy","imagePullSecrets","env","envFrom","resources","containerSecurityContext", "startupProbe", "readinessProbe", "livenessProbe"'
 
 	yq - \
@@ -26,12 +28,13 @@ sort_yaml() {
 		| yq '.spec.orchestrator |= pick((['"$ORCHESTRATOR_ORDER"'] + keys) | unique)' \
 		| yq '.spec.pmm |= pick((['"$PMM_ORDER"'] + keys) | unique)' \
 		| yq '.spec.backup |= pick((['"$BACKUP_ORDER"'] + keys) | unique)' \
+		| yq '.spec.backup.pitr |= pick((['"$BINLOG_SERVER_ORDER"'] + keys) | unique)' \
+		| yq '.spec.backup.pitr.binlogServer |= pick((['"$BINLOG_SERVER_SPEC_ORDER"'] + keys) | unique)' \
 		| yq '.spec.toolkit |= pick((['"$TOOLKIT_ORDER"'] + keys) | unique)'
 }
 
 remove_fields() {
 	# - removing initImage as it is deprecated
-	# - removing binlogServer is not used
 	# - removing azure-blob fields to reduce size
 	# - removing gcp-cs fields to reduce size
 	# - removing non-s3 fields in s3-us-west
@@ -43,7 +46,24 @@ remove_fields() {
 		| yq 'del(.spec.orchestrator.initImage)' \
 		| yq 'del(.spec.proxy.haproxy.initImage)' \
 		| yq 'del(.spec.proxy.router.initImage)' \
-		| yq 'del(.spec.backup.pitr.binlogServer)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.runtimeClassName)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.labels)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.size)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.serverId)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.verifyChecksum)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.topologySpreadConstraints)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.tolerations)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.annotations)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.nodeSelector)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.priorityClassName)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.schedulerName)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.serviceAccountName)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.gracePeriod)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.startupProbe)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.readinessProbe)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.livenessProbe)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.podDisruptionBudget)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.configuration)' \
 		| yq 'del(.spec.backup.storages.azure-blob.affinity)' \
 		| yq 'del(.spec.backup.storages.azure-blob.annotations)' \
 		| yq 'del(.spec.backup.storages.azure-blob.gcs)' \
@@ -189,6 +209,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.pmm.livenessProbes)" \
 		| yq "del(.spec.pmm.containerSecurityContext)" \
 		| yq "del(.spec.pmm.resources.limits)" \
+		| yq "del(.spec.backup.pitr.binlogServer)" \
 		| yq "del(.spec.backup.sourcePod)" \
 		| yq "del(.spec.backup.schedule)" \
 		| yq "del(.spec.backup.backoffLimit)" \

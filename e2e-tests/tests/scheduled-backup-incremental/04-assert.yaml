@@ -1,0 +1,27 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+commands:
+  - script: |-
+      set -o errexit
+
+      source ../../functions
+      
+      backup_count=$(count_backups_in_schedule "full" "$(get_cluster_name)")
+      until [[ $backup_count -ge 1 ]]; do
+        echo "There are $backup_count full ps-backups but should be at least 1"
+        sleep 5
+
+        backup_count=$(count_backups_in_schedule "full" "$(get_cluster_name)")
+      done
+    timeout: 420
+---
+kind: PerconaServerMySQLBackup
+apiVersion: ps.percona.com/v1
+metadata:
+  labels:
+    percona.com/backup-type: cron
+    percona.com/cluster: scheduled-backup-incremental
+status:
+  state: Succeeded
+  type: full
