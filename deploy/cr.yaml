@@ -21,7 +21,7 @@ spec:
 #    proxy: false
 #    proxySize: false
 #  pause: false
-  crVersion: 1.1.0
+  crVersion: 1.2.0
 #  enableVolumeExpansion: false
   secretsName: ps-cluster1-secrets
   sslSecretName: ps-cluster1-ssl
@@ -719,7 +719,6 @@ spec:
 #            requests:
 #              cpu: 200m
 #              memory: 200M
-#        initImage: ""
 #        logLevel: info
 #        podSecurityContext:
 #          fsGroup: 1001

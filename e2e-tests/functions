@@ -658,6 +658,9 @@ detect_k8s_platform() {
 	elif kubectl get nodes -o json | jq -r '.items[0].spec.providerID' | grep -q "azure://"; then
 		platform="aks"
 
+	elif kubectl get nodes -o json | jq -r '.items[0].metadata.labels["minikube.k8s.io/name"]' | grep -q .; then
+		platform="minikube"
+
 	else
 		platform="unknown"
 	fi
