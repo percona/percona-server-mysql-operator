@@ -5,7 +5,6 @@ timeout: 300
 kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
 metadata:
-  name: gr-pitr-one-pod-incr
+  name: gr-pitr-one-pod-full
 status:
   state: Succeeded
-  type: incremental

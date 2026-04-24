@@ -7,7 +7,6 @@ apiVersion: apps/v1
 metadata:
   name: gr-pitr-one-pod-mysql
 status:
-  observedGeneration: 1
   replicas: 3
   readyReplicas: 3
   currentReplicas: 3
@@ -19,10 +18,20 @@ apiVersion: apps/v1
 metadata:
   name: gr-pitr-one-pod-haproxy
 status:
-  observedGeneration: 1
   replicas: 3
   readyReplicas: 3
   updatedReplicas: 3
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-pitr-one-pod-binlog-server
+status:
+  replicas: 1
+  readyReplicas: 1
+  currentReplicas: 1
+  updatedReplicas: 1
+  collisionCount: 0
 ---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL

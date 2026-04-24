@@ -1,0 +1,8 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-pitr-one-pod
+spec:
+  backup:
+    pitr:
+      enabled: true

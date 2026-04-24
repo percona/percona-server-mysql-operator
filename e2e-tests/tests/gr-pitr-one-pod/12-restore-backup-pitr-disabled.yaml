@@ -1,0 +1,16 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 120
+    script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      backup_name="backup-pitr-disabled"
+      restore_name="restore-of-backup-pitr-disabled"
+      cluster_name="gr-pitr-one-pod-restore"
+      destination=$(kubectl -n "${NAMESPACE}" get ps-backup "${backup_name}" -o jsonpath='{.status.destination}')
+
+      run_restore "$restore_name" "" "$cluster_name" "pitr-disabled" "$destination"

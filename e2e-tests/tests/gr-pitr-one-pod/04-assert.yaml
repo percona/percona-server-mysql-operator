@@ -5,6 +5,8 @@ timeout: 300
 kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
 metadata:
-  name: gr-pitr-one-pod-full
+  name: backup-pitr-disabled
+  finalizers:
+    - percona.com/delete-backup
 status:
   state: Succeeded

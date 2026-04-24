@@ -670,7 +670,7 @@ spec:
       enabled: false
 #      binlogServer:
 #        size: 1
-#        image: perconalab/percona-binlog-server:0.2.1
+#        image: perconalab/percona-binlog-server:0.2.2
 #        imagePullPolicy: Always
 #        imagePullSecrets:
 #          - name: my-secret-1

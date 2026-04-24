@@ -7,11 +7,9 @@ commands:
 
       source ../../functions
 
-      get_binlogs_prefix() {
-        echo $(kubectl -n "$NAMESPACE" get configmap binlogs-prefix -o jsonpath='{.data.prefix}')
-      }
-
+      binlogs_prefix=$(kubectl -n "$NAMESPACE" get configmap binlogs-prefix -o jsonpath='{.data.prefix}')
       get_cr \
+        | yq eval '.spec.sslSecretName="gr-pitr-one-pod"' - \
         |  yq eval '
             (.. | select(tag == "!!str")) |= sub("<prefix>"; "'"$(get_binlogs_prefix)"'")
           ' - \

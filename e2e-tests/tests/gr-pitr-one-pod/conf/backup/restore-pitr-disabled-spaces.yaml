@@ -1,0 +1,16 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: <restore-name>
+spec:
+  clusterName: gr-pitr-one-pod-restore
+  backupSource:
+    destination: "<destination>"
+    storage:
+      type: s3
+      s3:
+        bucket: "operator-testing"
+        credentialsSecret: do-spaces-secret
+        endpointUrl: https://ams3.digitaloceanspaces.com
+        region: ams3
+        prefix: ps/gr-pitr-one-pod

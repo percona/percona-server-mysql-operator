@@ -28,7 +28,7 @@ spec:
             - name: VERIFY_TLS
               value: "false"
     pitr:
-      enabled: true
+      enabled: false
       binlogServer:
         size: 1
         serverId: 200

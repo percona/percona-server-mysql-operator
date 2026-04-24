@@ -8,13 +8,10 @@ commands:
 
       source ../../functions
 
-      get_binlogs_prefix() {
-        echo $(kubectl -n "$NAMESPACE" get configmap binlogs-prefix -o jsonpath='{.data.prefix}')
-      }
-
+      binlogs_prefix=$(kubectl -n "$NAMESPACE" get configmap binlogs-prefix -o jsonpath='{.data.prefix}')
       get_cr "restore" \
+        | yq eval '.spec.sslSecretName="gr-pitr-one-pod-restore"' - \
         |  yq eval '
-            (.. | select(tag == "!!str")) |= sub("<prefix>"; "'"$(get_binlogs_prefix)"'")
+            (.. | select(tag == "!!str")) |= sub("<prefix>"; "'"$binlogs_prefix"'")
           ' - \
         | kubectl -n "$NAMESPACE" apply -f -
-

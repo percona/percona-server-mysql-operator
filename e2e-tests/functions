@@ -764,8 +764,8 @@ get_cr() {
 		(.. | select(tag == "!!str")) |= sub("<namespace>"; "'"${NAMESPACE}"'")
 	' "${crs[@]}" \
 		| if [[ $platform == "minikube" ]]; then
-			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) = "none"' - \
-				| yq eval '.spec.proxy.haproxy.resources.requests.cpu = "300m"' -
+			yq eval '(.. | select(has("antiAffinityTopologyKey")).antiAffinityTopologyKey) = "none"' - | \
+			yq eval '.spec.proxy.haproxy.resources.requests.cpu = "300m"' -
 		else
 			cat
 		fi

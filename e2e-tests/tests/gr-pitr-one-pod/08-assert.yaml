@@ -2,15 +2,10 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 300
 ---
+kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQL
 metadata:
-  name: gr-pitr-one-pod
-  finalizers:
-    - percona.com/delete-mysql-pods-in-order
+  name: gr-pitr-one-pod-incr
 status:
-  mysql:
-    state: paused
-  haproxy:
-    state: paused
-  state: paused
+  state: Succeeded
+  type: incremental
