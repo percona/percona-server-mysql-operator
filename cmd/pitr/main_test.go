@@ -55,31 +55,37 @@ type fakeDB struct {
 	getGTIDExecutedResult string
 	calls                 []string
 	startUntilGTID        string
+	channels              []string
 }
 
-func (f *fakeDB) ChangeReplicationSourceRelay(_ context.Context, _ string, _ int) error {
+func (f *fakeDB) ChangeReplicationSourceRelay(_ context.Context, _ string, _ int, channel string) error {
 	f.calls = append(f.calls, "ChangeReplicationSourceRelay")
+	f.channels = append(f.channels, channel)
 	return f.changeRelayErr
 }
 
-func (f *fakeDB) StartReplicaUntilGTID(_ context.Context, gtid string) error {
+func (f *fakeDB) StartReplicaUntilGTID(_ context.Context, gtid string, channel string) error {
 	f.calls = append(f.calls, "StartReplicaUntilGTID")
 	f.startUntilGTID = gtid
+	f.channels = append(f.channels, channel)
 	return f.startUntilErr
 }
 
-func (f *fakeDB) WaitReplicaSQLThreadStop(_ context.Context, _ time.Duration) error {
+func (f *fakeDB) WaitReplicaSQLThreadStop(_ context.Context, _ time.Duration, channel string) error {
 	f.calls = append(f.calls, "WaitReplicaSQLThreadStop")
+	f.channels = append(f.channels, channel)
 	return f.waitErr
 }
 
-func (f *fakeDB) StopReplication(_ context.Context) error {
+func (f *fakeDB) StopReplication(_ context.Context, channel string) error {
 	f.calls = append(f.calls, "StopReplication")
+	f.channels = append(f.channels, channel)
 	return f.stopErr
 }
 
-func (f *fakeDB) ResetReplication(_ context.Context) error {
+func (f *fakeDB) ResetReplication(_ context.Context, channel string) error {
 	f.calls = append(f.calls, "ResetReplication")
+	f.channels = append(f.channels, channel)
 	return f.resetErr
 }
 
@@ -359,6 +365,9 @@ func TestRunApply(t *testing.T) {
 
 			if tc.expectedFuncCalls != nil && fakeDatabase != nil {
 				assert.Equal(t, tc.expectedFuncCalls, fakeDatabase.calls)
+				for i, ch := range fakeDatabase.channels {
+					assert.Equalf(t, "pitr", ch, "channel-aware call #%d should target the pitr channel", i)
+				}
 			}
 			if tc.expectedUDID != "" && fakeDatabase != nil {
 				assert.Equal(t, tc.expectedUDID, fakeDatabase.startUntilGTID)

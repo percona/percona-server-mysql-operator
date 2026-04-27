@@ -27,15 +27,20 @@ import (
 // The binlog-replay method only uses GetGTIDExecuted; the replication method
 // uses the full set.
 type Database interface {
-	ChangeReplicationSourceRelay(ctx context.Context, relayLogFile string, relayLogPos int) error
-	StartReplicaUntilGTID(ctx context.Context, gtid string) error
-	WaitReplicaSQLThreadStop(ctx context.Context, pollInterval time.Duration) error
-	StopReplication(ctx context.Context) error
-	ResetReplication(ctx context.Context) error
+	ChangeReplicationSourceRelay(ctx context.Context, relayLogFile string, relayLogPos int, channel string) error
+	StartReplicaUntilGTID(ctx context.Context, gtid string, channel string) error
+	WaitReplicaSQLThreadStop(ctx context.Context, pollInterval time.Duration, channel string) error
+	StopReplication(ctx context.Context, channel string) error
+	ResetReplication(ctx context.Context, channel string) error
 	SetGTIDNextAutomatic(ctx context.Context) error
 	GetGTIDExecuted(ctx context.Context) (string, error)
 	Close() error
 }
+
+// pitrChannelName is the dedicated replication channel used by the PITR
+// recovery flow. Isolating recovery to its own channel keeps it independent
+// of any pre-existing replication state on the default channel.
+const pitrChannelName = "pitr"
 
 type newStorageFn func(ctx context.Context, endpoint, accessKey, secretKey, bucket, prefix, region string, verifyTLS bool) (storage.Storage, error)
 type newDatabaseFn func(ctx context.Context, params db.DBParams) (Database, error)
@@ -340,8 +345,8 @@ func runApply(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getS
 	log.Printf("GTID_EXECUTED: %s", currentGTID)
 
 	firstRelayLog := fmt.Sprintf("%s-relay-bin.000001", hostname)
-	log.Printf("CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE='%s', RELAY_LOG_POS=%d, SOURCE_HOST='dummy'", firstRelayLog, 4)
-	if err := database.ChangeReplicationSourceRelay(ctx, firstRelayLog, 4); err != nil {
+	log.Printf("CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE='%s', RELAY_LOG_POS=%d, SOURCE_HOST='dummy' FOR CHANNEL '%s'", firstRelayLog, 4, pitrChannelName)
+	if err := database.ChangeReplicationSourceRelay(ctx, firstRelayLog, 4, pitrChannelName); err != nil {
 		return fmt.Errorf("change replication source: %w", err)
 	}
 
@@ -359,23 +364,23 @@ func runApply(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getS
 		log.Printf("latest GTID for date %s: %s", pitrDate, pitrGTID)
 	}
 
-	log.Printf("START REPLICA SQL_THREAD UNTIL SQL_AFTER_GTIDS='%s'", pitrGTID)
-	if err := database.StartReplicaUntilGTID(ctx, pitrGTID); err != nil {
+	log.Printf("START REPLICA SQL_THREAD UNTIL SQL_AFTER_GTIDS='%s' FOR CHANNEL '%s'", pitrGTID, pitrChannelName)
+	if err := database.StartReplicaUntilGTID(ctx, pitrGTID, pitrChannelName); err != nil {
 		return fmt.Errorf("start replica until GTID: %w", err)
 	}
 
 	log.Println("waiting for replication to complete...")
-	if err := database.WaitReplicaSQLThreadStop(ctx, time.Second); err != nil {
+	if err := database.WaitReplicaSQLThreadStop(ctx, time.Second, pitrChannelName); err != nil {
 		return fmt.Errorf("wait for replication: %w", err)
 	}
 
 	log.Println("stopping replication")
-	if err := database.StopReplication(ctx); err != nil {
+	if err := database.StopReplication(ctx, pitrChannelName); err != nil {
 		return errors.Wrap(err, "stop replication")
 	}
 
 	log.Println("running 'RESET REPLICA ALL'")
-	if err := database.ResetReplication(ctx); err != nil {
+	if err := database.ResetReplication(ctx, pitrChannelName); err != nil {
 		return errors.Wrap(err, "reset replication")
 	}
 
