@@ -352,8 +352,8 @@ func runApply(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getS
 	log.Printf("GTID_EXECUTED: %s", currentGTID)
 
 	firstRelayLog := fmt.Sprintf("%s-relay-bin.000001", hostname)
-	log.Printf("CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE='%s', RELAY_LOG_POS=%d, SOURCE_HOST='dummy' FOR CHANNEL '%s'", firstRelayLog, 4, pitrChannelName)
-	if err := database.ChangeReplicationSourceRelay(ctx, firstRelayLog, 4, pitrChannelName); err != nil {
+	log.Printf("CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE='%s', RELAY_LOG_POS=%d, SOURCE_HOST='dummy' FOR CHANNEL '%s'", firstRelayLog, 1, pitrChannelName)
+	if err := database.ChangeReplicationSourceRelay(ctx, firstRelayLog, 1, pitrChannelName); err != nil {
 		return fmt.Errorf("change replication source: %w", err)
 	}
 
