@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -37,6 +38,9 @@ func (r *orcResponse) Error() error {
 	if strings.Contains(r.Message, "no such host") {
 		return ErrNoSuchHost
 	}
+	if strings.Contains(r.Message, "i/o timeout") {
+		return ErrTimeout
+	}
 	return errors.New(r.Message)
 }
 
@@ -65,16 +69,29 @@ var (
 	ErrUnauthorized           = errors.New("unauthorized")
 	ErrBadConn                = errors.New("bad connection")
 	ErrNoSuchHost             = errors.New("mysql host not found")
+	ErrTimeout                = errors.New("timeout")
+	ErrContainerNotFound      = errors.New("orchestrator container not found")
 )
 
 func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoint string, outb, errb *bytes.Buffer) error {
 	c := []string{"curl", fmt.Sprintf("localhost:%d/%s", defaultWebPort, endpoint)}
 	err := cliCmd.Exec(ctx, pod, AppName, c, nil, outb, errb, false)
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unable to upgrade connection: container not found") {
+			return ErrContainerNotFound
+		}
 		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", c, outb, errb)
 	}
 
 	return nil
+}
+
+func isTruncatedJSONErr(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	return errors.Is(err, io.ErrUnexpectedEOF) || err.Error() == "unexpected end of JSON input"
 }
 
 func ClusterPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint string) (*Instance, error) {
@@ -95,6 +112,9 @@ func ClusterPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Po
 
 	orcResp := &orcResponse{}
 	if err := json.Unmarshal(body, orcResp); err != nil {
+		if isTruncatedJSONErr(err) {
+			return nil, ErrEmptyResponse
+		}
 		return nil, errors.Wrap(err, "json decode")
 	}
 
@@ -116,6 +136,9 @@ func StopReplication(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.P
 
 	orcResp := &orcResponse{}
 	if err := json.Unmarshal(res.Bytes(), &orcResp); err != nil {
+		if isTruncatedJSONErr(err) {
+			return ErrEmptyResponse
+		}
 		return errors.Wrap(err, "json decode")
 	}
 
@@ -133,6 +156,9 @@ func StartReplication(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.
 
 	orcResp := &orcResponse{}
 	if err := json.Unmarshal(res.Bytes(), &orcResp); err != nil {
+		if isTruncatedJSONErr(err) {
+			return ErrEmptyResponse
+		}
 		return errors.Wrap(err, "json decode")
 	}
 
@@ -158,6 +184,9 @@ func AddPeer(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, peer
 
 	orcResp := &orcResponse{}
 	if err := json.Unmarshal(body, &orcResp); err != nil {
+		if isTruncatedJSONErr(err) {
+			return ErrEmptyResponse
+		}
 		return errors.Wrap(err, "json decode")
 	}
 
@@ -183,6 +212,9 @@ func RemovePeer(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, p
 
 	orcResp := &orcResponse{}
 	if err := json.Unmarshal(body, &orcResp); err != nil {
+		if isTruncatedJSONErr(err) {
+			return ErrEmptyResponse
+		}
 		return errors.Wrap(err, "json decode")
 	}
 
@@ -211,6 +243,9 @@ func EnsureNodeIsPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *core
 
 	orcResp := &orcResponse{}
 	if err := json.Unmarshal(body, orcResp); err != nil {
+		if isTruncatedJSONErr(err) {
+			return ErrEmptyResponse
+		}
 		return errors.Wrapf(err, "json decode \"%s\"", string(body))
 	}
 
@@ -234,6 +269,9 @@ func Discover(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, hos
 	}
 
 	if err := json.Unmarshal(body, orcResp); err != nil {
+		if isTruncatedJSONErr(err) {
+			return ErrEmptyResponse
+		}
 		return errors.Wrapf(err, "json decode \"%s\"", string(body))
 	}
 
@@ -257,6 +295,9 @@ func SetWriteable(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod,
 	}
 
 	if err := json.Unmarshal(body, orcResp); err != nil {
+		if isTruncatedJSONErr(err) {
+			return ErrEmptyResponse
+		}
 		return errors.Wrapf(err, "json decode \"%s\"", string(body))
 	}
 
@@ -284,6 +325,9 @@ func Cluster(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clus
 
 	orcResp := &orcResponse{}
 	if err := json.Unmarshal(body, orcResp); err != nil {
+		if isTruncatedJSONErr(err) {
+			return nil, ErrEmptyResponse
+		}
 		return nil, errors.Wrap(err, "json decode")
 	}
 
@@ -311,6 +355,9 @@ func ForgetInstance(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Po
 	}
 
 	if err := json.Unmarshal(body, orcResp); err != nil {
+		if isTruncatedJSONErr(err) {
+			return ErrEmptyResponse
+		}
 		return errors.Wrapf(err, "json decode \"%s\"", string(body))
 	}
 
@@ -343,6 +390,9 @@ func BeginDowntime(
 	}
 
 	if err := json.Unmarshal(body, orcResp); err != nil {
+		if isTruncatedJSONErr(err) {
+			return ErrEmptyResponse
+		}
 		return errors.Wrapf(err, "json decode \"%s\"", string(body))
 	}
 
@@ -366,6 +416,9 @@ func EndDowntime(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, 
 	}
 
 	if err := json.Unmarshal(body, orcResp); err != nil {
+		if isTruncatedJSONErr(err) {
+			return ErrEmptyResponse
+		}
 		return errors.Wrapf(err, "json decode \"%s\"", string(body))
 	}
 
