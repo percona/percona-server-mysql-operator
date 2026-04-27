@@ -123,6 +123,25 @@ func writeBinlogsFile(t *testing.T, entries []binlogserver.BinlogEntry) string {
 	return f.Name()
 }
 
+func TestWriteEmptyRelayLogs(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, writeEmptyRelayLogs(dir, "myhost", 3))
+
+	wantMagic := []byte{0xfe, 0x62, 0x69, 0x6e}
+	for i := 1; i <= 3; i++ {
+		path := filepath.Join(dir, fmt.Sprintf("myhost-relay-bin.%06d", i))
+		data, err := os.ReadFile(path)
+		require.NoErrorf(t, err, "placeholder %d must exist", i)
+		assert.Equalf(t, wantMagic, data, "placeholder %d must contain only the binlog magic", i)
+	}
+
+	indexData, err := os.ReadFile(filepath.Join(dir, "myhost-relay-bin.index"))
+	require.NoError(t, err)
+	assert.Equal(t,
+		"./myhost-relay-bin.000001\n./myhost-relay-bin.000002\n./myhost-relay-bin.000003\n",
+		string(indexData))
+}
+
 func TestRunApply(t *testing.T) {
 	bucket := "mybucket"
 	defaultEntries := []binlogserver.BinlogEntry{

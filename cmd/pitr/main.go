@@ -351,6 +351,14 @@ func runApply(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getS
 	}
 	log.Printf("GTID_EXECUTED: %s", currentGTID)
 
+	// CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE='X' requires X to exist and
+	// to begin with the 4-byte binlog magic. Pre-create empty-but-valid
+	// placeholders and the index for every entry; downloadRelayLogs overwrites
+	// them with real binlog data before START REPLICA reads them.
+	if err := writeEmptyRelayLogs(mysqlDir, hostname, len(entries)); err != nil {
+		return err
+	}
+
 	firstRelayLog := fmt.Sprintf("%s-relay-bin.000001", hostname)
 	log.Printf("CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE='%s', RELAY_LOG_POS=%d, SOURCE_HOST='dummy' FOR CHANNEL '%s'", firstRelayLog, 1, pitrChannelName)
 	if err := database.ChangeReplicationSourceRelay(ctx, firstRelayLog, 1, pitrChannelName); err != nil {
@@ -411,8 +419,37 @@ func runApply(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getS
 	return nil
 }
 
-// downloadRelayLogs streams every binlog from S3 into the MySQL data directory
-// as a relay log file and writes the accompanying relay-bin.index.
+// binlogMagic is the 4-byte prefix that identifies a MySQL binary/relay log
+// file. A file containing only this magic is a syntactically valid binlog
+// with zero events — enough for CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE
+// to accept it as the named relay log.
+var binlogMagic = []byte{0xfe, 0x62, 0x69, 0x6e}
+
+// writeEmptyRelayLogs creates count empty-but-valid relay log files
+// (containing only the binlog magic) and the matching relay-bin.index. The
+// files are placeholders for downloadRelayLogs to overwrite, and let CHANGE
+// REPLICATION SOURCE succeed before the real binlogs are on disk.
+func writeEmptyRelayLogs(mysqlDir, hostname string, count int) error {
+	relayLogFiles := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		relayLogName := fmt.Sprintf("%s-relay-bin.%06d", hostname, i+1)
+		relayLogPath := filepath.Join(mysqlDir, relayLogName)
+		if err := os.WriteFile(relayLogPath, binlogMagic, 0644); err != nil {
+			return fmt.Errorf("write empty relay log %s: %w", relayLogPath, err)
+		}
+		relayLogFiles = append(relayLogFiles, "./"+relayLogName)
+	}
+	indexPath := filepath.Join(mysqlDir, fmt.Sprintf("%s-relay-bin.index", hostname))
+	indexContent := strings.Join(relayLogFiles, "\n") + "\n"
+	if err := os.WriteFile(indexPath, []byte(indexContent), 0644); err != nil {
+		return fmt.Errorf("write relay log index: %w", err)
+	}
+	log.Printf("wrote %d empty relay log placeholder(s)", count)
+	return nil
+}
+
+// downloadRelayLogs streams every binlog from S3 into the MySQL data directory,
+// overwriting the placeholder relay log files written by writeEmptyRelayLogs.
 func downloadRelayLogs(ctx context.Context, newS3 newStorageFn, entries []binlogserver.BinlogEntry, mysqlDir, hostname string) error {
 	endpoint := os.Getenv("AWS_ENDPOINT")
 	accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
@@ -426,7 +463,6 @@ func downloadRelayLogs(ctx context.Context, newS3 newStorageFn, entries []binlog
 		return fmt.Errorf("create S3 client: %w", err)
 	}
 
-	relayLogFiles := make([]string, 0, len(entries))
 	for i, entry := range entries {
 		relayLogName := fmt.Sprintf("%s-relay-bin.%06d", hostname, i+1)
 		relayLogPath := filepath.Join(mysqlDir, relayLogName)
@@ -461,17 +497,9 @@ func downloadRelayLogs(ctx context.Context, newS3 newStorageFn, entries []binlog
 		if err != nil {
 			return fmt.Errorf("write relay log file %s: %w", relayLogPath, err)
 		}
-
-		relayLogFiles = append(relayLogFiles, "./"+relayLogName)
 	}
 
-	indexPath := filepath.Join(mysqlDir, fmt.Sprintf("%s-relay-bin.index", hostname))
-	indexContent := strings.Join(relayLogFiles, "\n") + "\n"
-	if err := os.WriteFile(indexPath, []byte(indexContent), 0644); err != nil {
-		return fmt.Errorf("write relay log index: %w", err)
-	}
-
-	log.Printf("downloaded %d relay log files", len(relayLogFiles))
+	log.Printf("downloaded %d relay log files", len(entries))
 	return nil
 }
 
