@@ -324,6 +324,10 @@ func applyBinlogs(ctx context.Context, objectKeys []string, getObject getObjectF
 	return nil
 }
 
+func relayLogName(hostname string, channelName string, index int) string {
+	return fmt.Sprintf("%s-relay-bin-%s.%06d", hostname, channelName, index)
+}
+
 // runInit is the first stage of the replication PITR method. It writes
 // empty relay log placeholders, then issues CHANGE REPLICATION SOURCE and
 // CHANGE REPLICATION FILTER on the recovery channel.
@@ -374,7 +378,7 @@ func runInit(ctx context.Context, newDB newDatabaseFn, getSecret func(apiv1.Syst
 		return err
 	}
 
-	firstRelayLog := fmt.Sprintf("%s-relay-bin.000001", hostname)
+	firstRelayLog := relayLogName(hostname, pitrChannelName, 1)
 	log.Printf("CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE='%s', RELAY_LOG_POS=%d, SOURCE_HOST='dummy' FOR CHANNEL '%s'", firstRelayLog, 1, pitrChannelName)
 	if err := database.ChangeReplicationSourceRelay(ctx, firstRelayLog, 1, pitrChannelName); err != nil {
 		return fmt.Errorf("change replication source: %w", err)
@@ -430,7 +434,7 @@ func runApply(ctx context.Context, newDB newDatabaseFn, getSecret func(apiv1.Sys
 	}
 
 	if pitrType == "date" {
-		lastRelayLog := fmt.Sprintf("%s-relay-bin.%06d", hostname, len(entries))
+		lastRelayLog := relayLogName(hostname, pitrChannelName, len(entries))
 		lastRelayLogPath := filepath.Join(mysqlDir, lastRelayLog)
 		pitrGTID, err = getGTIDByDatetime(lastRelayLogPath, pitrDate)
 		if err != nil {
@@ -506,14 +510,14 @@ var binlogMagic = []byte{0xfe, 0x62, 0x69, 0x6e}
 func writeEmptyRelayLogs(mysqlDir, hostname string, count int) error {
 	relayLogFiles := make([]string, 0, count)
 	for i := 0; i < count; i++ {
-		relayLogName := fmt.Sprintf("%s-relay-bin.%06d", hostname, i+1)
-		relayLogPath := filepath.Join(mysqlDir, relayLogName)
+		relayLog := relayLogName(hostname, pitrChannelName, i+1)
+		relayLogPath := filepath.Join(mysqlDir, relayLog)
 		if err := os.WriteFile(relayLogPath, binlogMagic, 0644); err != nil {
 			return fmt.Errorf("write empty relay log %s: %w", relayLogPath, err)
 		}
-		relayLogFiles = append(relayLogFiles, "./"+relayLogName)
+		relayLogFiles = append(relayLogFiles, "./"+relayLog)
 	}
-	indexPath := filepath.Join(mysqlDir, fmt.Sprintf("%s-relay-bin.index", hostname))
+	indexPath := filepath.Join(mysqlDir, fmt.Sprintf("%s-relay-bin-%s.index", hostname, pitrChannelName))
 	indexContent := strings.Join(relayLogFiles, "\n") + "\n"
 	if err := os.WriteFile(indexPath, []byte(indexContent), 0644); err != nil {
 		return fmt.Errorf("write relay log index: %w", err)
@@ -538,8 +542,8 @@ func downloadRelayLogs(ctx context.Context, newS3 newStorageFn, entries []binlog
 	}
 
 	for i, entry := range entries {
-		relayLogName := fmt.Sprintf("%s-relay-bin.%06d", hostname, i+1)
-		relayLogPath := filepath.Join(mysqlDir, relayLogName)
+		relayLog := relayLogName(hostname, pitrChannelName, i+1)
+		relayLogPath := filepath.Join(mysqlDir, relayLog)
 
 		objectKey, err := objectKeyFromURI(entry.URI, bucket)
 		if err != nil {
