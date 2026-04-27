@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -46,6 +47,7 @@ func (f *fakeStorage) GetPrefix() string                                        
 // fakeDB records method calls and returns configured errors.
 type fakeDB struct {
 	changeRelayErr        error
+	changeFilterErr       error
 	startUntilErr         error
 	waitErr               error
 	stopErr               error
@@ -56,12 +58,20 @@ type fakeDB struct {
 	calls                 []string
 	startUntilGTID        string
 	channels              []string
+	filterIgnoreDBs       []string
 }
 
 func (f *fakeDB) ChangeReplicationSourceRelay(_ context.Context, _ string, _ int, channel string) error {
 	f.calls = append(f.calls, "ChangeReplicationSourceRelay")
 	f.channels = append(f.channels, channel)
 	return f.changeRelayErr
+}
+
+func (f *fakeDB) ChangeReplicationFilterIgnoreDB(_ context.Context, dbs []string, channel string) error {
+	f.calls = append(f.calls, "ChangeReplicationFilterIgnoreDB")
+	f.channels = append(f.channels, channel)
+	f.filterIgnoreDBs = dbs
+	return f.changeFilterErr
 }
 
 func (f *fakeDB) StartReplicaUntilGTID(_ context.Context, gtid string, channel string) error {
@@ -131,6 +141,7 @@ func TestRunApply(t *testing.T) {
 	allDBCalls := []string{
 		"GetGTIDExecuted",
 		"ChangeReplicationSourceRelay",
+		"ChangeReplicationFilterIgnoreDB",
 		"StartReplicaUntilGTID",
 		"WaitReplicaSQLThreadStop",
 		"StopReplication",
@@ -200,6 +211,14 @@ func TestRunApply(t *testing.T) {
 			expectedError:     "change replication source",
 			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay"},
 		},
+		"change replication filter error": {
+			entries:           defaultEntries,
+			pitrType:          "gtid",
+			pitrGTID:          "uuid:1",
+			db:                &fakeDB{changeFilterErr: errors.New("filter error")},
+			expectedError:     "change replication filter",
+			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay", "ChangeReplicationFilterIgnoreDB"},
+		},
 		"S3 client creation error": {
 			entries:  defaultEntries,
 			pitrType: "gtid",
@@ -211,7 +230,7 @@ func TestRunApply(t *testing.T) {
 				}
 			},
 			expectedError:     "create S3 client",
-			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay"},
+			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay", "ChangeReplicationFilterIgnoreDB"},
 		},
 		"S3 download error": {
 			entries:  defaultEntries,
@@ -225,7 +244,7 @@ func TestRunApply(t *testing.T) {
 				}
 			},
 			expectedError:     "download binlog",
-			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay"},
+			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay", "ChangeReplicationFilterIgnoreDB"},
 		},
 		"start replica until GTID error": {
 			entries:           defaultEntries,
@@ -233,7 +252,7 @@ func TestRunApply(t *testing.T) {
 			pitrGTID:          "uuid:1",
 			db:                &fakeDB{startUntilErr: errors.New("start error")},
 			expectedError:     "start replica until GTID",
-			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay", "StartReplicaUntilGTID"},
+			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay", "ChangeReplicationFilterIgnoreDB", "StartReplicaUntilGTID"},
 		},
 		"wait replica stop error": {
 			entries:           defaultEntries,
@@ -241,7 +260,7 @@ func TestRunApply(t *testing.T) {
 			pitrGTID:          "uuid:1",
 			db:                &fakeDB{waitErr: errors.New("wait error")},
 			expectedError:     "wait for replication",
-			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay", "StartReplicaUntilGTID", "WaitReplicaSQLThreadStop"},
+			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay", "ChangeReplicationFilterIgnoreDB", "StartReplicaUntilGTID", "WaitReplicaSQLThreadStop"},
 		},
 		"stop replication error": {
 			entries:           defaultEntries,
@@ -249,7 +268,7 @@ func TestRunApply(t *testing.T) {
 			pitrGTID:          "uuid:1",
 			db:                &fakeDB{stopErr: errors.New("stop error")},
 			expectedError:     "stop replication",
-			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay", "StartReplicaUntilGTID", "WaitReplicaSQLThreadStop", "StopReplication"},
+			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay", "ChangeReplicationFilterIgnoreDB", "StartReplicaUntilGTID", "WaitReplicaSQLThreadStop", "StopReplication"},
 		},
 		"reset replication error": {
 			entries:           defaultEntries,
@@ -257,7 +276,7 @@ func TestRunApply(t *testing.T) {
 			pitrGTID:          "uuid:1",
 			db:                &fakeDB{resetErr: errors.New("reset error")},
 			expectedError:     "reset replication",
-			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay", "StartReplicaUntilGTID", "WaitReplicaSQLThreadStop", "StopReplication", "ResetReplication"},
+			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay", "ChangeReplicationFilterIgnoreDB", "StartReplicaUntilGTID", "WaitReplicaSQLThreadStop", "StopReplication", "ResetReplication"},
 		},
 		"set GTID_NEXT error": {
 			entries:           defaultEntries,
@@ -296,7 +315,7 @@ func TestRunApply(t *testing.T) {
 			db:                &fakeDB{},
 			getGTID:           func(string, string) (string, error) { return "", errors.New("mysqlbinlog failed") },
 			expectedError:     "get latest GTID for date",
-			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay"},
+			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay", "ChangeReplicationFilterIgnoreDB"},
 		},
 	}
 
@@ -367,6 +386,9 @@ func TestRunApply(t *testing.T) {
 				assert.Equal(t, tc.expectedFuncCalls, fakeDatabase.calls)
 				for i, ch := range fakeDatabase.channels {
 					assert.Equalf(t, "pitr", ch, "channel-aware call #%d should target the pitr channel", i)
+				}
+				if slices.Contains(fakeDatabase.calls, "ChangeReplicationFilterIgnoreDB") {
+					assert.Equal(t, []string{"mysql_innodb_cluster_metadata"}, fakeDatabase.filterIgnoreDBs)
 				}
 			}
 			if tc.expectedUDID != "" && fakeDatabase != nil {

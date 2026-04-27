@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -420,6 +421,19 @@ func (d *DB) ChangeReplicationSourceRelay(ctx context.Context, relayLogFile stri
 		"CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE='%s', RELAY_LOG_POS=%d, SOURCE_HOST='dummy'%s",
 		relayLogFile, relayLogPos, forChannelClause(channel)))
 	return errors.Wrap(err, "change replication source to relay log")
+}
+
+// ChangeReplicationFilterIgnoreDB sets REPLICATE_IGNORE_DB on the given
+// channel so the SQL thread skips events whose default database is in dbs.
+// Database names are emitted unquoted as required by CHANGE REPLICATION FILTER.
+func (d *DB) ChangeReplicationFilterIgnoreDB(ctx context.Context, dbs []string, channel string) error {
+	if len(dbs) == 0 {
+		return errors.New("no databases provided")
+	}
+	_, err := d.db.ExecContext(ctx, fmt.Sprintf(
+		"CHANGE REPLICATION FILTER REPLICATE_IGNORE_DB = (%s)%s",
+		strings.Join(dbs, ", "), forChannelClause(channel)))
+	return errors.Wrap(err, "change replication filter")
 }
 
 func (d *DB) StartReplicaUntilGTID(ctx context.Context, gtid string, channel string) error {

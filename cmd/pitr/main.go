@@ -28,6 +28,7 @@ import (
 // uses the full set.
 type Database interface {
 	ChangeReplicationSourceRelay(ctx context.Context, relayLogFile string, relayLogPos int, channel string) error
+	ChangeReplicationFilterIgnoreDB(ctx context.Context, dbs []string, channel string) error
 	StartReplicaUntilGTID(ctx context.Context, gtid string, channel string) error
 	WaitReplicaSQLThreadStop(ctx context.Context, pollInterval time.Duration, channel string) error
 	StopReplication(ctx context.Context, channel string) error
@@ -41,6 +42,12 @@ type Database interface {
 // recovery flow. Isolating recovery to its own channel keeps it independent
 // of any pre-existing replication state on the default channel.
 const pitrChannelName = "pitr"
+
+// pitrIgnoreDBs lists databases whose events the recovery SQL thread must
+// skip. mysql_innodb_cluster_metadata is owned by the InnoDB Cluster /
+// Group Replication metadata layer and replaying its binlog events on a
+// freshly restored cluster would corrupt the local metadata.
+var pitrIgnoreDBs = []string{"mysql_innodb_cluster_metadata"}
 
 type newStorageFn func(ctx context.Context, endpoint, accessKey, secretKey, bucket, prefix, region string, verifyTLS bool) (storage.Storage, error)
 type newDatabaseFn func(ctx context.Context, params db.DBParams) (Database, error)
@@ -348,6 +355,11 @@ func runApply(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getS
 	log.Printf("CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE='%s', RELAY_LOG_POS=%d, SOURCE_HOST='dummy' FOR CHANNEL '%s'", firstRelayLog, 4, pitrChannelName)
 	if err := database.ChangeReplicationSourceRelay(ctx, firstRelayLog, 4, pitrChannelName); err != nil {
 		return fmt.Errorf("change replication source: %w", err)
+	}
+
+	log.Printf("CHANGE REPLICATION FILTER REPLICATE_IGNORE_DB = (%s) FOR CHANNEL '%s'", strings.Join(pitrIgnoreDBs, ", "), pitrChannelName)
+	if err := database.ChangeReplicationFilterIgnoreDB(ctx, pitrIgnoreDBs, pitrChannelName); err != nil {
+		return fmt.Errorf("change replication filter: %w", err)
 	}
 
 	if err := downloadRelayLogs(ctx, newS3, entries, mysqlDir, hostname); err != nil {
