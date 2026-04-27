@@ -107,149 +107,20 @@ func writeBinlogsFile(t *testing.T, entries []binlogserver.BinlogEntry) string {
 	return f.Name()
 }
 
-func TestRunSetup(t *testing.T) {
-	bucket := "mybucket"
-
-	tests := map[string]struct {
-		setupEnv      func(t *testing.T, binlogsPath string)
-		entries       []binlogserver.BinlogEntry
-		rawContent    string
-		newS3         func(*fakeStorage) newStorageFn
-		expectedError string
-		checkResult   func(t *testing.T, mysqlDir string)
-	}{
-		"missing BINLOGS_PATH": {
-			setupEnv: func(t *testing.T, _ string) {
-				t.Setenv("BINLOGS_PATH", "")
-			},
-			expectedError: "BINLOGS_PATH",
-		},
-		"invalid JSON in binlogs file": {
-			setupEnv: func(t *testing.T, binlogsPath string) {
-				t.Setenv("BINLOGS_PATH", binlogsPath)
-			},
-			rawContent:    "not-json",
-			expectedError: "parse binlogs json",
-		},
-		"empty binlog entries": {
-			setupEnv: func(t *testing.T, binlogsPath string) {
-				t.Setenv("BINLOGS_PATH", binlogsPath)
-			},
-			entries:       []binlogserver.BinlogEntry{},
-			expectedError: "no binlog entries found",
-		},
-		"S3 client creation error": {
-			setupEnv: func(t *testing.T, binlogsPath string) {
-				t.Setenv("BINLOGS_PATH", binlogsPath)
-				t.Setenv("S3_BUCKET", bucket)
-			},
-			entries: []binlogserver.BinlogEntry{
-				{URI: "s3://mybucket/binlogs/binlog.000001"},
-			},
-			newS3: func(_ *fakeStorage) newStorageFn {
-				return func(_ context.Context, _, _, _, _, _, _ string, _ bool) (storage.Storage, error) {
-					return nil, errors.New("s3 unavailable")
-				}
-			},
-			expectedError: "create S3 client",
-		},
-		"GetObject error": {
-			setupEnv: func(t *testing.T, binlogsPath string) {
-				t.Setenv("BINLOGS_PATH", binlogsPath)
-				t.Setenv("S3_BUCKET", bucket)
-			},
-			entries: []binlogserver.BinlogEntry{
-				{URI: "s3://mybucket/binlogs/binlog.000001"},
-			},
-			newS3: func(fake *fakeStorage) newStorageFn {
-				fake.getErr = errors.New("download failed")
-				return func(_ context.Context, _, _, _, _, _, _ string, _ bool) (storage.Storage, error) {
-					return fake, nil
-				}
-			},
-			expectedError: "download binlog",
-		},
-		"success": {
-			setupEnv: func(t *testing.T, binlogsPath string) {
-				t.Setenv("BINLOGS_PATH", binlogsPath)
-				t.Setenv("S3_BUCKET", bucket)
-			},
-			entries: []binlogserver.BinlogEntry{
-				{URI: "s3://mybucket/binlogs/binlog.000001"},
-				{URI: "s3://mybucket/binlogs/binlog.000002"},
-			},
-			newS3: func(fake *fakeStorage) newStorageFn {
-				fake.objects = map[string]string{
-					"binlogs/binlog.000001": "binlogdata1",
-					"binlogs/binlog.000002": "binlogdata2",
-				}
-				return func(_ context.Context, _, _, _, _, _, _ string, _ bool) (storage.Storage, error) {
-					return fake, nil
-				}
-			},
-			checkResult: func(t *testing.T, mysqlDir string) {
-				hostname, err := os.Hostname()
-				require.NoError(t, err)
-
-				indexPath := filepath.Join(mysqlDir, hostname+"-relay-bin.index")
-				indexData, err := os.ReadFile(indexPath)
-				require.NoError(t, err, "relay log index file must exist")
-
-				indexContent := string(indexData)
-				assert.Contains(t, indexContent, hostname+"-relay-bin.000001")
-				assert.Contains(t, indexContent, hostname+"-relay-bin.000002")
-
-				for i, wantContent := range []string{"binlogdata1", "binlogdata2"} {
-					relayLog := filepath.Join(mysqlDir, fmt.Sprintf("%s-relay-bin.%06d", hostname, i+1))
-					data, err := os.ReadFile(relayLog)
-					require.NoErrorf(t, err, "relay log %d must exist", i+1)
-					assert.Equalf(t, wantContent, string(data), "relay log %d content mismatch", i+1)
-				}
-			},
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			var binlogsPath string
-			if tc.rawContent != "" {
-				f, err := os.CreateTemp(t.TempDir(), "binlogs-*.json")
-				require.NoError(t, err)
-				_, err = f.WriteString(tc.rawContent)
-				require.NoError(t, err)
-				require.NoError(t, f.Close())
-				binlogsPath = f.Name()
-			} else if tc.entries != nil {
-				binlogsPath = writeBinlogsFile(t, tc.entries)
-			}
-
-			tc.setupEnv(t, binlogsPath)
-
-			fake := &fakeStorage{}
-			var newS3 newStorageFn
-			if tc.newS3 != nil {
-				newS3 = tc.newS3(fake)
-			}
-
-			mysqlDir := t.TempDir()
-			err := runSetup(t.Context(), newS3, mysqlDir)
-
-			if tc.expectedError != "" {
-				require.ErrorContains(t, err, tc.expectedError)
-				return
-			}
-			require.NoError(t, err)
-			if tc.checkResult != nil {
-				tc.checkResult(t, mysqlDir)
-			}
-		})
-	}
-}
-
 func TestRunApply(t *testing.T) {
+	bucket := "mybucket"
 	defaultEntries := []binlogserver.BinlogEntry{
-		{URI: "s3://bucket/binlogs/binlog.000001"},
-		{URI: "s3://bucket/binlogs/binlog.000002"},
+		{URI: "s3://mybucket/binlogs/binlog.000001"},
+		{URI: "s3://mybucket/binlogs/binlog.000002"},
+	}
+	defaultS3 := func(fake *fakeStorage) newStorageFn {
+		fake.objects = map[string]string{
+			"binlogs/binlog.000001": "binlogdata1",
+			"binlogs/binlog.000002": "binlogdata2",
+		}
+		return func(_ context.Context, _, _, _, _, _, _ string, _ bool) (storage.Storage, error) {
+			return fake, nil
+		}
 	}
 	allDBCalls := []string{
 		"GetGTIDExecuted",
@@ -264,17 +135,33 @@ func TestRunApply(t *testing.T) {
 
 	tests := map[string]struct {
 		entries           []binlogserver.BinlogEntry
+		rawContent        string
+		omitBinlogsPath   bool
 		pitrType          string
 		pitrGTID          string
 		pitrDate          string
 		db                *fakeDB
 		newDB             func(ctx context.Context, params db.DBParams) (Database, error)
+		newS3             func(*fakeStorage) newStorageFn
 		getSecret         func(apiv1.SystemUser) (string, error)
 		getGTID           func(string, string) (string, error)
 		expectedError     string
 		expectedFuncCalls []string
 		expectedUDID      string
+		checkRelayLogs    bool
 	}{
+		"missing BINLOGS_PATH": {
+			omitBinlogsPath: true,
+			expectedError:   "BINLOGS_PATH",
+		},
+		"invalid JSON in binlogs file": {
+			rawContent:    "not-json",
+			expectedError: "parse binlogs json",
+		},
+		"empty binlog entries": {
+			entries:       []binlogserver.BinlogEntry{},
+			expectedError: "no binlog entries found",
+		},
 		"get secret error": {
 			entries:       defaultEntries,
 			pitrType:      "gtid",
@@ -291,12 +178,47 @@ func TestRunApply(t *testing.T) {
 			},
 			expectedError: "connect to MySQL",
 		},
+		"GetGTIDExecuted error": {
+			entries:           defaultEntries,
+			pitrType:          "gtid",
+			pitrGTID:          "uuid:1",
+			db:                &fakeDB{getGTIDExecutedErr: errors.New("query failed")},
+			expectedError:     "get current GTID_EXECUTED",
+			expectedFuncCalls: []string{"GetGTIDExecuted"},
+		},
 		"change replication source relay error": {
 			entries:           defaultEntries,
 			pitrType:          "gtid",
 			pitrGTID:          "uuid:1",
 			db:                &fakeDB{changeRelayErr: errors.New("relay error")},
 			expectedError:     "change replication source",
+			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay"},
+		},
+		"S3 client creation error": {
+			entries:  defaultEntries,
+			pitrType: "gtid",
+			pitrGTID: "uuid:1",
+			db:       &fakeDB{},
+			newS3: func(_ *fakeStorage) newStorageFn {
+				return func(_ context.Context, _, _, _, _, _, _ string, _ bool) (storage.Storage, error) {
+					return nil, errors.New("s3 unavailable")
+				}
+			},
+			expectedError:     "create S3 client",
+			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay"},
+		},
+		"S3 download error": {
+			entries:  defaultEntries,
+			pitrType: "gtid",
+			pitrGTID: "uuid:1",
+			db:       &fakeDB{},
+			newS3: func(fake *fakeStorage) newStorageFn {
+				fake.getErr = errors.New("download failed")
+				return func(_ context.Context, _, _, _, _, _, _ string, _ bool) (storage.Storage, error) {
+					return fake, nil
+				}
+			},
+			expectedError:     "download binlog",
 			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay"},
 		},
 		"start replica until GTID error": {
@@ -346,6 +268,7 @@ func TestRunApply(t *testing.T) {
 			db:                &fakeDB{},
 			expectedFuncCalls: allDBCalls,
 			expectedUDID:      "aaaaaaaa-0000-0000-0000-000000000001:1-10",
+			checkRelayLogs:    true,
 		},
 		"date mode success": {
 			entries:  defaultEntries,
@@ -358,24 +281,42 @@ func TestRunApply(t *testing.T) {
 			},
 			expectedFuncCalls: allDBCalls,
 			expectedUDID:      "bbbbbbbb-0000-0000-0000-000000000002:1-5",
+			checkRelayLogs:    true,
 		},
 		"date mode getGTID error": {
-			entries:       defaultEntries,
-			pitrType:      "date",
-			pitrDate:      "2024-01-15 12:00:00",
-			db:            &fakeDB{},
-			getGTID:       func(string, string) (string, error) { return "", errors.New("mysqlbinlog failed") },
-			expectedError: "get latest GTID for date",
+			entries:           defaultEntries,
+			pitrType:          "date",
+			pitrDate:          "2024-01-15 12:00:00",
+			db:                &fakeDB{},
+			getGTID:           func(string, string) (string, error) { return "", errors.New("mysqlbinlog failed") },
+			expectedError:     "get latest GTID for date",
+			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay"},
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			binlogsPath := writeBinlogsFile(t, tc.entries)
-			t.Setenv("BINLOGS_PATH", binlogsPath)
+			var binlogsPath string
+			if tc.rawContent != "" {
+				f, err := os.CreateTemp(t.TempDir(), "binlogs-*.json")
+				require.NoError(t, err)
+				_, err = f.WriteString(tc.rawContent)
+				require.NoError(t, err)
+				require.NoError(t, f.Close())
+				binlogsPath = f.Name()
+			} else if tc.entries != nil {
+				binlogsPath = writeBinlogsFile(t, tc.entries)
+			}
+
+			if tc.omitBinlogsPath {
+				t.Setenv("BINLOGS_PATH", "")
+			} else {
+				t.Setenv("BINLOGS_PATH", binlogsPath)
+			}
 			t.Setenv("PITR_TYPE", tc.pitrType)
 			t.Setenv("PITR_GTID", tc.pitrGTID)
 			t.Setenv("PITR_DATE", tc.pitrDate)
+			t.Setenv("S3_BUCKET", bucket)
 
 			fakeDatabase := tc.db
 
@@ -399,7 +340,16 @@ func TestRunApply(t *testing.T) {
 				}
 			}
 
-			err := runApply(t.Context(), newDB, getSecret, getGTID, t.TempDir())
+			fake := &fakeStorage{}
+			var newS3 newStorageFn
+			if tc.newS3 != nil {
+				newS3 = tc.newS3(fake)
+			} else {
+				newS3 = defaultS3(fake)
+			}
+
+			mysqlDir := t.TempDir()
+			err := runApply(t.Context(), newS3, newDB, getSecret, getGTID, mysqlDir)
 
 			if tc.expectedError != "" {
 				require.ErrorContains(t, err, tc.expectedError)
@@ -412,6 +362,25 @@ func TestRunApply(t *testing.T) {
 			}
 			if tc.expectedUDID != "" && fakeDatabase != nil {
 				assert.Equal(t, tc.expectedUDID, fakeDatabase.startUntilGTID)
+			}
+			if tc.checkRelayLogs {
+				hostname, err := os.Hostname()
+				require.NoError(t, err)
+
+				indexPath := filepath.Join(mysqlDir, hostname+"-relay-bin.index")
+				indexData, err := os.ReadFile(indexPath)
+				require.NoError(t, err, "relay log index file must exist")
+
+				indexContent := string(indexData)
+				assert.Contains(t, indexContent, hostname+"-relay-bin.000001")
+				assert.Contains(t, indexContent, hostname+"-relay-bin.000002")
+
+				for i, wantContent := range []string{"binlogdata1", "binlogdata2"} {
+					relayLog := filepath.Join(mysqlDir, fmt.Sprintf("%s-relay-bin.%06d", hostname, i+1))
+					data, err := os.ReadFile(relayLog)
+					require.NoErrorf(t, err, "relay log %d must exist", i+1)
+					assert.Equalf(t, wantContent, string(data), "relay log %d content mismatch", i+1)
+				}
 			}
 		})
 	}

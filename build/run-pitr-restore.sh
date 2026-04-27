@@ -51,7 +51,6 @@ case "${PITR_METHOD}" in
     /opt/percona/pitr replay
     ;;
   replication)
-    /opt/percona/pitr setup
     /opt/percona/pitr apply
     ;;
   *)
