@@ -7,17 +7,31 @@ function log() {
   echo "${ts} 0 [Info] [K8SPS-642] [Job] $*" >&2
 }
 
-log "Starting mysqld"
 # TODO: Add support for data at rest encryption
-mysqld \
-  --admin-address=127.0.0.1 \
-  --user=mysql \
-  --gtid-mode=ON \
-  --enforce-gtid-consistency=ON &
+
+PITR_METHOD=${PITR_METHOD:-binlog-replay}
+
+MYSQLD_ARGS=(
+  --admin-address=127.0.0.1
+  --user=mysql
+  --gtid-mode=ON
+  --enforce-gtid-consistency=ON
+)
+
+if [[ "${PITR_METHOD}" == "replication" ]]; then
+  MYSQLD_ARGS+=(
+    --skip-replica-start
+    --read-only=ON
+    --super-read-only=ON
+  )
+fi
+
+log "Starting mysqld (method: ${PITR_METHOD})"
+mysqld "${MYSQLD_ARGS[@]}" &
 
 log "waiting for mysqld to be ready"
 until mysqladmin -u operator -p"$(</etc/mysql/mysql-users-secret/operator)" ping --silent 2>/dev/null; do
-    sleep 1;
+  sleep 1
 done
 log "mysqld is ready"
 
@@ -32,7 +46,19 @@ if [[ -n ${SLEEP_FOREVER} ]]; then
 fi
 
 log "starting recovery"
-/opt/percona/pitr
+case "${PITR_METHOD}" in
+  binlog-replay)
+    /opt/percona/pitr replay
+    ;;
+  replication)
+    /opt/percona/pitr setup
+    /opt/percona/pitr apply
+    ;;
+  *)
+    log "unknown PITR_METHOD: ${PITR_METHOD}"
+    exit 1
+    ;;
+esac
 
 log "stopping mysqld"
 mysqladmin -u operator -p"$(</etc/mysql/mysql-users-secret/operator)" shutdown 2>/dev/null

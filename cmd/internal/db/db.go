@@ -400,3 +400,71 @@ func (d *DB) GetGTIDExecuted(ctx context.Context) (string, error) {
 	err := d.db.QueryRowContext(ctx, "SELECT @@GTID_EXECUTED").Scan(&gtid)
 	return gtid, errors.Wrap(err, "get GTID_EXECUTED")
 }
+
+func (d *DB) ResetBinaryLogAndGTIDs(ctx context.Context) error {
+	_, err := d.db.ExecContext(ctx, "RESET BINARY LOGS AND GTIDS")
+	return errors.Wrap(err, "reset binary logs and gtids")
+}
+
+func (d *DB) ChangeReplicationSourceRelay(ctx context.Context, relayLogFile string, relayLogPos int) error {
+	_, err := d.db.ExecContext(ctx, fmt.Sprintf(
+		"CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE='%s', RELAY_LOG_POS=%d, SOURCE_HOST='dummy'",
+		relayLogFile, relayLogPos))
+	return errors.Wrap(err, "change replication source to relay log")
+}
+
+func (d *DB) StartReplicaUntilGTID(ctx context.Context, gtid string) error {
+	_, err := d.db.ExecContext(ctx, fmt.Sprintf(
+		"START REPLICA SQL_THREAD UNTIL SQL_AFTER_GTIDS='%s'", gtid))
+	return errors.Wrap(err, "start replica until GTID")
+}
+
+func (d *DB) SetGTIDNextAutomatic(ctx context.Context) error {
+	_, err := d.db.ExecContext(ctx, "SET GTID_NEXT='AUTOMATIC'")
+	return errors.Wrap(err, "set GTID_NEXT to AUTOMATIC")
+}
+
+func (d *DB) WaitReplicaSQLThreadStop(ctx context.Context, pollInterval time.Duration) error {
+	for {
+		var serviceState string
+		err := d.db.QueryRowContext(ctx,
+			"SELECT SERVICE_STATE FROM replication_applier_status WHERE CHANNEL_NAME=''").Scan(&serviceState)
+		if err != nil {
+			return errors.Wrap(err, "query replication applier status")
+		}
+
+		if serviceState == "OFF" {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(pollInterval):
+		}
+	}
+
+	rows, err := d.db.QueryContext(ctx,
+		"SELECT LAST_ERROR_NUMBER, LAST_ERROR_MESSAGE FROM replication_applier_status_by_worker WHERE CHANNEL_NAME=''")
+	if err != nil {
+		return errors.Wrap(err, "query replication applier worker status")
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			logf.FromContext(ctx).Error(err, "close rows")
+		}
+	}()
+
+	for rows.Next() {
+		var errNum int
+		var errMsg string
+		if err := rows.Scan(&errNum, &errMsg); err != nil {
+			return errors.Wrap(err, "scan worker status")
+		}
+		if errNum != 0 {
+			return errors.Errorf("replication worker error %d: %s", errNum, errMsg)
+		}
+	}
+
+	return rows.Err()
+}
