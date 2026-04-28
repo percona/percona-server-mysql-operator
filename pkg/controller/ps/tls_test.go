@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"path/filepath"
 	"time"
 
@@ -160,6 +161,68 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 		It("should fail on ensure TLS secret", func() {
 			Expect(reconciler().ensureTLSSecret(ctx, cr)).ShouldNot(BeNil())
 		})
+	})
+})
+
+var _ = Describe("TLS cert-manager leak regression", Ordered, func() {
+	const crName = "tls-leak-regression"
+	const ns = crName
+
+	ctx := context.Background()
+
+	cr, err := readDefaultCR(crName, ns)
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: ns},
+	}
+
+	req := ctrl.Request{
+		NamespacedName: types.NamespacedName{Namespace: ns, Name: crName},
+	}
+
+	BeforeAll(func() {
+		Expect(err).NotTo(HaveOccurred())
+		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+		Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+
+		_, reconcileErr := reconciler().Reconcile(ctx, req)
+		Expect(reconcileErr).NotTo(HaveOccurred())
+		secret := &corev1.Secret{}
+		Eventually(func() bool {
+			return k8sClient.Get(ctx, types.NamespacedName{
+				Name:      cr.Spec.SSLSecretName,
+				Namespace: ns,
+			}, secret) == nil
+		}, 15*time.Second, 250*time.Millisecond).Should(BeTrue())
+
+		_, installErr := envtest.InstallCRDs(cfg, envtest.CRDInstallOptions{
+			Paths: []string{filepath.Join("testdata", "cert-manager.yaml")},
+		})
+		Expect(installErr).NotTo(HaveOccurred())
+	})
+
+	AfterAll(func() {
+		_ = k8sClient.Delete(ctx, namespace)
+	})
+
+	It("second reconcile must not block in waitForCert when TLS secret already exists", func() {
+		tightCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		_, reconcileErr := reconciler().Reconcile(tightCtx, req)
+		Expect(reconcileErr).NotTo(HaveOccurred())
+	})
+
+	It("waitForCert must return before the 3 s ticker when context deadline expires", func() {
+		tightCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer cancel()
+
+		start := time.Now()
+		err := reconciler().waitForCert(tightCtx, cr, "nonexistent-cert", "nonexistent-secret")
+		elapsed := time.Since(start)
+
+		Expect(errors.Is(err, context.DeadlineExceeded)).To(BeTrue(),
+			"expected context.DeadlineExceeded, got: %v", err)
+		Expect(elapsed).To(BeNumerically("<", 1*time.Second))
 	})
 })
 
