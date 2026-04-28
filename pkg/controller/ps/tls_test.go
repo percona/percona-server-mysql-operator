@@ -79,15 +79,15 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 				"*.ps-cluster1-mysql",
 				"*.ps-cluster1-mysql.tls-1",
 				"*.ps-cluster1-mysql.tls-1.svc",
-				"ps-cluster1-mysql-primary",
-				"ps-cluster1-mysql-primary.tls-1",
-				"ps-cluster1-mysql-primary.tls-1.svc",
 				"*.ps-cluster1-orchestrator",
 				"*.ps-cluster1-orchestrator.tls-1",
 				"*.ps-cluster1-orchestrator.tls-1.svc",
 				"*.ps-cluster1-router",
 				"*.ps-cluster1-router.tls-1",
 				"*.ps-cluster1-router.tls-1.svc",
+				"ps-cluster1-mysql-primary",
+				"ps-cluster1-mysql-primary.tls-1",
+				"ps-cluster1-mysql-primary.tls-1.svc",
 			}
 
 			Expect(tlsCert.DNSNames).Should(BeEquivalentTo(dnsNames))
@@ -130,9 +130,6 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 				"*.ps-cluster1-mysql",
 				"*.ps-cluster1-mysql.tls-1",
 				"*.ps-cluster1-mysql.tls-1.svc",
-				"ps-cluster1-mysql-primary",
-				"ps-cluster1-mysql-primary.tls-1",
-				"ps-cluster1-mysql-primary.tls-1.svc",
 				"*.ps-cluster1-orchestrator",
 				"*.ps-cluster1-orchestrator.tls-1",
 				"*.ps-cluster1-orchestrator.tls-1.svc",
@@ -140,6 +137,9 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 				"*.ps-cluster1-router.tls-1",
 				"*.ps-cluster1-router.tls-1.svc",
 				"mysql-1.example.com",
+				"ps-cluster1-mysql-primary",
+				"ps-cluster1-mysql-primary.tls-1",
+				"ps-cluster1-mysql-primary.tls-1.svc",
 			}
 
 			Expect(tlsCert.DNSNames).Should(BeEquivalentTo(dnsNames))
