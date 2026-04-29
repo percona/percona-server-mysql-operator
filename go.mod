@@ -28,10 +28,10 @@ require (
 	golang.org/x/sync v0.20.0
 	golang.org/x/text v0.36.0
 	google.golang.org/grpc v1.80.0
-	k8s.io/api v0.35.4
+	k8s.io/api v0.36.0
 	k8s.io/apiextensions-apiserver v0.35.4
 	k8s.io/apimachinery v0.36.0
-	k8s.io/client-go v0.35.4
+	k8s.io/client-go v0.36.0
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2
 	sigs.k8s.io/controller-runtime v0.23.3
 )
