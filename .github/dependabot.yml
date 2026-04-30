@@ -45,3 +45,7 @@ updates:
       interval: weekly
       day: "wednesday"
       time: "01:00"
+    groups:
+      k8s-io:
+        patterns:
+          - "k8s.io/*"
