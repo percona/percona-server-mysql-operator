@@ -7,6 +7,8 @@ metadata:
 spec:
   clusterName: ps-cluster1
   storageName: minio
+#  type: full
+#  incrementalBaseBackupName: some-backup
 #  sourcePod: ps-cluster1-mysql-1
 #  containerOptions:
 #    env:

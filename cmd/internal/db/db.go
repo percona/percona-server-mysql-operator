@@ -165,7 +165,7 @@ func (d *DB) ReplicationStatus(ctx context.Context) (db.ReplicationStatus, strin
 		return db.ReplicationStatusActive, host, nil
 	}
 
-	return db.ReplicationStatusNotInitiated, "", nil
+	return db.ReplicationStatusStopped, "", nil
 }
 
 func (d *DB) IsReplica(ctx context.Context) (bool, error) {
@@ -393,4 +393,10 @@ func (d *DB) CheckIfInPrimaryPartition(ctx context.Context) (bool, error) {
 func (d *DB) EnableSuperReadonly(ctx context.Context) error {
 	_, err := d.db.ExecContext(ctx, "SET GLOBAL SUPER_READ_ONLY=1")
 	return errors.Wrap(err, "set global super_read_only param to 1")
+}
+
+func (d *DB) GetGTIDExecuted(ctx context.Context) (string, error) {
+	var gtid string
+	err := d.db.QueryRowContext(ctx, "SELECT @@GTID_EXECUTED").Scan(&gtid)
+	return gtid, errors.Wrap(err, "get GTID_EXECUTED")
 }

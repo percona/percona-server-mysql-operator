@@ -98,13 +98,15 @@ var _ = AfterSuite(func() {
 })
 
 func reconciler() *PerconaServerMySQLReconciler {
+	cr := NewCronRegistry()
+	DeferCleanup(cr.crons.Stop)
 	return &PerconaServerMySQLReconciler{
 		Client: k8sClient,
 		Scheme: k8sClient.Scheme(),
 		ServerVersion: &platform.ServerVersion{
 			Platform: platform.PlatformKubernetes,
 		},
-		Crons:    NewCronRegistry(),
+		Crons:    cr,
 		Recorder: new(record.FakeRecorder),
 	}
 }

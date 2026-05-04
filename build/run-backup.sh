@@ -13,6 +13,7 @@ request_data() {
 				    "type": "$(json_escape "${STORAGE_TYPE}")",
 				    "containerOptions": ${CONTAINER_OPTIONS},
 				    "verifyTLS": $(json_escape "${VERIFY_TLS}"),
+					"incrementalLsn": "$(json_escape "${INCREMENTAL_LSN}")",
 				    "s3": {
 				        "bucket": "$(json_escape "${S3_BUCKET}")",
 				        "endpointUrl": "$(json_escape "${AWS_ENDPOINT}")",
@@ -30,6 +31,7 @@ request_data() {
 				    "verifyTLS": $(json_escape "${VERIFY_TLS}"),
 				    "type": "$(json_escape "${STORAGE_TYPE}")",
 				    "containerOptions": ${CONTAINER_OPTIONS},
+					"incrementalLsn": "$(json_escape "${INCREMENTAL_LSN}")",
 				    "gcs": {
 				        "bucket": "$(json_escape "${GCS_BUCKET}")",
 				        "endpointUrl": "$(json_escape "${GCS_ENDPOINT}")",
@@ -47,6 +49,7 @@ request_data() {
 				    "verifyTLS": $(json_escape "${VERIFY_TLS}"),
 				    "type": "$(json_escape "${STORAGE_TYPE}")",
 				    "containerOptions": ${CONTAINER_OPTIONS},
+					"incrementalLsn": "$(json_escape "${INCREMENTAL_LSN}")",
 				    "azure": {
 				        "containerName": "$(json_escape "${AZURE_CONTAINER_NAME}")",
 				        "storageAccount": "$(json_escape "${AZURE_STORAGE_ACCOUNT}")",
@@ -62,8 +65,8 @@ request_data() {
 
 # json_escape takes a string and replaces `\` to `\\` and `"` to `\"` to make it safe to insert provided argument into a json string
 json_escape() {
-	escaped_backslash=${1//'\'/'\\'}
-	escaped_quotes=${escaped_backslash//'"'/'\"'}
+	escaped_backslash=${1//\\/\\\\}
+	escaped_quotes=${escaped_backslash//\"/\\\"}
 	echo -n "$escaped_quotes"
 }
 

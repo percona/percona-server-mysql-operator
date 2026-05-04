@@ -17,5 +17,8 @@ commands:
         "*.tls-cert-manager-orchestrator.'"${NAMESPACE}"'.svc",
         "*.tls-cert-manager-router",
         "*.tls-cert-manager-router.'"${NAMESPACE}"'",
-        "*.tls-cert-manager-router.'"${NAMESPACE}"'.svc"
+        "*.tls-cert-manager-router.'"${NAMESPACE}"'.svc",
+        "tls-cert-manager-mysql-primary",
+        "tls-cert-manager-mysql-primary.'"${NAMESPACE}"'",
+        "tls-cert-manager-mysql-primary.'"${NAMESPACE}"'.svc"
       ]'

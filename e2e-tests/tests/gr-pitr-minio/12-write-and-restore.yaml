@@ -1,0 +1,31 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 600
+    script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+
+      run_mysql \
+          "INSERT myDB.myTable (id) VALUES (200501)" \
+          "-h $(get_router_service ${cluster_name})"
+
+      sleep 120
+
+      PITR_DATE_POST=$(date -u '+%Y-%m-%d %H:%M:%S')
+      kubectl create configmap -n "${NAMESPACE}" pitr-date-post --from-literal=date="${PITR_DATE_POST}"
+
+      echo '{}' \
+          | yq eval '.apiVersion = "ps.percona.com/v1"' - \
+          | yq eval '.kind = "PerconaServerMySQLRestore"' - \
+          | yq eval '.metadata.name = "gr-pitr-minio-restore-post-failover"' - \
+          | yq eval ".spec.clusterName = \"${cluster_name}\"" - \
+          | yq eval '.spec.backupName = "gr-pitr-minio-backup-2"' - \
+          | yq eval '.spec.pitr.force = true' - \
+          | yq eval '.spec.pitr.type = "date"' - \
+          | yq eval ".spec.pitr.date = \"${PITR_DATE_POST}\"" - \
+          | kubectl apply -n "${NAMESPACE}" -f -

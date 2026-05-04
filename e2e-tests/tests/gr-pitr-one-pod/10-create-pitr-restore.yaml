@@ -1,0 +1,17 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 120
+    script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      backup_name="gr-pitr-one-pod-incr"
+      restore_name="gr-pitr-one-pod-restore"
+      cluster_name="gr-pitr-one-pod-restore"
+      destination=$(kubectl -n "${NAMESPACE}" get ps-backup "${backup_name}" -o jsonpath='{.status.destination}')
+      pitr_date=$(kubectl get configmap -n "${NAMESPACE}" pitr-date -o jsonpath='{.data.date}')
+
+      run_restore "$restore_name" "" "$cluster_name" "pitr" "$destination" "$pitr_date"

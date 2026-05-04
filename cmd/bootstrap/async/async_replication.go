@@ -195,7 +195,7 @@ func Bootstrap(ctx context.Context) error {
 		return errors.Wrap(err, "check replication status")
 	}
 
-	if rStatus == mysqldb.ReplicationStatusNotInitiated {
+	if rStatus == mysqldb.ReplicationStatusNotInitiated || rStatus == mysqldb.ReplicationStatusStopped {
 		log.Println("configuring replication")
 
 		replicaPass, err := utils.GetSecret(apiv1.UserReplication)

@@ -1,0 +1,12 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # Gets first storage defined and run backup
+      storage_name=$(kubectl get ps gr-pitr-one-pod -n ${NAMESPACE} -o yaml | yq '(.spec.backup.storages // {}) | keys | .[0]')
+      run_backup gr-pitr-one-pod-incr $storage_name gr-pitr-one-pod incremental

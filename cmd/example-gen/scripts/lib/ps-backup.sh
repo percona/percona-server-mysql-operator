@@ -6,7 +6,7 @@
 export RESOURCE_PATH="deploy/backup/backup.yaml"
 
 sort_yaml() {
-	SPEC_ORDER='"clusterName", "storageName", "sourcePod", "containerOptions"'
+	SPEC_ORDER='"clusterName", "storageName", "type", "incrementalBaseBackupName", "sourcePod", "containerOptions"'
 	CONTAINER_OPTS_ORDER='"env", "args"'
 
 	yq - \
@@ -22,5 +22,7 @@ remove_fields() {
 del_fields_to_comment() {
 	yq - \
 		| yq "del(.spec.containerOptions)" \
-		| yq "del(.spec.sourcePod)"
+		| yq "del(.spec.sourcePod)" \
+		| yq "del(.spec.incrementalBaseBackupName)" \
+		| yq "del(.spec.type)"
 }

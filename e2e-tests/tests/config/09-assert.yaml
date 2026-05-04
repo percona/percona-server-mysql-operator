@@ -1,0 +1,21 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 60
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: 09-check-retry-vars-1
+data:
+  retry_values: |2-
+                    Connect_Retry: 70
+               Source_Retry_Count: 4
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: 09-check-retry-vars-2
+data:
+  retry_values: |2-
+                    Connect_Retry: 70
+               Source_Retry_Count: 4

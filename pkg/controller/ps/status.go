@@ -19,6 +19,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
 	database "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
@@ -138,6 +139,15 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		}
 		status.HAProxy = haproxyStatus
 
+		binlogServerStatus := apiv1.StatefulAppStatus{}
+		if cr.Spec.Backup.PiTR.Enabled {
+			binlogServerStatus, err = r.appStatus(ctx, cr, binlogserver.Name(cr), 1, binlogserver.MatchLabels(cr), status.BinlogServer.Version)
+			if err != nil {
+				return errors.Wrap(err, "get binlog server status")
+			}
+		}
+		status.BinlogServer = binlogServerStatus
+
 		status.State = apiv1.StateReady
 		if cr.Spec.MySQL.IsAsync() {
 			if cr.OrchestratorEnabled() && status.Orchestrator.State != apiv1.StateReady {
@@ -153,6 +163,10 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 			if cr.HAProxyEnabled() && status.HAProxy.State != apiv1.StateReady {
 				status.State = status.HAProxy.State
 			}
+		}
+
+		if cr.Spec.Backup.PiTR.Enabled && status.BinlogServer.State != apiv1.StateReady {
+			status.State = apiv1.StateInitializing
 		}
 
 		if status.MySQL.State != apiv1.StateReady {

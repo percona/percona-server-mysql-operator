@@ -150,7 +150,7 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 			Name:        Name(cr),
 			Namespace:   cr.Namespace,
 			Labels:      Labels(cr),
-			Annotations: cr.GlobalAnnotations(),
+			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), cr.Spec.Proxy.HAProxy.Annotations),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &cr.Spec.Proxy.HAProxy.Size,
@@ -162,7 +162,7 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      Labels(cr),
-					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
+					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), cr.Spec.Proxy.HAProxy.Annotations, annotations),
 				},
 				Spec: cr.Spec.Proxy.HAProxy.Core(
 					selector,

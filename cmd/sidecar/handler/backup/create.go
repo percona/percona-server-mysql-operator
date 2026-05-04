@@ -122,7 +122,7 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 	defer backupLog.Close() //nolint:errcheck
 	logWriter := io.MultiWriter(backupLog, os.Stderr)
 
-	xbcloud := exec.CommandContext(gCtx, "xbcloud", xb.XBCloudArgs(xb.XBCloudActionPut, &backupConf)...)
+	xbcloud := exec.CommandContext(gCtx, "xbcloud", backupConf.XbcloudPutArgs()...)
 	xbcloud.Env = envs(backupConf)
 	xbcloud.Stdin = xbOut
 
@@ -206,11 +206,18 @@ func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
 		"--safe-slave-backup",
 		"--slave-info",
 		"--target-dir=/backup/",
+		"--databases-exclude=lost+found",
 		fmt.Sprintf("--user=%s", user),
 		fmt.Sprintf("--password=%s", pass),
 	}
+	if _, err := os.Stat(mysql.CustomMyCnfPath); err == nil {
+		args = append([]string{"--defaults-extra-file=" + mysql.CustomMyCnfPath}, args...)
+	}
 	if conf != nil && conf.ContainerOptions != nil {
 		args = append(args, conf.ContainerOptions.Args.Xtrabackup...)
+	}
+	if conf != nil && conf.IncrementalLsn != "" {
+		args = append(args, fmt.Sprintf("--incremental-lsn=%s", conf.IncrementalLsn))
 	}
 	return args
 }

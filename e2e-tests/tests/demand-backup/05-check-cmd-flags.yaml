@@ -1,0 +1,17 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      backup_pod_name=$(kubectl get pod -n ${NAMESPACE} -l app.kubernetes.io/instance=demand-backup,app.kubernetes.io/component=backup -o name)
+
+      xtrabackup_flag_count=$(kubectl logs -n ${NAMESPACE} $backup_pod_name | grep -- "--strict" | wc -l)
+      if [ "$xtrabackup_flag_count" -eq 0 ]; then
+        echo "custom flag --strict was provided to the backup but it's not mentioned in the logs"
+        exit 1
+      fi
+

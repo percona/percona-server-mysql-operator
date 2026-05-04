@@ -39,6 +39,8 @@ spec:
           name: backup-logs
         - mountPath: /etc/mysql/vault-keyring-secret
           name: vault-keyring-secret
+        - mountPath: /etc/mysql/config
+          name: config
       - name: pt-heartbeat
         volumeMounts:
         - mountPath: /opt/percona

@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -124,9 +125,11 @@ func printBackup() error {
 			},
 		},
 		Spec: apiv1.PerconaServerMySQLBackupSpec{
-			ClusterName: defaults.NameCluster,
-			StorageName: "minio",
-			SourcePod:   defaults.SourcePod,
+			ClusterName:               defaults.NameCluster,
+			Type:                      apiv1.BackupTypeFull,
+			IncrementalBaseBackupName: ptr.To("some-backup"),
+			StorageName:               "minio",
+			SourcePod:                 defaults.SourcePod,
 		},
 	}
 
@@ -161,6 +164,11 @@ func printRestore() error {
 		Spec: apiv1.PerconaServerMySQLRestoreSpec{
 			ClusterName: defaults.NameCluster,
 			BackupName:  defaults.NameBackup,
+			PITR: &apiv1.RestorePITRSpec{
+				Type: apiv1.PITRDate,
+				Date: "2024-11-18T11:10:48Z",
+				GTID: "a3e5ff70-83e2-11ef-8e57-7a62caf7e1e3:1-36",
+			},
 			BackupSource: &apiv1.PerconaServerMySQLBackupStatus{
 				Destination: "s3://S3-BACKUP-BUCKET-NAME-HERE/backup-path",
 				Storage: &apiv1.BackupStorageSpec{
