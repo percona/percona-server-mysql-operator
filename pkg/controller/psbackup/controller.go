@@ -889,36 +889,20 @@ func (r *PerconaServerMySQLBackupReconciler) setIncrementalBaseAnnotations(
 	return nil
 }
 
-func backupLeaseName(clusterName string) string {
-	return "ps-" + clusterName + "-backup-lock"
-}
-
-func backupLeaseHolder(backup *apiv1.PerconaServerMySQLBackup) string {
-	return fmt.Sprintf("%s|%s", backup.GetName(), backup.GetUID())
-}
-
-func parseBackupLeaseHolder(holder string) (string, types.UID) {
-	parts := strings.Split(holder, "|")
-	if len(parts) != 2 {
-		return "", ""
-	}
-	return parts[0], types.UID(parts[1])
-}
-
 func (r *PerconaServerMySQLBackupReconciler) tryAcquireLease(
 	ctx context.Context,
 	backup *apiv1.PerconaServerMySQLBackup,
 	status *apiv1.PerconaServerMySQLBackupStatus,
 ) (bool, error) {
 	log := logf.FromContext(ctx)
-	leaseName := backupLeaseName(backup.Spec.ClusterName)
-	leaseHolderID := backupLeaseHolder(backup)
+	leaseName := naming.BackupLeaseName(backup.Spec.ClusterName)
+	leaseHolderID := naming.LeaseHolderName(backup.Name, string(backup.GetUID()))
 
 	checkStale := func(ctx context.Context, lease *coordv1.Lease) (bool, error) {
 		if lease.Spec.HolderIdentity == nil {
 			return true, nil
 		}
-		backupName, backupUID := parseBackupLeaseHolder(*lease.Spec.HolderIdentity)
+		backupName, backupUID := naming.ParseLeaseHolder(*lease.Spec.HolderIdentity)
 		if backupName == "" || backupUID == "" {
 			log.Info("Backup lease holder is malformed, acquiring lease anyway")
 			return true, nil
@@ -980,8 +964,8 @@ func (r *PerconaServerMySQLBackupReconciler) releaseLeaseIfNeeded(
 		return nil
 	}
 
-	leaseName := backupLeaseName(backup.Spec.ClusterName)
-	if err := k8s.ReleaseLease(ctx, r.Client, leaseName, backupLeaseHolder(backup), backup.GetNamespace()); err != nil && !errors.Is(err, k8s.ErrLeaseAlreadyHeld) {
+	leaseName := naming.BackupLeaseName(backup.Spec.ClusterName)
+	if err := k8s.ReleaseLease(ctx, r.Client, leaseName, naming.LeaseHolderName(backup.GetName(), string(backup.GetUID())), backup.GetNamespace()); err != nil && !errors.Is(err, k8s.ErrLeaseAlreadyHeld) {
 		return errors.Wrap(err, "failed to release lease")
 	}
 	meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionBackupLeaseAcquired)
