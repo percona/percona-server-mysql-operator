@@ -317,7 +317,7 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 		},
 	}
 
-	if cr.CompareVersion("1.1.0") >= 0 {
+	if cr.CompareVersion("1.2.0") >= 0 {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name: nodeCnfVolumeName,
@@ -641,7 +641,7 @@ func mysqldVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 		},
 	}
 
-	if cr.CompareVersion("1.1.0") >= 0 {
+	if cr.CompareVersion("1.2.0") >= 0 {
 		mounts = append(mounts,
 			corev1.VolumeMount{
 				Name:      nodeCnfVolumeName,
@@ -707,7 +707,7 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	}
 	env = append(env, spec.Env...)
 
-	if cr.CompareVersion("1.1.0") >= 0 {
+	if cr.CompareVersion("1.2.0") >= 0 {
 		env = append(env, corev1.EnvVar{
 			Name: naming.EnvPodIP,
 			ValueFrom: &corev1.EnvVarSource{
