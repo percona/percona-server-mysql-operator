@@ -15,6 +15,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -28,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
@@ -1255,11 +1257,191 @@ func makeFakeReadyPods(cr *apiv1.PerconaServerMySQL, amount int, podType string)
 		case "router":
 			pod.Name = router.PodName(cr, i)
 			pod.Labels = router.Labels(cr)
+		case "binlogserver":
+			pod.Name = fmt.Sprintf("%s-%d", binlogserver.Name(cr), i)
+			pod.Labels = binlogserver.MatchLabels(cr)
 		}
 		pod.Namespace = cr.Namespace
 		pods = append(pods, pod)
 	}
 	return pods
+}
+
+func TestReconcileStatusBinlogServer(t *testing.T) {
+	cr, err := readDefaultCR("ps-cluster1", "status-1")
+	require.NoError(t, err)
+	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
+	cr.Spec.UpdateStrategy = appsv1.OnDeleteStatefulSetStrategyType
+	cr.Spec.Backup.PiTR.Enabled = true
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	allReadyObjects := appendSlices(
+		makeFakeReadyPods(cr, 3, "mysql"),
+		makeFakeReadyPods(cr, 3, "haproxy"),
+		makeFakeReadyPods(cr, 3, "orchestrator"),
+	)
+
+	tests := map[string]struct {
+		cr       *apiv1.PerconaServerMySQL
+		objects  []client.Object
+		expected apiv1.PerconaServerMySQLStatus
+	}{
+		"pitr enabled, binlog server pod not ready": {
+			cr:      cr,
+			objects: allReadyObjects,
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1.StateReady,
+				},
+				Orchestrator: apiv1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1.StateReady,
+				},
+				HAProxy: apiv1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1.StateReady,
+				},
+				BinlogServer: apiv1.StatefulAppStatus{
+					Size:  1,
+					State: apiv1.StateInitializing,
+				},
+				State: apiv1.StateInitializing,
+				Host:  cr.Name + "-haproxy." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1.StateInitializing.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1.StateReady.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1.StateReady.String(),
+					},
+				},
+			},
+		},
+		"pitr enabled, binlog server pod ready": {
+			cr: cr,
+			objects: appendSlices(
+				allReadyObjects,
+				makeFakeReadyPods(cr, 1, "binlogserver"),
+			),
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1.StateReady,
+				},
+				Orchestrator: apiv1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1.StateReady,
+				},
+				HAProxy: apiv1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1.StateReady,
+				},
+				BinlogServer: apiv1.StatefulAppStatus{
+					Size:  1,
+					Ready: 1,
+					State: apiv1.StateReady,
+				},
+				State: apiv1.StateReady,
+				Host:  cr.Name + "-haproxy." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1.StateInitializing.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1.StateReady.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1.StateReady.String(),
+					},
+				},
+			},
+		},
+		"pitr disabled, binlog server pod not ready does not affect cluster state": {
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQL) {
+				cr.Spec.Backup.PiTR.Enabled = false
+			}),
+			objects: allReadyObjects,
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1.StateReady,
+				},
+				Orchestrator: apiv1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1.StateReady,
+				},
+				HAProxy: apiv1.StatefulAppStatus{
+					Size:  3,
+					Ready: 3,
+					State: apiv1.StateReady,
+				},
+				State: apiv1.StateReady,
+				Host:  cr.Name + "-haproxy." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1.StateInitializing.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1.StateReady.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1.StateReady.String(),
+					},
+				},
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := tt.cr.DeepCopy()
+			cb := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).WithStatusSubresource(cr).WithObjects(tt.objects...).WithStatusSubresource(tt.objects...)
+
+			cliCmd, err := getFakeOrchestratorClient(cr)
+			require.NoError(t, err)
+
+			r := &PerconaServerMySQLReconciler{
+				Client:    cb.Build(),
+				Scheme:    scheme,
+				ClientCmd: cliCmd,
+				Recorder:  new(record.FakeRecorder),
+				ServerVersion: &platform.ServerVersion{
+					Platform: platform.PlatformKubernetes,
+				},
+			}
+
+			cr = &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      cr.Name,
+					Namespace: cr.Namespace,
+				},
+			}
+
+			require.NoError(t, r.reconcileCRStatus(t.Context(), cr, nil))
+			require.NoError(t, r.Get(t.Context(), types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, cr))
+
+			opt := cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime", "Message")
+			assert.Empty(t, cmp.Diff(cr.Status, tt.expected, opt))
+		})
+	}
 }
 
 func updateResource[T any](obj *T, updateFuncs ...func(obj *T)) *T {

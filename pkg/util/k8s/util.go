@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"sort"
 
 	"github.com/pkg/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -170,6 +171,7 @@ func GetLatestIncrementalBackupInChain(
 // as the given backup, i.e. all incrementals whose AnnotationBaseBackupName matches this backup's
 // base. For a full backup this lists all incrementals that depend on it; for an incremental
 // backup this lists all siblings in the same chain.
+// Backups are sorted by CompletedAt (oldest to newest).
 func ListDependentIncrementalBackups(
 	ctx context.Context,
 	cl client.Client,
@@ -204,5 +206,18 @@ func ListDependentIncrementalBackups(
 		}
 		result = append(result, &backupList.Items[i])
 	}
+
+	// Sort by CompletedAt (oldest to newest), falling back to CreationTimestamp if CompletedAt is not set
+	sort.SliceStable(result, func(i, j int) bool {
+		ti := result[i].Status.CompletedAt
+		if ti == nil {
+			ti = &result[i].CreationTimestamp
+		}
+		tj := result[j].Status.CompletedAt
+		if tj == nil {
+			tj = &result[j].CreationTimestamp
+		}
+		return ti.Before(tj)
+	})
 	return result, nil
 }

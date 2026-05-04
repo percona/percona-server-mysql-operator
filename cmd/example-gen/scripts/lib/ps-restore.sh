@@ -6,7 +6,7 @@
 export RESOURCE_PATH="deploy/backup/restore.yaml"
 
 sort_yaml() {
-	SPEC_ORDER='"clusterName", "backupName", "containerOptions", "backupSource"'
+	SPEC_ORDER='"clusterName", "backupName", "pitr", "containerOptions", "backupSource"'
 	CONTAINER_OPTS_ORDER='"env", "args"'
 
 	yq - \
@@ -24,11 +24,13 @@ remove_fields() {
 		| yq "del(.spec.backupSource.stateDescription)" \
 		| yq "del(.spec.backupSource.storage.azure)" \
 		| yq "del(.spec.backupSource.storage.gcs)" \
-		| yq "del(.spec.backupSource.type)"
+		| yq "del(.spec.backupSource.type)" \
+		| yq "del(.spec.backupSource.conditions)"
 }
 
 del_fields_to_comment() {
 	yq - \
+		| yq "del(.spec.pitr)" \
 		| yq "del(.spec.containerOptions)" \
 		| yq "del(.spec.backupSource)"
 }

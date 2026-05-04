@@ -2,9 +2,11 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 120
 ---
-apiVersion: batch/v1
-kind: Job
+apiVersion: v1
+kind: Pod
 metadata:
-  name: xb-demand-backup-retry-minio
+  labels:
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/instance: demand-backup-retry
 status:
-  failed: 1
+  phase: Failed

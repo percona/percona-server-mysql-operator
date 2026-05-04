@@ -1,0 +1,32 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-scheduled-backup-incremental
+spec:
+  mysql:
+    clusterType: group-replication
+    size: 3
+
+  proxy:
+    haproxy:
+      enabled: false
+    router:
+      enabled: true
+      size: 3
+
+  orchestrator:
+    enabled: true
+    size: 3
+
+  backup:
+    backoffLimit: 3
+    storages:   
+      spaces:
+        type: s3
+        verifyTLS: true
+        s3:
+          bucket: operator-testing
+          credentialsSecret: do-spaces-secret
+          endpointUrl: https://ams3.digitaloceanspaces.com
+          region: ams3
+          prefix: ps/scheduled-backup/spaces-1

@@ -355,3 +355,154 @@ func TestGetLatestIncrementalBackupInChain(t *testing.T) {
 		})
 	}
 }
+
+func TestListDependentIncrementalBackups(t *testing.T) {
+	now := time.Now()
+	baseAnno := string(naming.AnnotationBaseBackupName)
+
+	tests := map[string]struct {
+		inputBackup *apiv1.PerconaServerMySQLBackup
+		listBackups []*apiv1.PerconaServerMySQLBackup
+		wantNames   []string
+		wantErr     string
+	}{
+		"full backup returns all dependent incrementals sorted oldest to newest": {
+			inputBackup: newBackupWithMeta("full-1", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded,
+				metaTime(now.Add(-4*time.Hour)), "s3://bucket/prefix/full-1", nil),
+			listBackups: []*apiv1.PerconaServerMySQLBackup{
+				newBackupWithMeta("incr-2", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded,
+					metaTime(now.Add(-1*time.Hour)), "", map[string]string{baseAnno: "full-1"}),
+				newBackupWithMeta("incr-1", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded,
+					metaTime(now.Add(-3*time.Hour)), "", map[string]string{baseAnno: "full-1"}),
+				newBackupWithMeta("incr-3", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded,
+					metaTime(now.Add(-2*time.Hour)), "", map[string]string{baseAnno: "full-1"}),
+			},
+			wantNames: []string{"incr-1", "incr-3", "incr-2"},
+		},
+		"incremental backup returns all siblings in same chain sorted": {
+			inputBackup: newBackupWithMeta("incr-input", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded,
+				metaTime(now.Add(-2*time.Hour)), "", map[string]string{baseAnno: "full-1"}),
+			listBackups: []*apiv1.PerconaServerMySQLBackup{
+				newBackupWithMeta("incr-newer", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded,
+					metaTime(now.Add(-1*time.Hour)), "", map[string]string{baseAnno: "full-1"}),
+				newBackupWithMeta("incr-older", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded,
+					metaTime(now.Add(-3*time.Hour)), "", map[string]string{baseAnno: "full-1"}),
+			},
+			wantNames: []string{"incr-older", "incr-input", "incr-newer"},
+		},
+		"single dependent incremental": {
+			inputBackup: newBackupWithMeta("full-1", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded,
+				metaTime(now.Add(-2*time.Hour)), "s3://bucket/prefix/full-1", nil),
+			listBackups: []*apiv1.PerconaServerMySQLBackup{
+				newBackupWithMeta("only-incr", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded,
+					metaTime(now.Add(-1*time.Hour)), "", map[string]string{baseAnno: "full-1"}),
+			},
+			wantNames: []string{"only-incr"},
+		},
+		"skips full backups in list": {
+			inputBackup: newBackupWithMeta("full-1", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded,
+				metaTime(now.Add(-3*time.Hour)), "s3://bucket/prefix/full-1", nil),
+			listBackups: []*apiv1.PerconaServerMySQLBackup{
+				newBackupWithMeta("full-2", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded,
+					metaTime(now), "s3://bucket/prefix/full-2", nil),
+				newBackupWithMeta("incr-1", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded,
+					metaTime(now.Add(-1*time.Hour)), "", map[string]string{baseAnno: "full-1"}),
+			},
+			wantNames: []string{"incr-1"},
+		},
+		"skips incrementals pointing to different base": {
+			inputBackup: newBackupWithMeta("full-1", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded,
+				metaTime(now.Add(-3*time.Hour)), "s3://bucket/prefix/full-1", nil),
+			listBackups: []*apiv1.PerconaServerMySQLBackup{
+				newBackupWithMeta("incr-other", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded,
+					metaTime(now), "", map[string]string{baseAnno: "full-2"}),
+				newBackupWithMeta("incr-mine", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded,
+					metaTime(now.Add(-1*time.Hour)), "", map[string]string{baseAnno: "full-1"}),
+			},
+			wantNames: []string{"incr-mine"},
+		},
+		"skips incrementals without base annotation": {
+			inputBackup: newBackupWithMeta("full-1", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded,
+				metaTime(now.Add(-3*time.Hour)), "s3://bucket/prefix/full-1", nil),
+			listBackups: []*apiv1.PerconaServerMySQLBackup{
+				newBackupWithMeta("incr-no-anno", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded,
+					metaTime(now), "", nil),
+				newBackupWithMeta("incr-ok", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded,
+					metaTime(now.Add(-1*time.Hour)), "", map[string]string{baseAnno: "full-1"}),
+			},
+			wantNames: []string{"incr-ok"},
+		},
+		"includes non-succeeded incrementals": {
+			inputBackup: newBackupWithMeta("full-1", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded,
+				metaTime(now.Add(-3*time.Hour)), "s3://bucket/prefix/full-1", nil),
+			listBackups: []*apiv1.PerconaServerMySQLBackup{
+				newBackupWithMeta("incr-running", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupRunning,
+					metaTime(now.Add(-1*time.Hour)), "", map[string]string{baseAnno: "full-1"}),
+				newBackupWithMeta("incr-ok", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded,
+					metaTime(now.Add(-2*time.Hour)), "", map[string]string{baseAnno: "full-1"}),
+			},
+			wantNames: []string{"incr-ok", "incr-running"},
+		},
+		"returns empty slice when no matching incrementals": {
+			inputBackup: newBackupWithMeta("full-1", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded,
+				metaTime(now.Add(-2*time.Hour)), "s3://bucket/prefix/full-1", nil),
+			listBackups: []*apiv1.PerconaServerMySQLBackup{
+				newBackupWithMeta("full-2", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded,
+					metaTime(now), "s3://bucket/prefix/full-2", nil),
+			},
+			wantNames: nil,
+		},
+		"returns empty slice when no backups exist": {
+			inputBackup: newBackupWithMeta("full-1", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded,
+				metaTime(now.Add(-2*time.Hour)), "s3://bucket/prefix/full-1", nil),
+			wantNames: nil,
+		},
+		"error when input incremental has no base annotation": {
+			inputBackup: newBackupWithMeta("incr-no-anno", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded,
+				metaTime(now), "", nil),
+			wantErr: "base backup name not known in annotations",
+		},
+		"sorts by creationTimestamp when completedAt is nil": {
+			inputBackup: newBackupWithMeta("full-1", "cluster1", apiv1.BackupTypeFull, apiv1.BackupSucceeded,
+				metaTime(now.Add(-4*time.Hour)), "s3://bucket/prefix/full-1", nil),
+			listBackups: []*apiv1.PerconaServerMySQLBackup{
+				func() *apiv1.PerconaServerMySQLBackup {
+					b := newBackupWithMeta("incr-no-completed", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupRunning,
+						nil, "", map[string]string{baseAnno: "full-1"})
+					b.CreationTimestamp = metav1.Time{Time: now.Add(-2 * time.Hour)}
+					return b
+				}(),
+				newBackupWithMeta("incr-completed", "cluster1", apiv1.BackupTypeIncremental, apiv1.BackupSucceeded,
+					metaTime(now.Add(-3*time.Hour)), "", map[string]string{baseAnno: "full-1"}),
+			},
+			wantNames: []string{"incr-completed", "incr-no-completed"},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			var objs []client.Object
+			objs = append(objs, tt.inputBackup)
+			for _, b := range tt.listBackups {
+				objs = append(objs, b)
+			}
+
+			cl := buildTestClient(objs...)
+			result, err := ListDependentIncrementalBackups(t.Context(), cl, tt.inputBackup)
+
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				assert.Nil(t, result)
+				return
+			}
+
+			require.NoError(t, err)
+			var gotNames []string
+			for _, b := range result {
+				gotNames = append(gotNames, b.Name)
+			}
+			assert.Equal(t, tt.wantNames, gotNames)
+		})
+	}
+}

@@ -39,6 +39,11 @@ func DNSNames(cr *apiv1.PerconaServerMySQL) []string {
 	if cr.Spec.TLS != nil {
 		hosts = append(hosts, cr.Spec.TLS.SANs...)
 	}
+	if cr.CompareVersion("1.1.0") >= 0 {
+		hosts = append(hosts, fmt.Sprintf("%s-mysql-primary", cr.Name),
+			fmt.Sprintf("%s-mysql-primary.%s", cr.Name, cr.Namespace),
+			fmt.Sprintf("%s-mysql-primary.%s.svc", cr.Name, cr.Namespace))
+	}
 	return hosts
 }
 

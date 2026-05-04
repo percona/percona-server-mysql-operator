@@ -1,0 +1,53 @@
+
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-demand-backup-cloud
+spec:
+  mysql:
+    clusterType: group-replication
+    size: 3
+
+  proxy:
+    haproxy:
+      enabled: false
+    router:
+      enabled: true
+      size: 3
+
+  orchestrator:
+    enabled: true
+    size: 3
+
+  backup:
+    backoffLimit: 3
+    storages:
+      spaces-1:
+        type: s3
+        verifyTLS: true
+        s3:
+          bucket: operator-testing
+          credentialsSecret: do-spaces-secret
+          endpointUrl: https://ams3.digitaloceanspaces.com
+          region: ams3
+          prefix: ps/demand-backup-cloud/spaces-1
+
+      spaces-2:
+        type: s3
+        verifyTLS: true
+        s3:
+          bucket: operator-testing-nyc3
+          credentialsSecret: do-spaces-secret
+          endpointUrl: https://nyc3.digitaloceanspaces.com
+          region: nyc3
+          prefix: ps/demand-backup-cloud/spaces-2
+
+      spaces-3:
+        type: s3
+        verifyTLS: true
+        s3:
+          bucket: operator-testing-sfo3
+          credentialsSecret: do-spaces-secret
+          endpointUrl: https://sfo3.digitaloceanspaces.com
+          region: sfo3
+          prefix: ps/demand-backup-cloud/spaces-3

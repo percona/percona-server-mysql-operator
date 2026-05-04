@@ -121,6 +121,29 @@ func pmmDefaults(spec *apiv1.PMMSpec) {
 func backupDefaults(spec *apiv1.BackupSpec) {
 	spec.Image = ImageBackup
 	spec.Enabled = true
+	spec.PiTR = apiv1.PiTRSpec{
+		Enabled: false,
+		BinlogServer: &apiv1.BinlogServerSpec{
+			Storage: apiv1.BinlogServerStorageSpec{
+				S3: &apiv1.BackupStorageS3Spec{
+					Bucket:            "S3-BACKUP-BUCKET-NAME-HERE",
+					Prefix:            "PREFIX_NAME",
+					CredentialsSecret: fmt.Sprintf("%s-s3-credentials", NameCluster),
+					Region:            "us-west-2",
+					EndpointURL:       "https://s3.amazonaws.com",
+				},
+			},
+			ConnectTimeout:     30,
+			ReadTimeout:        30,
+			WriteTimeout:       30,
+			IdleTime:           30,
+			CheckpointSize:     "16M",
+			CheckpointInterval: "30s",
+			LogLevel:           "info",
+		},
+	}
+	podSpecDefaults(&spec.PiTR.BinlogServer.PodSpec, ImageBinlogServer, corev1.ResourceRequirements{}, "", 30, nil, nil)
+	spec.PiTR.BinlogServer.Size = 1
 	spec.SourcePod = SourcePod
 	spec.ServiceAccountName = "some-service-account"
 	spec.BackoffLimit = ptr.To(int32(6))
@@ -128,14 +151,12 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 		{
 			Name:        "sat-night-backup",
 			Schedule:    "0 0 * * 6",
-			Keep:        3,
 			StorageName: "s3-us-west",
 			Type:        apiv1.BackupTypeFull,
 		},
 		{
 			Name:        "daily-backup",
 			Schedule:    "0 0 * * *",
-			Keep:        5,
 			StorageName: "s3",
 			Type:        apiv1.BackupTypeIncremental,
 		},

@@ -1,0 +1,16 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 180
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+      source ../../functions
+
+      # Sleep 2mins, and ensure that the backup is still there
+      sleep 120
+      kubectl get ps-backup incr-2 -n "${NAMESPACE}"
+
+      # Verify operator logged the expected middle-chain deletion refusal
+      kubectl logs -n "${OPERATOR_NS:-$NAMESPACE}" "$(get_operator_pod)" \
+        | grep "Cannot delete incremental backup which is in middle of the chain"

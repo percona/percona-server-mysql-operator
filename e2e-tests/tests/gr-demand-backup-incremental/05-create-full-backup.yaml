@@ -1,9 +1,0 @@
-apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQLBackup
-metadata:
-  name: base-backup
-  finalizers:
-    - percona.com/delete-backup
-spec:
-  clusterName: gr-demand-backup-incremental
-  storageName: minio

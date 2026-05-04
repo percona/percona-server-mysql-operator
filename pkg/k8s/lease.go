@@ -15,8 +15,11 @@ import (
 
 var ErrLeaseAlreadyHeld = errors.New("lease held by another holder")
 
+// IsHolderStaleFunc determines whether the current lease holder is stale
+// and can be evicted. Called with the current holder's identity.
 type IsHolderStaleFunc func(ctx context.Context, lease *coordv1.Lease) (bool, error)
 
+// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch
 func GetLease(ctx context.Context, client client.Client, leaseName, namespace string) (*coordv1.Lease, error) {
 	lease := new(coordv1.Lease)
 	if err := client.Get(ctx, types.NamespacedName{Name: leaseName, Namespace: namespace}, lease); err != nil {
@@ -25,6 +28,12 @@ func GetLease(ctx context.Context, client client.Client, leaseName, namespace st
 	return lease, nil
 }
 
+// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=create;update
+
+// AcquireLease attempts to acquire a named lease for the given holder.
+// If isHolderStale is non-nil and the lease is held by a different holder,
+// the callback is invoked to determine whether the current holder is stale.
+// A stale holder is evicted atomically and the lease is granted to the new holder.
 func AcquireLease(ctx context.Context, cl client.Client, leaseName, holder, namespace string, checkStale IsHolderStaleFunc) error {
 	lease := &coordv1.Lease{
 		ObjectMeta: metav1.ObjectMeta{
@@ -33,9 +42,12 @@ func AcquireLease(ctx context.Context, cl client.Client, leaseName, holder, name
 		},
 	}
 
-	now := time.Now()
 	_, err := controllerutil.CreateOrUpdate(ctx, cl, lease, func() error {
-		if lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != holder {
+		if lease.Spec.HolderIdentity != nil {
+			if *lease.Spec.HolderIdentity == holder {
+				return nil // already held
+			}
+
 			if checkStale == nil {
 				return ErrLeaseAlreadyHeld
 			}
@@ -49,16 +61,18 @@ func AcquireLease(ctx context.Context, cl client.Client, leaseName, holder, name
 			}
 		}
 
-		if lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity != holder {
-			lease.Spec.HolderIdentity = &holder
-			lease.Spec.AcquireTime = &metav1.MicroTime{Time: now}
-			lease.Spec.RenewTime = &metav1.MicroTime{Time: now}
-		}
+		lease.Spec.HolderIdentity = &holder
+		lease.Spec.AcquireTime = &metav1.MicroTime{Time: time.Now()}
 		return nil
 	})
 	return err
 }
 
+// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;delete
+
+// ReleaseLease deletes the lease only if it is still held by the given holder.
+// UID and ResourceVersion preconditions prevent accidentally deleting a lease
+// that was re-created by a concurrent acquirer between the Get and Delete.
 func ReleaseLease(ctx context.Context, cl client.Client, leaseName, holder, namespace string) error {
 	lease, err := GetLease(ctx, cl, leaseName, namespace)
 	if k8serrors.IsNotFound(err) {
