@@ -184,11 +184,6 @@ spec:
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
 #      type: ClusterIP
-    containerSecurityContext:
-      runAsUser: 1001
-      runAsGroup: 1001
-    podSecurityContext:
-      fsGroup: 1001
     volumeSpec:
 #      emptyDir: {}
 #      hostPath:

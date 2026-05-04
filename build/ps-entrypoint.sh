@@ -178,6 +178,8 @@ add_encryption_options() {
 
 create_default_cnf() {
 	echo '[mysqld]' >$CFG
+	# Place the Unix socket in the data directory (not e.g. /var/run/mysqld/) so it shares volume permissions with mysqld.
+	sed -i "/\[mysqld\]/a socket=${DATADIR}/mysql.sock" $CFG
 	if [[ ${CLUSTER_TYPE} == "async" ]]; then
 		# Ensures replication is not automatically started on mysql startup,
 		# giving the orchestrator full control over replication start.
@@ -288,7 +290,8 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 		rm -rfv "$TMPDIR"
 		echo 'Database initialized'
 
-		SOCKET="$(_get_config 'socket' "$@")"
+		# Must match socket= in node.cnf (create_default_cnf); --verbose --help does not apply that file here.
+		SOCKET="${DATADIR}/mysql.sock"
 		"$@" --skip-networking --socket="${SOCKET}" &
 		pid="$!"
 
