@@ -31,7 +31,23 @@ type PerconaServerMySQLRestoreSpec struct {
 	BackupName       string                          `json:"backupName,omitempty"`
 	BackupSource     *PerconaServerMySQLBackupStatus `json:"backupSource,omitempty"`
 	ContainerOptions *BackupContainerOptions         `json:"containerOptions,omitempty"`
+	PITR             *RestorePITRSpec                `json:"pitr,omitempty"`
 }
+
+type RestorePITRSpec struct {
+	// +kubebuilder:validation:Enum=gtid;date
+	Type  PITRType `json:"type"`
+	Date  string   `json:"date,omitempty"`
+	GTID  string   `json:"gtid,omitempty"`
+	Force bool     `json:"force,omitempty"`
+}
+
+type PITRType string
+
+const (
+	PITRGtid PITRType = "gtid"
+	PITRDate PITRType = "date"
+)
 
 type RestoreState string
 

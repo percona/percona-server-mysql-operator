@@ -149,6 +149,40 @@ func TestStatefulSet(t *testing.T) {
 		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
 		assert.Equal(t, tolerations, sts.Spec.Template.Spec.Tolerations)
 	})
+
+	t.Run("annotations", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		cluster.Spec.MySQL.Annotations = map[string]string{
+			"mysql-annotation": "mysql-annotation",
+		}
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		assert.Equal(t, "mysql-annotation", sts.Annotations["mysql-annotation"])
+		assert.Equal(t, "mysql-annotation", sts.Spec.Template.Annotations["mysql-annotation"])
+
+	})
+
+	t.Run("env variables", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		cluster.Spec.Backup = &apiv1.BackupSpec{
+			Enabled: true,
+		}
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+
+		envs := sts.Spec.Template.Spec.Containers[0].Env
+		assert.Contains(t, envs, corev1.EnvVar{
+			Name:  naming.EnvBackupsEnabled,
+			Value: "true",
+		})
+
+		// backups disabled
+		cluster.Spec.Backup.Enabled = false
+		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		envs = sts.Spec.Template.Spec.Containers[0].Env
+		assert.Contains(t, envs, corev1.EnvVar{
+			Name:  naming.EnvBackupsEnabled,
+			Value: "false",
+		})
+	})
 }
 
 func TestStatefulsetVolumes(t *testing.T) {
@@ -674,4 +708,29 @@ func TestPrimaryServiceName(t *testing.T) {
 	}
 	serviceName := PrimaryServiceName(cr)
 	assert.Equal(t, "my-cluster-mysql-primary", serviceName)
+}
+
+func TestBackupVolumeMounts(t *testing.T) {
+	cr := &apiv1.PerconaServerMySQL{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ps-cluster1",
+			Namespace: "test-ns",
+		},
+		Spec: apiv1.PerconaServerMySQLSpec{
+			CRVersion: version.Version(),
+		},
+	}
+
+	expected := []corev1.VolumeMount{
+		{Name: apiv1.BinVolumeName, MountPath: apiv1.BinVolumePath},
+		{Name: DataVolumeName, MountPath: DataMountPath},
+		{Name: credsVolumeName, MountPath: naming.CredsMountPath},
+		{Name: "backup-logs", MountPath: BackupLogDir},
+		{Name: vaultSecretVolumeName, MountPath: vaultSecretMountPath},
+		{Name: configVolumeName, MountPath: configMountPath},
+	}
+
+	mounts := backupVolumeMounts(cr)
+
+	assert.Equal(t, expected, mounts)
 }

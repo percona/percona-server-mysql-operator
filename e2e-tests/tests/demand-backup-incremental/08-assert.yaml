@@ -1,0 +1,30 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+resourceRefs:
+- apiVersion: ps.percona.com/v1
+  kind: PerconaServerMySQLBackup
+  name: base-backup
+  ref: base
+- apiVersion: ps.percona.com/v1
+  kind: PerconaServerMySQLBackup
+  name: incr-2
+  ref: incr2
+assertAll:
+- celExpr: incr2.status.state == "Succeeded"
+  message: "Incremental backup should be succeeded"
+
+- celExpr: incr2.status.type == "incremental"
+  message: "Incremental backup should have a type of incremental"
+
+- celExpr: base.status.destination.contains(incr2.metadata.annotations["percona.com/base-backup-name"])
+  message: "Base backup annotation should reference the correct base backup"
+
+commands:
+  - script: |-
+      set -o errexit
+
+      source ../../functions
+      
+      backup=incr-2
+      verify_incremental_backup_delta_files $backup

@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 func TestCheckNSetDefaults(t *testing.T) {
@@ -83,6 +85,69 @@ func TestCheckNSetDefaults(t *testing.T) {
 		err := cr.CheckNSetDefaults(t.Context(), nil)
 		assert.NoError(t, err)
 	})
+	t.Run("invalid async source retry count", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.Backup = &BackupSpec{
+			Image: "backup-image",
+		}
+		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
+		cr.Spec.MySQL.Env = []corev1.EnvVar{{
+			Name:  naming.EnvAsyncSourceRetryCount,
+			Value: "-1",
+		}}
+		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+				},
+			},
+		}
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.EqualError(t, err, "ASYNC_SOURCE_RETRY_COUNT should be a positive value")
+	})
+	t.Run("invalid async source connect retry", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.Backup = &BackupSpec{
+			Image: "backup-image",
+		}
+		cr.Spec.MySQL.ClusterType = ClusterTypeAsync
+		cr.Spec.MySQL.Env = []corev1.EnvVar{{
+			Name:  naming.EnvAsyncSourceConnectRetry,
+			Value: "-1",
+		}}
+		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+				},
+			},
+		}
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.EqualError(t, err, "ASYNC_SOURCE_CONNECT_RETRY should be a positive value")
+	})
+	t.Run("backups disabled without image should succeed", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.Backup = &BackupSpec{
+			Enabled: false,
+		}
+		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+				},
+			},
+		}
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.NoError(t, err)
+	})
 	t.Run("without backup image, with volume spec", func(t *testing.T) {
 		cr := new(PerconaServerMySQL)
 		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
@@ -101,6 +166,154 @@ func TestCheckNSetDefaults(t *testing.T) {
 		err := cr.CheckNSetDefaults(t.Context(), nil)
 		assert.NoError(t, err)
 	})
+	t.Run("binlog server defaults are set when binlogServer is configured", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+				},
+			},
+		}
+		cr.Spec.Backup = &BackupSpec{
+			PiTR: PiTRSpec{
+				BinlogServer: &BinlogServerSpec{},
+			},
+		}
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.NoError(t, err)
+
+		bls := cr.Spec.Backup.PiTR.BinlogServer
+		assert.Equal(t, "verify_identity", bls.SSLMode)
+		assert.NotNil(t, bls.VerifyChecksum)
+		assert.True(t, *bls.VerifyChecksum)
+		assert.Equal(t, "128M", bls.RewriteFileSize)
+		assert.Equal(t, "16M", bls.CheckpointSize)
+		assert.Equal(t, "30s", bls.CheckpointInterval)
+		assert.Equal(t, int32(30), bls.ConnectTimeout)
+		assert.Equal(t, int32(30), bls.ReadTimeout)
+		assert.Equal(t, int32(30), bls.WriteTimeout)
+		assert.Equal(t, int32(30), bls.IdleTime)
+		assert.Equal(t, "info", bls.LogLevel)
+		assert.Equal(t, int32(100), bls.ServerID)
+	})
+	t.Run("binlog server explicit values are not overridden by defaults", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+				},
+			},
+		}
+		f := false
+		cr.Spec.Backup = &BackupSpec{
+			PiTR: PiTRSpec{
+				BinlogServer: &BinlogServerSpec{
+					SSLMode:            "required",
+					VerifyChecksum:     &f,
+					RewriteFileSize:    "256M",
+					CheckpointSize:     "4M",
+					CheckpointInterval: "60s",
+					ConnectTimeout:     10,
+					ReadTimeout:        10,
+					WriteTimeout:       10,
+					IdleTime:           10,
+					LogLevel:           "debug",
+					ServerID:           200,
+				},
+			},
+		}
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.NoError(t, err)
+
+		bls := cr.Spec.Backup.PiTR.BinlogServer
+		assert.Equal(t, "required", bls.SSLMode)
+		assert.NotNil(t, bls.VerifyChecksum)
+		assert.False(t, *bls.VerifyChecksum)
+		assert.Equal(t, "256M", bls.RewriteFileSize)
+		assert.Equal(t, "4M", bls.CheckpointSize)
+		assert.Equal(t, "60s", bls.CheckpointInterval)
+		assert.Equal(t, int32(10), bls.ConnectTimeout)
+		assert.Equal(t, int32(10), bls.ReadTimeout)
+		assert.Equal(t, int32(10), bls.WriteTimeout)
+		assert.Equal(t, int32(10), bls.IdleTime)
+		assert.Equal(t, "debug", bls.LogLevel)
+		assert.Equal(t, int32(200), bls.ServerID)
+	})
+}
+
+func TestCanBackup(t *testing.T) {
+	tests := map[string]struct {
+		cr          *PerconaServerMySQL
+		expectedErr string
+	}{
+		"ready cluster": {
+			cr: &PerconaServerMySQL{
+				Status: PerconaServerMySQLStatus{
+					State: StateReady,
+				},
+			},
+		},
+		"unready cluster without unsafe flag": {
+			cr: &PerconaServerMySQL{
+				Status: PerconaServerMySQLStatus{
+					State: StateInitializing,
+				},
+			},
+			expectedErr: "unsafeFlags.backupNonReadyCluster must be true to run backup on cluster with status Initializing",
+		},
+		"unready cluster with unsafe flag and no ready mysql nodes": {
+			cr: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					Unsafe: UnsafeFlags{
+						BackupNonReadyCluster: true,
+					},
+				},
+				Status: PerconaServerMySQLStatus{
+					State: StateInitializing,
+					MySQL: StatefulAppStatus{
+						Ready: 0,
+					},
+				},
+			},
+			expectedErr: "there are no ready MySQL nodes",
+		},
+		"unready cluster with unsafe flag and ready mysql nodes": {
+			cr: &PerconaServerMySQL{
+				Spec: PerconaServerMySQLSpec{
+					Unsafe: UnsafeFlags{
+						BackupNonReadyCluster: true,
+					},
+				},
+				Status: PerconaServerMySQLStatus{
+					State: StateInitializing,
+					MySQL: StatefulAppStatus{
+						Ready: 1,
+					},
+				},
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := tc.cr.CanBackup()
+
+			if tc.expectedErr != "" {
+				assert.EqualError(t, err, tc.expectedErr)
+				return
+			}
+
+			assert.NoError(t, err)
+		})
+	}
 }
 
 func TestValidateVolume(t *testing.T) {
@@ -356,6 +569,186 @@ func TestGlobalAnnotations(t *testing.T) {
 				_, exists := tc.cr.Spec.Metadata.Annotations["new-key"]
 				assert.False(t, exists)
 			}
+		})
+	}
+}
+
+func TestBackupStorageSpecEquals(t *testing.T) {
+	baseS3 := &BackupStorageSpec{
+		Type: BackupStorageS3,
+		S3: &BackupStorageS3Spec{
+			Bucket:            "my-bucket/pfx",
+			Prefix:            "backups",
+			CredentialsSecret: "s3-creds",
+			Region:            "us-east-1",
+			EndpointURL:       "https://s3.example.com",
+		},
+	}
+	baseGCS := &BackupStorageSpec{
+		Type: BackupStorageGCS,
+		GCS: &BackupStorageGCSSpec{
+			Bucket:            "gcs-bucket/path",
+			Prefix:            "data",
+			CredentialsSecret: "gcs-creds",
+			EndpointURL:       "https://storage.googleapis.com",
+			StorageClass:      "STANDARD",
+		},
+	}
+	baseAzure := &BackupStorageSpec{
+		Type: BackupStorageAzure,
+		Azure: &BackupStorageAzureSpec{
+			ContainerName:     "container/sub",
+			Prefix:            "azure-pfx",
+			CredentialsSecret: "azure-creds",
+			EndpointURL:       "https://blob.core.windows.net",
+			StorageClass:      "Hot",
+		},
+	}
+
+	tests := map[string]struct {
+		a, b      *BackupStorageSpec
+		wantEqual bool
+	}{
+		"S3 identical": {
+			a: baseS3,
+			b: &BackupStorageSpec{
+				Type: BackupStorageS3,
+				S3: &BackupStorageS3Spec{
+					Bucket:            baseS3.S3.Bucket,
+					Prefix:            baseS3.S3.Prefix,
+					CredentialsSecret: baseS3.S3.CredentialsSecret,
+					Region:            baseS3.S3.Region,
+					EndpointURL:       baseS3.S3.EndpointURL,
+				},
+			},
+			wantEqual: true,
+		},
+		"S3 different credentialsSecret": {
+			a: baseS3,
+			b: &BackupStorageSpec{
+				Type: BackupStorageS3,
+				S3: &BackupStorageS3Spec{
+					Bucket:            baseS3.S3.Bucket,
+					Prefix:            baseS3.S3.Prefix,
+					CredentialsSecret: "other-secret",
+					Region:            baseS3.S3.Region,
+					EndpointURL:       baseS3.S3.EndpointURL,
+				},
+			},
+			wantEqual: true,
+		},
+		"S3 different bucket": {
+			a: baseS3,
+			b: &BackupStorageSpec{
+				Type: BackupStorageS3,
+				S3: &BackupStorageS3Spec{
+					Bucket:            "other-bucket",
+					Prefix:            baseS3.S3.Prefix,
+					CredentialsSecret: baseS3.S3.CredentialsSecret,
+					Region:            baseS3.S3.Region,
+					EndpointURL:       baseS3.S3.EndpointURL,
+				},
+			},
+			wantEqual: false,
+		},
+		"S3 vs GCS type mismatch": {
+			a:         baseS3,
+			b:         baseGCS,
+			wantEqual: false,
+		},
+		"GCS identical": {
+			a: baseGCS,
+			b: &BackupStorageSpec{
+				Type: BackupStorageGCS,
+				GCS: &BackupStorageGCSSpec{
+					Bucket:            baseGCS.GCS.Bucket,
+					Prefix:            baseGCS.GCS.Prefix,
+					CredentialsSecret: baseGCS.GCS.CredentialsSecret,
+					EndpointURL:       baseGCS.GCS.EndpointURL,
+					StorageClass:      baseGCS.GCS.StorageClass,
+				},
+			},
+			wantEqual: true,
+		},
+		"GCS different endpoint": {
+			a: baseGCS,
+			b: &BackupStorageSpec{
+				Type: BackupStorageGCS,
+				GCS: &BackupStorageGCSSpec{
+					Bucket:            baseGCS.GCS.Bucket,
+					Prefix:            baseGCS.GCS.Prefix,
+					CredentialsSecret: baseGCS.GCS.CredentialsSecret,
+					EndpointURL:       "https://other.example.com",
+					StorageClass:      baseGCS.GCS.StorageClass,
+				},
+			},
+			wantEqual: false,
+		},
+		"GCS different storageClass": {
+			a: baseGCS,
+			b: &BackupStorageSpec{
+				Type: BackupStorageGCS,
+				GCS: &BackupStorageGCSSpec{
+					Bucket:            baseGCS.GCS.Bucket,
+					Prefix:            baseGCS.GCS.Prefix,
+					CredentialsSecret: baseGCS.GCS.CredentialsSecret,
+					EndpointURL:       baseGCS.GCS.EndpointURL,
+					StorageClass:      "NEARLINE",
+				},
+			},
+			wantEqual: false,
+		},
+		"Azure identical": {
+			a: baseAzure,
+			b: &BackupStorageSpec{
+				Type: BackupStorageAzure,
+				Azure: &BackupStorageAzureSpec{
+					ContainerName:     baseAzure.Azure.ContainerName,
+					Prefix:            baseAzure.Azure.Prefix,
+					CredentialsSecret: baseAzure.Azure.CredentialsSecret,
+					EndpointURL:       baseAzure.Azure.EndpointURL,
+					StorageClass:      baseAzure.Azure.StorageClass,
+				},
+			},
+			wantEqual: true,
+		},
+		"Azure different storageClass": {
+			a: baseAzure,
+			b: &BackupStorageSpec{
+				Type: BackupStorageAzure,
+				Azure: &BackupStorageAzureSpec{
+					ContainerName:     baseAzure.Azure.ContainerName,
+					Prefix:            baseAzure.Azure.Prefix,
+					CredentialsSecret: baseAzure.Azure.CredentialsSecret,
+					EndpointURL:       baseAzure.Azure.EndpointURL,
+					StorageClass:      "Cool",
+				},
+			},
+			wantEqual: false,
+		},
+		"unknown storage type": {
+			a:         &BackupStorageSpec{Type: "unknown", S3: &BackupStorageS3Spec{Bucket: "b"}},
+			b:         &BackupStorageSpec{Type: "unknown", S3: &BackupStorageS3Spec{Bucket: "b"}},
+			wantEqual: false,
+		},
+
+		"self is nil": {
+			a: nil,
+			b: baseS3,
+		},
+		"other is nil": {
+			a: baseS3,
+			b: nil,
+		},
+		"both are nil": {
+			a: nil,
+			b: nil,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.wantEqual, tc.a.Equals(tc.b))
 		})
 	}
 }

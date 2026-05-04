@@ -15,6 +15,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
+	defs "github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
 const defaultChannelName = ""
@@ -25,6 +26,7 @@ const (
 	ReplicationStatusActive ReplicationStatus = iota
 	ReplicationStatusError
 	ReplicationStatusNotInitiated
+	ReplicationStatusStopped
 )
 
 type MemberState string
@@ -64,7 +66,14 @@ func (m *ReplicationDBManager) query(ctx context.Context, query string, out inte
 	return nil
 }
 
-func (m *ReplicationDBManager) ChangeReplicationSource(ctx context.Context, host, replicaPass string, port int32) error {
+func (m *ReplicationDBManager) ChangeReplicationSource(ctx context.Context, host, replicaPass string, port int32, sourceRetryCount, sourceConnectRetry uint32) error {
+	if sourceRetryCount == 0 {
+		sourceRetryCount = defs.DefaultAsyncSourceRetryCount
+	}
+	if sourceConnectRetry == 0 {
+		sourceConnectRetry = defs.DefaultAsyncSourceConnectRetry
+	}
+
 	var errb, outb bytes.Buffer
 	q := fmt.Sprintf(`
 		CHANGE REPLICATION SOURCE TO
@@ -75,11 +84,10 @@ func (m *ReplicationDBManager) ChangeReplicationSource(ctx context.Context, host
 			SOURCE_SSL=1,
 			SOURCE_CONNECTION_AUTO_FAILOVER=1,
 			SOURCE_AUTO_POSITION=1,
-			SOURCE_RETRY_COUNT=3,
-			SOURCE_CONNECT_RETRY=60
-		`, apiv1.UserReplication, replicaPass, host, port)
+			SOURCE_RETRY_COUNT=%d,
+			SOURCE_CONNECT_RETRY=%d
+		`, apiv1.UserReplication, replicaPass, host, port, sourceRetryCount, sourceConnectRetry)
 	err := m.db.exec(ctx, q, &outb, &errb)
-
 	if err != nil {
 		return errors.Wrap(err, "exec CHANGE REPLICATION SOURCE TO")
 	}
@@ -117,8 +125,7 @@ func (m *ReplicationDBManager) ReplicationStatus(ctx context.Context) (Replicati
 	if rows[0].IoState == "ON" && rows[0].SqlState == "ON" {
 		return ReplicationStatusActive, rows[0].Host, nil
 	}
-
-	return ReplicationStatusNotInitiated, "", err
+	return ReplicationStatusStopped, "", nil
 }
 
 func (m *ReplicationDBManager) GetGroupReplicationPrimary(ctx context.Context) (string, error) {

@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
@@ -49,22 +50,44 @@ func TestContainer(t *testing.T) {
 	assert.Equal(t, apiv1.BinVolumeName, container.VolumeMounts[0].Name)
 	assert.Equal(t, apiv1.BinVolumePath, container.VolumeMounts[0].MountPath)
 
-	foundEnv := map[string]bool{}
+	envMap := map[string]corev1.EnvVar{}
 	for _, env := range container.Env {
-		foundEnv[env.Name] = true
+		envMap[env.Name] = env
 	}
 
-	expectedEnvs := []string{
-		"POD_NAME", "POD_NAMESPACE", "CLUSTER_NAME", "PMM_AGENT_SERVER_ADDRESS", "PMM_AGENT_SERVER_USERNAME",
-		"PMM_AGENT_SERVER_PASSWORD", "PMM_AGENT_LISTEN_PORT", "PMM_AGENT_PORTS_MIN", "PMM_AGENT_PORTS_MAX", "PMM_AGENT_PRERUN_SCRIPT",
-		"PMM_AGENT_CONFIG_FILE", "PMM_AGENT_SERVER_INSECURE_TLS", "PMM_AGENT_LISTEN_ADDRESS", "PMM_AGENT_SETUP_NODE_NAME",
-		"PMM_AGENT_SETUP_METRICS_MODE", "PMM_AGENT_SETUP", "PMM_AGENT_SETUP_FORCE", "PMM_AGENT_SETUP_NODE_TYPE",
-		"PMM_AGENT_SIDECAR", "PMM_AGENT_SIDECAR_SLEEP", "PMM_AGENT_PATHS_TEMPDIR", "DB_CLUSTER",
-		"DB_TYPE", "DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_ARGS",
+	expectedEnvs := []corev1.EnvVar{
+		{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}},
+		{Name: "POD_NAMESPACE", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"}}},
+		{Name: "CLUSTER_NAME", Value: "test-cluster"},
+		{Name: "PMM_AGENT_SERVER_ADDRESS", Value: "pmm-server"},
+		{Name: "PMM_AGENT_SERVER_USERNAME", Value: "service_token"},
+		{Name: "PMM_AGENT_SERVER_PASSWORD", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: k8s.SecretKeySelector("test-secret", string(apiv1.UserPMMServerToken))}},
+		{Name: "PMM_AGENT_LISTEN_PORT", Value: "7777"},
+		{Name: "PMM_AGENT_PORTS_MIN", Value: "30100"},
+		{Name: "PMM_AGENT_PORTS_MAX", Value: "30105"},
+		{Name: "PMM_AGENT_PRERUN_SCRIPT", Value: "/opt/percona/pmm-prerun.sh"},
+		{Name: "PMM_AGENT_CONFIG_FILE", Value: "/usr/local/percona/pmm/config/pmm-agent.yaml"},
+		{Name: "PMM_AGENT_SERVER_INSECURE_TLS", Value: "1"},
+		{Name: "PMM_AGENT_LISTEN_ADDRESS", Value: "0.0.0.0"},
+		{Name: "PMM_AGENT_SETUP_NODE_NAME", Value: "$(POD_NAMESPACE)-$(POD_NAME)"},
+		{Name: "PMM_AGENT_SETUP_METRICS_MODE", Value: "push"},
+		{Name: "PMM_AGENT_SETUP", Value: "1"},
+		{Name: "PMM_AGENT_SETUP_FORCE", Value: "1"},
+		{Name: "PMM_AGENT_SETUP_NODE_TYPE", Value: "container"},
+		{Name: "PMM_AGENT_SIDECAR", Value: "true"},
+		{Name: "PMM_AGENT_SIDECAR_SLEEP", Value: "5"},
+		{Name: "PMM_AGENT_PATHS_TEMPDIR", Value: "/tmp/pmm"},
+		{Name: "DB_CLUSTER", Value: "test-cluster"},
+		{Name: "DB_TYPE", Value: "mysql"},
+		{Name: "DB_HOST", Value: "localhost"},
+		{Name: "DB_PORT", Value: "33062"},
+		{Name: "DB_USER", Value: string(apiv1.UserMonitor)},
+		{Name: "DB_PASSWORD", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: k8s.SecretKeySelector("test-secret", string(apiv1.UserMonitor))}},
+		{Name: "DB_ARGS", Value: "--query-source=perfschema"},
 	}
 
-	for _, env := range expectedEnvs {
-		assert.True(t, foundEnv[env])
+	for _, expected := range expectedEnvs {
+		assert.Equal(t, expected, envMap[expected.Name])
 	}
 
 	assert.NotNil(t, container.Lifecycle)

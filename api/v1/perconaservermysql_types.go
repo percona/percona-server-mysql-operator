@@ -98,6 +98,9 @@ type UnsafeFlags struct {
 	// MySQLSize allows to set MySQL size to a value less than the minimum safe size or higher than the maximum safe size.
 	MySQLSize bool `json:"mysqlSize,omitempty"`
 
+	// BackupNonReadyCluster allows backups to run even when the cluster is not in ready state.
+	BackupNonReadyCluster bool `json:"backupNonReadyCluster,omitempty"`
+
 	// Proxy allows to disable proxy.
 	Proxy bool `json:"proxy,omitempty"`
 	// ProxySize allows to set proxy (HAProxy / Router) size to a value less than the minimum safe size.
@@ -119,10 +122,13 @@ type ClusterType string
 const (
 	ClusterTypeGR    ClusterType = "group-replication"
 	ClusterTypeAsync ClusterType = "async"
-	MinSafeProxySize             = 2
-	MinSafeGRSize                = 3
-	MaxSafeGRSize                = 9
-	MinSafeAsyncSize             = 2
+)
+
+const (
+	MinSafeProxySize = 2
+	MinSafeGRSize    = 3
+	MaxSafeGRSize    = 9
+	MinSafeAsyncSize = 2
 )
 
 // Checks if the provided ClusterType is valid.
@@ -135,7 +141,11 @@ func (t ClusterType) isValid() bool {
 	return false
 }
 
+// +kubebuilder:validation:XValidation:rule="has(self.image) && size(self.image) > 0",message="mysql.image is required"
+// +kubebuilder:validation:XValidation:rule="has(self.size) && self.size > 0",message="mysql.size must be greater than 0"
 type MySQLSpec struct {
+	// +kubebuilder:validation:Enum=group-replication;async
+	// +kubebuilder:default=group-replication
 	ClusterType   ClusterType            `json:"clusterType,omitempty"`
 	ExposePrimary ServiceExposeTogglable `json:"exposePrimary,omitempty"`
 	Expose        ServiceExposeTogglable `json:"expose,omitempty"`
@@ -168,6 +178,8 @@ type SidecarPVC struct {
 	Spec corev1.PersistentVolumeClaimSpec `json:"spec"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && size(self.image) > 0)",message="orchestrator.image is required when orchestrator is enabled"
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.size) && self.size > 0)",message="orchestrator.size must be greater than 0 when orchestrator is enabled"
 type OrchestratorSpec struct {
 	Enabled bool          `json:"enabled,omitempty"`
 	Expose  ServiceExpose `json:"expose,omitempty"`
@@ -176,7 +188,7 @@ type OrchestratorSpec struct {
 }
 
 type ContainerSpec struct {
-	Image            string                        `json:"image"`
+	Image            string                        `json:"image,omitempty"`
 	ImagePullPolicy  corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	Resources        corev1.ResourceRequirements   `json:"resources,omitempty"`
@@ -192,7 +204,6 @@ type ContainerSpec struct {
 }
 
 type PodSpec struct {
-	// +kubebuilder:validation:Required
 	Size        int32             `json:"size,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
@@ -278,9 +289,10 @@ func (s *PodSpec) GetInitSpec(cr *PerconaServerMySQL) InitContainerSpec {
 	return *s.InitContainer
 }
 
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && size(self.image) > 0)",message="pmm.image is required when pmm is enabled"
 type PMMSpec struct {
 	Enabled                  bool                        `json:"enabled,omitempty"`
-	Image                    string                      `json:"image"`
+	Image                    string                      `json:"image,omitempty"`
 	MySQLParams              string                      `json:"mysqlParams,omitempty"`
 	ServerHost               string                      `json:"serverHost,omitempty"`
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
@@ -293,7 +305,7 @@ type PMMSpec struct {
 type BackupSpec struct {
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	SourcePod                string                        `json:"sourcePod,omitempty"`
-	Image                    string                        `json:"image"`
+	Image                    string                        `json:"image,omitempty"`
 	ImagePullSecrets         []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
 	ServiceAccountName       string                        `json:"serviceAccountName,omitempty"`
@@ -317,6 +329,9 @@ type BackupSchedule struct {
 	Keep     int    `json:"keep,omitempty"`
 	// +kubebuilder:validation:Required
 	StorageName string `json:"storageName,omitempty"`
+	// +kubebuilder:validation:Enum=full;incremental
+	// +kubebuilder:default:=full
+	Type BackupType `json:"type,omitempty"`
 }
 
 func (s *BackupSpec) GetInitSpec(cr *PerconaServerMySQL) InitContainerSpec {
@@ -502,6 +517,10 @@ func (b *BackupStorageAzureSpec) ContainerAndPrefix() (string, string) {
 	return container, prefix
 }
 
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || has(self.binlogServer)",message="binlogServer is required when pitr is enabled"
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || !has(self.binlogServer) || (has(self.binlogServer.image) && self.binlogServer.image != '')",message="binlogServer.image is required when pitr is enabled"
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || !has(self.binlogServer) || (has(self.binlogServer.size) && self.binlogServer.size > 0)",message="binlogServer.size is required when pitr is enabled"
+
 type PiTRSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 
@@ -512,19 +531,42 @@ type BinlogServerStorageSpec struct {
 	S3 *BackupStorageS3Spec `json:"s3,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!has(self.size) || self.size <= 1",message="binlogServer size cannot be more than 1"
 type BinlogServerSpec struct {
-	Storage BinlogServerStorageSpec `json:"storage"`
+	Storage BinlogServerStorageSpec `json:"storage,omitempty"`
 
 	// The number of seconds the MySQL client library will wait to establish a connection with a remote host
-	ConnectTimeout int32 `json:"connectTimeout"`
+	// +kubebuilder:default=30
+	ConnectTimeout int32 `json:"connectTimeout,omitempty"`
 	// The number of seconds the MySQL client library will wait to read data from a remote server.
-	ReadTimeout int32 `json:"readTimeout"`
+	// +kubebuilder:default=30
+	ReadTimeout int32 `json:"readTimeout,omitempty"`
 	// The number of seconds the MySQL client library will wait to write data to a remote server.
-	WriteTimeout int32 `json:"writeTimeout"`
+	// +kubebuilder:default=30
+	WriteTimeout int32 `json:"writeTimeout,omitempty"`
 	// Specifies the server ID that the utility will be using when connecting to a remote MySQL server
-	ServerID int32 `json:"serverId"`
+	ServerID int32 `json:"serverId,omitempty"`
 	// The number of seconds the utility will spend in disconnected mode between reconnection attempts.
-	IdleTime int32 `json:"idleTime"`
+	// +kubebuilder:default=30
+	IdleTime int32 `json:"idleTime,omitempty"`
+	// SSLMode specifies the SSL mode for the connection to MySQL.
+	// +kubebuilder:default="verify_identity"
+	SSLMode string `json:"sslMode,omitempty"`
+	// VerifyChecksum enables checksum verification during replication.
+	// +kubebuilder:default=true
+	VerifyChecksum *bool `json:"verifyChecksum,omitempty"`
+	// RewriteFileSize specifies the maximum binlog file size for rewrite.
+	// +kubebuilder:default="128M"
+	RewriteFileSize string `json:"rewriteFileSize,omitempty"`
+	// CheckpointSize specifies the storage checkpoint size.
+	// +kubebuilder:default="16M"
+	CheckpointSize string `json:"checkpointSize,omitempty"`
+	// CheckpointInterval specifies the storage checkpoint interval.
+	// +kubebuilder:default="30s"
+	CheckpointInterval string `json:"checkpointInterval,omitempty"`
+	// LogLevel specifies the log level.
+	// +kubebuilder:default="info"
+	LogLevel string `json:"logLevel,omitempty"`
 
 	PodSpec `json:",inline"`
 }
@@ -534,6 +576,8 @@ type ProxySpec struct {
 	HAProxy *HAProxySpec     `json:"haproxy,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && size(self.image) > 0)",message="router.image is required when router is enabled"
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.size) && self.size > 0)",message="router.size must be greater than 0 when router is enabled"
 type MySQLRouterSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 
@@ -544,10 +588,13 @@ type MySQLRouterSpec struct {
 	PodSpec `json:",inline"`
 }
 
+// +kubebuilder:validation:XValidation:rule="has(self.image) && size(self.image) > 0",message="toolkit.image is required"
 type ToolkitSpec struct {
 	ContainerSpec `json:",inline"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && size(self.image) > 0)",message="haproxy.image is required when haproxy is enabled"
+// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.size) && self.size > 0)",message="haproxy.size must be greater than 0 when haproxy is enabled"
 type HAProxySpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 
@@ -634,6 +681,7 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	Orchestrator   StatefulAppStatus  `json:"orchestrator,omitempty"`
 	HAProxy        StatefulAppStatus  `json:"haproxy,omitempty"`
 	Router         StatefulAppStatus  `json:"router,omitempty"`
+	BinlogServer   StatefulAppStatus  `json:"binlogServer,omitempty"`
 	State          StatefulAppState   `json:"state,omitempty"`
 	BackupVersion  string             `json:"backupVersion,omitempty"`
 	PMMVersion     string             `json:"pmmVersion,omitempty"`
@@ -730,6 +778,22 @@ func (cr *PerconaServerMySQL) GlobalAnnotations() map[string]string {
 	return m
 }
 
+func (cr *PerconaServerMySQL) CanBackup() error {
+	if cr.Status.State == StateReady {
+		return nil
+	}
+
+	if !cr.Spec.Unsafe.BackupNonReadyCluster {
+		return errors.Errorf("unsafeFlags.backupNonReadyCluster must be true to run backup on cluster with status %s", cr.Status.State)
+	}
+
+	if cr.Status.MySQL.Ready < int32(1) {
+		return errors.New("there are no ready MySQL nodes")
+	}
+
+	return nil
+}
+
 func (cr *PerconaServerMySQL) Version() *v.Version {
 	return v.Must(v.NewVersion(cr.Spec.CRVersion))
 }
@@ -774,6 +838,12 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 				if err != nil {
 					return errors.Wrap(err, "invalid schedule format")
 				}
+			}
+		}
+
+		for i, sch := range cr.Spec.Backup.Schedule {
+			if sch.Type == "" {
+				cr.Spec.Backup.Schedule[i].Type = BackupTypeFull
 			}
 		}
 	}
@@ -936,15 +1006,31 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 
 	if cr.Spec.MySQL.ClusterType == ClusterTypeAsync {
 		for _, env := range cr.Spec.MySQL.Env {
-			if env.Name != naming.EnvBootstrapReadTimeout {
-				continue
-			}
-			readTimeout, err := strconv.Atoi(env.Value)
-			if err != nil {
-				return errors.Wrap(err, "failed to parse BOOTSTRAP_READ_TIMEOUT")
-			}
-			if readTimeout < 0 {
-				return errors.New("BOOTSTRAP_READ_TIMEOUT should be a positive value")
+			switch env.Name {
+			case naming.EnvBootstrapReadTimeout:
+				readTimeout, err := strconv.Atoi(env.Value)
+				if err != nil {
+					return errors.Wrap(err, "failed to parse BOOTSTRAP_READ_TIMEOUT")
+				}
+				if readTimeout < 0 {
+					return errors.New("BOOTSTRAP_READ_TIMEOUT should be a positive value")
+				}
+			case naming.EnvAsyncSourceRetryCount:
+				sourceRetryCount, err := strconv.Atoi(env.Value)
+				if err != nil {
+					return errors.Wrap(err, "failed to parse ASYNC_SOURCE_RETRY_COUNT")
+				}
+				if sourceRetryCount < 0 {
+					return errors.New("ASYNC_SOURCE_RETRY_COUNT should be a positive value")
+				}
+			case naming.EnvAsyncSourceConnectRetry:
+				connectRetry, err := strconv.Atoi(env.Value)
+				if err != nil {
+					return errors.Wrap(err, "failed to parse ASYNC_SOURCE_CONNECT_RETRY")
+				}
+				if connectRetry < 0 {
+					return errors.New("ASYNC_SOURCE_CONNECT_RETRY should be a positive value")
+				}
 			}
 		}
 	}
@@ -965,11 +1051,52 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.Backup.PiTR.BinlogServer = new(BinlogServerSpec)
 	}
 
+	if cr.Spec.Backup.PiTR.BinlogServer != nil {
+		bls := cr.Spec.Backup.PiTR.BinlogServer
+		if bls.SSLMode == "" {
+			bls.SSLMode = "verify_identity"
+		}
+		if bls.VerifyChecksum == nil {
+			t := true
+			bls.VerifyChecksum = &t
+		}
+		if bls.RewriteFileSize == "" {
+			bls.RewriteFileSize = "128M"
+		}
+		if bls.CheckpointSize == "" {
+			bls.CheckpointSize = "16M"
+		}
+		if bls.CheckpointInterval == "" {
+			bls.CheckpointInterval = "30s"
+		}
+		if bls.ConnectTimeout == 0 {
+			bls.ConnectTimeout = 30
+		}
+		if bls.ReadTimeout == 0 {
+			bls.ReadTimeout = 30
+		}
+		if bls.WriteTimeout == 0 {
+			bls.WriteTimeout = 30
+		}
+		if bls.IdleTime == 0 {
+			bls.IdleTime = 30
+		}
+		if bls.LogLevel == "" {
+			bls.LogLevel = "info"
+		}
+		if bls.ServerID == 0 {
+			bls.ServerID = 100
+		}
+	}
+
 	if cr.Spec.Pause {
 		cr.Spec.MySQL.Size = 0
 		cr.Spec.Orchestrator.Size = 0
 		cr.Spec.Proxy.Router.Size = 0
 		cr.Spec.Proxy.HAProxy.Size = 0
+		if cr.Spec.Backup.PiTR.BinlogServer != nil {
+			cr.Spec.Backup.PiTR.BinlogServer.Size = 0
+		}
 	}
 
 	if cr.Spec.SecretsName == "" {
@@ -1241,5 +1368,72 @@ const (
 	UpgradeStrategyDisabled    = "disabled"
 	UpgradeStrategyNever       = "never"
 	UpgradeStrategyRecommended = "recommended"
-	UpgradeStrategyLatest      = "latest"
 )
+
+func (s *BackupStorageSpec) Equals(other *BackupStorageSpec) bool {
+	if s == nil || other == nil {
+		return false
+	}
+	if s.Type != other.Type {
+		return false
+	}
+
+	switch s.Type {
+	case BackupStorageS3:
+		return s.S3.equals(other.S3)
+	case BackupStorageGCS:
+		return s.GCS.equals(other.GCS)
+	case BackupStorageAzure:
+		return s.Azure.equals(other.Azure)
+	default:
+		return false
+	}
+}
+
+func (s *BackupStorageS3Spec) equals(other *BackupStorageS3Spec) bool {
+	if s.Bucket != other.Bucket {
+		return false
+	}
+	if s.Prefix != other.Prefix {
+		return false
+	}
+	if s.Region != other.Region {
+		return false
+	}
+	if s.EndpointURL != other.EndpointURL {
+		return false
+	}
+	return true
+}
+
+func (s *BackupStorageGCSSpec) equals(other *BackupStorageGCSSpec) bool {
+	if s.Bucket != other.Bucket {
+		return false
+	}
+	if s.Prefix != other.Prefix {
+		return false
+	}
+	if s.EndpointURL != other.EndpointURL {
+		return false
+	}
+	if s.StorageClass != other.StorageClass {
+		return false
+	}
+	return true
+}
+
+func (s *BackupStorageAzureSpec) equals(other *BackupStorageAzureSpec) bool {
+	if s.ContainerName != other.ContainerName {
+		return false
+	}
+	if s.Prefix != other.Prefix {
+		return false
+	}
+	if s.EndpointURL != other.EndpointURL {
+		return false
+	}
+	if s.StorageClass != other.StorageClass {
+		return false
+	}
+	return true
+}

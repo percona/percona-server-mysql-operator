@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/go-ini/ini"
+	"github.com/percona/percona-server-mysql-operator/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,7 +48,7 @@ func TestGetCreateOptions(t *testing.T) {
 				group_replication_communication_stack=MYSQL
 				`
 				myCnfFile := io.NopCloser(bytes.NewReader([]byte(cnf)))
-				myCnf, err := parseMyCnf(myCnfFile)
+				myCnf, err := config.ParseSection(myCnfFile, "mysqld")
 				require.NoError(t, err)
 				return myCnf
 			},
@@ -67,7 +68,7 @@ func TestGetCreateOptions(t *testing.T) {
 				loose_group_replication_communication_stack=XCOM
 				`
 				myCnfFile := io.NopCloser(bytes.NewReader([]byte(cnf)))
-				myCnf, err := parseMyCnf(myCnfFile)
+				myCnf, err := config.ParseSection(myCnfFile, "mysqld")
 				require.NoError(t, err)
 				return myCnf
 			},
@@ -86,7 +87,7 @@ func TestGetCreateOptions(t *testing.T) {
 				group_replication_communication_stack=XCOM
 				`
 				myCnfFile := io.NopCloser(bytes.NewReader([]byte(cnf)))
-				myCnf, err := parseMyCnf(myCnfFile)
+				myCnf, err := config.ParseSection(myCnfFile, "mysqld")
 				require.NoError(t, err)
 				return myCnf
 			},

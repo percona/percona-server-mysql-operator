@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,6 +12,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/pmm"
@@ -26,6 +26,7 @@ const (
 	CustomConfigKey       = "my.cnf"
 	configVolumeName      = "config"
 	configMountPath       = "/etc/mysql/config"
+	CustomMyCnfPath       = "/etc/mysql/config/my-config.cnf"
 	credsVolumeName       = "users"
 	mysqlshVolumeName     = "mysqlsh"
 	mysqlshMountPath      = "/.mysqlsh"
@@ -45,6 +46,9 @@ const (
 
 	DefaultReadTimeoutSecondsSeconds  = 3600
 	DefaultCloneTimeoutSecondsSeconds = 3600
+
+	DefaultAsyncSourceRetryCount   = 3
+	DefaultAsyncSourceConnectRetry = 60
 )
 
 type User struct {
@@ -157,7 +161,7 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 			Name:        Name(cr),
 			Namespace:   cr.Namespace,
 			Labels:      Labels(cr),
-			Annotations: cr.GlobalAnnotations(),
+			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), spec.Annotations),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
@@ -169,7 +173,7 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      Labels(cr),
-					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), annotations),
+					Annotations: util.SSMapMerge(cr.GlobalAnnotations(), spec.Annotations, annotations),
 				},
 				Spec: spec.Core(
 					selector,
@@ -676,6 +680,17 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		})
 	}
 
+	if cr.CompareVersion("1.1.0") >= 0 {
+		backupsEnabled := false
+		if cr.Spec.Backup != nil {
+			backupsEnabled = cr.Spec.Backup.Enabled
+		}
+		env = append(env, corev1.EnvVar{
+			Name:  naming.EnvBackupsEnabled,
+			Value: strconv.FormatBool(backupsEnabled),
+		})
+	}
+
 	container := corev1.Container{
 		Name:                     AppName,
 		Image:                    spec.Image,
@@ -729,10 +744,21 @@ func backupVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 	}
 
 	if cr.CompareVersion("0.11.0") >= 0 {
-		mounts = append(mounts, corev1.VolumeMount{
-			Name:      vaultSecretVolumeName,
-			MountPath: vaultSecretMountPath,
-		})
+		mounts = append(mounts,
+			corev1.VolumeMount{
+				Name:      vaultSecretVolumeName,
+				MountPath: vaultSecretMountPath,
+			},
+		)
+	}
+
+	if cr.CompareVersion("1.1.0") >= 0 {
+		mounts = append(mounts,
+			corev1.VolumeMount{
+				Name:      configVolumeName,
+				MountPath: configMountPath,
+			},
+		)
 	}
 
 	return mounts
