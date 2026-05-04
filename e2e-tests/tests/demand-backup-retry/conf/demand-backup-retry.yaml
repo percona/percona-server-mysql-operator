@@ -1,0 +1,33 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: demand-backup-retry
+spec:
+  mysql:
+    clusterType: async
+    size: 3
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 7Gi
+
+  proxy:
+    haproxy:
+      enabled: true
+      size: 3
+
+  orchestrator:
+    enabled: true
+    size: 3
+
+  backup:
+    backoffLimit: 5
+    storages:
+      minio:
+        type: s3
+        s3:
+          bucket: operator-testing
+          credentialsSecret: minio-secret
+          endpointUrl: http://minio-service.<namespace>:9000
+          region: us-east-1

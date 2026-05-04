@@ -1,0 +1,27 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      kubectl patch ps $(get_cluster_name) -n "${NAMESPACE}" \
+        --type='merge' \
+        -p '{
+          "spec": {
+            "mysql": {
+              "env": [
+                {
+                  "name": "ASYNC_SOURCE_RETRY_COUNT",
+                  "value": "4"
+                },
+                {
+                  "name": "ASYNC_SOURCE_CONNECT_RETRY",
+                  "value": "70"
+                }
+              ]
+            }
+          }
+        }'

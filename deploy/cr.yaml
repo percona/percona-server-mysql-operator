@@ -14,13 +14,14 @@ spec:
 #    labels:
 #      rack: rack-22
 #  unsafeFlags:
+#    backupNonReadyCluster: false
 #    mysqlSize: false
 #    orchestrator: false
 #    orchestratorSize: false
 #    proxy: false
 #    proxySize: false
 #  pause: false
-  crVersion: 1.1.0
+  crVersion: 1.2.0
 #  enableVolumeExpansion: false
   secretsName: ps-cluster1-secrets
   sslSecretName: ps-cluster1-ssl
@@ -97,6 +98,10 @@ spec:
 #    env:
 #      - name: BOOTSTRAP_READ_TIMEOUT
 #        value: "600"
+#      - name: ASYNC_SOURCE_RETRY_COUNT
+#        value: "3"
+#      - name: ASYNC_SOURCE_CONNECT_RETRY
+#        value: "60"
 #    envFrom:
 #      - secretRef:
 #          name: mysql-env-secret
@@ -668,6 +673,73 @@ spec:
     enabled: true
     pitr:
       enabled: false
+#      binlogServer:
+#        size: 1
+#        image: perconalab/percona-binlog-server:0.2.1
+#        imagePullPolicy: Always
+#        imagePullSecrets:
+#          - name: my-secret-1
+#          - name: my-secret-2
+#        storage:
+#          s3:
+#            bucket: S3-BACKUP-BUCKET-NAME-HERE
+#            credentialsSecret: ps-cluster1-s3-credentials
+#            endpointUrl: https://s3.amazonaws.com
+#            prefix: PREFIX_NAME
+#            region: us-west-2
+#        connectTimeout: 30
+#        readTimeout: 30
+#        writeTimeout: 30
+#        idleTime: 30
+#        affinity:
+#          advanced:
+#            nodeAffinity:
+#              requiredDuringSchedulingIgnoredDuringExecution:
+#                nodeSelectorTerms:
+#                  - matchExpressions:
+#                      - key: kubernetes.io/e2e-az-name
+#                        operator: In
+#                        values:
+#                          - e2e-az1
+#                          - e2e-az2
+#          antiAffinityTopologyKey: kubernetes.io/hostname
+#        checkpointInterval: 30s
+#        checkpointSize: 16M
+#        containerSecurityContext:
+#          privileged: false
+#          runAsGroup: 1001
+#          runAsUser: 1001
+#        env: []
+#        envFrom: []
+#        initContainer:
+#          containerSecurityContext:
+#            privileged: false
+#            runAsGroup: 1001
+#            runAsUser: 1001
+#          image: perconalab/percona-server-mysql-operator:main
+#          resources:
+#            limits:
+#              cpu: 100m
+#              memory: 100M
+#            requests:
+#              cpu: 200m
+#              memory: 200M
+#        logLevel: info
+#        podSecurityContext:
+#          fsGroup: 1001
+#          supplementalGroups:
+#            - 1001
+#            - 1002
+#            - 1003
+#        resources:
+#          limits:
+#            cpu: 100m
+#            memory: 100M
+#          requests:
+#            cpu: 200m
+#            memory: 200M
+#        rewriteFileSize: ""
+#        sslMode: ""
 #    sourcePod: ps-cluster1-mysql-1
     image: perconalab/percona-server-mysql-operator:main-backup8.4
     imagePullPolicy: Always
@@ -675,14 +747,16 @@ spec:
 #      - name: my-secret-1
 #      - name: my-secret-2
 #    schedule:
-#      - keep: 3
+#      - keep: 0
 #        name: sat-night-backup
 #        schedule: 0 0 * * 6
 #        storageName: s3-us-west
-#      - keep: 5
+#        type: full
+#      - keep: 0
 #        name: daily-backup
 #        schedule: 0 0 * * *
 #        storageName: s3
+#        type: incremental
 #    backoffLimit: 6
 #    serviceAccountName: some-service-account
 #    initContainer:

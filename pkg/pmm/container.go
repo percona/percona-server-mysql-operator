@@ -114,6 +114,11 @@ func pmmEnvs(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret, dbType string)
 	token := string(apiv1.UserPMMServerToken)
 	pmmSpec := cr.PMMSpec()
 
+	pmmTmpDir := "/tmp"
+	if cr.CompareVersion("1.1.0") >= 0 {
+		pmmTmpDir = "/tmp/pmm"
+	}
+
 	return []corev1.EnvVar{
 		{
 			Name: "POD_NAME",
@@ -203,7 +208,7 @@ func pmmEnvs(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret, dbType string)
 		},
 		{
 			Name:  "PMM_AGENT_PATHS_TEMPDIR",
-			Value: "/tmp",
+			Value: pmmTmpDir,
 		},
 		{
 			Name:  "PMM_AGENT_PRERUN_SCRIPT",

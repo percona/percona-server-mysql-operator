@@ -85,7 +85,7 @@ func deleteBackup(ctx context.Context, cfg *xb.BackupConfig, backupName string) 
 		defer backupLog.Close() //nolint:errcheck
 		logWriter = io.MultiWriter(backupLog, os.Stderr)
 	}
-	xbcloud := exec.CommandContext(ctx, "xbcloud", xb.XBCloudArgs(xb.XBCloudActionDelete, cfg)...)
+	xbcloud := exec.CommandContext(ctx, "xbcloud", cfg.XbcloudDeleteArgs()...)
 	xbcloud.Env = envs(*cfg)
 	xbcloudErr, err := xbcloud.StderrPipe()
 	if err != nil {

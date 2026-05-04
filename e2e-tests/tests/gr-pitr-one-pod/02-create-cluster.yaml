@@ -1,0 +1,18 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      get_binlogs_prefix() {
+        echo $(kubectl -n "$NAMESPACE" get configmap binlogs-prefix -o jsonpath='{.data.prefix}')
+      }
+
+      get_cr \
+        |  yq eval '
+            (.. | select(tag == "!!str")) |= sub("<prefix>"; "'"$(get_binlogs_prefix)"'")
+          ' - \
+        | kubectl -n "$NAMESPACE" apply -f -

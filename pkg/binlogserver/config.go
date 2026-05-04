@@ -12,23 +12,59 @@ type Logger struct {
 	File  string `json:"file,omitempty"`
 }
 
+type ConnectionSSL struct {
+	Mode    string `json:"mode,omitempty"`
+	CA      string `json:"ca,omitempty"`
+	CAPath  string `json:"capath,omitempty"`
+	CRL     string `json:"crl,omitempty"`
+	CRLPath string `json:"crlpath,omitempty"`
+	Cert    string `json:"cert,omitempty"`
+	Key     string `json:"key,omitempty"`
+	Cipher  string `json:"cipher,omitempty"`
+}
+
+type ConnectionTLS struct {
+	CipherSuites string `json:"ciphersuites,omitempty"`
+	Version      string `json:"version,omitempty"`
+}
+
 type Connection struct {
-	Host           string `json:"host,omitempty"`
-	Port           int32  `json:"port,omitempty"`
-	User           string `json:"user,omitempty"`
-	Password       string `json:"password,omitempty"`
-	ConnectTimeout int32  `json:"connect_timeout,omitempty"`
-	ReadTimeout    int32  `json:"read_timeout,omitempty"`
-	WriteTimeout   int32  `json:"write_timeout,omitempty"`
+	Host           string         `json:"host,omitempty"`
+	Port           int32          `json:"port,omitempty"`
+	User           string         `json:"user,omitempty"`
+	Password       string         `json:"password,omitempty"`
+	ConnectTimeout int32          `json:"connect_timeout,omitempty"`
+	ReadTimeout    int32          `json:"read_timeout,omitempty"`
+	WriteTimeout   int32          `json:"write_timeout,omitempty"`
+	SSL            *ConnectionSSL `json:"ssl,omitempty"`
+	TLS            *ConnectionTLS `json:"tls,omitempty"`
+}
+
+type ReplicationMode string
+
+const (
+	ReplicationModeGTID ReplicationMode = "gtid"
+)
+
+type Rewrite struct {
+	BaseFileName string `json:"base_file_name,omitempty"`
+	FileSize     string `json:"file_size,omitempty"`
 }
 
 type Replication struct {
-	ServerID int32 `json:"server_id,omitempty"`
-	IdleTime int32 `json:"idle_time,omitempty"`
+	ServerID       int32           `json:"server_id,omitempty"`
+	IdleTime       int32           `json:"idle_time,omitempty"`
+	VerifyChecksum bool            `json:"verify_checksum,omitempty"`
+	Mode           ReplicationMode `json:"mode,omitempty"`
+	Rewrite        Rewrite         `json:"rewrite,omitempty"`
 }
 
 type Storage struct {
-	URI string `json:"uri,omitempty"`
+	Backend            string `json:"backend,omitempty"`
+	URI                string `json:"uri,omitempty"`
+	FsBufferDirectory  string `json:"fs_buffer_directory,omitempty"`
+	CheckpointSize     string `json:"checkpoint_size,omitempty"`
+	CheckpointInterval string `json:"checkpoint_interval,omitempty"`
 }
 
 type Configuration struct {

@@ -1,0 +1,17 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+        t=1
+        for pod in $(kubectl get pods -n "${NAMESPACE}" -l 'app.kubernetes.io/component=database,!mysql.percona.com/primary' -o jsonpath='{.items[*].metadata.name}'); do
+          connect_retry=$(kubectl exec $pod -n "${NAMESPACE}" -- bash -c 'mysql -uroot  -p"$(cat /etc/mysql/mysql-users-secret/root)" -e "show replica status\G;"' | egrep  "Connect_Retry|Source_Retry_Count")
+          echo "Connect retry for $pod: $connect_retry"
+          kubectl create cm 09-check-retry-vars-$t  -n "${NAMESPACE}" --from-literal=retry_values="$connect_retry"
+          t=$((t+1))
+        done
+    timeout: 360

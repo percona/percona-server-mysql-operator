@@ -5,6 +5,7 @@ export ROOT_REPO=${ROOT_REPO:-${PWD}}
 export DEPLOY_DIR="${DEPLOY_DIR:-${ROOT_REPO}/deploy}"
 export TESTS_DIR="${TESTS_DIR:-${ROOT_REPO}/e2e-tests}"
 export TESTS_CONFIG_DIR="${TESTS_CONFIG_DIR:-${TESTS_DIR}/conf}"
+export TEST_CONFIG_DIR="${TEST_CONFIG_DIR:-${TESTS_DIR}/tests/${test_name}/conf}"
 export TEMP_DIR="/tmp/kuttl/ps/${test_name}"
 
 export GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
@@ -28,15 +29,16 @@ export IMAGE_ORCHESTRATOR=${IMAGE_ORCHESTRATOR:-"perconalab/percona-server-mysql
 export IMAGE_ROUTER=${IMAGE_ROUTER:-"perconalab/percona-server-mysql-operator:main-router${MYSQL_VERSION}"}
 export IMAGE_TOOLKIT=${IMAGE_TOOLKIT:-"perconalab/percona-server-mysql-operator:main-toolkit"}
 export IMAGE_HAPROXY=${IMAGE_HAPROXY:-"perconalab/percona-server-mysql-operator:main-haproxy"}
+export IMAGE_BINLOG_SERVER=${IMAGE_BINLOG_SERVER:-"perconalab/percona-binlog-server:0.2.1"}
 export PMM_SERVER_VERSION=${PMM_SERVER_VERSION:-"1.4.3"}
 export IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:3-dev-latest"}
 export IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:3-dev-latest"}
-export CERT_MANAGER_VER="1.19.1"
+export CERT_MANAGER_VER="1.20.2"
 export MINIO_VER="5.4.0"
 export CHAOS_MESH_VER="2.7.2"
 export VAULT_VER="0.16.1"
 
-date=$(which gdate || which date)
+export date=$(which gdate || which date)
 
 oc get projects &> /dev/null && export OPENSHIFT=4 || :
 

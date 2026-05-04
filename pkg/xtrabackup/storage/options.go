@@ -74,11 +74,11 @@ func getGCSOptions(ctx context.Context, cl client.Client, cluster *apiv1.Percona
 	}
 	accessKeyID, ok := s.Data[secret.CredentialsGCSAccessKey]
 	if !ok {
-		return nil, errors.Errorf("key %s is not found in the % secret", secret.CredentialsGCSAccessKey, s.Name)
+		return nil, errors.Errorf("key %s is not found in the %s secret", secret.CredentialsGCSAccessKey, s.Name)
 	}
 	secretAccessKey, ok := s.Data[secret.CredentialsGCSSecretKey]
 	if !ok {
-		return nil, errors.Errorf("key %s is not found in the % secret", secret.CredentialsGCSSecretKey, s.Name)
+		return nil, errors.Errorf("key %s is not found in the %s secret", secret.CredentialsGCSSecretKey, s.Name)
 	}
 
 	bucket, prefix := backupStatus.Storage.GCS.BucketAndPrefix()
@@ -122,11 +122,11 @@ func getAzureOptions(ctx context.Context, cl client.Client, ns string, backupSta
 	}
 	accountName, ok := s.Data[secret.CredentialsAzureStorageAccount]
 	if !ok {
-		return nil, errors.Errorf("key %s is not found in the % secret", secret.CredentialsAzureStorageAccount, s.Name)
+		return nil, errors.Errorf("key %s is not found in the %s secret", secret.CredentialsAzureStorageAccount, s.Name)
 	}
 	accountKey, ok := s.Data[secret.CredentialsAzureAccessKey]
 	if !ok {
-		return nil, errors.Errorf("key %s is not found in the % secret", secret.CredentialsAzureAccessKey, s.Name)
+		return nil, errors.Errorf("key %s is not found in the %s secret", secret.CredentialsAzureAccessKey, s.Name)
 	}
 
 	container, prefix := backupStatus.Storage.Azure.ContainerAndPrefix()
@@ -158,11 +158,11 @@ func getS3Options(ctx context.Context, cl client.Client, cluster *apiv1.PerconaS
 	}
 	accessKeyID, ok := s.Data[secret.CredentialsAWSAccessKey]
 	if !ok {
-		return nil, errors.Errorf("key %s is not found in the % secret", secret.CredentialsAWSAccessKey, s.Name)
+		return nil, errors.Errorf("key %s is not found in the %s secret", secret.CredentialsAWSAccessKey, s.Name)
 	}
 	secretAccessKey, ok := s.Data[secret.CredentialsAWSSecretKey]
 	if !ok {
-		return nil, errors.Errorf("key %s is not found in the % secret", secret.CredentialsAWSSecretKey, s.Name)
+		return nil, errors.Errorf("key %s is not found in the %s secret", secret.CredentialsAWSSecretKey, s.Name)
 	}
 
 	bucket, prefix := backupStatus.Storage.S3.BucketAndPrefix()

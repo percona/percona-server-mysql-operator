@@ -318,12 +318,14 @@ void downloadKubectl() {
 }
 
 void prepareNode() {
+    sh """
+        sudo curl -fsSL https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux64 -o /usr/local/bin/jq && sudo chmod +x /usr/local/bin/jq
+    """
     downloadKubectl()
     sh """
         curl -fsSL https://get.helm.sh/helm-v3.20.0-linux-amd64.tar.gz | sudo tar -C /usr/local/bin --strip-components 1 -xzf - linux-amd64/helm
 
         sudo curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.45.4/yq_linux_amd64 -o /usr/local/bin/yq && sudo chmod +x /usr/local/bin/yq
-        sudo curl -fsSL https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux64 -o /usr/local/bin/jq && sudo chmod +x /usr/local/bin/jq
 
         curl -fsSL https://github.com/kubernetes-sigs/krew/releases/latest/download/krew-linux_amd64.tar.gz | tar -xzf -
         ./krew-linux_amd64 install krew
@@ -389,30 +391,46 @@ void checkE2EIgnoreFiles() {
         build = build.previousBuild
     }
 
+    def mergeBaseDiff = "git diff --name-only \$(git merge-base HEAD origin/$CHANGE_TARGET) HEAD"
+    def parentCount = sh(script: "git show -s --format=%P HEAD | wc -w", returnStdout: true).trim().toInteger()
+    def isMergeCommit = parentCount > 1
+
     if (lastProcessedCommitHash == "") {
-        echo "This is the first run. Using merge base as the starting point for the diff."
-        changedFiles = sh(script: "git diff --name-only \$(git merge-base HEAD origin/$CHANGE_TARGET)", returnStdout: true).trim().split('\n').findAll{it}
+        echo "First run (no last processed commit). Using merge-base..HEAD vs origin/$CHANGE_TARGET."
+        changedFiles = sh(script: mergeBaseDiff, returnStdout: true).trim().split('\n').findAll{it}
     } else {
         def commitExists = sh(script: "git cat-file -e $lastProcessedCommitHash 2>/dev/null", returnStatus: true) == 0
-        if (commitExists) {
-            echo "Processing changes since last processed commit: $lastProcessedCommitHash"
-            changedFiles = sh(script: "git diff --name-only $lastProcessedCommitHash HEAD", returnStdout: true).trim().split('\n').findAll{it}
+        if (!commitExists) {
+            echo "Last processed commit $lastProcessedCommitHash not in repo. Using merge-base..HEAD."
+            changedFiles = sh(script: mergeBaseDiff, returnStdout: true).trim().split('\n').findAll{it}
         } else {
-            echo "Commit hash $lastProcessedCommitHash does not exist in the current repository. Using merge base as the starting point for the diff."
-            changedFiles = sh(script: "git diff --name-only \$(git merge-base HEAD origin/$CHANGE_TARGET)", returnStdout: true).trim().split('\n').findAll{it}
+            def isAncestor = sh(script: "git merge-base --is-ancestor $lastProcessedCommitHash HEAD", returnStatus: true) == 0
+            if (!isAncestor) {
+                echo "Last processed commit is not an ancestor of HEAD (e.g. rebase). Using merge-base..HEAD."
+                changedFiles = sh(script: mergeBaseDiff, returnStdout: true).trim().split('\n').findAll{it}
+            } else if (isMergeCommit) {
+                echo "HEAD is a merge commit: merge-base..HEAD (incremental last..HEAD would include the whole merged branch)."
+                changedFiles = sh(script: mergeBaseDiff, returnStdout: true).trim().split('\n').findAll{it}
+            } else {
+                echo "Using incremental diff since last processed commit: $lastProcessedCommitHash..HEAD"
+                changedFiles = sh(script: "git diff --name-only $lastProcessedCommitHash HEAD", returnStdout: true).trim().split('\n').findAll{it}
+            }
         }
     }
 
     echo "Excluded files: $excludedFiles"
     echo "Changed files: $changedFiles"
 
-    def excludedFilesRegex = excludedFiles.collect{it.replace("**", ".*").replace("*", "[^/]*")}
+    // Use placeholder so the * in ".*" (from **) is not replaced by [^/]*
+    def excludedFilesRegex = excludedFiles.collect{
+        it.replace("**", ".__STARSTAR__").replace("*", "[^/]*").replace(".__STARSTAR__", ".*")
+    }
     needToRunTests = !changedFiles.every{changed -> excludedFilesRegex.any{regex -> changed ==~ regex}}
 
     if (needToRunTests) {
         echo "Some changed files are outside of the e2eignore list. Proceeding with execution."
     } else {
-        if (currentBuild.previousBuild?.result != 'SUCCESS') {
+        if (currentBuild.previousBuild?.result != 'SUCCESS' && currentBuild.number != 1) {
             echo "All changed files are e2eignore files, and previous build was unsuccessful. Propagating previous state."
             currentBuild.result = currentBuild.previousBuild?.result
             error "Skipping execution as non-significant changes detected and previous build was unsuccessful."
@@ -537,7 +555,7 @@ pipeline {
                             -w /go/src/github.com/percona/percona-server-mysql-operator \
                             -e GOFLAGS='-buildvcs=false' \
                             -e GO111MODULE=on \
-                            golang:1.25 sh -c '
+                            golang:1.26 sh -c '
                                 go install github.com/google/go-licenses@latest;
                                 /go/bin/go-licenses csv github.com/percona/percona-server-mysql-operator/cmd/manager \
                                     | cut -d , -f 3 \
@@ -566,7 +584,7 @@ pipeline {
                             -w /go/src/github.com/percona/percona-server-mysql-operator \
                             -e GOFLAGS='-buildvcs=false' \
                             -e GO111MODULE=on \
-                            golang:1.25 sh -c 'go build -v -o percona-server-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
+                            golang:1.26 sh -c 'go build -v -o percona-server-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
                     "
                 '''
 

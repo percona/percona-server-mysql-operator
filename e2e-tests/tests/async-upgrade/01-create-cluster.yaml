@@ -15,9 +15,23 @@ commands:
         exit 1
       fi
 
+      # binlog server options were required in v1.0.0
+      # we can delete them after v1.1.0 released
       get_cr_with_latest_versions_in_vs \
           | yq eval "$(printf '.spec.initImage="%s"' "${init_image}")" - \
           | yq eval "$(printf '.spec.crVersion="%s"' "${version}")" - \
           | yq eval '.spec.mysql.clusterType="async"' - \
           | yq eval '.spec.secretsName="async-upgrade-secrets"' - \
+          | yq eval '.spec.backup.pitr.enabled=false' - \
+          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.bucket="operator-testing"' - \
+          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.prefix="binlogs"' - \
+          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.credentialsSecret="minio-secret"' - \
+          | yq eval ".spec.backup.pitr.binlogServer.storage.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
+          | yq eval '.spec.backup.pitr.binlogServer.storage.s3.region="us-east-1"' - \
+          | yq eval '.spec.backup.pitr.binlogServer.size=1' - \
+          | yq eval '.spec.backup.pitr.binlogServer.serverId=100' - \
+          | yq eval '.spec.backup.pitr.binlogServer.connectTimeout=10' - \
+          | yq eval '.spec.backup.pitr.binlogServer.readTimeout=10' - \
+          | yq eval '.spec.backup.pitr.binlogServer.writeTimeout=10' - \
+          | yq eval '.spec.backup.pitr.binlogServer.idleTime=3' - \
           | kubectl -n "${NAMESPACE}" apply -f -

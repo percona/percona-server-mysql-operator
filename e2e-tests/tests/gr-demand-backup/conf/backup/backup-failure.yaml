@@ -1,0 +1,16 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: <backup-name>
+  finalizers:
+    - percona.com/delete-backup
+spec:
+  clusterName: gr-demand-backup
+  storageName: <storage-name>
+  containerOptions:
+    env:
+    - name: CUSTOM_ENV_2
+      value: "test"
+    args:
+      xtrabackup:
+      - "--customnotsupported"

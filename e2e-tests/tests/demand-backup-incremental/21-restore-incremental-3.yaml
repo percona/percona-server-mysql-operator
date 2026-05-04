@@ -1,0 +1,7 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: restore-incr-3
+spec:
+  clusterName: demand-backup-incremental
+  backupName: incr-3

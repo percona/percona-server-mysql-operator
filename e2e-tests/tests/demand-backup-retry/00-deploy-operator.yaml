@@ -12,5 +12,7 @@ commands:
       deploy_operator
       deploy_tls_cluster_secrets
       deploy_client
-      deploy_minio "7G"
+      if has_minio_storage; then
+        deploy_minio "7G"
+      fi
     timeout: 300

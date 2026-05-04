@@ -1,0 +1,22 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+      init_temp_dir # do this only in the first TestStep
+
+      apply_s3_storage_secrets
+      deploy_operator
+      deploy_client
+      if has_minio_storage; then
+        deploy_minio
+      fi
+
+      # Configmap used to define binlogs random prefix to avoid tests conflict
+      kubectl create configmap binlogs-prefix \
+        --from-literal=prefix=${RANDOM} \
+        -n ${NAMESPACE}
+    timeout: 300

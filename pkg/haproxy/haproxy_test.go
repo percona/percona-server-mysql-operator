@@ -144,6 +144,17 @@ func TestStatefulset(t *testing.T) {
 		assert.Equal(t, tolerations, sts.Spec.Template.Spec.Tolerations)
 	})
 
+	t.Run("annotations", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		cluster.Spec.Proxy.HAProxy.Annotations = map[string]string{
+			"haproxy-annotation": "haproxy-annotation",
+		}
+
+		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+		assert.Equal(t, "haproxy-annotation", sts.Annotations["haproxy-annotation"])
+		assert.Equal(t, "haproxy-annotation", sts.Spec.Template.Annotations["haproxy-annotation"])
+	})
+
 	t.Run("probes", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 		cluster.Spec.CRVersion = "0.12.0"

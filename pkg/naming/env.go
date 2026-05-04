@@ -13,4 +13,10 @@ const (
 	EnvBootstrapCloneTimeout = "BOOTSTRAP_CLONE_TIMEOUT"
 
 	EnvPodIP = "POD_IP"
+
+	EnvAsyncSourceRetryCount = "ASYNC_SOURCE_RETRY_COUNT"
+
+	EnvAsyncSourceConnectRetry = "ASYNC_SOURCE_CONNECT_RETRY"
+
+	EnvBackupsEnabled = "BACKUPS_ENABLED"
 )

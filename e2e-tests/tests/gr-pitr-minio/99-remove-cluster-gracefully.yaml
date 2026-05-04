@@ -1,0 +1,17 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+delete:
+  - apiVersion: ps.percona.com/v1
+    kind: PerconaServerMySQL
+    metadata:
+      name: gr-pitr-minio
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      remove_resource_finalizers ps-backup
+      destroy_operator
+    timeout: 180
