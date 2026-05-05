@@ -72,6 +72,11 @@ spec:
           value: /var/lib/mysql/notify.sock
         - name: MYSQL_STATE_FILE
           value: /var/lib/mysql/mysql.state
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
         - name: KEYRING_VAULT_PATH
           value: /etc/mysql/vault-keyring-secret/keyring_vault.cnf
         - name: BACKUPS_ENABLED
@@ -191,9 +196,6 @@ spec:
           name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext:
-        supplementalGroups:
-        - 1001
       terminationGracePeriodSeconds: 30
       volumes:
       - emptyDir: {}
@@ -403,9 +405,6 @@ spec:
           name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext:
-        supplementalGroups:
-        - 1001
       serviceAccount: percona-server-mysql-operator-orchestrator
       serviceAccountName: percona-server-mysql-operator-orchestrator
       terminationGracePeriodSeconds: 30

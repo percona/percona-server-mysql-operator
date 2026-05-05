@@ -822,8 +822,31 @@ run_mysql() {
 	client_pod=$(get_client_pod)
 	wait_pod $client_pod 1>&2
 
-	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
-		bash -c "printf '%s\n' \"${command}\" | mysql -sN $host $user" 2>&1 \
+	local target_pod="${pod:-mysql-client}"
+	local container_opt=()
+	if [[ "${target_pod}" != "mysql-client" ]]; then
+		container_opt=(-c mysql)
+	fi
+
+	# 'user'@'localhost' requires a Unix socket; -h localhost uses the *client* default, which often
+	# does not match mysqld (e.g. /var/run/mysqld/mysqld.sock vs /var/lib/mysql/mysql.sock).
+	# Operator + ps-entrypoint always use ${DataMountPath}/mysql.sock (see pkg/mysql DataMountPath).
+	local conn_args="${host}"
+	if [[ "${target_pod}" != "mysql-client" && "${host}" == *"localhost"* ]]; then
+		local root_pw socket operator_sock="/var/lib/mysql/mysql.sock"
+		root_pw=$(get_user_pass root)
+		# Root must use the same socket as the server; a bare mysql -uroot would repeat the client-default problem.
+		socket=$(kubectl -n "${NAMESPACE}" exec "${target_pod}" "${container_opt[@]}" -- \
+			env MYSQL_PWD="${root_pw}" mysql -sN -uroot --socket="${operator_sock}" -e "SELECT @@socket" 2>/dev/null | tail -1)
+		socket=$(echo "${socket}" | tr -d '\r' | tr -d '[:space:]')
+		if [[ -z "${socket}" ]]; then
+			socket="${operator_sock}"
+		fi
+		conn_args="--socket=${socket}"
+	fi
+
+	kubectl -n "${NAMESPACE}" exec "${target_pod}" "${container_opt[@]}" -- \
+		bash -c "printf '%s\n' \"${command}\" | mysql -sN ${conn_args} ${user}" 2>&1 \
 		| $sed -e 's/mysql: //' \
 		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
 }
