@@ -98,11 +98,11 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 
 	defer func() {
 		switch status.State {
-		case apiv1.RestoreNew, apiv1.RestoreStarting, apiv1.RestoreRunning:
-		default:
+		case apiv1.RestoreFailed, apiv1.RestoreSucceeded, apiv1.RestoreError:
 			if err := k8s.ReleaseLease(ctx, r.Client, naming.RestoreLeaseName(cr.Spec.ClusterName), naming.LeaseHolderName(cr.Name, string(cr.GetUID())), cr.Namespace); err != nil && !errors.Is(err, k8s.ErrLeaseAlreadyHeld) {
 				log.Error(err, "failed to release restore lease")
 			}
+		default:
 		}
 
 		if status.State == cr.Status.State && status.StateDesc == cr.Status.StateDesc {
