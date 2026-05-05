@@ -186,25 +186,14 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return ctrl.Result{}, nil
 		}
 
-		lease, err := k8s.GetLease(ctx, r.Client, naming.RestoreLeaseName(cr.Spec.ClusterName), cr.Namespace)
-		if client.IgnoreNotFound(err) != nil {
-			return rr, errors.Wrap(err, "get restore lease")
+		restoreName, err := r.getActiveRestore(ctx, cr)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "get active restore")
 		}
-		if !k8serrors.IsNotFound(err) {
-			restoreName := ""
-			if lease.Spec.HolderIdentity != nil {
-				restoreName = *lease.Spec.HolderIdentity
-			}
-			isRestoreActive, err := k8sutil.IsRestoreActive(ctx, r.Client, restoreName, lease.Namespace)
-			if err != nil {
-				return ctrl.Result{}, errors.Wrapf(err, "get lease holder %s", restoreName)
-			}
-
-			if isRestoreActive {
-				status.State = apiv1.BackupError
-				status.StateDesc = fmt.Sprintf("backup cannot run while restore %s is in progress", restoreName)
-				return ctrl.Result{}, nil
-			}
+		if restoreName != "" {
+			status.State = apiv1.BackupError
+			status.StateDesc = fmt.Sprintf("backup cannot run while restore %s is in progress", restoreName)
+			return ctrl.Result{}, nil
 		}
 
 		storage, ok := cluster.Spec.Backup.Storages[cr.Spec.StorageName]
@@ -971,4 +960,28 @@ func (r *PerconaServerMySQLBackupReconciler) releaseLeaseIfNeeded(
 	meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionBackupLeaseAcquired)
 	log.Info("Backup lease released", "leaseName", leaseName)
 	return nil
+}
+
+func (r *PerconaServerMySQLBackupReconciler) getActiveRestore(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) (string, error) {
+	lease, err := k8s.GetLease(ctx, r.Client, naming.RestoreLeaseName(cr.Spec.ClusterName), cr.Namespace)
+	if client.IgnoreNotFound(err) != nil {
+		return "", errors.Wrap(err, "get restore lease")
+	}
+	if err != nil {
+		return "", nil
+	}
+
+	restoreName := ""
+	if lease.Spec.HolderIdentity != nil {
+		restoreName, _ = naming.ParseLeaseHolder(*lease.Spec.HolderIdentity)
+	}
+	isRestoreActive, err := k8sutil.IsRestoreActive(ctx, r.Client, restoreName, lease.Namespace)
+	if err != nil {
+		return "", errors.Wrapf(err, "get lease holder %s", restoreName)
+	}
+
+	if isRestoreActive {
+		return restoreName, nil
+	}
+	return "", nil
 }

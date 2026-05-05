@@ -29,20 +29,22 @@ func TestAcquireLease(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "restore1",
 				Namespace: "ns",
+				UID:       "restore1-uid",
 			},
 			Spec: apiv1.PerconaServerMySQLRestoreSpec{
 				ClusterName: "cluster1",
 			},
 		}
 
-		err := AcquireLease(t.Context(), cl, naming.RestoreLeaseName(restore.Spec.ClusterName), restore.Name, restore.Namespace, nil)
+		holder := naming.LeaseHolderName(restore.Name, string(restore.UID))
+		err := AcquireLease(t.Context(), cl, naming.RestoreLeaseName(restore.Spec.ClusterName), holder, restore.Namespace, nil)
 		require.NoError(t, err)
 
 		got, err := GetLease(t.Context(), cl, naming.RestoreLeaseName(restore.Spec.ClusterName), restore.Namespace)
 		require.NoError(t, err)
 		require.NotNil(t, got)
 		require.NotNil(t, got.Spec.HolderIdentity)
-		assert.Equal(t, restore.Name, *got.Spec.HolderIdentity)
+		assert.Equal(t, holder, *got.Spec.HolderIdentity)
 		assert.Nil(t, got.Spec.LeaseDurationSeconds)
 		assert.NotNil(t, got.Spec.AcquireTime)
 	})
@@ -58,7 +60,7 @@ func TestAcquireLease(t *testing.T) {
 				Namespace: "ns",
 			},
 			Spec: coordv1.LeaseSpec{
-				HolderIdentity:       ptr.To("restore1"),
+				HolderIdentity:       ptr.To(naming.LeaseHolderName("restore1", "restore1-uid")),
 				LeaseDurationSeconds: ptr.To(int32(30)),
 				AcquireTime:          &metav1.MicroTime{Time: now},
 				RenewTime:            &metav1.MicroTime{Time: now},
@@ -69,13 +71,15 @@ func TestAcquireLease(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "restore2",
 				Namespace: "ns",
+				UID:       "restore2-uid",
 			},
 			Spec: apiv1.PerconaServerMySQLRestoreSpec{
 				ClusterName: "cluster1",
 			},
 		}
 
-		err := AcquireLease(t.Context(), cl, naming.RestoreLeaseName(restore.Spec.ClusterName), restore.Name, restore.Namespace, func(_ context.Context, lease *coordv1.Lease) (bool, error) {
+		holder := naming.LeaseHolderName(restore.Name, string(restore.UID))
+		err := AcquireLease(t.Context(), cl, naming.RestoreLeaseName(restore.Spec.ClusterName), holder, restore.Namespace, func(_ context.Context, lease *coordv1.Lease) (bool, error) {
 			require.NotNil(t, lease)
 			return false, nil
 		})
@@ -84,7 +88,7 @@ func TestAcquireLease(t *testing.T) {
 		got, err := GetLease(t.Context(), cl, naming.RestoreLeaseName(restore.Spec.ClusterName), restore.Namespace)
 		require.NoError(t, err)
 		require.NotNil(t, got.Spec.HolderIdentity)
-		assert.Equal(t, "restore1", *got.Spec.HolderIdentity)
+		assert.Equal(t, naming.LeaseHolderName("restore1", "restore1-uid"), *got.Spec.HolderIdentity)
 	})
 
 	t.Run("replaces stale lease holder", func(t *testing.T) {
@@ -98,14 +102,14 @@ func TestAcquireLease(t *testing.T) {
 				Namespace: "ns",
 			},
 			Spec: coordv1.LeaseSpec{
-				HolderIdentity:       ptr.To("restore1"),
+				HolderIdentity:       ptr.To(naming.LeaseHolderName("restore1", "restore1-uid")),
 				LeaseDurationSeconds: ptr.To(int32(30)),
 				AcquireTime:          &metav1.MicroTime{Time: now.Add(-time.Minute)},
 				RenewTime:            &metav1.MicroTime{Time: now.Add(-time.Minute)},
 			},
 		}).Build()
 
-		err := AcquireLease(t.Context(), cl, naming.RestoreLeaseName("cluster1"), "restore2", "ns", func(_ context.Context, lease *coordv1.Lease) (bool, error) {
+		err := AcquireLease(t.Context(), cl, naming.RestoreLeaseName("cluster1"), naming.LeaseHolderName("restore2", "restore2-uid"), "ns", func(_ context.Context, lease *coordv1.Lease) (bool, error) {
 			require.NotNil(t, lease)
 			return true, nil
 		})
@@ -114,7 +118,7 @@ func TestAcquireLease(t *testing.T) {
 		got, err := GetLease(t.Context(), cl, naming.RestoreLeaseName("cluster1"), "ns")
 		require.NoError(t, err)
 		require.NotNil(t, got.Spec.HolderIdentity)
-		assert.Equal(t, "restore2", *got.Spec.HolderIdentity)
+		assert.Equal(t, naming.LeaseHolderName("restore2", "restore2-uid"), *got.Spec.HolderIdentity)
 	})
 }
 
@@ -124,6 +128,7 @@ func TestReleaseLease(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "restore1",
 			Namespace: "ns",
+			UID:       "restore1-uid",
 		},
 		Spec: apiv1.PerconaServerMySQLRestoreSpec{
 			ClusterName: "cluster1",
@@ -142,14 +147,14 @@ func TestReleaseLease(t *testing.T) {
 			Namespace: "ns",
 		},
 		Spec: coordv1.LeaseSpec{
-			HolderIdentity:       ptr.To("restore1"),
+			HolderIdentity:       ptr.To(naming.LeaseHolderName(restore.Name, string(restore.UID))),
 			LeaseDurationSeconds: ptr.To(int32(30)),
 			AcquireTime:          &metav1.MicroTime{Time: now},
 			RenewTime:            &metav1.MicroTime{Time: now},
 		},
 	}).Build()
 
-	require.NoError(t, ReleaseLease(t.Context(), cl, naming.RestoreLeaseName(restore.Spec.ClusterName), restore.Name, restore.Namespace))
+	require.NoError(t, ReleaseLease(t.Context(), cl, naming.RestoreLeaseName(restore.Spec.ClusterName), naming.LeaseHolderName(restore.Name, string(restore.UID)), restore.Namespace))
 
 	lease, err := GetLease(t.Context(), cl, naming.RestoreLeaseName(restore.Spec.ClusterName), restore.Namespace)
 	require.Error(t, err)
@@ -167,7 +172,7 @@ func TestReleaseLease(t *testing.T) {
 				Namespace: "ns",
 			},
 			Spec: coordv1.LeaseSpec{
-				HolderIdentity:       ptr.To("restore1"),
+				HolderIdentity:       ptr.To(naming.LeaseHolderName("restore1", "restore1-uid")),
 				LeaseDurationSeconds: ptr.To(int32(30)),
 				AcquireTime:          &metav1.MicroTime{Time: now},
 				RenewTime:            &metav1.MicroTime{Time: now},
