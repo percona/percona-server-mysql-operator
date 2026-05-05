@@ -620,7 +620,7 @@ func (r *PerconaServerMySQLRestoreReconciler) tryAcquireLease(ctx context.Contex
 			log.Info("Restore lease holder is malformed, acquiring lease anyway")
 			return true, nil
 		}
-		if lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity == leaseHolder {
+		if *lease.Spec.HolderIdentity == leaseHolder {
 			return true, nil
 		}
 		activeRestore = restoreName
