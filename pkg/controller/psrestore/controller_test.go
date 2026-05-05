@@ -252,6 +252,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "running-restore",
 						Namespace: namespace,
+						UID:       types.UID("running-restore-uid"),
 					},
 					Spec: apiv1.PerconaServerMySQLRestoreSpec{
 						ClusterName: clusterName,
@@ -266,7 +267,7 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 						Namespace: namespace,
 					},
 					Spec: coordv1.LeaseSpec{
-						HolderIdentity:       ptr.To("running-restore"),
+						HolderIdentity:       ptr.To("running-restore|running-restore-uid"),
 						LeaseDurationSeconds: ptr.To(int32(30)),
 						AcquireTime:          &metav1.MicroTime{Time: metav1.Now().Time},
 						RenewTime:            &metav1.MicroTime{Time: metav1.Now().Time},

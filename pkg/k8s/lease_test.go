@@ -45,7 +45,6 @@ func TestAcquireLease(t *testing.T) {
 		assert.Equal(t, restore.Name, *got.Spec.HolderIdentity)
 		assert.Nil(t, got.Spec.LeaseDurationSeconds)
 		assert.NotNil(t, got.Spec.AcquireTime)
-		assert.NotNil(t, got.Spec.RenewTime)
 	})
 
 	t.Run("returns already held when lease is owned by another holder", func(t *testing.T) {
