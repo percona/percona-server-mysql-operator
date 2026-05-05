@@ -596,3 +596,23 @@ func EqualMetadata(m ...metav1.ObjectMeta) bool {
 	}
 	return true
 }
+
+// EffectiveBackupStoragePodSecurityContext returns the pod SecurityContext for backup-related Jobs
+// (backup, delete, physical restore, PITR restore). Defaults to spec.mysql.podSecurityContext; per-storage
+// podSecurityContext overrides when set.
+func EffectiveBackupStoragePodSecurityContext(cluster *apiv1.PerconaServerMySQL, storage *apiv1.BackupStorageSpec) *corev1.PodSecurityContext {
+	if storage != nil && storage.PodSecurityContext != nil {
+		return storage.PodSecurityContext
+	}
+	return cluster.MySQLSpec().PodSecurityContext
+}
+
+// EffectiveBackupStorageContainerSecurityContext returns the container SecurityContext for the same Jobs as
+// EffectiveBackupStoragePodSecurityContext. Defaults to spec.mysql.containerSecurityContext; per-storage
+// containerSecurityContext overrides when set.
+func EffectiveBackupStorageContainerSecurityContext(cluster *apiv1.PerconaServerMySQL, storage *apiv1.BackupStorageSpec) *corev1.SecurityContext {
+	if storage != nil && storage.ContainerSecurityContext != nil {
+		return storage.ContainerSecurityContext
+	}
+	return cluster.MySQLSpec().ContainerSecurityContext
+}
