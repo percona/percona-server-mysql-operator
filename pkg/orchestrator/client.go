@@ -86,14 +86,6 @@ func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoin
 	return nil
 }
 
-func isTruncatedJSONErr(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	return errors.Is(err, io.ErrUnexpectedEOF) || err.Error() == "unexpected end of JSON input"
-}
-
 func ClusterPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clusterHint string) (*Instance, error) {
 	url := fmt.Sprintf("api/master/%s", clusterHint)
 
@@ -110,12 +102,9 @@ func ClusterPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Po
 		return primary, nil
 	}
 
-	orcResp := &orcResponse{}
-	if err := json.Unmarshal(body, orcResp); err != nil {
-		if isTruncatedJSONErr(err) {
-			return nil, ErrEmptyResponse
-		}
-		return nil, errors.Wrap(err, "json decode")
+	orcResp := new(orcResponse)
+	if err := unmarshalOrcResponse(body, orcResp); err != nil {
+		return nil, err
 	}
 
 	if err := orcResp.Error(); err != nil {
@@ -134,12 +123,9 @@ func StopReplication(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.P
 		return err
 	}
 
-	orcResp := &orcResponse{}
-	if err := json.Unmarshal(res.Bytes(), &orcResp); err != nil {
-		if isTruncatedJSONErr(err) {
-			return ErrEmptyResponse
-		}
-		return errors.Wrap(err, "json decode")
+	orcResp := new(orcResponse)
+	if err := unmarshalOrcResponse(res.Bytes(), orcResp); err != nil {
+		return err
 	}
 
 	return orcResp.Error()
@@ -154,12 +140,9 @@ func StartReplication(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.
 		return err
 	}
 
-	orcResp := &orcResponse{}
-	if err := json.Unmarshal(res.Bytes(), &orcResp); err != nil {
-		if isTruncatedJSONErr(err) {
-			return ErrEmptyResponse
-		}
-		return errors.Wrap(err, "json decode")
+	orcResp := new(orcResponse)
+	if err := unmarshalOrcResponse(res.Bytes(), orcResp); err != nil {
+		return err
 	}
 
 	return orcResp.Error()
@@ -182,12 +165,9 @@ func AddPeer(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, peer
 		return nil
 	}
 
-	orcResp := &orcResponse{}
-	if err := json.Unmarshal(body, &orcResp); err != nil {
-		if isTruncatedJSONErr(err) {
-			return ErrEmptyResponse
-		}
-		return errors.Wrap(err, "json decode")
+	orcResp := new(orcResponse)
+	if err := unmarshalOrcResponse(body, orcResp); err != nil {
+		return err
 	}
 
 	return orcResp.Error()
@@ -210,12 +190,9 @@ func RemovePeer(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, p
 		return nil
 	}
 
-	orcResp := &orcResponse{}
-	if err := json.Unmarshal(body, &orcResp); err != nil {
-		if isTruncatedJSONErr(err) {
-			return ErrEmptyResponse
-		}
-		return errors.Wrap(err, "json decode")
+	orcResp := new(orcResponse)
+	if err := unmarshalOrcResponse(body, orcResp); err != nil {
+		return err
 	}
 
 	return orcResp.Error()
@@ -241,12 +218,9 @@ func EnsureNodeIsPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *core
 
 	body := res.Bytes()
 
-	orcResp := &orcResponse{}
-	if err := json.Unmarshal(body, orcResp); err != nil {
-		if isTruncatedJSONErr(err) {
-			return ErrEmptyResponse
-		}
-		return errors.Wrapf(err, "json decode \"%s\"", string(body))
+	orcResp := new(orcResponse)
+	if err := unmarshalOrcResponse(body, orcResp); err != nil {
+		return err
 	}
 
 	return orcResp.Error()
@@ -262,17 +236,8 @@ func Discover(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, hos
 	}
 
 	orcResp := new(orcResponse)
-	body := res.Bytes()
-
-	if len(body) == 0 {
-		return ErrEmptyResponse
-	}
-
-	if err := json.Unmarshal(body, orcResp); err != nil {
-		if isTruncatedJSONErr(err) {
-			return ErrEmptyResponse
-		}
-		return errors.Wrapf(err, "json decode \"%s\"", string(body))
+	if err := unmarshalOrcResponse(res.Bytes(), orcResp); err != nil {
+		return err
 	}
 
 	return orcResp.Error()
@@ -288,17 +253,8 @@ func SetWriteable(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod,
 	}
 
 	orcResp := new(orcResponse)
-	body := res.Bytes()
-
-	if len(body) == 0 {
-		return ErrEmptyResponse
-	}
-
-	if err := json.Unmarshal(body, orcResp); err != nil {
-		if isTruncatedJSONErr(err) {
-			return ErrEmptyResponse
-		}
-		return errors.Wrapf(err, "json decode \"%s\"", string(body))
+	if err := unmarshalOrcResponse(res.Bytes(), orcResp); err != nil {
+		return err
 	}
 
 	return orcResp.Error()
@@ -323,12 +279,9 @@ func Cluster(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clus
 		return instances, nil
 	}
 
-	orcResp := &orcResponse{}
-	if err := json.Unmarshal(body, orcResp); err != nil {
-		if isTruncatedJSONErr(err) {
-			return nil, ErrEmptyResponse
-		}
-		return nil, errors.Wrap(err, "json decode")
+	orcResp := new(orcResponse)
+	if err := unmarshalOrcResponse(body, orcResp); err != nil {
+		return nil, err
 	}
 
 	if err := orcResp.Error(); err != nil {
@@ -348,17 +301,8 @@ func ForgetInstance(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Po
 	}
 
 	orcResp := new(orcResponse)
-	body := res.Bytes()
-
-	if len(body) == 0 {
-		return ErrEmptyResponse
-	}
-
-	if err := json.Unmarshal(body, orcResp); err != nil {
-		if isTruncatedJSONErr(err) {
-			return ErrEmptyResponse
-		}
-		return errors.Wrapf(err, "json decode \"%s\"", string(body))
+	if err := unmarshalOrcResponse(res.Bytes(), orcResp); err != nil {
+		return err
 	}
 
 	return orcResp.Error()
@@ -383,17 +327,8 @@ func BeginDowntime(
 	}
 
 	orcResp := new(orcResponse)
-	body := res.Bytes()
-
-	if len(body) == 0 {
-		return ErrEmptyResponse
-	}
-
-	if err := json.Unmarshal(body, orcResp); err != nil {
-		if isTruncatedJSONErr(err) {
-			return ErrEmptyResponse
-		}
-		return errors.Wrapf(err, "json decode \"%s\"", string(body))
+	if err := unmarshalOrcResponse(res.Bytes(), orcResp); err != nil {
+		return err
 	}
 
 	return orcResp.Error()
@@ -409,18 +344,22 @@ func EndDowntime(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, 
 	}
 
 	orcResp := new(orcResponse)
-	body := res.Bytes()
-
-	if len(body) == 0 {
-		return ErrEmptyResponse
-	}
-
-	if err := json.Unmarshal(body, orcResp); err != nil {
-		if isTruncatedJSONErr(err) {
-			return ErrEmptyResponse
-		}
-		return errors.Wrapf(err, "json decode \"%s\"", string(body))
+	if err := unmarshalOrcResponse(res.Bytes(), orcResp); err != nil {
+		return err
 	}
 
 	return orcResp.Error()
+}
+
+func unmarshalOrcResponse(body []byte, v interface{}) error {
+	if len(body) == 0 {
+		return ErrEmptyResponse
+	}
+	if err := json.Unmarshal(body, v); err != nil {
+		if errors.Is(err, io.ErrUnexpectedEOF) || err.Error() == "unexpected end of JSON input" {
+			return ErrEmptyResponse
+		}
+		return errors.Wrapf(err, "json decode %q", string(body))
+	}
+	return nil
 }
