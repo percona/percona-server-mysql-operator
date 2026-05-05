@@ -524,6 +524,9 @@ func (b *BackupStorageAzureSpec) ContainerAndPrefix() (string, string) {
 type PiTRSpec struct {
 	Enabled bool `json:"enabled,omitempty"`
 
+	// Image is the container image for the PITR restore Job (mysqlbinlog-based). When empty, spec.mysql.image is used.
+	Image string `json:"image,omitempty"`
+
 	BinlogServer *BinlogServerSpec `json:"binlogServer,omitempty"`
 }
 

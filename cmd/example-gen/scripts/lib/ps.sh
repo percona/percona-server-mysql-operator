@@ -15,7 +15,7 @@ sort_yaml() {
 	ORCHESTRATOR_ORDER='"enabled", "expose", '"$POD_SPEC_ORDER"
 
 	PMM_ORDER='"enabled","image","imagePullPolicy","serverHost","mysqlParams","containerSecurityContext", "resources", "readinessProbes", "livenessProbes"'
-	BINLOG_SERVER_ORDER='"enabled","binlogServer"'
+	BINLOG_SERVER_ORDER='"enabled","image","binlogServer"'
 	BINLOG_SERVER_SPEC_ORDER='"size","image","imagePullPolicy","imagePullSecrets","serverId","storage","connectTimeout","readTimeout","writeTimeout","idleTime"'
 	BACKUP_ORDER='"enabled","pitr","sourcePod","image","imagePullPolicy","imagePullSecrets","schedule","backoffLimit", "serviceAccountName", "initContainer", "containerSecurityContext", "resources","storages"'
 	TOOLKIT_ORDER='"image","imagePullPolicy","imagePullSecrets","env","envFrom","resources","containerSecurityContext", "startupProbe", "readinessProbe", "livenessProbe"'
@@ -210,6 +210,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.pmm.containerSecurityContext)" \
 		| yq "del(.spec.pmm.resources.limits)" \
 		| yq "del(.spec.backup.pitr.binlogServer)" \
+		| yq "del(.spec.backup.pitr.image)" \
 		| yq "del(.spec.backup.sourcePod)" \
 		| yq "del(.spec.backup.schedule)" \
 		| yq "del(.spec.backup.backoffLimit)" \

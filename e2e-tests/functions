@@ -704,15 +704,22 @@ get_storage_alias() {
 }
 
 # When MYSQL_UPSTREAM is set, add security settings required by the official mysql image (non-root uid/gid + fsGroup).
+# spec.mysql is enough: backup/restore Jobs inherit these contexts unless a storage entry overrides them.
+# Upstream mysql image lacks mysqlbinlog; PITR restore Job uses spec.backup.pitr.image (Percona Server main-psmysql* by default).
 apply_mysql_upstream_cr_patch() {
 	if [[ -z ${MYSQL_UPSTREAM-} ]]; then
 		cat
 		return
 	fi
-	yq eval '
+	local cr_tmp
+	cr_tmp=$(mktemp)
+	cat >"${cr_tmp}"
+	IMAGE_PITR_RESTORE="${IMAGE_PITR_RESTORE}" yq eval '
 		.spec.mysql.containerSecurityContext = {"runAsUser": 1001, "runAsGroup": 1001} |
-		.spec.mysql.podSecurityContext = {"fsGroup": 1001}
-	' -
+		.spec.mysql.podSecurityContext = {"fsGroup": 1001} |
+		.spec.backup.pitr.image = strenv(IMAGE_PITR_RESTORE)
+	' "${cr_tmp}"
+	rm -f "${cr_tmp}"
 }
 
 get_test_cr() {
@@ -785,9 +792,25 @@ get_cr() {
 }
 
 get_client_pod() {
-	kubectl -n "${NAMESPACE}" get pods \
-		--selector=name=mysql-client \
-		-o 'jsonpath={.items[].metadata.name}'
+	# Use {.items[*].metadata.name}: {.items[].…} errors with "array index out of bounds"
+	# when there are zero pods (recent kubectl). Retry briefly so deploy_client can finish.
+	local pod=""
+	local retry=0
+	while [[ $retry -lt 120 ]]; do
+		pod=$(kubectl -n "${NAMESPACE}" get pods \
+			--selector=name=mysql-client \
+			-o 'jsonpath={.items[*].metadata.name}' 2>/dev/null) || true
+		pod="${pod%% *}"
+		if [[ -n "$pod" ]]; then
+			echo "$pod"
+			return 0
+		fi
+		sleep 1
+		retry=$((retry + 1))
+	done
+	echo "ERROR: mysql-client pod not found after 120s (namespace=${NAMESPACE}). Ensure deploy_client ran (e.g. 00-deploy-operator)." >&2
+	kubectl -n "${NAMESPACE}" get pods -l name=mysql-client -o wide >&2 || true
+	return 1
 }
 
 run_mysql() {
@@ -810,12 +833,18 @@ run_mysqlsh() {
 	local host="$2"
 	local user="${3:--uroot -p'$(get_user_pass)'}"
 	local pod="$4"
+	local sql_mode="--sql"
+
+	# Port 33060 is MySQL X Protocol; --sql uses classic protocol and fails on 8.4+ (ERROR 2007).
+	if [[ "$host" =~ -P[[:space:]]*33060 ]] || [[ "$host" =~ :33060 ]]; then
+		sql_mode="--sqlx"
+	fi
 
 	client_pod=$(get_client_pod)
 	wait_pod $client_pod 1>&2
 
 	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
-		bash -c "printf '%s\n' \"${command}\" | mysqlsh --sql --quiet-start=2 $host $user" 2>/dev/null \
+		bash -c "printf '%s\n' \"${command}\" | mysqlsh ${sql_mode} --quiet-start=2 $host $user" 2>/dev/null \
 		| tail -n +2
 }
 

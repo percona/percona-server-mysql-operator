@@ -18,9 +18,11 @@ else
 	export MYSQL_VERSION=${MYSQL_VERSION:-"8.4"}
 fi
 
-# Upstream Oracle mysql image in e2e (security patch applied in apply_mysql_upstream_cr_patch in functions).
+# Upstream Oracle mysql image in e2e: apply_mysql_upstream_cr_patch sets spec.mysql security and spec.backup.pitr.image
+# to Percona Server (main-psmysql*) so mysqlbinlog is available; override with IMAGE_PITR_RESTORE if needed.
 if [[ -n ${MYSQL_UPSTREAM-} ]]; then
 	export IMAGE_MYSQL="${IMAGE_MYSQL:-mysql:${MYSQL_VERSION}}"
+	export IMAGE_PITR_RESTORE="${IMAGE_PITR_RESTORE:-perconalab/percona-server-mysql-operator:main-psmysql${MYSQL_VERSION}}"
 fi
 
 export IMAGE_MYSQL=${IMAGE_MYSQL:-"perconalab/percona-server-mysql-operator:main-psmysql${MYSQL_VERSION}"}

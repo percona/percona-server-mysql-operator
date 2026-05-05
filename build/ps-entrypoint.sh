@@ -180,6 +180,8 @@ create_default_cnf() {
 	echo '[mysqld]' >$CFG
 	# Place the Unix socket in the data directory (not e.g. /var/run/mysqld/) so it shares volume permissions with mysqld.
 	sed -i "/\[mysqld\]/a socket=${DATADIR}/mysql.sock" $CFG
+	# Same for MySQL X Plugin’s Unix socket (otherwise defaults to /var/run/mysqld/mysqlx.sock).
+	sed -i "/\[mysqld\]/a mysqlx_socket=${DATADIR}/mysqlx.sock" $CFG
 	if [[ ${CLUSTER_TYPE} == "async" ]]; then
 		# Ensures replication is not automatically started on mysql startup,
 		# giving the orchestrator full control over replication start.
