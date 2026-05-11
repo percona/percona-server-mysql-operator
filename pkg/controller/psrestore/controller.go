@@ -209,7 +209,6 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			return ctrl.Result{}, errors.Wrap(err, "check pitr config")
 		}
 		if !pitrConfigExists {
-			// TODO: delete backupSourceBinlogServer objects if restore is errored, failed or succeeded
 			if err := r.reconcileBackupSourceBinlogServer(ctx, cr, cluster); err != nil {
 				return ctrl.Result{}, errors.Wrap(err, "reconcile backup source binlog server")
 			}
