@@ -8,14 +8,12 @@ export IMAGE_TAG_OWNER=percona
 export MIN_KUBE_VERSION=1.27.0
 # Openshift versions:
 export OPENSHIFT_VERSIONS="v4.16-v4.20"
-# Set namespace or cluster (to generate bundles for cluster-wide)
-export MODE=namespace
 ```
 2. Also it could be useful to check variable in makefile and update if you need something extra. For the most cases to update these variables is enough
 3. Update spec.description in bundle.csv.yaml with features added in this release.
 4. Run bundle generation:
 ```bash
-# Generate all bundles community redhat and marketplace:
+# Generate all bundles (community and redhat):
 make bundles
 # Generate only specific bundle:
 make bundles/community

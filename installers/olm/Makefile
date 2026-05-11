@@ -15,7 +15,6 @@ SHELL := /bin/bash
 NAME ?= percona-server-mysql-operator
 IMAGE_TAG_OWNER ?= perconalab
 IMAGE_TAG_BASE ?= $(IMAGE_TAG_OWNER)/$(NAME)
-MODE ?= cluster
 
 # Version detection
 SED := $(shell which gsed || which sed)
@@ -49,16 +48,16 @@ GREEN := $(shell tput setaf 2)
 RESET := $(shell tput sgr0)
 
 # Export variables for generate.sh
-export VERSION OPENSHIFT_VERSIONS PACKAGE_CHANNEL MIN_KUBE_VERSION DOCKER_DEFAULT_PLATFORM MODE
+export VERSION OPENSHIFT_VERSIONS PACKAGE_CHANNEL MIN_KUBE_VERSION DOCKER_DEFAULT_PLATFORM
 
 # ==============================================================================
 # Bundle Targets
 # ==============================================================================
 
-DISTROS := community redhat marketplace
+DISTROS := community redhat
 
 .PHONY: bundles
-bundles: ## Build all OLM bundles (community, redhat, marketplace)
+bundles: ## Build all OLM bundles (community, redhat)
 bundles: check-prereqs $(DISTROS:%=bundles/%)
 
 .PHONY: $(DISTROS:%=bundles/%)
@@ -165,7 +164,6 @@ list-versions: ## Show current version information
 	@echo "Current configuration:"
 	@echo "  VERSION: $(VERSION)"
 	@echo "  IMAGE: $(IMAGE)"
-	@echo "  MODE: $(MODE)"
 	@echo "  OPENSHIFT_VERSIONS: $(OPENSHIFT_VERSIONS)"
 	@echo "  MIN_KUBE_VERSION: $(MIN_KUBE_VERSION)"
 
