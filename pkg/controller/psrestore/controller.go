@@ -430,6 +430,15 @@ func (r *PerconaServerMySQLRestoreReconciler) cleanupBackupSourceBinlogServer(
 		return errors.Wrap(err, "delete statefulset")
 	}
 
+	if err := r.Delete(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      binlogserver.RestoreConfigSecretName(cluster, cr),
+			Namespace: cluster.Namespace,
+		},
+	}); err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "delete config secret")
+	}
+
 	return nil
 }
 
