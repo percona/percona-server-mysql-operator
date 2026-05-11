@@ -26,6 +26,8 @@ commands:
       PITR_DATE=$(date -u '+%Y-%m-%d %H:%M:%S')
       kubectl create configmap -n "${NAMESPACE}" pitr-date --from-literal=date="${PITR_DATE}"
 
+      kubectl patch ps "${cluster_name}" -n "${NAMESPACE}" --type=json -p='[{"op":"remove","path":"/spec/backup/pitr/binlogServer"}]'
+
       sleep 60
 
       echo '{}' \
@@ -34,6 +36,19 @@ commands:
           | yq eval '.metadata.name = "gr-pitr-minio-restore"' - \
           | yq eval ".spec.clusterName = \"${cluster_name}\"" - \
           | yq eval '.spec.backupName = "gr-pitr-minio-backup"' - \
+          | yq eval ".spec.pitr.backupSource.binlogServer.image=\"${IMAGE_BINLOG_SERVER}\"" - \
+          | yq eval '.spec.pitr.backupSource.binlogServer.size=1' - \
+          | yq eval '.spec.pitr.backupSource.binlogServer.serverId=101' - \
+          | yq eval '.spec.pitr.backupSource.binlogServer.storage.s3.bucket="operator-testing"' - \
+          | yq eval '.spec.pitr.backupSource.binlogServer.storage.s3.prefix="binlogs"' - \
+          | yq eval '.spec.pitr.backupSource.binlogServer.storage.s3.credentialsSecret="minio-secret"' - \
+          | yq eval ".spec.pitr.backupSource.binlogServer.storage.s3.endpointUrl=\"http://minio-service.${NAMESPACE}:9000\"" - \
+          | yq eval '.spec.pitr.backupSource.binlogServer.storage.s3.region="us-east-1"' - \
+          | yq eval '.spec.pitr.backupSource.binlogServer.connectTimeout=10' - \
+          | yq eval '.spec.pitr.backupSource.binlogServer.readTimeout=10' - \
+          | yq eval '.spec.pitr.backupSource.binlogServer.writeTimeout=10' - \
+          | yq eval '.spec.pitr.backupSource.binlogServer.idleTime=3' - \
+          | yq eval '.spec.pitr.backupSource.binlogServer.logLevel="debug"' - \
           | yq eval '.spec.pitr.type = "gtid"' - \
           | yq eval ".spec.pitr.gtid = \"${PITR_GTID}\"" - \
           | kubectl apply -n "${NAMESPACE}" -f -

@@ -1,0 +1,13 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 180
+    script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+
+      kubectl patch ps "${cluster_name}" -n "${NAMESPACE}" --type=merge -p "{\"spec\":{\"backup\":{\"pitr\":{\"binlogServer\":{\"image\":\"${IMAGE_BINLOG_SERVER}\",\"size\":1,\"storage\":{\"s3\":{\"bucket\":\"operator-testing\",\"prefix\":\"binlogs\",\"credentialsSecret\":\"minio-secret\",\"endpointUrl\":\"http://minio-service.${NAMESPACE}:9000\",\"region\":\"us-east-1\"}},\"connectTimeout\":10,\"readTimeout\":10,\"writeTimeout\":10,\"idleTime\":3,\"logLevel\":\"debug\"}}}}}"

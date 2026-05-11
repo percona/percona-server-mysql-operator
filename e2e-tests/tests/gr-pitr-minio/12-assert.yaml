@@ -1,10 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 600
-collectors:
-  - type: pod
-    selector: "app.kubernetes.io/component=pitr"
-    tail: 1000
 ---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
@@ -23,9 +19,9 @@ status:
     state: ready
   state: ready
 ---
-kind: PerconaServerMySQLRestore
+kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
 metadata:
-  name: gr-pitr-minio-restore-post-failover
+  name: gr-pitr-minio-backup-2
 status:
   state: Succeeded
