@@ -8,8 +8,8 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/validate/content"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -40,7 +40,7 @@ func Name(cr *apiv1.PerconaServerMySQL) string {
 }
 
 func RestoreName(cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) string {
-	maxRestoreStatefulSetNameLength := content.DNS1123LabelMaxLength - controllerRevisionHashLength
+	maxRestoreStatefulSetNameLength := validation.DNS1123LabelMaxLength - controllerRevisionHashLength
 
 	name := Name(cr) + "-r-" + restore.Name
 	if len(name) <= maxRestoreStatefulSetNameLength {
