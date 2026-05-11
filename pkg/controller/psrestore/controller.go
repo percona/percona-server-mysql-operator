@@ -399,8 +399,8 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcileBackupSourceBinlogServer(
 		return errors.Wrap(err, "get init image")
 	}
 
-	sts := binlogserver.StatefulSet(cluster, spec, initImage, fmt.Sprintf("%x", md5.Sum(configBytes)), backupSourceBinlogServerConfigSecretName(cr, cluster))
-	sts.Name = backupSourceBinlogServerStatefulsetName(cr, cluster)
+	sts := binlogserver.StatefulSet(cluster, spec, initImage, fmt.Sprintf("%x", md5.Sum(configBytes)), binlogserver.RestoreConfigSecretName(cluster, cr))
+	sts.Name = binlogserver.RestoreName(cluster, cr)
 	labels := binlogserver.RestoreMatchLabels(cluster, cr)
 	sts.Labels = labels
 	sts.Spec.Selector.MatchLabels = labels
@@ -415,14 +415,6 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcileBackupSourceBinlogServer(
 	return nil
 }
 
-func backupSourceBinlogServerStatefulsetName(cr *apiv1.PerconaServerMySQLRestore, cluster *apiv1.PerconaServerMySQL) string {
-	return binlogserver.RestoreName(cluster, cr)
-}
-
-func backupSourceBinlogServerConfigSecretName(cr *apiv1.PerconaServerMySQLRestore, cluster *apiv1.PerconaServerMySQL) string {
-	return binlogserver.ConfigSecretName(cluster) + "-restore-" + cr.Name
-}
-
 func (r *PerconaServerMySQLRestoreReconciler) cleanupBackupSourceBinlogServer(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQLRestore,
@@ -434,7 +426,7 @@ func (r *PerconaServerMySQLRestoreReconciler) cleanupBackupSourceBinlogServer(
 
 	if err := r.Delete(ctx, &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      backupSourceBinlogServerStatefulsetName(cr, cluster),
+			Name:      binlogserver.RestoreName(cluster, cr),
 			Namespace: cluster.Namespace,
 		},
 	}); err != nil && !k8serrors.IsNotFound(err) {

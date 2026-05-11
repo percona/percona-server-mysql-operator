@@ -61,6 +61,10 @@ func ConfigSecretName(cr *apiv1.PerconaServerMySQL) string {
 	return cr.Name + "-" + AppName + "-config"
 }
 
+func RestoreConfigSecretName(cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) string {
+	return cr.Name + "-" + AppName + "-config-restore-" + cr.Name
+}
+
 func MatchLabels(cr *apiv1.PerconaServerMySQL) map[string]string {
 	return util.SSMapMerge(
 		cr.GlobalLabels(),
