@@ -45,7 +45,6 @@ type RestorePITRSpec struct {
 
 type RestorePITRBackupSource struct {
 	BinlogServer *BinlogServerSpec `json:"binlogServer,omitempty"`
-	// TODO: *PerconaServerMySQLBackupStatus `json:",inline"`
 }
 
 type PITRType string
