@@ -210,7 +210,9 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		}
 		if !pitrConfigExists {
 			if err := r.reconcileBackupSourceBinlogServer(ctx, cr, cluster); err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "reconcile backup source binlog server")
+				status.State = apiv1.RestoreError
+				status.StateDesc = errors.Wrap(err, "reconcile backup source binlog server").Error()
+				return ctrl.Result{}, nil
 			}
 
 			running, err := r.isBinlogServerRunning(ctx, cr, cluster)
