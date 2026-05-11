@@ -48,7 +48,7 @@ func TestStatefulSet(t *testing.T) {
 			initImage:  "init:latest",
 			configHash: "abc123",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "abc123", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "abc123", "")
 
 				assert.Equal(t, "apps/v1", sts.APIVersion)
 				assert.Equal(t, "StatefulSet", sts.Kind)
@@ -60,7 +60,7 @@ func TestStatefulSet(t *testing.T) {
 			cr:        newTestCR("cluster", "ns"),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 
 				expectedLabels := MatchLabels(cr)
 				assert.Equal(t, expectedLabels, sts.Labels)
@@ -72,7 +72,7 @@ func TestStatefulSet(t *testing.T) {
 			cr:        newTestCR("cluster", "ns"),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 				assert.Equal(t, ptr.To(int32(1)), sts.Spec.Replicas)
 			},
 		},
@@ -81,7 +81,7 @@ func TestStatefulSet(t *testing.T) {
 			initImage:  "init:latest",
 			configHash: "2pacisnotdead",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "2pacisnotdead", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "2pacisnotdead", "")
 				assert.Equal(t, "2pacisnotdead", sts.Spec.Template.Annotations[string(naming.AnnotationConfigHash)])
 			},
 		},
@@ -89,7 +89,7 @@ func TestStatefulSet(t *testing.T) {
 			cr:        newTestCR("cluster", "ns"),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 				assert.NotContains(t, sts.Spec.Template.Annotations, string(naming.AnnotationConfigHash))
 			},
 		},
@@ -97,7 +97,7 @@ func TestStatefulSet(t *testing.T) {
 			cr:        newTestCR("cluster", "ns"),
 			initImage: "percona/init:1.2.3",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "percona/init:1.2.3", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "percona/init:1.2.3", "", "")
 				assert.Len(t, sts.Spec.Template.Spec.InitContainers, 1)
 				assert.Equal(t, "percona/init:1.2.3", sts.Spec.Template.Spec.InitContainers[0].Image)
 			},
@@ -106,7 +106,7 @@ func TestStatefulSet(t *testing.T) {
 			cr:        newTestCR("cluster", "ns"),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 				assert.Len(t, sts.Spec.Template.Spec.Containers, 1)
 				assert.Equal(t, AppName, sts.Spec.Template.Spec.Containers[0].Name)
 			},
@@ -115,7 +115,7 @@ func TestStatefulSet(t *testing.T) {
 			cr:        newTestCR("cluster", "ns"),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 				container := sts.Spec.Template.Spec.Containers[0]
 				assert.Equal(t, []string{"/opt/percona/binlog-server-entrypoint.sh"}, container.Command)
 				assert.Equal(t, []string{
@@ -133,7 +133,7 @@ func TestStatefulSet(t *testing.T) {
 			}(),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 				container := sts.Spec.Template.Spec.Containers[0]
 				assert.Equal(t, "percona/binlog-server:2.0", container.Image)
 			},
@@ -142,7 +142,7 @@ func TestStatefulSet(t *testing.T) {
 			cr:        newTestCR("cluster", "ns"),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 				volumeNames := map[string]bool{}
 				for _, v := range sts.Spec.Template.Spec.Volumes {
 					volumeNames[v.Name] = true
@@ -163,7 +163,7 @@ func TestStatefulSet(t *testing.T) {
 			}(),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 				for _, v := range sts.Spec.Template.Spec.Volumes {
 					assert.NotEqual(t, tlsVolumeName, v.Name, "tls volume should be absent when ssl is disabled")
 				}
@@ -177,7 +177,7 @@ func TestStatefulSet(t *testing.T) {
 			cr:        newTestCR("mycluster", "ns"),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 				for _, v := range sts.Spec.Template.Spec.Volumes {
 					if v.Name == credsVolumeName {
 						assert.Equal(t, cr.InternalSecretName(), v.Secret.SecretName)
@@ -191,7 +191,7 @@ func TestStatefulSet(t *testing.T) {
 			cr:        newTestCR("mycluster", "ns"),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 				for _, v := range sts.Spec.Template.Spec.Volumes {
 					if v.Name == tlsVolumeName {
 						assert.Equal(t, "mycluster-ssl", v.Secret.SecretName)
@@ -209,7 +209,7 @@ func TestStatefulSet(t *testing.T) {
 			}(),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 				for _, v := range sts.Spec.Template.Spec.Volumes {
 					if v.Name == storageCredsVolumeName {
 						assert.Equal(t, "my-s3-creds", v.Secret.SecretName)
@@ -223,7 +223,7 @@ func TestStatefulSet(t *testing.T) {
 			cr:        newTestCR("cluster", "ns"),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 				for _, v := range sts.Spec.Template.Spec.Volumes {
 					if v.Name == configVolumeName {
 						assert.NotNil(t, v.Projected)
@@ -250,7 +250,7 @@ func TestStatefulSet(t *testing.T) {
 			}(),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 				assert.Equal(t, "dba", sts.Annotations["team"])
 			},
 		},
@@ -264,7 +264,7 @@ func TestStatefulSet(t *testing.T) {
 			}(),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 				assert.Equal(t, "prod", sts.Labels["env"])
 			},
 		},
@@ -272,7 +272,7 @@ func TestStatefulSet(t *testing.T) {
 			cr:        newTestCR("cluster", "ns"),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 				container := sts.Spec.Template.Spec.Containers[0]
 				mountNames := map[string]bool{}
 				for _, m := range container.VolumeMounts {
@@ -289,7 +289,7 @@ func TestStatefulSet(t *testing.T) {
 			cr:        newTestCR("cluster", "ns"),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 				container := sts.Spec.Template.Spec.Containers[0]
 				envMap := make(map[string]string)
 				for _, e := range container.Env {
@@ -309,7 +309,7 @@ func TestStatefulSet(t *testing.T) {
 			}(),
 			initImage: "init:latest",
 			verify: func(t *testing.T, cr *apiv1.PerconaServerMySQL) {
-				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, "init:latest", "", "")
+				sts := StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, MatchLabels(cr), "init:latest", "", "")
 				container := sts.Spec.Template.Spec.Containers[0]
 				envMap := make(map[string]string)
 				for _, e := range container.Env {
