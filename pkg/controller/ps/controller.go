@@ -1639,25 +1639,3 @@ func getPodIndexFromHostname(hostname string) (int, error) {
 
 	return idx, nil
 }
-
-func s3URI(s3 apiv1.BackupStorageS3Spec, accessKey, secretKey []byte) (string, error) {
-	bucket := string(s3.Bucket)
-	if len(s3.Region) > 0 {
-		bucket = fmt.Sprintf("%s.%s", s3.Bucket, s3.Region)
-	}
-	encodedAccessKey := url.QueryEscape(string(accessKey))
-	encodedSecretKey := url.QueryEscape(string(secretKey))
-	uri := fmt.Sprintf("s3://%s:%s@%s", encodedAccessKey, encodedSecretKey, bucket)
-	if len(s3.EndpointURL) != 0 {
-		protocol, host, err := parseEndpointURL(s3.EndpointURL)
-		if err != nil {
-			return "", errors.Wrap(err, "parse endpoint URL")
-		}
-		uri = fmt.Sprintf("%s://%s:%s@%s/%s", protocol, encodedAccessKey, encodedSecretKey, host, s3.Bucket)
-	}
-	if len(s3.Prefix) > 0 {
-		uri += fmt.Sprintf("/%s", s3.Prefix)
-	}
-
-	return uri, nil
-}

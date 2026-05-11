@@ -1,4 +1,4 @@
-package ps
+package binlogserver
 
 import (
 	"testing"
