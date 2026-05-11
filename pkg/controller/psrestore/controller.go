@@ -399,14 +399,11 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcileBackupSourceBinlogServer(
 		return errors.Wrap(err, "get init image")
 	}
 
-	sts := binlogserver.StatefulSet(cluster, spec, initImage, fmt.Sprintf("%x", md5.Sum(configBytes)), binlogserver.RestoreConfigSecretName(cluster, cr))
+	sts := binlogserver.StatefulSet(cluster, spec, binlogserver.RestoreMatchLabels(cluster, cr), initImage, fmt.Sprintf("%x", md5.Sum(configBytes)), binlogserver.RestoreConfigSecretName(cluster, cr))
 	sts.Name = binlogserver.RestoreName(cluster, cr)
-	labels := binlogserver.RestoreMatchLabels(cluster, cr)
-	sts.Labels = labels
-	sts.Spec.Selector.MatchLabels = labels
-	sts.Spec.Template.Labels = labels
-	sts.Spec.Template.Spec.Affinity = spec.GetAffinity(labels)
-	sts.Spec.Template.Spec.TopologySpreadConstraints = spec.GetTopologySpreadConstraints(labels)
+	sts.Spec.Template.Spec.Containers[0].Command = []string{"sleep"}
+	sts.Spec.Template.Spec.Containers[0].Args = []string{"infinity"}
+
 	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, sts, r.Scheme)
 	if err != nil {
 		return errors.Wrap(err, "reconcile statefulset")

@@ -80,8 +80,7 @@ func RestoreMatchLabels(cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServ
 	)
 }
 
-func StatefulSet(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, initImage, configHash, configSecretName string) *appsv1.StatefulSet {
-	labels := MatchLabels(cr)
+func StatefulSet(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, labels map[string]string, initImage, configHash, configSecretName string) *appsv1.StatefulSet {
 	if configSecretName == "" {
 		configSecretName = ConfigSecretName(cr)
 	}

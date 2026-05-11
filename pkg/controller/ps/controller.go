@@ -1350,7 +1350,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 		return errors.Wrap(err, "get init image")
 	}
 
-	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, binlogserver.StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, initImage, fmt.Sprintf("%x", md5.Sum(configBytes)), ""), r.Scheme)
+	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, binlogserver.StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, binlogserver.MatchLabels(cr), initImage, fmt.Sprintf("%x", md5.Sum(configBytes)), ""), r.Scheme)
 	if err != nil {
 		return errors.Wrap(err, "reconcile statefulset")
 	}
