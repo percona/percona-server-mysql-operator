@@ -371,7 +371,7 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcileBackupSourceBinlogServer(
 
 	configSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        binlogserver.ConfigSecretName(cluster) + "-restore-" + cr.Name,
+			Name:        binlogserver.RestoreConfigSecretName(cluster, cr),
 			Namespace:   cluster.Namespace,
 			Labels:      cluster.GlobalLabels(),
 			Annotations: cluster.GlobalAnnotations(),
