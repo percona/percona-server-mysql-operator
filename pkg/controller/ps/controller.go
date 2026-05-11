@@ -380,7 +380,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPvc(ctx context.Context, cr *a
 
 	list := corev1.PersistentVolumeClaimList{}
 
-	err := r.Client.List(
+	err := r.List(
 		ctx,
 		&list,
 		&client.ListOptions{
