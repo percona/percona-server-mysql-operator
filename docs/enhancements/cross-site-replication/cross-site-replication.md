@@ -50,23 +50,23 @@ The feature targets disaster-recovery, geo-distributed read serving, and cross-r
 
 **Native asynchronous connection failover** (MySQL 8.0.22+). When a channel is created with `SOURCE_CONNECTION_AUTO_FAILOVER = 1`, the replica's IO thread reads source endpoints from `mysql.replication_asynchronous_connection_failover` (populated by `asynchronous_connection_failover_add_source()` or `_add_managed()`). MySQL picks the highest-weight reachable source and fails over automatically when it becomes unavailable, without any operator involvement. For a managed GR source, the failover list reflects current GR membership; member changes propagate without the operator re-asserting anything.
 
-`**log_slave_updates` and the source binlog stream.** Every pod in an operator-managed cluster runs with `log_slave_updates = ON` and `log_bin = ON`. This means every pod — primary or in-cluster replica — emits the same binlog stream. Cross-site replication can fetch binlogs from any pod in a source cluster, not only the writable primary.
+**`log_slave_updates` and the source binlog stream.** Every pod in an operator-managed cluster runs with `log_slave_updates = ON` and `log_bin = ON`. This means every pod — primary or in-cluster replica — emits the same binlog stream. Cross-site replication can fetch binlogs from any pod in a source cluster, not only the writable primary.
 
 **Per-pod Service exposure.** The operator already supports `spec.mysql.expose` to expose each pod through its own external Service (LoadBalancer/NodePort). This is the mechanism by which source-cluster pods become individually reachable from outside the source's Kubernetes cluster.
 
-`**super_read_only`.** A server-level flag that prevents writes from all clients, including users with `SUPER` privilege. The cross-site reconciler sets `super_read_only = ON` on the replica's primary while replicating, and clears it when channels are removed.
+**`super_read_only`.** A server-level flag that prevents writes from all clients, including users with `SUPER` privilege. The cross-site reconciler sets `super_read_only = ON` on the replica's primary while replicating, and clears it when channels are removed.
 
 ### 2.2 Key Constraints
 
 1. **MySQL 8.0.22 or later.** Required for `SOURCE_CONNECTION_AUTO_FAILOVER` and the failover-table UDFs. Both supported MySQL versions (8.0, 8.4) include these features.
 2. **Reachability between clusters.** Replica must reach at least one source pod's exposed endpoint over TCP. The operator does not solve cross-cluster networking — that is the user's responsibility (LB hostnames, firewall rules, ServiceMesh, VPN).
 3. **The user is responsible for the initial seed.** Before setting `spec.mysql.replicationChannels`, the user must ensure the replica cluster contains a consistent snapshot of the source's data — typically by:
-  1. Taking a `PerconaServerMySQLBackup` of the source.
-  2. Restoring it into the replica cluster via `PerconaServerMySQLRestore` (using `backupSource` if the replica is in a different Kubernetes cluster).
-  3. Verifying the restore is complete.
-  4. Only then setting `replicationChannels` on the replica CR.
+    1. Taking a `PerconaServerMySQLBackup` of the source.
+    2. Restoring it into the replica cluster via `PerconaServerMySQLRestore` (using `backupSource` if the replica is in a different Kubernetes cluster).
+    3. Verifying the restore is complete.
+    4. Only then setting `replicationChannels` on the replica CR.
 4. **A new `replication` MySQL system user is added.** The operator provisions it automatically on every cluster (alongside the existing system users like `root`, `xtrabackup`, `monitor`, etc.) with `REPLICATION SLAVE` and `REPLICATION CLIENT` grants and no other privileges. Its password lives under the `replication` key in `spec.secretsName`. On clusters where cross-site is not in use, the user simply exists unused — the grants are read-only on the replication stream and pose no risk. The replica admin reads this password from the source's Secret, places it into a Secret in the replica's namespace, and references that via `replicationUserSecretRef`. The cross-site reconciler itself does not create the user. If the replica cluster is setup with the same `replication` password as the source, this `replicationUserSecretRef` may be skipped.
-5. `**super_read_only` is the only fence.** No quorum, witness, or fencing service. Split-brain protection relies on the operator's invariant that the replica's primary is read-only while `replicationChannels` is non-empty.
+5. **`super_read_only` is the only fence.** No quorum, witness, or fencing service. Split-brain protection relies on the operator's invariant that the replica's primary is read-only while `replicationChannels` is non-empty.
 6. **Backward compatibility.** Existing CRs (without `replicationChannels`) must continue to work as usual (no changes).
 
 ---
@@ -179,17 +179,17 @@ spec:
 
 #### 4.1.1 Field semantics
 
-- `**replicationChannels**` *(list, optional, default empty)*. Non-empty list declares the cluster a replica. The operator will reconcile cross-site channels on whichever pod is currently the cluster's primary. Maximum 16 channels (CEL-validated; practical ceiling tied to applier worker defaults; can be raised later).
-- `**replicationChannels[].name`** *(string, required)*. MySQL channel name. Must match `[a-zA-Z0-9_]+`, length 1–64. Must be unique within the list. Renaming a channel is observed by the reconciler as remove-old + add-new.
-- `**replicationChannels[].replicationUserSecretRef`** *(SecretKeySelector, optional)*. References a Secret in the same namespace as the replica CR. Reads the password for the `replication` MySQL user from the named key (default `password`). The IO thread always authenticates as `replication` — there is no field to override the username. The Secret is watched; updates trigger a `CHANGE REPLICATION SOURCE TO ... SOURCE_PASSWORD=<new>` reissue for the affected channel. May be omitted when the replica's own `spec.secretsName` already holds the same password as the source under the `replication` key, in which case the operator authenticates with the local secret.
-- `**replicationChannels[].sources`** *(list, required, non-empty)*. Endpoints fed into the channel's failover table. The user may list any source-cluster pod endpoints — primary or in-cluster replica. MySQL picks one based on weight and reachability.
-- `**replicationChannels[].sources[].host` / `.port`** *(string / int, required)*. Externally reachable host:port. Typically derived from the source's per-pod LoadBalancer/NodePort hostnames.
-- `**replicationChannels[].sources[].weight`** *(int, default `100`, range `[0, 100]`)*. Forwarded to the failover table. Higher = preferred. Weight `0` is a valid "blacklist" value — endpoint is tried only when all others are unreachable.
-- `**replicationChannels[].config`** *(object, optional)*. Per-channel knobs for retry behavior and TLS. All fields default sensibly; an entire channel can omit the block.
-- `**replicationChannels[].config.sourceRetryCount` / `.sourceConnectRetry`** *(uint32)*. Forwarded into `CHANGE REPLICATION SOURCE TO`. Defaults from `pkg/mysql` constants (`DefaultAsyncSourceRetryCount`, `DefaultAsyncSourceConnectRetry`).
-- `**replicationChannels[].config.tls`** *(bool, default `true`)*. Sets `SOURCE_SSL = 1` on the channel when true. Disabling requires `unsafeFlags.crossSiteReplicationTLS`.
-- `**replicationChannels[].config.tlsSkipVerify`** *(bool, default `false`)*. When true, sets `SOURCE_SSL_VERIFY_SERVER_CERT = 0` — the IO thread encrypts the connection but does not validate the source's certificate. Useful for self-signed certs in lab/test environments; emits a `Warning` event in production. Ignored when `config.tls` is `false`.
-- `**replicationChannels[].config.caSecret`** *(SecretKeySelector, optional)*. Reads a PEM CA bundle from the named Secret/key. When provided and `tlsSkipVerify` is `false`, the operator writes the bundle to a file in the replica's primary pod and passes its path as `SOURCE_SSL_CA`. Required when the source's TLS cert is not signed by a CA trusted by MySQL's default cert store. Ignored when `tlsSkipVerify` is `true` or `config.tls` is `false`.
+- **`replicationChannels`** *(list, optional, default empty)*. Non-empty list declares the cluster a replica. The operator will reconcile cross-site channels on whichever pod is currently the cluster's primary. Maximum 16 channels (CEL-validated; practical ceiling tied to applier worker defaults; can be raised later).
+- **`replicationChannels[].name`** *(string, required)*. MySQL channel name. Must match `[a-zA-Z0-9_]+`, length 1–64. Must be unique within the list. Renaming a channel is observed by the reconciler as remove-old + add-new.
+- **`replicationChannels[].replicationUserSecretRef`** *(SecretKeySelector, optional)*. References a Secret in the same namespace as the replica CR. Reads the password for the `replication` MySQL user from the named key (default `password`). The IO thread always authenticates as `replication` — there is no field to override the username. The Secret is watched; updates trigger a `CHANGE REPLICATION SOURCE TO ... SOURCE_PASSWORD=<new>` reissue for the affected channel. May be omitted when the replica's own `spec.secretsName` already holds the same password as the source under the `replication` key, in which case the operator authenticates with the local secret.
+- **`replicationChannels[].sources`** *(list, required, non-empty)*. Endpoints fed into the channel's failover table. The user may list any source-cluster pod endpoints — primary or in-cluster replica. MySQL picks one based on weight and reachability.
+- **`replicationChannels[].sources[].host`** / **`.port`** *(string / int, required)*. Externally reachable host:port. Typically derived from the source's per-pod LoadBalancer/NodePort hostnames.
+- **`replicationChannels[].sources[].weight`** *(int, default `100`, range `[0, 100]`)*. Forwarded to the failover table. Higher = preferred. Weight `0` is a valid "blacklist" value — endpoint is tried only when all others are unreachable.
+- **`replicationChannels[].config`** *(object, optional)*. Per-channel knobs for retry behavior and TLS. All fields default sensibly; an entire channel can omit the block.
+- **`replicationChannels[].config.sourceRetryCount`** / **`.sourceConnectRetry`** *(uint32)*. Forwarded into `CHANGE REPLICATION SOURCE TO`. Defaults from `pkg/mysql` constants (`DefaultAsyncSourceRetryCount`, `DefaultAsyncSourceConnectRetry`).
+- **`replicationChannels[].config.tls`** *(bool, default `true`)*. Sets `SOURCE_SSL = 1` on the channel when true. Disabling requires `unsafeFlags.crossSiteReplicationTLS`.
+- **`replicationChannels[].config.tlsSkipVerify`** *(bool, default `false`)*. When true, sets `SOURCE_SSL_VERIFY_SERVER_CERT = 0` — the IO thread encrypts the connection but does not validate the source's certificate. Useful for self-signed certs in lab/test environments; emits a `Warning` event in production. Ignored when `config.tls` is `false`.
+- **`replicationChannels[].config.caSecret`** *(SecretKeySelector, optional)*. Reads a PEM CA bundle from the named Secret/key. When provided and `tlsSkipVerify` is `false`, the operator writes the bundle to a file in the replica's primary pod and passes its path as `SOURCE_SSL_CA`. Required when the source's TLS cert is not signed by a CA trusted by MySQL's default cert store. Ignored when `tlsSkipVerify` is `true` or `config.tls` is `false`.
 
 #### 4.1.2 New UnsafeFlags key
 
@@ -379,7 +379,7 @@ A mis-bootstrapped replica is caught at runtime by MySQL itself: `START REPLICA`
 
 **Why:** Out of scope, users with more advanced needs can apply filters via `spec.mysql.configuration` if absolutely required.
 
-### 5.10 Source-side scaling requires manual `sources` updates (async clusterType)
+### 5.9 Source-side scaling requires manual `sources` updates (async clusterType)
 
 **Chosen approach:** For async-clusterType sources, the user updates each replica's `replicationChannels[].sources` list when the source cluster scales. For GR sources, `asynchronous_connection_failover_add_managed()` tracks GR membership and removes the manual step.
 
