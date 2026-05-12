@@ -1,4 +1,4 @@
-# [K8SPS-508]: Cross-Site Replication
+# [K8SPS-508]: Cross-Site Replication (GR clusters only)
 
 
 | Field        | Value           |
@@ -21,8 +21,8 @@ The feature targets disaster-recovery, geo-distributed read serving, and cross-r
 ### 1.1 Goals
 
 - A single new field, `spec.mysql.replicationChannels`, on the existing `PerconaServerMySQL` CRD configures the replica side of cross-site replication.
-- Works for both `clusterType: group-replication` and `clusterType: async`, but the initial implementation will cover only `group-replication`.
-- Topology: **M sources → N replicas**. Each replica CR declares one or more named replication channels; each channel can list multiple source endpoints with weights.
+- Supports `clusterType: group-replication` only in this initial release. Async-clusterType support is deferred (see Non-Goals).
+- Topology: **M sources → N replicas**. Each replica CR declares one or more named replication channels; each channel can list multiple source endpoints (used as seeds for GR membership discovery).
 - MySQL-native source failover via `SOURCE_CONNECTION_AUTO_FAILOVER = 1`. For GR sources, `asynchronous_connection_failover_add_managed()` tracks membership changes inside the source cluster automatically.
 - Replica enforces `super_read_only = ON` on its primary while replicating, to prevent application split-brain.
 - Promotion is user-driven by editing the CR (removing the channels). No automatic cross-site failover.
@@ -30,6 +30,7 @@ The feature targets disaster-recovery, geo-distributed read serving, and cross-r
 
 ### 1.2 Non-Goals (Out of Scope)
 
+- **Support for** `clusterType: async`. The async clusterType uses MySQL's standard async replication for in-cluster topology (Orchestrator-managed primary, IO/SQL threads on each replica). Adding cross-site on top introduces several non-trivial integration points. These are worth tackling in a follow-up once GR cross-site is stable.
 - **Operator-managed initial seeding.** The user is responsible for bootstrapping the replica cluster (typically via a `PerconaServerMySQLRestore` from a backup of the source) *before* setting `replicationChannels`.
 - **Bidirectional / active-active replication** — significant conflict resolution work; revisit once unidirectional cross-site is stable.
 - **Chained replication** (A → B → C) — every additional hop multiplies the failure modes; out of initial scope.
@@ -48,25 +49,21 @@ The feature targets disaster-recovery, geo-distributed read serving, and cross-r
 
 **Multi-source replication.** A replica can have multiple *channels*, each with its own IO thread, SQL thread, GTID state, source endpoints, and failover config. Each channel is keyed by `channel_name` in the performance/replication tables.
 
-**Native asynchronous connection failover** (MySQL 8.0.22+). When a channel is created with `SOURCE_CONNECTION_AUTO_FAILOVER = 1`, the replica's IO thread reads source endpoints from `mysql.replication_asynchronous_connection_failover` (populated by `asynchronous_connection_failover_add_source()` or `_add_managed()`). MySQL picks the highest-weight reachable source and fails over automatically when it becomes unavailable, without any operator involvement. For a managed GR source, the failover list reflects current GR membership; member changes propagate without the operator re-asserting anything.
+**Native asynchronous connection failover** (MySQL 8.0.22+). When a channel is created with `SOURCE_CONNECTION_AUTO_FAILOVER = 1`, the replica's IO thread uses the `mysql.replication_asynchronous_connection_failover_managed` table (populated via `asynchronous_connection_failover_add_managed()`) to discover the source GR group's current membership and pick a member to read from. Each call to `_add_managed()` records one seed endpoint for the same managed group; MySQL needs only one of the seeds to be reachable at first connect to bootstrap discovery, after which it tracks members dynamically from the source's `performance_schema.replication_group_members`. Source-side primary changes and member additions/removals propagate without operator involvement.
 
-**`log_slave_updates` and the source binlog stream.** Every pod in an operator-managed cluster runs with `log_slave_updates = ON` and `log_bin = ON`. This means every pod — primary or in-cluster replica — emits the same binlog stream. Cross-site replication can fetch binlogs from any pod in a source cluster, not only the writable primary.
-
-**Per-pod Service exposure.** The operator already supports `spec.mysql.expose` to expose each pod through its own external Service (LoadBalancer/NodePort). This is the mechanism by which source-cluster pods become individually reachable from outside the source's Kubernetes cluster.
-
-**`super_read_only`.** A server-level flag that prevents writes from all clients, including users with `SUPER` privilege. The cross-site reconciler sets `super_read_only = ON` on the replica's primary while replicating, and clears it when channels are removed.
+`**super_read_only`.** A server-level flag that prevents writes from all clients, including users with `SUPER` privilege. The cross-site reconciler sets `super_read_only = ON` on the replica's primary while replicating, and clears it when channels are removed.
 
 ### 2.2 Key Constraints
 
 1. **MySQL 8.0.22 or later.** Required for `SOURCE_CONNECTION_AUTO_FAILOVER` and the failover-table UDFs. Both supported MySQL versions (8.0, 8.4) include these features.
 2. **Reachability between clusters.** Replica must reach at least one source pod's exposed endpoint over TCP. The operator does not solve cross-cluster networking — that is the user's responsibility (LB hostnames, firewall rules, ServiceMesh, VPN).
 3. **The user is responsible for the initial seed.** Before setting `spec.mysql.replicationChannels`, the user must ensure the replica cluster contains a consistent snapshot of the source's data — typically by:
-    1. Taking a `PerconaServerMySQLBackup` of the source.
-    2. Restoring it into the replica cluster via `PerconaServerMySQLRestore` (using `backupSource` if the replica is in a different Kubernetes cluster).
-    3. Verifying the restore is complete.
-    4. Only then setting `replicationChannels` on the replica CR.
-4. **A new `replication` MySQL system user is added.** The operator provisions it automatically on every cluster (alongside the existing system users like `root`, `xtrabackup`, `monitor`, etc.) with `REPLICATION SLAVE` and `REPLICATION CLIENT` grants and no other privileges. Its password lives under the `replication` key in `spec.secretsName`. On clusters where cross-site is not in use, the user simply exists unused — the grants are read-only on the replication stream and pose no risk. The replica admin reads this password from the source's Secret, places it into a Secret in the replica's namespace, and references that via `replicationUserSecretRef`. The cross-site reconciler itself does not create the user. If the replica cluster is setup with the same `replication` password as the source, this `replicationUserSecretRef` may be skipped.
-5. **`super_read_only` is the only fence.** No quorum, witness, or fencing service. Split-brain protection relies on the operator's invariant that the replica's primary is read-only while `replicationChannels` is non-empty.
+  1. Taking a `PerconaServerMySQLBackup` of the source.
+  2. Restoring it into the replica cluster via `PerconaServerMySQLRestore` (using `backupSource` if the replica is in a different Kubernetes cluster).
+  3. Verifying the restore is complete.
+  4. Only then setting `replicationChannels` on the replica CR.
+4. **The existing `replication` MySQL system user is reused.** The operator already provisions this user (`apiv1.UserReplication`) on every cluster as part of the standard system-users set, with grants that comfortably cover both the IO thread (`REPLICATION SLAVE`, `REPLICATION CLIENT`) and the operator-side discovery probe (`SELECT` on `*.*`, `SYSTEM_VARIABLES_ADMIN`). Its password lives under the `replication` key in `spec.secretsName`. The replica admin reads this password from the source cluster's Secret, places it into a Secret in the replica's namespace, and references that via `replicationUserSecretRef`. No new user, no new grants, no user-management code change. If the replica cluster happens to be set up with the same `replication` password as the source, `replicationUserSecretRef` may be skipped.
+5. `**super_read_only` is the only fence.** No quorum, witness, or fencing service. Split-brain protection relies on the operator's invariant that the replica's primary is read-only while `replicationChannels` is non-empty.
 6. **Backward compatibility.** Existing CRs (without `replicationChannels`) must continue to work as usual (no changes).
 
 ---
@@ -101,9 +98,19 @@ The replica cluster reconciler grows a new phase that activates when `spec.mysql
 ps reconciler
   ├─ phase: channel reconcile (on the cluster's current primary pod)
   │    for each declared channel:
-  │      populate mysql.replication_asynchronous_connection_failover
-  │        (asynchronous_connection_failover_add_managed for GR sources,
-  │         asynchronous_connection_failover_add_source for async sources)
+  │      probe one reachable endpoint in `sources[]` using the
+  │      `replication` user; read @@global.group_replication_group_name
+  │      to determine the source's GR group UUID.
+  │      If empty / non-GR: set state = Error,
+  │        reason = UnsupportedSource, skip this channel.
+  │      Cache the discovered group UUID in
+  │        status.replicationChannels.channels[].sourceGroupName.
+  │      populate mysql.replication_asynchronous_connection_failover_managed
+  │        via asynchronous_connection_failover_add_managed(
+  │          channel, 'GroupReplication', <discovered group UUID>,
+  │          host, port, ...)
+  │        — one row per entry in `sources[]`, sharing the same group UUID
+  │          so MySQL treats them as redundant seeds for the same group.
   │      CHANGE REPLICATION SOURCE TO
   │        SOURCE_USER='replication',
   │        SOURCE_PASSWORD=<from replicationUserSecretRef>,
@@ -160,10 +167,10 @@ spec:
         sources:
           - host: cluster1-mysql-0.example.com
             port: 3306
-            weight: 100                     # default 100. Range [0, 100].
           - host: cluster1-mysql-1.example.com
             port: 3306
-            weight: 50
+          - host: cluster1-mysql-2.example.com
+            port: 3306
         config:
           sourceRetryCount: 3               # default 3.
           sourceConnectRetry: 60            # default 60.
@@ -179,17 +186,16 @@ spec:
 
 #### 4.1.1 Field semantics
 
-- **`replicationChannels`** *(list, optional, default empty)*. Non-empty list declares the cluster a replica. The operator will reconcile cross-site channels on whichever pod is currently the cluster's primary. Maximum 16 channels (CEL-validated; practical ceiling tied to applier worker defaults; can be raised later).
-- **`replicationChannels[].name`** *(string, required)*. MySQL channel name. Must match `[a-zA-Z0-9_]+`, length 1–64. Must be unique within the list. Renaming a channel is observed by the reconciler as remove-old + add-new.
-- **`replicationChannels[].replicationUserSecretRef`** *(SecretKeySelector, optional)*. References a Secret in the same namespace as the replica CR. Reads the password for the `replication` MySQL user from the named key (default `password`). The IO thread always authenticates as `replication` — there is no field to override the username. The Secret is watched; updates trigger a `CHANGE REPLICATION SOURCE TO ... SOURCE_PASSWORD=<new>` reissue for the affected channel. May be omitted when the replica's own `spec.secretsName` already holds the same password as the source under the `replication` key, in which case the operator authenticates with the local secret.
-- **`replicationChannels[].sources`** *(list, required, non-empty)*. Endpoints fed into the channel's failover table. The user may list any source-cluster pod endpoints — primary or in-cluster replica. MySQL picks one based on weight and reachability.
-- **`replicationChannels[].sources[].host`** / **`.port`** *(string / int, required)*. Externally reachable host:port. Typically derived from the source's per-pod LoadBalancer/NodePort hostnames.
-- **`replicationChannels[].sources[].weight`** *(int, default `100`, range `[0, 100]`)*. Forwarded to the failover table. Higher = preferred. Weight `0` is a valid "blacklist" value — endpoint is tried only when all others are unreachable.
-- **`replicationChannels[].config`** *(object, optional)*. Per-channel knobs for retry behavior and TLS. All fields default sensibly; an entire channel can omit the block.
-- **`replicationChannels[].config.sourceRetryCount`** / **`.sourceConnectRetry`** *(uint32)*. Forwarded into `CHANGE REPLICATION SOURCE TO`. Defaults from `pkg/mysql` constants (`DefaultAsyncSourceRetryCount`, `DefaultAsyncSourceConnectRetry`).
-- **`replicationChannels[].config.tls`** *(bool, default `true`)*. Sets `SOURCE_SSL = 1` on the channel when true. Disabling requires `unsafeFlags.crossSiteReplicationTLS`.
-- **`replicationChannels[].config.tlsSkipVerify`** *(bool, default `false`)*. When true, sets `SOURCE_SSL_VERIFY_SERVER_CERT = 0` — the IO thread encrypts the connection but does not validate the source's certificate. Useful for self-signed certs in lab/test environments; emits a `Warning` event in production. Ignored when `config.tls` is `false`.
-- **`replicationChannels[].config.caSecret`** *(SecretKeySelector, optional)*. Reads a PEM CA bundle from the named Secret/key. When provided and `tlsSkipVerify` is `false`, the operator writes the bundle to a file in the replica's primary pod and passes its path as `SOURCE_SSL_CA`. Required when the source's TLS cert is not signed by a CA trusted by MySQL's default cert store. Ignored when `tlsSkipVerify` is `true` or `config.tls` is `false`.
+- `**replicationChannels**` *(list, optional, default empty)*. Non-empty list declares the cluster a replica. The operator will reconcile cross-site channels on whichever pod is currently the cluster's primary. Maximum 16 channels (CEL-validated; practical ceiling tied to applier worker defaults; can be raised later).
+- `**replicationChannels[].name*`* *(string, required)*. MySQL channel name. Must match `[a-zA-Z0-9_]+`, length 1–64. Must be unique within the list. Renaming a channel is observed by the reconciler as remove-old + add-new.
+- `**replicationChannels[].replicationUserSecretRef*`* *(SecretKeySelector, optional)*. References a Secret in the same namespace as the replica CR. Reads the password for the `replication` MySQL user from the named key (default `password`). The IO thread always authenticates as `replication` — there is no field to override the username. The Secret is watched; updates trigger a `CHANGE REPLICATION SOURCE TO ... SOURCE_PASSWORD=<new>` reissue for the affected channel. May be omitted when the replica's own `spec.secretsName` already holds the same password as the source under the `replication` key, in which case the operator authenticates with the local secret.
+- `**replicationChannels[].sources*`* *(list, required, non-empty)*. Seed endpoints for GR membership discovery. Each entry is recorded as a row in `mysql.replication_asynchronous_connection_failover_managed` via `asynchronous_connection_failover_add_managed()`; MySQL only needs *one* of them to be reachable at first connect to bootstrap discovery of the source's GR group, after which it tracks members dynamically from the source's `performance_schema.replication_group_members`. Multiple entries give redundancy against any particular seed pod being unreachable.
+- `**replicationChannels[].sources[].host*`* / `**.port**` *(string / int, required)*. Externally reachable host:port of a source-cluster pod. Typically derived from the source's per-pod LoadBalancer/NodePort hostnames.
+- `**replicationChannels[].config*`* *(object, optional)*. Per-channel knobs for retry behavior and TLS. All fields default sensibly; an entire channel can omit the block.
+- `**replicationChannels[].config.sourceRetryCount*`* / `**.sourceConnectRetry**` *(uint32)*. Forwarded into `CHANGE REPLICATION SOURCE TO`. Defaults from `pkg/mysql` constants (`DefaultAsyncSourceRetryCount`, `DefaultAsyncSourceConnectRetry`).
+- `**replicationChannels[].config.tls*`* *(bool, default `true`)*. Sets `SOURCE_SSL = 1` on the channel when true. Disabling requires `unsafeFlags.crossSiteReplicationTLS`.
+- `**replicationChannels[].config.tlsSkipVerify*`* *(bool, default `false`)*. When true, sets `SOURCE_SSL_VERIFY_SERVER_CERT = 0` — the IO thread encrypts the connection but does not validate the source's certificate. Useful for self-signed certs in lab/test environments; emits a `Warning` event in production. Ignored when `config.tls` is `false`.
+- `**replicationChannels[].config.caSecret*`* *(SecretKeySelector, optional)*. Reads a PEM CA bundle from the named Secret/key. When provided and `tlsSkipVerify` is `false`, the operator writes the bundle to a file in the replica's primary pod and passes its path as `SOURCE_SSL_CA`. Required when the source's TLS cert is not signed by a CA trusted by MySQL's default cert store. Ignored when `tlsSkipVerify` is `true` or `config.tls` is `false`.
 
 #### 4.1.2 New UnsafeFlags key
 
@@ -204,10 +210,10 @@ type UnsafeFlags struct {
 
 1. Channel names are unique, non-empty, match `[a-zA-Z0-9_]+`, length 1–64.
 2. `replicationChannels[].sources` is non-empty for each channel.
-3. `replicationChannels[].sources[].weight` is in `[0, 100]`.
-4. Any `replicationChannels[].config.tls: false` requires `unsafeFlags.crossSiteReplicationTLS: true`.
-5. `len(replicationChannels) ≤ 16`.
-6. `replicationChannels` non-empty is mutually exclusive with `pause: true`.
+3. Any `replicationChannels[].config.tls: false` requires `unsafeFlags.crossSiteReplicationTLS: true`.
+4. `len(replicationChannels) ≤ 16`.
+5. `replicationChannels` non-empty is mutually exclusive with `pause: true`.
+6. `replicationChannels` non-empty requires `spec.mysql.clusterType: group-replication`. Async-clusterType clusters reject the field at admission for this release.
 
 There is intentionally no validation rule about the initial seed; that prerequisite is documented (Constraint 3) and surfaces as a MySQL-side runtime error (IO thread error 1236, surfaced in `lastError` with `reason = GTIDDivergence`) if violated.
 
@@ -221,6 +227,11 @@ status:
     channels:
       - name: ch_primary
         state: Running | Stopped | Error
+        sourceGroupName: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+                                          # auto-discovered by the operator
+                                          # via SELECT @@global.group_replication_group_name
+                                          # on a reachable source endpoint. Surfaced
+                                          # read-only for verification / audit.
         currentSource: cluster1-mysql-0.example.com:3306
         secondsBehindSource: 3            # null when IO thread not running
         ioThreadRunning: true
@@ -242,6 +253,7 @@ A new top-level condition is added to the CR:
         | TLSError
         | GTIDDivergence
         | ReplicaPrimaryChanging
+        | UnsupportedSource
         | Stopped
   message: <details>
 ```
@@ -250,9 +262,10 @@ Aggregated: `True` only if every channel is `Running`.
 
 ### 4.3 Internal Contracts
 
-- **New system user: `replication`.** Added to the operator's known system-users list (next to `root`, `xtrabackup`, `monitor`, etc.). Grants are deliberately minimal: `REPLICATION SLAVE` (required for the IO thread) and `REPLICATION CLIENT` (required for `SHOW REPLICA STATUS` and similar). No DML or DDL privileges. The password is generated on first reconcile if absent from `spec.secretsName`, stored under the key `replication`, and rotated when the Secret value rotates — exactly as today's system users behave. **Provisioning is gated on `spec.crVersion`.** The user is created only on clusters whose `crVersion` is ≥ the operator release that introduces this feature. Clusters at an older `crVersion` are left untouched — they retain their existing user inventory and `spec.secretsName` contents, so they do not see a Secret diff and do not trigger a rolling restart on operator upgrade. Users opt in by bumping `spec.crVersion` (already the documented upgrade path for adopting new features). Implementation touchpoints: extend the system-user list in `pkg/controller/ps/user.go` (with a `crVersion` predicate matching the existing pattern used for other version-gated user-management changes) and the password-generation path in `pkg/secret`. No reconciler logic is gated on cross-site state for this user — once the version gate passes, it's simply another row in the cluster's user inventory.
-- **MySQL config invariants asserted by the reconciler:** `gtid_mode = ON`, `enforce_gtid_consistency = ON`, `log_slave_updates = ON`, `log_bin = ON`, `server_id` derived collision-safely. Already true today for both cluster types; the cross-site path verifies and refuses to start if any is off.
-- `mysql.replication_asynchronous_connection_failover` is managed by the operator. Reconciler diffs declared sources against the table contents per channel and converges via `_add_source` / `_delete_source` UDFs (or `_add_managed` / `_delete_managed` for GR sources). Users editing the table directly may have their edits reverted on the next reconcile.
+- **Reuse of the existing `replication` system user.** The operator already provisions this user on every cluster as part of the standard system-users set (`apiv1.UserReplication`, declared in `api/v1/perconaservermysql_types.go` and managed by `pkg/controller/ps/user.go` + `pkg/secret`). Its existing grants — verified in `build/ps-entrypoint.sh` — comfortably cover both the IO thread (`REPLICATION SLAVE`, `REPLICATION CLIENT`) and the operator-side probe (`SELECT` on `*.*`, `SYSTEM_VARIABLES_ADMIN`). The cross-site feature adds **no new user**, **no new grants**, and **no changes to user-management code**. As a corollary, no `crVersion` gating is needed for user provisioning — clusters at every `crVersion` already have the user. Upgrading the operator does not cause a Secret diff or a rolling restart on this account.
+- **MySQL config preconditions for the cross-site path:** `gtid_mode = ON` and `enforce_gtid_consistency = ON` are already set by `build/ps-entrypoint.sh` for every operator-managed cluster, so the cross-site reconciler can rely on them. `server_id` is already derived from a cluster-hash prefix in the same entrypoint, so cross-cluster collisions are not a concern. GR's own protocol requirements (binary logging, replicated-write emission) are taken as given on `clusterType: group-replication` clusters; no additional assertion is made by the cross-site reconciler.
+- **Source-type discovery is operator-side, not user-declared.** Before configuring a channel, the operator opens a MySQL connection to one of the channel's `sources[]` endpoints using the `replication` user, runs `SELECT @@global.group_replication_group_name`, and uses the result as `managed_name` for `_add_managed()`. If the source is not a GR cluster (empty/zero group UUID), the channel is set to `state = Error`, `reason = UnsupportedSource` — the operator never falls back to `_add_source()` in this release. The discovered UUID is surfaced read-only in `status.replicationChannels.channels[].sourceGroupName`. Keeping this discovery out of the CRD means the user-facing schema does not carry GR-specific concepts, leaving room for async-source support to be added later as a controller-side branch with no CRD breakage.
+- **`mysql.replication_asynchronous_connection_failover_managed` is managed by the operator.** Reconciler diffs declared sources against the table contents per channel and converges via `_add_managed` / `_delete_managed` UDFs. Each row uses the same discovered group UUID; multiple rows represent multiple seed endpoints into the same group. Users editing the table directly may have their edits reverted on the next reconcile.
 
 ### 4.4 User-Facing Behavior Changes
 
@@ -309,21 +322,38 @@ Aggregated: `True` only if every channel is `Running`.
 | Static `SOURCE_HOST` to a Service that points at the primary                                         | Service-update lag during in-source failover. Requires the operator to keep the Service endpoints in sync, same coordination cost, fewer benefits. |
 
 
-### 5.4 Replica can fetch binlogs from any source pod, not just primary
+### 5.4 Source endpoints are seeds, not a writers list; no per-endpoint weight
 
-**Chosen approach:** Allow users to list any pod endpoints in `replicationChannels[].sources`. MySQL picks based on weight and reachability.
+**Chosen approach:** Users list one or more source-cluster pod endpoints in `replicationChannels[].sources`. Each entry is passed to `asynchronous_connection_failover_add_managed()` as a seed for the source's GR group. MySQL only needs *one* of the seeds to be reachable to bootstrap discovery; after that, it tracks members and the current primary via the source's `performance_schema.replication_group_members`. No per-endpoint weight is exposed.
 
-**Why:** Every pod has `log_slave_updates = ON` and emits the same binlog stream. Replicating from an in-cluster replica adds at most one hop of lag and offloads the writable primary. Users may also prefer the geographically nearest pod regardless of role.
+**Why:** For a managed GR source, the failover UDF takes role-based weights (primary vs. secondary), not per-endpoint weights — so a `weight: N` field on each `sources[]` entry doesn't map cleanly to MySQL's model. Exposing it would either be silently ignored or require collapsing user intent into role weights in a way users wouldn't predict. Multiple endpoints are still useful — as seeds, they protect against a specific pod being unreachable at first connect. PXC operator's per-endpoint weights make sense because PXC is multi-writer Galera, where every node is a peer; that semantic doesn't transfer to GR single-primary.
 
 **Alternatives considered:**
 
 
-| Alternative                                             | Why Rejected                                                                                              |
-| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Operator enforces "primary only" by filtering endpoints | Throws away a real capability MySQL already provides. Imposes load on the writable primary unnecessarily. |
+| Alternative                                             | Why Rejected                                                                                                                                                                                                                           |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Operator enforces "primary only" by filtering endpoints | Reintroduces operator-side primary discovery (Section 5.3) and contradicts MySQL's native managed-failover model.                                                                                                                      |
+| Keep per-endpoint `weight` (PXC-style)                  | `_add_managed()` does not consume per-endpoint weights; the field would be silently ignored or require an unintuitive mapping to role weights. Can be reintroduced additively if/when async support lands and `_add_source()` is used. |
 
 
-### 5.5 Manual, user-driven promotion
+### 5.5 Source-type discovery is operator-side; CRD stays source-type-agnostic
+
+**Chosen approach:** The replica's CRD carries no field describing what kind of cluster the source is (no `sourceType`, no `groupName`, no GR-specific block). At channel reconcile time, the operator opens a MySQL connection to one of the channel's `sources[]` endpoints using the `replication` user, runs `SELECT @@global.group_replication_group_name`, and uses the discovered UUID as `managed_name` for `_add_managed()`. The discovered value is surfaced read-only in `status.replicationChannels.channels[].sourceGroupName` for verification. If the probe returns empty/zero, the source is not a GR cluster and the channel is set to `state = Error`, `reason = UnsupportedSource`.
+
+**Why:** Keeps the CRD source-type-neutral. When async support lands, the controller adds a branch (probe outcome → use `_add_source()` instead of `_add_managed()`) without disturbing any user-facing field. No need to design a discriminator (`sourceType`) or a tagged-union shape (`groupReplication: {...}` vs `async: {...}`) today, when only the GR path is supported. The user supplies what's invariant across source types — endpoints and credentials — and the controller figures out the rest from the source itself. The reading of `@@global.group_replication_group_name` requires no privileges beyond the `REPLICATION CLIENT` + implicit `USAGE` already granted to the `replication` user.
+
+**Alternatives considered:**
+
+
+| Alternative | Why Rejected |
+| --- | --- |
+| Require user to supply `sourceGroupName` in the CR | Adds a GR-specific field that has no analog for async sources. Forces the user to look up a UUID. Asymmetric with how we handle credentials (also auto-applied without the user knowing the source's internals). |
+| Discriminated CRD shape (`sourceType: groupReplication \| async`, with type-specific sub-objects) | Designs for the async case before it ships. Wraps every user's GR config in an extra indentation level today for a feature they don't yet have. Same forward-compat outcome can be reached additively when async actually lands. |
+| Hybrid: optional CR field, auto-discover if absent | Two code paths to maintain; the rarely-set "explicit" path becomes a poorly-tested branch. |
+
+
+### 5.6 Manual, user-driven promotion
 
 **Chosen approach:** Promotion happens by removing `replicationChannels` from the replica CR. The operator runs `STOP REPLICA; RESET REPLICA ALL` and clears `super_read_only`.
 
@@ -338,7 +368,7 @@ Aggregated: `True` only if every channel is `Running`.
 | Automatic failover on source-unreachable detection                      | Too dangerous across WAN. Out of scope.                                                                                    |
 
 
-### 5.6 User-driven bootstrap, not operator-mediated
+### 5.7 User-driven bootstrap, not operator-mediated
 
 **Chosen approach:** The user bootstraps the replica cluster with a consistent source snapshot, typically via `PerconaServerMySQLBackup` on the source and `PerconaServerMySQLRestore` on the replica, *before* setting `replicationChannels`. The operator does not invoke any restore machinery on the cross-site path.
 
@@ -358,7 +388,7 @@ A mis-bootstrapped replica is caught at runtime by MySQL itself: `START REPLICA`
 | Operator creates an internal `PerconaServerMySQLRestore` from a `bootstrap.backupSource` field | Embeds a second copy of restore lifecycle in a different controller. Adds CR fields specific to S3/storage to the cross-site spec block. Adds failure modes (BootstrapFailed) that obscure the cross-site reconciler's core job. |
 
 
-### 5.7 No source-side CR fields
+### 5.8 No source-side CR fields
 
 **Chosen approach:** A source cluster has no cross-site-specific CR fields. It is a normal cluster with `spec.mysql.expose` configured and a `replication` key in its `spec.secretsName` Secret.
 
@@ -373,45 +403,28 @@ A mis-bootstrapped replica is caught at runtime by MySQL itself: `START REPLICA`
 | `replicas: [host:port, ...]` field on the source listing expected replicas | Requires cross-cluster knowledge on the source side     |
 
 
-### 5.8 No replication filters in CRD
+### 5.9 No replication filters in CRD
 
 **Chosen approach:** Multi-source replication works only with non-overlapping schemas across channels. We will document this - we do not expose `replicate-do-db`/`replicate-ignore-db` in the CRD.
 
 **Why:** Out of scope, users with more advanced needs can apply filters via `spec.mysql.configuration` if absolutely required.
 
-### 5.9 Source-side scaling requires manual `sources` updates (async clusterType)
-
-**Chosen approach:** For async-clusterType sources, the user updates each replica's `replicationChannels[].sources` list when the source cluster scales. For GR sources, `asynchronous_connection_failover_add_managed()` tracks GR membership and removes the manual step.
-
-**Why:** Cross-cluster watches require complicated tooling. Documenting the manual step for the async path is acceptable; the GR path (more common) is already automatic.
-
 ---
 
 ## 6. Replication Model Impact
 
-### 6.1 Group Replication source
+This release supports `clusterType: group-replication` only. Async-clusterType behavior is deferred to a follow-up.
+
+### 6.1 Source cluster (GR)
 
 - Replica side uses `asynchronous_connection_failover_add_managed()` with the source-cluster endpoint(s) provided in `replicationChannels[].sources`; MySQL queries the source's `performance_schema.replication_group_members` to maintain the failover list dynamically.
 - In-source primary failover is invisible to the operator.
-- Source-cluster scaling is invisible to the operator.
+- Source-cluster scaling is invisible to the operator — MySQL's failover list updates automatically from GR membership.
 
-### 6.2 Group Replication replica
+### 6.2 Replica cluster (GR)
 
 - Channels run on the GR primary only. On a GR primary change, the operator re-asserts channels on the new primary and runs `RESET REPLICA ALL FOR CHANNEL '<name>'` on the old primary.
 - `super_read_only = ON` is set cluster-wide via in-cluster GR replication — the operator sets it on the primary, GR propagates the change.
-
-### 6.3 Async source
-
-- Replica side uses `asynchronous_connection_failover_add_source()` with the static endpoint list from `replicationChannels[].sources`.
-- Source-cluster scaling requires updating `replicationChannels[].sources` on each replica.
-
-### 6.4 Async replica
-
-- Channels run on the async primary. On a primary change (orchestrator-driven), the operator re-asserts channels on the new primary as in the GR case.
-
-### 6.5 Differences and Why
-
-The GR path is more automatic because GR exposes membership via a documented performance-schema view that MySQL's failover mechanism consumes directly. Async clusters have no equivalent; Orchestrator manages topology but is not queryable by the replica's MySQL.
 
 ---
 
@@ -508,9 +521,9 @@ spec:
           name: source-replication-creds      # in this namespace. Alternatively, create cluster with this replication password
           key: password
         sources:
-          - {host: source-mysql-0.example.com, port: 3306, weight: 100}
-          - {host: source-mysql-1.example.com, port: 3306, weight: 100}
-          - {host: source-mysql-2.example.com, port: 3306, weight: 100}
+          - {host: source-mysql-0.example.com, port: 3306}
+          - {host: source-mysql-1.example.com, port: 3306}
+          - {host: source-mysql-2.example.com, port: 3306}
         config:
           tls: true
           caSecret:
@@ -524,23 +537,23 @@ spec:
 spec:
   mysql:
     replicationChannels:
-      - name: shard_us
+      - name: src_a
         replicationUserSecretRef:
-          name: shard-us-creds
+          name: src-a-creds
           key: password
         sources:
-          - {host: shard-us-mysql-0.example.com, port: 3306, weight: 100}
-          - {host: shard-us-mysql-1.example.com, port: 3306, weight: 100}
-      - name: shard_eu
+          - {host: cluster-a-mysql-0.example.com, port: 3306}
+          - {host: cluster-a-mysql-1.example.com, port: 3306}
+      - name: src_b
         replicationUserSecretRef:
-          name: shard-eu-creds
+          name: src-b-creds
           key: password
         sources:
-          - {host: shard-eu-mysql-0.example.com, port: 3306, weight: 100}
-          - {host: shard-eu-mysql-1.example.com, port: 3306, weight: 100}
+          - {host: cluster-b-mysql-0.example.com, port: 3306}
+          - {host: cluster-b-mysql-1.example.com, port: 3306}
 ```
 
-Constraint: `shard_us` and `shard_eu` must write to non-overlapping schemas (documented in 5.8). No filter is configured.
+Constraint: `src_a` and `src_b` must write to non-overlapping schemas (documented in 5.9). No filter is configured.
 
 ### 7.6 Promotion (replica → standalone)
 
@@ -580,41 +593,41 @@ The former replica is now writable. The former source can be re-enrolled as a re
 
 **Expected behavior:** `reason = TLSError`. Same recovery path as 8.2 — update the Secret, operator reconciles.
 
-### 8.4 GTID divergence (including failed bootstrap)
+### 8.4 Source is not a Group Replication cluster
+
+**Scenario:** Operator probes the source via `SELECT @@global.group_replication_group_name` and the result is empty or all-zero — the endpoint is not a GR cluster (e.g., a standalone MySQL, an async-clusterType cluster, a non-Percona MySQL).
+
+**Expected behavior:** Channel is set to `state = Error`, `reason = UnsupportedSource`. `lastError` records "source endpoint <host:port> reports no Group Replication group; cross-site replication requires a group-replication source in this release." No retry beyond the next reconcile; user must point `sources[]` at a GR cluster or wait for async support.
+
+### 8.5 GTID divergence (including failed bootstrap)
 
 **Scenario:** Replica's `gtid_executed` contains transactions whose `server_uuid`s are not in any source's `gtid_executed`, or the source has purged binlogs covering the gap. Causes include: the user set `replicationChannels` on a cluster that was never properly bootstrapped, the replica was promoted and accepted writes before being re-enrolled, or backups have aged out.
 
 **Expected behavior:** MySQL's IO thread fails with error on `START REPLICA`. The operator observes `Last_IO_Error` and `Last_IO_Errno = 1236` on `SHOW REPLICA STATUS`, sets the channel to `state = Error`, `reason = GTIDDivergence`, copies the message verbatim into `lastError`. No automatic recovery; user must reset GTIDs manually or re-bootstrap.
 
-### 8.5 In-replica primary failover
+### 8.6 In-replica primary failover
 
 **Scenario:** Replica cluster's primary changes.
 
 **Expected behavior:** Operator asserts every declared channel on the new primary and runs `RESET REPLICA ALL FOR CHANNEL` on the old primary. Once channels are running on the new primary, condition flips back to `Running`. The persisted channel config on the new primary lets MySQL resume from its saved GTID; no full re-bootstrap.
 
-### 8.6 Channel add / remove / modify
+### 8.7 Channel add / remove / modify
 
 **Scenario:** User edits `replicationChannels[]`.
 
 **Expected behavior:** Reconciler diffs declared vs. currently configured channels on the primary. Adds: `CHANGE REPLICATION SOURCE TO … FOR CHANNEL '<new>'; START REPLICA FOR CHANNEL '<new>'`. Removes: `STOP REPLICA; RESET REPLICA ALL FOR CHANNEL '<old>'`. Renames are detected as remove-plus-add; the new channel restarts from the cluster's current GTID (works if source still has the binlogs, fails with divergence otherwise).
 
-### 8.7 Source list updates within a channel
+### 8.8 Source list updates within a channel
 
-**Scenario:** User edits `replicationChannels[].sources` (add, remove, change weight).
+**Scenario:** User edits `replicationChannels[].sources` (add or remove a seed endpoint).
 
-**Expected behavior:** Reconciler diffs the rows in `mysql.replication_asynchronous_connection_failover` for the channel and converges via `_add_source` / `_delete_source` UDFs. No `CHANGE REPLICATION SOURCE` reissue. The failover list is hot-reloadable.
+**Expected behavior:** Reconciler diffs the rows in `mysql.replication_asynchronous_connection_failover_managed` for the channel and converges via `_add_managed` / `_delete_managed` UDFs (one row per seed endpoint, all sharing the same discovered group UUID). No `CHANGE REPLICATION SOURCE` reissue. The failover list is hot-reloadable.
 
-### 8.8 Replication user password rotation
+### 8.9 Replication user password rotation
 
 **Scenario:** Source-side operator rotates the `replication` user's password.
 
 **Expected behavior:** User updates the replica's Secret to match. Operator detects via watch and re-issues `CHANGE REPLICATION SOURCE TO … SOURCE_PASSWORD=<new>; START REPLICA`. If the user forgets to sync, 8.2 fires.
-
-### 8.9 Source cluster scaling (async clusterType)
-
-**Scenario:** Pods added/removed from an async-clusterType source cluster.
-
-**Expected behavior:** Operator does not auto-discover. User updates each replica's `replicationChannels[].sources` manually. (For GR sources, `_add_managed()` handles this automatically)
 
 ### 8.10 Prevented configurations (validation-level)
 
@@ -622,8 +635,8 @@ The following are rejected at admission, not handled at runtime:
 
 - Duplicate, empty, or invalid channel names.
 - Empty `replicationChannels[].sources`.
-- `weight` outside `[0, 100]`.
 - `config.tls: false` without `unsafeFlags.crossSiteReplicationTLS: true`.
+- `replicationChannels` non-empty on a cluster whose `spec.mysql.clusterType` is not `group-replication`.
 
 ---
 
@@ -641,7 +654,7 @@ Changes are additive:
 - New optional key in `UnsafeFlags` (`crossSiteReplicationTLS`).
 - New optional top-level status block (`replicationChannels`).
 - New condition type (`CrossSiteReplicating`).
-- A new `replication` MySQL system user is added to the operator's known user list. Creation is gated on **`spec.crVersion`**: clusters at the new `crVersion` get the user (with a freshly-generated password written into their existing `spec.secretsName` Secret under the `replication` key); clusters at older `crVersion` values are untouched — no Secret diff, no MySQL user-management SQL, no rolling restart on operator upgrade. The user has only `REPLICATION SLAVE` and `REPLICATION CLIENT` grants. No DML or DDL, so its presence on clusters that do not act as cross-site sources is harmless. Adopting cross-site replication on an existing cluster therefore requires bumping `spec.crVersion` (the standard opt-in path for new features).
+- No new MySQL system users or grants are introduced. The cross-site feature reuses the existing `replication` user (see Section 4.3 and Constraint 4 in Section 2.2). Operator upgrade onto an existing cluster does not modify `spec.secretsName` for cross-site purposes and does not trigger a rolling restart on this account.
 
 ### 9.3 Operator version skew
 
@@ -657,11 +670,11 @@ Changes are additive:
 
 | #   | Scenario                                      | Cluster types | What it validates                                                                                                                                                          |
 | --- | --------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Happy-path replication after manual bootstrap | GR, async     | Test fixture bootstraps the replica via Backup+Restore, then sets `replicationChannels`. Channels reach `Running`; writes on source land on replica; `super_read_only=ON`. |
+| 1   | Happy-path replication after manual bootstrap | GR            | Test fixture bootstraps the replica via Backup+Restore, then sets `replicationChannels`. Channels reach `Running`; writes on source land on replica; `super_read_only=ON`. |
 | 2   | Multi-source consolidation                    | GR            | Two source clusters, one replica with two channels (non-overlapping schemas). Writes from each source land in the corresponding schema.                                    |
 | 3   | Source primary failover                       | GR            | Force GR primary change on source. MySQL native auto-failover follows; `currentSource` status updates.                                                                     |
 | 4   | Replica primary failover                      | GR            | Force GR primary change on replica. Channels move to new primary; old primary loses channels via `RESET REPLICA ALL`.                                                      |
-| 5   | Promotion                                     | GR, async     | Remove `replicationChannels`; assert teardown, `super_read_only=OFF`, writes succeed.                                                                                      |
+| 5   | Promotion                                     | GR            | Remove `replicationChannels`; assert teardown, `super_read_only=OFF`, writes succeed.                                                                                      |
 | 6   | Reverse direction with clean GTID             | GR            | After promotion, re-bootstrap former source via Backup+Restore, then add `replicationChannels` pointing at new source. Replication resumes.                                |
 | 7   | GTID divergence detection                     | GR            | Set `replicationChannels` on a cluster whose `gtid_executed` is not a subset of the source's. MySQL IO thread fails with error 1236; operator surfaces `GTIDDivergence`.   |
 | 8   | TLS-encrypted replication                     | GR            | Default config (TLS on). Verify `Replica_SSL_Allowed = Yes`.                                                                                                               |
@@ -671,7 +684,8 @@ Changes are additive:
 | 12  | Secret rotation                               | GR            | Update `replicationUserSecretRef` Secret value. Operator re-applies `CHANGE REPLICATION SOURCE`.                                                                           |
 | 13  | Source unreachable then recovers              | GR            | NetworkPolicy block; assert `SourceUnreachable`. Remove policy; assert recovery without operator action.                                                                   |
 | 14  | Operator restart during replication           | GR            | Restart operator pod; replication continues; operator status converges.                                                                                                    |
-| 15  | CRD validation rejects bad configs            | (no cluster)  | Submit each invalid spec from 8.12; assert rejection message.                                                                                                              |
+| 15  | CRD validation rejects bad configs            | (no cluster)  | Submit each invalid spec from 8.10; assert rejection message.                                                                                                              |
+
 
 ---
 
@@ -680,17 +694,17 @@ Changes are additive:
 ### A. Glossary
 
 
-| Term                             | Definition                                                                                                  |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| GR                               | Group Replication — MySQL's replication protocol.                                                           |
-| Async clusterType                | Operator clusterType where one MySQL pod is primary and others are async replicas, managed by Orchestrator. |
-| Cross-site replication           | Async MySQL replication between two clusters.                                                               |
-| GTID                             | Global Transaction Identifier; `<server_uuid>:<transaction_id>`.                                            |
-| Channel                          | A named, independent replication stream on a MySQL replica.                                                 |
-| Asynchronous connection failover | MySQL 8.0.22+ feature where the IO thread auto-fails-over between a list of weighted sources.               |
-| `super_read_only`                | MySQL flag preventing writes from all clients, including `SUPER`-privileged users.                          |
-| PXB                              | Percona XtraBackup.                                                                                         |
-| PiTR                             | Point-in-Time Recovery via binary log replay.                                                               |
+| Term                             | Definition                                                                                                                                                           |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GR                               | Group Replication — MySQL's replication protocol.                                                                                                                    |
+| Async clusterType                | Operator clusterType where one MySQL pod is primary and others are async replicas, managed by Orchestrator.                                                          |
+| Cross-site replication           | Async MySQL replication between two clusters.                                                                                                                        |
+| GTID                             | Global Transaction Identifier; `<server_uuid>:<transaction_id>`.                                                                                                     |
+| Channel                          | A named, independent replication stream on a MySQL replica.                                                                                                          |
+| Asynchronous connection failover | MySQL 8.0.22+ feature where the IO thread auto-fails-over between a list of source endpoints; for a managed GR source, it tracks the group's membership dynamically. |
+| `super_read_only`                | MySQL flag preventing writes from all clients, including `SUPER`-privileged users.                                                                                   |
+| PXB                              | Percona XtraBackup.                                                                                                                                                  |
+| PiTR                             | Point-in-Time Recovery via binary log replay.                                                                                                                        |
 
 
 ### B. References
