@@ -21,7 +21,7 @@ The feature targets disaster-recovery, geo-distributed read serving, and cross-r
 ### 1.1 Goals
 
 - A single new field, `spec.mysql.replicationChannels`, on the existing `PerconaServerMySQL` CRD configures the replica side of cross-site replication.
-- Works for both `clusterType: group-replication` and `clusterType: async`.
+- Works for both `clusterType: group-replication` and `clusterType: async`, but the initial implementation will cover only `group-replication`.
 - Topology: **M sources → N replicas**. Each replica CR declares one or more named replication channels; each channel can list multiple source endpoints with weights.
 - MySQL-native source failover via `SOURCE_CONNECTION_AUTO_FAILOVER = 1`. For GR sources, `asynchronous_connection_failover_add_managed()` tracks membership changes inside the source cluster automatically.
 - Replica enforces `super_read_only = ON` on its primary while replicating, to prevent application split-brain.
