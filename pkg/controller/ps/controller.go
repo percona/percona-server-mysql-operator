@@ -1309,7 +1309,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 	config, err := binlogserver.GetConfiguration(ctx, r.Client, cr, cr.Spec.Backup.PiTR.BinlogServer)
 	if err != nil {
 		if errors.Is(err, binlogserver.ErrNoCredentials) {
-			logger.Info("setting spec.backup.pitr.binlogServer.s3.credentialsSecret is required to upload binlogs to s3")
+			logger.Info("setting spec.backup.pitr.binlogServer.storage.s3.credentialsSecret is required to upload binlogs to s3")
 			return nil
 		}
 		return errors.Wrap(err, "configuration from spec")

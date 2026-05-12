@@ -362,6 +362,9 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcileBackupSourceBinlogServer(
 	if spec.Image == "" && cluster.Spec.Backup.PiTR.BinlogServer != nil {
 		spec.Image = cluster.Spec.Backup.PiTR.BinlogServer.Image
 	}
+	if spec.Image == "" {
+		return errors.New("binlogServer.image is not specified")
+	}
 	spec.SetDefaults()
 
 	config, err := binlogserver.GetConfiguration(ctx, r.Client, cluster, spec)
@@ -403,6 +406,7 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcileBackupSourceBinlogServer(
 	sts.Name = binlogserver.RestoreName(cluster, cr)
 	sts.Spec.Template.Spec.Containers[0].Command = []string{"sleep"}
 	sts.Spec.Template.Spec.Containers[0].Args = []string{"infinity"}
+	sts.Spec.Template.Spec.TerminationGracePeriodSeconds = new(int64(5))
 
 	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, sts, r.Scheme)
 	if err != nil {
