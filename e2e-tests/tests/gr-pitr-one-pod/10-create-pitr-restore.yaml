@@ -13,5 +13,13 @@ commands:
       cluster_name="gr-pitr-one-pod-restore"
       destination=$(kubectl -n "${NAMESPACE}" get ps-backup "${backup_name}" -o jsonpath='{.status.destination}')
       pitr_date=$(kubectl get configmap -n "${NAMESPACE}" pitr-date -o jsonpath='{.data.date}')
+      pitr_binlog_server="${TEMP_DIR}/pitr-binlog-server.yaml"
 
-      run_restore "$restore_name" "" "$cluster_name" "pitr" "$destination" "$pitr_date"
+      kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o yaml \
+          | yq eval '.spec.backup.pitr.binlogServer' - > "${pitr_binlog_server}"
+
+      kubectl patch ps "${cluster_name}" -n "${NAMESPACE}" --type=json -p='[{"op":"remove","path":"/spec/backup/pitr/binlogServer"}]'
+
+      sleep 60
+
+      run_restore "${restore_name}" "" "${cluster_name}" "pitr" "${destination}" "${pitr_date}" "${pitr_binlog_server}"
