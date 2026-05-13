@@ -1,31 +1,24 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 600
-collectors:
-  - type: pod
-    selector: "app.kubernetes.io/component=pitr"
-    tail: 1000
+timeout: 30
 ---
-apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQL
+kind: ConfigMap
+apiVersion: v1
 metadata:
-  name: gr-pitr-minio
-  finalizers:
-    - percona.com/delete-mysql-pods-in-order
-status:
-  router:
-    ready: 3
-    size: 3
-    state: ready
-  mysql:
-    ready: 3
-    size: 3
-    state: ready
-  state: ready
+  name: 13-read-data-0
+data:
+  max_id: "200501"
 ---
-kind: PerconaServerMySQLRestore
-apiVersion: ps.percona.com/v1
+kind: ConfigMap
+apiVersion: v1
 metadata:
-  name: gr-pitr-minio-restore-post-failover
-status:
-  state: Succeeded
+  name: 13-read-data-1
+data:
+  max_id: "200501"
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 13-read-data-2
+data:
+  max_id: "200501"
