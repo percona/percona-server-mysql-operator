@@ -91,57 +91,99 @@ The changes mainly touch the replica side. A source cluster is just a normal clu
 - `spec.mysql.expose` configured for external reach,
 - a `replication` key in its `spec.secretsName` Secret (the existing user-management code provisions the MySQL user).
 
-The replica cluster reconciler grows a new phase that activates when `spec.mysql.replicationChannels` is non-empty:
+The replica cluster reconciler grows a new phase that activates when `spec.mysql.replicationChannels` is non-empty. The flow is broken into four phases, ordered carefully: GR broadcasts the `SOURCE_CONNECTION_AUTO_FAILOVER` state and the source list to all group members when a primary enables them, so the channel and filter must already exist on every member before that broadcast fires.
 
 ```
-ps reconciler
-  ├─ phase: channel reconcile (on the cluster's current primary pod)
-  │    for each declared channel:
-  │      probe one reachable endpoint in `sources[]` using the
-  │      `replication` user; read @@global.group_replication_group_name
-  │      to determine the source's GR group UUID.
-  │      If empty / non-GR: set state = Error,
-  │        reason = UnsupportedSource, skip this channel.
-  │      Cache the discovered group UUID in
-  │        status.replicationChannels.channels[].sourceGroupName.
-  │      populate mysql.replication_asynchronous_connection_failover_managed
-  │        via asynchronous_connection_failover_add_managed(
-  │          channel, 'GroupReplication', <discovered group UUID>,
-  │          host, port, ...)
-  │        — one row per entry in `sources[]`, sharing the same group UUID
-  │          so MySQL treats them as redundant seeds for the same group.
+ps reconciler (for each declared channel)
+  ├─ phase A: per-member channel + filter setup (on EVERY GR member)
+  │    On each pod, idempotently:
   │      CHANGE REPLICATION SOURCE TO
+  │        SOURCE_HOST=<first reachable channel.sources entry>,
+  │        SOURCE_PORT=<...>,
   │        SOURCE_USER='replication',
   │        SOURCE_PASSWORD=<from replicationUserSecretRef>,
   │        SOURCE_AUTO_POSITION=1,
-  │        SOURCE_CONNECTION_AUTO_FAILOVER=1,
   │        SOURCE_SSL=<config.tls ? 1 : 0>,
   │        SOURCE_SSL_VERIFY_SERVER_CERT=<config.tlsSkipVerify ? 0 : 1>,
   │        SOURCE_SSL_CA=<from config.caSecret>,
   │        SOURCE_RETRY_COUNT=<config.sourceRetryCount>,
   │        SOURCE_CONNECT_RETRY=<config.sourceConnectRetry>
-  │        FOR CHANNEL '<name>'
-  │      START REPLICA FOR CHANNEL '<name>'
-  │    SET PERSIST super_read_only = ON
+  │        FOR CHANNEL '<channel.name>';
+  │      -- IMPORTANT: do not set SOURCE_CONNECTION_AUTO_FAILOVER here.
   │
-  ├─ phase: drift reconciliation (every loop)
-  │    diff declared channels against SHOW REPLICA STATUS
-  │    add/remove/update channels and failover rows as needed
-  │    if the cluster's primary moved: re-assert all channels on the new
-  │      primary; RESET REPLICA ALL on the previous primary
+  │      CHANGE REPLICATION FILTER
+  │        REPLICATE_WILD_IGNORE_TABLE = (
+  │          'mysql.%',
+  │          'mysql_innodb_cluster_metadata.%'
+  │        )
+  │        FOR CHANNEL '<channel.name>';
   │
-  └─ phase: teardown (when replicationChannels removed)
-       STOP REPLICA; RESET REPLICA ALL
-       SET PERSIST super_read_only = OFF
+  ├─ phase B: failover-managed table population (on the current primary)
+  │    Discover the source's GR group UUID:
+  │      probe one reachable endpoint in `channel.sources` using the
+  │      `replication` user; SELECT @@global.group_replication_group_name.
+  │      If empty/non-GR: set state = Error, reason = UnsupportedSource;
+  │        skip Phase C-D for this channel.
+  │
+  │    For each entry in `channel.sources`:
+  │      SELECT asynchronous_connection_failover_add_managed(
+  │        '<channel.name>', 'GroupReplication', <discovered group UUID>,
+  │        <host>, <port>, '', 80, 60
+  │      );
+  │    -- rows replicate to secondaries via GR; secondaries already
+  │    -- have the channel locally (from Phase A), so the row is consistent.
+  │
+  ├─ phase C: activate AUTO_FAILOVER (on the current primary)
+  │    CHANGE REPLICATION SOURCE TO
+  │      SOURCE_CONNECTION_AUTO_FAILOVER=1
+  │      FOR CHANNEL '<channel.name>';
+  │    -- this is the statement that triggers GR's broadcast of AUTO_FAILOVER
+  │    -- state and the source list to all GR members. Because Phase A is
+  │    -- already done on every member, the broadcast applies cleanly.
+  │
+  └─ phase D: start replication + fence writes (on the current primary)
+       START REPLICA FOR CHANNEL '<channel.name>';
+       SET GLOBAL super_read_only = ON;
+       -- Note: SET GLOBAL, not SET PERSIST. We do not want this baked
+       -- into mysqld-auto.cnf — only the current GR primary is fenced;
+       -- on primary failover, GR clears super_read_only on the new primary,
+       -- and the operator re-asserts it on the next reconcile.
+
+Drift reconciliation (every loop):
+  - Confirm channel + filter present on every member (re-apply Phase A on
+    anything that drifted, e.g., a pod with a freshly-restored datadir
+    that hasn't been touched yet).
+  - Re-assert SET GLOBAL super_read_only = ON on the current primary.
+  - Surface SHOW REPLICA STATUS into status.
+
+In-replica primary failover:
+  GR's mysql_start_failover_channels_if_primary member action starts the
+  channel on the newly-elected primary (documented). The demoted ex-primary
+  side is not explicitly documented; the operator defensively runs
+  STOP REPLICA FOR CHANNEL '<name>' on any non-primary member where it
+  observes the channel still running. The operator also re-asserts
+  SET GLOBAL super_read_only = ON on the current primary.
+
+Teardown (when replicationChannels is removed):
+  On every member:
+    STOP REPLICA FOR CHANNEL '<name>';
+    RESET REPLICA ALL FOR CHANNEL '<name>';   -- also clears the filter
+  On the current primary:
+    SELECT asynchronous_connection_failover_delete_managed(
+      '<name>', '<source group UUID from status>'
+    );
+    SET GLOBAL super_read_only = OFF;
 ```
 
 ### 3.3 Key Observations
 
-1. **The cross-site channel always runs on the replica cluster's current primary.** Other replica pods receive data via in-cluster replication. The operator's main correctness is in keeping the channel running on the current primary.
-2. **All cross-site state is per-cluster and recoverable from MySQL.** The operator can compute the state of replication just using `SHOW REPLICA STATUS` on every reconcile and rebuild its understanding.
+1. **The channel is configured on every GR member, but only runs on the current primary.** Phase A creates the channel config and the replication filter on every pod. GR's `mysql_start_failover_channels_if_primary` member action ensures the channel's IO/SQL threads run only on whichever pod is the GR primary at any moment. Other pods hold the channel in a stopped state, ready to take over.
+2. **All cross-site state is per-cluster and recoverable from MySQL.** Channel config, filters, and the managed-failover row all live in MySQL system tables that survive pod restarts and propagate to new members via GR clone-based recovery.
 3. **The source side has no cross-site-specific reconciler logic.** A source is a cluster with exposed pods and a `replication` user; nothing in the CR explicitly marks it as a source.
-4. **MySQL's native auto-failover replaces operator-side primary discovery.** The replica reconciler never polls source endpoints to find a writable primary; MySQL does that.
+4. **MySQL's native auto-failover replaces operator-side source primary discovery.** The replica reconciler never polls source endpoints to find a writable primary; `_add_managed()` plus MySQL's IO thread do that.
 5. **Bootstrap is user-driven.** The reconciler never invokes restore code paths. If the user mis-bootstraps the replica, MySQL itself rejects the IO thread on `START REPLICA` with a GTID-divergence error (typically MySQL error 1236); the operator surfaces that error verbatim. There is no operator-side pre-flight check.
+6. **GR's `mysql_start_failover_channels_if_primary` member action starts the channel on the newly-elected primary.** Per [MySQL 8.4: Asynchronous Connection Failover for Replicas](https://dev.mysql.com/doc/refman/8.4/en/replication-asynchronous-connection-failover-replica.html), *"the new primary starts replication on the same channel when it is elected."* The docs do not explicitly say whether the demoted ex-primary stops its channel automatically. It should, since otherwise two members would be IO-threading from the source simultaneously, but the operator should verify on each reconcile and run `STOP REPLICA FOR CHANNEL '<name>'` on any non-primary member found running the channel as a defensive measure. Separately, the operator re-asserts `SET GLOBAL super_read_only = ON` on the current primary, since GR clears `super_read_only` on the primary as part of single-primary-mode election ([GR Primary Elections](https://dev.mysql.com/doc/refman/8.4/en/group-replication-primary-elections.html)).
+7. **Scale-up relies on GR's CLONE-based distributed recovery.** A new member joining the replica cluster receives a copy of an existing member's datadir, which includes `mysql.slave_master_info` (channel config), `mysql.replication_applier_filters_configuration` (filter), and the `_add_managed()` row. No per-pod fanout from the operator is needed on scale-up. In order for this to work, any new node on the replica custer must join via CLONE.
 
 ---
 
@@ -165,10 +207,6 @@ spec:
           key: replication                  
         sources:
           - host: cluster1-mysql-0.example.com
-            port: 3306
-          - host: cluster1-mysql-1.example.com
-            port: 3306
-          - host: cluster1-mysql-2.example.com
             port: 3306
         config:
           sourceRetryCount: 3               # default 3.
@@ -259,9 +297,19 @@ Aggregated: `True` only if every channel is `Running`.
 
 ### 4.3 Internal Contracts
 
-- **Reuse of the existing `replication` system user.** The operator already provisions this user on every cluster as part of the standard system-users set. Its existing grants  cover both the IO thread (`REPLICATION SLAVE`, `REPLICATION CLIENT`) and the operator-side probe (`SELECT` on `*.`*, `SYSTEM_VARIABLES_ADMIN`).
-- **MySQL config preconditions for the cross-site path:** `gtid_mode = ON` and `enforce_gtid_consistency = ON` are already set by `build/ps-entrypoint.sh` for every operator-managed cluster, so the cross-site reconciler can rely on them. `server_id` is already derived from a cluster-hash prefix in the same entrypoint, so cross-cluster collisions are not a concern. GR's own protocol requirements (binary logging, replicated-write emission) are taken as given on `clusterType: group-replication` clusters; no additional assertion is made by the cross-site reconciler.
-- `mysql.replication_asynchronous_connection_failover_managed` is managed by the operator. Reconciler diffs declared sources against the table contents per channel and converges via `_add_managed` / `_delete_managed` UDFs. Each row uses the same discovered group UUID; multiple rows represent multiple seed endpoints into the same group. Users editing the table directly may have their edits reverted on the next reconcile.
+- **Reuse of the existing `replication` system user.** The operator already provisions this user on every cluster as part of the standard system-users set. Its existing grants cover both the IO thread (`REPLICATION SLAVE`, `REPLICATION CLIENT`) and the operator-side probe (`SELECT` on `*.`*, `SYSTEM_VARIABLES_ADMIN`).
+- **MySQL config preconditions for the cross-site path.** `gtid_mode = ON` and `enforce_gtid_consistency = ON` are already set by `build/ps-entrypoint.sh` for every operator-managed cluster. `server_id` is derived from a cluster-hash prefix in the same entrypoint, so cross-cluster collisions are not a concern. GR's own protocol requirements (binary logging, replicated-write emission) are taken as given on `clusterType: group-replication` clusters; no additional assertion is made by the cross-site reconciler.
+- **Per-channel replication filter managed by the operator.** Before activating `SOURCE_CONNECTION_AUTO_FAILOVER` on a channel, the operator runs:
+  ```sql
+  CHANGE REPLICATION FILTER
+    REPLICATE_WILD_IGNORE_TABLE = ('mysql.%', 'mysql_innodb_cluster_metadata.%')
+    FOR CHANNEL '<name>';
+  ```
+  on every GR member. This filter suppresses row events on (a) the MySQL system schema (`mysql.user` updates from mysqlsh recovery-account management, etc.) and (b) the InnoDB Cluster metadata schema (per-cluster topology state that doesn't apply across clusters). Without these filters, the cross-site channel hits applier errors during normal source-side mysqlsh activity (cluster bootstrap, member add/remove, primary switchover, recovery account password rotation). The filter is not user-configurable.  
+  **Trade-off:** the `mysql.%` portion of the filter also blocks legitimate replication of any user-issued changes to the `mysql` schema — including `CREATE USER`, `GRANT`, `mysql.user` updates for application users. Users who want to sync application user accounts between source and replica clusters must do so out of band.
+- **GR's** `mysql_start_failover_channels_if_primary` **member action starts the channel on the newly-elected primary.** Documented in [MySQL 8.4: Asynchronous Connection Failover for Replicas](https://dev.mysql.com/doc/refman/8.4/en/replication-asynchronous-connection-failover-replica.html): *"the new primary starts replication on the same channel when it is elected."* The docs do not explicitly cover the demoted ex-primary side; the operator therefore defensively runs `STOP REPLICA FOR CHANNEL '<name>'` on any non-primary member where it finds the channel running. Separately, the operator re-asserts `SET GLOBAL super_read_only = ON` on the current primary on every reconcile, because GR clears `super_read_only` on the elected primary as part of single-primary-mode election.
+- **Scale-up via CLONE-based recovery.** The operator must always invoke `dba.addInstance(..., {recoveryMethod: 'clone'})` for new members on the replica cluster. CLONE copies the donor's data, which includes `mysql.slave_master_info` (channel config), `mysql.replication_applier_filters_configuration` (filter), and `mysql.replication_asynchronous_connection_failover_managed` (managed-source rows). A new pod therefore comes up with everything in place; the operator does not run Phase A on it explicitly. This relies on CLONE staying the default recovery method for members on a replica cluster.
+- `**mysql.replication_asynchronous_connection_failover_managed` is managed by the operator.** Reconciler diffs declared sources against the table contents per channel and converges via `_add_managed` / `_delete_managed` UDFs. Each row uses the same discovered group UUID; multiple rows represent multiple seed endpoints into the same group. Users editing the table directly may have their edits reverted on the next reconcile.
 
 ### 4.4 User-Facing Behavior Changes
 
@@ -306,7 +354,7 @@ Aggregated: `True` only if every channel is `Running`.
 
 **Chosen approach:** `CHANGE REPLICATION SOURCE … SOURCE_CONNECTION_AUTO_FAILOVER = 1` plus the failover table. For GR sources, use `asynchronous_connection_failover_add_managed()` so MySQL tracks the source cluster's membership directly.
 
-**Why:** Source failover happens at MySQL's IO-thread level in milliseconds, not at operator-reconcile latency. No operator polling code, no `CHANGE REPLICATION SOURCE` re-issue on every in-source primary change.
+**Why:** Source failover happens at MySQL's IO-thread level, not at operator-reconcile latency. No operator polling code, no `CHANGE REPLICATION SOURCE` re-issue on every in-source primary change.
 
 **Alternatives considered:**
 
@@ -321,7 +369,7 @@ Aggregated: `True` only if every channel is `Running`.
 
 **Chosen approach:** Users list one or more source-cluster pod endpoints in `replicationChannels[].sources`. Each entry is passed to `asynchronous_connection_failover_add_managed()` as a seed for the source's GR group. MySQL only needs *one* of the seeds to be reachable to bootstrap discovery; after that, it tracks members and the current primary via the source's `performance_schema.replication_group_members`. No per-endpoint weight is exposed.
 
-**Why:** For a managed GR source, the failover UDF takes role-based weights (primary vs. secondary), not per-endpoint weights — so a `weight: N` field on each `sources[]` entry doesn't map cleanly to MySQL's model. Exposing it would either be silently ignored or require collapsing user intent into role weights in a way users wouldn't predict. Multiple endpoints are still useful — as seeds, they protect against a specific pod being unreachable at first connect. PXC operator's per-endpoint weights make sense because PXC is multi-writer Galera, where every node is a peer; that semantic doesn't transfer to GR single-primary.
+**Why:** For a managed GR source, the failover UDF takes role-based weights (primary vs. secondary), not per-endpoint weights — so a `weight: N` field on each `sources[]` entry doesn't map cleanly to MySQL's model. Exposing it would either be silently ignored or require collapsing user intent into role weights in a way users wouldn't predict. Multiple endpoints are still useful as seeds, they protect against a specific pod/network being unreachable at first connect. PXC operator's per-endpoint weights make sense because PXC is multi-writer Galera, where every node is a peer; that semantic doesn't transfer to GR single-primary.
 
 **Alternatives considered:**
 
@@ -335,15 +383,15 @@ Aggregated: `True` only if every channel is `Running`.
 
 **Chosen approach:** Promotion happens by removing `replicationChannels` from the replica CR. The operator runs `STOP REPLICA; RESET REPLICA ALL` and clears `super_read_only`.
 
-**Why:** Cross-region network blips are common. Automated failover risks split-brain. A declarative user edit is predictable, auditable, and reversible.
+**Why:** Automating this can be pretty complex for an initial implementation.
 
 **Alternatives considered:**
 
 
-| Alternative                                                             | Why Rejected                                                                                                               |
-| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Operator-orchestrated promotion API (`role: source` or `role: replica`) | Adds an imperative-feeling field on a declarative CRD. Same outcome as editing `replicationChannels` . Not enough benefit. |
-| Automatic failover on source-unreachable detection                      | Too dangerous across WAN. Out of scope.                                                                                    |
+| Alternative                                                             | Why Rejected                                                                                                            |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Operator-orchestrated promotion API (`role: source` or `role: replica`) | Adds an imperative-feeling field a declarative CRD. Same outcome as editing `replicationChannels` . Not enough benefit. |
+| Automatic failover on source-unreachable detection                      | Too dangerous Out of scope.                                                                                             |
 
 
 ### 5.6 User-driven bootstrap, not operator-mediated
@@ -366,6 +414,23 @@ A mis-bootstrapped replica is caught at runtime by MySQL itself: `START REPLICA`
 | Operator creates an internal `PerconaServerMySQLRestore` from a `bootstrap.backupSource` field | Embeds a second copy of restore lifecycle in a different controller. Adds CR fields specific to S3/storage to the cross-site spec block. Adds failure modes (BootstrapFailed) that obscure the cross-site reconciler's core job. |
 
 
+### 5.7 Two-step `CHANGE REPLICATION SOURCE TO` with channel-on-every-member
+
+**Chosen approach:** Configure the channel on every GR member of the replica cluster *without* `SOURCE_CONNECTION_AUTO_FAILOVER` first, then enable AUTO_FAILOVER in a second `CHANGE REPLICATION SOURCE TO` on the current primary only.
+
+**Why:** GR actively broadcasts the AUTO_FAILOVER state and the source list to all group members. When a primary enables `SOURCE_CONNECTION_AUTO_FAILOVER=1`, the broadcast tries to apply that setting to the named channel on every member. Members without the channel pre-configured fail this broadcast with MY-013786 ("Unable to set SOURCE_CONNECTION_AUTO_FAILOVER on a non-existent or misconfigured replication channel") and leave the GR group. The two-step pattern ensures every member has the channel locally before the broadcast fires.
+
+Documented by MySQL: ["Asynchronous Connection Failover for Replicas"](https://dev.mysql.com/doc/refman/8.4/en/replication-asynchronous-connection-failover-replica.html) — *"The replication channel and the replication user account and password for the channel must be set up on all the member servers in the replication group ... The SOURCE_CONNECTION_AUTO_FAILOVER setting for the channel is broadcast to group members from the primary when they join."*
+
+**Alternatives considered:**
+
+
+| Alternative                                                                                 | Why Rejected                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Single `CHANGE REPLICATION SOURCE TO ... SOURCE_CONNECTION_AUTO_FAILOVER=1` on primary only | Verified, and fails with MY-013786 on every replica-cluster secondary as soon as the broadcast fires. Channel configuration is not binlogged so it doesn't propagate via GR; only the broadcast does, which requires the local channel to exist on secondaries.                   |
+| Use `_add_source()` instead of `_add_managed()` and skip AUTO_FAILOVER on the primary       | Loses source-side GR membership tracking. Replica then has to be reconfigured by the operator each time the source cluster scales, and source-primary changes inside the source cluster become invisible to MySQL's IO thread, requiring operator-side polling or manual changes. |
+
+
 ### 5.8 No source-side CR fields
 
 **Chosen approach:** A source cluster has no cross-site-specific CR fields. It is a normal cluster with `spec.mysql.expose` configured and a `replication` key in its `spec.secretsName` Secret.
@@ -381,11 +446,35 @@ A mis-bootstrapped replica is caught at runtime by MySQL itself: `START REPLICA`
 | `replicas: [host:port, ...]` field on the source listing expected replicas | Requires cross-cluster knowledge on the source side     |
 
 
-### 5.9 No replication filters in CRD
+### 5.9 No user-configurable replication filters; operator-managed internal filters only
 
-**Chosen approach:** Multi-source replication works only with non-overlapping schemas across channels. We will document this - we do not expose `replicate-do-db`/`replicate-ignore-db` in the CRD.
+**Chosen approach:** The CRD exposes no fields for replication filters. The operator applies one fixed filter on every cross-site channel:
 
-**Why:** Out of scope, users with more advanced needs can apply filters via `spec.mysql.configuration` if absolutely required.
+```sql
+CHANGE REPLICATION FILTER
+  REPLICATE_WILD_IGNORE_TABLE = ('mysql.%', 'mysql_innodb_cluster_metadata.%')
+  FOR CHANNEL '<channel.name>';
+```
+
+**Why:** Testing showed that without this filter, the cross-site channel hits applier errors during normal source-side operation:
+
+- Row events on `mysql_innodb_cluster_metadata.`* (cluster topology metadata that mysqlsh maintains per-cluster) fail with `HA_ERR_KEY_NOT_FOUND` because the replica cluster's metadata tables describe its own members, not the source's.
+- Row events on `mysql.user` and adjacent system tables fail when mysqlsh's `dba` API operations issue user-management SQL against `mysql_innodb_cluster_<server_id>` recovery accounts that exist on the source but not the replica (different server_ids → different account names).
+
+The filter is operator-managed and not user-facing because it's a correctness requirement, not a preference — without it, the feature does not work between two PSMO GR clusters.
+
+**Trade-off, documented for users:** the `mysql.%` portion of the filter also suppresses legitimate replication of user-issued `CREATE USER` / `GRANT` / `mysql.user` changes for application accounts. Users wanting application user/grant state synced across clusters must do so out of band. This is the cost of cross-site replication between two mysqlsh-managed GR clusters; it is not a limitation we can paper over from the operator side.
+
+**Alternatives considered:**
+
+
+| Alternative                                                                                                                   | Why Rejected                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Expose filter rules as user-configurable CRD fields                                                                           | Adds CR surface for what is fundamentally an operator-correctness concern. Users could disable the filter and break replication. Internal management is safer and matches PXC operator's approach.                                                                                                                                                                                                                                                               |
+| Use `replica_skip_errors` to silently skip applier errors (1032, 1396, 1410)                                                  | Server-startup-only (requires restart) and blanket-skips error codes that might fire on legitimate user-data issues. The filter is narrower and per-channel.                                                                                                                                                                                                                                                                                                     |
+| Operator-managed shell-user mirroring (replicate source's `mysql_innodb_cluster_`* users to replica)                          | Solves only the user-management side. Doesn't help with `mysql_innodb_cluster_metadata.`* row events. Combined with the filter, would be redundant. Filter alone is simpler and sufficient.                                                                                                                                                                                                                                                                      |
+| Adopt MySQL InnoDB ClusterSet ([upstream MySQL feature](https://dev.mysql.com/doc/mysql-shell/8.4/en/innodb-clusterset.html)) | Less restrictive but more complex to integrate into the operator: replica clusters cannot be operator managed as it is today. They must be initialised via `ClusterSet.createReplicaCluster()` against a standalone instance, a different bootstrap path that doesn't go through normal `dba.createCluster()`, and distinct recovery/promotion logic wrapping `cs.setPrimaryCluster()` / `cs.forcePrimaryCluster()`. This potentially also requires its own CRD. |
+
 
 ---
 
@@ -509,30 +598,6 @@ spec:
             key: ca.crt
 ```
 
-### 7.5 Replica cluster — multi-source consolidation
-
-```yaml
-spec:
-  mysql:
-    replicationChannels:
-      - name: src_a
-        replicationUserSecretRef:
-          name: src-a-creds
-          key: password
-        sources:
-          - {host: cluster-a-mysql-0.example.com, port: 3306}
-          - {host: cluster-a-mysql-1.example.com, port: 3306}
-      - name: src_b
-        replicationUserSecretRef:
-          name: src-b-creds
-          key: password
-        sources:
-          - {host: cluster-b-mysql-0.example.com, port: 3306}
-          - {host: cluster-b-mysql-1.example.com, port: 3306}
-```
-
-Constraint: `src_a` and `src_b` must write to non-overlapping schemas (documented in 5.9). No filter is configured.
-
 ### 7.6 Promotion (replica → standalone)
 
 Remove `replicationChannels` (or set it to an empty list). The operator runs `STOP REPLICA; RESET REPLICA ALL` and clears `super_read_only`.
@@ -583,13 +648,16 @@ spec:
 
 **Scenario:** Replica cluster's primary changes.
 
-**Expected behavior:** Operator asserts every declared channel on the new primary and runs `RESET REPLICA ALL FOR CHANNEL` on the old primary. Once channels are running on the new primary, condition flips back to `Running`. The persisted channel config on the new primary lets MySQL resume from its saved GTID; no full re-bootstrap.
+**Expected behavior:** GR's `mysql_start_failover_channels_if_primary` member action [automatically starts the channel on the newly-elected primary](https://dev.mysql.com/doc/refman/8.4/en/replication-asynchronous-connection-failover-replica.html). The docs don't explicitly cover what happens on the demoted ex-primary, so the operator defensively runs `STOP REPLICA FOR CHANNEL '<name>'` on any non-primary member found with the channel running. The operator re-asserts `SET GLOBAL super_read_only = ON` on the current primary (since GR clears it on promotion). Channel state survives the role change because Phase A previously configured the channel on every member; `_add_managed` rows replicated to every member via GR DML; the filter is present on every member.
 
 ### 8.7 Channel add / remove / modify
 
 **Scenario:** User edits `replicationChannels[]`.
 
-**Expected behavior:** Reconciler diffs declared vs. currently configured channels on the primary. Adds: `CHANGE REPLICATION SOURCE TO … FOR CHANNEL '<new>'; START REPLICA FOR CHANNEL '<new>'`. Removes: `STOP REPLICA; RESET REPLICA ALL FOR CHANNEL '<old>'`. Renames are detected as remove-plus-add; the new channel restarts from the cluster's current GTID (works if source still has the binlogs, fails with divergence otherwise).
+**Expected behavior:** Reconciler diffs declared vs. currently configured channels.
+
+- *Add:* run full Phase A through Phase D for the new channel: per-member CHANGE REPLICATION SOURCE TO + replication filter, then `_add_managed()` + AUTO_FAILOVER toggle + START REPLICA on the current primary.
+- *Remove:* on every member, `STOP REPLICA FOR CHANNEL '<old>'; RESET REPLICA ALL FOR CHANNEL '<old>';` (this also clears the channel's filter). On the current primary, `asynchronous_connection_failover_delete_managed('<old>', '<group UUID>')`.
 
 ### 8.8 Source list updates within a channel
 
@@ -601,16 +669,7 @@ spec:
 
 **Scenario:** Source-side operator rotates the `replication` user's password.
 
-**Expected behavior:** User updates the replica's Secret to match. Operator detects re-issues `CHANGE REPLICATION SOURCE TO … SOURCE_PASSWORD=<new>; START REPLICA`. If the user forgets to sync, 8.2 fires.
-
-### 8.10 Prevented configurations (validation-level)
-
-The following are rejected at admission, not handled at runtime:
-
-- Duplicate, empty, or invalid channel names.
-- Empty `replicationChannels[].sources`.
-- `config.tls: false` without `unsafeFlags.crossSiteReplicationTLS: true`.
-- `replicationChannels` non-empty on a cluster whose `spec.mysql.clusterType` is not `group-replication`.
+**Expected behavior:** User updates the replica's Secret to match. Operator detects, re-issues `CHANGE REPLICATION SOURCE TO … SOURCE_PASSWORD=<new>; START REPLICA`.
 
 ---
 
@@ -642,16 +701,13 @@ Changes are additive:
 ### 10.1 E2E test scenarios
 
 
-| #   | Scenario                                      | Cluster types | What it validates                                                                                                                                                        |
-| --- | --------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | Happy-path replication after manual bootstrap | GR            | Test bootstraps the replica via Backup+Restore, then sets `replicationChannels`. Channels reach `Running`; writes on source land on replica; `super_read_only=ON`.       |
-| 2   | Source primary failover                       | GR            | Force GR primary change on source. MySQL native auto-failover follows; `currentSource` status updates.                                                                   |
-| 3   | Replica primary failover                      | GR            | Force GR primary change on replica. Channels move to new primary; old primary loses channels via `RESET REPLICA ALL`.                                                    |
-| 4   | Promotion                                     | GR            | Remove `replicationChannels`; assert teardown, `super_read_only=OFF`, writes succeed.                                                                                    |
-| 5   | TLS-encrypted replication                     | GR            | Default config (TLS on). Verify `Replica_SSL_Allowed = Yes`.                                                                                                             |
-| 6  | Adding a channel mid-flight                   | GR            | Patch CR to add a second channel; existing channel undisturbed.                                                                                                          |
-| 7  | Removing a channel mid-flight                 | GR            | Patch CR to drop a channel; remaining channels untouched.                                                                                                                |
-| 8  | Secret rotation                               | GR            | Update `replicationUserSecretRef` Secret value. Operator re-applies `CHANGE REPLICATION SOURCE`.                                                                         |
+| #   | Scenario                                      | Cluster types | What it validates                                                                                                                                                  |
+| --- | --------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Happy-path replication after manual bootstrap | GR            | Test bootstraps the replica via Backup+Restore, then sets `replicationChannels`. Channels reach `Running`; writes on source land on replica; `super_read_only=ON`. |
+| 2   | Source primary failover                       | GR            | Force GR primary change on source. MySQL native auto-failover follows; `currentSource` status updates.                                                             |
+| 3   | Replica primary failover                      | GR            | Force GR primary change on replica. Channels move to new primary; old primary loses channels via `RESET REPLICA ALL`.                                              |
+| 4   | Promotion                                     | GR            | Remove `replicationChannels`; assert teardown, `super_read_only=OFF`, writes succeed.                                                                              |
+| 5   | Secret rotation                               | GR            | Update `replicationUserSecretRef` Secret value. Operator re-applies `CHANGE REPLICATION SOURCE`.                                                                   |
 
 
 ---
