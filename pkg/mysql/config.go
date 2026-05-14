@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
 type Configurable apiv1.PerconaServerMySQL
@@ -34,7 +35,11 @@ func (c *Configurable) GetResources() corev1.ResourceRequirements {
 }
 
 func (c *Configurable) ExecuteConfigurationTemplate(input string, memory *resource.Quantity) (string, error) {
-	tmpl, err := pongo2.FromString(input)
+	set, err := util.SandboxedTemplateSet()
+	if err != nil {
+		return "", errors.Wrap(err, "create sandboxed template set")
+	}
+	tmpl, err := set.FromString(input)
 	if err != nil {
 		return "", errors.Wrap(err, "parse template")
 	}
