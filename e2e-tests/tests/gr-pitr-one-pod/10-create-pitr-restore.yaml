@@ -18,7 +18,7 @@ commands:
       kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o yaml \
           | yq eval '.spec.backup.pitr.binlogServer' - > "${pitr_binlog_server}"
 
-      kubectl patch ps "${cluster_name}" -n "${NAMESPACE}" --type=json -p='[{"op":"remove","path":"/spec/backup/pitr/binlogServer"}]'
+      kubectl patch ps "${cluster_name}" -n "${NAMESPACE}" --type=merge -p='{"spec":{"backup":{"pitr":{"enabled":false}}}}'
 
       sleep 60
 
