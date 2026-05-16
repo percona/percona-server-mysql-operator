@@ -63,8 +63,9 @@ func lookup(ctx context.Context, svcName string) (sets.Set[string], error) {
 
 func shellOut(ctx context.Context, sendStdin, script string) {
 	log.Printf("execing: %v with stdin: %v", script, sendStdin)
-	// TODO: Switch to sending stdin from go
-	out, err := exec.CommandContext(ctx, "bash", "-c", fmt.Sprintf("echo -e '%v' | %v", sendStdin, script)).CombinedOutput()
+	cmd := exec.CommandContext(ctx, script)
+	cmd.Stdin = strings.NewReader(sendStdin)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Fatalf("Failed to execute %v: %v, err: %v", script, string(out), err)
 	}
