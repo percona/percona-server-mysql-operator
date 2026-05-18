@@ -401,7 +401,7 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 	if cr.RouterEnabled() {
 		components = append(components, component{
 			name:      router.AppName,
-			size:      int(cr.Spec.Proxy.HAProxy.Size),
+			size:      int(cr.Spec.Proxy.Router.Size),
 			credsPath: router.CredsMountPath,
 		})
 	}
