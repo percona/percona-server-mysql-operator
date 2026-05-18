@@ -31,7 +31,7 @@ func startServer() *http.Server {
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(mysql.SidecarHTTPPort),
 		Handler:           mux,
-		ReadHeaderTimeout: 30 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {
