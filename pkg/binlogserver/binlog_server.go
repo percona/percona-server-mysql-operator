@@ -62,7 +62,14 @@ func ConfigSecretName(cr *apiv1.PerconaServerMySQL) string {
 }
 
 func RestoreConfigSecretName(cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) string {
-	return cr.Name + "-" + AppName + "-config-restore-" + restore.Name
+	name := cr.Name + "-" + AppName + "-config-restore-" + restore.Name
+	if len(name) <= validation.DNS1123SubdomainMaxLength {
+		return name
+	}
+	hash := "-" + fmt.Sprintf("%x", md5.Sum([]byte(name)))[:8]
+	suffix := "-r-" + hash
+	prefix := strings.TrimRight(name[:validation.DNS1123SubdomainMaxLength-len(suffix)], "-")
+	return prefix + suffix
 }
 
 func MatchLabels(cr *apiv1.PerconaServerMySQL) map[string]string {

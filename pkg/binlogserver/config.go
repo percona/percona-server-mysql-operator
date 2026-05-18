@@ -116,6 +116,11 @@ func GetConfiguration(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 	if err != nil {
 		return Configuration{}, errors.Wrap(err, "get replication password")
 	}
+	verifyChecksum := true
+	if spec.VerifyChecksum != nil {
+		verifyChecksum = *spec.VerifyChecksum
+	}
+
 	return Configuration{
 		Logger: Logger{
 			Level: spec.LogLevel,
@@ -135,7 +140,7 @@ func GetConfiguration(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 			Mode:           ReplicationModeGTID,
 			ServerID:       spec.ServerID,
 			IdleTime:       spec.IdleTime,
-			VerifyChecksum: true,
+			VerifyChecksum: verifyChecksum,
 			Rewrite: Rewrite{
 				BaseFileName: "binlog",
 				FileSize:     spec.RewriteFileSize,
