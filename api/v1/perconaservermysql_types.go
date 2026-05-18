@@ -147,6 +147,7 @@ type MySQLSpec struct {
 	// +kubebuilder:validation:Enum=group-replication;async
 	// +kubebuilder:default=group-replication
 	ClusterType   ClusterType            `json:"clusterType,omitempty"`
+	Bootstrap     BootstrapConfig        `json:"bootstrap,omitempty"`
 	ExposePrimary ServiceExposeTogglable `json:"exposePrimary,omitempty"`
 	Expose        ServiceExposeTogglable `json:"expose,omitempty"`
 	AutoRecovery  bool                   `json:"autoRecovery,omitempty"`
@@ -160,6 +161,19 @@ type MySQLSpec struct {
 	VolumeSpec *VolumeSpec `json:"volumeSpec,omitempty"`
 
 	PodSpec `json:",inline"`
+}
+
+type BootstrapMode string
+
+const (
+	BootstrapModeAuto   BootstrapMode = "auto"
+	BootstrapModeManual BootstrapMode = "manual"
+)
+
+type BootstrapConfig struct {
+	// +kubebuilder:validation:Enum=auto;manual
+	// +kubebuilder:default=auto
+	Mode BootstrapMode `json:"mode,omitempty"`
 }
 
 // Checks if the MySQL cluster type is asynchronous.

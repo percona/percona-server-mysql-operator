@@ -229,6 +229,10 @@ load_group_replication_plugin() {
 	sed -i "/\[mysqld\]/a plugin_load_add=group_replication.so" $CFG
 	sed -i "/\[mysqld\]/a group_replication_exit_state_action=ABORT_SERVER" $CFG
 	sed -i "/\[mysqld\]/a group_replication_unreachable_majority_timeout=5" $CFG
+
+	if [[ "${BOOTSTRAP_MODE}" == "manual" ]]; then
+		sed -i "/\[mysqld\]/a group_replication_start_on_boot=OFF" $CFG
+	fi
 }
 
 ensure_read_only() {

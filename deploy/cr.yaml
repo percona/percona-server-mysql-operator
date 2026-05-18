@@ -5,7 +5,7 @@ metadata:
     - percona.com/delete-mysql-pods-in-order
 #    - percona.com/delete-ssl
 #    - percona.com/delete-mysql-pvc
-  name: ps-cluster1
+  name: source-cluster
 spec:
 #  metadata:
 #    annotations:
@@ -13,17 +13,17 @@ spec:
 #      service.beta.kubernetes.io/aws-load-balancer-type: nlb
 #    labels:
 #      rack: rack-22
-#  unsafeFlags:
+  unsafeFlags:
 #    backupNonReadyCluster: false
 #    mysqlSize: false
 #    orchestrator: false
 #    orchestratorSize: false
 #    proxy: false
-#    proxySize: false
+    proxySize: true
 #  pause: false
   crVersion: 1.2.0
 #  enableVolumeExpansion: false
-  secretsName: ps-cluster1-secrets
+  secretsName: cluster-secrets
   sslSecretName: ps-cluster1-ssl
   updateStrategy: SmartUpdate
   upgradeOptions:
@@ -244,6 +244,8 @@ spec:
 #          resources:
 #            requests:
 #              storage: 1Gi
+    bootstrap:
+      mode: auto
   proxy:
     haproxy:
       enabled: true
@@ -258,7 +260,7 @@ spec:
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
 #        type: ClusterIP
-      size: 3
+      size: 1
       image: perconalab/percona-server-mysql-operator:main-haproxy
       imagePullPolicy: Always
 #      imagePullSecrets:

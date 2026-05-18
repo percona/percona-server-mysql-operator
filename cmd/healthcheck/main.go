@@ -227,6 +227,11 @@ func checkLivenessGR(ctx context.Context) error {
 	}
 	defer db.Close()
 
+	if os.Getenv("BOOTSTRAP_MODE") == string(apiv1.BootstrapModeManual) {
+		// TODO: proceed only if GR is configured
+		return nil
+	}
+
 	in, err := db.CheckIfInPrimaryPartition(ctx)
 	if err != nil {
 		return errors.Wrap(err, "check if member in primary partition")

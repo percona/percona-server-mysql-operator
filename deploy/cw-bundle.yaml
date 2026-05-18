@@ -5621,6 +5621,15 @@ spec:
                     type: object
                   autoRecovery:
                     type: boolean
+                  bootstrap:
+                    properties:
+                      mode:
+                        default: auto
+                        enum:
+                        - auto
+                        - manual
+                        type: string
+                    type: object
                   clusterType:
                     default: group-replication
                     enum:
@@ -13227,7 +13236,7 @@ spec:
           value: ""
         - name: DISABLE_TELEMETRY
           value: "false"
-        image: perconalab/percona-server-mysql-operator:main
+        image: perconalab/percona-xtradb-cluster-operator:K8SPS-508
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
