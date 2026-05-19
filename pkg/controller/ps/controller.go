@@ -1620,7 +1620,7 @@ func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context
 
 	orcPod, err := getReadyOrcPod(ctx, r.Client, cr)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
