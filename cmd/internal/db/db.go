@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -129,14 +130,23 @@ func (d *DB) StartReplication(ctx context.Context, host, replicaPass string, por
 	return errors.Wrap(err, "start replication")
 }
 
-func (d *DB) StopReplication(ctx context.Context) error {
-	_, err := d.db.ExecContext(ctx, "STOP REPLICA")
+func (d *DB) StopReplication(ctx context.Context, channel string) error {
+	_, err := d.db.ExecContext(ctx, "STOP REPLICA"+forChannelClause(channel))
 	return errors.Wrap(err, "stop replication")
 }
 
-func (d *DB) ResetReplication(ctx context.Context) error {
-	_, err := d.db.ExecContext(ctx, "RESET REPLICA ALL")
+func (d *DB) ResetReplication(ctx context.Context, channel string) error {
+	_, err := d.db.ExecContext(ctx, "RESET REPLICA ALL"+forChannelClause(channel))
 	return errors.Wrap(err, "reset replication")
+}
+
+// forChannelClause returns " FOR CHANNEL '<name>'" for a non-empty channel,
+// or "" so the statement targets the default channel.
+func forChannelClause(channel string) string {
+	if channel == defaultChannelName {
+		return ""
+	}
+	return fmt.Sprintf(" FOR CHANNEL '%s'", channel)
 }
 
 func (d *DB) ReplicationStatus(ctx context.Context) (db.ReplicationStatus, string, error) {
@@ -399,4 +409,85 @@ func (d *DB) GetGTIDExecuted(ctx context.Context) (string, error) {
 	var gtid string
 	err := d.db.QueryRowContext(ctx, "SELECT @@GTID_EXECUTED").Scan(&gtid)
 	return gtid, errors.Wrap(err, "get GTID_EXECUTED")
+}
+
+func (d *DB) ResetBinaryLogAndGTIDs(ctx context.Context) error {
+	_, err := d.db.ExecContext(ctx, "RESET BINARY LOGS AND GTIDS")
+	return errors.Wrap(err, "reset binary logs and gtids")
+}
+
+func (d *DB) ChangeReplicationSourceRelay(ctx context.Context, relayLogFile string, relayLogPos int, channel string) error {
+	_, err := d.db.ExecContext(ctx, fmt.Sprintf(
+		"CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE='%s', RELAY_LOG_POS=%d, SOURCE_HOST='dummy'%s",
+		relayLogFile, relayLogPos, forChannelClause(channel)))
+	return errors.Wrap(err, "change replication source to relay log")
+}
+
+// ChangeReplicationFilterIgnoreDB sets REPLICATE_IGNORE_DB on the given
+// channel so the SQL thread skips events whose default database is in dbs.
+// Database names are emitted unquoted as required by CHANGE REPLICATION FILTER.
+func (d *DB) ChangeReplicationFilterIgnoreDB(ctx context.Context, dbs []string, channel string) error {
+	if len(dbs) == 0 {
+		return errors.New("no databases provided")
+	}
+	_, err := d.db.ExecContext(ctx, fmt.Sprintf(
+		"CHANGE REPLICATION FILTER REPLICATE_IGNORE_DB = (%s)%s",
+		strings.Join(dbs, ", "), forChannelClause(channel)))
+	return errors.Wrap(err, "change replication filter")
+}
+
+func (d *DB) StartReplicaUntilGTID(ctx context.Context, gtid string, channel string) error {
+	_, err := d.db.ExecContext(ctx, fmt.Sprintf(
+		"START REPLICA SQL_THREAD UNTIL SQL_AFTER_GTIDS='%s'%s", gtid, forChannelClause(channel)))
+	return errors.Wrap(err, "start replica until GTID")
+}
+
+func (d *DB) SetGTIDNextAutomatic(ctx context.Context) error {
+	_, err := d.db.ExecContext(ctx, "SET GTID_NEXT='AUTOMATIC'")
+	return errors.Wrap(err, "set GTID_NEXT to AUTOMATIC")
+}
+
+func (d *DB) WaitReplicaSQLThreadStop(ctx context.Context, pollInterval time.Duration, channel string) error {
+	for {
+		var serviceState string
+		err := d.db.QueryRowContext(ctx,
+			"SELECT SERVICE_STATE FROM replication_applier_status WHERE CHANNEL_NAME=?", channel).Scan(&serviceState)
+		if err != nil {
+			return errors.Wrap(err, "query replication applier status")
+		}
+
+		if serviceState == "OFF" {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(pollInterval):
+		}
+	}
+
+	rows, err := d.db.QueryContext(ctx,
+		"SELECT LAST_ERROR_NUMBER, LAST_ERROR_MESSAGE FROM replication_applier_status_by_worker WHERE CHANNEL_NAME=?", channel)
+	if err != nil {
+		return errors.Wrap(err, "query replication applier worker status")
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			logf.FromContext(ctx).Error(err, "close rows")
+		}
+	}()
+
+	for rows.Next() {
+		var errNum int
+		var errMsg string
+		if err := rows.Scan(&errNum, &errMsg); err != nil {
+			return errors.Wrap(err, "scan worker status")
+		}
+		if errNum != 0 {
+			return errors.Errorf("replication worker error %d: %s", errNum, errMsg)
+		}
+	}
+
+	return rows.Err()
 }
