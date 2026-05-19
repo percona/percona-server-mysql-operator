@@ -25,6 +25,10 @@ spec:
           name: tls
         - mountPath: /etc/mysql/config
           name: config
+        - mountPath: /etc/my.cnf.d
+          name: node-cnf
+        - mountPath: /etc/mysql/conf.d
+          name: node-cnf-conf-d
         - mountPath: /etc/mysql/vault-keyring-secret
           name: vault-keyring-secret
       - name: xtrabackup
@@ -86,6 +90,10 @@ spec:
               optional: true
       - emptyDir: {}
         name: backup-logs
+      - emptyDir: {}
+        name: node-cnf
+      - emptyDir: {}
+        name: node-cnf-conf-d
       - name: vault-keyring-secret
         secret:
           defaultMode: 420

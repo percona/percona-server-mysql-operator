@@ -586,6 +586,170 @@ func TestRestoreJob(t *testing.T) {
 				assert.Len(t, job.Spec.Template.Spec.InitContainers, 1)
 			},
 		},
+		"pitr restore container uses mysql image by default": {
+			cluster: &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					SecretsName:   "secrets",
+					SSLSecretName: "ssl",
+					MySQL: apiv1.MySQLSpec{
+						PodSpec: apiv1.PodSpec{
+							ContainerSpec: apiv1.ContainerSpec{
+								Image:           "mysql:8.4",
+								ImagePullPolicy: corev1.PullAlways,
+							},
+						},
+					},
+					Backup: &apiv1.BackupSpec{
+						PiTR: apiv1.PiTRSpec{
+							BinlogServer: &apiv1.BinlogServerSpec{},
+						},
+					},
+				},
+			},
+			restore: &apiv1.PerconaServerMySQLRestore{
+				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+			},
+			storage:   &apiv1.BackupStorageSpec{},
+			initImage: "init:latest",
+			verify: func(t *testing.T, job *batchv1.Job) {
+				c := job.Spec.Template.Spec.Containers[0]
+				assert.Equal(t, "mysql:8.4", c.Image)
+				assert.Equal(t, corev1.PullAlways, c.ImagePullPolicy)
+			},
+		},
+		"pitr restore container uses spec.backup.pitr.image when set": {
+			cluster: &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					SecretsName:   "secrets",
+					SSLSecretName: "ssl",
+					MySQL: apiv1.MySQLSpec{
+						PodSpec: apiv1.PodSpec{
+							ContainerSpec: apiv1.ContainerSpec{
+								Image:           "mysql:8.4",
+								ImagePullPolicy: corev1.PullNever,
+							},
+						},
+					},
+					Backup: &apiv1.BackupSpec{
+						Image:           "backup:tool",
+						ImagePullPolicy: corev1.PullIfNotPresent,
+						PiTR: apiv1.PiTRSpec{
+							Image:        "pitr-restore:custom",
+							BinlogServer: &apiv1.BinlogServerSpec{},
+						},
+					},
+				},
+			},
+			restore: &apiv1.PerconaServerMySQLRestore{
+				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+			},
+			storage:   &apiv1.BackupStorageSpec{},
+			initImage: "init:latest",
+			verify: func(t *testing.T, job *batchv1.Job) {
+				c := job.Spec.Template.Spec.Containers[0]
+				assert.Equal(t, "pitr-restore:custom", c.Image)
+				assert.Equal(t, corev1.PullIfNotPresent, c.ImagePullPolicy)
+			},
+		},
+		"pitr restore image falls back to mysql pull policy when backup policy unset": {
+			cluster: &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					SecretsName:   "secrets",
+					SSLSecretName: "ssl",
+					MySQL: apiv1.MySQLSpec{
+						PodSpec: apiv1.PodSpec{
+							ContainerSpec: apiv1.ContainerSpec{
+								Image:           "mysql:8.4",
+								ImagePullPolicy: corev1.PullNever,
+							},
+						},
+					},
+					Backup: &apiv1.BackupSpec{
+						PiTR: apiv1.PiTRSpec{
+							Image:        "pitr-restore:only-image",
+							BinlogServer: &apiv1.BinlogServerSpec{},
+						},
+					},
+				},
+			},
+			restore: &apiv1.PerconaServerMySQLRestore{
+				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+			},
+			storage:   &apiv1.BackupStorageSpec{},
+			initImage: "init:latest",
+			verify: func(t *testing.T, job *batchv1.Job) {
+				c := job.Spec.Template.Spec.Containers[0]
+				assert.Equal(t, "pitr-restore:only-image", c.Image)
+				assert.Equal(t, corev1.PullNever, c.ImagePullPolicy)
+			},
+		},
+		"container security context from mysql": {
+			cluster: &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					SecretsName:   "secrets",
+					SSLSecretName: "ssl",
+					MySQL: apiv1.MySQLSpec{
+						PodSpec: apiv1.PodSpec{
+							ContainerSpec: apiv1.ContainerSpec{
+								ContainerSecurityContext: &corev1.SecurityContext{RunAsUser: ptr.To(int64(3003))},
+							},
+						},
+					},
+					Backup: &apiv1.BackupSpec{
+						PiTR: apiv1.PiTRSpec{
+							BinlogServer: &apiv1.BinlogServerSpec{},
+						},
+					},
+				},
+			},
+			restore: &apiv1.PerconaServerMySQLRestore{
+				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+			},
+			storage:   &apiv1.BackupStorageSpec{},
+			initImage: "init:latest",
+			verify: func(t *testing.T, job *batchv1.Job) {
+				want := &corev1.SecurityContext{RunAsUser: ptr.To(int64(3003))}
+				assert.Equal(t, want, job.Spec.Template.Spec.InitContainers[0].SecurityContext)
+				assert.Equal(t, want, job.Spec.Template.Spec.Containers[0].SecurityContext)
+			},
+		},
+		"storage container security context overrides mysql": {
+			cluster: &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					SecretsName:   "secrets",
+					SSLSecretName: "ssl",
+					MySQL: apiv1.MySQLSpec{
+						PodSpec: apiv1.PodSpec{
+							ContainerSpec: apiv1.ContainerSpec{
+								ContainerSecurityContext: &corev1.SecurityContext{RunAsUser: ptr.To(int64(3003))},
+							},
+						},
+					},
+					Backup: &apiv1.BackupSpec{
+						PiTR: apiv1.PiTRSpec{
+							BinlogServer: &apiv1.BinlogServerSpec{},
+						},
+					},
+				},
+			},
+			restore: &apiv1.PerconaServerMySQLRestore{
+				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+			},
+			storage: &apiv1.BackupStorageSpec{
+				ContainerSecurityContext: &corev1.SecurityContext{RunAsUser: ptr.To(int64(4004))},
+			},
+			initImage: "init:latest",
+			verify: func(t *testing.T, job *batchv1.Job) {
+				want := &corev1.SecurityContext{RunAsUser: ptr.To(int64(4004))}
+				assert.Equal(t, want, job.Spec.Template.Spec.InitContainers[0].SecurityContext)
+				assert.Equal(t, want, job.Spec.Template.Spec.Containers[0].SecurityContext)
+			},
+		},
 	}
 
 	for name, tt := range tests {

@@ -260,6 +260,7 @@ void runTest(Integer TEST_ID) {
                     export KUBECONFIG=/tmp/$CLUSTER_NAME-$clusterSuffix
                     export PATH="\${KREW_ROOT:-\$HOME/.krew}/bin:\$PATH"
                     export MYSQL_VERSION="$mysqlVer"
+                    export  MYSQL_UPSTREAM="true"
                     set -o pipefail
                     if [ -f ./e2e-tests/kuttl.yaml ]; then
                         kubectl kuttl test --config ./e2e-tests/kuttl.yaml --test "^${testName}\$" |& tee e2e-tests/logs/${testNameWithMysqlVersion}.log

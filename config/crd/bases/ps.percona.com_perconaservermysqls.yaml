@@ -1538,6 +1538,8 @@ spec:
                           rule: '!has(self.size) || self.size <= 1'
                       enabled:
                         type: boolean
+                      image:
+                        type: string
                     type: object
                     x-kubernetes-validations:
                     - message: binlogServer is required when pitr is enabled

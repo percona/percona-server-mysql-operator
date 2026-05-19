@@ -123,6 +123,7 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 	spec.Enabled = true
 	spec.PiTR = apiv1.PiTRSpec{
 		Enabled: false,
+		Image:   ImageMySQL,
 		BinlogServer: &apiv1.BinlogServerSpec{
 			Storage: apiv1.BinlogServerStorageSpec{
 				S3: &apiv1.BackupStorageS3Spec{

@@ -72,6 +72,11 @@ spec:
           value: /var/lib/mysql/notify.sock
         - name: MYSQL_STATE_FILE
           value: /var/lib/mysql/mysql.state
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
         - name: KEYRING_VAULT_PATH
           value: /etc/mysql/vault-keyring-secret/keyring_vault.cnf
         - name: BACKUPS_ENABLED
@@ -133,6 +138,10 @@ spec:
           name: tls
         - mountPath: /etc/mysql/config
           name: config
+        - mountPath: /etc/my.cnf.d
+          name: node-cnf
+        - mountPath: /etc/mysql/conf.d
+          name: node-cnf-conf-d
         - mountPath: /etc/mysql/vault-keyring-secret
           name: vault-keyring-secret
       - command:
@@ -187,9 +196,6 @@ spec:
           name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext:
-        supplementalGroups:
-        - 1001
       terminationGracePeriodSeconds: 30
       volumes:
       - emptyDir: {}
@@ -228,6 +234,10 @@ spec:
               optional: true
       - emptyDir: {}
         name: backup-logs
+      - emptyDir: {}
+        name: node-cnf
+      - emptyDir: {}
+        name: node-cnf-conf-d
       - name: vault-keyring-secret
         secret:
           defaultMode: 420
@@ -395,9 +405,6 @@ spec:
           name: bin
       restartPolicy: Always
       schedulerName: default-scheduler
-      securityContext:
-        supplementalGroups:
-        - 1001
       serviceAccount: percona-server-mysql-operator-orchestrator
       serviceAccountName: percona-server-mysql-operator-orchestrator
       terminationGracePeriodSeconds: 30

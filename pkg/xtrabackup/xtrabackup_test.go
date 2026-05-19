@@ -581,6 +581,25 @@ func TestRestoreJob(t *testing.T) {
 		}, getEnv())
 	})
 
+	t.Run("container security context from mysql with storage override", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		r := backup.DeepCopy()
+		storage := cluster.Spec.Backup.Storages[storageName]
+
+		mysqlSec := &corev1.SecurityContext{RunAsUser: ptr.To(int64(1001))}
+		cluster.Spec.MySQL.ContainerSecurityContext = mysqlSec
+
+		j := RestoreJob(cluster, destination, r, storage, initImage, "pvc-name")
+		assert.Equal(t, mysqlSec, j.Spec.Template.Spec.InitContainers[0].SecurityContext)
+		assert.Equal(t, mysqlSec, j.Spec.Template.Spec.Containers[0].SecurityContext)
+
+		storageSec := &corev1.SecurityContext{RunAsUser: ptr.To(int64(2002))}
+		storage.ContainerSecurityContext = storageSec
+		j = RestoreJob(cluster, destination, r, storage, initImage, "pvc-name")
+		assert.Equal(t, storageSec, j.Spec.Template.Spec.InitContainers[0].SecurityContext)
+		assert.Equal(t, storageSec, j.Spec.Template.Spec.Containers[0].SecurityContext)
+	})
+
 }
 
 func TestGetDestination(t *testing.T) {

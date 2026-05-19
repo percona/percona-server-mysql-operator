@@ -155,7 +155,7 @@ func Job(
 							initImage,
 							cluster.Spec.Backup.InitContainer,
 							cluster.Spec.Backup.ImagePullPolicy,
-							storage.ContainerSecurityContext,
+							k8s.EffectiveBackupStorageContainerSecurityContext(cluster, storage),
 							cluster.Spec.Backup.Resources,
 							nil,
 						),
@@ -164,7 +164,7 @@ func Job(
 						xbContainer,
 					},
 					ImagePullSecrets:          cluster.Spec.Backup.ImagePullSecrets,
-					SecurityContext:           storage.PodSecurityContext,
+					SecurityContext:           k8s.EffectiveBackupStoragePodSecurityContext(cluster, storage),
 					Affinity:                  storage.Affinity,
 					TopologySpreadConstraints: storage.TopologySpreadConstraints,
 					Tolerations:               storage.Tolerations,
@@ -261,7 +261,7 @@ func xtrabackupContainer(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaSer
 		Command:                  []string{"/opt/percona/run-backup.sh"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		SecurityContext:          storage.ContainerSecurityContext,
+		SecurityContext:          k8s.EffectiveBackupStorageContainerSecurityContext(cluster, storage),
 		Resources:                storage.Resources,
 	}, nil
 }
@@ -360,7 +360,7 @@ func (conf *BackupConfig) XbcloudGetArgs(files ...string) []string {
 	return args
 }
 
-func deleteContainer(image string, conf *BackupConfig, cr *apiv1.PerconaServerMySQLBackup, storage *apiv1.BackupStorageSpec) corev1.Container {
+func deleteContainer(image string, conf *BackupConfig, cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQLBackup, storage *apiv1.BackupStorageSpec) corev1.Container {
 	return corev1.Container{
 		Name:            appName,
 		Image:           image,
@@ -375,7 +375,7 @@ func deleteContainer(image string, conf *BackupConfig, cr *apiv1.PerconaServerMy
 		Command:                  append([]string{"xbcloud"}, conf.XbcloudDeleteArgs()...),
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		SecurityContext:          storage.ContainerSecurityContext,
+		SecurityContext:          k8s.EffectiveBackupStorageContainerSecurityContext(cluster, storage),
 		Resources:                storage.Resources,
 	}
 }
@@ -421,7 +421,7 @@ func RestoreJob(
 						k8s.InitContainer(cluster, appName, initImage,
 							cluster.Spec.Backup.InitContainer,
 							cluster.Spec.Backup.ImagePullPolicy,
-							storage.ContainerSecurityContext,
+							k8s.EffectiveBackupStorageContainerSecurityContext(cluster, storage),
 							cluster.Spec.Backup.Resources,
 							[]corev1.VolumeMount{
 								{
@@ -449,7 +449,7 @@ func RestoreJob(
 					PriorityClassName:         storage.PriorityClassName,
 					RuntimeClassName:          storage.RuntimeClassName,
 					DNSPolicy:                 corev1.DNSClusterFirst,
-					SecurityContext:           storage.PodSecurityContext,
+					SecurityContext:           k8s.EffectiveBackupStoragePodSecurityContext(cluster, storage),
 					Volumes: []corev1.Volume{
 						{
 							Name: apiv1.BinVolumeName,
@@ -534,9 +534,9 @@ func GetDeleteJob(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQ
 					ShareProcessNamespace: &t,
 					SetHostnameAsFQDN:     &t,
 					Containers: []corev1.Container{
-						deleteContainer(cr.Status.Image, conf, cr, storage),
+						deleteContainer(cr.Status.Image, conf, cluster, cr, storage),
 					},
-					SecurityContext:           storage.PodSecurityContext,
+					SecurityContext:           k8s.EffectiveBackupStoragePodSecurityContext(cluster, storage),
 					Affinity:                  storage.Affinity,
 					TopologySpreadConstraints: storage.TopologySpreadConstraints,
 					Tolerations:               storage.Tolerations,
@@ -635,7 +635,7 @@ func restoreContainer(
 		Command:                  []string{"/opt/percona/run-restore.sh"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		SecurityContext:          storage.ContainerSecurityContext,
+		SecurityContext:          k8s.EffectiveBackupStorageContainerSecurityContext(cluster, storage),
 		Resources:                storage.Resources,
 	}
 }

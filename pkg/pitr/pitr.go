@@ -89,7 +89,7 @@ func RestoreJob(
 							initImage,
 							cluster.Spec.Backup.InitContainer,
 							cluster.Spec.Backup.ImagePullPolicy,
-							storage.ContainerSecurityContext,
+							k8s.EffectiveBackupStorageContainerSecurityContext(cluster, storage),
 							cluster.Spec.Backup.Resources,
 							[]corev1.VolumeMount{
 								{
@@ -118,7 +118,7 @@ func RestoreJob(
 					PriorityClassName:         storage.PriorityClassName,
 					RuntimeClassName:          storage.RuntimeClassName,
 					DNSPolicy:                 corev1.DNSClusterFirst,
-					SecurityContext:           storage.PodSecurityContext,
+					SecurityContext:           k8s.EffectiveBackupStoragePodSecurityContext(cluster, storage),
 					Volumes: []corev1.Volume{
 						{
 							Name: apiv1.BinVolumeName,
@@ -168,12 +168,28 @@ func RestoreJob(
 	}
 }
 
+func pitrRestoreImage(cluster *apiv1.PerconaServerMySQL) (string, corev1.PullPolicy) {
+	mysqlSpec := cluster.Spec.MySQL
+	backup := cluster.Spec.Backup
+	if backup != nil {
+		if img := backup.PiTR.Image; img != "" {
+			policy := backup.ImagePullPolicy
+			if policy == "" {
+				policy = mysqlSpec.ImagePullPolicy
+			}
+			return img, policy
+		}
+	}
+	return mysqlSpec.Image, mysqlSpec.ImagePullPolicy
+}
+
 func restoreContainer(
 	cluster *apiv1.PerconaServerMySQL,
 	restore *apiv1.PerconaServerMySQLRestore,
 	storage *apiv1.BackupStorageSpec,
 ) corev1.Container {
 	binlogServer := cluster.Spec.Backup.PiTR.BinlogServer
+	img, pullPolicy := pitrRestoreImage(cluster)
 
 	envs := []corev1.EnvVar{
 		{
@@ -257,8 +273,8 @@ func restoreContainer(
 
 	return corev1.Container{
 		Name:            appName,
-		Image:           cluster.Spec.MySQL.Image,
-		ImagePullPolicy: cluster.Spec.MySQL.ImagePullPolicy,
+		Image:           img,
+		ImagePullPolicy: pullPolicy,
 		Env:             envs,
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -285,7 +301,7 @@ func restoreContainer(
 		Command:                  []string{"/opt/percona/run-pitr-restore.sh"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		SecurityContext:          storage.ContainerSecurityContext,
+		SecurityContext:          k8s.EffectiveBackupStorageContainerSecurityContext(cluster, storage),
 		Resources:                storage.Resources,
 	}
 }

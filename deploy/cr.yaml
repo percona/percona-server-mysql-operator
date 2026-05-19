@@ -668,6 +668,7 @@ spec:
     enabled: true
     pitr:
       enabled: false
+#      image: perconalab/percona-server-mysql-operator:main-psmysql8.4
 #      binlogServer:
 #        size: 1
 #        image: perconalab/percona-binlog-server:0.2.1
