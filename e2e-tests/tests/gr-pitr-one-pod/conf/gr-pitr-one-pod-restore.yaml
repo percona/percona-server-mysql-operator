@@ -35,7 +35,7 @@ spec:
               value: "false"
 
     pitr:
-      enabled: true
+      enabled: false
       binlogServer:
         size: 1
         serverId: 200

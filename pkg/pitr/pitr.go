@@ -174,6 +174,9 @@ func restoreContainer(
 	storage *apiv1.BackupStorageSpec,
 ) corev1.Container {
 	binlogServer := cluster.Spec.Backup.PiTR.BinlogServer
+	if restore.Spec.PITR != nil && restore.Spec.PITR.BackupSource != nil && restore.Spec.PITR.BackupSource.BinlogServer != nil {
+		binlogServer = restore.Spec.PITR.BackupSource.BinlogServer
+	}
 
 	envs := []corev1.EnvVar{
 		{
@@ -221,7 +224,8 @@ func restoreContainer(
 	if binlogServer.Storage.S3 != nil {
 		s3 := binlogServer.Storage.S3
 		bucket, _ := s3.BucketAndPrefix()
-		envs = append(envs,
+		envs = append(
+			envs,
 			corev1.EnvVar{
 				Name:  "STORAGE_TYPE",
 				Value: "s3",

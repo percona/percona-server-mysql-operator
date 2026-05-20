@@ -140,7 +140,7 @@ func TestSearchByGTID(t *testing.T) {
 			cl := newSearchTestClient(t, tt.pod).Build()
 
 			execClient, _ := tt.cliCmd.(*fakeExecClient)
-			resp, err := SearchByGTID(t.Context(), cl, tt.cliCmd, cr, tt.gtidSet)
+			resp, err := SearchByGTID(t.Context(), cl, tt.cliCmd, cr, nil, tt.gtidSet)
 			if tt.expectedError != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
@@ -220,7 +220,7 @@ func TestSearchByTimestamp(t *testing.T) {
 			cl := newSearchTestClient(t, tt.pod).Build()
 
 			execClient, _ := tt.cliCmd.(*fakeExecClient)
-			resp, err := SearchByTimestamp(t.Context(), cl, tt.cliCmd, cr, tt.timestamp)
+			resp, err := SearchByTimestamp(t.Context(), cl, tt.cliCmd, cr, nil, tt.timestamp)
 			if tt.expectedError != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
