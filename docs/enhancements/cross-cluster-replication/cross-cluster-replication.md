@@ -628,6 +628,5 @@ If the operator pod is upgraded but a `PerconaServerMySQL` CR is not re-applied:
 
 ### B. References
 
-- [MySQL Shell — InnoDB ClusterSet User Accounts](https://dev.mysql.com/doc/mysql-shell/8.0/en/innodb-clusterset-user-accounts.html)
-- [MySQL Shell — InnoDB ClusterSet Requirements](https://dev.mysql.com/doc/mysql-shell/8.0/en/innodb-clusterset-requirements.html)
+- [InnoDB ClusterSet docs](https://dev.mysql.com/doc/mysql-shell/9.1/en/innodb-clusterset.html)
 
