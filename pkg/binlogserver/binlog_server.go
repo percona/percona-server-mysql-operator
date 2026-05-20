@@ -66,7 +66,7 @@ func RestoreConfigSecretName(cr *apiv1.PerconaServerMySQL, restore *apiv1.Percon
 	if len(name) <= validation.DNS1123SubdomainMaxLength {
 		return name
 	}
-	hash := "-" + fmt.Sprintf("%x", md5.Sum([]byte(name)))[:8]
+	hash := fmt.Sprintf("%x", md5.Sum([]byte(name)))[:8]
 	suffix := "-r-" + hash
 	prefix := strings.TrimRight(name[:validation.DNS1123SubdomainMaxLength-len(suffix)], "-")
 	return prefix + suffix
