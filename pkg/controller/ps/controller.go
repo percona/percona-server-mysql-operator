@@ -432,10 +432,11 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcileVersions(ctx, cr); err != nil {
 		log.Error(err, "failed to reconcile versions")
 	}
-	if err := r.ensureUserSecrets(ctx, cr); err != nil {
+	userSecret, err := r.ensureUserSecrets(ctx, cr)
+	if err != nil {
 		return errors.Wrap(err, "users secret")
 	}
-	if err := r.reconcileUsers(ctx, cr); err != nil {
+	if err := r.reconcileUsers(ctx, cr, userSecret); err != nil {
 		return errors.Wrap(err, "users")
 	}
 	if err := r.ensureTLSSecret(ctx, cr); err != nil {
