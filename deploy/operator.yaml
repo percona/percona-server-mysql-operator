@@ -51,7 +51,7 @@ spec:
               fieldPath: metadata.namespace
         - name: DISABLE_TELEMETRY
           value: "false"
-        image: perconalab/percona-xtradb-cluster-operator:K8SPS-508
+        image: perconalab/percona-server-mysql-operator:main
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
