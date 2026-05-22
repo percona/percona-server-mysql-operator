@@ -46,9 +46,9 @@ remove_fields() {
 		| yq 'del(.spec.orchestrator.initImage)' \
 		| yq 'del(.spec.proxy.haproxy.initImage)' \
 		| yq 'del(.spec.proxy.router.initImage)' \
+		| yq 'del(.spec.backup.pitr.binlogServer.initImage)' \
 		| yq 'del(.spec.backup.pitr.binlogServer.runtimeClassName)' \
 		| yq 'del(.spec.backup.pitr.binlogServer.labels)' \
-		| yq 'del(.spec.backup.pitr.binlogServer.size)' \
 		| yq 'del(.spec.backup.pitr.binlogServer.serverId)' \
 		| yq 'del(.spec.backup.pitr.binlogServer.verifyChecksum)' \
 		| yq 'del(.spec.backup.pitr.binlogServer.topologySpreadConstraints)' \

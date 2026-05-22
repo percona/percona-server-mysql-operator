@@ -3,6 +3,7 @@ package tls
 import (
 	"testing"
 
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -19,6 +20,9 @@ func TestDNSNames(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "cluster1",
 					Namespace: "default",
+				},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					CRVersion: version.Version(),
 				},
 			},
 			expected: map[string]struct{}{
@@ -43,6 +47,7 @@ func TestDNSNames(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: apiv1.PerconaServerMySQLSpec{
+					CRVersion: version.Version(),
 					TLS: &apiv1.TLSSpec{
 						SANs: []string{"extra.example.com"},
 					},
@@ -55,6 +60,32 @@ func TestDNSNames(t *testing.T) {
 				"cluster1-mysql-primary":              {},
 				"cluster1-mysql-primary.default":      {},
 				"cluster1-mysql-primary.default.svc":  {},
+				"*.cluster1-orchestrator":             {},
+				"*.cluster1-orchestrator.default":     {},
+				"*.cluster1-orchestrator.default.svc": {},
+				"*.cluster1-router":                   {},
+				"*.cluster1-router.default":           {},
+				"*.cluster1-router.default.svc":       {},
+				"extra.example.com":                   {},
+			},
+		},
+		"with extra SANs version 1.0.0": {
+			cr: &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster1",
+					Namespace: "default",
+				},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					CRVersion: "1.0.0",
+					TLS: &apiv1.TLSSpec{
+						SANs: []string{"extra.example.com"},
+					},
+				},
+			},
+			expected: map[string]struct{}{
+				"*.cluster1-mysql":                    {},
+				"*.cluster1-mysql.default":            {},
+				"*.cluster1-mysql.default.svc":        {},
 				"*.cluster1-orchestrator":             {},
 				"*.cluster1-orchestrator.default":     {},
 				"*.cluster1-orchestrator.default.svc": {},

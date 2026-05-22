@@ -3,10 +3,11 @@
 | Field        | Value              |
 |--------------|--------------------|
 | Author       | @mayankshah1607    |
-| Status       | In review          |
+| Status       | Completed          |
 | Created      | 2026-03-18         |
-| Last Updated | 2026-03-26         |
-| Reviewers    | [names]            |
+| Last Updated | 2026-04-02         |
+| Reviewers    | @egegunes @gkech @hors            |
+| Implementation    | https://github.com/percona/percona-server-mysql-operator/pull/1269            |
 
 ---
 
@@ -327,9 +328,9 @@ The added complexity is not justified. Users needing different storage tiers sho
 
 ### 5.6 Scheduled Incremental Without a Full Base
 
-**Chosen approach:** Skip the scheduled incremental with a warning event if no succeeded full backup exists.
+**Chosen approach:** Backup moves to `Error` state with an appropriate message.
 
-**Why:** Silently promoting to a full backup changes expected behavior and storage consumption. A warning gives the user clear signal to create a full backup first. See Open Question 2 for discussion of making this configurable.
+**Why:** Silently promoting to a full backup changes expected behavior and storage consumption. An error gives the user clear signal to create a full backup first.
 
 ---
 

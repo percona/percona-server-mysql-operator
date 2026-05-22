@@ -658,6 +658,9 @@ detect_k8s_platform() {
 	elif kubectl get nodes -o json | jq -r '.items[0].spec.providerID' | grep -q "azure://"; then
 		platform="aks"
 
+	elif kubectl get nodes -o json | jq -r '.items[0].metadata.labels["minikube.k8s.io/name"]' | grep -q .; then
+		platform="minikube"
+
 	else
 		platform="unknown"
 	fi
@@ -804,7 +807,7 @@ run_mysqlsh() {
 }
 
 run_mysql_query_file() {
-  local file="$1"
+	local file="$1"
 	local host="$2"
 	local user="${3:--uroot -p'$(get_user_pass root)'}"
 	local pod="$4"
@@ -813,8 +816,8 @@ run_mysql_query_file() {
 	wait_pod $client_pod 1>&2
 
 	cat "$file" | kubectl -n "${NAMESPACE}" exec -i "${pod:-mysql-client}" -- \
-		bash -c "mysql -sN $host $user 2>&1" 2>/dev/null | \
-		grep -v 'Using a password on the command line interface can be insecure.' || :
+		bash -c "mysql -sN $host $user 2>&1" 2>/dev/null \
+		| grep -v 'Using a password on the command line interface can be insecure.' || :
 }
 
 get_innodb_cluster_status() {
@@ -980,8 +983,8 @@ get_router_pods() {
 }
 
 get_mysql_users() {
- local host=$1
- local user="${2:--uroot -p'$(get_user_pass root)'}"
+	local host=$1
+	local user="${2:--uroot -p'$(get_user_pass root)'}"
 
 	run_mysql "SELECT user FROM mysql.user" "${host}" "${user}" | grep -vE "mysql|root|percona.telemetry"
 }
@@ -1631,16 +1634,16 @@ latest_operator_image_in_vs() {
 get_cr_with_latest_versions_in_vs() {
 	local operator_version=$(latest_operator_version_in_vs)
 	local git_tag="v${operator_version}"
-	local versions=$(curl -s  https://check.percona.com/versions/v1/ps-operator/${operator_version})
+	local versions=$(curl -s https://check.percona.com/versions/v1/ps-operator/${operator_version})
 
 	local image_mysql=$(echo ${versions} \
-    | jq -r '.versions[].matrix.mysql | with_entries(select(.key | startswith("'${MYSQL_VERSION}'"))) | .[] | select(.status=="available") | .imagePath' \
-    | sort -r \
-    | head -n 1)
+		| jq -r '.versions[].matrix.mysql | with_entries(select(.key | startswith("'${MYSQL_VERSION}'"))) | .[] | select(.status=="available") | .imagePath' \
+		| sort -r \
+		| head -n 1)
 	local image_backup=$(echo ${versions} \
-    | jq -r '.versions[].matrix.backup | with_entries(select(.key | startswith("'${MYSQL_VERSION}'"))) | .[].imagePath' \
-    | sort -r \
-    | head -n 1)
+		| jq -r '.versions[].matrix.backup | with_entries(select(.key | startswith("'${MYSQL_VERSION}'"))) | .[].imagePath' \
+		| sort -r \
+		| head -n 1)
 
 	local image_orchestrator=$(echo ${versions} | jq -r '.versions[].matrix.orchestrator[].imagePath' | head -n 1)
 	local image_router=$(echo ${versions} | jq -r '.versions[].matrix.orchestrator[].imagePath' | head -n 1)
@@ -1745,6 +1748,7 @@ run_restore() {
 	local prefix=${4:+-${4}}
 	local destination=$5
 	local pitr_date=$6
+	local pitr_binlog_server=$7
 
 	local platform=$(detect_k8s_platform)
 	local storage_alias=$(get_storage_alias $platform)
@@ -1764,14 +1768,27 @@ run_restore() {
 	fi
 
 	echo "Running restore '$restore_name' from backup '$backup_name' using '$restore_template'"
-	yq eval '
+	local restore_yq='
 		.metadata.name = "'"$restore_name"'" |
 		.spec.backupName = "'"$backup_name"'" |
-		.spec.clusterName = "'"$cluster_name"'" |
+		.spec.clusterName = "'"$cluster_name"'"
+	'
+
+	if [[ -n $pitr_binlog_server ]]; then
+		restore_yq+=' |
+			.spec.pitr.backupSource.binlogServer = load("'"$pitr_binlog_server"'") |
+			.spec.pitr.backupSource.binlogServer.image = "'"${IMAGE_BINLOG_SERVER}"'" |
+			.spec.pitr.backupSource.binlogServer.logLevel = "debug"
+		'
+	fi
+
+	restore_yq+=' |
 		(.. | select(tag == "!!str")) |= sub("<pitr-date>"; "'"$pitr_date"'") |
 		(.. | select(tag == "!!str")) |= sub("<destination>"; "'"$destination"'") |
 		(.. | select(tag == "!!str")) |= sub("<namespace>"; "'"${NAMESPACE}"'")
-	' "$restore_template" | kubectl apply -n "$NAMESPACE" -f -
+	'
+
+	yq eval "$restore_yq" "$restore_template" | kubectl apply -n "$NAMESPACE" -f -
 }
 
 get_secret_value() {

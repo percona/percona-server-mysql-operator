@@ -29,9 +29,6 @@ func DNSNames(cr *apiv1.PerconaServerMySQL) []string {
 		fmt.Sprintf("*.%s-mysql", cr.Name),
 		fmt.Sprintf("*.%s-mysql.%s", cr.Name, cr.Namespace),
 		fmt.Sprintf("*.%s-mysql.%s.svc", cr.Name, cr.Namespace),
-		fmt.Sprintf("%s-mysql-primary", cr.Name),
-		fmt.Sprintf("%s-mysql-primary.%s", cr.Name, cr.Namespace),
-		fmt.Sprintf("%s-mysql-primary.%s.svc", cr.Name, cr.Namespace),
 		fmt.Sprintf("*.%s-orchestrator", cr.Name),
 		fmt.Sprintf("*.%s-orchestrator.%s", cr.Name, cr.Namespace),
 		fmt.Sprintf("*.%s-orchestrator.%s.svc", cr.Name, cr.Namespace),
@@ -41,6 +38,11 @@ func DNSNames(cr *apiv1.PerconaServerMySQL) []string {
 	}
 	if cr.Spec.TLS != nil {
 		hosts = append(hosts, cr.Spec.TLS.SANs...)
+	}
+	if cr.CompareVersion("1.1.0") >= 0 {
+		hosts = append(hosts, fmt.Sprintf("%s-mysql-primary", cr.Name),
+			fmt.Sprintf("%s-mysql-primary.%s", cr.Name, cr.Namespace),
+			fmt.Sprintf("%s-mysql-primary.%s.svc", cr.Name, cr.Namespace))
 	}
 	return hosts
 }

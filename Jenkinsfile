@@ -14,7 +14,7 @@ void createCluster(String CLUSTER_SUFFIX) {
                 gcloud container clusters list --filter $CLUSTER_NAME-${CLUSTER_SUFFIX} --zone $region --format='csv[no-heading](name)' | xargs gcloud container clusters delete --zone $region --quiet || true
                 gcloud container clusters create $CLUSTER_NAME-${CLUSTER_SUFFIX} \
                     --zone $region \
-                    --cluster-version=1.32 \
+                    --cluster-version=1.33 \
                     --machine-type=c2d-standard-4 \
                     --preemptible \
                     --disk-size 30 \
@@ -555,7 +555,7 @@ pipeline {
                             -w /go/src/github.com/percona/percona-server-mysql-operator \
                             -e GOFLAGS='-buildvcs=false' \
                             -e GO111MODULE=on \
-                            golang:1.25 sh -c '
+                            golang:1.26 sh -c '
                                 go install github.com/google/go-licenses@latest;
                                 /go/bin/go-licenses csv github.com/percona/percona-server-mysql-operator/cmd/manager \
                                     | cut -d , -f 3 \
@@ -584,7 +584,7 @@ pipeline {
                             -w /go/src/github.com/percona/percona-server-mysql-operator \
                             -e GOFLAGS='-buildvcs=false' \
                             -e GO111MODULE=on \
-                            golang:1.25 sh -c 'go build -v -o percona-server-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
+                            golang:1.26 sh -c 'go build -v -o percona-server-mysql-operator github.com/percona/percona-server-mysql-operator/cmd/manager'
                     "
                 '''
 

@@ -11,6 +11,17 @@ done
 
 set -eu
 
+# sed -i behaves differently on macOS (BSD sed) and Linux (GNU sed):
+#   BSD: sed -i '' 'script' file   (requires explicit empty-string backup suffix)
+#   GNU: sed -i 'script' file      (no suffix argument)
+sed_inplace() {
+	if sed --version 2>/dev/null | grep -q GNU; then
+		sed -i "$@"
+	else
+		sed -i '' "$@"
+	fi
+}
+
 DISTRIBUTION="$1"
 
 cd "${BASH_SOURCE[0]%/*}"
@@ -19,7 +30,7 @@ bundle_directory="bundles/${DISTRIBUTION}"
 project_directory="projects/${DISTRIBUTION}"
 
 # The 'operators.operatorframework.io.bundle.package.v1' package name for each
-# bundle (updated for the 'certified' and 'marketplace' bundles).
+# bundle (updated for the 'redhat' bundle).
 package_name='percona-server-mysql-operator'
 
 # The project name used by operator-sdk for initial bundle generation.
@@ -27,28 +38,16 @@ project_name='percona-server-mysql-operator'
 
 # The prefix for the 'clusterserviceversion.yaml' file.
 # Per OLM guidance, the filename for the clusterserviceversion.yaml must be prefixed
-# with the Operator's package name for the 'redhat' and 'marketplace' bundles.
+# with the Operator's package name for the 'redhat' bundle.
 # https://github.com/redhat-openshift-ecosystem/certification-releases/blob/main/4.9/ga/troubleshooting.md#get-supported-versions
 file_name='percona-server-mysql-operator'
 
-if [ "${MODE}" == "cluster" ]; then
-	suffix="-cw"
-	rbac_file="../../deploy/cw-rbac.yaml"
-	operator_file="../../deploy/cw-operator.yaml"
-elif [ "${MODE}" == "namespace" ]; then
-	suffix=""
-	rbac_file="../../deploy/rbac.yaml"
-	operator_file="../../deploy/operator.yaml"
-else
-	echo "Please add MODE variable. It could be either namespace or cluster"
-	exit 1
-fi
-
+# Always generate both clusterPermissions (from cw-rbac.yaml) and permissions (from rbac.yaml).
 # Parse deploy files directly into temporary files (don't modify config/ originals)
-yq eval '. | select(.kind == "Deployment")' "$operator_file" >operator_deployments.yaml
-yq eval '. | select(.kind == "ServiceAccount")' "$rbac_file" >operator_accounts.yaml
-yq eval '. | select(.kind == "ClusterRole")' "$rbac_file" >operator_cluster_roles.yaml
-yq eval '. | select(.kind == "Role")' "$rbac_file" >operator_ns_roles.yaml
+yq eval '. | select(.kind == "Deployment")' "../../deploy/operator.yaml" >operator_deployments.yaml
+yq eval '. | select(.kind == "ServiceAccount")' "../../deploy/rbac.yaml" >operator_accounts.yaml
+yq eval '. | select(.kind == "ClusterRole")' "../../deploy/cw-rbac.yaml" >operator_cluster_roles.yaml
+yq eval '. | select(.kind == "Role")' "../../deploy/rbac.yaml" >operator_ns_roles.yaml
 
 update_yaml_images() {
 	local yaml_file="$1"
@@ -84,11 +83,11 @@ install -d \
 
 # Render bundle annotations and strip comments.
 # Per Red Hat we should not include the org.opencontainers annotations in the
-# 'redhat' & 'marketplace' annotations.yaml file, so only add them for 'community'.
+# 'redhat' annotations.yaml file, so only add them for 'community'.
 # - https://coreos.slack.com/team/UP1LZCC1Y
 
 export package="${package_name}"
-export package_channel="${PACKAGE_CHANNEL}${suffix}"
+export package_channel="${PACKAGE_CHANNEL}"
 export openshift_supported_versions="${OPENSHIFT_VERSIONS}"
 
 yq eval '.annotations["operators.operatorframework.io.bundle.channels.v1"] = env(package_channel) |
@@ -111,15 +110,7 @@ elif [ "${DISTRIBUTION}" == 'redhat' ]; then
     .annotations["operators.operatorframework.io.bundle.package.v1"] = "percona-server-mysql-operator-certified" ' \
 		"${bundle_directory}/metadata/annotations.yaml"
 
-# redhat-marketplace
-elif [ "${DISTRIBUTION}" == 'marketplace' ]; then
-	yq eval --inplace '
-    .annotations["operators.operatorframework.io.bundle.package.v1"] = "percona-server-mysql-operator-certified-rhmp" ' \
-		"${bundle_directory}/metadata/annotations.yaml"
 fi
-
-# Copy annotations into Dockerfile LABELs.
-# TODO fix tab for labels.
 
 labels=$(yq eval -r '.annotations | to_entries | map("LABEL " + .key + "=" + (.value | tojson)) | join("\n")' \
 	"${bundle_directory}/metadata/annotations.yaml")
@@ -156,7 +147,9 @@ BEGIN {
 }
 ' ../../deploy/crd.yaml
 
-find "${bundle_directory}/manifests" -type f -name "*.crd.yaml" -exec sed -i '' '1s/^/---\n/; ${/^---$/d;}' {} +
+while IFS= read -r f; do
+	sed_inplace '1s/^/---\n/; ${/^---$/d;}' "$f"
+done < <(find "${bundle_directory}/manifests" -type f -name "*.crd.yaml")
 
 abort() {
 	echo >&2 "$@"
@@ -176,11 +169,10 @@ yq eval-all '[.]' operator_ns_roles.yaml >operator_ns_roles_arr.yaml && mv opera
 
 # Render bundle CSV and strip comments.
 export stem=$(yq -r '.projectName' "${project_directory}/PROJECT")
-export version="${VERSION}${suffix}"
+export version="${VERSION}"
 export timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-export name="${stem}.v${VERSION}${suffix}"
-export name_certified="${stem}-certified.v${VERSION}${suffix}"
-export name_certified_rhmp="${stem}-certified-rhmp.v${VERSION}${suffix}"
+export name="${stem}.v${VERSION}"
+export name_certified="${stem}-certified.v${VERSION}"
 export skip_range="<v${VERSION}"
 export containerImage=$(yq eval '.[0].spec.template.spec.containers[0].image' operator_deployments.yaml)
 export deployment=$(yq eval operator_deployments.yaml)
@@ -213,52 +205,35 @@ yq eval --inplace '
   {"name": "WATCH_NAMESPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.annotations['"'"'olm.targetNamespaces'"'"']"}}}
 ' "${bundle_directory}/manifests/${file_name}.v${VERSION}.clusterserviceversion.yaml"
 
+# Add OpenShift feature annotations to all distributions.
+# 'disconnected' defaults to "false" for community; overridden to "true" for redhat below.
+yq eval --inplace '
+    .metadata.annotations["features.operators.openshift.io/disconnected"] = "false" |
+    .metadata.annotations["features.operators.openshift.io/fips-compliant"] = "false" |
+    .metadata.annotations["features.operators.openshift.io/proxy-aware"] = "false" |
+    .metadata.annotations["features.operators.openshift.io/tls-profiles"] = "false" |
+    .metadata.annotations["features.operators.openshift.io/token-auth-aws"] = "false" |
+    .metadata.annotations["features.operators.openshift.io/token-auth-azure"] = "false" |
+    .metadata.annotations["features.operators.openshift.io/token-auth-gcp"] = "false" |
+    .metadata.annotations["features.operators.openshift.io/cnf"] = "false" |
+    .metadata.annotations["features.operators.openshift.io/cni"] = "false" |
+    .metadata.annotations["features.operators.openshift.io/csi"] = "false"' \
+	"${bundle_directory}/manifests/${file_name}.v${VERSION}.clusterserviceversion.yaml"
+
 if [ "${DISTRIBUTION}" == "community" ]; then
 	update_yaml_images "bundles/$DISTRIBUTION/manifests/${file_name}.v${VERSION}.clusterserviceversion.yaml"
 elif [ "${DISTRIBUTION}" == "redhat" ]; then
 	yq eval --inplace '
         .metadata.annotations["features.operators.openshift.io/disconnected"] = "true" |
-        .metadata.annotations["features.operators.openshift.io/fips-compliant"] = "false" |
-        .metadata.annotations["features.operators.openshift.io/proxy-aware"] = "false" |
-        .metadata.annotations["features.operators.openshift.io/tls-profiles"] = "false" |
-        .metadata.annotations["features.operators.openshift.io/token-auth-aws"] = "false" |
-        .metadata.annotations["features.operators.openshift.io/token-auth-azure"] = "false" |
-        .metadata.annotations["features.operators.openshift.io/token-auth-gcp"] = "false" |
-        .metadata.annotations["features.operators.openshift.io/cnf"] = "false" |
-        .metadata.annotations["features.operators.openshift.io/cni"] = "false" |
-        .metadata.annotations["features.operators.openshift.io/csi"] = "false" |
         .spec.relatedImages = env(relatedImages) |
         .metadata.annotations.certified = "true" |
         .metadata.annotations["containerImage"] = "registry.connect.redhat.com/percona/percona-server-mysql-operator@sha256:<update_operator_SHA_value>" |
         .metadata.name = strenv(name_certified)' \
 		"${bundle_directory}/manifests/${file_name}.v${VERSION}.clusterserviceversion.yaml"
-
-elif [ "${DISTRIBUTION}" == "marketplace" ]; then
-	# Annotations needed when targeting Red Hat Marketplace
-	export package_url="https://marketplace.redhat.com/en-us/operators/${file_name}"
-	yq --inplace '
-        .metadata.annotations["features.operators.openshift.io/disconnected"] = "true" |
-        .metadata.annotations["features.operators.openshift.io/fips-compliant"] = "false" |
-        .metadata.annotations["features.operators.openshift.io/proxy-aware"] = "false" |
-        .metadata.annotations["features.operators.openshift.io/tls-profiles"] = "false" |
-        .metadata.annotations["features.operators.openshift.io/token-auth-aws"] = "false" |
-        .metadata.annotations["features.operators.openshift.io/token-auth-azure"] = "false" |
-        .metadata.annotations["features.operators.openshift.io/token-auth-gcp"] = "false" |
-        .metadata.annotations["features.operators.openshift.io/cnf"] = "false" |
-        .metadata.annotations["features.operators.openshift.io/cni"] = "false" |
-        .metadata.annotations["features.operators.openshift.io/csi"] = "false" |
-        .metadata.name = env(name_certified_rhmp) |
-        .metadata.annotations["containerImage"] = "registry.connect.redhat.com/percona/percona-server-mysql-operator@sha256:<update_operator_SHA_value>" |
-        .metadata.annotations["marketplace.openshift.io/remote-workflow"] =
-            "https://marketplace.redhat.com/en-us/operators/percona-server-mysql-operator-certified-rhmp/pricing?utm_source=openshift_console" |
-        .metadata.annotations["marketplace.openshift.io/support-workflow"] =
-            "https://marketplace.redhat.com/en-us/operators/percona-server-mysql-operator-certified-rhmp/support?utm_source=openshift_console" |
-        .spec.relatedImages = env(relatedImages)' \
-		"${bundle_directory}/manifests/${file_name}.v${VERSION}.clusterserviceversion.yaml"
 fi
 
 # Delete comments
-sed -i '' '/^[[:space:]]*# [^#]/d' "${bundle_directory}/manifests/${file_name}.v${VERSION}.clusterserviceversion.yaml"
+sed_inplace '/^[[:space:]]*# [^#]/d' "${bundle_directory}/manifests/${file_name}.v${VERSION}.clusterserviceversion.yaml"
 
 # Lint the bundle YAML files.
 yamllint -d '{extends: default, rules: {line-length: disable, indentation: disable}}' bundles/"$DISTRIBUTION"
