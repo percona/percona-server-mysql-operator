@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	coordinationv1 "k8s.io/api/coordination/v1"
+	coordv1 "k8s.io/api/coordination/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -17,12 +17,11 @@ var ErrLeaseAlreadyHeld = errors.New("lease held by another holder")
 
 // IsHolderStaleFunc determines whether the current lease holder is stale
 // and can be evicted. Called with the current holder's identity.
-type IsHolderStaleFunc func(ctx context.Context, currentHolder string) (bool, error)
+type IsHolderStaleFunc func(ctx context.Context, lease *coordv1.Lease) (bool, error)
 
 // +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch
-
-func GetLease(ctx context.Context, client client.Client, leaseName, namespace string) (*coordinationv1.Lease, error) {
-	lease := &coordinationv1.Lease{}
+func GetLease(ctx context.Context, client client.Client, leaseName, namespace string) (*coordv1.Lease, error) {
+	lease := new(coordv1.Lease)
 	if err := client.Get(ctx, types.NamespacedName{Name: leaseName, Namespace: namespace}, lease); err != nil {
 		return nil, err
 	}
@@ -36,7 +35,7 @@ func GetLease(ctx context.Context, client client.Client, leaseName, namespace st
 // the callback is invoked to determine whether the current holder is stale.
 // A stale holder is evicted atomically and the lease is granted to the new holder.
 func AcquireLease(ctx context.Context, cl client.Client, leaseName, holder, namespace string, checkStale IsHolderStaleFunc) error {
-	lease := &coordinationv1.Lease{
+	lease := &coordv1.Lease{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      leaseName,
 			Namespace: namespace,
@@ -53,7 +52,7 @@ func AcquireLease(ctx context.Context, cl client.Client, leaseName, holder, name
 				return ErrLeaseAlreadyHeld
 			}
 
-			stale, err := checkStale(ctx, *lease.Spec.HolderIdentity)
+			stale, err := checkStale(ctx, lease)
 			if err != nil {
 				return errors.Wrap(err, "failed to check if lease holder is stale")
 			}
