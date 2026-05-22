@@ -1309,6 +1309,21 @@ spec:
             type: object
           status:
             properties:
+              clusters:
+                additionalProperties:
+                  properties:
+                    clusterRole:
+                      type: string
+                    globalStatus:
+                      type: string
+                    primaryCluster:
+                      type: string
+                  required:
+                  - clusterRole
+                  - globalStatus
+                  - primaryCluster
+                  type: object
+                type: object
               conditions:
                 items:
                   properties:

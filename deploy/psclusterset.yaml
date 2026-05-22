@@ -3,14 +3,14 @@ kind: PerconaServerMySQLClusterSet
 metadata:
   name: my-cluster-set
 spec:
-  primaryCluster: my-primary-cluster
+  primaryCluster: pscluster1
   credentialsSecret:
     name: ps-cluster1-secrets
-    key: replication
+    key: root
   allowForcedFailover: false
   clusters:
-    - name: my-cluster-1
+    - name: pscluster1
       endpoints:
-      - host: mysql-1.example.com
+      - host: 34.118.226.200
   mysqlShellRunner:
     image: perconalab/percona-server-mysql-operator:main-psmysql8.4

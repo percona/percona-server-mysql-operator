@@ -193,8 +193,9 @@ func main() {
 	}
 
 	if err = (&psclusterset.PerconaServerMySQLClusterSetReconciler{
-		Client: nsClient,
-		Scheme: mgr.GetScheme(),
+		Client:    nsClient,
+		Scheme:    mgr.GetScheme(),
+		ClientCmd: cliCmd,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLClusterSet")
 		os.Exit(1)

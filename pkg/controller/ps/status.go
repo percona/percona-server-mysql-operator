@@ -280,7 +280,7 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1.
 
 	uri := getMySQLURI(apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
 
-	msh, err := mysqlsh.NewWithExec(r.ClientCmd, pod, uri)
+	msh, err := mysqlsh.NewWithExec(r.ClientCmd, pod, "mysql", uri)
 	if err != nil {
 		return false, err
 	}

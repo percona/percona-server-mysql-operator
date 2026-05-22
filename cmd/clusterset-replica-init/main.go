@@ -1,0 +1,102 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log"
+
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
+	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+type replicaInitArgs struct {
+	replicaClusterName string
+	replicaEndpoint    string
+	replicaPort        int
+	psClusterSetName   string
+	namespace          string
+	user               string
+}
+
+func main() {
+	args := replicaInitArgs{}
+	flag.StringVar(&args.replicaClusterName, "replica-cluster-name", "", "Replica cluster name")
+	flag.StringVar(&args.replicaEndpoint, "replica-endpoint", "", "Replica endpoint")
+	flag.IntVar(&args.replicaPort, "replica-port", 3306, "Replica port")
+	flag.StringVar(&args.user, "user", "root", "User")
+	flag.StringVar(&args.psClusterSetName, "ps-cluster-set-name", "", "PerconaServerMySQLClusterSet name")
+	flag.StringVar(&args.namespace, "namespace", "", "Namespace")
+	flag.Parse()
+
+	ctx := context.Background()
+
+	config, err := ctrl.GetConfig()
+	if err != nil {
+		log.Fatalf("failed to get config: %v", err)
+	}
+
+	cl, err := newClient(config)
+	if err != nil {
+		log.Fatalf("failed to create client: %v", err)
+	}
+
+	psClusterSet := &apiv1.PerconaServerMySQLClusterSet{}
+	if err := cl.Get(ctx, types.NamespacedName{Namespace: args.namespace, Name: args.psClusterSetName}, psClusterSet); err != nil {
+		log.Fatalf("failed to get PerconaServerMySQLClusterSet: %v", err)
+	}
+
+	cliCmd, err := clientcmd.NewClient()
+	if err != nil {
+		log.Fatalf("failed to create clientcmd: %v", err)
+	}
+
+	manager, err := clusterset.NewManager(ctx, cl, cliCmd, psClusterSet)
+	if err != nil {
+		log.Fatalf("failed to create manager: %v", err)
+	}
+
+	if err := manager.CreateReplicaCluster(ctx, &apiv1.ClusterSetCluster{
+		Name: args.replicaClusterName,
+		Endpoints: []apiv1.ClusterSetClusterEndpoint{
+			{
+				Host: args.replicaEndpoint,
+				Port: new(int32(args.replicaPort)),
+			},
+		},
+	}); err != nil {
+		log.Fatalf("failed to create replica cluster: %v", err)
+	}
+}
+
+func newClient(config *rest.Config) (client.Client, error) {
+	scheme, err := newScheme()
+	if err != nil {
+		return nil, err
+	}
+	cl, err := client.New(config, client.Options{
+		Scheme: scheme,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create controller-runtime client: %w", err)
+	}
+	return cl, nil
+}
+
+func newScheme() (*runtime.Scheme, error) {
+	scheme := runtime.NewScheme()
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("add client-go types to scheme: %w", err)
+	}
+	if err := apiv1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("add percona types to scheme: %w", err)
+	}
+	return scheme, nil
+}

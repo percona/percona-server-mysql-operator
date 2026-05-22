@@ -1309,6 +1309,21 @@ spec:
             type: object
           status:
             properties:
+              clusters:
+                additionalProperties:
+                  properties:
+                    clusterRole:
+                      type: string
+                    globalStatus:
+                      type: string
+                    primaryCluster:
+                      type: string
+                  required:
+                  - clusterRole
+                  - globalStatus
+                  - primaryCluster
+                  type: object
+                type: object
               conditions:
                 items:
                   properties:
@@ -13367,7 +13382,17 @@ spec:
               fieldPath: metadata.namespace
         - name: DISABLE_TELEMETRY
           value: "false"
-        image: perconalab/percona-xtradb-cluster-operator:K8SPS-508
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        image: asia-south1-docker.pkg.dev/cloud-dev-112233/mayankshah/ps-operator:K8SPS-508
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

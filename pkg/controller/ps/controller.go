@@ -225,7 +225,7 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 
 		um := database.NewReplicationManager(&firstPod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, &firstPod))
 
-		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, &firstPod, firstPodUri)
+		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, &firstPod, "mysql", firstPodUri)
 		if err != nil {
 			return err
 		}
@@ -1081,7 +1081,7 @@ func (r *PerconaServerMySQLReconciler) rescanClusterIfNeeded(ctx context.Context
 
 	uri := getMySQLURI(apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
 
-	msh, err := mysqlsh.NewWithExec(r.ClientCmd, pod, uri)
+	msh, err := mysqlsh.NewWithExec(r.ClientCmd, pod, "mysql", uri)
 	if err != nil {
 		return err
 	}

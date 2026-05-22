@@ -10,7 +10,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -22,18 +21,43 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
+
+	k8sutil "github.com/percona/percona-server-mysql-operator/pkg/util/k8s"
 )
+
+type clusterSetManagerGetter func(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) (ClusterSetManager, error)
 
 type PerconaServerMySQLClusterSetReconciler struct {
 	client.Client
 	Scheme    *runtime.Scheme
 	ClientCmd clientcmd.Client
+
+	getClusterSetManager clusterSetManagerGetter
+	operatorPod          *corev1.Pod
+}
+
+type ClusterSetManager interface {
+	CreateClusterSet(ctx context.Context, clustersetName string) error
+	CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster) error
+	RemoveReplicaCluster(ctx context.Context, clusterName string) error
+	SetPrimaryCluster(ctx context.Context, clusterName string) error
 }
 
 const controllerName = "psclusterset-controller"
 
 func (r *PerconaServerMySQLClusterSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.getClusterSetManager == nil {
+		r.getClusterSetManager = func(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) (ClusterSetManager, error) {
+			return clusterset.NewManager(ctx, r.Client, r.ClientCmd, pcs)
+		}
+	}
+
+	operatorPod, err := k8sutil.GetOperatorPod(context.Background(), mgr.GetAPIReader())
+	if err != nil {
+		return errors.Wrap(err, "get operator pod")
+	}
+	r.operatorPod = operatorPod
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1.PerconaServerMySQLClusterSet{}).
 		Owns(&appsv1.Deployment{}).
@@ -63,20 +87,17 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, nil
 	}
 
-	shell, err := r.newMySQLShell(ctx, pcs)
+	manager, err := r.getClusterSetManager(ctx, pcs)
 	if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "new mysqlsh")
+		return ctrl.Result{}, errors.Wrap(err, "get cluster set manager")
 	}
 
-	if err := r.bootstrapClusterSet(ctx, pcs, shell); err != nil {
+	if err := r.bootstrapClusterSet(ctx, pcs, manager); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "bootstrap ClusterSet")
 	}
 
-	if configured, err := r.configureReplicas(ctx, pcs); err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "configure replicas")
-	} else if !configured {
-		log.Info("Waiting for replicas to be configured")
-		return ctrl.Result{}, nil
+	if err := r.reconcileReplicas(ctx, pcs, manager); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "reconcile replicas")
 	}
 
 	if err := r.reconcileSwitchover(ctx, pcs); err != nil {
@@ -144,17 +165,72 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileMySQLShellRunner(ctx c
 	return ready, nil
 }
 
-func (r *PerconaServerMySQLClusterSetReconciler) bootstrapClusterSet(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, shell *mysqlsh.MysqlshExec) error {
+func (r *PerconaServerMySQLClusterSetReconciler) bootstrapClusterSet(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, manager ClusterSetManager) error {
 	// Already bootstrapped, early return.
 	if meta.IsStatusConditionTrue(pcs.Status.Conditions, apiv1.ConditionClusterSetBootstrapped) {
 		return nil
 	}
 
+	primaryCluster := pcs.PrimaryCluster()
+	log := logf.FromContext(ctx).WithValues("primaryCluster", primaryCluster.Name)
+
+	log.Info("Creating ClusterSet")
+	if err := manager.CreateClusterSet(ctx, pcs.GetName()); err != nil {
+		return errors.Wrap(err, "create cluster set")
+	}
+
+	log.Info("ClusterSet bootstrapped")
+	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) {
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:   apiv1.ConditionClusterSetBootstrapped,
+			Status: metav1.ConditionTrue,
+			Reason: "ClusterSetBootstrapped",
+		})
+		status.PrimaryCluster = primaryCluster.Name
+	}); err != nil {
+		return errors.Wrap(err, "update status")
+	}
 	return nil
 }
 
-func (r *PerconaServerMySQLClusterSetReconciler) configureReplicas(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) (bool, error) {
-	return false, nil
+func (r *PerconaServerMySQLClusterSetReconciler) reconcileReplicas(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, manager ClusterSetManager) error {
+	log := logf.FromContext(ctx)
+	// Add replicas to the clusterset if not added already
+	for _, cluster := range pcs.Spec.Clusters {
+		if _, ok := pcs.Status.Clusters[cluster.Name]; !ok {
+			log.Info("Adding cluster to ClusterSet", "clusterName", cluster.Name)
+			if err := r.addToClusterSet(ctx, pcs, &cluster); err != nil {
+				return errors.Wrap(err, "add to cluster set")
+			}
+		}
+	}
+
+	// Remove replicas from the clusterset if not present in spec
+	for name := range pcs.Status.Clusters {
+		if pcs.GetCluster(name) == nil {
+			log.Info("Removing cluster from ClusterSet", "clusterName", name)
+			if err := manager.RemoveReplicaCluster(ctx, name); err != nil {
+				return errors.Wrap(err, "remove from cluster set")
+			}
+		}
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLClusterSetReconciler) addToClusterSet(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, cluster *apiv1.ClusterSetCluster) error {
+	job := clusterset.ClusterSetReplicaInitJob(pcs, cluster, r.operatorPod.Spec.Containers[0].Image, r.operatorPod.Spec.ServiceAccountName)
+	err := r.Get(ctx, client.ObjectKeyFromObject(job), job)
+	if k8serrors.IsNotFound(err) {
+		if err := controllerutil.SetControllerReference(pcs, job, r.Scheme); err != nil {
+			return errors.Wrap(err, "set controller reference")
+		}
+		return r.Create(ctx, job)
+	} else if err != nil {
+		return errors.Wrap(err, "get replica init job")
+	}
+
+	return nil
 }
 
 func (r *PerconaServerMySQLClusterSetReconciler) reconcileSwitchover(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
@@ -163,67 +239,4 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileSwitchover(ctx context
 
 func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
 	return nil
-}
-
-func (r *PerconaServerMySQLClusterSetReconciler) getRunnerPod(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) (*corev1.Pod, error) {
-	selector := clusterset.MySQLShellRunner(pcs).Spec.Selector.MatchLabels
-	listOptions := &client.ListOptions{
-		Namespace:     pcs.Namespace,
-		LabelSelector: labels.SelectorFromSet(selector),
-	}
-
-	runnerPods := &corev1.PodList{}
-	if err := r.List(ctx, runnerPods, listOptions); err != nil {
-		return nil, errors.Wrap(err, "list runner pods")
-	}
-
-	if len(runnerPods.Items) == 0 {
-		return nil, errors.New("no runner pods found")
-	}
-
-	runnerPod := runnerPods.Items[0]
-	return &runnerPod, nil
-}
-
-func (r *PerconaServerMySQLClusterSetReconciler) getClustersetAdminPassword(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) (string, error) {
-	secret := &corev1.Secret{}
-	secretKeySel := pcs.Spec.CredentialsSecret
-	if err := r.Get(ctx, client.ObjectKey{Namespace: pcs.Namespace, Name: secretKeySel.Name}, secret); err != nil {
-		return "", errors.Wrap(err, "get credentials secret")
-	}
-
-	password, ok := secret.Data[string(secretKeySel.Key)]
-	if !ok {
-		return "", errors.New("no password for clusterset admin found")
-	}
-
-	return string(password), nil
-}
-
-func (r *PerconaServerMySQLClusterSetReconciler) newMySQLShell(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) (*mysqlsh.MysqlshExec, error) {
-	runnerPod, err := r.getRunnerPod(ctx, pcs)
-	if err != nil {
-		return nil, errors.Wrap(err, "get runner pod")
-	}
-
-	pass, err := r.getClustersetAdminPassword(ctx, pcs)
-	if err != nil {
-		return nil, errors.Wrap(err, "get clusterset admin password")
-	}
-
-	primaryCluster := pcs.PrimaryCluster()
-	if primaryCluster == nil {
-		return nil, errors.New("primary cluster not found")
-	}
-
-	// TODO: use clusterAdmin here, not root
-	// TODO: use any endpoint, not just first one
-	primaryClusterURI := mysqlsh.URI(string(apiv1.UserRoot), pass, primaryCluster.Endpoints[0].Host)
-
-	shell, err := mysqlsh.NewWithExec(r.ClientCmd, runnerPod, primaryClusterURI)
-	if err != nil {
-		return nil, errors.Wrap(err, "new mysqlsh")
-	}
-
-	return shell, nil
 }

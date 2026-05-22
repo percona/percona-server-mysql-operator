@@ -48,7 +48,7 @@ spec:
           value: ""
         - name: DISABLE_TELEMETRY
           value: "false"
-        image: perconalab/percona-xtradb-cluster-operator:K8SPS-508
+        image: asia-south1-docker.pkg.dev/cloud-dev-112233/mayankshah/ps-operator:K8SPS-508
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

@@ -54,6 +54,7 @@ func MySQLShellRunner(pcs *apiv1.PerconaServerMySQLClusterSet) *appsv1.Deploymen
 							},
 						},
 					},
+					TerminationGracePeriodSeconds: new(int64(5)),
 				},
 			},
 		},

@@ -16,20 +16,21 @@ import (
 )
 
 type MysqlshExec struct {
-	pod    *corev1.Pod
-	client clientcmd.Client
-	uri    string
+	pod           *corev1.Pod
+	containerName string
+	client        clientcmd.Client
+	uri           string
 }
 
-func NewWithExec(cliCmd clientcmd.Client, pod *corev1.Pod, uri string) (*MysqlshExec, error) {
-	return &MysqlshExec{client: cliCmd, pod: pod, uri: uri}, nil
+func NewWithExec(cliCmd clientcmd.Client, pod *corev1.Pod, containerName, uri string) (*MysqlshExec, error) {
+	return &MysqlshExec{client: cliCmd, pod: pod, uri: uri, containerName: containerName}, nil
 }
 
 func (m *MysqlshExec) runWithExec(ctx context.Context, cmd string) error {
 	var errb, outb bytes.Buffer
 
 	c := []string{"mysqlsh", "--js", "--no-wizard", "--uri", m.uri, "-e", cmd}
-	err := m.client.Exec(ctx, m.pod, "mysql", c, nil, &outb, &errb, false)
+	err := m.client.Exec(ctx, m.pod, m.containerName, c, nil, &outb, &errb, false)
 	if err != nil {
 		sout := sensitiveRegexp.ReplaceAllString(outb.String(), ":*****@")
 		serr := sensitiveRegexp.ReplaceAllString(errb.String(), ":*****@")
@@ -132,6 +133,24 @@ func (m *MysqlshExec) CreateClusterSetWithExec(ctx context.Context, name string)
 	cmd := fmt.Sprintf("dba.getCluster().createClusterSet('%s')", name)
 	if err := m.runWithExec(ctx, cmd); err != nil {
 		return errors.Wrap(err, "create cluster set")
+	}
+	return nil
+}
+
+func (m *MysqlshExec) CreateReplicaClusterWithExec(
+	ctx context.Context,
+	clusterName, endpoint string, port int) error {
+	cmd := fmt.Sprintf("dba.getCluster().createReplicaCluster('%s:%d','%s',{recoveryMethod: 'clone'})", endpoint, port, clusterName)
+	if err := m.runWithExec(ctx, cmd); err != nil {
+		return errors.Wrap(err, "create replica cluster")
+	}
+	return nil
+}
+
+func (m *MysqlshExec) RemoveReplicaClusterWithExec(ctx context.Context, clusterName string) error {
+	cmd := fmt.Sprintf("dba.getCluster().removeReplicaCluster('%s')", clusterName)
+	if err := m.runWithExec(ctx, cmd); err != nil {
+		return errors.Wrap(err, "remove replica cluster")
 	}
 	return nil
 }

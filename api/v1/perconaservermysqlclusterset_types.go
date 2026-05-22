@@ -77,8 +77,17 @@ const (
 )
 
 type PerconaServerMySQLClusterSetStatus struct {
-	PrimaryCluster string             `json:"primaryCluster"`
-	Conditions     []metav1.Condition `json:"conditions,omitempty"`
+	PrimaryCluster string                             `json:"primaryCluster"`
+	Conditions     []metav1.Condition                 `json:"conditions,omitempty"`
+	Clusters       map[string]ClusterSetClusterStatus `json:"clusters,omitempty"`
+}
+
+// ClusterSetClusterStatus is the status of a single cluster in the cluster set.
+// The shape of this object is derived from the output of `dba.getCluster().getClusterSet().status()` mysqlshell command.
+type ClusterSetClusterStatus struct {
+	ClusterRole    string `json:"clusterRole"`
+	GlobalStatus   string `json:"globalStatus"`
+	PrimaryCluster string `json:"primaryCluster"`
 }
 
 // +kubebuilder:object:root=true
@@ -94,9 +103,22 @@ func init() {
 	SchemeBuilder.Register(&PerconaServerMySQLClusterSet{}, &PerconaServerMySQLClusterSetList{})
 }
 
-func (pcs *PerconaServerMySQLClusterSet) PrimaryCluster() *ClusterSetCluster {
-	for _, cluster := range pcs.Spec.Clusters {
-		if cluster.Name == pcs.Spec.PrimaryCluster {
+func (psc *PerconaServerMySQLClusterSet) PrimaryCluster() *ClusterSetCluster {
+	primaryClusterName := psc.Spec.PrimaryCluster
+	if psc.Status.PrimaryCluster != "" {
+		primaryClusterName = psc.Status.PrimaryCluster
+	}
+	for _, cluster := range psc.Spec.Clusters {
+		if cluster.Name == primaryClusterName {
+			return &cluster
+		}
+	}
+	return nil
+}
+
+func (psc *PerconaServerMySQLClusterSet) GetCluster(name string) *ClusterSetCluster {
+	for _, cluster := range psc.Spec.Clusters {
+		if cluster.Name == name {
 			return &cluster
 		}
 	}
