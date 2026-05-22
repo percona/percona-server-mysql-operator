@@ -123,6 +123,9 @@ rules:
   - perconaservermysqlbackups
   - perconaservermysqlbackups/finalizers
   - perconaservermysqlbackups/status
+  - perconaservermysqlclustersets
+  - perconaservermysqlclustersets/finalizers
+  - perconaservermysqlclustersets/status
   - perconaservermysqlrestores
   - perconaservermysqlrestores/finalizers
   - perconaservermysqlrestores/status

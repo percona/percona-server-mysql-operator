@@ -45,6 +45,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/ps"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psbackup"
+	"github.com/percona/percona-server-mysql-operator/pkg/controller/psclusterset"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
@@ -188,6 +189,14 @@ func main() {
 		NewStorageClient: storage.NewClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLRestore")
+		os.Exit(1)
+	}
+
+	if err = (&psclusterset.PerconaServerMySQLClusterSetReconciler{
+		Client: nsClient,
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLClusterSet")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
