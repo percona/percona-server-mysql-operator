@@ -637,6 +637,8 @@ type HAProxySpec struct {
 	Expose ServiceExpose `json:"expose,omitempty"`
 
 	PodSpec `json:",inline"`
+
+	SidecarResources corev1.ResourceRequirements `json:"sidecarResources,omitempty"`
 }
 
 type PodDisruptionBudgetSpec struct {

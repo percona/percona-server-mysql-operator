@@ -356,6 +356,13 @@ spec:
 #          - 1001
 #          - 1002
 #          - 1003
+#      sidecarResources:
+#        limits:
+#          cpu: 100m
+#          memory: 100M
+#        requests:
+#          cpu: 200m
+#          memory: 200M
 #      configuration: |-
 #        #      the actual default configuration file can be found here https://github.com/percona/percona-server-mysql-operator/blob/main/build/haproxy-global.cfg
 #
