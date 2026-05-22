@@ -1,6 +1,42 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 30
+timeout: 600
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-pitr-one-pod-restore-mysql
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-pitr-one-pod-restore-haproxy
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-pitr-one-pod-restore-binlog-server
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-pitr-one-pod-restore
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+status:
+  haproxy:
+    ready: 1
+    size: 1
+    state: ready
+  mysql:
+    ready: 1
+    size: 1
+    state: ready
+  binlogServer:
+    ready: 1
+    size: 1
+    state: ready
+  state: ready
 ---
 apiVersion: v1
 kind: ConfigMap

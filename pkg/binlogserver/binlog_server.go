@@ -1,11 +1,15 @@
 package binlogserver
 
 import (
+	"crypto/md5"
+	"fmt"
 	"path"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -29,8 +33,24 @@ const (
 	customConfigKey        = "custom.json"
 )
 
+const controllerRevisionHashLength = 11
+
 func Name(cr *apiv1.PerconaServerMySQL) string {
 	return cr.Name + "-" + AppName
+}
+
+func RestoreName(cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) string {
+	maxRestoreStatefulSetNameLength := validation.DNS1123LabelMaxLength - controllerRevisionHashLength
+
+	name := Name(cr) + "-r-" + restore.Name
+	if len(name) <= maxRestoreStatefulSetNameLength {
+		return name
+	}
+
+	hash := fmt.Sprintf("%x", md5.Sum([]byte(name)))[:8]
+	suffix := "-" + hash
+	prefix := strings.TrimRight(name[:maxRestoreStatefulSetNameLength-len(suffix)], "-")
+	return prefix + suffix
 }
 
 func customConfigMapName(cr *apiv1.PerconaServerMySQL) string {
@@ -41,17 +61,36 @@ func ConfigSecretName(cr *apiv1.PerconaServerMySQL) string {
 	return cr.Name + "-" + AppName + "-config"
 }
 
+func RestoreConfigSecretName(cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) string {
+	name := cr.Name + "-" + AppName + "-config-restore-" + restore.Name
+	if len(name) <= validation.DNS1123SubdomainMaxLength {
+		return name
+	}
+	hash := fmt.Sprintf("%x", md5.Sum([]byte(name)))[:8]
+	suffix := "-r-" + hash
+	prefix := strings.TrimRight(name[:validation.DNS1123SubdomainMaxLength-len(suffix)], "-")
+	return prefix + suffix
+}
+
 func MatchLabels(cr *apiv1.PerconaServerMySQL) map[string]string {
-	return util.SSMapMerge(cr.GlobalLabels(),
+	return util.SSMapMerge(
+		cr.GlobalLabels(),
 		cr.MySQLSpec().Labels,
 		cr.Labels(AppName, naming.ComponentPITR),
 	)
 }
 
-func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash string) *appsv1.StatefulSet {
-	spec := cr.Spec.Backup.PiTR.BinlogServer
+func RestoreMatchLabels(cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) map[string]string {
+	return util.SSMapMerge(
+		cr.GlobalLabels(),
+		restore.Labels(AppName, naming.ComponentPITR),
+	)
+}
 
-	labels := MatchLabels(cr)
+func StatefulSet(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, labels map[string]string, initImage, configHash, configSecretName string) *appsv1.StatefulSet {
+	if configSecretName == "" {
+		configSecretName = ConfigSecretName(cr)
+	}
 
 	annotations := make(map[string]string)
 	if configHash != "" {
@@ -81,7 +120,7 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash string) *ap
 				},
 				Spec: spec.Core(
 					labels,
-					volumes(cr),
+					volumes(cr, spec, configSecretName),
 					[]corev1.Container{
 						k8s.InitContainer(
 							cr,
@@ -94,23 +133,21 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash string) *ap
 							nil,
 						),
 					},
-					containers(cr),
+					containers(spec),
 				),
 			},
 		},
 	}
 }
 
-func sslDisabled(cr *apiv1.PerconaServerMySQL) bool {
-	return cr.Spec.Backup.PiTR.BinlogServer.SSLMode == "disabled"
+func sslDisabled(spec *apiv1.BinlogServerSpec) bool {
+	return spec.SSLMode == "disabled"
 }
 
-func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
+func volumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configSecretName string) []corev1.Volume {
 	t := true
 
-	spec := cr.Spec.Backup.PiTR.BinlogServer
-
-	conf := Configurable(*cr)
+	conf := Configurable{cr: cr, spec: spec}
 
 	vols := []corev1.Volume{
 		{
@@ -135,7 +172,7 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 		},
 	}
 
-	if !sslDisabled(cr) {
+	if !sslDisabled(spec) {
 		vols = append(vols, corev1.Volume{
 			Name: tlsVolumeName,
 			VolumeSource: corev1.VolumeSource{
@@ -146,7 +183,8 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 		})
 	}
 
-	vols = append(vols,
+	vols = append(
+		vols,
 		corev1.Volume{
 			Name: storageCredsVolumeName,
 			VolumeSource: corev1.VolumeSource{
@@ -163,7 +201,7 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 						{
 							Secret: &corev1.SecretProjection{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: ConfigSecretName(cr),
+									Name: configSecretName,
 								},
 								Items: []corev1.KeyToPath{
 									{
@@ -196,13 +234,11 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 	return vols
 }
 
-func containers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
-	return []corev1.Container{binlogServerContainer(cr)}
+func containers(spec *apiv1.BinlogServerSpec) []corev1.Container {
+	return []corev1.Container{binlogServerContainer(spec)}
 }
 
-func binlogServerContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
-	spec := cr.Spec.Backup.PiTR.BinlogServer
-
+func binlogServerContainer(spec *apiv1.BinlogServerSpec) corev1.Container {
 	env := []corev1.EnvVar{
 		{
 			Name:  "CONFIG_PATH",
@@ -225,13 +261,14 @@ func binlogServerContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 			MountPath: CredsMountPath,
 		},
 	}
-	if !sslDisabled(cr) {
+	if !sslDisabled(spec) {
 		mounts = append(mounts, corev1.VolumeMount{
 			Name:      tlsVolumeName,
 			MountPath: TLSMountPath,
 		})
 	}
-	mounts = append(mounts,
+	mounts = append(
+		mounts,
 		corev1.VolumeMount{
 			Name:      configVolumeName,
 			MountPath: configMountPath,
