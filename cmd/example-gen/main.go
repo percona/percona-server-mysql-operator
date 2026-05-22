@@ -81,7 +81,8 @@ func printCluster(ctx context.Context) error {
 		return errors.Wrap(err, "preset defaults")
 	}
 
-	jsonBytes, err := marshal.MarshalIgnoreOmitEmpty(cr,
+	jsonBytes, err := marshal.MarshalIgnoreOmitEmpty(
+		cr,
 		metav1.ObjectMeta{},
 		corev1.ResourceRequirements{},
 		corev1.SecurityContext{},
@@ -165,6 +166,31 @@ func printRestore() error {
 			ClusterName: defaults.NameCluster,
 			BackupName:  defaults.NameBackup,
 			PITR: &apiv1.RestorePITRSpec{
+				BackupSource: &apiv1.RestorePITRBackupSource{
+					BinlogServer: &apiv1.BinlogServerSpec{
+						Storage: apiv1.BinlogServerStorageSpec{
+							S3: &apiv1.BackupStorageS3Spec{
+								Bucket:            "S3-BACKUP-BUCKET-NAME-HERE",
+								Prefix:            "PREFIX_NAME",
+								CredentialsSecret: fmt.Sprintf("%s-s3-credentials", defaults.NameCluster),
+								Region:            "us-west-2",
+								EndpointURL:       "https://s3.amazonaws.com",
+							},
+						},
+						ServerID:       101,
+						ConnectTimeout: 30,
+						ReadTimeout:    30,
+						WriteTimeout:   30,
+						IdleTime:       30,
+						LogLevel:       "info",
+						PodSpec: apiv1.PodSpec{
+							Size: 1,
+							ContainerSpec: apiv1.ContainerSpec{
+								Image: defaults.ImageBinlogServer,
+							},
+						},
+					},
+				},
 				Type: apiv1.PITRDate,
 				Date: "2024-11-18T11:10:48Z",
 				GTID: "a3e5ff70-83e2-11ef-8e57-7a62caf7e1e3:1-36",
@@ -195,7 +221,8 @@ func printRestore() error {
 	if err := defaults.FromPresets(cr); err != nil {
 		return errors.Wrap(err, "preset defaults")
 	}
-	jsonBytes, err := marshal.MarshalIgnoreOmitEmpty(cr,
+	jsonBytes, err := marshal.MarshalIgnoreOmitEmpty(
+		cr,
 		corev1.EnvVar{},
 		corev1.EnvFromSource{},
 		metav1.ObjectMeta{},

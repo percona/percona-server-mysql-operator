@@ -14,7 +14,7 @@ commands:
 
       get_cr "restore" \
         |  yq eval '
+            .spec.backup.pitr.enabled = false |
             (.. | select(tag == "!!str")) |= sub("<prefix>"; "'"$(get_binlogs_prefix)"'")
           ' - \
         | kubectl -n "$NAMESPACE" apply -f -
-
