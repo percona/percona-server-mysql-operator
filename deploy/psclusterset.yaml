@@ -1,0 +1,16 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLClusterSet
+metadata:
+  name: my-cluster-set
+spec:
+  primaryCluster: my-primary-cluster
+  credentialsSecret:
+    name: ps-cluster1-secrets
+    key: replication
+  allowForcedFailover: false
+  clusters:
+    - name: my-cluster-1
+      endpoints:
+      - host: mysql-1.example.com
+  mysqlShellRunner:
+    image: perconalab/percona-server-mysql-operator:main-psmysql8.4

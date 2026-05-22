@@ -1228,6 +1228,144 @@ metadata:
     app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
     app.kubernetes.io/version: v1.2.0
+  name: perconaservermysqlclustersets.ps.percona.com
+spec:
+  group: ps.percona.com
+  names:
+    kind: PerconaServerMySQLClusterSet
+    listKind: PerconaServerMySQLClusterSetList
+    plural: perconaservermysqlclustersets
+    shortNames:
+    - ps-clusterset
+    singular: perconaservermysqlclusterset
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              allowForcedFailover:
+                default: false
+                type: boolean
+              clusters:
+                items:
+                  properties:
+                    endpoints:
+                      items:
+                        properties:
+                          host:
+                            type: string
+                          port:
+                            default: 3306
+                            format: int32
+                            type: integer
+                        required:
+                        - host
+                        type: object
+                      minItems: 1
+                      type: array
+                    name:
+                      type: string
+                  required:
+                  - endpoints
+                  - name
+                  type: object
+                type: array
+              credentialsSecret:
+                properties:
+                  key:
+                    type: string
+                  name:
+                    default: ""
+                    type: string
+                  optional:
+                    type: boolean
+                required:
+                - key
+                type: object
+                x-kubernetes-map-type: atomic
+              mysqlShellRunner:
+                properties:
+                  image:
+                    type: string
+                required:
+                - image
+                type: object
+              primaryCluster:
+                type: string
+            required:
+            - clusters
+            - credentialsSecret
+            - mysqlShellRunner
+            - primaryCluster
+            type: object
+          status:
+            properties:
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              primaryCluster:
+                type: string
+            required:
+            - primaryCluster
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  labels:
+    app.kubernetes.io/component: crd
+    app.kubernetes.io/name: percona-server-crd
+    app.kubernetes.io/part-of: percona-server-mysql-operator
+    app.kubernetes.io/version: v1.2.0
   name: perconaservermysqlrestores.ps.percona.com
 spec:
   group: ps.percona.com
@@ -13239,7 +13377,7 @@ spec:
           value: ""
         - name: DISABLE_TELEMETRY
           value: "false"
-        image: perconalab/percona-server-mysql-operator:main
+        image: perconalab/percona-xtradb-cluster-operator:K8SPS-508
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

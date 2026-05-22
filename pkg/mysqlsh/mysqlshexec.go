@@ -15,17 +15,17 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 )
 
-type mysqlshExec struct {
+type MysqlshExec struct {
 	pod    *corev1.Pod
 	client clientcmd.Client
 	uri    string
 }
 
-func NewWithExec(cliCmd clientcmd.Client, pod *corev1.Pod, uri string) (*mysqlshExec, error) {
-	return &mysqlshExec{client: cliCmd, pod: pod, uri: uri}, nil
+func NewWithExec(cliCmd clientcmd.Client, pod *corev1.Pod, uri string) (*MysqlshExec, error) {
+	return &MysqlshExec{client: cliCmd, pod: pod, uri: uri}, nil
 }
 
-func (m *mysqlshExec) runWithExec(ctx context.Context, cmd string) error {
+func (m *MysqlshExec) runWithExec(ctx context.Context, cmd string) error {
 	var errb, outb bytes.Buffer
 
 	c := []string{"mysqlsh", "--js", "--no-wizard", "--uri", m.uri, "-e", cmd}
@@ -39,7 +39,7 @@ func (m *mysqlshExec) runWithExec(ctx context.Context, cmd string) error {
 	return nil
 }
 
-func (m *mysqlshExec) RemoveInstanceWithExec(ctx context.Context, clusterName, instance string) error {
+func (m *MysqlshExec) RemoveInstanceWithExec(ctx context.Context, clusterName, instance string) error {
 	cmd := fmt.Sprintf("dba.getCluster('%s').removeInstance('%s', {'force': true})", clusterName, instance)
 
 	if err := m.runWithExec(ctx, cmd); err != nil {
@@ -49,7 +49,7 @@ func (m *mysqlshExec) RemoveInstanceWithExec(ctx context.Context, clusterName, i
 	return nil
 }
 
-func (m *mysqlshExec) DoesClusterExistWithExec(ctx context.Context, clusterName string) bool {
+func (m *MysqlshExec) DoesClusterExistWithExec(ctx context.Context, clusterName string) bool {
 	log := logf.FromContext(ctx)
 
 	cmd := fmt.Sprintf("dba.getCluster('%s').status()", clusterName)
@@ -61,7 +61,7 @@ func (m *mysqlshExec) DoesClusterExistWithExec(ctx context.Context, clusterName 
 	return err == nil
 }
 
-func (m *mysqlshExec) ClusterStatusWithExec(ctx context.Context) (innodbcluster.Status, error) {
+func (m *MysqlshExec) ClusterStatusWithExec(ctx context.Context) (innodbcluster.Status, error) {
 	status := innodbcluster.Status{}
 
 	stdoutBuffer := bytes.Buffer{}
@@ -82,7 +82,7 @@ func (m *mysqlshExec) ClusterStatusWithExec(ctx context.Context) (innodbcluster.
 	return status, nil
 }
 
-func (m *mysqlshExec) RebootClusterFromCompleteOutageWithExec(ctx context.Context, clusterName string) error {
+func (m *MysqlshExec) RebootClusterFromCompleteOutageWithExec(ctx context.Context, clusterName string) error {
 	cmd := fmt.Sprintf("dba.rebootClusterFromCompleteOutage('%s')", clusterName)
 
 	if err := m.runWithExec(ctx, cmd); err != nil {
@@ -92,7 +92,7 @@ func (m *mysqlshExec) RebootClusterFromCompleteOutageWithExec(ctx context.Contex
 	return nil
 }
 
-func (m *mysqlshExec) SetPrimaryInstanceWithExec(ctx context.Context, clusterName, instance string) error {
+func (m *MysqlshExec) SetPrimaryInstanceWithExec(ctx context.Context, clusterName, instance string) error {
 	cmd := fmt.Sprintf("dba.getCluster('%s').setPrimaryInstance('%s')", clusterName, instance)
 
 	if err := m.runWithExec(ctx, cmd); err != nil {
@@ -102,7 +102,7 @@ func (m *mysqlshExec) SetPrimaryInstanceWithExec(ctx context.Context, clusterNam
 	return nil
 }
 
-func (m *mysqlshExec) Rescan80WithExec(ctx context.Context, clusterName string) error {
+func (m *MysqlshExec) Rescan80WithExec(ctx context.Context, clusterName string) error {
 	cmd := fmt.Sprintf(
 		"dba.getCluster('%s').rescan({'addInstances': 'auto', 'removeInstances': 'auto', 'repairMetadata': true})",
 		clusterName,
@@ -115,7 +115,7 @@ func (m *mysqlshExec) Rescan80WithExec(ctx context.Context, clusterName string) 
 	return nil
 }
 
-func (m *mysqlshExec) Rescan84WithExec(ctx context.Context, clusterName string) error {
+func (m *MysqlshExec) Rescan84WithExec(ctx context.Context, clusterName string) error {
 	cmd := fmt.Sprintf(
 		"dba.getCluster('%s').rescan({'addUnmanaged': true, 'removeObsolete': true, 'repairMetadata': true})",
 		clusterName,
@@ -125,5 +125,13 @@ func (m *mysqlshExec) Rescan84WithExec(ctx context.Context, clusterName string) 
 		return errors.Wrap(err, "8.4: rescan cluster")
 	}
 
+	return nil
+}
+
+func (m *MysqlshExec) CreateClusterSetWithExec(ctx context.Context, name string) error {
+	cmd := fmt.Sprintf("dba.getCluster().createClusterSet('%s')", name)
+	if err := m.runWithExec(ctx, cmd); err != nil {
+		return errors.Wrap(err, "create cluster set")
+	}
 	return nil
 }

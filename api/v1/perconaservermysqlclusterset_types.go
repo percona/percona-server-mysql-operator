@@ -29,8 +29,8 @@ import (
 // PerconaServerMySQLClusterSet is the Schema for the perconaservermysqlclustersets API
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=psclusterset
 // +kubebuilder:resource:scope=Namespaced
+// +kubebuilder:resource:shortName=ps-clusterset
 type PerconaServerMySQLClusterSet struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -45,8 +45,8 @@ type PerconaServerMySQLClusterSetSpec struct {
 	CredentialsSecret corev1.SecretKeySelector `json:"credentialsSecret"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:=false
-	AllowForcedFailover *bool                `json:"allowForcedFailover,omitempty"`
-	Clusters            []ClusterSetClusters `json:"clusters"`
+	AllowForcedFailover *bool               `json:"allowForcedFailover,omitempty"`
+	Clusters            []ClusterSetCluster `json:"clusters"`
 
 	MysqlShellRunner MysqlShellRunner `json:"mysqlShellRunner"`
 }
@@ -56,7 +56,7 @@ type MysqlShellRunner struct {
 	Image string `json:"image"`
 }
 
-type ClusterSetClusters struct {
+type ClusterSetCluster struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 	// +kubebuilder:validation:Required
@@ -72,7 +72,8 @@ type ClusterSetClusterEndpoint struct {
 }
 
 const (
-	ConditionMySQLShellRunnerReady string = "MySQLShellRunnerReady"
+	ConditionMySQLShellRunnerReady  string = "MySQLShellRunnerReady"
+	ConditionClusterSetBootstrapped string = "ClusterSetBootstrapped"
 )
 
 type PerconaServerMySQLClusterSetStatus struct {
@@ -91,6 +92,15 @@ type PerconaServerMySQLClusterSetList struct {
 
 func init() {
 	SchemeBuilder.Register(&PerconaServerMySQLClusterSet{}, &PerconaServerMySQLClusterSetList{})
+}
+
+func (pcs *PerconaServerMySQLClusterSet) PrimaryCluster() *ClusterSetCluster {
+	for _, cluster := range pcs.Spec.Clusters {
+		if cluster.Name == pcs.Spec.PrimaryCluster {
+			return &cluster
+		}
+	}
+	return nil
 }
 
 func (pcs *PerconaServerMySQLClusterSet) UpdateStatus(ctx context.Context, cl client.Client, mutate func(status *PerconaServerMySQLClusterSetStatus)) error {

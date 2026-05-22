@@ -77,7 +77,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 		}
 
 		podFQDN := mysql.PodFQDN(cr, &pod)
-		podUri := getMySQLURI(apiv1.UserOperator, operatorPass, podFQDN)
+		podUri := mysqlsh.URI(string(apiv1.UserOperator), operatorPass, podFQDN)
 
 		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, &pod, podUri)
 		if err != nil {

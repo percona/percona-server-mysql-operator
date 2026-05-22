@@ -11,6 +11,8 @@ spec:
     kind: PerconaServerMySQLClusterSet
     listKind: PerconaServerMySQLClusterSetList
     plural: perconaservermysqlclustersets
+    shortNames:
+    - ps-clusterset
     singular: perconaservermysqlclusterset
   scope: Namespaced
   versions:
