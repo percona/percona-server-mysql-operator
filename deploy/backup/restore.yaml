@@ -6,6 +6,23 @@ spec:
   clusterName: ps-cluster1
   backupName: backup1
 #  pitr:
+#    backupSource:
+#      binlogServer:
+#        size: 1
+#        image: perconalab/percona-binlog-server:0.2.1
+#        serverId: 101
+#        storage:
+#          s3:
+#            bucket: S3-BACKUP-BUCKET-NAME-HERE
+#            credentialsSecret: ps-cluster1-s3-credentials
+#            endpointUrl: https://s3.amazonaws.com
+#            prefix: PREFIX_NAME
+#            region: us-west-2
+#        connectTimeout: 30
+#        readTimeout: 30
+#        writeTimeout: 30
+#        idleTime: 30
+#        logLevel: info
 #    date: "2024-11-18T11:10:48Z"
 #    force: false
 #    gtid: a3e5ff70-83e2-11ef-8e57-7a62caf7e1e3:1-36
