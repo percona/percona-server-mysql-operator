@@ -59,7 +59,7 @@ func main() {
 		log.Fatalf("failed to create clientcmd: %v", err)
 	}
 
-	manager, err := csmanager.NewManager(ctx, psClusterSet, &csmanager.ManagerOptions{
+	manager, err := csmanager.New(ctx, psClusterSet, &csmanager.ManagerOptions{
 		Client:    cl,
 		ClientCmd: cliCmd,
 		// mysqlsh reports progress on stderr; send both streams to stdout for job logs.

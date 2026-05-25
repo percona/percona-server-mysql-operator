@@ -25,13 +25,13 @@ type ManagerOptions struct {
 	Stderr    io.Writer
 }
 
-func NewManager(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, opts *ManagerOptions) (*mysqlshellClusterSetManager, error) {
+func New(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, opts *ManagerOptions) (*mysqlshellClusterSetManager, error) {
 	runnerPod, err := getRunnerPod(ctx, opts.Client, pcs)
 	if err != nil {
 		return nil, errors.Wrap(err, "get runner pod")
 	}
 
-	pass, err := getClusterSetAdminPassword(ctx, opts.Client, pcs)
+	pass, err := getClusterSetPassword(ctx, opts.Client, pcs)
 	if err != nil {
 		return nil, errors.Wrap(err, "get clusterset admin password")
 	}
@@ -41,7 +41,7 @@ func NewManager(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, op
 		return nil, errors.New("primary cluster not found")
 	}
 
-	primaryClusterURI := mysqlsh.URI(string(apiv1.UserRoot), pass, primaryCluster.Endpoints[0].Host)
+	primaryClusterURI := mysqlsh.URI(string(apiv1.UserClusterSet), pass, primaryCluster.Endpoints[0].Host)
 
 	execOpts := &mysqlsh.ExecOptions{
 		Pod:           runnerPod,
@@ -58,16 +58,21 @@ func NewManager(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, op
 	return &mysqlshellClusterSetManager{shell: shell}, nil
 }
 
-func getClusterSetAdminPassword(ctx context.Context, cl client.Client, pcs *apiv1.PerconaServerMySQLClusterSet) (string, error) {
+func getClusterSetPassword(ctx context.Context, cl client.Client, pcs *apiv1.PerconaServerMySQLClusterSet) (string, error) {
 	secret := &corev1.Secret{}
 	secretKeySel := pcs.Spec.CredentialsSecret
 	if err := cl.Get(ctx, client.ObjectKey{Namespace: pcs.Namespace, Name: secretKeySel.Name}, secret); err != nil {
 		return "", errors.Wrap(err, "get credentials secret")
 	}
 
-	password, ok := secret.Data[string(secretKeySel.Key)]
+	key := secretKeySel.Key
+	if key == "" {
+		key = string(apiv1.UserClusterSet)
+	}
+
+	password, ok := secret.Data[key]
 	if !ok {
-		return "", errors.New("no password for clusterset admin found")
+		return "", errors.New("no password for clusterset found")
 	}
 	return string(password), nil
 }

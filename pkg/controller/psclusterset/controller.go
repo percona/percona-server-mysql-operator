@@ -59,7 +59,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) SetupWithManager(mgr ctrl.Manag
 				ClientCmd: r.ClientCmd,
 				Stdout:    &bytes.Buffer{},
 			}
-			return csmanager.NewManager(ctx, pcs, opts)
+			return csmanager.New(ctx, pcs, opts)
 		}
 	}
 
