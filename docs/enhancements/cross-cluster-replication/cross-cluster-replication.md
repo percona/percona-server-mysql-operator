@@ -6,7 +6,7 @@
 | Author       | Mayank Shah |
 | Status       | Draft       |
 | Created      | 2026-05-18  |
-| Last Updated | 2026-05-18  |
+| Last Updated | 2026-05-25  |
 | Reviewers    |             |
 
 
@@ -14,22 +14,20 @@
 
 ## 1. Overview
 
-This feature adds support for cross-cluster replication capabilities in the Percona Server MySQL Operator. A new namespaced CRD `PerconaServerMySQLClusterSet` (or `psclusterset`) is introduced, letting users declare cross-cluster replication between multiple GR-based MySQL clusters, as a MySQL InnoDB ClusterSet. A dedicated controller drives the ClusterSet orchestration using mysql-shell: bootstrap, switchover, rejoin, etc.
+This feature adds support for cross-cluster replication capabilities between GR (group replication) clusters. A new namespaced CRD `PerconaServerMySQLClusterSet` (or `ps-clusterset`) is introduced, letting users declare cross-cluster replication between multiple GR-based MySQL clusters, as a MySQL InnoDB ClusterSet. A dedicated controller drives the ClusterSet orchestration using mysql-shell: bootstrap, switchover, rejoin, etc.
 
 ### 1.1 Goals
 
 - Provide an API for managing MySQL InnoDB ClusterSets across sites.
 - Support clusters anywhere reachable on the network: same K8s cluster, different K8s cluster, on-prem, managed service.
 - Support planned switchover and explicit emergency (force) failover.
-- Keep the per-site `PerconaServerMySQL` controller unchanged except for the minimum needed to let a new replica start as standalone.
-
-> NOTE: One of the requirements explicitly laid out by the MySQL docs is that replica clusters need to come up as 'standalone' clusters (no GR initialised). The ClusterSet takes care of initialising GR. Read about the requirements [here](https://dev.mysql.com/doc/mysql-shell/9.1/en/innodb-clusterset-requirements.html#innodb-clusterset-requirements-mysql-instances).
+- Keep the per-site `PerconaServerMySQL` controller unchanged except for the minimum needed to let a new replica start as standalone. One of the requirements explicitly laid out by the MySQL docs is that replica clusters need to come up as 'standalone' clusters (no GR initialised). The ClusterSet takes care of initialising GR. Read about the requirements [here](https://dev.mysql.com/doc/mysql-shell/9.1/en/innodb-clusterset-requirements.html#innodb-clusterset-requirements-mysql-instances).
 
 ### 1.2 Non-Goals (Out of Scope)
 
-- **Automatic failover**: all failover is user-initiated. Revisit once the manual flow is operationally proven and we trust the detection signal.
+- **Automatic switchover**: all switchover is declarative and user-initiated. Revisit once the manual flow is operationally proven and we trust the detection signal.
 - **Automatic rejoin of INVALIDATED clusters**: annotation-driven only in v1. Revisit once rejoin success/failure patterns are well understood from real operations.
-- **Async-mode (Orchestrator) per-site topologies**: GR only. Mixing async and GR is not supported. Revisit if there is demand and the semantic story is clear.
+- **Async-mode (Orchestrator) per-site topologies**: InnoDB ClusterSet supports GR only, mixing async and GR is not supported. Replication between async clusters requires a different design, possibly using native replication channels.
 - **Adopting an existing ClusterSet** created out-of-band via mysqlsh: v1 either bootstraps a fresh ClusterSet or refuses if metadata is inconsistent.
 - **MySQL Router integration**: while possible to set up MySQL Router to split read/write traffic between primary and DR, we will leave it out of scope for v1.
 
@@ -44,16 +42,16 @@ This feature adds support for cross-cluster replication capabilities in the Perc
 - **InnoDB ClusterSet**: A higher-level abstraction (introduced in MySQL 8.0.27) consisting of one PRIMARY InnoDB Cluster and N REPLICA InnoDB Clusters connected by async replication. Each REPLICA Cluster is itself a fully-functional GR group; only the PRIMARY Cluster accepts writes. Managed via mysqlsh's `dba.createClusterSet()`, `<cs>.createReplicaCluster()`, `<cs>.setPrimaryCluster()`, `<cs>.forcePrimaryCluster()`, `<cs>.rejoinCluster()`, `<cs>.removeCluster()`, `<cs>.dissolve()`, `<cs>.status()`.
 - **CLONE plugin**: MySQL's built-in mechanism for taking a physical snapshot of one MySQL instance and transferring it to another. `createReplicaCluster()` uses CLONE to seed the replica from the primary. For TB-scale data over WAN, CLONE can take hours.
 - **INVALIDATED state**: When mysqlsh's `forcePrimaryCluster()` runs while the old primary is unreachable, the old primary is marked INVALIDATED in metadata. It stays in the ClusterSet but is fenced off, because it may have accepted writes the new primary doesn't have. Recovery requires explicit `rejoinCluster()` (cheap, if GTIDs are compatible) or remove-and-recreate (slow, full re-CLONE).
-- **mysqlsh**: The MySQL command-line tool that hosts the AdminAPI. Today the operator invokes mysqlsh via `kubectl exec` into a MySQL pod (see `pkg/mysqlsh`). For this feature mysqlsh needs to be bundled it into the operator image and invoke it via `os/exec` from the controller pod.
+- **mysqlsh**: The MySQL command-line tool that hosts the AdminAPI. Today the operator invokes mysqlsh via `kubectl exec` into a MySQL pod. For this feature, the controller invokes mysqlsh via `kubectl exec` into a dedicated `mysqlshell-runner` Pod whose image is configured per-ClusterSet (see §5.6).
 
 ### 2.2 Key Constraints
 
-1. **InnoDB ClusterSet requires MySQL 8.0.27+** on every participating cluster, with a matching mysqlsh version. Endpoints below this are unsupported.
+1. **InnoDB ClusterSet requires MySQL 8.0.27+** on every participating cluster, with a matching mysqlsh version. Versions below this are unsupported.
 2. **The mysqlsh AdminAPI requires GR-compatible MySQL configuration** on every cluster and the CLONE plugin loaded. The per-site operator's existing bootstrap already produces this when `clusterType: group-replication`.
 3. `cs.createReplicaCluster()` requires the target instance to be a clean standalone MySQL, not in any GR group, not in any ClusterSet. An existing operator-managed cluster bootstraps GR automatically on Pod-0, so we need a new bootstrap mode that skips this step for clusters intended to become ClusterSet replicas.
 4. **mysqlsh's user that runs ClusterSet operations must exist on the target with the SAME credentials as on the primary**, because `createReplicaCluster` CLONEs the primary's `mysql.user` table over the replica's.
-5. **StatefulSets generated by the operator do not set `PodManagementPolicy`**, so the Kubernetes default `OrderedReady` applies. This is load-bearing for the standalone bootstrap path: Pod-1 and above must not start until Pod-0 is Ready, which only happens after a new cluster is formed from Pod-0.
-6. **Backward compatibility:** existing `PerconaServerMySQL` CRs in the wild must be after the change. New fields are additive and optional with defaults that preserve current behavior.
+5. **StatefulSets generated by the operator do not set `PodManagementPolicy`**, so the Kubernetes default `OrderedReady` applies. This is needed for the standalone bootstrap path: Pod-1 and above must not start until Pod-0 is Ready, which only happens after a new cluster is formed from Pod-0.
+6. **Backward compatibility:** New fields are additive and optional with defaults that preserve current behavior.
 7. **The K8s cluster hosting the ClusterSet CR is not a SPOF for the underlying MySQL data**, because the controller is a pure orchestrator over MySQL primitives. Loss of the CR's K8s cluster does not lose MySQL data; redeploy and re-apply the CR to resume.
 
 ---
@@ -94,12 +92,12 @@ Two changes layered on top of the existing architecture:
 ```
 User applies PerconaServerMySQLClusterSet CR
   → New controller in operator pod reconciles
-    → Probe each clusters[].endpoints (inline mysqlsh)
+    → Probe each clusters[].endpoints
     → Decide action: bootstrap | switchover | force-failover |
                      add-replica | remove | rejoin | refresh-status | dissolve
     → Execute:
-       - Fast verbs inline via os/exec mysqlsh
-       - createReplicaCluster as a Kubernetes Job (initial cloning may take hours)
+       - Fast verbs via kubectl exec into the mysqlshell-runner Pod
+       - createReplicaCluster as a Kubernetes Job using the runner image (initial cloning may take hours)
     → Update CR status from observed topology
 ```
 
@@ -124,8 +122,8 @@ spec.mysql.bootstrap.mode = manual (new field; default auto)
 ### 3.3 Key Observations
 
 1. **InnoDB ClusterSet is a MySQL-side concept.** The natural CRD shape is a list of network endpoints with credentials, not a list of references to other CRs. This allows managing replicating from across K8S clusters or even on non-Kubernetes environments.
-2. `createReplicaCluster` is the only long-running operation. All mysql-shell commands are called via `exec`, except `createReplicaCluster`. Since this may take even hours to complete, this will run as a Job, and the `psclusterset` controller simply tracks its progress.
-3. **mysqlsh in the operator pod is a new code path.** Today the operator exec's into MySQL pods to run mysqlshell. For ClusterSet the controller must run mysqlsh locally against network endpoints, which requires mysqlsh to be bundled into the operator image.
+2. `createReplicaCluster` is the only long-running operation. All mysql-shell commands are issued via `kubectl exec` into a dedicated `mysqlshell-runner` Pod, except `createReplicaCluster`. Since this may take even hours to complete, it will run as a Job using the same runner image, and the `psclusterset` controller simply tracks its progress.
+3. **The `mysqlshell-runner` Pod is a new component.** Today the operator exec's into MySQL pods to run mysqlsh. For ClusterSet, the operator manages a separate long-running runner Pod (one per ClusterSet CR) and `kubectl exec`s mysqlsh commands into it. This keeps the operator image free of mysqlsh and lets each ClusterSet pin a mysqlsh version that matches its MySQL endpoints.
 
 ---
 
@@ -146,7 +144,8 @@ spec:
   primaryCluster: cluster1
   credentialsSecret:
     name: cluster1-credentials
-    key: clustersetAdmin
+  mysqlshellRunner:
+    image: percona/percona-server:8.0.36
   clusters:
   - name: cluster1
     endpoints:
@@ -161,6 +160,7 @@ spec:
 
 - `spec.primaryCluster` *(required, string)*: Logical name of the desired primary cluster. Must equal exactly one `clusters[].name`. Editing this triggers a planned switchover, or a force failover if `allowForceFailover` is true and the current primary is unreachable.
 - `spec.allowForceFailover` *(optional, default: `false`)*: When true, the controller is permitted to use `forcePrimaryCluster()` if a `primaryCluster` change is requested while the current primary is unreachable. When false, the controller blocks and surfaces a condition. Default `false` because force failover is destructive (data correctness can suffer).
+- `spec.mysqlshellRunner.image` *(required, string)*: Container image used for the `mysqlshell-runner` Pod and the `createReplicaCluster` Job. Must contain a `mysqlsh` binary on `PATH`. The mysqlsh version should match the major version of the MySQL endpoints participating in this ClusterSet (e.g. 8.0 endpoints → 8.0 mysqlsh). See §5.6 for the rationale.
 - `spec.clusters[]` *(required, length >= 2)*: List of clusters participating in the ClusterSet. Each entry:
   - `name` *(required, immutable per entry)*: Logical handle used in `primaryCluster`, status, annotations. Must match `[a-z0-9-]{1,63}`. Immutable once observed in status; renames go through remove + re-add.
   - `endpoints[]` *(required, length >= 1)*: List of host:port pairs the controller can use to reach the cluster's MySQL members. Controller picks the first reachable. Multiple entries allow the controller's own connection to survive single-member failures.
@@ -177,19 +177,18 @@ spec:
 - `state` (`Initializing | Ready | NeedsAction | Degraded | Deleting | Unknown`): High-level state derived from per-cluster observations.
 - `currentPrimary` (string): The cluster currently primary, as observed via `<cs>.status()`. May lag spec briefly during switchover.
 - `lastObservedAt` (RFC3339 timestamp): Time of the last successful status refresh.
+- `lastObservedGeneration`: The last observed generation of the ps-clusterset being reconciled
 - `conditions[]` (Kubernetes-standard conditions):
-  - `ClusterSetReady` — all clusters reachable, topology matches spec.
-  - `PrimaryReachable` — current primary is reachable from the controller.
+  - `Ready` — ClusterSet is formed, replicas are replicating from specified primary.
+  - `ClusterSetBootstrapped` - Primary is configured for forming a ClusterSet
+  - `MysqlShellRunnerReady` — The mysqlshell runner Deployment is ready
   - `SwitchoverInProgress` — `spec.primaryCluster` differs from `status.currentPrimary` and reconcile is executing the change.
-  - `SwitchoverBlocked` — spec change requested but preconditions fail. Reasons: `PrimaryUnreachableAndForceFailoverNotAllowed`, `NewPrimaryNotInClusterSet`, `NewPrimaryNotOK`, `ReplicationLagTooHigh`.
-  - `ClusterInvalidated` — at least one cluster in INVALIDATED state. Message names which cluster(s) and suggests the rejoin path.
 - `clusters[]` mirrors `<cs>.status()`'s output one-to-one so users can correlate `kubectl get psclusterset -o yaml` with mysqlsh output during incidents. Each entry:
-  - `name`, `role` (`PRIMARY`/`REPLICA` from mysqlsh, not spec), `globalStatus` (`OK`/`OK_NOT_REPLICATING`/`NOT_OK`/`INVALIDATED`/`UNKNOWN`), `lastSeen`, `transactionSet.executed` (GTID set), `replicationLag` (for replicas, best-effort), `members[]` with per-member `address`, `role`, `state`.
-  - `pendingOperation` *(present only while a Job is in flight)*: `op` (e.g. `createReplicaCluster`), `jobName`, `startedAt`.
+  - `name`, `role` (`PRIMARY`/`REPLICA` from mysqlsh, not spec), `globalStatus` (`OK`/`OK_NOT_REPLICATING`/`NOT_OK`/`INVALIDATED`/`UNKNOWN`)
 
 ### 4.3 Internal Contracts
 
-**clustersetAdmin user**: A new `clustersetAdmin` user is added into the existing set of users. When a new replica is added to a ClusterSet, this user is automatically cloned from the primary. The same credentials may be used to manage all members of a ClusterSet.
+**clusterset user**: A new `clusterset` user is added into the existing set of users which shall be used for managing ClusterSet operations. Each replica cluster MUST contain the same password as in the primary before adding to the ClusterSet.
 
 **Annotations on the ClusterSet CR**:
 
@@ -201,18 +200,23 @@ spec:
 
 - `BOOTSTRAP_MODE` *(values: `auto` | `manual`)* — always set; read by both `cmd/bootstrap` and `cmd/healthcheck`.
 
-**Job-based contract for createReplicaCluster** (§5.3):
+**mysqlshell-runner Deployment contract**:
 
-- Job name pattern: `psclusterset-<cr-name>-createreplica-<cluster>-<gen>`.
-- Same image as the operator; entrypoint is a new subcommand (`clusterset-op --op=create-replica-cluster --target=<name>`).
-- Mounts the primary and target `credentialsSecretRef` Secrets.
-- `activeDeadlineSeconds`: default 12 h, overridable.
-- `ttlSecondsAfterFinished`: 1 h retention for debug.
+- Name pattern: `<cr-name>-mysqlshell-runner`.
+- One Pod per ClusterSet CR, in the CR's namespace, managed by the controller (created on first reconcile, automatically cleaned up using ControllerReferences).
+- Image: `spec.mysqlshellRunner.image`. Must provide `mysqlsh` on `PATH`.
+- Long-lived and stateless: no PVCs, no Secrets baked in. The controller passes credentials per invocation via stdin/env when it `kubectl exec`s into the Pod.
+- Used for every mysqlsh AdminAPI call the controller makes.
+
+**Job-based contract for createReplicaCluster**:
+
+- Job name pattern: `<cr-name>-replica-init`.
+- Uses the same image as the operator
 
 ### 4.4 User-Facing Behavior Changes
 
 - New resource visible via `kubectl get psclusterset`, with printed columns `state` and `currentPrimary`.
-- New events: `SwitchoverStarted`, `SwitchoverCompleted`, `ForceFailoverPerformed`, `ClusterInvalidated`, `RejoinTriggered`, `RejoinSucceeded`, `RejoinFailed`, `CreateReplicaClusterStarted`, `CreateReplicaClusterSucceeded`, `CreateReplicaClusterFailed`.
+- New events: `ClusterSetDegraded`, `ClusterSetPrimarySwitched`, `ClusterSetReady`, `ClusterSetBootstrapped`
 - For `PerconaServerMySQL` CRs with `bootstrap.mode: manual`, Pod-0 will stay NotReady indefinitely until bootstrapped by the `psclusterset` controllers . This is intentional and surfaced via the Readiness Probe failing with "Member state: OFFLINE" until the ClusterSet controller (or some other actor) attaches it.
 
 ---
@@ -225,7 +229,7 @@ spec:
 
 **Why:** Native replication channels do not align well with Group Replication because they operate outside the Group Replication metadata model. Supporting them would require the operator to work around MySQL's topology metadata, reconcile state manually, and accept functional limitations, including limited replication of MySQL users and grants.
 
-### 5.1 Dedicated CRD for cross-cluster replication
+### 5.2 Dedicated CRD for cross-cluster replication
 
 **Chosen:** A dedicated CRD `PerconaServerMySQLClusterSet` for setting up cross-cluster-replication.
 
@@ -270,7 +274,7 @@ A dedicated `PerconaServerMySQLClusterSet` CR keeps the topology in one object. 
 | Use `.spec.clusterSet` on existing `PerconaServerMySQL` CR | Splits one ClusterSet across N independently reconciled CRs, requires non-atomic role changes for switchover/failover, and forces per-site cluster CRs to own topology-level operations they do not control. |
 
 
-### 5.2 Network-only coupling (no binding to `PerconaServerMySQL` CRs)
+### 5.3 Network-only coupling (no binding to `PerconaServerMySQL` CRs)
 
 **Chosen:** The ClusterSet CR references MySQL endpoints + credentials. It does **not** reference `PerconaServerMySQL` CRs by name and does not use ownerReferences.
 
@@ -285,28 +289,27 @@ A dedicated `PerconaServerMySQLClusterSet` CR keeps the topology in one object. 
 | Owner-references creating per-site CRs from a ClusterSet template        | Even tighter coupling; impossible to use with pre-existing clusters; impossible to use with non-K8s endpoints.                                                                  |
 
 
-### 5.3 Single-instance, namespaced controller (no replication, no leader election)
+### 5.4 Single-instance, namespaced controller (no replication, no leader election)
 
 **Chosen:** The CR is namespaced. The operator in that namespace (or a cluster-wide operator) reconciles it as a normal Kubernetes resource. Only one CR per logical ClusterSet, in one K8s cluster.
 
 **Why:** With network-only coupling, the controller does not need co-location with any specific cluster.
 
-### 5.4 Jobs only for `createReplicaCluster`
+### 5.5 Jobs only for `createReplicaCluster`
 
-**Chosen:** Every mutating mysqlsh verb runs inline via `os/exec` in the controller pod, with one exception: `createReplicaCluster` runs as a Kubernetes Job using the operator image.
+**Chosen:** Every mutating mysqlsh verb is issued via `kubectl exec` into the `mysqlshell-runner` Pod, with one exception: `createReplicaCluster` runs as a Kubernetes Job using the same `spec.mysqlshellRunner.image`.
 
-**Why:** `createReplicaCluster` performs a CLONE of the primary's data into the target replica. For multi-TB databases, this can take hours. Holding the controller's reconcile open for hours risks context cancellation, operator pod restarts losing progress, and blocks other CRs in the same operator. All other ClusterSet verbs (setPrimaryCluster on a caught-up replica, forcePrimaryCluster, removeCluster, rejoinCluster without re-clone) complete in seconds when preconditions hold, so inline is fine.
+**Why:** `createReplicaCluster` performs a CLONE of the primary's data into the target replica. For multi-TB databases, this can take hours and should not block the reconcile loop for that long.
 
 **Alternatives considered:**
 
 
-| Alternative                                                                                                                      | Why Rejected                                                               |
-| -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `createReplicaCluster` in a goroutine, in-memory tracking                                                                        | Pod restart loses progress; in-memory state ios fragile across reconciles. |
-| A dedicated ClusterSet Manager Deployment that exposes operations via HTTP/gRPC API. Operator is stateless, simply calls the API | A new component to design and operate, adds complexity.                    |
+| Alternative                                               | Why Rejected                                                               |
+| --------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `createReplicaCluster` in a goroutine, in-memory tracking | Pod restart loses progress; in-memory state ios fragile across reconciles. |
 
 
-### 5.5 Bootstrap "manual" mode via a single-branch short-circuit
+### 5.6 Bootstrap "manual" mode via a single-branch short-circuit
 
 **Chosen:** Add `spec.mysql.bootstrap.mode: auto | manual`. In `manual` mode, the existing GR bootstrap short-circuits at the `peers.Len() == 1 && connectToCluster failed` branch, returning 0 before calling `dba.createCluster()`. Other probes (readiness, liveness) handle the resulting unadopted state.
 
@@ -322,25 +325,29 @@ A dedicated `PerconaServerMySQLClusterSet` CR keeps the topology in one object. 
 | Clamp StatefulSet replicas to 1 while standalone, scale up on adoption  | Adds reconcile complexity for no real benefit; OrderedReady already gives the same effective sequencing for free, and Pod-1+ wait costs zero compute (they don't exist as running pods yet). |
 
 
-### 5.6 mysqlsh runtime: bundled in operator image, invoked via `os/exec`
+### 5.7 mysqlsh runtime: dedicated `mysqlshell-runner` Pod, invoked via `kubectl exec`
 
-**Chosen:** The operator image includes the mysqlsh binary. The controller invokes it via `os/exec` against remote endpoints over the network. A new wrapper (`pkg/mysqlsh/local` or similar) handles this network-only invocation pattern, distinct from the existing `pkg/mysqlsh` which `kubectl exec`s into a MySQL pod.
+**Chosen:** The controller manages a long-lived `mysqlshell-runner` Pod per ClusterSet CR. Its image is configured via `spec.mysqlshellRunner.image` and must contain the `mysqlsh` binary. The controller `kubectl exec`s mysqlsh AdminAPI calls into this Pod against the remote MySQL endpoints declared in `spec.clusters[]`. The operator image itself does not contain mysqlsh.
 
-**Why:** Simplest control flow, no extra pods for fast operations, acceptable image-size increase (~80-150 MB). The operator pod needs network egress to every endpoint listed in the CR anyway.
+**Why:**
+
+- **Decouples mysqlsh version from operator releases.** mysqlsh needs to match the major version of the MySQL endpoints it talks to (8.0 vs 8.4 and onward). Bundling mysqlsh in the operator image would tie every operator release to one mysqlsh version and prevent users from pinning a different one per ClusterSet. With a separate runner image, each ClusterSet pins its own version via `spec.mysqlshellRunner.image`.
+- **Keeps the operator image slim.** Bundling mysqlsh adds ~80-150 MB to the operator image, paid by every operator deployment regardless of whether ClusterSet is in use.
+- **Acceptable cost.** The runner Pod is a single stateless container per ClusterSet CR — no PVCs, no Secrets baked in, nothing to lose on restart. `kubectl exec` latency is fine for the dozens of probe calls per minute under steady-state reconcile.
 
 **Alternatives considered:**
 
 
-| Alternative                                                                                                                      | Why Rejected                                                                                                                                 |
-| -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Short-lived Job per mysqlsh invocation                                                                                           | Adds pod-start latency to every operation; for the dozens of probe calls per minute under steady-state reconcile load, this is unacceptable. |
-| A dedicated ClusterSet Manager Deployment that exposes operations via HTTP/gRPC API. Operator is stateless, simply calls the API | A new component to design and operate, adds complexity.                                                                                      |
-| Exec into a local MySQL pod for mysqlsh                                                                                          | Doesn't work when the primary cluster is outside K8S or outside the managing controller's cluster;                                           |
+| Alternative                                                | Why Rejected                                                                                                                                                                                          |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bundle mysqlsh in the operator image, invoke via `os/exec` | Couples operator releases to mysqlsh release cadence; image grows ~80-150 MB for every user; no way to pin a different mysqlsh version per ClusterSet, which matters when CRs span 8.0 and 8.4 MySQL. |
+| Short-lived Job per mysqlsh invocation                     | Adds pod-start latency to every operation; for the dozens of probe calls per minute under steady-state reconcile load, this is unacceptable.                                                          |
+| Exec into a local MySQL pod for mysqlsh                    | Doesn't work when the primary cluster is outside K8s or outside the managing controller's cluster.                                                                                                    |
 
 
-### 5.7 Dedicated `clustersetAdmin` user, provisioned by per-site bootstrap
+### 5.8 Dedicated `clusterset` user
 
-**Chosen:** A new MySQL user `clustersetAdmin@'%'` with the required grants set is created on every operator-managed cluster by `build/ps-entrypoint.sh`, alongside the existing system users. Password sourced from a new key in the per-site Secret. The ClusterSet CR's `credentialsSecret` references a Secret whose password matches.
+**Chosen:** A new MySQL user `clusterset` with the required grants set is created on every operator-managed cluster, alongside the existing system users. Password sourced from a new key in the per-site Secret. The ClusterSet CR's `credentialsSecret` references a Secret whose password matches.
 
 **Why:** The existing `operator` user has `GRANT ALL ON *.* WITH GRANT OPTION` and would work, but reusing it for cross-site administration conflates privileges and grant scopes. The existing `replication` user lacks DML grants on schemas outside `mysql.`*, so it cannot manage the `mysql_innodb_cluster_metadata` schema that mysqlsh ClusterSet operations write to. A dedicated user with exactly the needed grants follows least-privilege and gives users a clean audit/rotation surface for cross-site credentials.
 
@@ -353,15 +360,15 @@ Provisioning during initial bootstrap keeps the ClusterSet controller free of an
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | Reuse existing `operator` user                            | Conflates privilege scopes; rotation/audit becomes coarse-grained.                                                                       |
 | Reuse existing `replication` user                         | Missing DML grants on `mysql_innodb_cluster_metadata.`*; would fail on the very first mysqlsh ClusterSet call.                           |
-| ClusterSet controller provisions the user just-in-time    | Adds privileged user-management to the controller; requires two credentials per cluster (bootstrap + admin)                              |
+| ClusterSet controller provisions the user just-in-time    | Adds privileged user-management to the controller                                                                                        |
 | User provisions the account manually outside the operator | High friction; users may get the grant set wrong. The operator already provisions five other system users; one more follows the pattern. |
 
 
-### 5.8 Manual-only failover with explicit `allowForceFailover` opt-in
+### 5.9 Manual-only switchover with explicit `allowForceFailover` opt-in
 
 **Chosen:** No auto-failover. Switchover requires the user to edit `spec.primaryCluster`. Force failover additionally requires `spec.allowForceFailover: true`.
 
-**Why:** Force failover destroys correctness guarantees if performed when the old primary is alive but unreachable from the controller only. The cost of staying down a few extra minutes during an incident is much smaller than the cost of an incorrect force-failover. Two separate signals — the spec edit and the permission flag — are required to make sure both are deliberate.
+**Why:** Force failover destroys correctness guarantees if performed when the old primary is alive but unreachable from the controller only. The cost of staying down a few extra minutes during an incident is much smaller than the cost of an incorrect force-failover. Two separate signals: the spec edit and the permission flag are required to make sure both are deliberate.
 
 **Alternatives considered:**
 
@@ -372,7 +379,7 @@ Provisioning during initial bootstrap keeps the ClusterSet controller free of an
 | Single `allowUnsafeFailover` boolean covering both lag tolerance and force-failover | Conflates independent decisions; users would surprise themselves in incidents. The chosen design keeps the two knobs explicit; lag is left to mysqlsh to enforce or refuse. |
 
 
-### 5.9 Annotation-driven rejoin
+### 5.10 Annotation-driven rejoin
 
 **Chosen:** When a cluster is INVALIDATED, the controller surfaces a condition and waits. The user applies `mysql.percona.com/rejoin-cluster: <name>` to authorize the cheap rejoin path (`<cs>.rejoinCluster()`). The controller runs it inline and removes the annotation. Failure falls back to remove + re-add (which uses the createReplicaCluster Job path).
 
@@ -387,9 +394,9 @@ Provisioning during initial bootstrap keeps the ClusterSet controller free of an
 | Status-only signal, user runs mysqlsh manually | Forces users to learn mysqlsh just to recover from an INVALIDATED state. The annotation keeps the action inside `kubectl`.                                                               |
 
 
-### 5.10 Finalizer dissolves the ClusterSet on CR deletion
+### 5.11 Finalizer dissolves the ClusterSet on CR deletion
 
-**Chosen:** A `mysql.percona.com/clusterset-dissolve` finalizer runs `<cs>.dissolve({force: true})` on CR deletion (after waiting for any in-flight `createReplicaCluster` Job). All underlying clusters revert to standalone InnoDB Clusters; data is preserved; per-site operators continue to manage them.
+**Chosen:** A `mysql.percona.com/clusterset-dissolve` finalizer runs `<cs>.dissolve()` on CR deletion (after waiting for any in-flight `createReplicaCluster` Job). All underlying clusters revert to standalone InnoDB Clusters; data is preserved; per-site operators continue to manage them.
 
 **Why:** Matches Kubernetes-idiomatic cascade-on-delete semantics (`kubectl delete` actually deletes the modeled thing). The underlying MySQL clusters are not destroyed — only their ClusterSet association is. Per-site operators continue to manage them. An annotation-based bypass exists for the case where the primary cluster is permanently unreachable and the dissolve cannot run.
 
@@ -419,6 +426,8 @@ A new GR cluster intended to become a replica cluster sets `spec.mysql.bootstrap
 ### 6.2 Async Replication Behavior
 
 Not supported. A `PerconaServerMySQL` CR with `clusterType: async` cannot participate in a ClusterSet. Validation: the controller refuses to operate on an endpoint that does not respond as an InnoDB Cluster or as a clean standalone GR-capable instance.
+
+Cross-cluster replication support may be added in the future using native replication channels.
 
 ---
 
@@ -457,7 +466,7 @@ spec:
   # ... rest unchanged ...
 ```
 
-Pod-0 starts, configures MySQL for GR, creates `clustersetAdmin` and the other system users, then exits its bootstrap successfully without forming GR. ReadinessProbe fails (no GR membership), pod stays NotReady. Pod-1 and Pod-2 are blocked because of `OrderedReady`.
+Pod-0 starts, configures MySQL for GR, creates `clusterset` and the other system users, then exits its bootstrap successfully without forming GR. ReadinessProbe fails (no GR membership), pod stays NotReady. Pod-1 and Pod-2 are blocked because of `OrderedReady`.
 
 ### 7.3 Creating the ClusterSet
 
@@ -471,7 +480,8 @@ spec:
   allowForceFailover: false
   credentialsSecret:
     name: cluster1-secret
-    key: clustersetAdmin   # This user must exist on replica as well
+  mysqlshellRunner:
+    image: percona/percona-server:8.0.36
   clusters:
     - name: cluster1
       endpoints:
@@ -517,7 +527,7 @@ Controller runs `<cs>.rejoinCluster('cluster1')` inline, removes the annotation,
 
 ### 7.7 Deletion
 
-`kubectl delete psclusterset my-clusterset`. Finalizer waits for any in-flight `createReplicaCluster` Job to terminate, then runs `<cs>.dissolve({force: true})` inline. CR is deleted. Both underlying clusters revert to standalone InnoDB Clusters and remain managed by their per-site operators.
+`kubectl delete psclusterset my-clusterset`. Finalizer waits for any in-flight `createReplicaCluster` Job to terminate, then runs `<cs>.dissolve()` inline. CR is deleted. Both underlying clusters revert to standalone InnoDB Clusters and remain managed by their per-site operators.
 
 ---
 
@@ -527,31 +537,31 @@ Controller runs `<cs>.rejoinCluster('cluster1')` inline, removes the annotation,
 
 **Scenario:** ClusterSet CR is applied but the cluster named in `spec.primaryCluster` is unreachable from the controller.
 
-**Expected behavior:** Probe fails. Set `BootstrapBlocked` with reason `PrimaryUnreachable`. Do not attempt `createClusterSet` or any operation against other endpoints. Requeue with backoff; surface the condition until the user fixes connectivity.
+**Expected behavior:** Set `ClusterSetBootstrapped` condition to `False` with reason and message from the error. Requeue with backoff; surface the condition until the user fixes connectivity.
 
 ### 8.2 Primary endpoint reachable but not an InnoDB Cluster
 
 **Scenario:** The endpoint named as primary is a MySQL instance but not yet an InnoDB Cluster (e.g., user applied the ClusterSet CR before the per-site operator finished bootstrapping the primary).
 
-**Expected behavior:** Set `BootstrapBlocked` with reason `PrimaryNotAnInnoDBCluster`. The controller never bootstraps the primary's InnoDB Cluster itself — that's the per-site operator's job. Requeue; reconcile naturally resumes once the primary is ready.
+**Expected behavior:** Set `ClusterSetBootstrapped` condition to `False` with reason `NotAnInnoDBCluster`. The controller never bootstraps the primary's InnoDB Cluster itself, that's the per-site operator's job. Requeue; reconcile naturally resumes once the primary is ready.
 
 ### 8.3 Replica endpoint is not a clean standalone
 
 **Scenario:** A cluster listed in `clusters[]` (non-primary) probe result shows it is already part of some other InnoDB Cluster or ClusterSet.
 
-**Expected behavior:** Set `BootstrapBlocked` with reason `ReplicaNotStandalone`. Do not queue a `createReplicaCluster` Job — mysqlsh would refuse anyway, and a silent force-remove would risk data loss.
+**Expected behavior:** Set `Ready` condition to `False` with reason `ReplicaNotStandalone`. Do not queue a `createReplicaCluster` Job as mysqlsh would refuse anyway, and a silent force-remove would risk data loss.
 
 ### 8.4 `createReplicaCluster` Job fails
 
 **Scenario:** The Job exits non-zero (CLONE failed, network drop mid-operation, mysqlsh rejected for any reason).
 
-**Expected behavior:** Surface `OperationFailed` condition with the Job's stderr captured. Do not retry automatically. User can re-trigger by `kubectl delete job psclusterset-...` — controller recreates on next reconcile. If the failure is environmental (unreachable target), user fixes the environment first.
+**Expected behavior:** Surface `Ready` condition with with `False` and the Job's stderr captured. Do not retry automatically. User can re-trigger by `kubectl delete job psclusterset-...`, controller recreates on next reconcile. If the failure is environmental (unreachable target), user fixes the environment first.
 
 ### 8.5 Primary unreachable during planned switchover
 
 **Scenario:** User edits `spec.primaryCluster: cluster2`, `allowForceFailover: false`, and cluster1 (old primary) is unreachable.
 
-**Expected behavior:** Set `SwitchoverBlocked` with reason `PrimaryUnreachableAndForceFailoverNotAllowed`. Do nothing. User either fixes cluster1 (reconcile naturally proceeds) or flips `allowForceFailover: true` (next reconcile uses `forcePrimaryCluster`).
+**Expected behavior:** Set `SwitchoverBlocked` with reason `PrimaryUnreachable`. Do nothing. User either fixes cluster1 (reconcile naturally proceeds) or flips `allowForceFailover: true` (next reconcile uses `forcePrimaryCluster`).
 
 ### 8.6 Dissolve fails during finalizer
 
@@ -565,15 +575,14 @@ Controller runs `<cs>.rejoinCluster('cluster1')` inline, removes the annotation,
 
 ### 9.1 Existing Clusters
 
-- `PerconaServerMySQL` CRs without `spec.mysql.bootstrap` continue to work identically. Defaulting in `CheckNSetDefaults()` sets the field to `{ mode: auto }`, which is equivalent to today's behavior.
-- Existing system-user Secrets gain a new key `clustersetAdmin` on next reconcile after operator upgrade (gated by CRVersion check); the per-site operator generates the password if absent and creates the user via `ps-entrypoint.sh` on subsequent pod restarts. Already-running pods do not have `clustersetAdmin` until they restart; this is acceptable because the user is only needed for ClusterSet participation, which is an explicit opt-in.
+- `PerconaServerMySQL` CRs without `spec.mysql.bootstrap` continue to work as usual.
+- Existing system-user Secrets gain a new key `clusterset` on next reconcile after operator upgrade (gated by CRVersion check); the per-site operator generates the password if absent and creates the user via `ps-entrypoint.sh` on subsequent pod restarts. Already-running pods do not have `clustersetAdmin` until they restart; this is acceptable because the user is only needed for ClusterSet participation, which is an explicit opt-in.
 
 ### 9.2 CRD Compatibility
 
 - The new `PerconaServerMySQLClusterSet` CRD is purely additive.
 - The new `spec.mysql.bootstrap` field on `PerconaServerMySQL` is additive, optional, with a default that preserves current behavior.
 - New status conditions are additive.
-- `make generate` and `make manifests` must be re-run; the generated CRD manifest under `deploy/crd.yaml` (or equivalent) picks up both the new CRD and the new field.
 
 ### 9.3 Operator Version Skew
 
@@ -603,9 +612,11 @@ If the operator pod is upgraded but a `PerconaServerMySQL` CR is not re-applied:
 
 ## 11. Open Questions
 
-1. Is bundling MySQL Shell with the operator image the right long-term approach? The operator would need to track multiple MySQL Shell versions, including 8.0 and 8.4, and maintain that packaging manually, which could become unnecessary operational toil.
+*None at this time.*
 
-   A strong alternative is a stateless `ClusterSet Manager` Deployment that exposes ClusterSet operations over an HTTP or gRPC API. It could use the same base image as the existing MySQL image, ensuring that MySQL Shell matches the MySQL version used by the managed cluster.
+### Resolved
+
+- **mysqlsh runtime / version tracking.** Previously open: whether to bundle MySQL Shell in the operator image, given that the operator would otherwise need to track multiple mysqlsh versions (8.0, 8.4, …) and rebuild on every mysqlsh release. **Resolution:** the controller does not bundle mysqlsh. Instead, it manages a dedicated `mysqlshell-runner` Pod per ClusterSet CR, with the image configured via `spec.mysqlshellRunner.image`, and invokes mysqlsh via `kubectl exec` into that Pod. The `createReplicaCluster` Job uses the same image. See §5.6.
 
 ---
 
