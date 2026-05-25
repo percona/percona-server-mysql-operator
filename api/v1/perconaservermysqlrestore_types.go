@@ -35,11 +35,16 @@ type PerconaServerMySQLRestoreSpec struct {
 }
 
 type RestorePITRSpec struct {
+	BackupSource *RestorePITRBackupSource `json:"backupSource,omitempty"`
 	// +kubebuilder:validation:Enum=gtid;date
 	Type  PITRType `json:"type"`
 	Date  string   `json:"date,omitempty"`
 	GTID  string   `json:"gtid,omitempty"`
 	Force bool     `json:"force,omitempty"`
+}
+
+type RestorePITRBackupSource struct {
+	BinlogServer *BinlogServerSpec `json:"binlogServer,omitempty"`
 }
 
 type PITRType string
