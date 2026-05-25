@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -14,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,6 +38,7 @@ type PerconaServerMySQLClusterSetReconciler struct {
 	client.Client
 	Scheme    *runtime.Scheme
 	ClientCmd clientcmd.Client
+	Recorder  record.EventRecorder
 
 	getClusterSetManager clusterSetManagerGetter
 	operatorPod          *corev1.Pod
@@ -191,6 +194,8 @@ func (r *PerconaServerMySQLClusterSetReconciler) bootstrapClusterSet(ctx context
 	}
 
 	log.Info("ClusterSet bootstrapped")
+	r.Recorder.Event(pcs, corev1.EventTypeNormal, apiv1.EventTypeClusterSetBootstrapped, fmt.Sprintf("ClusterSet bootstrapped for primary cluster %s", primaryCluster.Name))
+
 	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) {
 		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 			Type:   apiv1.ConditionClusterSetBootstrapped,
@@ -251,14 +256,27 @@ func (r *PerconaServerMySQLClusterSetReconciler) trackReplicaInitJobs(ctx contex
 		}
 
 		if status.Status == kstatus.FailedStatus {
-			failed = append(failed, job.Name)
+			failed = append(failed, job.Labels["cluster-name"])
 		}
 	}
 
-	log := logf.FromContext(ctx)
-	if len(failed) > 0 {
-		log.Info("Replica init jobs failed", "failed", failed)
-		// TODO: add a failed condition here
+	if len(failed) == 0 && meta.IsStatusConditionTrue(pcs.Status.Conditions, apiv1.ConditionReplicaInitFailure) {
+		if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) {
+			meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionReplicaInitFailure)
+		}); err != nil {
+			return errors.Wrap(err, "update status")
+		}
+	} else if len(failed) > 0 {
+		if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) {
+			meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+				Type:    apiv1.ConditionReplicaInitFailure,
+				Reason:  apiv1.ConditionReplicaInitFailure,
+				Status:  metav1.ConditionTrue,
+				Message: fmt.Sprintf("Replica init jobs failed for clusters: [%s]", strings.Join(failed, ", ")),
+			})
+		}); err != nil {
+			return errors.Wrap(err, "update status")
+		}
 	}
 
 	return nil
@@ -309,6 +327,8 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileSwitchover(ctx context
 		return errors.Wrap(err, "update status")
 	}
 
+	r.Recorder.Event(pcs, corev1.EventTypeNormal, apiv1.EventTypeClusterSetPrimarySwitched, fmt.Sprintf("Primary cluster switched from %s to %s", pcs.Status.PrimaryCluster, pcs.Spec.PrimaryCluster))
+
 	return nil
 }
 
@@ -328,6 +348,13 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Con
 	if observedStatus.Status != clusterset.StatusHealthy {
 		readyCond.Status = metav1.ConditionFalse
 		readyCond.Reason = "ClusterSetNotHealthy"
+
+		// Emit an event when we transition from healthy to unhealthy
+		currentCond := meta.FindStatusCondition(pcs.Status.Conditions, apiv1.ConditionClusterSetReady)
+		if currentCond == nil || currentCond.Status == metav1.ConditionTrue {
+			r.Recorder.Event(pcs, corev1.EventTypeWarning, apiv1.EventTypeClusterSetUnhealthy,
+				fmt.Sprintf("ClusterSet health degraded: %s", observedStatus.StatusText))
+		}
 	}
 
 	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) {

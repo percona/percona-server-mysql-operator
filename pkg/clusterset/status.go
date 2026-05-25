@@ -6,6 +6,11 @@ const (
 	StatusHealthy string = "HEALTHY"
 )
 
+const (
+	ClusterRolePrimary   string = "PRIMARY"
+	ClusterRoleSECONDARY string = "REPLICA"
+)
+
 type Status struct {
 	Clusters              apiv1.ClusterSetStatus
 	DomainName            string `json:"domainName"`

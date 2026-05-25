@@ -72,18 +72,26 @@ type ClusterSetClusterEndpoint struct {
 }
 
 const (
+	EventTypeClusterSetPrimarySwitched string = "ClusterSetPrimarySwitched"
+	EventTypeClusterSetBootstrapped    string = "ClusterSetBootstrapped"
+	EventTypeClusterSetUnhealthy       string = "ClusterSetHealthDegraded"
+)
+
+const (
 	ConditionMySQLShellRunnerReady             string = "MySQLShellRunnerReady"
 	ConditionClusterSetBootstrapped            string = "ClusterSetBootstrapped"
 	ConditionClusterSetPrimarySwitchOverInProg string = "ClusterSetPrimarySwitchOverInProgress"
+	ConditionReplicaInitFailure                string = "ReplicaInitFailure"
 	ConditionClusterSetReady                   string = "Ready"
 )
 
 type ClusterSetStatus map[string]ClusterSetClusterStatus
 
 type PerconaServerMySQLClusterSetStatus struct {
-	PrimaryCluster string             `json:"primaryCluster"`
-	Conditions     []metav1.Condition `json:"conditions,omitempty"`
-	Clusters       ClusterSetStatus   `json:"clusters,omitempty"`
+	PrimaryCluster         string             `json:"primaryCluster"`
+	Conditions             []metav1.Condition `json:"conditions,omitempty"`
+	Clusters               ClusterSetStatus   `json:"clusters,omitempty"`
+	LastObservedGeneration int64              `json:"lastObservedGeneration,omitempty"`
 }
 
 // ClusterSetClusterStatus is the status of a single cluster in the cluster set.
@@ -136,6 +144,8 @@ func (pcs *PerconaServerMySQLClusterSet) UpdateStatus(ctx context.Context, cl cl
 			return err
 		}
 		mutate(&actual.Status)
+		actual.Status.LastObservedGeneration = pcs.Generation
+
 		return cl.Status().Update(ctx, actual)
 	})
 }

@@ -21,8 +21,10 @@ const (
 func ClusterSetReplicaInitJob(
 	pcs *apiv1.PerconaServerMySQLClusterSet,
 	cluster *apiv1.ClusterSetCluster,
-	image, serviceAccount string) *batchv1.Job {
+	image, serviceAccount string,
+) *batchv1.Job {
 	labels := naming.Labels(ClusterSetReplicaInitAppName, pcs.Name, "percona-server", ClusterSetReplicaInitComponent)
+	labels["cluster-name"] = cluster.Name
 	endpoint := cluster.Endpoints[0]
 	port := int32(3306)
 	if endpoint.Port != nil {

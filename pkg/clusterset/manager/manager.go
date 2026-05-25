@@ -119,6 +119,9 @@ func (m *mysqlshellClusterSetManager) RemoveReplicaCluster(ctx context.Context, 
 }
 
 func (m *mysqlshellClusterSetManager) SetPrimaryCluster(ctx context.Context, clusterName string) error {
+	if err := m.shell.SetPrimaryClusterWithExec(ctx, clusterName); err != nil {
+		return errors.Wrap(err, "set primary cluster")
+	}
 	return nil
 }
 

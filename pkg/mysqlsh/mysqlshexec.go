@@ -177,7 +177,14 @@ func (m *MysqlshExec) Rescan84WithExec(ctx context.Context, clusterName string) 
 }
 
 func (m *MysqlshExec) CreateClusterSetWithExec(ctx context.Context, name string) error {
-	cmd := fmt.Sprintf("dba.getCluster().createClusterSet('%s')", name)
+	cmd := fmt.Sprintf(`
+var cluster = dba.getCluster()
+try {
+	cluster.getClusterSet()
+} catch (err) {
+	cluster.createClusterSet('%s')
+}
+`, name)
 	if err := m.runWithExec(ctx, cmd); err != nil {
 		return errors.Wrap(err, "create cluster set")
 	}
@@ -198,6 +205,14 @@ func (m *MysqlshExec) RemoveReplicaClusterWithExec(ctx context.Context, clusterN
 	cmd := fmt.Sprintf("dba.getCluster().getClusterSet().removeCluster('%s')", clusterName)
 	if err := m.runWithExec(ctx, cmd); err != nil {
 		return errors.Wrap(err, "remove replica cluster")
+	}
+	return nil
+}
+
+func (m *MysqlshExec) SetPrimaryClusterWithExec(ctx context.Context, clusterName string) error {
+	cmd := fmt.Sprintf("dba.getCluster().getClusterSet().setPrimaryCluster('%s')", clusterName)
+	if err := m.runWithExec(ctx, cmd); err != nil {
+		return errors.Wrap(err, "set primary cluster")
 	}
 	return nil
 }
