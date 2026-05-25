@@ -75,6 +75,9 @@ func haproxyDefaults(spec *apiv1.HAProxySpec) {
 	podSpecDefaults(&spec.PodSpec, ImageHAProxy, resources("1Gi", "600m", "1Gi", "700m"), configurationHAProxy, 30, envList("HA_CONNECTION_TIMEOUT", "600"), envFromList("haproxy-env-secret"))
 
 	spec.Enabled = true
+	spec.SidecarResources = map[string]corev1.ResourceRequirements{
+		"mysql-monit": resources("64Mi", "50m", "128Mi", "100m"),
+	}
 }
 
 func routerDefaults(spec *apiv1.MySQLRouterSpec) {

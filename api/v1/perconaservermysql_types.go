@@ -638,7 +638,9 @@ type HAProxySpec struct {
 
 	PodSpec `json:",inline"`
 
-	SidecarResources corev1.ResourceRequirements `json:"sidecarResources,omitempty"`
+	// SidecarResources defines resource limits and requests per sidecar container name
+	// (e.g. "mysql-monit"). If a container is not listed, it runs without resource constraints.
+	SidecarResources map[string]corev1.ResourceRequirements `json:"sidecarResources,omitempty"`
 }
 
 type PodDisruptionBudgetSpec struct {

@@ -389,7 +389,7 @@ func mysqlMonitContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 
 	resources := spec.Resources
 	if cr.CompareVersion("1.2.0") >= 0 {
-		resources = spec.SidecarResources
+		resources = spec.SidecarResources["mysql-monit"]
 	}
 
 	return corev1.Container{
