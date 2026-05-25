@@ -164,7 +164,7 @@ spec:
 - `spec.clusters[]` *(required, length >= 2)*: List of clusters participating in the ClusterSet. Each entry:
   - `name` *(required, immutable per entry)*: Logical handle used in `primaryCluster`, status, annotations. Must match `[a-z0-9-]{1,63}`. Immutable once observed in status; renames go through remove + re-add.
   - `endpoints[]` *(required, length >= 1)*: List of host:port pairs the controller can use to reach the cluster's MySQL members. Controller picks the first reachable. Multiple entries allow the controller's own connection to survive single-member failures.
-  - `credentialsSecret` *(required, string)*: Name of a Secret in the same namespace, containing the `clustersetAdmin` user.
+  - `credentialsSecret` *(required, string)*: Name of a Secret in the same namespace, containing the `clusterset` user.
 
 *Existing CRD* `PerconaServerMySQL` gains one new optional field:
 
@@ -576,7 +576,7 @@ Controller runs `<cs>.rejoinCluster('cluster1')` inline, removes the annotation,
 ### 9.1 Existing Clusters
 
 - `PerconaServerMySQL` CRs without `spec.mysql.bootstrap` continue to work as usual.
-- Existing system-user Secrets gain a new key `clusterset` on next reconcile after operator upgrade (gated by CRVersion check); the per-site operator generates the password if absent and creates the user via `ps-entrypoint.sh` on subsequent pod restarts. Already-running pods do not have `clustersetAdmin` until they restart; this is acceptable because the user is only needed for ClusterSet participation, which is an explicit opt-in.
+- Existing system-user Secrets gain a new key `clusterset` on next reconcile after operator upgrade (gated by CRVersion check); the per-site operator generates the password if absent and creates the user via `ps-entrypoint.sh` on subsequent pod restarts. Already-running pods do not have `clusterset` until they restart; this is acceptable because the user is only needed for ClusterSet participation, which is an explicit opt-in.
 
 ### 9.2 CRD Compatibility
 
