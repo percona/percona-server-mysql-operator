@@ -1360,6 +1360,9 @@ spec:
                   - type
                   type: object
                 type: array
+              lastObservedGeneration:
+                format: int64
+                type: integer
               primaryCluster:
                 type: string
             required:
