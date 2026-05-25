@@ -305,6 +305,9 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileSwitchover(ctx context
 		return nil
 	}
 
+	log := logf.FromContext(ctx)
+	log.Info("Switching primary cluster", "from", pcs.Status.PrimaryCluster, "to", pcs.Spec.PrimaryCluster)
+
 	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) {
 		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 			Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
