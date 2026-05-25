@@ -83,6 +83,7 @@ func TestEnsureUserSecrets(t *testing.T) {
 				},
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName: secretsName,
+					CRVersion:   "1.2.0",
 				},
 			},
 		},
@@ -95,6 +96,7 @@ func TestEnsureUserSecrets(t *testing.T) {
 				},
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName: secretsName,
+					CRVersion:   "1.2.0",
 				},
 			},
 			secret: &corev1.Secret{
@@ -110,6 +112,7 @@ func TestEnsureUserSecrets(t *testing.T) {
 					string(apiv1.UserReplication):  []byte("repl-password"),
 					string(apiv1.UserRoot):         []byte("root-password"),
 					string(apiv1.UserXtraBackup):   []byte("backup-password"),
+					string(apiv1.UserClusterSet):   []byte("clusterset-password"),
 				},
 			},
 		},
@@ -122,6 +125,7 @@ func TestEnsureUserSecrets(t *testing.T) {
 				},
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName: secretsName,
+					CRVersion:   "1.2.0",
 				},
 			},
 			secret: &corev1.Secret{
@@ -146,6 +150,7 @@ func TestEnsureUserSecrets(t *testing.T) {
 				},
 				Spec: apiv1.PerconaServerMySQLSpec{
 					SecretsName: secretsName,
+					CRVersion:   "1.2.0",
 				},
 			},
 			secret: &corev1.Secret{
@@ -184,7 +189,7 @@ func TestEnsureUserSecrets(t *testing.T) {
 				t.Fatal(err, "failed to get user secret")
 			}
 
-			for _, user := range secret.SecretUsers {
+			for _, user := range secret.SecretUsers(tt.cr) {
 				if _, ok := uSecret.Data[string(user)]; !ok {
 					t.Fatalf("user %s not found in secret", user)
 				}

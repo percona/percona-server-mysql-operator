@@ -745,15 +745,15 @@ type PerconaServerMySQLList struct {
 type SystemUser string
 
 const (
-	UserHeartbeat       SystemUser = "heartbeat"
-	UserMonitor         SystemUser = "monitor"
-	UserOperator        SystemUser = "operator"
-	UserOrchestrator    SystemUser = "orchestrator"
-	UserPMMServerToken  SystemUser = "pmmservertoken"
-	UserReplication     SystemUser = "replication"
-	UserRoot            SystemUser = "root"
-	UserXtraBackup      SystemUser = "xtrabackup"
-	UserClusterSetAdmin SystemUser = "clustersetAdmin"
+	UserHeartbeat      SystemUser = "heartbeat"
+	UserMonitor        SystemUser = "monitor"
+	UserOperator       SystemUser = "operator"
+	UserOrchestrator   SystemUser = "orchestrator"
+	UserPMMServerToken SystemUser = "pmmservertoken"
+	UserReplication    SystemUser = "replication"
+	UserRoot           SystemUser = "root"
+	UserXtraBackup     SystemUser = "xtrabackup"
+	UserClusterSet     SystemUser = "clusterset"
 )
 
 // MySQLSpec returns the MySQL specification from the PerconaServerMySQL custom resource.

@@ -31,16 +31,8 @@ import (
 
 var ErrPassNotPropagated = errors.New("password not yet propagated")
 
-func allSystemUsers() map[apiv1.SystemUser]mysql.User {
-	uu := [...]apiv1.SystemUser{
-		apiv1.UserHeartbeat,
-		apiv1.UserMonitor,
-		apiv1.UserOperator,
-		apiv1.UserOrchestrator,
-		apiv1.UserReplication,
-		apiv1.UserRoot,
-		apiv1.UserXtraBackup,
-	}
+func allSystemUsers(cr *apiv1.PerconaServerMySQL) map[apiv1.SystemUser]mysql.User {
+	uu := secret.SecretUsers(cr)
 
 	users := make(map[apiv1.SystemUser]mysql.User, len(uu))
 	for _, u := range uu {
@@ -136,7 +128,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return errors.Wrapf(err, "get secret/%s hash", internalSecret.Name)
 	}
 
-	allUsers := allSystemUsers()
+	allUsers := allSystemUsers(cr)
 	if hash == internalHash {
 		if v, ok := internalSecret.Annotations[naming.AnnotationPasswordsUpdated.String()]; ok && v == "false" {
 			operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
