@@ -103,7 +103,7 @@ const (
 )
 
 func setupFieldIndexers(mgr ctrl.Manager) error {
-	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &apiv1.PerconaServerMySQL{}, fieldSecretsName, func(o client.Object) []string {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &apiv1.PerconaServerMySQL{}, fieldSecretsName, func(o client.Object) []string {
 		cluster, ok := o.(*apiv1.PerconaServerMySQL)
 		if !ok {
 			return nil
