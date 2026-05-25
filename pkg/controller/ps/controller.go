@@ -108,7 +108,11 @@ func setupFieldIndexers(mgr ctrl.Manager) error {
 		if !ok {
 			return nil
 		}
-		return []string{cluster.Name}
+
+		if cluster.Spec.SecretsName == "" {
+			return []string{cluster.DefaultSecretName()}
+		}
+		return []string{cluster.Spec.SecretsName}
 	}); err != nil {
 		return errors.Wrapf(err, "index field %s", fieldSecretsName)
 	}

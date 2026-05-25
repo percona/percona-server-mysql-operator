@@ -840,6 +840,14 @@ func (cr *PerconaServerMySQL) CompareVersion(ver string) int {
 	return cr.Version().Compare(v.Must(v.NewVersion(ver)))
 }
 
+func (cr *PerconaServerMySQL) DefaultSecretName() string {
+	return cr.Name + "-secrets"
+}
+
+func (cr *PerconaServerMySQL) DefaultSSLSecretName() string {
+	return cr.Name + "-ssl"
+}
+
 // CheckNSetDefaults validates and sets default values for the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion *platform.ServerVersion) error {
 	if len(cr.Spec.MySQL.ClusterType) == 0 {
@@ -1098,11 +1106,11 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 	}
 
 	if cr.Spec.SecretsName == "" {
-		cr.Spec.SecretsName = cr.Name + "-secrets"
+		cr.Spec.SecretsName = cr.DefaultSecretName()
 	}
 
 	if cr.Spec.SSLSecretName == "" {
-		cr.Spec.SSLSecretName = cr.Name + "-ssl"
+		cr.Spec.SSLSecretName = cr.DefaultSSLSecretName()
 	}
 
 	if cr.Spec.MySQL.VaultSecretName == "" {
