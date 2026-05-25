@@ -1316,12 +1316,12 @@ spec:
                       type: string
                     globalStatus:
                       type: string
-                    primaryCluster:
+                    primary:
                       type: string
                   required:
                   - clusterRole
                   - globalStatus
-                  - primaryCluster
+                  - primary
                   type: object
                 type: object
               conditions:
