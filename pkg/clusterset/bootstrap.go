@@ -6,7 +6,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -15,7 +14,7 @@ import (
 const (
 	ClusterSetReplicaInitAppName    = "clusterset-replica-init"
 	ClusterSetReplicaInitComponent  = "clusterset-replica-init"
-	clusterSetReplicaInitBinaryPath = "/opt/percona/clusterset-replica-init"
+	clusterSetReplicaInitBinaryPath = "/opt/percona-server-mysql-operator/clusterset-replica-init"
 )
 
 func ClusterSetReplicaInitJob(
@@ -30,18 +29,14 @@ func ClusterSetReplicaInitJob(
 	}
 
 	return &batchv1.Job{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "batch/v1",
-			Kind:       "Job",
-		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%s-replica-init", pcs.Name, cluster.Name),
 			Namespace: pcs.Namespace,
 			Labels:    labels,
 		},
 		Spec: batchv1.JobSpec{
-			Parallelism: ptr.To(int32(1)),
-			Completions: ptr.To(int32(1)),
+			Parallelism: new(int32(1)),
+			Completions: new(int32(1)),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
@@ -51,9 +46,10 @@ func ClusterSetReplicaInitJob(
 					ServiceAccountName: serviceAccount,
 					Containers: []corev1.Container{
 						{
-							Name:    ClusterSetReplicaInitAppName,
-							Image:   image,
-							Command: []string{clusterSetReplicaInitBinaryPath},
+							Name:            ClusterSetReplicaInitAppName,
+							Image:           image,
+							ImagePullPolicy: corev1.PullAlways,
+							Command:         []string{clusterSetReplicaInitBinaryPath},
 							Args: []string{
 								fmt.Sprintf("--replica-cluster-name=%s", cluster.Name),
 								fmt.Sprintf("--replica-endpoint=%s", endpoint.Host),

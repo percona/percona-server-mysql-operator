@@ -1,7 +1,10 @@
 package psclusterset
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -20,7 +23,9 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
+	csmanager "github.com/percona/percona-server-mysql-operator/pkg/clusterset/manager"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 
 	k8sutil "github.com/percona/percona-server-mysql-operator/pkg/util/k8s"
 )
@@ -41,6 +46,7 @@ type ClusterSetManager interface {
 	CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster) error
 	RemoveReplicaCluster(ctx context.Context, clusterName string) error
 	SetPrimaryCluster(ctx context.Context, clusterName string) error
+	Status(ctx context.Context) (clusterset.Status, error)
 }
 
 const controllerName = "psclusterset-controller"
@@ -48,7 +54,12 @@ const controllerName = "psclusterset-controller"
 func (r *PerconaServerMySQLClusterSetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.getClusterSetManager == nil {
 		r.getClusterSetManager = func(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) (ClusterSetManager, error) {
-			return clusterset.NewManager(ctx, r.Client, r.ClientCmd, pcs)
+			opts := &csmanager.ManagerOptions{
+				Client:    r.Client,
+				ClientCmd: r.ClientCmd,
+				Stdout:    &bytes.Buffer{},
+			}
+			return csmanager.NewManager(ctx, pcs, opts)
 		}
 	}
 
@@ -100,15 +111,15 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, errors.Wrap(err, "reconcile replicas")
 	}
 
-	if err := r.reconcileSwitchover(ctx, pcs); err != nil {
+	if err := r.reconcileSwitchover(ctx, pcs, manager); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "reconcile switchover")
 	}
 
-	if err := r.reconcileStatus(ctx, pcs); err != nil {
+	if err := r.reconcileStatus(ctx, pcs, manager); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "reconcile status")
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
@@ -199,17 +210,20 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileReplicas(ctx context.C
 	log := logf.FromContext(ctx)
 	// Add replicas to the clusterset if not added already
 	for _, cluster := range pcs.Spec.Clusters {
-		if _, ok := pcs.Status.Clusters[cluster.Name]; !ok {
-			log.Info("Adding cluster to ClusterSet", "clusterName", cluster.Name)
+		if _, ok := pcs.Status.Clusters[cluster.Name]; !ok && cluster.Name != pcs.PrimaryCluster().Name {
 			if err := r.addToClusterSet(ctx, pcs, &cluster); err != nil {
 				return errors.Wrap(err, "add to cluster set")
 			}
 		}
 	}
 
+	if err := r.trackReplicaInitJobs(ctx, pcs); err != nil {
+		return errors.Wrap(err, "track replica init jobs")
+	}
+
 	// Remove replicas from the clusterset if not present in spec
 	for name := range pcs.Status.Clusters {
-		if pcs.GetCluster(name) == nil {
+		if pcs.GetCluster(name) == nil && name != pcs.PrimaryCluster().Name {
 			log.Info("Removing cluster from ClusterSet", "clusterName", name)
 			if err := manager.RemoveReplicaCluster(ctx, name); err != nil {
 				return errors.Wrap(err, "remove from cluster set")
@@ -220,13 +234,46 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileReplicas(ctx context.C
 	return nil
 }
 
+func (r *PerconaServerMySQLClusterSetReconciler) trackReplicaInitJobs(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
+	labels := naming.Labels(clusterset.ClusterSetReplicaInitAppName, pcs.Name, "percona-server", clusterset.ClusterSetReplicaInitComponent)
+
+	jobs := &batchv1.JobList{}
+	if err := r.List(ctx, jobs, client.InNamespace(pcs.Namespace), client.MatchingLabels(labels)); err != nil {
+		return errors.Wrap(err, "list replica init jobs")
+	}
+
+	failed := []string{}
+
+	for _, job := range jobs.Items {
+		status, err := k8s.KStatusCompute(&job)
+		if err != nil {
+			return errors.Wrap(err, "compute status")
+		}
+
+		if status.Status == kstatus.FailedStatus {
+			failed = append(failed, job.Name)
+		}
+	}
+
+	log := logf.FromContext(ctx)
+	if len(failed) > 0 {
+		log.Info("Replica init jobs failed", "failed", failed)
+		// TODO: add a failed condition here
+	}
+
+	return nil
+}
+
 func (r *PerconaServerMySQLClusterSetReconciler) addToClusterSet(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, cluster *apiv1.ClusterSetCluster) error {
 	job := clusterset.ClusterSetReplicaInitJob(pcs, cluster, r.operatorPod.Spec.Containers[0].Image, r.operatorPod.Spec.ServiceAccountName)
 	err := r.Get(ctx, client.ObjectKeyFromObject(job), job)
+
+	log := logf.FromContext(ctx).WithValues("clusterName", cluster.Name)
 	if k8serrors.IsNotFound(err) {
 		if err := controllerutil.SetControllerReference(pcs, job, r.Scheme); err != nil {
 			return errors.Wrap(err, "set controller reference")
 		}
+		log.Info("Adding to ClusterSet")
 		return r.Create(ctx, job)
 	} else if err != nil {
 		return errors.Wrap(err, "get replica init job")
@@ -235,10 +282,59 @@ func (r *PerconaServerMySQLClusterSetReconciler) addToClusterSet(ctx context.Con
 	return nil
 }
 
-func (r *PerconaServerMySQLClusterSetReconciler) reconcileSwitchover(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
+func (r *PerconaServerMySQLClusterSetReconciler) reconcileSwitchover(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, manager ClusterSetManager) error {
+	if pcs.Spec.PrimaryCluster == pcs.Status.PrimaryCluster {
+		return nil
+	}
+
+	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) {
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
+			Status:  metav1.ConditionTrue,
+			Reason:  apiv1.ConditionClusterSetPrimarySwitchOverInProg,
+			Message: fmt.Sprintf("Primary cluster switchover in progress from %s to %s", pcs.Status.PrimaryCluster, pcs.Spec.PrimaryCluster),
+		})
+	}); err != nil {
+		return errors.Wrap(err, "update status")
+	}
+
+	if err := manager.SetPrimaryCluster(ctx, pcs.Spec.PrimaryCluster); err != nil {
+		return errors.Wrap(err, "set primary cluster")
+	}
+
+	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) {
+		status.PrimaryCluster = pcs.Spec.PrimaryCluster
+		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetPrimarySwitchOverInProg)
+	}); err != nil {
+		return errors.Wrap(err, "update status")
+	}
+
 	return nil
 }
 
-func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
+func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, manager ClusterSetManager) error {
+	observedStatus, err := manager.Status(ctx)
+	if err != nil {
+		return errors.Wrap(err, "get cluster set status")
+	}
+
+	readyCond := metav1.Condition{
+		Type:    apiv1.ConditionClusterSetReady,
+		Status:  metav1.ConditionTrue,
+		Reason:  "ClusterSetHealthy",
+		Message: observedStatus.StatusText,
+	}
+
+	if observedStatus.Status != clusterset.StatusHealthy {
+		readyCond.Status = metav1.ConditionFalse
+		readyCond.Reason = "ClusterSetNotHealthy"
+	}
+
+	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) {
+		meta.SetStatusCondition(&status.Conditions, readyCond)
+		status.Clusters = observedStatus.Clusters
+	}); err != nil {
+		return errors.Wrap(err, "update status")
+	}
 	return nil
 }

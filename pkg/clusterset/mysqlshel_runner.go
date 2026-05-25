@@ -24,7 +24,7 @@ func MySQLShellRunner(pcs *apiv1.PerconaServerMySQLClusterSet) *appsv1.Deploymen
 			Kind:       "Deployment",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      pcs.Name + "-mysqlshell-runner",
+			Name:      pcs.Name + "-runner",
 			Namespace: pcs.Namespace,
 			Labels:    naming.Labels(MySQLShellRunnerAppName, pcs.Name, "percona-server", MySQLShellRunnerComponent),
 		},

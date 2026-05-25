@@ -5,10 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
-	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
+	csmanager "github.com/percona/percona-server-mysql-operator/pkg/clusterset/manager"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -58,11 +59,18 @@ func main() {
 		log.Fatalf("failed to create clientcmd: %v", err)
 	}
 
-	manager, err := clusterset.NewManager(ctx, cl, cliCmd, psClusterSet)
+	manager, err := csmanager.NewManager(ctx, psClusterSet, &csmanager.ManagerOptions{
+		Client:    cl,
+		ClientCmd: cliCmd,
+		// mysqlsh reports progress on stderr; send both streams to stdout for job logs.
+		Stdout: os.Stdout,
+		Stderr: os.Stdout,
+	})
 	if err != nil {
 		log.Fatalf("failed to create manager: %v", err)
 	}
 
+	log.Printf("Creating replica cluster %s", args.replicaClusterName)
 	if err := manager.CreateReplicaCluster(ctx, &apiv1.ClusterSetCluster{
 		Name: args.replicaClusterName,
 		Endpoints: []apiv1.ClusterSetClusterEndpoint{
@@ -74,6 +82,8 @@ func main() {
 	}); err != nil {
 		log.Fatalf("failed to create replica cluster: %v", err)
 	}
+
+	log.Printf("Replica cluster %s created", args.replicaClusterName)
 }
 
 func newClient(config *rest.Config) (client.Client, error) {

@@ -280,9 +280,15 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1.
 
 	uri := getMySQLURI(apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
 
-	msh, err := mysqlsh.NewWithExec(r.ClientCmd, pod, "mysql", uri)
+	opts := &mysqlsh.ExecOptions{
+		Pod:           pod,
+		ContainerName: "mysql",
+		Client:        r.ClientCmd,
+		Stdout:        &bytes.Buffer{},
+	}
+	msh, err := mysqlsh.NewWithExec(uri, opts)
 	if err != nil {
-		return false, err
+		return false, errors.Wrap(err, "new mysqlsh")
 	}
 
 	status, err := msh.ClusterStatusWithExec(ctx)

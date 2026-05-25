@@ -1,10 +1,12 @@
-package clusterset
+package manager
 
 import (
 	"context"
+	"io"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
+	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -16,13 +18,20 @@ type mysqlshellClusterSetManager struct {
 	shell *mysqlsh.MysqlshExec
 }
 
-func NewManager(ctx context.Context, cl client.Client, cmd clientcmd.Client, pcs *apiv1.PerconaServerMySQLClusterSet) (*mysqlshellClusterSetManager, error) {
-	runnerPod, err := getRunnerPod(ctx, cl, pcs)
+type ManagerOptions struct {
+	Client    client.Client
+	ClientCmd clientcmd.Client
+	Stdout    io.Writer
+	Stderr    io.Writer
+}
+
+func NewManager(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, opts *ManagerOptions) (*mysqlshellClusterSetManager, error) {
+	runnerPod, err := getRunnerPod(ctx, opts.Client, pcs)
 	if err != nil {
 		return nil, errors.Wrap(err, "get runner pod")
 	}
 
-	pass, err := getClusterSetAdminPassword(ctx, cl, pcs)
+	pass, err := getClusterSetAdminPassword(ctx, opts.Client, pcs)
 	if err != nil {
 		return nil, errors.Wrap(err, "get clusterset admin password")
 	}
@@ -34,7 +43,14 @@ func NewManager(ctx context.Context, cl client.Client, cmd clientcmd.Client, pcs
 
 	primaryClusterURI := mysqlsh.URI(string(apiv1.UserRoot), pass, primaryCluster.Endpoints[0].Host)
 
-	shell, err := mysqlsh.NewWithExec(cmd, runnerPod, "mysqlshell-runner", primaryClusterURI)
+	execOpts := &mysqlsh.ExecOptions{
+		Pod:           runnerPod,
+		ContainerName: "mysqlshell-runner",
+		Client:        opts.ClientCmd,
+		Stdout:        opts.Stdout,
+		Stderr:        opts.Stderr,
+	}
+	shell, err := mysqlsh.NewWithExec(primaryClusterURI, execOpts)
 	if err != nil {
 		return nil, errors.Wrap(err, "new mysqlsh")
 	}
@@ -57,7 +73,7 @@ func getClusterSetAdminPassword(ctx context.Context, cl client.Client, pcs *apiv
 }
 
 func getRunnerPod(ctx context.Context, cl client.Client, pcs *apiv1.PerconaServerMySQLClusterSet) (*corev1.Pod, error) {
-	selector := MySQLShellRunner(pcs).Spec.Selector.MatchLabels
+	selector := clusterset.MySQLShellRunner(pcs).Spec.Selector.MatchLabels
 	listOptions := &client.ListOptions{
 		Namespace:     pcs.Namespace,
 		LabelSelector: labels.SelectorFromSet(selector),
@@ -99,4 +115,8 @@ func (m *mysqlshellClusterSetManager) RemoveReplicaCluster(ctx context.Context, 
 
 func (m *mysqlshellClusterSetManager) SetPrimaryCluster(ctx context.Context, clusterName string) error {
 	return nil
+}
+
+func (m *mysqlshellClusterSetManager) Status(ctx context.Context) (clusterset.Status, error) {
+	return m.shell.ClusterSetStatusWithExec(ctx)
 }

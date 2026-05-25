@@ -72,22 +72,26 @@ type ClusterSetClusterEndpoint struct {
 }
 
 const (
-	ConditionMySQLShellRunnerReady  string = "MySQLShellRunnerReady"
-	ConditionClusterSetBootstrapped string = "ClusterSetBootstrapped"
+	ConditionMySQLShellRunnerReady             string = "MySQLShellRunnerReady"
+	ConditionClusterSetBootstrapped            string = "ClusterSetBootstrapped"
+	ConditionClusterSetPrimarySwitchOverInProg string = "ClusterSetPrimarySwitchOverInProgress"
+	ConditionClusterSetReady                   string = "Ready"
 )
 
+type ClusterSetStatus map[string]ClusterSetClusterStatus
+
 type PerconaServerMySQLClusterSetStatus struct {
-	PrimaryCluster string                             `json:"primaryCluster"`
-	Conditions     []metav1.Condition                 `json:"conditions,omitempty"`
-	Clusters       map[string]ClusterSetClusterStatus `json:"clusters,omitempty"`
+	PrimaryCluster string             `json:"primaryCluster"`
+	Conditions     []metav1.Condition `json:"conditions,omitempty"`
+	Clusters       ClusterSetStatus   `json:"clusters,omitempty"`
 }
 
 // ClusterSetClusterStatus is the status of a single cluster in the cluster set.
 // The shape of this object is derived from the output of `dba.getCluster().getClusterSet().status()` mysqlshell command.
 type ClusterSetClusterStatus struct {
-	ClusterRole    string `json:"clusterRole"`
-	GlobalStatus   string `json:"globalStatus"`
-	PrimaryCluster string `json:"primaryCluster"`
+	ClusterRole  string `json:"clusterRole"`
+	GlobalStatus string `json:"globalStatus"`
+	Primary      string `json:"primary"`
 }
 
 // +kubebuilder:object:root=true

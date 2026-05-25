@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -12,7 +13,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
+	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
+	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
 type MysqlshExec struct {
@@ -20,21 +23,65 @@ type MysqlshExec struct {
 	containerName string
 	client        clientcmd.Client
 	uri           string
+	stdout        io.Writer
+	stderr        io.Writer
 }
 
-func NewWithExec(cliCmd clientcmd.Client, pod *corev1.Pod, containerName, uri string) (*MysqlshExec, error) {
-	return &MysqlshExec{client: cliCmd, pod: pod, uri: uri, containerName: containerName}, nil
+type ExecOptions struct {
+	Pod           *corev1.Pod
+	ContainerName string
+	Client        clientcmd.Client
+	Stdout        io.Writer
+	Stderr        io.Writer
+}
+
+func (o *ExecOptions) Defaults() {
+	if o.Stdout == nil {
+		o.Stdout = &bytes.Buffer{}
+	}
+	if o.Stderr == nil {
+		o.Stderr = &bytes.Buffer{}
+	}
+}
+
+func (o *ExecOptions) Validate() error {
+	if o.Pod == nil {
+		return errors.New("pod is required")
+	}
+	if o.ContainerName == "" {
+		return errors.New("container name is required")
+	}
+	if o.Client == nil {
+		return errors.New("client is required")
+	}
+	return nil
+}
+
+func NewWithExec(uri string, opts *ExecOptions) (*MysqlshExec, error) {
+	opts.Defaults()
+	if err := opts.Validate(); err != nil {
+		return nil, errors.Wrap(err, "validate options")
+	}
+
+	return &MysqlshExec{
+		client:        opts.Client,
+		pod:           opts.Pod,
+		uri:           uri,
+		containerName: opts.ContainerName,
+		stdout:        opts.Stdout,
+		stderr:        opts.Stderr,
+	}, nil
 }
 
 func (m *MysqlshExec) runWithExec(ctx context.Context, cmd string) error {
-	var errb, outb bytes.Buffer
+	var outb, errb bytes.Buffer
+	stdout := util.NewSensitiveWriter(io.MultiWriter(m.stdout, &outb), sensitiveRegexp)
+	stderr := util.NewSensitiveWriter(io.MultiWriter(m.stderr, &errb), sensitiveRegexp)
 
 	c := []string{"mysqlsh", "--js", "--no-wizard", "--uri", m.uri, "-e", cmd}
-	err := m.client.Exec(ctx, m.pod, m.containerName, c, nil, &outb, &errb, false)
+	err := m.client.Exec(ctx, m.pod, m.containerName, c, nil, stdout, stderr, false)
 	if err != nil {
-		sout := sensitiveRegexp.ReplaceAllString(outb.String(), ":*****@")
-		serr := sensitiveRegexp.ReplaceAllString(errb.String(), ":*****@")
-		return errors.Wrapf(err, "stdout: %s, stderr: %s", sout, serr)
+		return errors.Wrapf(err, "stdout: %s, stderr: %s", outb.String(), errb.String())
 	}
 
 	return nil
@@ -140,7 +187,7 @@ func (m *MysqlshExec) CreateClusterSetWithExec(ctx context.Context, name string)
 func (m *MysqlshExec) CreateReplicaClusterWithExec(
 	ctx context.Context,
 	clusterName, endpoint string, port int) error {
-	cmd := fmt.Sprintf("dba.getCluster().createReplicaCluster('%s:%d','%s',{recoveryMethod: 'clone'})", endpoint, port, clusterName)
+	cmd := fmt.Sprintf("dba.getCluster().getClusterSet().createReplicaCluster('%s:%d','%s',{recoveryMethod: 'clone',manualStartOnBoot: true})", endpoint, port, clusterName)
 	if err := m.runWithExec(ctx, cmd); err != nil {
 		return errors.Wrap(err, "create replica cluster")
 	}
@@ -148,9 +195,31 @@ func (m *MysqlshExec) CreateReplicaClusterWithExec(
 }
 
 func (m *MysqlshExec) RemoveReplicaClusterWithExec(ctx context.Context, clusterName string) error {
-	cmd := fmt.Sprintf("dba.getCluster().removeReplicaCluster('%s')", clusterName)
+	cmd := fmt.Sprintf("dba.getCluster().getClusterSet().removeCluster('%s')", clusterName)
 	if err := m.runWithExec(ctx, cmd); err != nil {
 		return errors.Wrap(err, "remove replica cluster")
 	}
 	return nil
+}
+
+func (m *MysqlshExec) ClusterSetStatusWithExec(ctx context.Context) (clusterset.Status, error) {
+	status := clusterset.Status{}
+
+	stdoutBuffer := bytes.Buffer{}
+	stderrBuffer := bytes.Buffer{}
+
+	c := []string{"mysqlsh", "--result-format", "json", "--js", "--uri", m.uri, "-e", "print(dba.getCluster().getClusterSet().status())"}
+	err := m.client.Exec(ctx, m.pod, m.containerName, c, nil, &stdoutBuffer, &stderrBuffer, false)
+	if err != nil {
+		sout := sensitiveRegexp.ReplaceAllString(stdoutBuffer.String(), ":*****@")
+		serr := sensitiveRegexp.ReplaceAllString(stderrBuffer.String(), ":*****@")
+		return status, errors.Wrapf(err, "stdout: %s, stderr: %s", sout, serr)
+	}
+
+	if err := json.Unmarshal(stdoutBuffer.Bytes(), &status); err != nil {
+		return status, errors.Wrap(err, "unmarshal status")
+	}
+
+	return status, nil
+
 }

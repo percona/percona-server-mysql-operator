@@ -17,6 +17,7 @@ limitations under the License.
 package ps
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/json"
@@ -225,7 +226,13 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 
 		um := database.NewReplicationManager(&firstPod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, &firstPod))
 
-		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, &firstPod, "mysql", firstPodUri)
+		opts := &mysqlsh.ExecOptions{
+			Pod:           &firstPod,
+			ContainerName: "mysql",
+			Client:        r.ClientCmd,
+			Stdout:        &bytes.Buffer{},
+		}
+		mysh, err := mysqlsh.NewWithExec(firstPodUri, opts)
 		if err != nil {
 			return err
 		}
@@ -1081,7 +1088,13 @@ func (r *PerconaServerMySQLReconciler) rescanClusterIfNeeded(ctx context.Context
 
 	uri := getMySQLURI(apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
 
-	msh, err := mysqlsh.NewWithExec(r.ClientCmd, pod, "mysql", uri)
+	opts := &mysqlsh.ExecOptions{
+		Pod:           pod,
+		ContainerName: "mysql",
+		Client:        r.ClientCmd,
+		Stdout:        &bytes.Buffer{},
+	}
+	msh, err := mysqlsh.NewWithExec(uri, opts)
 	if err != nil {
 		return err
 	}
