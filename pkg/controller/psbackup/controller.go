@@ -24,6 +24,7 @@ import (
 
 	"github.com/pkg/errors"
 	batchv1 "k8s.io/api/batch/v1"
+	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -63,6 +64,7 @@ type PerconaServerMySQLBackupReconciler struct {
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqlbackups;perconaservermysqlbackups/status;perconaservermysqlbackups/finalizers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch
 
 const controllerName = "psbackup-controller"
 
@@ -184,6 +186,16 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return ctrl.Result{}, nil
 		}
 
+		restoreName, err := r.getActiveRestore(ctx, cr)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "get active restore")
+		}
+		if restoreName != "" {
+			status.State = apiv1.BackupError
+			status.StateDesc = fmt.Sprintf("backup cannot run while restore %s is in progress", restoreName)
+			return ctrl.Result{}, nil
+		}
+
 		storage, ok := cluster.Spec.Backup.Storages[cr.Spec.StorageName]
 		if !ok {
 			status.State = apiv1.BackupError
@@ -214,6 +226,13 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			status.State = apiv1.BackupError
 			status.StateDesc = "failed to validate storage: " + err.Error()
 			return ctrl.Result{}, nil
+		}
+
+		if cr.Status.State != apiv1.BackupStarting {
+			// Set the state before creating the Job so restore can see that backup is starting.
+			status.State = apiv1.BackupStarting
+			status.StateDesc = ""
+			return rr, nil
 		}
 
 		log.Info("Preparing backup source", "source", backupSource)
@@ -859,33 +878,20 @@ func (r *PerconaServerMySQLBackupReconciler) setIncrementalBaseAnnotations(
 	return nil
 }
 
-func backupLeaseName(clusterName string) string {
-	return "ps-" + clusterName + "-backup-lock"
-}
-
-func backupLeaseHolder(backup *apiv1.PerconaServerMySQLBackup) string {
-	return fmt.Sprintf("%s|%s", backup.GetName(), backup.GetUID())
-}
-
-func parseBackupLeaseHolder(holder string) (string, types.UID) {
-	parts := strings.Split(holder, "|")
-	if len(parts) != 2 {
-		return "", ""
-	}
-	return parts[0], types.UID(parts[1])
-}
-
 func (r *PerconaServerMySQLBackupReconciler) tryAcquireLease(
 	ctx context.Context,
 	backup *apiv1.PerconaServerMySQLBackup,
 	status *apiv1.PerconaServerMySQLBackupStatus,
 ) (bool, error) {
 	log := logf.FromContext(ctx)
-	leaseName := backupLeaseName(backup.Spec.ClusterName)
-	leaseHolderID := backupLeaseHolder(backup)
+	leaseName := naming.BackupLeaseName(backup.Spec.ClusterName)
+	leaseHolderID := naming.LeaseHolderName(backup.Name, string(backup.GetUID()))
 
-	checkStale := func(ctx context.Context, currentHolder string) (bool, error) {
-		backupName, backupUID := parseBackupLeaseHolder(currentHolder)
+	checkStale := func(ctx context.Context, lease *coordv1.Lease) (bool, error) {
+		if lease.Spec.HolderIdentity == nil {
+			return true, nil
+		}
+		backupName, backupUID := naming.ParseLeaseHolder(*lease.Spec.HolderIdentity)
 		if backupName == "" || backupUID == "" {
 			log.Info("Backup lease holder is malformed, acquiring lease anyway")
 			return true, nil
@@ -947,11 +953,35 @@ func (r *PerconaServerMySQLBackupReconciler) releaseLeaseIfNeeded(
 		return nil
 	}
 
-	leaseName := backupLeaseName(backup.Spec.ClusterName)
-	if err := k8s.ReleaseLease(ctx, r.Client, leaseName, backupLeaseHolder(backup), backup.GetNamespace()); err != nil && !errors.Is(err, k8s.ErrLeaseAlreadyHeld) {
+	leaseName := naming.BackupLeaseName(backup.Spec.ClusterName)
+	if err := k8s.ReleaseLease(ctx, r.Client, leaseName, naming.LeaseHolderName(backup.GetName(), string(backup.GetUID())), backup.GetNamespace()); err != nil && !errors.Is(err, k8s.ErrLeaseAlreadyHeld) {
 		return errors.Wrap(err, "failed to release lease")
 	}
 	meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionBackupLeaseAcquired)
 	log.Info("Backup lease released", "leaseName", leaseName)
 	return nil
+}
+
+func (r *PerconaServerMySQLBackupReconciler) getActiveRestore(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) (string, error) {
+	lease, err := k8s.GetLease(ctx, r.Client, naming.RestoreLeaseName(cr.Spec.ClusterName), cr.Namespace)
+	if client.IgnoreNotFound(err) != nil {
+		return "", errors.Wrap(err, "get restore lease")
+	}
+	if err != nil {
+		return "", nil
+	}
+
+	restoreName := ""
+	if lease.Spec.HolderIdentity != nil {
+		restoreName, _ = naming.ParseLeaseHolder(*lease.Spec.HolderIdentity)
+	}
+	isRestoreActive, err := k8sutil.IsRestoreActive(ctx, r.Client, restoreName, lease.Namespace)
+	if err != nil {
+		return "", errors.Wrapf(err, "get lease holder %s", restoreName)
+	}
+
+	if isRestoreActive {
+		return restoreName, nil
+	}
+	return "", nil
 }

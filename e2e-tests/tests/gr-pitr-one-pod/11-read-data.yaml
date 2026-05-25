@@ -10,3 +10,5 @@ commands:
 
       max_id=$(run_mysql "SELECT MAX(id) FROM myDB.myTable" "-h $(get_haproxy_svc gr-pitr-one-pod-restore)")
       kubectl create configmap -n "${NAMESPACE}" 11-read-data --from-literal=max_id="${max_id}"
+
+      kubectl patch ps gr-pitr-one-pod-restore -n "${NAMESPACE}" --type=merge -p='{"spec":{"backup":{"pitr":{"enabled":true}}}}'

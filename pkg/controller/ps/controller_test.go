@@ -1069,10 +1069,8 @@ var _ = Describe("CR validations", Ordered, func() {
 
 			cr.Spec.Backup.PiTR.Enabled = true
 			cr.Spec.Backup.PiTR.BinlogServer = nil
-			It("should fail with binlogServer required error", func() {
-				createErr := k8sClient.Create(ctx, cr)
-				Expect(createErr).To(HaveOccurred())
-				Expect(createErr.Error()).To(ContainSubstring("binlogServer is required when pitr is enabled"))
+			It("should create successfully without cluster binlog server", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
 			})
 		})
 
