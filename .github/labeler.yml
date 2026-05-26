@@ -14,7 +14,8 @@ tests:
 
 ci:
   - changed-files:
-    - any-glob-to-any-file: '.github/workflows/**'
+    - any-glob-to-any-file:
+      - '.github/workflows/**'
 
 build:
   - changed-files:
