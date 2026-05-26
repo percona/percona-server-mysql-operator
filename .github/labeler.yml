@@ -4,6 +4,7 @@ doc:
       - 'README*'
       - 'CONTRIBUTING*'
       - 'code-of-conduct*'
+      - 'docs/**'
 
 tests:
   - changed-files:
