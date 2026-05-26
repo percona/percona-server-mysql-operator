@@ -355,14 +355,14 @@ func (d *DB) GetMemberState(ctx context.Context, host string) (db.MemberState, e
 }
 
 func (d *DB) IsGRConfigured(ctx context.Context) (bool, error) {
-	var groupName string
+	var groupName sql.NullString
 
 	err := d.db.QueryRowContext(ctx, "SELECT @@global.group_replication_group_name").Scan(&groupName)
 	if err != nil {
 		return false, errors.Wrap(err, "query group replication group name")
 	}
 
-	return groupName != "", nil
+	return groupName.Valid && groupName.String != "", nil
 }
 
 func (d *DB) CheckIfInPrimaryPartition(ctx context.Context) (bool, error) {
