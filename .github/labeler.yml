@@ -18,7 +18,8 @@ ci:
 
 build:
   - changed-files:
-    - any-glob-to-any-file: 'build/**'
+    - any-glob-to-any-file:
+      - 'build/**'
 
 olm:
   - changed-files:
