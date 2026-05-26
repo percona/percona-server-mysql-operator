@@ -189,7 +189,7 @@ func TestEnsureUserSecrets(t *testing.T) {
 				t.Fatal(err, "failed to get user secret")
 			}
 
-			for _, user := range secret.SecretUsers(tt.cr) {
+			for _, user := range secret.SystemUsers(tt.cr) {
 				if _, ok := uSecret.Data[string(user)]; !ok {
 					t.Fatalf("user %s not found in secret", user)
 				}

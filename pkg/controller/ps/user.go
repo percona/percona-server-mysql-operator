@@ -32,7 +32,7 @@ import (
 var ErrPassNotPropagated = errors.New("password not yet propagated")
 
 func allSystemUsers(cr *apiv1.PerconaServerMySQL) map[apiv1.SystemUser]mysql.User {
-	uu := secret.SecretUsers(cr)
+	uu := secret.SystemUsers(cr)
 
 	users := make(map[apiv1.SystemUser]mysql.User, len(uu))
 	for _, u := range uu {
