@@ -1360,13 +1360,19 @@ spec:
                   - type
                   type: object
                 type: array
+              lastObservedAt:
+                format: date-time
+                type: string
               lastObservedGeneration:
                 format: int64
                 type: integer
               primaryCluster:
                 type: string
+              primaryClusterEndpoint:
+                type: string
             required:
             - primaryCluster
+            - primaryClusterEndpoint
             type: object
         type: object
     served: true

@@ -89,9 +89,11 @@ type ClusterSetStatus map[string]ClusterSetClusterStatus
 
 type PerconaServerMySQLClusterSetStatus struct {
 	PrimaryCluster         string             `json:"primaryCluster"`
+	PrimaryClusterEndpoint string             `json:"primaryClusterEndpoint"`
 	Conditions             []metav1.Condition `json:"conditions,omitempty"`
 	Clusters               ClusterSetStatus   `json:"clusters,omitempty"`
 	LastObservedGeneration int64              `json:"lastObservedGeneration,omitempty"`
+	LastObservedAt         metav1.Time        `json:"lastObservedAt,omitempty"`
 }
 
 // ClusterSetClusterStatus is the status of a single cluster in the cluster set.
@@ -145,6 +147,7 @@ func (pcs *PerconaServerMySQLClusterSet) UpdateStatus(ctx context.Context, cl cl
 		}
 		mutate(&actual.Status)
 		actual.Status.LastObservedGeneration = pcs.Generation
+		actual.Status.LastObservedAt = metav1.Now()
 
 		return cl.Status().Update(ctx, actual)
 	})

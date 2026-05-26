@@ -363,6 +363,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Con
 	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) {
 		meta.SetStatusCondition(&status.Conditions, readyCond)
 		status.Clusters = observedStatus.Clusters
+		status.PrimaryClusterEndpoint = observedStatus.GlobalPrimaryInstance
 	}); err != nil {
 		return errors.Wrap(err, "update status")
 	}
