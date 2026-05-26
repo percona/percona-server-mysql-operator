@@ -31,6 +31,9 @@ import (
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced
 // +kubebuilder:resource:shortName=ps-clusterset
+// +kubebuilder:printcolumn:name="Primary",type=string,JSONPath=".status.primaryCluster"
+// +kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=".status.primaryClusterEndpoint"
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=".status.conditions[?(@.type=='Ready')].status"
 type PerconaServerMySQLClusterSet struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

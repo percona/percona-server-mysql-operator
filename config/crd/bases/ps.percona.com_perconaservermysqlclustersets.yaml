@@ -16,7 +16,17 @@ spec:
     singular: perconaservermysqlclusterset
   scope: Namespaced
   versions:
-  - name: v1
+  - additionalPrinterColumns:
+    - jsonPath: .status.primaryCluster
+      name: Primary
+      type: string
+    - jsonPath: .status.primaryClusterEndpoint
+      name: Endpoint
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    name: v1
     schema:
       openAPIV3Schema:
         properties:
