@@ -142,6 +142,13 @@ func (m *mysqlshellClusterSetManager) SetPrimaryCluster(ctx context.Context, clu
 	return nil
 }
 
+func (m *mysqlshellClusterSetManager) ForcePrimaryCluster(ctx context.Context, clusterName string) error {
+	if err := m.shell.ForcePrimaryClusterWithExec(ctx, clusterName); err != nil {
+		return errors.Wrap(err, "force primary cluster")
+	}
+	return nil
+}
+
 func (m *mysqlshellClusterSetManager) Status(ctx context.Context) (clusterset.Status, error) {
 	return m.shell.ClusterSetStatusWithExec(ctx)
 }

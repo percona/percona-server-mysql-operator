@@ -27,6 +27,11 @@ type replicaInitArgs struct {
 	user               string
 }
 
+type replicaManager interface {
+	CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster) error
+	RemoveReplicaCluster(ctx context.Context, clusterName string) error
+}
+
 func main() {
 	args := replicaInitArgs{}
 	flag.StringVar(&args.replicaClusterName, "replica-cluster-name", "", "Replica cluster name")
@@ -35,7 +40,7 @@ func main() {
 	flag.StringVar(&args.user, "user", "root", "User")
 	flag.StringVar(&args.psClusterSetName, "ps-cluster-set-name", "", "PerconaServerMySQLClusterSet name")
 	flag.StringVar(&args.namespace, "namespace", "", "Namespace")
-	flag.Parse()
+	flag.CommandLine.Parse(os.Args[2:])
 
 	ctx := context.Background()
 
@@ -70,7 +75,22 @@ func main() {
 		log.Fatalf("failed to create manager: %v", err)
 	}
 
-	log.Printf("Creating replica cluster %s", args.replicaClusterName)
+	switch os.Args[1] {
+	case "add-replica":
+		if err := addReplica(ctx, manager, args); err != nil {
+			log.Fatalf("failed to add replica: %v", err)
+		}
+	case "remove-replica":
+		if err := removeReplica(ctx, manager, args); err != nil {
+			log.Fatalf("failed to remove replica: %v", err)
+		}
+	default:
+		log.Fatalf("invalid command: %s", os.Args[1])
+	}
+}
+
+func addReplica(ctx context.Context, manager replicaManager, args replicaInitArgs) error {
+	log.Printf("Adding replica cluster '%s' to clusterset '%s'", args.replicaClusterName, args.psClusterSetName)
 	if err := manager.CreateReplicaCluster(ctx, &apiv1.ClusterSetCluster{
 		Name: args.replicaClusterName,
 		Endpoints: []apiv1.ClusterSetClusterEndpoint{
@@ -82,8 +102,17 @@ func main() {
 	}); err != nil {
 		log.Fatalf("failed to create replica cluster: %v", err)
 	}
+	log.Printf("Replica cluster '%s' added to clusterset '%s'", args.replicaClusterName, args.psClusterSetName)
+	return nil
+}
 
-	log.Printf("Replica cluster %s created", args.replicaClusterName)
+func removeReplica(ctx context.Context, manager replicaManager, args replicaInitArgs) error {
+	log.Printf("Removing replica cluster '%s' from clusterset '%s'", args.replicaClusterName, args.psClusterSetName)
+	if err := manager.RemoveReplicaCluster(ctx, args.replicaClusterName); err != nil {
+		log.Fatalf("failed to remove replica cluster: %v", err)
+	}
+	log.Printf("Replica cluster '%s' removed from clusterset '%s'", args.replicaClusterName, args.psClusterSetName)
+	return nil
 }
 
 func newClient(config *rest.Config) (client.Client, error) {

@@ -85,7 +85,7 @@ const (
 	ConditionMySQLShellRunnerReady             string = "MySQLShellRunnerReady"
 	ConditionClusterSetBootstrapped            string = "ClusterSetBootstrapped"
 	ConditionClusterSetPrimarySwitchOverInProg string = "ClusterSetPrimarySwitchOverInProgress"
-	ConditionReplicaInitFailure                string = "ReplicaInitFailure"
+	ConditionReplicaManagementFailure          string = "ReplicaManagementFailure"
 	ConditionPrimaryClusterUnreachable         string = "PrimaryClusterUnreachable"
 	ConditionClusterSetReady                   string = "Ready"
 )

@@ -38,7 +38,7 @@ func TestMySQLShellRunner(t *testing.T) {
 	}
 	assert.Equal(t, "apps/v1", deployment.APIVersion)
 	assert.Equal(t, "Deployment", deployment.Kind)
-	assert.Equal(t, "clusterset-mysqlshell-runner", deployment.Name)
+	assert.Equal(t, "clusterset-runner", deployment.Name)
 	assert.Equal(t, "clusterset-ns", deployment.Namespace)
 	assert.Equal(t, labels, deployment.Labels)
 	assert.Equal(t, int32(1), *deployment.Spec.Replicas)

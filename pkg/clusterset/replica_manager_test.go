@@ -12,7 +12,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
-func TestClusterSetReplicaInitJob(t *testing.T) {
+func TestClusterSetReplicaManagerJob(t *testing.T) {
 	pcs := &apiv1.PerconaServerMySQLClusterSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-cluster-set",
@@ -29,18 +29,18 @@ func TestClusterSetReplicaInitJob(t *testing.T) {
 		},
 	}
 
-	job := ClusterSetReplicaInitJob(pcs, cluster, "operator-image", "operator-service-account")
+	job := ClusterSetReplicaManagerJob(pcs, cluster, CmdAddReplica, "operator-image", "operator-service-account")
 
-	assert.Equal(t, "batch/v1", job.APIVersion)
-	assert.Equal(t, "Job", job.Kind)
-	assert.Equal(t, "my-cluster-set-replica-cluster-replica-init", job.Name)
+	assert.Equal(t, "my-cluster-set-replica-cluster-add-replica", job.Name)
 	assert.Equal(t, "cluster-ns", job.Namespace)
 	assert.Equal(t, map[string]string{
-		"app.kubernetes.io/name":       "clusterset-replica-init",
+		"app.kubernetes.io/name":       "clusterset-replica-manager",
 		"app.kubernetes.io/instance":   "my-cluster-set",
 		"app.kubernetes.io/part-of":    "percona-server",
-		"app.kubernetes.io/component":  "clusterset-replica-init",
+		"app.kubernetes.io/component":  "clusterset-replica-manager",
 		"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
+		"cluster-name":                 "replica-cluster",
+		"command":                      CmdAddReplica,
 	}, job.Labels)
 
 	require.NotNil(t, job.Spec.Parallelism)
@@ -54,10 +54,11 @@ func TestClusterSetReplicaInitJob(t *testing.T) {
 	require.Len(t, podSpec.Containers, 1)
 
 	container := podSpec.Containers[0]
-	assert.Equal(t, "clusterset-replica-init", container.Name)
+	assert.Equal(t, "clusterset-replica-manager", container.Name)
 	assert.Equal(t, "operator-image", container.Image)
-	assert.Equal(t, []string{"/opt/percona/clusterset-replica-init"}, container.Command)
+	assert.Equal(t, []string{"/opt/percona-server-mysql-operator/clusterset-replica-manager"}, container.Command)
 	assert.Equal(t, []string{
+		CmdAddReplica,
 		"--replica-cluster-name=replica-cluster",
 		"--replica-endpoint=replica.example.com",
 		"--replica-port=3307",
