@@ -218,6 +218,14 @@ func (m *MysqlshExec) SetPrimaryClusterWithExec(ctx context.Context, clusterName
 	return nil
 }
 
+func (m *MysqlshExec) ForcePrimaryClusterWithExec(ctx context.Context, clusterName string) error {
+	cmd := fmt.Sprintf("dba.getCluster().getClusterSet().forcePrimaryCluster('%s')", clusterName)
+	if err := m.runWithExec(ctx, cmd); err != nil {
+		return errors.Wrap(err, "force primary cluster")
+	}
+	return nil
+}
+
 func (m *MysqlshExec) ClusterSetStatusWithExec(ctx context.Context) (clusterset.Status, error) {
 	status := clusterset.Status{}
 

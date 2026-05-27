@@ -164,5 +164,12 @@ func (r *PerconaServerMySQLReconciler) recoverClustersetReplicaCluster(
 	}); err != nil {
 		return errors.Wrapf(err, "delete mysql pods")
 	}
+
+	if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), func(status *apiv1.PerconaServerMySQLStatus) error {
+		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionInnoDBClusterBootstrapped)
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "write status condition")
+	}
 	return nil
 }
