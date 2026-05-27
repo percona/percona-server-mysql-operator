@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"io"
+	"strings"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
@@ -41,21 +42,32 @@ func New(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, opts *Man
 		return nil, errors.New("primary cluster not found")
 	}
 
-	primaryClusterURI := mysqlsh.URI(string(apiv1.UserClusterSet), pass, primaryCluster.Endpoints[0].Host)
+	for _, endpoint := range primaryCluster.Endpoints {
+		uri := mysqlsh.URI(string(apiv1.UserClusterSet), pass, endpoint.Host)
+		execOpts := &mysqlsh.ExecOptions{
+			Pod:           runnerPod,
+			ContainerName: "mysqlshell-runner",
+			Client:        opts.ClientCmd,
+			Stdout:        opts.Stdout,
+			Stderr:        opts.Stderr,
+		}
+		shell, err := mysqlsh.NewWithExec(uri, execOpts)
+		if err != nil {
+			return nil, errors.Wrap(err, "new mysqlsh")
+		}
 
-	execOpts := &mysqlsh.ExecOptions{
-		Pod:           runnerPod,
-		ContainerName: "mysqlshell-runner",
-		Client:        opts.ClientCmd,
-		Stdout:        opts.Stdout,
-		Stderr:        opts.Stderr,
-	}
-	shell, err := mysqlsh.NewWithExec(primaryClusterURI, execOpts)
-	if err != nil {
-		return nil, errors.Wrap(err, "new mysqlsh")
+		if err := shell.Ping(ctx); err != nil {
+			if errors.Is(err, mysqlsh.ErrEndpointUnreachable) {
+				continue
+			}
+			return nil, errors.Wrap(err, "ping")
+		}
+
+		return &mysqlshellClusterSetManager{shell: shell}, nil
 	}
 
-	return &mysqlshellClusterSetManager{shell: shell}, nil
+	return nil, errors.Wrap(mysqlsh.ErrEndpointUnreachable, "all endpoints are unreachable")
+
 }
 
 func getClusterSetPassword(ctx context.Context, cl client.Client, pcs *apiv1.PerconaServerMySQLClusterSet) (string, error) {
@@ -118,8 +130,13 @@ func (m *mysqlshellClusterSetManager) RemoveReplicaCluster(ctx context.Context, 
 	return nil
 }
 
+var AlreadyPrimaryClusterError = errors.New("already the primary cluster")
+
 func (m *mysqlshellClusterSetManager) SetPrimaryCluster(ctx context.Context, clusterName string) error {
 	if err := m.shell.SetPrimaryClusterWithExec(ctx, clusterName); err != nil {
+		if strings.Contains(err.Error(), "already the PRIMARY cluster") {
+			return AlreadyPrimaryClusterError
+		}
 		return errors.Wrap(err, "set primary cluster")
 	}
 	return nil

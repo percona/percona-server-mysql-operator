@@ -75,9 +75,10 @@ type ClusterSetClusterEndpoint struct {
 }
 
 const (
-	EventTypeClusterSetPrimarySwitched string = "ClusterSetPrimarySwitched"
-	EventTypeClusterSetBootstrapped    string = "ClusterSetBootstrapped"
-	EventTypeClusterSetUnhealthy       string = "ClusterSetHealthDegraded"
+	EventTypeClusterSetPrimarySwitched       string = "ClusterSetPrimarySwitched"
+	EventTypeClusterSetPrimaryForcedSwitched string = "ClusterSetPrimaryForcedSwitched"
+	EventTypeClusterSetBootstrapped          string = "ClusterSetBootstrapped"
+	EventTypeClusterSetUnhealthy             string = "ClusterSetHealthDegraded"
 )
 
 const (
@@ -85,6 +86,7 @@ const (
 	ConditionClusterSetBootstrapped            string = "ClusterSetBootstrapped"
 	ConditionClusterSetPrimarySwitchOverInProg string = "ClusterSetPrimarySwitchOverInProgress"
 	ConditionReplicaInitFailure                string = "ReplicaInitFailure"
+	ConditionPrimaryClusterUnreachable         string = "PrimaryClusterUnreachable"
 	ConditionClusterSetReady                   string = "Ready"
 )
 

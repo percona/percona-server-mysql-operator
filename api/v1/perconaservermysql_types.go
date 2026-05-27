@@ -709,7 +709,10 @@ func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {
 	return v.Must(v.NewVersion(s.MySQL.Version)).Compare(v.Must(v.NewVersion(ver)))
 }
 
-const ConditionInnoDBClusterBootstrapped string = "InnoDBClusterBootstrapped"
+const (
+	ConditionInnoDBClusterBootstrapped    string = "InnoDBClusterBootstrapped"
+	ConditionClusterSetReplicationRunning string = "ClusterSetReplicationRunning"
+)
 
 // PerconaServerMySQL is the Schema for the perconaservermysqls API
 // +kubebuilder:object:root=true

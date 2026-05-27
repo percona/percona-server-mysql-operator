@@ -49,6 +49,19 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 	cmd := []string{"cat", "/var/lib/mysql/full-cluster-crash"}
 
 	for _, pod := range pods {
+		// Check if there is an ongoing clusterset recovery
+		if err := r.ClientCmd.Exec(ctx, &pod, "mysql", []string{"cat", "/var/lib/mysql/clusterset-recovery"}, nil, &outb, &errb, false); err == nil {
+			return nil
+		} else if err != nil {
+			if strings.Contains(errb.String(), "No such file or directory") {
+				continue
+			}
+			return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, outb.String(), errb.String())
+		}
+
+		outb.Reset()
+		errb.Reset()
+
 		err = r.ClientCmd.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false)
 		if err != nil {
 			if strings.Contains(errb.String(), "No such file or directory") {

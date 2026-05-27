@@ -27,6 +27,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
 	csmanager "github.com/percona/percona-server-mysql-operator/pkg/clusterset/manager"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 
 	k8sutil "github.com/percona/percona-server-mysql-operator/pkg/util/k8s"
@@ -82,7 +83,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) SetupWithManager(mgr ctrl.Manag
 
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqlclustersets;perconaservermysqlclustersets/status;perconaservermysqlclustersets/finalizers,verbs=get;list;watch;create;update;patch;delete
 
-// SetupWithManager sets up the controller with the Manager.
+// Reconcile reconciles the PerconaServerMySQLClusterSet custom resource.
 func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx).WithName("PerconaServerMySQLClusterSet")
 
@@ -102,7 +103,15 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 	}
 
 	manager, err := r.getClusterSetManager(ctx, pcs)
-	if err != nil {
+	if updErr := r.reconcilePrimaryClusterUnreachableCondition(ctx, pcs, err); updErr != nil {
+		return ctrl.Result{}, errors.Wrap(updErr, "reconcile primary cluster unreachable condition")
+	}
+
+	if errors.Is(err, mysqlsh.ErrEndpointUnreachable) {
+		if xerr := r.reconcileForcedFailover(ctx, pcs, manager); xerr != nil {
+			return ctrl.Result{}, errors.Wrap(xerr, "reconcile forced failover")
+		}
+	} else if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "get cluster set manager")
 	}
 
@@ -123,6 +132,32 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 	}
 
 	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+}
+
+func (r *PerconaServerMySQLClusterSetReconciler) reconcilePrimaryClusterUnreachableCondition(
+	ctx context.Context,
+	pcs *apiv1.PerconaServerMySQLClusterSet,
+	csErr error,
+) error {
+	if errors.Is(csErr, mysqlsh.ErrEndpointUnreachable) {
+		return pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) {
+			meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+				Type:    apiv1.ConditionPrimaryClusterUnreachable,
+				Status:  metav1.ConditionTrue,
+				Reason:  apiv1.ConditionPrimaryClusterUnreachable,
+				Message: "All primary cluster endpoints are unreachable",
+			})
+		})
+	}
+
+	cond := meta.FindStatusCondition(pcs.Status.Conditions, apiv1.ConditionPrimaryClusterUnreachable)
+	if cond == nil {
+		return nil
+	}
+
+	return pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) {
+		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionPrimaryClusterUnreachable)
+	})
 }
 
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
@@ -233,6 +268,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileReplicas(ctx context.C
 			if err := manager.RemoveReplicaCluster(ctx, name); err != nil {
 				return errors.Wrap(err, "remove from cluster set")
 			}
+			log.Info("Removed cluster from ClusterSet", "clusterName", name)
 		}
 	}
 
@@ -301,7 +337,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) addToClusterSet(ctx context.Con
 }
 
 func (r *PerconaServerMySQLClusterSetReconciler) reconcileSwitchover(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, manager ClusterSetManager) error {
-	if pcs.Spec.PrimaryCluster == pcs.Status.PrimaryCluster {
+	if pcs.Status.PrimaryCluster == "" || pcs.Spec.PrimaryCluster == pcs.Status.PrimaryCluster {
 		return nil
 	}
 
@@ -320,7 +356,9 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileSwitchover(ctx context
 	}
 
 	if err := manager.SetPrimaryCluster(ctx, pcs.Spec.PrimaryCluster); err != nil {
-		return errors.Wrap(err, "set primary cluster")
+		if !errors.Is(err, csmanager.AlreadyPrimaryClusterError) {
+			return errors.Wrap(err, "set primary cluster")
+		}
 	}
 
 	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) {
@@ -330,8 +368,35 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileSwitchover(ctx context
 		return errors.Wrap(err, "update status")
 	}
 
-	r.Recorder.Event(pcs, corev1.EventTypeNormal, apiv1.EventTypeClusterSetPrimarySwitched, fmt.Sprintf("Primary cluster switched from %s to %s", pcs.Status.PrimaryCluster, pcs.Spec.PrimaryCluster))
+	r.Recorder.Event(pcs, corev1.EventTypeNormal, apiv1.EventTypeClusterSetPrimarySwitched,
+		fmt.Sprintf("Primary cluster switched from %s to %s", pcs.Status.PrimaryCluster, pcs.Spec.PrimaryCluster),
+	)
 
+	return nil
+}
+
+func (r *PerconaServerMySQLClusterSetReconciler) reconcileForcedFailover(
+	ctx context.Context,
+	pcs *apiv1.PerconaServerMySQLClusterSet,
+	manager ClusterSetManager,
+) error {
+	log := logf.FromContext(ctx)
+
+	if pcs.Spec.PrimaryCluster == pcs.Status.PrimaryCluster {
+		return nil
+	}
+
+	if pcs.Spec.AllowForcedFailover == nil || !*pcs.Spec.AllowForcedFailover {
+		log.Info("Forced failover is requested, but not allowed. Set .spec.allowForcedFailover to true to allow it.")
+		return nil
+	}
+
+	log.Info("Forcefully failing over primary cluster")
+
+	// TODO
+
+	r.Recorder.Event(pcs, corev1.EventTypeWarning, apiv1.EventTypeClusterSetPrimaryForcedSwitched,
+		fmt.Sprintf("Primary cluster forced switched from %s to %s", pcs.Status.PrimaryCluster, pcs.Spec.PrimaryCluster))
 	return nil
 }
 

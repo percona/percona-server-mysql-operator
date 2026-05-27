@@ -38,8 +38,9 @@ func ClusterSetReplicaInitJob(
 			Labels:    labels,
 		},
 		Spec: batchv1.JobSpec{
-			Parallelism: new(int32(1)),
-			Completions: new(int32(1)),
+			Parallelism:             new(int32(1)),
+			Completions:             new(int32(1)),
+			TTLSecondsAfterFinished: new(int32(60)),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
