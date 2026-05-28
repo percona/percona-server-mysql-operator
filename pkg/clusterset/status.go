@@ -7,8 +7,8 @@ const (
 )
 
 const (
-	ClusterRolePrimary   string = "PRIMARY"
-	ClusterRoleSECONDARY string = "REPLICA"
+	ClusterRolePrimary string = "PRIMARY"
+	ClusterRoleReplica string = "REPLICA"
 )
 
 type Status struct {

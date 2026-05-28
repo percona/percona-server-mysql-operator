@@ -26,6 +26,10 @@ const (
 	FinalizerDeleteMySQLPvc    = perconaPrefix + "delete-mysql-pvc"
 )
 
+const (
+	FinalizerClusterSetDissolve = perconaPrefix + "dissolve"
+)
+
 type AnnotationKey string
 
 func (s AnnotationKey) String() string {

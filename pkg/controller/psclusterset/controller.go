@@ -96,6 +96,10 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, errors.Wrap(err, "get PerconaServerMySQLClusterSet")
 	}
 
+	if !pcs.GetDeletionTimestamp().IsZero() {
+		return ctrl.Result{}, r.reconcileFinalizers(ctx, pcs)
+	}
+
 	if ready, err := r.reconcileMySQLShellRunner(ctx, pcs); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "reconcile MySQLShellRunner")
 	} else if !ready {
@@ -467,4 +471,75 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Con
 		return errors.Wrap(err, "update status")
 	}
 	return nil
+}
+
+func (r *PerconaServerMySQLClusterSetReconciler) reconcileFinalizers(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
+	manager, err := r.getClusterSetManager(ctx, pcs)
+	if err != nil {
+		return errors.Wrap(err, "get cluster set manager")
+	}
+
+	updated := []string{}
+	for _, finalizer := range pcs.GetFinalizers() {
+		switch finalizer {
+		case naming.FinalizerClusterSetDissolve:
+			if ok, err := r.dissolveClusterSet(ctx, pcs, manager); err != nil {
+				return errors.Wrap(err, "dissolve cluster set")
+			} else if !ok {
+				updated = append(updated, finalizer)
+			}
+		}
+	}
+
+	orig := pcs.DeepCopy()
+	pcs.SetFinalizers(updated)
+	if err := r.Patch(ctx, pcs, client.MergeFrom(orig)); err != nil {
+		return errors.Wrap(err, "patch cluster set finalizers")
+	}
+
+	return nil
+}
+
+// dissolveClusterSet dissolves the cluster set by removing all replicas.
+// mysqhsell 9.7 natively supports this operation, but this version is not supported in the operator at the time of writing this.
+func (r *PerconaServerMySQLClusterSetReconciler) dissolveClusterSet(
+	ctx context.Context,
+	pcs *apiv1.PerconaServerMySQLClusterSet,
+	manager ClusterSetManager,
+) (bool, error) {
+	observedStatus, err := manager.Status(ctx)
+	if err != nil {
+		return false, errors.Wrap(err, "get cluster set status")
+	}
+	clusters := observedStatus.Clusters
+
+	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) {
+		status.Clusters = observedStatus.Clusters
+		status.Conditions = []metav1.Condition{}
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:    apiv1.ConditionClusterSetDissolving,
+			Status:  metav1.ConditionTrue,
+			Reason:  apiv1.ConditionClusterSetDissolving,
+			Message: fmt.Sprintf("Dissolving clusterset, %d cluster(s) remaining", len(clusters)-1),
+		})
+	}); err != nil {
+		return false, errors.Wrap(err, "update status")
+	}
+
+	// If only one cluster remains, that's the primary. Removal is done.
+	if len(clusters) == 1 {
+		return true, nil
+	}
+
+	// Remove all replicas from the clusterset
+	for name, cluster := range clusters {
+		if cluster.ClusterRole == clusterset.ClusterRolePrimary {
+			continue
+		}
+		if err := r.runReplicaManagerJob(ctx, clusterset.CmdRemoveReplica, pcs, &apiv1.ClusterSetCluster{Name: name}); err != nil {
+			return false, errors.Wrap(err, "run replica manager job")
+		}
+	}
+
+	return true, nil
 }

@@ -87,6 +87,7 @@ const (
 	ConditionClusterSetPrimarySwitchOverInProg string = "ClusterSetPrimarySwitchOverInProgress"
 	ConditionReplicaManagementFailure          string = "ReplicaManagementFailure"
 	ConditionPrimaryClusterUnreachable         string = "PrimaryClusterUnreachable"
+	ConditionClusterSetDissolving              string = "ClusterSetDissolving"
 	ConditionClusterSetReady                   string = "Ready"
 )
 
