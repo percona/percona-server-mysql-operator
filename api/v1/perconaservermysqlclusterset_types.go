@@ -176,7 +176,6 @@ func (psc *PerconaServerMySQLClusterSet) PrimaryCluster() *ClusterSetCluster {
 	}
 	return nil
 }
-}
 
 func (psc *PerconaServerMySQLClusterSet) GetCluster(name string) *ClusterSetCluster {
 	for i := range psc.Spec.Clusters {
