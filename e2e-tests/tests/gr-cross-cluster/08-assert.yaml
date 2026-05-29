@@ -1,0 +1,23 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+---
+kind: PerconaServerMySQLClusterSet
+metadata:
+  name: gr-cross-cluster
+status:
+  conditions:
+  - type: Ready
+    status: "True"
+  - type: ClusterSetBootstrapped
+    status: "True"
+  - type: MySQLShellRunnerReady
+    status: "True"
+  clusters:
+    grcrossclusterdc1:
+      clusterRole: REPLICA
+      globalStatus: OK
+    grcrossclusterdc2:
+      clusterRole: PRIMARY
+      globalStatus: OK
+  primaryCluster: grcrossclusterdc2

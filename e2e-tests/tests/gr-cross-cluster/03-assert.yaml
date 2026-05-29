@@ -1,0 +1,52 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-cross-cluster-dc2
+spec:
+  backup:
+    backoffLimit: 3
+status:
+  conditions:
+  - reason: Ready
+    status: "True"
+    type: Ready
+  - message: InnoDB cluster successfully bootstrapped with 3 nodes
+    reason: InnoDBClusterBootstrapped
+    status: "True"
+    type: InnoDBClusterBootstrapped
+  - type: ClusterSetReplicationRunning
+    status: "True"
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  haproxy:
+    ready: 1
+    size: 1
+    state: ready
+  state: ready
+---
+kind: PerconaServerMySQLClusterSet
+apiVersion: ps.percona.com/v1
+metadata:
+  name: gr-cross-cluster
+status:
+  conditions:
+  - type: Ready
+    status: "True"
+  - type: ClusterSetBootstrapped
+    status: "True"
+  - type: MySQLShellRunnerReady
+    status: "True"
+  clusters:
+    grcrossclusterdc1:
+      clusterRole: PRIMARY
+      globalStatus: OK
+    grcrossclusterdc2:
+      clusterRole: REPLICA
+      globalStatus: OK
+  primaryCluster: grcrossclusterdc1

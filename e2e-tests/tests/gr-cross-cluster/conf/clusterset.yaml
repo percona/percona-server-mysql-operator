@@ -1,0 +1,20 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLClusterSet
+metadata:
+  name: gr-cross-cluster
+spec:
+  primaryCluster: grcrossclusterdc1
+  sslMode: AUTO
+  credentialsSecret:
+    name: test-secrets
+    key: clusterset
+  allowForcedFailover: false
+  clusters:
+    - name: grcrossclusterdc1
+      endpoints:
+      - host: gr-cross-cluster-dc1-mysql-primary
+    - name: grcrossclusterdc2
+      endpoints:
+      - host: gr-cross-cluster-dc2-mysql-0.gr-cross-cluster-dc2-mysql
+  mysqlShellRunner:
+    image: image

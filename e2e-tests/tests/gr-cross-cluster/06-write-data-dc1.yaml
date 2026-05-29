@@ -1,0 +1,24 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o pipefail
+      set -o xtrace
+
+      source ../../functions
+
+      run_mysql \
+          "CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable (id int PRIMARY KEY)" \
+          "-h $(get_haproxy_svc "gr-cross-cluster-dc1")"
+
+      run_mysql \
+          "INSERT INTO myDB.myTable (id) VALUES (100503)" \
+          "-h $(get_haproxy_svc "gr-cross-cluster-dc1")"
+      run_mysql \
+          "INSERT INTO myDB.myTable (id) VALUES (100504)" \
+          "-h $(get_haproxy_svc "gr-cross-cluster-dc1")"
+      run_mysql \
+          "INSERT INTO myDB.myTable (id) VALUES (100505)" \
+          "-h $(get_haproxy_svc "gr-cross-cluster-dc1")"
+
