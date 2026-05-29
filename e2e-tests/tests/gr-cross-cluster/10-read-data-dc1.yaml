@@ -8,15 +8,15 @@ commands:
 
       source ../../functions
 
-      cluster_name="gr-cross-cluster-dc2"
+      cluster_name="gr-cross-cluster-dc1"
       mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
-      expected=$'100500\n100501\n100502\n100503\n100504\n100505'
+      expected=$'100500\n100501\n100502\n100503\n100504\n100505\n100506\n100507\n100508'
 
       for attempt in {1..30}; do
           all_ready=true
           for i in 0 1 2; do
               data=$(run_mysql "SELECT id FROM myDB.myTable ORDER BY id" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql" "${mysql_user}")
-              printf '%s' "${data}" > "${TEMP_DIR}/07-read-data-dc2-${i}"
+              printf '%s' "${data}" > "${TEMP_DIR}/10-read-data-dc1-${i}"
               if [[ "${data}" != "${expected}" ]]; then
                   all_ready=false
               fi
@@ -28,11 +28,11 @@ commands:
       done
 
       for i in 0 1 2; do
-          data=$(<"${TEMP_DIR}/07-read-data-dc2-${i}")
+          data=$(<"${TEMP_DIR}/10-read-data-dc1-${i}")
           if [[ "${data}" != "${expected}" ]]; then
               echo "Unexpected data from ${cluster_name}-mysql-${i}:"
               printf '%s\n' "${data}"
               exit 1
           fi
-          kubectl create configmap -n "${NAMESPACE}" 07-read-data-dc2-${i} --from-literal=data="${data}"
+          kubectl create configmap -n "${NAMESPACE}" 10-read-data-dc1-${i} --from-literal=data="${data}"
       done

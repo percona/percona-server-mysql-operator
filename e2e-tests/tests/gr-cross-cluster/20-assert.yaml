@@ -11,16 +11,15 @@ commands:
 
       mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
 
-      status=$(get_clusterset_status "-h gr-cross-cluster-dc1-mysql-primary" "${mysql_user}")
+      status=$(get_clusterset_status "-h gr-cross-cluster-dc2-mysql-primary" "${mysql_user}")
 
       echo "${status}" | jq .
       echo "${status}" | jq -e '
           .status == "HEALTHY" and
           .primaryCluster == "grcrossclusterdc2" and
-          .clusters.grcrossclusterdc1.clusterRole == "REPLICA" and
-          .clusters.grcrossclusterdc1.globalStatus == "OK" and
           .clusters.grcrossclusterdc2.clusterRole == "PRIMARY" and
-          .clusters.grcrossclusterdc2.globalStatus == "OK"
+          .clusters.grcrossclusterdc2.globalStatus == "OK" and
+          (.clusters | length) == 1
       '
     timeout: 420
 ---
@@ -28,18 +27,20 @@ kind: PerconaServerMySQLClusterSet
 apiVersion: ps.percona.com/v1
 metadata:
   name: gr-cross-cluster
+spec:
+  clusters:
+    - name: grcrossclusterdc2
+      endpoints:
+      - host: gr-cross-cluster-dc2-mysql-0.gr-cross-cluster-dc2-mysql
 status:
   conditions:
-  - type: MySQLShellRunnerReady
+  - type: Ready
     status: "True"
   - type: ClusterSetBootstrapped
     status: "True"
-  - type: Ready
+  - type: MySQLShellRunnerReady
     status: "True"
   clusters:
-    grcrossclusterdc1:
-      clusterRole: REPLICA
-      globalStatus: OK
     grcrossclusterdc2:
       clusterRole: PRIMARY
       globalStatus: OK

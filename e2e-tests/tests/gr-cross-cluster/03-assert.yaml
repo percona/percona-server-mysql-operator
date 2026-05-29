@@ -1,25 +1,46 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 420
+commands:
+  - script: |-
+      set -o errexit
+      set -o pipefail
+      set -o xtrace
+
+      source ../../functions
+
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
+
+      status=$(get_clusterset_status "-h gr-cross-cluster-dc1-mysql-primary" "${mysql_user}")
+
+      echo "${status}" | jq .
+      echo "${status}" | jq -e '
+          .status == "HEALTHY" and
+          .primaryCluster == "grcrossclusterdc1" and
+          .clusters.grcrossclusterdc1.clusterRole == "PRIMARY" and
+          .clusters.grcrossclusterdc1.globalStatus == "OK" and
+          .clusters.grcrossclusterdc2.clusterRole == "REPLICA" and
+          .clusters.grcrossclusterdc2.globalStatus == "OK"
+      '
+    timeout: 420
 ---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
   name: gr-cross-cluster-dc2
-spec:
-  backup:
-    backoffLimit: 3
 status:
   conditions:
+  - reason: Initializing
+    status: "False"
+    type: Initializing
   - reason: Ready
     status: "True"
     type: Ready
-  - message: InnoDB cluster successfully bootstrapped with 3 nodes
-    reason: InnoDBClusterBootstrapped
-    status: "True"
-    type: InnoDBClusterBootstrapped
   - type: ClusterSetReplicationRunning
     status: "True"
+  - message: InnoDB cluster successfully bootstrapped with 3 nodes
+    status: "True"
+    type: InnoDBClusterBootstrapped
   mysql:
     ready: 3
     size: 3
@@ -36,11 +57,11 @@ metadata:
   name: gr-cross-cluster
 status:
   conditions:
-  - type: Ready
+  - type: MySQLShellRunnerReady
     status: "True"
   - type: ClusterSetBootstrapped
     status: "True"
-  - type: MySQLShellRunnerReady
+  - type: Ready
     status: "True"
   clusters:
     grcrossclusterdc1:

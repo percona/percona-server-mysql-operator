@@ -1,6 +1,0 @@
-apiVersion: kuttl.dev/v1beta1
-kind: TestStep
-timeout: 10
-commands:
-- script: |-
-    kubectl patch -n "${NAMESPACE}" ps-clusterset gr-cross-cluster --type=json -p='[{"op": "remove", "path": "/spec/clusters/0"}]'

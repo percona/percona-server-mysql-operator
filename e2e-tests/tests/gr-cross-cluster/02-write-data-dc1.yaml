@@ -7,11 +7,12 @@ commands:
       set -o xtrace
 
       source ../../functions
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
 
       run_mysql \
           "CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable (id int PRIMARY KEY)" \
-          "-h $(get_haproxy_svc "gr-cross-cluster-dc1")"
+          "-h $(get_haproxy_svc "gr-cross-cluster-dc1")" "${mysql_user}"
 
       run_mysql \
           "INSERT INTO myDB.myTable (id) VALUES (100500),(100501),(100502)" \
-          "-h $(get_haproxy_svc "gr-cross-cluster-dc1")"
+          "-h $(get_haproxy_svc "gr-cross-cluster-dc1")" "${mysql_user}"

@@ -1,10 +1,9 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
 timeout: 10
----
-apiVersion: ps.percona.com/v1
-kind: PerconaServerMySQLClusterSet
-metadata:
-  name: gr-cross-cluster
-spec:
-  primaryCluster: grcrossclusterdc2
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      kubectl patch -n "${NAMESPACE}" ps-clusterset gr-cross-cluster --type=merge -p '{"spec":{"primaryCluster":"grcrossclusterdc2"}}'

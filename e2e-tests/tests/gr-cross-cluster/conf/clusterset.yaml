@@ -2,6 +2,8 @@ apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLClusterSet
 metadata:
   name: gr-cross-cluster
+  finalizers:
+  - percona.com/clusterset-dissolve
 spec:
   primaryCluster: grcrossclusterdc1
   sslMode: AUTO
