@@ -2,15 +2,19 @@ apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLClusterSet
 metadata:
   name: my-cluster-set
+  finalizers:
+    - percona.com/clusterset-dissolve
 spec:
-  primaryCluster: pscluster1
+  primaryCluster: sourcecluster
   credentialsSecret:
     name: ps-cluster1-secrets
-    key: root
-  allowForcedFailover: false
+    key: clusterset
   clusters:
-    - name: pscluster1
+    - name: sourcecluster
       endpoints:
-      - host: 34.118.226.200
+      - host: source-cluster-mysql-primary.default.svc.cluster.local
+    - name: replicacluster
+      endpoints:
+      - host: replica-cluster-mysql-0.replica-cluster-mysql.default.svc.cluster.local
   mysqlShellRunner:
     image: perconalab/percona-server-mysql-operator:main-psmysql8.4

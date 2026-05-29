@@ -1288,6 +1288,7 @@ spec:
                   - endpoints
                   - name
                   type: object
+                minItems: 1
                 type: array
               credentialsSecret:
                 properties:
@@ -1310,6 +1311,15 @@ spec:
                 - image
                 type: object
               primaryCluster:
+                type: string
+              sslMode:
+                default: AUTO
+                enum:
+                - AUTO
+                - DISABLED
+                - REQUIRED
+                - VERIFY_CA
+                - VERIFY_IDENTITY
                 type: string
             required:
             - clusters
