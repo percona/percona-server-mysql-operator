@@ -1312,6 +1312,9 @@ spec:
                 type: object
               primaryCluster:
                 type: string
+                x-kubernetes-validations:
+                - message: primaryCluster must contain only alphanumeric characters
+                  rule: self.matches('^[A-Za-z0-9]+$')
               sslMode:
                 default: AUTO
                 enum:
@@ -14482,17 +14485,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - events
-  - serviceaccounts
-  verbs:
-  - create
-  - get
-  - list
-  - patch
-  - watch
-- apiGroups:
-  - ""
-  resources:
   - pods
   - pods/exec
   verbs:
@@ -14503,6 +14495,28 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - get
+  - list
+  - patch
   - watch
 - apiGroups:
   - apps
@@ -14557,16 +14571,6 @@ rules:
   - update
   - watch
 - apiGroups:
-  - events.k8s.io
-  resources:
-  - events
-  verbs:
-  - create
-  - get
-  - list
-  - patch
-  - watch
-- apiGroups:
   - policy
   resources:
   - poddisruptionbudgets
@@ -14611,6 +14615,7 @@ rules:
   - get
   - list
   - patch
+  - update
   - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1

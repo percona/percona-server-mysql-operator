@@ -173,7 +173,7 @@ const (
 type BootstrapConfig struct {
 	// +kubebuilder:validation:Enum=auto;manual
 	// +kubebuilder:default=auto
-	Mode BootstrapMode `json:"mode,omitempty"`
+	Mode *BootstrapMode `json:"mode,omitempty"`
 }
 
 // Checks if the MySQL cluster type is asynchronous.
@@ -1452,4 +1452,11 @@ func (s *BackupStorageAzureSpec) equals(other *BackupStorageAzureSpec) bool {
 		return false
 	}
 	return true
+}
+
+func (cr *PerconaServerMySQL) BootstrapMode() BootstrapMode {
+	if cr.Spec.MySQL.Bootstrap.Mode == nil {
+		return BootstrapModeAuto
+	}
+	return *cr.Spec.MySQL.Bootstrap.Mode
 }

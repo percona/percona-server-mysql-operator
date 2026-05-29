@@ -47,6 +47,7 @@ type PerconaServerMySQLClusterSetSpec struct {
 	// This is the cluster that will serve writes, and replica members will connect to.
 	//
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self.matches('^[A-Za-z0-9]+$')",message="primaryCluster must contain only alphanumeric characters"
 	PrimaryCluster string `json:"primaryCluster"`
 
 	// SSLMode is the desired SSL mode of the ClusterSet.
