@@ -10,6 +10,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	csmanager "github.com/percona/percona-server-mysql-operator/pkg/clusterset/manager"
+	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -100,7 +101,7 @@ func addReplica(ctx context.Context, manager replicaManager, args replicaInitArg
 			},
 		},
 	}); err != nil {
-		log.Fatalf("failed to create replica cluster: %v", err)
+		return errors.Wrap(err, "failed to create replica cluster")
 	}
 	log.Printf("Replica cluster '%s' added to clusterset '%s'", args.replicaClusterName, args.psClusterSetName)
 	return nil
@@ -109,7 +110,7 @@ func addReplica(ctx context.Context, manager replicaManager, args replicaInitArg
 func removeReplica(ctx context.Context, manager replicaManager, args replicaInitArgs) error {
 	log.Printf("Removing replica cluster '%s' from clusterset '%s'", args.replicaClusterName, args.psClusterSetName)
 	if err := manager.RemoveReplicaCluster(ctx, args.replicaClusterName); err != nil {
-		log.Fatalf("failed to remove replica cluster: %v", err)
+		return errors.Wrap(err, "failed to remove replica cluster")
 	}
 	log.Printf("Replica cluster '%s' removed from clusterset '%s'", args.replicaClusterName, args.psClusterSetName)
 	return nil

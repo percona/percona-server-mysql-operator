@@ -70,7 +70,6 @@ func SystemUsers(cr *apiv1.PerconaServerMySQL) []apiv1.SystemUser {
 		apiv1.UserRoot,
 		apiv1.UserXtraBackup,
 		apiv1.UserReplication,
-		apiv1.UserClusterSet,
 	}
 
 	if cr.CompareVersion("1.2.0") >= 0 {

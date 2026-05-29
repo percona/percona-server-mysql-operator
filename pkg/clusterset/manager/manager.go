@@ -109,8 +109,10 @@ func getRunnerPod(ctx context.Context, cl client.Client, pcs *apiv1.PerconaServe
 	return &runnerPod, nil
 }
 
-func (m *mysqlshellClusterSetManager) CreateClusterSet(ctx context.Context, clustersetName string) error {
-	if err := m.shell.CreateClusterSetWithExec(ctx, clustersetName); err != nil {
+func (m *mysqlshellClusterSetManager) CreateClusterSet(ctx context.Context, clustersetName string, sslMode apiv1.ClusterSetSSLMode) error {
+	if err := m.shell.CreateClusterSetWithExec(ctx, clustersetName, &mysqlsh.CreateClusterSetOptions{
+		SSLMode: sslMode,
+	}); err != nil {
 		return errors.Wrap(err, "create cluster set")
 	}
 	return nil

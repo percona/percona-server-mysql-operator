@@ -43,16 +43,55 @@ type PerconaServerMySQLClusterSet struct {
 }
 
 type PerconaServerMySQLClusterSetSpec struct {
+	// PrimaryCluster is the desired primary cluster of the ClusterSet.
+	// This is the cluster that will serve writes, and replica members will connect to.
+	//
 	// +kubebuilder:validation:Required
-	PrimaryCluster    string                   `json:"primaryCluster"`
+	PrimaryCluster string `json:"primaryCluster"`
+
+	// SSLMode is the desired SSL mode of the ClusterSet.
+	//
+	// +kubebuilder:validation:Enum=AUTO;DISABLED;REQUIRED;VERIFY_CA;VERIFY_IDENTITY
+	// +kubebuilder:default:=AUTO
+	SSLMode *ClusterSetSSLMode `json:"sslMode,omitempty"`
+
+	// CredentialsSecret is the secret containing the credentials for the ClusterSet.
 	CredentialsSecret corev1.SecretKeySelector `json:"credentialsSecret"`
+
+	// AllowForcedFailover controls if an emergency failover may be performed in the event
+	// when the current primary cluster becomes unreachable.
+	//
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:=false
-	AllowForcedFailover *bool               `json:"allowForcedFailover,omitempty"`
-	Clusters            []ClusterSetCluster `json:"clusters"`
+	AllowForcedFailover *bool `json:"allowForcedFailover,omitempty"`
 
+	// Clusters is the list of member clusters in the ClusterSet.
+	// At least one cluster must be specified (the primary).
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems:=1
+	Clusters []ClusterSetCluster `json:"clusters"`
+
+	// MysqlShellRunner is the configuration for the MySQL shell runner.
 	MysqlShellRunner MysqlShellRunner `json:"mysqlShellRunner"`
 }
+
+type ClusterSetSSLMode string
+
+const (
+	// TLS encryption will be enabled if supported by the instance, otherwise disabled.
+	ClusterSetSSLModeAuto ClusterSetSSLMode = "AUTO"
+	// TLS encryption will be disabled.
+	ClusterSetTLSModeDisabled ClusterSetSSLMode = "DISABLED"
+	// TLS encryption will be enabled.
+	ClusterSetSSLModeRequired ClusterSetSSLMode = "REQUIRED"
+	// Like REQUIRED, but additionally verify the peer server TLS certificate against the configured Certificate Authority (CA) certificates.
+	// In this case, the replica and primary certificates must be signed by the same Certificate Authority (CA).
+	ClusterSetSSLModeVerifyCA ClusterSetSSLMode = "VERIFY_CA"
+	// Like VERIFY_CA, but additionally verify that the peer server certificate matches the host to which the connection is attempted.
+	// The primary cluster's server cert must have a SAN matching the ClusterSetCluster.Endpoints[].Host value the replica connects to
+	ClusterSetSSLModeVerifyIdentity ClusterSetSSLMode = "VERIFY_IDENTITY"
+)
 
 type MysqlShellRunner struct {
 	// +kubebuilder:validation:Required

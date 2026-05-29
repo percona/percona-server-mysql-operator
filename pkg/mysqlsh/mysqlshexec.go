@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
@@ -177,15 +178,30 @@ func (m *MysqlshExec) Rescan84WithExec(ctx context.Context, clusterName string) 
 	return nil
 }
 
-func (m *MysqlshExec) CreateClusterSetWithExec(ctx context.Context, name string) error {
+type CreateClusterSetOptions struct {
+	SSLMode apiv1.ClusterSetSSLMode
+}
+
+func (o *CreateClusterSetOptions) Default() {
+	if o == nil {
+		o = &CreateClusterSetOptions{}
+	}
+
+	if o.SSLMode == "" {
+		o.SSLMode = apiv1.ClusterSetSSLModeAuto
+	}
+}
+
+func (m *MysqlshExec) CreateClusterSetWithExec(ctx context.Context, name string, opts *CreateClusterSetOptions) error {
+	opts.Default()
 	cmd := fmt.Sprintf(`
 var cluster = dba.getCluster()
 try {
 	cluster.getClusterSet()
 } catch (err) {
-	cluster.createClusterSet('%s')
+	cluster.createClusterSet('%s', {clusterSetReplicationSslMode: '%s'})
 }
-`, name)
+`, name, opts.SSLMode)
 	if err := m.runWithExec(ctx, cmd); err != nil {
 		return errors.Wrap(err, "create cluster set")
 	}

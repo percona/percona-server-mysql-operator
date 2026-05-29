@@ -46,7 +46,7 @@ type PerconaServerMySQLClusterSetReconciler struct {
 }
 
 type ClusterSetManager interface {
-	CreateClusterSet(ctx context.Context, clustersetName string) error
+	CreateClusterSet(ctx context.Context, clustersetName string, sslMode apiv1.ClusterSetSSLMode) error
 	CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster) error
 	RemoveReplicaCluster(ctx context.Context, clusterName string) error
 	SetPrimaryCluster(ctx context.Context, clusterName string) error
@@ -230,7 +230,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) bootstrapClusterSet(ctx context
 	log := logf.FromContext(ctx).WithValues("primaryCluster", primaryCluster.Name)
 
 	log.Info("Creating ClusterSet")
-	if err := manager.CreateClusterSet(ctx, pcs.GetName()); err != nil {
+	if err := manager.CreateClusterSet(ctx, pcs.GetName(), *pcs.Spec.SSLMode); err != nil {
 		return errors.Wrap(err, "create cluster set")
 	}
 
