@@ -676,7 +676,7 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	if cr.CompareVersion("1.2.0") >= 0 {
 		env = append(env, corev1.EnvVar{
 			Name:  "BOOTSTRAP_MODE",
-			Value: string(cr.Spec.MySQL.Bootstrap.Mode),
+			Value: string(cr.BootstrapMode()),
 		})
 	}
 

@@ -22,7 +22,7 @@ import (
 // reconcileClusterSetStatus adds a status condition when the cluster is replica member of a ClusterSet.
 // When a replica member is removed from the ClusterSet, this function ensures that GR is bootstrapped again and the cluster is able to accept writes.
 func (r *PerconaServerMySQLReconciler) reconcileClusterSetStatus(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
-	if cr.Spec.MySQL.Bootstrap.Mode != apiv1.BootstrapModeManual {
+	if cr.BootstrapMode() != apiv1.BootstrapModeManual {
 		return nil
 	}
 
@@ -133,7 +133,7 @@ func (r *PerconaServerMySQLReconciler) recoverClustersetReplicaCluster(
 
 	// Patch the .spec.mysql.bootstrap.mode to apiv1.BootstrapModeAuto
 	orig := cr.DeepCopy()
-	cr.Spec.MySQL.Bootstrap.Mode = apiv1.BootstrapModeAuto
+	cr.Spec.MySQL.Bootstrap.Mode = new(apiv1.BootstrapModeAuto)
 	if err := r.Client.Patch(ctx, cr, client.MergeFrom(orig)); err != nil {
 		return errors.Wrapf(err, "patch cr")
 	}

@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,7 +30,6 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
-
 	k8sutil "github.com/percona/percona-server-mysql-operator/pkg/util/k8s"
 )
 
@@ -42,7 +42,7 @@ type PerconaServerMySQLClusterSetReconciler struct {
 	Recorder  record.EventRecorder
 
 	getClusterSetManager clusterSetManagerGetter
-	operatorPod          *corev1.Pod
+	jobImage             string
 }
 
 type ClusterSetManager interface {
@@ -72,7 +72,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) SetupWithManager(mgr ctrl.Manag
 	if err != nil {
 		return errors.Wrap(err, "get operator pod")
 	}
-	r.operatorPod = operatorPod
+	r.jobImage = operatorPod.Spec.Containers[0].Image
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1.PerconaServerMySQLClusterSet{}).
@@ -100,6 +100,10 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, r.reconcileFinalizers(ctx, pcs)
 	}
 
+	if err := r.reconcileRBAC(ctx, pcs); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "reconcile RBAC")
+	}
+
 	if ready, err := r.reconcileMySQLShellRunner(ctx, pcs); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "reconcile MySQLShellRunner")
 	} else if !ready {
@@ -125,7 +129,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, errors.Wrap(err, "bootstrap ClusterSet")
 	}
 
-	if err := r.reconcileReplicas(ctx, pcs, manager); err != nil {
+	if err := r.reconcileReplicas(ctx, pcs); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "reconcile replicas")
 	}
 
@@ -255,8 +259,10 @@ func (r *PerconaServerMySQLClusterSetReconciler) bootstrapClusterSet(ctx context
 }
 
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;delete
+//+kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch
 
-func (r *PerconaServerMySQLClusterSetReconciler) reconcileReplicas(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, manager ClusterSetManager) error {
+func (r *PerconaServerMySQLClusterSetReconciler) reconcileReplicas(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
 	// Add replicas to the clusterset if not added already
 	for _, cluster := range pcs.Spec.Clusters {
 		if _, ok := pcs.Status.Clusters[cluster.Name]; !ok && cluster.Name != pcs.PrimaryCluster().Name {
@@ -342,7 +348,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) runReplicaManagerJob(
 	pcs *apiv1.PerconaServerMySQLClusterSet,
 	cluster *apiv1.ClusterSetCluster,
 ) error {
-	job := clusterset.ClusterSetReplicaManagerJob(pcs, cluster, command, r.operatorPod.Spec.Containers[0].Image, r.operatorPod.Spec.ServiceAccountName)
+	job := clusterset.ClusterSetReplicaManagerJob(pcs, cluster, command, r.jobImage, clustersetServiceAccount(pcs).Name)
 	err := r.Get(ctx, client.ObjectKeyFromObject(job), job)
 
 	verb := "Adding to"
@@ -572,4 +578,103 @@ func (r *PerconaServerMySQLClusterSetReconciler) dissolveClusterSet(
 	}
 
 	return false, nil
+}
+
+func clustersetRole(pcs *apiv1.PerconaServerMySQLClusterSet) *rbacv1.Role {
+	return &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-clusterset", pcs.Name),
+			Namespace: pcs.Namespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods/exec"},
+				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get"},
+			},
+			{
+				APIGroups: []string{apiv1.GroupVersion.Group},
+				Resources: []string{"perconaservermysqlclustersets"},
+				Verbs:     []string{"get"},
+			},
+		},
+	}
+}
+
+func clustersetRoleBinding(pcs *apiv1.PerconaServerMySQLClusterSet) *rbacv1.RoleBinding {
+	role := clustersetRole(pcs)
+	serviceAccount := clustersetServiceAccount(pcs)
+	return &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-clusterset", pcs.Name),
+			Namespace: pcs.Namespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: rbacv1.SchemeGroupVersion.Group,
+			Kind:     "Role",
+			Name:     role.Name,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      rbacv1.ServiceAccountKind,
+				Name:      serviceAccount.Name,
+				Namespace: serviceAccount.Namespace,
+			},
+		},
+	}
+}
+
+func clustersetServiceAccount(pcs *apiv1.PerconaServerMySQLClusterSet) *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-clusterset", pcs.Name),
+			Namespace: pcs.Namespace,
+		},
+	}
+}
+
+func (r *PerconaServerMySQLClusterSetReconciler) reconcileRBAC(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
+	role := clustersetRole(pcs)
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, role, func() error {
+		if err := controllerutil.SetControllerReference(pcs, role, r.Scheme); err != nil {
+			return err
+		}
+		role.Rules = clustersetRole(pcs).Rules
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "create or update role")
+	}
+
+	roleBinding := clustersetRoleBinding(pcs)
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, roleBinding, func() error {
+		if err := controllerutil.SetControllerReference(pcs, roleBinding, r.Scheme); err != nil {
+			return err
+		}
+		roleBinding.RoleRef = clustersetRoleBinding(pcs).RoleRef
+		roleBinding.Subjects = clustersetRoleBinding(pcs).Subjects
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "create or update role binding")
+	}
+
+	serviceAccount := clustersetServiceAccount(pcs)
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, serviceAccount, func() error {
+		if err := controllerutil.SetControllerReference(pcs, serviceAccount, r.Scheme); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "create or update service account")
+	}
+	return nil
 }
