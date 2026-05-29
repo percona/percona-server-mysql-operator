@@ -169,12 +169,13 @@ func (psc *PerconaServerMySQLClusterSet) PrimaryCluster() *ClusterSetCluster {
 	if psc.Status.PrimaryCluster != "" {
 		primaryClusterName = psc.Status.PrimaryCluster
 	}
-	for _, cluster := range psc.Spec.Clusters {
-		if cluster.Name == primaryClusterName {
-			return &cluster
+	for i := range psc.Spec.Clusters {
+		if psc.Spec.Clusters[i].Name == primaryClusterName {
+			return &psc.Spec.Clusters[i]
 		}
 	}
 	return nil
+}
 }
 
 func (psc *PerconaServerMySQLClusterSet) GetCluster(name string) *ClusterSetCluster {
