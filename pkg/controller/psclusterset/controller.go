@@ -499,20 +499,21 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Con
 }
 
 func (r *PerconaServerMySQLClusterSetReconciler) reconcileFinalizers(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
-	manager, err := r.getClusterSetManager(ctx, pcs)
-	if err != nil {
-		return errors.Wrap(err, "get cluster set manager")
-	}
-
 	updated := []string{}
 	for _, finalizer := range pcs.GetFinalizers() {
 		switch finalizer {
 		case naming.FinalizerClusterSetDissolve:
+			manager, err := r.getClusterSetManager(ctx, pcs)
+			if err != nil {
+				return errors.Wrap(err, "get cluster set manager")
+			}
 			if ok, err := r.dissolveClusterSet(ctx, pcs, manager); err != nil {
 				return errors.Wrap(err, "dissolve cluster set")
 			} else if !ok {
 				updated = append(updated, finalizer)
 			}
+		default:
+			updated = append(updated, finalizer)
 		}
 	}
 
@@ -566,5 +567,5 @@ func (r *PerconaServerMySQLClusterSetReconciler) dissolveClusterSet(
 		}
 	}
 
-	return true, nil
+	return false, nil
 }

@@ -27,7 +27,7 @@ const (
 )
 
 const (
-	FinalizerClusterSetDissolve = perconaPrefix + "dissolve"
+	FinalizerClusterSetDissolve = perconaPrefix + "clusterset-dissolve"
 )
 
 type AnnotationKey string
