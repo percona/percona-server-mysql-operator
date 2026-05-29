@@ -38,6 +38,10 @@ type ExecOptions struct {
 }
 
 func (o *ExecOptions) Defaults() {
+	if o == nil {
+		o = &ExecOptions{}
+	}
+
 	if o.Stdout == nil {
 		o.Stdout = &bytes.Buffer{}
 	}

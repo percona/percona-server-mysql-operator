@@ -227,6 +227,10 @@ func (r *PerconaServerMySQLClusterSetReconciler) bootstrapClusterSet(ctx context
 	}
 
 	primaryCluster := pcs.PrimaryCluster()
+	if primaryCluster == nil {
+		return errors.New("primary cluster not found in spec")
+	}
+
 	log := logf.FromContext(ctx).WithValues("primaryCluster", primaryCluster.Name)
 
 	log.Info("Creating ClusterSet")
@@ -527,7 +531,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileFinalizers(ctx context
 }
 
 // dissolveClusterSet dissolves the cluster set by removing all replicas.
-// mysqhsell 9.7 natively supports this operation, but this version is not supported in the operator at the time of writing this.
+// mysqlshell 9.7 natively supports this operation, but this version is not supported in the operator at the time of writing this.
 func (r *PerconaServerMySQLClusterSetReconciler) dissolveClusterSet(
 	ctx context.Context,
 	pcs *apiv1.PerconaServerMySQLClusterSet,

@@ -34,6 +34,10 @@ type replicaManager interface {
 }
 
 func main() {
+	if len(os.Args) < 2 {
+		log.Fatalf("usage: %s <command> [flags]", os.Args[0])
+	}
+
 	args := replicaInitArgs{}
 	flag.StringVar(&args.replicaClusterName, "replica-cluster-name", "", "Replica cluster name")
 	flag.StringVar(&args.replicaEndpoint, "replica-endpoint", "", "Replica endpoint")

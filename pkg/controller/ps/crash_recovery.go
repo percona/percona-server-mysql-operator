@@ -49,6 +49,9 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 	cmd := []string{"cat", "/var/lib/mysql/full-cluster-crash"}
 
 	for _, pod := range pods {
+		outb.Reset()
+		errb.Reset()
+
 		// Check if there is an ongoing clusterset recovery
 		if err := r.ClientCmd.Exec(ctx, &pod, "mysql", []string{"cat", "/var/lib/mysql/clusterset-recovery"}, nil, &outb, &errb, false); err == nil {
 			return nil
