@@ -59,10 +59,10 @@ func TestClusterSetReplicaManagerJob(t *testing.T) {
 	assert.Equal(t, []string{"/opt/percona-server-mysql-operator/clusterset-replica-manager"}, container.Command)
 	assert.Equal(t, []string{
 		CmdAddReplica,
-		"--replica-cluster-name=replica-cluster",
-		"--replica-endpoint=replica.example.com",
-		"--replica-port=3307",
-		"--ps-cluster-set-name=my-cluster-set",
-		"--namespace=cluster-ns",
+		"--replica-cluster-name", "replica-cluster",
+		"--ps-cluster-set-name", "my-cluster-set",
+		"--namespace", "cluster-ns",
+		"--replica-endpoint", "replica.example.com",
+		"--replica-port", "3307",
 	}, container.Args)
 }
