@@ -79,6 +79,8 @@ const (
 	EventTypeClusterSetPrimaryForcedSwitched string = "ClusterSetPrimaryForcedSwitched"
 	EventTypeClusterSetBootstrapped          string = "ClusterSetBootstrapped"
 	EventTypeClusterSetUnhealthy             string = "ClusterSetHealthDegraded"
+	EventTypeClusterSetMemberAdded           string = "ClusterSetMemberAdded"
+	EventTypeClusterSetMemberRemoved         string = "ClusterSetMemberRemoved"
 )
 
 const (

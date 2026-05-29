@@ -438,6 +438,17 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileForcedFailover(
 	return nil
 }
 
+// Returns the names of clusters that are in a but not in b.
+func clusterSetMemberDiff(a, b apiv1.ClusterSetStatus) []string {
+	diff := []string{}
+	for name := range a {
+		if _, ok := b[name]; !ok {
+			diff = append(diff, name)
+		}
+	}
+	return diff
+}
+
 func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, manager ClusterSetManager) error {
 	observedStatus, err := manager.Status(ctx)
 	if err != nil {
@@ -461,6 +472,20 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Con
 			r.Recorder.Event(pcs, corev1.EventTypeWarning, apiv1.EventTypeClusterSetUnhealthy,
 				fmt.Sprintf("ClusterSet health degraded: %s", observedStatus.StatusText))
 		}
+	}
+
+	// Emit an event for each newly added member
+	newlyAdded := clusterSetMemberDiff(observedStatus.Clusters, pcs.Status.Clusters)
+	for _, name := range newlyAdded {
+		r.Recorder.Event(pcs, corev1.EventTypeNormal, apiv1.EventTypeClusterSetMemberAdded,
+			fmt.Sprintf("Cluster %s added to ClusterSet with role %s", name, observedStatus.Clusters[name].ClusterRole))
+	}
+
+	// Emit an event for each newly removed member
+	newlyRemoved := clusterSetMemberDiff(pcs.Status.Clusters, observedStatus.Clusters)
+	for _, name := range newlyRemoved {
+		r.Recorder.Event(pcs, corev1.EventTypeNormal, apiv1.EventTypeClusterSetMemberRemoved,
+			fmt.Sprintf("Cluster %s removed from ClusterSet", name))
 	}
 
 	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) {
