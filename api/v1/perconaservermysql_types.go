@@ -531,7 +531,6 @@ func (b *BackupStorageAzureSpec) ContainerAndPrefix() (string, string) {
 	return container, prefix
 }
 
-// +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || has(self.binlogServer)",message="binlogServer is required when pitr is enabled"
 // +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || !has(self.binlogServer) || (has(self.binlogServer.image) && self.binlogServer.image != '')",message="binlogServer.image is required when pitr is enabled"
 // +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || !has(self.binlogServer) || (has(self.binlogServer.size) && self.binlogServer.size > 0)",message="binlogServer.size is required when pitr is enabled"
 
@@ -583,6 +582,43 @@ type BinlogServerSpec struct {
 	LogLevel string `json:"logLevel,omitempty"`
 
 	PodSpec `json:",inline"`
+}
+
+func (s *BinlogServerSpec) SetDefaults() {
+	if s.SSLMode == "" {
+		s.SSLMode = "verify_identity"
+	}
+	if s.VerifyChecksum == nil {
+		t := true
+		s.VerifyChecksum = &t
+	}
+	if s.RewriteFileSize == "" {
+		s.RewriteFileSize = "128M"
+	}
+	if s.CheckpointSize == "" {
+		s.CheckpointSize = "16M"
+	}
+	if s.CheckpointInterval == "" {
+		s.CheckpointInterval = "30s"
+	}
+	if s.ConnectTimeout == 0 {
+		s.ConnectTimeout = 30
+	}
+	if s.ReadTimeout == 0 {
+		s.ReadTimeout = 30
+	}
+	if s.WriteTimeout == 0 {
+		s.WriteTimeout = 30
+	}
+	if s.IdleTime == 0 {
+		s.IdleTime = 30
+	}
+	if s.LogLevel == "" {
+		s.LogLevel = "info"
+	}
+	if s.ServerID == 0 {
+		s.ServerID = 100
+	}
 }
 
 type ProxySpec struct {
@@ -1065,46 +1101,8 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.Toolkit = new(ToolkitSpec)
 	}
 
-	if cr.Spec.Backup.PiTR.Enabled && cr.Spec.Backup.PiTR.BinlogServer == nil {
-		cr.Spec.Backup.PiTR.BinlogServer = new(BinlogServerSpec)
-	}
-
 	if cr.Spec.Backup.PiTR.BinlogServer != nil {
-		bls := cr.Spec.Backup.PiTR.BinlogServer
-		if bls.SSLMode == "" {
-			bls.SSLMode = "verify_identity"
-		}
-		if bls.VerifyChecksum == nil {
-			t := true
-			bls.VerifyChecksum = &t
-		}
-		if bls.RewriteFileSize == "" {
-			bls.RewriteFileSize = "128M"
-		}
-		if bls.CheckpointSize == "" {
-			bls.CheckpointSize = "16M"
-		}
-		if bls.CheckpointInterval == "" {
-			bls.CheckpointInterval = "30s"
-		}
-		if bls.ConnectTimeout == 0 {
-			bls.ConnectTimeout = 30
-		}
-		if bls.ReadTimeout == 0 {
-			bls.ReadTimeout = 30
-		}
-		if bls.WriteTimeout == 0 {
-			bls.WriteTimeout = 30
-		}
-		if bls.IdleTime == 0 {
-			bls.IdleTime = 30
-		}
-		if bls.LogLevel == "" {
-			bls.LogLevel = "info"
-		}
-		if bls.ServerID == 0 {
-			bls.ServerID = 100
-		}
+		cr.Spec.Backup.PiTR.BinlogServer.SetDefaults()
 	}
 
 	if cr.Spec.Pause {
