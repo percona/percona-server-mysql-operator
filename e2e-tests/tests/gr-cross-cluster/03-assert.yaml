@@ -1,6 +1,22 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 420
+
+resourceRefs:
+- kind: PerconaServerMySQL
+  apiVersion: ps.percona.com/v1
+  name: gr-cross-cluster-dc1
+  ref: dc1
+- kind: PerconaServerMySQL
+  apiVersion: ps.percona.com/v1
+  name: gr-cross-cluster-dc2
+  ref: dc2
+assertAll:
+- celExpr: "!dc1.status.conditions.exists(c, c.type == \"ClusterSetReplicationRunning\")"
+  message: "dc1 should not have ClusterSetReplicationRunning=True"
+- celExpr: "dc2.status.conditions.exists(c, c.type == \"ClusterSetReplicationRunning\" && c.status == \"True\")"
+  message: "dc2 should have ClusterSetReplicationRunning=True"
+
 commands:
   - script: |-
       set -o errexit

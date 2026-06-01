@@ -59,4 +59,15 @@ spec:
     bootstrap:
       mode: manual
 status:
+  conditions:
+  - reason: Initializing
+    status: "True"
+    type: Initializing
+  - reason: Ready
+    status: "False"
+    type: Ready
+  - message: Awaiting external bootstrap
+    reason: ManualBootstrapRequested
+    status: "True"
+    type: AwaitingExternalBootstrap
   state: initializing
