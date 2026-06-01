@@ -33,6 +33,8 @@ func ClusterSetReplicaManagerJob(
 	labels["cluster-name"] = cluster.Name
 	labels["command"] = cmd
 
+	args = append([]string{cmd}, args...)
+
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%s-%s", pcs.Name, cluster.Name, cmd),

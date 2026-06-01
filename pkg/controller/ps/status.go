@@ -92,6 +92,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 				if err != nil {
 					return errors.Wrap(err, "check if GR is ready")
 				}
+
 				if !ready {
 					mysqlStatus.State = apiv1.StateInitializing
 				}
@@ -209,6 +210,18 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 				r.Recorder.Event(cr, corev1.EventTypeWarning, "FullClusterCrashDetected", "Full cluster crash detected")
 			}
+
+			meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionAwaitingExternalBootstrap)
+			if ok, err := r.isAwaitingExtBootstrap(ctx, cr); err != nil {
+				return errors.Wrap(err, "check if awaiting external bootstrap")
+			} else if ok {
+				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+					Type:    apiv1.ConditionAwaitingExternalBootstrap,
+					Status:  metav1.ConditionTrue,
+					Reason:  "ManualBootstrapRequested",
+					Message: "Awaiting external bootstrap",
+				})
+			}
 		}
 
 		status.Host, err = appHost(ctx, r.Client, cr)
@@ -248,6 +261,24 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 
 	return writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), updateStatusF)
+}
+
+func (r *PerconaServerMySQLReconciler) isAwaitingExtBootstrap(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, error) {
+	if cr.BootstrapMode() != apiv1.BootstrapModeManual {
+		return false, nil
+	}
+
+	cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionInnoDBClusterBootstrapped)
+
+	_, err := mysql.GetReadyPod(ctx, r.Client, cr)
+	if err != nil {
+		if errors.Is(err, mysql.ErrNoReadyPods) {
+			return true && cond == nil, nil
+		}
+		return false, errors.Wrap(err, "get ready mysql pod")
+	}
+
+	return false, nil
 }
 
 func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, error) {

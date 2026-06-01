@@ -19,3 +19,12 @@ type Status struct {
 	Status                string `json:"status"`
 	StatusText            string `json:"statusText"`
 }
+
+func (s *Status) GetPrimaryCluster() string {
+	for name, cluster := range s.Clusters {
+		if cluster.ClusterRole == ClusterRolePrimary {
+			return name
+		}
+	}
+	return ""
+}

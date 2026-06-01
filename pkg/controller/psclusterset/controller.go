@@ -308,15 +308,20 @@ func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Con
 				return errors.Wrap(err, "compute status")
 			}
 
-			if status.Status == kstatus.InProgressStatus {
-				meta.SetStatusCondition(&pcs.Status.Conditions, metav1.Condition{
-					Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
-					Status:  metav1.ConditionTrue,
-					Reason:  apiv1.ConditionClusterSetPrimarySwitchOverInProg,
-					Message: "Switchover in progress",
-				})
-				return nil
+			cond := metav1.Condition{
+				Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
+				Status:  metav1.ConditionTrue,
+				Reason:  "SwitchoverInProgress",
+				Message: "Switchover in progress",
 			}
+
+			if status.Status == kstatus.FailedStatus {
+				cond.Status = metav1.ConditionFalse
+				cond.Reason = "SwitchoverFailed"
+				cond.Message = "Switchover failed"
+			}
+
+			meta.SetStatusCondition(&pcs.Status.Conditions, cond)
 		}
 
 		return nil
@@ -390,16 +395,16 @@ func (r *PerconaServerMySQLClusterSetReconciler) runClusterSetJob(
 ) error {
 
 	args := []string{}
-	args = append(args, "--ps-cluster-set-name", pcs.Name)
-	args = append(args, "--namespace", pcs.Namespace)
+	args = append(args, "--ps-cluster-set-name="+pcs.Name)
+	args = append(args, "--namespace="+pcs.Namespace)
 
 	switch command {
 	case clusterset.CmdAddReplica:
-		args = append(args, "--replica-cluster-name", cluster.Name)
-		args = append(args, "--replica-endpoint", cluster.Endpoints[0].Host)
-		args = append(args, "--replica-port", fmt.Sprintf("%d", cluster.Endpoints[0].Port))
+		args = append(args, "--replica-cluster-name="+cluster.Name)
+		args = append(args, "--replica-endpoint="+cluster.Endpoints[0].Host)
+		args = append(args, "--replica-port="+fmt.Sprintf("%d", *cluster.Endpoints[0].Port))
 	case clusterset.CmdRemoveReplica:
-		args = append(args, "--replica-cluster-name", cluster.Name)
+		args = append(args, "--replica-cluster-name="+cluster.Name)
 	}
 
 	job := clusterset.ClusterSetReplicaManagerJob(pcs, cluster, command, args, r.jobImage, clustersetServiceAccount(pcs).Name)
@@ -544,7 +549,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Con
 	}
 
 	// Emit an event when the primary cluster is switched
-	if pcs.Status.PrimaryCluster != observedStatus.PrimaryCluster {
+	if pcs.Status.PrimaryCluster != "" && pcs.Status.PrimaryCluster != observedStatus.PrimaryCluster {
 		r.Recorder.Event(pcs, corev1.EventTypeNormal, apiv1.EventTypeClusterSetPrimarySwitched,
 			fmt.Sprintf("Primary cluster switched from %s to %s", pcs.Status.PrimaryCluster, observedStatus.PrimaryCluster))
 	}
@@ -552,6 +557,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Con
 	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
 		meta.SetStatusCondition(&status.Conditions, readyCond)
 		status.Clusters = observedStatus.Clusters
+		status.PrimaryCluster = observedStatus.GetPrimaryCluster()
 		status.PrimaryClusterEndpoint = observedStatus.GlobalPrimaryInstance
 		return nil
 	}); err != nil {

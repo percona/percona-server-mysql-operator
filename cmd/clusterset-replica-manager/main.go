@@ -134,6 +134,9 @@ func removeReplica(ctx context.Context, manager replicaManager, args replicaInit
 func setPrimary(ctx context.Context, manager replicaManager, primary string) error {
 	log.Printf("Setting primary cluster to '%s'", primary)
 	if err := manager.SetPrimaryCluster(ctx, primary); err != nil {
+		if strings.Contains(err.Error(), "MYSQLSH 51317") {
+			return nil
+		}
 		return errors.Wrap(err, "failed to set primary cluster")
 	}
 	return nil
