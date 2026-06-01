@@ -19,33 +19,19 @@ const (
 
 	CmdAddReplica    = "add-replica"
 	CmdRemoveReplica = "remove-replica"
+	CmdSetPrimary    = "set-primary"
 )
 
 func ClusterSetReplicaManagerJob(
 	pcs *apiv1.PerconaServerMySQLClusterSet,
 	cluster *apiv1.ClusterSetCluster,
 	cmd string,
+	args []string,
 	image, serviceAccount string,
 ) *batchv1.Job {
 	labels := naming.Labels(ClusterSetReplicaManagerAppName, pcs.Name, "percona-server", ClusterSetReplicaManagerComponent)
 	labels["cluster-name"] = cluster.Name
 	labels["command"] = cmd
-
-	args := []string{
-		cmd,
-		"--replica-cluster-name", cluster.Name,
-		"--ps-cluster-set-name", pcs.Name,
-		"--namespace", pcs.Namespace,
-	}
-	if cmd == CmdAddReplica {
-		endpoint := cluster.Endpoints[0]
-		port := int32(3306)
-		if endpoint.Port != nil {
-			port = *endpoint.Port
-		}
-		args = append(args, "--replica-endpoint", endpoint.Host)
-		args = append(args, "--replica-port", fmt.Sprintf("%d", port))
-	}
 
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{

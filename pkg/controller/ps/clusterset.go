@@ -12,6 +12,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -198,6 +199,7 @@ func (r *PerconaServerMySQLReconciler) recoverClustersetReplicaCluster(
 	}
 	origSfs := sfs.DeepCopy()
 	sfs.Spec.Replicas = new(int32(0))
+	delete(sfs.Annotations, naming.AnnotationLastConfigHash.String())
 	if err := r.Client.Patch(ctx, sfs, client.MergeFrom(origSfs)); err != nil {
 		return errors.Wrapf(err, "patch statefulset")
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
@@ -31,6 +32,7 @@ type replicaInitArgs struct {
 type replicaManager interface {
 	CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster) error
 	RemoveReplicaCluster(ctx context.Context, clusterName string) error
+	SetPrimaryCluster(ctx context.Context, clusterName string) error
 }
 
 func main() {
@@ -89,6 +91,11 @@ func main() {
 		if err := removeReplica(ctx, manager, args); err != nil {
 			log.Fatalf("failed to remove replica: %v", err)
 		}
+
+	case "set-primary":
+		if err := setPrimary(ctx, manager, psClusterSet.Spec.PrimaryCluster); err != nil {
+			log.Fatalf("failed to set primary cluster: %v", err)
+		}
 	default:
 		log.Fatalf("invalid command: %s", os.Args[1])
 	}
@@ -114,9 +121,21 @@ func addReplica(ctx context.Context, manager replicaManager, args replicaInitArg
 func removeReplica(ctx context.Context, manager replicaManager, args replicaInitArgs) error {
 	log.Printf("Removing replica cluster '%s' from clusterset '%s'", args.replicaClusterName, args.psClusterSetName)
 	if err := manager.RemoveReplicaCluster(ctx, args.replicaClusterName); err != nil {
+		if strings.Contains(err.Error(), "does not exist or does not belong to the ClusterSet") {
+			log.Println("Cluster already removed")
+			return nil
+		}
 		return errors.Wrap(err, "failed to remove replica cluster")
 	}
 	log.Printf("Replica cluster '%s' removed from clusterset '%s'", args.replicaClusterName, args.psClusterSetName)
+	return nil
+}
+
+func setPrimary(ctx context.Context, manager replicaManager, primary string) error {
+	log.Printf("Setting primary cluster to '%s'", primary)
+	if err := manager.SetPrimaryCluster(ctx, primary); err != nil {
+		return errors.Wrap(err, "failed to set primary cluster")
+	}
 	return nil
 }
 

@@ -187,13 +187,15 @@ func (psc *PerconaServerMySQLClusterSet) GetCluster(name string) *ClusterSetClus
 	return nil
 }
 
-func (pcs *PerconaServerMySQLClusterSet) UpdateStatus(ctx context.Context, cl client.Client, mutate func(status *PerconaServerMySQLClusterSetStatus)) error {
+func (pcs *PerconaServerMySQLClusterSet) UpdateStatus(ctx context.Context, cl client.Client, mutate func(status *PerconaServerMySQLClusterSetStatus) error) error {
 	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
 		actual := &PerconaServerMySQLClusterSet{}
 		if err := cl.Get(ctx, types.NamespacedName{Name: pcs.Name, Namespace: pcs.Namespace}, actual); err != nil {
 			return err
 		}
-		mutate(&actual.Status)
+		if err := mutate(&actual.Status); err != nil {
+			return err
+		}
 		actual.Status.LastObservedGeneration = pcs.Generation
 		actual.Status.LastObservedAt = metav1.Now()
 
