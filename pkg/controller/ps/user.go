@@ -62,7 +62,9 @@ func allSystemUsers() map[apiv1.SystemUser]mysql.User {
 	return users
 }
 
-func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
+// ensureUserSecrets reconciles the user secrets for the given cluster.
+// It returns the user secret and an error if any.
+func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr *apiv1.PerconaServerMySQL) (*corev1.Secret, error) {
 	nn := types.NamespacedName{
 		Namespace: cr.Namespace,
 		Name:      cr.Spec.SecretsName,
@@ -71,37 +73,28 @@ func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr
 	userSecret := new(corev1.Secret)
 
 	if err := r.Get(ctx, nn, userSecret); client.IgnoreNotFound(err) != nil {
-		return errors.Wrap(err, "get user secret")
+		return nil, errors.Wrap(err, "get user secret")
 	}
 	err := secret.FillPasswordsSecret(cr, userSecret)
 	if err != nil {
-		return errors.Wrap(err, "fill passwords")
+		return nil, errors.Wrap(err, "fill passwords")
 	}
 	userSecret.Name = cr.Spec.SecretsName
 	userSecret.Namespace = cr.Namespace
 	userSecret.Labels = util.SSMapMerge(cr.GlobalLabels(), mysql.MatchLabels(cr))
 	userSecret.Annotations = util.SSMapMerge(cr.GlobalAnnotations())
 	if err := k8s.EnsureObjectWithHash(ctx, r.Client, nil, userSecret, r.Scheme); err != nil {
-		return errors.Wrap(err, "ensure user secret")
+		return nil, errors.Wrap(err, "ensure user secret")
 	}
 
-	return nil
+	return userSecret, nil
 }
 
-func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) error {
 	log := logf.FromContext(ctx).WithName("reconcileUsers")
 
-	secret := &corev1.Secret{}
-	nn := types.NamespacedName{Name: cr.Spec.SecretsName, Namespace: cr.Namespace}
-	if err := r.Client.Get(ctx, nn, secret); err != nil {
-		if k8serrors.IsNotFound(err) {
-			return nil
-		}
-		return errors.Wrapf(err, "get Secret/%s", nn.Name)
-	}
-
 	internalSecret := &corev1.Secret{}
-	nn.Name = cr.InternalSecretName()
+	nn := types.NamespacedName{Name: cr.InternalSecretName(), Namespace: cr.GetNamespace()}
 	err := r.Client.Get(ctx, nn, internalSecret)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		return errors.Wrapf(err, "get Secret/%s", nn.Name)

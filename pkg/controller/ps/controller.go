@@ -44,7 +44,9 @@ import (
 	k8sretry "k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
@@ -86,10 +88,63 @@ type PerconaServerMySQLReconciler struct {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PerconaServerMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := setupFieldIndexers(mgr); err != nil {
+		return errors.Wrap(err, "setup field indexers")
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1.PerconaServerMySQL{}).
+		Watches(&corev1.Secret{}, enqueueClusterFromSecretsName(r.Client)).
 		Named("ps-controller").
 		Complete(r)
+}
+
+const (
+	fieldSecretsName = ".spec.secretsName"
+)
+
+func setupFieldIndexers(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &apiv1.PerconaServerMySQL{}, fieldSecretsName, func(o client.Object) []string {
+		cluster, ok := o.(*apiv1.PerconaServerMySQL)
+		if !ok {
+			return nil
+		}
+
+		if cluster.Spec.SecretsName == "" {
+			return []string{cluster.DefaultSecretName()}
+		}
+		return []string{cluster.Spec.SecretsName}
+	}); err != nil {
+		return errors.Wrapf(err, "index field %s", fieldSecretsName)
+	}
+	return nil
+}
+
+func enqueueClusterFromSecretsName(c client.Client) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+		secret, ok := o.(*corev1.Secret)
+		if !ok {
+			return nil
+		}
+		clusters := &apiv1.PerconaServerMySQLList{}
+		log := logf.FromContext(ctx)
+		if err := c.List(ctx, clusters, client.InNamespace(secret.Namespace), client.MatchingFields{
+			fieldSecretsName: secret.Name,
+		}); err != nil {
+			log.Error(err, "failed to list clusters for secret", "secret", secret.Name)
+			return nil
+		}
+
+		var requests []reconcile.Request
+		for _, cluster := range clusters.Items {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      cluster.Name,
+					Namespace: cluster.Namespace,
+				},
+			})
+		}
+		return requests
+	})
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -431,10 +486,11 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcileVersions(ctx, cr); err != nil {
 		log.Error(err, "failed to reconcile versions")
 	}
-	if err := r.ensureUserSecrets(ctx, cr); err != nil {
+	userSecret, err := r.ensureUserSecrets(ctx, cr)
+	if err != nil {
 		return errors.Wrap(err, "users secret")
 	}
-	if err := r.reconcileUsers(ctx, cr); err != nil {
+	if err := r.reconcileUsers(ctx, cr, userSecret); err != nil {
 		return errors.Wrap(err, "users")
 	}
 	if err := r.ensureTLSSecret(ctx, cr); err != nil {
