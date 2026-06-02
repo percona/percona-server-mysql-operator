@@ -114,6 +114,13 @@ type ClusterSetClusterEndpoint struct {
 	Port *int32 `json:"port,omitempty"`
 }
 
+func (ep *ClusterSetClusterEndpoint) GetPort() int32 {
+	if ep.Port != nil {
+		return *ep.Port
+	}
+	return 3306
+}
+
 const (
 	EventTypeClusterSetPrimarySwitched       string = "ClusterSetPrimarySwitched"
 	EventTypeClusterSetPrimaryForcedSwitched string = "ClusterSetPrimaryForcedSwitched"

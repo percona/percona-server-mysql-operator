@@ -306,7 +306,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Con
 	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
 		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetPrimarySwitchOverInProg)
 		for _, job := range jobs.Items {
-			status, err := k8s.KStatusCompute(&job)
+			jobStatus, err := k8s.KStatusCompute(&job)
 			if err != nil {
 				return errors.Wrap(err, "compute status")
 			}
@@ -318,13 +318,12 @@ func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Con
 				Message: "Switchover in progress",
 			}
 
-			if status.Status == kstatus.FailedStatus {
+			if jobStatus.Status == kstatus.FailedStatus {
 				cond.Status = metav1.ConditionFalse
 				cond.Reason = "SwitchoverFailed"
 				cond.Message = "Switchover failed"
 			}
-
-			meta.SetStatusCondition(&pcs.Status.Conditions, cond)
+			meta.SetStatusCondition(&status.Conditions, cond)
 		}
 
 		return nil
@@ -405,7 +404,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) runClusterSetJob(
 	case clusterset.CmdAddReplica:
 		args = append(args, "--replica-cluster-name="+cluster.Name)
 		args = append(args, "--replica-endpoint="+cluster.Endpoints[0].Host)
-		args = append(args, "--replica-port="+fmt.Sprintf("%d", *cluster.Endpoints[0].Port))
+		args = append(args, "--replica-port="+fmt.Sprintf("%d", cluster.Endpoints[0].GetPort()))
 	case clusterset.CmdRemoveReplica:
 		args = append(args, "--replica-cluster-name="+cluster.Name)
 	}

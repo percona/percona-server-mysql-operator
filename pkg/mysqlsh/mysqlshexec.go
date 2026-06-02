@@ -118,7 +118,7 @@ func (m *MysqlshExec) ClusterStatusWithExec(ctx context.Context) (innodbcluster.
 	stderrBuffer := bytes.Buffer{}
 
 	c := []string{"mysqlsh", "--result-format", "json", "--js", "--uri", m.uri, "--cluster", "--", "cluster", "status"}
-	err := m.client.Exec(ctx, m.pod, "mysql", c, nil, &stdoutBuffer, &stderrBuffer, false)
+	err := m.client.Exec(ctx, m.pod, m.containerName, c, nil, &stdoutBuffer, &stderrBuffer, false)
 	if err != nil {
 		sout := sensitiveRegexp.ReplaceAllString(stdoutBuffer.String(), ":*****@")
 		serr := sensitiveRegexp.ReplaceAllString(stderrBuffer.String(), ":*****@")
@@ -183,10 +183,6 @@ type CreateClusterSetOptions struct {
 }
 
 func (o *CreateClusterSetOptions) Default() {
-	if o == nil {
-		o = &CreateClusterSetOptions{}
-	}
-
 	if o.SSLMode == "" {
 		o.SSLMode = apiv1.ClusterSetSSLModeAuto
 	}
@@ -214,7 +210,7 @@ try {
 
 func (m *MysqlshExec) CreateReplicaClusterWithExec(
 	ctx context.Context,
-	clusterName, endpoint string, port int) error {
+	clusterName, endpoint string, port int32) error {
 	cmd := fmt.Sprintf("dba.getCluster().getClusterSet().createReplicaCluster('%s:%d','%s',{recoveryMethod: 'auto',manualStartOnBoot: true})", endpoint, port, clusterName)
 	if err := m.runWithExec(ctx, cmd); err != nil {
 		return errors.Wrap(err, "create replica cluster")

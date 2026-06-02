@@ -124,11 +124,7 @@ func (m *mysqlshellClusterSetManager) CreateClusterSet(ctx context.Context, clus
 }
 
 func (m *mysqlshellClusterSetManager) CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster) error {
-	port := 3306
-	if cluster.Endpoints[0].Port != nil {
-		port = int(*cluster.Endpoints[0].Port)
-	}
-	if err := m.shell.CreateReplicaClusterWithExec(ctx, cluster.Name, cluster.Endpoints[0].Host, port); err != nil {
+	if err := m.shell.CreateReplicaClusterWithExec(ctx, cluster.Name, cluster.Endpoints[0].Host, cluster.Endpoints[0].GetPort()); err != nil {
 		return errors.Wrap(err, "create replica cluster")
 	}
 	return nil
