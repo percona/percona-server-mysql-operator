@@ -273,7 +273,7 @@ func (r *PerconaServerMySQLReconciler) isAwaitingExtBootstrap(ctx context.Contex
 	_, err := mysql.GetReadyPod(ctx, r.Client, cr)
 	if err != nil {
 		if errors.Is(err, mysql.ErrNoReadyPods) {
-			return true && cond == nil, nil
+			return true && (cond == nil || cond.Status == metav1.ConditionFalse), nil
 		}
 		return false, errors.Wrap(err, "get ready mysql pod")
 	}

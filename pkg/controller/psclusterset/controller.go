@@ -47,9 +47,6 @@ type PerconaServerMySQLClusterSetReconciler struct {
 
 type ClusterSetManager interface {
 	CreateClusterSet(ctx context.Context, clustersetName string, sslMode apiv1.ClusterSetSSLMode) error
-	CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster) error
-	RemoveReplicaCluster(ctx context.Context, clusterName string) error
-	SetPrimaryCluster(ctx context.Context, clusterName string) error
 	ForcePrimaryCluster(ctx context.Context, clusterName string) error
 	Status(ctx context.Context) (clusterset.Status, error)
 }
@@ -133,7 +130,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, errors.Wrap(err, "reconcile replicas")
 	}
 
-	if err := r.reconcileSwitchover(ctx, pcs, manager); err != nil {
+	if err := r.reconcileSwitchover(ctx, pcs); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "reconcile switchover")
 	}
 
@@ -429,7 +426,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) runClusterSetJob(
 	return nil
 }
 
-func (r *PerconaServerMySQLClusterSetReconciler) reconcileSwitchover(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, manager ClusterSetManager) error {
+func (r *PerconaServerMySQLClusterSetReconciler) reconcileSwitchover(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
 	if pcs.Status.PrimaryCluster == "" || pcs.Spec.PrimaryCluster == pcs.Status.PrimaryCluster {
 		return nil
 	}
