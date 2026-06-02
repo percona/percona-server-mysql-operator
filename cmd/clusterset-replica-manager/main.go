@@ -47,7 +47,10 @@ func main() {
 	flag.StringVar(&args.user, "user", "root", "User")
 	flag.StringVar(&args.psClusterSetName, "ps-cluster-set-name", "", "PerconaServerMySQLClusterSet name")
 	flag.StringVar(&args.namespace, "namespace", "", "Namespace")
-	flag.CommandLine.Parse(os.Args[2:])
+
+	if err := flag.CommandLine.Parse(os.Args[2:]); err != nil {
+		log.Fatalf("failed to parse flags: %v", err)
+	}
 
 	ctx := context.Background()
 

@@ -173,6 +173,8 @@ func (r *PerconaServerMySQLReconciler) recoverClustersetReplicaCluster(
 	var outb, errb bytes.Buffer
 	cmd := []string{"touch", "/var/lib/mysql/clusterset-recovery"}
 	for _, pod := range pods {
+		outb.Reset()
+		errb.Reset()
 		err := r.ClientCmd.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false)
 		if err != nil {
 			return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, outb.String(), errb.String())
@@ -182,7 +184,7 @@ func (r *PerconaServerMySQLReconciler) recoverClustersetReplicaCluster(
 	// Patch the .spec.mysql.bootstrap.mode to apiv1.BootstrapModeAuto
 	orig := cr.DeepCopy()
 	cr.Spec.MySQL.Bootstrap.Mode = new(apiv1.BootstrapModeAuto)
-	if err := r.Client.Patch(ctx, cr, client.MergeFrom(orig)); err != nil {
+	if err := r.Patch(ctx, cr, client.MergeFrom(orig)); err != nil {
 		return errors.Wrapf(err, "patch cr")
 	}
 
@@ -194,13 +196,13 @@ func (r *PerconaServerMySQLReconciler) recoverClustersetReplicaCluster(
 			Namespace: cr.Namespace,
 		},
 	}
-	if err := r.Client.Get(ctx, client.ObjectKeyFromObject(sfs), sfs); err != nil {
+	if err := r.Get(ctx, client.ObjectKeyFromObject(sfs), sfs); err != nil {
 		return errors.Wrapf(err, "get statefulset")
 	}
 	origSfs := sfs.DeepCopy()
 	sfs.Spec.Replicas = new(int32(0))
 	delete(sfs.Annotations, naming.AnnotationLastConfigHash.String())
-	if err := r.Client.Patch(ctx, sfs, client.MergeFrom(origSfs)); err != nil {
+	if err := r.Patch(ctx, sfs, client.MergeFrom(origSfs)); err != nil {
 		return errors.Wrapf(err, "patch statefulset")
 	}
 

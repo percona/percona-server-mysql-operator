@@ -4,7 +4,6 @@ package mock
 
 import (
 	mock "github.com/stretchr/testify/mock"
-
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -13,23 +12,10 @@ type EventRecorder struct {
 	mock.Mock
 }
 
-// AnnotatedEventf provides a mock function with given fields: object, annotations, eventtype, reason, messageFmt, args
-func (_m *EventRecorder) AnnotatedEventf(object runtime.Object, annotations map[string]string, eventtype string, reason string, messageFmt string, args ...interface{}) {
+// Eventf provides a mock function with given fields: regarding, related, eventtype, reason, action, note, args
+func (_m *EventRecorder) Eventf(regarding runtime.Object, related runtime.Object, eventtype string, reason string, action string, note string, args ...interface{}) {
 	var _ca []interface{}
-	_ca = append(_ca, object, annotations, eventtype, reason, messageFmt)
-	_ca = append(_ca, args...)
-	_m.Called(_ca...)
-}
-
-// Event provides a mock function with given fields: object, eventtype, reason, message
-func (_m *EventRecorder) Event(object runtime.Object, eventtype string, reason string, message string) {
-	_m.Called(object, eventtype, reason, message)
-}
-
-// Eventf provides a mock function with given fields: object, eventtype, reason, messageFmt, args
-func (_m *EventRecorder) Eventf(object runtime.Object, eventtype string, reason string, messageFmt string, args ...interface{}) {
-	var _ca []interface{}
-	_ca = append(_ca, object, eventtype, reason, messageFmt)
+	_ca = append(_ca, regarding, related, eventtype, reason, action, note)
 	_ca = append(_ca, args...)
 	_m.Called(_ca...)
 }

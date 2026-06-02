@@ -196,7 +196,7 @@ func main() {
 		Client:    nsClient,
 		Scheme:    mgr.GetScheme(),
 		ClientCmd: cliCmd,
-		Recorder:  mgr.GetEventRecorderFor("psclusterset-controller"),
+		Recorder:  mgr.GetEventRecorder("psclusterset-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PerconaServerMySQLClusterSet")
 		os.Exit(1)

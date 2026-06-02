@@ -8,6 +8,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -105,6 +106,10 @@ func getRunnerPod(ctx context.Context, cl client.Client, pcs *apiv1.PerconaServe
 		return nil, errors.New("no runner pods found")
 	}
 
+	if !k8s.IsPodReady(runnerPods.Items[0]) {
+		return nil, errors.New("runner pod is not ready")
+	}
+
 	runnerPod := runnerPods.Items[0]
 	return &runnerPod, nil
 }
@@ -119,7 +124,11 @@ func (m *mysqlshellClusterSetManager) CreateClusterSet(ctx context.Context, clus
 }
 
 func (m *mysqlshellClusterSetManager) CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster) error {
-	if err := m.shell.CreateReplicaClusterWithExec(ctx, cluster.Name, cluster.Endpoints[0].Host, int(*cluster.Endpoints[0].Port)); err != nil {
+	port := 3306
+	if cluster.Endpoints[0].Port != nil {
+		port = int(*cluster.Endpoints[0].Port)
+	}
+	if err := m.shell.CreateReplicaClusterWithExec(ctx, cluster.Name, cluster.Endpoints[0].Host, port); err != nil {
 		return errors.Wrap(err, "create replica cluster")
 	}
 	return nil

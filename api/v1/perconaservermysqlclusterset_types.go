@@ -83,7 +83,7 @@ const (
 	// TLS encryption will be enabled if supported by the instance, otherwise disabled.
 	ClusterSetSSLModeAuto ClusterSetSSLMode = "AUTO"
 	// TLS encryption will be disabled.
-	ClusterSetTLSModeDisabled ClusterSetSSLMode = "DISABLED"
+	ClusterSetSSLModeDisabled ClusterSetSSLMode = "DISABLED"
 	// TLS encryption will be enabled.
 	ClusterSetSSLModeRequired ClusterSetSSLMode = "REQUIRED"
 	// Like REQUIRED, but additionally verify the peer server TLS certificate against the configured Certificate Authority (CA) certificates.

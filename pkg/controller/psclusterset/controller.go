@@ -16,7 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,7 +39,7 @@ type PerconaServerMySQLClusterSetReconciler struct {
 	client.Client
 	Scheme    *runtime.Scheme
 	ClientCmd clientcmd.Client
-	Recorder  record.EventRecorder
+	Recorder  events.EventRecorder
 
 	getClusterSetManager clusterSetManagerGetter
 	jobImage             string
@@ -237,13 +237,19 @@ func (r *PerconaServerMySQLClusterSetReconciler) bootstrapClusterSet(ctx context
 
 	log := logf.FromContext(ctx).WithValues("primaryCluster", primaryCluster.Name)
 
+	sslMode := apiv1.ClusterSetSSLModeAuto
+	if pcs.Spec.SSLMode != nil {
+		sslMode = *pcs.Spec.SSLMode
+	}
 	log.Info("Creating ClusterSet")
-	if err := manager.CreateClusterSet(ctx, pcs.GetName(), *pcs.Spec.SSLMode); err != nil {
+	if err := manager.CreateClusterSet(ctx, pcs.GetName(), sslMode); err != nil {
 		return errors.Wrap(err, "create cluster set")
 	}
 
 	log.Info("ClusterSet bootstrapped")
-	r.Recorder.Event(pcs, corev1.EventTypeNormal, apiv1.EventTypeClusterSetBootstrapped, fmt.Sprintf("ClusterSet bootstrapped for primary cluster %s", primaryCluster.Name))
+
+	r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetBootstrapped,
+		apiv1.EventTypeClusterSetBootstrapped, "ClusterSet bootstrapped for primary cluster %s", primaryCluster.Name)
 
 	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
 		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
@@ -486,8 +492,9 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileForcedFailover(
 		return errors.Wrap(err, "update status")
 	}
 
-	r.Recorder.Event(pcs, corev1.EventTypeWarning, apiv1.EventTypeClusterSetPrimaryForcedSwitched,
-		fmt.Sprintf("Primary cluster forcefully switched from %s to %s", pcs.Status.PrimaryCluster, pcs.Spec.PrimaryCluster))
+	r.Recorder.Eventf(pcs, nil, corev1.EventTypeWarning, apiv1.EventTypeClusterSetPrimaryForcedSwitched,
+		apiv1.EventTypeClusterSetPrimaryForcedSwitched, "Primary cluster forcefully switched from %s to %s", pcs.Status.PrimaryCluster, pcs.Spec.PrimaryCluster)
+
 	return nil
 }
 
@@ -522,23 +529,22 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Con
 		// Emit an event when we transition from healthy to unhealthy
 		currentCond := meta.FindStatusCondition(pcs.Status.Conditions, apiv1.ConditionClusterSetReady)
 		if currentCond == nil || currentCond.Status == metav1.ConditionTrue {
-			r.Recorder.Event(pcs, corev1.EventTypeWarning, apiv1.EventTypeClusterSetUnhealthy,
-				fmt.Sprintf("ClusterSet health degraded: %s", observedStatus.StatusText))
+			r.Recorder.Eventf(pcs, nil, corev1.EventTypeWarning, apiv1.EventTypeClusterSetUnhealthy,
+				apiv1.EventTypeClusterSetUnhealthy, "ClusterSet health degraded: %s", observedStatus.StatusText)
 		}
 	}
 
 	// Emit an event for each newly added member
 	newlyAdded := clusterSetMemberDiff(observedStatus.Clusters, pcs.Status.Clusters)
 	for _, name := range newlyAdded {
-		r.Recorder.Event(pcs, corev1.EventTypeNormal, apiv1.EventTypeClusterSetMemberAdded,
-			fmt.Sprintf("Cluster %s added to ClusterSet with role %s", name, observedStatus.Clusters[name].ClusterRole))
+		r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetMemberAdded,
+			apiv1.EventTypeClusterSetMemberAdded, "Cluster %s added to ClusterSet with role %s", name, observedStatus.Clusters[name].ClusterRole)
 	}
 
 	// Emit an event for each newly removed member
 	newlyRemoved := clusterSetMemberDiff(pcs.Status.Clusters, observedStatus.Clusters)
 	for _, name := range newlyRemoved {
-		r.Recorder.Event(pcs, corev1.EventTypeNormal, apiv1.EventTypeClusterSetMemberRemoved,
-			fmt.Sprintf("Cluster %s removed from ClusterSet", name))
+		r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetMemberRemoved, apiv1.EventTypeClusterSetMemberRemoved, "Cluster %s removed from ClusterSet", name)
 	}
 
 	if err := r.trackSwitchover(ctx, pcs); err != nil {
@@ -547,8 +553,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Con
 
 	// Emit an event when the primary cluster is switched
 	if pcs.Status.PrimaryCluster != "" && pcs.Status.PrimaryCluster != observedStatus.PrimaryCluster {
-		r.Recorder.Event(pcs, corev1.EventTypeNormal, apiv1.EventTypeClusterSetPrimarySwitched,
-			fmt.Sprintf("Primary cluster switched from %s to %s", pcs.Status.PrimaryCluster, observedStatus.PrimaryCluster))
+		r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetPrimarySwitched, apiv1.EventTypeClusterSetPrimarySwitched, "Primary cluster switched from %s to %s", pcs.Status.PrimaryCluster, observedStatus.PrimaryCluster)
 	}
 
 	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {

@@ -76,8 +76,12 @@ func TestReconciler_reconcileStatus(t *testing.T) {
 				StatusText:            "Cluster set is healthy",
 			},
 			events: func(recorder *psmock.EventRecorder) {
-				recorder.On("Event", mock.IsType(&apiv1.PerconaServerMySQLClusterSet{}), corev1.EventTypeNormal,
-					apiv1.EventTypeClusterSetMemberAdded, mock.Anything).Return()
+				recorder.On("Eventf", mock.IsType(&apiv1.PerconaServerMySQLClusterSet{}), nil, corev1.EventTypeNormal,
+					apiv1.EventTypeClusterSetMemberAdded, apiv1.EventTypeClusterSetMemberAdded,
+					"Cluster %s added to ClusterSet with role %s", "dc1", clusterset.ClusterRolePrimary).Return()
+				recorder.On("Eventf", mock.IsType(&apiv1.PerconaServerMySQLClusterSet{}), nil, corev1.EventTypeNormal,
+					apiv1.EventTypeClusterSetMemberAdded, apiv1.EventTypeClusterSetMemberAdded,
+					"Cluster %s added to ClusterSet with role %s", "dc2", clusterset.ClusterRoleReplica).Return()
 			},
 			asserts: func(t *testing.T, cl client.Client) {
 				observed := &apiv1.PerconaServerMySQLClusterSet{}
@@ -128,8 +132,9 @@ func TestReconciler_reconcileStatus(t *testing.T) {
 				StatusText:            "Cluster set is not healthy",
 			},
 			events: func(recorder *psmock.EventRecorder) {
-				recorder.On("Event", mock.IsType(&apiv1.PerconaServerMySQLClusterSet{}), corev1.EventTypeWarning,
-					apiv1.EventTypeClusterSetUnhealthy, "ClusterSet health degraded: Cluster set is not healthy").Return()
+				recorder.On("Eventf", mock.IsType(&apiv1.PerconaServerMySQLClusterSet{}), nil, corev1.EventTypeWarning,
+					apiv1.EventTypeClusterSetUnhealthy, apiv1.EventTypeClusterSetUnhealthy,
+					"ClusterSet health degraded: %s", "Cluster set is not healthy").Return()
 			},
 			asserts: func(t *testing.T, cl client.Client) {
 				observed := &apiv1.PerconaServerMySQLClusterSet{}
@@ -178,8 +183,9 @@ func TestReconciler_reconcileStatus(t *testing.T) {
 				StatusText:            "Cluster set is healthy",
 			},
 			events: func(recorder *psmock.EventRecorder) {
-				recorder.On("Event", mock.IsType(&apiv1.PerconaServerMySQLClusterSet{}), corev1.EventTypeNormal,
-					apiv1.EventTypeClusterSetMemberRemoved, "Cluster dc3 removed from ClusterSet").Return()
+				recorder.On("Eventf", mock.IsType(&apiv1.PerconaServerMySQLClusterSet{}), nil, corev1.EventTypeNormal,
+					apiv1.EventTypeClusterSetMemberRemoved, apiv1.EventTypeClusterSetMemberRemoved,
+					"Cluster %s removed from ClusterSet", "dc3").Return()
 			},
 			asserts: func(t *testing.T, cl client.Client) {
 				observed := &apiv1.PerconaServerMySQLClusterSet{}
@@ -224,8 +230,9 @@ func TestReconciler_reconcileStatus(t *testing.T) {
 				StatusText:            "Cluster set is healthy",
 			},
 			events: func(recorder *psmock.EventRecorder) {
-				recorder.On("Event", mock.IsType(&apiv1.PerconaServerMySQLClusterSet{}), corev1.EventTypeNormal,
-					apiv1.EventTypeClusterSetPrimarySwitched, "Primary cluster switched from dc1 to dc2").Return()
+				recorder.On("Eventf", mock.IsType(&apiv1.PerconaServerMySQLClusterSet{}), nil, corev1.EventTypeNormal,
+					apiv1.EventTypeClusterSetPrimarySwitched, apiv1.EventTypeClusterSetPrimarySwitched,
+					"Primary cluster switched from %s to %s", "dc1", "dc2").Return()
 			},
 			asserts: func(t *testing.T, cl client.Client) {
 				observed := &apiv1.PerconaServerMySQLClusterSet{}

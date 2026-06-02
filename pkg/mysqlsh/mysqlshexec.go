@@ -38,10 +38,6 @@ type ExecOptions struct {
 }
 
 func (o *ExecOptions) Defaults() {
-	if o == nil {
-		o = &ExecOptions{}
-	}
-
 	if o.Stdout == nil {
 		o.Stdout = &bytes.Buffer{}
 	}
@@ -197,6 +193,10 @@ func (o *CreateClusterSetOptions) Default() {
 }
 
 func (m *MysqlshExec) CreateClusterSetWithExec(ctx context.Context, name string, opts *CreateClusterSetOptions) error {
+	if opts == nil {
+		opts = &CreateClusterSetOptions{}
+	}
+
 	opts.Default()
 	cmd := fmt.Sprintf(`
 var cluster = dba.getCluster()

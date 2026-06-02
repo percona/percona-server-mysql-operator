@@ -1128,6 +1128,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.MySQL.VaultSecretName = cr.Name + "-vault"
 	}
 
+	if cr.Spec.MySQL.Bootstrap.Mode == nil {
+		cr.Spec.MySQL.Bootstrap.Mode = new(BootstrapModeAuto)
+	}
+
 	return nil
 }
 
