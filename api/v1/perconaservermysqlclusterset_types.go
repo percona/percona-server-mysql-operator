@@ -175,7 +175,7 @@ const (
 const (
 	ConditionMySQLShellRunnerReady             string = "MySQLShellRunnerReady"
 	ConditionClusterSetBootstrapped            string = "ClusterSetBootstrapped"
-	ConditionClusterSetPrimarySwitchOverInProg string = "ClusterSetPrimarySwitchOverInProgress"
+	ConditionClusterSetPrimarySwitchOverInProg string = "PrimarySwitchOverInProgress"
 	ConditionReplicaManagementFailure          string = "ReplicaManagementFailure"
 	ConditionPrimaryClusterUnreachable         string = "PrimaryClusterUnreachable"
 	ConditionClusterSetDissolving              string = "ClusterSetDissolving"
