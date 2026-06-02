@@ -26,7 +26,7 @@ This feature adds support for cross-cluster replication capabilities between GR 
 ### 1.2 Non-Goals (Out of Scope)
 
 - **Automatic switchover**: all switchover is declarative and user-initiated. Revisit once the manual flow is operationally proven and we trust the detection signal.
-- **Automatic rejoin of INVALIDATED clusters**: annotation-driven only in v1. Revisit once rejoin success/failure patterns are well understood from real operations.
+- **Automatic rejoin of INVALIDATED clusters**: Revisit once rejoin success/failure patterns are well understood from real operations.
 - **Async-mode (Orchestrator) per-site topologies**: InnoDB ClusterSet supports GR only, mixing async and GR is not supported. Replication between async clusters requires a different design, possibly using native replication channels.
 - **Adopting an existing ClusterSet** created out-of-band via mysqlsh: v1 either bootstraps a fresh ClusterSet or refuses if metadata is inconsistent.
 - **MySQL Router integration**: while possible to set up MySQL Router to split read/write traffic between primary and DR, we will leave it out of scope for v1.
@@ -122,7 +122,7 @@ spec.mysql.bootstrap.mode = manual (new field; default auto)
 ### 3.3 Key Observations
 
 1. **InnoDB ClusterSet is a MySQL-side concept.** The natural CRD shape is a list of network endpoints with credentials, not a list of references to other CRs. This allows managing replicating from across K8S clusters or even on non-Kubernetes environments.
-2. `createReplicaCluster` is the only long-running operation. All mysql-shell commands are issued via `kubectl exec` into a dedicated `mysqlshell-runner` Pod, except `createReplicaCluster`. Since this may take even hours to complete, it will run as a Job using the same runner image, and the `psclusterset` controller simply tracks its progress.
+2. Long running operations such as `createReplicaCluster`, `setPrimaryCluster` and `removeaCluster` shall be executed asynchronously via a Kubernetes Job. This ensures that the control loop is not blocked on long running operations.
 3. **The `mysqlshell-runner` Pod is a new component.** Today the operator exec's into MySQL pods to run mysqlsh. For ClusterSet, the operator manages a separate long-running runner Pod (one per ClusterSet CR) and `kubectl exec`s mysqlsh commands into it. This keeps the operator image free of mysqlsh and lets each ClusterSet pin a mysqlsh version that matches its MySQL endpoints.
 
 ---
@@ -144,6 +144,8 @@ spec:
   primaryCluster: cluster1
   credentialsSecret:
     name: cluster1-credentials
+    key: clusterset
+  sslMode: AUTO
   mysqlshellRunner:
     image: percona/percona-server:8.0.36
   clusters:
@@ -160,6 +162,12 @@ spec:
 
 - `spec.primaryCluster` *(required, string)*: Logical name of the desired primary cluster. Must equal exactly one `clusters[].name`. Editing this triggers a planned switchover, or a force failover if `allowForceFailover` is true and the current primary is unreachable.
 - `spec.allowForceFailover` *(optional, default: `false`)*: When true, the controller is permitted to use `forcePrimaryCluster()` if a `primaryCluster` change is requested while the current primary is unreachable. When false, the controller blocks and surfaces a condition. Default `false` because force failover is destructive (data correctness can suffer).
+- `spec.sslMode` *(optional, string, default: `AUTO`)*: SSL Mode for the ClusterSet replication channels. Available options are:
+  - `DISABLED`: TLS encryption is disabled for the ClusterSet replication channels.
+  - `REQUIRED`: TLS encryption is enabled for the ClusterSet replication channels.
+  - `VERIFY_CA`:  like REQUIRED, but additionally verify the peer server TLS certificate against the configured Certificate Authority (CA) certificates.
+  - `VERIFY_IDENTITY`: like VERIFY_CA, but additionally verify that the peer server certificate matches the host to which the connection is attempted.
+  - `AUTO`: TLS encryption will be enabled if supported by the instance, otherwise disabled.
 - `spec.mysqlshellRunner.image` *(required, string)*: Container image used for the `mysqlshell-runner` Pod and the `createReplicaCluster` Job. Must contain a `mysqlsh` binary on `PATH`. The mysqlsh version should match the major version of the MySQL endpoints participating in this ClusterSet (e.g. 8.0 endpoints → 8.0 mysqlsh). See §5.6 for the rationale.
 - `spec.clusters[]` *(required, length >= 2)*: List of clusters participating in the ClusterSet. Each entry:
   - `name` *(required, immutable per entry)*: Logical handle used in `primaryCluster`, status, annotations. Must match `[a-z0-9-]{1,63}`. Immutable once observed in status; renames go through remove + re-add.
@@ -174,8 +182,7 @@ spec:
 
 `PerconaServerMySQLClusterSet.status`:
 
-- `state` (`Initializing | Ready | NeedsAction | Degraded | Deleting | Unknown`): High-level state derived from per-cluster observations.
-- `currentPrimary` (string): The cluster currently primary, as observed via `<cs>.status()`. May lag spec briefly during switchover.
+- `primaryCluster` (string): The cluster currently primary, as observed via `<cs>.status()`. May lag spec briefly during switchover.
 - `lastObservedAt` (RFC3339 timestamp): Time of the last successful status refresh.
 - `lastObservedGeneration`: The last observed generation of the ps-clusterset being reconciled
 - `conditions[]` (Kubernetes-standard conditions):
@@ -183,16 +190,21 @@ spec:
   - `ClusterSetBootstrapped` - Primary is configured for forming a ClusterSet
   - `MysqlShellRunnerReady` — The mysqlshell runner Deployment is ready
   - `SwitchoverInProgress` — `spec.primaryCluster` differs from `status.currentPrimary` and reconcile is executing the change.
+  - `PrimaryClusterUnreachable` - The primary cluster of this clusterset is not reachable by the operator
+  - `ClusterSetDissolving` - The ClusterSet is deleting and dissolving all replica clusters
 - `clusters[]` mirrors `<cs>.status()`'s output one-to-one so users can correlate `kubectl get psclusterset -o yaml` with mysqlsh output during incidents. Each entry:
   - `name`, `role` (`PRIMARY`/`REPLICA` from mysqlsh, not spec), `globalStatus` (`OK`/`OK_NOT_REPLICATING`/`NOT_OK`/`INVALIDATED`/`UNKNOWN`)
 
+`PerconaServerMySQL`:
+
+The following status conditions are added:
+- `ClusterSetReplicationRunning` - when present, indicates that the cluster is a REPLICA member of a ClusterSet.
+- `AwaitingExternalBootstrap` - when present and true, indicates that a cluster created using `.spec.mysql.bootstrap.mode=manual`, is awaiting bootstrap of GR, in this case, by a ClusterSet.
+
+
 ### 4.3 Internal Contracts
 
-**clusterset user**: A new `clusterset` user is added into the existing set of users which shall be used for managing ClusterSet operations. Each replica cluster MUST contain the same password as in the primary before adding to the ClusterSet.
-
-**Annotations on the ClusterSet CR**:
-
-- `mysql.percona.com/rejoin-cluster: <cluster-name>` — imperative trigger for `<cs>.rejoinCluster()` on the named INVALIDATED cluster. Controller removes the annotation after acting.
+**clusterset user**: A new `clusterset` user is added into the existing set of users which shall be used for managing ClusterSet operations. Each replica cluster MUST contain the same set of passwords as in the primary before adding to the ClusterSet. Since the users will be replicated from the source cluster, it is also not possible to independently rotate credentials on replica clusters.
 
 **Finalizer**: `mysql.percona.com/clusterset-dissolve` is added to `psclusterset` object, which ensures that the ClusterSet dissolves when the object is deleted from K8S. This only stops replication and deletes metadata, the actual clusters continue to run.
 
@@ -208,16 +220,23 @@ spec:
 - Long-lived and stateless: no PVCs, no Secrets baked in. The controller passes credentials per invocation via stdin/env when it `kubectl exec`s into the Pod.
 - Used for every mysqlsh AdminAPI call the controller makes.
 
-**Job-based contract for createReplicaCluster**:
+**Job-based contract for long running operations:
 
-- Job name pattern: `<cr-name>-replica-init`.
+- Job name pattern: `<cr-name>-<cluster-name>-<action>`.
 - Uses the same image as the operator
+- Execs into the `mysqlshell-runner` for performing long-running ClusterSet operations.
 
 ### 4.4 User-Facing Behavior Changes
 
-- New resource visible via `kubectl get psclusterset`, with printed columns `state` and `currentPrimary`.
-- New events: `ClusterSetDegraded`, `ClusterSetPrimarySwitched`, `ClusterSetReady`, `ClusterSetBootstrapped`
-- For `PerconaServerMySQL` CRs with `bootstrap.mode: manual`, Pod-0 will stay NotReady indefinitely until bootstrapped by the `psclusterset` controllers . This is intentional and surfaced via the Readiness Probe failing with "Member state: OFFLINE" until the ClusterSet controller (or some other actor) attaches it.
+- New resource visible via `kubectl get psclusterset`, with printed columns `Primary`, `Endpoint` and `Ready`.
+- New events for `PerconaServerMySQLClusterSet`:
+  - `ClusterSetPrimarySwitched`
+  - `ClusterSetPrimaryForceSwitched`
+  - `ClusterSetBootstrapped`
+  - `ClusterSetHealthDegraded`
+  - `ClusterSetMemberAdded`
+  - `ClusterSetMemberRemoved`
+- For `PerconaServerMySQL` CRs with `spec.mysql.bootstrap.mode: manual`, Pod-0 will stay `NotReady` indefinitely until bootstrapped by the `psclusterset` controller . This is intentional and surfaced via the Readiness Probe failing with "Member state: OFFLINE" until the ClusterSet controller (or some other actor) attaches it. A new status condition surfaces this scenario - `AwaitingExternalBootstrap`
 
 ---
 
@@ -295,18 +314,18 @@ A dedicated `PerconaServerMySQLClusterSet` CR keeps the topology in one object. 
 
 **Why:** With network-only coupling, the controller does not need co-location with any specific cluster.
 
-### 5.5 Jobs only for `createReplicaCluster`
+### 5.5 Jobs for long running operations
 
-**Chosen:** Every mutating mysqlsh verb is issued via `kubectl exec` into the `mysqlshell-runner` Pod, with one exception: `createReplicaCluster` runs as a Kubernetes Job using the same `spec.mysqlshellRunner.image`.
+**Chosen:** All long running ClusterSet operations are run asynchronously via Kubernetes Jobs, and the controller tracks their completions.
 
-**Why:** `createReplicaCluster` performs a CLONE of the primary's data into the target replica. For multi-TB databases, this can take hours and should not block the reconcile loop for that long.
+**Why:**: Avoids blocking the control loop on long running operations.
 
 **Alternatives considered:**
 
 
 | Alternative                                               | Why Rejected                                                               |
 | --------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `createReplicaCluster` in a goroutine, in-memory tracking | Pod restart loses progress; in-memory state ios fragile across reconciles. |
+| Run in a goroutine, in-memory tracking | Pod restart loses progress; in-memory state is fragile across reconciles. |
 
 
 ### 5.6 Bootstrap "manual" mode via a single-branch short-circuit
@@ -379,22 +398,7 @@ Provisioning during initial bootstrap keeps the ClusterSet controller free of an
 | Single `allowUnsafeFailover` boolean covering both lag tolerance and force-failover | Conflates independent decisions; users would surprise themselves in incidents. The chosen design keeps the two knobs explicit; lag is left to mysqlsh to enforce or refuse. |
 
 
-### 5.10 Annotation-driven rejoin
-
-**Chosen:** When a cluster is INVALIDATED, the controller surfaces a condition and waits. The user applies `mysql.percona.com/rejoin-cluster: <name>` to authorize the cheap rejoin path (`<cs>.rejoinCluster()`). The controller runs it inline and removes the annotation. Failure falls back to remove + re-add (which uses the createReplicaCluster Job path).
-
-**Why:** Rejoin destroys data if performed when GTIDs have actually diverged. Forcing the user to authorize each rejoin makes them think about it. Annotation is the standard "do this once" pattern.
-
-**Alternatives considered:**
-
-
-| Alternative                                    | Why Rejected                                                                                                                                                                             |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Auto-rejoin on INVALIDATED state               | Risky; the controller cannot reliably distinguish "safe to rejoin" from "needs full rebuild" without non-trivial GTID checks, and even with them a human usually wants to make the call. |
-| Status-only signal, user runs mysqlsh manually | Forces users to learn mysqlsh just to recover from an INVALIDATED state. The annotation keeps the action inside `kubectl`.                                                               |
-
-
-### 5.11 Finalizer dissolves the ClusterSet on CR deletion
+### 5.10 Finalizer dissolves the ClusterSet on CR deletion
 
 **Chosen:** A `mysql.percona.com/clusterset-dissolve` finalizer runs `<cs>.dissolve()` on CR deletion (after waiting for any in-flight `createReplicaCluster` Job). All underlying clusters revert to standalone InnoDB Clusters; data is preserved; per-site operators continue to manage them.
 
@@ -471,13 +475,14 @@ Pod-0 starts, configures MySQL for GR, creates `clusterset` and the other system
 ### 7.3 Creating the ClusterSet
 
 ```yaml
-apiVersion: mysql.percona.com/v1
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLClusterSet
 metadata:
   name: my-clusterset
 spec:
   primaryCluster: cluster1
   allowForceFailover: false
+  sslMode: AUTO
   credentialsSecret:
     name: cluster1-secret
   mysqlshellRunner:
@@ -498,6 +503,37 @@ spec:
 - When the Job completes, cluster2 is a single-member GR replica cluster within the ClusterSet; Pod-0's ReadinessProbe now passes; OrderedReady lets Pod-1 and Pod-2 boot and join the local GR via the existing `addInstance` path.
 - ClusterSet is ready
 
+#### 7.3.1 Seeding
+
+By default, `createReplicaCluster()` seeds the first member of a replica cluster with the MySQL `clone` recovery method. That is convenient for small datasets and low-latency networks, but it is a poor fit for WAN links and multi-TB datasets where a full online clone can take a long time and is expensive to retry.
+
+For large datasets, seed the replica cluster from a backup taken from the current primary cluster before adding it to the ClusterSet:
+
+1. Create the replica `PerconaServerMySQL` with `spec.mysql.bootstrap.mode: manual`.
+2. Restore the source backup into the replica cluster.
+3. Add the replica cluster to `PerconaServerMySQLClusterSet`.
+
+The restore targets the replica cluster, not the primary:
+
+```yaml
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLRestore
+metadata:
+  name: clusterset-seed
+spec:
+  clusterName: cluster2
+  backupSource:
+    destination: s3://my-bucket/backups/cluster1-full
+    storage:
+      type: s3
+      s3:
+        bucket: my-bucket
+        credentialsSecret: s3-credentials
+        region: us-east-1
+```
+
+After the restore succeeds, add `cluster2` to `PerconaServerMySQLClusterSet`. Because the target already contains data and GTID history from the primary cluster, mysqlshell will use `incremental` recovery instead of transferring the full dataset with `clone`.
+
 ### 7.4 Planned switchover
 
 User edits `spec.primaryCluster: cluster2`. Controller checks status (both clusters reachable), runs `setPrimaryCluster('cluster2')` . `status.currentPrimary` updates to `cluster2`.
@@ -514,18 +550,7 @@ spec:
 
 Controller runs `forcePrimaryCluster('cluster2')` inline. cluster1 becomes INVALIDATED; status surfaces `ClusterInvalidated` condition with a hint about the rejoin path.
 
-### 7.6 Rejoin after force failover
-
-cluster1 has been brought back online. User runs:
-
-```bash
-kubectl annotate psclusterset my-clusterset \
-  mysql.percona.com/rejoin-cluster=cluster1
-```
-
-Controller runs `<cs>.rejoinCluster('cluster1')` inline, removes the annotation, clears the `ClusterInvalidated` condition. If `rejoinCluster()` refuses (GTIDs diverged beyond rejoin), the condition reason updates to `RejoinFailed` and the user escalates to remove + re-add (which uses the createReplicaCluster Job path).
-
-### 7.7 Deletion
+### 7.6 Deletion
 
 `kubectl delete psclusterset my-clusterset`. Finalizer waits for any in-flight `createReplicaCluster` Job to terminate, then runs `<cs>.dissolve()` inline. CR is deleted. Both underlying clusters revert to standalone InnoDB Clusters and remain managed by their per-site operators.
 
@@ -539,31 +564,25 @@ Controller runs `<cs>.rejoinCluster('cluster1')` inline, removes the annotation,
 
 **Expected behavior:** Set `ClusterSetBootstrapped` condition to `False` with reason and message from the error. Requeue with backoff; surface the condition until the user fixes connectivity.
 
-### 8.2 Primary endpoint reachable but not an InnoDB Cluster
-
-**Scenario:** The endpoint named as primary is a MySQL instance but not yet an InnoDB Cluster (e.g., user applied the ClusterSet CR before the per-site operator finished bootstrapping the primary).
-
-**Expected behavior:** Set `ClusterSetBootstrapped` condition to `False` with reason `NotAnInnoDBCluster`. The controller never bootstraps the primary's InnoDB Cluster itself, that's the per-site operator's job. Requeue; reconcile naturally resumes once the primary is ready.
-
-### 8.3 Replica endpoint is not a clean standalone
+### 8.2 Replica endpoint is not a clean standalone
 
 **Scenario:** A cluster listed in `clusters[]` (non-primary) probe result shows it is already part of some other InnoDB Cluster or ClusterSet.
 
 **Expected behavior:** Set `Ready` condition to `False` with reason `ReplicaNotStandalone`. Do not queue a `createReplicaCluster` Job as mysqlsh would refuse anyway, and a silent force-remove would risk data loss.
 
-### 8.4 `createReplicaCluster` Job fails
+### 8.3 `createReplicaCluster` Job fails
 
 **Scenario:** The Job exits non-zero (CLONE failed, network drop mid-operation, mysqlsh rejected for any reason).
 
-**Expected behavior:** Surface `Ready` condition with with `False` and the Job's stderr captured. Do not retry automatically. User can re-trigger by `kubectl delete job psclusterset-...`, controller recreates on next reconcile. If the failure is environmental (unreachable target), user fixes the environment first.
+**Expected behavior:** Surface `ReplicaManagementFailure` condition with with `True` and the Job's stderr captured. Do not retry automatically. User can re-trigger by `kubectl delete job`, controller recreates on next reconcile. If the failure is environmental (unreachable target), user fixes the environment first.
 
-### 8.5 Primary unreachable during planned switchover
+### 8.4 Primary unreachable during planned switchover
 
 **Scenario:** User edits `spec.primaryCluster: cluster2`, `allowForceFailover: false`, and cluster1 (old primary) is unreachable.
 
-**Expected behavior:** Set `SwitchoverBlocked` with reason `PrimaryUnreachable`. Do nothing. User either fixes cluster1 (reconcile naturally proceeds) or flips `allowForceFailover: true` (next reconcile uses `forcePrimaryCluster`).
+**Expected behavior:** Set `SwitchoverFailed` and `PrimaryUnreachable` conditions. Do nothing. User either fixes cluster1 (reconcile naturally proceeds) or flips `allowForceFailover: true` (next reconcile uses `forcePrimaryCluster`).
 
-### 8.6 Dissolve fails during finalizer
+### 8.5 Dissolve fails during finalizer
 
 **Scenario:** User deletes the CR; finalizer's `<cs>.dissolve()` call fails because the primary is unreachable or mysqlsh errors.
 
