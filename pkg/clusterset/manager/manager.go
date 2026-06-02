@@ -123,8 +123,8 @@ func (m *mysqlshellClusterSetManager) CreateClusterSet(ctx context.Context, clus
 	return nil
 }
 
-func (m *mysqlshellClusterSetManager) CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster) error {
-	if err := m.shell.CreateReplicaClusterWithExec(ctx, cluster.Name, cluster.Endpoints[0].Host, cluster.Endpoints[0].GetPort()); err != nil {
+func (m *mysqlshellClusterSetManager) CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster, recoveryMethod string) error {
+	if err := m.shell.CreateReplicaClusterWithExec(ctx, cluster.Name, recoveryMethod, cluster.Endpoints[0].Host, cluster.Endpoints[0].GetPort()); err != nil {
 		return errors.Wrap(err, "create replica cluster")
 	}
 	return nil

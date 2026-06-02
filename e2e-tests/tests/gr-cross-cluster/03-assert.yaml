@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 420
+timeout: 600
 
 resourceRefs:
 - kind: PerconaServerMySQL
@@ -87,3 +87,13 @@ status:
       clusterRole: REPLICA
       globalStatus: OK
   primaryCluster: grcrossclusterdc1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gr-cross-cluster-runner
+status:
+  availableReplicas: 1
+  readyReplicas: 1
+  replicas: 1
+  updatedReplicas: 1

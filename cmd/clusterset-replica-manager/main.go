@@ -24,13 +24,14 @@ type replicaInitArgs struct {
 	replicaClusterName string
 	replicaEndpoint    string
 	replicaPort        int
+	recoveryMethod     string
 	psClusterSetName   string
 	namespace          string
 	user               string
 }
 
 type replicaManager interface {
-	CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster) error
+	CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster, recoverMethod string) error
 	RemoveReplicaCluster(ctx context.Context, clusterName string) error
 	SetPrimaryCluster(ctx context.Context, clusterName string) error
 }
@@ -47,6 +48,7 @@ func main() {
 	flag.StringVar(&args.user, "user", "root", "User")
 	flag.StringVar(&args.psClusterSetName, "ps-cluster-set-name", "", "PerconaServerMySQLClusterSet name")
 	flag.StringVar(&args.namespace, "namespace", "", "Namespace")
+	flag.StringVar(&args.recoveryMethod, "recovery-method", "", "Recovery method")
 
 	if err := flag.CommandLine.Parse(os.Args[2:]); err != nil {
 		log.Fatalf("failed to parse flags: %v", err)
@@ -68,6 +70,7 @@ func main() {
 	if err := cl.Get(ctx, types.NamespacedName{Namespace: args.namespace, Name: args.psClusterSetName}, psClusterSet); err != nil {
 		log.Fatalf("failed to get PerconaServerMySQLClusterSet: %v", err)
 	}
+	psClusterSet.SetDefaults()
 
 	cliCmd, err := clientcmd.NewClient()
 	if err != nil {
@@ -114,7 +117,7 @@ func addReplica(ctx context.Context, manager replicaManager, args replicaInitArg
 				Port: new(int32(args.replicaPort)),
 			},
 		},
-	}); err != nil {
+	}, args.recoveryMethod); err != nil {
 		return errors.Wrap(err, "failed to create replica cluster")
 	}
 	log.Printf("Replica cluster '%s' added to clusterset '%s'", args.replicaClusterName, args.psClusterSetName)

@@ -73,8 +73,50 @@ type PerconaServerMySQLClusterSetSpec struct {
 	// +kubebuilder:validation:MinItems:=1
 	Clusters []ClusterSetCluster `json:"clusters"`
 
+	// CreateReplicaClusterOptions is the configuration for the creation of a replica cluster.
+	CreateReplicaClusterOptions CreateReplicaClusterOptions `json:"createReplicaClusterOptions,omitempty"`
+
 	// MysqlShellRunner is the configuration for the MySQL shell runner.
 	MysqlShellRunner MysqlShellRunner `json:"mysqlShellRunner"`
+}
+
+func (pcs *PerconaServerMySQLClusterSet) SetDefaults() {
+	if pcs.Spec.CreateReplicaClusterOptions.RecoveryMethod == nil {
+		pcs.Spec.CreateReplicaClusterOptions.RecoveryMethod = new(RecoveryMethodClone)
+	}
+
+	if pcs.Spec.AllowForcedFailover == nil {
+		pcs.Spec.AllowForcedFailover = new(false)
+	}
+
+	if pcs.Spec.SSLMode == nil {
+		pcs.Spec.SSLMode = new(ClusterSetSSLModeAuto)
+	}
+
+	for i := range pcs.Spec.Clusters {
+		for j := range pcs.Spec.Clusters[i].Endpoints {
+			if pcs.Spec.Clusters[i].Endpoints[j].Port == nil {
+				pcs.Spec.Clusters[i].Endpoints[j].Port = new(int32(3306))
+			}
+		}
+	}
+}
+
+const (
+	RecoveryMethodClone       string = "clone"
+	RecoveryMethodIncremental string = "incremental"
+	RecoveryMethodAuto        string = "auto"
+)
+
+type CreateReplicaClusterOptions struct {
+	// Preferred method for state recovery/provisioning.
+	// Default is 'clone'.
+	// Set this to 'incremental' when the cluster is seeded from an existing backup.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Enum=clone;incremental;auto
+	// +kubebuilder:default:=clone
+	RecoveryMethod *string `json:"recoveryMethod"`
 }
 
 type ClusterSetSSLMode string

@@ -93,6 +93,8 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, errors.Wrap(err, "get PerconaServerMySQLClusterSet")
 	}
 
+	pcs.SetDefaults()
+
 	if !pcs.GetDeletionTimestamp().IsZero() {
 		return ctrl.Result{}, r.reconcileFinalizers(ctx, pcs)
 	}
@@ -405,6 +407,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) runClusterSetJob(
 		args = append(args, "--replica-cluster-name="+cluster.Name)
 		args = append(args, "--replica-endpoint="+cluster.Endpoints[0].Host)
 		args = append(args, "--replica-port="+fmt.Sprintf("%d", cluster.Endpoints[0].GetPort()))
+		args = append(args, "--recovery-method="+*pcs.Spec.CreateReplicaClusterOptions.RecoveryMethod)
 	case clusterset.CmdRemoveReplica:
 		args = append(args, "--replica-cluster-name="+cluster.Name)
 	}

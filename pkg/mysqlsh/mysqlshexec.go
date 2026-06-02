@@ -210,8 +210,8 @@ try {
 
 func (m *MysqlshExec) CreateReplicaClusterWithExec(
 	ctx context.Context,
-	clusterName, endpoint string, port int32) error {
-	cmd := fmt.Sprintf("dba.getCluster().getClusterSet().createReplicaCluster('%s:%d','%s',{recoveryMethod: 'auto',manualStartOnBoot: true})", endpoint, port, clusterName)
+	clusterName, recoveryMethod, endpoint string, port int32) error {
+	cmd := fmt.Sprintf("dba.getCluster().getClusterSet().createReplicaCluster('%s:%d','%s',{recoveryMethod: '%s',manualStartOnBoot: true})", endpoint, port, clusterName, recoveryMethod)
 	if err := m.runWithExec(ctx, cmd); err != nil {
 		return errors.Wrap(err, "create replica cluster")
 	}
@@ -261,7 +261,6 @@ func (m *MysqlshExec) ClusterSetStatusWithExec(ctx context.Context) (clusterset.
 	}
 
 	return status, nil
-
 }
 
 var ErrEndpointUnreachable = errors.New("endpoint unreachable")

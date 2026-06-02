@@ -66,6 +66,16 @@ spec:
                   type: object
                 minItems: 1
                 type: array
+              createReplicaClusterOptions:
+                properties:
+                  recoveryMethod:
+                    default: clone
+                    enum:
+                    - clone
+                    - incremental
+                    - auto
+                    type: string
+                type: object
               credentialsSecret:
                 properties:
                   key:
