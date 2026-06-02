@@ -215,7 +215,7 @@ try {
 func (m *MysqlshExec) CreateReplicaClusterWithExec(
 	ctx context.Context,
 	clusterName, endpoint string, port int) error {
-	cmd := fmt.Sprintf("dba.getCluster().getClusterSet().createReplicaCluster('%s:%d','%s',{recoveryMethod: 'clone',manualStartOnBoot: true})", endpoint, port, clusterName)
+	cmd := fmt.Sprintf("dba.getCluster().getClusterSet().createReplicaCluster('%s:%d','%s',{recoveryMethod: 'auto',manualStartOnBoot: true})", endpoint, port, clusterName)
 	if err := m.runWithExec(ctx, cmd); err != nil {
 		return errors.Wrap(err, "create replica cluster")
 	}
