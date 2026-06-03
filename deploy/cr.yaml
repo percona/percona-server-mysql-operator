@@ -1,18 +1,3 @@
-apiVersion: v1
-kind: Secret
-metadata:
-  name: minio-secret
-stringData:
-  AWS_ACCESS_KEY_ID: minioadmin
-  AWS_SECRET_ACCESS_KEY: minioadmin
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: backup-encryption-key
-stringData:
-  encryptionKey: yK84AwUysPIjKSaRxHNfKzgjRB6z7Lfr
----
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
@@ -28,13 +13,13 @@ spec:
 #      service.beta.kubernetes.io/aws-load-balancer-type: nlb
 #    labels:
 #      rack: rack-22
-  unsafeFlags:
+#  unsafeFlags:
 #    backupNonReadyCluster: false
-    mysqlSize: true
+#    mysqlSize: false
 #    orchestrator: false
 #    orchestratorSize: false
-    proxy: true
-    proxySize: true
+#    proxy: false
+#    proxySize: false
 #  pause: false
   crVersion: 1.2.0
 #  enableVolumeExpansion: false
@@ -74,7 +59,7 @@ spec:
     clusterType: group-replication
     autoRecovery: true
 #    vaultSecretName: ps-cluster1-vault
-    size: 1
+    size: 3
     image: perconalab/percona-server-mysql-operator:main-psmysql8.4
     imagePullPolicy: Always
 #    imagePullSecrets:
@@ -261,7 +246,7 @@ spec:
 #              storage: 1Gi
   proxy:
     haproxy:
-      enabled: false
+      enabled: true
 #      expose:
 #        annotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
@@ -794,17 +779,6 @@ spec:
 #        cpu: 200m
 #        memory: 200M
     storages:
-      minio:
-        type: s3
-        verifyTLS: false
-        encryptionKeySecret:
-          name: backup-encryption-key
-          key: encryptionKey
-        s3:
-          bucket: backups
-          credentialsSecret: minio-secret
-          endpointUrl: https://minio.minio
-          region: us-east-1
 #      azure-blob:
 #        azure:
 #          container: CONTAINER-NAME
