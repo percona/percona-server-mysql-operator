@@ -9,6 +9,9 @@ spec:
   credentialsSecret:
     name: ps-cluster1-secrets
     key: clusterset
+  sslMode: AUTO
+  createReplicaClusterOptions:
+    recoveryMethod: clone
   clusters:
     - name: sourcecluster
       endpoints:
@@ -16,5 +19,5 @@ spec:
     - name: replicacluster
       endpoints:
       - host: replica-cluster-mysql-0.replica-cluster-mysql.default.svc.cluster.local
-  mysqlShellRunner:
+  mysqlshellRunner:
     image: perconalab/percona-server-mysql-operator:main-psmysql8.4

@@ -53,11 +53,13 @@ type PerconaServerMySQLClusterSetSpec struct {
 
 	// SSLMode is the desired SSL mode of the ClusterSet.
 	//
+	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Enum=AUTO;DISABLED;REQUIRED;VERIFY_CA;VERIFY_IDENTITY
 	// +kubebuilder:default:=AUTO
 	SSLMode *ClusterSetSSLMode `json:"sslMode,omitempty"`
 
 	// CredentialsSecret is the secret containing the credentials for the ClusterSet.
+	// +kubebuilder:validation:Required
 	CredentialsSecret corev1.SecretKeySelector `json:"credentialsSecret"`
 
 	// AllowForcedFailover controls if an emergency failover may be performed in the event
@@ -76,15 +78,17 @@ type PerconaServerMySQLClusterSetSpec struct {
 	Clusters []ClusterSetCluster `json:"clusters"`
 
 	// CreateReplicaClusterOptions is the configuration for the creation of a replica cluster.
-	CreateReplicaClusterOptions CreateReplicaClusterOptions `json:"createReplicaClusterOptions,omitempty"`
+	// +kubebuilder:validation:Optional
+	CreateReplicaClusterOptions CreateReplicaClusterOptions `json:"createReplicaClusterOptions"`
 
 	// MysqlShellRunner is the configuration for the MySQL shell runner.
-	MysqlShellRunner MysqlShellRunner `json:"mysqlShellRunner"`
+	// +kubebuilder:validation:Required
+	MySQLShellRunner MySQLShellRunnerSpec `json:"mysqlshellRunner"`
 }
 
 func (pcs *PerconaServerMySQLClusterSet) SetDefaults() {
-	if pcs.Spec.CreateReplicaClusterOptions.RecoveryMethod == nil {
-		pcs.Spec.CreateReplicaClusterOptions.RecoveryMethod = new(RecoveryMethodClone)
+	if pcs.Spec.CreateReplicaClusterOptions.RecoveryMethod == "" {
+		pcs.Spec.CreateReplicaClusterOptions.RecoveryMethod = RecoveryMethodClone
 	}
 
 	if pcs.Spec.AllowForcedFailover == nil {
@@ -104,10 +108,12 @@ func (pcs *PerconaServerMySQLClusterSet) SetDefaults() {
 	}
 }
 
+type RecoveryMethod string
+
 const (
-	RecoveryMethodClone       string = "clone"
-	RecoveryMethodIncremental string = "incremental"
-	RecoveryMethodAuto        string = "auto"
+	RecoveryMethodClone       RecoveryMethod = "clone"
+	RecoveryMethodIncremental RecoveryMethod = "incremental"
+	RecoveryMethodAuto        RecoveryMethod = "auto"
 )
 
 type CreateReplicaClusterOptions struct {
@@ -118,7 +124,7 @@ type CreateReplicaClusterOptions struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Enum=clone;incremental;auto
 	// +kubebuilder:default:=clone
-	RecoveryMethod *string `json:"recoveryMethod"`
+	RecoveryMethod RecoveryMethod `json:"recoveryMethod"`
 }
 
 type ClusterSetSSLMode string
@@ -138,8 +144,9 @@ const (
 	ClusterSetSSLModeVerifyIdentity ClusterSetSSLMode = "VERIFY_IDENTITY"
 )
 
-type MysqlShellRunner struct {
+type MySQLShellRunnerSpec struct {
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image"`
 }
 
@@ -196,7 +203,7 @@ type PerconaServerMySQLClusterSetStatus struct {
 	PrimaryClusterEndpoint string             `json:"primaryClusterEndpoint"`
 	Conditions             []metav1.Condition `json:"conditions,omitempty"`
 	Clusters               ClusterSetStatus   `json:"clusters,omitempty"`
-	LastObservedGeneration int64              `json:"lastObservedGeneration,omitempty"`
+	ObservedGeneration     int64              `json:"lastObservedGeneration,omitempty"`
 	LastObservedAt         metav1.Time        `json:"lastObservedAt,omitempty"`
 }
 
@@ -252,7 +259,7 @@ func (pcs *PerconaServerMySQLClusterSet) UpdateStatus(ctx context.Context, cl cl
 		if err := mutate(&actual.Status); err != nil {
 			return err
 		}
-		actual.Status.LastObservedGeneration = pcs.Generation
+		actual.Status.ObservedGeneration = pcs.Generation
 		actual.Status.LastObservedAt = metav1.Now()
 
 		return cl.Status().Update(ctx, actual)

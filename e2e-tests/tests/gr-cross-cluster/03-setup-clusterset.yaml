@@ -8,6 +8,6 @@ commands:
 
       source ../../functions
 
-      yq eval '.spec.mysqlShellRunner.image = strenv(IMAGE_MYSQL)' \
+      yq eval '.spec.mysqlshellRunner.image = strenv(IMAGE_MYSQL)' \
         "${TEST_CONFIG_DIR}/clusterset.yaml" \
         | kubectl -n "${NAMESPACE}" apply -f -

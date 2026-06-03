@@ -21,7 +21,7 @@ func TestMySQLShellRunner(t *testing.T) {
 				LocalObjectReference: corev1.LocalObjectReference{Name: "clusterset-creds"},
 				Key:                  "password",
 			},
-			MysqlShellRunner: apiv1.MysqlShellRunner{
+			MySQLShellRunner: apiv1.MySQLShellRunnerSpec{
 				Image: "percona/percona-server-mysql-operator:mysqlshell",
 			},
 		},

@@ -43,7 +43,7 @@ func MySQLShellRunner(pcs *apiv1.PerconaServerMySQLClusterSet) *appsv1.Deploymen
 					Containers: []corev1.Container{
 						{
 							Name:    MySQLShellRunnerAppName,
-							Image:   pcs.Spec.MysqlShellRunner.Image,
+							Image:   pcs.Spec.MySQLShellRunner.Image,
 							Command: []string{"sleep", "infinity"},
 							Env: []corev1.EnvVar{
 								{

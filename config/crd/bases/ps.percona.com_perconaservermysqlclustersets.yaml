@@ -99,9 +99,10 @@ spec:
                 - key
                 type: object
                 x-kubernetes-map-type: atomic
-              mysqlShellRunner:
+              mysqlshellRunner:
                 properties:
                   image:
+                    minLength: 1
                     type: string
                 required:
                 - image
@@ -124,7 +125,7 @@ spec:
             required:
             - clusters
             - credentialsSecret
-            - mysqlShellRunner
+            - mysqlshellRunner
             - primaryCluster
             type: object
           status:
