@@ -151,7 +151,7 @@ type ClusterSetCluster struct {
 }
 
 type ClusterSetClusterEndpoint struct {
-	// +kubebuilder:validation:XValidation:rule="isIP(self) || format.qualifiedName().validate(string).hasValue()",message="host must be a valid IP address or a DNS name"
+	// +kubebuilder:validation:XValidation:rule="isIP(self) || format.qualifiedName().validate(self).hasValue()",message="host must be a valid IP address or a DNS name"
 	Host string `json:"host"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:=3306

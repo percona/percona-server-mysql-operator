@@ -1275,7 +1275,7 @@ spec:
                             type: string
                             x-kubernetes-validations:
                             - message: host must be a valid IP address or a DNS name
-                              rule: isIP(self) || format.qualifiedName().validate(string).hasValue()
+                              rule: isIP(self) || format.qualifiedName().validate(self).hasValue()
                           port:
                             default: 3306
                             format: int32
