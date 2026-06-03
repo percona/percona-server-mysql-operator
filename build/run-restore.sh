@@ -66,8 +66,6 @@ get_keyring_arg() {
 	echo "${keyring}"
 }
 
-
-
 restore_full() {
 	echo "Starting full restore ${RESTORE_NAME}"
 	echo "Restoring to backup: ${BACKUP_DEST}"
@@ -133,7 +131,6 @@ restore_incremental() {
 
 		download "${incr_dest}" | extract "${incrdir}"
 		decrypt "${incrdir}"
-
 
 		# shellcheck disable=SC2086
 		xtrabackup --decompress --remove-original --parallel="${PARALLEL}" --target-dir="${incrdir}" ${XB_EXTRA_ARGS}

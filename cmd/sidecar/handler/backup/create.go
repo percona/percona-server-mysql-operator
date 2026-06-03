@@ -105,11 +105,6 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 	g, gCtx := errgroup.WithContext(req.Context())
-
-	if backupConf.EncryptionKeyFile != "" {
-		// wait for the file to be created
-	}
-
 	xtrabackup := exec.CommandContext(gCtx, "xtrabackup", xtrabackupArgs(string(backupUser), backupPass, &backupConf)...)
 	xtrabackup.Env = envs(backupConf)
 

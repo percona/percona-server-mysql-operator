@@ -518,6 +518,15 @@ func expectedVolumes() []corev1.Volume {
 				},
 			},
 		},
+		{
+			Name: "backup-encryption-keys",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "internal-encryption-keys-ps-cluster1",
+					Optional:   ptr.To(true),
+				},
+			},
+		},
 	}
 }
 
