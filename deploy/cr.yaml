@@ -244,8 +244,8 @@ spec:
 #          resources:
 #            requests:
 #              storage: 1Gi
-    bootstrap:
-      mode: auto
+#    bootstrap:
+#      mode: manual
   proxy:
     haproxy:
       enabled: true
