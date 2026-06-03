@@ -47,6 +47,7 @@ type PerconaServerMySQLClusterSetSpec struct {
 	// This is the cluster that will serve writes, and replica members will connect to.
 	//
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:XValidation:rule="self.matches('^[A-Za-z0-9]+$')",message="primaryCluster must contain only alphanumeric characters"
 	PrimaryCluster string `json:"primaryCluster"`
 
@@ -71,6 +72,7 @@ type PerconaServerMySQLClusterSetSpec struct {
 	//
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems:=1
+	// +kubebuilder:validation:MaxItems:=10
 	Clusters []ClusterSetCluster `json:"clusters"`
 
 	// CreateReplicaClusterOptions is the configuration for the creation of a replica cluster.
@@ -143,15 +145,18 @@ type MysqlShellRunner struct {
 
 type ClusterSetCluster struct {
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:XValidation:rule="self.matches('^[A-Za-z0-9]+$')",message="name must contain only alphanumeric characters"
 	Name string `json:"name"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems:=1
+	// +kubebuilder:validation:MaxItems:=9
 	Endpoints []ClusterSetClusterEndpoint `json:"endpoints"`
 }
 
 type ClusterSetClusterEndpoint struct {
-	// +kubebuilder:validation:XValidation:rule="isIP(self) || format.qualifiedName().validate(self).hasValue()",message="host must be a valid IP address or a DNS name"
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:XValidation:rule="isIP(self) || !format.dns1123Subdomain().validate(self).hasValue()",message="host must be a valid IP address or domain name"
 	Host string `json:"host"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:=3306
@@ -177,7 +182,7 @@ const (
 const (
 	ConditionMySQLShellRunnerReady             string = "MySQLShellRunnerReady"
 	ConditionClusterSetBootstrapped            string = "ClusterSetBootstrapped"
-	ConditionClusterSetPrimarySwitchOverInProg string = "PrimarySwitchOverInProgress"
+	ConditionClusterSetPrimarySwitchOverInProg string = "SwitchoverInProgress"
 	ConditionReplicaManagementFailure          string = "ReplicaManagementFailure"
 	ConditionPrimaryClusterUnreachable         string = "PrimaryClusterUnreachable"
 	ConditionClusterSetDissolving              string = "ClusterSetDissolving"

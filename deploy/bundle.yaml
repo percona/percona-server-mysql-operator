@@ -1272,10 +1272,11 @@ spec:
                       items:
                         properties:
                           host:
+                            maxLength: 253
                             type: string
                             x-kubernetes-validations:
-                            - message: host must be a valid IP address or a DNS name
-                              rule: isIP(self) || format.qualifiedName().validate(self).hasValue()
+                            - message: host must be a valid IP address or domain name
+                              rule: isIP(self) || !format.dns1123Subdomain().validate(self).hasValue()
                           port:
                             default: 3306
                             format: int32
@@ -1283,9 +1284,11 @@ spec:
                         required:
                         - host
                         type: object
+                      maxItems: 9
                       minItems: 1
                       type: array
                     name:
+                      maxLength: 63
                       type: string
                       x-kubernetes-validations:
                       - message: name must contain only alphanumeric characters
@@ -1294,6 +1297,7 @@ spec:
                   - endpoints
                   - name
                   type: object
+                maxItems: 10
                 minItems: 1
                 type: array
               createReplicaClusterOptions:
@@ -1327,6 +1331,7 @@ spec:
                 - image
                 type: object
               primaryCluster:
+                maxLength: 63
                 type: string
                 x-kubernetes-validations:
                 - message: primaryCluster must contain only alphanumeric characters
