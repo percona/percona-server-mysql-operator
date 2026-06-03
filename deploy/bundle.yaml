@@ -1273,6 +1273,9 @@ spec:
                         properties:
                           host:
                             type: string
+                            x-kubernetes-validations:
+                            - message: host must be a valid IP address or a DNS name
+                              rule: isIP(self) || format.qualifiedName().validate(string).hasValue()
                           port:
                             default: 3306
                             format: int32
@@ -1284,6 +1287,9 @@ spec:
                       type: array
                     name:
                       type: string
+                      x-kubernetes-validations:
+                      - message: name must contain only alphanumeric characters
+                        rule: self.matches('^[A-Za-z0-9]+$')
                   required:
                   - endpoints
                   - name

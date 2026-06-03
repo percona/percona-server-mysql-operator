@@ -143,6 +143,7 @@ type MysqlShellRunner struct {
 
 type ClusterSetCluster struct {
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self.matches('^[A-Za-z0-9]+$')",message="name must contain only alphanumeric characters"
 	Name string `json:"name"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems:=1
@@ -150,6 +151,7 @@ type ClusterSetCluster struct {
 }
 
 type ClusterSetClusterEndpoint struct {
+	// +kubebuilder:validation:XValidation:rule="isIP(self) || format.qualifiedName().validate(string).hasValue()",message="host must be a valid IP address or a DNS name"
 	Host string `json:"host"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:=3306
