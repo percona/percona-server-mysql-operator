@@ -122,7 +122,7 @@ spec.mysql.bootstrap.mode = manual (new field; default auto)
 ### 3.3 Key Observations
 
 1. **InnoDB ClusterSet is a MySQL-side concept.** The natural CRD shape is a list of network endpoints with credentials, not a list of references to other CRs. This allows managing replicating from across K8S clusters or even on non-Kubernetes environments.
-2. Long running operations such as `createReplicaCluster`, `setPrimaryCluster` and `removeaCluster` shall be executed asynchronously via a Kubernetes Job. This ensures that the control loop is not blocked on long running operations.
+2. Long running operations such as `createReplicaCluster`, `setPrimaryCluster` and `removeCluster` shall be executed asynchronously via a Kubernetes Job. This ensures that the control loop is not blocked on long running operations.
 3. **The `mysqlshell-runner` Pod is a new component.** Today the operator exec's into MySQL pods to run mysqlsh. For ClusterSet, the operator manages a separate long-running runner Pod (one per ClusterSet CR) and `kubectl exec`s mysqlsh commands into it. This keeps the operator image free of mysqlsh and lets each ClusterSet pin a mysqlsh version that matches its MySQL endpoints.
 
 ---
@@ -220,9 +220,9 @@ The following status conditions are added:
 - Long-lived and stateless: no PVCs, no Secrets baked in. The controller passes credentials per invocation via stdin/env when it `kubectl exec`s into the Pod.
 - Used for every mysqlsh AdminAPI call the controller makes.
 
-**Job-based contract for long running operations:
+**Job-based contract for long running operations:**
 
-- Job name pattern: `<cr-name>-<cluster-name>-<action>`.
+- Job name pattern: `<cr-name>-<cluster-name>-<action>`. This naming ensures no 2 jobs can run the same action for the same cluster.
 - Uses the same image as the operator
 - Execs into the `mysqlshell-runner` for performing long-running ClusterSet operations.
 
