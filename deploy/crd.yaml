@@ -223,19 +223,6 @@ spec:
                 type: array
               destination:
                 type: string
-              encryptionKeySecret:
-                properties:
-                  key:
-                    type: string
-                  name:
-                    default: ""
-                    type: string
-                  optional:
-                    type: boolean
-                required:
-                - key
-                type: object
-                x-kubernetes-map-type: atomic
               image:
                 type: string
               state:
@@ -1334,19 +1321,6 @@ spec:
                     type: array
                   destination:
                     type: string
-                  encryptionKeySecret:
-                    properties:
-                      key:
-                        type: string
-                      name:
-                        default: ""
-                        type: string
-                      optional:
-                        type: boolean
-                    required:
-                    - key
-                    type: object
-                    x-kubernetes-map-type: atomic
                   image:
                     type: string
                   state:

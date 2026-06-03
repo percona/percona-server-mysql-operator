@@ -28,18 +28,20 @@ import (
 )
 
 const (
-	appName               = "xtrabackup"
-	componentShortName    = "xb"
-	dataVolumeName        = "datadir"
-	dataMountPath         = "/var/lib/mysql"
-	credsVolumeName       = "users"
-	credsMountPath        = "/etc/mysql/mysql-users-secret"
-	tlsVolumeName         = "tls"
-	tlsMountPath          = "/etc/mysql/mysql-tls-secret"
-	backupVolumeName      = appName
-	backupMountPath       = "/backup"
-	vaultSecretVolumeName = "vault-keyring-secret"
-	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
+	appName                  = "xtrabackup"
+	componentShortName       = "xb"
+	dataVolumeName           = "datadir"
+	dataMountPath            = "/var/lib/mysql"
+	credsVolumeName          = "users"
+	credsMountPath           = "/etc/mysql/mysql-users-secret"
+	tlsVolumeName            = "tls"
+	tlsMountPath             = "/etc/mysql/mysql-tls-secret"
+	backupVolumeName         = appName
+	backupMountPath          = "/backup"
+	vaultSecretVolumeName    = "vault-keyring-secret"
+	vaultSecretMountPath     = "/etc/mysql/vault-keyring-secret"
+	encryptionKeysVolumeName = "backup-encryption-key"
+	encryptionKeysMountPath  = "/etc/mysql/encryption-keys"
 )
 
 func Name(cr *apiv1.PerconaServerMySQLBackup) string {
@@ -423,7 +425,6 @@ func RestoreJob(
 	storage *apiv1.BackupStorageSpec,
 	initImage string,
 	pvcName string,
-	encryptionKeySecret *corev1.SecretKeySelector,
 ) *batchv1.Job {
 	labels := util.SSMapMerge(cluster.GlobalLabels(), storage.Labels, restore.Labels(appName, naming.ComponentRestore))
 
@@ -532,24 +533,20 @@ func RestoreJob(
 		})
 	}
 
-	if encryptionKeySecret != nil {
+	if storage.EncryptionKeySecret != nil {
 		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
-			Name: "backup-encryption-keys",
+			Name: encryptionKeysVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: encryptionKeySecret.Name,
+					SecretName: storage.EncryptionKeySecret.Name,
 					Items: []corev1.KeyToPath{
 						{
-							Key:  encryptionKeySecret.Key,
+							Key:  storage.EncryptionKeySecret.Key,
 							Path: "encryption-key",
 						},
 					},
 				},
 			},
-		})
-		job.Spec.Template.Spec.Containers[0].VolumeMounts = append(job.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
-			Name:      "backup-encryption-keys",
-			MountPath: "/etc/mysql/encryption-keys",
 		})
 	}
 
@@ -676,6 +673,13 @@ func restoreContainer(
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      vaultSecretVolumeName,
 			MountPath: vaultSecretMountPath,
+		})
+	}
+
+	if storage.EncryptionKeySecret != nil {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      encryptionKeysVolumeName,
+			MountPath: encryptionKeysMountPath,
 		})
 	}
 

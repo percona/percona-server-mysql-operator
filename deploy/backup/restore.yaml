@@ -41,7 +41,6 @@ spec:
 #  backupSource:
 #    compressed: false
 #    destination: s3://S3-BACKUP-BUCKET-NAME-HERE/backup-path
-#    encryptionKeySecret: null
 #    storage:
 #      affinity:
 #        nodeAffinity:
