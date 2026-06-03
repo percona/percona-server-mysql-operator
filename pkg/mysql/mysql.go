@@ -319,7 +319,19 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: cr.Spec.MySQL.VaultSecretName,
-					Optional:   ptr.To(true),
+					Optional:   new(true),
+				},
+			},
+		})
+	}
+
+	if cr.CompareVersion("1.2.0") >= 0 {
+		volumes = append(volumes, corev1.Volume{
+			Name: "backup-encryption-keys",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: naming.EncryptionKeyInternalSecretName(cr.Name),
+					Optional:   new(true),
 				},
 			},
 		})
@@ -757,6 +769,15 @@ func backupVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 			corev1.VolumeMount{
 				Name:      configVolumeName,
 				MountPath: configMountPath,
+			},
+		)
+	}
+
+	if cr.CompareVersion("1.2.0") >= 0 {
+		mounts = append(mounts,
+			corev1.VolumeMount{
+				Name:      "backup-encryption-keys",
+				MountPath: "/etc/mysql/encryption-keys",
 			},
 		)
 	}

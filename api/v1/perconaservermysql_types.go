@@ -319,6 +319,16 @@ type BackupSpec struct {
 	// Deprecated: not supported since v0.12.0. Use initContainer instead
 	InitImage     string             `json:"initImage,omitempty"`
 	InitContainer *InitContainerSpec `json:"initContainer,omitempty"`
+
+	// EncryptionKeySecret is the secret key selector for the backup encryption key.
+	EncryptionKeySecret *corev1.SecretKeySelector `json:"encryptionKeySecret,omitempty"`
+}
+
+func (s *BackupSpec) GetEncryptionKeySecret(storageName string) *corev1.SecretKeySelector {
+	if storage, ok := s.Storages[storageName]; ok && storage.EncryptionKeySecret != nil {
+		return storage.EncryptionKeySecret
+	}
+	return s.EncryptionKeySecret
 }
 
 type BackupSchedule struct {
@@ -374,6 +384,11 @@ type BackupStorageSpec struct {
 	RuntimeClassName          *string                           `json:"runtimeClassName,omitempty"`
 	VerifyTLS                 *bool                             `json:"verifyTLS,omitempty"`
 	ContainerOptions          *BackupContainerOptions           `json:"containerOptions,omitempty"`
+
+	// EncryptionKeySecret is the secret key selector for the backup encryption key.
+	// This takes precedence over the encryption key secret in the backup spec.
+	// +optional
+	EncryptionKeySecret *corev1.SecretKeySelector `json:"encryptionKeySecret,omitempty"`
 }
 
 type BackupContainerOptions struct {

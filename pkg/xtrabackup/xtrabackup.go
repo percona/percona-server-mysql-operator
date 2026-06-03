@@ -857,13 +857,14 @@ func SetSourceNode(job *batchv1.Job, src string) error {
 }
 
 type BackupConfig struct {
-	Destination      string                        `json:"destination"`
-	Type             apiv1.BackupStorageType       `json:"type"`
-	VerifyTLS        bool                          `json:"verifyTLS,omitempty"`
-	ContainerOptions *apiv1.BackupContainerOptions `json:"containerOptions,omitempty"`
-	S3               BackupConfigS3                `json:"s3"`
-	GCS              BackupConfigGCS               `json:"gcs"`
-	Azure            BackupConfigAzure             `json:"azure"`
+	Destination       string                        `json:"destination"`
+	Type              apiv1.BackupStorageType       `json:"type"`
+	VerifyTLS         bool                          `json:"verifyTLS,omitempty"`
+	ContainerOptions  *apiv1.BackupContainerOptions `json:"containerOptions,omitempty"`
+	S3                BackupConfigS3                `json:"s3"`
+	GCS               BackupConfigGCS               `json:"gcs"`
+	Azure             BackupConfigAzure             `json:"azure"`
+	EncryptionKeyFile string                        `json:"encryptionKeyFile,omitempty"`
 
 	// Specify for incremental backups
 	IncrementalLsn string `json:"incrementalLsn,omitempty"`

@@ -10,7 +10,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -62,6 +64,15 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
+	// Wait for kubelet to propogate the encryption key file to the pod.
+	if backupConf.EncryptionKeyFile != "" {
+		if err := awaitEncryptionKeyFile(req.Context(), log, backupConf.EncryptionKeyFile); err != nil {
+			log.Error(err, "failed to await encryption key file")
+			http.Error(w, "backup failed", http.StatusInternalServerError)
+			return
+		}
+	}
+
 	h.status.setBackupConfig(backupConf)
 	defer func() {
 		h.status.removeBackupConfig()
@@ -93,6 +104,10 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 	g, gCtx := errgroup.WithContext(req.Context())
+
+	if backupConf.EncryptionKeyFile != "" {
+		// wait for the file to be created
+	}
 
 	xtrabackup := exec.CommandContext(gCtx, "xtrabackup", xtrabackupArgs(string(backupUser), backupPass, &backupConf)...)
 	xtrabackup.Env = envs(backupConf)
@@ -295,4 +310,26 @@ func getSecret(username apiv1.SystemUser) (string, error) {
 	}
 
 	return strings.TrimSpace(string(sBytes)), nil
+}
+
+// awaitEncryptionKeyFile waits for the encryption key file to be created.
+// If the backup is created soon after the encryption secret was configured,
+// we need to wait for kubelet to propogate the secret to the file mounted on the pod.
+func awaitEncryptionKeyFile(ctx context.Context, log logr.Logger, file string) error {
+	pCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	for {
+		if _, err := os.Stat(file); err == nil {
+			return nil
+		}
+
+		select {
+		case <-pCtx.Done():
+			return pCtx.Err()
+		default:
+			log.Info("waiting for encryption key file to be created", "file", file)
+			time.Sleep(5 * time.Second)
+		}
+	}
 }

@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/config"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -77,16 +78,17 @@ const (
 
 // PerconaServerMySQLBackupStatus defines the observed state of PerconaServerMySQLBackup
 type PerconaServerMySQLBackupStatus struct {
-	Type         BackupType         `json:"type,omitempty"`
-	State        BackupState        `json:"state,omitempty"`
-	StateDesc    string             `json:"stateDescription,omitempty"`
-	Destination  BackupDestination  `json:"destination,omitempty"`
-	Storage      *BackupStorageSpec `json:"storage,omitempty"`
-	CompletedAt  *metav1.Time       `json:"completed,omitempty"`
-	Image        string             `json:"image,omitempty"`
-	BackupSource string             `json:"backupSource,omitempty"`
-	Compressed   bool               `json:"compressed,omitempty"`
-	Conditions   []metav1.Condition `json:"conditions,omitempty"`
+	Type                BackupType                `json:"type,omitempty"`
+	State               BackupState               `json:"state,omitempty"`
+	StateDesc           string                    `json:"stateDescription,omitempty"`
+	Destination         BackupDestination         `json:"destination,omitempty"`
+	Storage             *BackupStorageSpec        `json:"storage,omitempty"`
+	CompletedAt         *metav1.Time              `json:"completed,omitempty"`
+	Image               string                    `json:"image,omitempty"`
+	BackupSource        string                    `json:"backupSource,omitempty"`
+	Compressed          bool                      `json:"compressed,omitempty"`
+	Conditions          []metav1.Condition        `json:"conditions,omitempty"`
+	EncryptionKeySecret *corev1.SecretKeySelector `json:"encryptionKeySecret,omitempty"`
 }
 
 const (

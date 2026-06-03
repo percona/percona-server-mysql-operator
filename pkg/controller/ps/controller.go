@@ -44,6 +44,7 @@ import (
 	k8sretry "k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -495,6 +496,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	}
 	if err := r.ensureTLSSecret(ctx, cr); err != nil {
 		return errors.Wrap(err, "TLS secret")
+	}
+	if err := r.reconcileInternalEncryptionKeySecret(ctx, cr); err != nil {
+		return errors.Wrap(err, "internal encryption key secret")
 	}
 	if err := r.reconcileServices(ctx, cr); err != nil {
 		return errors.Wrap(err, "services")
@@ -1693,4 +1697,69 @@ func getPodIndexFromHostname(hostname string) (int, error) {
 	}
 
 	return idx, nil
+}
+
+func readEncryptionKey(ctx context.Context, cl client.Client, sel corev1.SecretKeySelector, namespace string) ([]byte, error) {
+	key := sel.Key
+	if key == "" {
+		key = "encryptionKey"
+	}
+
+	secret := &corev1.Secret{}
+	if err := cl.Get(ctx, types.NamespacedName{
+		Name:      sel.Name,
+		Namespace: namespace,
+	}, secret); err != nil {
+		return nil, errors.Wrap(err, "get secret")
+	}
+
+	value, ok := secret.Data[key]
+	if !ok {
+		return nil, errors.Errorf("key %s not found in secret %s", key, sel.Name)
+	}
+
+	return value, nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      naming.EncryptionKeyInternalSecretName(cr.Name),
+			Namespace: cr.Namespace,
+		},
+	}
+
+	data := make(map[string][]byte)
+
+	if cr.Spec.Backup.EncryptionKeySecret != nil {
+		key, err := readEncryptionKey(ctx, r.Client, *cr.Spec.Backup.EncryptionKeySecret, cr.Namespace)
+		if err != nil {
+			return errors.Wrap(err, "read backup encryption key")
+		}
+		data[cr.GetName()] = key
+	}
+
+	for storageName, storage := range cr.Spec.Backup.Storages {
+		if storage.EncryptionKeySecret == nil {
+			continue
+		}
+
+		key, err := readEncryptionKey(ctx, r.Client, *storage.EncryptionKeySecret, cr.Namespace)
+		if err != nil {
+			return errors.Wrap(err, "read backup encryption key")
+		}
+		data[cr.GetName()+"-"+storageName] = key
+	}
+
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
+		secret.Data = data
+		if err := controllerutil.SetControllerReference(cr, secret, r.Scheme); err != nil {
+			return errors.Wrap(err, "set controller reference")
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "create or update encryption key secret")
+	}
+
+	return nil
 }
