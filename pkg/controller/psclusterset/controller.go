@@ -517,55 +517,73 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Con
 		return errors.Wrap(err, "get cluster set status")
 	}
 
-	readyCond := metav1.Condition{
-		Type:    apiv1.ConditionClusterSetReady,
-		Status:  metav1.ConditionTrue,
-		Reason:  "ClusterSetHealthy",
-		Message: observedStatus.StatusText,
-	}
-
-	if observedStatus.Status != clusterset.StatusHealthy {
-		readyCond.Status = metav1.ConditionFalse
-		readyCond.Reason = "ClusterSetNotHealthy"
-
-		// Emit an event when we transition from healthy to unhealthy
-		currentCond := meta.FindStatusCondition(pcs.Status.Conditions, apiv1.ConditionClusterSetReady)
-		if currentCond == nil || currentCond.Status == metav1.ConditionTrue {
-			r.Recorder.Eventf(pcs, nil, corev1.EventTypeWarning, apiv1.EventTypeClusterSetUnhealthy,
-				apiv1.EventTypeClusterSetUnhealthy, "ClusterSet health degraded: %s", observedStatus.StatusText)
-		}
-	}
-
-	// Emit an event for each newly added member
-	newlyAdded := clusterSetMemberDiff(observedStatus.Clusters, pcs.Status.Clusters)
-	for _, name := range newlyAdded {
-		r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetMemberAdded,
-			apiv1.EventTypeClusterSetMemberAdded, "Cluster %s added to ClusterSet with role %s", name, observedStatus.Clusters[name].ClusterRole)
-	}
-
-	// Emit an event for each newly removed member
-	newlyRemoved := clusterSetMemberDiff(pcs.Status.Clusters, observedStatus.Clusters)
-	for _, name := range newlyRemoved {
-		r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetMemberRemoved, apiv1.EventTypeClusterSetMemberRemoved, "Cluster %s removed from ClusterSet", name)
-	}
-
 	if err := r.trackSwitchover(ctx, pcs); err != nil {
 		return errors.Wrap(err, "track switchover")
 	}
 
-	// Emit an event when the primary cluster is switched
-	if pcs.Status.PrimaryCluster != "" && pcs.Status.PrimaryCluster != observedStatus.PrimaryCluster {
-		r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetPrimarySwitched, apiv1.EventTypeClusterSetPrimarySwitched, "Primary cluster switched from %s to %s", pcs.Status.PrimaryCluster, observedStatus.PrimaryCluster)
-	}
+	// Since event decisions are made based on the current status, we need to ensure that we are not reading a stale status from cache.
+	// Since UpdateStatus is retried on conflicts, we only keep track of which events need to be emitted based.
+	// Once the status update is successful, we know that all decesions were made based on an update state and can emit the events.
+	events := []func(){}
 
 	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
+		events = []func(){}
+
+		readyCond := metav1.Condition{
+			Type:    apiv1.ConditionClusterSetReady,
+			Status:  metav1.ConditionTrue,
+			Reason:  "ClusterSetHealthy",
+			Message: observedStatus.StatusText,
+		}
+		if observedStatus.Status != clusterset.StatusHealthy {
+			readyCond.Status = metav1.ConditionFalse
+			readyCond.Reason = "ClusterSetNotHealthy"
+
+			// Emit an event when we transition from healthy to unhealthy
+			currentCond := meta.FindStatusCondition(pcs.Status.Conditions, apiv1.ConditionClusterSetReady)
+			if currentCond == nil || currentCond.Status == metav1.ConditionTrue {
+				events = append(events, func() {
+					r.Recorder.Eventf(pcs, nil, corev1.EventTypeWarning, apiv1.EventTypeClusterSetUnhealthy,
+						apiv1.EventTypeClusterSetUnhealthy, "ClusterSet health degraded: %s", observedStatus.StatusText)
+				})
+			}
+		}
 		meta.SetStatusCondition(&status.Conditions, readyCond)
+
+		// Emit an event for each newly added member
+		newlyAdded := clusterSetMemberDiff(observedStatus.Clusters, status.Clusters)
+		for _, name := range newlyAdded {
+			events = append(events, func() {
+				r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetMemberAdded,
+					apiv1.EventTypeClusterSetMemberAdded, "Cluster %s added to ClusterSet with role %s", name, observedStatus.Clusters[name].ClusterRole)
+			})
+		}
+
+		// Emit an event for each newly removed member
+		newlyRemoved := clusterSetMemberDiff(status.Clusters, observedStatus.Clusters)
+		for _, name := range newlyRemoved {
+			events = append(events, func() {
+				r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetMemberRemoved, apiv1.EventTypeClusterSetMemberRemoved, "Cluster %s removed from ClusterSet", name)
+			})
+		}
+
+		// Emit an event when the primary cluster is switched
+		if status.PrimaryCluster != "" && status.PrimaryCluster != observedStatus.PrimaryCluster {
+			events = append(events, func() {
+				r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetPrimarySwitched, apiv1.EventTypeClusterSetPrimarySwitched, "Primary cluster switched from %s to %s", pcs.Status.PrimaryCluster, observedStatus.PrimaryCluster)
+			})
+		}
+
 		status.Clusters = observedStatus.Clusters
-		status.PrimaryCluster = observedStatus.GetPrimaryCluster()
+		status.PrimaryCluster = observedStatus.PrimaryCluster
 		status.PrimaryClusterEndpoint = observedStatus.GlobalPrimaryInstance
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "update status")
+	}
+
+	for _, emitEvt := range events {
+		emitEvt()
 	}
 	return nil
 }
