@@ -198,9 +198,9 @@ spec:
 `PerconaServerMySQL`:
 
 The following status conditions are added:
+
 - `ClusterSetReplicationRunning` - when present, indicates that the cluster is a REPLICA member of a ClusterSet.
 - `AwaitingExternalBootstrap` - when present and true, indicates that a cluster created using `.spec.mysql.bootstrap.mode=manual`, is awaiting bootstrap of GR, in this case, by a ClusterSet.
-
 
 ### 4.3 Internal Contracts
 
@@ -323,8 +323,8 @@ A dedicated `PerconaServerMySQLClusterSet` CR keeps the topology in one object. 
 **Alternatives considered:**
 
 
-| Alternative                                               | Why Rejected                                                               |
-| --------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Alternative                            | Why Rejected                                                              |
+| -------------------------------------- | ------------------------------------------------------------------------- |
 | Run in a goroutine, in-memory tracking | Pod restart loses progress; in-memory state is fragile across reconciles. |
 
 
@@ -503,7 +503,7 @@ spec:
 - When the Job completes, cluster2 is a single-member GR replica cluster within the ClusterSet; Pod-0's ReadinessProbe now passes; OrderedReady lets Pod-1 and Pod-2 boot and join the local GR via the existing `addInstance` path.
 - ClusterSet is ready
 
-#### 7.3.1 Seeding
+#### 7.3.1 Seeding using an existing backup
 
 By default, `createReplicaCluster()` seeds the first member of a replica cluster with the MySQL `clone` recovery method. That is convenient for small datasets and low-latency networks, but it is a poor fit for WAN links and multi-TB datasets where a full online clone can take a long time and is expensive to retry.
 
@@ -532,7 +532,18 @@ spec:
         region: us-east-1
 ```
 
-After the restore succeeds, add `cluster2` to `PerconaServerMySQLClusterSet`. Because the target already contains data and GTID history from the primary cluster, mysqlshell will use `incremental` recovery instead of transferring the full dataset with `clone`.
+After the restore succeeds, add `cluster2` to `PerconaServerMySQLClusterSet`. Because the target already contains data and GTID history from the primary cluster, we can use the `incremental` recovery instead of transferring the full dataset with `clone`.
+
+```yaml
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLClusterSet
+metadata:
+  name: my-clusterset
+spec:
+  # ...
+  createReplicaClusterOptions:
+    recoveryMethod: incremental
+```
 
 ### 7.4 Planned switchover
 
@@ -550,7 +561,13 @@ spec:
 
 Controller runs `forcePrimaryCluster('cluster2')` inline. cluster1 becomes INVALIDATED; status surfaces `ClusterInvalidated` condition with a hint about the rejoin path.
 
-### 7.6 Deletion
+### 7.6 Removal of a replica cluster
+
+A replica cluster can be removed from a ClusterSet by deleting its entry from `.spec.clusters[]`. During reconciliation, the ClusterSet controller removes the cluster from the ClusterSet, dissolves Group Replication on the removed cluster, and lets the per-site operator bootstrap it again as a standalone InnoDB Cluster.
+
+Removal is one-way: after a cluster has been removed from a ClusterSet, it cannot be added back to the same ClusterSet.
+
+### 7.7 Deletion
 
 `kubectl delete psclusterset my-clusterset`. Finalizer waits for any in-flight `createReplicaCluster` Job to terminate, then runs `<cs>.dissolve()` inline. CR is deleted. Both underlying clusters revert to standalone InnoDB Clusters and remain managed by their per-site operators.
 
