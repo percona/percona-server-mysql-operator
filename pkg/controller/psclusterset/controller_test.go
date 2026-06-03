@@ -522,6 +522,8 @@ func TestReconciler_reconcileReplicas(t *testing.T) {
 				Scheme:   scheme,
 				Recorder: recorder,
 			}
+
+			clusterSet.SetDefaults()
 			err := r.reconcileReplicas(t.Context(), clusterSet)
 			require.NoError(t, err)
 			tc.asserts(t, cl)
