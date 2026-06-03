@@ -3,6 +3,8 @@
 set -e
 set -o xtrace
 
+encryption_key_file="/etc/mysql/encryption-keys/encryption-key"
+
 XTRABACKUP_VERSION=$(xtrabackup --version 2>&1 | awk '/^xtrabackup version/{print $3}' | awk -F'.' '{print $1"."$2}')
 DATADIR=${DATADIR:-/var/lib/mysql}
 PARALLEL=$(grep -c processor /proc/cpuinfo)
@@ -41,6 +43,14 @@ extract() {
 	xbstream -xv -C "${targetdir}" --parallel="${PARALLEL}" ${XBSTREAM_EXTRA_ARGS}
 }
 
+decrypt() {
+	local targetdir=$1
+	if [ -f "${encryption_key_file}" ]; then
+		xtrabackup --decrypt=AES256 --encrypt-key-file="${encryption_key_file}" --target-dir="${targetdir}" --parallel="${PARALLEL}"
+		find "${targetdir}" -name '*.xbcrypt' -delete
+	fi
+}
+
 get_keyring_arg() {
 	local keyring=""
 	if [[ -f ${KEYRING_VAULT_PATH} ]]; then
@@ -56,6 +66,8 @@ get_keyring_arg() {
 	echo "${keyring}"
 }
 
+
+
 restore_full() {
 	echo "Starting full restore ${RESTORE_NAME}"
 	echo "Restoring to backup: ${BACKUP_DEST}"
@@ -63,7 +75,9 @@ restore_full() {
 	rm -rf "${DATADIR:?}"/*
 	tmpdir=$(mktemp --directory "${DATADIR}/${RESTORE_NAME}_XXXX")
 
+	echo "Downloading backup: ${BACKUP_DEST}"
 	download "${BACKUP_DEST}" | extract "${tmpdir}"
+	decrypt "${tmpdir}"
 
 	# shellcheck disable=SC2086
 	xtrabackup --decompress --remove-original --parallel="${PARALLEL}" --target-dir="${tmpdir}" ${XB_EXTRA_ARGS}
@@ -93,6 +107,7 @@ restore_incremental() {
 	# Download and extract the base (full) backup
 	echo "Downloading base backup: ${BACKUP_DEST}"
 	download "${BACKUP_DEST}" | extract "${basedir}"
+	decrypt "${basedir}"
 
 	# shellcheck disable=SC2086
 	xtrabackup --decompress --remove-original --parallel="${PARALLEL}" --target-dir="${basedir}" ${XB_EXTRA_ARGS}
@@ -117,6 +132,8 @@ restore_incremental() {
 		incrdir=$(mktemp --directory "${DATADIR}/${RESTORE_NAME}_incr${count}_XXXX")
 
 		download "${incr_dest}" | extract "${incrdir}"
+		decrypt "${incrdir}"
+
 
 		# shellcheck disable=SC2086
 		xtrabackup --decompress --remove-original --parallel="${PARALLEL}" --target-dir="${incrdir}" ${XB_EXTRA_ARGS}

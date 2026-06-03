@@ -324,13 +324,6 @@ type BackupSpec struct {
 	EncryptionKeySecret *corev1.SecretKeySelector `json:"encryptionKeySecret,omitempty"`
 }
 
-func (s *BackupSpec) GetEncryptionKeySecret(storageName string) *corev1.SecretKeySelector {
-	if storage, ok := s.Storages[storageName]; ok && storage.EncryptionKeySecret != nil {
-		return storage.EncryptionKeySecret
-	}
-	return s.EncryptionKeySecret
-}
-
 type BackupSchedule struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name,omitempty"`

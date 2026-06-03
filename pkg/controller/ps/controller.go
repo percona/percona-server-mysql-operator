@@ -1721,6 +1721,11 @@ func readEncryptionKey(ctx context.Context, cl client.Client, sel corev1.SecretK
 	return value, nil
 }
 
+// Reconcile the internal encryption key secret for the backup.
+// TODO(mayank): Decide whether Secret updates should trigger SmartUpdate.
+//
+// Kubelet propagates mounted Secret changes eventually, so a backup started right
+// after an encryption key update may still read the previous key from the pod.
 func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1736,7 +1741,7 @@ func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx 
 		if err != nil {
 			return errors.Wrap(err, "read backup encryption key")
 		}
-		data[cr.GetName()] = key
+		data[naming.InternalEncryptionKeyFileName(cr.GetName(), "")] = key
 	}
 
 	for storageName, storage := range cr.Spec.Backup.Storages {
@@ -1748,7 +1753,7 @@ func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx 
 		if err != nil {
 			return errors.Wrap(err, "read backup encryption key")
 		}
-		data[cr.GetName()+"-"+storageName] = key
+		data[naming.InternalEncryptionKeyFileName(cr.GetName(), storageName)] = key
 	}
 
 	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {

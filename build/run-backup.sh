@@ -14,6 +14,7 @@ request_data() {
 				    "containerOptions": ${CONTAINER_OPTIONS},
 				    "verifyTLS": $(json_escape "${VERIFY_TLS}"),
 					"incrementalLsn": "$(json_escape "${INCREMENTAL_LSN}")",
+					"encryptionKeyFile": "$(json_escape "${ENCRYPTION_KEY_FILE}")",
 				    "s3": {
 				        "bucket": "$(json_escape "${S3_BUCKET}")",
 				        "endpointUrl": "$(json_escape "${AWS_ENDPOINT}")",
@@ -32,6 +33,7 @@ request_data() {
 				    "type": "$(json_escape "${STORAGE_TYPE}")",
 				    "containerOptions": ${CONTAINER_OPTIONS},
 					"incrementalLsn": "$(json_escape "${INCREMENTAL_LSN}")",
+					"encryptionKeyFile": "$(json_escape "${ENCRYPTION_KEY_FILE}")",
 				    "gcs": {
 				        "bucket": "$(json_escape "${GCS_BUCKET}")",
 				        "endpointUrl": "$(json_escape "${GCS_ENDPOINT}")",
@@ -50,6 +52,7 @@ request_data() {
 				    "type": "$(json_escape "${STORAGE_TYPE}")",
 				    "containerOptions": ${CONTAINER_OPTIONS},
 					"incrementalLsn": "$(json_escape "${INCREMENTAL_LSN}")",
+					"encryptionKeyFile": "$(json_escape "${ENCRYPTION_KEY_FILE}")",
 				    "azure": {
 				        "containerName": "$(json_escape "${AZURE_CONTAINER_NAME}")",
 				        "storageAccount": "$(json_escape "${AZURE_STORAGE_ACCOUNT}")",

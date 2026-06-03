@@ -223,6 +223,19 @@ spec:
                 type: array
               destination:
                 type: string
+              encryptionKeySecret:
+                properties:
+                  key:
+                    type: string
+                  name:
+                    default: ""
+                    type: string
+                  optional:
+                    type: boolean
+                required:
+                - key
+                type: object
+                x-kubernetes-map-type: atomic
               image:
                 type: string
               state:
@@ -863,6 +876,19 @@ spec:
                             type: string
                         type: object
                     type: object
+                  encryptionKeySecret:
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        default: ""
+                        type: string
+                      optional:
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
                   gcs:
                     properties:
                       bucket:
@@ -1308,6 +1334,19 @@ spec:
                     type: array
                   destination:
                     type: string
+                  encryptionKeySecret:
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        default: ""
+                        type: string
+                      optional:
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
                   image:
                     type: string
                   state:
@@ -1948,6 +1987,19 @@ spec:
                                 type: string
                             type: object
                         type: object
+                      encryptionKeySecret:
+                        properties:
+                          key:
+                            type: string
+                          name:
+                            default: ""
+                            type: string
+                          optional:
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
                       gcs:
                         properties:
                           bucket:
@@ -3853,6 +3905,19 @@ spec:
                     type: object
                   enabled:
                     type: boolean
+                  encryptionKeySecret:
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        default: ""
+                        type: string
+                      optional:
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
                   image:
                     type: string
                   imagePullPolicy:
@@ -5964,6 +6029,19 @@ spec:
                                   type: string
                               type: object
                           type: object
+                        encryptionKeySecret:
+                          properties:
+                            key:
+                              type: string
+                            name:
+                              default: ""
+                              type: string
+                            optional:
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
                         gcs:
                           properties:
                             bucket:
@@ -14496,7 +14574,7 @@ spec:
               fieldPath: metadata.namespace
         - name: DISABLE_TELEMETRY
           value: "false"
-        image: perconalab/percona-server-mysql-operator:main
+        image: asia-south1-docker.pkg.dev/cloud-dev-112233/mayankshah/ps-operator:K8SPS-409
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

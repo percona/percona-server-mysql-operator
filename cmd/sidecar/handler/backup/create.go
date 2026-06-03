@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -228,12 +229,23 @@ func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
 	if _, err := os.Stat(mysql.CustomMyCnfPath); err == nil {
 		args = append([]string{"--defaults-extra-file=" + mysql.CustomMyCnfPath}, args...)
 	}
+	if conf != nil && conf.EncryptionKeyFile != "" {
+		args = append(args, fmt.Sprintf("--encrypt-key-file=%s", conf.EncryptionKeyFile))
+	}
 	if conf != nil && conf.ContainerOptions != nil {
 		args = append(args, conf.ContainerOptions.Args.Xtrabackup...)
 	}
 	if conf != nil && conf.IncrementalLsn != "" {
 		args = append(args, fmt.Sprintf("--incremental-lsn=%s", conf.IncrementalLsn))
 	}
+
+	// Provide a default encryption algorithm if not specified.
+	if !slices.ContainsFunc(args, func(arg string) bool {
+		return strings.HasPrefix(arg, "--encrypt=")
+	}) {
+		args = append(args, "--encrypt=AES256")
+	}
+
 	return args
 }
 

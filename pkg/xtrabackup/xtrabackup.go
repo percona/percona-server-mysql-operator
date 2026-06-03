@@ -105,6 +105,25 @@ func trimJobName(name string) string {
 	return name
 }
 
+func encryptionKeyFileName(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQLBackup) string {
+	for storageName, storage := range cluster.Spec.Backup.Storages {
+		if storageName != cr.Spec.StorageName {
+			continue
+		}
+
+		if storage.EncryptionKeySecret != nil {
+			return naming.InternalEncryptionKeyFileName(cluster.GetName(), storageName)
+		}
+
+	}
+
+	if cluster.Spec.Backup.EncryptionKeySecret != nil {
+		return naming.InternalEncryptionKeyFileName(cluster.GetName(), "")
+	}
+
+	return ""
+}
+
 func Job(
 	cluster *apiv1.PerconaServerMySQL,
 	cr *apiv1.PerconaServerMySQLBackup,
@@ -222,7 +241,7 @@ func xtrabackupContainer(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaSer
 		return corev1.Container{}, errors.Wrap(err, "marshal container options")
 	}
 
-	return corev1.Container{
+	container := corev1.Container{
 		Name:            appName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
@@ -263,7 +282,19 @@ func xtrabackupContainer(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaSer
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          storage.ContainerSecurityContext,
 		Resources:                storage.Resources,
-	}, nil
+	}
+
+	if cluster.CompareVersion("1.2.0") >= 0 {
+		encryptionKeyFile := encryptionKeyFileName(cluster, cr)
+		if encryptionKeyFile != "" {
+			container.Env = append(container.Env, corev1.EnvVar{
+				Name:  "ENCRYPTION_KEY_FILE",
+				Value: path.Join("/etc/mysql/encryption-keys", encryptionKeyFile),
+			})
+		}
+	}
+
+	return container, nil
 }
 
 type XBCloudAction string
@@ -392,6 +423,7 @@ func RestoreJob(
 	storage *apiv1.BackupStorageSpec,
 	initImage string,
 	pvcName string,
+	encryptionKeySecret *corev1.SecretKeySelector,
 ) *batchv1.Job {
 	labels := util.SSMapMerge(cluster.GlobalLabels(), storage.Labels, restore.Labels(appName, naming.ComponentRestore))
 
@@ -497,6 +529,27 @@ func RestoreJob(
 					Optional:   ptr.To(true),
 				},
 			},
+		})
+	}
+
+	if encryptionKeySecret != nil {
+		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: "backup-encryption-keys",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: encryptionKeySecret.Name,
+					Items: []corev1.KeyToPath{
+						{
+							Key:  encryptionKeySecret.Key,
+							Path: "encryption-key",
+						},
+					},
+				},
+			},
+		})
+		job.Spec.Template.Spec.Containers[0].VolumeMounts = append(job.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+			Name:      "backup-encryption-keys",
+			MountPath: "/etc/mysql/encryption-keys",
 		})
 	}
 

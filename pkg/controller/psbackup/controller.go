@@ -347,12 +347,18 @@ func (r *PerconaServerMySQLBackupReconciler) prepareStatus(
 		return errors.Wrap(err, "get backup destination")
 	}
 
+	status.EncryptionKeySecret = cluster.Spec.Backup.EncryptionKeySecret
+	if storage.EncryptionKeySecret != nil {
+		status.EncryptionKeySecret = storage.EncryptionKeySecret
+	}
+
 	status.Destination = destination
 	status.Image = cluster.Spec.Backup.Image
 	status.Storage = storage
 	status.BackupSource = backupSource
 	status.Type = cr.Spec.Type
 	status.Compressed = cr.IsCompressed(storage, cluster.Spec.MySQL.Configuration)
+
 	return nil
 }
 
