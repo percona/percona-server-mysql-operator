@@ -10,5 +10,5 @@ commands:
 
       apply_crd
       apply_rbac
-      upgrade_operator_image ${IMAGE}
+      deploy_operator
       wait_deployment percona-server-mysql-operator ${OPERATOR_NS:-$NAMESPACE}
