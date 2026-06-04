@@ -16,6 +16,7 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 func TestGenerateBackupName(t *testing.T) {
@@ -156,6 +157,7 @@ func TestReconcileInternalEncryptionKeySecret(t *testing.T) {
 			UID:       types.UID("cluster1-uid"),
 		},
 		Spec: apiv1.PerconaServerMySQLSpec{
+			CRVersion: version.Version(),
 			Backup: &apiv1.BackupSpec{
 				EncryptionKeySecret: &apiv1.EncryptionKeySecretSelector{
 					Name: "cluster-key",
