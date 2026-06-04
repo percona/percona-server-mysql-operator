@@ -384,5 +384,8 @@ func getBackup(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMyS
 	if ok {
 		backup.Status.Storage = storage
 	}
+	if backup.Status.Storage.EncryptionKeySecret == nil {
+		backup.Status.Storage.EncryptionKeySecret = cluster.Spec.Backup.EncryptionKeySecret
+	}
 	return backup, nil
 }
