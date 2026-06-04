@@ -165,6 +165,10 @@ func enqueueClusterFromEncryptionKeySecret(c client.Client) handler.EventHandler
 
 		var requests []reconcile.Request
 		for _, cluster := range clusters.Items {
+			if cluster.Spec.Backup == nil {
+				continue
+			}
+
 			if cluster.Spec.Backup.EncryptionKeySecret != nil && cluster.Spec.Backup.EncryptionKeySecret.Name == secret.Name {
 				requests = append(requests, reconcile.Request{
 					NamespacedName: types.NamespacedName{
@@ -176,7 +180,7 @@ func enqueueClusterFromEncryptionKeySecret(c client.Client) handler.EventHandler
 			}
 
 			for _, storage := range cluster.Spec.Backup.Storages {
-				if storage.EncryptionKeySecret != nil && storage.EncryptionKeySecret.Name == secret.Name {
+				if storage != nil && storage.EncryptionKeySecret != nil && storage.EncryptionKeySecret.Name == secret.Name {
 					requests = append(requests, reconcile.Request{
 						NamespacedName: types.NamespacedName{
 							Name:      cluster.Name,

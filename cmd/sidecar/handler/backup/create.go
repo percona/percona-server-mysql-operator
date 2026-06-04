@@ -321,6 +321,9 @@ func awaitEncryptionKeyFile(ctx context.Context, log logr.Logger, file string) e
 	pCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		if _, err := os.Stat(file); err == nil {
 			return nil
@@ -329,9 +332,9 @@ func awaitEncryptionKeyFile(ctx context.Context, log logr.Logger, file string) e
 		select {
 		case <-pCtx.Done():
 			return pCtx.Err()
-		default:
+
+		case <-ticker.C:
 			log.Info("waiting for encryption key file to be created", "file", file)
-			time.Sleep(5 * time.Second)
 		}
 	}
 }
