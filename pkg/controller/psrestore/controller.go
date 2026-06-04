@@ -18,6 +18,7 @@ package psrestore
 
 import (
 	"context"
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -27,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -45,10 +47,12 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/pitr"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
+	utilk8s "github.com/percona/percona-server-mysql-operator/pkg/util/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 )
@@ -67,6 +71,7 @@ type PerconaServerMySQLRestoreReconciler struct {
 var ErrWaitingTermination error = errors.New("waiting for MySQL pods to terminate")
 
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqlrestores;perconaservermysqlrestores/status;perconaservermysqlrestores/finalizers,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -93,6 +98,14 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	defer func() {
+		switch status.State {
+		case apiv1.RestoreFailed, apiv1.RestoreSucceeded, apiv1.RestoreError:
+			if err := k8s.ReleaseLease(ctx, r.Client, naming.RestoreLeaseName(cr.Spec.ClusterName), naming.LeaseHolderName(cr.Name, string(cr.GetUID())), cr.Namespace); err != nil && !errors.Is(err, k8s.ErrLeaseAlreadyHeld) {
+				log.Error(err, "failed to release restore lease")
+			}
+		default:
+		}
+
 		if status.State == cr.Status.State && status.StateDesc == cr.Status.StateDesc {
 			return
 		}
@@ -130,6 +143,20 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 
 	switch status.State {
 	case apiv1.RestoreFailed, apiv1.RestoreSucceeded:
+		cluster := new(apiv1.PerconaServerMySQL)
+		nn := types.NamespacedName{Name: cr.Spec.ClusterName, Namespace: cr.Namespace}
+		if err := r.Get(ctx, nn, cluster); err != nil {
+			if k8serrors.IsNotFound(err) {
+				return ctrl.Result{}, nil
+			}
+			return ctrl.Result{}, errors.Wrapf(err, "get cluster %s", nn)
+		}
+		if err := cluster.CheckNSetDefaults(ctx, r.ServerVersion); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "check n set defaults")
+		}
+		if err := r.cleanupBackupSourceBinlogServer(ctx, cr, cluster); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "cleanup backup source binlog server")
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -147,23 +174,21 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, errors.Wrap(err, "check n set defaults")
 	}
 
-	restoreList := &apiv1.PerconaServerMySQLRestoreList{}
-	if err := r.List(ctx, restoreList, &client.ListOptions{Namespace: cr.Namespace}); err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "get restore jobs list")
+	if ok, err := r.tryAcquireLease(ctx, cr, &status); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "try to acquire lease")
+	} else if !ok {
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
-	for _, restore := range restoreList.Items {
-		if restore.Spec.ClusterName != cr.Spec.ClusterName || restore.Name == cr.Name {
-			continue
-		}
 
-		switch restore.Status.State {
-		case apiv1.RestoreSucceeded, apiv1.RestoreFailed, apiv1.RestoreError, apiv1.RestoreNew:
-		default:
-			status.State = apiv1.RestoreNew
-			status.StateDesc = fmt.Sprintf("PerconaServerMySQLRestore %s is already running", restore.Name)
-			log.Info("PerconaServerMySQLRestore is already running", "restore", restore.Name)
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-		}
+	backup, err := utilk8s.GetRunningBackup(ctx, r.Client, cr.Spec.ClusterName, cr.Namespace)
+	if err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "get running backups list")
+	}
+	if backup != nil {
+		status.State = apiv1.RestoreNew
+		status.StateDesc = fmt.Sprintf("PerconaServerMySQLBackup %s is still running", backup.Name)
+		log.Info("PerconaServerMySQLBackup is still running", "backup", backup.Name)
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	if err := r.validate(ctx, cr, cluster); err != nil {
@@ -181,17 +206,41 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	defer r.sm.Delete(cr.Spec.ClusterName)
 
 	if cr.Spec.PITR != nil {
-		if !cluster.Spec.Backup.PiTR.Enabled || cluster.Spec.Backup.PiTR.BinlogServer == nil {
+		if (!cluster.Spec.Backup.PiTR.Enabled || cluster.Spec.Backup.PiTR.BinlogServer == nil) && restoreBinlogServer(cr) == nil {
 			status.State = apiv1.RestoreError
 			status.StateDesc = "Binlog server is not enabled for the cluster"
 			return ctrl.Result{}, nil
 		}
 
 		status.State = apiv1.RestoreStarting
-		if err := r.reconcilePITRConfig(ctx, cr, cluster); err != nil {
-			status.State = apiv1.RestoreError
-			status.StateDesc = errors.Wrap(err, "reconcile pitr config").Error()
-			return ctrl.Result{}, nil
+
+		pitrConfigExists, err := r.pitrConfigExists(ctx, cr, cluster)
+		if err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "check pitr config")
+		}
+		if !pitrConfigExists {
+			if err := r.reconcileBackupSourceBinlogServer(ctx, cr, cluster); err != nil {
+				status.State = apiv1.RestoreError
+				status.StateDesc = errors.Wrap(err, "reconcile backup source binlog server").Error()
+				return ctrl.Result{}, nil
+			}
+
+			running, err := r.isBinlogServerRunning(ctx, cr, cluster)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "is binlog server running")
+			}
+			if !running {
+				log.Info("Waiting for binlog server pod")
+				return ctrl.Result{
+					RequeueAfter: 5 * time.Second,
+				}, nil
+			}
+
+			if err := r.reconcilePITRConfig(ctx, cr, cluster); err != nil {
+				status.State = apiv1.RestoreError
+				status.StateDesc = errors.Wrap(err, "reconcile pitr config").Error()
+				return ctrl.Result{}, nil
+			}
 		}
 		status.StateDesc = ""
 	}
@@ -281,10 +330,153 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		if err := r.unpauseCluster(ctx, cluster); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "unpause cluster")
 		}
+		if err := r.cleanupBackupSourceBinlogServer(ctx, cr, cluster); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "cleanup backup source binlog server")
+		}
 		log.Info("PerconaServerMySQLRestore is finished", "restore", cr.Name, "cluster", cluster.Name)
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) isBinlogServerRunning(ctx context.Context,
+	cr *apiv1.PerconaServerMySQLRestore,
+	cluster *apiv1.PerconaServerMySQL,
+) (bool, error) {
+	nn := types.NamespacedName{
+		Namespace: cluster.Namespace,
+		Name:      binlogserver.BinlogServerPodName(cluster, cr),
+	}
+
+	pod := &corev1.Pod{}
+	err := r.Get(ctx, nn, pod)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return k8s.IsPodReady(*pod), nil
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) reconcileBackupSourceBinlogServer(ctx context.Context,
+	cr *apiv1.PerconaServerMySQLRestore,
+	cluster *apiv1.PerconaServerMySQL,
+) error {
+	if cr.Spec.PITR == nil || restoreBinlogServer(cr) == nil {
+		return nil
+	}
+
+	spec := restoreBinlogServer(cr).DeepCopy()
+	if spec.Image == "" && cluster.Spec.Backup.PiTR.BinlogServer != nil {
+		spec.Image = cluster.Spec.Backup.PiTR.BinlogServer.Image
+	}
+	if spec.Image == "" {
+		return errors.New("binlogServer.image is not specified")
+	}
+	spec.SetDefaults()
+
+	config, err := binlogserver.GetConfiguration(ctx, r.Client, cluster, spec)
+	if err != nil {
+		return errors.Wrap(err, "configuration from spec")
+	}
+
+	configSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        binlogserver.RestoreConfigSecretName(cluster, cr),
+			Namespace:   cluster.Namespace,
+			Labels:      cluster.GlobalLabels(),
+			Annotations: cluster.GlobalAnnotations(),
+		},
+	}
+
+	configBytes, err := json.Marshal(config)
+	if err != nil {
+		return errors.Wrap(err, "marshal binlog server config")
+	}
+
+	configSecret.Data = map[string][]byte{
+		binlogserver.ConfigKey: configBytes,
+	}
+	if err := controllerutil.SetOwnerReference(cr, configSecret, r.Scheme); err != nil {
+		return errors.Wrap(err, "set owner reference")
+	}
+
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, configSecret, r.Scheme); err != nil {
+		return errors.Wrap(err, "reconcile secret")
+	}
+
+	initImage, err := k8s.InitImage(ctx, r.Client, cluster, &spec.PodSpec)
+	if err != nil {
+		return errors.Wrap(err, "get init image")
+	}
+
+	sts := binlogserver.StatefulSet(cluster, spec, binlogserver.RestoreMatchLabels(cluster, cr), initImage, fmt.Sprintf("%x", md5.Sum(configBytes)), binlogserver.RestoreConfigSecretName(cluster, cr))
+	sts.Name = binlogserver.RestoreName(cluster, cr)
+	sts.Spec.Template.Spec.Containers[0].Command = []string{"sleep"}
+	sts.Spec.Template.Spec.Containers[0].Args = []string{"infinity"}
+	sts.Spec.Template.Spec.TerminationGracePeriodSeconds = new(int64(5))
+
+	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, sts, r.Scheme)
+	if err != nil {
+		return errors.Wrap(err, "reconcile statefulset")
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) cleanupBackupSourceBinlogServer(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLRestore,
+	cluster *apiv1.PerconaServerMySQL,
+) error {
+	if restoreBinlogServer(cr) == nil {
+		return nil
+	}
+
+	if err := r.Delete(ctx, &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      binlogserver.RestoreName(cluster, cr),
+			Namespace: cluster.Namespace,
+		},
+	}); err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "delete statefulset")
+	}
+
+	if err := r.Delete(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      binlogserver.RestoreConfigSecretName(cluster, cr),
+			Namespace: cluster.Namespace,
+		},
+	}); err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "delete config secret")
+	}
+
+	return nil
+}
+
+func restoreBinlogServer(cr *apiv1.PerconaServerMySQLRestore) *apiv1.BinlogServerSpec {
+	if cr.Spec.PITR == nil || cr.Spec.PITR.BackupSource == nil {
+		return nil
+	}
+	return cr.Spec.PITR.BackupSource.BinlogServer
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) pitrConfigExists(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLRestore,
+	cluster *apiv1.PerconaServerMySQL,
+) (bool, error) {
+	cm := pitr.BinlogsConfigMap(cluster, cr)
+	err := r.Get(ctx, client.ObjectKeyFromObject(cm), new(corev1.ConfigMap))
+	if err == nil {
+		return true, nil
+	}
+	if k8serrors.IsNotFound(err) {
+		return false, nil
+	}
+	return false, err
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRConfig(
@@ -397,9 +589,9 @@ func (r *PerconaServerMySQLRestoreReconciler) searchBinlogs(
 	switch cr.Spec.PITR.Type {
 	case apiv1.PITRDate:
 		ts := strings.Replace(cr.Spec.PITR.Date, " ", "T", 1)
-		resp, err = binlogserver.SearchByTimestamp(ctx, r.Client, r.ClientCmd, cluster, ts)
+		resp, err = binlogserver.SearchByTimestamp(ctx, r.Client, r.ClientCmd, cluster, cr, ts)
 	case apiv1.PITRGtid:
-		resp, err = binlogserver.SearchByGTID(ctx, r.Client, r.ClientCmd, cluster, cr.Spec.PITR.GTID)
+		resp, err = binlogserver.SearchByGTID(ctx, r.Client, r.ClientCmd, cluster, cr, cr.Spec.PITR.GTID)
 	default:
 		return nil, errors.Errorf("unknown PITR type: %s", cr.Spec.PITR.Type)
 	}
@@ -594,4 +786,42 @@ func (r *PerconaServerMySQLRestoreReconciler) validate(ctx context.Context, cr *
 	}
 
 	return nil
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) tryAcquireLease(ctx context.Context, cr *apiv1.PerconaServerMySQLRestore, status *apiv1.PerconaServerMySQLRestoreStatus) (bool, error) {
+	log := logf.FromContext(ctx).WithName("tryAcquireLease")
+
+	leaseHolder := naming.LeaseHolderName(cr.Name, string(cr.GetUID()))
+	activeRestore := ""
+	checkStale := func(ctx context.Context, lease *coordv1.Lease) (bool, error) {
+		if lease.Spec.HolderIdentity == nil {
+			return true, nil
+		}
+		restoreName, restoreUID := naming.ParseLeaseHolder(*lease.Spec.HolderIdentity)
+		if restoreName == "" || restoreUID == "" {
+			log.Info("Restore lease holder is malformed, acquiring lease anyway")
+			return true, nil
+		}
+		if *lease.Spec.HolderIdentity == leaseHolder {
+			return true, nil
+		}
+		activeRestore = restoreName
+		active, err := utilk8s.IsRestoreActive(ctx, r.Client, restoreName, lease.Namespace)
+		if err != nil {
+			return false, err
+		}
+		return !active, nil
+	}
+
+	if err := k8s.AcquireLease(ctx, r.Client, naming.RestoreLeaseName(cr.Spec.ClusterName), leaseHolder, cr.Namespace, checkStale); err != nil {
+		if errors.Is(err, k8s.ErrLeaseAlreadyHeld) || k8serrors.IsAlreadyExists(err) || k8serrors.IsConflict(err) {
+			status.State = apiv1.RestoreNew
+			status.StateDesc = fmt.Sprintf("PerconaServerMySQLRestore %s is already running", activeRestore)
+			log.Info("PerconaServerMySQLRestore is already running", "restore", activeRestore)
+			return false, nil
+		} else {
+			return false, errors.Wrap(err, "failed to acquire lease")
+		}
+	}
+	return true, nil
 }

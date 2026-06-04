@@ -1540,8 +1540,6 @@ spec:
                         type: boolean
                     type: object
                     x-kubernetes-validations:
-                    - message: binlogServer is required when pitr is enabled
-                      rule: '!(has(self.enabled) && self.enabled) || has(self.binlogServer)'
                     - message: binlogServer.image is required when pitr is enabled
                       rule: '!(has(self.enabled) && self.enabled) || !has(self.binlogServer)
                         || (has(self.binlogServer.image) && self.binlogServer.image

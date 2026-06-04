@@ -21,7 +21,6 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"path"
 	"slices"
 	"strconv"
@@ -45,7 +44,9 @@ import (
 	k8sretry "k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
@@ -60,7 +61,6 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
-	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
@@ -88,10 +88,63 @@ type PerconaServerMySQLReconciler struct {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PerconaServerMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := setupFieldIndexers(mgr); err != nil {
+		return errors.Wrap(err, "setup field indexers")
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1.PerconaServerMySQL{}).
+		Watches(&corev1.Secret{}, enqueueClusterFromSecretsName(r.Client)).
 		Named("ps-controller").
 		Complete(r)
+}
+
+const (
+	fieldSecretsName = ".spec.secretsName"
+)
+
+func setupFieldIndexers(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &apiv1.PerconaServerMySQL{}, fieldSecretsName, func(o client.Object) []string {
+		cluster, ok := o.(*apiv1.PerconaServerMySQL)
+		if !ok {
+			return nil
+		}
+
+		if cluster.Spec.SecretsName == "" {
+			return []string{cluster.DefaultSecretName()}
+		}
+		return []string{cluster.Spec.SecretsName}
+	}); err != nil {
+		return errors.Wrapf(err, "index field %s", fieldSecretsName)
+	}
+	return nil
+}
+
+func enqueueClusterFromSecretsName(c client.Client) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+		secret, ok := o.(*corev1.Secret)
+		if !ok {
+			return nil
+		}
+		clusters := &apiv1.PerconaServerMySQLList{}
+		log := logf.FromContext(ctx)
+		if err := c.List(ctx, clusters, client.InNamespace(secret.Namespace), client.MatchingFields{
+			fieldSecretsName: secret.Name,
+		}); err != nil {
+			log.Error(err, "failed to list clusters for secret", "secret", secret.Name)
+			return nil
+		}
+
+		var requests []reconcile.Request
+		for _, cluster := range clusters.Items {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      cluster.Name,
+					Namespace: cluster.Namespace,
+				},
+			})
+		}
+		return requests
+	})
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -381,7 +434,8 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPvc(ctx context.Context, cr *a
 
 	list := corev1.PersistentVolumeClaimList{}
 
-	err := r.Client.List(ctx,
+	err := r.List(
+		ctx,
 		&list,
 		&client.ListOptions{
 			Namespace:     cr.Namespace,
@@ -432,10 +486,11 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcileVersions(ctx, cr); err != nil {
 		log.Error(err, "failed to reconcile versions")
 	}
-	if err := r.ensureUserSecrets(ctx, cr); err != nil {
+	userSecret, err := r.ensureUserSecrets(ctx, cr)
+	if err != nil {
 		return errors.Wrap(err, "users secret")
 	}
-	if err := r.reconcileUsers(ctx, cr); err != nil {
+	if err := r.reconcileUsers(ctx, cr, userSecret); err != nil {
 		return errors.Wrap(err, "users")
 	}
 	if err := r.ensureTLSSecret(ctx, cr); err != nil {
@@ -1301,40 +1356,19 @@ func binlogServerSSLConfig(sslMode string) *binlogserver.ConnectionSSL {
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
-	if !cr.Spec.Backup.PiTR.Enabled || cr.Spec.Pause {
+	if !cr.Spec.Backup.PiTR.Enabled || cr.Spec.Backup.PiTR.BinlogServer == nil || cr.Spec.Pause {
 		return nil
 	}
 
 	logger := logf.FromContext(ctx).WithName("BinlogServer")
 
-	s3 := cr.Spec.Backup.PiTR.BinlogServer.Storage.S3
-
-	if s3 == nil || len(s3.CredentialsSecret) == 0 {
-		logger.Info("setting spec.backup.pitr.binlogServer.s3.credentialsSecret is required to upload binlogs to s3")
-		return nil
-	}
-
-	s3Secret := corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Spec.Backup.PiTR.BinlogServer.Storage.S3.CredentialsSecret,
-			Namespace: cr.Namespace,
-		},
-	}
-	if err := r.Client.Get(ctx, client.ObjectKeyFromObject(&s3Secret), &s3Secret); err != nil {
-		return errors.Wrap(err, "get s3 credentials secret")
-	}
-
-	accessKey := s3Secret.Data[secret.CredentialsAWSAccessKey]
-	secretKey := s3Secret.Data[secret.CredentialsAWSSecretKey]
-
-	s3Uri, err := s3URI(*s3, accessKey, secretKey)
+	config, err := binlogserver.GetConfiguration(ctx, r.Client, cr, cr.Spec.Backup.PiTR.BinlogServer)
 	if err != nil {
-		return errors.Wrap(err, "get s3 uri")
-	}
-
-	replPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserReplication)
-	if err != nil {
-		return errors.Wrap(err, "get replication password")
+		if errors.Is(err, binlogserver.ErrNoCredentials) {
+			logger.Info("setting spec.backup.pitr.binlogServer.storage.s3.credentialsSecret is required to upload binlogs to s3")
+			return nil
+		}
+		return errors.Wrap(err, "configuration from spec")
 	}
 
 	configSecret := corev1.Secret{
@@ -1346,40 +1380,6 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 		},
 	}
 	configSecret.Data = make(map[string][]byte)
-
-	config := binlogserver.Configuration{
-		Logger: binlogserver.Logger{
-			Level: cr.Spec.Backup.PiTR.BinlogServer.LogLevel,
-			File:  "/dev/stdout",
-		},
-		Connection: binlogserver.Connection{
-			Host:           fmt.Sprintf("%s.%s", mysql.PrimaryServiceName(cr), cr.Namespace),
-			Port:           3306,
-			User:           string(apiv1.UserReplication),
-			Password:       replPass,
-			ConnectTimeout: cr.Spec.Backup.PiTR.BinlogServer.ConnectTimeout,
-			WriteTimeout:   cr.Spec.Backup.PiTR.BinlogServer.WriteTimeout,
-			ReadTimeout:    cr.Spec.Backup.PiTR.BinlogServer.ReadTimeout,
-			SSL:            binlogServerSSLConfig(cr.Spec.Backup.PiTR.BinlogServer.SSLMode),
-		},
-		Replication: binlogserver.Replication{
-			Mode:           binlogserver.ReplicationModeGTID,
-			ServerID:       cr.Spec.Backup.PiTR.BinlogServer.ServerID,
-			IdleTime:       cr.Spec.Backup.PiTR.BinlogServer.IdleTime,
-			VerifyChecksum: true,
-			Rewrite: binlogserver.Rewrite{
-				BaseFileName: "binlog",
-				FileSize:     cr.Spec.Backup.PiTR.BinlogServer.RewriteFileSize,
-			},
-		},
-		Storage: binlogserver.Storage{
-			Backend:            "s3",
-			URI:                s3Uri,
-			CheckpointSize:     cr.Spec.Backup.PiTR.BinlogServer.CheckpointSize,
-			CheckpointInterval: cr.Spec.Backup.PiTR.BinlogServer.CheckpointInterval,
-			FsBufferDirectory:  binlogserver.BufferMountPath,
-		},
-	}
 
 	configBytes, err := json.Marshal(config)
 	if err != nil {
@@ -1406,7 +1406,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 		return errors.Wrap(err, "get init image")
 	}
 
-	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, binlogserver.StatefulSet(cr, initImage, fmt.Sprintf("%x", md5.Sum(configBytes))), r.Scheme)
+	err = k8s.EnsureObjectWithHash(ctx, r.Client, cr, binlogserver.StatefulSet(cr, cr.Spec.Backup.PiTR.BinlogServer, binlogserver.MatchLabels(cr), initImage, fmt.Sprintf("%x", md5.Sum(configBytes)), ""), r.Scheme)
 	if err != nil {
 		return errors.Wrap(err, "reconcile statefulset")
 	}
@@ -1415,7 +1415,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 }
 
 func (r *PerconaServerMySQLReconciler) cleanupBinlogServer(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
-	if cr.Spec.Backup.PiTR.Enabled && !cr.Spec.Pause {
+	if cr.Spec.Backup.PiTR.Enabled && cr.Spec.Backup.PiTR.BinlogServer != nil && !cr.Spec.Pause {
 		return nil
 	}
 
@@ -1693,26 +1693,4 @@ func getPodIndexFromHostname(hostname string) (int, error) {
 	}
 
 	return idx, nil
-}
-
-func s3URI(s3 apiv1.BackupStorageS3Spec, accessKey, secretKey []byte) (string, error) {
-	bucket := string(s3.Bucket)
-	if len(s3.Region) > 0 {
-		bucket = fmt.Sprintf("%s.%s", s3.Bucket, s3.Region)
-	}
-	encodedAccessKey := url.QueryEscape(string(accessKey))
-	encodedSecretKey := url.QueryEscape(string(secretKey))
-	uri := fmt.Sprintf("s3://%s:%s@%s", encodedAccessKey, encodedSecretKey, bucket)
-	if len(s3.EndpointURL) != 0 {
-		protocol, host, err := parseEndpointURL(s3.EndpointURL)
-		if err != nil {
-			return "", errors.Wrap(err, "parse endpoint URL")
-		}
-		uri = fmt.Sprintf("%s://%s:%s@%s/%s", protocol, encodedAccessKey, encodedSecretKey, host, s3.Bucket)
-	}
-	if len(s3.Prefix) > 0 {
-		uri += fmt.Sprintf("/%s", s3.Prefix)
-	}
-
-	return uri, nil
 }

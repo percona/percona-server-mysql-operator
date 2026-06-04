@@ -34,16 +34,16 @@ type BinlogEntry struct {
 	MaxTimestamp  string `json:"max_timestamp"`
 }
 
-func SearchByGTID(ctx context.Context, cl client.Client, cliCmd clientcmd.Client, cr *apiv1.PerconaServerMySQL, gtidSet string) (*SearchResponse, error) {
-	return execSearch(ctx, cl, cliCmd, cr, "search_by_gtid_set", gtidSet)
+func SearchByGTID(ctx context.Context, cl client.Client, cliCmd clientcmd.Client, cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore, gtidSet string) (*SearchResponse, error) {
+	return execSearch(ctx, cl, cliCmd, cr, restore, "search_by_gtid_set", gtidSet)
 }
 
-func SearchByTimestamp(ctx context.Context, cl client.Client, cliCmd clientcmd.Client, cr *apiv1.PerconaServerMySQL, timestamp string) (*SearchResponse, error) {
-	return execSearch(ctx, cl, cliCmd, cr, "search_by_timestamp", timestamp)
+func SearchByTimestamp(ctx context.Context, cl client.Client, cliCmd clientcmd.Client, cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore, timestamp string) (*SearchResponse, error) {
+	return execSearch(ctx, cl, cliCmd, cr, restore, "search_by_timestamp", timestamp)
 }
 
-func execSearch(ctx context.Context, cl client.Client, cliCmd clientcmd.Client, cr *apiv1.PerconaServerMySQL, subcommand, arg string) (*SearchResponse, error) {
-	pod, err := getBinlogServerPod(ctx, cl, cr)
+func execSearch(ctx context.Context, cl client.Client, cliCmd clientcmd.Client, cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore, subcommand, arg string) (*SearchResponse, error) {
+	pod, err := GetBinlogServerPod(ctx, cl, cr, restore)
 	if err != nil {
 		return nil, errors.Wrap(err, "get binlog server pod")
 	}
@@ -64,10 +64,10 @@ func execSearch(ctx context.Context, cl client.Client, cliCmd clientcmd.Client, 
 	return &resp, nil
 }
 
-func getBinlogServerPod(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL) (*corev1.Pod, error) {
+func GetBinlogServerPod(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) (*corev1.Pod, error) {
 	nn := types.NamespacedName{
 		Namespace: cr.Namespace,
-		Name:      Name(cr) + "-0",
+		Name:      BinlogServerPodName(cr, restore),
 	}
 
 	pod := &corev1.Pod{}
@@ -80,4 +80,12 @@ func getBinlogServerPod(ctx context.Context, cl client.Client, cr *apiv1.Percona
 	}
 
 	return pod, nil
+}
+
+func BinlogServerPodName(cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore) string {
+	if restore != nil && restore.Spec.PITR != nil && restore.Spec.PITR.BackupSource != nil && restore.Spec.PITR.BackupSource.BinlogServer != nil {
+		return RestoreName(cr, restore) + "-0"
+	}
+
+	return Name(cr) + "-0"
 }
