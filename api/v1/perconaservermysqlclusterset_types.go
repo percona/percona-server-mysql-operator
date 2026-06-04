@@ -259,7 +259,7 @@ func (pcs *PerconaServerMySQLClusterSet) UpdateStatus(ctx context.Context, cl cl
 		if err := mutate(&actual.Status); err != nil {
 			return err
 		}
-		actual.Status.ObservedGeneration = pcs.Generation
+		actual.Status.ObservedGeneration = actual.Generation
 		actual.Status.LastObservedAt = metav1.Now()
 
 		return cl.Status().Update(ctx, actual)

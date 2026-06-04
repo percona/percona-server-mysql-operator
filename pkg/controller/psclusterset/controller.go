@@ -540,7 +540,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Con
 			readyCond.Reason = "ClusterSetNotHealthy"
 
 			// Emit an event when we transition from healthy to unhealthy
-			currentCond := meta.FindStatusCondition(pcs.Status.Conditions, apiv1.ConditionClusterSetReady)
+			currentCond := meta.FindStatusCondition(status.Conditions, apiv1.ConditionClusterSetReady)
 			if currentCond == nil || currentCond.Status == metav1.ConditionTrue {
 				events = append(events, func() {
 					r.Recorder.Eventf(pcs, nil, corev1.EventTypeWarning, apiv1.EventTypeClusterSetUnhealthy,
