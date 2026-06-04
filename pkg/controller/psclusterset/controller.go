@@ -443,9 +443,9 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileSwitchover(ctx context
 	log.Info("Switching primary cluster", "from", pcs.Status.PrimaryCluster, "to", pcs.Spec.PrimaryCluster)
 
 	var cluster *apiv1.ClusterSetCluster
-	for _, c := range pcs.Spec.Clusters {
-		if c.Name == pcs.Spec.PrimaryCluster {
-			cluster = &c
+	for i := range pcs.Spec.Clusters {
+		if pcs.Spec.Clusters[i].Name == pcs.Spec.PrimaryCluster {
+			cluster = &pcs.Spec.Clusters[i]
 			break
 		}
 	}
@@ -569,8 +569,10 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileStatus(ctx context.Con
 
 		// Emit an event when the primary cluster is switched
 		if status.PrimaryCluster != "" && status.PrimaryCluster != observedStatus.PrimaryCluster {
+			oldPrimaryCluster := status.PrimaryCluster
+			newPrimaryCluster := observedStatus.PrimaryCluster
 			events = append(events, func() {
-				r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetPrimarySwitched, apiv1.EventTypeClusterSetPrimarySwitched, "Primary cluster switched from %s to %s", pcs.Status.PrimaryCluster, observedStatus.PrimaryCluster)
+				r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetPrimarySwitched, apiv1.EventTypeClusterSetPrimarySwitched, "Primary cluster switched from %s to %s", oldPrimaryCluster, newPrimaryCluster)
 			})
 		}
 

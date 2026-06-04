@@ -248,7 +248,7 @@ func (m *MysqlshExec) ClusterSetStatusWithExec(ctx context.Context) (clusterset.
 	stdoutBuffer := bytes.Buffer{}
 	stderrBuffer := bytes.Buffer{}
 
-	c := []string{"mysqlsh", "--result-format", "json", "--js", "--uri", m.uri, "-e", "print(dba.getCluster().getClusterSet().status())"}
+	c := []string{"mysqlsh", "--result-format", "json", "--js", "--uri", m.uri, "-e", "print(JSON.stringify(dba.getCluster().getClusterSet().status()))"}
 	err := m.client.Exec(ctx, m.pod, m.containerName, c, nil, &stdoutBuffer, &stderrBuffer, false)
 	if err != nil {
 		sout := sensitiveRegexp.ReplaceAllString(stdoutBuffer.String(), ":*****@")
