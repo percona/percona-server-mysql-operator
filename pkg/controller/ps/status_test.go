@@ -1273,6 +1273,7 @@ func TestReconcileStatusBinlogServer(t *testing.T) {
 	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
 	cr.Spec.UpdateStrategy = appsv1.OnDeleteStatefulSetStrategyType
 	cr.Spec.Backup.PiTR.Enabled = true
+	cr.Spec.Backup.PiTR.BinlogServer = &apiv1.BinlogServerSpec{}
 
 	scheme := runtime.NewScheme()
 	require.NoError(t, clientgoscheme.AddToScheme(scheme))
