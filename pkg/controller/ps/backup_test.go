@@ -157,18 +157,15 @@ func TestReconcileInternalEncryptionKeySecret(t *testing.T) {
 		},
 		Spec: apiv1.PerconaServerMySQLSpec{
 			Backup: &apiv1.BackupSpec{
-				EncryptionKeySecret: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "cluster-key",
-					},
+				EncryptionKeySecret: &apiv1.EncryptionKeySecretSelector{
+					Name: "cluster-key",
+					Key:  "encryptionKey",
 				},
 				Storages: map[string]*apiv1.BackupStorageSpec{
 					"s3": {
-						EncryptionKeySecret: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: "storage-key",
-							},
-							Key: "custom-key",
+						EncryptionKeySecret: &apiv1.EncryptionKeySecretSelector{
+							Name: "storage-key",
+							Key:  "custom-key",
 						},
 					},
 					"without-key": {},

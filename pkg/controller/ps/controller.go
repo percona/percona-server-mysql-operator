@@ -1745,7 +1745,7 @@ func getPodIndexFromHostname(hostname string) (int, error) {
 	return idx, nil
 }
 
-func readEncryptionKey(ctx context.Context, cl client.Client, sel corev1.SecretKeySelector, namespace string) ([]byte, error) {
+func readEncryptionKey(ctx context.Context, cl client.Client, sel apiv1.EncryptionKeySecretSelector, namespace string) ([]byte, error) {
 	key := sel.Key
 	if key == "" {
 		key = "encryptionKey"

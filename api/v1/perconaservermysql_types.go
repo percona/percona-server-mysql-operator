@@ -302,6 +302,15 @@ type PMMSpec struct {
 	ReadinessProbe           *corev1.Probe               `json:"readinessProbe,omitempty"`
 }
 
+type EncryptionKeySecretSelector struct {
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:=encryptionKey
+	Key string `json:"key,omitempty"`
+}
+
 type BackupSpec struct {
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	SourcePod                string                        `json:"sourcePod,omitempty"`
@@ -321,7 +330,7 @@ type BackupSpec struct {
 	InitContainer *InitContainerSpec `json:"initContainer,omitempty"`
 
 	// EncryptionKeySecret is the secret key selector for the backup encryption key.
-	EncryptionKeySecret *corev1.SecretKeySelector `json:"encryptionKeySecret,omitempty"`
+	EncryptionKeySecret *EncryptionKeySecretSelector `json:"encryptionKeySecret,omitempty"`
 }
 
 type BackupSchedule struct {
@@ -381,7 +390,7 @@ type BackupStorageSpec struct {
 	// EncryptionKeySecret is the secret key selector for the backup encryption key.
 	// This takes precedence over the encryption key secret in the backup spec.
 	// +optional
-	EncryptionKeySecret *corev1.SecretKeySelector `json:"encryptionKeySecret,omitempty"`
+	EncryptionKeySecret *EncryptionKeySecretSelector `json:"encryptionKeySecret,omitempty"`
 }
 
 type BackupContainerOptions struct {
