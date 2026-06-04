@@ -162,33 +162,6 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		restartPMM          bool
 	)
 
-	updatedUsers := make([]mysql.User, 0)
-	for user, pass := range secret.Data {
-		if bytes.Equal(pass, internalSecret.Data[user]) {
-			log.V(1).Info("User password is up to date", "user", user)
-			continue
-		}
-
-		mysqlUser := allUsers[apiv1.SystemUser(user)]
-		mysqlUser.Password = string(pass)
-
-		switch apiv1.SystemUser(user) {
-		case apiv1.UserMonitor:
-			restartMySQL = cr.PMMEnabled(internalSecret)
-		case apiv1.UserPMMServerToken:
-			restartPMM = cr.PMMEnabled(internalSecret)
-			continue // PMM server user credentials are not stored in db
-		case apiv1.UserReplication:
-			restartReplication = true
-		case apiv1.UserOrchestrator:
-			restartOrchestrator = true && cr.Spec.MySQL.IsAsync()
-		}
-
-		log.V(1).Info("User password changed", "user", user)
-
-		updatedUsers = append(updatedUsers, mysqlUser)
-	}
-
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
 	if err != nil {
 		return errors.Wrap(err, "get operator password")
@@ -210,6 +183,42 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	}
 
 	um := db.NewUserManager(primPod, r.ClientCmd, apiv1.UserOperator, operatorPass, primaryHost)
+
+	updatedUsers := make([]mysql.User, 0)
+	for user, pass := range secret.Data {
+		if bytes.Equal(pass, internalSecret.Data[user]) {
+			log.V(1).Info("User password is up to date", "user", user)
+			continue
+		}
+
+		mysqlUser := allUsers[apiv1.SystemUser(user)]
+		mysqlUser.Password = string(pass)
+
+		switch apiv1.SystemUser(user) {
+		case apiv1.UserMonitor:
+			restartMySQL = cr.PMMEnabled(internalSecret)
+		case apiv1.UserPMMServerToken:
+			restartPMM = cr.PMMEnabled(internalSecret)
+			continue // PMM server user credentials are not stored in db
+		case apiv1.UserReplication:
+			restartReplication = true
+		case apiv1.UserOrchestrator:
+			restartOrchestrator = true && cr.Spec.MySQL.IsAsync()
+		case apiv1.UserClusterSet:
+			// The clusterset user was introduced in 1.2.0 and the entrypoint
+			// creates users only on initial datadir initialization. On clusters
+			// upgraded from older versions the user doesn't exist in MySQL yet,
+			// making the ALTER USER below fail with ERROR 1396. Create it
+			// idempotently before updating passwords.
+			if err := um.CreateClusterSetUser(ctx, mysqlUser.Password); err != nil {
+				return errors.Wrap(err, "create clusterset user")
+			}
+		}
+
+		log.V(1).Info("User password changed", "user", user)
+
+		updatedUsers = append(updatedUsers, mysqlUser)
+	}
 
 	var asyncPrimary *orchestrator.Instance
 
