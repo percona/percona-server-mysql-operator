@@ -113,7 +113,7 @@ func encryptionKeyFileName(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaS
 			continue
 		}
 
-		if storage.EncryptionKeySecret != nil {
+		if storage != nil && storage.EncryptionKeySecret != nil {
 			return naming.InternalEncryptionKeyFileName(cluster.GetName(), storageName)
 		}
 
@@ -291,7 +291,7 @@ func xtrabackupContainer(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaSer
 		if encryptionKeyFile != "" {
 			container.Env = append(container.Env, corev1.EnvVar{
 				Name:  "ENCRYPTION_KEY_FILE",
-				Value: path.Join("/etc/mysql/encryption-keys", encryptionKeyFile),
+				Value: path.Join(encryptionKeysMountPath, encryptionKeyFile),
 			})
 		}
 	}

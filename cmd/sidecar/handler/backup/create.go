@@ -65,7 +65,7 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	// Wait for kubelet to propogate the encryption key file to the pod.
+	// Wait for kubelet to propagate the encryption key file to the pod.
 	if backupConf.EncryptionKeyFile != "" {
 		if err := awaitEncryptionKeyFile(req.Context(), log, backupConf.EncryptionKeyFile); err != nil {
 			log.Error(err, "failed to await encryption key file")
@@ -235,9 +235,10 @@ func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
 	}
 
 	// Provide a default encryption algorithm if not specified.
-	if !slices.ContainsFunc(args, func(arg string) bool {
+	encryptionAlgoSpecified := slices.ContainsFunc(args, func(arg string) bool {
 		return strings.HasPrefix(arg, "--encrypt=")
-	}) {
+	})
+	if conf.EncryptionKeyFile != "" && !encryptionAlgoSpecified {
 		args = append(args, "--encrypt=AES256")
 	}
 
@@ -321,7 +322,7 @@ func getSecret(username apiv1.SystemUser) (string, error) {
 
 // awaitEncryptionKeyFile waits for the encryption key file to be created.
 // If the backup is created soon after the encryption secret was configured,
-// we need to wait for kubelet to propogate the secret to the file mounted on the pod.
+// we need to wait for kubelet to propagate the secret to the file mounted on the pod.
 func awaitEncryptionKeyFile(ctx context.Context, log logr.Logger, file string) error {
 	pCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()

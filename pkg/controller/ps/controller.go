@@ -95,6 +95,7 @@ func (r *PerconaServerMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1.PerconaServerMySQL{}).
 		Watches(&corev1.Secret{}, enqueueClusterFromSecretsName(r.Client)).
+		Watches(&corev1.Secret{}, enqueueClusterFromEncryptionKeySecret(r.Client)).
 		Named("ps-controller").
 		Complete(r)
 }
@@ -143,6 +144,47 @@ func enqueueClusterFromSecretsName(c client.Client) handler.EventHandler {
 					Namespace: cluster.Namespace,
 				},
 			})
+		}
+		return requests
+	})
+}
+
+// enqueueClusterFromEncryptionKeySecret enqueues a request for all clusters that have an encryption key secret set to the given secret.
+func enqueueClusterFromEncryptionKeySecret(c client.Client) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+		secret, ok := o.(*corev1.Secret)
+		if !ok {
+			return nil
+		}
+		clusters := &apiv1.PerconaServerMySQLList{}
+		log := logf.FromContext(ctx)
+		if err := c.List(ctx, clusters, client.InNamespace(secret.Namespace)); err != nil {
+			log.Error(err, "failed to list clusters")
+			return nil
+		}
+
+		var requests []reconcile.Request
+		for _, cluster := range clusters.Items {
+			if cluster.Spec.Backup.EncryptionKeySecret != nil && cluster.Spec.Backup.EncryptionKeySecret.Name == secret.Name {
+				requests = append(requests, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      cluster.Name,
+						Namespace: cluster.Namespace,
+					},
+				})
+				continue
+			}
+
+			for _, storage := range cluster.Spec.Backup.Storages {
+				if storage.EncryptionKeySecret != nil && storage.EncryptionKeySecret.Name == secret.Name {
+					requests = append(requests, reconcile.Request{
+						NamespacedName: types.NamespacedName{
+							Name:      cluster.Name,
+							Namespace: cluster.Namespace,
+						},
+					})
+				}
+			}
 		}
 		return requests
 	})
@@ -1745,7 +1787,7 @@ func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx 
 	}
 
 	for storageName, storage := range cr.Spec.Backup.Storages {
-		if storage.EncryptionKeySecret == nil {
+		if storage == nil || storage.EncryptionKeySecret == nil {
 			continue
 		}
 

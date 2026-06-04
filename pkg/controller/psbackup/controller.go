@@ -349,7 +349,7 @@ func (r *PerconaServerMySQLBackupReconciler) prepareStatus(
 
 	status.Destination = destination
 	status.Image = cluster.Spec.Backup.Image
-	status.Storage = storage
+	status.Storage = storage.DeepCopy()
 	status.BackupSource = backupSource
 	status.Type = cr.Spec.Type
 	status.Compressed = cr.IsCompressed(storage, cluster.Spec.MySQL.Configuration)
