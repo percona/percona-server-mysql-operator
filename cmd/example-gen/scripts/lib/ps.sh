@@ -218,6 +218,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.backup.containerSecurityContext)" \
 		| yq "del(.spec.backup.resources)" \
 		| yq "del(.spec.backup.serviceAccountName)" \
+		| yq "del(.spec.backup.encryptionKeySecret)" \
 		| yq "del(.spec.backup.storages.azure-blob)" \
 		| yq "del(.spec.backup.storages.gcp-cs)" \
 		| yq "del(.spec.backup.storages.s3-us-west.resources)" \
@@ -236,6 +237,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.backup.storages.s3-us-west.s3.endpointUrl)" \
 		| yq "del(.spec.backup.storages.s3-us-west.schedulerName)" \
 		| yq "del(.spec.backup.storages.s3-us-west.runtimeClassName)" \
+		| yq "del(.spec.backup.storages.s3-us-west.encryptionKeySecret)" \
 		| yq "del(.spec.toolkit.imagePullSecrets)" \
 		| yq "del(.spec.toolkit.env)" \
 		| yq "del(.spec.toolkit.envFrom)" \
