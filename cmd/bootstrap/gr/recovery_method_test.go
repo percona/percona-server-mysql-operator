@@ -2,7 +2,6 @@ package gr
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -11,32 +10,19 @@ import (
 )
 
 type mockSQLRunner struct {
-	sqlResponses map[string]any
 	gtidExecuted string
 	gtidPurged   string
+	subtract     map[[2]string]string
+	intersect    map[[2]string]string
+	isSubset     map[[2]string]bool
 }
 
 func newMockSQLRunner() *mockSQLRunner {
 	return &mockSQLRunner{
-		sqlResponses: make(map[string]any),
-		gtidExecuted: "",
-		gtidPurged:   "",
+		subtract:  make(map[[2]string]string),
+		intersect: make(map[[2]string]string),
+		isSubset:  make(map[[2]string]bool),
 	}
-}
-
-func (m *mockSQLRunner) runSQL(ctx context.Context, sql string) (SQLResult, error) {
-	if result, ok := m.sqlResponses[sql]; ok {
-		return SQLResult{
-			Rows: []map[string]any{
-				{
-					"sub":       result,
-					"is_subset": result, // for comparePrimaryPurged
-				},
-			},
-		}, nil
-	}
-
-	return SQLResult{}, errors.Errorf("unexpected query: %s", sql)
 }
 
 func (m *mockSQLRunner) getGTIDExecuted(ctx context.Context) (string, error) {
@@ -47,14 +33,40 @@ func (m *mockSQLRunner) getGTIDPurged(ctx context.Context) (string, error) {
 	return m.gtidPurged, nil
 }
 
+func (m *mockSQLRunner) gtidSubtract(ctx context.Context, a, b string) (string, error) {
+	v, ok := m.subtract[[2]string{a, b}]
+	if !ok {
+		return "", errors.Errorf("unexpected gtidSubtract(%q, %q)", a, b)
+	}
+	return v, nil
+}
+
+func (m *mockSQLRunner) gtidSubtractIntersection(ctx context.Context, a, b string) (string, error) {
+	v, ok := m.intersect[[2]string{a, b}]
+	if !ok {
+		return "", errors.Errorf("unexpected gtidSubtractIntersection(%q, %q)", a, b)
+	}
+	return v, nil
+}
+
+func (m *mockSQLRunner) isPurgedSubsetOfExecuted(ctx context.Context, purged, executed string) (bool, error) {
+	v, ok := m.isSubset[[2]string{purged, executed}]
+	if !ok {
+		return false, errors.Errorf("unexpected isPurgedSubsetOfExecuted(%q, %q)", purged, executed)
+	}
+	return v, nil
+}
+
 func (m *mockSQLRunner) setGTIDSubtractResponse(a, b, result string) {
-	query := fmt.Sprintf("SELECT GTID_SUBTRACT('%s', '%s') AS sub", a, b)
-	m.sqlResponses[query] = result
+	m.subtract[[2]string{a, b}] = result
 }
 
 func (m *mockSQLRunner) setGTIDSubtractIntersectionResponse(a, b, result string) {
-	query := fmt.Sprintf("SELECT GTID_SUBTRACT('%s', GTID_SUBTRACT('%s', '%s')) AS sub", a, a, b)
-	m.sqlResponses[query] = result
+	m.intersect[[2]string{a, b}] = result
+}
+
+func (m *mockSQLRunner) setIsPurgedSubsetResponse(purged, executed string, result bool) {
+	m.isSubset[[2]string{purged, executed}] = result
 }
 
 func TestCompareGTIDs_Equal(t *testing.T) {
@@ -252,8 +264,7 @@ func TestCheckReplicaState_Recoverable_WithPurgedButOK(t *testing.T) {
 	primary.setGTIDSubtractResponse("a:1-10", "a:1-5", "a:6-10")
 	primary.setGTIDSubtractResponse("a:1-5", "a:1-10", "")
 
-	// comparePrimaryPurged check - purged is subset of replica executed
-	primary.sqlResponses["SELECT GTID_SUBTRACT('a:1-3', 'a:1-5') = '' AS is_subset"] = float64(1.0)
+	primary.setIsPurgedSubsetResponse("a:1-3", "a:1-5", true)
 
 	result, err := checkReplicaState(ctx, primary, replica)
 	if err != nil {
@@ -273,8 +284,7 @@ func TestCheckReplicaState_Irrecoverable(t *testing.T) {
 	primary.setGTIDSubtractResponse("a:1-10", "a:1-5", "a:6-10")
 	primary.setGTIDSubtractResponse("a:1-5", "a:1-10", "")
 
-	// comparePrimaryPurged check fails - purged has more than replica executed
-	primary.sqlResponses["SELECT GTID_SUBTRACT('a:1-8', 'a:1-5') = '' AS is_subset"] = float64(0.0)
+	primary.setIsPurgedSubsetResponse("a:1-8", "a:1-5", false)
 
 	result, err := checkReplicaState(ctx, primary, replica)
 	if err != nil {

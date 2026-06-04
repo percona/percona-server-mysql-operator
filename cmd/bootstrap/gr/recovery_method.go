@@ -2,7 +2,7 @@ package gr
 
 import (
 	"context"
-	"fmt"
+	"database/sql"
 	"log"
 	"strings"
 
@@ -12,57 +12,11 @@ import (
 )
 
 type SQLRunner interface {
-	runSQL(ctx context.Context, sql string) (SQLResult, error)
 	getGTIDExecuted(ctx context.Context) (string, error)
 	getGTIDPurged(ctx context.Context) (string, error)
-}
-
-func gtidSubtract(ctx context.Context, shell SQLRunner, a, b string) (string, error) {
-	a = strings.ReplaceAll(a, "\n", "")
-	b = strings.ReplaceAll(b, "\n", "")
-
-	query := fmt.Sprintf("SELECT GTID_SUBTRACT('%s', '%s') AS sub", a, b)
-
-	result, err := shell.runSQL(ctx, query)
-	if err != nil {
-		return "", errors.Wrapf(err, "execute %s", query)
-	}
-
-	v, ok := result.Rows[0]["sub"]
-	if !ok {
-		return "", errors.Errorf("unexpected output: %+v", result)
-	}
-
-	s, ok := v.(string)
-	if !ok {
-		return "", errors.Errorf("unexpected type: %T", v)
-	}
-
-	return s, nil
-}
-
-func gtidSubtractIntersection(ctx context.Context, shell SQLRunner, a, b string) (string, error) {
-	a = strings.ReplaceAll(a, "\n", "")
-	b = strings.ReplaceAll(b, "\n", "")
-
-	query := fmt.Sprintf("SELECT GTID_SUBTRACT('%s', GTID_SUBTRACT('%s', '%s')) AS sub", a, a, b)
-
-	result, err := shell.runSQL(ctx, query)
-	if err != nil {
-		return "", errors.Wrapf(err, "execute %s", query)
-	}
-
-	v, ok := result.Rows[0]["sub"]
-	if !ok {
-		return "", errors.Errorf("unexpected output: %+v", result)
-	}
-
-	s, ok := v.(string)
-	if !ok {
-		return "", errors.Errorf("unexpected type: %T", v)
-	}
-
-	return s, nil
+	gtidSubtract(ctx context.Context, set, subset string) (string, error)
+	gtidSubtractIntersection(ctx context.Context, a, b string) (string, error)
+	isPurgedSubsetOfExecuted(ctx context.Context, purged, executed string) (bool, error)
 }
 
 type GTIDSetRelation string
@@ -87,14 +41,14 @@ func compareGTIDs(ctx context.Context, shell SQLRunner, a, b string) (GTIDSetRel
 		return GTIDSetContains, nil
 	}
 
-	aSubB, err := gtidSubtract(ctx, shell, a, b)
+	aSubB, err := shell.gtidSubtract(ctx, a, b)
 	if err != nil {
-		return "", errors.Wrapf(err, "a sub b")
+		return "", errors.Wrap(err, "a sub b")
 	}
 
-	bSubA, err := gtidSubtract(ctx, shell, b, a)
+	bSubA, err := shell.gtidSubtract(ctx, b, a)
 	if err != nil {
-		return "", errors.Wrapf(err, "b sub a")
+		return "", errors.Wrap(err, "b sub a")
 	}
 
 	if aSubB == "" && bSubA == "" {
@@ -109,9 +63,9 @@ func compareGTIDs(ctx context.Context, shell SQLRunner, a, b string) (GTIDSetRel
 		return GTIDSetContains, nil
 	}
 
-	abIntersection, err := gtidSubtractIntersection(ctx, shell, a, b)
+	abIntersection, err := shell.gtidSubtractIntersection(ctx, a, b)
 	if err != nil {
-		return "", errors.Wrapf(err, "intersection")
+		return "", errors.Wrap(err, "intersection")
 	}
 
 	if abIntersection == "" {
@@ -119,29 +73,6 @@ func compareGTIDs(ctx context.Context, shell SQLRunner, a, b string) (GTIDSetRel
 	}
 
 	return GTIDSetIntersects, nil
-}
-
-// If purged has more gtids than the executed on the replica
-// it means some data will not be recoverable
-func comparePrimaryPurged(ctx context.Context, shell SQLRunner, purged, executed string) (bool, error) {
-	query := fmt.Sprintf("SELECT GTID_SUBTRACT('%s', '%s') = '' AS is_subset", purged, executed)
-
-	result, err := shell.runSQL(ctx, query)
-	if err != nil {
-		return false, errors.Wrap(err, "run sql")
-	}
-
-	v, ok := result.Rows[0]["is_subset"]
-	if !ok {
-		return false, errors.Errorf("unexpected output: %+v", result)
-	}
-
-	s, ok := v.(float64)
-	if !ok {
-		return false, errors.Errorf("unexpected type: %T", v)
-	}
-
-	return s == 1, nil
 }
 
 func checkReplicaState(ctx context.Context, primary, replica SQLRunner) (innodbcluster.ReplicaGtidState, error) {
@@ -181,11 +112,11 @@ func checkReplicaState(ctx context.Context, primary, replica SQLRunner) (innodbc
 		if primaryPurged == "" {
 			return innodbcluster.ReplicaGtidRecoverable, nil
 		}
-		compareRes, err := comparePrimaryPurged(ctx, primary, primaryPurged, replicaExecuted)
+		recoverable, err := primary.isPurgedSubsetOfExecuted(ctx, primaryPurged, replicaExecuted)
 		if err != nil {
-			return "", errors.Wrap(err, "compare primary purged")
+			return "", errors.Wrap(err, "check primary purged subset")
 		}
-		if compareRes {
+		if recoverable {
 			return innodbcluster.ReplicaGtidRecoverable, nil
 		}
 		return innodbcluster.ReplicaGtidIrrecoverable, nil
@@ -212,4 +143,48 @@ func getRecoveryMethod(ctx context.Context, primary, replica SQLRunner) (innodbc
 	default:
 		return innodbcluster.RecoveryClone, nil
 	}
+}
+
+type sqlRunner struct {
+	db *sql.DB
+}
+
+func (r *sqlRunner) getGTIDExecuted(ctx context.Context) (string, error) {
+	var gtid string
+	if err := r.db.QueryRowContext(ctx, "SELECT @@GTID_EXECUTED").Scan(&gtid); err != nil {
+		return "", errors.Wrap(err, "get GTID_EXECUTED")
+	}
+	return strings.ReplaceAll(gtid, "\n", ""), nil
+}
+
+func (r *sqlRunner) getGTIDPurged(ctx context.Context) (string, error) {
+	var gtid string
+	if err := r.db.QueryRowContext(ctx, "SELECT @@GTID_PURGED").Scan(&gtid); err != nil {
+		return "", errors.Wrap(err, "get GTID_PURGED")
+	}
+	return strings.ReplaceAll(gtid, "\n", ""), nil
+}
+
+func (r *sqlRunner) gtidSubtract(ctx context.Context, set, subset string) (string, error) {
+	var sub sql.NullString
+	if err := r.db.QueryRowContext(ctx, "SELECT GTID_SUBTRACT(?, ?)", set, subset).Scan(&sub); err != nil {
+		return "", errors.Wrap(err, "GTID_SUBTRACT")
+	}
+	return sub.String, nil
+}
+
+func (r *sqlRunner) gtidSubtractIntersection(ctx context.Context, a, b string) (string, error) {
+	var sub sql.NullString
+	if err := r.db.QueryRowContext(ctx, "SELECT GTID_SUBTRACT(?, GTID_SUBTRACT(?, ?))", a, a, b).Scan(&sub); err != nil {
+		return "", errors.Wrap(err, "GTID_SUBTRACT intersection")
+	}
+	return sub.String, nil
+}
+
+func (r *sqlRunner) isPurgedSubsetOfExecuted(ctx context.Context, purged, executed string) (bool, error) {
+	var isSubset bool
+	if err := r.db.QueryRowContext(ctx, "SELECT GTID_SUBTRACT(?, ?) = ''", purged, executed).Scan(&isSubset); err != nil {
+		return false, errors.Wrap(err, "check purged subset")
+	}
+	return isSubset, nil
 }

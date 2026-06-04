@@ -3,6 +3,7 @@ package gr
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/go-ini/ini"
+	_ "github.com/go-sql-driver/mysql"
 	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-server-mysql-operator/pkg/config"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -25,6 +27,7 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
+	database "github.com/percona/percona-server-mysql-operator/cmd/internal/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -521,7 +524,24 @@ func Bootstrap(ctx context.Context) error {
 
 	member, ok := status.DefaultReplicaSet.Topology[fmt.Sprintf("%s:%d", localShell.host, 3306)]
 	if !ok {
-		recoveryMethod, err := getRecoveryMethod(ctx, newShell(primary, mysqlshVer), localShell)
+		operatorPass, err := utils.GetSecret(apiv1.UserOperator)
+		if err != nil {
+			return errors.Wrapf(err, "get %s password", apiv1.UserOperator)
+		}
+		primaryParams := database.DBParams{User: apiv1.UserOperator, Pass: operatorPass, Host: primary}
+		primaryDB, err := sql.Open("mysql", primaryParams.DSN())
+		if err != nil {
+			return errors.Wrap(err, "open primary DB")
+		}
+		defer primaryDB.Close()
+		localParams := database.DBParams{User: apiv1.UserOperator, Pass: operatorPass, Host: localShell.host}
+		localDB, err := sql.Open("mysql", localParams.DSN())
+		if err != nil {
+			return errors.Wrap(err, "open local DB")
+		}
+		defer localDB.Close()
+
+		recoveryMethod, err := getRecoveryMethod(ctx, &sqlRunner{db: primaryDB}, &sqlRunner{db: localDB})
 		if err != nil {
 			return err
 		}
