@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/url"
 	"os"
 	"os/exec"
@@ -528,7 +529,13 @@ func Bootstrap(ctx context.Context) error {
 		if err != nil {
 			return errors.Wrapf(err, "get %s password", apiv1.UserOperator)
 		}
-		primaryParams := database.DBParams{User: apiv1.UserOperator, Pass: operatorPass, Host: primary}
+		// member.Address is "host:port" (matching the Topology key format).
+		// Strip the port before handing to DBParams, which appends its own.
+		primaryHost, _, err := net.SplitHostPort(primary)
+		if err != nil {
+			primaryHost = primary
+		}
+		primaryParams := database.DBParams{User: apiv1.UserOperator, Pass: operatorPass, Host: primaryHost}
 		primaryDB, err := sql.Open("mysql", primaryParams.DSN())
 		if err != nil {
 			return errors.Wrap(err, "open primary DB")

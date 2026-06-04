@@ -209,7 +209,7 @@ func (m *ReplicationDBManager) CheckIfClusterMetadataDBExists(ctx context.Contex
 	rows := []*struct {
 		DB string `csv:"db"`
 	}{}
-	err := m.query(ctx, "SELECT SCHEMA_NAME AS db FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME LIKE 'mysql_innodb_cluster_metadata'", &rows)
+	err := m.query(ctx, "SELECT SCHEMA_NAME AS db FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = 'mysql_innodb_cluster_metadata'", &rows)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
