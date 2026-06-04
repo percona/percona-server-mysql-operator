@@ -778,6 +778,24 @@ func TestGetXtrabackupFlagValue(t *testing.T) {
 			want: "AES256",
 		},
 		{
+			containerOptions: BackupContainerOptions{
+				Args: BackupContainerArgs{
+					Xtrabackup: []string{"--encrypt=AES256", "--encrypt-key-file=encryption-key"},
+				},
+			},
+			flag: "--encrypt",
+			want: "AES256",
+		},
+		{
+			containerOptions: BackupContainerOptions{
+				Args: BackupContainerArgs{
+					Xtrabackup: []string{"--encrypt=AES256", "--encrypt-key-file=encryption-key"},
+				},
+			},
+			flag: "--encrypt-key-file",
+			want: "encryption-key",
+		},
+		{
 			containerOptions: BackupContainerOptions{},
 			flag:             "--encrypt",
 		},

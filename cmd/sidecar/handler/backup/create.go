@@ -327,6 +327,8 @@ func awaitEncryptionKeyFile(ctx context.Context, log logr.Logger, file string) e
 	for {
 		if _, err := os.Stat(file); err == nil {
 			return nil
+		} else if !os.IsNotExist(err) {
+			return errors.Wrap(err, "stat encryption key file")
 		}
 
 		select {

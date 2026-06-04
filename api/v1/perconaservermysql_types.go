@@ -415,18 +415,14 @@ func (b *BackupContainerOptions) GetArgs() BackupContainerArgs {
 }
 
 func (args BackupContainerArgs) GetXtrabackupFlagValue(flag string) string {
+	matchPrefix := flag + "="
 	for _, arg := range args.Xtrabackup {
-		if !strings.HasPrefix(arg, flag) {
+		if !strings.HasPrefix(arg, matchPrefix) {
 			continue
 		}
 
-		// Get the value after '='
-		parts := strings.SplitN(arg, "=", 2)
-		if len(parts) == 2 {
-			return parts[1]
-		}
+		return strings.TrimPrefix(arg, matchPrefix)
 	}
-
 	return ""
 }
 

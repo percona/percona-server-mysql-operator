@@ -1773,6 +1773,10 @@ func readEncryptionKey(ctx context.Context, cl client.Client, sel apiv1.Encrypti
 // Kubelet propagates mounted Secret changes eventually, so a backup started right
 // after an encryption key update may still read the previous key from the pod.
 func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
+	if cr.Spec.Backup == nil || cr.CompareVersion("1.2.0") < 0 {
+		return nil
+	}
+
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      naming.EncryptionKeyInternalSecretName(cr.Name),
