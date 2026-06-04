@@ -398,6 +398,29 @@ func (b *BackupContainerOptions) GetEnv() []corev1.EnvVar {
 	return util.MergeEnvLists(b.Env, b.Args.env())
 }
 
+func (b *BackupContainerOptions) GetArgs() BackupContainerArgs {
+	if b == nil {
+		return BackupContainerArgs{}
+	}
+	return b.Args
+}
+
+func (args BackupContainerArgs) GetXtrabackupFlagValue(flag string) string {
+	for _, arg := range args.Xtrabackup {
+		if !strings.HasPrefix(arg, flag) {
+			continue
+		}
+
+		// Get the value after '='
+		parts := strings.SplitN(arg, "=", 2)
+		if len(parts) == 2 {
+			return parts[1]
+		}
+	}
+
+	return ""
+}
+
 type BackupContainerArgs struct {
 	Xtrabackup []string `json:"xtrabackup,omitempty"`
 	Xbcloud    []string `json:"xbcloud,omitempty"`

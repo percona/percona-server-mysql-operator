@@ -650,6 +650,11 @@ func restoreContainer(
 		)
 	}
 
+	encryptionAlgorithm := "AES256"
+	if e := restore.GetContainerOptions(storage).GetArgs().GetXtrabackupFlagValue("--encrypt"); e != "" {
+		encryptionAlgorithm = e
+	}
+
 	envs := util.MergeEnvLists(
 		baseEnvs,
 		restore.GetContainerOptions(storage).GetEnv(),
@@ -680,6 +685,10 @@ func restoreContainer(
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      encryptionKeysVolumeName,
 			MountPath: encryptionKeysMountPath,
+		})
+		envs = append(envs, corev1.EnvVar{
+			Name:  "ENCRYPTION_ALGORITHM",
+			Value: encryptionAlgorithm,
 		})
 	}
 

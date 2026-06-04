@@ -45,8 +45,8 @@ extract() {
 
 decrypt() {
 	local targetdir=$1
-	if [ -f "${encryption_key_file}" ]; then
-		xtrabackup --decrypt=AES256 --encrypt-key-file="${encryption_key_file}" --target-dir="${targetdir}" --parallel="${PARALLEL}"
+	if [ -n "${ENCRYPTION_ALGORITHM}" ]; then
+		xtrabackup --decrypt=${ENCRYPTION_ALGORITHM} --encrypt-key-file=${encryption_key_file} --target-dir="${targetdir}" --parallel="${PARALLEL}"
 		find "${targetdir}" -name '*.xbcrypt' -delete
 	fi
 }
