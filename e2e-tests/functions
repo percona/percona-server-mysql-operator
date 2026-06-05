@@ -93,12 +93,6 @@ deploy_operator() {
 		| kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply -f -
 }
 
-upgrade_operator_image() {
-	local image=$1
-
-	kubectl -n ${OPERATOR_NS:-$NAMESPACE} set image deployment/percona-server-mysql-operator manager=${image}
-}
-
 deploy_operator_gh() {
 	local git_tag=$1
 
