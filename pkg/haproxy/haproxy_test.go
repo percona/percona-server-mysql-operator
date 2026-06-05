@@ -155,6 +155,70 @@ func TestStatefulset(t *testing.T) {
 		assert.Equal(t, "haproxy-annotation", sts.Spec.Template.Annotations["haproxy-annotation"])
 	})
 
+	t.Run("sidecar resources", func(t *testing.T) {
+		haproxyResources := corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    mustParseQuantity("600m"),
+				corev1.ResourceMemory: mustParseQuantity("1Gi"),
+			},
+		}
+		monitResources := corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    mustParseQuantity("50m"),
+				corev1.ResourceMemory: mustParseQuantity("64Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    mustParseQuantity("100m"),
+				corev1.ResourceMemory: mustParseQuantity("128Mi"),
+			},
+		}
+
+		getContainers := func(cluster *apiv1.PerconaServerMySQL) (haproxy, monit corev1.Container) {
+			sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+			for _, c := range sts.Spec.Template.Spec.Containers {
+				switch c.Name {
+				case AppName:
+					haproxy = c
+				case "mysql-monit":
+					monit = c
+				}
+			}
+			return
+		}
+
+		t.Run("cr < 1.2.0 mysql-monit inherits haproxy resources", func(t *testing.T) {
+			cluster := cr.DeepCopy()
+			cluster.Spec.CRVersion = "1.1.0"
+			cluster.Spec.Proxy.HAProxy.Resources = haproxyResources
+
+			_, monit := getContainers(cluster)
+			assert.Equal(t, haproxyResources, monit.Resources)
+		})
+
+		t.Run("cr >= 1.2.0 mysql-monit has empty resources by default", func(t *testing.T) {
+			cluster := cr.DeepCopy()
+			cluster.Spec.CRVersion = "1.2.0"
+			cluster.Spec.Proxy.HAProxy.Resources = haproxyResources
+			cluster.Spec.Proxy.HAProxy.SidecarResources = nil
+
+			_, monit := getContainers(cluster)
+			assert.Equal(t, corev1.ResourceRequirements{}, monit.Resources)
+		})
+
+		t.Run("cr >= 1.2.0 mysql-monit uses sidecarResources independently", func(t *testing.T) {
+			cluster := cr.DeepCopy()
+			cluster.Spec.CRVersion = "1.2.0"
+			cluster.Spec.Proxy.HAProxy.Resources = haproxyResources
+			cluster.Spec.Proxy.HAProxy.SidecarResources = map[string]corev1.ResourceRequirements{
+				"mysql-monit": monitResources,
+			}
+
+			haproxy, monit := getContainers(cluster)
+			assert.Equal(t, haproxyResources, haproxy.Resources)
+			assert.Equal(t, monitResources, monit.Resources)
+		})
+	})
+
 	t.Run("probes", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 		cluster.Spec.CRVersion = "0.12.0"

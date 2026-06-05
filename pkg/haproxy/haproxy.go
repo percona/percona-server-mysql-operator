@@ -387,11 +387,16 @@ func mysqlMonitContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		env = append(env, cluserTypeEnv...)
 	}
 
+	resources := spec.Resources
+	if cr.CompareVersion("1.2.0") >= 0 {
+		resources = spec.SidecarResources["mysql-monit"]
+	}
+
 	return corev1.Container{
 		Name:            "mysql-monit",
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
-		Resources:       spec.Resources,
+		Resources:       resources,
 		Command:         []string{"/opt/percona/haproxy-entrypoint.sh"},
 		Args: []string{
 			"/opt/percona/peer-list",
