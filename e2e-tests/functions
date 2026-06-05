@@ -1691,6 +1691,7 @@ get_telemetry_report_by_id() {
 
 		if [[ $rows =~ ^[1-9][0-9]*$ ]]; then
 			echo "Report data found:"
+			echo "$resp" | jq '.data'
 			return 0
 		fi
 
