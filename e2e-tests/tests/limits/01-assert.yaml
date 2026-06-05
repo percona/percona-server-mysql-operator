@@ -161,6 +161,8 @@ spec:
           name: vault-keyring-secret
         - mountPath: /etc/mysql/config
           name: config
+        - mountPath: /etc/mysql/encryption-keys
+          name: backup-encryption-keys
       - command:
         - /opt/percona/heartbeat-entrypoint.sh
         imagePullPolicy: Always
@@ -235,6 +237,11 @@ spec:
           defaultMode: 420
           optional: true
           secretName: limits-no-limits-vault
+      - name: backup-encryption-keys
+        secret:
+          defaultMode: 420
+          optional: true
+          secretName: internal-encryption-keys-limits-no-limits
   updateStrategy:
     type: OnDelete
   volumeClaimTemplates:
