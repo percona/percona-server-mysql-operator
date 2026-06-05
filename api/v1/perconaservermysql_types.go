@@ -637,6 +637,10 @@ type HAProxySpec struct {
 	Expose ServiceExpose `json:"expose,omitempty"`
 
 	PodSpec `json:",inline"`
+
+	// SidecarResources defines resource limits and requests per sidecar container name
+	// (e.g. "mysql-monit"). If a container is not listed, it runs without resource constraints.
+	SidecarResources map[string]corev1.ResourceRequirements `json:"sidecarResources,omitempty"`
 }
 
 type PodDisruptionBudgetSpec struct {
@@ -838,6 +842,14 @@ func (cr *PerconaServerMySQL) Version() *v.Version {
 // Returns -1, 0, or 1 if given version is smaller, equal, or larger than the current version, respectively.
 func (cr *PerconaServerMySQL) CompareVersion(ver string) int {
 	return cr.Version().Compare(v.Must(v.NewVersion(ver)))
+}
+
+func (cr *PerconaServerMySQL) DefaultSecretName() string {
+	return cr.Name + "-secrets"
+}
+
+func (cr *PerconaServerMySQL) DefaultSSLSecretName() string {
+	return cr.Name + "-ssl"
 }
 
 // CheckNSetDefaults validates and sets default values for the PerconaServerMySQL custom resource.
@@ -1098,11 +1110,11 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 	}
 
 	if cr.Spec.SecretsName == "" {
-		cr.Spec.SecretsName = cr.Name + "-secrets"
+		cr.Spec.SecretsName = cr.DefaultSecretName()
 	}
 
 	if cr.Spec.SSLSecretName == "" {
-		cr.Spec.SSLSecretName = cr.Name + "-ssl"
+		cr.Spec.SSLSecretName = cr.DefaultSSLSecretName()
 	}
 
 	if cr.Spec.MySQL.VaultSecretName == "" {

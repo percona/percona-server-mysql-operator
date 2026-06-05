@@ -28,7 +28,11 @@ func startServer() *http.Server {
 	mux.HandleFunc("/backup/checkpoint-info", handler.GetCheckpointInfoFunc)
 	mux.HandleFunc("/logs/", handler.LogsHandlerFunc)
 
-	srv := &http.Server{Addr: ":" + strconv.Itoa(mysql.SidecarHTTPPort), Handler: mux}
+	srv := &http.Server{
+		Addr:              ":" + strconv.Itoa(mysql.SidecarHTTPPort),
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 
 	go func() {
 		log.Info("starting http server")

@@ -104,6 +104,7 @@ spec:
           value: async
         imagePullPolicy: Always
         name: mysql-monit
+        resources: {}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:

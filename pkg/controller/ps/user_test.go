@@ -176,7 +176,7 @@ func TestEnsureUserSecrets(t *testing.T) {
 				Client: cb.Build(),
 				Scheme: scheme,
 			}
-			if err := r.ensureUserSecrets(ctx, tt.cr); err != nil {
+			if _, err := r.ensureUserSecrets(ctx, tt.cr); err != nil {
 				t.Fatal(err, "failed to ensure user secrets")
 			}
 			uSecret := new(corev1.Secret)
