@@ -61,6 +61,7 @@ type PerconaServerMySQLClusterSetSpec struct {
 
 	// CredentialsSecret is the secret containing the credentials for the ClusterSet.
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="has(self.name) && self.name != ''",message="credentialsSecret.name must be set"
 	CredentialsSecret corev1.SecretKeySelector `json:"credentialsSecret"`
 
 	// AllowForcedFailover controls if an emergency failover may be performed in the event

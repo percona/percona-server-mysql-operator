@@ -99,6 +99,9 @@ spec:
                 - key
                 type: object
                 x-kubernetes-map-type: atomic
+                x-kubernetes-validations:
+                - message: credentialsSecret.name must be set
+                  rule: has(self.name) && self.name != ''
               mysqlshellRunner:
                 properties:
                   image:
