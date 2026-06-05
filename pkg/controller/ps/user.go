@@ -3,6 +3,7 @@ package ps
 import (
 	"bytes"
 	"context"
+	stderrors "errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -92,6 +93,11 @@ func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr
 
 func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) error {
 	log := logf.FromContext(ctx).WithName("reconcileUsers")
+
+	if err := validateUserSecret(cr, secret); err != nil {
+		log.Error(err, "User secret is invalid. Passwords and internal secret won't be updated until it becomes valid")
+		return nil
+	}
 
 	internalSecret := &corev1.Secret{}
 	nn := types.NamespacedName{Name: cr.InternalSecretName(), Namespace: cr.GetNamespace()}
@@ -310,6 +316,46 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, updatedUsers, operatorPass)
 }
 
+const (
+	MySQLPasswordMaxLength = 256
+
+	// > The password used for a replication user account in a CHANGE REPLICATION SOURCE TO statement is limited to 32 characters in length
+	// Source: https://dev.mysql.com/doc/refman/8.0/en/change-replication-source-to.html#crs-opt-source_password
+	MySQLReplicationSourcePasswordMaxLength = 32
+)
+
+func validateUserSecret(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) error {
+	if secret == nil || len(secret.Data) == 0 {
+		return errors.New("user secret is empty")
+	}
+
+	var errs []error
+	for user, pass := range secret.Data {
+		if user == string(apiv1.UserPMMServerToken) {
+			continue
+		}
+		if string(pass) == "" {
+			errs = append(errs, errors.Errorf("password is empty for %s user", string(user)))
+			continue
+		}
+		if bytes.IndexByte(pass, 0) >= 0 {
+			errs = append(errs, errors.Errorf("password for %s user must not contain NUL bytes", user))
+			continue
+		}
+		maxLen := MySQLPasswordMaxLength
+		if user == string(apiv1.UserReplication) && cr.Spec.MySQL.IsAsync() {
+			maxLen = MySQLReplicationSourcePasswordMaxLength
+		}
+
+		// MySQL counts bytes, not characters
+		if len(pass) > maxLen {
+			errs = append(errs, errors.Errorf("password for %s user must not exceed %d bytes", user, maxLen))
+			continue
+		}
+	}
+	return stderrors.Join(errs...)
+}
+
 func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
@@ -409,7 +455,8 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 		eg.Go(func() error {
 			for i := 0; int32(i) < int32(comp.size); i++ {
 				pod := corev1.Pod{}
-				err := r.Client.Get(ctx,
+				err := r.Client.Get(
+					ctx,
 					types.NamespacedName{
 						Namespace: cr.Namespace,
 						Name:      fmt.Sprintf("%s-%s-%d", cr.Name, comp.name, i),
