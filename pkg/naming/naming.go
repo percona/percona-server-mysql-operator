@@ -46,3 +46,5 @@ const (
 	AnnotationPVCResizeInProgress AnnotationKey = perconaPrefix + "pvc-resize-in-progress"
 	AnnotationBaseBackupName      AnnotationKey = perconaPrefix + "base-backup-name"
 )
+
+const ClusterSetRecoveryFile = "/var/lib/mysql/clusterset-recovery"

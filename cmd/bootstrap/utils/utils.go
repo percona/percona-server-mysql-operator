@@ -135,21 +135,24 @@ func Lookup(svcName string) (sets.Set[string], error) {
 }
 
 const (
-	noBootstrapFile        = "/var/lib/mysql/no-bootstrap"
-	manualRecoveryFile     = "/var/lib/mysql/sleep-forever"
-	fullClusterCrashFile   = "/var/lib/mysql/full-cluster-crash"
-	clustersetRecoveryFile = "/var/lib/mysql/clusterset-recovery"
+	noBootstrapFile      = "/var/lib/mysql/no-bootstrap"
+	manualRecoveryFile   = "/var/lib/mysql/sleep-forever"
+	fullClusterCrashFile = "/var/lib/mysql/full-cluster-crash"
 )
 
 var recoveryFiles = []string{
 	noBootstrapFile,
 	manualRecoveryFile,
 	fullClusterCrashFile,
-	clustersetRecoveryFile,
+	naming.ClusterSetRecoveryFile,
 }
 
 func CheckClustersetRecovery() error {
-	res, err := fileExists(clustersetRecoveryFile)
+	return checkClustersetRecovery(naming.ClusterSetRecoveryFile, recoveryFiles)
+}
+
+func checkClustersetRecovery(clusterSetRecoveryFile string, recoveryFiles []string) error {
+	res, err := fileExists(clusterSetRecoveryFile)
 	if err != nil {
 		return errors.Wrap(err, "file exists")
 	}
@@ -159,7 +162,7 @@ func CheckClustersetRecovery() error {
 	}
 
 	for _, f := range recoveryFiles {
-		if err := RemoveFile(f); err != nil {
+		if err := removeFile(f); err != nil {
 			return errors.Wrap(err, "remove file")
 		}
 	}
@@ -181,7 +184,7 @@ func LockExists(lockName string) (bool, error) {
 	return fileExists(fmt.Sprintf("/var/lib/mysql/%s.lock", lockName))
 }
 
-func RemoveFile(name string) error {
+func removeFile(name string) error {
 	if err := os.Remove(name); err != nil {
 		if os.IsNotExist(err) {
 			return nil

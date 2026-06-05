@@ -57,11 +57,6 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterSetStatus(ctx context.Con
 		return errors.Wrap(err, "get cluster set replication exists")
 	}
 
-	members, err := db.GetGroupReplicationMembers(ctx)
-	if err != nil {
-		return errors.Wrap(err, "get group replication members")
-	}
-
 	if channelExists {
 		if !meta.IsStatusConditionTrue(cr.Status.Conditions, apiv1.ConditionClusterSetReplicationRunning) {
 			if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), func(status *apiv1.PerconaServerMySQLStatus) error {
@@ -89,6 +84,11 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterSetStatus(ctx context.Con
 	isClusterPrimary, err := r.isClusterRolePrimary(ctx, cr, operatorPass, pods[0])
 	if err != nil {
 		return errors.Wrap(err, "check if cluster is clusterset primary")
+	}
+
+	members, err := db.GetGroupReplicationMembers(ctx)
+	if err != nil {
+		return errors.Wrap(err, "get group replication members")
 	}
 
 	clusterDissolved := func() bool {
@@ -171,7 +171,7 @@ func (r *PerconaServerMySQLReconciler) recoverClustersetReplicaCluster(
 
 	// Prepare pods for recovery
 	var outb, errb bytes.Buffer
-	cmd := []string{"touch", "/var/lib/mysql/clusterset-recovery"}
+	cmd := []string{"touch", naming.ClusterSetRecoveryFile}
 	for _, pod := range pods {
 		outb.Reset()
 		errb.Reset()

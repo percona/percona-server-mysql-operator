@@ -20,6 +20,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
@@ -53,7 +54,7 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 		errb.Reset()
 
 		// Check if there is an ongoing clusterset recovery
-		if err := r.ClientCmd.Exec(ctx, &pod, "mysql", []string{"cat", "/var/lib/mysql/clusterset-recovery"}, nil, &outb, &errb, false); err == nil {
+		if err := r.ClientCmd.Exec(ctx, &pod, "mysql", []string{"cat", naming.ClusterSetRecoveryFile}, nil, &outb, &errb, false); err == nil {
 			return nil
 		} else if strings.Contains(errb.String(), "No such file or directory") {
 			outb.Reset()
