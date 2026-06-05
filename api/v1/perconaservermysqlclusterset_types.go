@@ -42,6 +42,7 @@ type PerconaServerMySQLClusterSet struct {
 	Status PerconaServerMySQLClusterSetStatus `json:"status,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="self.clusters.exists(c, c.name == self.primaryCluster)",message="spec.primaryCluster not found in spec.clusters"
 type PerconaServerMySQLClusterSetSpec struct {
 	// PrimaryCluster is the desired primary cluster of the ClusterSet.
 	// This is the cluster that will serve writes, and replica members will connect to.

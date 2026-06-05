@@ -128,6 +128,9 @@ spec:
             - mysqlshellRunner
             - primaryCluster
             type: object
+            x-kubernetes-validations:
+            - message: spec.primaryCluster not found in spec.clusters
+              rule: self.clusters.exists(c, c.name == self.primaryCluster)
           status:
             properties:
               clusters:
