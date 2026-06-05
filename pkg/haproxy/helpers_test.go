@@ -5,10 +5,15 @@ import (
 	"path/filepath"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/yaml"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
+
+func mustParseQuantity(s string) resource.Quantity {
+	return resource.MustParse(s)
+}
 
 func readDefaultCluster(t *testing.T, name, namespace string) *apiv1.PerconaServerMySQL {
 	t.Helper()

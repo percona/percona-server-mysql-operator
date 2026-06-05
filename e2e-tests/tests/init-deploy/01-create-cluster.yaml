@@ -46,6 +46,10 @@ commands:
           | yq eval '.spec.proxy.haproxy.resources.limits.memory="512Mi"' - \
           | yq eval '.spec.proxy.haproxy.resources.requests.cpu="500m"' - \
           | yq eval '.spec.proxy.haproxy.resources.requests.memory="256Mi"' - \
+          | yq eval '.spec.proxy.haproxy.sidecarResources.mysql-monit.requests.cpu="50m"' - \
+          | yq eval '.spec.proxy.haproxy.sidecarResources.mysql-monit.requests.memory="64Mi"' - \
+          | yq eval '.spec.proxy.haproxy.sidecarResources.mysql-monit.limits.cpu="100m"' - \
+          | yq eval '.spec.proxy.haproxy.sidecarResources.mysql-monit.limits.memory="128Mi"' - \
           | yq eval '.spec.orchestrator.resources.limits.cpu="200m"' - \
           | yq eval '.spec.orchestrator.resources.limits.memory="256Mi"' - \
           | yq eval '.spec.orchestrator.resources.requests.cpu="100m"' - \

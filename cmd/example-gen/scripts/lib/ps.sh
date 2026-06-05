@@ -10,7 +10,7 @@ sort_yaml() {
 
 	POD_SPEC_ORDER='"size", "image", "imagePullPolicy","imagePullSecrets", "runtimeClassName", "tolerations", "annotations", "labels", "nodeSelector", "priorityClassName", "schedulerName", "serviceAccountName","gracePeriod", "initContainer", "env", "envFrom", "podDisruptionBudget", "resources","startupProbe", "readinessProbe", "livenessProbe", "affinity", "topologySpreadConstraints", "containerSecurityContext", "podSecurityContext"'
 	MYSQL_ORDER='"clusterType", "autoRecovery", "vaultSecretName", '"$POD_SPEC_ORDER"',"exposePrimary", "expose", "volumeSpec", "configuration", "sidecars", "sidecarVolumes", "sidecarPVCs"'
-	HAPROXY_ORDER='"enabled", "expose", '"$POD_SPEC_ORDER"
+	HAPROXY_ORDER='"enabled", "expose", '"$POD_SPEC_ORDER"', "sidecarResources"'
 	ROUTER_ORDER='"enabled", "expose", '"$POD_SPEC_ORDER"', "ports"'
 	ORCHESTRATOR_ORDER='"enabled", "expose", '"$POD_SPEC_ORDER"
 
@@ -149,6 +149,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.proxy.haproxy.imagePullSecrets)" \
 		| yq "del(.spec.proxy.haproxy.podDisruptionBudget.minAvailable)" \
 		| yq "del(.spec.proxy.haproxy.resources.limits)" \
+		| yq "del(.spec.proxy.haproxy.sidecarResources)" \
 		| yq "del(.spec.proxy.haproxy.env)" \
 		| yq "del(.spec.proxy.haproxy.envFrom)" \
 		| yq "del(.spec.proxy.haproxy.startupProbe)" \
