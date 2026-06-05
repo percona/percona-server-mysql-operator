@@ -455,7 +455,7 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 		eg.Go(func() error {
 			for i := 0; int32(i) < int32(comp.size); i++ {
 				pod := corev1.Pod{}
-				err := r.Client.Get(
+				err := r.Get(
 					ctx,
 					types.NamespacedName{
 						Namespace: cr.Namespace,
