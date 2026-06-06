@@ -213,6 +213,10 @@ func printRestore() error {
 					NodeSelector:      defaults.NodeSelector,
 					VerifyTLS:         defaults.VerifyTLS,
 					RuntimeClassName:  defaults.RuntimeClassName,
+					EncryptionKeySecret: &apiv1.EncryptionKeySecretSelector{
+						Name: "my-encryption-key-secret",
+						Key:  "encryptionKey",
+					},
 				},
 			},
 		},
