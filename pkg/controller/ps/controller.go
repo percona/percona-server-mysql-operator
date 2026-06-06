@@ -1808,6 +1808,9 @@ func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx 
 
 	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
 		secret.Data = data
+		secret.Labels = cr.GlobalLabels()
+		secret.Annotations = cr.GlobalAnnotations()
+
 		if err := controllerutil.SetControllerReference(cr, secret, r.Scheme); err != nil {
 			return errors.Wrap(err, "set controller reference")
 		}
