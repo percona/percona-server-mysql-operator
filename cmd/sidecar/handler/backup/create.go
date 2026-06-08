@@ -315,7 +315,7 @@ func getSecret(username apiv1.SystemUser) (string, error) {
 }
 
 func versionFileFor(keyFile string) string {
-	return filepath.Join(filepath.Dir(keyFile), "version")
+	return filepath.Join(filepath.Dir(keyFile), naming.InternalEncryptionKeyVersionFileName)
 }
 
 func readVersionFile(path string) (string, error) {

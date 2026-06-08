@@ -1822,8 +1822,8 @@ func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx 
 	}
 
 	opResult, err := controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
-		if version, ok := secret.Data["version"]; ok {
-			data["version"] = version
+		if version, ok := secret.Data[naming.InternalEncryptionKeyVersionFileName]; ok {
+			data[naming.InternalEncryptionKeyVersionFileName] = version
 		}
 		secret.Data = data
 		secret.Labels = cr.GlobalLabels()
@@ -1842,10 +1842,11 @@ func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx 
 		return nil
 	}
 
-	// If the Secret was modified, we need to pass the resourceVersion to it.
-	// The xtrabackup sidecar will use this to check if the mounted Secret is synced.
-	// Use APIReader so to avoid reading a stale cache. Perfmance-wise this is fine because do
-	// not expect to hit this path often.
+	// Store the current resourceVersion inside the Secret so the xtrabackup sidecar
+	// can compare it with the version in the mounted Secret data. When they match,
+	// the kubelet has refreshed the mounted volume and the sidecar can safely use
+	// the updated encryption key. Use APIReader here to avoid reading a stale cache;
+	// performance-wise this is fine because we do not expect to hit this path often.
 	if err := r.APIReader.Get(ctx, client.ObjectKeyFromObject(secret), secret); err != nil {
 		return errors.Wrap(err, "get encryption key secret")
 	}
