@@ -92,12 +92,44 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	status := cr.Status
+	status.StateDesc = ""
 	if status.State == apiv1.RestoreError {
 		status.State = apiv1.RestoreNew
-		status.StateDesc = ""
 	}
 
 	defer func() {
+		if status.State != cr.Status.State || status.StateDesc != cr.Status.StateDesc {
+			retriable := func(err error) bool {
+				return err != nil
+			}
+			err := k8sretry.OnError(k8sretry.DefaultRetry, retriable, func() error {
+				cr := &apiv1.PerconaServerMySQLRestore{}
+				if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
+					return errors.Wrapf(err, "get %v", req.String())
+				}
+
+				cr.Status = status
+				log.Info("Updating status", "state", cr.Status.State)
+				if err := r.Status().Update(ctx, cr); err != nil {
+					return errors.Wrap(err, "update status")
+				}
+
+				if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
+					return errors.Wrapf(err, "get %v", req.String())
+				}
+				if cr.Status.State != status.State {
+					return errors.Errorf("status %s was not updated to %s", cr.Status.State, status.State)
+				}
+				return nil
+			})
+			if err != nil {
+				log.Error(err, "failed to update status")
+				return
+			}
+
+			log.V(1).Info("status updated", "state", status.State)
+		}
+
 		switch status.State {
 		case apiv1.RestoreFailed, apiv1.RestoreSucceeded, apiv1.RestoreError:
 			if err := k8s.ReleaseLease(ctx, r.Client, naming.RestoreLeaseName(cr.Spec.ClusterName), naming.LeaseHolderName(cr.Name, string(cr.GetUID())), cr.Namespace); err != nil && !errors.Is(err, k8s.ErrLeaseAlreadyHeld) {
@@ -105,40 +137,6 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			}
 		default:
 		}
-
-		if status.State == cr.Status.State && status.StateDesc == cr.Status.StateDesc {
-			return
-		}
-
-		retriable := func(err error) bool {
-			return err != nil
-		}
-		err := k8sretry.OnError(k8sretry.DefaultRetry, retriable, func() error {
-			cr := &apiv1.PerconaServerMySQLRestore{}
-			if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
-				return errors.Wrapf(err, "get %v", req.String())
-			}
-
-			cr.Status = status
-			log.Info("Updating status", "state", cr.Status.State)
-			if err := r.Status().Update(ctx, cr); err != nil {
-				return errors.Wrap(err, "update status")
-			}
-
-			if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
-				return errors.Wrapf(err, "get %v", req.String())
-			}
-			if cr.Status.State != status.State {
-				return errors.Errorf("status %s was not updated to %s", cr.Status.State, status.State)
-			}
-			return nil
-		})
-		if err != nil {
-			log.Error(err, "failed to update status")
-			return
-		}
-
-		log.V(1).Info("status updated", "state", status.State)
 	}()
 
 	switch status.State {
@@ -178,6 +176,65 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, errors.Wrap(err, "try to acquire lease")
 	} else if !ok {
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      xtrabackup.RestoreJobName(cluster, cr),
+			Namespace: req.Namespace,
+		},
+	}
+	err = r.Get(ctx, client.ObjectKeyFromObject(job), job)
+	if client.IgnoreNotFound(err) != nil {
+		return ctrl.Result{}, errors.Wrapf(err, "get job %s", job.Name)
+	}
+	restoreJobNotFound := k8serrors.IsNotFound(err)
+
+	restoreJobCompleted := false
+	if !restoreJobNotFound {
+		for _, cond := range job.Status.Conditions {
+			if cond.Type != batchv1.JobComplete || cond.Status != corev1.ConditionTrue {
+				continue
+			}
+			restoreJobCompleted = true
+			break
+		}
+	}
+
+	if restoreJobCompleted {
+		if cr.Spec.PITR != nil {
+			pitrState, err := r.reconcilePITRJob(ctx, cr, cluster)
+			if err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "reconcile pitr job")
+			}
+			status.State = pitrState
+			if pitrState != apiv1.RestoreSucceeded {
+				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			}
+		}
+
+		if cluster.Spec.Pause {
+			if cluster.CompareVersion("1.1.0") >= 0 || cluster.Spec.MySQL.IsGR() {
+				if err := r.deletePVCs(ctx, cluster); err != nil {
+					return ctrl.Result{}, errors.Wrap(err, "delete PVCs")
+				}
+			}
+			if err := r.unpauseCluster(ctx, cluster); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "unpause cluster")
+			}
+		}
+		if cluster.Status.State != apiv1.StateReady {
+			status.State = apiv1.RestoreRunning
+			status.StateDesc = "Waiting for cluster to become ready after restore"
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+
+		if err := r.cleanupBackupSourceBinlogServer(ctx, cr, cluster); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "cleanup backup source binlog server")
+		}
+		status.State = apiv1.RestoreSucceeded
+		log.Info("PerconaServerMySQLRestore is finished", "restore", cr.Name, "cluster", cluster.Name)
+		return ctrl.Result{}, nil
 	}
 
 	backup, err := utilk8s.GetRunningBackup(ctx, r.Client, cr.Spec.ClusterName, cr.Namespace)
@@ -260,15 +317,8 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 		}
 	}
 
-	job := &batchv1.Job{}
-	nn = types.NamespacedName{Name: xtrabackup.RestoreJobName(cluster, cr), Namespace: req.Namespace}
-	err = r.Get(ctx, nn, job)
-	if client.IgnoreNotFound(err) != nil {
-		return ctrl.Result{}, errors.Wrapf(err, "get job %s", nn)
-	}
-
-	if k8serrors.IsNotFound(err) {
-		log.Info("Creating restore job", "jobName", nn.Name)
+	if restoreJobNotFound {
+		log.Info("Creating restore job", "jobName", job.Name)
 
 		restorer, err := r.getRestorer(ctx, cr, cluster)
 		if err != nil {
@@ -303,37 +353,12 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 			switch cond.Type {
 			case batchv1.JobFailed:
 				status.State = apiv1.RestoreFailed
-			case batchv1.JobComplete:
-				if cr.Spec.PITR != nil {
-					pitrState, err := r.reconcilePITRJob(ctx, cr, cluster)
-					if err != nil {
-						return ctrl.Result{}, errors.Wrap(err, "reconcile pitr job")
-					}
-					status.State = pitrState
-				} else {
-					status.State = apiv1.RestoreSucceeded
-				}
 			}
 		}
 	case apiv1.RestoreFailed, apiv1.RestoreSucceeded:
 		return ctrl.Result{}, nil
 	default:
 		status.State = apiv1.RestoreStarting
-	}
-
-	if status.State == apiv1.RestoreSucceeded {
-		if cluster.CompareVersion("1.1.0") >= 0 || cluster.Spec.MySQL.IsGR() {
-			if err := r.deletePVCs(ctx, cluster); err != nil {
-				return ctrl.Result{}, errors.Wrap(err, "delete PVCs")
-			}
-		}
-		if err := r.unpauseCluster(ctx, cluster); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "unpause cluster")
-		}
-		if err := r.cleanupBackupSourceBinlogServer(ctx, cr, cluster); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "cleanup backup source binlog server")
-		}
-		log.Info("PerconaServerMySQLRestore is finished", "restore", cr.Name, "cluster", cluster.Name)
 	}
 
 	return ctrl.Result{}, nil
@@ -734,11 +759,7 @@ func (r *PerconaServerMySQLRestoreReconciler) unpauseCluster(ctx context.Context
 
 		c.Spec.Pause = false
 
-		if err := r.Patch(ctx, c, client.MergeFrom(cluster)); err != nil {
-			return err
-		}
-
-		return nil
+		return r.Patch(ctx, c, client.MergeFrom(cluster))
 	})
 }
 
