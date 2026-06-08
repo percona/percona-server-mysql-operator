@@ -47,7 +47,7 @@ decrypt() {
 	local targetdir=$1
 	if [ -n "${ENCRYPTION_ALGORITHM}" ]; then
 		# shellcheck disable=SC2086
-		xtrabackup --decrypt=${ENCRYPTION_ALGORITHM} --encrypt-key-file=${encryption_key_file} --target-dir="${targetdir}" --parallel="${PARALLEL}"
+		xtrabackup --decrypt=${ENCRYPTION_ALGORITHM} --encrypt-key-file=${encryption_key_file} --target-dir="${targetdir}" --parallel="${PARALLEL}" ${XB_EXTRA_ARGS}
 		find "${targetdir}" -name '*.xbcrypt' -delete
 	fi
 }
