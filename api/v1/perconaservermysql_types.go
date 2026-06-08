@@ -333,6 +333,16 @@ type BackupSpec struct {
 	EncryptionKeySecret *EncryptionKeySecretSelector `json:"encryptionKeySecret,omitempty"`
 }
 
+func (s *BackupSpec) GetEncryptionEnabled(storage *BackupStorageSpec) bool {
+	if s.EncryptionKeySecret != nil {
+		return true
+	}
+	if storage != nil && storage.EncryptionKeySecret != nil {
+		return true
+	}
+	return false
+}
+
 type BackupSchedule struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name,omitempty"`

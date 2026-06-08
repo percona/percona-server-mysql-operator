@@ -66,7 +66,7 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 
 	// Wait for kubelet to propagate the encryption key file to the pod.
 	if backupConf.EncryptionKeyFile != "" {
-		if err := awaitEncryptionKeyFile(req.Context(), log, backupConf.EncryptionKeyFile); err != nil {
+		if err := awaitEncryptionKeyFile(req.Context(), log, backupConf.EncryptionKeyFile, backupConf.EncryptionKeyVersion); err != nil {
 			log.Error(err, "failed to await encryption key file")
 			http.Error(w, "backup failed", http.StatusInternalServerError)
 			return
@@ -314,29 +314,49 @@ func getSecret(username apiv1.SystemUser) (string, error) {
 	return strings.TrimSpace(string(sBytes)), nil
 }
 
-// awaitEncryptionKeyFile waits for the encryption key file to be created.
-// If the backup is created soon after the encryption secret was configured,
-// we need to wait for kubelet to propagate the secret to the file mounted on the pod.
-func awaitEncryptionKeyFile(ctx context.Context, log logr.Logger, file string) error {
-	pCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+func versionFileFor(keyFile string) string {
+	return filepath.Join(filepath.Dir(keyFile), "version")
+}
+
+func readVersionFile(path string) (string, error) {
+	sBytes, err := os.ReadFile(path)
+	if err != nil {
+		return "", errors.Wrapf(err, "read %s", path)
+	}
+	return strings.TrimSpace(string(sBytes)), nil
+}
+
+const defaultKubeletSecretSyncTimeout = 5 * time.Minute
+
+// awaitEncryptionKeyFile waits for the encryption key file to be created and synced from the Secret.
+func awaitEncryptionKeyFile(ctx context.Context, log logr.Logger, file, desiredVersion string) error {
+	pCtx, cancel := context.WithTimeout(ctx, defaultKubeletSecretSyncTimeout)
 	defer cancel()
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	for {
+		// Wait for the file to exist.
 		if _, err := os.Stat(file); err == nil {
-			return nil
+			// If the file exists, wait for it to be synced from the Secret.
+			observedVersion, err := readVersionFile(versionFileFor(file))
+			if err != nil {
+				return errors.Wrap(err, "read version file")
+			}
+			if observedVersion == desiredVersion {
+				return nil
+			}
 		} else if !os.IsNotExist(err) {
 			return errors.Wrap(err, "stat encryption key file")
 		}
 
 		select {
 		case <-pCtx.Done():
-			return pCtx.Err()
+			return errors.Wrap(pCtx.Err(), "context done")
 
 		case <-ticker.C:
-			log.Info("waiting for encryption key file to be created", "file", file)
+			log.Info("waiting for encryption key file", "file", file)
 		}
 	}
 }

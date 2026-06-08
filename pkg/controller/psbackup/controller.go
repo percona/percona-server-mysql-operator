@@ -453,6 +453,24 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 		}
 	}
 
+	if cluster.Spec.Backup.GetEncryptionEnabled(storage) {
+		secret := &corev1.Secret{}
+		if err := r.Client.Get(ctx, client.ObjectKey{
+			Namespace: cr.Namespace,
+			Name:      naming.EncryptionKeyInternalSecretName(cluster.Name),
+		}, secret); err != nil {
+			return errors.Wrap(err, "get encryption key secret")
+		}
+
+		version, ok := secret.Data["version"]
+		if !ok {
+			return errors.Errorf("version not found in encryption key secret %s/%s", secret.Namespace, secret.Name)
+		}
+		if err := xtrabackup.SetEncryptionKeyFileVersion(job, string(version)); err != nil {
+			return errors.Wrap(err, "set encryption key file version")
+		}
+	}
+
 	if err := controllerutil.SetControllerReference(cr, job, r.Scheme); err != nil {
 		return errors.Wrapf(err, "set controller reference to Job %s/%s", job.Namespace, job.Name)
 	}

@@ -922,15 +922,31 @@ func SetSourceNode(job *batchv1.Job, src string) error {
 	return errors.Errorf("no container named %s in Job spec", appName)
 }
 
+func SetEncryptionKeyFileVersion(job *batchv1.Job, ver string) error {
+	spec := &job.Spec.Template.Spec
+
+	for i := range spec.Containers {
+		container := &spec.Containers[i]
+
+		if container.Name == appName {
+			container.Env = append(container.Env, corev1.EnvVar{Name: "ENCRYPTION_KEY_FILE_VERSION", Value: ver})
+			return nil
+		}
+	}
+
+	return errors.Errorf("no container named %s in Job spec", appName)
+}
+
 type BackupConfig struct {
-	Destination       string                        `json:"destination"`
-	Type              apiv1.BackupStorageType       `json:"type"`
-	VerifyTLS         bool                          `json:"verifyTLS,omitempty"`
-	ContainerOptions  *apiv1.BackupContainerOptions `json:"containerOptions,omitempty"`
-	S3                BackupConfigS3                `json:"s3"`
-	GCS               BackupConfigGCS               `json:"gcs"`
-	Azure             BackupConfigAzure             `json:"azure"`
-	EncryptionKeyFile string                        `json:"encryptionKeyFile,omitempty"`
+	Destination          string                        `json:"destination"`
+	Type                 apiv1.BackupStorageType       `json:"type"`
+	VerifyTLS            bool                          `json:"verifyTLS,omitempty"`
+	ContainerOptions     *apiv1.BackupContainerOptions `json:"containerOptions,omitempty"`
+	S3                   BackupConfigS3                `json:"s3"`
+	GCS                  BackupConfigGCS               `json:"gcs"`
+	Azure                BackupConfigAzure             `json:"azure"`
+	EncryptionKeyFile    string                        `json:"encryptionKeyFile,omitempty"`
+	EncryptionKeyVersion string                        `json:"encryptionKeyVersion,omitempty"`
 
 	// Specify for incremental backups
 	IncrementalLsn string `json:"incrementalLsn,omitempty"`

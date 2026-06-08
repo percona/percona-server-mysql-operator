@@ -68,6 +68,8 @@ import (
 // PerconaServerMySQLReconciler reconciles a PerconaServerMySQL object
 type PerconaServerMySQLReconciler struct {
 	client.Client
+
+	APIReader     client.Reader
 	Scheme        *runtime.Scheme
 	ServerVersion *platform.ServerVersion
 	Recorder      record.EventRecorder
@@ -1767,29 +1769,13 @@ func readEncryptionKey(ctx context.Context, cl client.Client, sel apiv1.Encrypti
 	return value, nil
 }
 
-// Reconcile the internal encryption key secret for the backup.
-// TODO(mayank): Decide whether Secret updates should trigger SmartUpdate.
-//
-// Kubelet propagates mounted Secret changes eventually, so a backup started right
-// after an encryption key update may still read the previous key from the pod.
-func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
-	if cr.Spec.Backup == nil || cr.CompareVersion("1.2.0") < 0 {
-		return nil
-	}
-
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.EncryptionKeyInternalSecretName(cr.Name),
-			Namespace: cr.Namespace,
-		},
-	}
-
+func buildEncryptionKeySecretData(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL) (map[string][]byte, error) {
 	data := make(map[string][]byte)
 
 	if cr.Spec.Backup.EncryptionKeySecret != nil {
-		key, err := readEncryptionKey(ctx, r.Client, *cr.Spec.Backup.EncryptionKeySecret, cr.Namespace)
+		key, err := readEncryptionKey(ctx, cl, *cr.Spec.Backup.EncryptionKeySecret, cr.Namespace)
 		if err != nil {
-			return errors.Wrap(err, "read backup encryption key")
+			return nil, errors.Wrap(err, "read backup encryption key")
 		}
 		data[naming.InternalEncryptionKeyFileName(cr.GetName(), "")] = key
 	}
@@ -1799,14 +1785,46 @@ func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx 
 			continue
 		}
 
-		key, err := readEncryptionKey(ctx, r.Client, *storage.EncryptionKeySecret, cr.Namespace)
+		key, err := readEncryptionKey(ctx, cl, *storage.EncryptionKeySecret, cr.Namespace)
 		if err != nil {
-			return errors.Wrap(err, "read backup encryption key")
+			return nil, errors.Wrap(err, "read backup encryption key")
 		}
 		data[naming.InternalEncryptionKeyFileName(cr.GetName(), storageName)] = key
 	}
+	return data, nil
+}
 
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
+// Reconcile the internal encryption key secret for the backup.
+func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
+	if cr.Spec.Backup == nil || cr.CompareVersion("1.2.0") < 0 {
+		return nil
+	}
+
+	log := logf.FromContext(ctx)
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      naming.EncryptionKeyInternalSecretName(cr.Name),
+			Namespace: cr.Namespace,
+		},
+	}
+
+	data, err := buildEncryptionKeySecretData(ctx, r.Client, cr)
+	if err != nil {
+		return errors.Wrap(err, "build encryption key secret data")
+	}
+
+	if len(data) == 0 {
+		if err := r.Client.Delete(ctx, secret); client.IgnoreNotFound(err) != nil {
+			return errors.Wrap(err, "delete encryption key secret")
+		}
+		return nil
+	}
+
+	opResult, err := controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
+		if version, ok := secret.Data["version"]; ok {
+			data["version"] = version
+		}
 		secret.Data = data
 		secret.Labels = cr.GlobalLabels()
 		secret.Annotations = cr.GlobalAnnotations()
@@ -1815,9 +1833,29 @@ func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx 
 			return errors.Wrap(err, "set controller reference")
 		}
 		return nil
-	}); err != nil {
+	})
+	if err != nil {
 		return errors.Wrap(err, "create or update encryption key secret")
 	}
+
+	if opResult == controllerutil.OperationResultNone {
+		return nil
+	}
+
+	// If the Secret was modified, we need to pass the resourceVersion to it.
+	// The xtrabackup sidecar will use this to check if the mounted Secret is synced.
+	// Use APIReader so to avoid reading a stale cache. Perfmance-wise this is fine because do
+	// not expect to hit this path often.
+	if err := r.APIReader.Get(ctx, client.ObjectKeyFromObject(secret), secret); err != nil {
+		return errors.Wrap(err, "get encryption key secret")
+	}
+	secret.Data["version"] = []byte(secret.GetResourceVersion())
+
+	if err := r.Client.Update(ctx, secret); err != nil {
+		return errors.Wrap(err, "update encryption key secret")
+	}
+
+	log.Info("Created or updated internal backup encryption key secret", "name", secret.Name, "version", secret.GetResourceVersion())
 
 	return nil
 }
