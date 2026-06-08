@@ -210,3 +210,16 @@ func (m *ReplicationDBManager) CheckIfDatabaseExists(ctx context.Context, name s
 	}
 	return true, nil
 }
+
+func (m *ReplicationDBManager) GetClusterSetReplicationExists(ctx context.Context) (bool, error) {
+	rows := []*struct {
+		Exists bool `csv:"channel_exists"`
+	}{}
+
+	err := m.query(ctx, "SELECT EXISTS(SELECT 1 FROM replication_connection_configuration WHERE channel_name = 'clusterset_replication') as channel_exists", &rows)
+	if err != nil {
+		return false, errors.Wrap(err, "query cluster set replication exists")
+	}
+
+	return rows[0].Exists, nil
+}
