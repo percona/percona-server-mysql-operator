@@ -150,7 +150,7 @@ func (r *PerconaServerMySQLReconciler) isClusterRolePrimary(
 	return status.ClusterRole == clusterset.ClusterRolePrimary, nil
 }
 
-// Why is this needed: Once a replica is removed from the ClusterSet, mysqlshell always dissloves GR, removes related metadata
+// Why is this needed: Once a replica is removed from the ClusterSet, mysqlshell always dissolves GR, removes related metadata
 // and leaves the cluster in a read-only state. This routine ensures that the cluster is able to start again as a GR cluster and accept new writes.
 // This is automated in mysqlshell 9.7 (which is not supported at the time of writing this), but that will require investigation as well.
 // For more details, see: https://dev.mysql.com/doc/mysql-shell/8.4/en/innodb-clusterset-remove.html
