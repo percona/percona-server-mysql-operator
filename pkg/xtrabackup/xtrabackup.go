@@ -40,7 +40,7 @@ const (
 	backupMountPath          = "/backup"
 	vaultSecretVolumeName    = "vault-keyring-secret"
 	vaultSecretMountPath     = "/etc/mysql/vault-keyring-secret"
-	encryptionKeysVolumeName = "backup-encryption-key"
+	encryptionKeysVolumeName = "backup-encryption-keys"
 	encryptionKeysMountPath  = "/etc/mysql/encryption-keys"
 )
 

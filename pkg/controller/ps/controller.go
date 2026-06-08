@@ -456,7 +456,7 @@ func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv
 	}
 	for _, secretName := range secretNames {
 		secret := &corev1.Secret{}
-		err := r.Client.Get(ctx, types.NamespacedName{
+		err := r.Get(ctx, types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      secretName,
 		}, secret)
@@ -1772,6 +1772,10 @@ func readEncryptionKey(ctx context.Context, cl client.Client, sel apiv1.Encrypti
 func buildEncryptionKeySecretData(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL) (map[string][]byte, error) {
 	data := make(map[string][]byte)
 
+	if cr.Spec.Backup == nil {
+		return data, nil
+	}
+
 	if cr.Spec.Backup.EncryptionKeySecret != nil {
 		key, err := readEncryptionKey(ctx, cl, *cr.Spec.Backup.EncryptionKeySecret, cr.Namespace)
 		if err != nil {
@@ -1815,7 +1819,7 @@ func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx 
 	}
 
 	if len(data) == 0 {
-		if err := r.Client.Delete(ctx, secret); client.IgnoreNotFound(err) != nil {
+		if err := r.Delete(ctx, secret); client.IgnoreNotFound(err) != nil {
 			return errors.Wrap(err, "delete encryption key secret")
 		}
 		return nil
@@ -1852,7 +1856,7 @@ func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx 
 	}
 	secret.Data["version"] = []byte(secret.GetResourceVersion())
 
-	if err := r.Client.Update(ctx, secret); err != nil {
+	if err := r.Update(ctx, secret); err != nil {
 		return errors.Wrap(err, "update encryption key secret")
 	}
 

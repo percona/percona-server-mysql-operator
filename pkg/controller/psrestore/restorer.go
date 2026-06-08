@@ -382,6 +382,7 @@ func getBackup(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMyS
 	}
 	storage, ok := cluster.Spec.Backup.Storages[backup.Spec.StorageName]
 	if ok {
+		storage = storage.DeepCopy()
 		if storage.EncryptionKeySecret == nil {
 			storage.EncryptionKeySecret = cluster.Spec.Backup.EncryptionKeySecret
 		}

@@ -455,7 +455,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 
 	if cluster.Spec.Backup.GetEncryptionEnabled(storage) {
 		secret := &corev1.Secret{}
-		if err := r.Client.Get(ctx, client.ObjectKey{
+		if err := r.Get(ctx, client.ObjectKey{
 			Namespace: cr.Namespace,
 			Name:      naming.EncryptionKeyInternalSecretName(cluster.Name),
 		}, secret); err != nil {
