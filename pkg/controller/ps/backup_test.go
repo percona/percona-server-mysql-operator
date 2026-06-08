@@ -195,12 +195,15 @@ func TestReconcileInternalEncryptionKeySecret(t *testing.T) {
 		},
 	}
 
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cr, clusterKeySecret, storageKeySecret).
+		Build()
+
 	r := &PerconaServerMySQLReconciler{
-		Client: fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithObjects(cr, clusterKeySecret, storageKeySecret).
-			Build(),
-		Scheme: scheme,
+		APIReader: cl,
+		Client:    cl,
+		Scheme:    scheme,
 	}
 
 	require.NoError(t, r.reconcileInternalEncryptionKeySecret(t.Context(), cr))
@@ -211,10 +214,10 @@ func TestReconcileInternalEncryptionKeySecret(t *testing.T) {
 		Namespace: cr.Namespace,
 	}, internalSecret))
 
-	assert.Equal(t, map[string][]byte{
-		naming.InternalEncryptionKeyFileName(cr.Name, ""):   []byte("cluster-secret-key"),
-		naming.InternalEncryptionKeyFileName(cr.Name, "s3"): []byte("storage-secret-key"),
-	}, internalSecret.Data)
+	assert.Equal(t, []byte("cluster-secret-key"), internalSecret.Data[naming.InternalEncryptionKeyFileName(cr.Name, "")])
+	assert.Equal(t, []byte("storage-secret-key"), internalSecret.Data[naming.InternalEncryptionKeyFileName(cr.Name, "s3")])
+	assert.NotEmpty(t, internalSecret.Data[naming.InternalEncryptionKeyVersionFileName])
+	assert.Len(t, internalSecret.Data, 3)
 	require.Len(t, internalSecret.OwnerReferences, 1)
 	assert.Equal(t, cr.Name, internalSecret.OwnerReferences[0].Name)
 	assert.Equal(t, cr.UID, internalSecret.OwnerReferences[0].UID)
