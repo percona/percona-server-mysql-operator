@@ -63,17 +63,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - events
-  - serviceaccounts
-  verbs:
-  - create
-  - get
-  - list
-  - patch
-  - watch
-- apiGroups:
-  - ""
-  resources:
   - pods
   - pods/exec
   verbs:
@@ -84,6 +73,28 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - get
+  - list
+  - patch
   - watch
 - apiGroups:
   - apps
@@ -138,16 +149,6 @@ rules:
   - update
   - watch
 - apiGroups:
-  - events.k8s.io
-  resources:
-  - events
-  verbs:
-  - create
-  - get
-  - list
-  - patch
-  - watch
-- apiGroups:
   - policy
   resources:
   - poddisruptionbudgets
@@ -165,6 +166,9 @@ rules:
   - perconaservermysqlbackups
   - perconaservermysqlbackups/finalizers
   - perconaservermysqlbackups/status
+  - perconaservermysqlclustersets
+  - perconaservermysqlclustersets/finalizers
+  - perconaservermysqlclustersets/status
   - perconaservermysqlrestores
   - perconaservermysqlrestores/finalizers
   - perconaservermysqlrestores/status
@@ -189,6 +193,7 @@ rules:
   - get
   - list
   - patch
+  - update
   - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
