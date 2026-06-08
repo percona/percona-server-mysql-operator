@@ -2,9 +2,11 @@ package k8s
 
 import (
 	"context"
+	"os"
 	"sort"
 
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -220,4 +222,18 @@ func ListDependentIncrementalBackups(
 		return ti.Before(tj)
 	})
 	return result, nil
+}
+
+func GetOperatorPod(ctx context.Context, cl client.Reader) (*corev1.Pod, error) {
+	namespace := os.Getenv("POD_NAMESPACE")
+	podName := os.Getenv("POD_NAME")
+	if namespace == "" || podName == "" {
+		return nil, errors.New("POD_NAMESPACE or POD_NAME is not set")
+	}
+
+	pod := &corev1.Pod{}
+	if err := cl.Get(ctx, types.NamespacedName{Namespace: namespace, Name: podName}, pod); err != nil {
+		return nil, errors.Wrap(err, "get operator pod")
+	}
+	return pod, nil
 }

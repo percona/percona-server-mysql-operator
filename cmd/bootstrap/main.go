@@ -22,6 +22,10 @@ func main() {
 
 	log.SetOutput(io.MultiWriter(os.Stderr, f))
 
+	if err := utils.CheckClustersetRecovery(); err != nil {
+		log.Fatalf("failed to check clusterset recovery: %v", err)
+	}
+
 	requested, rFile := utils.ManualRecoveryRequested()
 	if requested {
 		log.Printf("%s exists. exiting...", rFile)
