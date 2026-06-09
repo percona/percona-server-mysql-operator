@@ -673,6 +673,13 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	}
 	env = append(env, spec.Env...)
 
+	if cr.CompareVersion("1.2.0") >= 0 {
+		env = append(env, corev1.EnvVar{
+			Name:  "BOOTSTRAP_MODE",
+			Value: string(cr.BootstrapMode()),
+		})
+	}
+
 	if cr.CompareVersion("0.12.0") >= 0 {
 		env = append(env, corev1.EnvVar{
 			Name:  "KEYRING_VAULT_PATH",

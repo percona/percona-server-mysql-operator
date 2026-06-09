@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	"strings"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
@@ -38,6 +39,29 @@ func (m *UserManager) UpdateUserPasswords(ctx context.Context, users []mysql.Use
 	err := m.db.exec(ctx, "FLUSH PRIVILEGES", &outb, &errb)
 	if err != nil {
 		return errors.Wrap(err, "flush privileges")
+	}
+
+	return nil
+}
+
+// CreateClusterSetUser creates the clusterset user with the same grants as
+// ps-entrypoint.sh. The entrypoint creates users only on initial datadir
+// initialization, so clusters created by operator versions older than 1.2.0
+// don't have this user. It is safe to call if the user already exists.
+func (m *UserManager) CreateClusterSetUser(ctx context.Context, pass string) error {
+	queries := []string{
+		fmt.Sprintf("CREATE USER IF NOT EXISTS 'clusterset'@'%%' IDENTIFIED BY '%s' PASSWORD EXPIRE NEVER", escapePass(pass)),
+		"GRANT SELECT, RELOAD, SHUTDOWN, PROCESS, FILE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE USER, EXECUTE ON *.* TO 'clusterset'@'%' WITH GRANT OPTION",
+		"GRANT BACKUP_ADMIN, CLONE_ADMIN, CONNECTION_ADMIN, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, REPLICATION_APPLIER, PERSIST_RO_VARIABLES_ADMIN, ROLE_ADMIN, SESSION_VARIABLES_ADMIN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'clusterset'@'%' WITH GRANT OPTION",
+		"GRANT INSERT, UPDATE, DELETE ON mysql.* TO 'clusterset'@'%' WITH GRANT OPTION",
+		"GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata.* TO 'clusterset'@'%' WITH GRANT OPTION",
+		"GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata_bkp.* TO 'clusterset'@'%' WITH GRANT OPTION",
+		"GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata_previous.* TO 'clusterset'@'%' WITH GRANT OPTION",
+	}
+
+	var errb, outb bytes.Buffer
+	if err := m.db.exec(ctx, strings.Join(queries, "; "), &outb, &errb); err != nil {
+		return errors.Wrap(err, "create clusterset user")
 	}
 
 	return nil

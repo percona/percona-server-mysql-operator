@@ -1,0 +1,83 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+
+resourceRefs:
+- kind: PerconaServerMySQL
+  apiVersion: ps.percona.com/v1
+  name: gr-cross-cluster-dc1
+  ref: dc1
+assertAll:
+- celExpr: "!dc1.status.conditions.exists(c, c.type == \"ClusterSetReplicationRunning\")"
+  message: "dc1 should not have ClusterSetReplicationRunning condition"
+
+commands:
+  - script: |-
+      set -o errexit
+      set -o pipefail
+      set -o xtrace
+
+      source ../../functions
+
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
+
+      status=$(get_clusterset_status "-h gr-cross-cluster-dc2-mysql-primary" "${mysql_user}")
+
+      echo "${status}" | jq .
+      echo "${status}" | jq -e '
+          .status == "HEALTHY" and
+          .primaryCluster == "grcrossclusterdc2" and
+          .clusters.grcrossclusterdc2.clusterRole == "PRIMARY" and
+          .clusters.grcrossclusterdc2.globalStatus == "OK" and
+          (.clusters | length) == 1
+      '
+    timeout: 420
+---
+kind: PerconaServerMySQLClusterSet
+apiVersion: ps.percona.com/v1
+metadata:
+  name: gr-cross-cluster
+spec:
+  clusters:
+    - name: grcrossclusterdc2
+      endpoints:
+      - host: gr-cross-cluster-dc2-mysql-0.gr-cross-cluster-dc2-mysql
+status:
+  conditions:
+  - type: MySQLShellRunnerReady
+    status: "True"
+  - type: ClusterSetBootstrapped
+    status: "True"
+  - type: Ready
+    status: "True"
+  clusters:
+    grcrossclusterdc2:
+      clusterRole: PRIMARY
+      globalStatus: OK
+  primaryCluster: grcrossclusterdc2
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-cross-cluster-dc1
+status:
+  conditions:
+  - reason: Initializing
+    status: "False"
+    type: Initializing
+  - reason: Ready
+    status: "True"
+    type: Ready
+  - message: InnoDB cluster successfully bootstrapped with 3 nodes
+    reason: InnoDBClusterBootstrapped
+    status: "True"
+    type: InnoDBClusterBootstrapped
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  haproxy:
+    ready: 1
+    size: 1
+    state: ready
+  state: ready
