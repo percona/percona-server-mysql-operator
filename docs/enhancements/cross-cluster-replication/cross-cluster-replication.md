@@ -21,7 +21,7 @@ This feature adds support for cross-cluster replication capabilities between GR 
 - Provide an API for managing MySQL InnoDB ClusterSets across sites.
 - Support clusters anywhere reachable on the network: same K8s cluster, different K8s cluster, on-prem, managed service.
 - Support planned switchover and explicit emergency (force) failover.
-- Keep the per-site `PerconaServerMySQL` controller unchanged except for the minimum needed to let a new replica start as standalone. One of the requirements explicitly laid out by the MySQL docs is that replica clusters need to come up as 'standalone' clusters (no GR initialised). The ClusterSet takes care of initialising GR. Read about the requirements [here](https://dev.mysql.com/doc/mysql-shell/9.1/en/innodb-clusterset-requirements.html#innodb-clusterset-requirements-mysql-instances).
+- Keep the per-site `PerconaServerMySQL` controller unchanged except for the minimum needed to let a new replica start as standalone. One of the requirements explicitly laid out by the MySQL docs is that replica clusters need to come up as 'standalone' clusters (no GR initialized). The ClusterSet takes care of initializing GR. Read about the requirements [here](https://dev.mysql.com/doc/mysql-shell/9.1/en/innodb-clusterset-requirements.html#innodb-clusterset-requirements-mysql-instances).
 
 ### 1.2 Non-Goals (Out of Scope)
 
