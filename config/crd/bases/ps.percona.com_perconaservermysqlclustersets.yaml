@@ -76,6 +76,9 @@ spec:
                 maxItems: 10
                 minItems: 1
                 type: array
+                x-kubernetes-validations:
+                - message: clusters names must be unique
+                  rule: self.all(c, self.exists_one(d, d.name == c.name))
               createReplicaClusterOptions:
                 properties:
                   recoveryMethod:

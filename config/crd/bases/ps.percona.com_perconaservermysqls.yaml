@@ -10491,6 +10491,8 @@ spec:
                 type: object
               host:
                 type: string
+              innodbClusterName:
+                type: string
               mysql:
                 properties:
                   imageID:
