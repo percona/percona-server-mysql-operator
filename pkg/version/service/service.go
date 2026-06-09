@@ -45,8 +45,13 @@ func GetVersion(ctx context.Context, cr *apiv1.PerconaServerMySQL, endpoint stri
 	crUID := string(cr.GetUID())
 	platformStr := string(serverVersion.Platform)
 
+	apply := cr.Spec.UpgradeOptions.Apply
+	if apply == "" {
+		apply = apiv1.UpgradeStrategyDisabled
+	}
+
 	applyParams := &version_service.VersionServiceApplyParams{
-		Apply:             cr.Spec.UpgradeOptions.Apply,
+		Apply:             apply,
 		BackupVersion:     &cr.Status.BackupVersion,
 		CustomResourceUID: &crUID,
 		DatabaseVersion:   &cr.Status.MySQL.Version,
