@@ -145,6 +145,49 @@ func TestReconcileVersions(t *testing.T) {
 			want:             apiv1.PerconaServerMySQLStatus{},
 		},
 		{
+			name: "Test enabled telemetry with empty upgrade strategy",
+			cr: &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: namespace,
+					UID:       types.UID("custom-resource-uid"),
+				},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					Backup: &apiv1.BackupSpec{
+						Image: "some-image",
+					},
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: apiv1.ClusterTypeGR,
+						VolumeSpec: &apiv1.VolumeSpec{
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+								Resources: corev1.VolumeResourceRequirements{
+									Requests: map[corev1.ResourceName]resource.Quantity{
+										corev1.ResourceStorage: q,
+									},
+								},
+							},
+						},
+						PodSpec: apiv1.PodSpec{
+							Size: 3,
+						},
+					},
+					Proxy: apiv1.ProxySpec{
+						HAProxy: &apiv1.HAProxySpec{
+							Enabled: true,
+							PodSpec: apiv1.PodSpec{
+								Size: 2,
+							},
+						},
+					},
+					UpgradeOptions: apiv1.UpgradeOptions{
+						VersionServiceEndpoint: defaultEndpoint,
+					},
+				},
+			},
+			telemetryEnabled: true,
+			want:             apiv1.PerconaServerMySQLStatus{},
+		},
+		{
 			name: "Test enabled telemetry and custom version upgrade endpoint",
 			cr: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
@@ -360,6 +403,9 @@ func TestGetVersion(t *testing.T) {
 							},
 						},
 					},
+					UpgradeOptions: apiv1.UpgradeOptions{
+						Apply: apiv1.UpgradeStrategyRecommended,
+					},
 				},
 				Status: apiv1.PerconaServerMySQLStatus{
 					MySQL: apiv1.StatefulAppStatus{
@@ -443,8 +489,11 @@ func (vs *fakeVS) Apply(_ context.Context, req any) (any, error) {
 		return nil, errors.New("unimplemented")
 	}
 	r := req.(*pbVersion.ApplyRequest)
+	if r.Apply == "" {
+		return nil, errors.New("failed to parse version: ")
+	}
 	switch r.Apply {
-	case string(apiv1.UpgradeStrategyDisabled), string(apiv1.UpgradeStrategyNever):
+	case apiv1.UpgradeStrategyDisabled, apiv1.UpgradeStrategyNever:
 		return &pbVersion.VersionResponse{}, nil
 	}
 
