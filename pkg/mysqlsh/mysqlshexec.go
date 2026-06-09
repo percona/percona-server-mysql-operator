@@ -219,7 +219,7 @@ func (m *MysqlshExec) CreateReplicaClusterWithExec(
 }
 
 func (m *MysqlshExec) RemoveReplicaClusterWithExec(ctx context.Context, clusterName string) error {
-	cmd := fmt.Sprintf("dba.getCluster().getClusterSet().removeCluster('%s')", clusterName)
+	cmd := fmt.Sprintf("dba.getCluster().getClusterSet().removeCluster('%s', {'force': true})", clusterName)
 	if err := m.runWithExec(ctx, cmd); err != nil {
 		return errors.Wrap(err, "remove replica cluster")
 	}
