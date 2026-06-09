@@ -117,8 +117,11 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 				if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 					return errors.Wrapf(err, "get %v", req.String())
 				}
-				if cr.Status.State != status.State {
-					return errors.Errorf("status %s was not updated to %s", cr.Status.State, status.State)
+				if cr.Status.State != status.State || cr.Status.StateDesc != status.StateDesc {
+					return fmt.Errorf(
+						"status was not updated to %s (%q); got %s (%q)",
+						status.State, status.StateDesc, cr.Status.State, cr.Status.StateDesc,
+					)
 				}
 				return nil
 			})
