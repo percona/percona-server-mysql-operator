@@ -448,8 +448,12 @@ func Bootstrap(ctx context.Context) error {
 		log.Printf("Failed to connect to the cluster: %v", err)
 
 		if peers.Len() == 1 {
-			var myCnf *ini.Section
+			if os.Getenv("BOOTSTRAP_MODE") == string(apiv1.BootstrapModeManual) {
+				log.Printf("Manual bootstrap mode: skipping cluster creation")
+				return nil
+			}
 
+			var myCnf *ini.Section
 			customMyCnf, err := os.Open(mysql.CustomMyCnfPath)
 			if err == nil {
 				defer customMyCnf.Close() //nolint

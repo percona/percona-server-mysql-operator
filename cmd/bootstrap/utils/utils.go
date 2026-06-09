@@ -140,12 +140,36 @@ const (
 	fullClusterCrashFile = "/var/lib/mysql/full-cluster-crash"
 )
 
-func ManualRecoveryRequested() (bool, string) {
-	recoveryFiles := []string{
-		noBootstrapFile,
-		manualRecoveryFile,
-		fullClusterCrashFile,
+var recoveryFiles = []string{
+	noBootstrapFile,
+	manualRecoveryFile,
+	fullClusterCrashFile,
+	naming.ClusterSetRecoveryFile,
+}
+
+func CheckClustersetRecovery() error {
+	return checkClustersetRecovery(naming.ClusterSetRecoveryFile, recoveryFiles)
+}
+
+func checkClustersetRecovery(clusterSetRecoveryFile string, recoveryFiles []string) error {
+	res, err := fileExists(clusterSetRecoveryFile)
+	if err != nil {
+		return errors.Wrap(err, "file exists")
 	}
+
+	if !res {
+		return nil
+	}
+
+	for _, f := range recoveryFiles {
+		if err := removeFile(f); err != nil {
+			return errors.Wrap(err, "remove file")
+		}
+	}
+	return nil
+}
+
+func ManualRecoveryRequested() (bool, string) {
 	for _, rFile := range recoveryFiles {
 		exists, err := fileExists(rFile)
 		if err == nil && exists {
@@ -158,6 +182,16 @@ func ManualRecoveryRequested() (bool, string) {
 
 func LockExists(lockName string) (bool, error) {
 	return fileExists(fmt.Sprintf("/var/lib/mysql/%s.lock", lockName))
+}
+
+func removeFile(name string) error {
+	if err := os.Remove(name); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return errors.Wrap(err, "remove file")
+	}
+	return nil
 }
 
 func fileExists(name string) (bool, error) {

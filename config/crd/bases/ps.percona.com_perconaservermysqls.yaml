@@ -3178,6 +3178,15 @@ spec:
                     type: object
                   autoRecovery:
                     type: boolean
+                  bootstrap:
+                    properties:
+                      mode:
+                        default: auto
+                        enum:
+                        - auto
+                        - manual
+                        type: string
+                    type: object
                   clusterType:
                     default: group-replication
                     enum:

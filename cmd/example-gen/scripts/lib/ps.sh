@@ -101,6 +101,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.ignoreAnnotations)" \
 		| yq "del(.spec.ignoreLabels)" \
 		| yq "del(.spec.tls)" \
+		| yq "del(.spec.mysql.bootstrap)" \
 		| yq "del(.spec.mysql.runtimeClassName)" \
 		| yq "del(.spec.mysql.tolerations)" \
 		| yq "del(.spec.mysql.annotations)" \

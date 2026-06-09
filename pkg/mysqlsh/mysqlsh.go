@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -26,6 +27,10 @@ var sensitiveRegexp = regexp.MustCompile(":.*@")
 
 func New(e k8sexec.Interface, uri string) *mysqlsh {
 	return &mysqlsh{exec: e, uri: uri}
+}
+
+func URI(user, password, host string) string {
+	return fmt.Sprintf("%s:%s@%s", user, url.QueryEscape(password), host)
 }
 
 func (m *mysqlsh) run(ctx context.Context, cmd string) error {
