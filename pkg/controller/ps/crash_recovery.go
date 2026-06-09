@@ -20,6 +20,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
 
 func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
@@ -49,6 +50,19 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 	cmd := []string{"cat", "/var/lib/mysql/full-cluster-crash"}
 
 	for _, pod := range pods {
+		outb.Reset()
+		errb.Reset()
+
+		// Check if there is an ongoing clusterset recovery
+		if err := r.ClientCmd.Exec(ctx, &pod, "mysql", []string{"cat", naming.ClusterSetRecoveryFile}, nil, &outb, &errb, false); err == nil {
+			return nil
+		} else if strings.Contains(errb.String(), "No such file or directory") {
+			outb.Reset()
+			errb.Reset()
+		} else {
+			return errors.Wrapf(err, "check clusterset recovery file, stdout: %s, stderr: %s", outb.String(), errb.String())
+		}
+
 		err = r.ClientCmd.Exec(ctx, &pod, "mysql", cmd, nil, &outb, &errb, false)
 		if err != nil {
 			if strings.Contains(errb.String(), "No such file or directory") {
@@ -77,9 +91,15 @@ func (r *PerconaServerMySQLReconciler) reconcileFullClusterCrash(ctx context.Con
 		}
 
 		podFQDN := mysql.PodFQDN(cr, &pod)
-		podUri := getMySQLURI(apiv1.UserOperator, operatorPass, podFQDN)
+		podUri := mysqlsh.URI(string(apiv1.UserOperator), operatorPass, podFQDN)
 
-		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, &pod, podUri)
+		opts := &mysqlsh.ExecOptions{
+			Pod:           &pod,
+			ContainerName: "mysql",
+			Client:        r.ClientCmd,
+			Stdout:        &bytes.Buffer{},
+		}
+		mysh, err := mysqlsh.NewWithExec(podUri, opts)
 		if err != nil {
 			return err
 		}

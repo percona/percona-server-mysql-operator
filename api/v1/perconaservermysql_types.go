@@ -147,6 +147,7 @@ type MySQLSpec struct {
 	// +kubebuilder:validation:Enum=group-replication;async
 	// +kubebuilder:default=group-replication
 	ClusterType   ClusterType            `json:"clusterType,omitempty"`
+	Bootstrap     BootstrapConfig        `json:"bootstrap,omitempty"`
 	ExposePrimary ServiceExposeTogglable `json:"exposePrimary,omitempty"`
 	Expose        ServiceExposeTogglable `json:"expose,omitempty"`
 	AutoRecovery  bool                   `json:"autoRecovery,omitempty"`
@@ -160,6 +161,19 @@ type MySQLSpec struct {
 	VolumeSpec *VolumeSpec `json:"volumeSpec,omitempty"`
 
 	PodSpec `json:",inline"`
+}
+
+type BootstrapMode string
+
+const (
+	BootstrapModeAuto   BootstrapMode = "auto"
+	BootstrapModeManual BootstrapMode = "manual"
+)
+
+type BootstrapConfig struct {
+	// +kubebuilder:validation:Enum=auto;manual
+	// +kubebuilder:default=auto
+	Mode *BootstrapMode `json:"mode,omitempty"`
 }
 
 // Checks if the MySQL cluster type is asynchronous.
@@ -735,7 +749,11 @@ func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {
 	return v.Must(v.NewVersion(s.MySQL.Version)).Compare(v.Must(v.NewVersion(ver)))
 }
 
-const ConditionInnoDBClusterBootstrapped string = "InnoDBClusterBootstrapped"
+const (
+	ConditionInnoDBClusterBootstrapped    string = "InnoDBClusterBootstrapped"
+	ConditionClusterSetReplicationRunning string = "ClusterSetReplicationRunning"
+	ConditionAwaitingExternalBootstrap    string = "AwaitingExternalBootstrap"
+)
 
 // PerconaServerMySQL is the Schema for the perconaservermysqls API
 // +kubebuilder:object:root=true
@@ -779,6 +797,7 @@ const (
 	UserReplication    SystemUser = "replication"
 	UserRoot           SystemUser = "root"
 	UserXtraBackup     SystemUser = "xtrabackup"
+	UserClusterSet     SystemUser = "clusterset"
 )
 
 // MySQLSpec returns the MySQL specification from the PerconaServerMySQL custom resource.
@@ -1121,6 +1140,10 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.MySQL.VaultSecretName = cr.Name + "-vault"
 	}
 
+	if cr.Spec.MySQL.Bootstrap.Mode == nil {
+		cr.Spec.MySQL.Bootstrap.Mode = new(BootstrapModeAuto)
+	}
+
 	return nil
 }
 
@@ -1446,4 +1469,11 @@ func (s *BackupStorageAzureSpec) equals(other *BackupStorageAzureSpec) bool {
 		return false
 	}
 	return true
+}
+
+func (cr *PerconaServerMySQL) BootstrapMode() BootstrapMode {
+	if cr.Spec.MySQL.Bootstrap.Mode == nil {
+		return BootstrapModeAuto
+	}
+	return *cr.Spec.MySQL.Bootstrap.Mode
 }

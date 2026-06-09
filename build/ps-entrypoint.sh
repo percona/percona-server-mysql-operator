@@ -229,6 +229,10 @@ load_group_replication_plugin() {
 	sed -i "/\[mysqld\]/a plugin_load_add=group_replication.so" $CFG
 	sed -i "/\[mysqld\]/a group_replication_exit_state_action=ABORT_SERVER" $CFG
 	sed -i "/\[mysqld\]/a group_replication_unreachable_majority_timeout=5" $CFG
+
+	if [[ "${BOOTSTRAP_MODE}" == "manual" ]]; then
+		sed -i "/\[mysqld\]/a group_replication_start_on_boot=OFF" $CFG
+	fi
 }
 
 ensure_read_only() {
@@ -341,10 +345,24 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 		file_env 'OPERATOR_ADMIN_PASSWORD' '' 'operator'
 		file_env 'XTRABACKUP_PASSWORD' '' 'xtrabackup'
 		file_env 'HEARTBEAT_PASSWORD' '' 'heartbeat'
+		file_env 'CLUSTERSET_PASSWORD' '' 'clusterset'
 
 		read -r -d '' monitorConnectGrant <<-EOSQL || true
 			GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
 		EOSQL
+
+		clustersetCreate=
+		if [ -n "$CLUSTERSET_PASSWORD" ]; then
+			read -r -d '' clustersetCreate <<-EOSQL || true
+				CREATE USER 'clusterset'@'%' IDENTIFIED BY '$(escape_special "${CLUSTERSET_PASSWORD}")' PASSWORD EXPIRE NEVER;
+				GRANT SELECT, RELOAD, SHUTDOWN, PROCESS, FILE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE USER, EXECUTE ON *.* TO 'clusterset'@'%' WITH GRANT OPTION ;
+				GRANT BACKUP_ADMIN, CLONE_ADMIN, CONNECTION_ADMIN, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, REPLICATION_APPLIER, PERSIST_RO_VARIABLES_ADMIN, ROLE_ADMIN, SESSION_VARIABLES_ADMIN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'clusterset'@'%' WITH GRANT OPTION ;
+				GRANT INSERT, UPDATE, DELETE ON mysql.* TO 'clusterset'@'%' WITH GRANT OPTION ;
+				GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata.* TO 'clusterset'@'%' WITH GRANT OPTION ;
+				GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata_bkp.* TO 'clusterset'@'%' WITH GRANT OPTION ;
+				GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata_previous.* TO 'clusterset'@'%' WITH GRANT OPTION ;
+			EOSQL
+		fi
 
 		"${mysql[@]}" <<-EOSQL
 			-- What's done in this file shouldn't be replicated
@@ -359,6 +377,8 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 
 			CREATE USER 'operator'@'${MYSQL_ROOT_HOST}' IDENTIFIED BY '$(escape_special "${OPERATOR_ADMIN_PASSWORD}")' PASSWORD EXPIRE NEVER;
 			GRANT ALL ON *.* TO 'operator'@'${MYSQL_ROOT_HOST}' WITH GRANT OPTION ;
+
+			${clustersetCreate}
 
 			CREATE USER 'xtrabackup'@'localhost' IDENTIFIED BY '$(escape_special "${XTRABACKUP_PASSWORD}")' PASSWORD EXPIRE NEVER;
 			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
