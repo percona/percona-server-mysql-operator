@@ -110,7 +110,7 @@ func main() {
 func addReplica(ctx context.Context, manager replicaManager, args replicaInitArgs) error {
 	log.Printf("Adding replica cluster '%s' to clusterset '%s'", args.replicaClusterName, args.psClusterSetName)
 	if err := manager.CreateReplicaCluster(ctx, &apiv1.ClusterSetCluster{
-		Name: args.replicaClusterName,
+		InnoDBClusterName: args.replicaClusterName,
 		Endpoints: []apiv1.ClusterSetClusterEndpoint{
 			{
 				Host: args.replicaEndpoint,

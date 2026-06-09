@@ -13,10 +13,10 @@ spec:
   createReplicaClusterOptions:
     recoveryMethod: clone
   clusters:
-    - name: sourcecluster
+    - innodbClusterName: sourcecluster
       endpoints:
       - host: source-cluster-mysql-primary.default.svc.cluster.local
-    - name: replicacluster
+    - innodbClusterName: replicacluster
       endpoints:
       - host: replica-cluster-mysql-0.replica-cluster-mysql.default.svc.cluster.local
   mysqlshellRunner:

@@ -154,10 +154,13 @@ type MySQLShellRunnerSpec struct {
 }
 
 type ClusterSetCluster struct {
+	// InnoDBClusterName is the name of the InnoDB cluster that will be a member of this ClusterSet.
+	// This name must be unique within the ClusterSet.
+	//
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:XValidation:rule="self.matches('^[A-Za-z0-9]+$')",message="name must contain only alphanumeric characters"
-	Name string `json:"name"`
+	InnoDBClusterName string `json:"innodbClusterName"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems:=1
 	// +kubebuilder:validation:MaxItems:=9
@@ -237,7 +240,7 @@ func (psc *PerconaServerMySQLClusterSet) PrimaryCluster() *ClusterSetCluster {
 		primaryClusterName = psc.Status.PrimaryCluster
 	}
 	for i := range psc.Spec.Clusters {
-		if psc.Spec.Clusters[i].Name == primaryClusterName {
+		if psc.Spec.Clusters[i].InnoDBClusterName == primaryClusterName {
 			return &psc.Spec.Clusters[i]
 		}
 	}
@@ -246,7 +249,7 @@ func (psc *PerconaServerMySQLClusterSet) PrimaryCluster() *ClusterSetCluster {
 
 func (psc *PerconaServerMySQLClusterSet) GetCluster(name string) *ClusterSetCluster {
 	for i := range psc.Spec.Clusters {
-		if psc.Spec.Clusters[i].Name == name {
+		if psc.Spec.Clusters[i].InnoDBClusterName == name {
 			return &psc.Spec.Clusters[i]
 		}
 	}
