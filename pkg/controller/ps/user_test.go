@@ -211,11 +211,14 @@ func TestEnsureUserSecrets(t *testing.T) {
 
 func TestValidateUserSecret(t *testing.T) {
 	s := func(user apiv1.SystemUser, password []byte) *corev1.Secret {
-		return &corev1.Secret{
-			Data: map[string][]byte{
-				string(user): password,
-			},
+		secret := &corev1.Secret{
+			Data: make(map[string][]byte),
 		}
+		for systemUser := range allSystemUsers() {
+			secret.Data[string(systemUser)] = []byte("password")
+		}
+		secret.Data[string(user)] = password
+		return secret
 	}
 
 	tests := []struct {
@@ -236,6 +239,22 @@ func TestValidateUserSecret(t *testing.T) {
 			wantError:   "user secret is empty",
 		},
 		{
+			name:        "missing password",
+			clusterType: apiv1.ClusterTypeGR,
+			secret: func() *corev1.Secret {
+				secret := s(apiv1.UserRoot, []byte("password"))
+				delete(secret.Data, string(apiv1.UserMonitor))
+				return secret
+			}(),
+			wantError: "missing password for monitor user",
+		},
+		{
+			name:        "unknown user",
+			clusterType: apiv1.ClusterTypeGR,
+			secret:      s(apiv1.SystemUser("unknown"), []byte("password")),
+			wantError:   "unknown user unknown is specified in the secret",
+		},
+		{
 			name:        "empty password",
 			clusterType: apiv1.ClusterTypeGR,
 			secret:      s(apiv1.UserRoot, nil),
@@ -250,23 +269,23 @@ func TestValidateUserSecret(t *testing.T) {
 		{
 			name:        "maximum MySQL password length",
 			clusterType: apiv1.ClusterTypeGR,
-			secret:      s(apiv1.UserRoot, bytes.Repeat([]byte{'a'}, MySQLPasswordMaxLength)),
+			secret:      s(apiv1.UserRoot, bytes.Repeat([]byte{'a'}, mySQLPasswordMaxLength)),
 		},
 		{
 			name:        "MySQL password too long",
 			clusterType: apiv1.ClusterTypeGR,
-			secret:      s(apiv1.UserRoot, bytes.Repeat([]byte{'a'}, MySQLPasswordMaxLength+1)),
+			secret:      s(apiv1.UserRoot, bytes.Repeat([]byte{'a'}, mySQLPasswordMaxLength+1)),
 			wantError:   "password for root user must not exceed 256 bytes",
 		},
 		{
 			name:        "maximum async replication password length",
 			clusterType: apiv1.ClusterTypeAsync,
-			secret:      s(apiv1.UserReplication, bytes.Repeat([]byte{'a'}, MySQLReplicationSourcePasswordMaxLength)),
+			secret:      s(apiv1.UserReplication, bytes.Repeat([]byte{'a'}, mySQLReplicationSourcePasswordMaxLength)),
 		},
 		{
 			name:        "async replication password too long",
 			clusterType: apiv1.ClusterTypeAsync,
-			secret:      s(apiv1.UserReplication, bytes.Repeat([]byte{'a'}, MySQLReplicationSourcePasswordMaxLength+1)),
+			secret:      s(apiv1.UserReplication, bytes.Repeat([]byte{'a'}, mySQLReplicationSourcePasswordMaxLength+1)),
 			wantError:   "password for replication user must not exceed 32 bytes",
 		},
 		{
@@ -278,7 +297,7 @@ func TestValidateUserSecret(t *testing.T) {
 		{
 			name:        "group replication does not use source password limit",
 			clusterType: apiv1.ClusterTypeGR,
-			secret:      s(apiv1.UserReplication, bytes.Repeat([]byte{'a'}, MySQLReplicationSourcePasswordMaxLength+1)),
+			secret:      s(apiv1.UserReplication, bytes.Repeat([]byte{'a'}, mySQLReplicationSourcePasswordMaxLength+1)),
 		},
 		{
 			name:        "PMM server token is not a MySQL password",

@@ -317,11 +317,11 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 }
 
 const (
-	MySQLPasswordMaxLength = 256
+	mySQLPasswordMaxLength = 256
 
 	// > The password used for a replication user account in a CHANGE REPLICATION SOURCE TO statement is limited to 32 characters in length
 	// Source: https://dev.mysql.com/doc/refman/8.0/en/change-replication-source-to.html#crs-opt-source_password
-	MySQLReplicationSourcePasswordMaxLength = 32
+	mySQLReplicationSourcePasswordMaxLength = 32
 )
 
 func validateUserSecret(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) error {
@@ -329,30 +329,45 @@ func validateUserSecret(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) err
 		return errors.New("user secret is empty")
 	}
 
+	systemUsers := allSystemUsers()
 	var errs []error
+
+	for user := range systemUsers {
+		if _, ok := secret.Data[string(user)]; ok {
+			continue
+		}
+		errs = append(errs, fmt.Errorf("missing password for %s user", user))
+		continue
+	}
+
 	for user, pass := range secret.Data {
+		if _, ok := systemUsers[apiv1.SystemUser(user)]; !ok && user != string(apiv1.UserPMMServerToken) {
+			errs = append(errs, fmt.Errorf("unknown user %s is specified in the secret", string(user)))
+			continue
+		}
 		if user == string(apiv1.UserPMMServerToken) {
 			continue
 		}
-		if string(pass) == "" {
-			errs = append(errs, errors.Errorf("password is empty for %s user", string(user)))
+		if len(pass) == 0 {
+			errs = append(errs, fmt.Errorf("password is empty for %s user", string(user)))
 			continue
 		}
 		if bytes.IndexByte(pass, 0) >= 0 {
-			errs = append(errs, errors.Errorf("password for %s user must not contain NUL bytes", user))
+			errs = append(errs, fmt.Errorf("password for %s user must not contain NUL bytes", user))
 			continue
 		}
-		maxLen := MySQLPasswordMaxLength
+		maxLen := mySQLPasswordMaxLength
 		if user == string(apiv1.UserReplication) && cr.Spec.MySQL.IsAsync() {
-			maxLen = MySQLReplicationSourcePasswordMaxLength
+			maxLen = mySQLReplicationSourcePasswordMaxLength
 		}
 
 		// MySQL counts bytes, not characters
 		if len(pass) > maxLen {
-			errs = append(errs, errors.Errorf("password for %s user must not exceed %d bytes", user, maxLen))
+			errs = append(errs, fmt.Errorf("password for %s user must not exceed %d bytes", user, maxLen))
 			continue
 		}
 	}
+
 	return stderrors.Join(errs...)
 }
 
