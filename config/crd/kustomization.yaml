@@ -5,12 +5,14 @@ resources:
 - bases/ps.percona.com_perconaservermysqls.yaml
 - bases/ps.percona.com_perconaservermysqlbackups.yaml
 - bases/ps.percona.com_perconaservermysqlrestores.yaml
+- bases/ps.percona.com_perconaservermysqlclustersets.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:
 - patches/versionlabel_in_perconaserverformysql.yaml
 - patches/versionlabel_in_perconaserverformysqlbackups.yaml
 - patches/versionlabel_in_perconaserverformysqlrestores.yaml
+- patches/versionlabel_in_perconaserverformysqlclustersets.yaml
 
 # the following config is for teaching kustomize how to do kustomization for CRDs.
 configurations:
