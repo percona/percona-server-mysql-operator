@@ -1,0 +1,7 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 120
+delete:
+  - kind: PerconaServerMySQLClusterSet
+    apiVersion: ps.percona.com/v1
+    name: gr-cross-cluster

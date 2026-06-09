@@ -36,6 +36,8 @@ func mysqlDefaults(spec *apiv1.MySQLSpec) {
 	spec.VolumeSpec = nil
 	spec.ExposePrimary.Enabled = true
 
+	spec.Bootstrap.Mode = new(apiv1.BootstrapModeAuto)
+
 	c := func(name string) corev1.Container {
 		return corev1.Container{
 			Name:    name,

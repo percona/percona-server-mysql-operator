@@ -1,0 +1,13 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      yq eval '.spec.mysqlshellRunner.image = strenv(IMAGE_MYSQL)' \
+        "${TEST_CONFIG_DIR}/clusterset.yaml" \
+        | kubectl -n "${NAMESPACE}" apply -f -

@@ -17,6 +17,7 @@ limitations under the License.
 package ps
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/json"
@@ -327,7 +328,13 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 
 		um := database.NewReplicationManager(&firstPod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, &firstPod))
 
-		mysh, err := mysqlsh.NewWithExec(r.ClientCmd, &firstPod, firstPodUri)
+		opts := &mysqlsh.ExecOptions{
+			Pod:           &firstPod,
+			ContainerName: "mysql",
+			Client:        r.ClientCmd,
+			Stdout:        &bytes.Buffer{},
+		}
+		mysh, err := mysqlsh.NewWithExec(firstPodUri, opts)
 		if err != nil {
 			return err
 		}
@@ -528,6 +535,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 
 	if err := r.validate(ctx, cr); err != nil {
 		return errors.Wrap(err, "failed to validate")
+	}
+	if err := r.reconcileClusterSetStatus(ctx, cr); err != nil {
+		return errors.Wrap(err, "failed to reconcile cross cluster replication")
 	}
 	if err := r.reconcileFullClusterCrash(ctx, cr); err != nil {
 		return errors.Wrap(err, "failed to check full cluster crash")
@@ -1188,7 +1198,13 @@ func (r *PerconaServerMySQLReconciler) rescanClusterIfNeeded(ctx context.Context
 
 	uri := getMySQLURI(apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
 
-	msh, err := mysqlsh.NewWithExec(r.ClientCmd, pod, uri)
+	opts := &mysqlsh.ExecOptions{
+		Pod:           pod,
+		ContainerName: "mysql",
+		Client:        r.ClientCmd,
+		Stdout:        &bytes.Buffer{},
+	}
+	msh, err := mysqlsh.NewWithExec(uri, opts)
 	if err != nil {
 		return err
 	}
