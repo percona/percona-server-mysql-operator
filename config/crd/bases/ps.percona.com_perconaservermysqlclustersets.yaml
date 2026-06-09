@@ -63,7 +63,7 @@ spec:
                       maxItems: 9
                       minItems: 1
                       type: array
-                    name:
+                    innodbClusterName:
                       maxLength: 63
                       type: string
                       x-kubernetes-validations:
@@ -71,7 +71,7 @@ spec:
                         rule: self.matches('^[A-Za-z0-9]+$')
                   required:
                   - endpoints
-                  - name
+                  - innodbClusterName
                   type: object
                 maxItems: 10
                 minItems: 1
