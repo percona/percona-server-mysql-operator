@@ -77,7 +77,7 @@ type PerconaServerMySQLClusterSetSpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems:=1
 	// +kubebuilder:validation:MaxItems:=10
-	// +kubebuilder:validation:XValidation:rule="self.all(c, self.exists_one(d, d.name == c.name))",message="clusters names must be unique"
+	// +kubebuilder:validation:XValidation:rule="self.all(c, self.exists_one(d, d.name == c.name))",message="cluster names must be unique"
 	Clusters []ClusterSetCluster `json:"clusters"`
 
 	// CreateReplicaClusterOptions is the configuration for the creation of a replica cluster.
