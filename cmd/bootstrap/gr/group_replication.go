@@ -544,13 +544,23 @@ func Bootstrap(ctx context.Context) error {
 		if err != nil {
 			return errors.Wrap(err, "open primary DB")
 		}
-		defer primaryDB.Close()
+		defer func(primaryDB *sql.DB) {
+			err := primaryDB.Close()
+			if err != nil {
+				log.Printf("Failed to close primary DB: %v", err)
+			}
+		}(primaryDB)
 		localParams := database.DBParams{User: apiv1.UserOperator, Pass: operatorPass, Host: localShell.host}
 		localDB, err := sql.Open("mysql", localParams.DSN())
 		if err != nil {
 			return errors.Wrap(err, "open local DB")
 		}
-		defer localDB.Close()
+		defer func(localDB *sql.DB) {
+			err := localDB.Close()
+			if err != nil {
+				log.Printf("Failed to close local DB: %v", err)
+			}
+		}(localDB)
 
 		recoveryMethod, err := getRecoveryMethod(ctx, &sqlRunner{db: primaryDB}, &sqlRunner{db: localDB})
 		if err != nil {
