@@ -2,12 +2,76 @@ package utils
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestCheckClustersetRecovery(t *testing.T) {
+	tests := map[string]struct {
+		existingFiles   []string
+		expectedRemoved []string
+		expectedPresent []string
+	}{
+		"removes recovery files when clusterset recovery is requested": {
+			existingFiles: []string{
+				"no-bootstrap",
+				"sleep-forever",
+				"full-cluster-crash",
+				"clusterset-recovery",
+			},
+			expectedRemoved: []string{
+				"no-bootstrap",
+				"sleep-forever",
+				"full-cluster-crash",
+				"clusterset-recovery",
+			},
+		},
+		"keeps recovery files when clusterset recovery is not requested": {
+			existingFiles: []string{
+				"no-bootstrap",
+				"sleep-forever",
+				"full-cluster-crash",
+			},
+			expectedPresent: []string{
+				"no-bootstrap",
+				"sleep-forever",
+				"full-cluster-crash",
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			clusterSetRecoveryFile := filepath.Join(dir, "clusterset-recovery")
+			recoveryFiles := []string{
+				filepath.Join(dir, "no-bootstrap"),
+				filepath.Join(dir, "sleep-forever"),
+				filepath.Join(dir, "full-cluster-crash"),
+				clusterSetRecoveryFile,
+			}
+
+			for _, file := range tt.existingFiles {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, file), []byte("x"), 0o600))
+			}
+
+			require.NoError(t, checkClustersetRecovery(clusterSetRecoveryFile, recoveryFiles))
+
+			for _, file := range tt.expectedRemoved {
+				_, err := os.Stat(filepath.Join(dir, file))
+				assert.True(t, os.IsNotExist(err), "%s should be removed", file)
+			}
+			for _, file := range tt.expectedPresent {
+				_, err := os.Stat(filepath.Join(dir, file))
+				assert.NoError(t, err, "%s should remain", file)
+			}
+		})
+	}
+}
 
 func TestGetCloneTimeout(t *testing.T) {
 	tests := map[string]struct {

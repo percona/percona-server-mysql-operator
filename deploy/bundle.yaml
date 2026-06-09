@@ -1228,6 +1228,219 @@ metadata:
     app.kubernetes.io/name: percona-server-crd
     app.kubernetes.io/part-of: percona-server-mysql-operator
     app.kubernetes.io/version: v1.2.0
+  name: perconaservermysqlclustersets.ps.percona.com
+spec:
+  group: ps.percona.com
+  names:
+    kind: PerconaServerMySQLClusterSet
+    listKind: PerconaServerMySQLClusterSetList
+    plural: perconaservermysqlclustersets
+    shortNames:
+    - ps-clusterset
+    singular: perconaservermysqlclusterset
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.primaryCluster
+      name: Primary
+      type: string
+    - jsonPath: .status.primaryClusterEndpoint
+      name: Endpoint
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              allowForcedFailover:
+                default: false
+                type: boolean
+              clusters:
+                items:
+                  properties:
+                    endpoints:
+                      items:
+                        properties:
+                          host:
+                            maxLength: 253
+                            type: string
+                            x-kubernetes-validations:
+                            - message: host must be a valid IP address or domain name
+                              rule: isIP(self) || !format.dns1123Subdomain().validate(self).hasValue()
+                          port:
+                            default: 3306
+                            format: int32
+                            type: integer
+                        required:
+                        - host
+                        type: object
+                      maxItems: 9
+                      minItems: 1
+                      type: array
+                    name:
+                      maxLength: 63
+                      type: string
+                      x-kubernetes-validations:
+                      - message: name must contain only alphanumeric characters
+                        rule: self.matches('^[A-Za-z0-9]+$')
+                  required:
+                  - endpoints
+                  - name
+                  type: object
+                maxItems: 10
+                minItems: 1
+                type: array
+              createReplicaClusterOptions:
+                properties:
+                  recoveryMethod:
+                    default: clone
+                    enum:
+                    - clone
+                    - incremental
+                    - auto
+                    type: string
+                type: object
+              credentialsSecret:
+                properties:
+                  key:
+                    type: string
+                  name:
+                    default: ""
+                    type: string
+                  optional:
+                    type: boolean
+                required:
+                - key
+                type: object
+                x-kubernetes-map-type: atomic
+                x-kubernetes-validations:
+                - message: credentialsSecret.name must be set
+                  rule: has(self.name) && self.name != ''
+              mysqlshellRunner:
+                properties:
+                  image:
+                    minLength: 1
+                    type: string
+                required:
+                - image
+                type: object
+              primaryCluster:
+                maxLength: 63
+                type: string
+                x-kubernetes-validations:
+                - message: primaryCluster must contain only alphanumeric characters
+                  rule: self.matches('^[A-Za-z0-9]+$')
+              sslMode:
+                default: AUTO
+                enum:
+                - AUTO
+                - DISABLED
+                - REQUIRED
+                - VERIFY_CA
+                - VERIFY_IDENTITY
+                type: string
+            required:
+            - clusters
+            - credentialsSecret
+            - mysqlshellRunner
+            - primaryCluster
+            type: object
+            x-kubernetes-validations:
+            - message: spec.primaryCluster not found in spec.clusters
+              rule: self.clusters.exists(c, c.name == self.primaryCluster)
+          status:
+            properties:
+              clusters:
+                additionalProperties:
+                  properties:
+                    clusterRole:
+                      type: string
+                    globalStatus:
+                      type: string
+                    primary:
+                      type: string
+                  required:
+                  - clusterRole
+                  - globalStatus
+                  - primary
+                  type: object
+                type: object
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              lastObservedAt:
+                format: date-time
+                type: string
+              lastObservedGeneration:
+                format: int64
+                type: integer
+              primaryCluster:
+                type: string
+              primaryClusterEndpoint:
+                type: string
+            required:
+            - primaryCluster
+            - primaryClusterEndpoint
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  labels:
+    app.kubernetes.io/component: crd
+    app.kubernetes.io/name: percona-server-crd
+    app.kubernetes.io/part-of: percona-server-mysql-operator
+    app.kubernetes.io/version: v1.2.0
   name: perconaservermysqlrestores.ps.percona.com
 spec:
   group: ps.percona.com
@@ -6899,6 +7112,15 @@ spec:
                     type: object
                   autoRecovery:
                     type: boolean
+                  bootstrap:
+                    properties:
+                      mode:
+                        default: auto
+                        enum:
+                        - auto
+                        - manual
+                        type: string
+                    type: object
                   clusterType:
                     default: group-replication
                     enum:
@@ -12084,6 +12306,41 @@ spec:
                         type: string
                       serviceAccountName:
                         type: string
+                      sidecarResources:
+                        additionalProperties:
+                          properties:
+                            claims:
+                              items:
+                                properties:
+                                  name:
+                                    type: string
+                                  request:
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              type: array
+                              x-kubernetes-list-map-keys:
+                              - name
+                              x-kubernetes-list-type: map
+                            limits:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              type: object
+                            requests:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              type: object
+                          type: object
+                        type: object
                       size:
                         format: int32
                         type: integer
@@ -14291,17 +14548,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - events
-  - serviceaccounts
-  verbs:
-  - create
-  - get
-  - list
-  - patch
-  - watch
-- apiGroups:
-  - ""
-  resources:
   - pods
   - pods/exec
   verbs:
@@ -14312,6 +14558,28 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - get
+  - list
+  - patch
   - watch
 - apiGroups:
   - apps
@@ -14366,16 +14634,6 @@ rules:
   - update
   - watch
 - apiGroups:
-  - events.k8s.io
-  resources:
-  - events
-  verbs:
-  - create
-  - get
-  - list
-  - patch
-  - watch
-- apiGroups:
   - policy
   resources:
   - poddisruptionbudgets
@@ -14393,6 +14651,9 @@ rules:
   - perconaservermysqlbackups
   - perconaservermysqlbackups/finalizers
   - perconaservermysqlbackups/status
+  - perconaservermysqlclustersets
+  - perconaservermysqlclustersets/finalizers
+  - perconaservermysqlclustersets/status
   - perconaservermysqlrestores
   - perconaservermysqlrestores/finalizers
   - perconaservermysqlrestores/status
@@ -14417,6 +14678,7 @@ rules:
   - get
   - list
   - patch
+  - update
   - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -14496,6 +14758,16 @@ spec:
               fieldPath: metadata.namespace
         - name: DISABLE_TELEMETRY
           value: "false"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
         image: perconalab/percona-server-mysql-operator:main
         imagePullPolicy: Always
         livenessProbe:

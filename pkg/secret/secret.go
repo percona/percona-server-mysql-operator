@@ -61,21 +61,30 @@ const (
 		"!$%&()*+,-.<=>?@[]^_{}~#"
 )
 
-var SecretUsers = []apiv1.SystemUser{
-	apiv1.UserHeartbeat,
-	apiv1.UserMonitor,
-	apiv1.UserOperator,
-	apiv1.UserOrchestrator,
-	apiv1.UserRoot,
-	apiv1.UserXtraBackup,
-	apiv1.UserReplication,
+func SystemUsers(cr *apiv1.PerconaServerMySQL) []apiv1.SystemUser {
+	result := []apiv1.SystemUser{
+		apiv1.UserHeartbeat,
+		apiv1.UserMonitor,
+		apiv1.UserOperator,
+		apiv1.UserOrchestrator,
+		apiv1.UserRoot,
+		apiv1.UserXtraBackup,
+		apiv1.UserReplication,
+	}
+
+	if cr.CompareVersion("1.2.0") >= 0 {
+		result = append(result, apiv1.UserClusterSet)
+	}
+
+	return result
 }
 
 func FillPasswordsSecret(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) error {
+	users := SystemUsers(cr)
 	if len(secret.Data) == 0 {
-		secret.Data = make(map[string][]byte, len(SecretUsers))
+		secret.Data = make(map[string][]byte, len(users))
 	}
-	for _, user := range SecretUsers {
+	for _, user := range users {
 		if _, ok := secret.Data[string(user)]; ok {
 			continue
 		}

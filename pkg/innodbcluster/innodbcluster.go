@@ -42,6 +42,7 @@ type Member struct {
 
 type Status struct {
 	ClusterName       string           `json:"clusterName"`
+	ClusterRole       string           `json:"clusterRole"`
 	DefaultReplicaSet ReplicaSetStatus `json:"defaultReplicaSet"`
 }
 
