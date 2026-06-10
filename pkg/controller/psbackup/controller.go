@@ -462,7 +462,7 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 			return errors.Wrap(err, "get encryption key secret")
 		}
 
-		version, ok := secret.Data[naming.EncryptionKeySecretVersionKey]
+		version, ok := secret.Data[naming.InternalEncryptionKeyVersionFileName]
 		if !ok {
 			return errors.Errorf("version not found in encryption key secret %s/%s", secret.Namespace, secret.Name)
 		}
