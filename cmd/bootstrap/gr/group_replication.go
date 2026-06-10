@@ -529,42 +529,9 @@ func Bootstrap(ctx context.Context) error {
 
 	member, ok := status.DefaultReplicaSet.Topology[fmt.Sprintf("%s:%d", localShell.host, 3306)]
 	if !ok {
-		operatorPass, err := utils.GetSecret(apiv1.UserOperator)
+		recoveryMethod, err := getRecoveryMethod(ctx, primary, localShell.host)
 		if err != nil {
-			return errors.Wrapf(err, "get %s password", apiv1.UserOperator)
-		}
-		// member.Address is "host:port" (matching the Topology key format).
-		// Strip the port before handing to DBParams, which appends its own.
-		primaryHost, _, err := net.SplitHostPort(primary)
-		if err != nil {
-			primaryHost = primary
-		}
-		primaryParams := database.DBParams{User: apiv1.UserOperator, Pass: operatorPass, Host: primaryHost}
-		primaryDB, err := sql.Open("mysql", primaryParams.DSN())
-		if err != nil {
-			return errors.Wrap(err, "open primary DB")
-		}
-		defer func(primaryDB *sql.DB) {
-			err := primaryDB.Close()
-			if err != nil {
-				log.Printf("Failed to close primary DB: %v", err)
-			}
-		}(primaryDB)
-		localParams := database.DBParams{User: apiv1.UserOperator, Pass: operatorPass, Host: localShell.host}
-		localDB, err := sql.Open("mysql", localParams.DSN())
-		if err != nil {
-			return errors.Wrap(err, "open local DB")
-		}
-		defer func(localDB *sql.DB) {
-			err := localDB.Close()
-			if err != nil {
-				log.Printf("Failed to close local DB: %v", err)
-			}
-		}(localDB)
-
-		recoveryMethod, err := getRecoveryMethod(ctx, &sqlRunner{db: primaryDB}, &sqlRunner{db: localDB})
-		if err != nil {
-			return err
+			return errors.Wrap(err, "get recovery method")
 		}
 
 		log.Printf("Adding instance (%s) to InnoDB cluster using %s recovery", localShell.host, recoveryMethod)
@@ -629,4 +596,41 @@ func Bootstrap(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func getSQLRunners(primary, replica string) (primarySQLRunner *sqlRunner, replicaSQLRunner *sqlRunner, err error) {
+	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "get %s password", apiv1.UserOperator)
+	}
+	// member.Address is "host:port" (matching the Topology key format).
+	// Strip the port before handing to DBParams, which appends its own.
+	primaryHost, _, err := net.SplitHostPort(primary)
+	if err != nil {
+		primaryHost = primary
+	}
+	primaryParams := database.DBParams{User: apiv1.UserOperator, Pass: operatorPass, Host: primaryHost}
+	primaryDB, err := sql.Open("mysql", primaryParams.DSN())
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "open primary DB")
+	}
+	defer func(primaryDB *sql.DB) {
+		err := primaryDB.Close()
+		if err != nil {
+			log.Printf("Failed to close primary DB: %v", err)
+		}
+	}(primaryDB)
+	localParams := database.DBParams{User: apiv1.UserOperator, Pass: operatorPass, Host: replica}
+	localDB, err := sql.Open("mysql", localParams.DSN())
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "open local DB")
+	}
+	defer func(localDB *sql.DB) {
+		err := localDB.Close()
+		if err != nil {
+			log.Printf("Failed to close local DB: %v", err)
+		}
+	}(localDB)
+
+	return &sqlRunner{db: primaryDB}, &sqlRunner{db: localDB}, nil
 }

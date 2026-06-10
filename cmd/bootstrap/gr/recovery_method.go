@@ -125,8 +125,13 @@ func checkReplicaState(ctx context.Context, primary, replica SQLRunner) (innodbc
 	return "", errors.New("internal error")
 }
 
-func getRecoveryMethod(ctx context.Context, primary, replica SQLRunner) (innodbcluster.RecoveryMethod, error) {
-	replicaState, err := checkReplicaState(ctx, primary, replica)
+func getRecoveryMethod(ctx context.Context, primary, replica string) (innodbcluster.RecoveryMethod, error) {
+	primarySQLRunner, replicaSQLRunner, err := getSQLRunners(primary, replica)
+	if err != nil {
+		return "", errors.Wrap(err, "get databases")
+	}
+
+	replicaState, err := checkReplicaState(ctx, primarySQLRunner, replicaSQLRunner)
 	if err != nil {
 		return "", errors.Wrap(err, "check replica state")
 	}
