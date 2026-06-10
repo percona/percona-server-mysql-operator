@@ -1034,10 +1034,11 @@ func TestResolveIncrementalChain(t *testing.T) {
 			name:        "chain with multiple incrementals, restoring to middle one",
 			destination: apiv1.BackupDestination("s3://my-bucket/pfx/base-backup.incr/2026-03-17T000000-incr"),
 			storageObjects: []string{
-				"base-backup.incr/2026-03-15T000000-incr/xtrabackup_info",
-				"base-backup.incr/2026-03-16T000000-incr/xtrabackup_info",
-				"base-backup.incr/2026-03-17T000000-incr/xtrabackup_info",
-				"base-backup.incr/2026-03-18T000000-incr/xtrabackup_info",
+				"base-backup.incr/2026-03-15T000000-incr/xtrabackup_info.00000000000000000000",
+				"base-backup.incr/2026-03-15T000000-incr/xtrabackup_info.00000000000000000001",
+				"base-backup.incr/2026-03-16T000000-incr/xtrabackup_info.00000000000000000000",
+				"base-backup.incr/2026-03-17T000000-incr/xtrabackup_info.00000000000000000000",
+				"base-backup.incr/2026-03-18T000000-incr/xtrabackup_info.00000000000000000000",
 			},
 			wantBase: "pfx/base-backup",
 			wantIncrs: []string{
@@ -1063,7 +1064,7 @@ func TestResolveIncrementalChain(t *testing.T) {
 			name:        "incremental without xtrabackup_info is ignored",
 			destination: apiv1.BackupDestination("s3://my-bucket/pfx/base-backup.incr/2026-03-15T000000-incr"),
 			storageObjects: []string{
-				"base-backup.incr/2026-03-15T000000-incr/xtrabackup_checkpoints",
+				"base-backup.incr/2026-03-15T000000-incr/xtrabackup_checkpoints.00000000000000000000",
 			},
 			wantErr: "no incremental backups found in chain",
 		},
@@ -1071,10 +1072,10 @@ func TestResolveIncrementalChain(t *testing.T) {
 			name:        "restoring to last incremental includes all",
 			destination: apiv1.BackupDestination("s3://my-bucket/pfx/base-backup.incr/2026-03-18T000000-incr"),
 			storageObjects: []string{
-				"base-backup.incr/2026-03-15T000000-incr/xtrabackup_info",
-				"base-backup.incr/2026-03-16T000000-incr/xtrabackup_info",
-				"base-backup.incr/2026-03-17T000000-incr/xtrabackup_info",
-				"base-backup.incr/2026-03-18T000000-incr/xtrabackup_info",
+				"base-backup.incr/2026-03-15T000000-incr/xtrabackup_info.00000000000000000000",
+				"base-backup.incr/2026-03-16T000000-incr/xtrabackup_info.00000000000000000000",
+				"base-backup.incr/2026-03-17T000000-incr/xtrabackup_info.00000000000000000000",
+				"base-backup.incr/2026-03-18T000000-incr/xtrabackup_info.00000000000000000000",
 			},
 			wantBase: "pfx/base-backup",
 			wantIncrs: []string{
