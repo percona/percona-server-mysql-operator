@@ -130,8 +130,8 @@ func (m *mysqlshellClusterSetManager) CreateReplicaCluster(ctx context.Context, 
 	return nil
 }
 
-func (m *mysqlshellClusterSetManager) RemoveReplicaCluster(ctx context.Context, clusterName string) error {
-	if err := m.shell.RemoveReplicaClusterWithExec(ctx, clusterName); err != nil {
+func (m *mysqlshellClusterSetManager) RemoveReplicaCluster(ctx context.Context, clusterName string, force bool) error {
+	if err := m.shell.RemoveReplicaClusterWithExec(ctx, clusterName, force); err != nil {
 		return errors.Wrap(err, "remove replica cluster")
 	}
 	return nil

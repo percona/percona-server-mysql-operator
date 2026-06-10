@@ -469,8 +469,9 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileForcedFailover(
 		return nil
 	}
 
-	if pcs.Spec.AllowForcedFailover == nil || !*pcs.Spec.AllowForcedFailover {
-		log.Info("Forced failover is requested, but not allowed. Set .spec.allowForcedFailover to true to allow it.")
+	allowed := pcs.Spec.UnsafeClusterSetFlags.ForcedFailover != nil && *pcs.Spec.UnsafeClusterSetFlags.ForcedFailover
+	if !allowed {
+		log.Info("Forced failover is requested, but not allowed. Set .spec.unsafeFlags.forcedFailover to true to allow it.")
 		return nil
 	}
 

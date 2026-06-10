@@ -32,7 +32,7 @@ type replicaInitArgs struct {
 
 type replicaManager interface {
 	CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster, recoverMethod string) error
-	RemoveReplicaCluster(ctx context.Context, clusterName string) error
+	RemoveReplicaCluster(ctx context.Context, clusterName string, force bool) error
 	SetPrimaryCluster(ctx context.Context, clusterName string) error
 }
 
@@ -94,7 +94,8 @@ func main() {
 			log.Fatalf("failed to add replica: %v", err)
 		}
 	case "remove-replica":
-		if err := removeReplica(ctx, manager, args); err != nil {
+		force := psClusterSet.Spec.UnsafeClusterSetFlags.ForcedClusterRemoval != nil && *psClusterSet.Spec.UnsafeClusterSetFlags.ForcedClusterRemoval
+		if err := removeReplica(ctx, manager, args, force); err != nil {
 			log.Fatalf("failed to remove replica: %v", err)
 		}
 
@@ -124,9 +125,9 @@ func addReplica(ctx context.Context, manager replicaManager, args replicaInitArg
 	return nil
 }
 
-func removeReplica(ctx context.Context, manager replicaManager, args replicaInitArgs) error {
+func removeReplica(ctx context.Context, manager replicaManager, args replicaInitArgs, force bool) error {
 	log.Printf("Removing replica cluster '%s' from clusterset '%s'", args.replicaClusterName, args.psClusterSetName)
-	if err := manager.RemoveReplicaCluster(ctx, args.replicaClusterName); err != nil {
+	if err := manager.RemoveReplicaCluster(ctx, args.replicaClusterName, force); err != nil {
 		if strings.Contains(err.Error(), "does not exist or does not belong to the ClusterSet") {
 			log.Println("Cluster already removed")
 			return nil

@@ -42,7 +42,7 @@ type PerconaServerMySQLClusterSet struct {
 	Status PerconaServerMySQLClusterSetStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:validation:XValidation:rule="self.clusters.exists(c, c.name == self.primaryCluster)",message="spec.primaryCluster not found in spec.clusters"
+// +kubebuilder:validation:XValidation:rule="self.clusters.exists(c, c.innodbClusterName == self.primaryCluster)",message="spec.primaryCluster not found in spec.clusters"
 type PerconaServerMySQLClusterSetSpec struct {
 	// PrimaryCluster is the desired primary cluster of the ClusterSet.
 	// This is the cluster that will serve writes, and replica members will connect to.
@@ -51,6 +51,10 @@ type PerconaServerMySQLClusterSetSpec struct {
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:XValidation:rule="self.matches('^[A-Za-z0-9]+$')",message="primaryCluster must contain only alphanumeric characters"
 	PrimaryCluster string `json:"primaryCluster"`
+
+	// UnsafeClusterSetFlags is the configuration for the unsafe cluster set flags.
+	// +kubebuilder:validation:Optional
+	UnsafeClusterSetFlags *UnsafeClusterSetFlags `json:"unsafeFlags,omitempty"`
 
 	// SSLMode is the desired SSL mode of the ClusterSet.
 	//
@@ -64,20 +68,13 @@ type PerconaServerMySQLClusterSetSpec struct {
 	// +kubebuilder:validation:XValidation:rule="has(self.name) && self.name != ''",message="credentialsSecret.name must be set"
 	CredentialsSecret corev1.SecretKeySelector `json:"credentialsSecret"`
 
-	// AllowForcedFailover controls if an emergency failover may be performed in the event
-	// when the current primary cluster becomes unreachable.
-	//
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default:=false
-	AllowForcedFailover *bool `json:"allowForcedFailover,omitempty"`
-
 	// Clusters is the list of member clusters in the ClusterSet.
 	// At least one cluster must be specified (the primary).
 	//
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems:=1
 	// +kubebuilder:validation:MaxItems:=10
-	// +kubebuilder:validation:XValidation:rule="self.all(c, self.exists_one(d, d.name == c.name))",message="cluster names must be unique"
+	// +kubebuilder:validation:XValidation:rule="self.all(c, self.exists_one(d, d.innodbClusterName == c.innodbClusterName))",message="cluster names must be unique"
 	Clusters []ClusterSetCluster `json:"clusters"`
 
 	// CreateReplicaClusterOptions is the configuration for the creation of a replica cluster.
@@ -89,14 +86,45 @@ type PerconaServerMySQLClusterSetSpec struct {
 	MySQLShellRunner MySQLShellRunnerSpec `json:"mysqlshellRunner"`
 }
 
+type UnsafeClusterSetFlags struct {
+	// ForcedFailover controls if an emergency failover may be performed if the
+	// current primary is unreachable. Enabling it can promote a replica while
+	// the old primary may still accept writes, which can cause split-brain,
+	// lost transactions, and require manual recovery of the old primary.
+	// Set this only when you're absolutely sure that your primary cannot be recovered.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:=false
+	ForcedFailover *bool `json:"forcedFailover,omitempty"`
+	// ForcedClusterRemoval controls if a replica cluster can be removed if it is
+	// unreachable. Enabling it lets the operator forget an unreachable replica;
+	// any transactions not replicated back are abandoned.
+	// This can effectively leave the replica cluster unusable, requiring manual cleanup or full rebuild.
+	// Set this only if you can afford to discard the replica cluster.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:=false
+	ForcedClusterRemoval *bool `json:"forcedClusterRemoval,omitempty"`
+}
+
+func (ucs *UnsafeClusterSetFlags) SetDefaults() {
+	if ucs.ForcedFailover == nil {
+		ucs.ForcedFailover = new(false)
+	}
+	if ucs.ForcedClusterRemoval == nil {
+		ucs.ForcedClusterRemoval = new(false)
+	}
+}
+
 func (pcs *PerconaServerMySQLClusterSet) SetDefaults() {
 	if pcs.Spec.CreateReplicaClusterOptions.RecoveryMethod == "" {
 		pcs.Spec.CreateReplicaClusterOptions.RecoveryMethod = RecoveryMethodClone
 	}
 
-	if pcs.Spec.AllowForcedFailover == nil {
-		pcs.Spec.AllowForcedFailover = new(false)
+	if pcs.Spec.UnsafeClusterSetFlags == nil {
+		pcs.Spec.UnsafeClusterSetFlags = &UnsafeClusterSetFlags{}
 	}
+	pcs.Spec.UnsafeClusterSetFlags.SetDefaults()
 
 	if pcs.Spec.SSLMode == nil {
 		pcs.Spec.SSLMode = new(ClusterSetSSLModeAuto)

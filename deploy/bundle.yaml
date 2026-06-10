@@ -1262,9 +1262,6 @@ spec:
             type: object
           spec:
             properties:
-              allowForcedFailover:
-                default: false
-                type: boolean
               clusters:
                 items:
                   properties:
@@ -1302,7 +1299,7 @@ spec:
                 type: array
                 x-kubernetes-validations:
                 - message: cluster names must be unique
-                  rule: self.all(c, self.exists_one(d, d.name == c.name))
+                  rule: self.all(c, self.exists_one(d, d.innodbClusterName == c.innodbClusterName))
               createReplicaClusterOptions:
                 properties:
                   recoveryMethod:
@@ -1352,6 +1349,15 @@ spec:
                 - VERIFY_CA
                 - VERIFY_IDENTITY
                 type: string
+              unsafeFlags:
+                properties:
+                  forcedClusterRemoval:
+                    default: false
+                    type: boolean
+                  forcedFailover:
+                    default: false
+                    type: boolean
+                type: object
             required:
             - clusters
             - credentialsSecret
@@ -1360,7 +1366,7 @@ spec:
             type: object
             x-kubernetes-validations:
             - message: spec.primaryCluster not found in spec.clusters
-              rule: self.clusters.exists(c, c.name == self.primaryCluster)
+              rule: self.clusters.exists(c, c.innodbClusterName == self.primaryCluster)
           status:
             properties:
               clusters:
