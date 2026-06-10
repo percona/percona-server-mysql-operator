@@ -161,7 +161,6 @@ func main() {
 
 	if err = (&ps.PerconaServerMySQLReconciler{
 		Client:        nsClient,
-		APIReader:     mgr.GetAPIReader(),
 		Scheme:        mgr.GetScheme(),
 		ServerVersion: serverVersion,
 		Recorder:      mgr.GetEventRecorderFor("ps-controller"),

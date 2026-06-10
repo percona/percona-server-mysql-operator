@@ -201,9 +201,8 @@ func TestReconcileInternalEncryptionKeySecret(t *testing.T) {
 		Build()
 
 	r := &PerconaServerMySQLReconciler{
-		APIReader: cl,
-		Client:    cl,
-		Scheme:    scheme,
+		Client: cl,
+		Scheme: scheme,
 	}
 
 	require.NoError(t, r.reconcileInternalEncryptionKeySecret(t.Context(), cr))

@@ -69,8 +69,6 @@ import (
 // PerconaServerMySQLReconciler reconciles a PerconaServerMySQL object
 type PerconaServerMySQLReconciler struct {
 	client.Client
-
-	APIReader     client.Reader
 	Scheme        *runtime.Scheme
 	ServerVersion *platform.ServerVersion
 	Recorder      record.EventRecorder
