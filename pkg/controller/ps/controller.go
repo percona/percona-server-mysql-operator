@@ -190,6 +190,7 @@ func enqueueClusterFromEncryptionKeySecret(c client.Client) handler.EventHandler
 							Namespace: cluster.Namespace,
 						},
 					})
+					break
 				}
 			}
 		}
