@@ -175,7 +175,7 @@ spec:
 - `spec.mysqlshellRunner.image` *(required, string)*: Container image used for the `mysqlshell-runner` Pod and the `createReplicaCluster` Job. Must contain a `mysqlsh` binary on `PATH`. The mysqlsh version should match the major version of the MySQL endpoints participating in this ClusterSet (e.g. 8.0 endpoints → 8.0 mysqlsh). See §5.6 for the rationale.
 - `spec.credentialsSecret` *(required, secret key selector)*: `name` (required) and `key` of a Secret in the same namespace holding the password of the `clusterset` user.
 - `spec.clusters[]` *(required, 1–10 entries)*: List of clusters participating in the ClusterSet. Each entry:
-  - `innodbClusterName` *(required)*: Name of the InnoDB cluster, used in `primaryCluster`, status, annotations. Must contain only alphanumeric characters, max 63; must be unique within the ClusterSet (CEL-validated at admission). Immutable once observed in status; renames go through remove + re-add.
+  - `innodbClusterName` *(required)*: Name of the InnoDB cluster, used in `primaryCluster`, status, annotations. Must contain only alphanumeric characters, max 63; must be unique within the ClusterSet (CEL-validated at admission).
   - `endpoints[]` *(required, 1–9 entries)*: List of host:port pairs the controller can use to reach the cluster's MySQL members. `host` is required and must be a valid IP address or DNS name (CEL-validated). Controller picks the first reachable. Multiple entries allow the controller's own connection to survive single-member failures.
 
 *Existing CRD* `PerconaServerMySQL` gains one new optional field:

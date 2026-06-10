@@ -71,6 +71,8 @@ type PerconaServerMySQLClusterSetSpec struct {
 	// Clusters is the list of member clusters in the ClusterSet.
 	// At least one cluster must be specified (the primary).
 	//
+	// +listType=map
+	// +listMapKey=innodbClusterName
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems:=1
 	// +kubebuilder:validation:MaxItems:=10
@@ -96,6 +98,7 @@ type UnsafeClusterSetFlags struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:=false
 	ForcedFailover *bool `json:"forcedFailover,omitempty"`
+
 	// ForcedClusterRemoval controls if a replica cluster can be removed if it is
 	// unreachable. Enabling it lets the operator forget an unreachable replica;
 	// any transactions not replicated back are abandoned.
@@ -188,7 +191,6 @@ type ClusterSetCluster struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:XValidation:rule="self.matches('^[A-Za-z0-9]+$')",message="innodbClusterName must contain only alphanumeric characters"
-	// +kubebuilder:validation:XValidation:rule="oldSelf == self",message="innodbClusterName is immutable"
 	InnoDBClusterName string `json:"innodbClusterName"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems:=1

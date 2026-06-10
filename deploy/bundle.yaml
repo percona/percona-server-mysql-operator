@@ -1291,8 +1291,6 @@ spec:
                       - message: innodbClusterName must contain only alphanumeric
                           characters
                         rule: self.matches('^[A-Za-z0-9]+$')
-                      - message: innodbClusterName is immutable
-                        rule: oldSelf == self
                   required:
                   - endpoints
                   - innodbClusterName
@@ -1300,6 +1298,9 @@ spec:
                 maxItems: 10
                 minItems: 1
                 type: array
+                x-kubernetes-list-map-keys:
+                - innodbClusterName
+                x-kubernetes-list-type: map
                 x-kubernetes-validations:
                 - message: cluster names must be unique
                   rule: self.all(c, self.exists_one(d, d.innodbClusterName == c.innodbClusterName))
