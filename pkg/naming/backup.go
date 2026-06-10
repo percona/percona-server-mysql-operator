@@ -1,6 +1,6 @@
 package naming
 
-const InternalEncryptionKeyVersionFileName = "version"
+const InternalEncryptionKeyVersionFileName = ".version"
 
 func EncryptionKeyInternalSecretName(clusterName string) string {
 	return "internal-encryption-keys-" + clusterName
