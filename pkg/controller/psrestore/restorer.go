@@ -252,8 +252,8 @@ func (s *restorerOptions) resolveIncrementalChain(ctx context.Context) (xtraback
 	var allIncrementals []string
 	for _, obj := range objects {
 		rel := strings.TrimPrefix(obj, incrListPrefix)
-		ts, _, _ := strings.Cut(rel, "/")
-		if ts != "" && strings.HasSuffix(ts, "-incr") {
+		ts, file, _ := strings.Cut(rel, "/")
+		if ts != "" && strings.HasSuffix(ts, "-incr") && file == "xtrabackup_info" {
 			allIncrementals = append(allIncrementals, ts)
 		}
 	}
