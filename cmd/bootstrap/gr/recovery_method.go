@@ -130,6 +130,14 @@ func getRecoveryMethod(ctx context.Context, primary, replica string) (innodbclus
 	if err != nil {
 		return "", errors.Wrap(err, "get databases")
 	}
+	defer func() {
+		if err := primarySQLRunner.db.Close(); err != nil {
+			log.Printf("Failed to close primary DB: %v", err)
+		}
+		if err := replicaSQLRunner.db.Close(); err != nil {
+			log.Printf("Failed to close local DB: %v", err)
+		}
+	}()
 
 	replicaState, err := checkReplicaState(ctx, primarySQLRunner, replicaSQLRunner)
 	if err != nil {

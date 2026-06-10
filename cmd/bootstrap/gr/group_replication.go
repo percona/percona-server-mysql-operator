@@ -614,23 +614,14 @@ func getSQLRunners(primary, replica string) (primarySQLRunner *sqlRunner, replic
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "open primary DB")
 	}
-	defer func(primaryDB *sql.DB) {
-		err := primaryDB.Close()
-		if err != nil {
-			log.Printf("Failed to close primary DB: %v", err)
-		}
-	}(primaryDB)
 	localParams := database.DBParams{User: apiv1.UserOperator, Pass: operatorPass, Host: replica}
 	localDB, err := sql.Open("mysql", localParams.DSN())
 	if err != nil {
+		if closeErr := primaryDB.Close(); closeErr != nil {
+			log.Printf("Failed to close primary DB: %v", closeErr)
+		}
 		return nil, nil, errors.Wrap(err, "open local DB")
 	}
-	defer func(localDB *sql.DB) {
-		err := localDB.Close()
-		if err != nil {
-			log.Printf("Failed to close local DB: %v", err)
-		}
-	}(localDB)
 
 	return &sqlRunner{db: primaryDB}, &sqlRunner{db: localDB}, nil
 }
