@@ -179,6 +179,9 @@ func (m *ReplicationDBManager) GetMemberState(ctx context.Context, host string) 
 		}
 		return MemberStateError, errors.Wrap(err, "query member state")
 	}
+	if len(rows) == 0 {
+		return MemberStateOffline, nil
+	}
 
 	return rows[0].State, nil
 }
@@ -216,7 +219,7 @@ func (m *ReplicationDBManager) CheckIfClusterMetadataDBExists(ctx context.Contex
 		}
 		return false, err
 	}
-	return true, nil
+	return len(rows) > 0, nil
 }
 
 func (m *ReplicationDBManager) GetClusterSetReplicationExists(ctx context.Context) (bool, error) {
@@ -227,6 +230,9 @@ func (m *ReplicationDBManager) GetClusterSetReplicationExists(ctx context.Contex
 	err := m.query(ctx, "SELECT EXISTS(SELECT 1 FROM replication_connection_configuration WHERE channel_name = 'clusterset_replication') as channel_exists", &rows)
 	if err != nil {
 		return false, errors.Wrap(err, "query cluster set replication exists")
+	}
+	if len(rows) == 0 {
+		return false, nil
 	}
 
 	return rows[0].Exists, nil
