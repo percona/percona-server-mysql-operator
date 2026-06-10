@@ -5,6 +5,9 @@ metadata:
   finalizers:
     - percona.com/clusterset-dissolve
 spec:
+#  unsafeFlags:
+#    forcedFailover: false
+#    forcedClusterRemoval: false
   primaryCluster: pscluster1
   credentialsSecret:
     name: ps-cluster1-secrets

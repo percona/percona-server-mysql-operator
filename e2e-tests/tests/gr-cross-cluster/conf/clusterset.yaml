@@ -5,12 +5,14 @@ metadata:
   finalizers:
   - percona.com/clusterset-dissolve
 spec:
+  unsafeFlags:
+    forcedFailover: false
+    forcedClusterRemoval: false
   primaryCluster: grcrossclusterdc1
   sslMode: AUTO
   credentialsSecret:
     name: test-secrets
     key: clusterset
-  allowForcedFailover: false
   clusters:
     - innodbClusterName: grcrossclusterdc1
       endpoints:

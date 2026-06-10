@@ -187,7 +187,7 @@ type ClusterSetCluster struct {
 	//
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MaxLength=63
-	// +kubebuilder:validation:XValidation:rule="self.matches('^[A-Za-z0-9]+$')",message="name must contain only alphanumeric characters"
+	// +kubebuilder:validation:XValidation:rule="self.matches('^[A-Za-z0-9]+$')",message="innodbClusterName must contain only alphanumeric characters"
 	InnoDBClusterName string `json:"innodbClusterName"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems:=1
@@ -196,6 +196,7 @@ type ClusterSetCluster struct {
 }
 
 type ClusterSetClusterEndpoint struct {
+	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:XValidation:rule="isIP(self) || !format.dns1123Subdomain().validate(self).hasValue()",message="host must be a valid IP address or domain name"
 	Host string `json:"host"`

@@ -1288,7 +1288,8 @@ spec:
                       maxLength: 63
                       type: string
                       x-kubernetes-validations:
-                      - message: name must contain only alphanumeric characters
+                      - message: innodbClusterName must contain only alphanumeric
+                          characters
                         rule: self.matches('^[A-Za-z0-9]+$')
                   required:
                   - endpoints
