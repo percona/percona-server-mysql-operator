@@ -188,6 +188,7 @@ type ClusterSetCluster struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:XValidation:rule="self.matches('^[A-Za-z0-9]+$')",message="innodbClusterName must contain only alphanumeric characters"
+	// +kubebuilder:validation:XValidation:rule="oldSelf == self",message="innodbClusterName is immutable"
 	InnoDBClusterName string `json:"innodbClusterName"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems:=1

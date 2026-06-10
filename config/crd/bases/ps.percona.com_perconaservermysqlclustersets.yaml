@@ -67,6 +67,8 @@ spec:
                       - message: innodbClusterName must contain only alphanumeric
                           characters
                         rule: self.matches('^[A-Za-z0-9]+$')
+                      - message: innodbClusterName is immutable
+                        rule: oldSelf == self
                   required:
                   - endpoints
                   - innodbClusterName
