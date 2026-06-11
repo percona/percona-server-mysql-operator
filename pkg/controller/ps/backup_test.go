@@ -6,9 +6,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 func TestGenerateBackupName(t *testing.T) {
@@ -135,4 +143,83 @@ func TestGenerateBackupName(t *testing.T) {
 			uniqueSuffixes[suffix] = struct{}{}
 		})
 	}
+}
+
+func TestReconcileInternalEncryptionKeySecret(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	cr := &apiv1.PerconaServerMySQL{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster1",
+			Namespace: "test-ns",
+			UID:       types.UID("cluster1-uid"),
+		},
+		Spec: apiv1.PerconaServerMySQLSpec{
+			CRVersion: version.Version(),
+			Backup: &apiv1.BackupSpec{
+				EncryptionKeySecret: &apiv1.EncryptionKeySecretSelector{
+					Name: "cluster-key",
+					Key:  "encryptionKey",
+				},
+				Storages: map[string]*apiv1.BackupStorageSpec{
+					"s3": {
+						EncryptionKeySecret: &apiv1.EncryptionKeySecretSelector{
+							Name: "storage-key",
+							Key:  "custom-key",
+						},
+					},
+					"without-key": {},
+					"nil":         nil,
+				},
+			},
+		},
+	}
+	clusterKeySecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster-key",
+			Namespace: cr.Namespace,
+		},
+		Data: map[string][]byte{
+			"encryptionKey": []byte("cluster-secret-key"),
+		},
+	}
+	storageKeySecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "storage-key",
+			Namespace: cr.Namespace,
+		},
+		Data: map[string][]byte{
+			"custom-key": []byte("storage-secret-key"),
+		},
+	}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cr, clusterKeySecret, storageKeySecret).
+		Build()
+
+	r := &PerconaServerMySQLReconciler{
+		Client: cl,
+		Scheme: scheme,
+	}
+
+	require.NoError(t, r.reconcileInternalEncryptionKeySecret(t.Context(), cr))
+
+	internalSecret := &corev1.Secret{}
+	require.NoError(t, r.Get(t.Context(), client.ObjectKey{
+		Name:      naming.EncryptionKeyInternalSecretName(cr.Name),
+		Namespace: cr.Namespace,
+	}, internalSecret))
+
+	assert.Equal(t, []byte("cluster-secret-key"), internalSecret.Data[naming.InternalEncryptionKeyFileName(cr.Name, "")])
+	assert.Equal(t, []byte("storage-secret-key"), internalSecret.Data[naming.InternalEncryptionKeyFileName(cr.Name, "s3")])
+	assert.NotEmpty(t, internalSecret.Data[naming.InternalEncryptionKeyVersionFileName])
+	assert.Len(t, internalSecret.Data, 3)
+	require.Len(t, internalSecret.OwnerReferences, 1)
+	assert.Equal(t, cr.Name, internalSecret.OwnerReferences[0].Name)
+	assert.Equal(t, cr.UID, internalSecret.OwnerReferences[0].UID)
+	require.NotNil(t, internalSecret.OwnerReferences[0].Controller)
+	assert.True(t, *internalSecret.OwnerReferences[0].Controller)
 }
