@@ -191,7 +191,7 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 
 	conf := Configurable(*cr)
 
-	return []corev1.Volume{
+	volumes := []corev1.Volume{
 		{
 			Name: "bin",
 			VolumeSource: corev1.VolumeSource{
@@ -243,7 +243,19 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 				},
 			},
 		},
+		{
+			Name: internalConfigVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: naming.InternalHAProxyConfigMapName(cr.Name),
+					},
+					Optional: new(true),
+				},
+			},
+		},
 	}
+	return volumes
 }
 
 func updateStrategy(cr *apiv1.PerconaServerMySQL) appsv1.StatefulSetUpdateStrategy {
@@ -309,6 +321,36 @@ func haproxyContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		env = append(env, probsEnvs...)
 	}
 
+	volumeMounts := []corev1.VolumeMount{
+		{
+			Name:      "bin",
+			MountPath: "/opt/percona",
+		},
+		{
+			Name:      "haproxy-config",
+			MountPath: "/etc/haproxy/mysql",
+		},
+		{
+			Name:      credsVolumeName,
+			MountPath: CredsMountPath,
+		},
+		{
+			Name:      tlsVolumeName,
+			MountPath: tlsMountPath,
+		},
+		{
+			Name:      configVolumeName,
+			MountPath: configMountPath,
+		},
+	}
+
+	if cr.CompareVersion("1.2.0") >= 0 {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      internalConfigVolumeName,
+			MountPath: "/etc/haproxy/internal-config",
+		})
+	}
+
 	return corev1.Container{
 		Name:            AppName,
 		Image:           spec.Image,
@@ -338,28 +380,7 @@ func haproxyContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 				ContainerPort: int32(PortMySQLXProtocol),
 			},
 		},
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "bin",
-				MountPath: "/opt/percona",
-			},
-			{
-				Name:      "haproxy-config",
-				MountPath: "/etc/haproxy/mysql",
-			},
-			{
-				Name:      credsVolumeName,
-				MountPath: CredsMountPath,
-			},
-			{
-				Name:      tlsVolumeName,
-				MountPath: tlsMountPath,
-			},
-			{
-				Name:      configVolumeName,
-				MountPath: configMountPath,
-			},
-		},
+		VolumeMounts:             volumeMounts,
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          spec.ContainerSecurityContext,
@@ -392,6 +413,32 @@ func mysqlMonitContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		resources = spec.SidecarResources["mysql-monit"]
 	}
 
+	volumeMounts := []corev1.VolumeMount{
+		{
+			Name:      "bin",
+			MountPath: "/opt/percona",
+		},
+		{
+			Name:      "haproxy-config",
+			MountPath: "/etc/haproxy/mysql",
+		},
+		{
+			Name:      credsVolumeName,
+			MountPath: CredsMountPath,
+		},
+		{
+			Name:      tlsVolumeName,
+			MountPath: tlsMountPath,
+		},
+	}
+
+	if cr.CompareVersion("1.2.0") >= 0 {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      internalConfigVolumeName,
+			MountPath: "/etc/haproxy/internal-config",
+		})
+	}
+
 	return corev1.Container{
 		Name:            "mysql-monit",
 		Image:           spec.Image,
@@ -403,26 +450,9 @@ func mysqlMonitContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 			"-on-change=/opt/percona/haproxy_add_mysql_nodes.sh",
 			"-service=$(MYSQL_SERVICE)",
 		},
-		Env:     env,
-		EnvFrom: spec.EnvFrom,
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "bin",
-				MountPath: "/opt/percona",
-			},
-			{
-				Name:      "haproxy-config",
-				MountPath: "/etc/haproxy/mysql",
-			},
-			{
-				Name:      credsVolumeName,
-				MountPath: CredsMountPath,
-			},
-			{
-				Name:      tlsVolumeName,
-				MountPath: tlsMountPath,
-			},
-		},
+		Env:                      env,
+		EnvFrom:                  spec.EnvFrom,
+		VolumeMounts:             volumeMounts,
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          spec.ContainerSecurityContext,

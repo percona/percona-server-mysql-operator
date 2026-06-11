@@ -943,6 +943,42 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context
 	return nil
 }
 
+func (r *PerconaServerMySQLReconciler) reconcileInternalHAProxyConfigMap(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
+	if cr.CompareVersion("1.2.0") < 0 {
+		return nil
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      naming.InternalHAProxyConfigMapName(cr.Name),
+			Namespace: cr.Namespace,
+		},
+		Data: map[string]string{
+			"cluster_name": cr.Name,
+		},
+	}
+
+	data := map[string]string{
+		"is_clusterset_replica": "0",
+	}
+	if meta.IsStatusConditionTrue(cr.Status.Conditions, apiv1.ConditionClusterSetReplicationRunning) {
+		data["is_clusterset_replica"] = "1"
+	}
+
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
+		if err := controllerutil.SetControllerReference(cr, cm, r.Scheme); err != nil {
+			return errors.Wrap(err, "set controller reference")
+		}
+		cm.Labels = cr.GlobalLabels()
+		cm.Annotations = cr.GlobalAnnotations()
+		cm.Data = data
+		return nil
+	}); err != nil {
+		return errors.Wrapf(err, "create or update ConfigMap/%s", cm.Name)
+	}
+	return nil
+}
+
 func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileHAProxy")
 
@@ -959,6 +995,10 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 	if !firstMySQLPodReady && !cr.Spec.Pause {
 		log.V(1).Info("Waiting for pod to be ready", "pod", nn.Name)
 		return nil
+	}
+
+	if err := r.reconcileInternalHAProxyConfigMap(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile internal HAProxy config map")
 	}
 
 	component := haproxy.Component(*cr)
@@ -1378,6 +1418,16 @@ func (r *PerconaServerMySQLReconciler) cleanupProxies(ctx context.Context, cr *a
 
 		if err := r.Delete(ctx, haproxy.Service(cr, nil)); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrap(err, "failed to delete haproxy service")
+		}
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      naming.InternalHAProxyConfigMapName(cr.Name),
+				Namespace: cr.GetNamespace(),
+			},
+		}
+		if err := r.Client.Delete(ctx, secret); client.IgnoreNotFound(err) != nil {
+			return errors.Wrap(err, "failed to delete internal HAProxy config map secret")
 		}
 	}
 
