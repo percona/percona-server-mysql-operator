@@ -34,7 +34,9 @@ func GroupReplication(ctx context.Context, cli client.Client, cliCmd clientcmd.C
 
 	pod, err := getReadyPod(ctx, cli, cluster)
 	if err != nil {
-		logger.Info(errors.Wrap(err, "getting ready pod").Error())
+		if cluster.BootstrapMode() != apiv1.BootstrapModeManual {
+			logger.Info(errors.Wrap(err, "getting ready pod").Error())
+		}
 		return Topology{}, nil
 	}
 
