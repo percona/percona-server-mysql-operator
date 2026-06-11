@@ -43,6 +43,8 @@ spec:
           name: vault-keyring-secret
         - mountPath: /etc/mysql/config
           name: config
+        - mountPath: /etc/mysql/encryption-keys
+          name: backup-encryption-keys
       - name: pt-heartbeat
         volumeMounts:
         - mountPath: /opt/percona
@@ -114,6 +116,11 @@ spec:
           defaultMode: 420
           optional: true
           secretName: sidecars-vault
+      - name: backup-encryption-keys
+        secret:
+          defaultMode: 420
+          optional: true
+          secretName: internal-encryption-keys-sidecars
       - emptyDir:
           medium: Memory
         name: empty-vol

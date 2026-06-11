@@ -319,7 +319,27 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: cr.Spec.MySQL.VaultSecretName,
-					Optional:   ptr.To(true),
+					Optional:   new(true),
+				},
+			},
+		})
+	}
+
+	if cr.CompareVersion("1.2.0") >= 0 {
+		// This is the internal Secret managed by the operator.
+		// It is mounted unconditionally, even if empty, so that the mysql pods do not require a restart
+		// each time an encryption key is added/updated.
+		// The xtrabackup sidecar is long-running, so encrypted backups need the
+		// internal key Secret projected into the pod before a backup request arrives.
+		// The Secret is optional for clusters without backup encryption. When present,
+		// its version file lets the sidecar wait until kubelet has synced the mounted
+		// key data before starting xtrabackup.
+		volumes = append(volumes, corev1.Volume{
+			Name: "backup-encryption-keys",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: naming.EncryptionKeyInternalSecretName(cr.Name),
+					Optional:   new(true),
 				},
 			},
 		})
@@ -764,6 +784,16 @@ func backupVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 			corev1.VolumeMount{
 				Name:      configVolumeName,
 				MountPath: configMountPath,
+			},
+		)
+	}
+
+	if cr.CompareVersion("1.2.0") >= 0 {
+		// See the matching optional volume for how encryption keys propagate.
+		mounts = append(mounts,
+			corev1.VolumeMount{
+				Name:      "backup-encryption-keys",
+				MountPath: "/etc/mysql/encryption-keys",
 			},
 		)
 	}
