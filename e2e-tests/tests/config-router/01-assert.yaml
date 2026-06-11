@@ -41,6 +41,8 @@ spec:
           name: vault-keyring-secret
         - mountPath: /etc/mysql/config
           name: config
+        - mountPath: /etc/mysql/encryption-keys
+          name: backup-encryption-keys
       volumes:
       - emptyDir: {}
         name: bin
@@ -83,6 +85,11 @@ spec:
           defaultMode: 420
           optional: true
           secretName: config-router-vault
+      - name: backup-encryption-keys
+        secret:
+          defaultMode: 420
+          optional: true
+          secretName: internal-encryption-keys-config-router
 status:
   observedGeneration: 1
   replicas: 3

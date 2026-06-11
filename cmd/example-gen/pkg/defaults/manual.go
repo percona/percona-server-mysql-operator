@@ -147,6 +147,11 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 			LogLevel:           "info",
 		},
 	}
+
+	spec.EncryptionKeySecret = &apiv1.EncryptionKeySecretSelector{
+		Name: "my-encryption-key-secret",
+		Key:  "encryptionKey",
+	}
 	podSpecDefaults(&spec.PiTR.BinlogServer.PodSpec, ImageBinlogServer, corev1.ResourceRequirements{}, "", 30, nil, nil)
 	spec.PiTR.BinlogServer.Size = 1
 	spec.SourcePod = SourcePod
@@ -176,6 +181,10 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 				EndpointURL:       "https://accountName.blob.core.windows.net",
 				StorageClass:      "Cool",
 			},
+			EncryptionKeySecret: &apiv1.EncryptionKeySecretSelector{
+				Name: "my-azure-encryption-key-secret",
+				Key:  "encryptionKey",
+			},
 		},
 		"gcp-cs": {
 			Type: apiv1.BackupStorageGCS,
@@ -184,6 +193,10 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 				Prefix:            "PREFIX-NAME",
 				CredentialsSecret: "SECRET-NAME",
 				EndpointURL:       "https://storage.googleapis.com",
+			},
+			EncryptionKeySecret: &apiv1.EncryptionKeySecretSelector{
+				Name: "my-gcs-encryption-key-secret",
+				Key:  "encryptionKey",
 			},
 		},
 		"s3-us-west": {
@@ -206,6 +219,10 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 			SchedulerName:     SchedulerName,
 			VerifyTLS:         VerifyTLS,
 			NodeSelector:      NodeSelector,
+			EncryptionKeySecret: &apiv1.EncryptionKeySecretSelector{
+				Name: "my-s3-encryption-key-secret",
+				Key:  "encryptionKey",
+			},
 		},
 	}
 }

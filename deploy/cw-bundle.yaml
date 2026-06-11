@@ -863,6 +863,16 @@ spec:
                             type: string
                         type: object
                     type: object
+                  encryptionKeySecret:
+                    properties:
+                      key:
+                        default: encryptionKey
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
                   gcs:
                     properties:
                       bucket:
@@ -2160,6 +2170,16 @@ spec:
                               runAsUserName:
                                 type: string
                             type: object
+                        type: object
+                      encryptionKeySecret:
+                        properties:
+                          key:
+                            default: encryptionKey
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
                         type: object
                       gcs:
                         properties:
@@ -4066,6 +4086,16 @@ spec:
                     type: object
                   enabled:
                     type: boolean
+                  encryptionKeySecret:
+                    properties:
+                      key:
+                        default: encryptionKey
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
                   image:
                     type: string
                   imagePullPolicy:
@@ -6176,6 +6206,16 @@ spec:
                                 runAsUserName:
                                   type: string
                               type: object
+                          type: object
+                        encryptionKeySecret:
+                          properties:
+                            key:
+                              default: encryptionKey
+                              type: string
+                            name:
+                              type: string
+                          required:
+                          - name
                           type: object
                         gcs:
                           properties:

@@ -518,6 +518,15 @@ func expectedVolumes() []corev1.Volume {
 				},
 			},
 		},
+		{
+			Name: "backup-encryption-keys",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "internal-encryption-keys-ps-cluster1",
+					Optional:   ptr.To(true),
+				},
+			},
+		},
 	}
 }
 
@@ -728,6 +737,7 @@ func TestBackupVolumeMounts(t *testing.T) {
 		{Name: "backup-logs", MountPath: BackupLogDir},
 		{Name: vaultSecretVolumeName, MountPath: vaultSecretMountPath},
 		{Name: configVolumeName, MountPath: configMountPath},
+		{Name: "backup-encryption-keys", MountPath: "/etc/mysql/encryption-keys"},
 	}
 
 	mounts := backupVolumeMounts(cr)
