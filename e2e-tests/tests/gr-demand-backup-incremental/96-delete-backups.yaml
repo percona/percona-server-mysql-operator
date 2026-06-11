@@ -9,3 +9,6 @@ delete:
 - apiVersion: ps.percona.com/v1
   kind: PerconaServerMySQLBackup
   name: base-backup-compressed
+- apiVersion: ps.percona.com/v1
+  kind: PerconaServerMySQLBackup
+  name: base-backup-encrypted

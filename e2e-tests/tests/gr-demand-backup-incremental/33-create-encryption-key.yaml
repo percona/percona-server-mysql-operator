@@ -1,0 +1,30 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 30
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+      
+      key=$(openssl rand -base64 24)
+      secretName="test-encryption-key"
+      
+      kubectl create secret generic "${secretName}" --from-literal=encryptionKey="${key}" -n "${NAMESPACE}"
+
+      patch=$(cat <<EOF
+      {
+        "spec": {
+          "backup": {
+            "encryptionKeySecret": {
+              "name": "${secretName}",
+              "key": "encryptionKey"
+            }
+          }
+        }
+      }
+      EOF
+      )
+
+      kubectl patch ps gr-demand-backup-incremental -n "${NAMESPACE}" --type=merge --patch "${patch}"

@@ -28,7 +28,7 @@ var baseClusterSet = &apiv1.PerconaServerMySQLClusterSet{
 		PrimaryCluster: "dc1",
 		Clusters: []apiv1.ClusterSetCluster{
 			{
-				Name: "dc1",
+				InnoDBClusterName: "dc1",
 				Endpoints: []apiv1.ClusterSetClusterEndpoint{
 					{
 						Host: "dc1-mysql-primary.test-cluster-set.svc.cluster.local",
@@ -36,7 +36,7 @@ var baseClusterSet = &apiv1.PerconaServerMySQLClusterSet{
 				},
 			},
 			{
-				Name: "dc2",
+				InnoDBClusterName: "dc2",
 				Endpoints: []apiv1.ClusterSetClusterEndpoint{
 					{
 						Host: "dc2-mysql-0.test-cluster-set.svc.cluster.local",
@@ -426,7 +426,7 @@ func TestReconciler_reconcileReplicas(t *testing.T) {
 				pcs.Spec.PrimaryCluster = "dc1"
 
 				pcs.Spec.Clusters = append(pcs.Spec.Clusters, apiv1.ClusterSetCluster{
-					Name: "dc3",
+					InnoDBClusterName: "dc3",
 					Endpoints: []apiv1.ClusterSetClusterEndpoint{
 						{
 							Host: "dc3-mysql-0.test-cluster-set.svc.cluster.local",
@@ -465,7 +465,7 @@ func TestReconciler_reconcileReplicas(t *testing.T) {
 
 				pcs.Spec.Clusters = []apiv1.ClusterSetCluster{
 					{
-						Name: "dc1",
+						InnoDBClusterName: "dc1",
 						Endpoints: []apiv1.ClusterSetClusterEndpoint{
 							{
 								Host: "dc1-mysql-primary.test-cluster-set.svc.cluster.local",

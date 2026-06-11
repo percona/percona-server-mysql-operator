@@ -752,3 +752,59 @@ func TestBackupStorageSpecEquals(t *testing.T) {
 		})
 	}
 }
+
+func TestGetXtrabackupFlagValue(t *testing.T) {
+	testCases := []struct {
+		containerOptions BackupContainerOptions
+		flag             string
+		want             string
+	}{
+		{
+			containerOptions: BackupContainerOptions{
+				Args: BackupContainerArgs{
+					Xtrabackup: []string{"--compress=lz4"},
+				},
+			},
+			flag: "--compress",
+			want: "lz4",
+		},
+		{
+			containerOptions: BackupContainerOptions{
+				Args: BackupContainerArgs{
+					Xtrabackup: []string{"--encrypt=AES256"},
+				},
+			},
+			flag: "--encrypt",
+			want: "AES256",
+		},
+		{
+			containerOptions: BackupContainerOptions{
+				Args: BackupContainerArgs{
+					Xtrabackup: []string{"--encrypt=AES256", "--encrypt-key-file=encryption-key"},
+				},
+			},
+			flag: "--encrypt",
+			want: "AES256",
+		},
+		{
+			containerOptions: BackupContainerOptions{
+				Args: BackupContainerArgs{
+					Xtrabackup: []string{"--encrypt=AES256", "--encrypt-key-file=encryption-key"},
+				},
+			},
+			flag: "--encrypt-key-file",
+			want: "encryption-key",
+		},
+		{
+			containerOptions: BackupContainerOptions{},
+			flag:             "--encrypt",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.flag, func(t *testing.T) {
+			got := tc.containerOptions.GetArgs().GetXtrabackupFlagValue(tc.flag)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
