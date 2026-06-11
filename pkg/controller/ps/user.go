@@ -159,6 +159,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		restartMySQL        bool
 		restartReplication  bool
 		restartOrchestrator bool
+		restartRouter       bool
 		restartPMM          bool
 	)
 
@@ -197,6 +198,8 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		switch apiv1.SystemUser(user) {
 		case apiv1.UserMonitor:
 			restartMySQL = cr.PMMEnabled(internalSecret)
+		case apiv1.UserOperator:
+			restartRouter = cr.RouterEnabled()
 		case apiv1.UserPMMServerToken:
 			restartPMM = cr.PMMEnabled(internalSecret)
 			continue // PMM server user credentials are not stored in db
@@ -287,6 +290,19 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		}
 		if err := k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationSecretHash, hash); err != nil {
 			return errors.Wrap(err, "restart MySQL")
+		}
+	}
+
+	if restartRouter {
+		log.Info("Operator user password updated. Restarting Router.")
+
+		dp := new(appsv1.Deployment)
+		nn := types.NamespacedName{Name: router.Name(cr), Namespace: cr.Namespace}
+		if err := r.Get(ctx, nn, dp); err != nil {
+			return errors.Wrap(err, "get Router deployment")
+		}
+		if err := k8s.RolloutRestart(ctx, r.Client, dp, naming.AnnotationSecretHash, hash); err != nil {
+			return errors.Wrap(err, "restart Router")
 		}
 	}
 

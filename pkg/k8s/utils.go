@@ -472,6 +472,19 @@ func RolloutRestart(ctx context.Context, cl client.Client, obj runtime.Object, k
 		}
 
 		return nil
+	case *appsv1.Deployment:
+		orig := obj.DeepCopy()
+
+		if obj.Spec.Template.ObjectMeta.Annotations == nil {
+			obj.Spec.Template.ObjectMeta.Annotations = make(map[string]string)
+		}
+		obj.Spec.Template.ObjectMeta.Annotations[string(key)] = value
+
+		if err := cl.Patch(ctx, obj, client.StrategicMergeFrom(orig)); err != nil {
+			return errors.Wrap(err, "patch object")
+		}
+
+		return nil
 	default:
 		return errors.New("not supported")
 	}

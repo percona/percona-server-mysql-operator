@@ -8,6 +8,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -17,7 +18,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/router"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 )
 
@@ -344,5 +348,136 @@ func TestReconcileUsersCreatesClusterSetUser(t *testing.T) {
 
 	if fc.execCount != len(scripts) {
 		t.Fatalf("expected %d exec calls, got %d", len(scripts), fc.execCount)
+	}
+}
+
+func TestReconcileUsersRestartsRouterOnOperatorPasswordUpdate(t *testing.T) {
+	ctx := context.Background()
+
+	const crName = "router-password-rotation"
+	const ns = "some-namespace"
+	const oldOperatorPass = "op-password-old"
+	const newOperatorPass = "op-password-new"
+
+	cr := &apiv1.PerconaServerMySQL{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      crName,
+			Namespace: ns,
+		},
+		Spec: apiv1.PerconaServerMySQLSpec{
+			CRVersion:   "1.2.0",
+			SecretsName: "some-secret",
+			MySQL: apiv1.MySQLSpec{
+				ClusterType: apiv1.ClusterTypeGR,
+			},
+			Proxy: apiv1.ProxySpec{
+				Router: &apiv1.MySQLRouterSpec{
+					Enabled: true,
+					PodSpec: apiv1.PodSpec{Size: 3},
+				},
+			},
+		},
+		Status: apiv1.PerconaServerMySQLStatus{
+			MySQL: apiv1.StatefulAppStatus{State: apiv1.StateReady},
+			State: apiv1.StateInitializing,
+		},
+	}
+
+	oldData := map[string][]byte{string(apiv1.UserOperator): []byte(oldOperatorPass)}
+	newData := map[string][]byte{string(apiv1.UserOperator): []byte(newOperatorPass)}
+
+	userSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: cr.Spec.SecretsName, Namespace: ns},
+		Data:       newData,
+	}
+	internalSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: cr.InternalSecretName(), Namespace: ns},
+		Data:       oldData,
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      mysql.PodName(cr, 0),
+			Namespace: ns,
+			Labels:    mysql.MatchLabels(cr),
+		},
+		Status: corev1.PodStatus{
+			Phase:      corev1.PodRunning,
+			Conditions: []corev1.PodCondition{{Type: corev1.ContainersReady, Status: corev1.ConditionTrue}},
+		},
+	}
+
+	routerDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      router.Name(cr),
+			Namespace: ns,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{},
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		t.Fatal(err, "failed to add client-go scheme")
+	}
+	if err := apiv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err, "failed to add apis scheme")
+	}
+
+	host := mysql.FQDN(cr, 0)
+	mysqlCmd := func(query string) []string {
+		return []string{
+			"mysql",
+			"--database", "performance_schema",
+			"-p" + oldOperatorPass,
+			"-u", "operator",
+			"-h", host,
+			"-e", query,
+		}
+	}
+
+	scripts := []fakeClientScript{
+		{
+			cmd:    mysqlCmd("SELECT MEMBER_HOST as host FROM replication_group_members WHERE MEMBER_ROLE='PRIMARY' AND MEMBER_STATE='ONLINE'"),
+			stdout: []byte("host\n" + host + "\n"),
+		},
+		{
+			cmd: mysqlCmd(fmt.Sprintf("ALTER USER 'operator'@'%%' IDENTIFIED BY '%s' RETAIN CURRENT PASSWORD", newOperatorPass)),
+		},
+		{
+			cmd: mysqlCmd("FLUSH PRIVILEGES"),
+		},
+	}
+	fc := &fakeClient{scripts: scripts}
+
+	r := PerconaServerMySQLReconciler{
+		Client:    fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, userSecret, internalSecret, pod, routerDeployment).Build(),
+		Scheme:    scheme,
+		ClientCmd: fc,
+	}
+
+	if err := r.reconcileUsers(ctx, cr, userSecret); err != nil {
+		t.Fatalf("reconcileUsers failed: %v", err)
+	}
+
+	if fc.execCount != len(scripts) {
+		t.Fatalf("expected %d exec calls, got %d", len(scripts), fc.execCount)
+	}
+
+	updatedDeployment := new(appsv1.Deployment)
+	nn := types.NamespacedName{Name: router.Name(cr), Namespace: ns}
+	if err := r.Get(ctx, nn, updatedDeployment); err != nil {
+		t.Fatalf("get router deployment: %v", err)
+	}
+
+	hash, err := k8s.ObjectHash(userSecret)
+	if err != nil {
+		t.Fatalf("calculate secret hash: %v", err)
+	}
+
+	gotHash := updatedDeployment.Spec.Template.Annotations[naming.AnnotationSecretHash.String()]
+	if gotHash != hash {
+		t.Fatalf("router deployment secret hash mismatch: got %q, want %q", gotHash, hash)
 	}
 }

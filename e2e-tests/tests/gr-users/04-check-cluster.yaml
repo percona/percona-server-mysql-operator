@@ -10,6 +10,12 @@ commands:
 
       sleep 30 # wait for cluster status to change to initializing
       wait_cluster_consistency_gr "${test_name}" "3" "3"
+
+      # Password discard happens after propagation; keep verifying readiness long enough
+      # to catch delayed router auth failures after operator password rotation.
+      sleep 90
+      wait_cluster_consistency_gr "${test_name}" "3" "3"
+
       cluster_name=$(get_cluster_name)
       mysql_host="-h $(get_router_service ${cluster_name})"
       mysql_user="-uroot -proot_password_updated"
