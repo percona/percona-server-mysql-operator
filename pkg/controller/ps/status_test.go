@@ -1144,7 +1144,7 @@ func getFakeClient(
 			DB: "mysql_innodb_cluster_metadata",
 		},
 	}
-	s := queryScript("SELECT SCHEMA_NAME AS db FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME LIKE 'mysql_innodb_cluster_metadata'", dbs)
+	s := queryScript("SELECT SCHEMA_NAME AS db FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = 'mysql_innodb_cluster_metadata'", dbs)
 	if !noMetadataDB {
 	} else {
 		s.err = sql.ErrNoRows
