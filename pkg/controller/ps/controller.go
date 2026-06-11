@@ -45,6 +45,7 @@ import (
 	k8sretry "k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -95,15 +96,18 @@ func (r *PerconaServerMySQLReconciler) SetupWithManager(mgr ctrl.Manager) error 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1.PerconaServerMySQL{}).
 		Watches(&corev1.Secret{}, enqueueClusterFromSecretsName(r.Client)).
+		Watches(&corev1.Secret{}, enqueueClusterFromEncryptionKeySecret(r.Client)).
 		Named("ps-controller").
 		Complete(r)
 }
 
 const (
-	fieldSecretsName = ".spec.secretsName"
+	fieldSecretsName             = ".spec.secretsName"
+	fieldEncryptionKeySecretName = ".spec.backup.encryptionKeySecret.name"
 )
 
 func setupFieldIndexers(mgr ctrl.Manager) error {
+	// Index cluster secrets field
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &apiv1.PerconaServerMySQL{}, fieldSecretsName, func(o client.Object) []string {
 		cluster, ok := o.(*apiv1.PerconaServerMySQL)
 		if !ok {
@@ -116,6 +120,34 @@ func setupFieldIndexers(mgr ctrl.Manager) error {
 		return []string{cluster.Spec.SecretsName}
 	}); err != nil {
 		return errors.Wrapf(err, "index field %s", fieldSecretsName)
+	}
+
+	// Index cluster backup encryption key secrets field
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&apiv1.PerconaServerMySQL{},
+		fieldEncryptionKeySecretName,
+		func(rawObj client.Object) []string {
+			cluster := rawObj.(*apiv1.PerconaServerMySQL)
+			if cluster.Spec.Backup == nil {
+				return nil
+			}
+			result := []string{}
+
+			if cluster.Spec.Backup.EncryptionKeySecret != nil {
+				result = append(result, cluster.Spec.Backup.EncryptionKeySecret.Name)
+			}
+
+			for _, storage := range cluster.Spec.Backup.Storages {
+				if storage == nil || storage.EncryptionKeySecret == nil {
+					continue
+				}
+				result = append(result, storage.EncryptionKeySecret.Name)
+			}
+			return result
+		},
+	); err != nil {
+		return errors.Wrapf(err, "unable to index field %s", fieldEncryptionKeySecretName)
 	}
 	return nil
 }
@@ -132,6 +164,35 @@ func enqueueClusterFromSecretsName(c client.Client) handler.EventHandler {
 			fieldSecretsName: secret.Name,
 		}); err != nil {
 			log.Error(err, "failed to list clusters for secret", "secret", secret.Name)
+			return nil
+		}
+
+		var requests []reconcile.Request
+		for _, cluster := range clusters.Items {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      cluster.Name,
+					Namespace: cluster.Namespace,
+				},
+			})
+		}
+		return requests
+	})
+}
+
+// enqueueClusterFromEncryptionKeySecret enqueues a request for all clusters that have an encryption key secret set to the given secret.
+func enqueueClusterFromEncryptionKeySecret(c client.Client) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+		secret, ok := o.(*corev1.Secret)
+		if !ok {
+			return nil
+		}
+		clusters := &apiv1.PerconaServerMySQLList{}
+		log := logf.FromContext(ctx)
+		if err := c.List(ctx, clusters, client.InNamespace(secret.Namespace), client.MatchingFields{
+			fieldEncryptionKeySecretName: secret.Name,
+		}); err != nil {
+			log.Error(err, "failed to list clusters")
 			return nil
 		}
 
@@ -414,7 +475,7 @@ func (r *PerconaServerMySQLReconciler) deleteCerts(ctx context.Context, cr *apiv
 	}
 	for _, secretName := range secretNames {
 		secret := &corev1.Secret{}
-		err := r.Client.Get(ctx, types.NamespacedName{
+		err := r.Get(ctx, types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      secretName,
 		}, secret)
@@ -505,6 +566,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	}
 	if err := r.ensureTLSSecret(ctx, cr); err != nil {
 		return errors.Wrap(err, "TLS secret")
+	}
+	if err := r.reconcileInternalEncryptionKeySecret(ctx, cr); err != nil {
+		return errors.Wrap(err, "internal encryption key secret")
 	}
 	if err := r.reconcileServices(ctx, cr); err != nil {
 		return errors.Wrap(err, "services")
@@ -1709,4 +1773,122 @@ func getPodIndexFromHostname(hostname string) (int, error) {
 	}
 
 	return idx, nil
+}
+
+func readEncryptionKey(ctx context.Context, cl client.Client, sel apiv1.EncryptionKeySecretSelector, namespace string) ([]byte, error) {
+	key := sel.Key
+	if key == "" {
+		key = "encryptionKey"
+	}
+
+	secret := &corev1.Secret{}
+	if err := cl.Get(ctx, types.NamespacedName{
+		Name:      sel.Name,
+		Namespace: namespace,
+	}, secret); err != nil {
+		return nil, errors.Wrap(err, "get secret")
+	}
+
+	value, ok := secret.Data[key]
+	if !ok {
+		return nil, errors.Errorf("key %s not found in secret %s", key, sel.Name)
+	}
+
+	return value, nil
+}
+
+func buildEncryptionKeySecretData(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL) (map[string][]byte, error) {
+	data := make(map[string][]byte)
+
+	if cr.Spec.Backup == nil {
+		return data, nil
+	}
+
+	if cr.Spec.Backup.EncryptionKeySecret != nil {
+		key, err := readEncryptionKey(ctx, cl, *cr.Spec.Backup.EncryptionKeySecret, cr.Namespace)
+		if err != nil {
+			return nil, errors.Wrap(err, "read backup encryption key")
+		}
+		data[naming.InternalEncryptionKeyFileName(cr.GetName(), "")] = key
+	}
+
+	for storageName, storage := range cr.Spec.Backup.Storages {
+		if storage == nil || storage.EncryptionKeySecret == nil {
+			continue
+		}
+
+		key, err := readEncryptionKey(ctx, cl, *storage.EncryptionKeySecret, cr.Namespace)
+		if err != nil {
+			return nil, errors.Wrap(err, "read backup encryption key")
+		}
+		data[naming.InternalEncryptionKeyFileName(cr.GetName(), storageName)] = key
+	}
+	return data, nil
+}
+
+// Reconcile the internal encryption key secret for the backup.
+func (r *PerconaServerMySQLReconciler) reconcileInternalEncryptionKeySecret(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
+	if cr.Spec.Backup == nil || cr.CompareVersion("1.2.0") < 0 {
+		return nil
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      naming.EncryptionKeyInternalSecretName(cr.Name),
+			Namespace: cr.Namespace,
+		},
+	}
+
+	data, err := buildEncryptionKeySecretData(ctx, r.Client, cr)
+	if err != nil {
+		return errors.Wrap(err, "build encryption key secret data")
+	}
+
+	if len(data) == 0 {
+		if err := r.Delete(ctx, secret); client.IgnoreNotFound(err) != nil {
+			return errors.Wrap(err, "delete encryption key secret")
+		}
+		return nil
+	}
+
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
+		if err := controllerutil.SetControllerReference(cr, secret, r.Scheme); err != nil {
+			return errors.Wrap(err, "set controller reference")
+		}
+		secret.Labels = cr.GlobalLabels()
+		secret.Annotations = cr.GlobalAnnotations()
+
+		if encryptionKeyDataEqual(secret.Data, data) {
+			return nil
+		}
+
+		// Store a version of the data along with the keys. The version is the timestamp at which
+		// the data was last modified. This version is used to signal the sidecar whether to wait
+		// for the data to be synced from the Secret to the pod.
+		// The sidecar reads the version file from its mounted Secret volume; when it matches this value,
+		// kubelet has refreshed the projected data and the sidecar can safely use the
+		// encryption keys.
+		version := []byte(strconv.FormatInt(time.Now().UTC().UnixNano(), 10))
+
+		secret.Data = data
+		secret.Data[naming.InternalEncryptionKeyVersionFileName] = version
+
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "create or update encryption key secret")
+	}
+	return nil
+}
+
+func encryptionKeyDataEqual(current, desired map[string][]byte) bool {
+	if len(current) != len(desired)+1 {
+		return false
+	}
+	for key, desiredValue := range desired {
+		if !bytes.Equal(current[key], desiredValue) {
+			return false
+		}
+	}
+	_, ok := current[naming.InternalEncryptionKeyVersionFileName]
+	return ok
 }

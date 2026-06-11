@@ -30,14 +30,14 @@ func ClusterSetReplicaManagerJob(
 	image, serviceAccount string,
 ) *batchv1.Job {
 	labels := naming.Labels(ClusterSetReplicaManagerAppName, pcs.Name, "percona-server", ClusterSetReplicaManagerComponent)
-	labels["cluster-name"] = cluster.Name
+	labels["cluster-name"] = cluster.InnoDBClusterName
 	labels["command"] = cmd
 
 	args = append([]string{cmd}, args...)
 
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s-%s", pcs.Name, cluster.Name, cmd),
+			Name:      fmt.Sprintf("%s-%s-%s", pcs.Name, cluster.InnoDBClusterName, cmd),
 			Namespace: pcs.Namespace,
 			Labels:    labels,
 		},

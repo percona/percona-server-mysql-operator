@@ -70,6 +70,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 
 	updateStatusF := func(status *apiv1.PerconaServerMySQLStatus) error {
 		initialState := status.State
+		status.InnoDBClusterName = cr.InnoDBClusterName()
 
 		clusterCondition := metav1.Condition{
 			Status: metav1.ConditionTrue,

@@ -9,8 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	coordv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,6 +27,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
+	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 	fakestorage "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage/fake"
 )
@@ -179,8 +182,10 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 			stateDesc: "secrets aws-secret not found",
 		},
 		{
-			name: "should succeed",
-			cr:   cr,
+			name: "should clear stale state description",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLRestore) {
+				cr.Status.StateDesc = "waiting for another restore"
+			}),
 			objects: []runtime.Object{
 				&apiv1.PerconaServerMySQLBackup{
 					ObjectMeta: metav1.ObjectMeta{
@@ -531,6 +536,103 @@ func TestRestoreStatusErrStateDesc(t *testing.T) {
 	}
 }
 
+func TestRestoreFinishesWhenClusterIsReady(t *testing.T) {
+	const (
+		namespace   = "some-namespace"
+		clusterName = "ps-cluster"
+		restoreName = "restore"
+		restoreUID  = "restore-uid"
+	)
+
+	tests := []struct {
+		name          string
+		clusterPaused bool
+		clusterState  apiv1.StatefulAppState
+		restoreState  apiv1.RestoreState
+		leaseExists   bool
+	}{
+		{
+			name:          "cluster is paused",
+			clusterPaused: true,
+			clusterState:  apiv1.StatePaused,
+			restoreState:  apiv1.RestoreRunning,
+			leaseExists:   true,
+		},
+		{
+			name:         "cluster is initializing",
+			clusterState: apiv1.StateInitializing,
+			restoreState: apiv1.RestoreRunning,
+			leaseExists:  true,
+		},
+		{
+			name:         "cluster is ready",
+			clusterState: apiv1.StateReady,
+			restoreState: apiv1.RestoreSucceeded,
+			leaseExists:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+			cluster := readDefaultCluster(t, clusterName, namespace)
+			cluster.Spec.Pause = tt.clusterPaused
+			cluster.Status.State = tt.clusterState
+
+			restore := readDefaultRestore(t, restoreName, namespace)
+			restore.UID = types.UID(restoreUID)
+			restore.Spec.ClusterName = clusterName
+			restore.Status.State = apiv1.RestoreRunning
+
+			restoreJob := &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      xtrabackup.RestoreJobName(cluster, restore),
+					Namespace: namespace,
+				},
+				Status: batchv1.JobStatus{
+					Conditions: []batchv1.JobCondition{{
+						Type:   batchv1.JobComplete,
+						Status: corev1.ConditionTrue,
+					}},
+				},
+			}
+
+			leaseName := naming.RestoreLeaseName(clusterName)
+			lease := &coordv1.Lease{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      leaseName,
+					Namespace: namespace,
+				},
+				Spec: coordv1.LeaseSpec{
+					HolderIdentity: new(naming.LeaseHolderName(restoreName, restoreUID)),
+				},
+			}
+
+			cl := buildFakeClient(t, cluster, restore, restoreJob, lease)
+			r := reconciler(cl)
+			_, err := r.Reconcile(ctx, controllerruntime.Request{
+				NamespacedName: types.NamespacedName{Name: restoreName, Namespace: namespace},
+			})
+			require.NoError(t, err)
+
+			currentRestore := new(apiv1.PerconaServerMySQLRestore)
+			require.NoError(t, cl.Get(ctx, client.ObjectKeyFromObject(restore), currentRestore))
+			assert.Equal(t, tt.restoreState, currentRestore.Status.State)
+
+			currentCluster := new(apiv1.PerconaServerMySQL)
+			require.NoError(t, cl.Get(ctx, client.ObjectKeyFromObject(cluster), currentCluster))
+			assert.False(t, currentCluster.Spec.Pause)
+
+			err = cl.Get(ctx, types.NamespacedName{Name: leaseName, Namespace: namespace}, new(coordv1.Lease))
+			if tt.leaseExists {
+				require.NoError(t, err)
+			} else {
+				assert.True(t, k8serrors.IsNotFound(err))
+			}
+		})
+	}
+}
+
 func TestRestorerClusterDefaults(t *testing.T) {
 	ctx := t.Context()
 
@@ -743,17 +845,18 @@ func TestRestorerValidate(t *testing.T) {
 		},
 		{
 			name: "s3 without provided bucket",
-			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLRestore) {
-				cr.Spec.BackupName = ""
-				cr.Spec.BackupSource = &apiv1.PerconaServerMySQLBackupStatus{
-					Destination: s3Bcp.Status.Destination,
-					Storage: &apiv1.BackupStorageSpec{
-						S3:   s3Bcp.Status.Storage.S3,
-						Type: apiv1.BackupStorageS3,
-					},
-				}
-				cr.Spec.BackupSource.Storage.S3.Bucket = ""
-			},
+			cr: updateResource(
+				cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLRestore) {
+					cr.Spec.BackupName = ""
+					cr.Spec.BackupSource = &apiv1.PerconaServerMySQLBackupStatus{
+						Destination: s3Bcp.Status.Destination,
+						Storage: &apiv1.BackupStorageSpec{
+							S3:   s3Bcp.Status.Storage.S3,
+							Type: apiv1.BackupStorageS3,
+						},
+					}
+					cr.Spec.BackupSource.Storage.S3.Bucket = ""
+				},
 			),
 			cluster: cluster.DeepCopy(),
 			objects: []runtime.Object{
@@ -804,17 +907,18 @@ func TestRestorerValidate(t *testing.T) {
 		},
 		{
 			name: "gcs without provided bucket",
-			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLRestore) {
-				cr.Spec.BackupName = ""
-				cr.Spec.BackupSource = &apiv1.PerconaServerMySQLBackupStatus{
-					Destination: gcsBcp.Status.Destination,
-					Storage: &apiv1.BackupStorageSpec{
-						GCS:  gcsBcp.Status.Storage.GCS,
-						Type: apiv1.BackupStorageGCS,
-					},
-				}
-				cr.Spec.BackupSource.Storage.GCS.Bucket = ""
-			},
+			cr: updateResource(
+				cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLRestore) {
+					cr.Spec.BackupName = ""
+					cr.Spec.BackupSource = &apiv1.PerconaServerMySQLBackupStatus{
+						Destination: gcsBcp.Status.Destination,
+						Storage: &apiv1.BackupStorageSpec{
+							GCS:  gcsBcp.Status.Storage.GCS,
+							Type: apiv1.BackupStorageGCS,
+						},
+					}
+					cr.Spec.BackupSource.Storage.GCS.Bucket = ""
+				},
 			),
 			cluster: cluster.DeepCopy(),
 			objects: []runtime.Object{
@@ -865,17 +969,18 @@ func TestRestorerValidate(t *testing.T) {
 		},
 		{
 			name: "azure without provided bucket",
-			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLRestore) {
-				cr.Spec.BackupName = ""
-				cr.Spec.BackupSource = &apiv1.PerconaServerMySQLBackupStatus{
-					Destination: azureBcp.Status.Destination,
-					Storage: &apiv1.BackupStorageSpec{
-						Azure: azureBcp.Status.Storage.Azure,
-						Type:  apiv1.BackupStorageAzure,
-					},
-				}
-				cr.Spec.BackupSource.Storage.Azure.ContainerName = ""
-			},
+			cr: updateResource(
+				cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQLRestore) {
+					cr.Spec.BackupName = ""
+					cr.Spec.BackupSource = &apiv1.PerconaServerMySQLBackupStatus{
+						Destination: azureBcp.Status.Destination,
+						Storage: &apiv1.BackupStorageSpec{
+							Azure: azureBcp.Status.Storage.Azure,
+							Type:  apiv1.BackupStorageAzure,
+						},
+					}
+					cr.Spec.BackupSource.Storage.Azure.ContainerName = ""
+				},
 			),
 			cluster: cluster.DeepCopy(),
 			objects: []runtime.Object{

@@ -36,7 +36,7 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterSetStatus(ctx context.Con
 		return errors.Wrap(err, "get pods")
 	}
 
-	if len(pods) < int(cr.MySQLSpec().Size) {
+	if cr.Spec.Pause || len(pods) < int(cr.MySQLSpec().Size) {
 		return nil
 	}
 
