@@ -566,7 +566,7 @@ type routerRolloutRecordingClient struct {
 func (c *routerRolloutRecordingClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	if dep, ok := obj.(*appsv1.Deployment); ok {
 		secret := new(corev1.Secret)
-		if err := c.Client.Get(ctx, c.internalSecretNN, secret); err != nil {
+		if err := c.Get(ctx, c.internalSecretNN, secret); err != nil {
 			return err
 		}
 		c.operatorPassAtPatch = string(secret.Data[string(apiv1.UserOperator)])

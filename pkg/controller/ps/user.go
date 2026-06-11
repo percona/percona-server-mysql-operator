@@ -329,7 +329,7 @@ func (r *PerconaServerMySQLReconciler) finalizeInternalSecretAndRestartRouter(
 	log.Info("Updated internal secret", "secretName", cr.InternalSecretName())
 
 	k8s.AddAnnotation(internalSecret, naming.AnnotationPasswordsUpdated.String(), "false")
-	if err := r.Client.Update(ctx, internalSecret); err != nil {
+	if err := r.Update(ctx, internalSecret); err != nil {
 		return errors.Wrap(err, "update internal sys users secret annotation")
 	}
 
