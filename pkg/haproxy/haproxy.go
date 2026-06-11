@@ -243,7 +243,10 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 				},
 			},
 		},
-		{
+	}
+
+	if cr.CompareVersion("1.2.0") >= 0 {
+		volumes = append(volumes, corev1.Volume{
 			Name: internalConfigVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -253,7 +256,7 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 					Optional: new(true),
 				},
 			},
-		},
+		})
 	}
 	return volumes
 }
