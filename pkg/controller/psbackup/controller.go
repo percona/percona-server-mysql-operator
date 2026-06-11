@@ -840,6 +840,9 @@ func (r *PerconaServerMySQLBackupReconciler) getIncrementalBaseBackup(ctx contex
 		if err := r.Get(ctx, nn, backup); err != nil {
 			return nil, errors.Wrapf(err, "get backup %s", nn)
 		}
+		if backup.GetType() != apiv1.BackupTypeFull {
+			return nil, errors.New("specified base backup is not a full backup")
+		}
 		return backup, nil
 	}
 	lastFullBackup, err := k8sutil.GetLastFullBackup(ctx, r.Client, cr.Spec.ClusterName, cr.GetNamespace(), storage)
