@@ -349,10 +349,15 @@ func (r *PerconaServerMySQLBackupReconciler) prepareStatus(
 
 	status.Destination = destination
 	status.Image = cluster.Spec.Backup.Image
-	status.Storage = storage
+	status.Storage = storage.DeepCopy()
 	status.BackupSource = backupSource
 	status.Type = cr.Spec.Type
 	status.Compressed = cr.IsCompressed(storage, cluster.Spec.MySQL.Configuration)
+
+	if status.Storage.EncryptionKeySecret == nil {
+		status.Storage.EncryptionKeySecret = cluster.Spec.Backup.EncryptionKeySecret
+	}
+
 	return nil
 }
 
@@ -445,6 +450,24 @@ func (r *PerconaServerMySQLBackupReconciler) createBackupJob(
 		}
 		if err := xtrabackup.SetIncrementalLsn(job, lsn); err != nil {
 			return errors.Wrap(err, "set incremental LSN")
+		}
+	}
+
+	if cluster.Spec.Backup.GetEncryptionEnabled(storage) {
+		secret := &corev1.Secret{}
+		if err := r.Get(ctx, client.ObjectKey{
+			Namespace: cr.Namespace,
+			Name:      naming.EncryptionKeyInternalSecretName(cluster.Name),
+		}, secret); err != nil {
+			return errors.Wrap(err, "get encryption key secret")
+		}
+
+		version, ok := secret.Data[naming.InternalEncryptionKeyVersionFileName]
+		if !ok {
+			return errors.Errorf("version not found in encryption key secret %s/%s", secret.Namespace, secret.Name)
+		}
+		if err := xtrabackup.SetEncryptionKeyFileVersion(job, string(version)); err != nil {
+			return errors.Wrap(err, "set encryption key file version")
 		}
 	}
 
