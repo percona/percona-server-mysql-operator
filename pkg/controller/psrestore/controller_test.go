@@ -1052,7 +1052,7 @@ func TestResolveIncrementalChain(t *testing.T) {
 			name:        "chain with single incremental",
 			destination: apiv1.BackupDestination("s3://my-bucket/pfx/base-backup.incr/2026-03-15T000000-incr"),
 			storageObjects: []string{
-				"base-backup.incr/2026-03-15T000000-incr/xtrabackup_info",
+				"base-backup.incr/2026-03-15T000000-incr/xtrabackup_info.00000000000000000000",
 			},
 			wantBase: "pfx/base-backup",
 			wantIncrs: []string{

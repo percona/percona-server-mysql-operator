@@ -108,7 +108,7 @@ request_logs() {
 
 main() {
 	request_backup 10
-	request_logs || echo "WARING: Could not get logs from source node ${SRC_NODE}"
+	request_logs || echo "WARNING: Could not get logs from source node ${SRC_NODE}"
 
 	echo "Backup finished and uploaded successfully to ${BACKUP_DEST}"
 }
