@@ -325,7 +325,17 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 			return nil
 		}
 
-		log.Info("Ensuring oldest mysql node is the primary")
+		currentPrimary, err := orchestrator.ClusterPrimary(ctx, r.ClientCmd, orcPod, cr.ClusterHint())
+		if err != nil {
+			log.Info("Could not determine current primary from Orchestrator, skipping primary switch", "error", err)
+		} else if currentPrimary.Alias != firstPod.GetName() {
+			log.Info("Current primary is not the lowest-ordinal pod; switching for ordered deletion",
+				"currentPrimary", currentPrimary.Alias, "targetPrimary", firstPod.GetName())
+		} else {
+			log.Info("Current primary is already the lowest-ordinal pod, no switch needed", "primary", currentPrimary.Alias)
+		}
+
+		log.Info("Ensuring oldest mysql node is the primary before ordered pod deletion")
 		err = orchestrator.EnsureNodeIsPrimary(ctx, r.ClientCmd, orcPod, cr.ClusterHint(), firstPod.GetName(), mysql.DefaultPort)
 		if err != nil {
 			return errors.Wrap(err, "ensure node is primary")
@@ -1099,6 +1109,169 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 				return errors.Wrapf(err, "forget replica %s", instance.Alias)
 			}
 		}
+	}
+
+	if err := r.repairBrokenReplicas(ctx, cr, pod, primary, clusterInstances); err != nil {
+		return errors.Wrap(err, "repair broken replicas")
+	}
+
+	return nil
+}
+
+// repairBrokenReplicas re-issues CHANGE REPLICATION SOURCE on replicas whose
+// IO thread exists but is not running. After a failover or graceful takeover,
+// Orchestrator creates the replication channel on the demoted primary from its
+// (empty) replica status, so the channel ends up without SOURCE_SSL and
+// GET_SOURCE_PUBLIC_KEY. With caching_sha2_password the IO thread then fails
+// with "Authentication requires secure connection" and never recovers on its
+// own. Reconfiguring the channel with our standard options heals it.
+func (r *PerconaServerMySQLReconciler) repairBrokenReplicas(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	orcPod *corev1.Pod,
+	primary *orchestrator.Instance,
+	clusterInstances []*orchestrator.Instance,
+) error {
+	log := logf.FromContext(ctx).WithName("repairBrokenReplicas")
+
+	broken := make([]*orchestrator.Instance, 0)
+	for _, instance := range clusterInstances {
+		if instance.Alias == primary.Alias {
+			continue
+		}
+		if instance.MasterKey.Hostname != primary.Key.Hostname {
+			continue
+		}
+		if instance.ReplicationIOThreadState.Exists() && !instance.ReplicationIOThreadState.IsRunning() {
+			broken = append(broken, instance)
+		}
+	}
+	if len(broken) == 0 {
+		return nil
+	}
+
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+	replicaPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserReplication)
+	if err != nil {
+		return errors.Wrap(err, "get replication password")
+	}
+	sourceRetryCount, sourceConnectRetry, err := asyncSourceEnvValues(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse env vars")
+	}
+
+	for _, instance := range broken {
+		// An instance holding errant GTIDs has transactions its source never
+		// received (typically a former primary that took writes right before
+		// a failover). What happens to that data is a policy decision
+		// (spec.mysql.errantTransactionsPolicy), never an implicit repair.
+		if instance.GtidErrant != "" {
+			if err := r.handleErrantTransactions(ctx, cr, orcPod, primary, instance); err != nil {
+				return errors.Wrapf(err, "handle errant transactions on %s", instance.Alias)
+			}
+			continue
+		}
+
+		log.Info("Replica IO thread is not running, reconfiguring replication",
+			"replica", instance.Alias, "primary", primary.Key.Hostname, "ioThreadState", instance.ReplicationIOThreadState)
+
+		idx, err := getPodIndexFromHostname(instance.Key.Hostname)
+		if err != nil {
+			return err
+		}
+		mysqlPod, err := mysql.GetPod(ctx, r.Client, cr, idx)
+		if err != nil {
+			return err
+		}
+
+		if err := orchestrator.StopReplication(ctx, r.ClientCmd, orcPod, instance.Key.Hostname, instance.Key.Port); err != nil {
+			return errors.Wrapf(err, "stop replication on %s", instance.Alias)
+		}
+
+		um := database.NewReplicationManager(mysqlPod, r.ClientCmd, apiv1.UserOperator, operatorPass, instance.Key.Hostname)
+		if err := um.ChangeReplicationSource(ctx, primary.Key.Hostname, replicaPass, primary.Key.Port, sourceRetryCount, sourceConnectRetry); err != nil {
+			return errors.Wrapf(err, "change replication source on %s", instance.Alias)
+		}
+
+		if err := orchestrator.StartReplication(ctx, r.ClientCmd, orcPod, instance.Key.Hostname, instance.Key.Port); err != nil {
+			return errors.Wrapf(err, "start replication on %s", instance.Alias)
+		}
+
+		log.Info("Reconfigured replication on replica", "replica", instance.Alias)
+	}
+
+	return nil
+}
+
+// handleErrantTransactions applies spec.mysql.errantTransactionsPolicy to an
+// instance that holds transactions never replicated to the current primary.
+func (r *PerconaServerMySQLReconciler) handleErrantTransactions(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	orcPod *corev1.Pod,
+	primary *orchestrator.Instance,
+	instance *orchestrator.Instance,
+) error {
+	log := logf.FromContext(ctx).WithName("handleErrantTransactions").
+		WithValues("replica", instance.Alias, "errantGTIDs", instance.GtidErrant)
+
+	switch cr.Spec.MySQL.ErrantTransactionsPolicy {
+	case apiv1.ErrantTransactionsRebuild:
+		// Availability over the unreplicated data: drop the member's pod and
+		// PVC; the StatefulSet re-provisions it and bootstrap clones from the
+		// current primary.
+		log.Info("Errant GTIDs detected, policy is 'rebuild': deleting member pod and PVC to re-provision from primary")
+		r.Recorder.Eventf(cr, corev1.EventTypeWarning, "ErrantMemberRebuild",
+			"replica %s has transactions not present on primary %s (errant GTIDs: %s); rebuilding the member, unreplicated data will be lost",
+			instance.Alias, primary.Alias, instance.GtidErrant)
+
+		idx, err := getPodIndexFromHostname(instance.Key.Hostname)
+		if err != nil {
+			return err
+		}
+		mysqlPod, err := mysql.GetPod(ctx, r.Client, cr, idx)
+		if err != nil {
+			return errors.Wrap(err, "get mysql pod")
+		}
+
+		pvc := &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-%s", mysql.DataVolumeName, mysqlPod.Name),
+				Namespace: cr.Namespace,
+			},
+		}
+		if err := r.Client.Delete(ctx, pvc); client.IgnoreNotFound(err) != nil {
+			return errors.Wrapf(err, "delete PVC %s", pvc.Name)
+		}
+		if err := r.Client.Delete(ctx, mysqlPod); client.IgnoreNotFound(err) != nil {
+			return errors.Wrapf(err, "delete pod %s", mysqlPod.Name)
+		}
+
+	case apiv1.ErrantTransactionsInjectEmpty:
+		// Keep the member's extra rows locally; make the GTID sets consistent
+		// by injecting the errant GTIDs as empty transactions on the primary.
+		// Replication resumes on a later reconcile once Orchestrator no
+		// longer reports the instance as errant.
+		log.Info("Errant GTIDs detected, policy is 'inject-empty': reconciling GTID sets via Orchestrator")
+		r.Recorder.Eventf(cr, corev1.EventTypeWarning, "ErrantGTIDsInjectEmpty",
+			"replica %s has transactions not present on primary %s (errant GTIDs: %s); injecting empty transactions, diverged rows remain on the replica",
+			instance.Alias, primary.Alias, instance.GtidErrant)
+
+		if err := orchestrator.InjectEmptyGTIDs(ctx, r.ClientCmd, orcPod, instance.Key.Hostname, instance.Key.Port); err != nil {
+			return errors.Wrapf(err, "inject empty GTIDs for %s", instance.Alias)
+		}
+
+	default: // apiv1.ErrantTransactionsManual
+		log.Info("Replica has errant GTIDs, skipping automatic replication repair; " +
+			"inspect the unreplicated transactions and resolve via Orchestrator " +
+			"(gtid-errant-inject-empty or gtid-errant-reset-master), rebuild the member, " +
+			"or set spec.mysql.errantTransactionsPolicy")
+		r.Recorder.Eventf(cr, corev1.EventTypeWarning, "ErrantGTIDsDetected",
+			"replica %s has transactions not present on primary %s (errant GTIDs: %s); automatic repair skipped (policy: manual)",
+			instance.Alias, primary.Alias, instance.GtidErrant)
 	}
 
 	return nil

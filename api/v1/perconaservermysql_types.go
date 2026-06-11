@@ -124,6 +124,22 @@ const (
 	ClusterTypeAsync ClusterType = "async"
 )
 
+// ErrantTransactionsPolicy defines how the operator handles an async replica
+// holding transactions that were never replicated to the current primary.
+type ErrantTransactionsPolicy string
+
+const (
+	// ErrantTransactionsManual leaves resolution to the user (default).
+	ErrantTransactionsManual ErrantTransactionsPolicy = "manual"
+	// ErrantTransactionsRebuild discards the unreplicated data by deleting
+	// the member's pod and PVC; it re-provisions from the current primary.
+	ErrantTransactionsRebuild ErrantTransactionsPolicy = "rebuild"
+	// ErrantTransactionsInjectEmpty reconciles GTID sets via Orchestrator's
+	// gtid-errant-inject-empty and rejoins the member, keeping its extra
+	// rows locally.
+	ErrantTransactionsInjectEmpty ErrantTransactionsPolicy = "inject-empty"
+)
+
 const (
 	MinSafeProxySize = 2
 	MinSafeGRSize    = 3
@@ -151,6 +167,19 @@ type MySQLSpec struct {
 	ExposePrimary ServiceExposeTogglable `json:"exposePrimary,omitempty"`
 	Expose        ServiceExposeTogglable `json:"expose,omitempty"`
 	AutoRecovery  bool                   `json:"autoRecovery,omitempty"`
+
+	// ErrantTransactionsPolicy controls what the operator does with an async
+	// replica that holds errant GTIDs (transactions never replicated to the
+	// current primary, typically a former primary returning after failover):
+	// `manual` (default) - emit an event and do nothing; the user resolves it.
+	// `rebuild` - discard the unreplicated data: delete the member's pod and
+	// PVC so it re-provisions by cloning the current primary.
+	// `inject-empty` - keep the member's extra rows locally: reconcile the
+	// GTID sets via Orchestrator's gtid-errant-inject-empty and rejoin. The
+	// diverged rows remain on that member only.
+	// +kubebuilder:validation:Enum=manual;rebuild;inject-empty
+	// +kubebuilder:default=manual
+	ErrantTransactionsPolicy ErrantTransactionsPolicy `json:"errantTransactionsPolicy,omitempty"`
 
 	Sidecars       []corev1.Container `json:"sidecars,omitempty"`
 	SidecarVolumes []corev1.Volume    `json:"sidecarVolumes,omitempty"`

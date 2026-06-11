@@ -86,6 +86,7 @@ func (m *ReplicationDBManager) ChangeReplicationSource(ctx context.Context, host
 			SOURCE_HOST='%s',
 			SOURCE_PORT=%d,
 			SOURCE_SSL=1,
+			GET_SOURCE_PUBLIC_KEY=1,
 			SOURCE_CONNECTION_AUTO_FAILOVER=1,
 			SOURCE_AUTO_POSITION=1,
 			SOURCE_RETRY_COUNT=%d,

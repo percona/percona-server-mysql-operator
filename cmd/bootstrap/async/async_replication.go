@@ -148,6 +148,28 @@ func Bootstrap(ctx context.Context) error {
 		return errors.Wrap(err, "check if clone is required")
 	}
 
+	if requireClone {
+		// Never clone over a datadir that already executed transactions:
+		// cloning replaces the whole datadir with the donor's. A former
+		// primary restarting after a failover has no clone.lock but may hold
+		// transactions that were never replicated to the new primary; cloning
+		// would silently destroy them. Such a member must be either rejoined
+		// via replication (handled below; blocked by the operator if errant
+		// GTIDs are detected) or rebuilt explicitly by the user.
+		gtidExecuted, err := db.GetGTIDExecuted(ctx)
+		if err != nil {
+			return errors.Wrap(err, "get gtid_executed")
+		}
+		if gtidExecuted != "" {
+			log.Printf("Datadir has executed GTIDs (%s), skipping clone to preserve local data", gtidExecuted)
+			requireClone = false
+
+			if err := createCloneLock(cloneLock); err != nil {
+				return errors.Wrap(err, "create clone lock")
+			}
+		}
+	}
+
 	log.Printf("Clone required: %t", requireClone)
 	if requireClone {
 		log.Println("Checking if a clone in progress")
