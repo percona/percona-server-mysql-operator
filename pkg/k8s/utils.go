@@ -460,34 +460,33 @@ func DefaultAPINamespace() (string, error) {
 func RolloutRestart(ctx context.Context, cl client.Client, obj runtime.Object, key naming.AnnotationKey, value string) error {
 	switch obj := obj.(type) {
 	case *appsv1.StatefulSet:
-		orig := obj.DeepCopy()
-
-		if obj.Spec.Template.ObjectMeta.Annotations == nil {
-			obj.Spec.Template.ObjectMeta.Annotations = make(map[string]string)
-		}
-		obj.Spec.Template.ObjectMeta.Annotations[string(key)] = value
-
-		if err := cl.Patch(ctx, obj, client.StrategicMergeFrom(orig)); err != nil {
-			return errors.Wrap(err, "patch object")
-		}
-
-		return nil
+		return patchPodTemplateAnnotation(ctx, cl, obj, obj.DeepCopy(), &obj.Spec.Template, key, value)
 	case *appsv1.Deployment:
-		orig := obj.DeepCopy()
-
-		if obj.Spec.Template.ObjectMeta.Annotations == nil {
-			obj.Spec.Template.ObjectMeta.Annotations = make(map[string]string)
-		}
-		obj.Spec.Template.ObjectMeta.Annotations[string(key)] = value
-
-		if err := cl.Patch(ctx, obj, client.StrategicMergeFrom(orig)); err != nil {
-			return errors.Wrap(err, "patch object")
-		}
-
-		return nil
+		return patchPodTemplateAnnotation(ctx, cl, obj, obj.DeepCopy(), &obj.Spec.Template, key, value)
 	default:
 		return errors.New("not supported")
 	}
+}
+
+func patchPodTemplateAnnotation(
+	ctx context.Context,
+	cl client.Client,
+	obj client.Object,
+	orig client.Object,
+	template *corev1.PodTemplateSpec,
+	key naming.AnnotationKey,
+	value string,
+) error {
+	if template.ObjectMeta.Annotations == nil {
+		template.ObjectMeta.Annotations = make(map[string]string)
+	}
+	template.ObjectMeta.Annotations[string(key)] = value
+
+	if err := cl.Patch(ctx, obj, client.StrategicMergeFrom(orig)); err != nil {
+		return errors.Wrap(err, "patch object")
+	}
+
+	return nil
 }
 
 func GetCRWithDefaults(
