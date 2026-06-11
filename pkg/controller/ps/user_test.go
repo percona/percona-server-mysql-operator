@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -491,73 +492,26 @@ func TestReconcileUsersRestartsRouterOnOperatorPasswordUpdate(t *testing.T) {
 	const newOperatorPass = "op-password-new"
 
 	cr := &apiv1.PerconaServerMySQL{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      crName,
-			Namespace: ns,
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
 		Spec: apiv1.PerconaServerMySQLSpec{
 			CRVersion:   "1.2.0",
 			SecretsName: "some-secret",
-			MySQL: apiv1.MySQLSpec{
-				ClusterType: apiv1.ClusterTypeGR,
-				PodSpec:     apiv1.PodSpec{Size: 1},
-			},
-			Proxy: apiv1.ProxySpec{
-				Router: &apiv1.MySQLRouterSpec{
-					Enabled: true,
-					PodSpec: apiv1.PodSpec{Size: 1},
-				},
-			},
-		},
-		Status: apiv1.PerconaServerMySQLStatus{
-			MySQL: apiv1.StatefulAppStatus{State: apiv1.StateReady},
-			State: apiv1.StateReady,
+			MySQL:       apiv1.MySQLSpec{ClusterType: apiv1.ClusterTypeGR},
+			Proxy:       apiv1.ProxySpec{Router: &apiv1.MySQLRouterSpec{Enabled: true, PodSpec: apiv1.PodSpec{Size: 1}}},
 		},
 	}
-
-	oldData := map[string][]byte{string(apiv1.UserOperator): []byte(oldOperatorPass)}
-	newData := map[string][]byte{string(apiv1.UserOperator): []byte(newOperatorPass)}
 
 	userSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: cr.Spec.SecretsName, Namespace: ns},
-		Data:       newData,
+		Data:       map[string][]byte{string(apiv1.UserOperator): []byte(newOperatorPass)},
 	}
 	internalSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: cr.InternalSecretName(), Namespace: ns},
-		Data:       oldData,
+		Data:       map[string][]byte{string(apiv1.UserOperator): []byte(oldOperatorPass)},
 	}
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      mysql.PodName(cr, 0),
-			Namespace: ns,
-			Labels:    mysql.MatchLabels(cr),
-		},
-		Status: corev1.PodStatus{
-			Phase:      corev1.PodRunning,
-			Conditions: []corev1.PodCondition{{Type: corev1.ContainersReady, Status: corev1.ConditionTrue}},
-		},
-	}
-
 	routerDeployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      router.Name(cr),
-			Namespace: ns,
-		},
-		Spec: appsv1.DeploymentSpec{
-			Template: corev1.PodTemplateSpec{},
-		},
-	}
-
-	routerPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s-%d", cr.Name, router.AppName, 0),
-			Namespace: ns,
-		},
-		Status: corev1.PodStatus{
-			Phase:      corev1.PodRunning,
-			Conditions: []corev1.PodCondition{{Type: corev1.ContainersReady, Status: corev1.ConditionTrue}},
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: router.Name(cr), Namespace: ns},
+		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{}},
 	}
 
 	scheme := runtime.NewScheme()
@@ -568,80 +522,56 @@ func TestReconcileUsersRestartsRouterOnOperatorPasswordUpdate(t *testing.T) {
 		t.Fatal(err, "failed to add apis scheme")
 	}
 
-	host := mysql.FQDN(cr, 0)
-	mysqlCmdWithPass := func(pass, query string) []string {
-		return []string{
-			"mysql",
-			"--database", "performance_schema",
-			"-p" + pass,
-			"-u", "operator",
-			"-h", host,
-			"-e", query,
-		}
-	}
-	mysqlCmd := func(query string) []string {
-		return mysqlCmdWithPass(oldOperatorPass, query)
-	}
-
-	scripts := []fakeClientScript{
-		{
-			cmd:    mysqlCmd("SELECT MEMBER_HOST as host FROM replication_group_members WHERE MEMBER_ROLE='PRIMARY' AND MEMBER_STATE='ONLINE'"),
-			stdout: []byte("host\n" + host + "\n"),
-		},
-		{
-			cmd: mysqlCmd(fmt.Sprintf("ALTER USER 'operator'@'%%' IDENTIFIED BY '%s' RETAIN CURRENT PASSWORD", newOperatorPass)),
-		},
-		{
-			cmd: mysqlCmd("FLUSH PRIVILEGES"),
-		},
-		{
-			cmd:    []string{"cat", naming.CredsMountPath + "/" + string(apiv1.UserOperator)},
-			stdout: []byte(newOperatorPass),
-		},
-		{
-			cmd:    []string{"cat", router.CredsMountPath + "/" + string(apiv1.UserOperator)},
-			stdout: []byte(newOperatorPass),
-		},
-		{
-			cmd:    mysqlCmdWithPass(newOperatorPass, "SELECT MEMBER_HOST as host FROM replication_group_members WHERE MEMBER_ROLE='PRIMARY' AND MEMBER_STATE='ONLINE'"),
-			stdout: []byte("host\n" + host + "\n"),
-		},
-		{
-			cmd: mysqlCmd("ALTER USER 'operator'@'%' DISCARD OLD PASSWORD"),
-		},
-		{
-			cmd: mysqlCmd("FLUSH PRIVILEGES"),
-		},
-	}
-	fc := &fakeClient{scripts: scripts}
-
-	r := PerconaServerMySQLReconciler{
-		Client:    fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, userSecret, internalSecret, pod, routerDeployment, routerPod).Build(),
-		Scheme:    scheme,
-		ClientCmd: fc,
-	}
-
-	if err := r.reconcileUsers(ctx, cr, userSecret); err != nil {
-		t.Fatalf("reconcileUsers failed: %v", err)
-	}
-
-	if fc.execCount != len(scripts) {
-		t.Fatalf("expected %d exec calls, got %d", len(scripts), fc.execCount)
-	}
-
-	updatedDeployment := new(appsv1.Deployment)
-	nn := types.NamespacedName{Name: router.Name(cr), Namespace: ns}
-	if err := r.Get(ctx, nn, updatedDeployment); err != nil {
-		t.Fatalf("get router deployment: %v", err)
-	}
-
 	hash, err := k8s.ObjectHash(userSecret)
 	if err != nil {
 		t.Fatalf("calculate secret hash: %v", err)
 	}
 
-	gotHash := updatedDeployment.Spec.Template.Annotations[naming.AnnotationSecretHash.String()]
-	if gotHash != hash {
-		t.Fatalf("router deployment secret hash mismatch: got %q, want %q", gotHash, hash)
+	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, internalSecret, routerDeployment).Build()
+	recordingClient := &routerRolloutRecordingClient{
+		Client:           baseClient,
+		internalSecretNN: types.NamespacedName{Name: cr.InternalSecretName(), Namespace: ns},
 	}
+
+	r := PerconaServerMySQLReconciler{Client: recordingClient, Scheme: scheme}
+	if err := r.finalizeInternalSecretAndRestartRouter(ctx, cr, internalSecret, userSecret, true, hash); err != nil {
+		t.Fatalf("finalizeInternalSecretAndRestartRouter failed: %v", err)
+	}
+
+	updatedInternalSecret := new(corev1.Secret)
+	if err := r.Get(ctx, types.NamespacedName{Name: cr.InternalSecretName(), Namespace: ns}, updatedInternalSecret); err != nil {
+		t.Fatalf("get internal secret: %v", err)
+	}
+	if got := string(updatedInternalSecret.Data[string(apiv1.UserOperator)]); got != newOperatorPass {
+		t.Fatalf("internal secret operator password mismatch: got %q, want %q", got, newOperatorPass)
+	}
+	if got := updatedInternalSecret.Annotations[naming.AnnotationPasswordsUpdated.String()]; got != "false" {
+		t.Fatalf("passwords-updated annotation mismatch: got %q, want %q", got, "false")
+	}
+	if recordingClient.operatorPassAtPatch != newOperatorPass {
+		t.Fatalf("router rollout happened before internal secret update: got operator pass %q, want %q", recordingClient.operatorPassAtPatch, newOperatorPass)
+	}
+	if recordingClient.routerHashAtPatch != hash {
+		t.Fatalf("router rollout hash mismatch: got %q, want %q", recordingClient.routerHashAtPatch, hash)
+	}
+}
+
+type routerRolloutRecordingClient struct {
+	client.Client
+	internalSecretNN    types.NamespacedName
+	operatorPassAtPatch string
+	routerHashAtPatch   string
+}
+
+func (c *routerRolloutRecordingClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	if dep, ok := obj.(*appsv1.Deployment); ok {
+		secret := new(corev1.Secret)
+		if err := c.Client.Get(ctx, c.internalSecretNN, secret); err != nil {
+			return err
+		}
+		c.operatorPassAtPatch = string(secret.Data[string(apiv1.UserOperator)])
+		c.routerHashAtPatch = dep.Spec.Template.Annotations[naming.AnnotationSecretHash.String()]
+	}
+
+	return c.Client.Patch(ctx, obj, patch, opts...)
 }

@@ -304,6 +304,23 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return nil
 	}
 
+	if err := r.finalizeInternalSecretAndRestartRouter(ctx, cr, internalSecret, secret, restartRouter, hash); err != nil {
+		return err
+	}
+
+	return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, updatedUsers, operatorPass)
+}
+
+func (r *PerconaServerMySQLReconciler) finalizeInternalSecretAndRestartRouter(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	internalSecret *corev1.Secret,
+	secret *corev1.Secret,
+	restartRouter bool,
+	hash string,
+) error {
+	log := logf.FromContext(ctx).WithName("reconcileUsers")
+
 	internalSecret.Data = secret.DeepCopy().Data
 	if err := r.Client.Update(ctx, internalSecret); err != nil {
 		return errors.Wrapf(err, "update Secret/%s", internalSecret.Name)
@@ -312,8 +329,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	log.Info("Updated internal secret", "secretName", cr.InternalSecretName())
 
 	k8s.AddAnnotation(internalSecret, naming.AnnotationPasswordsUpdated.String(), "false")
-	err = r.Client.Update(ctx, internalSecret)
-	if err != nil {
+	if err := r.Client.Update(ctx, internalSecret); err != nil {
 		return errors.Wrap(err, "update internal sys users secret annotation")
 	}
 
@@ -330,7 +346,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		}
 	}
 
-	return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, updatedUsers, operatorPass)
+	return nil
 }
 
 const (
