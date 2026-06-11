@@ -369,17 +369,18 @@ func TestReconcileUsersRestartsRouterOnOperatorPasswordUpdate(t *testing.T) {
 			SecretsName: "some-secret",
 			MySQL: apiv1.MySQLSpec{
 				ClusterType: apiv1.ClusterTypeGR,
+				PodSpec:     apiv1.PodSpec{Size: 1},
 			},
 			Proxy: apiv1.ProxySpec{
 				Router: &apiv1.MySQLRouterSpec{
 					Enabled: true,
-					PodSpec: apiv1.PodSpec{Size: 3},
+					PodSpec: apiv1.PodSpec{Size: 1},
 				},
 			},
 		},
 		Status: apiv1.PerconaServerMySQLStatus{
 			MySQL: apiv1.StatefulAppStatus{State: apiv1.StateReady},
-			State: apiv1.StateInitializing,
+			State: apiv1.StateReady,
 		},
 	}
 
@@ -417,6 +418,17 @@ func TestReconcileUsersRestartsRouterOnOperatorPasswordUpdate(t *testing.T) {
 		},
 	}
 
+	routerPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-%s-%d", cr.Name, router.AppName, 0),
+			Namespace: ns,
+		},
+		Status: corev1.PodStatus{
+			Phase:      corev1.PodRunning,
+			Conditions: []corev1.PodCondition{{Type: corev1.ContainersReady, Status: corev1.ConditionTrue}},
+		},
+	}
+
 	scheme := runtime.NewScheme()
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		t.Fatal(err, "failed to add client-go scheme")
@@ -426,15 +438,18 @@ func TestReconcileUsersRestartsRouterOnOperatorPasswordUpdate(t *testing.T) {
 	}
 
 	host := mysql.FQDN(cr, 0)
-	mysqlCmd := func(query string) []string {
+	mysqlCmdWithPass := func(pass, query string) []string {
 		return []string{
 			"mysql",
 			"--database", "performance_schema",
-			"-p" + oldOperatorPass,
+			"-p" + pass,
 			"-u", "operator",
 			"-h", host,
 			"-e", query,
 		}
+	}
+	mysqlCmd := func(query string) []string {
+		return mysqlCmdWithPass(oldOperatorPass, query)
 	}
 
 	scripts := []fakeClientScript{
@@ -448,11 +463,29 @@ func TestReconcileUsersRestartsRouterOnOperatorPasswordUpdate(t *testing.T) {
 		{
 			cmd: mysqlCmd("FLUSH PRIVILEGES"),
 		},
+		{
+			cmd:    []string{"cat", naming.CredsMountPath + "/" + string(apiv1.UserOperator)},
+			stdout: []byte(newOperatorPass),
+		},
+		{
+			cmd:    []string{"cat", router.CredsMountPath + "/" + string(apiv1.UserOperator)},
+			stdout: []byte(newOperatorPass),
+		},
+		{
+			cmd:    mysqlCmdWithPass(newOperatorPass, "SELECT MEMBER_HOST as host FROM replication_group_members WHERE MEMBER_ROLE='PRIMARY' AND MEMBER_STATE='ONLINE'"),
+			stdout: []byte("host\n" + host + "\n"),
+		},
+		{
+			cmd: mysqlCmd("ALTER USER 'operator'@'%' DISCARD OLD PASSWORD"),
+		},
+		{
+			cmd: mysqlCmd("FLUSH PRIVILEGES"),
+		},
 	}
 	fc := &fakeClient{scripts: scripts}
 
 	r := PerconaServerMySQLReconciler{
-		Client:    fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, userSecret, internalSecret, pod, routerDeployment).Build(),
+		Client:    fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, userSecret, internalSecret, pod, routerDeployment, routerPod).Build(),
 		Scheme:    scheme,
 		ClientCmd: fc,
 	}

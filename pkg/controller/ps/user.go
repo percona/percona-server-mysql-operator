@@ -293,19 +293,6 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		}
 	}
 
-	if restartRouter {
-		log.Info("Operator user password updated. Restarting Router.")
-
-		dp := new(appsv1.Deployment)
-		nn := types.NamespacedName{Name: router.Name(cr), Namespace: cr.Namespace}
-		if err := r.Get(ctx, nn, dp); err != nil {
-			return errors.Wrap(err, "get Router deployment")
-		}
-		if err := k8s.RolloutRestart(ctx, r.Client, dp, naming.AnnotationSecretHash, hash); err != nil {
-			return errors.Wrap(err, "restart Router")
-		}
-	}
-
 	if cr.Status.State != apiv1.StateReady {
 		log.Info("Waiting cluster to be ready")
 		return nil
@@ -322,6 +309,19 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	err = r.Client.Update(ctx, internalSecret)
 	if err != nil {
 		return errors.Wrap(err, "update internal sys users secret annotation")
+	}
+
+	if restartRouter {
+		log.Info("Operator user password updated. Restarting Router.")
+
+		dp := new(appsv1.Deployment)
+		nn := types.NamespacedName{Name: router.Name(cr), Namespace: cr.Namespace}
+		if err := r.Get(ctx, nn, dp); err != nil {
+			return errors.Wrap(err, "get Router deployment")
+		}
+		if err := k8s.RolloutRestart(ctx, r.Client, dp, naming.AnnotationSecretHash, hash); err != nil {
+			return errors.Wrap(err, "restart Router")
+		}
 	}
 
 	return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, updatedUsers, operatorPass)
