@@ -1144,7 +1144,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 	db := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.ServiceName(cr))
 	cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionInnoDBClusterBootstrapped)
 	if cond == nil || cond.Status == metav1.ConditionFalse {
-		exists, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata")
+		exists, err := db.CheckIfClusterMetadataDBExists(ctx)
 		if err != nil || !exists {
 			log.V(1).Info("InnoDB cluster is not created yet")
 			return nil
@@ -1180,7 +1180,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 		return nil
 	}
 
-	if exists, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata"); err != nil || !exists {
+	if exists, err := db.CheckIfClusterMetadataDBExists(ctx); err != nil || !exists {
 		return errors.Wrap(err, "InnoDB cluster is already bootstrapped, but failed to check its status")
 	}
 
@@ -1411,7 +1411,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		}
 
 		db := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
-		if exist, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata"); err != nil || !exist {
+		if exist, err := db.CheckIfClusterMetadataDBExists(ctx); err != nil || !exist {
 			log.V(1).Info("Waiting for InnoDB Cluster", "cluster", cr.Name)
 			return nil
 		}

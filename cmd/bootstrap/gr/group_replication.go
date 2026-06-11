@@ -3,10 +3,12 @@ package gr
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/url"
 	"os"
 	"os/exec"
@@ -15,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/go-ini/ini"
+	_ "github.com/go-sql-driver/mysql"
 	v "github.com/hashicorp/go-version"
 	"github.com/percona/percona-server-mysql-operator/pkg/config"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
@@ -25,6 +28,7 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
+	database "github.com/percona/percona-server-mysql-operator/cmd/internal/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -525,9 +529,9 @@ func Bootstrap(ctx context.Context) error {
 
 	member, ok := status.DefaultReplicaSet.Topology[fmt.Sprintf("%s:%d", localShell.host, 3306)]
 	if !ok {
-		recoveryMethod, err := getRecoveryMethod(ctx, newShell(primary, mysqlshVer), localShell)
+		recoveryMethod, err := getRecoveryMethod(ctx, primary, localShell.host)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "get recovery method")
 		}
 
 		log.Printf("Adding instance (%s) to InnoDB cluster using %s recovery", localShell.host, recoveryMethod)
@@ -592,4 +596,32 @@ func Bootstrap(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func getSQLRunners(primary, replica string) (primarySQLRunner *sqlRunner, replicaSQLRunner *sqlRunner, err error) {
+	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "get %s password", apiv1.UserOperator)
+	}
+	// member.Address is "host:port" (matching the Topology key format).
+	// Strip the port before handing to DBParams, which appends its own.
+	primaryHost, _, err := net.SplitHostPort(primary)
+	if err != nil {
+		primaryHost = primary
+	}
+	primaryParams := database.DBParams{User: apiv1.UserOperator, Pass: operatorPass, Host: primaryHost}
+	primaryDB, err := sql.Open("mysql", primaryParams.DSN())
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "open primary DB")
+	}
+	localParams := database.DBParams{User: apiv1.UserOperator, Pass: operatorPass, Host: replica}
+	localDB, err := sql.Open("mysql", localParams.DSN())
+	if err != nil {
+		if closeErr := primaryDB.Close(); closeErr != nil {
+			log.Printf("Failed to close primary DB: %v", closeErr)
+		}
+		return nil, nil, errors.Wrap(err, "open local DB")
+	}
+
+	return &sqlRunner{db: primaryDB}, &sqlRunner{db: localDB}, nil
 }
