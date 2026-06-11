@@ -195,3 +195,22 @@ spec:
     app.kubernetes.io/part-of: percona-server
   sessionAffinity: None
   type: ClusterIP
+
+---
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+metadata:
+  name: check-haproxy-status-version-and-imageid
+timeout: 120
+commands:
+  - script: |-
+      set -o errexit
+      set -o nounset
+      set -o pipefail
+
+      haproxy_version=$(kubectl -n "${NAMESPACE}" get ps haproxy -o jsonpath='{.status.haproxy.version}')
+      haproxy_image_id=$(kubectl -n "${NAMESPACE}" get ps haproxy -o jsonpath='{.status.haproxy.imageID}')
+
+      test -n "${haproxy_version}"
+      test -n "${haproxy_image_id}"
+
