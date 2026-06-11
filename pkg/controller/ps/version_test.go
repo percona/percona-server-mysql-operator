@@ -3,6 +3,7 @@ package ps
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"reflect"
@@ -22,10 +23,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	restclient "k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
@@ -347,6 +350,106 @@ func TestReconcileVersions(t *testing.T) {
 	}
 }
 
+func TestParseHAProxyVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		output  string
+		want    string
+		wantErr bool
+	}{
+		{
+			name:   "plain output",
+			output: "HAProxy version 2.8.13-1~bookworm 2025/01/23 - https://haproxy.org/",
+			want:   "2.8.13-1~bookworm",
+		},
+		{
+			name:   "uppercase",
+			output: "HAPROXY VERSION 3.0.1",
+			want:   "3.0.1",
+		},
+		{
+			name:    "invalid output",
+			output:  "something else",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseHAProxyVersion([]byte(tt.output))
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestReconcileHAProxyVersionSetsImageIDAndSkipsWhenUnchanged(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	cr := &apiv1.PerconaServerMySQL{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster1",
+			Namespace: "ns1",
+		},
+		Spec: apiv1.PerconaServerMySQLSpec{
+			Proxy: apiv1.ProxySpec{
+				HAProxy: &apiv1.HAProxySpec{
+					Enabled: true,
+					PodSpec: apiv1.PodSpec{Size: 1},
+				},
+			},
+		},
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster1-haproxy-0",
+			Namespace: "ns1",
+			Labels:    haproxy.MatchLabels(cr),
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{{
+				Type:   corev1.ContainersReady,
+				Status: corev1.ConditionTrue,
+			}},
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:    haproxy.AppName,
+				ImageID: "docker-pullable://percona/haproxy@sha256:abc123",
+			}},
+		},
+	}
+
+	cmd := &fakeVersionClientCmd{
+		stdout: "HAProxy version 2.8.13-1~bookworm 2025/01/23 - https://haproxy.org/",
+	}
+
+	r := PerconaServerMySQLReconciler{
+		Client:    fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, pod).WithStatusSubresource(cr).Build(),
+		Scheme:    scheme,
+		ClientCmd: cmd,
+	}
+
+	require.NoError(t, r.reconcileHAProxyVersion(t.Context(), cr))
+
+	stored := &apiv1.PerconaServerMySQL{}
+	require.NoError(t, r.Get(t.Context(), client.ObjectKeyFromObject(cr), stored))
+	assert.Equal(t, "2.8.13-1~bookworm", stored.Status.HAProxy.Version)
+	assert.Equal(t, "docker-pullable://percona/haproxy@sha256:abc123", stored.Status.HAProxy.ImageID)
+	assert.Equal(t, 1, cmd.execCalls)
+
+	// Re-run with up-to-date status and unchanged image: command should not execute again.
+	require.NoError(t, r.reconcileHAProxyVersion(t.Context(), stored))
+	assert.Equal(t, 1, cmd.execCalls)
+}
+
 func TestGetVersion(t *testing.T) {
 	ctx := context.Background()
 
@@ -482,6 +585,23 @@ type fakeVS struct {
 	addr          string
 	gwPort        int
 	unimplemented bool
+}
+
+type fakeVersionClientCmd struct {
+	stdout    string
+	execCalls int
+}
+
+func (f *fakeVersionClientCmd) Exec(_ context.Context, _ *corev1.Pod, _ string, _ []string, _ io.Reader, stdout, _ io.Writer, _ bool) error {
+	f.execCalls++
+	if stdout != nil {
+		_, _ = stdout.Write([]byte(f.stdout))
+	}
+	return nil
+}
+
+func (f *fakeVersionClientCmd) REST() restclient.Interface {
+	return nil
 }
 
 func (vs *fakeVS) Apply(_ context.Context, req any) (any, error) {

@@ -139,6 +139,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 				return errors.Wrap(err, "get HAProxy status")
 			}
 		}
+		haproxyStatus.ImageID = status.HAProxy.ImageID
 		status.HAProxy = haproxyStatus
 
 		binlogServerStatus := apiv1.StatefulAppStatus{}
