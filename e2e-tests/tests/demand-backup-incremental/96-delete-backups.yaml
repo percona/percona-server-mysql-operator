@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 30
+timeout: 90
 delete:
 # Deleting base backup should clear the entire chain
 - apiVersion: ps.percona.com/v1

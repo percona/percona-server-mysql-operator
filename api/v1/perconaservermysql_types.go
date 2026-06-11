@@ -316,6 +316,15 @@ type PMMSpec struct {
 	ReadinessProbe           *corev1.Probe               `json:"readinessProbe,omitempty"`
 }
 
+type EncryptionKeySecretSelector struct {
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:=encryptionKey
+	Key string `json:"key,omitempty"`
+}
+
 type BackupSpec struct {
 	Enabled                  bool                          `json:"enabled,omitempty"`
 	SourcePod                string                        `json:"sourcePod,omitempty"`
@@ -333,6 +342,19 @@ type BackupSpec struct {
 	// Deprecated: not supported since v0.12.0. Use initContainer instead
 	InitImage     string             `json:"initImage,omitempty"`
 	InitContainer *InitContainerSpec `json:"initContainer,omitempty"`
+
+	// EncryptionKeySecret is the secret key selector for the backup encryption key.
+	EncryptionKeySecret *EncryptionKeySecretSelector `json:"encryptionKeySecret,omitempty"`
+}
+
+func (s *BackupSpec) GetEncryptionEnabled(storage *BackupStorageSpec) bool {
+	if s.EncryptionKeySecret != nil {
+		return true
+	}
+	if storage != nil && storage.EncryptionKeySecret != nil {
+		return true
+	}
+	return false
 }
 
 type BackupSchedule struct {
@@ -388,6 +410,11 @@ type BackupStorageSpec struct {
 	RuntimeClassName          *string                           `json:"runtimeClassName,omitempty"`
 	VerifyTLS                 *bool                             `json:"verifyTLS,omitempty"`
 	ContainerOptions          *BackupContainerOptions           `json:"containerOptions,omitempty"`
+
+	// EncryptionKeySecret is the secret key selector for the backup encryption key.
+	// This takes precedence over the encryption key secret in the backup spec.
+	// +optional
+	EncryptionKeySecret *EncryptionKeySecretSelector `json:"encryptionKeySecret,omitempty"`
 }
 
 type BackupContainerOptions struct {
@@ -402,6 +429,25 @@ func (b *BackupContainerOptions) GetEnv() []corev1.EnvVar {
 		return nil
 	}
 	return util.MergeEnvLists(b.Env, b.Args.env())
+}
+
+func (b *BackupContainerOptions) GetArgs() BackupContainerArgs {
+	if b == nil {
+		return BackupContainerArgs{}
+	}
+	return b.Args
+}
+
+func (args BackupContainerArgs) GetXtrabackupFlagValue(flag string) string {
+	matchPrefix := flag + "="
+	for _, arg := range args.Xtrabackup {
+		if !strings.HasPrefix(arg, matchPrefix) {
+			continue
+		}
+
+		return strings.TrimPrefix(arg, matchPrefix)
+	}
+	return ""
 }
 
 type BackupContainerArgs struct {
@@ -742,7 +788,8 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	ToolkitVersion string             `json:"toolkitVersion,omitempty"`
 	Conditions     []metav1.Condition `json:"conditions,omitempty"`
 	// +optional
-	Host string `json:"host"`
+	Host              string `json:"host"`
+	InnoDBClusterName string `json:"innodbClusterName,omitempty"`
 }
 
 func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {

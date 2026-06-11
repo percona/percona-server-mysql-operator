@@ -28,18 +28,20 @@ import (
 )
 
 const (
-	appName               = "xtrabackup"
-	componentShortName    = "xb"
-	dataVolumeName        = "datadir"
-	dataMountPath         = "/var/lib/mysql"
-	credsVolumeName       = "users"
-	credsMountPath        = "/etc/mysql/mysql-users-secret"
-	tlsVolumeName         = "tls"
-	tlsMountPath          = "/etc/mysql/mysql-tls-secret"
-	backupVolumeName      = appName
-	backupMountPath       = "/backup"
-	vaultSecretVolumeName = "vault-keyring-secret"
-	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
+	appName                  = "xtrabackup"
+	componentShortName       = "xb"
+	dataVolumeName           = "datadir"
+	dataMountPath            = "/var/lib/mysql"
+	credsVolumeName          = "users"
+	credsMountPath           = "/etc/mysql/mysql-users-secret"
+	tlsVolumeName            = "tls"
+	tlsMountPath             = "/etc/mysql/mysql-tls-secret"
+	backupVolumeName         = appName
+	backupMountPath          = "/backup"
+	vaultSecretVolumeName    = "vault-keyring-secret"
+	vaultSecretMountPath     = "/etc/mysql/vault-keyring-secret"
+	encryptionKeysVolumeName = "backup-encryption-keys"
+	encryptionKeysMountPath  = "/etc/mysql/encryption-keys"
 )
 
 func Name(cr *apiv1.PerconaServerMySQLBackup) string {
@@ -103,6 +105,25 @@ func trimJobName(name string) string {
 	}
 
 	return name
+}
+
+func encryptionKeyFileName(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaServerMySQLBackup) string {
+	for storageName, storage := range cluster.Spec.Backup.Storages {
+		if storageName != cr.Spec.StorageName {
+			continue
+		}
+
+		if storage != nil && storage.EncryptionKeySecret != nil {
+			return naming.InternalEncryptionKeyFileName(cluster.GetName(), storageName)
+		}
+
+	}
+
+	if cluster.Spec.Backup.EncryptionKeySecret != nil {
+		return naming.InternalEncryptionKeyFileName(cluster.GetName(), "")
+	}
+
+	return ""
 }
 
 func Job(
@@ -222,7 +243,7 @@ func xtrabackupContainer(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaSer
 		return corev1.Container{}, errors.Wrap(err, "marshal container options")
 	}
 
-	return corev1.Container{
+	container := corev1.Container{
 		Name:            appName,
 		Image:           spec.Image,
 		ImagePullPolicy: spec.ImagePullPolicy,
@@ -263,7 +284,19 @@ func xtrabackupContainer(cluster *apiv1.PerconaServerMySQL, cr *apiv1.PerconaSer
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          storage.ContainerSecurityContext,
 		Resources:                storage.Resources,
-	}, nil
+	}
+
+	if cluster.CompareVersion("1.2.0") >= 0 {
+		encryptionKeyFile := encryptionKeyFileName(cluster, cr)
+		if encryptionKeyFile != "" {
+			container.Env = append(container.Env, corev1.EnvVar{
+				Name:  "ENCRYPTION_KEY_FILE",
+				Value: path.Join(encryptionKeysMountPath, encryptionKeyFile),
+			})
+		}
+	}
+
+	return container, nil
 }
 
 type XBCloudAction string
@@ -500,6 +533,23 @@ func RestoreJob(
 		})
 	}
 
+	if storage.EncryptionKeySecret != nil {
+		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: encryptionKeysVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: storage.EncryptionKeySecret.Name,
+					Items: []corev1.KeyToPath{
+						{
+							Key:  storage.EncryptionKeySecret.Key,
+							Path: "encryption-key",
+						},
+					},
+				},
+			},
+		})
+	}
+
 	return job
 }
 
@@ -600,6 +650,11 @@ func restoreContainer(
 		)
 	}
 
+	encryptionAlgorithm := "AES256"
+	if e := restore.GetContainerOptions(storage).GetArgs().GetXtrabackupFlagValue("--encrypt"); e != "" {
+		encryptionAlgorithm = e
+	}
+
 	envs := util.MergeEnvLists(
 		baseEnvs,
 		restore.GetContainerOptions(storage).GetEnv(),
@@ -623,6 +678,17 @@ func restoreContainer(
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      vaultSecretVolumeName,
 			MountPath: vaultSecretMountPath,
+		})
+	}
+
+	if storage.EncryptionKeySecret != nil {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      encryptionKeysVolumeName,
+			MountPath: encryptionKeysMountPath,
+		})
+		envs = append(envs, corev1.EnvVar{
+			Name:  "ENCRYPTION_ALGORITHM",
+			Value: encryptionAlgorithm,
 		})
 	}
 
@@ -856,14 +922,31 @@ func SetSourceNode(job *batchv1.Job, src string) error {
 	return errors.Errorf("no container named %s in Job spec", appName)
 }
 
+func SetEncryptionKeyFileVersion(job *batchv1.Job, ver string) error {
+	spec := &job.Spec.Template.Spec
+
+	for i := range spec.Containers {
+		container := &spec.Containers[i]
+
+		if container.Name == appName {
+			container.Env = append(container.Env, corev1.EnvVar{Name: "ENCRYPTION_KEY_FILE_VERSION", Value: ver})
+			return nil
+		}
+	}
+
+	return errors.Errorf("no container named %s in Job spec", appName)
+}
+
 type BackupConfig struct {
-	Destination      string                        `json:"destination"`
-	Type             apiv1.BackupStorageType       `json:"type"`
-	VerifyTLS        bool                          `json:"verifyTLS,omitempty"`
-	ContainerOptions *apiv1.BackupContainerOptions `json:"containerOptions,omitempty"`
-	S3               BackupConfigS3                `json:"s3"`
-	GCS              BackupConfigGCS               `json:"gcs"`
-	Azure            BackupConfigAzure             `json:"azure"`
+	Destination          string                        `json:"destination"`
+	Type                 apiv1.BackupStorageType       `json:"type"`
+	VerifyTLS            bool                          `json:"verifyTLS,omitempty"`
+	ContainerOptions     *apiv1.BackupContainerOptions `json:"containerOptions,omitempty"`
+	S3                   BackupConfigS3                `json:"s3"`
+	GCS                  BackupConfigGCS               `json:"gcs"`
+	Azure                BackupConfigAzure             `json:"azure"`
+	EncryptionKeyFile    string                        `json:"encryptionKeyFile,omitempty"`
+	EncryptionKeyVersion string                        `json:"encryptionKeyVersion,omitempty"`
 
 	// Specify for incremental backups
 	IncrementalLsn string `json:"incrementalLsn,omitempty"`

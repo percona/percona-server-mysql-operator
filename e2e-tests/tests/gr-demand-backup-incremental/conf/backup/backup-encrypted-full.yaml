@@ -1,0 +1,14 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: <backup-name>
+  finalizers:
+    - percona.com/delete-backup
+spec:
+  clusterName: gr-demand-backup-incremental
+  storageName: <storage-name>
+  type: full
+  containerOptions:
+    args:
+      xtrabackup:
+        - "--compress"
