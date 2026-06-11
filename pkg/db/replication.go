@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/gocarina/gocsv"
@@ -19,6 +20,9 @@ import (
 )
 
 const defaultChannelName = ""
+
+// dns1123Hostname matches RFC-1123 hostnames
+var dns1123Hostname = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$`)
 
 type ReplicationStatus int8
 
@@ -161,6 +165,9 @@ func (m *ReplicationDBManager) GetGroupReplicationReplicas(ctx context.Context) 
 }
 
 func (m *ReplicationDBManager) GetMemberState(ctx context.Context, host string) (MemberState, error) {
+	if !dns1123Hostname.MatchString(host) {
+		return MemberStateError, errors.Errorf("invalid host %q", host)
+	}
 	rows := []*struct {
 		State MemberState `csv:"state"`
 	}{}
@@ -171,6 +178,9 @@ func (m *ReplicationDBManager) GetMemberState(ctx context.Context, host string) 
 			return MemberStateOffline, nil
 		}
 		return MemberStateError, errors.Wrap(err, "query member state")
+	}
+	if len(rows) == 0 {
+		return MemberStateOffline, nil
 	}
 
 	return rows[0].State, nil
@@ -196,19 +206,20 @@ func (m *ReplicationDBManager) GetGroupReplicationMembers(ctx context.Context) (
 	return members, nil
 }
 
-func (m *ReplicationDBManager) CheckIfDatabaseExists(ctx context.Context, name string) (bool, error) {
+// CheckIfClusterMetadataDBExists reports whether the InnoDB cluster metadata
+// schema is present.
+func (m *ReplicationDBManager) CheckIfClusterMetadataDBExists(ctx context.Context) (bool, error) {
 	rows := []*struct {
 		DB string `csv:"db"`
 	}{}
-	q := fmt.Sprintf("SELECT SCHEMA_NAME AS db FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME LIKE '%s'", name)
-	err := m.query(ctx, q, &rows)
+	err := m.query(ctx, "SELECT SCHEMA_NAME AS db FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = 'mysql_innodb_cluster_metadata'", &rows)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
 		}
 		return false, err
 	}
-	return true, nil
+	return len(rows) > 0, nil
 }
 
 func (m *ReplicationDBManager) GetClusterSetReplicationExists(ctx context.Context) (bool, error) {
@@ -219,6 +230,9 @@ func (m *ReplicationDBManager) GetClusterSetReplicationExists(ctx context.Contex
 	err := m.query(ctx, "SELECT EXISTS(SELECT 1 FROM replication_connection_configuration WHERE channel_name = 'clusterset_replication') as channel_exists", &rows)
 	if err != nil {
 		return false, errors.Wrap(err, "query cluster set replication exists")
+	}
+	if len(rows) == 0 {
+		return false, nil
 	}
 
 	return rows[0].Exists, nil
