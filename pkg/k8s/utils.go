@@ -477,10 +477,10 @@ func patchPodTemplateAnnotation(
 	key naming.AnnotationKey,
 	value string,
 ) error {
-	if template.ObjectMeta.Annotations == nil {
-		template.ObjectMeta.Annotations = make(map[string]string)
+	if template.Annotations == nil {
+		template.Annotations = make(map[string]string)
 	}
-	template.ObjectMeta.Annotations[string(key)] = value
+	template.Annotations[string(key)] = value
 
 	if err := cl.Patch(ctx, obj, client.StrategicMergeFrom(orig)); err != nil {
 		return errors.Wrap(err, "patch object")
