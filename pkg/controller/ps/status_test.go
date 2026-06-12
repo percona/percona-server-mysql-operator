@@ -449,6 +449,36 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 		noMetadataDB       bool
 	}{
 		{
+			name: "without backup spec",
+			cr: updateResource(cr.DeepCopy(), func(cr *apiv1.PerconaServerMySQL) {
+				cr.Spec.Backup = nil
+			}),
+			expected: apiv1.PerconaServerMySQLStatus{
+				MySQL: apiv1.StatefulAppStatus{
+					Size:  3,
+					State: apiv1.StateInitializing,
+				},
+				HAProxy: apiv1.StatefulAppStatus{
+					Size:  3,
+					State: apiv1.StateInitializing,
+				},
+				State: apiv1.StateInitializing,
+				Host:  cr.Name + "-haproxy." + cr.Namespace,
+				Conditions: []metav1.Condition{
+					{
+						Type:   apiv1.StateInitializing.String(),
+						Status: metav1.ConditionTrue,
+						Reason: apiv1.StateInitializing.String(),
+					},
+					{
+						Type:   apiv1.StateReady.String(),
+						Status: metav1.ConditionFalse,
+						Reason: apiv1.StateReady.String(),
+					},
+				},
+			},
+		},
+		{
 			name: "without pods",
 			cr:   cr.DeepCopy(),
 			expected: apiv1.PerconaServerMySQLStatus{
