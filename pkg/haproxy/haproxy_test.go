@@ -4,11 +4,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 )
 
@@ -216,6 +218,67 @@ func TestStatefulset(t *testing.T) {
 			haproxy, monit := getContainers(cluster)
 			assert.Equal(t, haproxyResources, haproxy.Resources)
 			assert.Equal(t, monitResources, monit.Resources)
+		})
+	})
+
+	t.Run("volumes", func(t *testing.T) {
+		volumeNames := func(sts *appsv1.StatefulSet) []string {
+			names := make([]string, 0, len(sts.Spec.Template.Spec.Volumes))
+			for _, v := range sts.Spec.Template.Spec.Volumes {
+				names = append(names, v.Name)
+			}
+			return names
+		}
+		mountsByContainer := func(sts *appsv1.StatefulSet) map[string][]corev1.VolumeMount {
+			mounts := make(map[string][]corev1.VolumeMount)
+			for _, c := range sts.Spec.Template.Spec.Containers {
+				mounts[c.Name] = c.VolumeMounts
+			}
+			return mounts
+		}
+
+		t.Run("cr < 1.2.0 has no internal-config volume", func(t *testing.T) {
+			cluster := cr.DeepCopy()
+			cluster.Spec.CRVersion = "1.1.0"
+
+			sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+
+			assert.Equal(t, []string{"bin", "haproxy-config", "users", "tls", "config"}, volumeNames(sts))
+			for name, mounts := range mountsByContainer(sts) {
+				for _, m := range mounts {
+					assert.NotEqual(t, "internal-config", m.Name, "container %s should not mount internal-config", name)
+				}
+			}
+		})
+
+		t.Run("cr >= 1.2.0 has internal-config volume", func(t *testing.T) {
+			cluster := cr.DeepCopy()
+			cluster.Spec.CRVersion = "1.2.0"
+
+			sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
+
+			assert.Equal(t, []string{"bin", "haproxy-config", "users", "tls", "config", "internal-config"}, volumeNames(sts))
+
+			var internalConfig *corev1.Volume
+			for i, v := range sts.Spec.Template.Spec.Volumes {
+				if v.Name == "internal-config" {
+					internalConfig = &sts.Spec.Template.Spec.Volumes[i]
+				}
+			}
+			if internalConfig == nil {
+				t.Fatal("internal-config volume is not found")
+			}
+			assert.NotNil(t, internalConfig.ConfigMap)
+			assert.Equal(t, naming.InternalHAProxyConfigMapName(cluster.Name), internalConfig.ConfigMap.Name)
+			assert.Equal(t, new(true), internalConfig.ConfigMap.Optional)
+
+			expectedMount := corev1.VolumeMount{
+				Name:      "internal-config",
+				MountPath: "/etc/haproxy/internal-config",
+			}
+			mounts := mountsByContainer(sts)
+			assert.Contains(t, mounts[AppName], expectedMount)
+			assert.Contains(t, mounts["mysql-monit"], expectedMount)
 		})
 	})
 
