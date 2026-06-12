@@ -313,21 +313,32 @@ func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Con
 				return errors.Wrap(err, "compute status")
 			}
 
-			cond := metav1.Condition{
-				Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
-				Status:  metav1.ConditionTrue,
-				Reason:  "SwitchoverInProgress",
-				Message: "Switchover in progress",
-			}
+			switch jobStatus.Status {
+			// Job has completed
+			case kstatus.CurrentStatus:
+				continue
 
-			if jobStatus.Status == kstatus.FailedStatus {
-				cond.Status = metav1.ConditionFalse
-				cond.Reason = "SwitchoverFailed"
-				cond.Message = "Switchover failed"
+			// Job has failed
+			case kstatus.FailedStatus:
+				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+					Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
+					Status:  metav1.ConditionFalse,
+					Reason:  "SwitchoverFailed",
+					Message: "Switchover failed",
+				})
+				return nil
+
+			// Job is in progress
+			case kstatus.InProgressStatus:
+				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+					Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
+					Status:  metav1.ConditionTrue,
+					Reason:  "SwitchoverInProgress",
+					Message: "Switchover in progress",
+				})
+				return nil
 			}
-			meta.SetStatusCondition(&status.Conditions, cond)
 		}
-
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "update status")
