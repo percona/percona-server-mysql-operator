@@ -246,6 +246,11 @@ func container(cr *apiv1.PerconaServerMySQL) corev1.Container {
 			Value: cr.Name,
 		},
 	}
+	// Enable HTTP API auth from crVersion 1.2.0 (gated so an operator upgrade
+	// alone does not change existing clusters).
+	if cr.CompareVersion("1.2.0") >= 0 {
+		env = append(env, corev1.EnvVar{Name: "ORC_API_AUTH", Value: "true"})
+	}
 	env = append(env, cr.Spec.Orchestrator.Env...)
 
 	return corev1.Container{
@@ -271,33 +276,38 @@ func container(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          cr.Spec.Orchestrator.ContainerSecurityContext,
-		LivenessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/api/lb-check",
-					Port: intstr.FromString("web"),
-				},
-			},
-			InitialDelaySeconds: 10,
-			TimeoutSeconds:      3,
-			PeriodSeconds:       5,
-			FailureThreshold:    3,
-			SuccessThreshold:    1,
-		},
-		ReadinessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/api/health",
-					Port: intstr.FromString("web"),
-				},
-			},
-			InitialDelaySeconds: 30,
-			TimeoutSeconds:      3,
-			PeriodSeconds:       5,
-			FailureThreshold:    3,
-			SuccessThreshold:    1,
+		LivenessProbe:            apiProbe(cr, "/api/lb-check", 10),
+		ReadinessProbe:           apiProbe(cr, "/api/health", 30),
+	}
+}
+
+// apiProbe builds an Orchestrator HTTP API probe. With auth enabled the health
+// endpoints are gated too, so the probe execs curl as the readonly user
+// (any password) instead of an httpGet that would get 401.
+func apiProbe(cr *apiv1.PerconaServerMySQL, path string, initialDelay int32) *corev1.Probe {
+	probe := &corev1.Probe{
+		InitialDelaySeconds: initialDelay,
+		TimeoutSeconds:      3,
+		PeriodSeconds:       5,
+		FailureThreshold:    3,
+		SuccessThreshold:    1,
+	}
+
+	if cr.CompareVersion("1.2.0") >= 0 {
+		curl := fmt.Sprintf(`curl -sf -u "readonly:readonly" "localhost:%d%s"`, defaultWebPort, path)
+		probe.ProbeHandler = corev1.ProbeHandler{
+			Exec: &corev1.ExecAction{Command: []string{"sh", "-c", curl}},
+		}
+		return probe
+	}
+
+	probe.ProbeHandler = corev1.ProbeHandler{
+		HTTPGet: &corev1.HTTPGetAction{
+			Path: path,
+			Port: intstr.FromString("web"),
 		},
 	}
+	return probe
 }
 
 func sidecarContainers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
