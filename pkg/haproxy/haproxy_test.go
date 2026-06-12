@@ -284,7 +284,7 @@ func TestStatefulset(t *testing.T) {
 
 	t.Run("probes", func(t *testing.T) {
 		cluster := cr.DeepCopy()
-		cluster.Spec.CRVersion = "0.12.0"
+		cluster.Spec.CRVersion = "1.2.0"
 		sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
 		var hContainer *corev1.Container
 		for _, c := range sts.Spec.Template.Spec.Containers {
@@ -317,8 +317,20 @@ func TestStatefulset(t *testing.T) {
 			FailureThreshold:    4,
 		}
 
+		expectedStartupProbe := corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_startup_check.sh"}},
+			},
+			InitialDelaySeconds: 10,
+			TimeoutSeconds:      3,
+			PeriodSeconds:       10,
+			SuccessThreshold:    1,
+			FailureThreshold:    10,
+		}
+
 		assert.Equal(t, expectedReadinessProbe, *hContainer.ReadinessProbe)
 		assert.Equal(t, expectedLivenessProbe, *hContainer.LivenessProbe)
+		assert.Equal(t, expectedStartupProbe, *hContainer.StartupProbe)
 
 		cluster.Spec.Proxy.HAProxy.ReadinessProbe = corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -346,6 +358,18 @@ func TestStatefulset(t *testing.T) {
 			FailureThreshold:              51,
 			TerminationGracePeriodSeconds: new(int64),
 		}
+		cluster.Spec.Proxy.HAProxy.StartupProbe = corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{Command: []string{"invalid-command"}},
+			},
+			InitialDelaySeconds:           12,
+			TimeoutSeconds:                22,
+			PeriodSeconds:                 32,
+			SuccessThreshold:              42,
+			FailureThreshold:              52,
+			TerminationGracePeriodSeconds: new(int64),
+		}
+
 		sts = StatefulSet(cluster, initImage, configHash, tlsHash, secret)
 		for _, c := range sts.Spec.Template.Spec.Containers {
 			if c.Name == AppName {
@@ -378,9 +402,21 @@ func TestStatefulset(t *testing.T) {
 			FailureThreshold:              51,
 			TerminationGracePeriodSeconds: new(int64),
 		}
+		expectedStartupProbe = corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{Command: []string{"/opt/percona/haproxy_startup_check.sh"}},
+			},
+			InitialDelaySeconds:           12,
+			TimeoutSeconds:                22,
+			PeriodSeconds:                 32,
+			SuccessThreshold:              42,
+			FailureThreshold:              52,
+			TerminationGracePeriodSeconds: new(int64),
+		}
 
 		assert.Equal(t, expectedReadinessProbe, *hContainer.ReadinessProbe)
 		assert.Equal(t, expectedLivenessProbe, *hContainer.LivenessProbe)
+		assert.Equal(t, expectedStartupProbe, *hContainer.StartupProbe)
 	})
 }
 
