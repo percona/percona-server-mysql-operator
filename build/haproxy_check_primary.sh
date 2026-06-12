@@ -25,6 +25,7 @@ IS_CLUSTERSET_REPLICA="$(/bin/cat /etc/haproxy/internal-config/is_clusterset_rep
 check_async() {
 	local VALUES=$(MYSQL_PWD="${MONITOR_PASSWORD}" ${MYSQL_CMDLINE} -e "select concat(concat(@@global.read_only,',', @@global.super_read_only));select service_state from performance_schema.replication_connection_status where channel_name='';select service_state from performance_schema.replication_applier_status where channel_name='';")
 
+	# shellcheck disable=SC2207
 	local REPLICATION_STATUS=($(echo $VALUES | /bin/tr "," "\n"))
 	local READ_ONLY=${REPLICATION_STATUS[0]}
 	local SUPER_RO=${REPLICATION_STATUS[1]}
@@ -45,6 +46,7 @@ check_async() {
 check_gr() {
 	local VALUES=$(MYSQL_PWD="${MONITOR_PASSWORD}" ${MYSQL_CMDLINE} -e "select concat(@@global.read_only,',',@@global.super_read_only,',',MEMBER_STATE,',',MEMBER_ROLE) from performance_schema.replication_group_members where MEMBER_ID = @@global.server_uuid;")
 
+	# shellcheck disable=SC2207
 	local REPLICATION_STATUS=($(echo $VALUES | /bin/tr "," "\n"))
 	local READ_ONLY=${REPLICATION_STATUS[0]}
 	local SUPER_RO=${REPLICATION_STATUS[1]}
