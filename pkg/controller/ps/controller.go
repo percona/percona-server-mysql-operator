@@ -1417,7 +1417,7 @@ func (r *PerconaServerMySQLReconciler) cleanupProxies(ctx context.Context, cr *a
 			return errors.Wrap(err, "failed to delete haproxy service")
 		}
 
-		if err := r.Client.Delete(ctx, &corev1.ConfigMap{
+		if err := r.Delete(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      naming.InternalHAProxyConfigMapName(cr.Name),
 				Namespace: cr.GetNamespace(),
