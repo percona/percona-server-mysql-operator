@@ -48,3 +48,7 @@ const (
 )
 
 const ClusterSetRecoveryFile = "/var/lib/mysql/clusterset-recovery"
+
+func InternalHAProxyConfigMapName(clusterName string) string {
+	return "internal-haproxy-config-" + clusterName
+}

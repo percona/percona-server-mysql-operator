@@ -308,31 +308,46 @@ func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Con
 	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
 		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetPrimarySwitchOverInProg)
 		for _, job := range jobs.Items {
-			jobStatus, err := k8s.KStatusCompute(&job)
-			if err != nil {
-				return errors.Wrap(err, "compute status")
-			}
+			switch {
+			// Job has completed
+			case jobConditionTrue(&job, batchv1.JobComplete):
+				continue
 
-			cond := metav1.Condition{
-				Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
-				Status:  metav1.ConditionTrue,
-				Reason:  "SwitchoverInProgress",
-				Message: "Switchover in progress",
-			}
+			// Job has failed
+			case jobConditionTrue(&job, batchv1.JobFailed):
+				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+					Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
+					Status:  metav1.ConditionFalse,
+					Reason:  "SwitchoverFailed",
+					Message: "Switchover failed",
+				})
+				return nil
 
-			if jobStatus.Status == kstatus.FailedStatus {
-				cond.Status = metav1.ConditionFalse
-				cond.Reason = "SwitchoverFailed"
-				cond.Message = "Switchover failed"
+			// Job is still running
+			default:
+				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+					Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
+					Status:  metav1.ConditionTrue,
+					Reason:  "SwitchoverInProgress",
+					Message: "Switchover in progress",
+				})
+				continue
 			}
-			meta.SetStatusCondition(&status.Conditions, cond)
 		}
-
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "update status")
 	}
 	return nil
+}
+
+func jobConditionTrue(job *batchv1.Job, condType batchv1.JobConditionType) bool {
+	for _, cond := range job.Status.Conditions {
+		if cond.Type == condType && cond.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *PerconaServerMySQLClusterSetReconciler) trackReplicaTopologyChanges(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
