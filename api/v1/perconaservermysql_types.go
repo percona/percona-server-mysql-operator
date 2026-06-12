@@ -1094,9 +1094,6 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 	if cr.Spec.Proxy.HAProxy.StartupProbe.FailureThreshold == 0 {
 		cr.Spec.Proxy.HAProxy.StartupProbe.FailureThreshold = 10
 	}
-	if cr.Spec.Proxy.HAProxy.StartupProbe.FailureThreshold == 0 {
-		cr.Spec.Proxy.HAProxy.StartupProbe.FailureThreshold = 3
-	}
 
 	var fsgroup *int64
 	if serverVersion != nil && serverVersion.Platform != platform.PlatformOpenshift {
