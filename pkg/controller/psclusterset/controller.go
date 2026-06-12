@@ -331,7 +331,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Con
 					Reason:  "SwitchoverInProgress",
 					Message: "Switchover in progress",
 				})
-				return nil
+				continue
 			}
 		}
 		return nil
