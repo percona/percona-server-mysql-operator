@@ -8,6 +8,12 @@ commands:
 
       source ../../functions
 
+
+      # After switchover, dc1 becomes replica and all nodes have super_read_only=1.
+      # The ConfigMap file indicating that it is a clusterset replica may not yet be propagated to the pods.
+      # During that window we will have failing connections. We sleep for 2mins to let the backends reconcile.
+      sleep 90
+
       cluster_name="gr-cross-cluster-dc1"
       mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
 
