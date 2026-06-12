@@ -11,4 +11,4 @@ commands:
 
       run_mysql \
           "INSERT INTO myDB.myTable (id) VALUES (100509)" \
-          "-h $(get_haproxy_svc "gr-cross-cluster-dc2")" "${mysql_user}"
+          "-h $(get_haproxy_svc gr-cross-cluster-dc2)" "${mysql_user}"
