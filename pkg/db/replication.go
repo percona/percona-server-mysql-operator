@@ -222,12 +222,12 @@ func (m *ReplicationDBManager) CheckIfClusterMetadataDBExists(ctx context.Contex
 	return len(rows) > 0, nil
 }
 
-func (m *ReplicationDBManager) GetClusterSetReplicationExists(ctx context.Context) (bool, error) {
+func (m *ReplicationDBManager) GetClusterSetReplicationRunning(ctx context.Context) (bool, error) {
 	rows := []*struct {
-		Exists bool `csv:"channel_exists"`
+		IsRunning bool `csv:"is_running"`
 	}{}
 
-	err := m.query(ctx, "SELECT EXISTS(SELECT 1 FROM replication_connection_configuration WHERE channel_name = 'clusterset_replication') as channel_exists", &rows)
+	err := m.query(ctx, "SELECT EXISTS(SELECT 1 FROM replication_connection_status conn JOIN replication_applier_status appl USING (CHANNEL_NAME) WHERE conn.CHANNEL_NAME = 'clusterset_replication' AND conn.SERVICE_STATE = 'ON' AND appl.SERVICE_STATE = 'ON') as is_running", &rows)
 	if err != nil {
 		return false, errors.Wrap(err, "query cluster set replication exists")
 	}
@@ -235,5 +235,5 @@ func (m *ReplicationDBManager) GetClusterSetReplicationExists(ctx context.Contex
 		return false, nil
 	}
 
-	return rows[0].Exists, nil
+	return rows[0].IsRunning, nil
 }
