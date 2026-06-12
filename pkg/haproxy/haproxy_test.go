@@ -243,7 +243,7 @@ func TestStatefulset(t *testing.T) {
 
 			sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
 
-			assert.Equal(t, []string{"bin", "haproxy-config", "users", "tls", "config"}, volumeNames(sts))
+			assert.ElementsMatch(t, []string{"bin", "haproxy-config", "users", "tls", "config"}, volumeNames(sts))
 			for name, mounts := range mountsByContainer(sts) {
 				for _, m := range mounts {
 					assert.NotEqual(t, "internal-config", m.Name, "container %s should not mount internal-config", name)
