@@ -16,6 +16,8 @@ limitations under the License.
 
 package main
 
+// dummy comment to trigger tests
+
 import (
 	"context"
 	"flag"
