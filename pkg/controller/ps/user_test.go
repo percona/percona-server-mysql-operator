@@ -515,17 +515,11 @@ func TestReconcileUsersRestartsRouterOnOperatorPasswordUpdate(t *testing.T) {
 	}
 
 	scheme := runtime.NewScheme()
-	if err := clientgoscheme.AddToScheme(scheme); err != nil {
-		t.Fatal(err, "failed to add client-go scheme")
-	}
-	if err := apiv1.AddToScheme(scheme); err != nil {
-		t.Fatal(err, "failed to add apis scheme")
-	}
+	require.NoError(t, clientgoscheme.AddToScheme(scheme), "failed to add client-go scheme")
+	require.NoError(t, apiv1.AddToScheme(scheme), "failed to add apis scheme")
 
 	hash, err := k8s.ObjectHash(userSecret)
-	if err != nil {
-		t.Fatalf("calculate secret hash: %v", err)
-	}
+	require.NoError(t, err, "calculate secret hash")
 
 	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, internalSecret, routerDeployment).Build()
 	recordingClient := &routerRolloutRecordingClient{
@@ -534,26 +528,15 @@ func TestReconcileUsersRestartsRouterOnOperatorPasswordUpdate(t *testing.T) {
 	}
 
 	r := PerconaServerMySQLReconciler{Client: recordingClient, Scheme: scheme}
-	if err := r.finalizeInternalSecretAndRestartRouter(ctx, cr, internalSecret, userSecret, true, hash); err != nil {
-		t.Fatalf("finalizeInternalSecretAndRestartRouter failed: %v", err)
-	}
+	require.NoError(t, r.finalizeInternalSecretAndRestartRouter(ctx, cr, internalSecret, userSecret, true, hash), "finalizeInternalSecretAndRestartRouter failed")
 
 	updatedInternalSecret := new(corev1.Secret)
-	if err := r.Get(ctx, types.NamespacedName{Name: cr.InternalSecretName(), Namespace: ns}, updatedInternalSecret); err != nil {
-		t.Fatalf("get internal secret: %v", err)
-	}
-	if got := string(updatedInternalSecret.Data[string(apiv1.UserOperator)]); got != newOperatorPass {
-		t.Fatalf("internal secret operator password mismatch: got %q, want %q", got, newOperatorPass)
-	}
-	if got := updatedInternalSecret.Annotations[naming.AnnotationPasswordsUpdated.String()]; got != "false" {
-		t.Fatalf("passwords-updated annotation mismatch: got %q, want %q", got, "false")
-	}
-	if recordingClient.operatorPassAtPatch != newOperatorPass {
-		t.Fatalf("router rollout happened before internal secret update: got operator pass %q, want %q", recordingClient.operatorPassAtPatch, newOperatorPass)
-	}
-	if recordingClient.routerHashAtPatch != hash {
-		t.Fatalf("router rollout hash mismatch: got %q, want %q", recordingClient.routerHashAtPatch, hash)
-	}
+	require.NoError(t, r.Get(ctx, types.NamespacedName{Name: cr.InternalSecretName(), Namespace: ns}, updatedInternalSecret), "get internal secret")
+
+	assert.Equal(t, newOperatorPass, string(updatedInternalSecret.Data[string(apiv1.UserOperator)]), "internal secret operator password mismatch")
+	assert.Equal(t, "false", updatedInternalSecret.Annotations[naming.AnnotationPasswordsUpdated.String()], "passwords-updated annotation mismatch")
+	assert.Equal(t, newOperatorPass, recordingClient.operatorPassAtPatch, "router rollout happened before internal secret update")
+	assert.Equal(t, hash, recordingClient.routerHashAtPatch, "router rollout hash mismatch")
 }
 
 type routerRolloutRecordingClient struct {
