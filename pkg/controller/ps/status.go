@@ -301,7 +301,7 @@ func (r *PerconaServerMySQLReconciler) isGRReady(ctx context.Context, cr *apiv1.
 
 	db := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
 
-	dbExists, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata")
+	dbExists, err := db.CheckIfClusterMetadataDBExists(ctx)
 	if err != nil {
 		return false, err
 	}

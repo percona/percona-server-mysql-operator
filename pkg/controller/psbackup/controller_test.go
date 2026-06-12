@@ -180,6 +180,42 @@ func TestBackupStatusErrStateDesc(t *testing.T) {
 			stateDesc: "failed to set incremental base annotations: base backup is not succeeded",
 		},
 		{
+			name: "incremental backup with incremental base",
+			cr: updateResource(cr.DeepCopy(),
+				func(cr *apiv1.PerconaServerMySQLBackup) {
+					baseName := "base-backup"
+					cr.Spec.Type = apiv1.BackupTypeIncremental
+					cr.Spec.IncrementalBaseBackupName = &baseName
+				}),
+			cluster: updateResource(
+				cluster.DeepCopy(),
+				func(cluster *apiv1.PerconaServerMySQL) {
+					cluster.Namespace = namespace
+					cluster.Spec.Backup = &apiv1.BackupSpec{
+						Image:   "some-image",
+						Enabled: true,
+						Storages: map[string]*apiv1.BackupStorageSpec{
+							cr.Spec.StorageName: {},
+						},
+					}
+				},
+			),
+			obj: []client.Object{
+				&apiv1.PerconaServerMySQLBackup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "base-backup",
+						Namespace: namespace,
+					},
+					Status: apiv1.PerconaServerMySQLBackupStatus{
+						Type:  apiv1.BackupTypeIncremental,
+						State: apiv1.BackupSucceeded,
+					},
+				},
+			},
+			state:     apiv1.BackupError,
+			stateDesc: "failed to set incremental base annotations: get incremental base backup: specified base backup is not a full backup",
+		},
+		{
 			name: "failed validation",
 			cr: updateResource(cr.DeepCopy(),
 				func(cr *apiv1.PerconaServerMySQLBackup) {
