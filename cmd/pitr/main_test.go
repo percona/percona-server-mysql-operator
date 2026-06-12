@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,10 +44,64 @@ func (f *fakeStorage) DeleteObject(_ context.Context, _ string) error           
 func (f *fakeStorage) SetPrefix(_ string)                                                {}
 func (f *fakeStorage) GetPrefix() string                                                 { return "" }
 
+// fakeDB records method calls and returns configured errors.
 type fakeDB struct {
-	getGTIDExecutedResult string
+	changeRelayErr        error
+	changeFilterErr       error
+	startUntilErr         error
+	waitErr               error
+	stopErr               error
+	resetErr              error
+	setGTIDNextErr        error
 	getGTIDExecutedErr    error
+	getGTIDExecutedResult string
 	calls                 []string
+	startUntilGTID        string
+	channels              []string
+	filterIgnoreDBs       []string
+}
+
+func (f *fakeDB) ChangeReplicationSourceRelay(_ context.Context, _ string, _ int, channel string) error {
+	f.calls = append(f.calls, "ChangeReplicationSourceRelay")
+	f.channels = append(f.channels, channel)
+	return f.changeRelayErr
+}
+
+func (f *fakeDB) ChangeReplicationFilterIgnoreDB(_ context.Context, dbs []string, channel string) error {
+	f.calls = append(f.calls, "ChangeReplicationFilterIgnoreDB")
+	f.channels = append(f.channels, channel)
+	f.filterIgnoreDBs = dbs
+	return f.changeFilterErr
+}
+
+func (f *fakeDB) StartReplicaUntilGTID(_ context.Context, gtid string, channel string) error {
+	f.calls = append(f.calls, "StartReplicaUntilGTID")
+	f.startUntilGTID = gtid
+	f.channels = append(f.channels, channel)
+	return f.startUntilErr
+}
+
+func (f *fakeDB) WaitReplicaSQLThreadStop(_ context.Context, _ time.Duration, channel string) error {
+	f.calls = append(f.calls, "WaitReplicaSQLThreadStop")
+	f.channels = append(f.channels, channel)
+	return f.waitErr
+}
+
+func (f *fakeDB) StopReplication(_ context.Context, channel string) error {
+	f.calls = append(f.calls, "StopReplication")
+	f.channels = append(f.channels, channel)
+	return f.stopErr
+}
+
+func (f *fakeDB) ResetReplication(_ context.Context, channel string) error {
+	f.calls = append(f.calls, "ResetReplication")
+	f.channels = append(f.channels, channel)
+	return f.resetErr
+}
+
+func (f *fakeDB) SetGTIDNextAutomatic(_ context.Context) error {
+	f.calls = append(f.calls, "SetGTIDNextAutomatic")
+	return f.setGTIDNextErr
 }
 
 func (f *fakeDB) GetGTIDExecuted(_ context.Context) (string, error) {
@@ -65,13 +123,455 @@ func writeBinlogsFile(t *testing.T, entries []binlogserver.BinlogEntry) string {
 	return f.Name()
 }
 
+func TestWriteEmptyRelayLogs(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, writeEmptyRelayLogs(dir, "myhost", 3))
+
+	wantMagic := []byte{0xfe, 0x62, 0x69, 0x6e}
+	for i := 1; i <= 3; i++ {
+		path := filepath.Join(dir, fmt.Sprintf("myhost-relay-bin.%06d", i))
+		data, err := os.ReadFile(path)
+		require.NoErrorf(t, err, "placeholder %d must exist", i)
+		assert.Equalf(t, wantMagic, data, "placeholder %d must contain only the binlog magic", i)
+	}
+
+	indexData, err := os.ReadFile(filepath.Join(dir, "myhost-relay-bin.index"))
+	require.NoError(t, err)
+	assert.Equal(t,
+		"./myhost-relay-bin.000001\n./myhost-relay-bin.000002\n./myhost-relay-bin.000003\n",
+		string(indexData))
+}
+
+func setupBinlogsEnv(t *testing.T, entries []binlogserver.BinlogEntry, rawContent string, omit bool) {
+	t.Helper()
+	var binlogsPath string
+	if rawContent != "" {
+		f, err := os.CreateTemp(t.TempDir(), "binlogs-*.json")
+		require.NoError(t, err)
+		_, err = f.WriteString(rawContent)
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+		binlogsPath = f.Name()
+	} else if entries != nil {
+		binlogsPath = writeBinlogsFile(t, entries)
+	}
+	if omit {
+		t.Setenv("BINLOGS_PATH", "")
+	} else {
+		t.Setenv("BINLOGS_PATH", binlogsPath)
+	}
+}
+
+func TestRunInit(t *testing.T) {
+	defaultEntries := []binlogserver.BinlogEntry{
+		{URI: "s3://mybucket/binlogs/binlog.000001"},
+		{URI: "s3://mybucket/binlogs/binlog.000002"},
+	}
+
+	tests := map[string]struct {
+		entries           []binlogserver.BinlogEntry
+		rawContent        string
+		omitBinlogsPath   bool
+		db                *fakeDB
+		newDB             func(ctx context.Context, params db.DBParams) (Database, error)
+		getSecret         func(apiv1.SystemUser) (string, error)
+		expectedError     string
+		expectedFuncCalls []string
+		checkPlaceholders bool
+	}{
+		"missing BINLOGS_PATH": {
+			omitBinlogsPath: true,
+			expectedError:   "BINLOGS_PATH",
+		},
+		"invalid JSON": {
+			rawContent:    "not-json",
+			expectedError: "parse binlogs json",
+		},
+		"empty binlog entries": {
+			entries:       []binlogserver.BinlogEntry{},
+			expectedError: "no binlog entries found",
+		},
+		"get secret error": {
+			entries:       defaultEntries,
+			getSecret:     func(apiv1.SystemUser) (string, error) { return "", errors.New("secret not found") },
+			expectedError: "get operator password",
+		},
+		"DB connect error": {
+			entries: defaultEntries,
+			newDB: func(_ context.Context, _ db.DBParams) (Database, error) {
+				return nil, errors.New("connection refused")
+			},
+			expectedError: "connect to MySQL",
+		},
+		"GetGTIDExecuted error": {
+			entries:           defaultEntries,
+			db:                &fakeDB{getGTIDExecutedErr: errors.New("query failed")},
+			expectedError:     "get current GTID_EXECUTED",
+			expectedFuncCalls: []string{"GetGTIDExecuted"},
+		},
+		"change replication source relay error": {
+			entries:           defaultEntries,
+			db:                &fakeDB{changeRelayErr: errors.New("relay error")},
+			expectedError:     "change replication source",
+			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay"},
+		},
+		"change replication filter error": {
+			entries:           defaultEntries,
+			db:                &fakeDB{changeFilterErr: errors.New("filter error")},
+			expectedError:     "change replication filter",
+			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay", "ChangeReplicationFilterIgnoreDB"},
+		},
+		"success": {
+			entries:           defaultEntries,
+			db:                &fakeDB{},
+			expectedFuncCalls: []string{"GetGTIDExecuted", "ChangeReplicationSourceRelay", "ChangeReplicationFilterIgnoreDB"},
+			checkPlaceholders: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			setupBinlogsEnv(t, tc.entries, tc.rawContent, tc.omitBinlogsPath)
+
+			fakeDatabase := tc.db
+			newDB := tc.newDB
+			if newDB == nil {
+				newDB = func(_ context.Context, _ db.DBParams) (Database, error) {
+					return fakeDatabase, nil
+				}
+			}
+			getSecret := tc.getSecret
+			if getSecret == nil {
+				getSecret = func(apiv1.SystemUser) (string, error) { return "testpass", nil }
+			}
+
+			mysqlDir := t.TempDir()
+			err := runInit(t.Context(), newDB, getSecret, mysqlDir)
+
+			if tc.expectedError != "" {
+				require.ErrorContains(t, err, tc.expectedError)
+			} else {
+				require.NoError(t, err)
+			}
+
+			if tc.expectedFuncCalls != nil && fakeDatabase != nil {
+				assert.Equal(t, tc.expectedFuncCalls, fakeDatabase.calls)
+				for i, ch := range fakeDatabase.channels {
+					assert.Equalf(t, "pitr", ch, "channel-aware call #%d should target the pitr channel", i)
+				}
+				if slices.Contains(fakeDatabase.calls, "ChangeReplicationFilterIgnoreDB") {
+					assert.Equal(t, []string{"mysql_innodb_cluster_metadata"}, fakeDatabase.filterIgnoreDBs)
+				}
+			}
+			if tc.checkPlaceholders {
+				hostname, err := os.Hostname()
+				require.NoError(t, err)
+
+				indexPath := filepath.Join(mysqlDir, hostname+"-relay-bin.index")
+				indexData, err := os.ReadFile(indexPath)
+				require.NoError(t, err, "relay log index file must exist")
+
+				indexContent := string(indexData)
+				assert.Contains(t, indexContent, hostname+"-relay-bin.000001")
+				assert.Contains(t, indexContent, hostname+"-relay-bin.000002")
+
+				wantMagic := []byte{0xfe, 0x62, 0x69, 0x6e}
+				for i := 1; i <= len(tc.entries); i++ {
+					relayLog := filepath.Join(mysqlDir, fmt.Sprintf("%s-relay-bin.%06d", hostname, i))
+					data, err := os.ReadFile(relayLog)
+					require.NoErrorf(t, err, "placeholder %d must exist", i)
+					assert.Equalf(t, wantMagic, data, "placeholder %d must contain only the binlog magic", i)
+				}
+			}
+		})
+	}
+}
+
+func TestRunSetup(t *testing.T) {
+	bucket := "mybucket"
+	defaultEntries := []binlogserver.BinlogEntry{
+		{URI: "s3://mybucket/binlogs/binlog.000001"},
+		{URI: "s3://mybucket/binlogs/binlog.000002"},
+	}
+	defaultS3 := func(fake *fakeStorage) newStorageFn {
+		fake.objects = map[string]string{
+			"binlogs/binlog.000001": "binlogdata1",
+			"binlogs/binlog.000002": "binlogdata2",
+		}
+		return func(_ context.Context, _, _, _, _, _, _ string, _ bool) (storage.Storage, error) {
+			return fake, nil
+		}
+	}
+
+	tests := map[string]struct {
+		entries         []binlogserver.BinlogEntry
+		rawContent      string
+		omitBinlogsPath bool
+		newS3           func(*fakeStorage) newStorageFn
+		expectedError   string
+		checkRelayLogs  bool
+	}{
+		"missing BINLOGS_PATH": {
+			omitBinlogsPath: true,
+			expectedError:   "BINLOGS_PATH",
+		},
+		"invalid JSON": {
+			rawContent:    "not-json",
+			expectedError: "parse binlogs json",
+		},
+		"empty binlog entries": {
+			entries:       []binlogserver.BinlogEntry{},
+			expectedError: "no binlog entries found",
+		},
+		"S3 client creation error": {
+			entries: defaultEntries,
+			newS3: func(_ *fakeStorage) newStorageFn {
+				return func(_ context.Context, _, _, _, _, _, _ string, _ bool) (storage.Storage, error) {
+					return nil, errors.New("s3 unavailable")
+				}
+			},
+			expectedError: "create S3 client",
+		},
+		"S3 download error": {
+			entries: defaultEntries,
+			newS3: func(fake *fakeStorage) newStorageFn {
+				fake.getErr = errors.New("download failed")
+				return func(_ context.Context, _, _, _, _, _, _ string, _ bool) (storage.Storage, error) {
+					return fake, nil
+				}
+			},
+			expectedError: "download binlog",
+		},
+		"success": {
+			entries:        defaultEntries,
+			checkRelayLogs: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			setupBinlogsEnv(t, tc.entries, tc.rawContent, tc.omitBinlogsPath)
+			t.Setenv("S3_BUCKET", bucket)
+
+			fake := &fakeStorage{}
+			var newS3 newStorageFn
+			if tc.newS3 != nil {
+				newS3 = tc.newS3(fake)
+			} else {
+				newS3 = defaultS3(fake)
+			}
+
+			mysqlDir := t.TempDir()
+			err := runSetup(t.Context(), newS3, mysqlDir)
+
+			if tc.expectedError != "" {
+				require.ErrorContains(t, err, tc.expectedError)
+				return
+			}
+			require.NoError(t, err)
+
+			if tc.checkRelayLogs {
+				hostname, err := os.Hostname()
+				require.NoError(t, err)
+				for i, wantContent := range []string{"binlogdata1", "binlogdata2"} {
+					relayLog := filepath.Join(mysqlDir, fmt.Sprintf("%s-relay-bin.%06d", hostname, i+1))
+					data, err := os.ReadFile(relayLog)
+					require.NoErrorf(t, err, "relay log %d must exist", i+1)
+					assert.Equalf(t, wantContent, string(data), "relay log %d content mismatch", i+1)
+				}
+			}
+		})
+	}
+}
+
+func TestRunApply(t *testing.T) {
+	defaultEntries := []binlogserver.BinlogEntry{
+		{URI: "s3://mybucket/binlogs/binlog.000001"},
+		{URI: "s3://mybucket/binlogs/binlog.000002"},
+	}
+	allDBCalls := []string{
+		"StartReplicaUntilGTID",
+		"WaitReplicaSQLThreadStop",
+		"StopReplication",
+		"ResetReplication",
+		"GetGTIDExecuted",
+		"SetGTIDNextAutomatic",
+	}
+
+	tests := map[string]struct {
+		entries           []binlogserver.BinlogEntry
+		rawContent        string
+		omitBinlogsPath   bool
+		pitrType          string
+		pitrGTID          string
+		pitrDate          string
+		db                *fakeDB
+		newDB             func(ctx context.Context, params db.DBParams) (Database, error)
+		getSecret         func(apiv1.SystemUser) (string, error)
+		getGTID           func(string, string) (string, error)
+		expectedError     string
+		expectedFuncCalls []string
+		expectedUDID      string
+	}{
+		"missing BINLOGS_PATH": {
+			omitBinlogsPath: true,
+			expectedError:   "BINLOGS_PATH",
+		},
+		"invalid JSON": {
+			rawContent:    "not-json",
+			expectedError: "parse binlogs json",
+		},
+		"empty binlog entries": {
+			entries:       []binlogserver.BinlogEntry{},
+			expectedError: "no binlog entries found",
+		},
+		"date mode getGTID error": {
+			entries:       defaultEntries,
+			pitrType:      "date",
+			pitrDate:      "2024-01-15 12:00:00",
+			getGTID:       func(string, string) (string, error) { return "", errors.New("mysqlbinlog failed") },
+			expectedError: "get latest GTID for date",
+		},
+		"get secret error": {
+			entries:       defaultEntries,
+			pitrType:      "gtid",
+			pitrGTID:      "uuid:1",
+			getSecret:     func(apiv1.SystemUser) (string, error) { return "", errors.New("secret not found") },
+			expectedError: "get operator password",
+		},
+		"DB connect error": {
+			entries:  defaultEntries,
+			pitrType: "gtid",
+			pitrGTID: "uuid:1",
+			newDB: func(_ context.Context, _ db.DBParams) (Database, error) {
+				return nil, errors.New("connection refused")
+			},
+			expectedError: "connect to MySQL",
+		},
+		"start replica until GTID error": {
+			entries:           defaultEntries,
+			pitrType:          "gtid",
+			pitrGTID:          "uuid:1",
+			db:                &fakeDB{startUntilErr: errors.New("start error")},
+			expectedError:     "start replica until GTID",
+			expectedFuncCalls: []string{"StartReplicaUntilGTID"},
+		},
+		"wait replica stop error": {
+			entries:           defaultEntries,
+			pitrType:          "gtid",
+			pitrGTID:          "uuid:1",
+			db:                &fakeDB{waitErr: errors.New("wait error")},
+			expectedError:     "wait for replication",
+			expectedFuncCalls: []string{"StartReplicaUntilGTID", "WaitReplicaSQLThreadStop"},
+		},
+		"stop replication error": {
+			entries:           defaultEntries,
+			pitrType:          "gtid",
+			pitrGTID:          "uuid:1",
+			db:                &fakeDB{stopErr: errors.New("stop error")},
+			expectedError:     "stop replication",
+			expectedFuncCalls: []string{"StartReplicaUntilGTID", "WaitReplicaSQLThreadStop", "StopReplication"},
+		},
+		"reset replication error": {
+			entries:           defaultEntries,
+			pitrType:          "gtid",
+			pitrGTID:          "uuid:1",
+			db:                &fakeDB{resetErr: errors.New("reset error")},
+			expectedError:     "reset replication",
+			expectedFuncCalls: []string{"StartReplicaUntilGTID", "WaitReplicaSQLThreadStop", "StopReplication", "ResetReplication"},
+		},
+		"GetGTIDExecuted error": {
+			entries:           defaultEntries,
+			pitrType:          "gtid",
+			pitrGTID:          "uuid:1",
+			db:                &fakeDB{getGTIDExecutedErr: errors.New("query failed")},
+			expectedError:     "get GTID_EXECUTED after restore",
+			expectedFuncCalls: []string{"StartReplicaUntilGTID", "WaitReplicaSQLThreadStop", "StopReplication", "ResetReplication", "GetGTIDExecuted"},
+		},
+		"set GTID_NEXT error": {
+			entries:           defaultEntries,
+			pitrType:          "gtid",
+			pitrGTID:          "uuid:1",
+			db:                &fakeDB{setGTIDNextErr: errors.New("gtid error")},
+			expectedError:     "set GTID_NEXT to AUTOMATIC",
+			expectedFuncCalls: allDBCalls,
+		},
+		"GTID mode success": {
+			entries:           defaultEntries,
+			pitrType:          "gtid",
+			pitrGTID:          "aaaaaaaa-0000-0000-0000-000000000001:1-10",
+			db:                &fakeDB{},
+			expectedFuncCalls: allDBCalls,
+			expectedUDID:      "aaaaaaaa-0000-0000-0000-000000000001:1-10",
+		},
+		"date mode success": {
+			entries:  defaultEntries,
+			pitrType: "date",
+			pitrDate: "2024-01-15 12:00:00",
+			db:       &fakeDB{},
+			getGTID: func(_ string, datetime string) (string, error) {
+				assert.Equal(t, "2024-01-15 12:00:00", datetime)
+				return "bbbbbbbb-0000-0000-0000-000000000002:1-5", nil
+			},
+			expectedFuncCalls: allDBCalls,
+			expectedUDID:      "bbbbbbbb-0000-0000-0000-000000000002:1-5",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			setupBinlogsEnv(t, tc.entries, tc.rawContent, tc.omitBinlogsPath)
+			t.Setenv("PITR_TYPE", tc.pitrType)
+			t.Setenv("PITR_GTID", tc.pitrGTID)
+			t.Setenv("PITR_DATE", tc.pitrDate)
+
+			fakeDatabase := tc.db
+			newDB := tc.newDB
+			if newDB == nil {
+				newDB = func(_ context.Context, _ db.DBParams) (Database, error) {
+					return fakeDatabase, nil
+				}
+			}
+			getSecret := tc.getSecret
+			if getSecret == nil {
+				getSecret = func(apiv1.SystemUser) (string, error) { return "testpass", nil }
+			}
+			getGTID := tc.getGTID
+			if getGTID == nil {
+				getGTID = func(string, string) (string, error) {
+					t.Fatal("getGTIDByDatetime should not be called")
+					return "", nil
+				}
+			}
+
+			err := runApply(t.Context(), newDB, getSecret, getGTID, t.TempDir())
+
+			if tc.expectedError != "" {
+				require.ErrorContains(t, err, tc.expectedError)
+			} else {
+				require.NoError(t, err)
+			}
+
+			if tc.expectedFuncCalls != nil && fakeDatabase != nil {
+				assert.Equal(t, tc.expectedFuncCalls, fakeDatabase.calls)
+				for i, ch := range fakeDatabase.channels {
+					assert.Equalf(t, "pitr", ch, "channel-aware call #%d should target the pitr channel", i)
+				}
+			}
+			if tc.expectedUDID != "" && fakeDatabase != nil {
+				assert.Equal(t, tc.expectedUDID, fakeDatabase.startUntilGTID)
+			}
+		})
+	}
+}
+
 type applyCall struct {
 	objectKeys      []string
 	mysqlbinlogArgs []string
 	mysqlArgs       []string
 }
 
-func TestRun(t *testing.T) {
+func TestRunReplay(t *testing.T) {
 	bucket := "mybucket"
 
 	defaultEntries := []binlogserver.BinlogEntry{
@@ -206,7 +706,6 @@ func TestRun(t *testing.T) {
 				assert.Contains(t, call.mysqlbinlogArgs, "--disable-log-bin")
 				assert.Contains(t, call.mysqlbinlogArgs, "--exclude-gtids=bbbbbbbb-0000-0000-0000-000000000002:1-5")
 				assert.Contains(t, call.mysqlbinlogArgs, "--stop-datetime=2024-01-15 12:00:00")
-				// Should not contain --include-gtids for date mode
 				for _, arg := range call.mysqlbinlogArgs {
 					assert.False(t, strings.HasPrefix(arg, "--include-gtids"), "date mode should not have --include-gtids")
 				}
@@ -231,7 +730,6 @@ func TestRun(t *testing.T) {
 			checkApply: func(t *testing.T, call applyCall) {
 				assert.Contains(t, call.mysqlbinlogArgs, "--disable-log-bin")
 				assert.Contains(t, call.mysqlbinlogArgs, "--include-gtids=aaaaaaaa-0000-0000-0000-000000000001:1-10")
-				// No --exclude-gtids when GTID_EXECUTED is empty
 				for _, arg := range call.mysqlbinlogArgs {
 					assert.False(t, strings.HasPrefix(arg, "--exclude-gtids"), "should not have --exclude-gtids when GTID_EXECUTED is empty")
 				}
@@ -241,7 +739,6 @@ func TestRun(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			// Set up binlogs file.
 			var binlogsPath string
 			if tc.rawContent != "" {
 				f, err := os.CreateTemp(t.TempDir(), "binlogs-*.json")
@@ -297,7 +794,7 @@ func TestRun(t *testing.T) {
 				return tc.applyErr
 			}
 
-			err := run(t.Context(), newS3, newDB, getSecret, apply)
+			err := runReplay(t.Context(), newS3, newDB, getSecret, apply)
 
 			if tc.expectedError != "" {
 				require.ErrorContains(t, err, tc.expectedError)

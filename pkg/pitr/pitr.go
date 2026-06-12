@@ -213,6 +213,14 @@ func restoreContainer(
 				Value: restore.Spec.PITR.GTID,
 			})
 		}
+		method := restore.Spec.PITR.Method
+		if method == "" {
+			method = apiv1.PITRMethodBinlogReplay
+		}
+		envs = append(envs, corev1.EnvVar{
+			Name:  "PITR_METHOD",
+			Value: string(method),
+		})
 		if restore.Spec.PITR.Force {
 			envs = append(envs, corev1.EnvVar{
 				Name:  "PITR_FORCE",

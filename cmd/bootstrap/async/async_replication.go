@@ -114,27 +114,27 @@ func Bootstrap(ctx context.Context) error {
 	}
 	defer db.Close()
 
-	if err := db.StopReplication(ctx); err != nil {
+	if err := db.StopReplication(ctx, ""); err != nil {
 		return err
 	}
 
 	switch {
 	case donor == "":
-		if err := db.ResetReplication(ctx); err != nil {
+		if err := db.ResetReplication(ctx, ""); err != nil {
 			return err
 		}
 
 		log.Printf("Can't find a donor, we're on our own.")
 		return nil
 	case donor == fqdn:
-		if err := db.ResetReplication(ctx); err != nil {
+		if err := db.ResetReplication(ctx, ""); err != nil {
 			return err
 		}
 
 		log.Printf("I'm the donor and therefore the primary.")
 		return nil
 	case primary == fqdn || primaryIp == podIp:
-		if err := db.ResetReplication(ctx); err != nil {
+		if err := db.ResetReplication(ctx, ""); err != nil {
 			return err
 		}
 
@@ -203,7 +203,7 @@ func Bootstrap(ctx context.Context) error {
 			return errors.Wrapf(err, "get %s password", apiv1.UserReplication)
 		}
 
-		if err := db.StopReplication(ctx); err != nil {
+		if err := db.StopReplication(ctx, ""); err != nil {
 			return errors.Wrap(err, "stop replication")
 		}
 
