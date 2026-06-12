@@ -504,9 +504,6 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 		}
 	}
 
-	// Gated by crVersion so that an operator upgrade alone does not change
-	// the ConfigMap of existing clusters (a config-hash change restarts the
-	// Orchestrator pods); the keys apply once the CR moves to 1.2.0.
 	if cr.CompareVersion("1.2.0") >= 0 && cr.Spec.SSLSecretName != "" {
 		config["MySQLTopologyUseMutualTLS"] = true
 		config["MySQLTopologySSLSkipVerify"] = true
@@ -515,7 +512,6 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 		config["MySQLTopologySSLCAFile"] = filepath.Join(tlsMountPath, "ca.crt")
 	}
 
-	// Operator-managed keys above win over user-provided configuration.
 	if cfg := cr.Spec.Orchestrator.Configuration; cfg != "" {
 		userConfig := make(map[string]interface{})
 		if err := json.Unmarshal([]byte(cfg), &userConfig); err != nil {
