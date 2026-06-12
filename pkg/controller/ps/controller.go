@@ -953,9 +953,6 @@ func (r *PerconaServerMySQLReconciler) reconcileInternalHAProxyConfigMap(ctx con
 			Name:      naming.InternalHAProxyConfigMapName(cr.Name),
 			Namespace: cr.Namespace,
 		},
-		Data: map[string]string{
-			"cluster_name": cr.Name,
-		},
 	}
 
 	data := map[string]string{
@@ -1420,14 +1417,13 @@ func (r *PerconaServerMySQLReconciler) cleanupProxies(ctx context.Context, cr *a
 			return errors.Wrap(err, "failed to delete haproxy service")
 		}
 
-		secret := &corev1.Secret{
+		if err := r.Client.Delete(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      naming.InternalHAProxyConfigMapName(cr.Name),
 				Namespace: cr.GetNamespace(),
 			},
-		}
-		if err := r.Client.Delete(ctx, secret); client.IgnoreNotFound(err) != nil {
-			return errors.Wrap(err, "failed to delete internal HAProxy config map secret")
+		}); client.IgnoreNotFound(err) != nil {
+			return errors.Wrap(err, "failed to delete internal HAProxy config map")
 		}
 	}
 
