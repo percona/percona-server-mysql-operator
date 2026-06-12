@@ -14,5 +14,5 @@ commands:
       data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-0.${cluster_name}-mysql" "${mysql_user}")
       kubectl create configmap -n "${NAMESPACE}" 28-read-data-single-node --from-literal=data="${data}"
       
-      data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_haproxy_svc "gr-cross-cluster-single-node")" "${mysql_user}")
+      data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_haproxy_svc gr-cross-cluster-single-node)" "${mysql_user}")
       kubectl create configmap -n "${NAMESPACE}" 28-read-data-single-node-haproxy --from-literal=data="${data}"
