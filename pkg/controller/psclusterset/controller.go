@@ -308,18 +308,13 @@ func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Con
 	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
 		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetPrimarySwitchOverInProg)
 		for _, job := range jobs.Items {
-			jobStatus, err := k8s.KStatusCompute(&job)
-			if err != nil {
-				return errors.Wrap(err, "compute status")
-			}
-
-			switch jobStatus.Status {
+			switch {
 			// Job has completed
-			case kstatus.CurrentStatus:
+			case jobConditionTrue(&job, batchv1.JobComplete):
 				continue
 
 			// Job has failed
-			case kstatus.FailedStatus:
+			case jobConditionTrue(&job, batchv1.JobFailed):
 				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 					Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
 					Status:  metav1.ConditionFalse,
@@ -328,8 +323,8 @@ func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Con
 				})
 				return nil
 
-			// Job is in progress
-			case kstatus.InProgressStatus:
+			// Job is still running
+			default:
 				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 					Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
 					Status:  metav1.ConditionTrue,
@@ -344,6 +339,15 @@ func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Con
 		return errors.Wrap(err, "update status")
 	}
 	return nil
+}
+
+func jobConditionTrue(job *batchv1.Job, condType batchv1.JobConditionType) bool {
+	for _, cond := range job.Status.Conditions {
+		if cond.Type == condType && cond.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *PerconaServerMySQLClusterSetReconciler) trackReplicaTopologyChanges(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
