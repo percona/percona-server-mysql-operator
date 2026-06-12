@@ -1,0 +1,87 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 600
+
+resourceRefs:
+- kind: PerconaServerMySQL
+  apiVersion: ps.percona.com/v1
+  name: gr-cross-cluster-dc2
+  ref: dc2
+- kind: PerconaServerMySQL
+  apiVersion: ps.percona.com/v1
+  name: gr-cross-cluster-single-node
+  ref: singleNode
+assertAll:
+- celExpr: "singleNode.status.conditions.exists(c, c.type == \"ClusterSetReplicationRunning\" && c.status == \"True\")"
+  message: "singleNode should have ClusterSetReplicationRunning=True"
+
+commands:
+  - script: |-
+      set -o errexit
+      set -o pipefail
+      set -o xtrace
+
+      source ../../functions
+
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
+
+      status=$(get_clusterset_status "-h gr-cross-cluster-dc2-mysql-primary" "${mysql_user}")
+
+      echo "${status}" | jq .
+      echo "${status}" | jq -e '
+          .status == "HEALTHY" and
+          .primaryCluster == "grcrossclusterdc2" and
+          .clusters.grcrossclusterdc2.clusterRole == "PRIMARY" and
+          .clusters.grcrossclusterdc2.globalStatus == "OK" and
+          .clusters.grcrossclustersinglenode.clusterRole == "REPLICA" and
+          .clusters.grcrossclustersinglenode.globalStatus == "OK"
+      '
+    timeout: 420
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-cross-cluster-single-node
+status:
+  conditions:
+  - reason: Initializing
+    status: "False"
+    type: Initializing
+  - reason: Ready
+    status: "True"
+    type: Ready
+  - type: ClusterSetReplicationRunning
+    status: "True"
+  - message: InnoDB cluster successfully bootstrapped with 1 nodes
+    status: "True"
+    type: InnoDBClusterBootstrapped
+  mysql:
+    ready: 1
+    size: 1
+    state: ready
+  haproxy:
+    ready: 1
+    size: 1
+    state: ready
+  state: ready
+---
+kind: PerconaServerMySQLClusterSet
+apiVersion: ps.percona.com/v1
+metadata:
+  name: gr-cross-cluster
+status:
+  conditions:
+  - type: MySQLShellRunnerReady
+    status: "True"
+  - type: ClusterSetBootstrapped
+    status: "True"
+  - type: Ready
+    status: "True"
+  clusters:
+    grcrossclusterdc2:
+      clusterRole: PRIMARY
+      globalStatus: OK
+    grcrossclustersinglenode:
+      clusterRole: REPLICA
+      globalStatus: OK
+  primaryCluster: grcrossclusterdc2

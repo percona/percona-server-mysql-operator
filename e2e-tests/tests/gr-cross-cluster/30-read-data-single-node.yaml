@@ -1,0 +1,18 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 120
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name="gr-cross-cluster-single-node"
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
+
+        data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-0.${cluster_name}-mysql" "${mysql_user}")
+        kubectl create configmap -n "${NAMESPACE}" 30-read-data-single-node --from-literal=data="${data}"
+        
+        data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_haproxy_svc "gr-cross-cluster-single-node")" "${mysql_user}")
+        kubectl create configmap -n "${NAMESPACE}" 30-read-data-single-node-haproxy --from-literal=data="${data}"

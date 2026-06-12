@@ -40,3 +40,16 @@ data:
     100503
     100504
     100505
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 07-read-data-dc2-haproxy
+data:
+  data: |-
+    100500
+    100501
+    100502
+    100503
+    100504
+    100505

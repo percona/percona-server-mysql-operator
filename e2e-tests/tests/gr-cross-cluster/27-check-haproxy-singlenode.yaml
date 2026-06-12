@@ -1,0 +1,18 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 120
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
+
+      check_haproxy_connection() {
+          [[ $(run_mysql "SELECT 1" "-h $(get_haproxy_svc "gr-cross-cluster-single-node")" "${mysql_user}") == "1" ]]
+      }
+
+      retry 30 3 check_haproxy_connection
+
