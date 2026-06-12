@@ -110,6 +110,7 @@ func orchestratorDefaults(spec *apiv1.OrchestratorSpec) {
 	podSpecDefaults(&spec.PodSpec, ImageOrchestrator, resources("128M", "", "256M", ""), "", 30, envList("ORC_ENV", "VALUE"), envFromList("orc-env-secret"))
 
 	spec.Enabled = false
+	spec.Configuration = `{"FailMasterPromotionOnLagMinutes": 10}`
 	spec.ServiceAccountName = "percona-server-mysql-operator-orchestrator"
 	spec.PodSecurityContext = &corev1.PodSecurityContext{
 		SupplementalGroups: []int64{1001},
