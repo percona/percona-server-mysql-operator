@@ -306,7 +306,7 @@ func haproxyContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	}
 	env = append(env, spec.Env...)
 
-	var readinessProbe, livenessProbe *corev1.Probe
+	var readinessProbe, livenessProbe, startupProbe *corev1.Probe
 	if cr.CompareVersion("0.12.0") >= 0 {
 		readinessProbe = k8s.ExecProbe(spec.ReadinessProbe, []string{"/opt/percona/haproxy_readiness_check.sh"})
 		livenessProbe = k8s.ExecProbe(spec.LivenessProbe, []string{"/opt/percona/haproxy_liveness_check.sh"})
@@ -319,6 +319,17 @@ func haproxyContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 			{
 				Name:  "READINESS_CHECK_TIMEOUT",
 				Value: fmt.Sprint(readinessProbe.TimeoutSeconds),
+			},
+		}
+		env = append(env, probsEnvs...)
+	}
+
+	if cr.CompareVersion("1.2.0") >= 0 {
+		startupProbe = k8s.ExecProbe(spec.StartupProbe, []string{"/opt/percona/haproxy_startup_check.sh"})
+		probsEnvs := []corev1.EnvVar{
+			{
+				Name:  "STARTUP_CHECK_TIMEOUT",
+				Value: fmt.Sprint(startupProbe.TimeoutSeconds),
 			},
 		}
 		env = append(env, probsEnvs...)
@@ -365,6 +376,7 @@ func haproxyContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		Args:            []string{"haproxy"},
 		ReadinessProbe:  readinessProbe,
 		LivenessProbe:   livenessProbe,
+		StartupProbe:    startupProbe,
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "mysql",

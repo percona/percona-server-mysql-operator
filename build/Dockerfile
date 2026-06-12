@@ -98,6 +98,7 @@ COPY build/haproxy_check_primary.sh /opt/percona-server-mysql-operator/haproxy_c
 COPY build/haproxy_check_replicas.sh /opt/percona-server-mysql-operator/haproxy_check_replicas.sh
 COPY build/haproxy_liveness_check.sh /opt/percona-server-mysql-operator/haproxy_liveness_check.sh
 COPY build/haproxy_readiness_check.sh /opt/percona-server-mysql-operator/haproxy_readiness_check.sh
+COPY build/haproxy_startup_check.sh /opt/percona-server-mysql-operator/haproxy_startup_check.sh
 COPY build/haproxy.cfg /opt/percona-server-mysql-operator/haproxy.cfg
 COPY build/haproxy-global.cfg /opt/percona-server-mysql-operator/haproxy-global.cfg
 COPY build/pmm-prerun.sh /opt/percona-server-mysql-operator/pmm-prerun.sh
