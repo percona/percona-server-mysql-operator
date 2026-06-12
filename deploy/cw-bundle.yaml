@@ -14833,7 +14833,7 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.namespace
-        image: perconalab/percona-server-mysql-operator:main
+        image: perconalab/percona-server-mysql-operator:preview-v1.2.0-0313d15
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

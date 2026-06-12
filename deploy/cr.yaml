@@ -34,7 +34,7 @@ spec:
 #      privileged: false
 #      runAsGroup: 1001
 #      runAsUser: 1001
-#    image: perconalab/percona-server-mysql-operator:main
+#    image: perconalab/percona-server-mysql-operator:preview-v1.2.0-0313d15
 #    resources:
 #      limits:
 #        cpu: 100m
@@ -87,7 +87,7 @@ spec:
 #        privileged: false
 #        runAsGroup: 1001
 #        runAsUser: 1001
-#      image: perconalab/percona-server-mysql-operator:main
+#      image: perconalab/percona-server-mysql-operator:preview-v1.2.0-0313d15
 #      resources:
 #        limits:
 #          cpu: 100m
@@ -288,7 +288,7 @@ spec:
 #          privileged: false
 #          runAsGroup: 1001
 #          runAsUser: 1001
-#        image: perconalab/percona-server-mysql-operator:main
+#        image: perconalab/percona-server-mysql-operator:preview-v1.2.0-0313d15
 #        resources:
 #          limits:
 #            cpu: 100m
@@ -443,7 +443,7 @@ spec:
 #          privileged: false
 #          runAsGroup: 1001
 #          runAsUser: 1001
-#        image: perconalab/percona-server-mysql-operator:main
+#        image: perconalab/percona-server-mysql-operator:preview-v1.2.0-0313d15
 #        resources:
 #          limits:
 #            cpu: 100m
@@ -584,7 +584,7 @@ spec:
 #        privileged: false
 #        runAsGroup: 1001
 #        runAsUser: 1001
-#      image: perconalab/percona-server-mysql-operator:main
+#      image: perconalab/percona-server-mysql-operator:preview-v1.2.0-0313d15
 #      resources:
 #        limits:
 #          cpu: 100m
@@ -722,7 +722,7 @@ spec:
 #            privileged: false
 #            runAsGroup: 1001
 #            runAsUser: 1001
-#          image: perconalab/percona-server-mysql-operator:main
+#          image: perconalab/percona-server-mysql-operator:preview-v1.2.0-0313d15
 #          resources:
 #            limits:
 #              cpu: 100m
@@ -770,7 +770,7 @@ spec:
 #        privileged: false
 #        runAsGroup: 1001
 #        runAsUser: 1001
-#      image: perconalab/percona-server-mysql-operator:main
+#      image: perconalab/percona-server-mysql-operator:preview-v1.2.0-0313d15
 #      resources:
 #        limits:
 #          cpu: 100m
