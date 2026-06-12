@@ -206,5 +206,3 @@ spec:
     app.kubernetes.io/part-of: percona-server
   sessionAffinity: None
   type: ClusterIP
-
-
