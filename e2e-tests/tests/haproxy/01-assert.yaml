@@ -1,6 +1,17 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 420
+commands:
+  - script: |-
+      set -o errexit
+      set -o nounset
+      set -o pipefail
+
+      haproxy_version=$(kubectl -n "${NAMESPACE}" get ps haproxy -o jsonpath='{.status.haproxy.version}')
+      haproxy_image_id=$(kubectl -n "${NAMESPACE}" get ps haproxy -o jsonpath='{.status.haproxy.imageID}')
+
+      test -n "${haproxy_version}"
+      test -n "${haproxy_image_id}"
 ---
 kind: StatefulSet
 apiVersion: apps/v1
