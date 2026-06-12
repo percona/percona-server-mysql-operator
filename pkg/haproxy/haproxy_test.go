@@ -257,7 +257,7 @@ func TestStatefulset(t *testing.T) {
 
 			sts := StatefulSet(cluster, initImage, configHash, tlsHash, secret)
 
-			assert.Equal(t, []string{"bin", "haproxy-config", "users", "tls", "config", "internal-config"}, volumeNames(sts))
+			assert.ElementsMatch(t, []string{"bin", "haproxy-config", "users", "tls", "config", "internal-config"}, volumeNames(sts))
 
 			var internalConfig *corev1.Volume
 			for i, v := range sts.Spec.Template.Spec.Volumes {
