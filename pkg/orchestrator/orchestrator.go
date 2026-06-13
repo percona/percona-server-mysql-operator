@@ -492,6 +492,29 @@ func ConfigMap(cr *apiv1.PerconaServerMySQL) (*corev1.ConfigMap, error) {
 	return k8s.ConfigMap(cr, ConfigMapName(cr), configFileKey, config, naming.ComponentOrchestrator), nil
 }
 
+// reservedOrchestratorConfigKeys are managed by the operator or injected
+// per-pod by the orchestrator entrypoint. They must not be overridable via
+// spec.orchestrator.configuration: doing so would break raft membership,
+// per-pod identity, topology TLS or API auth.
+var reservedOrchestratorConfigKeys = map[string]bool{
+	// operator-managed (set in ConfigMapData)
+	"RaftNodes":             true,
+	"RaftEnabledSingleNode": true,
+	// entrypoint-injected per-pod (orc-entrypoint.sh)
+	"HTTPAdvertise":                  true,
+	"RaftAdvertise":                  true,
+	"RaftBind":                       true,
+	"RaftEnabled":                    true,
+	"MySQLTopologyUseMutualTLS":      true,
+	"MySQLTopologySSLSkipVerify":     true,
+	"MySQLTopologySSLPrivateKeyFile": true,
+	"MySQLTopologySSLCertFile":       true,
+	"MySQLTopologySSLCAFile":         true,
+	"AuthenticationMethod":           true,
+	"HTTPAuthUser":                   true,
+	"HTTPAuthPassword":               true,
+}
+
 func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 	config := make(map[string]interface{}, 0)
 
@@ -501,6 +524,27 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 		config["RaftEnabledSingleNode"] = false
 		if cr.Spec.Orchestrator.Size == 1 {
 			config["RaftEnabledSingleNode"] = true
+		}
+	}
+
+	if cr.CompareVersion("1.2.0") >= 0 && cr.Spec.SSLSecretName != "" {
+		config["MySQLTopologyUseMutualTLS"] = true
+		config["MySQLTopologySSLSkipVerify"] = true
+		config["MySQLTopologySSLPrivateKeyFile"] = filepath.Join(tlsMountPath, "tls.key")
+		config["MySQLTopologySSLCertFile"] = filepath.Join(tlsMountPath, "tls.crt")
+		config["MySQLTopologySSLCAFile"] = filepath.Join(tlsMountPath, "ca.crt")
+	}
+
+	if cfg := cr.Spec.Orchestrator.Configuration; cfg != "" {
+		userConfig := make(map[string]interface{})
+		if err := json.Unmarshal([]byte(cfg), &userConfig); err != nil {
+			return "", errors.Wrap(err, "unmarshal spec.orchestrator.configuration: must be a JSON object")
+		}
+		for k, v := range userConfig {
+			if reservedOrchestratorConfigKeys[k] {
+				continue
+			}
+			config[k] = v
 		}
 	}
 
