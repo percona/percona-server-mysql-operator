@@ -5,7 +5,10 @@ metadata:
   finalizers:
     - percona.com/clusterset-dissolve
 spec:
-  primaryCluster: sourcecluster
+#  unsafeFlags:
+#    forcedFailover: false
+#    forcedClusterRemoval: false
+  primaryCluster: pscluster1
   credentialsSecret:
     name: ps-cluster1-secrets
     key: clusterset
@@ -13,11 +16,11 @@ spec:
   createReplicaClusterOptions:
     recoveryMethod: clone
   clusters:
-    - name: sourcecluster
+    - innodbClusterName: pscluster1
       endpoints:
-      - host: source-cluster-mysql-primary.default.svc.cluster.local
-    - name: replicacluster
+      - host: ps-cluster1-mysql-primary.default.svc.cluster.local
+    - innodbClusterName: pscluster2
       endpoints:
-      - host: replica-cluster-mysql-0.replica-cluster-mysql.default.svc.cluster.local
+      - host: ps-cluster2-mysql-0.ps-cluster2-mysql.default.svc.cluster.local
   mysqlshellRunner:
     image: perconalab/percona-server-mysql-operator:main-psmysql8.4

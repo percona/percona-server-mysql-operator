@@ -39,7 +39,7 @@ metadata:
   name: gr-cross-cluster
 spec:
   clusters:
-    - name: grcrossclusterdc2
+    - innodbClusterName: grcrossclusterdc2
       endpoints:
       - host: gr-cross-cluster-dc2-mysql-0.gr-cross-cluster-dc2-mysql
 status:

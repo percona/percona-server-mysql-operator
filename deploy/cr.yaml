@@ -313,8 +313,9 @@ spec:
           cpu: 600m
           memory: 1Gi
 #      startupProbe:
-#        failureThreshold: 3
-#        periodSeconds: 5
+#        failureThreshold: 10
+#        initialDelaySeconds: 10
+#        periodSeconds: 10
 #        successThreshold: 1
 #        timeoutSeconds: 3
 #      readinessProbe:
@@ -811,6 +812,9 @@ spec:
 #          privileged: false
 #          runAsGroup: 1001
 #          runAsUser: 1001
+#        encryptionKeySecret:
+#          key: encryptionKey
+#          name: my-azure-encryption-key-secret
 #        podSecurityContext:
 #          fsGroup: 1001
 #          supplementalGroups:
@@ -854,6 +858,9 @@ spec:
 #          privileged: false
 #          runAsGroup: 1001
 #          runAsUser: 1001
+#        encryptionKeySecret:
+#          key: encryptionKey
+#          name: my-gcs-encryption-key-secret
 #        gcs:
 #          bucket: BUCKET-NAME
 #          credentialsSecret: SECRET-NAME
@@ -914,6 +921,9 @@ spec:
 #          privileged: false
 #          runAsGroup: 1001
 #          runAsUser: 1001
+#        encryptionKeySecret:
+#          key: encryptionKey
+#          name: my-s3-encryption-key-secret
 #        labels:
 #          backupWorker: "True"
 #        nodeSelector:
@@ -966,6 +976,9 @@ spec:
 #              requests:
 #                storage: 2Gi
 #            storageClassName: standard
+#    encryptionKeySecret:
+#      key: encryptionKey
+#      name: my-encryption-key-secret
   toolkit:
     image: perconalab/percona-server-mysql-operator:main-toolkit
     imagePullPolicy: Always

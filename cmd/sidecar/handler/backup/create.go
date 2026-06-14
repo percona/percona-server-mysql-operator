@@ -10,7 +10,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -68,6 +70,15 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
+	// Wait for kubelet to propagate the encryption key file to the pod.
+	if backupConf.EncryptionKeyFile != "" {
+		if err := awaitEncryptionKeyFile(req.Context(), log, backupConf.EncryptionKeyFile, backupConf.EncryptionKeyVersion); err != nil {
+			log.Error(err, "failed to await encryption key file")
+			http.Error(w, "backup failed", http.StatusInternalServerError)
+			return
+		}
+	}
+
 	h.status.setBackupConfig(backupConf)
 	defer func() {
 		h.status.removeBackupConfig()
@@ -99,7 +110,6 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 	g, gCtx := errgroup.WithContext(req.Context())
-
 	xtrabackup := exec.CommandContext(gCtx, "xtrabackup", xtrabackupArgs(string(backupUser), backupPass, &backupConf)...)
 	xtrabackup.Env = envs(backupConf)
 
@@ -219,12 +229,19 @@ func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
 	if _, err := os.Stat(mysql.CustomMyCnfPath); err == nil {
 		args = append([]string{"--defaults-extra-file=" + mysql.CustomMyCnfPath}, args...)
 	}
+	if conf != nil && conf.EncryptionKeyFile != "" {
+		args = append(args, fmt.Sprintf("--encrypt-key-file=%s", conf.EncryptionKeyFile))
+		if conf.ContainerOptions.GetArgs().GetXtrabackupFlagValue("--encrypt") == "" {
+			args = append(args, "--encrypt=AES256")
+		}
+	}
 	if conf != nil && conf.ContainerOptions != nil {
 		args = append(args, conf.ContainerOptions.Args.Xtrabackup...)
 	}
 	if conf != nil && conf.IncrementalLsn != "" {
 		args = append(args, fmt.Sprintf("--incremental-lsn=%s", conf.IncrementalLsn))
 	}
+
 	return args
 }
 
@@ -301,4 +318,51 @@ func getSecret(username apiv1.SystemUser) (string, error) {
 	}
 
 	return strings.TrimSpace(string(sBytes)), nil
+}
+
+func versionFileFor(keyFile string) string {
+	return filepath.Join(filepath.Dir(keyFile), naming.InternalEncryptionKeyVersionFileName)
+}
+
+func readVersionFile(path string) (string, error) {
+	sBytes, err := os.ReadFile(path)
+	if err != nil {
+		return "", errors.Wrapf(err, "read %s", path)
+	}
+	return strings.TrimSpace(string(sBytes)), nil
+}
+
+const defaultKubeletSecretSyncTimeout = 5 * time.Minute
+
+// awaitEncryptionKeyFile waits for the encryption key file to be created and synced from the Secret.
+func awaitEncryptionKeyFile(ctx context.Context, log logr.Logger, file, desiredVersion string) error {
+	pCtx, cancel := context.WithTimeout(ctx, defaultKubeletSecretSyncTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		// Wait for the file to exist.
+		if _, err := os.Stat(file); err == nil {
+			// If the file exists, wait for it to be synced from the Secret.
+			observedVersion, err := readVersionFile(versionFileFor(file))
+			if err != nil {
+				return errors.Wrap(err, "read version file")
+			}
+			if observedVersion == desiredVersion {
+				return nil
+			}
+		} else if !os.IsNotExist(err) {
+			return errors.Wrap(err, "stat encryption key file")
+		}
+
+		select {
+		case <-pCtx.Done():
+			return errors.Wrap(pCtx.Err(), "context done")
+
+		case <-ticker.C:
+			log.Info("waiting for encryption key file", "file", file)
+		}
+	}
 }

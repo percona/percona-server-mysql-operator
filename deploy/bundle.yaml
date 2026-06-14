@@ -863,6 +863,16 @@ spec:
                             type: string
                         type: object
                     type: object
+                  encryptionKeySecret:
+                    properties:
+                      key:
+                        default: encryptionKey
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
                   gcs:
                     properties:
                       bucket:
@@ -1262,9 +1272,6 @@ spec:
             type: object
           spec:
             properties:
-              allowForcedFailover:
-                default: false
-                type: boolean
               clusters:
                 items:
                   properties:
@@ -1287,19 +1294,26 @@ spec:
                       maxItems: 9
                       minItems: 1
                       type: array
-                    name:
+                    innodbClusterName:
                       maxLength: 63
                       type: string
                       x-kubernetes-validations:
-                      - message: name must contain only alphanumeric characters
+                      - message: innodbClusterName must contain only alphanumeric
+                          characters
                         rule: self.matches('^[A-Za-z0-9]+$')
                   required:
                   - endpoints
-                  - name
+                  - innodbClusterName
                   type: object
                 maxItems: 10
                 minItems: 1
                 type: array
+                x-kubernetes-list-map-keys:
+                - innodbClusterName
+                x-kubernetes-list-type: map
+                x-kubernetes-validations:
+                - message: cluster names must be unique
+                  rule: self.all(c, self.exists_one(d, d.innodbClusterName == c.innodbClusterName))
               createReplicaClusterOptions:
                 properties:
                   recoveryMethod:
@@ -1349,6 +1363,15 @@ spec:
                 - VERIFY_CA
                 - VERIFY_IDENTITY
                 type: string
+              unsafeFlags:
+                properties:
+                  forcedClusterRemoval:
+                    default: false
+                    type: boolean
+                  forcedFailover:
+                    default: false
+                    type: boolean
+                type: object
             required:
             - clusters
             - credentialsSecret
@@ -1357,7 +1380,7 @@ spec:
             type: object
             x-kubernetes-validations:
             - message: spec.primaryCluster not found in spec.clusters
-              rule: self.clusters.exists(c, c.name == self.primaryCluster)
+              rule: self.clusters.exists(c, c.innodbClusterName == self.primaryCluster)
           status:
             properties:
               clusters:
@@ -2160,6 +2183,16 @@ spec:
                               runAsUserName:
                                 type: string
                             type: object
+                        type: object
+                      encryptionKeySecret:
+                        properties:
+                          key:
+                            default: encryptionKey
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
                         type: object
                       gcs:
                         properties:
@@ -4066,6 +4099,16 @@ spec:
                     type: object
                   enabled:
                     type: boolean
+                  encryptionKeySecret:
+                    properties:
+                      key:
+                        default: encryptionKey
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
                   image:
                     type: string
                   imagePullPolicy:
@@ -6176,6 +6219,16 @@ spec:
                                 runAsUserName:
                                   type: string
                               type: object
+                          type: object
+                        encryptionKeySecret:
+                          properties:
+                            key:
+                              default: encryptionKey
+                              type: string
+                            name:
+                              type: string
+                          required:
+                          - name
                           type: object
                         gcs:
                           properties:
@@ -14424,6 +14477,8 @@ spec:
                     type: string
                 type: object
               host:
+                type: string
+              innodbClusterName:
                 type: string
               mysql:
                 properties:

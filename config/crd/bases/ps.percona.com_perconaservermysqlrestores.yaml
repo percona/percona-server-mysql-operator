@@ -724,6 +724,16 @@ spec:
                                 type: string
                             type: object
                         type: object
+                      encryptionKeySecret:
+                        properties:
+                          key:
+                            default: encryptionKey
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
                       gcs:
                         properties:
                           bucket:

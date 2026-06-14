@@ -1,0 +1,27 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+resourceRefs:
+- apiVersion: ps.percona.com/v1
+  kind: PerconaServerMySQLBackup
+  name: base-backup-encrypted
+  ref: base
+- apiVersion: ps.percona.com/v1
+  kind: PerconaServerMySQLBackup
+  name: incr-encrypted-1
+  ref: incr
+assertAll:
+- celExpr: incr.status.state == "Succeeded"
+  message: "Encrypted incremental backup should be succeeded"
+
+- celExpr: incr.status.type == "incremental"
+  message: "Encrypted incremental backup should have a type of incremental"
+
+- celExpr: incr.status.compressed == true
+  message: "Encrypted incremental backup should have compressed=true in status"
+
+- celExpr: has(incr.status.storage.encryptionKeySecret) && incr.status.storage.encryptionKeySecret.name == "test-encryption-key" && incr.status.storage.encryptionKeySecret.key == "encryptionKey"
+  message: "Encrypted incremental backup should have encryptionKeySecret in status"
+
+- celExpr: base.status.destination.contains(incr.metadata.annotations["percona.com/base-backup-name"])
+  message: "Incremental backup annotation should reference the correct base backup"

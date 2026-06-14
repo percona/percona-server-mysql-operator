@@ -6,7 +6,7 @@
 | Author       | Mayank Shah |
 | Status       | Draft       |
 | Created      | 2026-05-18  |
-| Last Updated | 2026-05-25  |
+| Last Updated | 2026-06-10  |
 | Reviewers    |             |
 
 
@@ -131,7 +131,7 @@ spec.mysql.bootstrap.mode = manual (new field; default auto)
 
 ### 4.1 CRD Spec Changes
 
-**New CRD: `PerconaServerMySQLClusterSet`** (group `mysql.percona.com/v1`, scope `Namespaced`, short name `psclusterset`).
+**New CRD: `PerconaServerMySQLClusterSet`** (group `ps.percona.com/v1`, scope `Namespaced`, short name `ps-clusterset`).
 
 ```yaml
 apiVersion: ps.percona.com/v1
@@ -140,7 +140,9 @@ metadata:
   name: my-cluster-set
   namespace: default
 spec:
-  allowForceFailover: true
+  unsafeFlags:
+    forcedFailover: false
+    forcedClusterRemoval: false
   primaryCluster: cluster1
   credentialsSecret:
     name: cluster1-credentials
@@ -149,19 +151,21 @@ spec:
   mysqlshellRunner:
     image: percona/percona-server:8.0.36
   clusters:
-  - name: cluster1
+  - innodbClusterName: cluster1
     endpoints:
     - host: 10.11.0.13
       port: 3306
-  - name: cluster2
+  - innodbClusterName: cluster2
     endpoints:
     - host: 10.11.0.15
       port: 3306
 
 ```
 
-- `spec.primaryCluster` *(required, string)*: Logical name of the desired primary cluster. Must equal exactly one `clusters[].name`. Editing this triggers a planned switchover, or a force failover if `allowForceFailover` is true and the current primary is unreachable.
-- `spec.allowForceFailover` *(optional, default: `false`)*: When true, the controller is permitted to use `forcePrimaryCluster()` if a `primaryCluster` change is requested while the current primary is unreachable. When false, the controller blocks and surfaces a condition. Default `false` because force failover is destructive (data correctness can suffer).
+- `spec.primaryCluster` *(required, string)*: Name of the desired primary InnoDB cluster. Must equal exactly one `clusters[].innodbClusterName` (CEL-validated at admission). Must contain only alphanumeric characters. Editing this triggers a planned switchover, or a force failover if `unsafeFlags.forcedFailover` is true and the current primary is unreachable.
+- `spec.unsafeFlags` *(optional)*: Groups the opt-ins for destructive operations. Both default to `false`:
+  - `forcedFailover` *(optional, default: `false`)*: When true, the controller is permitted to use `forcePrimaryCluster()` if a `primaryCluster` change is requested while the current primary is unreachable. When false, the controller blocks and surfaces a condition. Default `false` because force failover is destructive — it can promote a replica while the old primary may still accept writes, causing split-brain and lost transactions.
+  - `forcedClusterRemoval` *(optional, default: `false`)*: When true, a replica cluster removed from `spec.clusters[]` is removed from the ClusterSet with `removeCluster(..., {force: true})` even if it is unreachable; any transactions not replicated back are abandoned and the removed cluster may require manual cleanup or a full rebuild. When false, mysqlsh refuses to remove an unreachable replica and the removal Job fails.
 - `spec.sslMode` *(optional, string, default: `AUTO`)*: SSL Mode for the ClusterSet replication channels. Available options are:
   - `DISABLED`: TLS encryption is disabled for the ClusterSet replication channels.
   - `REQUIRED`: TLS encryption is enabled for the ClusterSet replication channels.
@@ -169,10 +173,10 @@ spec:
   - `VERIFY_IDENTITY`: like VERIFY_CA, but additionally verify that the peer server certificate matches the host to which the connection is attempted.
   - `AUTO`: TLS encryption will be enabled if supported by the instance, otherwise disabled.
 - `spec.mysqlshellRunner.image` *(required, string)*: Container image used for the `mysqlshell-runner` Pod and the `createReplicaCluster` Job. Must contain a `mysqlsh` binary on `PATH`. The mysqlsh version should match the major version of the MySQL endpoints participating in this ClusterSet (e.g. 8.0 endpoints → 8.0 mysqlsh). See §5.6 for the rationale.
-- `spec.clusters[]` *(required, length >= 2)*: List of clusters participating in the ClusterSet. Each entry:
-  - `name` *(required, immutable per entry)*: Logical handle used in `primaryCluster`, status, annotations. Must match `[a-z0-9-]{1,63}`. Immutable once observed in status; renames go through remove + re-add.
-  - `endpoints[]` *(required, length >= 1)*: List of host:port pairs the controller can use to reach the cluster's MySQL members. Controller picks the first reachable. Multiple entries allow the controller's own connection to survive single-member failures.
-  - `credentialsSecret` *(required, string)*: Name of a Secret in the same namespace, containing the `clusterset` user.
+- `spec.credentialsSecret` *(required, secret key selector)*: `name` (required) and `key` of a Secret in the same namespace holding the password of the `clusterset` user.
+- `spec.clusters[]` *(required, 1–10 entries)*: List of clusters participating in the ClusterSet. Each entry:
+  - `innodbClusterName` *(required)*: Name of the InnoDB cluster, used in `primaryCluster`, status, annotations. Must contain only alphanumeric characters, max 63; must be unique within the ClusterSet (CEL-validated at admission).
+  - `endpoints[]` *(required, 1–9 entries)*: List of host:port pairs the controller can use to reach the cluster's MySQL members. `host` is required and must be a valid IP address or DNS name (CEL-validated). Controller picks the first reachable. Multiple entries allow the controller's own connection to survive single-member failures.
 
 *Existing CRD* `PerconaServerMySQL` gains one new optional field:
 
@@ -192,10 +196,14 @@ spec:
   - `SwitchoverInProgress` — `spec.primaryCluster` differs from `status.currentPrimary` and reconcile is executing the change.
   - `PrimaryClusterUnreachable` - The primary cluster of this clusterset is not reachable by the operator
   - `ClusterSetDissolving` - The ClusterSet is deleting and dissolving all replica clusters
-- `clusters[]` mirrors `<cs>.status()`'s output one-to-one so users can correlate `kubectl get psclusterset -o yaml` with mysqlsh output during incidents. Each entry:
+- `clusters[]` mirrors `<cs>.status()`'s output one-to-one so users can correlate `kubectl get ps-clusterset -o yaml` with mysqlsh output during incidents. Each entry:
   - `name`, `role` (`PRIMARY`/`REPLICA` from mysqlsh, not spec), `globalStatus` (`OK`/`OK_NOT_REPLICATING`/`NOT_OK`/`INVALIDATED`/`UNKNOWN`)
 
 `PerconaServerMySQL`:
+
+A new status field is added:
+
+- `innodbClusterName` (string): The name of the InnoDB cluster managed by this CR. Users copy this value into the ClusterSet CR's `spec.clusters[].innodbClusterName` when adding the cluster to a ClusterSet.
 
 The following status conditions are added:
 
@@ -206,7 +214,7 @@ The following status conditions are added:
 
 **clusterset user**: A new `clusterset` user is added into the existing set of users which shall be used for managing ClusterSet operations. Each replica cluster MUST contain the same set of passwords as in the primary before adding to the ClusterSet. Since the users will be replicated from the source cluster, it is also not possible to independently rotate credentials on replica clusters.
 
-**Finalizer**: `mysql.percona.com/clusterset-dissolve` is added to `psclusterset` object, which ensures that the ClusterSet dissolves when the object is deleted from K8S. This only stops replication and deletes metadata, the actual clusters continue to run.
+**Finalizer**: `percona.com/clusterset-dissolve` is added to `ps-clusterset` object, which ensures that the ClusterSet dissolves when the object is deleted from K8S. This only stops replication and deletes metadata, the actual clusters continue to run.
 
 **Env plumbing for the per-site bootstrap mode** (added by the per-site operator to the mysqld container):
 
@@ -228,7 +236,7 @@ The following status conditions are added:
 
 ### 4.4 User-Facing Behavior Changes
 
-- New resource visible via `kubectl get psclusterset`, with printed columns `Primary`, `Endpoint` and `Ready`.
+- New resource visible via `kubectl get ps-clusterset`, with printed columns `Primary`, `Endpoint` and `Ready`.
 - New events for `PerconaServerMySQLClusterSet`:
   - `ClusterSetPrimarySwitched`
   - `ClusterSetPrimaryForceSwitched`
@@ -236,7 +244,7 @@ The following status conditions are added:
   - `ClusterSetHealthDegraded`
   - `ClusterSetMemberAdded`
   - `ClusterSetMemberRemoved`
-- For `PerconaServerMySQL` CRs with `spec.mysql.bootstrap.mode: manual`, Pod-0 will stay `NotReady` indefinitely until bootstrapped by the `psclusterset` controller . This is intentional and surfaced via the Readiness Probe failing with "Member state: OFFLINE" until the ClusterSet controller (or some other actor) attaches it. A new status condition surfaces this scenario - `AwaitingExternalBootstrap`
+- For `PerconaServerMySQL` CRs with `spec.mysql.bootstrap.mode: manual`, Pod-0 will stay `NotReady` indefinitely until bootstrapped by the `ps-clusterset` controller . This is intentional and surfaced via the Readiness Probe failing with "Member state: OFFLINE" until the ClusterSet controller (or some other actor) attaches it. A new status condition surfaces this scenario - `AwaitingExternalBootstrap`
 
 ---
 
@@ -383,11 +391,14 @@ Provisioning during initial bootstrap keeps the ClusterSet controller free of an
 | User provisions the account manually outside the operator | High friction; users may get the grant set wrong. The operator already provisions five other system users; one more follows the pattern. |
 
 
-### 5.9 Manual-only switchover with explicit `allowForceFailover` opt-in
+### 5.9 Manual-only switchover with explicit `unsafeFlags` opt-ins
 
-**Chosen:** No auto-failover. Switchover requires the user to edit `spec.primaryCluster`. Force failover additionally requires `spec.allowForceFailover: true`.
+**Chosen:** No auto-failover. Switchover requires the user to edit `spec.primaryCluster`. Force failover additionally requires `spec.unsafeFlags.forcedFailover: true`. Destructive opt-ins are grouped under a single `spec.unsafeFlags` block (mirroring the `unsafeFlags` pattern in the `PerconaServerMySQL` CR), with one boolean per operation:
 
-**Why:** Force failover destroys correctness guarantees if performed when the old primary is alive but unreachable from the controller only. The cost of staying down a few extra minutes during an incident is much smaller than the cost of an incorrect force-failover. Two separate signals: the spec edit and the permission flag are required to make sure both are deliberate.
+- `forcedFailover` — permits `forcePrimaryCluster()` when the current primary is unreachable.
+- `forcedClusterRemoval` — permits `removeCluster(..., {force: true})` for an unreachable replica (see §7.6).
+
+**Why:** Force failover destroys correctness guarantees if performed when the old primary is alive but unreachable from the controller only. The cost of staying down a few extra minutes during an incident is much smaller than the cost of an incorrect force-failover. Two separate signals: the spec edit and the permission flag are required to make sure both are deliberate. Grouping the flags under `unsafeFlags` makes the danger explicit in the field path itself while keeping each decision an independent knob.
 
 **Alternatives considered:**
 
@@ -395,12 +406,13 @@ Provisioning during initial bootstrap keeps the ClusterSet controller free of an
 | Alternative                                                                         | Why Rejected                                                                                                                                                                |
 | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Auto-failover with `spec.failover.automatic: true` and tunable guardrails           | Detection signal across sites is difficult, we don't yet have operational evidence to trust an automated detector. Revisit in a future release.                             |
-| Single `allowUnsafeFailover` boolean covering both lag tolerance and force-failover | Conflates independent decisions; users would surprise themselves in incidents. The chosen design keeps the two knobs explicit; lag is left to mysqlsh to enforce or refuse. |
+| Single `allowUnsafeFailover` boolean covering all unsafe operations                 | Conflates independent decisions; users would surprise themselves in incidents. The chosen design keeps the knobs explicit per operation; lag is left to mysqlsh to enforce or refuse. |
+| Top-level booleans (`allowForcedFailover`, `allowForcedClusterRemoval`)             | Scatters unsafe opt-ins across the spec as the list grows; `unsafeFlags` gives them one discoverable, clearly-labeled home, consistent with the per-site CR.                |
 
 
 ### 5.10 Finalizer dissolves the ClusterSet on CR deletion
 
-**Chosen:** A `mysql.percona.com/clusterset-dissolve` finalizer runs `<cs>.dissolve()` on CR deletion (after waiting for any in-flight `createReplicaCluster` Job). All underlying clusters revert to standalone InnoDB Clusters; data is preserved; per-site operators continue to manage them.
+**Chosen:** A `percona.com/clusterset-dissolve` finalizer runs `<cs>.dissolve()` on CR deletion (after waiting for any in-flight `createReplicaCluster` Job). All underlying clusters revert to standalone InnoDB Clusters; data is preserved; per-site operators continue to manage them.
 
 **Why:** Matches Kubernetes-idiomatic cascade-on-delete semantics (`kubectl delete` actually deletes the modeled thing). The underlying MySQL clusters are not destroyed — only their ClusterSet association is. Per-site operators continue to manage them. An annotation-based bypass exists for the case where the primary cluster is permanently unreachable and the dissolve cannot run.
 
@@ -481,18 +493,18 @@ metadata:
   name: my-clusterset
 spec:
   primaryCluster: cluster1
-  allowForceFailover: false
   sslMode: AUTO
   credentialsSecret:
     name: cluster1-secret
+    key: clusterset
   mysqlshellRunner:
     image: percona/percona-server:8.0.36
   clusters:
-    - name: cluster1
+    - innodbClusterName: cluster1
       endpoints:
         - host: cluster1-mysql.example.com
           port: 3306
-    - name: cluster2
+    - innodbClusterName: cluster2
       endpoints:
         - host: cluster2-mysql.example.com
           port: 3306
@@ -556,20 +568,23 @@ cluster1 has become unreachable. User edits:
 ```yaml
 spec:
   primaryCluster: cluster2
-  allowForceFailover: true        # explicit opt-in
+  unsafeFlags:
+    forcedFailover: true          # explicit opt-in
 ```
 
 Controller runs `forcePrimaryCluster('cluster2')` inline. cluster1 becomes INVALIDATED; status surfaces `ClusterInvalidated` condition with a hint about the rejoin path.
 
 ### 7.6 Removal of a replica cluster
 
-A replica cluster can be removed from a ClusterSet by deleting its entry from `.spec.clusters[]`. During reconciliation, the ClusterSet controller removes the cluster from the ClusterSet, dissolves Group Replication on the removed cluster, and lets the per-site operator bootstrap it again as a standalone InnoDB Cluster.
+A replica cluster can be removed from a ClusterSet by deleting its entry from `.spec.clusters[]`. During reconciliation, the ClusterSet controller removes the cluster from the ClusterSet (via `removeCluster()`), dissolves Group Replication on the removed cluster, and lets the per-site operator bootstrap it again as a standalone InnoDB Cluster.
+
+If the replica being removed is unreachable, mysqlsh refuses the removal and the removal Job fails. To remove an unreachable replica anyway, set `spec.unsafeFlags.forcedClusterRemoval: true`; the controller then runs `removeCluster(..., {force: true})`, which forgets the replica from the ClusterSet metadata. Any transactions on the replica that were not replicated back are abandoned, and the removed cluster may be left unusable, requiring manual cleanup or a full rebuild.
 
 Removal is one-way: after a cluster has been removed from a ClusterSet, it cannot be added back to the same ClusterSet.
 
 ### 7.7 Deletion
 
-`kubectl delete psclusterset my-clusterset`. Finalizer waits for any in-flight `createReplicaCluster` Job to terminate, then runs `<cs>.dissolve()` inline. CR is deleted. Both underlying clusters revert to standalone InnoDB Clusters and remain managed by their per-site operators.
+`kubectl delete ps-clusterset my-clusterset`. Finalizer waits for any in-flight `createReplicaCluster` Job to terminate, then runs `<cs>.dissolve()` inline. CR is deleted. Both underlying clusters revert to standalone InnoDB Clusters and remain managed by their per-site operators.
 
 ---
 
@@ -595,9 +610,9 @@ Removal is one-way: after a cluster has been removed from a ClusterSet, it canno
 
 ### 8.4 Primary unreachable during planned switchover
 
-**Scenario:** User edits `spec.primaryCluster: cluster2`, `allowForceFailover: false`, and cluster1 (old primary) is unreachable.
+**Scenario:** User edits `spec.primaryCluster: cluster2`, `unsafeFlags.forcedFailover: false`, and cluster1 (old primary) is unreachable.
 
-**Expected behavior:** Set `SwitchoverFailed` and `PrimaryUnreachable` conditions. Do nothing. User either fixes cluster1 (reconcile naturally proceeds) or flips `allowForceFailover: true` (next reconcile uses `forcePrimaryCluster`).
+**Expected behavior:** Set `SwitchoverFailed` and `PrimaryUnreachable` conditions. Do nothing. User either fixes cluster1 (reconcile naturally proceeds) or flips `unsafeFlags.forcedFailover: true` (next reconcile uses `forcePrimaryCluster`).
 
 ### 8.5 Dissolve fails during finalizer
 
@@ -639,8 +654,7 @@ If the operator pod is upgraded but a `PerconaServerMySQL` CR is not re-applied:
 | ------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ClusterSet bootstrap from two operator-managed clusters | GR           | Apply primary CR, then replica CR with `bootstrap.mode: manual`, then ClusterSet CR. Validate: `<cs>.status()` returns OK; replica's Pod-0 becomes Ready after `createReplicaCluster` Job succeeds; replica's pods 1,2 boot via OrderedReady; status mirrors observed topology. |
 | Planned switchover                                      | GR           | Edit `spec.primaryCluster`. Validate: `SwitchoverInProgress` condition transitions through True → False; `status.currentPrimary` updates; data written to old primary pre-switchover is visible on new primary post-switchover.                                                 |
-| Force failover with old primary down                    | GR           | Kill the primary cluster's pods; set `allowForceFailover: true`; edit `spec.primaryCluster`. Validate: `ClusterInvalidated` condition surfaces for old primary; new primary accepts writes; bringing old primary back does not auto-rejoin.                                     |
-| Annotation-driven rejoin after force failover           | GR           | Apply rejoin annotation to a previously-INVALIDATED cluster. Validate: condition clears; data flows; annotation is removed by the controller.                                                                                                                                   |
+| Force failover with old primary down                    | GR           | Kill the primary cluster's pods; set `unsafeFlags.forcedFailover: true`; edit `spec.primaryCluster`. Validate: `ClusterInvalidated` condition surfaces for old primary; new primary accepts writes; bringing old primary back does not auto-rejoin.                             |
 | Deletion finalizer dissolves cleanly                    | GR           | Delete the CR. Validate: finalizer waits for any in-flight Job; runs `dissolve`; CR is removed; underlying clusters revert to standalone InnoDB Clusters and continue accepting traffic.                                                                                        |
 
 
