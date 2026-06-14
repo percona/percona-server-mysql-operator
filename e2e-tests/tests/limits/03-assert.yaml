@@ -320,13 +320,16 @@ spec:
           value: "true"
         - name: CLUSTER_NAME
           value: limits-no-requests
+        - name: ORC_API_AUTH
+          value: "true"
         imagePullPolicy: Always
         livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - curl -sf -u "readonly:readonly" "localhost:3000/api/lb-check"
           failureThreshold: 3
-          httpGet:
-            path: /api/lb-check
-            port: web
-            scheme: HTTP
           initialDelaySeconds: 10
           periodSeconds: 5
           successThreshold: 1
@@ -340,11 +343,12 @@ spec:
           name: raft
           protocol: TCP
         readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - curl -sf -u "readonly:readonly" "localhost:3000/api/health"
           failureThreshold: 3
-          httpGet:
-            path: /api/health
-            port: web
-            scheme: HTTP
           initialDelaySeconds: 30
           periodSeconds: 5
           successThreshold: 1
