@@ -335,6 +335,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 				cr.Spec.Orchestrator.Enabled = true
 				cr.Spec.Unsafe.Proxy = true
 				cr.Spec.Proxy.HAProxy.Enabled = false
+				cr.Status.HAProxy.ImageID = "docker-pullable://percona/haproxy@sha256:old"
 			}),
 			objects: appendSlices(
 				makeFakeReadyPods(cr, 3, "mysql"),
