@@ -381,6 +381,8 @@ spec:
           value: limits-no-limits-mysql
         - name: MYSQL_SERVICE
           value: limits-no-limits-mysql
+        - name: ORC_API_AUTH
+          value: "true"
         imagePullPolicy: Always
         name: mysql-monit
         resources: {}
