@@ -36,14 +36,11 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterSetStatus(ctx context.Con
 		return errors.Wrap(err, "get pods")
 	}
 
-	if len(pods) < int(cr.MySQLSpec().Size) {
+	// Setting the condition only requires the first pod to be queryable. Waiting
+	// for the full cluster would delay it (and everything derived from it, like
+	// the HAProxy is_clusterset_replica flag) until the last member finishes cloning.
+	if cr.Spec.Pause || len(pods) == 0 {
 		return nil
-	}
-
-	for _, pod := range pods {
-		if !k8s.IsPodReady(pod) {
-			return nil
-		}
 	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
@@ -51,13 +48,13 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterSetStatus(ctx context.Con
 		return errors.Wrap(err, "get operator password")
 	}
 
-	db := database.NewReplicationManager(&pods[0], r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.ServiceName(cr))
-	channelExists, err := db.GetClusterSetReplicationExists(ctx)
+	// Check for clusterset_replication channel running on any of the nodes.
+	replicationRunning, err := r.isClusterSetReplicationRunning(ctx, cr, operatorPass, pods)
 	if err != nil {
-		return errors.Wrap(err, "get cluster set replication exists")
+		return errors.Wrap(err, "check if cluster set replication is running")
 	}
 
-	if channelExists {
+	if replicationRunning {
 		if !meta.IsStatusConditionTrue(cr.Status.Conditions, apiv1.ConditionClusterSetReplicationRunning) {
 			if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), func(status *apiv1.PerconaServerMySQLStatus) error {
 				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
@@ -81,11 +78,26 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterSetStatus(ctx context.Con
 
 	// At this point we know that there was a channel running earlier, but not anymore.
 	// One of two things may have happened: (1) cluster was removed from clusterset, or (2) cluster was promoted to primary.
+	//
+	// This branch makes destructive decisions (lifting read-only, deleting pods), and its
+	// inputs (cluster role, member states) have transient look-alike states while pods are
+	// restarting or recovering. Only evaluate it once the cluster is settled: full size and
+	// every pod ready.
+	if len(pods) < int(cr.MySQLSpec().Size) {
+		return nil
+	}
+	for _, pod := range pods {
+		if !k8s.IsPodReady(pod) {
+			return nil
+		}
+	}
+
 	isClusterPrimary, err := r.isClusterRolePrimary(ctx, cr, operatorPass, pods[0])
 	if err != nil {
 		return errors.Wrap(err, "check if cluster is clusterset primary")
 	}
 
+	db := database.NewReplicationManager(&pods[0], r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.ServiceName(cr))
 	members, err := db.GetGroupReplicationMembers(ctx)
 	if err != nil {
 		return errors.Wrap(err, "get group replication members")
@@ -223,4 +235,24 @@ func (r *PerconaServerMySQLReconciler) recoverClustersetReplicaCluster(
 		return errors.Wrap(err, "write status condition")
 	}
 	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) isClusterSetReplicationRunning(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	operatorPass string,
+	pods []corev1.Pod,
+) (bool, error) {
+	for _, pod := range pods {
+		if !k8s.IsPodReady(pod) {
+			continue
+		}
+		db := database.NewReplicationManager(&pod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.ServiceName(cr))
+		if ok, err := db.GetClusterSetReplicationRunning(ctx); err != nil {
+			return false, errors.Wrap(err, "get cluster set replication running")
+		} else if ok {
+			return true, nil
+		}
+	}
+	return false, nil
 }

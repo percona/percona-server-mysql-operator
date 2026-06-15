@@ -1,13 +1,17 @@
 package ps
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"maps"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -19,6 +23,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 var _ = Describe("Keep user secrets", Ordered, func() {
@@ -209,6 +214,132 @@ func TestEnsureUserSecrets(t *testing.T) {
 					}
 				}
 			}
+		})
+	}
+}
+
+func TestValidateUserSecret(t *testing.T) {
+	s := func(clusterType apiv1.ClusterType, user apiv1.SystemUser, password []byte) *corev1.Secret {
+		cr := &apiv1.PerconaServerMySQL{
+			Spec: apiv1.PerconaServerMySQLSpec{
+				CRVersion: version.Version(),
+				MySQL: apiv1.MySQLSpec{
+					ClusterType: clusterType,
+				},
+			},
+		}
+		secret := &corev1.Secret{
+			Data: make(map[string][]byte),
+		}
+		for systemUser := range allSystemUsers(cr) {
+			secret.Data[string(systemUser)] = []byte("password")
+		}
+		secret.Data[string(user)] = password
+		return secret
+	}
+
+	tests := []struct {
+		name        string
+		clusterType apiv1.ClusterType
+		secret      *corev1.Secret
+		wantError   string
+	}{
+		{
+			name:        "nil secret",
+			clusterType: apiv1.ClusterTypeGR,
+			wantError:   "user secret is empty",
+		},
+		{
+			name:        "empty secret data",
+			clusterType: apiv1.ClusterTypeGR,
+			secret:      &corev1.Secret{},
+			wantError:   "user secret is empty",
+		},
+		{
+			name:        "missing password",
+			clusterType: apiv1.ClusterTypeGR,
+			secret: func() *corev1.Secret {
+				secret := s(apiv1.ClusterTypeGR, apiv1.UserRoot, []byte("password"))
+				delete(secret.Data, string(apiv1.UserMonitor))
+				return secret
+			}(),
+			wantError: "missing password for monitor user",
+		},
+		{
+			name:        "unknown user",
+			clusterType: apiv1.ClusterTypeGR,
+			secret:      s(apiv1.ClusterTypeGR, apiv1.SystemUser("unknown"), []byte("password")),
+			wantError:   "unknown user unknown is specified in the secret",
+		},
+		{
+			name:        "empty password",
+			clusterType: apiv1.ClusterTypeGR,
+			secret:      s(apiv1.ClusterTypeGR, apiv1.UserRoot, nil),
+			wantError:   "password is empty for root user",
+		},
+		{
+			name:        "NUL byte",
+			clusterType: apiv1.ClusterTypeGR,
+			secret:      s(apiv1.ClusterTypeGR, apiv1.UserRoot, []byte{'a', 0, 'b'}),
+			wantError:   "password for root user must not contain NUL bytes",
+		},
+		{
+			name:        "maximum MySQL password length",
+			clusterType: apiv1.ClusterTypeGR,
+			secret:      s(apiv1.ClusterTypeGR, apiv1.UserRoot, bytes.Repeat([]byte{'a'}, mySQLPasswordMaxLength)),
+		},
+		{
+			name:        "MySQL password too long",
+			clusterType: apiv1.ClusterTypeGR,
+			secret:      s(apiv1.ClusterTypeGR, apiv1.UserRoot, bytes.Repeat([]byte{'a'}, mySQLPasswordMaxLength+1)),
+			wantError:   "password for root user must not exceed 256 bytes",
+		},
+		{
+			name:        "maximum async replication password length",
+			clusterType: apiv1.ClusterTypeAsync,
+			secret:      s(apiv1.ClusterTypeAsync, apiv1.UserReplication, bytes.Repeat([]byte{'a'}, mySQLReplicationSourcePasswordMaxLength)),
+		},
+		{
+			name:        "async replication password too long",
+			clusterType: apiv1.ClusterTypeAsync,
+			secret:      s(apiv1.ClusterTypeAsync, apiv1.UserReplication, bytes.Repeat([]byte{'a'}, mySQLReplicationSourcePasswordMaxLength+1)),
+			wantError:   "password for replication user must not exceed 32 bytes",
+		},
+		{
+			name:        "async replication limit counts bytes",
+			clusterType: apiv1.ClusterTypeAsync,
+			secret:      s(apiv1.ClusterTypeAsync, apiv1.UserReplication, []byte(strings.Repeat("ї", 17))),
+			wantError:   "password for replication user must not exceed 32 bytes",
+		},
+		{
+			name:        "group replication does not use source password limit",
+			clusterType: apiv1.ClusterTypeGR,
+			secret:      s(apiv1.ClusterTypeGR, apiv1.UserReplication, bytes.Repeat([]byte{'a'}, mySQLReplicationSourcePasswordMaxLength+1)),
+		},
+		{
+			name:        "PMM server token is not a MySQL password",
+			clusterType: apiv1.ClusterTypeGR,
+			secret:      s(apiv1.ClusterTypeGR, apiv1.UserPMMServerToken, nil),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &apiv1.PerconaServerMySQL{
+				Spec: apiv1.PerconaServerMySQLSpec{
+					CRVersion: version.Version(),
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: tt.clusterType,
+					},
+				},
+			}
+			err := validateUserSecret(cr, tt.secret)
+			if tt.wantError == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.ErrorContains(t, err, tt.wantError)
 		})
 	}
 }

@@ -22,7 +22,7 @@ func TestClusterSetReplicaManagerJob(t *testing.T) {
 		},
 	}
 	cluster := &apiv1.ClusterSetCluster{
-		Name: "replica",
+		InnoDBClusterName: "replica",
 	}
 	args := []string{"--cluster", "replica"}
 

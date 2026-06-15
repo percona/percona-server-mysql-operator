@@ -6,6 +6,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
 	psmock "github.com/percona/percona-server-mysql-operator/pkg/controller/psclusterset/mock"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/stretchr/testify/assert"
@@ -28,7 +29,7 @@ var baseClusterSet = &apiv1.PerconaServerMySQLClusterSet{
 		PrimaryCluster: "dc1",
 		Clusters: []apiv1.ClusterSetCluster{
 			{
-				Name: "dc1",
+				InnoDBClusterName: "dc1",
 				Endpoints: []apiv1.ClusterSetClusterEndpoint{
 					{
 						Host: "dc1-mysql-primary.test-cluster-set.svc.cluster.local",
@@ -36,7 +37,7 @@ var baseClusterSet = &apiv1.PerconaServerMySQLClusterSet{
 				},
 			},
 			{
-				Name: "dc2",
+				InnoDBClusterName: "dc2",
 				Endpoints: []apiv1.ClusterSetClusterEndpoint{
 					{
 						Host: "dc2-mysql-0.test-cluster-set.svc.cluster.local",
@@ -377,6 +378,176 @@ func TestReconciler_reconcileSwitchover(t *testing.T) {
 	}
 }
 
+func TestReconciler_trackSwitchover(t *testing.T) {
+	switchoverJob := func(name string, status batchv1.JobStatus) *batchv1.Job {
+		labels := naming.Labels(clusterset.ClusterSetReplicaManagerAppName, baseClusterSet.Name, "percona-server", clusterset.ClusterSetReplicaManagerComponent)
+		labels["command"] = clusterset.CmdSetPrimary
+		return &batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   name,
+				Labels: labels,
+			},
+			Status: status,
+		}
+	}
+
+	inProgCondition := metav1.Condition{
+		Type:               apiv1.ConditionClusterSetPrimarySwitchOverInProg,
+		Status:             metav1.ConditionTrue,
+		Reason:             "SwitchoverInProgress",
+		LastTransitionTime: metav1.Now(),
+	}
+
+	testCases := []struct {
+		desc       string
+		clusterSet func() *apiv1.PerconaServerMySQLClusterSet
+		jobs       []client.Object
+		asserts    func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet)
+	}{
+		{
+			desc: "no switchover jobs removes condition",
+			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
+				pcs := baseClusterSet.DeepCopy()
+				pcs.Status.Conditions = []metav1.Condition{inProgCondition}
+				return pcs
+			},
+			asserts: func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet) {
+				cond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetPrimarySwitchOverInProg)
+				assert.Nil(t, cond)
+			},
+		},
+		{
+			desc: "switchover job not started yet",
+			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
+				return baseClusterSet.DeepCopy()
+			},
+			jobs: []client.Object{
+				switchoverJob("set-primary-dc2", batchv1.JobStatus{}),
+			},
+			asserts: func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet) {
+				cond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetPrimarySwitchOverInProg)
+				require.NotNil(t, cond)
+				assert.Equal(t, metav1.ConditionTrue, cond.Status)
+				assert.Equal(t, "SwitchoverInProgress", cond.Reason)
+			},
+		},
+		{
+			desc: "switchover job running",
+			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
+				return baseClusterSet.DeepCopy()
+			},
+			jobs: []client.Object{
+				switchoverJob("set-primary-dc2", batchv1.JobStatus{
+					StartTime: &metav1.Time{Time: metav1.Now().Time},
+					Active:    1,
+				}),
+			},
+			asserts: func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet) {
+				cond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetPrimarySwitchOverInProg)
+				require.NotNil(t, cond)
+				assert.Equal(t, metav1.ConditionTrue, cond.Status)
+				assert.Equal(t, "SwitchoverInProgress", cond.Reason)
+			},
+		},
+		{
+			desc: "switchover job completed removes condition",
+			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
+				pcs := baseClusterSet.DeepCopy()
+				pcs.Status.Conditions = []metav1.Condition{inProgCondition}
+				return pcs
+			},
+			jobs: []client.Object{
+				switchoverJob("set-primary-dc2", batchv1.JobStatus{
+					Succeeded: 1,
+					Conditions: []batchv1.JobCondition{
+						{
+							Type:   batchv1.JobComplete,
+							Status: corev1.ConditionTrue,
+						},
+					},
+				}),
+			},
+			asserts: func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet) {
+				cond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetPrimarySwitchOverInProg)
+				assert.Nil(t, cond)
+			},
+		},
+		{
+			desc: "switchover job failed",
+			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
+				pcs := baseClusterSet.DeepCopy()
+				pcs.Status.Conditions = []metav1.Condition{inProgCondition}
+				return pcs
+			},
+			jobs: []client.Object{
+				switchoverJob("set-primary-dc2", batchv1.JobStatus{
+					Failed: 1,
+					Conditions: []batchv1.JobCondition{
+						{
+							Type:   batchv1.JobFailed,
+							Status: corev1.ConditionTrue,
+						},
+					},
+				}),
+			},
+			asserts: func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet) {
+				cond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetPrimarySwitchOverInProg)
+				require.NotNil(t, cond)
+				assert.Equal(t, metav1.ConditionFalse, cond.Status)
+				assert.Equal(t, "SwitchoverFailed", cond.Reason)
+			},
+		},
+		{
+			desc: "jobs with other commands are ignored",
+			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
+				return baseClusterSet.DeepCopy()
+			},
+			jobs: []client.Object{
+				func() *batchv1.Job {
+					job := switchoverJob("add-replica-dc2", batchv1.JobStatus{Active: 1})
+					job.Labels["command"] = clusterset.CmdAddReplica
+					return job
+				}(),
+			},
+			asserts: func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet) {
+				cond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetPrimarySwitchOverInProg)
+				assert.Nil(t, cond)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			if err := clientgoscheme.AddToScheme(scheme); err != nil {
+				t.Fatal(err, "failed to add client-go scheme")
+			}
+			if err := apiv1.AddToScheme(scheme); err != nil {
+				t.Fatal(err, "failed to add apis scheme")
+			}
+
+			clusterSet := tc.clusterSet()
+			cl := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(append([]client.Object{clusterSet}, tc.jobs...)...).
+				WithStatusSubresource(clusterSet).
+				Build()
+
+			r := &PerconaServerMySQLClusterSetReconciler{
+				Client: cl,
+				Scheme: scheme,
+			}
+			err := r.trackSwitchover(t.Context(), clusterSet)
+			require.NoError(t, err)
+
+			observed := &apiv1.PerconaServerMySQLClusterSet{}
+			err = cl.Get(t.Context(), client.ObjectKeyFromObject(baseClusterSet), observed)
+			require.NoError(t, err)
+			tc.asserts(t, observed)
+		})
+	}
+}
+
 func TestReconciler_reconcileReplicas(t *testing.T) {
 	testCases := []struct {
 		desc       string
@@ -426,7 +597,7 @@ func TestReconciler_reconcileReplicas(t *testing.T) {
 				pcs.Spec.PrimaryCluster = "dc1"
 
 				pcs.Spec.Clusters = append(pcs.Spec.Clusters, apiv1.ClusterSetCluster{
-					Name: "dc3",
+					InnoDBClusterName: "dc3",
 					Endpoints: []apiv1.ClusterSetClusterEndpoint{
 						{
 							Host: "dc3-mysql-0.test-cluster-set.svc.cluster.local",
@@ -465,7 +636,7 @@ func TestReconciler_reconcileReplicas(t *testing.T) {
 
 				pcs.Spec.Clusters = []apiv1.ClusterSetCluster{
 					{
-						Name: "dc1",
+						InnoDBClusterName: "dc1",
 						Endpoints: []apiv1.ClusterSetClusterEndpoint{
 							{
 								Host: "dc1-mysql-primary.test-cluster-set.svc.cluster.local",
