@@ -565,6 +565,9 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 		if err := json.Unmarshal([]byte(cfg), &userConfig); err != nil {
 			return "", errors.Wrap(err, "unmarshal spec.orchestrator.configuration: must be a JSON object")
 		}
+		if userConfig == nil {
+			return "", errors.New("spec.orchestrator.configuration: must be a JSON object")
+		}
 		for k, v := range userConfig {
 			if reservedOrchestratorConfigKeys[k] {
 				continue
