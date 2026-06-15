@@ -7364,6 +7364,8 @@ spec:
                     type: array
                   expose:
                     properties:
+                      allocateLoadBalancerNodePorts:
+                        type: boolean
                       annotations:
                         additionalProperties:
                           type: string
@@ -7387,6 +7389,8 @@ spec:
                     type: object
                   exposePrimary:
                     properties:
+                      allocateLoadBalancerNodePorts:
+                        type: boolean
                       annotations:
                         additionalProperties:
                           type: string
@@ -10372,6 +10376,8 @@ spec:
                     type: array
                   expose:
                     properties:
+                      allocateLoadBalancerNodePorts:
+                        type: boolean
                       annotations:
                         additionalProperties:
                           type: string
@@ -11909,6 +11915,8 @@ spec:
                         type: array
                       expose:
                         properties:
+                          allocateLoadBalancerNodePorts:
+                            type: boolean
                           annotations:
                             additionalProperties:
                               type: string
@@ -13193,6 +13201,8 @@ spec:
                         type: array
                       expose:
                         properties:
+                          allocateLoadBalancerNodePorts:
+                            type: boolean
                           annotations:
                             additionalProperties:
                               type: string
@@ -14833,7 +14843,7 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.namespace
-        image: perconalab/percona-server-mysql-operator:main
+        image: perconalab/percona-server-mysql-operator:k8sps-496-allocateloadbalancernodeports
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
