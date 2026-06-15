@@ -147,6 +147,9 @@ spec:
             x-kubernetes-validations:
             - message: spec.primaryCluster not found in spec.clusters
               rule: self.clusters.exists(c, c.innodbClusterName == self.primaryCluster)
+            - message: endpoint host must be unique across all clusters
+              rule: self.clusters.all(c, c.endpoints.all(e, self.clusters.map(c2,
+                c2.endpoints.filter(e2, e2.host == e.host).size()).sum() == 1))
           status:
             properties:
               clusters:
