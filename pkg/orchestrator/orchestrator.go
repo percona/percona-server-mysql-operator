@@ -246,8 +246,8 @@ func container(cr *apiv1.PerconaServerMySQL) corev1.Container {
 			Value: cr.Name,
 		},
 	}
-	env = append(env, apiAuthEnv(cr)...)
 	env = append(env, cr.Spec.Orchestrator.Env...)
+	env = append(env, apiAuthEnv(cr)...)
 
 	return corev1.Container{
 		Name:            AppName,
