@@ -140,6 +140,10 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, errors.Wrap(err, "reconcile status")
 	}
 
+	if err := r.cleanupJobs(ctx, pcs); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "cleanup jobs")
+	}
+
 	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 
@@ -774,6 +778,24 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRBAC(ctx context.Conte
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "create or update service account")
+	}
+	return nil
+}
+
+func (r *PerconaServerMySQLClusterSetReconciler) cleanupJobs(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
+	jobs := &batchv1.JobList{}
+	labels := naming.Labels(clusterset.ClusterSetReplicaManagerAppName, pcs.Name, "percona-server", clusterset.ClusterSetReplicaManagerComponent)
+	if err := r.List(ctx, jobs, client.InNamespace(pcs.Namespace), client.MatchingLabels(labels)); err != nil {
+		return errors.Wrap(err, "list replica manager jobs")
+	}
+
+	for _, job := range jobs.Items {
+		if jobConditionTrue(&job, batchv1.JobComplete) {
+			if err := r.Delete(ctx, &job); client.IgnoreNotFound(err) != nil {
+				return errors.Wrap(err, "delete replica manager job")
+			}
+		}
+
 	}
 	return nil
 }
