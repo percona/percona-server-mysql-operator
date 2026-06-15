@@ -791,6 +791,9 @@ func (r *PerconaServerMySQLClusterSetReconciler) cleanupOutdatedJobs(ctx context
 	}
 
 	for _, job := range jobs.Items {
+		if job.Spec.TTLSecondsAfterFinished != nil {
+			continue
+		}
 		if jobConditionTrue(&job, batchv1.JobComplete) {
 			// Patch the Job with a TTLSecondsAfterFinished so that deletion is deferred.
 			// Immediate deletion can result in duplicate jobs if the informer cache is not updated fast enough.
