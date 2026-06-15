@@ -323,6 +323,7 @@ func TestPorts(t *testing.T) {
 
 func TestService(t *testing.T) {
 	podName := "test-cluster-router"
+	allocateNodePorts := false
 
 	cr := &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
@@ -340,7 +341,8 @@ func TestService(t *testing.T) {
 						Annotations: map[string]string{
 							"custom-annotation": "custom-annotation-value",
 						},
-						LoadBalancerSourceRanges: []string{"10.0.0.0/8"},
+						LoadBalancerSourceRanges:      []string{"10.0.0.0/8"},
+						AllocateLoadBalancerNodePorts: &allocateNodePorts,
 					},
 				},
 			},
@@ -393,8 +395,10 @@ func TestService(t *testing.T) {
 
 			if tt.expectLoadBalancer {
 				assert.Equal(t, cr.Spec.Proxy.Router.Expose.LoadBalancerSourceRanges, service.Spec.LoadBalancerSourceRanges)
+				assert.Equal(t, cr.Spec.Proxy.Router.Expose.AllocateLoadBalancerNodePorts, service.Spec.AllocateLoadBalancerNodePorts)
 			} else {
 				assert.Empty(t, service.Spec.LoadBalancerSourceRanges)
+				assert.Nil(t, service.Spec.AllocateLoadBalancerNodePorts)
 			}
 
 			if tt.expectExternalTrafficPolicy {

@@ -531,6 +531,7 @@ func expectedVolumes() []corev1.Volume {
 }
 
 func TestPrimaryService_GroupReplication(t *testing.T) {
+	allocateNodePorts := false
 	cr := &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
@@ -549,7 +550,8 @@ func TestPrimaryService_GroupReplication(t *testing.T) {
 						Annotations: map[string]string{
 							"custom-annotation": "custom-annotation-value",
 						},
-						LoadBalancerSourceRanges: []string{"10.0.0.0/8"},
+						LoadBalancerSourceRanges:      []string{"10.0.0.0/8"},
+						AllocateLoadBalancerNodePorts: &allocateNodePorts,
 					},
 				},
 			},
@@ -603,8 +605,10 @@ func TestPrimaryService_GroupReplication(t *testing.T) {
 
 			if tt.expectLoadBalancer {
 				assert.Equal(t, cr.Spec.MySQL.ExposePrimary.LoadBalancerSourceRanges, service.Spec.LoadBalancerSourceRanges)
+				assert.Equal(t, cr.Spec.MySQL.ExposePrimary.AllocateLoadBalancerNodePorts, service.Spec.AllocateLoadBalancerNodePorts)
 			} else {
 				assert.Empty(t, service.Spec.LoadBalancerSourceRanges)
+				assert.Nil(t, service.Spec.AllocateLoadBalancerNodePorts)
 			}
 
 			if tt.expectExternalTrafficPolicy {
@@ -620,6 +624,7 @@ func TestPrimaryService_GroupReplication(t *testing.T) {
 
 func TestPodService(t *testing.T) {
 	podName := "test-pod"
+	allocateNodePorts := false
 
 	cr := &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
@@ -639,7 +644,8 @@ func TestPodService(t *testing.T) {
 						Annotations: map[string]string{
 							"custom-annotation": "custom-annotation-value",
 						},
-						LoadBalancerSourceRanges: []string{"10.0.0.0/8"},
+						LoadBalancerSourceRanges:      []string{"10.0.0.0/8"},
+						AllocateLoadBalancerNodePorts: &allocateNodePorts,
 					},
 				},
 			},
@@ -694,8 +700,10 @@ func TestPodService(t *testing.T) {
 
 			if tt.expectLoadBalancer {
 				assert.Equal(t, cr.Spec.MySQL.Expose.LoadBalancerSourceRanges, service.Spec.LoadBalancerSourceRanges)
+				assert.Equal(t, cr.Spec.MySQL.Expose.AllocateLoadBalancerNodePorts, service.Spec.AllocateLoadBalancerNodePorts)
 			} else {
 				assert.Empty(t, service.Spec.LoadBalancerSourceRanges)
+				assert.Nil(t, service.Spec.AllocateLoadBalancerNodePorts)
 			}
 
 			if tt.expectExternalTrafficPolicy {

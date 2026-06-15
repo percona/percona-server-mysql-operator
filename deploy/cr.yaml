@@ -165,6 +165,7 @@ spec:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
 #        service.beta.kubernetes.io/aws-load-balancer-type: nlb
       enabled: true
+#      allocateLoadBalancerNodePorts: false
 #      externalTrafficPolicy: Cluster
 #      internalTrafficPolicy: Cluster
 #      labels:
@@ -259,6 +260,7 @@ spec:
 #          rack: rack-22
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
+#      allocateLoadBalancerNodePorts: false
 #        type: ClusterIP
       size: 3
       image: perconalab/percona-server-mysql-operator:main-haproxy
@@ -414,6 +416,7 @@ spec:
 #          rack: rack-22
 #        loadBalancerSourceRanges:
 #          - 10.0.0.0/8
+#        allocateLoadBalancerNodePorts: false
 #        type: ClusterIP
       size: 3
       image: perconalab/percona-server-mysql-operator:main-router8.4
@@ -555,6 +558,7 @@ spec:
 #        rack: rack-22
 #      loadBalancerSourceRanges:
 #        - 10.0.0.0/8
+#      allocateLoadBalancerNodePorts: false
 #      type: ClusterIP
     size: 3
     image: perconalab/percona-server-mysql-operator:main-orchestrator

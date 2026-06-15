@@ -400,8 +400,10 @@ func PodService(cr *apiv1.PerconaServerMySQL, t corev1.ServiceType, podName stri
 	selector["statefulset.kubernetes.io/pod-name"] = podName
 
 	var loadBalancerSourceRanges []string
+	var allocateLoadBalancerNodePorts *bool
 	if t == corev1.ServiceTypeLoadBalancer {
 		loadBalancerSourceRanges = expose.LoadBalancerSourceRanges
+		allocateLoadBalancerNodePorts = expose.AllocateLoadBalancerNodePorts
 	}
 
 	var externalTrafficPolicy corev1.ServiceExternalTrafficPolicyType
@@ -433,9 +435,10 @@ func PodService(cr *apiv1.PerconaServerMySQL, t corev1.ServiceType, podName stri
 					Port: defaultRaftPort,
 				},
 			},
-			LoadBalancerSourceRanges: loadBalancerSourceRanges,
-			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
-			ExternalTrafficPolicy:    externalTrafficPolicy,
+			LoadBalancerSourceRanges:      loadBalancerSourceRanges,
+			AllocateLoadBalancerNodePorts: allocateLoadBalancerNodePorts,
+			InternalTrafficPolicy:         expose.InternalTrafficPolicy,
+			ExternalTrafficPolicy:         externalTrafficPolicy,
 		},
 	}
 }
