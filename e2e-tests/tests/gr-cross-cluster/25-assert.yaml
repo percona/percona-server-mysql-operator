@@ -1,0 +1,35 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 600
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-cross-cluster-single-node-mysql
+status:
+  observedGeneration: 1
+  replicas: 1
+  currentReplicas: 1
+  updatedReplicas: 1
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-cross-cluster-single-node
+spec:
+  mysql:
+    bootstrap:
+      mode: manual
+status:
+  conditions:
+  - reason: Initializing
+    status: "True"
+    type: Initializing
+  - reason: Ready
+    status: "False"
+    type: Ready
+  - message: Awaiting external bootstrap
+    reason: ManualBootstrapRequested
+    status: "True"
+    type: AwaitingExternalBootstrap
+  state: initializing
