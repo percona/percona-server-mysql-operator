@@ -738,8 +738,8 @@ type ServiceExpose struct {
 	AllocateLoadBalancerNodePorts *bool                                    `json:"allocateLoadBalancerNodePorts,omitempty"`
 	Annotations                   map[string]string                        `json:"annotations,omitempty"`
 	Labels                        map[string]string                        `json:"labels,omitempty"`
-	InternalTrafficPolicy         *corev1.ServiceInternalTrafficPolicyType `json:"internalTrafficPolicy,omitempty"`
-	ExternalTrafficPolicy         corev1.ServiceExternalTrafficPolicyType  `json:"externalTrafficPolicy,omitempty"`
+	InternalTrafficPolicy         *corev1.ServiceInternalTrafficPolicyType `json:"internalTrafficPolicy,omitempty"` //nolint:staticcheck //FIXME: corev1.ServiceInternalTrafficPolicyType is deprecated, temporary disabling static checks
+	ExternalTrafficPolicy         corev1.ServiceExternalTrafficPolicyType  `json:"externalTrafficPolicy,omitempty"` //nolint:staticcheck //FIXME: corev1.ServiceInternalTrafficPolicyType is deprecated, temporary disabling static checks
 }
 
 // SaveOldMeta determines if both annotations and labels of the service expose are empty.
