@@ -460,7 +460,9 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 		echo
 	fi
 
-	load_group_replication_plugin
+	if [[ ${CLUSTER_TYPE} != "async" ]]; then
+		load_group_replication_plugin
+	fi
 	ensure_read_only
 
 	# exit when MYSQL_INIT_ONLY environment variable is set to avoid starting mysqld
