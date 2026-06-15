@@ -3,12 +3,21 @@ package clusterset
 import apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 
 const (
-	StatusHealthy string = "HEALTHY"
+	StatusHealthy     string = "HEALTHY"
+	StatusAvailable   string = "AVAILABLE"
+	StatusUnavailable string = "UNAVAILABLE"
 )
 
 const (
 	ClusterRolePrimary string = "PRIMARY"
 	ClusterRoleReplica string = "REPLICA"
+)
+
+const (
+	GlobalStatusOK             string = "OK"
+	GlobalStatusNotOK          string = "NOT_OK"
+	GlobalStatusUnknown        string = "UNKNOWN"
+	GlobalStatusNotReplicating string = "OK_NOT_REPLICATING"
 )
 
 type Status struct {

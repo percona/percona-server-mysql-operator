@@ -8,16 +8,20 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
-	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type mysqlshellClusterSetManager struct {
+type clusterSetManager struct {
 	shell *mysqlsh.MysqlshExec
+
+	// pcs, pass and conn back the Go-native Status() implementation, which
+	// connects directly to MySQL instead of going through mysqlsh.
+	pcs  *apiv1.PerconaServerMySQLClusterSet
+	pass string
+	conn connector
 }
 
 type ManagerOptions struct {
@@ -27,12 +31,36 @@ type ManagerOptions struct {
 	Stderr    io.Writer
 }
 
-func New(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, opts *ManagerOptions) (*mysqlshellClusterSetManager, error) {
-	runnerPod, err := getRunnerPod(ctx, opts.Client, pcs)
+func NewWithConnector(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, opts *ManagerOptions) (*clusterSetManager, error) {
+	pass, err := getClusterSetPassword(ctx, opts.Client, pcs)
 	if err != nil {
-		return nil, errors.Wrap(err, "get runner pod")
+		return nil, errors.Wrap(err, "get clusterset admin password")
 	}
 
+	primaryCluster := pcs.PrimaryCluster()
+	if primaryCluster == nil {
+		return nil, errors.New("primary cluster not found")
+	}
+
+	connector := sqlConnector{}
+	_, err = connector.connect(ctx, primaryCluster.Endpoints, pass)
+	if err != nil {
+		return nil, errors.Wrap(err, "connect to primary cluster")
+	}
+
+	return &clusterSetManager{
+		pcs:  pcs,
+		pass: pass,
+		conn: connector,
+	}, nil
+}
+
+func NewWithShellExec(
+	ctx context.Context,
+	pcs *apiv1.PerconaServerMySQLClusterSet,
+	execPod *corev1.Pod,
+	opts *ManagerOptions,
+) (*clusterSetManager, error) {
 	pass, err := getClusterSetPassword(ctx, opts.Client, pcs)
 	if err != nil {
 		return nil, errors.Wrap(err, "get clusterset admin password")
@@ -46,8 +74,8 @@ func New(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, opts *Man
 	for _, endpoint := range primaryCluster.Endpoints {
 		uri := mysqlsh.URI(string(apiv1.UserClusterSet), pass, endpoint.Host)
 		execOpts := &mysqlsh.ExecOptions{
-			Pod:           runnerPod,
-			ContainerName: "mysqlshell-runner",
+			Pod:           execPod,
+			ContainerName: "mysqlshell",
 			Client:        opts.ClientCmd,
 			Stdout:        opts.Stdout,
 			Stderr:        opts.Stderr,
@@ -64,7 +92,12 @@ func New(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, opts *Man
 			return nil, errors.Wrap(err, "ping")
 		}
 
-		return &mysqlshellClusterSetManager{shell: shell}, nil
+		return &clusterSetManager{
+			shell: shell,
+			pcs:   pcs,
+			pass:  pass,
+			conn:  sqlConnector{},
+		}, nil
 	}
 
 	return nil, errors.Wrap(mysqlsh.ErrEndpointUnreachable, "all endpoints are unreachable")
@@ -90,31 +123,7 @@ func getClusterSetPassword(ctx context.Context, cl client.Client, pcs *apiv1.Per
 	return string(password), nil
 }
 
-func getRunnerPod(ctx context.Context, cl client.Client, pcs *apiv1.PerconaServerMySQLClusterSet) (*corev1.Pod, error) {
-	selector := clusterset.MySQLShellRunner(pcs).Spec.Selector.MatchLabels
-	listOptions := &client.ListOptions{
-		Namespace:     pcs.Namespace,
-		LabelSelector: labels.SelectorFromSet(selector),
-	}
-
-	runnerPods := &corev1.PodList{}
-	if err := cl.List(ctx, runnerPods, listOptions); err != nil {
-		return nil, errors.Wrap(err, "list runner pods")
-	}
-
-	if len(runnerPods.Items) == 0 {
-		return nil, errors.New("no runner pods found")
-	}
-
-	if !k8s.IsPodReady(runnerPods.Items[0]) {
-		return nil, errors.New("runner pod is not ready")
-	}
-
-	runnerPod := runnerPods.Items[0]
-	return &runnerPod, nil
-}
-
-func (m *mysqlshellClusterSetManager) CreateClusterSet(ctx context.Context, clustersetName string, sslMode apiv1.ClusterSetSSLMode) error {
+func (m *clusterSetManager) CreateClusterSet(ctx context.Context, clustersetName string, sslMode apiv1.ClusterSetSSLMode) error {
 	if err := m.shell.CreateClusterSetWithExec(ctx, clustersetName, &mysqlsh.CreateClusterSetOptions{
 		SSLMode: sslMode,
 	}); err != nil {
@@ -123,14 +132,14 @@ func (m *mysqlshellClusterSetManager) CreateClusterSet(ctx context.Context, clus
 	return nil
 }
 
-func (m *mysqlshellClusterSetManager) CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster, recoveryMethod string) error {
+func (m *clusterSetManager) CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster, recoveryMethod string) error {
 	if err := m.shell.CreateReplicaClusterWithExec(ctx, cluster.InnoDBClusterName, recoveryMethod, cluster.Endpoints[0].Host, cluster.Endpoints[0].GetPort()); err != nil {
 		return errors.Wrap(err, "create replica cluster")
 	}
 	return nil
 }
 
-func (m *mysqlshellClusterSetManager) RemoveReplicaCluster(ctx context.Context, clusterName string, force bool) error {
+func (m *clusterSetManager) RemoveReplicaCluster(ctx context.Context, clusterName string, force bool) error {
 	if err := m.shell.RemoveReplicaClusterWithExec(ctx, clusterName, force); err != nil {
 		return errors.Wrap(err, "remove replica cluster")
 	}
@@ -139,7 +148,7 @@ func (m *mysqlshellClusterSetManager) RemoveReplicaCluster(ctx context.Context, 
 
 var AlreadyPrimaryClusterError = errors.New("already the primary cluster")
 
-func (m *mysqlshellClusterSetManager) SetPrimaryCluster(ctx context.Context, clusterName string) error {
+func (m *clusterSetManager) SetPrimaryCluster(ctx context.Context, clusterName string) error {
 	if err := m.shell.SetPrimaryClusterWithExec(ctx, clusterName); err != nil {
 		if strings.Contains(err.Error(), "already the PRIMARY cluster") {
 			return AlreadyPrimaryClusterError
@@ -149,13 +158,13 @@ func (m *mysqlshellClusterSetManager) SetPrimaryCluster(ctx context.Context, clu
 	return nil
 }
 
-func (m *mysqlshellClusterSetManager) ForcePrimaryCluster(ctx context.Context, clusterName string) error {
+func (m *clusterSetManager) ForcePrimaryCluster(ctx context.Context, clusterName string) error {
 	if err := m.shell.ForcePrimaryClusterWithExec(ctx, clusterName); err != nil {
 		return errors.Wrap(err, "force primary cluster")
 	}
 	return nil
 }
 
-func (m *mysqlshellClusterSetManager) Status(ctx context.Context) (clusterset.Status, error) {
-	return m.shell.ClusterSetStatusWithExec(ctx)
+func (m *clusterSetManager) Status(ctx context.Context) (clusterset.Status, error) {
+	return computeStatus(ctx, m.pcs, m.pass, m.conn)
 }

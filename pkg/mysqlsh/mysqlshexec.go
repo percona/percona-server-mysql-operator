@@ -15,7 +15,6 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
-	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
@@ -240,27 +239,6 @@ func (m *MysqlshExec) ForcePrimaryClusterWithExec(ctx context.Context, clusterNa
 		return errors.Wrap(err, "force primary cluster")
 	}
 	return nil
-}
-
-func (m *MysqlshExec) ClusterSetStatusWithExec(ctx context.Context) (clusterset.Status, error) {
-	status := clusterset.Status{}
-
-	stdoutBuffer := bytes.Buffer{}
-	stderrBuffer := bytes.Buffer{}
-
-	c := []string{"mysqlsh", "--result-format", "json", "--js", "--uri", m.uri, "-e", "print(JSON.stringify(dba.getCluster().getClusterSet().status()))"}
-	err := m.client.Exec(ctx, m.pod, m.containerName, c, nil, &stdoutBuffer, &stderrBuffer, false)
-	if err != nil {
-		sout := sensitiveRegexp.ReplaceAllString(stdoutBuffer.String(), ":*****@")
-		serr := sensitiveRegexp.ReplaceAllString(stderrBuffer.String(), ":*****@")
-		return status, errors.Wrapf(err, "stdout: %s, stderr: %s", sout, serr)
-	}
-
-	if err := json.Unmarshal(stdoutBuffer.Bytes(), &status); err != nil {
-		return status, errors.Wrap(err, "unmarshal status")
-	}
-
-	return status, nil
 }
 
 var ErrEndpointUnreachable = errors.New("endpoint unreachable")

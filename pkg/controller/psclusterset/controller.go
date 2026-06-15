@@ -46,7 +46,6 @@ type PerconaServerMySQLClusterSetReconciler struct {
 }
 
 type ClusterSetManager interface {
-	CreateClusterSet(ctx context.Context, clustersetName string, sslMode apiv1.ClusterSetSSLMode) error
 	ForcePrimaryCluster(ctx context.Context, clusterName string) error
 	Status(ctx context.Context) (clusterset.Status, error)
 }
@@ -61,7 +60,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) SetupWithManager(mgr ctrl.Manag
 				ClientCmd: r.ClientCmd,
 				Stdout:    &bytes.Buffer{},
 			}
-			return csmanager.New(ctx, pcs, opts)
+			return csmanager.NewWithConnector(ctx, pcs, opts)
 		}
 	}
 
@@ -83,8 +82,6 @@ func (r *PerconaServerMySQLClusterSetReconciler) SetupWithManager(mgr ctrl.Manag
 
 // Reconcile reconciles the PerconaServerMySQLClusterSet custom resource.
 func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := logf.FromContext(ctx).WithName("PerconaServerMySQLClusterSet")
-
 	pcs := &apiv1.PerconaServerMySQLClusterSet{}
 	if err := r.Get(ctx, req.NamespacedName, pcs); err != nil {
 		if k8serrors.IsNotFound(err) {
@@ -95,19 +92,14 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 
 	pcs.SetDefaults()
 
+	log := logf.FromContext(ctx)
+
 	if !pcs.GetDeletionTimestamp().IsZero() {
 		return ctrl.Result{}, r.reconcileFinalizers(ctx, pcs)
 	}
 
 	if err := r.reconcileRBAC(ctx, pcs); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "reconcile RBAC")
-	}
-
-	if ready, err := r.reconcileMySQLShellRunner(ctx, pcs); err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "reconcile MySQLShellRunner")
-	} else if !ready {
-		log.Info("Waiting for mysqlshell runner to be ready")
-		return ctrl.Result{}, nil
 	}
 
 	manager, err := r.getClusterSetManager(ctx, pcs)
@@ -124,8 +116,11 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, errors.Wrap(err, "get cluster set manager")
 	}
 
-	if err := r.bootstrapClusterSet(ctx, pcs, manager); err != nil {
+	if bootstrapped, err := r.bootstrapClusterSet(ctx, pcs); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "bootstrap ClusterSet")
+	} else if !bootstrapped {
+		log.Info("Waiting for ClusterSet to be bootstrapped")
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	if err := r.reconcileReplicas(ctx, pcs); err != nil {
@@ -175,84 +170,67 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcilePrimaryClusterUnreacha
 	})
 }
 
-//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-
-// reconcileMySQLShellRunner reconciles the MySQLShellRunner deployment for the ClusterSet.
-func (r *PerconaServerMySQLClusterSetReconciler) reconcileMySQLShellRunner(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) (bool, error) {
-	desired := clusterset.MySQLShellRunner(pcs)
-	actual := desired.DeepCopy()
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, actual, func() error {
-		if err := controllerutil.SetControllerReference(pcs, actual, r.Scheme); err != nil {
-			return errors.Wrap(err, "set controller reference")
-		}
-		actual.Spec = desired.Spec
-		actual.Labels = desired.Labels
-		return nil
-	}); err != nil {
-		return false, errors.Wrap(err, "create or update MySQLShellRunner")
-	}
-
-	if err := r.Get(ctx, client.ObjectKeyFromObject(actual), actual); err != nil {
-		return false, errors.Wrap(err, "get mysqlshell runner deployment")
-	}
-
-	status, err := k8s.KStatusCompute(actual)
-	if err != nil {
-		return false, errors.Wrap(err, "compute status")
-	}
-
-	cond := metav1.Condition{
-		Type:   apiv1.ConditionMySQLShellRunnerReady,
-		Status: metav1.ConditionUnknown,
-		Reason: "DeploymentNotObserved",
-	}
-
-	ready := false
-	switch status.Status {
-	case kstatus.CurrentStatus:
-		cond.Status = metav1.ConditionTrue
-		cond.Reason = "DeploymentReady"
-		ready = true
-	case kstatus.InProgressStatus:
-		cond.Status = metav1.ConditionFalse
-		cond.Reason = "DeploymentNotReady"
-	case kstatus.FailedStatus:
-		cond.Status = metav1.ConditionFalse
-		cond.Reason = "DeploymentFailed"
-	}
-
-	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
-		meta.SetStatusCondition(&status.Conditions, cond)
-		return nil
-	}); err != nil {
-		return false, errors.Wrap(err, "update status")
-	}
-	return ready, nil
-}
-
-func (r *PerconaServerMySQLClusterSetReconciler) bootstrapClusterSet(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, manager ClusterSetManager) error {
+func (r *PerconaServerMySQLClusterSetReconciler) bootstrapClusterSet(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) (bool, error) {
 	// Already bootstrapped, early return.
 	if meta.IsStatusConditionTrue(pcs.Status.Conditions, apiv1.ConditionClusterSetBootstrapped) {
-		return nil
+		return true, nil
 	}
 
 	primaryCluster := pcs.PrimaryCluster()
 	if primaryCluster == nil {
-		return errors.New("primary cluster not found in spec")
+		return false, errors.New("primary cluster not found in spec")
 	}
 
 	log := logf.FromContext(ctx).WithValues("primaryCluster", primaryCluster.InnoDBClusterName)
 
-	sslMode := apiv1.ClusterSetSSLModeAuto
-	if pcs.Spec.SSLMode != nil {
-		sslMode = *pcs.Spec.SSLMode
+	if err := r.runClusterSetJob(ctx, clusterset.CmdCreateClusterSet, pcs, &apiv1.ClusterSetCluster{InnoDBClusterName: pcs.GetName()}); err != nil {
+		return false, errors.Wrap(err, "create cluster set")
 	}
-	log.Info("Creating ClusterSet")
-	if err := manager.CreateClusterSet(ctx, pcs.GetName(), sslMode); err != nil {
-		return errors.Wrap(err, "create cluster set")
+
+	jobs := &batchv1.JobList{}
+	labels := naming.Labels(clusterset.ClusterSetManagerAppName, pcs.Name, "percona-server", clusterset.ClusterSetManagerComponent)
+	labels["command"] = clusterset.CmdCreateClusterSet
+	if err := r.List(ctx, jobs, client.InNamespace(pcs.Namespace), client.MatchingLabels(labels)); err != nil {
+		return false, errors.Wrap(err, "list cluster set jobs")
+	}
+
+	if len(jobs.Items) == 0 {
+		// Not yet observed by the cache
+		return false, nil
+	}
+
+	if jobConditionTrue(&jobs.Items[0], batchv1.JobFailed) {
+		if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
+			meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+				Type:    apiv1.ConditionClusterSetBootstrapped,
+				Status:  metav1.ConditionFalse,
+				Reason:  "ClusterSetBootstrapFailed",
+				Message: "ClusterSet bootstrapped failed",
+			})
+			meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+				Type:    apiv1.ConditionClusterSetReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  "ClusterSetBootstrapFailed",
+				Message: "ClusterSet bootstrapped failed",
+			})
+			return nil
+		}); err != nil {
+			return false, errors.Wrap(err, "update status")
+		}
+		return false, nil
+	}
+
+	if !jobConditionTrue(&jobs.Items[0], batchv1.JobComplete) {
+		return false, nil
 	}
 
 	log.Info("ClusterSet bootstrapped")
+
+	orig := jobs.Items[0].DeepCopy()
+	orig.Spec.TTLSecondsAfterFinished = new(int32(10))
+	if err := r.Patch(ctx, orig, client.MergeFrom(&jobs.Items[0])); err != nil {
+		return false, errors.Wrap(err, "patch cluster set job")
+	}
 
 	r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetBootstrapped,
 		apiv1.EventTypeClusterSetBootstrapped, "ClusterSet bootstrapped for primary cluster %s", primaryCluster.InnoDBClusterName)
@@ -266,9 +244,10 @@ func (r *PerconaServerMySQLClusterSetReconciler) bootstrapClusterSet(ctx context
 		status.PrimaryCluster = primaryCluster.InnoDBClusterName
 		return nil
 	}); err != nil {
-		return errors.Wrap(err, "update status")
+		return false, errors.Wrap(err, "update status")
 	}
-	return nil
+
+	return false, nil
 }
 
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;delete
@@ -302,7 +281,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileReplicas(ctx context.C
 }
 
 func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
-	labels := naming.Labels(clusterset.ClusterSetReplicaManagerAppName, pcs.Name, "percona-server", clusterset.ClusterSetReplicaManagerComponent)
+	labels := naming.Labels(clusterset.ClusterSetManagerAppName, pcs.Name, "percona-server", clusterset.ClusterSetManagerComponent)
 	labels["command"] = clusterset.CmdSetPrimary
 	jobs := &batchv1.JobList{}
 	if err := r.List(ctx, jobs, client.InNamespace(pcs.Namespace), client.MatchingLabels(labels)); err != nil {
@@ -355,7 +334,7 @@ func jobConditionTrue(job *batchv1.Job, condType batchv1.JobConditionType) bool 
 }
 
 func (r *PerconaServerMySQLClusterSetReconciler) trackReplicaTopologyChanges(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
-	labels := naming.Labels(clusterset.ClusterSetReplicaManagerAppName, pcs.Name, "percona-server", clusterset.ClusterSetReplicaManagerComponent)
+	labels := naming.Labels(clusterset.ClusterSetManagerAppName, pcs.Name, "percona-server", clusterset.ClusterSetManagerComponent)
 
 	jobs := &batchv1.JobList{}
 	if err := r.List(ctx, jobs, client.InNamespace(pcs.Namespace), client.MatchingLabels(labels)); err != nil {
@@ -417,6 +396,8 @@ func (r *PerconaServerMySQLClusterSetReconciler) runClusterSetJob(
 	cluster *apiv1.ClusterSetCluster,
 ) error {
 
+	mysqlShellImage := pcs.Spec.MySQLShellRunner.Image
+
 	args := []string{}
 	args = append(args, "--ps-cluster-set-name="+pcs.Name)
 	args = append(args, "--namespace="+pcs.Namespace)
@@ -431,20 +412,15 @@ func (r *PerconaServerMySQLClusterSetReconciler) runClusterSetJob(
 		args = append(args, "--replica-cluster-name="+cluster.InnoDBClusterName)
 	}
 
-	job := clusterset.ClusterSetReplicaManagerJob(pcs, cluster, command, args, r.jobImage, clustersetServiceAccount(pcs).Name)
+	job := clusterset.ClusterSetManagerJob(pcs, cluster, mysqlShellImage, command, args, r.jobImage, clustersetServiceAccount(pcs).Name)
 	err := r.Get(ctx, client.ObjectKeyFromObject(job), job)
-
-	verb := "Adding to"
-	if command == clusterset.CmdRemoveReplica {
-		verb = "Removing from"
-	}
 
 	log := logf.FromContext(ctx).WithValues("clusterName", cluster.InnoDBClusterName)
 	if k8serrors.IsNotFound(err) {
 		if err := controllerutil.SetControllerReference(pcs, job, r.Scheme); err != nil {
 			return errors.Wrap(err, "set controller reference")
 		}
-		log.Info(fmt.Sprintf("%s ClusterSet", verb))
+		log.Info("Creating ClusterSet job", "jobName", job.Name, "command", command)
 		return r.Create(ctx, job)
 	} else if err != nil {
 		return errors.Wrap(err, "get replica manager job")
@@ -494,16 +470,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileForcedFailover(
 		return nil
 	}
 
-	log.Info("Initiating forced failover")
-
-	temp := pcs.DeepCopy()
-	temp.Status.PrimaryCluster = ""
-	manager, err := r.getClusterSetManager(ctx, temp)
-	if err != nil {
-		return errors.Wrap(err, "get cluster set manager")
-	}
-
-	if err := manager.ForcePrimaryCluster(ctx, pcs.Spec.PrimaryCluster); err != nil {
+	if err := r.runClusterSetJob(ctx, clusterset.CmdForcePrimary, pcs, &apiv1.ClusterSetCluster{InnoDBClusterName: pcs.Spec.PrimaryCluster}); err != nil {
 		return errors.Wrap(err, "force primary cluster")
 	}
 
@@ -784,9 +751,9 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRBAC(ctx context.Conte
 
 func (r *PerconaServerMySQLClusterSetReconciler) cleanupJobs(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
 	jobs := &batchv1.JobList{}
-	labels := naming.Labels(clusterset.ClusterSetReplicaManagerAppName, pcs.Name, "percona-server", clusterset.ClusterSetReplicaManagerComponent)
+	labels := naming.Labels(clusterset.ClusterSetManagerAppName, pcs.Name, "percona-server", clusterset.ClusterSetManagerComponent)
 	if err := r.List(ctx, jobs, client.InNamespace(pcs.Namespace), client.MatchingLabels(labels)); err != nil {
-		return errors.Wrap(err, "list replica manager jobs")
+		return errors.Wrap(err, "list cluster set manager jobs")
 	}
 
 	for _, job := range jobs.Items {

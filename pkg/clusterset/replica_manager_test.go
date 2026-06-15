@@ -14,7 +14,7 @@ import (
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
 
-func TestClusterSetReplicaManagerJob(t *testing.T) {
+func TestClusterSetManagerJob(t *testing.T) {
 	pcs := &apiv1.PerconaServerMySQLClusterSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster-set",
@@ -26,14 +26,14 @@ func TestClusterSetReplicaManagerJob(t *testing.T) {
 	}
 	args := []string{"--cluster", "replica"}
 
-	job := ClusterSetReplicaManagerJob(pcs, cluster, CmdAddReplica, args, "replica-manager:latest", "replica-manager-sa")
+	job := ClusterSetManagerJob(pcs, cluster, "mysqlshell:latest", CmdAddReplica, args, "clusterset-manager:latest", "clusterset-manager-sa")
 
 	expectedLabels := map[string]string{
-		"app.kubernetes.io/name":       ClusterSetReplicaManagerAppName,
+		"app.kubernetes.io/name":       ClusterSetManagerAppName,
 		"app.kubernetes.io/instance":   "cluster-set",
 		"app.kubernetes.io/part-of":    "percona-server",
 		"app.kubernetes.io/managed-by": "percona-server-mysql-operator",
-		"app.kubernetes.io/component":  ClusterSetReplicaManagerComponent,
+		"app.kubernetes.io/component":  ClusterSetManagerComponent,
 		"cluster-name":                 "replica",
 		"command":                      CmdAddReplica,
 	}
@@ -54,10 +54,10 @@ func TestClusterSetReplicaManagerJob(t *testing.T) {
 				ServiceAccountName: "replica-manager-sa",
 				Containers: []corev1.Container{
 					{
-						Name:            ClusterSetReplicaManagerAppName,
-						Image:           "replica-manager:latest",
+						Name:            ClusterSetManagerAppName,
+						Image:           "clusterset-manager:latest",
 						ImagePullPolicy: corev1.PullAlways,
-						Command:         []string{clusterSetReplicaManagerBinaryPath},
+						Command:         []string{clusterSetManagerBinaryPath},
 						Args:            []string{CmdAddReplica, "--cluster", "replica"},
 						Resources: corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{

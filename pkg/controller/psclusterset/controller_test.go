@@ -380,7 +380,7 @@ func TestReconciler_reconcileSwitchover(t *testing.T) {
 
 func TestReconciler_trackSwitchover(t *testing.T) {
 	switchoverJob := func(name string, status batchv1.JobStatus) *batchv1.Job {
-		labels := naming.Labels(clusterset.ClusterSetReplicaManagerAppName, baseClusterSet.Name, "percona-server", clusterset.ClusterSetReplicaManagerComponent)
+		labels := naming.Labels(clusterset.ClusterSetManagerAppName, baseClusterSet.Name, "percona-server", clusterset.ClusterSetManagerComponent)
 		labels["command"] = clusterset.CmdSetPrimary
 		return &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{

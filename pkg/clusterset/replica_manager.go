@@ -13,23 +13,26 @@ import (
 )
 
 const (
-	ClusterSetReplicaManagerAppName    = "clusterset-replica-manager"
-	ClusterSetReplicaManagerComponent  = "clusterset-replica-manager"
-	clusterSetReplicaManagerBinaryPath = "/opt/percona-server-mysql-operator/clusterset-replica-manager"
+	ClusterSetManagerAppName    = "clusterset-manager"
+	ClusterSetManagerComponent  = "clusterset-manager"
+	clusterSetManagerBinaryPath = "/opt/percona-server-mysql-operator/clusterset-manager"
 
-	CmdAddReplica    = "add-replica"
-	CmdRemoveReplica = "remove-replica"
-	CmdSetPrimary    = "set-primary"
+	CmdAddReplica       = "add-replica"
+	CmdRemoveReplica    = "remove-replica"
+	CmdSetPrimary       = "set-primary"
+	CmdForcePrimary     = "force-primary"
+	CmdCreateClusterSet = "create-cluster-set"
 )
 
-func ClusterSetReplicaManagerJob(
+func ClusterSetManagerJob(
 	pcs *apiv1.PerconaServerMySQLClusterSet,
 	cluster *apiv1.ClusterSetCluster,
+	mysqlShellImage string,
 	cmd string,
 	args []string,
 	image, serviceAccount string,
 ) *batchv1.Job {
-	labels := naming.Labels(ClusterSetReplicaManagerAppName, pcs.Name, "percona-server", ClusterSetReplicaManagerComponent)
+	labels := naming.Labels(ClusterSetManagerAppName, pcs.Name, "percona-server", ClusterSetManagerComponent)
 	labels["cluster-name"] = cluster.InnoDBClusterName
 	labels["command"] = cmd
 
@@ -52,12 +55,32 @@ func ClusterSetReplicaManagerJob(
 				Spec: corev1.PodSpec{
 					RestartPolicy:      corev1.RestartPolicyNever,
 					ServiceAccountName: serviceAccount,
+					// Native sidecar
+					InitContainers: []corev1.Container{
+						{
+							Name:            "mysqlshell",
+							Image:           mysqlShellImage,
+							ImagePullPolicy: corev1.PullAlways,
+							Command:         []string{"sleep", "infinity"},
+							RestartPolicy:   new(corev1.ContainerRestartPolicyAlways),
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("100m"),
+									corev1.ResourceMemory: resource.MustParse("128Mi"),
+								},
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("100m"),
+									corev1.ResourceMemory: resource.MustParse("128Mi"),
+								},
+							},
+						},
+					},
 					Containers: []corev1.Container{
 						{
-							Name:            ClusterSetReplicaManagerAppName,
+							Name:            ClusterSetManagerAppName,
 							Image:           image,
 							ImagePullPolicy: corev1.PullAlways,
-							Command:         []string{clusterSetReplicaManagerBinaryPath},
+							Command:         []string{clusterSetManagerBinaryPath},
 							Args:            args,
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
@@ -67,6 +90,25 @@ func ClusterSetReplicaManagerJob(
 								Limits: corev1.ResourceList{
 									corev1.ResourceCPU:    resource.MustParse("100m"),
 									corev1.ResourceMemory: resource.MustParse("128Mi"),
+								},
+							},
+
+							Env: []corev1.EnvVar{
+								{
+									Name: "POD_NAME",
+									ValueFrom: &corev1.EnvVarSource{
+										FieldRef: &corev1.ObjectFieldSelector{
+											FieldPath: "metadata.name",
+										},
+									},
+								},
+								{
+									Name: "POD_NAMESPACE",
+									ValueFrom: &corev1.EnvVarSource{
+										FieldRef: &corev1.ObjectFieldSelector{
+											FieldPath: "metadata.namespace",
+										},
+									},
 								},
 							},
 						},

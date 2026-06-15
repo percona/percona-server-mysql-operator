@@ -8,9 +8,13 @@ import (
 	"os"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
+
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
+	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
 	csmanager "github.com/percona/percona-server-mysql-operator/pkg/clusterset/manager"
+
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -31,9 +35,11 @@ type replicaInitArgs struct {
 }
 
 type replicaManager interface {
+	CreateClusterSet(ctx context.Context, clustersetName string, sslMode apiv1.ClusterSetSSLMode) error
 	CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster, recoverMethod string) error
 	RemoveReplicaCluster(ctx context.Context, clusterName string, force bool) error
 	SetPrimaryCluster(ctx context.Context, clusterName string) error
+	ForcePrimaryCluster(ctx context.Context, clusterName string) error
 }
 
 func main() {
@@ -77,7 +83,12 @@ func main() {
 		log.Fatalf("failed to create clientcmd: %v", err)
 	}
 
-	manager, err := csmanager.New(ctx, psClusterSet, &csmanager.ManagerOptions{
+	pod, err := getSelfPod(ctx, cl)
+	if err != nil {
+		log.Fatalf("failed to get self pod: %v", err)
+	}
+
+	manager, err := csmanager.NewWithShellExec(ctx, psClusterSet, pod, &csmanager.ManagerOptions{
 		Client:    cl,
 		ClientCmd: cliCmd,
 		// mysqlsh reports progress on stderr; send both streams to stdout for job logs.
@@ -89,23 +100,49 @@ func main() {
 	}
 
 	switch os.Args[1] {
-	case "add-replica":
+	case clusterset.CmdCreateClusterSet:
+		if err := createClusterSet(ctx, manager, args); err != nil {
+			log.Fatalf("failed to create cluster set: %v", err)
+		}
+	case clusterset.CmdAddReplica:
 		if err := addReplica(ctx, manager, args); err != nil {
 			log.Fatalf("failed to add replica: %v", err)
 		}
-	case "remove-replica":
+	case clusterset.CmdRemoveReplica:
 		force := psClusterSet.Spec.UnsafeClusterSetFlags.ForcedClusterRemoval != nil && *psClusterSet.Spec.UnsafeClusterSetFlags.ForcedClusterRemoval
 		if err := removeReplica(ctx, manager, args, force); err != nil {
 			log.Fatalf("failed to remove replica: %v", err)
 		}
-
-	case "set-primary":
+	case clusterset.CmdSetPrimary:
 		if err := setPrimary(ctx, manager, psClusterSet.Spec.PrimaryCluster); err != nil {
 			log.Fatalf("failed to set primary cluster: %v", err)
+		}
+	case clusterset.CmdForcePrimary:
+		if err := forcePrimary(ctx, manager, psClusterSet.Spec.PrimaryCluster); err != nil {
+			log.Fatalf("failed to force primary cluster: %v", err)
 		}
 	default:
 		log.Fatalf("invalid command: %s", os.Args[1])
 	}
+}
+
+func forcePrimary(ctx context.Context, manager replicaManager, clusterName string) error {
+	log.Printf("Forcefully setting primary cluster to '%s'", clusterName)
+	if err := manager.ForcePrimaryCluster(ctx, clusterName); err != nil {
+		return errors.Wrap(err, "failed to force primary cluster")
+	}
+	log.Printf("Primary cluster '%s' forcefully set", clusterName)
+	return nil
+}
+
+func createClusterSet(ctx context.Context, manager replicaManager, args replicaInitArgs) error {
+	log.Printf("Creating cluster set '%s'", args.psClusterSetName)
+	if err := manager.CreateClusterSet(ctx, args.psClusterSetName, apiv1.ClusterSetSSLModeAuto); err != nil {
+		return errors.Wrap(err, "failed to create cluster set")
+	}
+	log.Printf("Cluster set '%s' created", args.psClusterSetName)
+	return nil
+
 }
 
 func addReplica(ctx context.Context, manager replicaManager, args replicaInitArgs) error {
@@ -172,4 +209,17 @@ func newScheme() (*runtime.Scheme, error) {
 		return nil, fmt.Errorf("add percona types to scheme: %w", err)
 	}
 	return scheme, nil
+}
+
+func getSelfPod(ctx context.Context, cl client.Client) (*corev1.Pod, error) {
+	podName := os.Getenv("POD_NAME")
+	podNamespace := os.Getenv("POD_NAMESPACE")
+	if podName == "" || podNamespace == "" {
+		return nil, errors.New("POD_NAME and POD_NAMESPACE must be set")
+	}
+	pod := &corev1.Pod{}
+	if err := cl.Get(ctx, types.NamespacedName{Namespace: podNamespace, Name: podName}, pod); err != nil {
+		return nil, errors.Wrap(err, "failed to get self pod")
+	}
+	return pod, nil
 }

@@ -57,9 +57,9 @@ RUN GOOS=$GOOS GOARCH=$TARGETARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAG
     && cp -r build/_output/bin/pitr /usr/local/bin/pitr
 RUN GOOS=$GOOS GOARCH=$TARGETARCH CGO_ENABLED=$CGO_ENABLED GO_LDFLAGS=$GO_LDFLAGS \
     go build -ldflags "-w -s -X main.GitCommit=$GIT_COMMIT -X main.GitBranch=$GIT_BRANCH -X main.BuildTime=$BUILD_TIME" \
-    -o build/_output/bin/clusterset-replica-manager \
-    ./cmd/clusterset-replica-manager/ \
-    && cp -r build/_output/bin/clusterset-replica-manager /usr/local/bin/clusterset-replica-manager
+    -o build/_output/bin/clusterset-manager \
+    ./cmd/clusterset-manager/ \
+    && cp -r build/_output/bin/clusterset-manager /usr/local/bin/clusterset-manager
 
 FROM redhat/ubi9-minimal AS ubi9
 RUN microdnf -y update && microdnf clean all
@@ -80,7 +80,7 @@ COPY --from=go_builder /usr/local/bin/sidecar /opt/percona-server-mysql-operator
 COPY --from=go_builder /usr/local/bin/peer-list /opt/percona-server-mysql-operator/peer-list
 COPY --from=go_builder /usr/local/bin/orc-handler /opt/percona-server-mysql-operator/orc-handler
 COPY --from=go_builder /usr/local/bin/mysql-state-monitor /opt/percona-server-mysql-operator/mysql-state-monitor
-COPY --from=go_builder /usr/local/bin/clusterset-replica-manager /opt/percona-server-mysql-operator/clusterset-replica-manager
+COPY --from=go_builder /usr/local/bin/clusterset-manager /opt/percona-server-mysql-operator/clusterset-manager
 COPY build/ps-entrypoint.sh /opt/percona-server-mysql-operator/ps-entrypoint.sh
 COPY build/ps-pre-stop.sh /opt/percona-server-mysql-operator/ps-pre-stop.sh
 COPY build/heartbeat-entrypoint.sh /opt/percona-server-mysql-operator/heartbeat-entrypoint.sh
