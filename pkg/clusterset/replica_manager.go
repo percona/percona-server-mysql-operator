@@ -42,8 +42,9 @@ func ClusterSetManagerJob(
 			Labels:    labels,
 		},
 		Spec: batchv1.JobSpec{
-			Parallelism: new(int32(1)),
-			Completions: new(int32(1)),
+			BackoffLimit: new(int32(3)),
+			Parallelism:  new(int32(1)),
+			Completions:  new(int32(1)),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,

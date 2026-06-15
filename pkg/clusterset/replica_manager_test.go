@@ -42,8 +42,9 @@ func TestClusterSetReplicaManagerJob(t *testing.T) {
 	assert.Equal(t, "test-ns", job.Namespace)
 	assert.Equal(t, expectedLabels, job.Labels)
 	assert.Equal(t, &batchv1.JobSpec{
-		Parallelism: ptr.To(int32(1)),
-		Completions: ptr.To(int32(1)),
+		BackoffLimit: ptr.To(int32(3)),
+		Parallelism:  ptr.To(int32(1)),
+		Completions:  ptr.To(int32(1)),
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: expectedLabels,
