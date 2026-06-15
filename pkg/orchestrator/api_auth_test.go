@@ -34,6 +34,10 @@ func TestOrchestratorAPIAuthGate(t *testing.T) {
 		assert.Contains(t, cmd, "readonly", "probe must authenticate as readonly: %s", cmd)
 
 		assert.NotNil(t, c.LivenessProbe.Exec, "liveness probe must be exec-based when API auth is enabled")
+
+		for _, s := range sidecarContainers(cr) {
+			assert.Truef(t, hasEnv(s.Env, "ORC_API_AUTH"), "sidecar %s must set ORC_API_AUTH for crVersion >= 1.2.0", s.Name)
+		}
 	})
 
 	t.Run("disabled before 1.2.0", func(t *testing.T) {
@@ -44,5 +48,9 @@ func TestOrchestratorAPIAuthGate(t *testing.T) {
 		assert.False(t, hasEnv(c.Env, "ORC_API_AUTH"), "ORC_API_AUTH env must not be set for crVersion < 1.2.0")
 		assert.NotNil(t, c.ReadinessProbe.HTTPGet, "readiness probe must stay httpGet before API auth")
 		assert.NotNil(t, c.LivenessProbe.HTTPGet, "liveness probe must stay httpGet before API auth")
+
+		for _, s := range sidecarContainers(cr) {
+			assert.Falsef(t, hasEnv(s.Env, "ORC_API_AUTH"), "sidecar %s must not set ORC_API_AUTH for crVersion < 1.2.0", s.Name)
+		}
 	})
 }
