@@ -150,7 +150,6 @@ metadata:
     kind: PerconaServerMySQL
     name: service-per-pod
 spec:
-  allocateLoadBalancerNodePorts: false
   ports:
   - name: mysql
     port: 3306
@@ -196,7 +195,6 @@ metadata:
     kind: PerconaServerMySQL
     name: service-per-pod
 spec:
-  allocateLoadBalancerNodePorts: false
   ports:
   - name: mysql
     port: 3306
@@ -242,7 +240,6 @@ metadata:
     kind: PerconaServerMySQL
     name: service-per-pod
 spec:
-  allocateLoadBalancerNodePorts: false
   ports:
   - name: mysql
     port: 3306
