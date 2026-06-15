@@ -7,8 +7,8 @@ commands:
 
       source ../../functions
 
-      get_cr \
-          | yq eval '.spec.mysql.expose.allocateLoadBalancerNodePorts = false' - \
-          | kubectl -n "${NAMESPACE}" apply -f -
+      kubectl patch ps "${test_name}" -n "${NAMESPACE}" \
+          --type=merge \
+          --patch '{"spec":{"mysql":{"expose":{"allocateLoadBalancerNodePorts":false}}}}'
     timeout: 30
 
