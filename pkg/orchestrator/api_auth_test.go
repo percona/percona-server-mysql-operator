@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -24,19 +26,14 @@ func TestOrchestratorAPIAuthGate(t *testing.T) {
 		cr.Spec.CRVersion = "1.2.0"
 
 		c := container(cr)
-		if !hasEnv(c.Env, "ORC_API_AUTH") {
-			t.Fatal("ORC_API_AUTH env must be set for crVersion >= 1.2.0")
-		}
-		if c.ReadinessProbe.Exec == nil {
-			t.Fatal("readiness probe must be exec-based when API auth is enabled")
-		}
+		assert.True(t, hasEnv(c.Env, "ORC_API_AUTH"), "ORC_API_AUTH env must be set for crVersion >= 1.2.0")
+
+		require.NotNil(t, c.ReadinessProbe.Exec, "readiness probe must be exec-based when API auth is enabled")
 		cmd := strings.Join(c.ReadinessProbe.Exec.Command, " ")
-		if !strings.Contains(cmd, "-u") || !strings.Contains(cmd, "readonly") {
-			t.Fatalf("probe must authenticate as readonly: %s", cmd)
-		}
-		if c.LivenessProbe.Exec == nil {
-			t.Fatal("liveness probe must be exec-based when API auth is enabled")
-		}
+		assert.Contains(t, cmd, "-u", "probe must authenticate: %s", cmd)
+		assert.Contains(t, cmd, "readonly", "probe must authenticate as readonly: %s", cmd)
+
+		assert.NotNil(t, c.LivenessProbe.Exec, "liveness probe must be exec-based when API auth is enabled")
 	})
 
 	t.Run("disabled before 1.2.0", func(t *testing.T) {
@@ -44,14 +41,8 @@ func TestOrchestratorAPIAuthGate(t *testing.T) {
 		cr.Spec.CRVersion = "1.1.0"
 
 		c := container(cr)
-		if hasEnv(c.Env, "ORC_API_AUTH") {
-			t.Fatal("ORC_API_AUTH env must not be set for crVersion < 1.2.0")
-		}
-		if c.ReadinessProbe.HTTPGet == nil {
-			t.Fatal("readiness probe must stay httpGet before API auth")
-		}
-		if c.LivenessProbe.HTTPGet == nil {
-			t.Fatal("liveness probe must stay httpGet before API auth")
-		}
+		assert.False(t, hasEnv(c.Env, "ORC_API_AUTH"), "ORC_API_AUTH env must not be set for crVersion < 1.2.0")
+		assert.NotNil(t, c.ReadinessProbe.HTTPGet, "readiness probe must stay httpGet before API auth")
+		assert.NotNil(t, c.LivenessProbe.HTTPGet, "liveness probe must stay httpGet before API auth")
 	})
 }
