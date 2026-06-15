@@ -492,10 +492,13 @@ func ConfigMap(cr *apiv1.PerconaServerMySQL) (*corev1.ConfigMap, error) {
 	return k8s.ConfigMap(cr, ConfigMapName(cr), configFileKey, config, naming.ComponentOrchestrator), nil
 }
 
-// reservedOrchestratorConfigKeys are managed by the operator or injected
-// per-pod by the orchestrator entrypoint. They must not be overridable via
-// spec.orchestrator.configuration: doing so would break raft membership,
-// per-pod identity, topology TLS or API auth.
+// reservedOrchestratorConfigKeys must not be overridable via
+// spec.orchestrator.configuration. They fall into three groups: operator-managed
+// (set in ConfigMapData), injected per-pod by the entrypoint, and baked defaults
+// the operator's own integration depends on. Overriding any would break raft
+// membership, per-pod identity, topology TLS, API auth, or operator functionality
+// such as primary-pod labelling. Tuning knobs in build/orchestrator.conf.json
+// (poll/recovery intervals, lag thresholds, filters, etc.) stay user-overridable.
 var reservedOrchestratorConfigKeys = map[string]bool{
 	// operator-managed (set in ConfigMapData)
 	"RaftNodes":             true,
@@ -513,6 +516,28 @@ var reservedOrchestratorConfigKeys = map[string]bool{
 	"AuthenticationMethod":           true,
 	"HTTPAuthUser":                   true,
 	"HTTPAuthPassword":               true,
+	// failover hooks that label the primary pod via orc-handler
+	"PostFailoverProcesses":                   true,
+	"PostMasterFailoverProcesses":             true,
+	"PostIntermediateMasterFailoverProcesses": true,
+	"PostGracefulTakeoverProcesses":           true,
+	// alias/hostname detection the operator relies on to map instances to pods
+	"DetectClusterAliasQuery":    true,
+	"DetectInstanceAliasQuery":   true,
+	"MySQLHostnameResolveMethod": true,
+	"HostnameResolveMethod":      true,
+	// operator-managed endpoints, paths and state
+	"ListenAddress":                      true,
+	"MySQLTopologyCredentialsConfigFile": true,
+	"RaftDataDir":                        true,
+	"SQLite3DataFile":                    true,
+	"BackendDB":                          true,
+	// failover/HA semantics the operator assumes
+	"ApplyMySQLPromotionAfterMasterFailover":    true,
+	"MasterFailoverDetachReplicaMasterHost":     true,
+	"DetachLostReplicasAfterMasterFailover":     true,
+	"FailMasterPromotionIfSQLThreadNotUpToDate": true,
+	"UseSuperReadOnly":                          true,
 }
 
 func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {

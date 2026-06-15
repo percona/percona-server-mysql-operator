@@ -70,4 +70,53 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 		// a non-reserved key still gets through
 		assert.EqualValues(t, 7, cfg["InstancePollSeconds"])
 	})
+
+	t.Run("operator-critical baked defaults cannot be overridden", func(t *testing.T) {
+		cr := &apiv1.PerconaServerMySQL{}
+		cr.Spec.CRVersion = "1.2.0"
+		cr.Spec.Orchestrator.Configuration = `{
+			"PostFailoverProcesses": ["echo pwned"],
+			"PostMasterFailoverProcesses": ["echo pwned"],
+			"PostIntermediateMasterFailoverProcesses": ["echo pwned"],
+			"PostGracefulTakeoverProcesses": ["echo pwned"],
+			"DetectClusterAliasQuery": "SELECT 'evil'",
+			"DetectInstanceAliasQuery": "SELECT 'evil'",
+			"MySQLHostnameResolveMethod": "evil",
+			"HostnameResolveMethod": "evil",
+			"ListenAddress": ":1234",
+			"MySQLTopologyCredentialsConfigFile": "/evil",
+			"RaftDataDir": "/evil",
+			"SQLite3DataFile": "/evil",
+			"BackendDB": "evil",
+			"ApplyMySQLPromotionAfterMasterFailover": false,
+			"MasterFailoverDetachReplicaMasterHost": false,
+			"DetachLostReplicasAfterMasterFailover": false,
+			"FailMasterPromotionIfSQLThreadNotUpToDate": false,
+			"UseSuperReadOnly": false,
+			"InstancePollSeconds": 9
+		}`
+
+		cfg := parse(t, cr)
+
+		// these are baked defaults the operator depends on; the operator does not
+		// write them to the ConfigMap, so a reserved user value is simply dropped
+		// and the baked default keeps winning at entrypoint merge time.
+		for _, k := range []string{
+			"PostFailoverProcesses", "PostMasterFailoverProcesses",
+			"PostIntermediateMasterFailoverProcesses", "PostGracefulTakeoverProcesses",
+			"DetectClusterAliasQuery", "DetectInstanceAliasQuery",
+			"MySQLHostnameResolveMethod", "HostnameResolveMethod",
+			"ListenAddress", "MySQLTopologyCredentialsConfigFile",
+			"RaftDataDir", "SQLite3DataFile", "BackendDB",
+			"ApplyMySQLPromotionAfterMasterFailover", "MasterFailoverDetachReplicaMasterHost",
+			"DetachLostReplicasAfterMasterFailover", "FailMasterPromotionIfSQLThreadNotUpToDate",
+			"UseSuperReadOnly",
+		} {
+			_, ok := cfg[k]
+			assert.Falsef(t, ok, "reserved key %s must not be in the ConfigMap", k)
+		}
+
+		// a genuine tuning knob still gets through
+		assert.EqualValues(t, 9, cfg["InstancePollSeconds"])
+	})
 }
