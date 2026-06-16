@@ -1081,6 +1081,11 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 		return nil
 	}
 
+	// Before Discover, which early-returns when a replica is unreachable.
+	if err := r.reconcileStrayReplicas(ctx, cr, pod); err != nil {
+		return errors.Wrap(err, "reconcile stray replicas")
+	}
+
 	if err := orchestrator.Discover(ctx, r.ClientCmd, pod, mysql.ServiceName(cr), mysql.DefaultPort); err != nil {
 		switch {
 		case errors.Is(err, orchestrator.ErrUnauthorized):
@@ -1748,6 +1753,77 @@ func asyncSourceEnvValues(cr *apiv1.PerconaServerMySQL) (uint32, uint32, error) 
 	}
 
 	return uint32(sourceRetryCount), uint32(sourceConnectRetry), nil
+}
+
+// reconcileStrayReplicas repoints async replicas the orchestrator failover left on
+// a stale source (e.g. the old primary). Orchestrator has "no action plan" for such
+// a replica, so without this it stays broken (error 1236) and never rejoins.
+func (r *PerconaServerMySQLReconciler) reconcileStrayReplicas(ctx context.Context, cr *apiv1.PerconaServerMySQL, orcPod *corev1.Pod) error {
+	log := logf.FromContext(ctx).WithName("reconcileStrayReplicas")
+
+	if cr.MySQLSpec().Size <= 1 {
+		return nil
+	}
+
+	primary, err := orchestrator.ClusterPrimary(ctx, r.ClientCmd, orcPod, cr.ClusterHint())
+	if err != nil || primary.Alias == "" {
+		return nil
+	}
+
+	sourceRetryCount, sourceConnectRetry, err := asyncSourceEnvValues(cr)
+	if err != nil {
+		return errors.Wrap(err, "parse async source env values")
+	}
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+	replicaPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserReplication)
+	if err != nil {
+		return errors.Wrap(err, "get replication password")
+	}
+
+	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "get mysql pods")
+	}
+
+	for i := range pods {
+		pod := &pods[i]
+		fqdn := mysql.PodFQDN(cr, pod)
+		if fqdn == primary.Key.Hostname {
+			continue
+		}
+
+		// Talk to the replica's own mysqld over loopback: a stray pod is NotReady
+		// and its FQDN no longer resolves, but we exec inside this very pod.
+		repl := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, "127.0.0.1")
+		status, source, err := repl.ReplicationStatus(ctx)
+		if err != nil {
+			log.V(1).Info("Cannot read replication status, skip", "replica", fqdn, "error", err.Error())
+			continue
+		}
+		if status == database.ReplicationStatusActive && source == primary.Key.Hostname {
+			continue
+		}
+		// Leave initial setup to the orchestrator; only repair stopped/stale replicas.
+		if status == database.ReplicationStatusNotInitiated || status == database.ReplicationStatusError {
+			continue
+		}
+
+		log.Info("Repointing stray replica to primary", "replica", fqdn, "primary", primary.Key.Hostname, "status", status, "source", source)
+		if err := repl.StopReplica(ctx); err != nil {
+			return errors.Wrapf(err, "stop replica %s", fqdn)
+		}
+		if err := repl.ChangeReplicationSource(ctx, primary.Key.Hostname, replicaPass, primary.Key.Port, sourceRetryCount, sourceConnectRetry); err != nil {
+			return errors.Wrapf(err, "change replication source on %s", fqdn)
+		}
+		if err := repl.StartReplica(ctx); err != nil {
+			return errors.Wrapf(err, "start replica %s", fqdn)
+		}
+	}
+
+	return nil
 }
 
 func (r *PerconaServerMySQLReconciler) startAsyncReplication(ctx context.Context, cr *apiv1.PerconaServerMySQL, replicaPass string, primary *orchestrator.Instance) error {
