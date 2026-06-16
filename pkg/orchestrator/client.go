@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 )
 
@@ -74,7 +76,13 @@ var (
 )
 
 func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoint string, outb, errb *bytes.Buffer) error {
-	c := []string{"curl", fmt.Sprintf("localhost:%d/%s", defaultWebPort, endpoint)}
+	// Read the password in-pod and always send it: it is harmless when the
+	// API has no auth and required when it does. The raft reverse proxy
+	// forwards the Authorization header from a follower to the leader.
+	credsFile := filepath.Join(CredsMountPath, string(apiv1.UserOrchestrator))
+	curl := fmt.Sprintf(`curl -s -u "%s:$(cat %s)" "localhost:%d/%s"`,
+		apiv1.UserOrchestrator, credsFile, defaultWebPort, endpoint)
+	c := []string{"sh", "-c", curl}
 	err := cliCmd.Exec(ctx, pod, AppName, c, nil, outb, errb, false)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unable to upgrade connection: container not found") {

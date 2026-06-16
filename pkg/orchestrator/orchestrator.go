@@ -247,6 +247,7 @@ func container(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		},
 	}
 	env = append(env, cr.Spec.Orchestrator.Env...)
+	env = append(env, apiAuthEnv(cr)...)
 
 	return corev1.Container{
 		Name:            AppName,
@@ -271,33 +272,48 @@ func container(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext:          cr.Spec.Orchestrator.ContainerSecurityContext,
-		LivenessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/api/lb-check",
-					Port: intstr.FromString("web"),
-				},
-			},
-			InitialDelaySeconds: 10,
-			TimeoutSeconds:      3,
-			PeriodSeconds:       5,
-			FailureThreshold:    3,
-			SuccessThreshold:    1,
-		},
-		ReadinessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/api/health",
-					Port: intstr.FromString("web"),
-				},
-			},
-			InitialDelaySeconds: 30,
-			TimeoutSeconds:      3,
-			PeriodSeconds:       5,
-			FailureThreshold:    3,
-			SuccessThreshold:    1,
+		LivenessProbe:            apiProbe(cr, "/api/lb-check", 10),
+		ReadinessProbe:           apiProbe(cr, "/api/health", 30),
+	}
+}
+
+// apiAuthEnv gates HTTP API auth from crVersion 1.2.0. Every container running
+// orc-entrypoint.sh must set it identically, else one starting later rewrites the
+// shared config without auth.
+func apiAuthEnv(cr *apiv1.PerconaServerMySQL) []corev1.EnvVar {
+	if cr.CompareVersion("1.2.0") >= 0 {
+		return []corev1.EnvVar{{Name: "ORC_API_AUTH", Value: "true"}}
+	}
+	return nil
+}
+
+// apiProbe builds an Orchestrator HTTP API probe. With auth enabled the health
+// endpoints are gated too, so the probe execs curl as the readonly user
+// (any password) instead of an httpGet that would get 401.
+func apiProbe(cr *apiv1.PerconaServerMySQL, path string, initialDelay int32) *corev1.Probe {
+	probe := &corev1.Probe{
+		InitialDelaySeconds: initialDelay,
+		TimeoutSeconds:      3,
+		PeriodSeconds:       5,
+		FailureThreshold:    3,
+		SuccessThreshold:    1,
+	}
+
+	if cr.CompareVersion("1.2.0") >= 0 {
+		curl := fmt.Sprintf(`curl -sf -u "readonly:readonly" "localhost:%d%s"`, defaultWebPort, path)
+		probe.ProbeHandler = corev1.ProbeHandler{
+			Exec: &corev1.ExecAction{Command: []string{"sh", "-c", curl}},
+		}
+		return probe
+	}
+
+	probe.ProbeHandler = corev1.ProbeHandler{
+		HTTPGet: &corev1.HTTPGetAction{
+			Path: path,
+			Port: intstr.FromString("web"),
 		},
 	}
+	return probe
 }
 
 func sidecarContainers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
@@ -308,7 +324,7 @@ func sidecarContainers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
 			Name:            "mysql-monit",
 			Image:           cr.Spec.Orchestrator.Image,
 			ImagePullPolicy: cr.Spec.Orchestrator.ImagePullPolicy,
-			Env: []corev1.EnvVar{
+			Env: append([]corev1.EnvVar{
 				{
 					Name:  "ORC_SERVICE",
 					Value: serviceName,
@@ -317,7 +333,7 @@ func sidecarContainers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
 					Name:  "MYSQL_SERVICE",
 					Value: serviceName,
 				},
-			},
+			}, apiAuthEnv(cr)...),
 			VolumeMounts: containerMounts(),
 			Command:      []string{"/opt/percona/orc-entrypoint.sh"},
 			Args: []string{

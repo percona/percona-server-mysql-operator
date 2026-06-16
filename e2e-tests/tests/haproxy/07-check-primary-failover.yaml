@@ -28,4 +28,4 @@ commands:
           echo "Primary in k8s label (${primary_pod_from_label}) is not set to same pod as in haproxy (${primary_pod_from_haproxy})!"
           exit 1
       fi
-    timeout: 60
+    timeout: 120

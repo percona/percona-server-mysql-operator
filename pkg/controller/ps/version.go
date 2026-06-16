@@ -8,10 +8,12 @@ import (
 
 	v "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	vs "github.com/percona/percona-server-mysql-operator/pkg/version/service"
@@ -20,6 +22,10 @@ import (
 func (r *PerconaServerMySQLReconciler) reconcileVersions(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	if err := r.reconcileMySQLVersion(ctx, cr); err != nil {
 		return errors.Wrap(err, "reconcile mysql version")
+	}
+
+	if err := r.reconcileHAProxyVersion(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile haproxy version")
 	}
 
 	if err := r.upgradeVersions(ctx, cr); err != nil {
@@ -85,6 +91,77 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLVersion(
 	}
 	log.V(1).Info("MySQL Server Version: " + version.String())
 	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileHAProxyVersion(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+) error {
+	if !cr.HAProxyEnabled() {
+		return nil
+	}
+
+	pods, err := k8s.PodsByLabels(ctx, r.Client, haproxy.MatchLabels(cr), cr.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "get haproxy pods")
+	}
+
+	var pod *corev1.Pod
+	for i := range pods {
+		if k8s.IsPodReady(pods[i]) {
+			pod = &pods[i]
+			break
+		}
+	}
+
+	if pod == nil {
+		return nil
+	}
+
+	imageID, err := k8s.GetImageIDFromPod(pod, haproxy.AppName)
+	if err != nil {
+		return errors.Wrapf(err, "get HAProxy image id from %s", pod.Name)
+	}
+
+	if cr.Status.HAProxy.Version != "" && cr.Status.HAProxy.ImageID == imageID {
+		return nil
+	}
+
+	var stdoutb, stderrb bytes.Buffer
+	err = r.ClientCmd.Exec(ctx, pod, haproxy.AppName, []string{"haproxy", "-v"}, nil, &stdoutb, &stderrb, false)
+	if err != nil {
+		return errors.Wrapf(err, "run haproxy -v (stdout: %s, stderr: %s)", stdoutb.String(), stderrb.String())
+	}
+
+	version, err := parseHAProxyVersion(stdoutb.Bytes())
+	if err != nil {
+		return errors.Wrapf(err, "extract version from haproxy -v output (stdout: %s, stderr: %s)", stdoutb.String(), stderrb.String())
+	}
+
+	if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), func(status *apiv1.PerconaServerMySQLStatus) error {
+		status.HAProxy.Version = version
+		status.HAProxy.ImageID = imageID
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "write status")
+	}
+
+	logf.FromContext(ctx).V(1).Info("HAProxy Version: " + version)
+	return nil
+}
+
+func parseHAProxyVersion(output []byte) (string, error) {
+	re, err := regexp.Compile(`(?i)\bversion\s+([^\s]+)`)
+	if err != nil {
+		return "", err
+	}
+
+	f := re.FindSubmatch(output)
+	if len(f) < 2 {
+		return "", errors.New("couldn't extract version information")
+	}
+
+	return string(f[1]), nil
 }
 
 func telemetryEnabled() bool {
