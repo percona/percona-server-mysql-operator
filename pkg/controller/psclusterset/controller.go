@@ -140,6 +140,10 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, errors.Wrap(err, "reconcile status")
 	}
 
+	if err := r.cleanupOutdatedJobs(ctx, pcs); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "cleanup outdated jobs")
+	}
+
 	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 
@@ -308,31 +312,46 @@ func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Con
 	if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
 		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetPrimarySwitchOverInProg)
 		for _, job := range jobs.Items {
-			jobStatus, err := k8s.KStatusCompute(&job)
-			if err != nil {
-				return errors.Wrap(err, "compute status")
-			}
+			switch {
+			// Job has completed
+			case jobConditionTrue(&job, batchv1.JobComplete):
+				continue
 
-			cond := metav1.Condition{
-				Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
-				Status:  metav1.ConditionTrue,
-				Reason:  "SwitchoverInProgress",
-				Message: "Switchover in progress",
-			}
+			// Job has failed
+			case jobConditionTrue(&job, batchv1.JobFailed):
+				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+					Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
+					Status:  metav1.ConditionFalse,
+					Reason:  "SwitchoverFailed",
+					Message: "Switchover failed",
+				})
+				return nil
 
-			if jobStatus.Status == kstatus.FailedStatus {
-				cond.Status = metav1.ConditionFalse
-				cond.Reason = "SwitchoverFailed"
-				cond.Message = "Switchover failed"
+			// Job is still running
+			default:
+				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+					Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
+					Status:  metav1.ConditionTrue,
+					Reason:  "SwitchoverInProgress",
+					Message: "Switchover in progress",
+				})
+				continue
 			}
-			meta.SetStatusCondition(&status.Conditions, cond)
 		}
-
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "update status")
 	}
 	return nil
+}
+
+func jobConditionTrue(job *batchv1.Job, condType batchv1.JobConditionType) bool {
+	for _, cond := range job.Status.Conditions {
+		if cond.Type == condType && cond.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *PerconaServerMySQLClusterSetReconciler) trackReplicaTopologyChanges(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
@@ -412,7 +431,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) runClusterSetJob(
 		args = append(args, "--replica-cluster-name="+cluster.InnoDBClusterName)
 	}
 
-	job := clusterset.ClusterSetReplicaManagerJob(pcs, cluster, command, args, r.jobImage, clustersetServiceAccount(pcs).Name)
+	job := clusterset.ClusterSetManagerJob(pcs, cluster, command, args, r.jobImage, clustersetServiceAccount(pcs).Name)
 	err := r.Get(ctx, client.ObjectKeyFromObject(job), job)
 
 	verb := "Adding to"
@@ -759,6 +778,31 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRBAC(ctx context.Conte
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "create or update service account")
+	}
+	return nil
+}
+
+func (r *PerconaServerMySQLClusterSetReconciler) cleanupOutdatedJobs(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
+	labels := naming.Labels(clusterset.ClusterSetReplicaManagerAppName, pcs.Name, "percona-server", clusterset.ClusterSetReplicaManagerComponent)
+	jobs := &batchv1.JobList{}
+
+	if err := r.List(ctx, jobs, client.InNamespace(pcs.Namespace), client.MatchingLabels(labels)); err != nil {
+		return errors.Wrap(err, "list replica manager jobs")
+	}
+
+	for _, job := range jobs.Items {
+		if job.Spec.TTLSecondsAfterFinished != nil {
+			continue
+		}
+		if jobConditionTrue(&job, batchv1.JobComplete) {
+			// Patch the Job with a TTLSecondsAfterFinished so that deletion is deferred.
+			// Immediate deletion can result in duplicate jobs if the informer cache is not updated fast enough.
+			orig := job.DeepCopy()
+			job.Spec.TTLSecondsAfterFinished = new(int32(30))
+			if err := r.Patch(ctx, &job, client.MergeFrom(orig)); err != nil {
+				return errors.Wrap(err, "patch replica manager job")
+			}
+		}
 	}
 	return nil
 }

@@ -5,7 +5,7 @@ timeout: 30
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 10-read-data-dc1-0
+  name: 11-read-data-dc1-0
 data:
   data: |-
     100500
@@ -21,7 +21,7 @@ data:
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 10-read-data-dc1-1
+  name: 11-read-data-dc1-1
 data:
   data: |-
     100500
@@ -37,7 +37,23 @@ data:
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: 10-read-data-dc1-2
+  name: 11-read-data-dc1-2
+data:
+  data: |-
+    100500
+    100501
+    100502
+    100503
+    100504
+    100505
+    100506
+    100507
+    100508
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 11-read-data-dc1-haproxy
 data:
   data: |-
     100500

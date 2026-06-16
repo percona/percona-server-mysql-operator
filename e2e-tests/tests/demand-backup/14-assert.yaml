@@ -78,7 +78,7 @@ commands:
       backup_name="demand-backup-fail"
       backup_source_pod=$(kubectl get ps-backup -n ${NAMESPACE} $backup_name -o jsonpath='{.status.backupSource}' | awk -F'.' '{print $1}')
 
-      source_downtimed=$(kubectl exec demand-backup-orc-0 -n ${NAMESPACE} -c orchestrator -- bash -c 'orchestrator-client -c topology -i $(orchestrator-client -c clusters)' | grep $backup_source_pod | grep -c 'downtimed')
+      source_downtimed=$(kubectl exec demand-backup-orc-0 -n ${NAMESPACE} -c orchestrator -- bash -c 'export ORCHESTRATOR_AUTH_USER=readonly ORCHESTRATOR_AUTH_PASSWORD=readonly; orchestrator-client -c topology -i $(orchestrator-client -c clusters)' | grep $backup_source_pod | grep -c 'downtimed')
  
       if [[ $source_downtimed != 1 ]]; then
         echo "Downtime did not start!"

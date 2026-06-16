@@ -22,6 +22,7 @@ commands:
           | yq eval '.spec.proxy.router.enabled=false' - \
           | yq eval '.spec.proxy.haproxy.enabled=true' - \
           | yq eval '.spec.mysql.bootstrap.mode="manual"' - \
+          | yq eval '.spec.unsafeFlags.proxySize=true' - \
           | yq eval '.spec.proxy.haproxy.size=1' - \
           | yq eval '.spec.secretsName="test-secrets"' - \
           | kubectl -n "${NAMESPACE}" apply -f -

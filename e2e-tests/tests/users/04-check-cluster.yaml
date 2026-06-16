@@ -43,9 +43,9 @@ commands:
       # check replication
       wait_cluster_consistency_async "${test_name}" "3" "3"
       orc_host=$(get_orc_headless_fqdn ${cluster_name} 0)
-      cluster=$(run_curl "http://${orc_host}:3000/api/clusters/" | jq -r .[0])
+      cluster=$(run_curl_orc "http://${orc_host}:3000/api/clusters/" | jq -r .[0])
 
-      replicating=$(run_curl "http://${orc_host}:3000/api/cluster/${cluster}/" \
+      replicating=$(run_curl_orc "http://${orc_host}:3000/api/cluster/${cluster}/" \
           | tee \
           | jq -r '.[] | "\(.ReplicationSQLThreadRuning) \(.ReplicationIOThreadRuning)"' \
           | grep "true" \

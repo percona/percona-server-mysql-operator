@@ -295,6 +295,15 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 	})
 }
 
+// orchestratorTopologyUnavailable reports whether Orchestrator has no usable
+// topology for the cluster (not discovered, no raft leader, or mid-teardown).
+// These are non-fatal on the deletion path.
+func orchestratorTopologyUnavailable(err error) bool {
+	return errors.Is(err, orchestrator.ErrUnableToGetClusterName) ||
+		errors.Is(err, orchestrator.ErrEmptyResponse) ||
+		errors.Is(err, orchestrator.ErrUnauthorized)
+}
+
 func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("deleteMySQLPods")
 
@@ -328,7 +337,11 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		log.Info("Ensuring oldest mysql node is the primary")
 		err = orchestrator.EnsureNodeIsPrimary(ctx, r.ClientCmd, orcPod, cr.ClusterHint(), firstPod.GetName(), mysql.DefaultPort)
 		if err != nil {
-			return errors.Wrap(err, "ensure node is primary")
+			if orchestratorTopologyUnavailable(err) {
+				log.Info("Could not ensure primary via Orchestrator, proceeding with deletion", "reason", err.Error())
+			} else {
+				return errors.Wrap(err, "ensure node is primary")
+			}
 		}
 	} else {
 		operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
@@ -946,6 +959,39 @@ func (r *PerconaServerMySQLReconciler) reconcileOrchestratorServices(ctx context
 	return nil
 }
 
+func (r *PerconaServerMySQLReconciler) reconcileInternalHAProxyConfigMap(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
+	if cr.CompareVersion("1.2.0") < 0 {
+		return nil
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      naming.InternalHAProxyConfigMapName(cr.Name),
+			Namespace: cr.Namespace,
+		},
+	}
+
+	data := map[string]string{
+		"is_clusterset_replica": "0",
+	}
+	if meta.IsStatusConditionTrue(cr.Status.Conditions, apiv1.ConditionClusterSetReplicationRunning) {
+		data["is_clusterset_replica"] = "1"
+	}
+
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
+		if err := controllerutil.SetControllerReference(cr, cm, r.Scheme); err != nil {
+			return errors.Wrap(err, "set controller reference")
+		}
+		cm.Labels = cr.GlobalLabels()
+		cm.Annotations = cr.GlobalAnnotations()
+		cm.Data = data
+		return nil
+	}); err != nil {
+		return errors.Wrapf(err, "create or update ConfigMap/%s", cm.Name)
+	}
+	return nil
+}
+
 func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("reconcileHAProxy")
 
@@ -962,6 +1008,10 @@ func (r *PerconaServerMySQLReconciler) reconcileHAProxy(ctx context.Context, cr 
 	if !firstMySQLPodReady && !cr.Spec.Pause {
 		log.V(1).Info("Waiting for pod to be ready", "pod", nn.Name)
 		return nil
+	}
+
+	if err := r.reconcileInternalHAProxyConfigMap(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile internal HAProxy config map")
 	}
 
 	component := haproxy.Component(*cr)
@@ -1147,7 +1197,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 	db := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.ServiceName(cr))
 	cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionInnoDBClusterBootstrapped)
 	if cond == nil || cond.Status == metav1.ConditionFalse {
-		exists, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata")
+		exists, err := db.CheckIfClusterMetadataDBExists(ctx)
 		if err != nil || !exists {
 			log.V(1).Info("InnoDB cluster is not created yet")
 			return nil
@@ -1183,7 +1233,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBootstrapStatus(ctx context.Cont
 		return nil
 	}
 
-	if exists, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata"); err != nil || !exists {
+	if exists, err := db.CheckIfClusterMetadataDBExists(ctx); err != nil || !exists {
 		return errors.Wrap(err, "InnoDB cluster is already bootstrapped, but failed to check its status")
 	}
 
@@ -1382,6 +1432,15 @@ func (r *PerconaServerMySQLReconciler) cleanupProxies(ctx context.Context, cr *a
 		if err := r.Delete(ctx, haproxy.Service(cr, nil)); err != nil && !k8serrors.IsNotFound(err) {
 			return errors.Wrap(err, "failed to delete haproxy service")
 		}
+
+		if err := r.Delete(ctx, &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      naming.InternalHAProxyConfigMapName(cr.Name),
+				Namespace: cr.GetNamespace(),
+			},
+		}); client.IgnoreNotFound(err) != nil {
+			return errors.Wrap(err, "failed to delete internal HAProxy config map")
+		}
 	}
 
 	return nil
@@ -1414,7 +1473,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLRouter(ctx context.Context,
 		}
 
 		db := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
-		if exist, err := db.CheckIfDatabaseExists(ctx, "mysql_innodb_cluster_metadata"); err != nil || !exist {
+		if exist, err := db.CheckIfClusterMetadataDBExists(ctx); err != nil || !exist {
 			log.V(1).Info("Waiting for InnoDB Cluster", "cluster", cr.Name)
 			return nil
 		}

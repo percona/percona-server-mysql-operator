@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -335,6 +336,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 				cr.Spec.Orchestrator.Enabled = true
 				cr.Spec.Unsafe.Proxy = true
 				cr.Spec.Proxy.HAProxy.Enabled = false
+				cr.Status.HAProxy.ImageID = "docker-pullable://percona/haproxy@sha256:old"
 			}),
 			objects: appendSlices(
 				makeFakeReadyPods(cr, 3, "mysql"),
@@ -1144,7 +1146,7 @@ func getFakeClient(
 			DB: "mysql_innodb_cluster_metadata",
 		},
 	}
-	s := queryScript("SELECT SCHEMA_NAME AS db FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME LIKE 'mysql_innodb_cluster_metadata'", dbs)
+	s := queryScript("SELECT SCHEMA_NAME AS db FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = 'mysql_innodb_cluster_metadata'", dbs)
 	if !noMetadataDB {
 	} else {
 		s.err = sql.ErrNoRows
@@ -1211,10 +1213,13 @@ func getFakeOrchestratorClient(cr *apiv1.PerconaServerMySQL) (clientcmd.Client, 
 			panic(err)
 		}
 
+		credsFile := filepath.Join(orchestrator.CredsMountPath, string(apiv1.UserOrchestrator))
 		return fakeClientScript{
 			cmd: []string{
-				"curl",
-				fmt.Sprintf("localhost:%d/%s", 3000, fmt.Sprintf("api/cluster/%s", cr.Name+"."+cr.Namespace)),
+				"sh", "-c",
+				fmt.Sprintf(`curl -s -u "%s:$(cat %s)" "localhost:%d/%s"`,
+					apiv1.UserOrchestrator, credsFile, 3000,
+					fmt.Sprintf("api/cluster/%s", cr.Name+"."+cr.Namespace)),
 			},
 			stdout: res,
 		}

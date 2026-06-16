@@ -1,24 +1,34 @@
 package ps
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"maps"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/router"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
+	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
 
 var _ = Describe("Keep user secrets", Ordered, func() {
@@ -213,6 +223,132 @@ func TestEnsureUserSecrets(t *testing.T) {
 	}
 }
 
+func TestValidateUserSecret(t *testing.T) {
+	s := func(clusterType apiv1.ClusterType, user apiv1.SystemUser, password []byte) *corev1.Secret {
+		cr := &apiv1.PerconaServerMySQL{
+			Spec: apiv1.PerconaServerMySQLSpec{
+				CRVersion: version.Version(),
+				MySQL: apiv1.MySQLSpec{
+					ClusterType: clusterType,
+				},
+			},
+		}
+		secret := &corev1.Secret{
+			Data: make(map[string][]byte),
+		}
+		for systemUser := range allSystemUsers(cr) {
+			secret.Data[string(systemUser)] = []byte("password")
+		}
+		secret.Data[string(user)] = password
+		return secret
+	}
+
+	tests := []struct {
+		name        string
+		clusterType apiv1.ClusterType
+		secret      *corev1.Secret
+		wantError   string
+	}{
+		{
+			name:        "nil secret",
+			clusterType: apiv1.ClusterTypeGR,
+			wantError:   "user secret is empty",
+		},
+		{
+			name:        "empty secret data",
+			clusterType: apiv1.ClusterTypeGR,
+			secret:      &corev1.Secret{},
+			wantError:   "user secret is empty",
+		},
+		{
+			name:        "missing password",
+			clusterType: apiv1.ClusterTypeGR,
+			secret: func() *corev1.Secret {
+				secret := s(apiv1.ClusterTypeGR, apiv1.UserRoot, []byte("password"))
+				delete(secret.Data, string(apiv1.UserMonitor))
+				return secret
+			}(),
+			wantError: "missing password for monitor user",
+		},
+		{
+			name:        "unknown user",
+			clusterType: apiv1.ClusterTypeGR,
+			secret:      s(apiv1.ClusterTypeGR, apiv1.SystemUser("unknown"), []byte("password")),
+			wantError:   "unknown user unknown is specified in the secret",
+		},
+		{
+			name:        "empty password",
+			clusterType: apiv1.ClusterTypeGR,
+			secret:      s(apiv1.ClusterTypeGR, apiv1.UserRoot, nil),
+			wantError:   "password is empty for root user",
+		},
+		{
+			name:        "NUL byte",
+			clusterType: apiv1.ClusterTypeGR,
+			secret:      s(apiv1.ClusterTypeGR, apiv1.UserRoot, []byte{'a', 0, 'b'}),
+			wantError:   "password for root user must not contain NUL bytes",
+		},
+		{
+			name:        "maximum MySQL password length",
+			clusterType: apiv1.ClusterTypeGR,
+			secret:      s(apiv1.ClusterTypeGR, apiv1.UserRoot, bytes.Repeat([]byte{'a'}, mySQLPasswordMaxLength)),
+		},
+		{
+			name:        "MySQL password too long",
+			clusterType: apiv1.ClusterTypeGR,
+			secret:      s(apiv1.ClusterTypeGR, apiv1.UserRoot, bytes.Repeat([]byte{'a'}, mySQLPasswordMaxLength+1)),
+			wantError:   "password for root user must not exceed 256 bytes",
+		},
+		{
+			name:        "maximum async replication password length",
+			clusterType: apiv1.ClusterTypeAsync,
+			secret:      s(apiv1.ClusterTypeAsync, apiv1.UserReplication, bytes.Repeat([]byte{'a'}, mySQLReplicationSourcePasswordMaxLength)),
+		},
+		{
+			name:        "async replication password too long",
+			clusterType: apiv1.ClusterTypeAsync,
+			secret:      s(apiv1.ClusterTypeAsync, apiv1.UserReplication, bytes.Repeat([]byte{'a'}, mySQLReplicationSourcePasswordMaxLength+1)),
+			wantError:   "password for replication user must not exceed 32 bytes",
+		},
+		{
+			name:        "async replication limit counts bytes",
+			clusterType: apiv1.ClusterTypeAsync,
+			secret:      s(apiv1.ClusterTypeAsync, apiv1.UserReplication, []byte(strings.Repeat("ї", 17))),
+			wantError:   "password for replication user must not exceed 32 bytes",
+		},
+		{
+			name:        "group replication does not use source password limit",
+			clusterType: apiv1.ClusterTypeGR,
+			secret:      s(apiv1.ClusterTypeGR, apiv1.UserReplication, bytes.Repeat([]byte{'a'}, mySQLReplicationSourcePasswordMaxLength+1)),
+		},
+		{
+			name:        "PMM server token is not a MySQL password",
+			clusterType: apiv1.ClusterTypeGR,
+			secret:      s(apiv1.ClusterTypeGR, apiv1.UserPMMServerToken, nil),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &apiv1.PerconaServerMySQL{
+				Spec: apiv1.PerconaServerMySQLSpec{
+					CRVersion: version.Version(),
+					MySQL: apiv1.MySQLSpec{
+						ClusterType: tt.clusterType,
+					},
+				},
+			}
+			err := validateUserSecret(cr, tt.secret)
+			if tt.wantError == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.ErrorContains(t, err, tt.wantError)
+		})
+	}
+}
+
 // TestReconcileUsersCreatesMissingClusterSetUser covers the upgrade path from
 // operator versions older than 1.2.0: the clusterset user appears in the users
 // secret but doesn't exist in MySQL, because the entrypoint creates users only
@@ -345,4 +481,80 @@ func TestReconcileUsersCreatesClusterSetUser(t *testing.T) {
 	if fc.execCount != len(scripts) {
 		t.Fatalf("expected %d exec calls, got %d", len(scripts), fc.execCount)
 	}
+}
+
+func TestReconcileUsersRestartsRouterOnOperatorPasswordUpdate(t *testing.T) {
+	ctx := context.Background()
+
+	const crName = "router-password-rotation"
+	const ns = "some-namespace"
+	const oldOperatorPass = "op-password-old"
+	const newOperatorPass = "op-password-new"
+
+	cr := &apiv1.PerconaServerMySQL{
+		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+		Spec: apiv1.PerconaServerMySQLSpec{
+			CRVersion:   "1.2.0",
+			SecretsName: "some-secret",
+			MySQL:       apiv1.MySQLSpec{ClusterType: apiv1.ClusterTypeGR},
+			Proxy:       apiv1.ProxySpec{Router: &apiv1.MySQLRouterSpec{Enabled: true, PodSpec: apiv1.PodSpec{Size: 1}}},
+		},
+	}
+
+	userSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: cr.Spec.SecretsName, Namespace: ns},
+		Data:       map[string][]byte{string(apiv1.UserOperator): []byte(newOperatorPass)},
+	}
+	internalSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: cr.InternalSecretName(), Namespace: ns},
+		Data:       map[string][]byte{string(apiv1.UserOperator): []byte(oldOperatorPass)},
+	}
+	routerDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: router.Name(cr), Namespace: ns},
+		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{}},
+	}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme), "failed to add client-go scheme")
+	require.NoError(t, apiv1.AddToScheme(scheme), "failed to add apis scheme")
+
+	hash, err := k8s.ObjectHash(userSecret)
+	require.NoError(t, err, "calculate secret hash")
+
+	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, internalSecret, routerDeployment).Build()
+	recordingClient := &routerRolloutRecordingClient{
+		Client:           baseClient,
+		internalSecretNN: types.NamespacedName{Name: cr.InternalSecretName(), Namespace: ns},
+	}
+
+	r := PerconaServerMySQLReconciler{Client: recordingClient, Scheme: scheme}
+	require.NoError(t, r.finalizeInternalSecretAndRestartRouter(ctx, cr, internalSecret, userSecret, true, hash), "finalizeInternalSecretAndRestartRouter failed")
+
+	updatedInternalSecret := new(corev1.Secret)
+	require.NoError(t, r.Get(ctx, types.NamespacedName{Name: cr.InternalSecretName(), Namespace: ns}, updatedInternalSecret), "get internal secret")
+
+	assert.Equal(t, newOperatorPass, string(updatedInternalSecret.Data[string(apiv1.UserOperator)]), "internal secret operator password mismatch")
+	assert.Equal(t, "false", updatedInternalSecret.Annotations[naming.AnnotationPasswordsUpdated.String()], "passwords-updated annotation mismatch")
+	assert.Equal(t, newOperatorPass, recordingClient.operatorPassAtPatch, "router rollout happened before internal secret update")
+	assert.Equal(t, hash, recordingClient.routerHashAtPatch, "router rollout hash mismatch")
+}
+
+type routerRolloutRecordingClient struct {
+	client.Client
+	internalSecretNN    types.NamespacedName
+	operatorPassAtPatch string
+	routerHashAtPatch   string
+}
+
+func (c *routerRolloutRecordingClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	if dep, ok := obj.(*appsv1.Deployment); ok {
+		secret := new(corev1.Secret)
+		if err := c.Get(ctx, c.internalSecretNN, secret); err != nil {
+			return err
+		}
+		c.operatorPassAtPatch = string(secret.Data[string(apiv1.UserOperator)])
+		c.routerHashAtPatch = dep.Spec.Template.Annotations[naming.AnnotationSecretHash.String()]
+	}
+
+	return c.Client.Patch(ctx, obj, patch, opts...)
 }

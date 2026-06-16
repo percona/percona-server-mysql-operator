@@ -3,6 +3,7 @@ package ps
 import (
 	"bytes"
 	"context"
+	stderrors "errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -85,6 +86,11 @@ func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr
 func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) error {
 	log := logf.FromContext(ctx).WithName("reconcileUsers")
 
+	if err := validateUserSecret(cr, secret); err != nil {
+		log.Error(err, "User secret is invalid. Passwords and internal secret won't be updated until it becomes valid")
+		return nil
+	}
+
 	internalSecret := &corev1.Secret{}
 	nn := types.NamespacedName{Name: cr.InternalSecretName(), Namespace: cr.GetNamespace()}
 	err := r.Client.Get(ctx, nn, internalSecret)
@@ -159,6 +165,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		restartMySQL        bool
 		restartReplication  bool
 		restartOrchestrator bool
+		restartRouter       bool
 		restartPMM          bool
 	)
 
@@ -197,6 +204,8 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		switch apiv1.SystemUser(user) {
 		case apiv1.UserMonitor:
 			restartMySQL = cr.PMMEnabled(internalSecret)
+		case apiv1.UserOperator:
+			restartRouter = cr.RouterEnabled()
 		case apiv1.UserPMMServerToken:
 			restartPMM = cr.PMMEnabled(internalSecret)
 			continue // PMM server user credentials are not stored in db
@@ -295,6 +304,23 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return nil
 	}
 
+	if err := r.finalizeInternalSecretAndRestartRouter(ctx, cr, internalSecret, secret, restartRouter, hash); err != nil {
+		return err
+	}
+
+	return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, updatedUsers, operatorPass)
+}
+
+func (r *PerconaServerMySQLReconciler) finalizeInternalSecretAndRestartRouter(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	internalSecret *corev1.Secret,
+	secret *corev1.Secret,
+	restartRouter bool,
+	hash string,
+) error {
+	log := logf.FromContext(ctx).WithName("reconcileUsers")
+
 	internalSecret.Data = secret.DeepCopy().Data
 	if err := r.Client.Update(ctx, internalSecret); err != nil {
 		return errors.Wrapf(err, "update Secret/%s", internalSecret.Name)
@@ -303,12 +329,79 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	log.Info("Updated internal secret", "secretName", cr.InternalSecretName())
 
 	k8s.AddAnnotation(internalSecret, naming.AnnotationPasswordsUpdated.String(), "false")
-	err = r.Client.Update(ctx, internalSecret)
-	if err != nil {
+	if err := r.Update(ctx, internalSecret); err != nil {
 		return errors.Wrap(err, "update internal sys users secret annotation")
 	}
 
-	return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, updatedUsers, operatorPass)
+	if restartRouter {
+		log.Info("Operator user password updated. Restarting Router.")
+
+		dp := new(appsv1.Deployment)
+		nn := types.NamespacedName{Name: router.Name(cr), Namespace: cr.Namespace}
+		if err := r.Get(ctx, nn, dp); err != nil {
+			return errors.Wrap(err, "get Router deployment")
+		}
+		if err := k8s.RolloutRestart(ctx, r.Client, dp, naming.AnnotationSecretHash, hash); err != nil {
+			return errors.Wrap(err, "restart Router")
+		}
+	}
+
+	return nil
+}
+
+const (
+	mySQLPasswordMaxLength = 256
+
+	// > The password used for a replication user account in a CHANGE REPLICATION SOURCE TO statement is limited to 32 characters in length
+	// Source: https://dev.mysql.com/doc/refman/8.0/en/change-replication-source-to.html#crs-opt-source_password
+	mySQLReplicationSourcePasswordMaxLength = 32
+)
+
+func validateUserSecret(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) error {
+	if secret == nil || len(secret.Data) == 0 {
+		return errors.New("user secret is empty")
+	}
+
+	systemUsers := allSystemUsers(cr)
+	var errs []error
+
+	for user := range systemUsers {
+		if _, ok := secret.Data[string(user)]; ok {
+			continue
+		}
+		errs = append(errs, fmt.Errorf("missing password for %s user", user))
+		continue
+	}
+
+	for user, pass := range secret.Data {
+		if _, ok := systemUsers[apiv1.SystemUser(user)]; !ok && user != string(apiv1.UserPMMServerToken) {
+			errs = append(errs, fmt.Errorf("unknown user %s is specified in the secret", string(user)))
+			continue
+		}
+		if user == string(apiv1.UserPMMServerToken) {
+			continue
+		}
+		if len(pass) == 0 {
+			errs = append(errs, fmt.Errorf("password is empty for %s user", string(user)))
+			continue
+		}
+		if bytes.IndexByte(pass, 0) >= 0 {
+			errs = append(errs, fmt.Errorf("password for %s user must not contain NUL bytes", user))
+			continue
+		}
+		maxLen := mySQLPasswordMaxLength
+		if user == string(apiv1.UserReplication) && cr.Spec.MySQL.IsAsync() {
+			maxLen = mySQLReplicationSourcePasswordMaxLength
+		}
+
+		// MySQL counts bytes, not characters
+		if len(pass) > maxLen {
+			errs = append(errs, fmt.Errorf("password for %s user must not exceed %d bytes", user, maxLen))
+			continue
+		}
+	}
+
+	return stderrors.Join(errs...)
 }
 
 func (r *PerconaServerMySQLReconciler) discardOldPasswordsAfterNewPropagated(
@@ -410,7 +503,8 @@ func (r *PerconaServerMySQLReconciler) passwordsPropagated(ctx context.Context, 
 		eg.Go(func() error {
 			for i := 0; int32(i) < int32(comp.size); i++ {
 				pod := corev1.Pod{}
-				err := r.Client.Get(ctx,
+				err := r.Get(
+					ctx,
 					types.NamespacedName{
 						Namespace: cr.Namespace,
 						Name:      fmt.Sprintf("%s-%s-%d", cr.Name, comp.name, i),
