@@ -10,11 +10,12 @@ import (
 )
 
 type mockSQLRunner struct {
-	gtidExecuted string
-	gtidPurged   string
-	subtract     map[[2]string]string
-	intersect    map[[2]string]string
-	isSubset     map[[2]string]bool
+	gtidExecuted   string
+	gtidPurged     string
+	cloneThreshold uint64
+	subtract       map[[2]string]string
+	intersect      map[[2]string]string
+	isSubset       map[[2]string]bool
 }
 
 func newMockSQLRunner() *mockSQLRunner {
@@ -55,6 +56,10 @@ func (m *mockSQLRunner) isPurgedSubsetOfExecuted(ctx context.Context, purged, ex
 		return false, errors.Errorf("unexpected isPurgedSubsetOfExecuted(%q, %q)", purged, executed)
 	}
 	return v, nil
+}
+
+func (m *mockSQLRunner) getCloneThreshold(ctx context.Context) (uint64, error) {
+	return m.cloneThreshold, nil
 }
 
 func (m *mockSQLRunner) setGTIDSubtractResponse(a, b, result string) {
@@ -348,5 +353,113 @@ func TestCheckReplicaState_Diverged_Contained(t *testing.T) {
 	}
 	if result != innodbcluster.ReplicaGtidDiverged {
 		t.Errorf("expected ReplicaGtidDiverged, got %v", result)
+	}
+}
+
+func TestCountGTIDs(t *testing.T) {
+	tests := []struct {
+		name string
+		set  string
+		want uint64
+	}{
+		{"empty", "", 0},
+		{"single transaction", "3E11FA47-71CA-11E1-9E33-C80AA9429562:1", 1},
+		{"range", "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-10", 10},
+		{"multiple intervals", "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-5:8-10", 8},
+		{"multiple uuids", "aaaa:1-5,bbbb:1-3", 8},
+		{"tagged gtid (8.4)", "3E11FA47-71CA-11E1-9E33-C80AA9429562:mytag:1-5", 5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := countGTIDs(tt.set)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("countGTIDs(%q) = %d, want %d", tt.set, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRecoveryMethodForReplicaState_Diverged_AlwaysClone(t *testing.T) {
+	ctx := context.Background()
+	primary := newMockSQLRunnerWithGTIDs("a:1-10", "")
+	replica := newMockSQLRunnerWithGTIDs("b:1-10", "")
+	// threshold is irrelevant for diverged state; it must not be consulted.
+
+	method, err := recoveryMethodForReplicaState(ctx, primary, replica, innodbcluster.ReplicaGtidDiverged)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if method != innodbcluster.RecoveryClone {
+		t.Errorf("expected RecoveryClone, got %v", method)
+	}
+}
+
+func TestRecoveryMethodForReplicaState_Recoverable_WithinThreshold(t *testing.T) {
+	ctx := context.Background()
+	primary := newMockSQLRunnerWithGTIDs("a:1-10", "")
+	replica := newMockSQLRunnerWithGTIDs("a:1-5", "")
+	replica.cloneThreshold = 100
+	// missing = a:6-10 = 5 transactions, below threshold
+	primary.setGTIDSubtractResponse("a:1-10", "a:1-5", "a:6-10")
+
+	method, err := recoveryMethodForReplicaState(ctx, primary, replica, innodbcluster.ReplicaGtidRecoverable)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if method != innodbcluster.RecoveryIncremental {
+		t.Errorf("expected RecoveryIncremental, got %v", method)
+	}
+}
+
+func TestRecoveryMethodForReplicaState_Recoverable_ExceedsThreshold(t *testing.T) {
+	ctx := context.Background()
+	primary := newMockSQLRunnerWithGTIDs("a:1-10", "")
+	replica := newMockSQLRunnerWithGTIDs("a:1-5", "")
+	replica.cloneThreshold = 3
+	// missing = a:6-10 = 5 transactions, above threshold -> Group Replication clones
+	primary.setGTIDSubtractResponse("a:1-10", "a:1-5", "a:6-10")
+
+	method, err := recoveryMethodForReplicaState(ctx, primary, replica, innodbcluster.ReplicaGtidRecoverable)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if method != innodbcluster.RecoveryClone {
+		t.Errorf("expected RecoveryClone, got %v", method)
+	}
+}
+
+func TestRecoveryMethodForReplicaState_New_ExceedsThreshold(t *testing.T) {
+	ctx := context.Background()
+	primary := newMockSQLRunnerWithGTIDs("a:1-10", "")
+	replica := newMockSQLRunnerWithGTIDs("", "")
+	replica.cloneThreshold = 5
+	// empty replica -> missing equals the whole primary set (10) -> clone
+
+	method, err := recoveryMethodForReplicaState(ctx, primary, replica, innodbcluster.ReplicaGtidNew)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if method != innodbcluster.RecoveryClone {
+		t.Errorf("expected RecoveryClone, got %v", method)
+	}
+}
+
+func TestRecoveryMethodForReplicaState_Identical_Incremental(t *testing.T) {
+	ctx := context.Background()
+	primary := newMockSQLRunnerWithGTIDs("a:1-10", "")
+	replica := newMockSQLRunnerWithGTIDs("a:1-10", "")
+	replica.cloneThreshold = 1
+	// missing is empty (0 transactions), so even a threshold of 1 keeps incremental
+	primary.setGTIDSubtractResponse("a:1-10", "a:1-10", "")
+
+	method, err := recoveryMethodForReplicaState(ctx, primary, replica, innodbcluster.ReplicaGtidIdentical)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if method != innodbcluster.RecoveryIncremental {
+		t.Errorf("expected RecoveryIncremental, got %v", method)
 	}
 }
