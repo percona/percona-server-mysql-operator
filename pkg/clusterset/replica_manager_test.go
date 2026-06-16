@@ -26,7 +26,7 @@ func TestClusterSetReplicaManagerJob(t *testing.T) {
 	}
 	args := []string{"--cluster", "replica"}
 
-	job := ClusterSetReplicaManagerJob(pcs, cluster, CmdAddReplica, args, "replica-manager:latest", "replica-manager-sa")
+	job := ClusterSetManagerJob(pcs, cluster, CmdAddReplica, args, "replica-manager:latest", "replica-manager-sa")
 
 	expectedLabels := map[string]string{
 		"app.kubernetes.io/name":       ClusterSetReplicaManagerAppName,
@@ -42,9 +42,9 @@ func TestClusterSetReplicaManagerJob(t *testing.T) {
 	assert.Equal(t, "test-ns", job.Namespace)
 	assert.Equal(t, expectedLabels, job.Labels)
 	assert.Equal(t, &batchv1.JobSpec{
-		Parallelism:             ptr.To(int32(1)),
-		Completions:             ptr.To(int32(1)),
-		TTLSecondsAfterFinished: ptr.To(int32(90)),
+		BackoffLimit: ptr.To(int32(3)),
+		Parallelism:  ptr.To(int32(1)),
+		Completions:  ptr.To(int32(1)),
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: expectedLabels,

@@ -42,6 +42,19 @@ if [ -f "$PATH_TO_SECRET/$TOPOLOGY_USER" ]; then
 fi
 
 set +o xtrace
+
+# Enable HTTP API auth (multi: orchestrator user = read+write, readonly user
+# with any password = read-only). Injected here, not in the ConfigMap, to keep
+# the password out of a world-readable object.
+if [ "${ORC_API_AUTH}" == "true" ] && [ -n "${TOPOLOGY_PASSWORD}" ]; then
+	auth_tmp=$(mktemp)
+	jq -M --arg user "${TOPOLOGY_USER}" --arg pass "${TOPOLOGY_PASSWORD}" \
+		'. + {AuthenticationMethod:"multi", HTTPAuthUser:$user, HTTPAuthPassword:$pass}' \
+		"$ORC_CONF_FILE" >"$auth_tmp"
+	cat "$auth_tmp" >"$ORC_CONF_FILE"
+	rm "$auth_tmp"
+fi
+
 temp=$(mktemp)
 
 ESCAPED_PASSWORD=$(printf '%s' "${TOPOLOGY_PASSWORD:-$ORC_TOPOLOGY_PASSWORD}" | sed -e 's/[&"\\]/\\&/g')

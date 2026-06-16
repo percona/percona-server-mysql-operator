@@ -140,6 +140,10 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, errors.Wrap(err, "reconcile status")
 	}
 
+	if err := r.cleanupOutdatedJobs(ctx, pcs); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "cleanup outdated jobs")
+	}
+
 	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 
@@ -427,7 +431,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) runClusterSetJob(
 		args = append(args, "--replica-cluster-name="+cluster.InnoDBClusterName)
 	}
 
-	job := clusterset.ClusterSetReplicaManagerJob(pcs, cluster, command, args, r.jobImage, clustersetServiceAccount(pcs).Name)
+	job := clusterset.ClusterSetManagerJob(pcs, cluster, command, args, r.jobImage, clustersetServiceAccount(pcs).Name)
 	err := r.Get(ctx, client.ObjectKeyFromObject(job), job)
 
 	verb := "Adding to"
@@ -774,6 +778,31 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRBAC(ctx context.Conte
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "create or update service account")
+	}
+	return nil
+}
+
+func (r *PerconaServerMySQLClusterSetReconciler) cleanupOutdatedJobs(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet) error {
+	labels := naming.Labels(clusterset.ClusterSetReplicaManagerAppName, pcs.Name, "percona-server", clusterset.ClusterSetReplicaManagerComponent)
+	jobs := &batchv1.JobList{}
+
+	if err := r.List(ctx, jobs, client.InNamespace(pcs.Namespace), client.MatchingLabels(labels)); err != nil {
+		return errors.Wrap(err, "list replica manager jobs")
+	}
+
+	for _, job := range jobs.Items {
+		if job.Spec.TTLSecondsAfterFinished != nil {
+			continue
+		}
+		if jobConditionTrue(&job, batchv1.JobComplete) {
+			// Patch the Job with a TTLSecondsAfterFinished so that deletion is deferred.
+			// Immediate deletion can result in duplicate jobs if the informer cache is not updated fast enough.
+			orig := job.DeepCopy()
+			job.Spec.TTLSecondsAfterFinished = new(int32(30))
+			if err := r.Patch(ctx, &job, client.MergeFrom(orig)); err != nil {
+				return errors.Wrap(err, "patch replica manager job")
+			}
+		}
 	}
 	return nil
 }
