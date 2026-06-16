@@ -105,6 +105,12 @@ func autoscalingPod(cr *apiv1.PerconaServerMySQL, idx string, running bool) *cor
 	if running {
 		pod.Status = corev1.PodStatus{
 			Phase: corev1.PodRunning,
+			Conditions: []corev1.PodCondition{
+				{
+					Type:   corev1.ContainersReady,
+					Status: corev1.ConditionTrue,
+				},
+			},
 			ContainerStatuses: []corev1.ContainerStatus{
 				{
 					Name:  mysql.AppName,
