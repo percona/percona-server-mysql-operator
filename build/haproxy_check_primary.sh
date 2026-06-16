@@ -55,7 +55,7 @@ check_gr() {
 
 	log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} Super_Read_Only: ${SUPER_RO} Read_Only: ${READ_ONLY} Node_Status: ${NODE_STATUS} Member_Role: ${MEMBER_ROLE} Is_Clusterset_Replica: ${IS_CLUSTERSET_REPLICA}"
 
-	if [[ ${IS_CLUSTERSET_REPLICA} == '1' ]] && [[ ${MEMBER_ROLE} == 'PRIMARY' ]] && [[ ${NODE_STATUS} == "ONLINE" ]]; then
+	if [[ ${IS_CLUSTERSET_REPLICA} == '1' ]] && [[ ${MEMBER_ROLE} == 'PRIMARY' ]] && [[ ${NODE_STATUS} == "ONLINE" ]] && [[ ${SUPER_RO} == '1' ]] && [[ ${READ_ONLY} == '1' ]]; then
 		log INFO "${MYSQL_SERVER_IP}:${MYSQL_SERVER_PORT} for backend ${HAPROXY_PROXY_NAME} is OK"
 		exit 0
 	elif [[ ${SUPER_RO} == '0' ]] && [[ ${READ_ONLY} == '0' ]] && [[ ${NODE_STATUS} == "ONLINE" ]]; then

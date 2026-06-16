@@ -22,7 +22,7 @@ const (
 	CmdSetPrimary    = "set-primary"
 )
 
-func ClusterSetReplicaManagerJob(
+func ClusterSetManagerJob(
 	pcs *apiv1.PerconaServerMySQLClusterSet,
 	cluster *apiv1.ClusterSetCluster,
 	cmd string,
@@ -42,9 +42,9 @@ func ClusterSetReplicaManagerJob(
 			Labels:    labels,
 		},
 		Spec: batchv1.JobSpec{
-			Parallelism:             new(int32(1)),
-			Completions:             new(int32(1)),
-			TTLSecondsAfterFinished: new(int32(90)),
+			BackoffLimit: new(int32(3)),
+			Parallelism:  new(int32(1)),
+			Completions:  new(int32(1)),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
