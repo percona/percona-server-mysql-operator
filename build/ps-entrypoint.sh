@@ -213,7 +213,7 @@ create_default_cnf() {
 	fi
 
 	if [ "$MYSQL_VERSION" == '8.4' ]; then
-		sed -i '/\[mysqld\]/a innodb_numa_interleave=OFF' $CFG
+		sed -i "/\[mysqld\]/a innodb_numa_interleave=OFF" $CFG
 	fi
 
 	for f in "${CUSTOM_CONFIG_FILES[@]}"; do
