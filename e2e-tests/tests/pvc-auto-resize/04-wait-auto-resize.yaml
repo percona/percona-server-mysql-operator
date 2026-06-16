@@ -24,7 +24,7 @@ assertAll:
   message: "PVC datadir-pvc-auto-resize-mysql-2 should have been resized"
 
 - celExpr: "pvc0.status.capacity.storage == '4Gi'"
-  message: "PVC datadir-pvc-auto-resize-mysql-2 should have been resized to 4Gi"
+  message: "PVC datadir-pvc-auto-resize-mysql-0 should have been resized to 4Gi"
 - celExpr: "pvc1.status.capacity.storage == '4Gi'"
   message: "PVC datadir-pvc-auto-resize-mysql-1 should have been resized to 4Gi"
 - celExpr: "pvc2.status.capacity.storage == '4Gi'"
