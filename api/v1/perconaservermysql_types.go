@@ -165,6 +165,7 @@ type AutoscalingSpec struct {
 	TriggerThresholdPercent int `json:"triggerThresholdPercent,omitempty"`
 
 	// GrowthStep is the amount to add to storage when the threshold is exceeded (e.g., "2Gi")
+	// +kubebuilder:validation:XValidation:rule="quantity(self).sign() >= 0",message="growthStep must be a positive quantity"
 	// +kubebuilder:default="2Gi"
 	GrowthStep resource.Quantity `json:"growthStep,omitempty"`
 
