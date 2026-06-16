@@ -1,0 +1,20 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 120
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # The Group Replication plugin must not be loaded on async clusters.
+      idx=0
+      for pod in $(kubectl -n "${NAMESPACE}" get pods -l 'app.kubernetes.io/component=database' -o jsonpath='{.items[*].metadata.name}'); do
+          gr_plugins=$(kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- bash -c \
+              'mysql -uroot -p"$(cat /etc/mysql/mysql-users-secret/root)" -NB -e "SELECT COUNT(*) FROM information_schema.plugins WHERE PLUGIN_NAME = \"group_replication\""')
+          echo "${pod}: group_replication plugins loaded: ${gr_plugins}"
+          kubectl -n "${NAMESPACE}" create configmap "12-check-no-gr-plugin-${idx}" \
+              --from-literal=group_replication_plugins="${gr_plugins}"
+          idx=$((idx + 1))
+      done
