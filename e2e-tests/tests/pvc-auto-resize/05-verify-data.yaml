@@ -21,7 +21,7 @@ commands:
       fi
 
       run_mysql \
-          "INSERT pvctest.data (id, data) VALUES (2000, 'post-resize test data')" \
+          "INSERT INTO pvctest.data (id, data) VALUES (2000, 'post-resize test data')" \
           "-h $(get_haproxy_svc $(get_cluster_name))"
 
       new_data=$(run_mysql "SELECT data FROM pvctest.data WHERE id=2000" "-h $(get_haproxy_svc $(get_cluster_name))")

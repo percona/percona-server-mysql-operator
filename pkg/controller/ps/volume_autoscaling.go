@@ -87,8 +87,9 @@ func (r *PerconaServerMySQLReconciler) reconcileStorageAutoscaling(
 		return errors.Wrap(err, "list pods for autoscaling")
 	}
 
-	for _, pvc := range pvcList.Items {
-		if !validatePVCName(pvc, sts.Name) {
+	for i := range pvcList.Items {
+		pvc := &pvcList.Items[i]
+		if !validatePVCName(*pvc, sts.Name) {
 			continue
 		}
 
@@ -98,7 +99,7 @@ func (r *PerconaServerMySQLReconciler) reconcileStorageAutoscaling(
 			continue
 		}
 
-		if err := r.checkAndResizePVC(ctx, cr, &pvc, pod); err != nil {
+		if err := r.checkAndResizePVC(ctx, cr, pvc, pod); err != nil {
 			log.Error(err, "failed to check/resize PVC", "pvc", pvc.Name)
 			r.updateAutoscalingStatus(ctx, cr, pvc.Name, nil, err)
 		}
@@ -133,6 +134,10 @@ func (r *PerconaServerMySQLReconciler) checkAndResizePVC(
 	}
 
 	r.updateAutoscalingStatus(ctx, cr, pvc.Name, usage, nil)
+
+	if pvc.Status.Capacity == nil || pvc.Status.Capacity.Storage().IsZero() {
+		return nil
+	}
 
 	if !r.shouldTriggerResize(ctx, cr, pvc, usage) {
 		return nil

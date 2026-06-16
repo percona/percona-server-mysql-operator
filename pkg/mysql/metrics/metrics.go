@@ -35,9 +35,10 @@ func GetPVCUsage(
 	}
 
 	backoff := wait.Backoff{
-		Steps:    5,
-		Duration: 5 * time.Second,
+		Steps:    3,
+		Duration: 1 * time.Second,
 		Factor:   2.0,
+		Jitter:   0.1,
 	}
 
 	// Execute df command in the mysql container to get disk usage
