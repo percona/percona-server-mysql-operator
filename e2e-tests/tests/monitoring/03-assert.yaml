@@ -269,6 +269,11 @@ spec:
                 path: haproxy.cfg
               name: monitoring-haproxy
               optional: true
+      - configMap:
+          defaultMode: 420
+          name: internal-haproxy-config-monitoring
+          optional: true
+        name: internal-config
   updateStrategy:
     rollingUpdate:
       partition: 0

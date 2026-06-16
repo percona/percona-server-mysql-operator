@@ -34,6 +34,7 @@ install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy_check_pri
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy_check_replicas.sh" "${BINDIR}/haproxy_check_replicas.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy_liveness_check.sh" "${BINDIR}/haproxy_liveness_check.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy_readiness_check.sh" "${BINDIR}/haproxy_readiness_check.sh"
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy_startup_check.sh" "${BINDIR}/haproxy_startup_check.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy.cfg" "${BINDIR}/haproxy.cfg"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/haproxy-global.cfg" "${BINDIR}/haproxy-global.cfg"
 

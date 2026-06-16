@@ -335,6 +335,7 @@ func TestReconcileStatusAsync(t *testing.T) {
 				cr.Spec.Orchestrator.Enabled = true
 				cr.Spec.Unsafe.Proxy = true
 				cr.Spec.Proxy.HAProxy.Enabled = false
+				cr.Status.HAProxy.ImageID = "docker-pullable://percona/haproxy@sha256:old"
 			}),
 			objects: appendSlices(
 				makeFakeReadyPods(cr, 3, "mysql"),
@@ -406,9 +407,12 @@ func TestReconcileStatusAsync(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			expected := tt.expected
+			expected.InnoDBClusterName = cr.InnoDBClusterName()
+
 			opt := cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime", "Message")
-			if diff := cmp.Diff(cr.Status, tt.expected, opt); diff != "" {
-				t.Errorf("expected status %v, got %v, diff: %s", tt.expected, cr.Status, diff)
+			if diff := cmp.Diff(cr.Status, expected, opt); diff != "" {
+				t.Errorf("expected status %v, got %v, diff: %s", expected, cr.Status, diff)
 			}
 		})
 	}
@@ -668,9 +672,12 @@ func TestReconcileStatusHAProxyGR(t *testing.T) {
 
 			require.NoError(t, r.Get(t.Context(), client.ObjectKeyFromObject(cr), cr))
 
+			expected := tt.expected
+			expected.InnoDBClusterName = cr.InnoDBClusterName()
+
 			opt := cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime", "Message")
-			if diff := cmp.Diff(cr.Status, tt.expected, opt); diff != "" {
-				t.Errorf("expected status %v, got %v, diff: %s", tt.expected, cr.Status, diff)
+			if diff := cmp.Diff(cr.Status, expected, opt); diff != "" {
+				t.Errorf("expected status %v, got %v, diff: %s", expected, cr.Status, diff)
 			}
 		})
 	}
@@ -929,9 +936,12 @@ func TestReconcileStatusRouterGR(t *testing.T) {
 			require.NoError(t, r.reconcileCRStatus(t.Context(), cr, nil))
 			require.NoError(t, r.Get(t.Context(), client.ObjectKeyFromObject(cr), cr))
 
+			expected := tt.expected
+			expected.InnoDBClusterName = cr.InnoDBClusterName()
+
 			opt := cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime", "Message")
-			if diff := cmp.Diff(cr.Status, tt.expected, opt); diff != "" {
-				t.Errorf("expected status %v, got %v, diff: %s", tt.expected, cr.Status, diff)
+			if diff := cmp.Diff(cr.Status, expected, opt); diff != "" {
+				t.Errorf("expected status %v, got %v, diff: %s", expected, cr.Status, diff)
 			}
 		})
 	}
@@ -1135,7 +1145,7 @@ func getFakeClient(
 			DB: "mysql_innodb_cluster_metadata",
 		},
 	}
-	s := queryScript("SELECT SCHEMA_NAME AS db FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME LIKE 'mysql_innodb_cluster_metadata'", dbs)
+	s := queryScript("SELECT SCHEMA_NAME AS db FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = 'mysql_innodb_cluster_metadata'", dbs)
 	if !noMetadataDB {
 	} else {
 		s.err = sql.ErrNoRows
@@ -1439,8 +1449,11 @@ func TestReconcileStatusBinlogServer(t *testing.T) {
 			require.NoError(t, r.reconcileCRStatus(t.Context(), cr, nil))
 			require.NoError(t, r.Get(t.Context(), types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, cr))
 
+			expected := tt.expected
+			expected.InnoDBClusterName = cr.InnoDBClusterName()
+
 			opt := cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime", "Message")
-			assert.Empty(t, cmp.Diff(cr.Status, tt.expected, opt))
+			assert.Empty(t, cmp.Diff(cr.Status, expected, opt))
 		})
 	}
 }

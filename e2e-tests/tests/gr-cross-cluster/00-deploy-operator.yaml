@@ -8,12 +8,8 @@ commands:
       source ../../functions
       init_temp_dir # do this only in the first TestStep
 
-      apply_s3_storage_secrets
       deploy_operator
       deploy_tls_cluster_secrets
       deploy_client
       deploy_cluster_secrets
-      if has_minio_storage; then
-        deploy_minio
-      fi
     timeout: 300
