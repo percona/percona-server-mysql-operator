@@ -9,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
@@ -100,6 +101,7 @@ func printCluster(ctx context.Context) error {
 		corev1.PersistentVolumeClaimSpec{},
 		corev1.Volume{},
 		corev1.Container{},
+		resource.Quantity{},
 	)
 	if err != nil {
 		return errors.Wrap(err, "marshal")

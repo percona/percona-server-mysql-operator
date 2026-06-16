@@ -128,6 +128,13 @@ func FromPresets(cr any) error {
 			VersionServiceEndpoint: "https://check.percona.com",
 			Apply:                  "disabled",
 		},
+		apiv1.StorageScalingSpec{
+			Autoscaling: &apiv1.AutoscalingSpec{
+				TriggerThresholdPercent: 80,
+				GrowthStep:              resource.MustParse("2Gi"),
+				MaxSize:                 resource.MustParse("10Gi"),
+			},
+		},
 		[]corev1.Toleration{
 			{
 				Key:               "node.alpha.kubernetes.io/unreachable",
