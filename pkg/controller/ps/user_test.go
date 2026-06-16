@@ -12,16 +12,21 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/percona/percona-server-mysql-operator/pkg/router"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/version"
 )
@@ -476,4 +481,80 @@ func TestReconcileUsersCreatesClusterSetUser(t *testing.T) {
 	if fc.execCount != len(scripts) {
 		t.Fatalf("expected %d exec calls, got %d", len(scripts), fc.execCount)
 	}
+}
+
+func TestReconcileUsersRestartsRouterOnOperatorPasswordUpdate(t *testing.T) {
+	ctx := context.Background()
+
+	const crName = "router-password-rotation"
+	const ns = "some-namespace"
+	const oldOperatorPass = "op-password-old"
+	const newOperatorPass = "op-password-new"
+
+	cr := &apiv1.PerconaServerMySQL{
+		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+		Spec: apiv1.PerconaServerMySQLSpec{
+			CRVersion:   "1.2.0",
+			SecretsName: "some-secret",
+			MySQL:       apiv1.MySQLSpec{ClusterType: apiv1.ClusterTypeGR},
+			Proxy:       apiv1.ProxySpec{Router: &apiv1.MySQLRouterSpec{Enabled: true, PodSpec: apiv1.PodSpec{Size: 1}}},
+		},
+	}
+
+	userSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: cr.Spec.SecretsName, Namespace: ns},
+		Data:       map[string][]byte{string(apiv1.UserOperator): []byte(newOperatorPass)},
+	}
+	internalSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: cr.InternalSecretName(), Namespace: ns},
+		Data:       map[string][]byte{string(apiv1.UserOperator): []byte(oldOperatorPass)},
+	}
+	routerDeployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: router.Name(cr), Namespace: ns},
+		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{}},
+	}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme), "failed to add client-go scheme")
+	require.NoError(t, apiv1.AddToScheme(scheme), "failed to add apis scheme")
+
+	hash, err := k8s.ObjectHash(userSecret)
+	require.NoError(t, err, "calculate secret hash")
+
+	baseClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr, internalSecret, routerDeployment).Build()
+	recordingClient := &routerRolloutRecordingClient{
+		Client:           baseClient,
+		internalSecretNN: types.NamespacedName{Name: cr.InternalSecretName(), Namespace: ns},
+	}
+
+	r := PerconaServerMySQLReconciler{Client: recordingClient, Scheme: scheme}
+	require.NoError(t, r.finalizeInternalSecretAndRestartRouter(ctx, cr, internalSecret, userSecret, true, hash), "finalizeInternalSecretAndRestartRouter failed")
+
+	updatedInternalSecret := new(corev1.Secret)
+	require.NoError(t, r.Get(ctx, types.NamespacedName{Name: cr.InternalSecretName(), Namespace: ns}, updatedInternalSecret), "get internal secret")
+
+	assert.Equal(t, newOperatorPass, string(updatedInternalSecret.Data[string(apiv1.UserOperator)]), "internal secret operator password mismatch")
+	assert.Equal(t, "false", updatedInternalSecret.Annotations[naming.AnnotationPasswordsUpdated.String()], "passwords-updated annotation mismatch")
+	assert.Equal(t, newOperatorPass, recordingClient.operatorPassAtPatch, "router rollout happened before internal secret update")
+	assert.Equal(t, hash, recordingClient.routerHashAtPatch, "router rollout hash mismatch")
+}
+
+type routerRolloutRecordingClient struct {
+	client.Client
+	internalSecretNN    types.NamespacedName
+	operatorPassAtPatch string
+	routerHashAtPatch   string
+}
+
+func (c *routerRolloutRecordingClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	if dep, ok := obj.(*appsv1.Deployment); ok {
+		secret := new(corev1.Secret)
+		if err := c.Get(ctx, c.internalSecretNN, secret); err != nil {
+			return err
+		}
+		c.operatorPassAtPatch = string(secret.Data[string(apiv1.UserOperator)])
+		c.routerHashAtPatch = dep.Spec.Template.Annotations[naming.AnnotationSecretHash.String()]
+	}
+
+	return c.Client.Patch(ctx, obj, patch, opts...)
 }
