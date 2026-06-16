@@ -1,0 +1,21 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      if [ "${MYSQL_VERSION}" != "8.4" ]; then
+          echo "skip: innodb_numa_interleave is only disabled by default for 8.4"
+          exit 0
+      fi
+
+      numa=$(run_mysql \
+          "SELECT @@innodb_numa_interleave" \
+          "-h $(get_haproxy_svc $(get_cluster_name))" "-uroot -proot_password")
+      if [ "${numa}" != "0" ]; then
+          echo "expected innodb_numa_interleave=OFF (0), got: '${numa}'"
+          exit 1
+      fi
