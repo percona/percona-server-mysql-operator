@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	customConfigKey  = "haproxy.cfg"
-	configVolumeName = "config"
-	configMountPath  = "/etc/haproxy-custom/"
+	customConfigKey          = "haproxy.cfg"
+	configVolumeName         = "config"
+	internalConfigVolumeName = "internal-config"
+	configMountPath          = "/etc/haproxy-custom/"
 )
 
 type Configurable apiv1.PerconaServerMySQL

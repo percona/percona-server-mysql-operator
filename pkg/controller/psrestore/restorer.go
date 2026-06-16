@@ -252,8 +252,10 @@ func (s *restorerOptions) resolveIncrementalChain(ctx context.Context) (xtraback
 	var allIncrementals []string
 	for _, obj := range objects {
 		rel := strings.TrimPrefix(obj, incrListPrefix)
-		ts, _, _ := strings.Cut(rel, "/")
-		if ts != "" && strings.HasSuffix(ts, "-incr") {
+		ts, file, _ := strings.Cut(rel, "/")
+		// xbcloud uploads files in chunks suffixed with the chunk index,
+		// e.g. xtrabackup_info.00000000000000000000
+		if ts != "" && strings.HasSuffix(ts, "-incr") && strings.HasPrefix(file, "xtrabackup_info.") {
 			allIncrementals = append(allIncrementals, ts)
 		}
 	}

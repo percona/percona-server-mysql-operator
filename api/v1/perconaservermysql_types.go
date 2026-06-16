@@ -1079,6 +1079,22 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 		cr.Spec.Proxy.HAProxy.ReadinessProbe.FailureThreshold = 3
 	}
 
+	if cr.Spec.Proxy.HAProxy.StartupProbe.InitialDelaySeconds == 0 {
+		cr.Spec.Proxy.HAProxy.StartupProbe.InitialDelaySeconds = 10
+	}
+	if cr.Spec.Proxy.HAProxy.StartupProbe.PeriodSeconds == 0 {
+		cr.Spec.Proxy.HAProxy.StartupProbe.PeriodSeconds = 10
+	}
+	if cr.Spec.Proxy.HAProxy.StartupProbe.SuccessThreshold == 0 {
+		cr.Spec.Proxy.HAProxy.StartupProbe.SuccessThreshold = 1
+	}
+	if cr.Spec.Proxy.HAProxy.StartupProbe.TimeoutSeconds == 0 {
+		cr.Spec.Proxy.HAProxy.StartupProbe.TimeoutSeconds = 3
+	}
+	if cr.Spec.Proxy.HAProxy.StartupProbe.FailureThreshold == 0 {
+		cr.Spec.Proxy.HAProxy.StartupProbe.FailureThreshold = 10
+	}
+
 	var fsgroup *int64
 	if serverVersion != nil && serverVersion.Platform != platform.PlatformOpenshift {
 		var tp int64 = 1001
