@@ -105,18 +105,19 @@ func TestConfigMapDataUserConfiguration(t *testing.T) {
 			"PostFailoverProcesses", "PostMasterFailoverProcesses",
 			"PostIntermediateMasterFailoverProcesses", "PostGracefulTakeoverProcesses",
 			"DetectClusterAliasQuery", "DetectInstanceAliasQuery",
-			"MySQLHostnameResolveMethod", "HostnameResolveMethod",
 			"ListenAddress", "MySQLTopologyCredentialsConfigFile",
 			"RaftDataDir", "SQLite3DataFile", "BackendDB",
 			"ApplyMySQLPromotionAfterMasterFailover", "MasterFailoverDetachReplicaMasterHost",
 			"DetachLostReplicasAfterMasterFailover", "FailMasterPromotionIfSQLThreadNotUpToDate",
-			"UseSuperReadOnly",
 		} {
 			_, ok := cfg[k]
 			assert.Falsef(t, ok, "reserved key %s must not be in the ConfigMap", k)
 		}
 
-		// a genuine tuning knob still gets through
+		// non-reserved keys (incl. the now-overridable ones) get through
 		assert.EqualValues(t, 9, cfg["InstancePollSeconds"])
+		assert.EqualValues(t, "evil", cfg["MySQLHostnameResolveMethod"])
+		assert.EqualValues(t, "evil", cfg["HostnameResolveMethod"])
+		assert.EqualValues(t, false, cfg["UseSuperReadOnly"])
 	})
 }
