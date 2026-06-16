@@ -212,6 +212,10 @@ create_default_cnf() {
 		sed -i "/\[mysqld\]/a innodb_parallel_dblwr_encrypt=ON" $CFG
 	fi
 
+	if [ "$MYSQL_VERSION" == '8.4' ]; then
+		sed -i "/\[mysqld\]/a innodb_numa_interleave=OFF" $CFG
+	fi
+
 	for f in "${CUSTOM_CONFIG_FILES[@]}"; do
 		echo "${f}"
 		if [ -f "${f}" ]; then
@@ -460,7 +464,9 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 		echo
 	fi
 
-	load_group_replication_plugin
+	if [[ ${CLUSTER_TYPE} != "async" ]]; then
+		load_group_replication_plugin
+	fi
 	ensure_read_only
 
 	# exit when MYSQL_INIT_ONLY environment variable is set to avoid starting mysqld

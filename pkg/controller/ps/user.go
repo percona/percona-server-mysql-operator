@@ -165,6 +165,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		restartMySQL        bool
 		restartReplication  bool
 		restartOrchestrator bool
+		restartRouter       bool
 		restartPMM          bool
 	)
 
@@ -203,6 +204,8 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		switch apiv1.SystemUser(user) {
 		case apiv1.UserMonitor:
 			restartMySQL = cr.PMMEnabled(internalSecret)
+		case apiv1.UserOperator:
+			restartRouter = cr.RouterEnabled()
 		case apiv1.UserPMMServerToken:
 			restartPMM = cr.PMMEnabled(internalSecret)
 			continue // PMM server user credentials are not stored in db
@@ -301,6 +304,23 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return nil
 	}
 
+	if err := r.finalizeInternalSecretAndRestartRouter(ctx, cr, internalSecret, secret, restartRouter, hash); err != nil {
+		return err
+	}
+
+	return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, updatedUsers, operatorPass)
+}
+
+func (r *PerconaServerMySQLReconciler) finalizeInternalSecretAndRestartRouter(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	internalSecret *corev1.Secret,
+	secret *corev1.Secret,
+	restartRouter bool,
+	hash string,
+) error {
+	log := logf.FromContext(ctx).WithName("reconcileUsers")
+
 	internalSecret.Data = secret.DeepCopy().Data
 	if err := r.Client.Update(ctx, internalSecret); err != nil {
 		return errors.Wrapf(err, "update Secret/%s", internalSecret.Name)
@@ -309,12 +329,24 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 	log.Info("Updated internal secret", "secretName", cr.InternalSecretName())
 
 	k8s.AddAnnotation(internalSecret, naming.AnnotationPasswordsUpdated.String(), "false")
-	err = r.Client.Update(ctx, internalSecret)
-	if err != nil {
+	if err := r.Update(ctx, internalSecret); err != nil {
 		return errors.Wrap(err, "update internal sys users secret annotation")
 	}
 
-	return r.discardOldPasswordsAfterNewPropagated(ctx, cr, internalSecret, updatedUsers, operatorPass)
+	if restartRouter {
+		log.Info("Operator user password updated. Restarting Router.")
+
+		dp := new(appsv1.Deployment)
+		nn := types.NamespacedName{Name: router.Name(cr), Namespace: cr.Namespace}
+		if err := r.Get(ctx, nn, dp); err != nil {
+			return errors.Wrap(err, "get Router deployment")
+		}
+		if err := k8s.RolloutRestart(ctx, r.Client, dp, naming.AnnotationSecretHash, hash); err != nil {
+			return errors.Wrap(err, "restart Router")
+		}
+	}
+
+	return nil
 }
 
 const (

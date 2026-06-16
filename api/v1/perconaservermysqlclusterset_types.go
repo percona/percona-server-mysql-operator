@@ -43,6 +43,8 @@ type PerconaServerMySQLClusterSet struct {
 }
 
 // +kubebuilder:validation:XValidation:rule="self.clusters.exists(c, c.innodbClusterName == self.primaryCluster)",message="spec.primaryCluster not found in spec.clusters"
+// +kubebuilder:validation:XValidation:rule="self.clusters.all(c, c.endpoints.all(e, self.clusters.map(c2, c2.endpoints.filter(e2, e2.host == e.host).size()).sum() == 1))",message="endpoint host must be unique across all clusters"
+
 type PerconaServerMySQLClusterSetSpec struct {
 	// PrimaryCluster is the desired primary cluster of the ClusterSet.
 	// This is the cluster that will serve writes, and replica members will connect to.

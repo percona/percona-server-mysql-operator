@@ -35,6 +35,13 @@ func (h *Handler) deleteBackupHandler(w http.ResponseWriter, req *http.Request) 
 
 	backupName := path[2]
 	log = log.WithValues("namespace", ns, "name", backupName)
+
+	if err := ValidateBackupName(backupName); err != nil {
+		log.Error(err, "invalid backup name")
+		http.Error(w, "invalid backup name", http.StatusBadRequest)
+		return
+	}
+
 	data, err := io.ReadAll(req.Body)
 	if err != nil {
 		log.Error(err, "failed to read request data")
