@@ -10,6 +10,16 @@ commands:
 
       sleep 30 # wait for cluster status to change to initializing
       wait_cluster_consistency_gr "${test_name}" "3" "3"
+
+      # Keep a delayed check to catch post-rotation regressions, then verify
+      # router readiness directly with the same script used by kubelet.
+      sleep 90
+      wait_cluster_consistency_gr "${test_name}" "3" "3"
+
+      for pod in $(get_router_pods); do
+          kubectl -n "${NAMESPACE}" exec "$pod" -- /opt/percona/router_readiness_check.sh
+      done
+
       cluster_name=$(get_cluster_name)
       mysql_host="-h $(get_router_service ${cluster_name})"
       mysql_user="-uroot -proot_password_updated"
