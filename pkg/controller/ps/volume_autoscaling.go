@@ -129,7 +129,7 @@ func (r *PerconaServerMySQLReconciler) checkAndResizePVC(
 
 	r.updateAutoscalingStatus(ctx, cr, pvc.Name, usage, nil)
 
-	if pvc.Status.Capacity == nil || pvc.Status.Capacity.Storage().IsZero() {
+	if pvc.Status.Capacity == nil || pvc.Status.Capacity.Storage() == nil || pvc.Status.Capacity.Storage().IsZero() {
 		return nil
 	}
 
