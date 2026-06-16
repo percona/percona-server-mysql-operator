@@ -92,6 +92,10 @@ func autoscalingPVC(cr *apiv1.PerconaServerMySQL, idx string, capacity string) *
 
 func autoscalingPod(cr *apiv1.PerconaServerMySQL, idx string, running bool) *corev1.Pod {
 	pod := &corev1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Pod",
+			APIVersion: "v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      mysql.Name(cr) + "-" + idx,
 			Namespace: cr.Namespace,

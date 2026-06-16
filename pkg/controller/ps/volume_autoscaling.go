@@ -12,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -118,13 +117,8 @@ func (r *PerconaServerMySQLReconciler) checkAndResizePVC(
 	log := logf.FromContext(ctx).WithValues("pvc", pvc.Name)
 	ctx = logf.IntoContext(ctx, log)
 
-	podStatus, err := k8s.KStatusCompute(pod)
-	if err != nil {
-		return errors.Wrap(err, "compute pod status")
-	}
-
-	if podStatus.Status != kstatus.CurrentStatus {
-		log.V(1).Info("Skipping PVC metrics check: pod not in current status", "status", podStatus.Status)
+	if !k8s.IsPodReady(*pod) {
+		log.V(1).Info("Skipping PVC metrics check: pod not ready", "pod", pod.Name)
 		return nil
 	}
 
