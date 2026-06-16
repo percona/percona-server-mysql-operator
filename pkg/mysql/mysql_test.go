@@ -531,7 +531,6 @@ func expectedVolumes() []corev1.Volume {
 }
 
 func TestPrimaryService_GroupReplication(t *testing.T) {
-	allocateNodePorts := false
 	cr := &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
@@ -551,7 +550,7 @@ func TestPrimaryService_GroupReplication(t *testing.T) {
 							"custom-annotation": "custom-annotation-value",
 						},
 						LoadBalancerSourceRanges:      []string{"10.0.0.0/8"},
-						AllocateLoadBalancerNodePorts: &allocateNodePorts,
+						AllocateLoadBalancerNodePorts: new(false),
 					},
 				},
 			},
@@ -624,7 +623,6 @@ func TestPrimaryService_GroupReplication(t *testing.T) {
 
 func TestPodService(t *testing.T) {
 	podName := "test-pod"
-	allocateNodePorts := false
 
 	cr := &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
@@ -645,7 +643,7 @@ func TestPodService(t *testing.T) {
 							"custom-annotation": "custom-annotation-value",
 						},
 						LoadBalancerSourceRanges:      []string{"10.0.0.0/8"},
-						AllocateLoadBalancerNodePorts: &allocateNodePorts,
+						AllocateLoadBalancerNodePorts: new(false),
 					},
 				},
 			},

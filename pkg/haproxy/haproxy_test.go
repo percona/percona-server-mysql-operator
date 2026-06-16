@@ -422,7 +422,6 @@ func TestStatefulset(t *testing.T) {
 
 func TestService(t *testing.T) {
 	podName := "test-cluster-haproxy"
-	allocateNodePorts := false
 
 	cr := &apiv1.PerconaServerMySQL{
 		ObjectMeta: metav1.ObjectMeta{
@@ -441,7 +440,7 @@ func TestService(t *testing.T) {
 							"custom-annotation": "custom-annotation-value",
 						},
 						LoadBalancerSourceRanges:      []string{"10.0.0.0/8"},
-						AllocateLoadBalancerNodePorts: &allocateNodePorts,
+						AllocateLoadBalancerNodePorts: new(false),
 					},
 				},
 			},
