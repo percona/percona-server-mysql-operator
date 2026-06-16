@@ -146,32 +146,15 @@ func getRecoveryMethod(ctx context.Context, primary, replica string) (innodbclus
 		return "", errors.Wrap(err, "check replica state")
 	}
 
-	return recoveryMethodForReplicaState(ctx, primarySQLRunner, replicaSQLRunner, replicaState)
-}
-
-// recoveryMethodForReplicaState maps the GTID-based replica state to a recovery
-// method for MySQL Shell.
-//
-// For states where incremental (distributed) recovery is possible, Group
-// Replication may still fall back to a remote clone at recovery time if the
-// number of transactions the joining member is missing exceeds
-// group_replication_clone_threshold. That decision is made by Group Replication
-// (InnoDB), independently of the recoveryMethod we pass to MySQL Shell, so a
-// shell-level "incremental" choice can silently end up cloning. We account for
-// the threshold here so the chosen method - and therefore bootstrap.log -
-// reflects what actually happens.
-func recoveryMethodForReplicaState(ctx context.Context, primary, replica SQLRunner, replicaState innodbcluster.ReplicaGtidState) (innodbcluster.RecoveryMethod, error) {
 	switch replicaState {
 	case innodbcluster.ReplicaGtidDiverged:
 		return innodbcluster.RecoveryClone, nil
 	case innodbcluster.ReplicaGtidIrrecoverable:
 		return innodbcluster.RecoveryClone, nil
 	case innodbcluster.ReplicaGtidRecoverable, innodbcluster.ReplicaGtidIdentical, innodbcluster.ReplicaGtidNew:
-		exceeded, err := cloneThresholdExceeded(ctx, primary, replica)
-		if err != nil {
+		if exceeded, err := cloneThresholdExceeded(ctx, primarySQLRunner, replicaSQLRunner); err != nil {
 			return "", errors.Wrap(err, "check clone threshold")
-		}
-		if exceeded {
+		} else if exceeded {
 			return innodbcluster.RecoveryClone, nil
 		}
 		return innodbcluster.RecoveryIncremental, nil
