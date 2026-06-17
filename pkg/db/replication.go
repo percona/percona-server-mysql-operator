@@ -99,22 +99,6 @@ func (m *ReplicationDBManager) ChangeReplicationSource(ctx context.Context, host
 	return nil
 }
 
-func (m *ReplicationDBManager) StopReplica(ctx context.Context) error {
-	var errb, outb bytes.Buffer
-	if err := m.db.exec(ctx, "STOP REPLICA", &outb, &errb); err != nil {
-		return errors.Wrap(err, "exec STOP REPLICA")
-	}
-	return nil
-}
-
-func (m *ReplicationDBManager) StartReplica(ctx context.Context) error {
-	var errb, outb bytes.Buffer
-	if err := m.db.exec(ctx, "START REPLICA", &outb, &errb); err != nil {
-		return errors.Wrap(err, "exec START REPLICA")
-	}
-	return nil
-}
-
 func (m *ReplicationDBManager) ReplicationStatus(ctx context.Context) (ReplicationStatus, string, error) {
 	rows := []*struct {
 		IoState  string `csv:"conn_state"`
