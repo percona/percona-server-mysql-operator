@@ -1689,13 +1689,17 @@ get_telemetry_report_by_id() {
 
 	local url="https://pmm.check-dev.percona.com/graph/api/datasources/proxy/33/?query=${encoded_sql}&database=telemetryd"
 
-	local retry=0 resp body http_code rows
+	local retry=0 resp body http_code rows curl_exit
 
 	while :; do
-		resp="$(curl -sS -k -w $'\n%{http_code}' -H "Authorization: Bearer ${token}" "$url" 2>&1)"
+		curl_exit=0
+		resp="$(curl -sS -k -w $'\n%{http_code}' -H "Authorization: Bearer ${token}" "$url" 2>&1)" || curl_exit=$?
 		http_code="$(printf '%s' "$resp" | tail -n1)"
 		body="$(printf '%s' "$resp" | sed '$d')"
-		rows="$(echo "$body" | jq '.rows' 2>/dev/null)"
+		rows=""
+		if [[ $curl_exit -eq 0 ]]; then
+			rows="$(echo "$body" | jq '.rows' 2>/dev/null)" || rows=""
+		fi
 
 		if [[ $rows =~ ^[1-9][0-9]*$ ]]; then
 			echo "Report data found:"
@@ -1706,6 +1710,7 @@ get_telemetry_report_by_id() {
 		((retry++))
 		if ((retry >= 10)); then
 			echo "Max retry count $retry reached. Report data was not found!"
+			echo "Last curl exit: ${curl_exit}"
 			echo "Last HTTP status: ${http_code}"
 			echo "Last response: ${body}"
 			return 1
