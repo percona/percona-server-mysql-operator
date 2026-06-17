@@ -316,9 +316,6 @@ func apiProbe(cr *apiv1.PerconaServerMySQL, path string, initialDelay int32) *co
 func sidecarContainers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
 	serviceName := mysql.ServiceName(cr)
 
-	// From 1.2.0 the Orchestrator HTTP API requires auth, so use the operator's
-	// copy of the script (installed in /opt/percona by the init container) which
-	// authenticates; older clusters keep the image's unauthenticated script.
 	addNodesScript := "/usr/bin/add_mysql_nodes.sh"
 	if cr.CompareVersion("1.2.0") >= 0 {
 		addNodesScript = "/opt/percona/orc-add_mysql_nodes.sh"
