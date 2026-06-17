@@ -851,6 +851,13 @@ run_curl() {
 	kubectl -n "${NAMESPACE}" exec mysql-client -- bash -c "curl -s -k $*"
 }
 
+# run_curl_orc queries the Orchestrator HTTP API, which requires auth. These
+# are read-only calls, so authenticate as the read-only user (the "multi"
+# method accepts any password for it) — no secret lookup needed.
+run_curl_orc() {
+	run_curl -u readonly:readonly "$@"
+}
+
 get_innodb_cluster_name() {
 	echo $(get_cluster_name) | tr -cd '[^a-zA-Z0-9_]+'
 }

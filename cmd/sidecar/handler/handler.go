@@ -33,6 +33,10 @@ func LogsHandlerFunc(w http.ResponseWriter, req *http.Request) {
 	}
 
 	backupName := path[2]
+	if err := backup.ValidateBackupName(backupName); err != nil {
+		http.Error(w, "invalid backup name", http.StatusBadRequest)
+		return
+	}
 	logFile, err := os.Open(filepath.Join(mysql.BackupLogDir, backupName+".log"))
 	if err != nil {
 		http.Error(w, "failed to open log file", http.StatusInternalServerError)
