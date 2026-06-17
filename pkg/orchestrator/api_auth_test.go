@@ -20,6 +20,17 @@ func hasEnv(env []corev1.EnvVar, name string) bool {
 	return false
 }
 
+func onChangeArg(t *testing.T, args []string) string {
+	t.Helper()
+	for _, a := range args {
+		if strings.HasPrefix(a, "-on-change=") {
+			return strings.TrimPrefix(a, "-on-change=")
+		}
+	}
+	require.Fail(t, "no -on-change arg found", "args: %v", args)
+	return ""
+}
+
 func TestOrchestratorAPIAuthGate(t *testing.T) {
 	t.Run("enabled from 1.2.0", func(t *testing.T) {
 		cr := &apiv1.PerconaServerMySQL{}
@@ -38,6 +49,28 @@ func TestOrchestratorAPIAuthGate(t *testing.T) {
 		for _, s := range sidecarContainers(cr) {
 			assert.Truef(t, hasEnv(s.Env, "ORC_API_AUTH"), "sidecar %s must set ORC_API_AUTH for crVersion >= 1.2.0", s.Name)
 		}
+	})
+
+	t.Run("add_mysql_nodes script gated on 1.2.0", func(t *testing.T) {
+		t.Run("staged script from 1.2.0", func(t *testing.T) {
+			cr := &apiv1.PerconaServerMySQL{}
+			cr.Spec.CRVersion = "1.2.0"
+
+			sidecars := sidecarContainers(cr)
+			require.Len(t, sidecars, 1)
+			assert.Equal(t, "/opt/percona/orc-add_mysql_nodes.sh", onChangeArg(t, sidecars[0].Args),
+				"sidecar must use the init-container-staged auth-aware script for crVersion >= 1.2.0")
+		})
+
+		t.Run("image script before 1.2.0", func(t *testing.T) {
+			cr := &apiv1.PerconaServerMySQL{}
+			cr.Spec.CRVersion = "1.1.0"
+
+			sidecars := sidecarContainers(cr)
+			require.Len(t, sidecars, 1)
+			assert.Equal(t, "/usr/bin/add_mysql_nodes.sh", onChangeArg(t, sidecars[0].Args),
+				"sidecar must use the orchestrator image's script for crVersion < 1.2.0")
+		})
 	})
 
 	t.Run("disabled before 1.2.0", func(t *testing.T) {

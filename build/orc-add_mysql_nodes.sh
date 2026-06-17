@@ -4,10 +4,19 @@ set -e
 
 ORC_HOST=127.0.0.1:3000
 
-CREDS_FILE="/etc/orchestrator/orchestrator-users-secret/orchestrator"
+ORC_CONF_PATH=${ORC_CONF_PATH:-/etc/orchestrator}
+TOPOLOGY_USER=${ORC_TOPOLOGY_USER:-orchestrator}
+CREDS_FILE="${ORC_CONF_PATH}/orchestrator-users-secret/${TOPOLOGY_USER}"
+
+TOPOLOGY_PASSWORD=""
+if [ -f "${CREDS_FILE}" ]; then
+	TOPOLOGY_PASSWORD=$(<"${CREDS_FILE}")
+fi
+TOPOLOGY_PASSWORD="${TOPOLOGY_PASSWORD:-$ORC_TOPOLOGY_PASSWORD}"
+
 CURL_AUTH=()
-if [ "${ORC_API_AUTH}" == "true" ] && [ -f "${CREDS_FILE}" ]; then
-	CURL_AUTH=(-u "orchestrator:$(cat "${CREDS_FILE}")")
+if [ "${ORC_API_AUTH}" == "true" ] && [ -n "${TOPOLOGY_PASSWORD}" ]; then
+	CURL_AUTH=(-u "${TOPOLOGY_USER}:${TOPOLOGY_PASSWORD}")
 fi
 
 log() {
@@ -29,7 +38,7 @@ wait_for_leader() {
 			exit 1
 		fi
 
-		local leader=$(curl "${CURL_AUTH[@]}" "${ORC_HOST}/api/raft-leader" 2>/dev/null)
+		leader=$(curl -fs "${CURL_AUTH[@]}" "${ORC_HOST}/api/raft-leader" 2>/dev/null) || true
 
 		retry=$((retry + 1))
 		sleep 1
@@ -37,9 +46,9 @@ wait_for_leader() {
 }
 
 am_i_leader() {
-	local http_code=$(curl "${CURL_AUTH[@]}" -w httpcode=%{http_code} "${ORC_HOST}/api/leader-check" 2>/dev/null | sed -e 's/.*\httpcode=//')
+	local http_code=$(curl "${CURL_AUTH[@]}" -o /dev/null -s -w '%{http_code}' "${ORC_HOST}/api/leader-check" 2>/dev/null)
 
-	if [ ${http_code} -ne 200 ]; then
+	if [ "${http_code}" != "200" ]; then
 		return 1
 	fi
 
@@ -51,22 +60,20 @@ discover() {
 	local host=$1
 	local port=$2
 
-	HOSTNAME=$(curl -s "${CURL_AUTH[@]}" "${ORC_HOST}/api/instance/${host}/${port}" | jq '.InstanceAlias' | tr -d 'null')
+	HOSTNAME=$(curl -s "${CURL_AUTH[@]}" "${ORC_HOST}/api/instance/${host}/${port}" | jq -r '.InstanceAlias // empty' 2>/dev/null) || true
 	if [ -n "$HOSTNAME" ]; then
 		log INFO "The MySQL node ${host} is already discovered by orchestrator. Skipping..."
 		return 0
 	fi
 
 	for i in {1..5}; do
-		R_CODE=$(curl -s "${CURL_AUTH[@]}" "${ORC_HOST}/api/discover/${host}/${port}" | jq '.Code' | tr -d '"')
-		if [ "$R_CODE" == 'ERROR' ]; then
-			log ERROR "MySQL node ${host} can't be discovered"
-			sleep 1
-			continue
-		else
+		R_CODE=$(curl -s "${CURL_AUTH[@]}" "${ORC_HOST}/api/discover/${host}/${port}" | jq -r '.Code // empty' 2>/dev/null) || true
+		if [ "$R_CODE" == 'OK' ]; then
 			log INFO "MySQL node ${host} is discovered"
 			break
 		fi
+		log ERROR "MySQL node ${host} can't be discovered"
+		sleep 1
 	done
 }
 
