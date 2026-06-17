@@ -561,11 +561,11 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.validate(ctx, cr); err != nil {
 		return errors.Wrap(err, "failed to validate")
 	}
-	if err := r.reconcileClusterSetStatus(ctx, cr); err != nil {
-		return errors.Wrap(err, "failed to reconcile cross cluster replication")
-	}
 	if err := r.reconcileFullClusterCrash(ctx, cr); err != nil {
 		return errors.Wrap(err, "failed to check full cluster crash")
+	}
+	if err := r.reconcileClusterSetStatus(ctx, cr); err != nil {
+		return errors.Wrap(err, "failed to reconcile cross cluster replication")
 	}
 	if err := r.reconcileVersions(ctx, cr); err != nil {
 		log.Error(err, "failed to reconcile versions")
