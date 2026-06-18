@@ -14,7 +14,7 @@ POD_IP=$(hostname -I | awk '{print $1}')
 
 echo "$(date +%Y-%m-%dT%H:%M:%S%Z): Removing ${FQDN} from cluster" >>${LOG_FILE}
 
-mysqlsh --js -i \
-  -h "${POD_IP}" -P 33062 \
-  -u operator -p"${OPERATOR_PASSWORD}" \
-  -e "dba.getCluster().removeInstance('${FQDN}:3306')" >>${LOG_FILE} 2>&1
+mysqlsh --js --no-wizard \
+	-h "${POD_IP}" -P 33062 \
+	-u operator -p"${OPERATOR_PASSWORD}" \
+	-e "dba.getCluster().removeInstance('${FQDN}:3306')" >>${LOG_FILE} 2>&1
