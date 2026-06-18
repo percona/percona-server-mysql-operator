@@ -1202,7 +1202,7 @@ func (f *fakeClientCmd) REST() restclient.Interface {
 	return nil
 }
 
-func TestPrepareBackupSource(t *testing.T) {
+func TestRenewDowntime(t *testing.T) {
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
 
@@ -1360,7 +1360,7 @@ func TestPrepareBackupSource(t *testing.T) {
 				testBackupSource = "" // empty string to trigger pod not found error
 			}
 
-			err := r.prepareBackupSource(ctx, cr, tt.cluster, testBackupSource)
+			err := r.renewDowntime(ctx, cr, tt.cluster, testBackupSource)
 
 			if tt.wantErr {
 				require.Error(t, err)
