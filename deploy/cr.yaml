@@ -161,6 +161,7 @@ spec:
 #        - 1002
 #        - 1003
     exposePrimary:
+#      allocateLoadBalancerNodePorts: false
 #      annotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
 #        service.beta.kubernetes.io/aws-load-balancer-type: nlb
@@ -173,6 +174,7 @@ spec:
 #        - 10.0.0.0/8
 #      type: ClusterIP
 #    expose:
+#      allocateLoadBalancerNodePorts: false
 #      annotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
 #        service.beta.kubernetes.io/aws-load-balancer-type: nlb
@@ -250,6 +252,7 @@ spec:
     haproxy:
       enabled: true
 #      expose:
+#        allocateLoadBalancerNodePorts: false
 #        annotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
 #          service.beta.kubernetes.io/aws-load-balancer-type: nlb
@@ -405,6 +408,7 @@ spec:
     router:
       enabled: false
 #      expose:
+#        allocateLoadBalancerNodePorts: false
 #        annotations:
 #          service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
 #          service.beta.kubernetes.io/aws-load-balancer-type: nlb
@@ -546,6 +550,7 @@ spec:
   orchestrator:
     enabled: false
 #    expose:
+#      allocateLoadBalancerNodePorts: false
 #      annotations:
 #        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
 #        service.beta.kubernetes.io/aws-load-balancer-type: nlb
