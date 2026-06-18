@@ -183,7 +183,8 @@ func TestPodService(t *testing.T) {
 					Annotations: map[string]string{
 						"custom-annotation": "custom-annotation-value",
 					},
-					LoadBalancerSourceRanges: []string{"10.0.0.0/8"},
+					LoadBalancerSourceRanges:      []string{"10.0.0.0/8"},
+					AllocateLoadBalancerNodePorts: new(false),
 				},
 			},
 		},
@@ -240,8 +241,10 @@ func TestPodService(t *testing.T) {
 
 			if tt.expectLoadBalancer {
 				assert.Equal(t, cr.Spec.Orchestrator.Expose.LoadBalancerSourceRanges, service.Spec.LoadBalancerSourceRanges)
+				assert.Equal(t, cr.Spec.Orchestrator.Expose.AllocateLoadBalancerNodePorts, service.Spec.AllocateLoadBalancerNodePorts)
 			} else {
 				assert.Empty(t, service.Spec.LoadBalancerSourceRanges)
+				assert.Nil(t, service.Spec.AllocateLoadBalancerNodePorts)
 			}
 
 			if tt.expectExternalTrafficPolicy {

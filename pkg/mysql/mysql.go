@@ -514,8 +514,10 @@ func PodService(cr *apiv1.PerconaServerMySQL, t corev1.ServiceType, podName stri
 	selector["statefulset.kubernetes.io/pod-name"] = podName
 
 	var loadBalancerSourceRanges []string
+	var allocateLoadBalancerNodePorts *bool
 	if t == corev1.ServiceTypeLoadBalancer {
 		loadBalancerSourceRanges = expose.LoadBalancerSourceRanges
+		allocateLoadBalancerNodePorts = expose.AllocateLoadBalancerNodePorts
 	}
 
 	var externalTrafficPolicy corev1.ServiceExternalTrafficPolicyType
@@ -535,12 +537,13 @@ func PodService(cr *apiv1.PerconaServerMySQL, t corev1.ServiceType, podName stri
 			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
 		},
 		Spec: corev1.ServiceSpec{
-			Type:                     t,
-			Selector:                 selector,
-			Ports:                    servicePorts(cr),
-			LoadBalancerSourceRanges: loadBalancerSourceRanges,
-			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
-			ExternalTrafficPolicy:    externalTrafficPolicy,
+			Type:                          t,
+			Selector:                      selector,
+			Ports:                         servicePorts(cr),
+			LoadBalancerSourceRanges:      loadBalancerSourceRanges,
+			AllocateLoadBalancerNodePorts: allocateLoadBalancerNodePorts,
+			InternalTrafficPolicy:         expose.InternalTrafficPolicy,
+			ExternalTrafficPolicy:         externalTrafficPolicy,
 		},
 	}
 }
@@ -557,8 +560,10 @@ func PrimaryService(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 	selector[naming.LabelMySQLPrimary] = "true"
 
 	var loadBalancerSourceRanges []string
+	var allocateLoadBalancerNodePorts *bool
 	if expose.Type == corev1.ServiceTypeLoadBalancer {
 		loadBalancerSourceRanges = expose.LoadBalancerSourceRanges
+		allocateLoadBalancerNodePorts = expose.AllocateLoadBalancerNodePorts
 	}
 
 	var externalTrafficPolicy corev1.ServiceExternalTrafficPolicyType
@@ -578,12 +583,13 @@ func PrimaryService(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
 		},
 		Spec: corev1.ServiceSpec{
-			Type:                     expose.Type,
-			Selector:                 selector,
-			Ports:                    servicePorts(cr),
-			LoadBalancerSourceRanges: loadBalancerSourceRanges,
-			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
-			ExternalTrafficPolicy:    externalTrafficPolicy,
+			Type:                          expose.Type,
+			Selector:                      selector,
+			Ports:                         servicePorts(cr),
+			LoadBalancerSourceRanges:      loadBalancerSourceRanges,
+			AllocateLoadBalancerNodePorts: allocateLoadBalancerNodePorts,
+			InternalTrafficPolicy:         expose.InternalTrafficPolicy,
+			ExternalTrafficPolicy:         externalTrafficPolicy,
 		},
 	}
 }
