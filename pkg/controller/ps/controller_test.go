@@ -613,6 +613,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr.Spec.Orchestrator.Size = 3
 			cr.Spec.Proxy.HAProxy.Enabled = true
 			cr.Spec.Proxy.Router.Enabled = false
+			cr.Spec.MySQL.VaultSecretName = ""
 
 			cr.Spec.MySQL.Image = "mysql-image"
 			cr.Spec.Toolkit.Image = "toolkit-image"
@@ -641,6 +642,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr.Spec.Orchestrator.Size = 3
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.Proxy.HAProxy.Enabled = true
+			cr.Spec.MySQL.VaultSecretName = ""
 
 			cr.Spec.MySQL.Image = "mysql-image"
 			cr.Spec.Toolkit.Image = "backup-image"
