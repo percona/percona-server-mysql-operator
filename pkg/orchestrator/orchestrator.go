@@ -277,9 +277,6 @@ func container(cr *apiv1.PerconaServerMySQL) corev1.Container {
 	}
 }
 
-// apiAuthEnv gates HTTP API auth from crVersion 1.2.0. Every container running
-// orc-entrypoint.sh must set it identically, else one starting later rewrites the
-// shared config without auth.
 func apiAuthEnv(cr *apiv1.PerconaServerMySQL) []corev1.EnvVar {
 	if cr.CompareVersion("1.2.0") >= 0 {
 		return []corev1.EnvVar{{Name: "ORC_API_AUTH", Value: "true"}}
@@ -319,6 +316,11 @@ func apiProbe(cr *apiv1.PerconaServerMySQL, path string, initialDelay int32) *co
 func sidecarContainers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
 	serviceName := mysql.ServiceName(cr)
 
+	addNodesScript := "/usr/bin/add_mysql_nodes.sh"
+	if cr.CompareVersion("1.2.0") >= 0 {
+		addNodesScript = "/opt/percona/orc-add_mysql_nodes.sh"
+	}
+
 	return []corev1.Container{
 		{
 			Name:            "mysql-monit",
@@ -338,7 +340,7 @@ func sidecarContainers(cr *apiv1.PerconaServerMySQL) []corev1.Container {
 			Command:      []string{"/opt/percona/orc-entrypoint.sh"},
 			Args: []string{
 				"/opt/percona/peer-list",
-				"-on-change=/usr/bin/add_mysql_nodes.sh",
+				"-on-change=" + addNodesScript,
 				"-service=$(MYSQL_SERVICE)",
 			},
 			TerminationMessagePath:   "/dev/termination-log",
