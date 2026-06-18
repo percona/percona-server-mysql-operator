@@ -13,6 +13,7 @@ install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/heartbeat-entrypo
 
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/orc-entrypoint.sh" "${BINDIR}/orc-entrypoint.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/orchestrator.conf.json" "${BINDIR}/orchestrator.conf.json"
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/orc-add_mysql_nodes.sh" "${BINDIR}/orc-add_mysql_nodes.sh"
 
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/router-entrypoint.sh" "${BINDIR}/router-entrypoint.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/router_readiness_check.sh" "${BINDIR}/router_readiness_check.sh"
