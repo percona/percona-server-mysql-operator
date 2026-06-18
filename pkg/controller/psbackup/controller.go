@@ -235,9 +235,10 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return rr, nil
 		}
 
-		log.Info("Preparing backup source", "source", backupSource)
-		if err := r.renewDowntime(ctx, cr, cluster, backupSource); err != nil {
-			return rr, errors.Wrap(err, "prepare backup source")
+		if cluster.Spec.MySQL.IsAsync() && cluster.Spec.Orchestrator.Enabled {
+			if err := r.renewDowntime(ctx, cr, cluster, backupSource); err != nil {
+				return rr, errors.Wrap(err, "renew downtime for backup source")
+			}
 		}
 
 		log.Info("Creating backup job", "jobName", nn.Name)
@@ -279,6 +280,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		}
 	case apiv1.BackupRunning:
 		if job.Status.Active > 0 {
+			// Backup is still running, check and renew downtime before it ends.
 			if err := r.renewDowntime(ctx, cr, cluster, status.BackupSource); err != nil {
 				return rr, errors.Wrap(err, "renew downtime for backup source")
 			}
