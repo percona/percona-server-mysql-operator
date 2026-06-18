@@ -1,0 +1,33 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 60
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: 13-check-orchestrator-auth-0
+data:
+  noauth_code: "401"
+  orc_read_code: "200"
+  ro_read_code: "200"
+  ro_write_code: "ERROR"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: 13-check-orchestrator-auth-1
+data:
+  noauth_code: "401"
+  orc_read_code: "200"
+  ro_read_code: "200"
+  ro_write_code: "ERROR"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: 13-check-orchestrator-auth-2
+data:
+  noauth_code: "401"
+  orc_read_code: "200"
+  ro_read_code: "200"
+  ro_write_code: "ERROR"

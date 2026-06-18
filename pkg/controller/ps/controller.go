@@ -295,6 +295,15 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 	})
 }
 
+// orchestratorTopologyUnavailable reports whether Orchestrator has no usable
+// topology for the cluster (not discovered, no raft leader, or mid-teardown).
+// These are non-fatal on the deletion path.
+func orchestratorTopologyUnavailable(err error) bool {
+	return errors.Is(err, orchestrator.ErrUnableToGetClusterName) ||
+		errors.Is(err, orchestrator.ErrEmptyResponse) ||
+		errors.Is(err, orchestrator.ErrUnauthorized)
+}
+
 func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("deleteMySQLPods")
 
@@ -328,7 +337,11 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 		log.Info("Ensuring oldest mysql node is the primary")
 		err = orchestrator.EnsureNodeIsPrimary(ctx, r.ClientCmd, orcPod, cr.ClusterHint(), firstPod.GetName(), mysql.DefaultPort)
 		if err != nil {
-			return errors.Wrap(err, "ensure node is primary")
+			if orchestratorTopologyUnavailable(err) {
+				log.Info("Could not ensure primary via Orchestrator, proceeding with deletion", "reason", err.Error())
+			} else {
+				return errors.Wrap(err, "ensure node is primary")
+			}
 		}
 	} else {
 		operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)

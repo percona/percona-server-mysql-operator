@@ -783,7 +783,8 @@ run_mysql() {
 	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
 		bash -c "printf '%s\n' \"${command}\" | mysql -sN $host $user" 2>&1 \
 		| $sed -e 's/mysql: //' \
-		| (grep -v 'Using a password on the command line interface can be insecure.' || :)
+		| (grep -v 'Using a password on the command line interface can be insecure.' || :) \
+		| (grep -vE 'Unknown stream id [0-9]+, discarding message' || :)
 }
 
 get_clusterset_status() {
@@ -849,6 +850,13 @@ wait_until_innodb_ok() {
 
 run_curl() {
 	kubectl -n "${NAMESPACE}" exec mysql-client -- bash -c "curl -s -k $*"
+}
+
+# run_curl_orc queries the Orchestrator HTTP API, which requires auth. These
+# are read-only calls, so authenticate as the read-only user (the "multi"
+# method accepts any password for it) — no secret lookup needed.
+run_curl_orc() {
+	run_curl -u readonly:readonly "$@"
 }
 
 get_innodb_cluster_name() {

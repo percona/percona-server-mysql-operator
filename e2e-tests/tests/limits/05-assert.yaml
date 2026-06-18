@@ -318,13 +318,16 @@ spec:
           value: "true"
         - name: CLUSTER_NAME
           value: limits-no-resources
+        - name: ORC_API_AUTH
+          value: "true"
         imagePullPolicy: Always
         livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - curl -sf -u "readonly:readonly" "localhost:3000/api/lb-check"
           failureThreshold: 3
-          httpGet:
-            path: /api/lb-check
-            port: web
-            scheme: HTTP
           initialDelaySeconds: 10
           periodSeconds: 5
           successThreshold: 1
@@ -338,11 +341,12 @@ spec:
           name: raft
           protocol: TCP
         readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - curl -sf -u "readonly:readonly" "localhost:3000/api/health"
           failureThreshold: 3
-          httpGet:
-            path: /api/health
-            port: web
-            scheme: HTTP
           initialDelaySeconds: 30
           periodSeconds: 5
           successThreshold: 1
@@ -364,7 +368,7 @@ spec:
           subPath: orchestrator
       - args:
         - /opt/percona/peer-list
-        - -on-change=/usr/bin/add_mysql_nodes.sh
+        - -on-change=/opt/percona/orc-add_mysql_nodes.sh
         - -service=$(MYSQL_SERVICE)
         command:
         - /opt/percona/orc-entrypoint.sh
@@ -373,6 +377,8 @@ spec:
           value: limits-no-resources-mysql
         - name: MYSQL_SERVICE
           value: limits-no-resources-mysql
+        - name: ORC_API_AUTH
+          value: "true"
         imagePullPolicy: Always
         name: mysql-monit
         resources: {}

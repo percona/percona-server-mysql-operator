@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -1242,10 +1243,13 @@ func getFakeOrchestratorClient(cr *apiv1.PerconaServerMySQL) (clientcmd.Client, 
 			panic(err)
 		}
 
+		credsFile := filepath.Join(orchestrator.CredsMountPath, string(apiv1.UserOrchestrator))
 		return fakeClientScript{
 			cmd: []string{
-				"curl",
-				fmt.Sprintf("localhost:%d/%s", 3000, fmt.Sprintf("api/cluster/%s", cr.Name+"."+cr.Namespace)),
+				"sh", "-c",
+				fmt.Sprintf(`curl -s -u "%s:$(cat %s)" "localhost:%d/%s"`,
+					apiv1.UserOrchestrator, credsFile, 3000,
+					fmt.Sprintf("api/cluster/%s", cr.Name+"."+cr.Namespace)),
 			},
 			stdout: res,
 		}
