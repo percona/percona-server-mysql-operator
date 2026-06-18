@@ -116,6 +116,7 @@ func (d *DB) StartReplication(ctx context.Context, host, replicaPass string, por
                 SOURCE_HOST=?,
                 SOURCE_PORT=?,
                 SOURCE_SSL=1,
+                GET_SOURCE_PUBLIC_KEY=1,
                 SOURCE_CONNECTION_AUTO_FAILOVER=1,
                 SOURCE_AUTO_POSITION=1,
                 SOURCE_RETRY_COUNT=?,

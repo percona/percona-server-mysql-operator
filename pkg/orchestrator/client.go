@@ -51,18 +51,40 @@ type InstanceKey struct {
 	Port     int32  `json:"Port"`
 }
 
+// ReplicationThreadState mirrors Orchestrator's inst.ReplicationThreadState:
+// -1 = no thread, 0 = stopped, 1 = running, 2 = other (e.g. connecting).
+type ReplicationThreadState int
+
+const (
+	ReplicationThreadStateNoThread ReplicationThreadState = -1
+	ReplicationThreadStateStopped  ReplicationThreadState = 0
+	ReplicationThreadStateRunning  ReplicationThreadState = 1
+	ReplicationThreadStateOther    ReplicationThreadState = 2
+)
+
+func (s ReplicationThreadState) IsRunning() bool { return s == ReplicationThreadStateRunning }
+func (s ReplicationThreadState) Exists() bool    { return s != ReplicationThreadStateNoThread }
+
 type Instance struct {
-	Key                  InstanceKey   `json:"Key"`
-	Alias                string        `json:"InstanceAlias"`
-	MasterKey            InstanceKey   `json:"MasterKey"`
-	Replicas             []InstanceKey `json:"Replicas"`
-	ReadOnly             bool          `json:"ReadOnly"`
-	Problems             []string      `json:"Problems"`
-	IsDowntimed          bool          `json:"IsDowntimed"`
-	DowntimeReason       string        `json:"DowntimeReason"`
-	DowntimeOwner        string        `json:"DowntimeOwner"`
-	DowntimeEndTimestamp string        `json:"DowntimeEndTimestamp"`
-	ElapsedDowntime      time.Duration `json:"ElapsedDowntime"`
+	Key       InstanceKey   `json:"Key"`
+	Alias     string        `json:"InstanceAlias"`
+	MasterKey InstanceKey   `json:"MasterKey"`
+	Replicas  []InstanceKey `json:"Replicas"`
+	ReadOnly  bool          `json:"ReadOnly"`
+	Problems  []string      `json:"Problems"`
+	// GtidErrant holds GTIDs executed on this instance but absent from its
+	// source (gtid_subtract(instance, source), computed by Orchestrator).
+	// Non-empty means the instance has transactions that were never
+	// replicated, e.g. a former primary that took writes right before a
+	// failover.
+	GtidErrant                string                 `json:"GtidErrant"`
+	ReplicationIOThreadState  ReplicationThreadState `json:"ReplicationIOThreadState"`
+	ReplicationSQLThreadState ReplicationThreadState `json:"ReplicationSQLThreadState"`
+	IsDowntimed               bool                   `json:"IsDowntimed"`
+	DowntimeReason            string                 `json:"DowntimeReason"`
+	DowntimeOwner             string                 `json:"DowntimeOwner"`
+	DowntimeEndTimestamp      string                 `json:"DowntimeEndTimestamp"`
+	ElapsedDowntime           time.Duration          `json:"ElapsedDowntime"`
 }
 
 var (
@@ -228,6 +250,26 @@ func EnsureNodeIsPrimary(ctx context.Context, cliCmd clientcmd.Client, pod *core
 
 	orcResp := new(orcResponse)
 	if err := unmarshalOrcResponse(body, orcResp); err != nil {
+		return err
+	}
+
+	return orcResp.Error()
+}
+
+// InjectEmptyGTIDs resolves errant GTIDs of an instance by injecting them as
+// empty transactions on the cluster primary (Orchestrator's
+// gtid-errant-inject-empty). The instance's extra rows stay local to it.
+func InjectEmptyGTIDs(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int32) error {
+	url := fmt.Sprintf("api/gtid-errant-inject-empty/%s/%d", host, port)
+
+	var res, errb bytes.Buffer
+	err := exec(ctx, cliCmd, pod, url, &res, &errb)
+	if err != nil {
+		return err
+	}
+
+	orcResp := new(orcResponse)
+	if err := unmarshalOrcResponse(res.Bytes(), orcResp); err != nil {
 		return err
 	}
 

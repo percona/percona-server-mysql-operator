@@ -522,6 +522,19 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 		}
 	}
 
+	// When an SSL secret is configured the TLS volume is mounted at tlsMountPath.
+	// Propagate the certificate paths into the Orchestrator config so that
+	// topology monitoring connections always use mutual TLS and so that the
+	// settings are managed by the operator rather than relying solely on the
+	// container entrypoint's jq patch.
+	if cr.Spec.SSLSecretName != "" {
+		config["MySQLTopologyUseMutualTLS"] = true
+		config["MySQLTopologySSLSkipVerify"] = true
+		config["MySQLTopologySSLPrivateKeyFile"] = filepath.Join(tlsMountPath, "tls.key")
+		config["MySQLTopologySSLCertFile"] = filepath.Join(tlsMountPath, "tls.crt")
+		config["MySQLTopologySSLCAFile"] = filepath.Join(tlsMountPath, "ca.crt")
+	}
+
 	configJson, err := json.Marshal(config)
 	if err != nil {
 		return "", errors.Wrap(err, "marshal orchestrator raft nodes to json")

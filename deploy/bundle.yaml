@@ -7365,6 +7365,13 @@ spec:
                           x-kubernetes-map-type: atomic
                       type: object
                     type: array
+                  errantTransactionsPolicy:
+                    default: manual
+                    enum:
+                    - manual
+                    - rebuild
+                    - inject-empty
+                    type: string
                   expose:
                     properties:
                       annotations:
