@@ -522,6 +522,12 @@ fi
 if [[ -n ${MYSQL_NOTIFY_SOCKET} ]]; then
 	export NOTIFY_SOCKET=${MYSQL_NOTIFY_SOCKET}
 	nohup /opt/percona/mysql-state-monitor >/var/lib/mysql/mysql-state-monitor.log 2>&1 </dev/null &
+	set +o xtrace
+	until [[ -S ${NOTIFY_SOCKET} ]]; do
+	  echo "Waiting for ${NOTIFY_SOCKET} to be available..."
+	  sleep 1
+	done
+	set -o xtrace
 fi
 
 exec "$@"
