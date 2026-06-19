@@ -521,8 +521,8 @@ fi
 
 if [[ -n ${MYSQL_NOTIFY_SOCKET} ]]; then
 	export NOTIFY_SOCKET=${MYSQL_NOTIFY_SOCKET}
-	unlink ${NOTIFY_SOCKET}
-	nohup /opt/percona/mysql-state-monitor >/var/lib/mysql/mysql-state-monitor.log 2>&1 </dev/null &
+	unlink ${NOTIFY_SOCKET} || true
+ 	nohup /opt/percona/mysql-state-monitor >/var/lib/mysql/mysql-state-monitor.log 2>&1 </dev/null &
  	monitor_pid=$!
 	set +o xtrace
  	for i in {1..30}; do
