@@ -1223,7 +1223,7 @@ func (f *fakeClientCmd) Exec(ctx context.Context, pod *corev1.Pod, containerName
 	}
 
 	if stdout != nil {
-		stdout.Write([]byte(resp))
+		stdout.Write([]byte(resp)) //nolint:errcheck
 	}
 	return nil
 }
