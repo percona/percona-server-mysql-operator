@@ -87,10 +87,11 @@ func FromPresets(cr any) error {
 			LoadBalancerSourceRanges: []string{
 				"10.0.0.0/8",
 			},
-			Annotations:           Annotations,
-			Labels:                Labels,
-			InternalTrafficPolicy: ptr.To(corev1.ServiceInternalTrafficPolicyCluster),
-			ExternalTrafficPolicy: corev1.ServiceExternalTrafficPolicyCluster,
+			AllocateLoadBalancerNodePorts: new(false),
+			Annotations:                   Annotations,
+			Labels:                        Labels,
+			InternalTrafficPolicy:         ptr.To(corev1.ServiceInternalTrafficPolicyCluster),
+			ExternalTrafficPolicy:         corev1.ServiceExternalTrafficPolicyCluster,
 		},
 		apiv1.VolumeSpec{
 			EmptyDir: &corev1.EmptyDirVolumeSource{},

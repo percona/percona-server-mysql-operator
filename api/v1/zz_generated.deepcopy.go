@@ -1475,6 +1475,11 @@ func (in *ServiceExpose) DeepCopyInto(out *ServiceExpose) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.AllocateLoadBalancerNodePorts != nil {
+		in, out := &in.AllocateLoadBalancerNodePorts, &out.AllocateLoadBalancerNodePorts
+		*out = new(bool)
+		**out = **in
+	}
 	if in.Annotations != nil {
 		in, out := &in.Annotations, &out.Annotations
 		*out = make(map[string]string, len(*in))

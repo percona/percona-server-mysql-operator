@@ -126,6 +126,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.mysql.exposePrimary.annotations)" \
 		| yq "del(.spec.mysql.exposePrimary.labels)" \
 		| yq "del(.spec.mysql.exposePrimary.loadBalancerSourceRanges)" \
+		| yq "del(.spec.mysql.exposePrimary.allocateLoadBalancerNodePorts)" \
 		| yq "del(.spec.mysql.exposePrimary.type)" \
 		| yq "del(.spec.mysql.exposePrimary.internalTrafficPolicy)" \
 		| yq "del(.spec.mysql.exposePrimary.externalTrafficPolicy)" \
