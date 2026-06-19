@@ -13,7 +13,7 @@ FQDN="${HOSTNAME}.${SERVICE_NAME}.${NAMESPACE}"
 POD_IP=$(hostname -I | awk '{print $1}')
 SERVER_NUM="${HOSTNAME##*-}"
 
-if [[ "${SERVER_NUM}"" == "0" ]]; then
+if [[ "${SERVER_NUM}" == "0" ]]; then
   echo "$(date +%Y-%m-%dT%H:%M:%S%Z): Not removing ${FQDN} from cluster, it's pod zero" >>${LOG_FILE}
   exit 0
 fi
