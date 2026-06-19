@@ -1185,6 +1185,26 @@ get_primary_from_label() {
 	kubectl -n "${NAMESPACE}" get pods -l mysql.percona.com/primary=true -ojsonpath="{.items[0].metadata.name}"
 }
 
+# find_async_replica prints the name of a read-only async member (a replica).
+# async clusters carry no GR primary label, so members are told apart by
+# @@super_read_only -- the primary is the only writable node.
+find_async_replica() {
+	local cluster=$1
+	local pod fqdn ro
+	for _ in $(seq 1 12); do
+		for pod in $(get_mysql_pods); do
+			fqdn="${pod}.${cluster}-mysql.${NAMESPACE}"
+			ro=$(run_mysql "SELECT @@super_read_only;" "-h ${fqdn} -P3306" 2>/dev/null | tail -1)
+			if [[ ${ro} == "1" ]]; then
+				echo "${pod}"
+				return 0
+			fi
+		done
+		sleep 5
+	done
+	return 1
+}
+
 get_primary_from_haproxy() {
 	local haproxy_pod=$1
 	local haproxy_pod_ip=$(kubectl -n "${NAMESPACE}" get pods ${haproxy_pod} -o jsonpath="{.status.podIP}")

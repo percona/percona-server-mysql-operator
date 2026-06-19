@@ -16,6 +16,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
@@ -71,6 +72,26 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	}
 	if running {
 		log.Info("can't start/continue 'SmartUpdate': backup is running")
+		return nil
+	}
+
+	// Pods that are both unready and on an outdated revision can only be
+	// fixed by recreating them; waiting for them deadlocks the rollout
+	// (https://github.com/kubernetes/kubernetes/issues/67250). Unready pods
+	// already on the update revision are converging and must not be deleted.
+	for _, pod := range pods.Items {
+		pod := pod
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
+		if k8s.IsPodReady(pod) || pod.Labels[controllerRevisionHash] == sts.Status.UpdateRevision {
+			continue
+		}
+
+		log.Info("Pod is unready and outdated, recreating it with the updated template", "pod", pod.Name)
+		if err := r.Client.Delete(ctx, &pod); err != nil {
+			return errors.Wrapf(err, "delete outdated pod %s", pod.Name)
+		}
 		return nil
 	}
 

@@ -1,0 +1,44 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 600
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster="${test_name}"
+
+      found=""
+      for i in $(seq 1 30); do
+          if kubectl -n "${NAMESPACE}" get events \
+                  --field-selector reason=ErrantGTIDsInjectEmpty,involvedObject.name="${cluster}" \
+                  -o jsonpath='{.items[*].reason}' | grep -q ErrantGTIDsInjectEmpty; then
+              found="yes"
+              break
+          fi
+          echo "waiting for ErrantGTIDsInjectEmpty event (attempt ${i})"
+          sleep 10
+      done
+      if [[ -z "${found}" ]]; then
+          echo "operator never injected empty transactions (inject-empty policy)"
+          kubectl -n "${NAMESPACE}" get events --field-selector involvedObject.name="${cluster}" || true
+          exit 1
+      fi
+
+      # The member rejoins on a reconciled GTID timeline -> cluster healthy again.
+      wait_cluster_consistency_async "${cluster}" "3" "3"
+
+      # inject-empty keeps the diverged rows locally: errant_db must still exist.
+      present=""
+      for pod in $(get_mysql_pods); do
+          fqdn="${pod}.${cluster}-mysql.${NAMESPACE}"
+          if [[ "$(run_mysql "SHOW DATABASES LIKE 'errant_db';" "-h ${fqdn} -P3306")" == "errant_db" ]]; then
+              present="yes"
+          fi
+      done
+      if [[ -z "${present}" ]]; then
+          echo "errant_db is gone; inject-empty must preserve the diverged rows locally"
+          exit 1
+      fi

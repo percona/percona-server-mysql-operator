@@ -1,0 +1,40 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 660
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster="${test_name}"
+
+      # A quarantined member must report NotReady (because of the quarantine
+      # marker, not transient startup), which is how the divergence surfaces.
+      target=""
+      for i in $(seq 1 40); do
+          for pod in $(get_mysql_pods); do
+              ready="$(kubectl -n "${NAMESPACE}" get pod "${pod}" \
+                  -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')"
+              if [[ "${ready}" == "False" ]] \
+                  && kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- test -f /var/lib/mysql/quarantine 2>/dev/null; then
+                  target="${pod}"
+                  break
+              fi
+          done
+          [[ -n "${target}" ]] && break
+          echo "waiting for a quarantined (NotReady) member (attempt ${i})"
+          sleep 15
+      done
+      if [[ -z "${target}" ]]; then
+          echo "no member became NotReady with a quarantine marker"
+          kubectl -n "${NAMESPACE}" get pods
+          exit 1
+      fi
+      echo "quarantined member: ${target}"
+
+      kubectl -n "${NAMESPACE}" get events \
+          --field-selector reason=ErrantGTIDsDetected,involvedObject.name="${cluster}" \
+          -o jsonpath='{.items[*].reason}' | grep -q ErrantGTIDsDetected \
+          || { echo "no ErrantGTIDsDetected event for the quarantined member"; exit 1; }

@@ -17,6 +17,7 @@ import (
 	state "github.com/percona/percona-server-mysql-operator/cmd/internal/naming"
 	mysqldb "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
 )
@@ -96,6 +97,14 @@ func main() {
 }
 
 func checkReadinessAsync(ctx context.Context) error {
+	// A quarantined member (errant transactions, not joined to the cluster) is
+	// reported NotReady so the divergence surfaces in the cluster status and
+	// halts rollouts. rebuild/inject-empty clear the marker quickly; only the
+	// manual policy leaves it in place.
+	if _, err := os.Stat(mysql.QuarantineFile); err == nil {
+		return errors.New("member is quarantined due to errant transactions; see the ErrantGTIDsDetected event")
+	}
+
 	podIP, err := getPodIP()
 	if err != nil {
 		return errors.Wrap(err, "get pod IP")
