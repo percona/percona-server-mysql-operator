@@ -1,0 +1,29 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 600
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster="${test_name}"
+
+      kubectl -n "${NAMESPACE}" get events \
+          --field-selector reason=ErrantMemberRebuild,involvedObject.name="${cluster}" \
+          -o jsonpath='{.items[*].reason}' | grep -q ErrantMemberRebuild \
+          || { echo "no ErrantMemberRebuild event emitted"; \
+               kubectl -n "${NAMESPACE}" get events --field-selector involvedObject.name="${cluster}" || true; \
+               exit 1; }
+
+      wait_cluster_consistency_async "${cluster}" "3" "3"
+
+      # rebuild re-clones the member from the primary, so errant_db is gone everywhere.
+      for pod in $(get_mysql_pods); do
+          fqdn="${pod}.${cluster}-mysql.${NAMESPACE}"
+          if [[ "$(run_mysql "SHOW DATABASES LIKE 'errant_db';" "-h ${fqdn} -P3306")" == "errant_db" ]]; then
+              echo "errant_db still present on ${pod} after rebuild"
+              exit 1
+          fi
+      done

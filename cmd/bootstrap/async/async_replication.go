@@ -118,7 +118,20 @@ func Bootstrap(ctx context.Context) error {
 		return err
 	}
 
+	readOnly, err := db.IsReadonly(ctx)
+	if err != nil {
+		return errors.Wrap(err, "check read only status")
+	}
+
 	switch {
+	case !readOnly:
+		// A writable node is the primary, whatever the topology guess says.
+		if err := db.ResetReplication(ctx); err != nil {
+			return err
+		}
+
+		log.Printf("I'm writable and therefore the primary.")
+		return nil
 	case donor == "":
 		if err := db.ResetReplication(ctx); err != nil {
 			return err
@@ -146,6 +159,24 @@ func Bootstrap(ctx context.Context) error {
 	requireClone, err := isCloneRequired(cloneLock)
 	if err != nil {
 		return errors.Wrap(err, "check if clone is required")
+	}
+
+	if requireClone {
+		// Never clone over a datadir that already executed transactions:
+		// a former primary returning after a failover has no clone.lock but
+		// may hold writes that were never replicated; cloning destroys them.
+		gtidExecuted, err := db.GetGTIDExecuted(ctx)
+		if err != nil {
+			return errors.Wrap(err, "get gtid_executed")
+		}
+		if gtidExecuted != "" {
+			log.Printf("Datadir has executed GTIDs (%s), skipping clone to preserve local data", gtidExecuted)
+			requireClone = false
+
+			if err := createCloneLock(cloneLock); err != nil {
+				return errors.Wrap(err, "create clone lock")
+			}
+		}
 	}
 
 	log.Printf("Clone required: %t", requireClone)
@@ -196,6 +227,40 @@ func Bootstrap(ctx context.Context) error {
 	}
 
 	if rStatus == mysqldb.ReplicationStatusNotInitiated || rStatus == mysqldb.ReplicationStatusStopped {
+		// Joining is only safe when this member has no transactions the
+		// primary doesn't know about.
+		errant, err := errantGTIDs(ctx, db, primaryIp)
+		if err != nil {
+			return errors.Wrap(err, "check errant GTIDs")
+		}
+		if errant != "" {
+			// Quarantine only against a confirmed (writable) primary. After
+			// a full cluster restart nobody is writable and the topology
+			// guess is unreliable; leave the member unjoined and let the
+			// operator resolve it.
+			primaryWritable, err := isPrimaryWritable(ctx, primaryIp)
+			if err != nil {
+				return errors.Wrapf(err, "check if primary %s is writable", primary)
+			}
+			if !primaryWritable {
+				log.Printf("Local transactions not present on presumed primary %s (errant GTIDs: %s), "+
+					"but the presumed primary is not writable; leaving the member unjoined for the operator to resolve", primary, errant)
+				if err := db.EnableSuperReadonly(ctx); err != nil {
+					return errors.Wrap(err, "enable super read only")
+				}
+				return nil
+			}
+
+			log.Printf("QUARANTINE: local transactions not present on primary %s (errant GTIDs: %s); refusing to join the cluster", primary, errant)
+			if err := os.WriteFile(mysql.QuarantineFile, []byte(errant+"\n"), 0o640); err != nil {
+				return errors.Wrap(err, "create quarantine file")
+			}
+			if err := db.EnableSuperReadonly(ctx); err != nil {
+				return errors.Wrap(err, "enable super read only")
+			}
+			return nil
+		}
+
 		log.Println("configuring replication")
 
 		replicaPass, err := utils.GetSecret(apiv1.UserReplication)
@@ -212,6 +277,11 @@ func Bootstrap(ctx context.Context) error {
 		}
 	}
 
+	// The member is joined: drop a stale quarantine marker if any.
+	if err := os.Remove(mysql.QuarantineFile); err != nil && !os.IsNotExist(err) {
+		return errors.Wrap(err, "remove quarantine file")
+	}
+
 	if err := db.EnableSuperReadonly(ctx); err != nil {
 		return errors.Wrap(err, "enable super read only")
 	}
@@ -219,9 +289,75 @@ func Bootstrap(ctx context.Context) error {
 	return nil
 }
 
+// isPrimaryWritable reports whether the node at primaryIp accepts writes.
+func isPrimaryWritable(ctx context.Context, primaryIp string) (bool, error) {
+	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
+	if err != nil {
+		return false, errors.Wrapf(err, "get %s password", apiv1.UserOperator)
+	}
+	readTimeout, err := utils.GetReadTimeout()
+	if err != nil {
+		return false, errors.Wrap(err, "get read timeout")
+	}
+	primaryDB, err := database.NewDatabase(ctx, database.DBParams{
+		User:               apiv1.UserOperator,
+		Pass:               operatorPass,
+		Host:               primaryIp,
+		ReadTimeoutSeconds: readTimeout,
+	})
+	if err != nil {
+		return false, errors.Wrapf(err, "connect to primary %s", primaryIp)
+	}
+	defer primaryDB.Close()
+
+	readOnly, err := primaryDB.IsReadonly(ctx)
+	if err != nil {
+		return false, errors.Wrap(err, "check primary read only status")
+	}
+	return !readOnly, nil
+}
+
+// errantGTIDs returns the GTIDs executed locally but absent on the primary.
+func errantGTIDs(ctx context.Context, localDB *database.DB, primaryIp string) (string, error) {
+	localGTIDs, err := localDB.GetGTIDExecuted(ctx)
+	if err != nil {
+		return "", errors.Wrap(err, "get local gtid_executed")
+	}
+	if localGTIDs == "" {
+		return "", nil
+	}
+
+	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
+	if err != nil {
+		return "", errors.Wrapf(err, "get %s password", apiv1.UserOperator)
+	}
+	readTimeout, err := utils.GetReadTimeout()
+	if err != nil {
+		return "", errors.Wrap(err, "get read timeout")
+	}
+	primaryDB, err := database.NewDatabase(ctx, database.DBParams{
+		User:               apiv1.UserOperator,
+		Pass:               operatorPass,
+		Host:               primaryIp,
+		ReadTimeoutSeconds: readTimeout,
+	})
+	if err != nil {
+		return "", errors.Wrapf(err, "connect to primary %s", primaryIp)
+	}
+	defer primaryDB.Close()
+
+	primaryGTIDs, err := primaryDB.GetGTIDExecuted(ctx)
+	if err != nil {
+		return "", errors.Wrap(err, "get primary gtid_executed")
+	}
+
+	return localDB.GTIDSubtract(ctx, localGTIDs, primaryGTIDs)
+}
+
 func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (string, []string, error) {
 	replicas := sets.New[string]()
 	primary := ""
+	stoppedSource := ""
 
 	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
 	if err != nil {
@@ -262,6 +398,21 @@ func getTopology(ctx context.Context, fqdn string, peers sets.Set[string]) (stri
 
 		if status == mysqldb.ReplicationStatusActive {
 			primary = source
+		} else if status == mysqldb.ReplicationStatusStopped && source != "" && source != replicaHost {
+			stoppedSource = source
+		}
+	}
+
+	if primary == "" && stoppedSource != "" {
+		// A stopped channel remembers its source — the primary. Honor the
+		// hint only if the source resolves: after a pause/resume the lowest
+		// ordinal boots alone and its channel points at a peer that does not
+		// exist yet.
+		if _, err := utils.GetPodIP(stoppedSource); err == nil {
+			log.Printf("No active replication, using stopped channel source as primary: %s", stoppedSource)
+			primary = stoppedSource
+		} else {
+			log.Printf("Stopped channel source %s does not resolve, ignoring the hint", stoppedSource)
 		}
 	}
 

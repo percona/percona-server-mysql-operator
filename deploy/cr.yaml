@@ -248,6 +248,7 @@ spec:
 #              storage: 1Gi
 #    bootstrap:
 #      mode: auto
+#    errantTransactionsPolicy: manual
   proxy:
     haproxy:
       enabled: true

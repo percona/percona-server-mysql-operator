@@ -35,6 +35,11 @@ const (
 	BackupLogDir          = "/var/log/xtrabackup"
 	vaultSecretVolumeName = "vault-keyring-secret"
 	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
+	// QuarantineFile marks an async member that refused to join the cluster
+	// because it holds transactions absent on the current primary. Created by
+	// the bootstrap, removed when the divergence is resolved per
+	// spec.mysql.errantTransactionsPolicy.
+	QuarantineFile = DataMountPath + "/quarantine"
 )
 
 const (

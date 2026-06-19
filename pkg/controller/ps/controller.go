@@ -1093,16 +1093,19 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 			log.Info("mysql is not ready, bad connection. skip")
 			return nil
 		case errors.Is(err, orchestrator.ErrNoSuchHost):
-			log.Info("mysql is not ready, host not found. skip")
-			return nil
+			// An unready or just-removed member fails discovery; the repair
+			// and forget logic below is what resolves these states, so
+			// continue instead of returning.
+			log.Info("discovery failed: host not found (a member may be unready or removed), continuing with known topology")
 		case errors.Is(err, orchestrator.ErrTimeout):
 			log.Info("mysql is not ready, connection timeout. skip")
 			return nil
 		case errors.Is(err, orchestrator.ErrContainerNotFound):
 			log.Info("orchestrator is not ready, container not found. skip")
 			return nil
+		default:
+			return errors.Wrap(err, "failed to discover cluster")
 		}
-		return errors.Wrap(err, "failed to discover cluster")
 	}
 
 	primary, err := orchestrator.ClusterPrimary(ctx, r.ClientCmd, pod, cr.ClusterHint())
@@ -1149,6 +1152,396 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 				return errors.Wrapf(err, "forget replica %s", instance.Alias)
 			}
 		}
+	}
+
+	if err := r.repairBrokenReplicas(ctx, cr, pod, primary, clusterInstances); err != nil {
+		return errors.Wrap(err, "repair broken replicas")
+	}
+
+	if err := r.reconcileQuarantinedMembers(ctx, cr, primary); err != nil {
+		return errors.Wrap(err, "reconcile quarantined members")
+	}
+
+	return nil
+}
+
+// reconcileQuarantinedMembers resolves channel-less async members (those the
+// bootstrap quarantined or left unjoined) per
+// spec.mysql.errantTransactionsPolicy, and confirms the primary as writable
+// after a full cluster restart. Such members are invisible to Orchestrator
+// and excluded from traffic by HAProxy checks, so everything runs via pod
+// exec.
+func (r *PerconaServerMySQLReconciler) reconcileQuarantinedMembers(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	primary *orchestrator.Instance,
+) error {
+	log := logf.FromContext(ctx).WithName("reconcileQuarantinedMembers")
+
+	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "get mysql pods")
+	}
+
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+	replicaPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserReplication)
+	if err != nil {
+		return errors.Wrap(err, "get replication password")
+	}
+
+	var primaryPod *corev1.Pod
+	writableExists := false
+	for i := range pods {
+		pod := &pods[i]
+		if pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+		um := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, "127.0.0.1")
+		readOnly, err := um.IsReadonly(ctx)
+		if err != nil {
+			continue
+		}
+		if !readOnly {
+			writableExists = true
+		}
+		if mysql.PodFQDN(cr, pod) == primary.Key.Hostname {
+			primaryPod = pod
+		}
+	}
+	if primaryPod == nil {
+		return nil
+	}
+	pm := database.NewReplicationManager(primaryPod, r.ClientCmd, apiv1.UserOperator, operatorPass, "127.0.0.1")
+
+	// Confirm the primary after a full cluster restart: making it writable
+	// unblocks the bootstrap of the remaining members.
+	if !writableExists {
+		status, _, err := pm.ReplicationStatus(ctx)
+		if err != nil {
+			return errors.Wrap(err, "get primary replication status")
+		}
+		quarantined, err := isQuarantined(ctx, r.ClientCmd, primaryPod)
+		if err != nil {
+			return errors.Wrap(err, "check primary quarantine state")
+		}
+		if status == database.ReplicationStatusNotInitiated && !quarantined {
+			log.Info("No writable member; confirming Orchestrator's primary as writable", "pod", primaryPod.Name)
+			if err := pm.SetWritable(ctx); err != nil {
+				return errors.Wrapf(err, "set %s writable", primaryPod.Name)
+			}
+			r.Recorder.Eventf(cr, corev1.EventTypeNormal, "PrimaryConfirmed",
+				"member %s confirmed as the writable primary after cluster restart", primaryPod.Name)
+		}
+	}
+
+	for i := range pods {
+		pod := &pods[i]
+		if mysql.PodFQDN(cr, pod) == primary.Key.Hostname || pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+
+		um := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, "127.0.0.1")
+
+		status, _, err := um.ReplicationStatus(ctx)
+		if err != nil {
+			log.V(1).Info("Can't check replication status, skipping", "pod", pod.Name, "error", err.Error())
+			continue
+		}
+		if status != database.ReplicationStatusNotInitiated {
+			continue
+		}
+
+		// Recompute divergence instead of trusting the quarantine marker.
+		memberGTIDs, err := um.GetGTIDExecuted(ctx)
+		if err != nil {
+			return errors.Wrapf(err, "get gtid_executed of %s", pod.Name)
+		}
+		primaryGTIDs, err := pm.GetGTIDExecuted(ctx)
+		if err != nil {
+			return errors.Wrap(err, "get gtid_executed of primary")
+		}
+		errant, err := um.GTIDSubtract(ctx, memberGTIDs, primaryGTIDs)
+		if err != nil {
+			return errors.Wrapf(err, "compute errant GTIDs of %s", pod.Name)
+		}
+
+		if errant == "" {
+			log.Info("Quarantined member no longer diverges, joining it to the cluster", "pod", pod.Name)
+			if err := r.joinQuarantinedMember(ctx, cr, pod, um, primary, replicaPass); err != nil {
+				return err
+			}
+			continue
+		}
+
+		switch cr.Spec.MySQL.ErrantTransactionsPolicy {
+		case apiv1.ErrantTransactionsRebuild:
+			log.Info("Quarantined member has errant GTIDs, policy is 'rebuild': deleting member pod and PVC to re-provision from primary",
+				"pod", pod.Name, "errantGTIDs", errant)
+			r.Recorder.Eventf(cr, corev1.EventTypeWarning, "ErrantMemberRebuild",
+				"quarantined member %s has transactions not present on primary %s (errant GTIDs: %s); rebuilding the member, unreplicated data will be lost",
+				pod.Name, primary.Alias, errant)
+
+			pvc := &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fmt.Sprintf("%s-%s", mysql.DataVolumeName, pod.Name),
+					Namespace: cr.Namespace,
+				},
+			}
+			if err := r.Client.Delete(ctx, pvc); client.IgnoreNotFound(err) != nil {
+				return errors.Wrapf(err, "delete PVC %s", pvc.Name)
+			}
+			if err := r.Client.Delete(ctx, pod); client.IgnoreNotFound(err) != nil {
+				return errors.Wrapf(err, "delete pod %s", pod.Name)
+			}
+
+		case apiv1.ErrantTransactionsInjectEmpty:
+			log.Info("Quarantined member has errant GTIDs, policy is 'inject-empty': injecting empty transactions on primary and joining the member",
+				"pod", pod.Name, "errantGTIDs", errant)
+			r.Recorder.Eventf(cr, corev1.EventTypeWarning, "ErrantGTIDsInjectEmpty",
+				"quarantined member %s has transactions not present on primary %s (errant GTIDs: %s); injecting empty transactions, diverged rows remain on the member",
+				pod.Name, primary.Alias, errant)
+
+			if err := pm.InjectEmptyGTIDs(ctx, errant); err != nil {
+				return errors.Wrapf(err, "inject empty GTIDs on primary for %s", pod.Name)
+			}
+			if err := r.joinQuarantinedMember(ctx, cr, pod, um, primary, replicaPass); err != nil {
+				return err
+			}
+
+		default: // apiv1.ErrantTransactionsManual
+			log.Info("Quarantined member has errant GTIDs; not joining it (policy: manual). "+
+				"Inspect the unreplicated transactions on the member, then rebuild it or set spec.mysql.errantTransactionsPolicy",
+				"pod", pod.Name, "errantGTIDs", errant)
+			r.Recorder.Eventf(cr, corev1.EventTypeWarning, "ErrantGTIDsDetected",
+				"member %s is quarantined: it has transactions not present on primary %s (errant GTIDs: %s); not joined to the cluster (policy: manual)",
+				pod.Name, primary.Alias, errant)
+		}
+	}
+
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) joinQuarantinedMember(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	pod *corev1.Pod,
+	um *database.ReplicationDBManager,
+	primary *orchestrator.Instance,
+	replicaPass string,
+) error {
+	log := logf.FromContext(ctx).WithName("joinQuarantinedMember")
+
+	sourceRetryCount, sourceConnectRetry, err := asyncSourceEnvValues(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse env vars")
+	}
+
+	if err := um.ChangeReplicationSource(ctx, primary.Key.Hostname, replicaPass, primary.Key.Port, sourceRetryCount, sourceConnectRetry); err != nil {
+		return errors.Wrapf(err, "change replication source on %s", pod.Name)
+	}
+	if err := um.StartReplication(ctx); err != nil {
+		return errors.Wrapf(err, "start replication on %s", pod.Name)
+	}
+	if err := removeQuarantineFile(ctx, r.ClientCmd, pod); err != nil {
+		return errors.Wrapf(err, "remove quarantine file on %s", pod.Name)
+	}
+
+	log.Info("Member joined the cluster", "pod", pod.Name, "primary", primary.Key.Hostname)
+	r.Recorder.Eventf(cr, corev1.EventTypeNormal, "MemberJoined",
+		"member %s joined the cluster as a replica of %s", pod.Name, primary.Alias)
+
+	return nil
+}
+
+func isQuarantined(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod) (bool, error) {
+	var outb, errb bytes.Buffer
+	err := cliCmd.Exec(ctx, pod, mysql.AppName,
+		[]string{"sh", "-c", "test -f " + mysql.QuarantineFile + " && echo yes || echo no"}, nil, &outb, &errb, false)
+	if err != nil {
+		return false, errors.Wrapf(err, "stdout: %s, stderr: %s", outb.String(), errb.String())
+	}
+	return strings.TrimSpace(outb.String()) == "yes", nil
+}
+
+func removeQuarantineFile(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod) error {
+	var outb, errb bytes.Buffer
+	err := cliCmd.Exec(ctx, pod, mysql.AppName,
+		[]string{"rm", "-f", mysql.QuarantineFile}, nil, &outb, &errb, false)
+	return errors.Wrapf(err, "stdout: %s, stderr: %s", outb.String(), errb.String())
+}
+
+// repairBrokenReplicas re-issues CHANGE REPLICATION SOURCE on replicas whose
+// IO thread exists but is not running: after a takeover Orchestrator creates
+// the demoted primary's channel without SOURCE_SSL/GET_SOURCE_PUBLIC_KEY, so
+// caching_sha2_password auth fails and never recovers on its own.
+func (r *PerconaServerMySQLReconciler) repairBrokenReplicas(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	orcPod *corev1.Pod,
+	primary *orchestrator.Instance,
+	clusterInstances []*orchestrator.Instance,
+) error {
+	log := logf.FromContext(ctx).WithName("repairBrokenReplicas")
+
+	broken := make([]*orchestrator.Instance, 0)
+	for _, instance := range clusterInstances {
+		if instance.Alias == primary.Alias {
+			continue
+		}
+		if instance.MasterKey.Hostname != primary.Key.Hostname {
+			continue
+		}
+
+		// Errant GTIDs need the policy treatment even with running threads:
+		// MySQL replicates past errant GTIDs silently. IsLastCheckValid
+		// guards against acting on stale Orchestrator data right after a
+		// rebuild, which would delete the new pod mid-clone.
+		if instance.GtidErrant != "" && instance.IsLastCheckValid {
+			if err := r.handleErrantTransactions(ctx, cr, orcPod, primary, instance); err != nil {
+				return errors.Wrapf(err, "handle errant transactions on %s", instance.Alias)
+			}
+			continue
+		}
+
+		if instance.ReplicationIOThreadState.Exists() && !instance.ReplicationIOThreadState.IsRunning() {
+			broken = append(broken, instance)
+		}
+	}
+	if len(broken) == 0 {
+		return nil
+	}
+
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+	replicaPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserReplication)
+	if err != nil {
+		return errors.Wrap(err, "get replication password")
+	}
+	sourceRetryCount, sourceConnectRetry, err := asyncSourceEnvValues(cr)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse env vars")
+	}
+
+	for _, instance := range broken {
+		log.Info("Replica IO thread is not running, reconfiguring replication",
+			"replica", instance.Alias, "primary", primary.Key.Hostname, "ioThreadState", instance.ReplicationIOThreadState)
+
+		idx, err := getPodIndexFromHostname(instance.Key.Hostname)
+		if err != nil {
+			return err
+		}
+		mysqlPod, err := mysql.GetPod(ctx, r.Client, cr, idx)
+		if err != nil {
+			return err
+		}
+
+		// Loopback exec: a broken replica is unready and has no DNS record.
+		um := database.NewReplicationManager(mysqlPod, r.ClientCmd, apiv1.UserOperator, operatorPass, "127.0.0.1")
+		if err := um.StopReplication(ctx); err != nil {
+			return errors.Wrapf(err, "stop replication on %s", instance.Alias)
+		}
+
+		if err := um.ChangeReplicationSource(ctx, primary.Key.Hostname, replicaPass, primary.Key.Port, sourceRetryCount, sourceConnectRetry); err != nil {
+			return errors.Wrapf(err, "change replication source on %s", instance.Alias)
+		}
+
+		if err := um.StartReplication(ctx); err != nil {
+			return errors.Wrapf(err, "start replication on %s", instance.Alias)
+		}
+
+		log.Info("Reconfigured replication on replica", "replica", instance.Alias)
+	}
+
+	return nil
+}
+
+// handleErrantTransactions applies spec.mysql.errantTransactionsPolicy to an
+// instance that holds transactions never replicated to the current primary.
+func (r *PerconaServerMySQLReconciler) handleErrantTransactions(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	orcPod *corev1.Pod,
+	primary *orchestrator.Instance,
+	instance *orchestrator.Instance,
+) error {
+	log := logf.FromContext(ctx).WithName("handleErrantTransactions").
+		WithValues("replica", instance.Alias, "errantGTIDs", instance.GtidErrant)
+
+	switch cr.Spec.MySQL.ErrantTransactionsPolicy {
+	case apiv1.ErrantTransactionsRebuild:
+		log.Info("Errant GTIDs detected, policy is 'rebuild': deleting member pod and PVC to re-provision from primary")
+		r.Recorder.Eventf(cr, corev1.EventTypeWarning, "ErrantMemberRebuild",
+			"replica %s has transactions not present on primary %s (errant GTIDs: %s); rebuilding the member, unreplicated data will be lost",
+			instance.Alias, primary.Alias, instance.GtidErrant)
+
+		idx, err := getPodIndexFromHostname(instance.Key.Hostname)
+		if err != nil {
+			return err
+		}
+		mysqlPod, err := mysql.GetPod(ctx, r.Client, cr, idx)
+		if err != nil {
+			return errors.Wrap(err, "get mysql pod")
+		}
+
+		pvc := &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-%s", mysql.DataVolumeName, mysqlPod.Name),
+				Namespace: cr.Namespace,
+			},
+		}
+		if err := r.Client.Delete(ctx, pvc); client.IgnoreNotFound(err) != nil {
+			return errors.Wrapf(err, "delete PVC %s", pvc.Name)
+		}
+		if err := r.Client.Delete(ctx, mysqlPod); client.IgnoreNotFound(err) != nil {
+			return errors.Wrapf(err, "delete pod %s", mysqlPod.Name)
+		}
+
+	case apiv1.ErrantTransactionsInjectEmpty:
+		log.Info("Errant GTIDs detected, policy is 'inject-empty': reconciling GTID sets via Orchestrator")
+		r.Recorder.Eventf(cr, corev1.EventTypeWarning, "ErrantGTIDsInjectEmpty",
+			"replica %s has transactions not present on primary %s (errant GTIDs: %s); injecting empty transactions, diverged rows remain on the replica",
+			instance.Alias, primary.Alias, instance.GtidErrant)
+
+		if err := orchestrator.InjectEmptyGTIDs(ctx, r.ClientCmd, orcPod, instance.Key.Hostname, instance.Key.Port); err != nil {
+			return errors.Wrapf(err, "inject empty GTIDs for %s", instance.Alias)
+		}
+
+		// Resume a stopped channel right away: an unready member has no DNS
+		// record, so no later reconcile could reach it through Orchestrator.
+		if !instance.ReplicationIOThreadState.IsRunning() || !instance.ReplicationSQLThreadState.IsRunning() {
+			operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
+			if err != nil {
+				return errors.Wrap(err, "get operator password")
+			}
+			idx, err := getPodIndexFromHostname(instance.Key.Hostname)
+			if err != nil {
+				return err
+			}
+			mysqlPod, err := mysql.GetPod(ctx, r.Client, cr, idx)
+			if err != nil {
+				return errors.Wrap(err, "get mysql pod")
+			}
+			// Loopback: the unready pod has no headless-service DNS record.
+			um := database.NewReplicationManager(mysqlPod, r.ClientCmd, apiv1.UserOperator, operatorPass, "127.0.0.1")
+			if err := um.StartReplication(ctx); err != nil {
+				return errors.Wrapf(err, "start replication on %s", instance.Alias)
+			}
+			log.Info("Restarted replication after injecting empty GTIDs", "replica", instance.Alias)
+		}
+
+	default: // apiv1.ErrantTransactionsManual
+		log.Info("Replica has errant GTIDs, skipping automatic replication repair; " +
+			"inspect the unreplicated transactions and resolve via Orchestrator " +
+			"(gtid-errant-inject-empty or gtid-errant-reset-master), rebuild the member, " +
+			"or set spec.mysql.errantTransactionsPolicy")
+		r.Recorder.Eventf(cr, corev1.EventTypeWarning, "ErrantGTIDsDetected",
+			"replica %s has transactions not present on primary %s (errant GTIDs: %s); automatic repair skipped (policy: manual)",
+			instance.Alias, primary.Alias, instance.GtidErrant)
 	}
 
 	return nil

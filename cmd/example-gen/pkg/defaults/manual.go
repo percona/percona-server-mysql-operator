@@ -33,6 +33,7 @@ func mysqlDefaults(spec *apiv1.MySQLSpec) {
 	podSpecDefaults(&spec.PodSpec, ImageMySQL, resources("2Gi", "", "4Gi", ""), configurationMySQL, 600, envList("BOOTSTRAP_READ_TIMEOUT", "600", "ASYNC_SOURCE_RETRY_COUNT", "3", "ASYNC_SOURCE_CONNECT_RETRY", "60"), envFromList("mysql-env-secret"))
 
 	spec.AutoRecovery = true
+	spec.ErrantTransactionsPolicy = apiv1.ErrantTransactionsManual
 	spec.VolumeSpec = nil
 	spec.ExposePrimary.Enabled = true
 
