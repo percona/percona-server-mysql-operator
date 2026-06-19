@@ -47,7 +47,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	psv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
@@ -1139,7 +1138,7 @@ var _ = Describe("CR validations", Ordered, func() {
 				observed := &psv1.PerconaServerMySQL{}
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cr), observed)).To(Succeed())
 
-				errCond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.StateError.String())
+				errCond := meta.FindStatusCondition(observed.Status.Conditions, psv1.StateError.String())
 				Expect(errCond).ToNot(BeNil())
 				Expect(errCond.Message).To(ContainSubstring(`get vault secret 'vault-missing-secret': secrets "vault-missing-secret" not found`))
 			})
@@ -1179,7 +1178,7 @@ vault_ca = /etc/mysql/vault-keyring-secret/ca.cert`,
 				observed := &psv1.PerconaServerMySQL{}
 				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cr), observed)).To(Succeed())
 
-				if errCond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.StateError.String()); errCond != nil {
+				if errCond := meta.FindStatusCondition(observed.Status.Conditions, psv1.StateError.String()); errCond != nil {
 					Expect(errCond.Message).NotTo(ContainSubstring("vault secret"))
 				}
 			})
