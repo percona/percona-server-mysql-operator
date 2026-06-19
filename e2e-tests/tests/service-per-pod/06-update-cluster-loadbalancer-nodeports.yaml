@@ -1,0 +1,14 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      kubectl patch ps "${test_name}" -n "${NAMESPACE}" \
+          --type=merge \
+          --patch '{"spec":{"mysql":{"expose":{"allocateLoadBalancerNodePorts":false}}}}'
+    timeout: 30
+
