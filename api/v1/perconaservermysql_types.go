@@ -86,6 +86,8 @@ type PerconaServerMySQLSpec struct {
 	// Deprecated: not supported since v0.12.0. Use initContainer instead
 	InitImage     string            `json:"initImage,omitempty"`
 	InitContainer InitContainerSpec `json:"initContainer,omitempty"`
+
+	Users []User `json:"users,omitempty"`
 }
 
 type InitContainerSpec struct {
@@ -791,6 +793,20 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	// +optional
 	Host              string `json:"host"`
 	InnoDBClusterName string `json:"innodbClusterName,omitempty"`
+}
+
+type UserSecretKeySelector struct {
+	Name string `json:"name"`
+	Key  string `json:"key"`
+}
+
+type User struct {
+	Name              string                 `json:"name"`
+	PasswordSecretRef *UserSecretKeySelector `json:"passwordSecretRef"`
+	DBs               []string               `json:"dbs,omitempty"`
+	Hosts             []string               `json:"hosts,omitempty"`
+	Grants            []string               `json:"grants,omitempty"`
+	WithGrantOption   bool                   `json:"withGrantOption,omitempty"`
 }
 
 func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {
