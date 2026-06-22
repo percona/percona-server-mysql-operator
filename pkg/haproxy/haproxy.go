@@ -69,8 +69,10 @@ func Service(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) *corev1.Servic
 	serviceType := cr.Spec.Proxy.HAProxy.Expose.Type
 
 	var loadBalancerSourceRanges []string
+	var allocateLoadBalancerNodePorts *bool
 	if serviceType == corev1.ServiceTypeLoadBalancer {
 		loadBalancerSourceRanges = expose.LoadBalancerSourceRanges
+		allocateLoadBalancerNodePorts = expose.AllocateLoadBalancerNodePorts
 	}
 
 	var externalTrafficPolicy corev1.ServiceExternalTrafficPolicyType
@@ -120,12 +122,13 @@ func Service(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) *corev1.Servic
 			Annotations: util.SSMapMerge(cr.GlobalAnnotations(), expose.Annotations),
 		},
 		Spec: corev1.ServiceSpec{
-			Type:                     serviceType,
-			Ports:                    ports,
-			Selector:                 selector,
-			LoadBalancerSourceRanges: loadBalancerSourceRanges,
-			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
-			ExternalTrafficPolicy:    externalTrafficPolicy,
+			Type:                          serviceType,
+			Ports:                         ports,
+			Selector:                      selector,
+			LoadBalancerSourceRanges:      loadBalancerSourceRanges,
+			AllocateLoadBalancerNodePorts: allocateLoadBalancerNodePorts,
+			InternalTrafficPolicy:         expose.InternalTrafficPolicy,
+			ExternalTrafficPolicy:         externalTrafficPolicy,
 		},
 	}
 }

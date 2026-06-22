@@ -113,6 +113,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.mysql.imagePullSecrets)" \
 		| yq "del(.spec.mysql.initContainer)" \
 		| yq "del(.spec.mysql.vaultSecretName)" \
+		| yq "del(.spec.orchestrator.configuration)" \
 		| yq "del(.spec.mysql.env)" \
 		| yq "del(.spec.mysql.envFrom)" \
 		| yq "del(.spec.mysql.podDisruptionBudget.minAvailable)" \
@@ -125,6 +126,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.mysql.exposePrimary.annotations)" \
 		| yq "del(.spec.mysql.exposePrimary.labels)" \
 		| yq "del(.spec.mysql.exposePrimary.loadBalancerSourceRanges)" \
+		| yq "del(.spec.mysql.exposePrimary.allocateLoadBalancerNodePorts)" \
 		| yq "del(.spec.mysql.exposePrimary.type)" \
 		| yq "del(.spec.mysql.exposePrimary.internalTrafficPolicy)" \
 		| yq "del(.spec.mysql.exposePrimary.externalTrafficPolicy)" \
