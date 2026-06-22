@@ -418,8 +418,10 @@ func PodService(cr *apiv1.PerconaServerMySQL, t corev1.ServiceType, podName stri
 	selector["statefulset.kubernetes.io/pod-name"] = podName
 
 	var loadBalancerSourceRanges []string
+	var allocateLoadBalancerNodePorts *bool
 	if t == corev1.ServiceTypeLoadBalancer {
 		loadBalancerSourceRanges = expose.LoadBalancerSourceRanges
+		allocateLoadBalancerNodePorts = expose.AllocateLoadBalancerNodePorts
 	}
 
 	var externalTrafficPolicy corev1.ServiceExternalTrafficPolicyType
@@ -451,9 +453,10 @@ func PodService(cr *apiv1.PerconaServerMySQL, t corev1.ServiceType, podName stri
 					Port: defaultRaftPort,
 				},
 			},
-			LoadBalancerSourceRanges: loadBalancerSourceRanges,
-			InternalTrafficPolicy:    expose.InternalTrafficPolicy,
-			ExternalTrafficPolicy:    externalTrafficPolicy,
+			LoadBalancerSourceRanges:      loadBalancerSourceRanges,
+			AllocateLoadBalancerNodePorts: allocateLoadBalancerNodePorts,
+			InternalTrafficPolicy:         expose.InternalTrafficPolicy,
+			ExternalTrafficPolicy:         externalTrafficPolicy,
 		},
 	}
 }
@@ -510,6 +513,51 @@ func ConfigMap(cr *apiv1.PerconaServerMySQL) (*corev1.ConfigMap, error) {
 	return k8s.ConfigMap(cr, ConfigMapName(cr), configFileKey, config, naming.ComponentOrchestrator), nil
 }
 
+// reservedOrchestratorConfigKeys must not be overridable via
+// spec.orchestrator.configuration. They fall into three groups: operator-managed
+// (set in ConfigMapData), injected per-pod by the entrypoint, and baked defaults
+// the operator's own integration depends on. Overriding any would break raft
+// membership, per-pod identity, topology TLS, API auth, or operator functionality
+// such as primary-pod labelling. Tuning knobs in build/orchestrator.conf.json
+// (poll/recovery intervals, lag thresholds, filters, etc.) stay user-overridable.
+var reservedOrchestratorConfigKeys = map[string]bool{
+	// operator-managed (set in ConfigMapData)
+	"RaftNodes":             true,
+	"RaftEnabledSingleNode": true,
+	// entrypoint-injected per-pod (orc-entrypoint.sh)
+	"HTTPAdvertise":                  true,
+	"RaftAdvertise":                  true,
+	"RaftBind":                       true,
+	"RaftEnabled":                    true,
+	"MySQLTopologyUseMutualTLS":      true,
+	"MySQLTopologySSLSkipVerify":     true,
+	"MySQLTopologySSLPrivateKeyFile": true,
+	"MySQLTopologySSLCertFile":       true,
+	"MySQLTopologySSLCAFile":         true,
+	"AuthenticationMethod":           true,
+	"HTTPAuthUser":                   true,
+	"HTTPAuthPassword":               true,
+	// failover hooks that label the primary pod via orc-handler
+	"PostFailoverProcesses":                   true,
+	"PostMasterFailoverProcesses":             true,
+	"PostIntermediateMasterFailoverProcesses": true,
+	"PostGracefulTakeoverProcesses":           true,
+	// alias/hostname detection the operator relies on to map instances to pods
+	"DetectClusterAliasQuery":    true,
+	"DetectInstanceAliasQuery":   true,
+	// operator-managed endpoints, paths and state
+	"ListenAddress":                      true,
+	"MySQLTopologyCredentialsConfigFile": true,
+	"RaftDataDir":                        true,
+	"SQLite3DataFile":                    true,
+	"BackendDB":                          true,
+	// failover/HA semantics the operator assumes
+	"ApplyMySQLPromotionAfterMasterFailover":    true,
+	"MasterFailoverDetachReplicaMasterHost":     true,
+	"DetachLostReplicasAfterMasterFailover":     true,
+	"FailMasterPromotionIfSQLThreadNotUpToDate": true,
+}
+
 func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 	config := make(map[string]interface{}, 0)
 
@@ -519,6 +567,30 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 		config["RaftEnabledSingleNode"] = false
 		if cr.Spec.Orchestrator.Size == 1 {
 			config["RaftEnabledSingleNode"] = true
+		}
+	}
+
+	if cr.CompareVersion("1.2.0") >= 0 && cr.Spec.SSLSecretName != "" {
+		config["MySQLTopologyUseMutualTLS"] = true
+		config["MySQLTopologySSLSkipVerify"] = true
+		config["MySQLTopologySSLPrivateKeyFile"] = filepath.Join(tlsMountPath, "tls.key")
+		config["MySQLTopologySSLCertFile"] = filepath.Join(tlsMountPath, "tls.crt")
+		config["MySQLTopologySSLCAFile"] = filepath.Join(tlsMountPath, "ca.crt")
+	}
+
+	if cfg := cr.Spec.Orchestrator.Configuration; cfg != "" {
+		userConfig := make(map[string]interface{})
+		if err := json.Unmarshal([]byte(cfg), &userConfig); err != nil {
+			return "", errors.Wrap(err, "unmarshal spec.orchestrator.configuration: must be a JSON object")
+		}
+		if userConfig == nil {
+			return "", errors.New("spec.orchestrator.configuration: must be a JSON object")
+		}
+		for k, v := range userConfig {
+			if reservedOrchestratorConfigKeys[k] {
+				continue
+			}
+			config[k] = v
 		}
 	}
 

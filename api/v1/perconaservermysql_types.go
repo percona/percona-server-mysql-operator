@@ -733,12 +733,13 @@ type VolumeSpec struct {
 }
 
 type ServiceExpose struct {
-	Type                     corev1.ServiceType                       `json:"type,omitempty"`
-	LoadBalancerSourceRanges []string                                 `json:"loadBalancerSourceRanges,omitempty"`
-	Annotations              map[string]string                        `json:"annotations,omitempty"`
-	Labels                   map[string]string                        `json:"labels,omitempty"`
-	InternalTrafficPolicy    *corev1.ServiceInternalTrafficPolicyType `json:"internalTrafficPolicy,omitempty"`
-	ExternalTrafficPolicy    corev1.ServiceExternalTrafficPolicyType  `json:"externalTrafficPolicy,omitempty"`
+	Type                          corev1.ServiceType                       `json:"type,omitempty"`
+	LoadBalancerSourceRanges      []string                                 `json:"loadBalancerSourceRanges,omitempty"`
+	AllocateLoadBalancerNodePorts *bool                                    `json:"allocateLoadBalancerNodePorts,omitempty"`
+	Annotations                   map[string]string                        `json:"annotations,omitempty"`
+	Labels                        map[string]string                        `json:"labels,omitempty"`
+	InternalTrafficPolicy         *corev1.ServiceInternalTrafficPolicyType `json:"internalTrafficPolicy,omitempty"` //nolint:staticcheck //FIXME: https://perconadev.atlassian.net/browse/K8SPS-764
+	ExternalTrafficPolicy         corev1.ServiceExternalTrafficPolicyType  `json:"externalTrafficPolicy,omitempty"` //nolint:staticcheck //FIXME: https://perconadev.atlassian.net/browse/K8SPS-764
 }
 
 // SaveOldMeta determines if both annotations and labels of the service expose are empty.
@@ -1419,6 +1420,14 @@ func (cr *PerconaServerMySQL) RouterEnabled() bool {
 // HAProxyEnabled verifies if HAProxy is enabled based on MySQL configuration and safety settings.
 func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
 	return cr.Spec.Proxy.HAProxy != nil && cr.Spec.Proxy.HAProxy.Enabled
+}
+
+// PiTREnabled reports whether point-in-time recovery is fully configured:
+// a backup spec exists, PiTR is enabled, and a binlog server is defined.
+func (cr *PerconaServerMySQL) PiTREnabled() bool {
+	return cr.Spec.Backup != nil &&
+		cr.Spec.Backup.PiTR.Enabled &&
+		cr.Spec.Backup.PiTR.BinlogServer != nil
 }
 
 // OrchestratorEnabled determines if the orchestrator is enabled,
