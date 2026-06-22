@@ -62,6 +62,7 @@ SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
 DEPLOYDIR = ./deploy
+OPERATOR_NAMESPACE ?= default
 
 all: build
 
@@ -124,6 +125,37 @@ manifests: kustomize generate generate-cr-yaml generate-restore-yaml generate-ba
 	echo "---" >> $(DEPLOYDIR)/crd.yaml
 
 	$(KUSTOMIZE) build config/rbac/ | $(SED) 's/ClusterRole/Role/g' > $(DEPLOYDIR)/rbac.yaml
+	# Keep namespaced RBAC for most resources, but add cluster-scoped access for ClusterIssuer only.
+	printf '%s\n' \
+		'---' \
+		'apiVersion: rbac.authorization.k8s.io/v1' \
+		'kind: ClusterRole' \
+		'metadata:' \
+		"  name: $(NAME)-clusterissuer" \
+		'rules:' \
+		'- apiGroups:' \
+		'  - cert-manager.io' \
+		'  - certmanager.k8s.io' \
+		'  resources:' \
+		'  - clusterissuers' \
+		'  verbs:' \
+		'  - get' \
+		'  - list' \
+		'  - watch' \
+		'---' \
+		'apiVersion: rbac.authorization.k8s.io/v1' \
+		'kind: ClusterRoleBinding' \
+		'metadata:' \
+		"  name: $(NAME)-clusterissuer" \
+		'roleRef:' \
+		'  apiGroup: rbac.authorization.k8s.io' \
+		'  kind: ClusterRole' \
+		"  name: $(NAME)-clusterissuer" \
+		'subjects:' \
+		'- kind: ServiceAccount' \
+		"  name: $(NAME)" \
+		"  namespace: $(OPERATOR_NAMESPACE)" \
+		>> $(DEPLOYDIR)/rbac.yaml
 	echo "---" >> $(DEPLOYDIR)/rbac.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image perconalab/percona-server-mysql-operator=$(IMAGE)
 	$(KUSTOMIZE) build config/manager/ > $(DEPLOYDIR)/operator.yaml
