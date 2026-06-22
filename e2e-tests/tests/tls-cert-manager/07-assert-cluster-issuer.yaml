@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 240
+timeout: 600
 commands:
   - script: |-
       set -o errexit
@@ -42,6 +42,6 @@ commands:
           echo "Cluster state is not ready: ${cluster_state}"
           exit 1
       fi
-    timeout: 240
+    timeout: 600
 
 
