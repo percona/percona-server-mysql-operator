@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -117,6 +118,12 @@ func main() {
 		WebhookServer: ctrlWebhook.NewServer(ctrlWebhook.Options{
 			Port: 9443,
 		}),
+	}
+
+	err = configureGroupKindConcurrency(&options)
+	if err != nil {
+		setupLog.Error(err, "failed to configure group kind concurrency")
+		os.Exit(1)
 	}
 
 	// Add support for MultiNamespace set in WATCH_NAMESPACE
@@ -267,6 +274,35 @@ func getLogLevel(log logr.Logger) zapcore.LevelEnabler {
 		log.Info("Unsupported log level, using INFO", "level", l)
 		return zapcore.InfoLevel
 	}
+}
+
+func configureGroupKindConcurrency(options *ctrl.Options) error {
+	groupKinds := []string{
+		"PerconaServerMySQL." + apiv1.GroupVersion.Group,
+		"PerconaServerMySQLBackup." + apiv1.GroupVersion.Group,
+		"PerconaServerMySQLRestore." + apiv1.GroupVersion.Group,
+		"PerconaServerMySQLClusterSet." + apiv1.GroupVersion.Group,
+	}
+
+	const defaultConcurrency = 1
+	options.Controller.GroupKindConcurrency = make(map[string]int, len(groupKinds))
+	for _, gk := range groupKinds {
+		options.Controller.GroupKindConcurrency[gk] = defaultConcurrency
+	}
+
+	if s := os.Getenv("MAX_CONCURRENT_RECONCILES"); s != "" {
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return fmt.Errorf("MAX_CONCURRENT_RECONCILES must be a valid integer: %s", s)
+		}
+		if i <= 0 {
+			return fmt.Errorf("MAX_CONCURRENT_RECONCILES must be a positive number: %d", i)
+		}
+		for _, gk := range groupKinds {
+			options.Controller.GroupKindConcurrency[gk] = i
+		}
+	}
+	return nil
 }
 
 func setupFieldIndexers(ctx context.Context, mgr ctrl.Manager) error {
