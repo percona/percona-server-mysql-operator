@@ -125,17 +125,18 @@ func setApplierWorkThreads(opts *configureInstanceOpts, myCnf *ini.Section) erro
 		return errors.Wrapf(err, "get %s", option)
 	}
 
-	workers, err := strconv.ParseInt(value, 10, 32)
-	if err != nil {
-		return errors.Wrapf(err, "parse value %v", value)
+	value = strings.TrimSpace(value)
+	if value == "" {
+		// keep defaults
+		return nil
 	}
 
-	switch {
-	case value != "":
-		opts.applierWorkerThreads = int32(workers)
-	default:
-		opts.applierWorkerThreads = 4
+	workers, err := strconv.ParseInt(value, 10, 32)
+	if err != nil {
+		return errors.Wrapf(err, "parse value %q", value)
 	}
+
+	opts.applierWorkerThreads = int32(workers)
 
 	return nil
 }

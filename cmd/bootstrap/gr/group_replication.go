@@ -443,7 +443,7 @@ func Bootstrap(ctx context.Context) error {
 
 	configureOpts, err := getConfigureInstanceOpts(myCnf)
 	if err != nil {
-		return errors.Wrap(err, "get createCluster options")
+		return errors.Wrap(err, "get configureInstance options")
 	}
 
 	err = localShell.configureInstance(ctx, configureOpts)
