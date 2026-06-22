@@ -848,6 +848,26 @@ const (
 	UserClusterSet     SystemUser = "clusterset"
 )
 
+// knownSystemUsers is the closed set of SystemUser values. Callers that join
+// SystemUser into a filesystem path (e.g. naming.CredsMountPath/<user>) must
+// validate against this set so an unexpected value cannot traverse outside.
+var knownSystemUsers = map[SystemUser]struct{}{
+	UserHeartbeat:      {},
+	UserMonitor:        {},
+	UserOperator:       {},
+	UserOrchestrator:   {},
+	UserPMMServerToken: {},
+	UserReplication:    {},
+	UserRoot:           {},
+	UserXtraBackup:     {},
+	UserClusterSet:     {},
+}
+
+func (u SystemUser) IsKnown() bool {
+	_, ok := knownSystemUsers[u]
+	return ok
+}
+
 // MySQLSpec returns the MySQL specification from the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) MySQLSpec() *MySQLSpec {
 	return &cr.Spec.MySQL
