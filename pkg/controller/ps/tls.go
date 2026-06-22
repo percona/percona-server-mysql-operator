@@ -104,25 +104,38 @@ func (r *PerconaServerMySQLReconciler) checkTLSIssuer(ctx context.Context, cr *a
 	if cr.Spec.TLS == nil || cr.Spec.TLS.IssuerConf == nil {
 		return nil
 	}
-	isr := &cm.Issuer{}
-	err := r.Get(ctx, types.NamespacedName{
-		Namespace: cr.Namespace,
-		Name:      cr.Spec.TLS.IssuerConf.Name,
-	}, isr)
-	if err != nil {
-		return err
+
+	ref := cr.Spec.TLS.IssuerConf
+	kind := ref.Kind
+	if kind == "" {
+		kind = cm.IssuerKind
 	}
 
-	return nil
+	nn := types.NamespacedName{Name: ref.Name}
+	var obj client.Object
+
+	switch kind {
+	case cm.IssuerKind:
+		nn.Namespace = cr.Namespace
+		obj = &cm.Issuer{}
+	case cm.ClusterIssuerKind:
+		obj = &cm.ClusterIssuer{}
+	default:
+		return errors.Errorf("unsupported tls.issuerConf.kind %q", kind)
+	}
+
+	return r.Get(ctx, nn, obj)
 }
 
 func (r *PerconaServerMySQLReconciler) ensureSSLByCertManager(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	issuerName := cr.Name + "-ps-issuer"
 	caIssuerName := cr.Name + "-ps-ca-issuer"
-	issuerKind := "Issuer"
+	issuerKind := cm.IssuerKind
 	issuerGroup := ""
 	if cr.Spec.TLS != nil && cr.Spec.TLS.IssuerConf != nil {
-		issuerKind = cr.Spec.TLS.IssuerConf.Kind
+		if cr.Spec.TLS.IssuerConf.Kind != "" {
+			issuerKind = cr.Spec.TLS.IssuerConf.Kind
+		}
 		issuerName = cr.Spec.TLS.IssuerConf.Name
 		issuerGroup = cr.Spec.TLS.IssuerConf.Group
 
