@@ -14385,18 +14385,15 @@ spec:
                     passwordSecretRef:
                       properties:
                         key:
+                          default: password
                           type: string
                         name:
                           type: string
                       required:
-                      - key
                       - name
                       type: object
-                    withGrantOption:
-                      type: boolean
                   required:
                   - name
-                  - passwordSecretRef
                   type: object
                 type: array
             type: object
