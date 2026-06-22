@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -123,9 +124,10 @@ func cleanupUsers(
 	}
 
 	for key := range internalSecret.Data {
-		if strings.HasSuffix(key, ".md5") {
+		if !strings.HasSuffix(key, ".md5") {
 			continue
 		}
+		key = strings.TrimSuffix(key, ".md5")
 
 		if slices.ContainsFunc(cr.Spec.Users, func(u apiv1.User) bool {
 			return u.Name == key
@@ -137,24 +139,11 @@ func cleanupUsers(
 			return errors.Wrapf(err, "drop user %s", key)
 		}
 
-		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			internalSecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      cr.InternalCustomUserSecretName(),
-					Namespace: cr.GetNamespace(),
-				},
-			}
-
-			if err := cl.Get(ctx, client.ObjectKeyFromObject(internalSecret), internalSecret); err != nil {
-				return err
-			}
-
-			orig := internalSecret.DeepCopy()
-			delete(internalSecret.Data, key)
-			delete(internalSecret.Data, key+".md5")
-			return cl.Patch(ctx, internalSecret, client.MergeFrom(orig))
+		if err := patchInternalUserSecret(ctx, cl, cr, func(data map[string][]byte) {
+			delete(data, key)
+			delete(data, key+".md5")
 		}); err != nil {
-			return errors.Wrap(err, "update user password in k8s secret")
+			return errors.Wrap(err, "patch internal user secret")
 		}
 	}
 	return nil
@@ -172,7 +161,22 @@ func upsertCustomUser(ctx context.Context, cl client.Client, um users.Manager, c
 		return errors.Wrap(err, "revoke stale grants")
 	}
 
-	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	if err := patchInternalUserSecret(ctx, cl, cr, func(data map[string][]byte) {
+		data[user.Name+".md5"] = []byte(hash)
+	}); err != nil {
+		return errors.Wrap(err, "patch internal user secret")
+	}
+
+	return nil
+}
+
+func patchInternalUserSecret(
+	ctx context.Context,
+	cl client.Client,
+	cr *apiv1.PerconaServerMySQL,
+	mutate func(data map[string][]byte),
+) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		internalSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      cr.InternalCustomUserSecretName(),
@@ -188,14 +192,10 @@ func upsertCustomUser(ctx context.Context, cl client.Client, um users.Manager, c
 		if internalSecret.Data == nil {
 			internalSecret.Data = make(map[string][]byte)
 		}
-		internalSecret.Data[user.Name+".md5"] = []byte(hash)
+		mutate(internalSecret.Data)
 
 		return cl.Patch(ctx, internalSecret, client.MergeFrom(orig))
-	}); err != nil {
-		return errors.Wrap(err, "update user password in k8s secret")
-	}
-
-	return nil
+	})
 }
 
 func updateUserPassword(ctx context.Context, cl client.Client, um users.Manager, cr *apiv1.PerconaServerMySQL, user *apiv1.User, pass string) error {
@@ -298,6 +298,10 @@ func getInternalCustomUserSecret(
 		return nil, errors.Wrap(err, "get internal custom user secret")
 	}
 
+	if err := controllerutil.SetControllerReference(cr, secret, cl.Scheme()); err != nil {
+		return nil, errors.Wrap(err, "set controller reference for internal custom user secret")
+	}
+
 	if err := cl.Create(ctx, secret); err != nil {
 		return nil, errors.Wrap(err, "create internal custom user secret")
 	}
@@ -311,8 +315,10 @@ func getCustomUserSecret(
 	user *apiv1.User,
 ) (*corev1.Secret, error) {
 	secretName := cr.DefaultCustomUserSecretName(*user)
+	secretKey := defaultCustomUserSecretKey
 	if user.PasswordSecretRef != nil {
 		secretName = user.PasswordSecretRef.Name
+		secretKey = user.PasswordSecretRef.Key
 	}
 
 	secret := &corev1.Secret{
@@ -334,7 +340,7 @@ func getCustomUserSecret(
 	}
 
 	secret.Data = map[string][]byte{
-		defaultCustomUserSecretKey: pass,
+		secretKey: pass,
 	}
 
 	if err := cl.Create(ctx, secret); err != nil {
