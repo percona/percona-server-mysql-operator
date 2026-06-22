@@ -254,7 +254,7 @@ var _ = Describe("TLS issuer kind handling", Ordered, func() {
 			ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 			Spec: apiv1.PerconaServerMySQLSpec{
 				TLS: &apiv1.TLSSpec{
-					IssuerConf: &cmmeta.ObjectReference{
+					IssuerConf: &cmmeta.IssuerReference{
 						Name:  clusterIssuerName,
 						Kind:  "ClusterIssuer",
 						Group: "cert-manager.io",
