@@ -41,18 +41,29 @@ var (
 
 var sensitiveRegexp = regexp.MustCompile(":.*@")
 
+// clusterNameRegexp matches valid Kubernetes resource names (RFC 1123 label).
+var clusterNameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+
+// seedsRegexp matches a comma-separated list of host:port pairs where host is
+// a DNS name or IP address. Single quotes and backticks are explicitly excluded.
+var seedsRegexp = regexp.MustCompile(`^[a-zA-Z0-9._:-]+(,[a-zA-Z0-9._:-]+)*$`)
+
 type mysqlsh struct {
 	clusterName string
 	host        string
 	version     *v.Version
 }
 
-func newShell(host string, version *v.Version) *mysqlsh {
+func newShell(host string, version *v.Version) (*mysqlsh, error) {
+	name := os.Getenv("INNODB_CLUSTER_NAME")
+	if !clusterNameRegexp.MatchString(name) {
+		return nil, errors.Errorf("invalid INNODB_CLUSTER_NAME %q: must match %s", name, clusterNameRegexp)
+	}
 	return &mysqlsh{
-		clusterName: os.Getenv("INNODB_CLUSTER_NAME"),
+		clusterName: name,
 		version:     version,
 		host:        host,
-	}
+	}, nil
 }
 
 func (m *mysqlsh) compareVersionWith(ver string) int {
@@ -130,8 +141,7 @@ type SQLResult struct {
 func (m *mysqlsh) runSQL(ctx context.Context, sql string) (SQLResult, error) {
 	var stdoutb, stderrb bytes.Buffer
 
-	cmd := fmt.Sprintf("session.runSql(`%s`)", sql)
-	args := []string{"--uri", m.getURI(), "--js", "--json=raw", "--interactive", "--quiet-start", "2", "-e", cmd}
+	args := []string{"--uri", m.getURI(), "--sql", "--json=raw", "--quiet-start", "2", "-e", sql}
 
 	c := exec.CommandContext(ctx, "mysqlsh", args...)
 	c.Stdout = &stdoutb
@@ -140,7 +150,7 @@ func (m *mysqlsh) runSQL(ctx context.Context, sql string) (SQLResult, error) {
 	var result SQLResult
 
 	if err := c.Run(); err != nil {
-		return result, errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", cmd, stdoutb.String(), stderrb.String())
+		return result, errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", sql, stdoutb.String(), stderrb.String())
 	}
 
 	if err := json.Unmarshal(stdoutb.Bytes(), &result); err != nil {
@@ -193,14 +203,13 @@ func (m *mysqlsh) getGTIDPurged(ctx context.Context) (string, error) {
 }
 
 func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) error {
+	if !seedsRegexp.MatchString(seeds) {
+		return errors.Errorf("invalid group_replication_group_seeds value %q", seeds)
+	}
 	sql := fmt.Sprintf("SET PERSIST group_replication_group_seeds = '%s'", seeds)
 
 	_, err := m.runSQL(ctx, sql)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func updateGroupPeers(ctx context.Context, peers sets.Set[string], version *v.Version) error {
@@ -216,7 +225,11 @@ func updateGroupPeers(ctx context.Context, peers sets.Set[string], version *v.Ve
 	})
 
 	for _, peer := range peers.UnsortedList() {
-		sh := newShell(peer, version)
+		sh, err := newShell(peer, version)
+		if err != nil {
+			log.Printf("ERROR: failed to create shell for peer %s: %s", peer, err)
+			continue
+		}
 
 		log.Printf("Connected to peer %s", peer)
 
@@ -330,12 +343,16 @@ func connectToLocal(version *v.Version) (*mysqlsh, error) {
 		return nil, errors.Wrap(err, "get FQDN")
 	}
 
-	return newShell(fqdn, version), nil
+	return newShell(fqdn, version)
 }
 
 func connectToCluster(ctx context.Context, peers sets.Set[string], version *v.Version) (*mysqlsh, error) {
 	for _, peer := range sets.List(peers) {
-		shell := newShell(peer, version)
+		shell, err := newShell(peer, version)
+		if err != nil {
+			log.Printf("Failed to create shell for peer %s: %s", peer, err)
+			continue
+		}
 		stdout, stderr, err := shell.run(ctx, fmt.Sprintf("dba.getCluster('%s')", shell.clusterName))
 		if err != nil {
 			log.Printf("Failed get cluster from peer %s, stdout: %s stderr: %s", peer, stdout.String(), stderr.String())
