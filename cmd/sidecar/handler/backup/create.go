@@ -138,7 +138,7 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 	defer backupLog.Close() //nolint:errcheck
 	logWriter := io.MultiWriter(backupLog, os.Stderr)
 
-	fmt.Fprintf(logWriter, "backup %s START %s\n", backupName, time.Now().UTC().Format(time.RFC3339))
+	fmt.Fprintf(logWriter, "backup %s START %s\n", backupName, time.Now().UTC().Format(time.RFC3339)) //nolint:errcheck
 
 	xbcloud := exec.CommandContext(gCtx, "xbcloud", backupConf.XbcloudPutArgs()...)
 	xbcloud.Env = envs(backupConf)
@@ -198,7 +198,7 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 
 	if err := g.Wait(); err != nil {
 		log.Error(err, "backup failed")
-		fmt.Fprintf(logWriter, "backup %s FAILED %s\n", backupName, time.Now().UTC().Format(time.RFC3339))
+		fmt.Fprintf(logWriter, "backup %s FAILED %s\n", backupName, time.Now().UTC().Format(time.RFC3339)) //nolint:errcheck
 
 		if getClusterType() == apiv1.ClusterTypeAsync {
 			// --safe-slave-backup stops SQL thread but it's not started
@@ -212,11 +212,11 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 	}
 	if err := h.checkBackupMD5Size(req.Context(), &backupConf); err != nil {
 		log.Error(err, "check backup md5 file size")
-		fmt.Fprintf(logWriter, "backup %s FAILED %s\n", backupName, time.Now().UTC().Format(time.RFC3339))
+		fmt.Fprintf(logWriter, "backup %s FAILED %s\n", backupName, time.Now().UTC().Format(time.RFC3339)) //nolint:errcheck
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
-	fmt.Fprintf(logWriter, "backup %s FINISHED %s\n", backupName, time.Now().UTC().Format(time.RFC3339))
+	fmt.Fprintf(logWriter, "backup %s FINISHED %s\n", backupName, time.Now().UTC().Format(time.RFC3339)) //nolint:errcheck
 	log.Info("Backup finished successfully", "destination", backupConf.Destination, "storage", backupConf.Type)
 }
 
