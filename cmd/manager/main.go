@@ -293,7 +293,7 @@ func configureGroupKindConcurrency(options *ctrl.Options) error {
 	if s := os.Getenv("MAX_CONCURRENT_RECONCILES"); s != "" {
 		i, err := strconv.Atoi(s)
 		if err != nil {
-			return fmt.Errorf("MAX_CONCURRENT_RECONCILES must be a valid integer: %s", s)
+			return fmt.Errorf("MAX_CONCURRENT_RECONCILES must be a valid integer: %q", s)
 		}
 		if i <= 0 {
 			return fmt.Errorf("MAX_CONCURRENT_RECONCILES must be a positive number: %d", i)

@@ -14846,8 +14846,6 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.namespace
-        - name: MAX_CONCURRENT_RECONCILES
-          value: "1"
         image: perconalab/percona-server-mysql-operator:main
         imagePullPolicy: Always
         livenessProbe:

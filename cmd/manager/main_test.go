@@ -68,9 +68,7 @@ func TestConfigureGroupKindConcurrency(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			if tt.envValue != "" {
-				t.Setenv("MAX_CONCURRENT_RECONCILES", tt.envValue)
-			}
+			t.Setenv("MAX_CONCURRENT_RECONCILES", tt.envValue)
 
 			options := ctrl.Options{
 				Scheme: scheme,
