@@ -256,6 +256,20 @@ func (r *PerconaServerMySQLReconciler) switchOverAsync(
 	return nil
 }
 
+func isErrPrimaryNotTheLowest(err error) bool {
+	errStrings := []string{
+		"The appointed primary member is not the lowest version in the group.",                                         // 8.4
+		"The appointed primary member has a version that is greater than the one of some of the members in the group.", // 8.0
+	}
+	for _, errStr := range errStrings {
+		if strings.Contains(err.Error(), errStr) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (r *PerconaServerMySQLReconciler) switchOverGR(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
@@ -267,14 +281,18 @@ func (r *PerconaServerMySQLReconciler) switchOverGR(
 	}
 
 	primaryUri := getMySQLURI(apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, primary))
-	mysh, err := mysqlsh.NewWithExec(r.ClientCmd, primary, primaryUri)
+	mysh, err := mysqlsh.NewWithExec(primaryUri, &mysqlsh.ExecOptions{
+		Pod:           primary,
+		ContainerName: "mysql",
+		Client:        r.ClientCmd,
+	})
 	if err != nil {
 		return err
 	}
 
 	targetFQDN := mysql.PodFQDN(cr, target)
 	if err := mysh.SetPrimaryInstanceWithExec(ctx, cr.InnoDBClusterName(), targetFQDN); err != nil {
-		if strings.Contains(err.Error(), "The appointed primary member is not the lowest version in the group.") {
+		if isErrPrimaryNotTheLowest(err) {
 			return errPrimaryNotTheLowest
 		}
 		return errors.Wrap(err, "set primary instance")
