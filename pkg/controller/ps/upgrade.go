@@ -99,7 +99,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 
 		log.Info("apply changes to the secondary pod", "pod", pod.Name)
 
-		if pod.ObjectMeta.Labels[controllerRevisionHash] == sts.Status.UpdateRevision {
+		if pod.Labels[controllerRevisionHash] == sts.Status.UpdateRevision {
 			log.Info("pod updated", "pod", pod.Name)
 			continue
 		}
@@ -117,7 +117,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	}
 
 	log.Info("apply changes to the primary pod", "pod", primPod.Name)
-	if primPod.ObjectMeta.Labels[controllerRevisionHash] != sts.Status.UpdateRevision {
+	if primPod.Labels[controllerRevisionHash] != sts.Status.UpdateRevision {
 		log.Info("primary pod was deleted", "pod", primPod.Name)
 		err = deletePodAndWait(ctx, r.Client, primPod, currentSet)
 		if err != nil {
@@ -135,7 +135,7 @@ func stsChanged(sts *appsv1.StatefulSet, pods []corev1.Pod) bool {
 	// When https://github.com/kubernetes/kubernetes/issues/73492 bug gets fixed,
 	// we can simply compare sts.Status.UpdateRevision with sts.Status.CurrentRevision
 	for _, pod := range pods {
-		if pod.ObjectMeta.Labels["controller-revision-hash"] != sts.Status.UpdateRevision {
+		if pod.Labels["controller-revision-hash"] != sts.Status.UpdateRevision {
 			return true
 		}
 	}
@@ -329,7 +329,7 @@ func deletePodAndWait(ctx context.Context, cli client.Client, pod *corev1.Pod, s
 			return errors.Wrap(err, "failed to get pod")
 		}
 
-		if p.ObjectMeta.Labels[controllerRevisionHash] != sts.Status.UpdateRevision {
+		if p.Labels[controllerRevisionHash] != sts.Status.UpdateRevision {
 			return errors.New("pod is not updated")
 		}
 
