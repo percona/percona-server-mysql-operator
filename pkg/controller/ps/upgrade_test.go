@@ -318,11 +318,11 @@ func TestSwitchOverAsync(t *testing.T) {
 			disableCheck: false,
 			scripts: []fakeClientScript{
 				{
-					cmd:    []string{"curl", fmt.Sprintf("localhost:3000/api/master/%s", clusterHint)},
+					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
 					stdout: clusterPrimaryResp,
 				},
 				{
-					cmd:    []string{"curl", fmt.Sprintf("localhost:3000/api/graceful-master-takeover-auto/%s/%s/%d", clusterHint, target.GetName(), mysql.DefaultPort)},
+					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/graceful-master-takeover-auto/%s/%s/%d"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint, target.GetName(), mysql.DefaultPort)},
 					stdout: takeoverResp,
 				},
 			},
@@ -371,7 +371,7 @@ func TestSwitchOverAsync(t *testing.T) {
 			disableCheck: false,
 			scripts: []fakeClientScript{
 				{
-					cmd:    []string{"curl", fmt.Sprintf("localhost:3000/api/master/%s", clusterHint)},
+					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
 					stdout: alreadyPrimaryResp,
 				},
 			},
@@ -497,15 +497,15 @@ func TestSwitchOverAndWait(t *testing.T) {
 		fc := &fakeClient{
 			scripts: []fakeClientScript{
 				{
-					cmd:    []string{"curl", fmt.Sprintf("localhost:3000/api/master/%s", clusterHint)},
+					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
 					stdout: oldPrimaryResp,
 				},
 				{
-					cmd:    []string{"curl", fmt.Sprintf("localhost:3000/api/graceful-master-takeover-auto/%s/%s/%d", clusterHint, target.GetName(), mysql.DefaultPort)},
+					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/graceful-master-takeover-auto/%s/%s/%d"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint, target.GetName(), mysql.DefaultPort)},
 					stdout: takeoverResp,
 				},
 				{
-					cmd:    []string{"curl", fmt.Sprintf("localhost:3000/api/master/%s", clusterHint)},
+					cmd:    []string{"sh", "-c", fmt.Sprintf(`curl -s -u "%s:$(cat %s/%s)" "localhost:3000/api/master/%s"`, apiv1.UserOrchestrator, orchestrator.CredsMountPath, apiv1.UserOrchestrator, clusterHint)},
 					stdout: newPrimaryResp,
 				},
 			},

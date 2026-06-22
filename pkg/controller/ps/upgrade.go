@@ -26,7 +26,7 @@ import (
 
 const controllerRevisionHash = "controller-revision-hash"
 
-var errPrimaryNotTheLowest = errors.New("The appointed primary member is not the lowest version in the group.")
+var errPrimaryNotTheLowest = errors.New("appointed primary member is not the lowest version in the group")
 
 func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *appsv1.StatefulSet, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("SmartUpdate")
