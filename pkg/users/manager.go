@@ -106,10 +106,17 @@ func (m *manager) UpsertUser(ctx context.Context, user *apiv1.User, pass string)
 	}
 
 	for _, q := range query {
-		_, err := m.db.ExecContext(ctx, q, pass)
-		if err != nil {
-			return errors.Wrapf(err, "upsert user %s", user.Name)
+		args := []any{}
+		if strings.Contains(q, "?") {
+			args = append(args, pass)
 		}
+
+		_, err := m.db.ExecContext(ctx, q, args...)
+		if err != nil {
+			return errors.Wrapf(err, "exec context")
+		}
+		continue
+
 	}
 
 	return nil
