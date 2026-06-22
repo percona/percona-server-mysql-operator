@@ -33,7 +33,7 @@ func scopeSQL(db string) string {
 // revokes privileges that were actually observed (passed in actual), so the
 // generated statements never fail with "no such grant".
 func staleGrantRevokes(user *apiv1.User, host string, actual []grant) []string {
-	desiredPrivs := make(map[string]bool)
+	desiredPrivs := make(map[string]struct{})
 	allPrivs := false
 	for _, g := range user.Grants {
 		for p := range strings.SplitSeq(g, ",") {
@@ -44,14 +44,14 @@ func staleGrantRevokes(user *apiv1.User, host string, actual []grant) []string {
 			if p == "ALL" || p == "ALL PRIVILEGES" {
 				allPrivs = true
 			}
-			desiredPrivs[p] = true
+			desiredPrivs[p] = struct{}{}
 		}
 	}
 	hasGrants := len(desiredPrivs) > 0
 
-	desiredDBs := make(map[string]bool, len(user.DBs))
+	desiredDBs := make(map[string]struct{}, len(user.DBs))
 	for _, db := range user.DBs {
-		desiredDBs[db] = true
+		desiredDBs[db] = struct{}{}
 	}
 	// UpsertUser grants globally only when no databases are specified.
 	globalDesired := len(desiredDBs) == 0
@@ -65,7 +65,8 @@ func staleGrantRevokes(user *apiv1.User, host string, actual []grant) []string {
 		if db == "" {
 			return globalDesired
 		}
-		return desiredDBs[db]
+		_, ok := desiredDBs[db]
+		return ok
 	}
 
 	type scopeRevoke struct {
@@ -94,7 +95,7 @@ func staleGrantRevokes(user *apiv1.User, host string, actual []grant) []string {
 			// Desired scope: keep everything when ALL is requested, otherwise
 			// drop only privileges no longer desired. Grant option is left
 			// intact because the remaining desired privileges keep it.
-			if allPrivs || desiredPrivs[priv] {
+			if _, ok := desiredPrivs[priv]; allPrivs || ok {
 				continue
 			}
 			s := revokeFor(g.db)
