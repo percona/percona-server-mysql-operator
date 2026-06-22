@@ -1,0 +1,88 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 360
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      router_svc=$(get_router_service "${cluster_name}")
+      mysql_host="-h ${router_svc}"
+
+      # Custom users are reconciled asynchronously once the cluster is Ready,
+      # so wait for both accounts to appear before running the checks.
+      wait_for_user() {
+          local user="$1"
+          local i
+          for i in $(seq 1 60); do
+              local count
+              count=$(run_mysql "SELECT COUNT(*) FROM mysql.user WHERE user='${user}'" "${mysql_host}" 2>/dev/null || true)
+              if [[ "${count}" == "1" ]]; then
+                  return 0
+              fi
+              echo "waiting for user ${user} to be created (${i})"
+              sleep 5
+          done
+          echo "ERROR: user ${user} was not created within timeout"
+          return 1
+      }
+
+      # Connect as a custom user. The password is passed through MYSQL_PWD via
+      # kubectl exec argv (no shell), so it is safe even for auto-generated
+      # passwords that contain shell metacharacters.
+      check_connect() {
+          local user="$1"
+          local pass="$2"
+          kubectl -n "${NAMESPACE}" exec mysql-client -- \
+              env MYSQL_PWD="${pass}" mysql -sN -h "${router_svc}" -u"${user}" -e "SELECT 1" >/dev/null 2>&1
+      }
+
+      wait_for_user alice
+      wait_for_user bob
+
+      # alice has no passwordSecretRef, so the operator auto-generated her
+      # password into the custom-users-user-alice secret.
+      alice_pass=$(kubectl -n "${NAMESPACE}" get secret custom-users-user-alice -o jsonpath='{.data.password}' | base64 --decode)
+
+      set +o errexit
+      check_connect alice "${alice_pass}" && alice_connect=success || alice_connect=fail
+      check_connect bob "bob-pass-1" && bob_connect=success || bob_connect=fail
+      set -o errexit
+
+      # alice.dbs=[myapp] makes the operator create the database.
+      if [[ -n "$(run_mysql "SHOW DATABASES LIKE 'myapp'" "${mysql_host}")" ]]; then
+          myapp_db=success
+      else
+          myapp_db=fail
+      fi
+
+      # alice: SELECT, INSERT, UPDATE on myapp.* WITH GRANT OPTION
+      alice_grants=$(run_mysql "SHOW GRANTS FOR 'alice'@'%'" "${mysql_host}")
+      alice_myapp_line=$(echo "${alice_grants}" | grep "myapp" || true)
+      if echo "${alice_myapp_line}" | grep -q "SELECT" \
+          && echo "${alice_myapp_line}" | grep -q "INSERT" \
+          && echo "${alice_myapp_line}" | grep -q "UPDATE" \
+          && echo "${alice_myapp_line}" | grep -q "GRANT OPTION"; then
+          alice_grants_result=success
+      else
+          alice_grants_result=fail
+      fi
+
+      # bob: global SELECT on *.* (no dbs specified)
+      bob_grants=$(run_mysql "SHOW GRANTS FOR 'bob'@'%'" "${mysql_host}")
+      if echo "${bob_grants}" | grep "SELECT" | grep -q "[*][.][*]"; then
+          bob_grants_result=success
+      else
+          bob_grants_result=fail
+      fi
+
+      kubectl create configmap -n "${NAMESPACE}" 03-check-users \
+          --from-literal=alice_connect="${alice_connect}" \
+          --from-literal=bob_connect="${bob_connect}" \
+          --from-literal=myapp_db="${myapp_db}" \
+          --from-literal=alice_grants="${alice_grants_result}" \
+          --from-literal=bob_grants="${bob_grants_result}"
+      kubectl get configmap -n "${NAMESPACE}" 03-check-users -o yaml

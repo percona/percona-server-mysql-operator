@@ -1,0 +1,54 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 360
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      mysql_host="-h $(get_router_service "${cluster_name}")"
+
+      # Drop INSERT and UPDATE from alice, keeping SELECT on the same database.
+      # The whole users list is replayed (bob unchanged) because a merge patch
+      # replaces the list wholesale.
+      kubectl -n "${NAMESPACE}" patch ps "${test_name}" --type=merge -p '{
+        "spec": {
+          "users": [
+            {
+              "name": "alice",
+              "dbs": ["myapp"],
+              "grants": ["SELECT"]
+            },
+            {
+              "name": "bob",
+              "grants": ["SELECT"],
+              "passwordSecretRef": {
+                "name": "custom-users-bob-pwd",
+                "key": "password"
+              }
+            }
+          ]
+        }
+      }'
+
+      # Wait until RevokeStaleGrants has stripped INSERT/UPDATE while keeping SELECT.
+      stale_revoked=fail
+      for i in $(seq 1 60); do
+          grants=$(run_mysql "SHOW GRANTS FOR 'alice'@'%'" "${mysql_host}" 2>/dev/null || true)
+          myapp_line=$(echo "${grants}" | grep "myapp" || true)
+          if echo "${myapp_line}" | grep -q "SELECT" \
+              && ! echo "${myapp_line}" | grep -q "INSERT" \
+              && ! echo "${myapp_line}" | grep -q "UPDATE"; then
+              stale_revoked=success
+              break
+          fi
+          echo "waiting for stale grants to be revoked (${i})"
+          sleep 5
+      done
+
+      kubectl create configmap -n "${NAMESPACE}" 04-check-grants \
+          --from-literal=stale_revoked="${stale_revoked}"
+      kubectl get configmap -n "${NAMESPACE}" 04-check-grants -o yaml
