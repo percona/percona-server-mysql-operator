@@ -138,8 +138,6 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 	defer backupLog.Close() //nolint:errcheck
 	logWriter := io.MultiWriter(backupLog, os.Stderr)
 
-	fmt.Fprintf(logWriter, "backup %s START %s\n", backupName, time.Now().UTC().Format(time.RFC3339)) //nolint:errcheck
-
 	xbcloud := exec.CommandContext(gCtx, "xbcloud", backupConf.XbcloudPutArgs()...)
 	xbcloud.Env = envs(backupConf)
 	xbcloud.Stdin = xbOut
@@ -151,6 +149,8 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 	defer xbcloudErr.Close() //nolint:errcheck
+
+	fmt.Fprintf(logWriter, "backup %s START %s\n", backupName, time.Now().UTC().Format(time.RFC3339)) //nolint:errcheck
 
 	log.Info(
 		"Backup starting",
