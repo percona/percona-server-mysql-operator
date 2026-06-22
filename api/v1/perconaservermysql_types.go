@@ -796,17 +796,29 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 }
 
 type UserSecretKeySelector struct {
+	// +kubebuilder:validation:Required
 	Name string `json:"name"`
-	Key  string `json:"key"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:=password
+	Key string `json:"key"`
 }
 
 type User struct {
-	Name              string                 `json:"name"`
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// +kubebuilder:validation:Optional
 	PasswordSecretRef *UserSecretKeySelector `json:"passwordSecretRef"`
 	DBs               []string               `json:"dbs,omitempty"`
 	Hosts             []string               `json:"hosts,omitempty"`
 	Grants            []string               `json:"grants,omitempty"`
-	WithGrantOption   bool                   `json:"withGrantOption,omitempty"`
+}
+
+func (cr *PerconaServerMySQL) DefaultCustomUserSecretName(u User) string {
+	return fmt.Sprintf("%s-user-%s", cr.GetName(), u.Name)
+}
+
+func (cr *PerconaServerMySQL) InternalCustomUserSecretName() string {
+	return fmt.Sprintf("%s-internal-custom-users", cr.GetName())
 }
 
 func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {
@@ -836,8 +848,7 @@ type PerconaServerMySQL struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec PerconaServerMySQLSpec `json:"spec,omitempty"`
-
+	Spec   PerconaServerMySQLSpec   `json:"spec,omitempty"`
 	Status PerconaServerMySQLStatus `json:"status,omitempty"` // Make sure that the Status is updated after making changes. See the description of `(*PerconaServerMySQLReconciler) reconcileCRStatus` method for details.
 }
 

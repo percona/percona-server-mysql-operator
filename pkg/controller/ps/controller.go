@@ -577,6 +577,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcileUsers(ctx, cr, userSecret); err != nil {
 		return errors.Wrap(err, "users")
 	}
+	if err := r.reconcileCustomUsers(ctx, cr); err != nil {
+		return errors.Wrap(err, "custom users")
+	}
 	if err := r.ensureTLSSecret(ctx, cr); err != nil {
 		return errors.Wrap(err, "TLS secret")
 	}

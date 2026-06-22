@@ -88,7 +88,7 @@ func FillPasswordsSecret(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) er
 		if _, ok := secret.Data[string(user)]; ok {
 			continue
 		}
-		pass, err := generatePass()
+		pass, err := GeneratePass()
 		if err != nil {
 			return errors.Wrapf(err, "create %s user password", user)
 		}
@@ -97,8 +97,8 @@ func FillPasswordsSecret(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) er
 	return nil
 }
 
-// generatePass generates a random password
-func generatePass() ([]byte, error) {
+// GeneratePass generates a random password
+func GeneratePass() ([]byte, error) {
 	mrand.Seed(time.Now().UnixNano())
 	ln := mrand.Intn(passwordMaxLen-passwordMinLen) + passwordMinLen
 	b := make([]byte, ln)
