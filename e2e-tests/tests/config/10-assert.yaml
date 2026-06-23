@@ -1,0 +1,12 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 120
+commands:
+  - script: |-
+      set -o errexit
+
+      source ../../functions
+
+      data=$(kubectl -n "${NAMESPACE}" get configmap "$(get_cluster_name)-orc" -o jsonpath='{.data.orchestrator\.conf\.json}')
+      echo "${data}" | grep -F '"FailMasterPromotionOnLagMinutes":30' >/dev/null || echo "${data}" | grep -F '"FailMasterPromotionOnLagMinutes": 30' >/dev/null
+      echo "${data}" | grep -F '"RecoveryPeriodBlockSeconds":300' >/dev/null || echo "${data}" | grep -F '"RecoveryPeriodBlockSeconds": 300' >/dev/null

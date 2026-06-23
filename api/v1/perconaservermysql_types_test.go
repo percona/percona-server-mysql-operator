@@ -808,3 +808,44 @@ func TestGetXtrabackupFlagValue(t *testing.T) {
 		})
 	}
 }
+
+func TestPiTREnabled(t *testing.T) {
+	testCases := []struct {
+		name   string
+		backup *BackupSpec
+		want   bool
+	}{
+		{
+			name:   "nil backup",
+			backup: nil,
+			want:   false,
+		},
+		{
+			name:   "empty backup",
+			backup: &BackupSpec{},
+			want:   false,
+		},
+		{
+			name:   "PiTR disabled",
+			backup: &BackupSpec{PiTR: PiTRSpec{Enabled: false, BinlogServer: &BinlogServerSpec{}}},
+			want:   false,
+		},
+		{
+			name:   "PiTR enabled without binlog server",
+			backup: &BackupSpec{PiTR: PiTRSpec{Enabled: true, BinlogServer: nil}},
+			want:   false,
+		},
+		{
+			name:   "PiTR enabled with binlog server",
+			backup: &BackupSpec{PiTR: PiTRSpec{Enabled: true, BinlogServer: &BinlogServerSpec{}}},
+			want:   true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			cr := &PerconaServerMySQL{Spec: PerconaServerMySQLSpec{Backup: tc.backup}}
+			assert.Equal(t, tc.want, cr.PiTREnabled())
+		})
+	}
+}
