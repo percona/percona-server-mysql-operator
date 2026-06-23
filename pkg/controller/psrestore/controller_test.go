@@ -588,6 +588,17 @@ func TestRestoreFinishesWhenClusterIsReady(t *testing.T) {
 			leaseExists:  false,
 		},
 		{
+			name: "cluster is ready (async)",
+			cluster: func() *apiv1.PerconaServerMySQL {
+				c := readDefaultCluster(t, clusterName, namespace)
+				c.Status.State = apiv1.StateReady
+				c.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
+				return c
+			},
+			restoreState: apiv1.RestoreSucceeded,
+			leaseExists:  false,
+		},
+		{
 			name: "manual cluster awaiting bootstrap",
 			cluster: func() *apiv1.PerconaServerMySQL {
 				c := readDefaultCluster(t, clusterName, namespace)
