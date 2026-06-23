@@ -111,6 +111,13 @@ func (r *PerconaServerMySQLReconciler) checkTLSIssuer(ctx context.Context, cr *a
 		kind = cm.IssuerKind
 	}
 
+	// For ClusterIssuer references we intentionally skip preflight existence checks.
+	// This avoids requiring cluster-scoped RBAC on the operator in namespaced installs;
+	// cert-manager will validate and surface readiness on the Certificate resource.
+	if kind == cm.ClusterIssuerKind {
+		return nil
+	}
+
 	nn := types.NamespacedName{Name: ref.Name}
 	var obj client.Object
 
@@ -118,8 +125,6 @@ func (r *PerconaServerMySQLReconciler) checkTLSIssuer(ctx context.Context, cr *a
 	case cm.IssuerKind:
 		nn.Namespace = cr.Namespace
 		obj = &cm.Issuer{}
-	case cm.ClusterIssuerKind:
-		obj = &cm.ClusterIssuer{}
 	default:
 		return errors.Errorf("unsupported tls.issuerConf.kind %q", kind)
 	}
