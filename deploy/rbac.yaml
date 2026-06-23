@@ -137,15 +137,6 @@ rules:
   - update
   - watch
 - apiGroups:
-  - cert-manager.io
-  - certmanager.k8s.io
-  resources:
-  - clusterissuers
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
   - coordination.k8s.io
   resources:
   - leases

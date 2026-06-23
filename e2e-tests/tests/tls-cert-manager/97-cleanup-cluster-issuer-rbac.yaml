@@ -8,7 +8,5 @@ commands:
 
       cluster_issuer_name="tls-cert-manager-cluster-issuer-${NAMESPACE}"
 
-      kubectl delete clusterrolebinding "${cluster_issuer_name}-reader-${NAMESPACE}" --ignore-not-found
-      kubectl delete clusterrole "${cluster_issuer_name}-reader" --ignore-not-found
       kubectl delete clusterissuer "${cluster_issuer_name}" --ignore-not-found
 

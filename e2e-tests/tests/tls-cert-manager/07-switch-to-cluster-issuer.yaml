@@ -9,33 +9,6 @@ commands:
       source ../../functions
 
       cluster_issuer_name="tls-cert-manager-cluster-issuer-${NAMESPACE}"
-      operator_sa="percona-server-mysql-operator"
-
-      cat <<EOF | kubectl apply -f -
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRole
-      metadata:
-        name: ${cluster_issuer_name}-reader
-      rules:
-      - apiGroups: ["cert-manager.io"]
-        resources: ["clusterissuers"]
-        verbs: ["get", "list", "watch"]
-      EOF
-
-      cat <<EOF | kubectl apply -f -
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRoleBinding
-      metadata:
-        name: ${cluster_issuer_name}-reader-${NAMESPACE}
-      roleRef:
-        apiGroup: rbac.authorization.k8s.io
-        kind: ClusterRole
-        name: ${cluster_issuer_name}-reader
-      subjects:
-      - kind: ServiceAccount
-        name: ${operator_sa}
-        namespace: ${OPERATOR_NS:-$NAMESPACE}
-      EOF
 
       cat <<EOF | kubectl apply -f -
       apiVersion: cert-manager.io/v1
