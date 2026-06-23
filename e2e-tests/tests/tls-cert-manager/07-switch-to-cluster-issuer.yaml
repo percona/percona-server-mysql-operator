@@ -34,7 +34,7 @@ commands:
       subjects:
       - kind: ServiceAccount
         name: ${operator_sa}
-        namespace: ${NAMESPACE}
+        namespace: ${OPERATOR_NS:-$NAMESPACE}
       EOF
 
       cat <<EOF | kubectl apply -f -
