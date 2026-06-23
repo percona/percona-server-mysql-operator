@@ -34,6 +34,7 @@ import (
 	"golang.org/x/text/language"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -1548,4 +1549,8 @@ func (cr *PerconaServerMySQL) BootstrapMode() BootstrapMode {
 		return BootstrapModeAuto
 	}
 	return *cr.Spec.MySQL.Bootstrap.Mode
+}
+
+func (cr *PerconaServerMySQL) IsAwaitingExternalBootstrap() bool {
+	return cr.BootstrapMode() == BootstrapModeManual && meta.IsStatusConditionTrue(cr.Status.Conditions, ConditionAwaitingExternalBootstrap)
 }
