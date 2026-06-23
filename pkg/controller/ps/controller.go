@@ -1531,7 +1531,7 @@ func binlogServerSSLConfig(sslMode string) *binlogserver.ConnectionSSL {
 }
 
 func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
-	if !cr.Spec.Backup.PiTR.Enabled || cr.Spec.Backup.PiTR.BinlogServer == nil || cr.Spec.Pause {
+	if !cr.PiTREnabled() || cr.Spec.Pause {
 		return nil
 	}
 
@@ -1590,7 +1590,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 }
 
 func (r *PerconaServerMySQLReconciler) cleanupBinlogServer(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
-	if cr.Spec.Backup.PiTR.Enabled && cr.Spec.Backup.PiTR.BinlogServer != nil && !cr.Spec.Pause {
+	if cr.PiTREnabled() && !cr.Spec.Pause {
 		return nil
 	}
 
