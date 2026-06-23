@@ -247,10 +247,10 @@ func updateGroupPeers(ctx context.Context, peers sets.Set[string], version *v.Ve
 	return nil
 }
 
-func (m *mysqlsh) configureInstance(ctx context.Context) error {
+func (m *mysqlsh) configureInstance(ctx context.Context, opts *configureInstanceOpts) error {
 	var cmd string
 	if m.compareVersionWith("8.4") >= 0 {
-		cmd = fmt.Sprintf("dba.configureInstance('%s')", m.getURI())
+		cmd = fmt.Sprintf("dba.configureInstance('%s', %s)", m.getURI(), opts)
 	} else {
 		cmd = fmt.Sprintf("dba.configureLocalInstance('%s', {'clearReadOnly': true})", m.getURI())
 	}
@@ -431,7 +431,22 @@ func Bootstrap(ctx context.Context) error {
 		log.Printf("WARNING: failed to clear group_replication_group_seeds: %v", err)
 	}
 
-	err = localShell.configureInstance(ctx)
+	var myCnf *ini.Section
+	customMyCnf, err := os.Open(mysql.CustomMyCnfPath)
+	if err == nil {
+		defer customMyCnf.Close() //nolint
+		myCnf, err = config.ParseSection(customMyCnf, "mysqld")
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse %s", mysql.CustomMyCnfPath)
+		}
+	}
+
+	configureOpts, err := getConfigureInstanceOpts(myCnf)
+	if err != nil {
+		return errors.Wrap(err, "get configureInstance options")
+	}
+
+	err = localShell.configureInstance(ctx, configureOpts)
 	if err != nil {
 		return err
 	}
@@ -453,23 +468,13 @@ func Bootstrap(ctx context.Context) error {
 				return nil
 			}
 
-			var myCnf *ini.Section
-			customMyCnf, err := os.Open(mysql.CustomMyCnfPath)
-			if err == nil {
-				defer customMyCnf.Close() //nolint
-				myCnf, err = config.ParseSection(customMyCnf, "mysqld")
-				if err != nil {
-					return errors.Wrapf(err, "failed to parse %s", mysql.CustomMyCnfPath)
-				}
-			}
-
-			opts, err := getCreateClusterOpts(myCnf)
+			createOpts, err := getCreateClusterOpts(myCnf)
 			if err != nil {
 				return errors.Wrap(err, "get createCluster options")
 			}
 
 			log.Printf("Creating InnoDB cluster: %s", localShell.clusterName)
-			err = localShell.createCluster(ctx, opts)
+			err = localShell.createCluster(ctx, createOpts)
 			if err != nil {
 				if errors.Is(err, errRebootClusterFromCompleteOutage) {
 					log.Printf("Cluster already exists, we need to reboot")
