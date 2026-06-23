@@ -1442,6 +1442,14 @@ func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
 	return cr.Spec.Proxy.HAProxy != nil && cr.Spec.Proxy.HAProxy.Enabled
 }
 
+// PiTREnabled reports whether point-in-time recovery is fully configured:
+// a backup spec exists, PiTR is enabled, and a binlog server is defined.
+func (cr *PerconaServerMySQL) PiTREnabled() bool {
+	return cr.Spec.Backup != nil &&
+		cr.Spec.Backup.PiTR.Enabled &&
+		cr.Spec.Backup.PiTR.BinlogServer != nil
+}
+
 // OrchestratorEnabled determines if the orchestrator is enabled,
 // considering the MySQL configuration.
 func (cr *PerconaServerMySQL) OrchestratorEnabled() bool {
