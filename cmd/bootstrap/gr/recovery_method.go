@@ -168,11 +168,6 @@ func getRecoveryMethod(ctx context.Context, primary, replica string) (innodbclus
 // group_replication_clone_threshold. When it is, Group Replication uses a remote
 // clone for distributed recovery instead of incremental state transfer.
 func cloneThresholdExceeded(ctx context.Context, primary, replica SQLRunner) (bool, error) {
-	threshold, err := replica.getCloneThreshold(ctx)
-	if err != nil {
-		return false, errors.Wrap(err, "get clone threshold")
-	}
-
 	primaryExecuted, err := primary.getGTIDExecuted(ctx)
 	if err != nil {
 		return false, errors.Wrap(err, "get GTID_EXECUTED from primary")
@@ -199,6 +194,11 @@ func cloneThresholdExceeded(ctx context.Context, primary, replica SQLRunner) (bo
 	count, err := countGTIDs(missing)
 	if err != nil {
 		return false, errors.Wrap(err, "count missing transactions")
+	}
+
+	threshold, err := replica.getCloneThreshold(ctx)
+	if err != nil {
+		return false, errors.Wrap(err, "get clone threshold")
 	}
 
 	log.Printf("Replica is missing %d transaction(s); group_replication_clone_threshold=%d", count, threshold)
