@@ -1,0 +1,28 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 120
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name="gr-cross-cluster-backup-dc2"
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
+      host="${cluster_name}-mysql-0.${cluster_name}-mysql"
+
+      for attempt in 1 2 3 4; do
+          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${host}" "${mysql_user}")
+          if [[ "${data}" == *"ERROR"* ]]; then
+              if [[ ${attempt} -eq 4 ]]; then
+                  echo "MySQL query failed after 3 retries: ${data}" >&2
+                  exit 1
+              fi
+              sleep 3
+              continue
+          fi
+          break
+      done
+
+      kubectl create configmap -n "${NAMESPACE}" 06-read-data-dc2-0 --from-literal=data="${data}"
