@@ -23,6 +23,14 @@ spec:
 #  pause: false
   crVersion: 1.2.0
 #  enableVolumeExpansion: false
+#  storageScaling:
+#    autoscaling:
+#      enabled: false
+#      growthStep: 2Gi
+#      maxSize: 10Gi
+#      triggerThresholdPercent: 80
+#    enableExternalAutoscaling: false
+#    enableVolumeScaling: false
   secretsName: ps-cluster1-secrets
   sslSecretName: ps-cluster1-ssl
   updateStrategy: SmartUpdate
@@ -687,7 +695,7 @@ spec:
       enabled: false
 #      binlogServer:
 #        size: 1
-#        image: perconalab/percona-binlog-server:0.2.1
+#        image: perconalab/percona-binlog-server:0.3.1
 #        imagePullPolicy: Always
 #        imagePullSecrets:
 #          - name: my-secret-1

@@ -34,6 +34,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -613,6 +614,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr.Spec.Orchestrator.Size = 3
 			cr.Spec.Proxy.HAProxy.Enabled = true
 			cr.Spec.Proxy.Router.Enabled = false
+			cr.Spec.MySQL.VaultSecretName = ""
 
 			cr.Spec.MySQL.Image = "mysql-image"
 			cr.Spec.Toolkit.Image = "toolkit-image"
@@ -641,6 +643,7 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr.Spec.Orchestrator.Size = 3
 			cr.Spec.Orchestrator.Enabled = true
 			cr.Spec.Proxy.HAProxy.Enabled = true
+			cr.Spec.MySQL.VaultSecretName = ""
 
 			cr.Spec.MySQL.Image = "mysql-image"
 			cr.Spec.Toolkit.Image = "backup-image"
@@ -1020,6 +1023,25 @@ var _ = Describe("CR validations", Ordered, func() {
 				Expect(createErr.Error()).To(ContainSubstring("router.image is required when router is enabled"))
 			})
 		})
+
+		When("storage autoscaling growth step is negative", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-storage-autoscaling-growth-step-negative", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.StorageScaling = &psv1.StorageScalingSpec{
+				EnableVolumeScaling: true,
+				Autoscaling: &psv1.AutoscalingSpec{
+					Enabled:    true,
+					GrowthStep: resource.MustParse("-1Gi"),
+				},
+			}
+
+			It("should fail with growth step required error", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("growthStep must be a positive quantity"))
+			})
+		})
 	})
 
 	Context("PITR validation rules", Ordered, func() {
@@ -1113,6 +1135,71 @@ var _ = Describe("CR validations", Ordered, func() {
 			cr.Spec.Backup.PiTR.BinlogServer.ServerID = 100
 			It("should create successfully", func() {
 				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("the referenced vault secret is missing", Ordered, func() {
+			var cr *psv1.PerconaServerMySQL
+
+			BeforeAll(func() {
+				var err error
+				cr, err = readDefaultCR("vault-missing", ns)
+				Expect(err).NotTo(HaveOccurred())
+
+				cr.Spec.MySQL.VaultSecretName = "vault-missing-secret"
+				Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+			})
+
+			It("fails reconcile with a vault error condition", func() {
+				_, err := reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
+				Expect(err).To(HaveOccurred())
+
+				observed := &psv1.PerconaServerMySQL{}
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cr), observed)).To(Succeed())
+
+				errCond := meta.FindStatusCondition(observed.Status.Conditions, psv1.StateError.String())
+				Expect(errCond).ToNot(BeNil())
+				Expect(errCond.Message).To(ContainSubstring(`get vault secret 'vault-missing-secret': secrets "vault-missing-secret" not found`))
+			})
+		})
+
+		When("the referenced vault secret is present", Ordered, func() {
+			var cr *psv1.PerconaServerMySQL
+
+			BeforeAll(func() {
+				var err error
+				cr, err = readDefaultCR("vault-present", ns)
+				Expect(err).NotTo(HaveOccurred())
+
+				cr.Spec.MySQL.VaultSecretName = "vault-present-secret"
+				Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+
+				secret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      cr.Spec.MySQL.VaultSecretName,
+						Namespace: cr.Namespace,
+					},
+					StringData: map[string]string{
+						"keyring_vault.cnf": `vault_url = https://vault.example.com:8200
+secret_mount_point = secret_v2
+token = s.1234567890abcdef
+vault_ca = /etc/mysql/vault-keyring-secret/ca.cert`,
+					},
+				}
+				Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+			})
+
+			It("passes vault validation", func() {
+				// Reconcile still fails on downstream steps under envtest (no real MySQL),
+				// so we only assert that vault validation itself was not the failure.
+				_, _ = reconciler().Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
+
+				observed := &psv1.PerconaServerMySQL{}
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cr), observed)).To(Succeed())
+
+				if errCond := meta.FindStatusCondition(observed.Status.Conditions, psv1.StateError.String()); errCond != nil {
+					Expect(errCond.Message).NotTo(ContainSubstring("vault secret"))
+				}
 			})
 		})
 	})

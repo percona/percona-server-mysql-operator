@@ -586,6 +586,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcileServices(ctx, cr); err != nil {
 		return errors.Wrap(err, "services")
 	}
+	if err := r.reconcileStorageAutoscaling(ctx, cr); err != nil {
+		return errors.Wrap(err, "storage autoscaling")
+	}
 	if err := r.reconcilePersistentVolumes(ctx, cr); err != nil {
 		return errors.Wrap(err, "persistent volumes")
 	}
@@ -627,6 +630,42 @@ func (r *PerconaServerMySQLReconciler) validate(ctx context.Context, cr *apiv1.P
 	if err := validateClusterType(ctx, r.Client, cr); err != nil {
 		return errors.Wrap(err, "validate cluster type")
 	}
+
+	if err := validateVaultSecret(ctx, r.Client, cr); err != nil {
+		return errors.Wrap(err, "validate vault secret")
+	}
+	return nil
+}
+
+// validateVaultSecret validates the vault secret if specified.
+func validateVaultSecret(ctx context.Context, cl client.Client, cr *apiv1.PerconaServerMySQL) error {
+	// Get the actual CR since our local copy contains the default vault secret name when unspecified.
+	actual := &apiv1.PerconaServerMySQL{}
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(cr), actual); err != nil {
+		return errors.Wrap(err, "get cluster")
+	}
+
+	vaultSecretName := actual.Spec.MySQL.VaultSecretName
+	if vaultSecretName == "" {
+		return nil
+	}
+
+	vaultSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      vaultSecretName,
+			Namespace: cr.GetNamespace(),
+		},
+	}
+
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(vaultSecret), vaultSecret); err != nil {
+		return errors.Wrapf(err, "get vault secret '%s'", vaultSecretName)
+	}
+
+	data, ok := vaultSecret.Data["keyring_vault.cnf"]
+	if !ok || len(data) == 0 {
+		return errors.Errorf("vault secret '%s' is missing keyring_vault.cnf", vaultSecretName)
+	}
+
 	return nil
 }
 
