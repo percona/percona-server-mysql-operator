@@ -311,6 +311,9 @@ func startReplicaSQLThread(ctx context.Context) error {
 }
 
 func getSecret(username apiv1.SystemUser) (string, error) {
+	if !username.IsKnown() {
+		return "", errors.Errorf("unknown system user %q", string(username))
+	}
 	path := filepath.Join(naming.CredsMountPath, string(username))
 	sBytes, err := os.ReadFile(path)
 	if err != nil {
