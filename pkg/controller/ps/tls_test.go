@@ -250,7 +250,7 @@ var _ = Describe("TLS issuer kind handling", Ordered, func() {
 		_ = k8sClient.Delete(ctx, &cm.ClusterIssuer{ObjectMeta: metav1.ObjectMeta{Name: clusterIssuerName}})
 	})
 
-	It("does not pre-check ClusterIssuer when tls.issuerConf.kind is set", func() {
+	It("checks existing ClusterIssuer when tls.issuerConf.kind is set", func() {
 		cr := &apiv1.PerconaServerMySQL{
 			ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 			Spec: apiv1.PerconaServerMySQLSpec{
@@ -267,7 +267,7 @@ var _ = Describe("TLS issuer kind handling", Ordered, func() {
 		Expect(reconciler().checkTLSIssuer(ctx, cr)).To(Succeed())
 	})
 
-	It("does not fail when referenced ClusterIssuer does not exist", func() {
+	It("fails when referenced ClusterIssuer does not exist", func() {
 		cr := &apiv1.PerconaServerMySQL{
 			ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 			Spec: apiv1.PerconaServerMySQLSpec{
@@ -281,7 +281,8 @@ var _ = Describe("TLS issuer kind handling", Ordered, func() {
 			},
 		}
 
-		Expect(reconciler().checkTLSIssuer(ctx, cr)).To(Succeed())
+		err := reconciler().checkTLSIssuer(ctx, cr)
+		Expect(k8serrors.IsNotFound(err)).To(BeTrue())
 	})
 })
 
