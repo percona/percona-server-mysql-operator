@@ -9,15 +9,29 @@ commands:
       source ../../functions
 
       cluster_issuer_name="tls-cert-manager-cluster-issuer-${NAMESPACE}"
+      operator_sa="percona-server-mysql-operator"
 
-      cat <<EOF | kubectl apply -f -
-      apiVersion: cert-manager.io/v1
-      kind: ClusterIssuer
-      metadata:
-        name: ${cluster_issuer_name}
-      spec:
-        selfSigned: {}
-      EOF
+      # Toggle to compare approaches: explicit test RBAC vs controller APIReader path.
+      if [[ "${TLS_CERT_MANAGER_USE_CLUSTERISSUER_RBAC:-true}" == "true" ]]; then
+          kubectl create clusterrole "${cluster_issuer_name}-reader" \
+              --verb=get,list,watch \
+              --resource=clusterissuers.cert-manager.io \
+              --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create clusterrolebinding "${cluster_issuer_name}-reader-${NAMESPACE}" \
+              --clusterrole="${cluster_issuer_name}-reader" \
+              --serviceaccount="${OPERATOR_NS:-$NAMESPACE}:${operator_sa}" \
+              --dry-run=client -o yaml | kubectl apply -f -
+      fi
+
+      printf '%s\n' \
+          'apiVersion: cert-manager.io/v1' \
+          'kind: ClusterIssuer' \
+          'metadata:' \
+          "  name: ${cluster_issuer_name}" \
+          'spec:' \
+          '  selfSigned: {}' \
+          | kubectl apply -f -
 
       kubectl -n "${NAMESPACE}" patch ps tls-cert-manager \
           --type json \
@@ -33,5 +47,3 @@ commands:
               }
             ]'
     timeout: 120
-
-
