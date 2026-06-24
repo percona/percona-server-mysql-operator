@@ -545,71 +545,65 @@ func TestRestoreFinishesWhenClusterIsReady(t *testing.T) {
 		restoreUID  = "restore-uid"
 	)
 
+	newCluster := func(mutate func(*apiv1.PerconaServerMySQL)) *apiv1.PerconaServerMySQL {
+		c := readDefaultCluster(t, clusterName, namespace)
+		mutate(c)
+		return c
+	}
+
 	tests := []struct {
-		name          string
-		clusterPaused bool
-		cluster       func() *apiv1.PerconaServerMySQL
-		restoreState  apiv1.RestoreState
-		leaseExists   bool
+		name         string
+		cluster      *apiv1.PerconaServerMySQL
+		restoreState apiv1.RestoreState
+		leaseExists  bool
 	}{
 		{
-			name:          "cluster is paused",
-			clusterPaused: true,
-			cluster: func() *apiv1.PerconaServerMySQL {
-				c := readDefaultCluster(t, clusterName, namespace)
+			name: "cluster is paused",
+			cluster: newCluster(func(c *apiv1.PerconaServerMySQL) {
 				c.Status.State = apiv1.StatePaused
-				return c
-			},
+			}),
 			restoreState: apiv1.RestoreRunning,
 			leaseExists:  true,
 		},
 		{
 			name: "cluster is initializing",
-			cluster: func() *apiv1.PerconaServerMySQL {
-				c := readDefaultCluster(t, clusterName, namespace)
+			cluster: newCluster(func(c *apiv1.PerconaServerMySQL) {
 				c.Status.State = apiv1.StateInitializing
-				return c
-			},
+			}),
 			restoreState: apiv1.RestoreRunning,
 			leaseExists:  true,
 		},
 		{
 			name: "cluster is ready (GR)",
-			cluster: func() *apiv1.PerconaServerMySQL {
-				c := readDefaultCluster(t, clusterName, namespace)
+			cluster: newCluster(func(c *apiv1.PerconaServerMySQL) {
 				c.Status.State = apiv1.StateReady
 				meta.SetStatusCondition(&c.Status.Conditions, metav1.Condition{
 					Type:   apiv1.ConditionInnoDBClusterBootstrapped,
 					Status: metav1.ConditionTrue,
 				})
-				return c
-			},
+			}),
 			restoreState: apiv1.RestoreSucceeded,
 			leaseExists:  false,
 		},
 		{
 			name: "cluster is ready (async)",
-			cluster: func() *apiv1.PerconaServerMySQL {
-				c := readDefaultCluster(t, clusterName, namespace)
+			cluster: newCluster(func(c *apiv1.PerconaServerMySQL) {
 				c.Status.State = apiv1.StateReady
 				c.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
-				return c
-			},
+			}),
 			restoreState: apiv1.RestoreSucceeded,
 			leaseExists:  false,
 		},
 		{
 			name: "manual cluster awaiting bootstrap",
-			cluster: func() *apiv1.PerconaServerMySQL {
-				c := readDefaultCluster(t, clusterName, namespace)
+			cluster: newCluster(func(c *apiv1.PerconaServerMySQL) {
 				c.Status.State = apiv1.StateInitializing
 				c.Spec.MySQL.Bootstrap.Mode = new(apiv1.BootstrapModeManual)
 				meta.SetStatusCondition(&c.Status.Conditions, metav1.Condition{
 					Type:   apiv1.ConditionAwaitingExternalBootstrap,
 					Status: metav1.ConditionTrue,
 				})
-				return c
-			},
+			}),
 			restoreState: apiv1.RestoreSucceeded,
 			leaseExists:  false,
 		},
@@ -618,7 +612,7 @@ func TestRestoreFinishesWhenClusterIsReady(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := t.Context()
-			cluster := tt.cluster()
+			cluster := tt.cluster
 
 			restore := readDefaultRestore(t, restoreName, namespace)
 			restore.UID = types.UID(restoreUID)
