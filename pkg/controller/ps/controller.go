@@ -586,6 +586,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcileServices(ctx, cr); err != nil {
 		return errors.Wrap(err, "services")
 	}
+	if err := r.reconcileStorageAutoscaling(ctx, cr); err != nil {
+		return errors.Wrap(err, "storage autoscaling")
+	}
 	if err := r.reconcilePersistentVolumes(ctx, cr); err != nil {
 		return errors.Wrap(err, "persistent volumes")
 	}
