@@ -23,7 +23,7 @@ func ManualCluster(cr *apiv1.PerconaServerMySQL) {
 	mysqlDefaults(&cr.Spec.MySQL)
 	haproxyDefaults(cr.Spec.Proxy.HAProxy)
 	routerDefaults(cr.Spec.Proxy.Router)
-	orchestratorDefaults(&cr.Spec.Orchestrator)
+	orchestratorDefaults(cr, &cr.Spec.Orchestrator)
 	pmmDefaults(cr.Spec.PMM)
 	toolkitDefaults(cr.Spec.Toolkit)
 	backupDefaults(cr.Spec.Backup)
@@ -106,12 +106,12 @@ func routerDefaults(spec *apiv1.MySQLRouterSpec) {
 	}
 }
 
-func orchestratorDefaults(spec *apiv1.OrchestratorSpec) {
+func orchestratorDefaults(cr *apiv1.PerconaServerMySQL, spec *apiv1.OrchestratorSpec) {
 	podSpecDefaults(&spec.PodSpec, ImageOrchestrator, resources("128M", "", "256M", ""), "", 30, envList("ORC_ENV", "VALUE"), envFromList("orc-env-secret"))
 
 	spec.Enabled = false
 	spec.Configuration = `{"FailMasterPromotionOnLagMinutes": 10}`
-	spec.ServiceAccountName = "percona-server-mysql-operator-orchestrator"
+	spec.ServiceAccountName = cr.DefaultOrchestratorServiceAccountName()
 	spec.PodSecurityContext = &corev1.PodSecurityContext{
 		SupplementalGroups: []int64{1001},
 	}
