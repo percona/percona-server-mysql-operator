@@ -299,6 +299,36 @@ func Cluster(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clus
 	return instances, nil
 }
 
+func GetInstance(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) (*Instance, error) {
+	url := fmt.Sprintf("api/instance/%s/%d", host, port)
+
+	var res, errb bytes.Buffer
+	if err := exec(ctx, cliCmd, pod, url, &res, &errb); err != nil {
+		return nil, err
+	}
+
+	body := res.Bytes()
+	if len(body) == 0 {
+		return nil, ErrEmptyResponse
+	}
+
+	instance := &Instance{}
+	if err := json.Unmarshal(body, instance); err == nil {
+		return instance, nil
+	}
+
+	orcResp := new(orcResponse)
+	if err := unmarshalOrcResponse(body, orcResp); err != nil {
+		return nil, err
+	}
+
+	if err := orcResp.Error(); err != nil {
+		return nil, err
+	}
+
+	return instance, nil
+}
+
 func ForgetInstance(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) error {
 	url := fmt.Sprintf("api/forget/%s/%d", host, port)
 

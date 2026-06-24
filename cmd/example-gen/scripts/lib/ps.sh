@@ -6,7 +6,7 @@
 export RESOURCE_PATH="deploy/cr.yaml"
 
 sort_yaml() {
-	GENERAL_ORDER='"metadata", "unsafeFlags", "pause", "crVersion", "enableVolumeExpansion", "secretsName", "sslSecretName", "updateStrategy", "upgradeOptions", "initContainer", "ignoreAnnotations", "ignoreLabels", "tls", "mysql", "proxy", "orchestrator", "pmm", "backup", "toolkit"'
+	GENERAL_ORDER='"metadata", "unsafeFlags", "pause", "crVersion", "enableVolumeExpansion", "storageScaling", "secretsName", "sslSecretName", "updateStrategy", "upgradeOptions", "initContainer", "ignoreAnnotations", "ignoreLabels", "tls", "mysql", "proxy", "orchestrator", "pmm", "backup", "toolkit"'
 
 	POD_SPEC_ORDER='"size", "image", "imagePullPolicy","imagePullSecrets", "runtimeClassName", "tolerations", "annotations", "labels", "nodeSelector", "priorityClassName", "schedulerName", "serviceAccountName","gracePeriod", "initContainer", "env", "envFrom", "podDisruptionBudget", "resources","startupProbe", "readinessProbe", "livenessProbe", "affinity", "topologySpreadConstraints", "containerSecurityContext", "podSecurityContext"'
 	MYSQL_ORDER='"clusterType", "autoRecovery", "vaultSecretName", '"$POD_SPEC_ORDER"',"exposePrimary", "expose", "volumeSpec", "configuration", "sidecars", "sidecarVolumes", "sidecarPVCs"'
@@ -97,6 +97,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.unsafeFlags)" \
 		| yq "del(.spec.pause)" \
 		| yq "del(.spec.enableVolumeExpansion)" \
+		| yq "del(.spec.storageScaling)" \
 		| yq "del(.spec.initContainer)" \
 		| yq "del(.spec.ignoreAnnotations)" \
 		| yq "del(.spec.ignoreLabels)" \
