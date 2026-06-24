@@ -119,6 +119,11 @@ func pmmEnvs(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret, dbType string)
 		pmmTmpDir = "/tmp/pmm"
 	}
 
+	clusterName := cr.Name
+	if pmmSpec.CustomClusterName != "" && cr.CompareVersion("1.2.0") >= 0 {
+		clusterName = pmmSpec.CustomClusterName
+	}
+
 	return []corev1.EnvVar{
 		{
 			Name: "POD_NAME",
@@ -138,7 +143,7 @@ func pmmEnvs(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret, dbType string)
 		},
 		{
 			Name:  "CLUSTER_NAME",
-			Value: cr.Name,
+			Value: clusterName,
 		},
 		{
 			Name:  "PMM_AGENT_SERVER_ADDRESS",
