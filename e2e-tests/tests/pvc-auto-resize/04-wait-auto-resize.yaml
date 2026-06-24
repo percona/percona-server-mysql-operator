@@ -1,0 +1,33 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 600
+resourceRefs:
+- kind: PerconaServerMySQL
+  name: pvc-auto-resize
+  ref: cluster
+- kind: PersistentVolumeClaim
+  name: datadir-pvc-auto-resize-mysql-0
+  ref: pvc0
+- kind: PersistentVolumeClaim
+  name: datadir-pvc-auto-resize-mysql-1
+  ref: pvc1
+- kind: PersistentVolumeClaim
+  name: datadir-pvc-auto-resize-mysql-2
+  ref: pvc2
+
+assertAll:
+- celExpr: "cluster.status.storageAutoscaling['datadir-pvc-auto-resize-mysql-0'].resizeCount == 1"
+  message: "PVC datadir-pvc-auto-resize-mysql-0 should have been resized"
+- celExpr: "cluster.status.storageAutoscaling['datadir-pvc-auto-resize-mysql-1'].resizeCount == 1"
+  message: "PVC datadir-pvc-auto-resize-mysql-1 should have been resized"
+- celExpr: "cluster.status.storageAutoscaling['datadir-pvc-auto-resize-mysql-2'].resizeCount == 1"
+  message: "PVC datadir-pvc-auto-resize-mysql-2 should have been resized"
+- celExpr: "pvc0.status.capacity.storage == '4Gi'"
+  message: "PVC datadir-pvc-auto-resize-mysql-0 should have been resized to 4Gi"
+- celExpr: "pvc1.status.capacity.storage == '4Gi'"
+  message: "PVC datadir-pvc-auto-resize-mysql-1 should have been resized to 4Gi"
+- celExpr: "pvc2.status.capacity.storage == '4Gi'"
+  message: "PVC datadir-pvc-auto-resize-mysql-2 should have been resized to 4Gi"
+
+- celExpr: "cluster.status.state == 'ready' && cluster.status.mysql.ready == 3 && cluster.status.haproxy.ready == 3"
+  message: "Cluster should be ready"
