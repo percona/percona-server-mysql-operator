@@ -4,6 +4,10 @@ set -e
 
 SIDECAR_PORT="6450"
 
+log() {
+	echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') $*"
+}
+
 request_data() {
 	case "${STORAGE_TYPE}" in
 		"s3")
@@ -80,7 +84,7 @@ request_backup() {
 	local sleep_duration=$1
 	local http_code
 
-	echo "Trying to run backup ${BACKUP_NAME} on ${SRC_NODE}"
+	log "Trying to run backup ${BACKUP_NAME} on ${SRC_NODE}"
 	http_code=$(
 		curl -s -o /dev/null \
 			-d "$(request_data)" \
@@ -93,14 +97,14 @@ request_backup() {
 		return
 	fi
 	if [ "${http_code}" -eq 409 ]; then
-		echo "Backup is already running on ${SRC_NODE}"
+		log "Backup is already running on ${SRC_NODE}"
 	else
-		echo "Backup failed. Check logs to troubleshoot:"
-		echo "kubectl logs ${SRC_NODE%%.*} xtrabackup"
+		log "Backup ${BACKUP_NAME} failed. Check logs to troubleshoot:"
+		log "kubectl logs ${SRC_NODE%%.*} xtrabackup"
 		exit 1
 	fi
 
-	echo "Trying again after ${sleep_duration} seconds"
+	log "Trying again after ${sleep_duration} seconds"
 	sleep "${sleep_duration}"
 	if [ "${sleep_duration}" -lt 600 ]; then
 		sleep_duration=$((sleep_duration * 2))
@@ -114,9 +118,9 @@ request_logs() {
 
 main() {
 	request_backup 10
-	request_logs || echo "WARNING: Could not get logs from source node ${SRC_NODE}"
+	request_logs || log "WARNING: Could not get logs from source node ${SRC_NODE}"
 
-	echo "Backup finished and uploaded successfully to ${BACKUP_DEST}"
+	log "Backup finished and uploaded successfully to ${BACKUP_DEST}"
 }
 
 main
