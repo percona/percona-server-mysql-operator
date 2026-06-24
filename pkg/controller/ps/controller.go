@@ -716,6 +716,10 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 ) error {
+	if cr.Spec.Pause || cr.Status.State != apiv1.StateReady {
+		return nil
+	}
+
 	desiredType := cr.Spec.MySQL.ClusterType
 	observedType, err := r.getObservedClusterType(ctx, cr)
 	if err != nil {
@@ -785,8 +789,6 @@ func (r *PerconaServerMySQLReconciler) teardownGR(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 ) error {
-	// TODO: RESET PERSIST the group_replication_* variables on all nodes
-
 	cr = cr.DeepCopy()
 	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
 
@@ -816,6 +818,23 @@ func (r *PerconaServerMySQLReconciler) teardownGR(
 
 	if err := mysh.DissolveWithExec(ctx); err != nil {
 		return errors.Wrap(err, "dissolve GR")
+	}
+
+	// Dissolving the cluster removes the GR metadata but leaves the
+	// group_replication_* system variables persisted in mysqld-auto.cnf on
+	// every node. Reset them so the nodes don't attempt to rejoin the group
+	// after the switch to async replication.
+	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "get pods")
+	}
+
+	for i := range pods {
+		pod := &pods[i]
+		db := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
+		if err := db.ResetGroupReplicationPersistedVars(ctx); err != nil {
+			return errors.Wrapf(err, "reset persisted group replication variables on pod %s", pod.Name)
+		}
 	}
 
 	return nil
