@@ -658,6 +658,7 @@ spec:
     image: perconalab/pmm-client:3-dev-latest
     imagePullPolicy: Always
     serverHost: monitoring-service
+#   customClusterName: "cluster1-custom"
 #    mysqlParams: PMM_ADMIN_CUSTOM_PARAMS
 #    containerSecurityContext:
 #      privileged: false
