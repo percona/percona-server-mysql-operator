@@ -98,9 +98,12 @@ func (r *PerconaServerMySQLReconciler) reconcileStorageAutoscaling(
 			continue
 		}
 
-		if err := r.checkAndResizePVC(ctx, cr, pvc, pod); err != nil {
+		if triggered, err := r.checkAndResizePVC(ctx, cr, pvc, pod); err != nil {
 			log.Error(err, "failed to check/resize PVC", "pvc", pvc.Name)
 			r.updateAutoscalingStatus(ctx, cr, pvc.Name, nil, err)
+		} else if triggered {
+			// avoid redundant patch calls
+			break
 		}
 	}
 
@@ -108,33 +111,34 @@ func (r *PerconaServerMySQLReconciler) reconcileStorageAutoscaling(
 }
 
 // checkAndResizePVC checks a single PVC and triggers resize if needed
+// returns 'true' if a resize was triggered, 'false' otherwise
 func (r *PerconaServerMySQLReconciler) checkAndResizePVC(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 	pvc *corev1.PersistentVolumeClaim,
 	pod *corev1.Pod,
-) error {
+) (bool, error) {
 	log := logf.FromContext(ctx).WithValues("pvc", pvc.Name)
 	ctx = logf.IntoContext(ctx, log)
 
 	if !k8s.IsPodReady(*pod) {
 		log.V(1).Info("Skipping PVC metrics check: pod not ready", "pod", pod.Name)
-		return nil
+		return false, nil
 	}
 
 	usage, err := metrics.GetPVCUsage(ctx, r.ClientCmd, pod, pvc.Name)
 	if err != nil {
-		return errors.Wrap(err, "get PVC usage from metrics")
+		return false, errors.Wrap(err, "get PVC usage from metrics")
 	}
 
 	r.updateAutoscalingStatus(ctx, cr, pvc.Name, usage, nil)
 
 	if pvc.Status.Capacity == nil || pvc.Status.Capacity.Storage() == nil || pvc.Status.Capacity.Storage().IsZero() {
-		return nil
+		return false, nil
 	}
 
 	if !r.shouldTriggerResize(ctx, cr, pvc, usage) {
-		return nil
+		return false, nil
 	}
 
 	newSize := r.calculateNewSize(cr, pvc)
@@ -145,7 +149,7 @@ func (r *PerconaServerMySQLReconciler) checkAndResizePVC(
 		"usagePercent", usage.UsagePercent,
 		"threshold", cr.Spec.StorageAutoscaling().TriggerThresholdPercent)
 
-	return r.triggerResize(ctx, cr, pvc, newSize)
+	return true, r.triggerResize(ctx, cr, pvc, newSize)
 }
 
 // shouldTriggerResize determines if a PVC should be resized
