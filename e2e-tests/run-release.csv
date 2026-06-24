@@ -39,6 +39,7 @@ limits
 monitoring
 one-pod
 operator-self-healing
+pvc-auto-resize
 pvc-resize
 recreate
 scaling

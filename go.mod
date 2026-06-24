@@ -9,18 +9,18 @@ require (
 	github.com/go-ini/ini v1.67.0
 	github.com/go-logr/logr v1.4.3
 	github.com/go-openapi/errors v0.22.8
-	github.com/go-openapi/runtime v0.32.3
+	github.com/go-openapi/runtime v0.32.4
 	github.com/go-openapi/strfmt v0.26.3
 	github.com/go-openapi/swag v0.26.1
-	github.com/go-openapi/validate v0.25.3
+	github.com/go-openapi/validate v0.26.0
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/gocarina/gocsv v0.0.0-20230616125104-99d496ca653d
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.7.0
 	github.com/hashicorp/go-version v1.9.0
 	github.com/minio/minio-go/v7 v7.2.0
-	github.com/onsi/ginkgo/v2 v2.31.0
-	github.com/onsi/gomega v1.42.0
+	github.com/onsi/ginkgo/v2 v2.32.0
+	github.com/onsi/gomega v1.42.1
 	github.com/pkg/errors v0.9.1
 	github.com/sjmudd/stopwatch v0.1.1
 	go.nhat.io/grpcmock v0.34.0
@@ -110,8 +110,8 @@ require (
 	github.com/go-openapi/analysis v0.25.2 // indirect
 	github.com/go-openapi/jsonpointer v0.23.1 // indirect
 	github.com/go-openapi/jsonreference v0.21.6 // indirect
-	github.com/go-openapi/loads v0.23.3 // indirect
-	github.com/go-openapi/spec v0.22.5 // indirect
+	github.com/go-openapi/loads v0.24.0 // indirect
+	github.com/go-openapi/spec v0.22.6 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/pprof v0.0.0-20260402051712-545e8a4df936 // indirect
