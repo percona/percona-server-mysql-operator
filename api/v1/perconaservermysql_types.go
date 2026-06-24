@@ -69,22 +69,23 @@ type PerconaServerMySQLSpec struct {
 	CRVersion string    `json:"crVersion,omitempty"`
 	Pause     bool      `json:"pause,omitempty"`
 	// Deprecated: use `.spec.storageScaling.enableVolumeScaling` instead.
-	VolumeExpansionEnabled bool                                 `json:"enableVolumeExpansion,omitempty"`
-	StorageScaling         *StorageScalingSpec                  `json:"storageScaling,omitempty"`
-	SecretsName            string                               `json:"secretsName,omitempty"`
-	SSLSecretName          string                               `json:"sslSecretName,omitempty"`
-	Unsafe                 UnsafeFlags                          `json:"unsafeFlags,omitempty"`
-	IgnoreAnnotations      []string                             `json:"ignoreAnnotations,omitempty"`
-	IgnoreLabels           []string                             `json:"ignoreLabels,omitempty"`
-	MySQL                  MySQLSpec                            `json:"mysql,omitempty"`
-	Orchestrator           OrchestratorSpec                     `json:"orchestrator,omitempty"`
-	PMM                    *PMMSpec                             `json:"pmm,omitempty"`
-	Backup                 *BackupSpec                          `json:"backup,omitempty"`
-	Proxy                  ProxySpec                            `json:"proxy,omitempty"`
-	TLS                    *TLSSpec                             `json:"tls,omitempty"`
-	Toolkit                *ToolkitSpec                         `json:"toolkit,omitempty"`
-	UpgradeOptions         UpgradeOptions                       `json:"upgradeOptions,omitempty"`
-	UpdateStrategy         appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	VolumeExpansionEnabled  bool                                 `json:"enableVolumeExpansion,omitempty"`
+	StorageScaling          *StorageScalingSpec                  `json:"storageScaling,omitempty"`
+	SecretsName             string                               `json:"secretsName,omitempty"`
+	SSLSecretName           string                               `json:"sslSecretName,omitempty"`
+	Unsafe                  UnsafeFlags                          `json:"unsafeFlags,omitempty"`
+	IgnoreAnnotations       []string                             `json:"ignoreAnnotations,omitempty"`
+	IgnoreLabels            []string                             `json:"ignoreLabels,omitempty"`
+	MySQL                   MySQLSpec                            `json:"mysql,omitempty"`
+	Orchestrator            OrchestratorSpec                     `json:"orchestrator,omitempty"`
+	PMM                     *PMMSpec                             `json:"pmm,omitempty"`
+	Backup                  *BackupSpec                          `json:"backup,omitempty"`
+	Proxy                   ProxySpec                            `json:"proxy,omitempty"`
+	TLS                     *TLSSpec                             `json:"tls,omitempty"`
+	Toolkit                 *ToolkitSpec                         `json:"toolkit,omitempty"`
+	UpgradeOptions          UpgradeOptions                       `json:"upgradeOptions,omitempty"`
+	UpdateStrategy          appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	ClusterServiceDNSSuffix string                               `json:"clusterServiceDNSSuffix,omitempty"`
 
 	// Deprecated: not supported since v0.12.0. Use initContainer instead
 	InitImage     string            `json:"initImage,omitempty"`
@@ -768,6 +769,17 @@ func (s *BinlogServerSpec) SetDefaults() {
 type ProxySpec struct {
 	Router  *MySQLRouterSpec `json:"router,omitempty"`
 	HAProxy *HAProxySpec     `json:"haproxy,omitempty"`
+}
+
+func (p *ProxySpec) LoadBalancerExposed() bool {
+	if p.Router != nil && p.Router.Enabled && p.Router.Expose.Type == corev1.ServiceTypeLoadBalancer {
+		return true
+	}
+	if p.HAProxy != nil && p.HAProxy.Enabled && p.HAProxy.Expose.Type == corev1.ServiceTypeLoadBalancer {
+		return true
+	}
+
+	return false
 }
 
 // +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && size(self.image) > 0)",message="router.image is required when router is enabled"

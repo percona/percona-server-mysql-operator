@@ -223,6 +223,114 @@ func TestEnsureUserSecrets(t *testing.T) {
 	}
 }
 
+func TestEnsureClusterUserSecret(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	newCR := func() *apiv1.PerconaServerMySQL {
+		return &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "cluster",
+				Namespace: "database",
+			},
+			Spec: apiv1.PerconaServerMySQLSpec{
+				ClusterServiceDNSSuffix: "cluster.example",
+				Proxy: apiv1.ProxySpec{
+					Router:  &apiv1.MySQLRouterSpec{},
+					HAProxy: &apiv1.HAProxySpec{},
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name         string
+		cr           *apiv1.PerconaServerMySQL
+		objects      []client.Object
+		expectedData map[string][]byte
+	}{
+		{
+			name: "mysql endpoint",
+			cr:   newCR(),
+			expectedData: map[string][]byte{
+				"host":     []byte("cluster-mysql.database.svc.cluster.example"),
+				"port":     []byte("3306"),
+				"user":     []byte("root"),
+				"password": []byte("p@ssword"),
+				"uri":      []byte("mysql://root:p%40ssword@cluster-mysql.database.svc.cluster.example:3306"),
+			},
+		},
+		{
+			name: "haproxy endpoint",
+			cr: func() *apiv1.PerconaServerMySQL {
+				cr := newCR()
+				cr.Spec.Proxy.HAProxy.Enabled = true
+				return cr
+			}(),
+			expectedData: map[string][]byte{
+				"host":       []byte("cluster-mysql.database.svc.cluster.example"),
+				"port":       []byte("3306"),
+				"user":       []byte("root"),
+				"password":   []byte("p@ssword"),
+				"uri":        []byte("mysql://root:p%40ssword@cluster-mysql.database.svc.cluster.example:3306"),
+				"proxy-host": []byte("cluster-haproxy.database.svc.cluster.example"),
+				"proxy-port": []byte("3306"),
+				"proxy-uri":  []byte("mysql://root:p%40ssword@cluster-haproxy.database.svc.cluster.example:3306"),
+			},
+		},
+		{
+			name: "router load balancer endpoint",
+			cr: func() *apiv1.PerconaServerMySQL {
+				cr := newCR()
+				cr.Spec.Proxy.Router.Enabled = true
+				cr.Spec.Proxy.Router.Expose.Type = corev1.ServiceTypeLoadBalancer
+				return cr
+			}(),
+			objects: []client.Object{
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{Name: "cluster-router", Namespace: "database"},
+					Status: corev1.ServiceStatus{LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{{Hostname: "lb.example.com"}},
+					}},
+				},
+			},
+			expectedData: map[string][]byte{
+				"host":                []byte("cluster-mysql.database.svc.cluster.example"),
+				"port":                []byte("3306"),
+				"user":                []byte("root"),
+				"password":            []byte("p@ssword"),
+				"uri":                 []byte("mysql://root:p%40ssword@cluster-mysql.database.svc.cluster.example:3306"),
+				"proxy-host":          []byte("cluster-router.database.svc.cluster.example"),
+				"proxy-port":          []byte("6446"),
+				"proxy-uri":           []byte("mysql://root:p%40ssword@cluster-router.database.svc.cluster.example:6446"),
+				"proxy-external-host": []byte("lb.example.com"),
+				"proxy-external-port": []byte("6446"),
+				"proxy-external-uri":  []byte("mysql://root:p%40ssword@lb.example.com:6446"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
+			r := PerconaServerMySQLReconciler{Client: cl, Scheme: scheme}
+			userSecret := &corev1.Secret{Data: map[string][]byte{
+				string(apiv1.UserRoot): []byte("p@ssword"),
+			}}
+
+			require.NoError(t, r.ensureClusterUserSecret(t.Context(), tt.cr, userSecret))
+
+			actual := new(corev1.Secret)
+			require.NoError(t, cl.Get(t.Context(), types.NamespacedName{
+				Name:      "cluster-psuser-root",
+				Namespace: "database",
+			}, actual))
+			assert.Equal(t, tt.expectedData, actual.Data)
+		})
+	}
+}
+
 func TestValidateUserSecret(t *testing.T) {
 	s := func(clusterType apiv1.ClusterType, user apiv1.SystemUser, password []byte) *corev1.Secret {
 		cr := &apiv1.PerconaServerMySQL{

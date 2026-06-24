@@ -58,6 +58,22 @@ func MatchLabels(cr *apiv1.PerconaServerMySQL) map[string]string {
 	return cr.Labels(AppName, naming.ComponentProxy)
 }
 
+func ServicePort() int {
+	return portReadWrite
+}
+
+func FQDN(cr *apiv1.PerconaServerMySQL, idx int) string {
+	return PodName(cr, idx) + "." + ServiceFQDN(cr)
+}
+
+func PodFQDN(cr *apiv1.PerconaServerMySQL, pod *corev1.Pod) string {
+	return pod.Name + "." + ServiceFQDN(cr)
+}
+
+func ServiceFQDN(cr *apiv1.PerconaServerMySQL) string {
+	return ServiceName(cr) + "." + cr.Namespace
+}
+
 func Service(cr *apiv1.PerconaServerMySQL) *corev1.Service {
 	expose := cr.Spec.Proxy.Router.Expose
 
