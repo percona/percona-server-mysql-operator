@@ -1,0 +1,40 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 400
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: pvc-auto-resize
+spec:
+  mysql:
+    size: 3
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 4Gi
+status:
+  mysql:
+    ready: 3
+  haproxy:
+    ready: 3
+  state: ready
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pvc-auto-resize-mysql
+spec:
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: datadir
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 4Gi
+        volumeMode: Filesystem
