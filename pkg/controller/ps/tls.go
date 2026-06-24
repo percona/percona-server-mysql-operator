@@ -125,7 +125,7 @@ func (r *PerconaServerMySQLReconciler) checkTLSIssuer(ctx context.Context, cr *a
 	}
 
 	err := r.Get(ctx, nn, obj)
-	if kind == cm.ClusterIssuerKind && (k8serrors.IsForbidden(err) || k8serrors.IsUnauthorized(err)) {
+	if kind == cm.ClusterIssuerKind && k8serrors.IsForbidden(err) {
 		// In namespaced installs we may not have cluster-scoped read permissions.
 		// Ignore only RBAC-denied errors and let cert-manager handle issuer resolution.
 		return nil
