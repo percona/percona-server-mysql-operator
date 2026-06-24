@@ -1,0 +1,31 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 300
+    script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+
+      echo "Verifying data integrity after PVC auto-resize"
+
+      original_count=$(kubectl get configmap -n "${NAMESPACE}" initial-data-count -o jsonpath='{.data.count}')
+      current_count=$(run_mysql "SELECT COUNT(*) FROM pvctest.data" "-h $(get_haproxy_svc $(get_cluster_name))")
+
+      if [[ $original_count != "$current_count" ]]; then
+          echo "ERROR: Data count mismatch! Original: $original_count, Current: $current_count"
+          exit 1
+      fi
+
+      run_mysql \
+          "INSERT INTO pvctest.data (id, data) VALUES (2000, 'post-resize test data')" \
+          "-h $(get_haproxy_svc $(get_cluster_name))"
+
+      new_data=$(run_mysql "SELECT data FROM pvctest.data WHERE id=2000" "-h $(get_haproxy_svc $(get_cluster_name))")
+      if [[ $new_data != "post-resize test data" ]]; then
+          echo "ERROR: Failed to insert data after resize"
+          exit 1
+      fi
