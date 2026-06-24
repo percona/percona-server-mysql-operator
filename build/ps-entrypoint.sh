@@ -521,7 +521,25 @@ fi
 
 if [[ -n ${MYSQL_NOTIFY_SOCKET} ]]; then
 	export NOTIFY_SOCKET=${MYSQL_NOTIFY_SOCKET}
+	unlink "${NOTIFY_SOCKET}" || true
 	nohup /opt/percona/mysql-state-monitor >/var/lib/mysql/mysql-state-monitor.log 2>&1 </dev/null &
+	monitor_pid=$!
+	set +o xtrace
+	for i in {1..30}; do
+		[[ -S ${NOTIFY_SOCKET} ]] && break
+		if ! kill -0 "${monitor_pid}" 2>/dev/null; then
+			echo "mysql-state-monitor exited before creating ${NOTIFY_SOCKET} (see /var/lib/mysql/mysql-state-monitor.log)"
+			break
+		fi
+		echo "Waiting for ${NOTIFY_SOCKET} to be available..."
+		sleep 1
+	done
+	if [[ ! -S ${NOTIFY_SOCKET} ]]; then
+		echo "Timed out waiting for ${NOTIFY_SOCKET} to be available"
+		exit 1
+	fi
+	echo "${NOTIFY_SOCKET} is available"
+	set -o xtrace
 fi
 
 exec "$@"
