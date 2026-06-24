@@ -1554,3 +1554,7 @@ func (cr *PerconaServerMySQL) BootstrapMode() BootstrapMode {
 func (cr *PerconaServerMySQL) IsAwaitingExternalBootstrap() bool {
 	return cr.BootstrapMode() == BootstrapModeManual && meta.IsStatusConditionTrue(cr.Status.Conditions, ConditionAwaitingExternalBootstrap)
 }
+
+func (cr *PerconaServerMySQL) IsOrchestratorEnabled() bool {
+	return cr.Spec.MySQL.IsAsync() && cr.Spec.Orchestrator.Enabled
+}
