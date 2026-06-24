@@ -23,6 +23,14 @@ spec:
 #  pause: false
   crVersion: 1.2.0
 #  enableVolumeExpansion: false
+#  storageScaling:
+#    autoscaling:
+#      enabled: false
+#      growthStep: 2Gi
+#      maxSize: 10Gi
+#      triggerThresholdPercent: 80
+#    enableExternalAutoscaling: false
+#    enableVolumeScaling: false
   secretsName: ps-cluster1-secrets
   sslSecretName: ps-cluster1-ssl
   updateStrategy: SmartUpdate
