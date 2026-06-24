@@ -743,17 +743,41 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 		return errors.Errorf("unsupported cluster type: %s", desiredType)
 	}
 
-	sts := &appsv1.StatefulSet{
+	// Delete mysql pods
+	if err := r.Delete(ctx, &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      mysql.Name(cr),
 			Namespace: cr.GetNamespace(),
 		},
+	}); client.IgnoreNotFound(err) != nil {
+		return errors.Wrap(err, "delete mysql statefulset")
 	}
 
-	if err := r.Delete(ctx, sts); err != nil {
-		return errors.Wrap(err, "delete statefulset")
+	// Delete haproxy (if set)
+	if cr.Spec.Proxy.HAProxy.Enabled {
+		if err := r.Delete(ctx, &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      haproxy.Name(cr),
+				Namespace: cr.GetNamespace(),
+			},
+		}); client.IgnoreNotFound(err) != nil {
+			return errors.Wrap(err, "delete haproxy statefulset")
+		}
 	}
 
+	// Delete router (if set)
+	if cr.Spec.Proxy.Router.Enabled {
+		if err := r.Delete(ctx, &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      router.Name(cr),
+				Namespace: cr.GetNamespace(),
+			},
+		}); client.IgnoreNotFound(err) != nil {
+			return errors.Wrap(err, "delete router deployment")
+		}
+	}
+
+	log.Info("Cluster type switched successfully", "to", desiredType)
 	return nil
 }
 
@@ -762,6 +786,9 @@ func (r *PerconaServerMySQLReconciler) teardownGR(
 	cr *apiv1.PerconaServerMySQL,
 ) error {
 	// TODO: RESET PERSIST the group_replication_* variables on all nodes
+
+	cr = cr.DeepCopy()
+	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeGR
 
 	primary, err := r.getPrimaryPod(ctx, cr)
 	if err != nil {
@@ -798,6 +825,13 @@ func (r *PerconaServerMySQLReconciler) teardownAsync(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 ) error {
+	if cr.Spec.Orchestrator.Enabled {
+		return errors.New("orchestrator not disabled")
+	}
+
+	cr = cr.DeepCopy()
+	cr.Spec.MySQL.ClusterType = apiv1.ClusterTypeAsync
+
 	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "get pods")
