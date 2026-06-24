@@ -9904,8 +9904,8 @@ spec:
                         pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                         x-kubernetes-int-or-string: true
                         x-kubernetes-validations:
-                        - message: growthStep must be a valid Kubernetes quantity
-                            (e.g., '2Gi')
+                        - message: maxSize must be a valid Kubernetes quantity (e.g.,
+                            '2Gi')
                           rule: isQuantity(self)
                         - message: maxSize must be a positive quantity
                           rule: sign(quantity(self)) == 1

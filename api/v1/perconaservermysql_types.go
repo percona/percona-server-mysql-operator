@@ -172,7 +172,7 @@ type AutoscalingSpec struct {
 
 	// MaxSize is the maximum size for PVCs (e.g., "100Gi")
 	// If set, autoscaling will not increase storage beyond this limit
-	// +kubebuilder:validation:XValidation:rule="isQuantity(self)",message="growthStep must be a valid Kubernetes quantity (e.g., '2Gi')"
+	// +kubebuilder:validation:XValidation:rule="isQuantity(self)",message="maxSize must be a valid Kubernetes quantity (e.g., '2Gi')"
 	// +kubebuilder:validation:XValidation:rule="sign(quantity(self)) == 1",message="maxSize must be a positive quantity"
 	// +kubebuilder:validation:XValidation:rule="quantity(self).compareTo(quantity('1Gi')) >= 0",message="maxSize should be at least 1Gi"
 	MaxSize resource.Quantity `json:"maxSize,omitempty"`
