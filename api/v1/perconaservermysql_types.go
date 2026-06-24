@@ -848,24 +848,44 @@ const (
 	UserClusterSet     SystemUser = "clusterset"
 )
 
+// systemUsers is the canonical, ordered list of every SystemUser value.
+// It is the single source of truth used to build knownSystemUsers (path
+// validation) and to derive the password-managed subset returned by
+// secret.SystemUsers.
+var systemUsers = []SystemUser{
+	UserHeartbeat,
+	UserMonitor,
+	UserOperator,
+	UserOrchestrator,
+	UserPMMServerToken,
+	UserReplication,
+	UserRoot,
+	UserXtraBackup,
+	UserClusterSet,
+}
+
 // knownSystemUsers is the closed set of SystemUser values. Callers that join
 // SystemUser into a filesystem path (e.g. naming.CredsMountPath/<user>) must
 // validate against this set so an unexpected value cannot traverse outside.
-var knownSystemUsers = map[SystemUser]struct{}{
-	UserHeartbeat:      {},
-	UserMonitor:        {},
-	UserOperator:       {},
-	UserOrchestrator:   {},
-	UserPMMServerToken: {},
-	UserReplication:    {},
-	UserRoot:           {},
-	UserXtraBackup:     {},
-	UserClusterSet:     {},
+var knownSystemUsers = func() map[SystemUser]struct{} {
+	m := make(map[SystemUser]struct{}, len(systemUsers))
+	for _, u := range systemUsers {
+		m[u] = struct{}{}
+	}
+	return m
+}()
+
+// AllSystemUsers returns a copy of the canonical SystemUser list.
+func AllSystemUsers() []SystemUser {
+	out := make([]SystemUser, len(systemUsers))
+	copy(out, systemUsers)
+	return out
 }
 
 func (u SystemUser) IsKnown() bool {
 	_, ok := knownSystemUsers[u]
 	return ok
+	
 }
 
 // MySQLSpec returns the MySQL specification from the PerconaServerMySQL custom resource.
