@@ -12,14 +12,14 @@ commands:
       mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
       host="${cluster_name}-mysql-0.${cluster_name}-mysql"
 
-      for attempt in 1 2 3 4; do
+      for attempt in 1 2 3 4 5 6; do
           data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${host}" "${mysql_user}")
           if [[ "${data}" == *"ERROR"* ]]; then
-              if [[ ${attempt} -eq 4 ]]; then
-                  echo "MySQL query failed after 3 retries: ${data}" >&2
+              if [[ ${attempt} -eq 6 ]]; then
+                  echo "MySQL query failed after 5 retries: ${data}" >&2
                   exit 1
               fi
-              sleep 3
+              sleep 5
               continue
           fi
           break
