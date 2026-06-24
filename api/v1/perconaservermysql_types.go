@@ -1549,3 +1549,7 @@ func (cr *PerconaServerMySQL) BootstrapMode() BootstrapMode {
 	}
 	return *cr.Spec.MySQL.Bootstrap.Mode
 }
+
+func (cr *PerconaServerMySQL) IsOrchestratorEnabled() bool {
+	return cr.Spec.MySQL.IsAsync() && cr.Spec.Orchestrator.Enabled
+}
