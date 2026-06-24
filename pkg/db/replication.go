@@ -237,3 +237,19 @@ func (m *ReplicationDBManager) GetClusterSetReplicationRunning(ctx context.Conte
 
 	return rows[0].IsRunning, nil
 }
+
+func (m *ReplicationDBManager) StopReplication(ctx context.Context) error {
+	err := m.db.exec(ctx, "STOP REPLICA", nil, nil)
+	if err != nil {
+		return errors.Wrap(err, "exec STOP REPLICA")
+	}
+	return nil
+}
+
+func (m *ReplicationDBManager) ResetReplication(ctx context.Context) error {
+	err := m.db.exec(ctx, "RESET REPLICA ALL", nil, nil)
+	if err != nil {
+		return errors.Wrap(err, "exec RESET REPLICA ALL")
+	}
+	return nil
+}
