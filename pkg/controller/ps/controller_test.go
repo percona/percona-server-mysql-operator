@@ -1023,6 +1023,25 @@ var _ = Describe("CR validations", Ordered, func() {
 				Expect(createErr.Error()).To(ContainSubstring("router.image is required when router is enabled"))
 			})
 		})
+
+		When("storage autoscaling growth step is negative", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-storage-autoscaling-growth-step-negative", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.StorageScaling = &psv1.StorageScalingSpec{
+				EnableVolumeScaling: true,
+				Autoscaling: &psv1.AutoscalingSpec{
+					Enabled:    true,
+					GrowthStep: resource.MustParse("-1Gi"),
+				},
+			}
+
+			It("should fail with growth step required error", func() {
+				createErr := k8sClient.Create(ctx, cr)
+				Expect(createErr).To(HaveOccurred())
+				Expect(createErr.Error()).To(ContainSubstring("growthStep must be a positive quantity"))
+			})
+		})
 	})
 
 	Context("PITR validation rules", Ordered, func() {
