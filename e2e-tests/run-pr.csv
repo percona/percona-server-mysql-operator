@@ -55,6 +55,7 @@ monitoring,8.4
 one-pod,8.0
 one-pod,8.4
 operator-self-healing,8.4
+pvc-auto-resize,8.4
 pvc-resize,8.4
 recreate,8.4
 scaling,8.4

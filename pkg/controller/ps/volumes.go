@@ -86,6 +86,11 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 		return errors.Wrap(err, "failed to reconcile pvc metadata")
 	}
 
+	if cr.Spec.StorageScaling != nil && cr.Spec.StorageScaling.VolumeExternalAutoscaling {
+		log.V(1).Info("skipping volume autoscaling: external autoscaling is enabled")
+		return nil
+	}
+
 	ls := mysql.MatchLabels(cr)
 	stsName := mysql.Name(cr)
 
@@ -294,7 +299,7 @@ func (r *PerconaServerMySQLReconciler) reconcilePersistentVolumes(ctx context.Co
 		return nil
 	}
 
-	if !cr.Spec.VolumeExpansionEnabled {
+	if !cr.Spec.IsVolumeExpansionEnabled() {
 		// If expansion is disabled we should keep the old value
 		cr.Spec.MySQL.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = configured
 		return nil

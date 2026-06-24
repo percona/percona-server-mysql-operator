@@ -88,6 +88,9 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	cr := &apiv1.PerconaServerMySQLRestore{}
 	err := r.Get(ctx, req.NamespacedName, cr)
 	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, errors.Wrapf(err, "get CR %s", req.NamespacedName)
 	}
 
