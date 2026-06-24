@@ -208,6 +208,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.orchestrator.initContainer)" \
 		| yq "del(.spec.orchestrator.containerSecurityContext)" \
 		| yq "del(.spec.orchestrator.podSecurityContext)" \
+		| yq "del(.spec.pmm.customClusterName)" \
 		| yq "del(.spec.pmm.mysqlParams)" \
 		| yq "del(.spec.pmm.readinessProbes)" \
 		| yq "del(.spec.pmm.livenessProbes)" \
