@@ -11,7 +11,6 @@ commands:
       cluster_issuer_name="tls-cert-manager-cluster-issuer-${NAMESPACE}"
       operator_sa="percona-server-mysql-operator"
 
-      # Toggle to compare approaches: explicit test RBAC vs controller APIReader path.
       if [[ "${TLS_CERT_MANAGER_USE_CLUSTERISSUER_RBAC:-true}" == "true" ]]; then
           kubectl create clusterrole "${cluster_issuer_name}-reader" \
               --verb=get,list,watch \
