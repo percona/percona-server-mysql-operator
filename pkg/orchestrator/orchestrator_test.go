@@ -136,6 +136,44 @@ func TestStatefulSet(t *testing.T) {
 		assert.Equal(t, serviceAccountName, sts.Spec.Template.Spec.ServiceAccountName)
 	})
 
+	t.Run("RBAC", func(t *testing.T) {
+		cluster := cr.DeepCopy()
+		role, binding, sa := RBAC(cluster)
+
+		const legacyDefaultName = "percona-server-mysql-operator-orchestrator"
+		assert.Equal(t, legacyDefaultName, sa.Name)
+		assert.Equal(t, legacyDefaultName, role.Name)
+		assert.Equal(t, legacyDefaultName, binding.Name)
+		assert.Equal(t, legacyDefaultName, binding.Subjects[0].Name)
+		assert.Equal(t, legacyDefaultName, binding.RoleRef.Name)
+
+		cluster.Spec.CRVersion = "1.3.0"
+		cluster.Spec.Orchestrator.ServiceAccountName = ""
+		if err := cluster.CheckNSetDefaults(t.Context(), &platform.ServerVersion{
+			Platform: platform.PlatformKubernetes,
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		role, binding, sa = RBAC(cluster)
+		const versionedDefaultName = "cluster-orchestrator"
+		assert.Equal(t, versionedDefaultName, sa.Name)
+		assert.Equal(t, versionedDefaultName, role.Name)
+		assert.Equal(t, versionedDefaultName, binding.Name)
+		assert.Equal(t, versionedDefaultName, binding.Subjects[0].Name)
+		assert.Equal(t, versionedDefaultName, binding.RoleRef.Name)
+
+		const customName = "custom-orchestrator"
+		cluster.Spec.Orchestrator.ServiceAccountName = customName
+
+		role, binding, sa = RBAC(cluster)
+		assert.Equal(t, customName, sa.Name)
+		assert.Equal(t, customName, role.Name)
+		assert.Equal(t, customName, binding.Name)
+		assert.Equal(t, customName, binding.Subjects[0].Name)
+		assert.Equal(t, customName, binding.RoleRef.Name)
+	})
+
 	t.Run("tolerations", func(t *testing.T) {
 		cluster := cr.DeepCopy()
 		sts := StatefulSet(cluster, initImage, configHash, tlsHash)

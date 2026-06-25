@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 )
@@ -848,4 +849,32 @@ func TestPiTREnabled(t *testing.T) {
 			assert.Equal(t, tc.want, cr.PiTREnabled())
 		})
 	}
+}
+
+func TestDefaultOrchestratorServiceAccountName(t *testing.T) {
+	t.Run("empty crVersion", func(t *testing.T) {
+		cr := &PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster-a"},
+		}
+
+		assert.Equal(t, "percona-server-mysql-operator-orchestrator", cr.DefaultOrchestratorServiceAccountName())
+	})
+
+	t.Run("before 1.3.0", func(t *testing.T) {
+		cr := &PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster-a"},
+			Spec:       PerconaServerMySQLSpec{CRVersion: "1.2.0"},
+		}
+
+		assert.Equal(t, "percona-server-mysql-operator-orchestrator", cr.DefaultOrchestratorServiceAccountName())
+	})
+
+	t.Run("since 1.3.0", func(t *testing.T) {
+		cr := &PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster-a"},
+			Spec:       PerconaServerMySQLSpec{CRVersion: "1.3.0"},
+		}
+
+		assert.Equal(t, "cluster-a-orchestrator", cr.DefaultOrchestratorServiceAccountName())
+	})
 }

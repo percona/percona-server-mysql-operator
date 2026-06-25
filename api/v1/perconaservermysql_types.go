@@ -986,7 +986,6 @@ func AllSystemUsers() []SystemUser {
 func (u SystemUser) IsKnown() bool {
 	_, ok := knownSystemUsers[u]
 	return ok
-	
 }
 
 // MySQLSpec returns the MySQL specification from the PerconaServerMySQL custom resource.
@@ -1058,6 +1057,14 @@ func (cr *PerconaServerMySQL) DefaultSecretName() string {
 
 func (cr *PerconaServerMySQL) DefaultSSLSecretName() string {
 	return cr.Name + "-ssl"
+}
+
+func (cr *PerconaServerMySQL) DefaultOrchestratorServiceAccountName() string {
+	if cr.Spec.CRVersion != "" && cr.CompareVersion("1.3.0") >= 0 {
+		return cr.Name + "-orchestrator"
+	}
+
+	return "percona-server-mysql-operator-orchestrator"
 }
 
 // CheckNSetDefaults validates and sets default values for the PerconaServerMySQL custom resource.
@@ -1261,7 +1268,7 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 	}
 
 	if cr.Spec.Orchestrator.ServiceAccountName == "" {
-		cr.Spec.Orchestrator.ServiceAccountName = "percona-server-mysql-operator-orchestrator"
+		cr.Spec.Orchestrator.ServiceAccountName = cr.DefaultOrchestratorServiceAccountName()
 	}
 
 	var err error
