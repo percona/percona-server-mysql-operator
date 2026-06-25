@@ -111,17 +111,15 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 	}
 
 	manager, err := r.getClusterSetManager(ctx, pcs)
-	if updErr := r.reconcilePrimaryClusterUnreachableCondition(ctx, pcs, err); updErr != nil {
-		return ctrl.Result{}, errors.Wrap(updErr, "reconcile primary cluster unreachable condition")
+	if updErr := r.handleClusterSetManagerError(ctx, pcs, err); updErr != nil {
+		return ctrl.Result{}, errors.Wrap(updErr, "handle cluster set manager error")
 	}
 
 	if errors.Is(err, mysqlsh.ErrEndpointUnreachable) {
-		if xerr := r.reconcileForcedFailover(ctx, pcs); xerr != nil {
-			return ctrl.Result{}, errors.Wrap(xerr, "reconcile forced failover")
+		if err := r.reconcileForcedFailover(ctx, pcs); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "reconcile forced failover")
 		}
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
-	} else if err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "get cluster set manager")
 	}
 
 	if err := r.bootstrapClusterSet(ctx, pcs, manager); err != nil {
@@ -147,13 +145,54 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 
-func (r *PerconaServerMySQLClusterSetReconciler) reconcilePrimaryClusterUnreachableCondition(
+func (r *PerconaServerMySQLClusterSetReconciler) handleClusterSetManagerError(
+	ctx context.Context,
+	pcs *apiv1.PerconaServerMySQLClusterSet,
+	csErr error,
+) error {
+	if err := r.reconcileErrorCondAccessDenied(ctx, pcs, csErr); err != nil {
+		return errors.Wrap(err, "reconcile access denied condition")
+	}
+	if err := r.reconcileErrorCondPrimaryUnreachable(ctx, pcs, csErr); err != nil {
+		return errors.Wrap(err, "reconcile primary cluster unreachable condition")
+	}
+	return nil
+}
+
+func (r *PerconaServerMySQLClusterSetReconciler) reconcileErrorCondAccessDenied(
+	ctx context.Context,
+	pcs *apiv1.PerconaServerMySQLClusterSet,
+	csErr error,
+) error {
+	if errors.Is(csErr, mysqlsh.ErrAccessDenied) {
+		return pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
+			for name, c := range status.Clusters {
+				c.GlobalStatus = clusterset.StatusUnknown
+				status.Clusters[name] = c
+			}
+			meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+				Type:    apiv1.ConditionClusterSetReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  "AccessDenied",
+				Message: "Invalid credentials for clusterset user",
+			})
+			return nil
+		})
+	}
+	return nil
+}
+
+func (r *PerconaServerMySQLClusterSetReconciler) reconcileErrorCondPrimaryUnreachable(
 	ctx context.Context,
 	pcs *apiv1.PerconaServerMySQLClusterSet,
 	csErr error,
 ) error {
 	if errors.Is(csErr, mysqlsh.ErrEndpointUnreachable) {
 		return pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
+			for name, c := range status.Clusters {
+				c.GlobalStatus = clusterset.StatusUnknown
+				status.Clusters[name] = c
+			}
 			meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 				Type:    apiv1.ConditionPrimaryClusterUnreachable,
 				Status:  metav1.ConditionTrue,
@@ -171,6 +210,33 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcilePrimaryClusterUnreacha
 
 	return pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
 		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionPrimaryClusterUnreachable)
+		return nil
+	})
+}
+
+// mysqlErrAccessDenied is MySQL error code 1045 (ER_ACCESS_DENIED_ERROR),
+// reported when the clusterset user authenticates with invalid credentials.
+const mysqlErrAccessDenied = "1045"
+
+// reconcileInvalidCredentialsCondition sets ClusterSetReady=False when the
+// ClusterSet manager error indicates the clusterset user's credentials were
+// rejected. Other errors leave the conditions untouched.
+func (r *PerconaServerMySQLClusterSetReconciler) reconcileInvalidCredentialsCondition(
+	ctx context.Context,
+	pcs *apiv1.PerconaServerMySQLClusterSet,
+	csErr error,
+) error {
+	if !strings.Contains(csErr.Error(), mysqlErrAccessDenied) {
+		return nil
+	}
+
+	return pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:    apiv1.ConditionClusterSetReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  "AccessDenied",
+			Message: "Invalid credentials for clusterset user",
+		})
 		return nil
 	})
 }
