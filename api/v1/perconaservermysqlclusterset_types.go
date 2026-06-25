@@ -18,10 +18,12 @@ package v1
 
 import (
 	"context"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	k8sretry "k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -291,7 +293,13 @@ func (psc *PerconaServerMySQLClusterSet) GetCluster(name string) *ClusterSetClus
 }
 
 func (pcs *PerconaServerMySQLClusterSet) UpdateStatus(ctx context.Context, cl client.Client, mutate func(status *PerconaServerMySQLClusterSetStatus) error) error {
-	return k8sretry.RetryOnConflict(k8sretry.DefaultRetry, func() error {
+	backoff := wait.Backoff{
+		Steps:    5,
+		Duration: 1 * time.Second,
+		Factor:   1.0,
+		Jitter:   0.1,
+	}
+	return k8sretry.RetryOnConflict(backoff, func() error {
 		actual := &PerconaServerMySQLClusterSet{}
 		if err := cl.Get(ctx, types.NamespacedName{Name: pcs.Name, Namespace: pcs.Namespace}, actual); err != nil {
 			return err
