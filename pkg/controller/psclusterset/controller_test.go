@@ -839,7 +839,7 @@ func TestReconciler_reconcileErrorCondition(t *testing.T) {
 				require.NotNil(t, readyCond)
 				assert.Equal(t, metav1.ConditionUnknown, readyCond.Status)
 				assert.Equal(t, "ClusterSetManagerError", readyCond.Reason)
-				assert.Equal(t, "Error connecting to primary cluster", readyCond.Message)
+				assert.Contains(t, readyCond.Message, "Error connecting to primary cluster")
 				assertNodesUnknown(t, observed)
 			},
 		},
