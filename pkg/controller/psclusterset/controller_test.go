@@ -6,8 +6,8 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
+	csmanager "github.com/percona/percona-server-mysql-operator/pkg/clusterset/manager"
 	psmock "github.com/percona/percona-server-mysql-operator/pkg/controller/psclusterset/mock"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/mock"
@@ -769,7 +769,7 @@ func TestReconciler_reconcileErrorCondition(t *testing.T) {
 				require.NotNil(t, cond)
 				assert.Equal(t, metav1.ConditionTrue, cond.Status)
 				assert.Equal(t, "ReconcileError", cond.Reason)
-				assert.Equal(t, "reconcile replicas failed", cond.Message)
+				assert.Equal(t, "Error during reconcile: reconcile replicas failed", cond.Message)
 
 				// node statuses are untouched for unknown failures
 				for _, c := range observed.Status.Clusters {
@@ -782,18 +782,20 @@ func TestReconciler_reconcileErrorCondition(t *testing.T) {
 			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
 				return clusterSetWithStatus()
 			},
-			rErr: fmt.Errorf("create cluster set: %w", mysqlsh.ErrAccessDenied),
+			rErr: fmt.Errorf("%w: %w", errGetClusterSetManager, csmanager.NewAccessDeniedError()),
 			asserts: func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet) {
 				errCond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetErrorReconcile)
 				require.NotNil(t, errCond)
 				assert.Equal(t, metav1.ConditionTrue, errCond.Status)
 				assert.Equal(t, "AccessDenied", errCond.Reason)
-				assert.Equal(t, "Access denied on primary, check the clusterset credentials", errCond.Message)
+				assert.Equal(t, "Invalid credentials for the primary cluster", errCond.Message)
 				assertNodesUnknown(t, observed)
 
 				readyCond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetReady)
 				require.NotNil(t, readyCond)
 				assert.Equal(t, metav1.ConditionUnknown, readyCond.Status)
+				assert.Equal(t, "AccessDenied", readyCond.Reason)
+				assert.Equal(t, "Invalid credentials for the primary cluster", readyCond.Message)
 			},
 		},
 		{
@@ -801,18 +803,20 @@ func TestReconciler_reconcileErrorCondition(t *testing.T) {
 			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
 				return clusterSetWithStatus()
 			},
-			rErr: fmt.Errorf("status: %w", mysqlsh.ErrEndpointUnreachable),
+			rErr: csmanager.NewUnreachableError(),
 			asserts: func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet) {
 				cond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetErrorReconcile)
 				require.NotNil(t, cond)
 				assert.Equal(t, metav1.ConditionTrue, cond.Status)
-				assert.Equal(t, "PrimaryClusterUnreachable", cond.Reason)
-				assert.Equal(t, "Primary cluster is unreachable, check the network and cluster status", cond.Message)
+				assert.Equal(t, "PrimaryUnreachable", cond.Reason)
+				assert.Equal(t, "No reachable endpoint for the primary cluster", cond.Message)
 				assertNodesUnknown(t, observed)
 
 				readyCond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetReady)
 				require.NotNil(t, readyCond)
 				assert.Equal(t, metav1.ConditionUnknown, readyCond.Status)
+				assert.Equal(t, "PrimaryUnreachable", readyCond.Reason)
+				assert.Equal(t, "No reachable endpoint for the primary cluster", readyCond.Message)
 			},
 		},
 		{
@@ -828,18 +832,19 @@ func TestReconciler_reconcileErrorCondition(t *testing.T) {
 				}
 				return pcs
 			},
-			rErr: fmt.Errorf("%w: %s", errGetClusterSetManager, "connection refused"),
+			rErr: fmt.Errorf("%w: %w", errGetClusterSetManager, csmanager.NewGenericError("connection refused")),
 			asserts: func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet) {
 				errCond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetErrorReconcile)
 				require.NotNil(t, errCond)
 				assert.Equal(t, metav1.ConditionTrue, errCond.Status)
-				assert.Equal(t, "ReconcileError", errCond.Reason)
+				assert.Equal(t, "ClusterSetManagerError", errCond.Reason)
+				assert.Equal(t, "connection refused", errCond.Message)
 
 				readyCond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetReady)
 				require.NotNil(t, readyCond)
 				assert.Equal(t, metav1.ConditionUnknown, readyCond.Status)
 				assert.Equal(t, "ClusterSetManagerError", readyCond.Reason)
-				assert.Contains(t, readyCond.Message, "Error connecting to primary cluster")
+				assert.Equal(t, "connection refused", readyCond.Message)
 				assertNodesUnknown(t, observed)
 			},
 		},

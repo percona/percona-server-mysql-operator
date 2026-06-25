@@ -3,6 +3,7 @@ package psclusterset
 import (
 	"bytes"
 	"context"
+	stderrors "errors"
 	"fmt"
 	"strings"
 	"time"
@@ -16,19 +17,21 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 	kstatus "sigs.k8s.io/cli-utils/pkg/kstatus/status"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
 	csmanager "github.com/percona/percona-server-mysql-operator/pkg/clusterset/manager"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
-	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	k8sutil "github.com/percona/percona-server-mysql-operator/pkg/util/k8s"
 )
@@ -71,12 +74,64 @@ func (r *PerconaServerMySQLClusterSetReconciler) SetupWithManager(mgr ctrl.Manag
 	}
 	r.jobImage = operatorPod.Spec.Containers[0].Image
 
+	if err := setupFieldIndexers(mgr); err != nil {
+		return errors.Wrap(err, "setup field indexers")
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1.PerconaServerMySQLClusterSet{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&batchv1.Job{}).
+		Watches(&corev1.Secret{}, enqueueFromCredentialsSecret(r.Client)).
 		Named(controllerName).
 		Complete(r)
+}
+
+func enqueueFromCredentialsSecret(c client.Client) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+		secret, ok := o.(*corev1.Secret)
+		if !ok {
+			return nil
+		}
+		list := &apiv1.PerconaServerMySQLList{}
+		log := logf.FromContext(ctx)
+		if err := c.List(ctx, list, client.InNamespace(secret.Namespace), client.MatchingFields{
+			fieldSecretsName: secret.Name,
+		}); err != nil {
+			log.Error(err, "failed to list clusters for secret", "secret", secret.Name)
+			return nil
+		}
+
+		var requests []reconcile.Request
+		for _, cluster := range list.Items {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      cluster.Name,
+					Namespace: cluster.Namespace,
+				},
+			})
+		}
+		return requests
+	})
+}
+
+const fieldSecretsName = "spec.credentialsSecret.name"
+
+func setupFieldIndexers(mgr ctrl.Manager) error {
+	// Index secrets
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &apiv1.PerconaServerMySQLClusterSet{}, fieldSecretsName, func(o client.Object) []string {
+		pcs, ok := o.(*apiv1.PerconaServerMySQLClusterSet)
+		if !ok {
+			return nil
+		}
+		if pcs.Spec.CredentialsSecret.Name != "" {
+			return []string{pcs.Spec.CredentialsSecret.Name}
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrapf(err, "index field %s", fieldSecretsName)
+	}
+	return nil
 }
 
 var errGetClusterSetManager = errors.New("get cluster set manager")
@@ -84,15 +139,12 @@ var errGetClusterSetManager = errors.New("get cluster set manager")
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqlclustersets;perconaservermysqlclustersets/status;perconaservermysqlclustersets/finalizers,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reconciles the PerconaServerMySQLClusterSet custom resource.
-func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, retErr error) {
+func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	log := logf.FromContext(ctx).WithName("PerconaServerMySQLClusterSet")
 
 	pcs := &apiv1.PerconaServerMySQLClusterSet{}
 	if err := r.Get(ctx, req.NamespacedName, pcs); err != nil {
-		if k8serrors.IsNotFound(err) {
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, errors.Wrap(err, "get PerconaServerMySQLClusterSet")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	pcs.SetDefaults()
@@ -101,10 +153,19 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, r.reconcileFinalizers(ctx, pcs)
 	}
 
-	var err error
 	defer func() {
-		if updErr := r.reconcileErrorCondition(ctx, pcs, err); updErr != nil && retErr == nil {
-			retErr = errors.Wrap(updErr, "reconcile error condition")
+		if updErr := r.reconcileErrorCondition(ctx, pcs, err); updErr != nil {
+			err = stderrors.Join(err, errors.Wrap(updErr, "reconcile error condition"))
+			return
+		}
+
+		// We want the controller to take over operations as soon as it can reach the cluster.
+		// Without the swallow and requeue, the controller would be subject to an exponential backoff,
+		// which can delay critical operations.
+		if csmanager.IsUnreachableError(err) {
+			log.Info("Primary cluster is unreachable, will retry in 10 seconds ...")
+			err = nil
+			result = ctrl.Result{RequeueAfter: 10 * time.Second}
 		}
 	}()
 
@@ -126,12 +187,12 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 
 	var manager ClusterSetManager
 	manager, err = r.getClusterSetManager(ctx, pcs)
-	if errors.Is(err, mysqlsh.ErrEndpointUnreachable) {
+	if csmanager.IsUnreachableError(err) {
 		if ffErr := r.reconcileForcedFailover(ctx, pcs); ffErr != nil {
 			err = errors.Wrap(ffErr, "reconcile forced failover")
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		return ctrl.Result{}, err
 	} else if err != nil {
 		err = fmt.Errorf("%w: %w", errGetClusterSetManager, err)
 		return ctrl.Result{}, err
@@ -178,35 +239,26 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileErrorCondition(
 			return nil
 		}
 
-		accessDenied := errors.Is(rErr, mysqlsh.ErrAccessDenied)
-		unreachable := errors.Is(rErr, mysqlsh.ErrEndpointUnreachable)
-		lostPrimaryConnection := accessDenied || unreachable || errors.Is(rErr, errGetClusterSetManager)
-
 		errCond := metav1.Condition{
 			Type:    apiv1.ConditionClusterSetErrorReconcile,
 			Status:  metav1.ConditionTrue,
-			Message: rErr.Error(),
 			Reason:  "ReconcileError",
+			Message: fmt.Sprintf("Error during reconcile: %s", rErr.Error()),
 		}
-		switch {
-		case accessDenied:
-			errCond.Reason = "AccessDenied"
-			errCond.Message = "Access denied on primary, check the clusterset credentials"
-		case unreachable:
-			errCond.Reason = "PrimaryClusterUnreachable"
-			errCond.Message = "Primary cluster is unreachable, check the network and cluster status"
-		}
-		meta.SetStatusCondition(&status.Conditions, errCond)
 
-		if lostPrimaryConnection {
-			markAllNodesUnknown(status)
+		if csErr := csmanager.AsManagerError(rErr); csErr != nil {
+			errCond.Reason = csErr.Reason()
+			errCond.Message = csErr.Message()
 			meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 				Type:    apiv1.ConditionClusterSetReady,
 				Status:  metav1.ConditionUnknown,
-				Message: fmt.Sprintf("Error connecting to primary cluster: %s", rErr.Error()),
-				Reason:  "ClusterSetManagerError",
+				Reason:  csErr.Reason(),
+				Message: csErr.Message(),
 			})
+			markAllNodesUnknown(status)
 		}
+
+		meta.SetStatusCondition(&status.Conditions, errCond)
 		return nil
 	}); updErr != nil {
 		return errors.Wrap(updErr, "update status")
