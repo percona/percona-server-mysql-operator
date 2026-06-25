@@ -84,7 +84,7 @@ var errGetClusterSetManager = errors.New("get cluster set manager")
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqlclustersets;perconaservermysqlclustersets/status;perconaservermysqlclustersets/finalizers,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reconciles the PerconaServerMySQLClusterSet custom resource.
-func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, retErr error) {
 	log := logf.FromContext(ctx).WithName("PerconaServerMySQLClusterSet")
 
 	pcs := &apiv1.PerconaServerMySQLClusterSet{}
@@ -103,8 +103,8 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 
 	var err error
 	defer func() {
-		if updErr := r.reconcileErrorCondition(ctx, pcs, err); updErr != nil {
-			err = errors.Wrap(updErr, "reconcile error condition")
+		if updErr := r.reconcileErrorCondition(ctx, pcs, err); updErr != nil && retErr == nil {
+			retErr = errors.Wrap(updErr, "reconcile error condition")
 		}
 	}()
 
@@ -127,8 +127,9 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 	var manager ClusterSetManager
 	manager, err = r.getClusterSetManager(ctx, pcs)
 	if errors.Is(err, mysqlsh.ErrEndpointUnreachable) {
-		if err := r.reconcileForcedFailover(ctx, pcs); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "reconcile forced failover")
+		if ffErr := r.reconcileForcedFailover(ctx, pcs); ffErr != nil {
+			err = errors.Wrap(ffErr, "reconcile forced failover")
+			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	} else if err != nil {
@@ -160,6 +161,10 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileErrorCondition(
 	pcs *apiv1.PerconaServerMySQLClusterSet,
 	rErr error,
 ) error {
+	if rErr == nil && meta.FindStatusCondition(pcs.Status.Conditions, apiv1.ConditionClusterSetErrorReconcile) == nil {
+		return nil
+	}
+
 	markAllNodesUnknown := func(status *apiv1.PerconaServerMySQLClusterSetStatus) {
 		for name, c := range status.Clusters {
 			c.GlobalStatus = clusterset.StatusUnknown
