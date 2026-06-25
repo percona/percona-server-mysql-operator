@@ -197,6 +197,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileErrorCondition(
 		// without connecting to the primary cluster, we no longer know for sure if
 		// everything is up and running correctly.
 		if errors.Is(rErr, errGetClusterSetManager) {
+			markAllNodesUnknown(status)
 			meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 				Type:    apiv1.ConditionClusterSetReady,
 				Status:  metav1.ConditionUnknown,
