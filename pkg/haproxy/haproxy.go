@@ -62,14 +62,6 @@ func ServicePort() int {
 	return PortMySQL
 }
 
-func FQDN(cr *apiv1.PerconaServerMySQL, idx int) string {
-	return PodName(cr, idx) + "." + ServiceFQDN(cr)
-}
-
-func PodFQDN(cr *apiv1.PerconaServerMySQL, pod *corev1.Pod) string {
-	return pod.Name + "." + ServiceFQDN(cr)
-}
-
 func ServiceFQDN(cr *apiv1.PerconaServerMySQL) string {
 	return ServiceName(cr) + "." + cr.Namespace
 }
