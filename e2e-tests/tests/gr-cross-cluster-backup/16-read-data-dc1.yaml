@@ -1,0 +1,45 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 300
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # After switchover, dc1 becomes replica and all nodes have super_read_only=1.
+      # The ConfigMap file indicating that it is a clusterset replica may not yet be propagated to the pods.
+      # During that window we will have failing connections. We sleep for 90s to let the backends reconcile.
+      sleep 40
+
+      cluster_name="gr-cross-cluster-backup-dc1"
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
+
+      read_mysql_with_retry() {
+          local host=$1
+          local attempt=0
+          local result=""
+
+          until [[ -n "${result}" && "${result}" != *"ERROR"* && "${result}" != *"command terminated"* ]]; do
+              attempt=$((attempt + 1))
+              if [[ ${attempt} -gt 10 ]]; then
+                  echo "MySQL query to ${host} failed after 10 attempts: ${result}" >&2
+                  exit 1
+              fi
+              result=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${host}" "${mysql_user}")
+              if [[ "${result}" == *"ERROR"* || "${result}" == *"command terminated"* ]]; then
+                  sleep 10
+              fi
+          done
+
+          echo "${result}"
+      }
+
+      for i in 0 1 2; do
+          data=$(read_mysql_with_retry "${cluster_name}-mysql-${i}.${cluster_name}-mysql")
+          kubectl create configmap -n "${NAMESPACE}" 16-read-data-dc1-${i} --from-literal=data="${data}"
+      done
+
+      data=$(read_mysql_with_retry "$(get_haproxy_svc "${cluster_name}")")
+      kubectl create configmap -n "${NAMESPACE}" 16-read-data-dc1-haproxy --from-literal=data="${data}"

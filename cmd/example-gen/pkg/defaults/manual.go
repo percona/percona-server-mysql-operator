@@ -122,6 +122,7 @@ func pmmDefaults(spec *apiv1.PMMSpec) {
 	spec.Image = ImagePMM
 	spec.Resources = resources("150M", "300m", "256M", "400m")
 	spec.ServerHost = "monitoring-service"
+	spec.CustomClusterName = "cluster1-custom"
 	spec.MySQLParams = "PMM_ADMIN_CUSTOM_PARAMS"
 }
 
