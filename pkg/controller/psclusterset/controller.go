@@ -203,7 +203,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileErrorCondition(
 			meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 				Type:    apiv1.ConditionClusterSetReady,
 				Status:  metav1.ConditionUnknown,
-				Message: "Error connecting to primary cluster",
+				Message: fmt.Sprintf("Error connecting to primary cluster: %s", rErr.Error()),
 				Reason:  "ClusterSetManagerError",
 			})
 		}
