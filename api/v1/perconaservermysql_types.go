@@ -34,6 +34,7 @@ import (
 	"golang.org/x/text/language"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -407,6 +408,7 @@ type PMMSpec struct {
 	Image                    string                      `json:"image,omitempty"`
 	MySQLParams              string                      `json:"mysqlParams,omitempty"`
 	ServerHost               string                      `json:"serverHost,omitempty"`
+	CustomClusterName        string                      `json:"customClusterName,omitempty"`
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
@@ -1699,6 +1701,10 @@ func (cr *PerconaServerMySQL) BootstrapMode() BootstrapMode {
 		return BootstrapModeAuto
 	}
 	return *cr.Spec.MySQL.Bootstrap.Mode
+}
+
+func (cr *PerconaServerMySQL) IsAwaitingExternalBootstrap() bool {
+	return cr.BootstrapMode() == BootstrapModeManual && meta.IsStatusConditionTrue(cr.Status.Conditions, ConditionAwaitingExternalBootstrap)
 }
 
 func (cr *PerconaServerMySQL) IsOrchestratorEnabled() bool {
