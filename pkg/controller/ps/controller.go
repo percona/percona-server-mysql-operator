@@ -878,7 +878,6 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 	}
 
 	if memory != nil {
-		log.V(1).Info("Generating auto-tune config based on memory", "memory", memory.String())
 		autotuneParams, err := mysql.GetAutoTuneParams(cr, memory)
 		if err != nil {
 			return err
