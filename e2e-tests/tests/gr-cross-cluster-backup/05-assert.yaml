@@ -1,0 +1,34 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 400
+---
+kind: PerconaServerMySQLRestore
+apiVersion: ps.percona.com/v1
+metadata:
+  name: restore-dc2
+status:
+  state: Succeeded
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-cross-cluster-backup-dc2
+status:
+  conditions:
+  - reason: Initializing
+    status: "True"
+    type: Initializing
+  - reason: Ready
+    status: "False"
+    type: Ready
+  - message: InnoDB cluster is not bootstrapped after restore
+    reason: InnoDBClusterBootstrapped
+    status: "False"
+    type: InnoDBClusterBootstrapped
+  - message: Awaiting external bootstrap
+    reason: ManualBootstrapRequested
+    status: "True"
+    type: AwaitingExternalBootstrap
+  mysql:
+    state: initializing
+  state: initializing
