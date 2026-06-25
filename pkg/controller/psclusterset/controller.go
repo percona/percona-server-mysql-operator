@@ -178,30 +178,27 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileErrorCondition(
 			return nil
 		}
 
-		cond := metav1.Condition{
+		accessDenied := errors.Is(rErr, mysqlsh.ErrAccessDenied)
+		unreachable := errors.Is(rErr, mysqlsh.ErrEndpointUnreachable)
+		lostPrimaryConnection := accessDenied || unreachable || errors.Is(rErr, errGetClusterSetManager)
+
+		errCond := metav1.Condition{
 			Type:    apiv1.ConditionClusterSetErrorReconcile,
 			Status:  metav1.ConditionTrue,
 			Message: rErr.Error(),
 			Reason:  "ReconcileError",
 		}
-
-		// handle known failures
 		switch {
-		case errors.Is(rErr, mysqlsh.ErrAccessDenied):
-			cond.Reason = "AccessDenied"
-			cond.Message = "Access denied on primary, check the clusterset credentials"
-			markAllNodesUnknown(status)
-		case errors.Is(rErr, mysqlsh.ErrEndpointUnreachable):
-			cond.Reason = "PrimaryClusterUnreachable"
-			cond.Message = "Primary cluster is unreachable, check the network and cluster status"
-			markAllNodesUnknown(status)
+		case accessDenied:
+			errCond.Reason = "AccessDenied"
+			errCond.Message = "Access denied on primary, check the clusterset credentials"
+		case unreachable:
+			errCond.Reason = "PrimaryClusterUnreachable"
+			errCond.Message = "Primary cluster is unreachable, check the network and cluster status"
 		}
+		meta.SetStatusCondition(&status.Conditions, errCond)
 
-		meta.SetStatusCondition(&status.Conditions, cond)
-
-		// without connecting to the primary cluster, we no longer know for sure if
-		// everything is up and running correctly.
-		if errors.Is(rErr, errGetClusterSetManager) {
+		if lostPrimaryConnection {
 			markAllNodesUnknown(status)
 			meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 				Type:    apiv1.ConditionClusterSetReady,
@@ -211,7 +208,6 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileErrorCondition(
 			})
 		}
 		return nil
-
 	}); updErr != nil {
 		return errors.Wrap(updErr, "update status")
 	}
