@@ -233,9 +233,9 @@ const (
 	ConditionClusterSetBootstrapped            string = "ClusterSetBootstrapped"
 	ConditionClusterSetPrimarySwitchOverInProg string = "SwitchoverInProgress"
 	ConditionReplicaManagementFailure          string = "ReplicaManagementFailure"
-	ConditionPrimaryClusterUnreachable         string = "PrimaryClusterUnreachable"
 	ConditionClusterSetDissolving              string = "ClusterSetDissolving"
 	ConditionClusterSetReady                   string = "Ready"
+	ConditionClusterSetErrorReconcile          string = "ErrorReconcile"
 )
 
 type ClusterSetStatus map[string]ClusterSetClusterStatus

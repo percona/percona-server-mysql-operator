@@ -79,6 +79,8 @@ func (r *PerconaServerMySQLClusterSetReconciler) SetupWithManager(mgr ctrl.Manag
 		Complete(r)
 }
 
+var errGetClusterSetManager = errors.New("get cluster set manager")
+
 //+kubebuilder:rbac:groups=ps.percona.com,resources=perconaservermysqlclustersets;perconaservermysqlclustersets/status;perconaservermysqlclustersets/finalizers,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile reconciles the PerconaServerMySQLClusterSet custom resource.
@@ -99,146 +101,115 @@ func (r *PerconaServerMySQLClusterSetReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, r.reconcileFinalizers(ctx, pcs)
 	}
 
-	if err := r.reconcileRBAC(ctx, pcs); err != nil {
+	var err error
+	defer func() {
+		if updErr := r.reconcileErrorCondition(ctx, pcs, err); updErr != nil {
+			err = errors.Wrap(updErr, "reconcile error condition")
+		}
+	}()
+
+	if err = r.reconcileRBAC(ctx, pcs); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "reconcile RBAC")
 	}
 
-	if ready, err := r.reconcileMySQLShellRunner(ctx, pcs); err != nil {
+	if err = r.cleanupOutdatedJobs(ctx, pcs); err != nil {
+		return ctrl.Result{}, errors.Wrap(err, "cleanup outdated jobs")
+	}
+
+	var runnerReady bool
+	if runnerReady, err = r.reconcileMySQLShellRunner(ctx, pcs); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "reconcile MySQLShellRunner")
-	} else if !ready {
+	} else if !runnerReady {
 		log.Info("Waiting for mysqlshell runner to be ready")
 		return ctrl.Result{}, nil
 	}
 
-	manager, err := r.getClusterSetManager(ctx, pcs)
-	if updErr := r.handleClusterSetManagerError(ctx, pcs, err); updErr != nil {
-		return ctrl.Result{}, errors.Wrap(updErr, "handle cluster set manager error")
-	}
-
+	var manager ClusterSetManager
+	manager, err = r.getClusterSetManager(ctx, pcs)
 	if errors.Is(err, mysqlsh.ErrEndpointUnreachable) {
 		if err := r.reconcileForcedFailover(ctx, pcs); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "reconcile forced failover")
 		}
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	} else if err != nil {
+		err = fmt.Errorf("%w: %w", errGetClusterSetManager, err)
+		return ctrl.Result{}, err
 	}
 
-	if err := r.bootstrapClusterSet(ctx, pcs, manager); err != nil {
+	if err = r.bootstrapClusterSet(ctx, pcs, manager); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "bootstrap ClusterSet")
 	}
 
-	if err := r.reconcileReplicas(ctx, pcs); err != nil {
+	if err = r.reconcileReplicas(ctx, pcs); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "reconcile replicas")
 	}
 
-	if err := r.reconcileSwitchover(ctx, pcs); err != nil {
+	if err = r.reconcileSwitchover(ctx, pcs); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "reconcile switchover")
 	}
 
-	if err := r.reconcileStatus(ctx, pcs, manager); err != nil {
+	if err = r.reconcileStatus(ctx, pcs, manager); err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "reconcile status")
-	}
-
-	if err := r.cleanupOutdatedJobs(ctx, pcs); err != nil {
-		return ctrl.Result{}, errors.Wrap(err, "cleanup outdated jobs")
 	}
 
 	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 
-func (r *PerconaServerMySQLClusterSetReconciler) handleClusterSetManagerError(
+func (r *PerconaServerMySQLClusterSetReconciler) reconcileErrorCondition(
 	ctx context.Context,
 	pcs *apiv1.PerconaServerMySQLClusterSet,
-	csErr error,
+	rErr error,
 ) error {
-	if err := r.reconcileErrorCondAccessDenied(ctx, pcs, csErr); err != nil {
-		return errors.Wrap(err, "reconcile access denied condition")
+	markAllNodesUnknown := func(status *apiv1.PerconaServerMySQLClusterSetStatus) {
+		for name, c := range status.Clusters {
+			c.GlobalStatus = clusterset.StatusUnknown
+			status.Clusters[name] = c
+		}
 	}
-	if err := r.reconcileErrorCondPrimaryUnreachable(ctx, pcs, csErr); err != nil {
-		return errors.Wrap(err, "reconcile primary cluster unreachable condition")
-	}
-	return nil
-}
 
-func (r *PerconaServerMySQLClusterSetReconciler) reconcileErrorCondAccessDenied(
-	ctx context.Context,
-	pcs *apiv1.PerconaServerMySQLClusterSet,
-	csErr error,
-) error {
-	if errors.Is(csErr, mysqlsh.ErrAccessDenied) {
-		return pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
-			for name, c := range status.Clusters {
-				c.GlobalStatus = clusterset.StatusUnknown
-				status.Clusters[name] = c
-			}
+	if updErr := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
+		if rErr == nil {
+			meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetErrorReconcile)
+			return nil
+		}
+
+		cond := metav1.Condition{
+			Type:    apiv1.ConditionClusterSetErrorReconcile,
+			Status:  metav1.ConditionTrue,
+			Message: rErr.Error(),
+			Reason:  "ReconcileError",
+		}
+
+		// handle known failures
+		switch {
+		case errors.Is(rErr, mysqlsh.ErrAccessDenied):
+			cond.Reason = "AccessDenied"
+			cond.Message = "Access denied on primary, check the clusterset credentials"
+			markAllNodesUnknown(status)
+		case errors.Is(rErr, mysqlsh.ErrEndpointUnreachable):
+			cond.Reason = "PrimaryClusterUnreachable"
+			cond.Message = "Primary cluster is unreachable, check the network and cluster status"
+			markAllNodesUnknown(status)
+		}
+
+		meta.SetStatusCondition(&status.Conditions, cond)
+
+		// without connecting to the primary cluster, we no longer know for sure if
+		// everything is up and running correctly.
+		if errors.Is(rErr, errGetClusterSetManager) {
 			meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 				Type:    apiv1.ConditionClusterSetReady,
-				Status:  metav1.ConditionFalse,
-				Reason:  "AccessDenied",
-				Message: "Invalid credentials for clusterset user",
+				Status:  metav1.ConditionUnknown,
+				Message: "Error connecting to primary cluster",
+				Reason:  "ClusterSetManagerError",
 			})
-			return nil
-		})
+		}
+		return nil
+
+	}); updErr != nil {
+		return errors.Wrap(updErr, "update status")
 	}
 	return nil
-}
-
-func (r *PerconaServerMySQLClusterSetReconciler) reconcileErrorCondPrimaryUnreachable(
-	ctx context.Context,
-	pcs *apiv1.PerconaServerMySQLClusterSet,
-	csErr error,
-) error {
-	if errors.Is(csErr, mysqlsh.ErrEndpointUnreachable) {
-		return pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
-			for name, c := range status.Clusters {
-				c.GlobalStatus = clusterset.StatusUnknown
-				status.Clusters[name] = c
-			}
-			meta.SetStatusCondition(&status.Conditions, metav1.Condition{
-				Type:    apiv1.ConditionPrimaryClusterUnreachable,
-				Status:  metav1.ConditionTrue,
-				Reason:  apiv1.ConditionPrimaryClusterUnreachable,
-				Message: "All primary cluster endpoints are unreachable",
-			})
-			return nil
-		})
-	}
-
-	cond := meta.FindStatusCondition(pcs.Status.Conditions, apiv1.ConditionPrimaryClusterUnreachable)
-	if cond == nil {
-		return nil
-	}
-
-	return pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
-		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionPrimaryClusterUnreachable)
-		return nil
-	})
-}
-
-// mysqlErrAccessDenied is MySQL error code 1045 (ER_ACCESS_DENIED_ERROR),
-// reported when the clusterset user authenticates with invalid credentials.
-const mysqlErrAccessDenied = "1045"
-
-// reconcileInvalidCredentialsCondition sets ClusterSetReady=False when the
-// ClusterSet manager error indicates the clusterset user's credentials were
-// rejected. Other errors leave the conditions untouched.
-func (r *PerconaServerMySQLClusterSetReconciler) reconcileInvalidCredentialsCondition(
-	ctx context.Context,
-	pcs *apiv1.PerconaServerMySQLClusterSet,
-	csErr error,
-) error {
-	if !strings.Contains(csErr.Error(), mysqlErrAccessDenied) {
-		return nil
-	}
-
-	return pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
-		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
-			Type:    apiv1.ConditionClusterSetReady,
-			Status:  metav1.ConditionFalse,
-			Reason:  "AccessDenied",
-			Message: "Invalid credentials for clusterset user",
-		})
-		return nil
-	})
 }
 
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
