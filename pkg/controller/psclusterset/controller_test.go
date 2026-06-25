@@ -784,12 +784,16 @@ func TestReconciler_reconcileErrorCondition(t *testing.T) {
 			},
 			rErr: fmt.Errorf("create cluster set: %w", mysqlsh.ErrAccessDenied),
 			asserts: func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet) {
-				cond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetErrorReconcile)
-				require.NotNil(t, cond)
-				assert.Equal(t, metav1.ConditionTrue, cond.Status)
-				assert.Equal(t, "AccessDenied", cond.Reason)
-				assert.Equal(t, "Access denied on primary, check the clusterset credentials", cond.Message)
+				errCond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetErrorReconcile)
+				require.NotNil(t, errCond)
+				assert.Equal(t, metav1.ConditionTrue, errCond.Status)
+				assert.Equal(t, "AccessDenied", errCond.Reason)
+				assert.Equal(t, "Access denied on primary, check the clusterset credentials", errCond.Message)
 				assertNodesUnknown(t, observed)
+
+				readyCond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetReady)
+				require.NotNil(t, readyCond)
+				assert.Equal(t, metav1.ConditionUnknown, readyCond.Status)
 			},
 		},
 		{
@@ -805,6 +809,10 @@ func TestReconciler_reconcileErrorCondition(t *testing.T) {
 				assert.Equal(t, "PrimaryClusterUnreachable", cond.Reason)
 				assert.Equal(t, "Primary cluster is unreachable, check the network and cluster status", cond.Message)
 				assertNodesUnknown(t, observed)
+
+				readyCond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetReady)
+				require.NotNil(t, readyCond)
+				assert.Equal(t, metav1.ConditionUnknown, readyCond.Status)
 			},
 		},
 		{
