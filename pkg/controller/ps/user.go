@@ -122,6 +122,7 @@ func (r *PerconaServerMySQLReconciler) ensureClusterUserSecret(ctx context.Conte
 
 	proxyHost := proxyHost(ctx, cr, true)
 	proxyPort := proxyServicePort(cr)
+	proxyReadOnlyPort := proxyServicePortReadOnly(cr)
 	if proxyHost != "" {
 		proxyURI := mysqlURI(clusterUser, string(clusterPass), proxyHost, proxyPort)
 
@@ -129,7 +130,6 @@ func (r *PerconaServerMySQLReconciler) ensureClusterUserSecret(ctx context.Conte
 		secret.Data["proxy-port"] = []byte(proxyPort)
 		secret.Data["proxy-uri"] = []byte(proxyURI)
 
-		proxyReadOnlyPort := proxyServicePortReadOnly(cr)
 		proxyReadOnlyURI := mysqlURI(clusterUser, string(clusterPass), proxyHost, proxyReadOnlyPort)
 		secret.Data["proxy-readonly-host"] = []byte(proxyHost)
 		secret.Data["proxy-readonly-port"] = []byte(proxyReadOnlyPort)
@@ -140,11 +140,16 @@ func (r *PerconaServerMySQLReconciler) ensureClusterUserSecret(ctx context.Conte
 	if err != nil {
 		return errors.Wrap(err, "load balancer host")
 	}
-	lbURI := mysqlURI(clusterUser, string(clusterPass), lbHost, proxyPort)
 	if lbHost != "" {
+		lbURI := mysqlURI(clusterUser, string(clusterPass), lbHost, proxyPort)
 		secret.Data["proxy-external-host"] = []byte(lbHost)
 		secret.Data["proxy-external-port"] = []byte(proxyPort)
 		secret.Data["proxy-external-uri"] = []byte(lbURI)
+
+		lbReadOnlyURI := mysqlURI(clusterUser, string(clusterPass), lbHost, proxyReadOnlyPort)
+		secret.Data["proxy-readonly-external-host"] = []byte(lbHost)
+		secret.Data["proxy-readonly-external-port"] = []byte(proxyReadOnlyPort)
+		secret.Data["proxy-readonly-external-uri"] = []byte(lbReadOnlyURI)
 	}
 
 	secret.Labels = util.SSMapMerge(cr.GlobalLabels(), mysql.MatchLabels(cr))

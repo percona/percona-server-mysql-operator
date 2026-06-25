@@ -501,11 +501,12 @@ func mysqlHost(ctx context.Context, cr *apiv1.PerconaServerMySQL, withSuffix boo
 }
 
 func mysqlPrimaryHost(ctx context.Context, cr *apiv1.PerconaServerMySQL, withSuffix bool) string {
+	primaryFQDN := mysql.PrimaryServiceName(cr) + "." + cr.Namespace
 	if !withSuffix {
-		return mysql.PrimaryServiceName(cr)
+		return primaryFQDN
 	}
 
-	return mysql.PrimaryServiceName(cr) + ".svc." + k8s.KubernetesClusterDomain(ctx, cr.Spec.ClusterServiceDNSSuffix)
+	return primaryFQDN + ".svc." + k8s.KubernetesClusterDomain(ctx, cr.Spec.ClusterServiceDNSSuffix)
 }
 
 func loadBalancerHost(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServerMySQL) (string, error) {

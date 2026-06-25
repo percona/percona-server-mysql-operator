@@ -543,8 +543,8 @@ var reservedOrchestratorConfigKeys = map[string]bool{
 	"PostIntermediateMasterFailoverProcesses": true,
 	"PostGracefulTakeoverProcesses":           true,
 	// alias/hostname detection the operator relies on to map instances to pods
-	"DetectClusterAliasQuery":    true,
-	"DetectInstanceAliasQuery":   true,
+	"DetectClusterAliasQuery":  true,
+	"DetectInstanceAliasQuery": true,
 	// operator-managed endpoints, paths and state
 	"ListenAddress":                      true,
 	"MySQLTopologyCredentialsConfigFile": true,

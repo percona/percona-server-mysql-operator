@@ -998,7 +998,7 @@ func AllSystemUsers() []SystemUser {
 func (u SystemUser) IsKnown() bool {
 	_, ok := knownSystemUsers[u]
 	return ok
-	
+
 }
 
 // MySQLSpec returns the MySQL specification from the PerconaServerMySQL custom resource.
