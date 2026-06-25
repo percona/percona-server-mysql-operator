@@ -152,7 +152,6 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 			}
 		}
 
-		log.V(1).Info("Secret data is up to date")
 		return nil
 	}
 
