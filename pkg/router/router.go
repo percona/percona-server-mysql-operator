@@ -62,6 +62,10 @@ func ServicePort() int {
 	return portReadWrite
 }
 
+func ServicePortReplicas() int {
+	return portReadOnly
+}
+
 func ServiceFQDN(cr *apiv1.PerconaServerMySQL) string {
 	return ServiceName(cr) + "." + cr.Namespace
 }

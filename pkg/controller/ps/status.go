@@ -465,6 +465,16 @@ func proxyServicePort(cr *apiv1.PerconaServerMySQL) string {
 	return ""
 }
 
+func proxyServicePortReadOnly(cr *apiv1.PerconaServerMySQL) string {
+	if cr.RouterEnabled() {
+		return strconv.Itoa(router.ServicePortReplicas())
+	}
+	if cr.HAProxyEnabled() {
+		return strconv.Itoa(haproxy.ServicePortReplicas())
+	}
+	return ""
+}
+
 func proxyHost(ctx context.Context, cr *apiv1.PerconaServerMySQL, withSuffix bool) string {
 	var svcFQDN string
 	switch {
@@ -488,6 +498,14 @@ func mysqlHost(ctx context.Context, cr *apiv1.PerconaServerMySQL, withSuffix boo
 	}
 
 	return mysql.ServiceFQDN(cr) + ".svc." + k8s.KubernetesClusterDomain(ctx, cr.Spec.ClusterServiceDNSSuffix)
+}
+
+func mysqlPrimaryHost(ctx context.Context, cr *apiv1.PerconaServerMySQL, withSuffix bool) string {
+	if !withSuffix {
+		return mysql.PrimaryServiceName(cr)
+	}
+
+	return mysql.PrimaryServiceName(cr) + ".svc." + k8s.KubernetesClusterDomain(ctx, cr.Spec.ClusterServiceDNSSuffix)
 }
 
 func loadBalancerHost(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServerMySQL) (string, error) {

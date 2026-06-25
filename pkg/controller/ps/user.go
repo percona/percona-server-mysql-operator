@@ -108,7 +108,7 @@ func (r *PerconaServerMySQLReconciler) ensureClusterUserSecret(ctx context.Conte
 		},
 	}
 
-	mysqlHost := mysqlHost(ctx, cr, true)
+	mysqlHost := mysqlPrimaryHost(ctx, cr, true)
 	mysqlPort := strconv.Itoa(mysql.DefaultPort)
 	mysqlURIStr := mysqlURI(clusterUser, string(clusterPass), mysqlHost, mysqlPort)
 
@@ -122,11 +122,18 @@ func (r *PerconaServerMySQLReconciler) ensureClusterUserSecret(ctx context.Conte
 
 	proxyHost := proxyHost(ctx, cr, true)
 	proxyPort := proxyServicePort(cr)
-	proxyURI := mysqlURI(clusterUser, string(clusterPass), proxyHost, proxyPort)
 	if proxyHost != "" {
+		proxyURI := mysqlURI(clusterUser, string(clusterPass), proxyHost, proxyPort)
+
 		secret.Data["proxy-host"] = []byte(proxyHost)
 		secret.Data["proxy-port"] = []byte(proxyPort)
 		secret.Data["proxy-uri"] = []byte(proxyURI)
+
+		proxyReadOnlyPort := proxyServicePortReadOnly(cr)
+		proxyReadOnlyURI := mysqlURI(clusterUser, string(clusterPass), proxyHost, proxyReadOnlyPort)
+		secret.Data["proxy-readonly-host"] = []byte(proxyHost)
+		secret.Data["proxy-readonly-port"] = []byte(proxyReadOnlyPort)
+		secret.Data["proxy-readonly-uri"] = []byte(proxyReadOnlyURI)
 	}
 
 	lbHost, err := loadBalancerHost(ctx, r.Client, cr)
