@@ -990,6 +990,37 @@ EOF
 		| jq '.rows[].fingerprint'
 }
 
+verify_custom_cluster_name() {
+	local expected_cluster=$1
+	local token=$2
+	shift 2
+	local service_names=("$@")
+
+	local response
+	response=$(run_curl "-H 'Authorization: Bearer ${token}'" "https://monitoring-service/v1/inventory/services")
+
+	local verified=0
+
+	for service_name in "${service_names[@]}"; do
+		local actual_cluster
+		actual_cluster=$(echo "$response" | jq -r --arg name "$service_name" '
+			.mysql[] | select(.service_name == $name) | .cluster
+		')
+
+		if [[ -z $actual_cluster || $actual_cluster == "null" ]]; then
+			echo "Service '$service_name' not found in PMM."
+			verified=1
+		elif [[ $actual_cluster != "$expected_cluster" ]]; then
+			echo "$service_name: Cluster mismatch"
+			echo "PMM reports: $actual_cluster"
+			echo "Expected:    $expected_cluster"
+			verified=1
+		fi
+	done
+
+	return $verified
+}
+
 get_mysql_pods() {
 	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/name=mysql | awk '{print $1}'
 }
@@ -1697,21 +1728,30 @@ get_telemetry_report_by_id() {
 
 	local url="https://pmm.check-dev.percona.com/graph/api/datasources/proxy/33/?query=${encoded_sql}&database=telemetryd"
 
-	local retry=0 resp rows
+	local retry=0 resp body http_code rows curl_exit
 
 	while :; do
-		resp="$(curl -fsS -k -H "Authorization: Bearer ${token}" "$url" 2>&1)"
-		rows="$(echo "$resp" | jq '.rows')"
+		curl_exit=0
+		resp="$(curl -sS -k -w $'\n%{http_code}' -H "Authorization: Bearer ${token}" "$url" 2>&1)" || curl_exit=$?
+		http_code="$(printf '%s' "$resp" | tail -n1)"
+		body="$(printf '%s' "$resp" | sed '$d')"
+		rows=""
+		if [[ $curl_exit -eq 0 ]]; then
+			rows="$(echo "$body" | jq '.rows' 2>/dev/null)" || rows=""
+		fi
 
 		if [[ $rows =~ ^[1-9][0-9]*$ ]]; then
 			echo "Report data found:"
-			echo "$resp" | jq '.data'
+			echo "$body" | jq '.data'
 			return 0
 		fi
 
 		((retry++))
 		if ((retry >= 10)); then
 			echo "Max retry count $retry reached. Report data was not found!"
+			echo "Last curl exit: ${curl_exit}"
+			echo "Last HTTP status: ${http_code}"
+			echo "Last response: ${body}"
 			return 1
 		fi
 

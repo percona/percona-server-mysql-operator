@@ -101,7 +101,7 @@ func checkReadinessAsync(ctx context.Context) error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	monitorPass, err := getSecret(string(apiv1.UserMonitor))
+	monitorPass, err := getSecret(apiv1.UserMonitor)
 	if err != nil {
 		return errors.Wrapf(err, "get %s password", apiv1.UserMonitor)
 	}
@@ -147,7 +147,7 @@ func checkReadinessGR(ctx context.Context) error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	monitorPass, err := getSecret(string(apiv1.UserMonitor))
+	monitorPass, err := getSecret(apiv1.UserMonitor)
 	if err != nil {
 		return errors.Wrapf(err, "get %s password", apiv1.UserMonitor)
 	}
@@ -186,7 +186,7 @@ func checkLivenessAsync(ctx context.Context) error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	monitorPass, err := getSecret(string(apiv1.UserMonitor))
+	monitorPass, err := getSecret(apiv1.UserMonitor)
 	if err != nil {
 		return errors.Wrapf(err, "get %s password", apiv1.UserMonitor)
 	}
@@ -211,7 +211,7 @@ func checkLivenessGR(ctx context.Context) error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	monitorPass, err := getSecret(string(apiv1.UserMonitor))
+	monitorPass, err := getSecret(apiv1.UserMonitor)
 	if err != nil {
 		return errors.Wrapf(err, "get %s password", apiv1.UserMonitor)
 	}
@@ -259,7 +259,7 @@ func checkReplication(ctx context.Context) error {
 		return errors.Wrap(err, "get pod IP")
 	}
 
-	monitorPass, err := getSecret(string(apiv1.UserMonitor))
+	monitorPass, err := getSecret(apiv1.UserMonitor)
 	if err != nil {
 		return errors.Wrapf(err, "get %s password", apiv1.UserMonitor)
 	}
@@ -288,8 +288,11 @@ func checkReplication(ctx context.Context) error {
 	return nil
 }
 
-func getSecret(username string) (string, error) {
-	path := filepath.Join(naming.CredsMountPath, username)
+func getSecret(username apiv1.SystemUser) (string, error) {
+	if !username.IsKnown() {
+		return "", errors.Errorf("unknown system user %q", string(username))
+	}
+	path := filepath.Join(naming.CredsMountPath, string(username))
 	sBytes, err := os.ReadFile(path)
 	if err != nil {
 		return "", errors.Wrapf(err, "read %s", path)

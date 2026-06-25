@@ -34,6 +34,7 @@ import (
 	"golang.org/x/text/language"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -64,10 +65,12 @@ const (
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && self.updateStrategy == 'SmartUpdate') || self.orchestrator.enabled",message="Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.proxy.router != null && has(self.proxy.router.enabled) && self.proxy.router.enabled && self.proxy.haproxy != null && has(self.proxy.haproxy.enabled) && self.proxy.haproxy.enabled)",message="Invalid configuration: MySQL Router and HAProxy can't be enabled at the same time"
 type PerconaServerMySQLSpec struct {
-	Metadata               *Metadata                            `json:"metadata,omitempty"`
-	CRVersion              string                               `json:"crVersion,omitempty"`
-	Pause                  bool                                 `json:"pause,omitempty"`
+	Metadata  *Metadata `json:"metadata,omitempty"`
+	CRVersion string    `json:"crVersion,omitempty"`
+	Pause     bool      `json:"pause,omitempty"`
+	// Deprecated: use `.spec.storageScaling.enableVolumeScaling` instead.
 	VolumeExpansionEnabled bool                                 `json:"enableVolumeExpansion,omitempty"`
+	StorageScaling         *StorageScalingSpec                  `json:"storageScaling,omitempty"`
 	SecretsName            string                               `json:"secretsName,omitempty"`
 	SSLSecretName          string                               `json:"sslSecretName,omitempty"`
 	Unsafe                 UnsafeFlags                          `json:"unsafeFlags,omitempty"`
@@ -86,6 +89,101 @@ type PerconaServerMySQLSpec struct {
 	// Deprecated: not supported since v0.12.0. Use initContainer instead
 	InitImage     string            `json:"initImage,omitempty"`
 	InitContainer InitContainerSpec `json:"initContainer,omitempty"`
+}
+
+// StorageAutoscaling returns the storage autoscaling configuration, if any.
+func (spec *PerconaServerMySQLSpec) StorageAutoscaling() *AutoscalingSpec {
+	if spec.StorageScaling == nil {
+		return nil
+	}
+	return spec.StorageScaling.Autoscaling
+}
+
+// IsVolumeExpansionEnabled returns whether volume expansion is enabled.
+func (spec *PerconaServerMySQLSpec) IsVolumeExpansionEnabled() bool {
+	if spec.StorageScaling != nil {
+		return spec.StorageScaling.EnableVolumeScaling
+	}
+	return spec.VolumeExpansionEnabled
+}
+
+// validateStorageAutoscaling validates the storage autoscaling configuration
+func (cr *PerconaServerMySQL) validateStorageAutoscaling() error {
+	spec := cr.Spec.StorageAutoscaling()
+	if spec == nil || !spec.Enabled {
+		return nil
+	}
+
+	if !spec.MaxSize.IsZero() {
+		minSize := resource.MustParse("1Gi")
+		if spec.MaxSize.Cmp(minSize) < 0 {
+			return errors.Errorf("maxSize must be at least 1Gi")
+		}
+	}
+
+	return nil
+}
+
+// setStorageAutoscalingDefaults sets default values for storage autoscaling configuration
+func (cr *PerconaServerMySQL) setStorageAutoscalingDefaults() {
+	spec := cr.Spec.StorageAutoscaling()
+	if spec == nil {
+		return
+	}
+
+	if spec.TriggerThresholdPercent == 0 {
+		spec.TriggerThresholdPercent = 80
+	}
+
+	if spec.GrowthStep.IsZero() {
+		spec.GrowthStep = resource.MustParse("2Gi")
+	}
+}
+
+// StorageScalingSpec defines the configuration for storage scaling behavior
+// +kubebuilder:validation:XValidation:rule="!has(self.autoscaling) || !has(self.autoscaling.enabled) || !self.autoscaling.enabled || self.enableVolumeScaling",message="autoscaling cannot be enabled when enableVolumeScaling is disabled"
+type StorageScalingSpec struct {
+	// EnableVolumeScaling allows volume expansion/resizing operations
+	// When disabled, PVC sizes will not be modified even if storage changes in the spec
+	EnableVolumeScaling bool `json:"enableVolumeScaling,omitempty"`
+
+	// Autoscaling configures automatic storage expansion based on disk usage
+	Autoscaling *AutoscalingSpec `json:"autoscaling,omitempty"`
+
+	VolumeExternalAutoscaling bool `json:"enableExternalAutoscaling,omitempty"`
+}
+
+// AutoscalingSpec defines the configuration for automatic storage expansion
+type AutoscalingSpec struct {
+	// Enabled enables storage autoscaling
+	Enabled bool `json:"enabled,omitempty"`
+
+	// TriggerThresholdPercent is the percentage of disk usage that triggers automatic storage expansion
+	// +kubebuilder:validation:Minimum=50
+	// +kubebuilder:validation:Maximum=95
+	// +kubebuilder:default=80
+	TriggerThresholdPercent int `json:"triggerThresholdPercent,omitempty"`
+
+	// GrowthStep is the amount to add to storage when the threshold is exceeded (e.g., "2Gi")
+	// +kubebuilder:validation:XValidation:rule="isQuantity(self)",message="growthStep must be a valid Kubernetes quantity (e.g., '2Gi')"
+	// +kubebuilder:validation:XValidation:rule="sign(quantity(self)) == 1",message="growthStep must be a positive quantity"
+	// +kubebuilder:default="2Gi"
+	GrowthStep resource.Quantity `json:"growthStep,omitempty"`
+
+	// MaxSize is the maximum size for PVCs (e.g., "100Gi")
+	// If set, autoscaling will not increase storage beyond this limit
+	// +kubebuilder:validation:XValidation:rule="isQuantity(self)",message="maxSize must be a valid Kubernetes quantity (e.g., '2Gi')"
+	// +kubebuilder:validation:XValidation:rule="sign(quantity(self)) == 1",message="maxSize must be a positive quantity"
+	// +kubebuilder:validation:XValidation:rule="quantity(self).compareTo(quantity('1Gi')) >= 0",message="maxSize should be at least 1Gi"
+	MaxSize resource.Quantity `json:"maxSize,omitempty"`
+}
+
+// StorageAutoscalingStatus tracks the autoscaling state for a specific PVC
+type StorageAutoscalingStatus struct {
+	CurrentSize    string      `json:"currentSize,omitempty"`
+	LastResizeTime metav1.Time `json:"lastResizeTime,omitempty"`
+	ResizeCount    int32       `json:"resizeCount,omitempty"`
+	LastError      string      `json:"lastError,omitempty"`
 }
 
 type InitContainerSpec struct {
@@ -309,6 +407,7 @@ type PMMSpec struct {
 	Image                    string                      `json:"image,omitempty"`
 	MySQLParams              string                      `json:"mysqlParams,omitempty"`
 	ServerHost               string                      `json:"serverHost,omitempty"`
+	CustomClusterName        string                      `json:"customClusterName,omitempty"`
 	Resources                corev1.ResourceRequirements `json:"resources,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext     `json:"containerSecurityContext,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy           `json:"imagePullPolicy,omitempty"`
@@ -789,8 +888,9 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	ToolkitVersion string             `json:"toolkitVersion,omitempty"`
 	Conditions     []metav1.Condition `json:"conditions,omitempty"`
 	// +optional
-	Host              string `json:"host"`
-	InnoDBClusterName string `json:"innodbClusterName,omitempty"`
+	Host               string                              `json:"host"`
+	InnoDBClusterName  string                              `json:"innodbClusterName,omitempty"`
+	StorageAutoscaling map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
 }
 
 func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {
@@ -847,6 +947,46 @@ const (
 	UserXtraBackup     SystemUser = "xtrabackup"
 	UserClusterSet     SystemUser = "clusterset"
 )
+
+// systemUsers is the canonical, ordered list of every SystemUser value.
+// It is the single source of truth used to build knownSystemUsers (path
+// validation) and to derive the password-managed subset returned by
+// secret.SystemUsers.
+var systemUsers = []SystemUser{
+	UserHeartbeat,
+	UserMonitor,
+	UserOperator,
+	UserOrchestrator,
+	UserPMMServerToken,
+	UserReplication,
+	UserRoot,
+	UserXtraBackup,
+	UserClusterSet,
+}
+
+// knownSystemUsers is the closed set of SystemUser values. Callers that join
+// SystemUser into a filesystem path (e.g. naming.CredsMountPath/<user>) must
+// validate against this set so an unexpected value cannot traverse outside.
+var knownSystemUsers = func() map[SystemUser]struct{} {
+	m := make(map[SystemUser]struct{}, len(systemUsers))
+	for _, u := range systemUsers {
+		m[u] = struct{}{}
+	}
+	return m
+}()
+
+// AllSystemUsers returns a copy of the canonical SystemUser list.
+func AllSystemUsers() []SystemUser {
+	out := make([]SystemUser, len(systemUsers))
+	copy(out, systemUsers)
+	return out
+}
+
+func (u SystemUser) IsKnown() bool {
+	_, ok := knownSystemUsers[u]
+	return ok
+	
+}
 
 // MySQLSpec returns the MySQL specification from the PerconaServerMySQL custom resource.
 func (cr *PerconaServerMySQL) MySQLSpec() *MySQLSpec {
@@ -928,6 +1068,11 @@ func (cr *PerconaServerMySQL) CheckNSetDefaults(_ context.Context, serverVersion
 	if valid := cr.Spec.MySQL.ClusterType.isValid(); !valid {
 		return errors.Errorf("%s is not a valid clusterType, valid options are %s and %s", cr.Spec.MySQL.ClusterType, ClusterTypeGR, ClusterTypeAsync)
 	}
+
+	if err := cr.validateStorageAutoscaling(); err != nil {
+		return errors.Wrap(err, "validate storage autoscaling")
+	}
+	cr.setStorageAutoscalingDefaults()
 
 	if cr.Spec.Backup == nil {
 		cr.Spec.Backup = new(BackupSpec)
@@ -1422,6 +1567,14 @@ func (cr *PerconaServerMySQL) HAProxyEnabled() bool {
 	return cr.Spec.Proxy.HAProxy != nil && cr.Spec.Proxy.HAProxy.Enabled
 }
 
+// PiTREnabled reports whether point-in-time recovery is fully configured:
+// a backup spec exists, PiTR is enabled, and a binlog server is defined.
+func (cr *PerconaServerMySQL) PiTREnabled() bool {
+	return cr.Spec.Backup != nil &&
+		cr.Spec.Backup.PiTR.Enabled &&
+		cr.Spec.Backup.PiTR.BinlogServer != nil
+}
+
 // OrchestratorEnabled determines if the orchestrator is enabled,
 // considering the MySQL configuration.
 func (cr *PerconaServerMySQL) OrchestratorEnabled() bool {
@@ -1540,4 +1693,8 @@ func (cr *PerconaServerMySQL) BootstrapMode() BootstrapMode {
 		return BootstrapModeAuto
 	}
 	return *cr.Spec.MySQL.Bootstrap.Mode
+}
+
+func (cr *PerconaServerMySQL) IsOrchestratorEnabled() bool {
+	return cr.Spec.MySQL.IsAsync() && cr.Spec.Orchestrator.Enabled
 }

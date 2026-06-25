@@ -143,7 +143,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		status.HAProxy = haproxyStatus
 
 		binlogServerStatus := apiv1.StatefulAppStatus{}
-		if cr.Spec.Backup.PiTR.Enabled && cr.Spec.Backup.PiTR.BinlogServer != nil {
+		if cr.PiTREnabled() {
 			binlogServerStatus, err = r.appStatus(ctx, cr, binlogserver.Name(cr), 1, binlogserver.MatchLabels(cr), status.BinlogServer.Version)
 			if err != nil {
 				return errors.Wrap(err, "get binlog server status")
@@ -168,7 +168,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 			}
 		}
 
-		if cr.Spec.Backup.PiTR.Enabled && cr.Spec.Backup.PiTR.BinlogServer != nil && status.BinlogServer.State != apiv1.StateReady {
+		if cr.PiTREnabled() && status.BinlogServer.State != apiv1.StateReady {
 			status.State = apiv1.StateInitializing
 		}
 
