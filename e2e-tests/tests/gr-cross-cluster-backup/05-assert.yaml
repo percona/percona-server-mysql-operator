@@ -15,6 +15,10 @@ metadata:
   name: gr-cross-cluster-backup-dc2
 status:
   conditions:
+  - message: Awaiting external bootstrap
+    reason: ManualBootstrapRequested
+    status: "True"
+    type: AwaitingExternalBootstrap
   - reason: Initializing
     status: "True"
     type: Initializing
@@ -25,10 +29,6 @@ status:
     reason: InnoDBClusterBootstrapped
     status: "False"
     type: InnoDBClusterBootstrapped
-  - message: Awaiting external bootstrap
-    reason: ManualBootstrapRequested
-    status: "True"
-    type: AwaitingExternalBootstrap
   mysql:
     state: initializing
   state: initializing
