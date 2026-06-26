@@ -21,6 +21,7 @@ spec:
 #    proxy: false
 #    proxySize: false
 #  pause: false
+#  clusterServiceDNSSuffix: cluster.local
   crVersion: 1.2.0
 #  enableVolumeExpansion: false
 #  storageScaling:
@@ -666,6 +667,7 @@ spec:
     image: perconalab/pmm-client:3-dev-latest
     imagePullPolicy: Always
     serverHost: monitoring-service
+#    customClusterName: cluster1-custom
 #    mysqlParams: PMM_ADMIN_CUSTOM_PARAMS
 #    containerSecurityContext:
 #      privileged: false

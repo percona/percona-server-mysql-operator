@@ -1,0 +1,61 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 420
+resourceRefs:
+- kind: PerconaServerMySQL
+  apiVersion: ps.percona.com/v1
+  name: gr-cross-cluster-backup-dc1
+  ref: dc1
+- kind: PerconaServerMySQL
+  apiVersion: ps.percona.com/v1
+  name: gr-cross-cluster-backup-dc2
+  ref: dc2
+assertAll:
+- celExpr: dc1.status.conditions.exists(c, c.type == "ClusterSetReplicationRunning" && c.status == "True")
+  message: "dc1 should have ClusterSetReplicationRunning=True"
+- celExpr: "!dc2.status.conditions.exists(c, c.type == \"ClusterSetReplicationRunning\")"
+  message: "dc2 should not have ClusterSetReplicationRunning condition"
+
+commands:
+  - script: |-
+      set -o errexit
+      set -o pipefail
+      set -o xtrace
+
+      source ../../functions
+
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
+
+      status=$(get_clusterset_status "-h gr-cross-cluster-backup-dc1-mysql-primary" "${mysql_user}")
+
+      echo "${status}" | jq .
+      echo "${status}" | jq -e '
+          .status == "HEALTHY" and
+          .primaryCluster == "grcrossclusterbackupdc2" and
+          .clusters.grcrossclusterbackupdc1.clusterRole == "REPLICA" and
+          .clusters.grcrossclusterbackupdc1.globalStatus == "OK" and
+          .clusters.grcrossclusterbackupdc2.clusterRole == "PRIMARY" and
+          .clusters.grcrossclusterbackupdc2.globalStatus == "OK"
+      '
+    timeout: 420
+---
+kind: PerconaServerMySQLClusterSet
+apiVersion: ps.percona.com/v1
+metadata:
+  name: gr-cross-cluster
+status:
+  conditions:
+  - type: MySQLShellRunnerReady
+    status: "True"
+  - type: ClusterSetBootstrapped
+    status: "True"
+  - type: Ready
+    status: "True"
+  clusters:
+    grcrossclusterbackupdc1:
+      clusterRole: REPLICA
+      globalStatus: OK
+    grcrossclusterbackupdc2:
+      clusterRole: PRIMARY
+      globalStatus: OK
+  primaryCluster: grcrossclusterbackupdc2

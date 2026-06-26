@@ -1,0 +1,73 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 600
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-cross-cluster-backup-dc1-mysql
+status:
+  observedGeneration: 1
+  replicas: 3
+  readyReplicas: 3
+  currentReplicas: 3
+  updatedReplicas: 3
+  collisionCount: 0
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-cross-cluster-backup-dc1
+status:
+  conditions:
+  - reason: Initializing
+    status: "False"
+    type: Initializing
+  - reason: Ready
+    status: "True"
+    type: Ready
+  - message: InnoDB cluster successfully bootstrapped with 3 nodes
+    reason: InnoDBClusterBootstrapped
+    status: "True"
+    type: InnoDBClusterBootstrapped
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  haproxy:
+    ready: 1
+    size: 1
+    state: ready
+  state: ready
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: gr-cross-cluster-backup-dc2-mysql
+status:
+  observedGeneration: 1
+  replicas: 1
+  currentReplicas: 1
+  updatedReplicas: 1
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-cross-cluster-backup-dc2
+spec:
+  mysql:
+    bootstrap:
+      mode: manual
+status:
+  conditions:
+  - message: Awaiting external bootstrap
+    reason: ManualBootstrapRequested
+    status: "True"
+    type: AwaitingExternalBootstrap
+  - reason: Initializing
+    status: "True"
+    type: Initializing
+  - reason: Ready
+    status: "False"
+    type: Ready
+  state: initializing

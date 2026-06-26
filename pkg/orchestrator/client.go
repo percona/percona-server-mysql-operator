@@ -85,7 +85,8 @@ func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoin
 	c := []string{"sh", "-c", curl}
 	err := cliCmd.Exec(ctx, pod, AppName, c, nil, outb, errb, false)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unable to upgrade connection: container not found") {
+		if strings.Contains(strings.ToLower(err.Error()), "unable to upgrade connection: container not found") ||
+			strings.Contains(err.Error(), "failed to exec in container") {
 			return ErrContainerNotFound
 		}
 		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", c, outb, errb)

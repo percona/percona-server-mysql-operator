@@ -6581,6 +6581,8 @@ spec:
                       type: object
                     type: object
                 type: object
+              clusterServiceDNSSuffix:
+                type: string
               crVersion:
                 type: string
               enableVolumeExpansion:
@@ -11070,6 +11072,8 @@ spec:
                             type: string
                         type: object
                     type: object
+                  customClusterName:
+                    type: string
                   enabled:
                     type: boolean
                   image:

@@ -98,6 +98,9 @@ func GetSourceConnectRetry() (uint32, error) {
 }
 
 func GetSecret(username apiv1.SystemUser) (string, error) {
+	if !username.IsKnown() {
+		return "", errors.Errorf("unknown system user %q", string(username))
+	}
 	path := filepath.Join(naming.CredsMountPath, string(username))
 	sBytes, err := os.ReadFile(path)
 	if err != nil {
