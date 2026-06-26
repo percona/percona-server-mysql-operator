@@ -1,12 +1,15 @@
 package psclusterset
 
 import (
+	"fmt"
 	"testing"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
+	csmanager "github.com/percona/percona-server-mysql-operator/pkg/clusterset/manager"
 	psmock "github.com/percona/percona-server-mysql-operator/pkg/controller/psclusterset/mock"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/stretchr/testify/assert"
@@ -698,6 +701,183 @@ func TestReconciler_reconcileReplicas(t *testing.T) {
 			err := r.reconcileReplicas(t.Context(), clusterSet)
 			require.NoError(t, err)
 			tc.asserts(t, cl)
+		})
+	}
+}
+
+func TestReconciler_reconcileErrorCondition(t *testing.T) {
+	// clusterSetWithStatus returns a copy of baseClusterSet with both member
+	// clusters reporting a healthy global status, so tests can assert when the
+	// reconciler marks them UNKNOWN.
+	clusterSetWithStatus := func() *apiv1.PerconaServerMySQLClusterSet {
+		pcs := baseClusterSet.DeepCopy()
+		pcs.Status.Clusters = apiv1.ClusterSetStatus{
+			"dc1": {
+				ClusterRole:  clusterset.ClusterRolePrimary,
+				GlobalStatus: "OK",
+			},
+			"dc2": {
+				ClusterRole:  clusterset.ClusterRoleReplica,
+				GlobalStatus: "OK",
+			},
+		}
+		return pcs
+	}
+
+	assertNodesUnknown := func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet) {
+		t.Helper()
+		require.NotEmpty(t, observed.Status.Clusters)
+		for name, c := range observed.Status.Clusters {
+			assert.Equal(t, clusterset.StatusUnknown, c.GlobalStatus, "cluster %s should be marked unknown", name)
+		}
+	}
+
+	testCases := []struct {
+		desc       string
+		clusterSet func() *apiv1.PerconaServerMySQLClusterSet
+		rErr       error
+		asserts    func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet)
+	}{
+		{
+			desc: "nil error removes the error condition",
+			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
+				pcs := baseClusterSet.DeepCopy()
+				pcs.Status.Conditions = []metav1.Condition{
+					{
+						Type:    apiv1.ConditionClusterSetErrorReconcile,
+						Status:  metav1.ConditionTrue,
+						Reason:  apiv1.ConditionClusterSetErrorReconcile,
+						Message: "some earlier failure",
+					},
+				}
+				return pcs
+			},
+			rErr: nil,
+			asserts: func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet) {
+				cond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetErrorReconcile)
+				assert.Nil(t, cond)
+			},
+		},
+		{
+			desc: "generic error sets the error condition",
+			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
+				return clusterSetWithStatus()
+			},
+			rErr: errors.New("reconcile replicas failed"),
+			asserts: func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet) {
+				cond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetErrorReconcile)
+				require.NotNil(t, cond)
+				assert.Equal(t, metav1.ConditionTrue, cond.Status)
+				assert.Equal(t, apiv1.ConditionClusterSetErrorReconcile, cond.Reason)
+				assert.Equal(t, "Error during reconcile: reconcile replicas failed", cond.Message)
+
+				// node statuses are untouched for unknown failures
+				for _, c := range observed.Status.Clusters {
+					assert.Equal(t, "OK", c.GlobalStatus)
+				}
+			},
+		},
+		{
+			desc: "access denied error marks nodes unknown",
+			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
+				return clusterSetWithStatus()
+			},
+			rErr: fmt.Errorf("%w: %w", errGetClusterSetManager, csmanager.NewAccessDeniedError()),
+			asserts: func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet) {
+				errCond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetErrorReconcile)
+				require.NotNil(t, errCond)
+				assert.Equal(t, metav1.ConditionTrue, errCond.Status)
+				assert.Equal(t, "AccessDenied", errCond.Reason)
+				assert.Equal(t, "Invalid credentials for the primary cluster", errCond.Message)
+				assertNodesUnknown(t, observed)
+
+				readyCond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetReady)
+				require.NotNil(t, readyCond)
+				assert.Equal(t, metav1.ConditionUnknown, readyCond.Status)
+				assert.Equal(t, "AccessDenied", readyCond.Reason)
+				assert.Equal(t, "Invalid credentials for the primary cluster", readyCond.Message)
+			},
+		},
+		{
+			desc: "endpoint unreachable error marks nodes unknown",
+			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
+				return clusterSetWithStatus()
+			},
+			rErr: csmanager.NewUnreachableError(),
+			asserts: func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet) {
+				cond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetErrorReconcile)
+				require.NotNil(t, cond)
+				assert.Equal(t, metav1.ConditionTrue, cond.Status)
+				assert.Equal(t, "PrimaryUnreachable", cond.Reason)
+				assert.Equal(t, "No reachable endpoint for the primary cluster", cond.Message)
+				assertNodesUnknown(t, observed)
+
+				readyCond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetReady)
+				require.NotNil(t, readyCond)
+				assert.Equal(t, metav1.ConditionUnknown, readyCond.Status)
+				assert.Equal(t, "PrimaryUnreachable", readyCond.Reason)
+				assert.Equal(t, "No reachable endpoint for the primary cluster", readyCond.Message)
+			},
+		},
+		{
+			desc: "cluster set manager error marks ready unknown",
+			clusterSet: func() *apiv1.PerconaServerMySQLClusterSet {
+				pcs := clusterSetWithStatus()
+				pcs.Status.Conditions = []metav1.Condition{
+					{
+						Type:   apiv1.ConditionClusterSetReady,
+						Status: metav1.ConditionTrue,
+						Reason: "ClusterSetHealthy",
+					},
+				}
+				return pcs
+			},
+			rErr: fmt.Errorf("%w: %w", errGetClusterSetManager, csmanager.NewGenericError("connection refused")),
+			asserts: func(t *testing.T, observed *apiv1.PerconaServerMySQLClusterSet) {
+				errCond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetErrorReconcile)
+				require.NotNil(t, errCond)
+				assert.Equal(t, metav1.ConditionTrue, errCond.Status)
+				assert.Equal(t, "ClusterSetManagerError", errCond.Reason)
+				assert.Equal(t, "connection refused", errCond.Message)
+
+				readyCond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetReady)
+				require.NotNil(t, readyCond)
+				assert.Equal(t, metav1.ConditionUnknown, readyCond.Status)
+				assert.Equal(t, "ClusterSetManagerError", readyCond.Reason)
+				assert.Equal(t, "connection refused", readyCond.Message)
+				assertNodesUnknown(t, observed)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			if err := clientgoscheme.AddToScheme(scheme); err != nil {
+				t.Fatal(err, "failed to add client-go scheme")
+			}
+			if err := apiv1.AddToScheme(scheme); err != nil {
+				t.Fatal(err, "failed to add apis scheme")
+			}
+
+			clusterSet := tc.clusterSet()
+			cl := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(clusterSet).
+				WithStatusSubresource(clusterSet).
+				Build()
+
+			r := &PerconaServerMySQLClusterSetReconciler{
+				Client: cl,
+				Scheme: scheme,
+			}
+			err := r.reconcileErrorCondition(t.Context(), clusterSet, tc.rErr)
+			require.NoError(t, err)
+
+			observed := &apiv1.PerconaServerMySQLClusterSet{}
+			err = cl.Get(t.Context(), client.ObjectKeyFromObject(baseClusterSet), observed)
+			require.NoError(t, err)
+			tc.asserts(t, observed)
 		})
 	}
 }

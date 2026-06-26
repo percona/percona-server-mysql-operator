@@ -214,7 +214,6 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 				r.Recorder.Event(cr, corev1.EventTypeWarning, "FullClusterCrashDetected", "Full cluster crash detected")
 			}
 
-			meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionAwaitingExternalBootstrap)
 			if ok, err := r.isAwaitingExtBootstrap(ctx, cr); err != nil {
 				return errors.Wrap(err, "check if awaiting external bootstrap")
 			} else if ok {
@@ -224,6 +223,8 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 					Reason:  "ManualBootstrapRequested",
 					Message: "Awaiting external bootstrap",
 				})
+			} else {
+				meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionAwaitingExternalBootstrap)
 			}
 		}
 
