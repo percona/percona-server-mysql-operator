@@ -1,0 +1,14 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 30
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: 03-check-users
+data:
+  alice_connect: "success"
+  bob_connect: "success"
+  myapp_db: "success"
+  alice_grants: "success"
+  bob_grants: "success"

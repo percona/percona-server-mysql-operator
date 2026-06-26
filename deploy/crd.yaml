@@ -14418,6 +14418,37 @@ spec:
                   versionServiceEndpoint:
                     type: string
                 type: object
+              users:
+                items:
+                  properties:
+                    dbs:
+                      items:
+                        type: string
+                      type: array
+                    grants:
+                      items:
+                        type: string
+                      type: array
+                    hosts:
+                      items:
+                        type: string
+                      type: array
+                    name:
+                      type: string
+                    passwordSecretRef:
+                      properties:
+                        key:
+                          default: password
+                          type: string
+                        name:
+                          type: string
+                      required:
+                      - name
+                      type: object
+                  required:
+                  - name
+                  type: object
+                type: array
             type: object
             x-kubernetes-validations:
             - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
