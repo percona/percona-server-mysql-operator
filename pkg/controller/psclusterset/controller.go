@@ -93,12 +93,14 @@ func enqueueFromCredentialsSecret(c client.Client) handler.EventHandler {
 		if !ok {
 			return nil
 		}
-		list := &apiv1.PerconaServerMySQLList{}
+
 		log := logf.FromContext(ctx)
+
+		list := &apiv1.PerconaServerMySQLClusterSetList{}
 		if err := c.List(ctx, list, client.InNamespace(secret.Namespace), client.MatchingFields{
 			fieldSecretsName: secret.Name,
 		}); err != nil {
-			log.Error(err, "failed to list clusters for secret", "secret", secret.Name)
+			log.Error(err, "failed to list ps-clustersets with matching spec.credentialsSecret.name", "secret", secret.Name)
 			return nil
 		}
 
