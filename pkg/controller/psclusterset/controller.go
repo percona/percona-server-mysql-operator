@@ -243,8 +243,8 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileErrorCondition(
 
 		errCond := metav1.Condition{
 			Type:    apiv1.ConditionClusterSetErrorReconcile,
+			Reason:  apiv1.ConditionClusterSetErrorReconcile,
 			Status:  metav1.ConditionTrue,
-			Reason:  "ReconcileError",
 			Message: fmt.Sprintf("Error during reconcile: %s", rErr.Error()),
 		}
 

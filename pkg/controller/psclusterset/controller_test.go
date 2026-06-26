@@ -746,7 +746,7 @@ func TestReconciler_reconcileErrorCondition(t *testing.T) {
 					{
 						Type:    apiv1.ConditionClusterSetErrorReconcile,
 						Status:  metav1.ConditionTrue,
-						Reason:  "ReconcileError",
+						Reason:  apiv1.ConditionClusterSetErrorReconcile,
 						Message: "some earlier failure",
 					},
 				}
@@ -768,7 +768,7 @@ func TestReconciler_reconcileErrorCondition(t *testing.T) {
 				cond := meta.FindStatusCondition(observed.Status.Conditions, apiv1.ConditionClusterSetErrorReconcile)
 				require.NotNil(t, cond)
 				assert.Equal(t, metav1.ConditionTrue, cond.Status)
-				assert.Equal(t, "ReconcileError", cond.Reason)
+				assert.Equal(t, apiv1.ConditionClusterSetErrorReconcile, cond.Reason)
 				assert.Equal(t, "Error during reconcile: reconcile replicas failed", cond.Message)
 
 				// node statuses are untouched for unknown failures
