@@ -203,7 +203,7 @@ func (m *mysqlsh) getGTIDPurged(ctx context.Context) (string, error) {
 }
 
 func (m *mysqlsh) setGroupSeeds(ctx context.Context, seeds string) error {
-	if !seedsRegexp.MatchString(seeds) {
+	if seeds != "" && !seedsRegexp.MatchString(seeds) {
 		return errors.Errorf("invalid group_replication_group_seeds value %q", seeds)
 	}
 	sql := fmt.Sprintf("SET PERSIST group_replication_group_seeds = '%s'", seeds)
