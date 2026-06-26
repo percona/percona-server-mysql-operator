@@ -1101,6 +1101,10 @@ func (c *fakeClient) REST() restclient.Interface {
 	return nil
 }
 
+func (c *fakeClient) Host() string {
+	return ""
+}
+
 // fakeClientScript is an object which contains an info about executed command.
 // cmd, stdin values are compared with the corresponding values in the Exec method.
 // stdin, stdout values are written to the corresponding streams in the Exec method.

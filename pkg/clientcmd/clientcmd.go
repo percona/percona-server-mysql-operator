@@ -20,6 +20,7 @@ type client struct {
 type Client interface {
 	Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error
 	REST() restclient.Interface
+	Host() string
 }
 
 func NewClient() (Client, error) {
@@ -91,4 +92,11 @@ func (c *client) Exec(
 
 func (c *client) REST() restclient.Interface {
 	return c.client.RESTClient()
+}
+
+func (c *client) Host() string {
+	if c.restconfig == nil {
+		return ""
+	}
+	return c.restconfig.Host
 }

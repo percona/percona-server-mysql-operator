@@ -37,6 +37,10 @@ func (m *mockExecClient) REST() restclient.Interface {
 	return nil
 }
 
+func (m *mockExecClient) Host() string {
+	return ""
+}
+
 func autoscalingCR(t *testing.T) *apiv1.PerconaServerMySQL {
 	t.Helper()
 
