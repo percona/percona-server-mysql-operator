@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -444,31 +445,86 @@ func (r *PerconaServerMySQLReconciler) allLoadBalancersReady(ctx context.Context
 	return true, nil
 }
 
-func appHost(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServerMySQL) (string, error) {
-	var serviceName string
-
+func proxyServiceName(cr *apiv1.PerconaServerMySQL) string {
 	if cr.RouterEnabled() {
-		serviceName = router.ServiceName(cr)
-		if cr.Spec.Proxy.Router.Expose.Type != corev1.ServiceTypeLoadBalancer {
-			return serviceName + "." + cr.GetNamespace(), nil
-		}
+		return router.ServiceName(cr)
 	}
-
 	if cr.HAProxyEnabled() {
-		serviceName = haproxy.ServiceName(cr)
-		if cr.Spec.Proxy.HAProxy.Expose.Type != corev1.ServiceTypeLoadBalancer {
-			return serviceName + "." + cr.GetNamespace(), nil
+		return haproxy.ServiceName(cr)
+	}
+	return ""
+}
+
+func proxyServicePort(cr *apiv1.PerconaServerMySQL) string {
+	if cr.RouterEnabled() {
+		return strconv.Itoa(router.ServicePort())
+	}
+	if cr.HAProxyEnabled() {
+		return strconv.Itoa(haproxy.ServicePort())
+	}
+	return ""
+}
+
+func proxyServicePortReadOnly(cr *apiv1.PerconaServerMySQL) string {
+	if cr.RouterEnabled() {
+		return strconv.Itoa(router.ServicePortReplicas())
+	}
+	if cr.HAProxyEnabled() {
+		return strconv.Itoa(haproxy.ServicePortReplicas())
+	}
+	return ""
+}
+
+func proxyHost(ctx context.Context, cr *apiv1.PerconaServerMySQL, withSuffix bool) string {
+	var svcFQDN string
+	switch {
+	case cr.RouterEnabled():
+		svcFQDN = router.ServiceFQDN(cr)
+	case cr.HAProxyEnabled():
+		svcFQDN = haproxy.ServiceFQDN(cr)
+	default:
+		return ""
+	}
+
+	if !withSuffix {
+		return svcFQDN
+	}
+	return svcFQDN + ".svc." + k8s.KubernetesClusterDomain(ctx, cr.Spec.ClusterServiceDNSSuffix)
+}
+
+func mysqlHost(ctx context.Context, cr *apiv1.PerconaServerMySQL, withSuffix bool) string {
+	if !withSuffix {
+		return mysql.ServiceFQDN(cr)
+	}
+
+	return mysql.ServiceFQDN(cr) + ".svc." + k8s.KubernetesClusterDomain(ctx, cr.Spec.ClusterServiceDNSSuffix)
+}
+
+func mysqlPrimaryHost(ctx context.Context, cr *apiv1.PerconaServerMySQL, withSuffix bool) string {
+	primaryFQDN := mysql.PrimaryServiceName(cr) + "." + cr.Namespace
+	if !withSuffix {
+		return primaryFQDN
+	}
+
+	return primaryFQDN + ".svc." + k8s.KubernetesClusterDomain(ctx, cr.Spec.ClusterServiceDNSSuffix)
+}
+
+func loadBalancerHost(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServerMySQL) (string, error) {
+	if !cr.Spec.Proxy.LoadBalancerExposed() {
+		return "", nil
+	}
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      proxyServiceName(cr),
+			Namespace: cr.Namespace,
+		},
+	}
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(svc), svc); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return "", nil
 		}
-	}
-
-	if !cr.RouterEnabled() && !cr.HAProxyEnabled() {
-		return mysql.ServiceName(cr) + "." + cr.GetNamespace(), nil
-	}
-
-	svc := &corev1.Service{}
-	err := cl.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: serviceName}, svc)
-	if err != nil {
-		return "", errors.Wrapf(err, "get %s service", serviceName)
+		return "", errors.Wrapf(err, "get %s service", svc.Name)
 	}
 
 	var host string
@@ -478,8 +534,24 @@ func appHost(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServerMySQL
 			host = i.Hostname
 		}
 	}
-
 	return host, nil
+}
+
+func appHost(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServerMySQL) (string, error) {
+	proxyHostStr := proxyHost(ctx, cr, false)
+
+	if proxyHostStr == "" {
+		return mysqlHost(ctx, cr, false), nil
+	}
+	if !cr.Spec.Proxy.LoadBalancerExposed() {
+		return proxyHostStr, nil
+	}
+
+	lbHost, err := loadBalancerHost(ctx, cl, cr)
+	if err != nil {
+		return "", errors.Wrap(err, "load balancer host")
+	}
+	return lbHost, nil
 }
 
 func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1.PerconaServerMySQL, compName string, size int32, selector map[string]string, version string) (apiv1.StatefulAppStatus, error) {
