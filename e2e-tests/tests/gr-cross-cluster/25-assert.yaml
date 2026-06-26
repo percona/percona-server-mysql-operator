@@ -22,14 +22,14 @@ spec:
       mode: manual
 status:
   conditions:
+  - message: Awaiting external bootstrap
+    reason: ManualBootstrapRequested
+    status: "True"
+    type: AwaitingExternalBootstrap
   - reason: Initializing
     status: "True"
     type: Initializing
   - reason: Ready
     status: "False"
     type: Ready
-  - message: Awaiting external bootstrap
-    reason: ManualBootstrapRequested
-    status: "True"
-    type: AwaitingExternalBootstrap
   state: initializing
