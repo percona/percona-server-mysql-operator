@@ -6,7 +6,7 @@
 export RESOURCE_PATH="deploy/cr.yaml"
 
 sort_yaml() {
-	GENERAL_ORDER='"metadata", "unsafeFlags", "pause", "crVersion", "enableVolumeExpansion", "secretsName", "sslSecretName", "updateStrategy", "upgradeOptions", "initContainer", "ignoreAnnotations", "ignoreLabels", "tls", "mysql", "proxy", "orchestrator", "pmm", "backup", "toolkit"'
+	GENERAL_ORDER='"metadata", "unsafeFlags", "pause", "crVersion", "enableVolumeExpansion", "storageScaling", "secretsName", "sslSecretName", "updateStrategy", "upgradeOptions", "initContainer", "ignoreAnnotations", "ignoreLabels", "tls", "mysql", "proxy", "orchestrator", "pmm", "backup", "toolkit"'
 
 	POD_SPEC_ORDER='"size", "image", "imagePullPolicy","imagePullSecrets", "runtimeClassName", "tolerations", "annotations", "labels", "nodeSelector", "priorityClassName", "schedulerName", "serviceAccountName","gracePeriod", "initContainer", "env", "envFrom", "podDisruptionBudget", "resources","startupProbe", "readinessProbe", "livenessProbe", "affinity", "topologySpreadConstraints", "containerSecurityContext", "podSecurityContext"'
 	MYSQL_ORDER='"clusterType", "autoRecovery", "vaultSecretName", '"$POD_SPEC_ORDER"',"exposePrimary", "expose", "volumeSpec", "configuration", "sidecars", "sidecarVolumes", "sidecarPVCs"'
@@ -14,7 +14,7 @@ sort_yaml() {
 	ROUTER_ORDER='"enabled", "expose", '"$POD_SPEC_ORDER"', "ports"'
 	ORCHESTRATOR_ORDER='"enabled", "expose", '"$POD_SPEC_ORDER"
 
-	PMM_ORDER='"enabled","image","imagePullPolicy","serverHost","mysqlParams","containerSecurityContext", "resources", "readinessProbes", "livenessProbes"'
+	PMM_ORDER='"enabled","image","imagePullPolicy","serverHost","customClusterName","mysqlParams","containerSecurityContext", "resources", "readinessProbes", "livenessProbes"'
 	BINLOG_SERVER_ORDER='"enabled","binlogServer"'
 	BINLOG_SERVER_SPEC_ORDER='"size","image","imagePullPolicy","imagePullSecrets","serverId","storage","connectTimeout","readTimeout","writeTimeout","idleTime"'
 	BACKUP_ORDER='"enabled","pitr","sourcePod","image","imagePullPolicy","imagePullSecrets","schedule","backoffLimit", "serviceAccountName", "initContainer", "containerSecurityContext", "resources","storages"'
@@ -97,6 +97,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.unsafeFlags)" \
 		| yq "del(.spec.pause)" \
 		| yq "del(.spec.enableVolumeExpansion)" \
+		| yq "del(.spec.storageScaling)" \
 		| yq "del(.spec.initContainer)" \
 		| yq "del(.spec.ignoreAnnotations)" \
 		| yq "del(.spec.ignoreLabels)" \
@@ -208,6 +209,7 @@ del_fields_to_comment() {
 		| yq "del(.spec.orchestrator.initContainer)" \
 		| yq "del(.spec.orchestrator.containerSecurityContext)" \
 		| yq "del(.spec.orchestrator.podSecurityContext)" \
+		| yq "del(.spec.pmm.customClusterName)" \
 		| yq "del(.spec.pmm.mysqlParams)" \
 		| yq "del(.spec.pmm.readinessProbes)" \
 		| yq "del(.spec.pmm.livenessProbes)" \

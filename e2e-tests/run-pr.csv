@@ -19,6 +19,8 @@ async-data-at-rest-encryption,8.0
 async-data-at-rest-encryption,8.4
 gr-cross-cluster,8.0
 gr-cross-cluster,8.4
+gr-cross-cluster-backup,8.0
+gr-cross-cluster-backup,8.4
 gr-global-metadata,8.4
 gr-data-at-rest-encryption,8.0
 gr-data-at-rest-encryption,8.4
@@ -53,6 +55,7 @@ monitoring,8.4
 one-pod,8.0
 one-pod,8.4
 operator-self-healing,8.4
+pvc-auto-resize,8.4
 pvc-resize,8.4
 recreate,8.4
 scaling,8.4

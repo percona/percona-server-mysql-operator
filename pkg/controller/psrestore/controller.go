@@ -88,6 +88,9 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	cr := &apiv1.PerconaServerMySQLRestore{}
 	err := r.Get(ctx, req.NamespacedName, cr)
 	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, errors.Wrapf(err, "get CR %s", req.NamespacedName)
 	}
 
@@ -226,7 +229,8 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 				return ctrl.Result{}, errors.Wrap(err, "unpause cluster")
 			}
 		}
-		if cluster.Status.State != apiv1.StateReady {
+
+		if !clusterReadyAfterRestore(cluster) {
 			status.State = apiv1.RestoreRunning
 			status.StateDesc = "Waiting for cluster to become ready after restore"
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
@@ -848,4 +852,22 @@ func (r *PerconaServerMySQLRestoreReconciler) tryAcquireLease(ctx context.Contex
 		}
 	}
 	return true, nil
+}
+
+// clusterReadyAfterRestore reports whether the restore can be marked complete.
+// For auto bootstrap we wait for the cluster to actually come back: StateReady,
+// plus a re-bootstrapped InnoDB cluster for GR (the restore resets that condition).
+// For manual bootstrap the cluster never self-bootstraps, so once it's awaiting
+// external bootstrap we stop waiting and let the restore finish.
+func clusterReadyAfterRestore(cluster *apiv1.PerconaServerMySQL) bool {
+	if cluster.IsAwaitingExternalBootstrap() {
+		return true
+	}
+	if cluster.Status.State != apiv1.StateReady {
+		return false
+	}
+	if cluster.Spec.MySQL.IsGR() {
+		return meta.IsStatusConditionTrue(cluster.Status.Conditions, apiv1.ConditionInnoDBClusterBootstrapped)
+	}
+	return true
 }

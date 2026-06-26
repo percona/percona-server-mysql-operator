@@ -15,6 +15,7 @@ async-data-at-rest-encryption
 gr-global-metadata
 gr-data-at-rest-encryption
 gr-cross-cluster
+gr-cross-cluster-backup
 gr-demand-backup
 gr-demand-backup-cloud
 gr-demand-backup-haproxy
@@ -39,6 +40,7 @@ limits
 monitoring
 one-pod
 operator-self-healing
+pvc-auto-resize
 pvc-resize
 recreate
 scaling
