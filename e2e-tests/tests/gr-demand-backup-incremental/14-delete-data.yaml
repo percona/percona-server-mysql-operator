@@ -7,7 +7,4 @@ commands:
 
       source ../../functions
 
-      run_mysql \
-          "TRUNCATE TABLE myDB.myTable" \
-          "-h $(get_mysql_router_service $(get_cluster_name))"
-      sleep 5
+      truncate_test_data
