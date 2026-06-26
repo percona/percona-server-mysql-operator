@@ -226,6 +226,66 @@ var _ = Describe("TLS cert-manager leak regression", Ordered, func() {
 	})
 })
 
+var _ = Describe("TLS issuer kind handling", Ordered, func() {
+	ctx := context.Background()
+	const clusterIssuerName = "tls-kind-test-cluster-issuer"
+	const missingClusterIssuerName = "tls-kind-test-missing-cluster-issuer"
+
+	BeforeAll(func() {
+		_, err := envtest.InstallCRDs(cfg, envtest.CRDInstallOptions{
+			Paths: []string{filepath.Join("testdata", "cert-manager.yaml")},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		clusterIssuer := &cm.ClusterIssuer{
+			ObjectMeta: metav1.ObjectMeta{Name: clusterIssuerName},
+			Spec: cm.IssuerSpec{
+				IssuerConfig: cm.IssuerConfig{SelfSigned: &cm.SelfSignedIssuer{}},
+			},
+		}
+		Expect(k8sClient.Create(ctx, clusterIssuer)).To(Succeed())
+	})
+
+	AfterAll(func() {
+		_ = k8sClient.Delete(ctx, &cm.ClusterIssuer{ObjectMeta: metav1.ObjectMeta{Name: clusterIssuerName}})
+	})
+
+	It("checks existing ClusterIssuer when tls.issuerConf.kind is set", func() {
+		cr := &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+			Spec: apiv1.PerconaServerMySQLSpec{
+				TLS: &apiv1.TLSSpec{
+					IssuerConf: &cmmeta.IssuerReference{
+						Name:  clusterIssuerName,
+						Kind:  "ClusterIssuer",
+						Group: "cert-manager.io",
+					},
+				},
+			},
+		}
+
+		Expect(reconciler().checkTLSIssuer(ctx, cr)).To(Succeed())
+	})
+
+	It("fails when referenced ClusterIssuer does not exist", func() {
+		cr := &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+			Spec: apiv1.PerconaServerMySQLSpec{
+				TLS: &apiv1.TLSSpec{
+					IssuerConf: &cmmeta.IssuerReference{
+						Name:  missingClusterIssuerName,
+						Kind:  "ClusterIssuer",
+						Group: "cert-manager.io",
+					},
+				},
+			},
+		}
+
+		err := reconciler().checkTLSIssuer(ctx, cr)
+		Expect(k8serrors.IsNotFound(err)).To(BeTrue())
+	})
+})
+
 var _ = Describe("Finalizer delete-ssl", Ordered, func() {
 	ctx := context.Background()
 
