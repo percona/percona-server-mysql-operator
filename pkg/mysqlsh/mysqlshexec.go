@@ -277,7 +277,10 @@ func (m *MysqlshExec) ClusterSetStatusWithExec(ctx context.Context) (clusterset.
 	return status, nil
 }
 
-var ErrEndpointUnreachable = errors.New("endpoint unreachable")
+var (
+	ErrEndpointUnreachable = errors.New("endpoint unreachable")
+	ErrAccessDenied        = errors.New("access denied")
+)
 
 func (m *MysqlshExec) Ping(ctx context.Context) error {
 	var outb, errb bytes.Buffer
@@ -289,9 +292,25 @@ func (m *MysqlshExec) Ping(ctx context.Context) error {
 		if isEndpointUnreachable(err, outb.String(), errb.String()) {
 			return ErrEndpointUnreachable
 		}
+		if isAccessDenied(err, outb.String(), errb.String()) {
+			return ErrAccessDenied
+		}
 		return errors.Wrapf(err, "ping, stdout: %s, stderr: %s", outb.String(), errb.String())
 	}
 	return nil
+}
+
+func isAccessDenied(err error, stdout, stderr string) bool {
+	msg := strings.ToLower(strings.Join([]string{err.Error(), stdout, stderr}, "\n"))
+	accessDeniedMessages := []string{
+		"MySQL Error 1045",
+	}
+	for _, text := range accessDeniedMessages {
+		if strings.Contains(msg, strings.ToLower(text)) {
+			return true
+		}
+	}
+	return false
 }
 
 func isEndpointUnreachable(err error, stdout, stderr string) bool {

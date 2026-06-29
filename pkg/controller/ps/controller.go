@@ -577,6 +577,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err != nil {
 		return errors.Wrap(err, "users secret")
 	}
+	if err := r.ensureClusterUserSecret(ctx, cr, userSecret); err != nil {
+		return errors.Wrap(err, "cluster user secret")
+	}
 	if err := r.reconcileUsers(ctx, cr, userSecret); err != nil {
 		return errors.Wrap(err, "users")
 	}
