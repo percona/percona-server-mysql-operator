@@ -12,13 +12,15 @@ commands:
 
       cluster_name="$(get_cluster_name)"
       selector="app.kubernetes.io/component=database,app.kubernetes.io/instance=${cluster_name}"
+      expected_pvc_count=3
 
       for i in {1..60}; do
           echo "Check attempt $i/60"
 
           pvcs="$(kubectl get pvc -n "${NAMESPACE}" -l "${selector}" --no-headers -o custom-columns=:metadata.name | grep '^datadir-' || true)"
-          if [[ -z "$pvcs" ]]; then
-              echo "No datadir PVCs found yet"
+          pvc_count="$(printf '%s\n' "$pvcs" | grep -c '^datadir-' || true)"
+          if [[ "$pvc_count" -lt "$expected_pvc_count" ]]; then
+              echo "Waiting for datadir PVCs: found ${pvc_count}/${expected_pvc_count}"
               sleep 5
               continue
           fi
@@ -46,8 +48,9 @@ commands:
           -o custom-columns=NAME:.metadata.name,SIZE:.status.capacity.storage
 
       pvcs="$(kubectl get pvc -n "${NAMESPACE}" -l "${selector}" --no-headers -o custom-columns=:metadata.name | grep '^datadir-' || true)"
-      if [[ -z "$pvcs" ]]; then
-          echo "ERROR: No datadir PVCs found"
+      pvc_count="$(printf '%s\n' "$pvcs" | grep -c '^datadir-' || true)"
+      if [[ "$pvc_count" -ne "$expected_pvc_count" ]]; then
+          echo "ERROR: Expected ${expected_pvc_count} datadir PVCs, found ${pvc_count}"
           exit 1
       fi
 
