@@ -419,6 +419,148 @@ func TestReconcileStatusAsync(t *testing.T) {
 	}
 }
 
+func TestConnectionHosts(t *testing.T) {
+	const (
+		name      = "cluster"
+		namespace = "database"
+		suffix    = "cluster.example"
+	)
+
+	newCR := func() *apiv1.PerconaServerMySQL {
+		return &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+			Spec: apiv1.PerconaServerMySQLSpec{
+				ClusterServiceDNSSuffix: suffix,
+				Proxy: apiv1.ProxySpec{
+					Router:  &apiv1.MySQLRouterSpec{},
+					HAProxy: &apiv1.HAProxySpec{},
+				},
+			},
+		}
+	}
+
+	t.Run("mysql", func(t *testing.T) {
+		cr := newCR()
+		assert.Equal(t, "cluster-mysql.database", mysqlHost(t.Context(), cr, false))
+		assert.Equal(t, "cluster-mysql.database.svc.cluster.example", mysqlHost(t.Context(), cr, true))
+	})
+
+	t.Run("haproxy", func(t *testing.T) {
+		cr := newCR()
+		cr.Spec.Proxy.HAProxy.Enabled = true
+
+		assert.Equal(t, "cluster-haproxy", proxyServiceName(cr))
+		assert.Equal(t, "3306", proxyServicePort(cr))
+		assert.Equal(t, "cluster-haproxy.database", proxyHost(t.Context(), cr, false))
+		assert.Equal(t, "cluster-haproxy.database.svc.cluster.example", proxyHost(t.Context(), cr, true))
+	})
+
+	t.Run("router takes precedence", func(t *testing.T) {
+		cr := newCR()
+		cr.Spec.Proxy.HAProxy.Enabled = true
+		cr.Spec.Proxy.Router.Enabled = true
+
+		assert.Equal(t, "cluster-router", proxyServiceName(cr))
+		assert.Equal(t, "6446", proxyServicePort(cr))
+		assert.Equal(t, "cluster-router.database.svc.cluster.example", proxyHost(t.Context(), cr, true))
+	})
+}
+
+func TestAppHost(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
+
+	newCR := func() *apiv1.PerconaServerMySQL {
+		return &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "database"},
+			Spec: apiv1.PerconaServerMySQLSpec{
+				Proxy: apiv1.ProxySpec{
+					Router:  &apiv1.MySQLRouterSpec{},
+					HAProxy: &apiv1.HAProxySpec{},
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		cr       *apiv1.PerconaServerMySQL
+		objects  []client.Object
+		expected string
+	}{
+		{
+			name:     "mysql without proxy",
+			cr:       newCR(),
+			expected: "cluster-mysql.database",
+		},
+		{
+			name: "cluster ip proxy",
+			cr: func() *apiv1.PerconaServerMySQL {
+				cr := newCR()
+				cr.Spec.Proxy.HAProxy.Enabled = true
+				cr.Spec.Proxy.HAProxy.Expose.Type = corev1.ServiceTypeClusterIP
+				return cr
+			}(),
+			expected: "cluster-haproxy.database",
+		},
+		{
+			name: "load balancer ip",
+			cr: func() *apiv1.PerconaServerMySQL {
+				cr := newCR()
+				cr.Spec.Proxy.Router.Enabled = true
+				cr.Spec.Proxy.Router.Expose.Type = corev1.ServiceTypeLoadBalancer
+				return cr
+			}(),
+			objects: []client.Object{
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{Name: "cluster-router", Namespace: "database"},
+					Status: corev1.ServiceStatus{LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{{IP: "192.0.2.10"}},
+					}},
+				},
+			},
+			expected: "192.0.2.10",
+		},
+		{
+			name: "load balancer hostname",
+			cr: func() *apiv1.PerconaServerMySQL {
+				cr := newCR()
+				cr.Spec.Proxy.HAProxy.Enabled = true
+				cr.Spec.Proxy.HAProxy.Expose.Type = corev1.ServiceTypeLoadBalancer
+				return cr
+			}(),
+			objects: []client.Object{
+				&corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{Name: "cluster-haproxy", Namespace: "database"},
+					Status: corev1.ServiceStatus{LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{{Hostname: "lb.example.com"}},
+					}},
+				},
+			},
+			expected: "lb.example.com",
+		},
+		{
+			name: "load balancer not created",
+			cr: func() *apiv1.PerconaServerMySQL {
+				cr := newCR()
+				cr.Spec.Proxy.HAProxy.Enabled = true
+				cr.Spec.Proxy.HAProxy.Expose.Type = corev1.ServiceTypeLoadBalancer
+				return cr
+			}(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
+
+			host, err := appHost(t.Context(), cl, tt.cr)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, host)
+		})
+	}
+}
+
 func TestReconcileStatusHAProxyGR(t *testing.T) {
 	cr, err := readDefaultCR("ps-cluster1", "status-1")
 	require.NoError(t, err)

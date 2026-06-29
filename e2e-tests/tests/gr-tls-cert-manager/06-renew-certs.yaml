@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestStep
-timeout: 10
+timeout: 150
 commands:
   - script: |-
       set -o errexit
@@ -13,10 +13,19 @@ commands:
 
       renew_certificate "gr-tls-cert-manager-ssl"
 
-      sleep 20
-
-      new_generation_mysql=$(kubectl -n ${NAMESPACE} get sts gr-tls-cert-manager-mysql -o jsonpath='{.metadata.generation}')
-      new_generation_router=$(kubectl -n ${NAMESPACE} get deployment gr-tls-cert-manager-router -o jsonpath='{.metadata.generation}')
+      # mysql rolls promptly, but the router reconcile runs after reconcileReplication
+      # and is skipped on passes that abort while mysql is restarting, so its rollout
+      # lags. Poll instead of assuming a fixed delay.
+      new_generation_mysql=${current_generation_mysql}
+      new_generation_router=${current_generation_router}
+      for i in $(seq 1 24); do
+          new_generation_mysql=$(kubectl -n ${NAMESPACE} get sts gr-tls-cert-manager-mysql -o jsonpath='{.metadata.generation}')
+          new_generation_router=$(kubectl -n ${NAMESPACE} get deployment gr-tls-cert-manager-router -o jsonpath='{.metadata.generation}')
+          if [[ ${current_generation_mysql} != "${new_generation_mysql}" && ${current_generation_router} != "${new_generation_router}" ]]; then
+              break
+          fi
+          sleep 5
+      done
 
       if [[ ${current_generation_mysql} == "${new_generation_mysql}" ]]; then
           echo "Certificate renewal failed for mysql"
