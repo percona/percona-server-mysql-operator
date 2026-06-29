@@ -13,10 +13,6 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 )
 
-// Managed AKS API server hostnames always end with .azmk8s.io; AKS does not
-// register a single distinguishing API group, so we fingerprint by hostname.
-const aksHostSuffix = ".azmk8s.io"
-
 var log = logf.Log.WithName("platform")
 
 type Platform string
@@ -30,11 +26,14 @@ const (
 type CloudProvider string
 
 const (
-	CloudProviderUndef CloudProvider = ""
-	CloudProviderGKE   CloudProvider = "gke"
-	CloudProviderEKS   CloudProvider = "eks"
-	CloudProviderAKS   CloudProvider = "aks"
-	CloudProviderDOKS  CloudProvider = "doks"
+	CloudProviderUndef   CloudProvider = ""
+	CloudProviderGKE     CloudProvider = "gke"
+	CloudProviderEKS     CloudProvider = "eks"
+	CloudProviderAKS     CloudProvider = "aks"
+	CloudProviderDOKS    CloudProvider = "doks"
+	CloudProviderOKE     CloudProvider = "oke"
+	CloudProviderTanzu   CloudProvider = "tanzu"
+	CloudProviderRancher CloudProvider = "rancher"
 )
 
 type ServerVersion struct {
@@ -104,25 +103,34 @@ func getServerVersion(cliCmd clientcmd.Client) (*ServerVersion, error) {
 
 func detectCloudProvider(client rest.Interface, host string) CloudProvider {
 	probes := []struct {
-		provider CloudProvider
-		group    string
+		provider  CloudProvider
+		apiGroups []string
+		hosts     []string
 	}{
-		{CloudProviderGKE, "cloud.google.com"},
-		{CloudProviderEKS, "vpcresources.k8s.aws"},
-		{CloudProviderDOKS, "dataplane-operator.doks.digitalocean.com"},
+		{provider: CloudProviderGKE, apiGroups: []string{"cloud.google.com"}},
+		{provider: CloudProviderEKS, apiGroups: []string{"vpcresources.k8s.aws"}},
+		{provider: CloudProviderDOKS, apiGroups: []string{"dataplane-operator.doks.digitalocean.com"}},
+		{provider: CloudProviderAKS, hosts: []string{".azmk8s.io"}},
+		{provider: CloudProviderOKE, hosts: []string{".oraclecloud.com"}},
+		{provider: CloudProviderTanzu, apiGroups: []string{"run.tanzu.vmware.com"}},
+		{provider: CloudProviderRancher, apiGroups: []string{"management.cattle.io"}},
 	}
 	for _, p := range probes {
-		path := "/apis/" + p.group
-		if _, err := probeAPI(path, client); err == nil {
-			log.Info("cloud provider detected", "provider", p.provider, "signal", "apigroup:"+p.group)
-			return p.provider
-		} else {
-			log.V(1).Info("cloud provider probe miss", "provider", p.provider, "signal", "apigroup:"+p.group, "err", err.Error())
+		for _, group := range p.apiGroups {
+			path := "/apis/" + group
+			if _, err := probeAPI(path, client); err == nil {
+				log.Info("cloud provider detected", "provider", p.provider, "signal", "apigroup:"+group)
+				return p.provider
+			} else {
+				log.V(1).Info("cloud provider probe miss", "provider", p.provider, "signal", "apigroup:"+group, "err", err.Error())
+			}
 		}
-	}
-	if strings.Contains(host, aksHostSuffix) {
-		log.Info("cloud provider detected", "provider", CloudProviderAKS, "signal", "host:"+aksHostSuffix)
-		return CloudProviderAKS
+		for _, h := range p.hosts {
+			if strings.Contains(host, h) {
+				log.Info("cloud provider detected", "provider", p.provider, "signal", "host:"+h)
+				return p.provider
+			}
+		}
 	}
 	log.Info("cloud provider not detected", "provider", "unknown")
 	return CloudProviderUndef
