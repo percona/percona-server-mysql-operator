@@ -8,8 +8,4 @@ commands:
 
       source ../../functions
 
-      # Gets first storage defined and run backup
-      storage_name=$(kubectl get ps gr-demand-backup-incremental -n ${NAMESPACE} -o yaml \
-        | yq '(.spec.backup.storages // {}) | keys | .[0]')
-
-      run_backup incr-2 $storage_name gr-demand-backup-incremental "incremental"
+      run_backup incr-2 "$(get_default_storage_name)" "$(get_cluster_name)" "incremental"
