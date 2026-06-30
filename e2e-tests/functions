@@ -823,6 +823,7 @@ run_mysql_query_file() {
 	local host="$2"
 	local user="${3:--uroot -p'$(get_user_pass root)'}"
 	local pod="${4:-mysql-client}"
+	local exit_when_empty="${5:-false}"
 	local result
 	local rc
 
@@ -840,7 +841,7 @@ run_mysql_query_file() {
 		rc=$?
 	}
 
-	if [[ -z $result ]]; then
+	if [[ $exit_when_empty == "true" && -z $result ]]; then
 		echo "Query from file $file failed on pod $pod with host $host and user $user"
 		return 1
 	fi
@@ -855,7 +856,7 @@ retry_run_mysql_query_file() {
 	local user="${3:--uroot -p'$(get_user_pass root)'}"
 	local pod="$4"
 
-	retry 3 5 run_mysql_query_file "$file" "$host" "$user" "$pod"
+	retry 3 5 run_mysql_query_file "$file" "$host" "$user" "$pod" true
 }
 
 get_innodb_cluster_status() {
