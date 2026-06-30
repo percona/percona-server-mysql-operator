@@ -23,4 +23,4 @@ spec:
       endpoints:
       - host: ps-cluster2-mysql-0.ps-cluster2-mysql.default.svc.cluster.local
   mysqlshellRunner:
-    image: perconalab/percona-server-mysql-operator:main-psmysql8.4
+    image: percona/percona-server:8.4.10-10.1
