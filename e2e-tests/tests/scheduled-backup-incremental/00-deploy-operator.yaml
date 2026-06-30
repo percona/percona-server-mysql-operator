@@ -13,6 +13,6 @@ commands:
       deploy_tls_cluster_secrets
       deploy_client
       if has_minio_storage; then
-        deploy_minio
+        deploy_minio "10G"
       fi
     timeout: 300

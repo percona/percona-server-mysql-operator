@@ -1,0 +1,42 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 600
+    script: |-
+      set -o errexit
+      set -o xtrace
+      set -o pipefail
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      expected_data=$(kubectl get configmap 02-scheduled-backup-data -n "${NAMESPACE}" -o json | jq -c '.data')
+      backup_name=$(kubectl get ps-backup -n "${NAMESPACE}" -o json | jq -r '
+        .items
+        | sort_by(.metadata.creationTimestamp, .metadata.name)
+        | map(select(.status.state == "Succeeded"))
+        | map(select(.spec.storageName == "minio"))
+        | .[0].metadata.name // ""
+      ')
+
+      if [[ -z "${backup_name}" ]]; then
+        echo "No succeeded minio backups found to restore"
+        exit 1
+      fi
+
+      restore_name="scheduled-backup-restore-1"
+      restored_data_configmap="16-scheduled-backup-data-1"
+
+      run_mysql "DROP DATABASE IF EXISTS myDB" "-h $(get_haproxy_svc "${cluster_name}")"
+      run_restore "${restore_name}" "${backup_name}" "${cluster_name}"
+      wait_for_restore "${restore_name}" "${backup_name}"
+      wait_cluster_consistency_async "${cluster_name}" 3 3
+
+      data=$(retry_run_mysql_query_file "conf/data-query.sql" "-h $(get_haproxy_svc "${cluster_name}")")
+      kubectl create configmap -n "${NAMESPACE}" "${restored_data_configmap}" --from-literal=data="${data}"
+
+      restored_data=$(kubectl get configmap "${restored_data_configmap}" -n "${NAMESPACE}" -o json | jq -c '.data')
+      if [[ "${expected_data}" != "${restored_data}" ]]; then
+        echo "Data after restore ${restore_name} is different, check configmaps 02-scheduled-backup-data and ${restored_data_configmap}"
+        exit 1
+      fi

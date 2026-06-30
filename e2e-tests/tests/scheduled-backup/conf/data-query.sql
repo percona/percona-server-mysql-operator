@@ -10,8 +10,11 @@ CREATE PROCEDURE count_rows()
 BEGIN
     DECLARE done INT DEFAULT FALSE;
     DECLARE tbl_name VARCHAR(255);
-    DECLARE cur CURSOR FOR 
-        SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE();
+    DECLARE cur CURSOR FOR
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = DATABASE()
+        ORDER BY CAST(SUBSTRING(table_name, 7) AS UNSIGNED);
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
 
     DROP TEMPORARY TABLE IF EXISTS temp_counts;
