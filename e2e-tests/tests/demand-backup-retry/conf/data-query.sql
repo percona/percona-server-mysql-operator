@@ -1,44 +1,24 @@
 USE myDB;
 
-SET GLOBAL max_allowed_packet = 1073741824;
+SET SESSION group_concat_max_len = 1048576;
 
-DROP PROCEDURE IF EXISTS count_rows;
+SELECT GROUP_CONCAT(
+    CONCAT(
+        'SELECT ''', table_name, ''' AS table_name, COUNT(*) AS total_rows FROM `', table_name, '`'
+    )
+    ORDER BY CAST(SUBSTRING(table_name, 7) AS UNSIGNED)
+    SEPARATOR ' UNION ALL '
+) INTO @count_query
+FROM information_schema.tables
+WHERE table_schema = DATABASE()
+  AND table_name REGEXP '^sbtest[0-9]+$';
 
-DELIMITER $$
+SET @count_query = CONCAT(
+    'SELECT CONCAT(table_name, '' '', total_rows) AS total_data FROM (',
+    @count_query,
+    ') AS counts'
+);
 
-CREATE PROCEDURE count_rows()
-BEGIN
-    DECLARE done INT DEFAULT FALSE;
-    DECLARE tbl_name VARCHAR(255);
-    DECLARE cur CURSOR FOR 
-        SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE();
-    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
-
-    DROP TEMPORARY TABLE IF EXISTS temp_counts;
-    CREATE TEMPORARY TABLE temp_counts (
-        table_name VARCHAR(255),
-        total_rows INT
-    );
-
-    OPEN cur;
-    read_loop: LOOP
-        FETCH cur INTO tbl_name;
-        IF done THEN
-            LEAVE read_loop;
-        END IF;
-
-        SET @sql = CONCAT(
-            'INSERT INTO temp_counts SELECT "', tbl_name, '", COUNT(*) FROM ', tbl_name
-        );
-        PREPARE stmt FROM @sql;
-        EXECUTE stmt;
-        DEALLOCATE PREPARE stmt;
-    END LOOP;
-    CLOSE cur;
-
-    SELECT CONCAT(table_name, ' ', total_rows) AS total_data FROM temp_counts;
-END$$
-
-DELIMITER ;
-
-CALL count_rows();
+PREPARE stmt FROM @count_query;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;

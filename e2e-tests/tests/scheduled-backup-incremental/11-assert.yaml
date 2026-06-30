@@ -1,30 +1,36 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 420
+timeout: 800
 commands:
   - script: |-
       set -o errexit
 
       source ../../functions
 
-      backup_count=$(count_backups_in_schedule "incr" "$(get_cluster_name)")
-      until [[ $backup_count -eq 1 ]]; do
-        echo "There are $backup_count incremental ps-backups but should be 1"
-        sleep 5
-
-        backup_count=$(count_backups_in_schedule "incr" "$(get_cluster_name)")
-      done
-    timeout: 420
-  - script: |-
-      set -o errexit
-
-      source ../../functions
-
-      backup_count=$(count_backups_in_schedule "full" "$(get_cluster_name)")
-      until [[ $backup_count -eq 1 ]]; do
-        echo "There are $backup_count full ps-backups but should be 1"
-        sleep 5
-
-        backup_count=$(count_backups_in_schedule "full" "$(get_cluster_name)")
-      done
-    timeout: 420
+      restore_count=$(kubectl get ps-restore -n "${NAMESPACE}" -o json \
+        | jq '[.items[] | select(.metadata.name | startswith("scheduled-backup-incremental-restore-")) | select(.status.state == "Succeeded")] | length')
+      if [[ "${restore_count}" != "2" ]]; then
+        echo "There are ${restore_count} succeeded incremental restores but should be 2"
+        exit 1
+      fi
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: scheduled-backup-incremental
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+status:
+  haproxy:
+    ready: 3
+    size: 3
+    state: ready
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  orchestrator:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready

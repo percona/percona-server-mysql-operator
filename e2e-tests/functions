@@ -790,15 +790,6 @@ run_mysql() {
 	return "${PIPESTATUS[0]}"
 }
 
-retry_run_mysql() {
-	local command="$1"
-	local host="$2"
-	local user="${3:--uroot -p'$(get_user_pass root)'}"
-	local pod="$4"
-
-	retry 3 5 run_mysql "$command" "$host" "$user" "$pod"
-}
-
 get_clusterset_status() {
 	local host="$1"
 	local user="${2:--uroot -p'$(get_user_pass)'}"
