@@ -1317,7 +1317,7 @@ spec:
               createReplicaClusterOptions:
                 properties:
                   recoveryMethod:
-                    default: clone
+                    default: auto
                     enum:
                     - clone
                     - incremental

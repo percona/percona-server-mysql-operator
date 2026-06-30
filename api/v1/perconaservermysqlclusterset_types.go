@@ -125,7 +125,7 @@ func (ucs *UnsafeClusterSetFlags) SetDefaults() {
 
 func (pcs *PerconaServerMySQLClusterSet) SetDefaults() {
 	if pcs.Spec.CreateReplicaClusterOptions.RecoveryMethod == "" {
-		pcs.Spec.CreateReplicaClusterOptions.RecoveryMethod = RecoveryMethodClone
+		pcs.Spec.CreateReplicaClusterOptions.RecoveryMethod = RecoveryMethodAuto
 	}
 
 	if pcs.Spec.UnsafeClusterSetFlags == nil {
@@ -156,12 +156,12 @@ const (
 
 type CreateReplicaClusterOptions struct {
 	// Preferred method for state recovery/provisioning.
-	// Default is 'clone'.
+	// Default is 'auto'.
 	// Set this to 'incremental' when the cluster is seeded from an existing backup.
 	//
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Enum=clone;incremental;auto
-	// +kubebuilder:default:=clone
+	// +kubebuilder:default:=auto
 	RecoveryMethod RecoveryMethod `json:"recoveryMethod"`
 }
 
