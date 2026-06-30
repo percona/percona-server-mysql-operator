@@ -13,7 +13,7 @@ commands:
       expected_data=$(kubectl get configmap 02-scheduled-backup-data -n "${NAMESPACE}" -o json | jq -c '.data')
       backup_name=$(kubectl get ps-backup -n "${NAMESPACE}" -o json | jq -r '
         .items
-        | sort_by(.metadata.creationTimestamp, .metadata.name)
+        | sort_by([.metadata.creationTimestamp, .metadata.name])
         | map(select(.status.state == "Succeeded"))
         | map(select(.spec.storageName == "minio"))
         | .[0].metadata.name // ""

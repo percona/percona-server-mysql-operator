@@ -18,7 +18,7 @@ commands:
 
       backup_name=$(kubectl get ps-backup -n "${NAMESPACE}" -o json | jq -r '
         .items
-        | sort_by(.metadata.creationTimestamp, .metadata.name)
+        | sort_by([.metadata.creationTimestamp, .metadata.name])
         | map(select(.status.state == "Succeeded"))
         | map(select(.spec.type == "incremental"))
         | .[-1].metadata.name // ""
