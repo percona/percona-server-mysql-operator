@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.8.0
-	github.com/cert-manager/cert-manager v1.20.2
+	github.com/cert-manager/cert-manager v1.20.3
 	github.com/flosch/pongo2 v0.0.0-20200913210552-0d938eb266f3
 	github.com/go-ini/ini v1.67.0
 	github.com/go-logr/logr v1.4.3
@@ -18,7 +18,7 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/google/go-cmp v0.7.0
 	github.com/hashicorp/go-version v1.9.0
-	github.com/minio/minio-go/v7 v7.2.0
+	github.com/minio/minio-go/v7 v7.2.1
 	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.42.1
 	github.com/pkg/errors v0.9.1
@@ -27,7 +27,7 @@ require (
 	go.uber.org/zap v1.28.0
 	golang.org/x/sync v0.21.0
 	golang.org/x/text v0.38.0
-	google.golang.org/grpc v1.81.1
+	google.golang.org/grpc v1.82.0
 	k8s.io/api v0.36.2
 	k8s.io/apiextensions-apiserver v0.36.2
 	k8s.io/apimachinery v0.36.2
