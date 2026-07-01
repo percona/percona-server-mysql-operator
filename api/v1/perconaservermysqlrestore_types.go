@@ -37,10 +37,13 @@ type PerconaServerMySQLRestoreSpec struct {
 type RestorePITRSpec struct {
 	BackupSource *RestorePITRBackupSource `json:"backupSource,omitempty"`
 	// +kubebuilder:validation:Enum=gtid;date
-	Type  PITRType `json:"type"`
-	Date  string   `json:"date,omitempty"`
-	GTID  string   `json:"gtid,omitempty"`
-	Force bool     `json:"force,omitempty"`
+	Type PITRType `json:"type"`
+	// +kubebuilder:validation:Enum=binlog-replay;replication
+	// +kubebuilder:default=binlog-replay
+	Method PITRMethod `json:"method,omitempty"`
+	Date   string     `json:"date,omitempty"`
+	GTID   string     `json:"gtid,omitempty"`
+	Force  bool       `json:"force,omitempty"`
 }
 
 type RestorePITRBackupSource struct {
@@ -52,6 +55,13 @@ type PITRType string
 const (
 	PITRGtid PITRType = "gtid"
 	PITRDate PITRType = "date"
+)
+
+type PITRMethod string
+
+const (
+	PITRMethodBinlogReplay PITRMethod = "binlog-replay"
+	PITRMethodReplication  PITRMethod = "replication"
 )
 
 type RestoreState string
