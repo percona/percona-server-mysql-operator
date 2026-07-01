@@ -91,6 +91,8 @@ type PerconaServerMySQLSpec struct {
 	// Deprecated: not supported since v0.12.0. Use initContainer instead
 	InitImage     string            `json:"initImage,omitempty"`
 	InitContainer InitContainerSpec `json:"initContainer,omitempty"`
+
+	Users []User `json:"users,omitempty"`
 }
 
 // StorageAutoscaling returns the storage autoscaling configuration, if any.
@@ -906,6 +908,32 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	StorageAutoscaling map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
 }
 
+type UserSecretKeySelector struct {
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:=password
+	Key string `json:"key"`
+}
+
+type User struct {
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// +kubebuilder:validation:Optional
+	PasswordSecretRef *UserSecretKeySelector `json:"passwordSecretRef"`
+	DBs               []string               `json:"dbs,omitempty"`
+	Hosts             []string               `json:"hosts,omitempty"`
+	Grants            []string               `json:"grants,omitempty"`
+}
+
+func (cr *PerconaServerMySQL) DefaultCustomUserSecretName(u User) string {
+	return fmt.Sprintf("%s-user-%s", cr.GetName(), u.Name)
+}
+
+func (cr *PerconaServerMySQL) InternalCustomUserSecretName() string {
+	return fmt.Sprintf("%s-internal-custom-users", cr.GetName())
+}
+
 func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {
 	return v.Must(v.NewVersion(s.MySQL.Version)).Compare(v.Must(v.NewVersion(ver)))
 }
@@ -933,8 +961,7 @@ type PerconaServerMySQL struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec PerconaServerMySQLSpec `json:"spec,omitempty"`
-
+	Spec   PerconaServerMySQLSpec   `json:"spec,omitempty"`
 	Status PerconaServerMySQLStatus `json:"status,omitempty"` // Make sure that the Status is updated after making changes. See the description of `(*PerconaServerMySQLReconciler) reconcileCRStatus` method for details.
 }
 
