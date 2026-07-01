@@ -838,22 +838,30 @@ run_mysql_query_file() {
 	local user="${3:--uroot -p'$(get_user_pass root)'}"
 	local pod="${4:-mysql-client}"
 	local exit_when_empty="${5:-false}"
+	local output
 	local result
 	local rc
 
 	local client_pod=$(get_client_pod)
 	wait_pod "$client_pod" >&2
 
-	{
-		result="$(
-			kubectl -n "${NAMESPACE}" exec -i "$pod" -- \
-				bash -c "mysql -sN $host $user 2>&1" \
-				<"$file" \
-				2>/dev/null \
-				| grep -v 'Using a password on the command line interface can be insecure.'
-		)"
+	if output="$(
+		kubectl -n "${NAMESPACE}" exec -i "$pod" -- \
+			bash -c "mysql -sN $host $user 2>&1" \
+			<"$file" \
+			2>/dev/null
+	)"; then
+		rc=0
+	else
 		rc=$?
-	}
+	fi
+
+	result="$(
+		printf '%s\n' "$output" \
+			| $sed -e 's/mysql: //' \
+			| (grep -v 'Using a password on the command line interface can be insecure.' || :) \
+			| (grep -vE 'Unknown stream id [0-9]+, discarding message' || :)
+	)"
 
 	if [[ $exit_when_empty == "true" && -z $result ]]; then
 		echo "Query from file $file failed on pod $pod with host $host and user $user"
