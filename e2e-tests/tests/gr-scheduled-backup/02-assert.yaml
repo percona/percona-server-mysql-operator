@@ -1,8 +1,8 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 400
+timeout: 500
 commands:
-  - timeout: 400
+  - timeout: 500
     script: |-
       set -o errexit
 
@@ -11,28 +11,24 @@ commands:
       cluster_name=$(get_cluster_name)
       kubectl wait --for=condition=complete job/sysbench-data -n "${NAMESPACE}" --timeout=400s
       sleep 10
-      wait_cluster_consistency_async "${cluster_name}" 3 3
+      wait_cluster_consistency_gr "${cluster_name}" 3 3
 
-      data=$(run_mysql_query_file "conf/data-query.sql" "-h $(get_haproxy_svc $(get_cluster_name))")
-      kubectl create configmap -n "${NAMESPACE}" 02-scheduled-backup-data --from-literal=data="${data}" --dry-run=client -o yaml \
+      data=$(run_mysql_query_file "conf/data-query.sql" "-h $(get_router_service "${cluster_name}")")
+      kubectl create configmap -n "${NAMESPACE}" 02-gr-scheduled-backup-data --from-literal=data="${data}" --dry-run=client -o yaml \
         | kubectl apply -n "${NAMESPACE}" -f -
 ---
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
-  name: scheduled-backup
+  name: gr-scheduled-backup
   finalizers:
     - percona.com/delete-mysql-pods-in-order
 status:
-  haproxy:
-    ready: 3
-    size: 3
-    state: ready
   mysql:
     ready: 3
     size: 3
     state: ready
-  orchestrator:
+  router:
     ready: 3
     size: 3
     state: ready
@@ -48,7 +44,7 @@ status:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: 02-scheduled-backup-data
+  name: 02-gr-scheduled-backup-data
 data:
   data: |-
     sbtest1 40000
@@ -171,4 +167,3 @@ data:
     sbtest118 40000
     sbtest119 40000
     sbtest120 40000
-
