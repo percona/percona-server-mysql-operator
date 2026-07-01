@@ -1,0 +1,17 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 30
+    script: |-
+      set -o errexit
+      set -o xtrace
+      set -o pipefail
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o yaml \
+        | yq eval '
+            .spec.backup.schedule[].schedule = ""
+          ' - \
+        | kubectl apply -n "${NAMESPACE}" -f -

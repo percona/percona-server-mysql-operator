@@ -16,7 +16,7 @@ commands:
             {
               "name": "incr",
               "type": "incremental",
-              "schedule": "*/2 * * * *",
+              "schedule": "*/4 * * * *",
               "storageName": $storage
             }
           ]
