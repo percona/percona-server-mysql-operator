@@ -1906,7 +1906,8 @@ wait_for_restore() {
 	until kubectl get ps-restore "${restore_name}" -n "${NAMESPACE}" -o json \
 		| jq -e '.status.state == "Succeeded"' >/dev/null; do
 		state=$(kubectl get ps-restore "${restore_name}" -n "${NAMESPACE}" -o jsonpath='{.status.state}')
-		if [[ -n ${state} && ${state} != "Running" && ${state} != "Succeeded" ]]; then
+		if [[ "${state}" == "Failed" || "${state}" == "Error" ]]; then
+			echo "Restore failed: ${state}"
 			kubectl describe ps-restore "${restore_name}" -n "${NAMESPACE}"
 			exit 1
 		fi

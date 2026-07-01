@@ -16,30 +16,10 @@ commands:
       cluster_name="gr-cross-cluster-backup-dc1"
       mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
 
-      read_mysql_with_retry() {
-          local host=$1
-          local attempt=0
-          local result=""
-
-          until [[ -n "${result}" && "${result}" != *"ERROR"* && "${result}" != *"command terminated"* ]]; do
-              attempt=$((attempt + 1))
-              if [[ ${attempt} -gt 10 ]]; then
-                  echo "MySQL query to ${host} failed after 10 attempts: ${result}" >&2
-                  exit 1
-              fi
-              result=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${host}" "${mysql_user}")
-              if [[ "${result}" == *"ERROR"* || "${result}" == *"command terminated"* ]]; then
-                  sleep 10
-              fi
-          done
-
-          echo "${result}"
-      }
-
       for i in 0 1 2; do
-          data=$(read_mysql_with_retry "${cluster_name}-mysql-${i}.${cluster_name}-mysql")
+          data=$(retry 10 5 run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql" "${mysql_user}")
           kubectl create configmap -n "${NAMESPACE}" 16-read-data-dc1-${i} --from-literal=data="${data}"
       done
 
-      data=$(read_mysql_with_retry "$(get_haproxy_svc "${cluster_name}")")
+      data=$(retry 10 5 run_mysql "SELECT * FROM myDB.myTable" "-h $(get_haproxy_svc "${cluster_name}")" "${mysql_user}")
       kubectl create configmap -n "${NAMESPACE}" 16-read-data-dc1-haproxy --from-literal=data="${data}"

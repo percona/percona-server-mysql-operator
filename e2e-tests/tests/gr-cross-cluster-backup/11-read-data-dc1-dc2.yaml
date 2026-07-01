@@ -13,10 +13,10 @@ commands:
       for cluster_name in gr-cross-cluster-backup-dc1 gr-cross-cluster-backup-dc2; do
           suffix="${cluster_name##*-}"
           for i in 0 1 2; do
-              data=$(run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql" "${mysql_user}")
+              data=$(retry 3 5 "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql" "${mysql_user}")
               kubectl create configmap -n "${NAMESPACE}" "11-read-data-${suffix}-${i}" --from-literal=data="${data}"
           done
 
-          data=$(run_mysql "SELECT * FROM myDB.myTable" "-h $(get_haproxy_svc "${cluster_name}")" "${mysql_user}")
+          data=$(retry 3 5 "SELECT * FROM myDB.myTable" "-h $(get_haproxy_svc "${cluster_name}")" "${mysql_user}")
           kubectl create configmap -n "${NAMESPACE}" "11-read-data-${suffix}-haproxy" --from-literal=data="${data}"
       done
