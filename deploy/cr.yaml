@@ -43,7 +43,7 @@ spec:
 #      privileged: false
 #      runAsGroup: 1001
 #      runAsUser: 1001
-#    image: perconalab/percona-server-mysql-operator:main
+#    image: percona/percona-server-mysql-operator:1.2.0
 #    resources:
 #      limits:
 #        cpu: 100m
@@ -69,7 +69,7 @@ spec:
     autoRecovery: true
 #    vaultSecretName: ps-cluster1-vault
     size: 3
-    image: perconalab/percona-server-mysql-operator:main-psmysql8.4
+    image: percona/percona-server:8.4.10-10.1
     imagePullPolicy: Always
 #    imagePullSecrets:
 #      - name: my-secret-1
@@ -96,7 +96,7 @@ spec:
 #        privileged: false
 #        runAsGroup: 1001
 #        runAsUser: 1001
-#      image: perconalab/percona-server-mysql-operator:main
+#      image: percona/percona-server-mysql-operator:1.2.0
 #      resources:
 #        limits:
 #          cpu: 100m
@@ -273,7 +273,7 @@ spec:
 #          - 10.0.0.0/8
 #        type: ClusterIP
       size: 3
-      image: perconalab/percona-server-mysql-operator:main-haproxy
+      image: percona/haproxy:2.8.18-1
       imagePullPolicy: Always
 #      imagePullSecrets:
 #        - name: my-secret-1
@@ -300,7 +300,7 @@ spec:
 #          privileged: false
 #          runAsGroup: 1001
 #          runAsUser: 1001
-#        image: perconalab/percona-server-mysql-operator:main
+#        image: percona/percona-server-mysql-operator:1.2.0
 #        resources:
 #          limits:
 #            cpu: 100m
@@ -429,7 +429,7 @@ spec:
 #          - 10.0.0.0/8
 #        type: ClusterIP
       size: 3
-      image: perconalab/percona-server-mysql-operator:main-router8.4
+      image: percona/percona-mysql-router:8.4.10
       imagePullPolicy: Always
 #      imagePullSecrets:
 #        - name: my-secret-1
@@ -456,7 +456,7 @@ spec:
 #          privileged: false
 #          runAsGroup: 1001
 #          runAsUser: 1001
-#        image: perconalab/percona-server-mysql-operator:main
+#        image: percona/percona-server-mysql-operator:1.2.0
 #        resources:
 #          limits:
 #            cpu: 100m
@@ -571,7 +571,7 @@ spec:
 #        - 10.0.0.0/8
 #      type: ClusterIP
     size: 3
-    image: perconalab/percona-server-mysql-operator:main-orchestrator
+    image: percona/percona-orchestrator:3.2.6-22
     imagePullPolicy: Always
 #    imagePullSecrets:
 #      - name: my-secret-1
@@ -598,7 +598,7 @@ spec:
 #        privileged: false
 #        runAsGroup: 1001
 #        runAsUser: 1001
-#      image: perconalab/percona-server-mysql-operator:main
+#      image: percona/percona-server-mysql-operator:1.2.0
 #      resources:
 #        limits:
 #          cpu: 100m
@@ -664,7 +664,7 @@ spec:
 #    configuration: '{"FailMasterPromotionOnLagMinutes": 10}'
   pmm:
     enabled: false
-    image: perconalab/pmm-client:3-dev-latest
+    image: percona/pmm-client:3.8.1
     imagePullPolicy: Always
     serverHost: monitoring-service
 #    customClusterName: cluster1-custom
@@ -737,7 +737,7 @@ spec:
 #            privileged: false
 #            runAsGroup: 1001
 #            runAsUser: 1001
-#          image: perconalab/percona-server-mysql-operator:main
+#          image: percona/percona-server-mysql-operator:1.2.0
 #          resources:
 #            limits:
 #              cpu: 100m
@@ -762,7 +762,7 @@ spec:
 #        rewriteFileSize: ""
 #        sslMode: ""
 #    sourcePod: ps-cluster1-mysql-1
-    image: perconalab/percona-server-mysql-operator:main-backup8.4
+    image: percona/percona-xtrabackup:8.4.0-6.1
     imagePullPolicy: Always
 #    imagePullSecrets:
 #      - name: my-secret-1
@@ -785,7 +785,7 @@ spec:
 #        privileged: false
 #        runAsGroup: 1001
 #        runAsUser: 1001
-#      image: perconalab/percona-server-mysql-operator:main
+#      image: percona/percona-server-mysql-operator:1.2.0
 #      resources:
 #        limits:
 #          cpu: 100m
@@ -995,7 +995,7 @@ spec:
 #      key: encryptionKey
 #      name: my-encryption-key-secret
   toolkit:
-    image: perconalab/percona-server-mysql-operator:main-toolkit
+    image: percona/percona-toolkit:3.7.1-3
     imagePullPolicy: Always
 #    imagePullSecrets:
 #      - name: my-secret-1
