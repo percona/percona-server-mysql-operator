@@ -8,8 +8,10 @@ commands:
       source ../../functions
 
       sleep 30
-      jobs_count=$(kubectl get job -n ${NAMESPACE} -o yaml | yq '.items | length')
       bcp_count=$(kubectl get ps-backup -n ${NAMESPACE} -o yaml | yq '.items | length')
+      jobs_count=$(kubectl get job -n ${NAMESPACE} -o yaml \
+        | yq '[.items[] | select(.metadata.ownerReferences[]?.kind == "PerconaServerMySQLBackup")] | length')
+
       if [[ $jobs_count != 1 ]]; then
           echo "There are $jobs_count jobs but should be 1"
           exit 1
