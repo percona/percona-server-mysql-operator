@@ -995,7 +995,7 @@ spec:
 #      key: encryptionKey
 #      name: my-encryption-key-secret
   toolkit:
-    image: percona/percona-toolkit:3.7.1-3
+    image: percona/percona-toolkit:3.7.1-4
     imagePullPolicy: Always
 #    imagePullSecrets:
 #      - name: my-secret-1
