@@ -2044,6 +2044,10 @@ list_files_on_storage() {
 verify_all_backups_deletion() {
 	for backup in $(kubectl get ps-backup -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}'); do
 		echo "Checking backup: $backup"
+		if ! kubectl get ps-backup "$backup" -n "$NAMESPACE" &>/dev/null; then
+			echo "Backup already gone (cascade-deleted): $backup"
+			continue
+		fi
 		eval "$(
 			kubectl get ps-backup "$backup" -n "$NAMESPACE" -o json \
 				| jq -r '
