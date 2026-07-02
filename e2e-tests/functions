@@ -2044,7 +2044,7 @@ list_files_on_storage() {
 verify_all_backups_deletion() {
 	# Skip incremental backups, as they are not deleted when the full backup is deleted
 	for backup in $(kubectl get ps-backup -n "$NAMESPACE" \
-  	-o jsonpath='{range .items[?(@.spec.type=="full")]}{.metadata.name}{" "}{end}'); do
+		-o jsonpath='{range .items[?(@.spec.type=="full")]}{.metadata.name}{" "}{end}'); do
 
 		echo "Checking backup: $backup"
 		if ! kubectl get ps-backup "$backup" -n "$NAMESPACE" &>/dev/null; then
