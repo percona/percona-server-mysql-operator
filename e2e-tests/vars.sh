@@ -12,7 +12,7 @@ export VERSION=${VERSION:-$(echo "${GIT_BRANCH}" | sed -e 's^/^-^g; s^[.]^-^g;' 
 
 export MYSQL_VERSION=${MYSQL_VERSION:-"8.4"}
 export PMM_SERVER_VERSION=${PMM_SERVER_VERSION:-"1.4.3"}
-export CERT_MANAGER_VER="1.20.2"
+export CERT_MANAGER_VER="1.20.3"
 export MINIO_VER="5.4.0"
 export CHAOS_MESH_VER="2.7.2"
 export VAULT_VER="0.16.1"
@@ -58,6 +58,6 @@ set_image IMAGE_ORCHESTRATOR "perconalab/percona-server-mysql-operator:main-orch
 set_image IMAGE_ROUTER "perconalab/percona-server-mysql-operator:main-router${MYSQL_VERSION}"
 set_image IMAGE_TOOLKIT "perconalab/percona-server-mysql-operator:main-toolkit"
 set_image IMAGE_HAPROXY "perconalab/percona-server-mysql-operator:main-haproxy"
-set_image IMAGE_BINLOG_SERVER "perconalab/percona-binlog-server:0.3.1"
+set_image IMAGE_BINLOG_SERVER "percona/percona-server-mysql-operator:1.2.0-binlog-server-0.3.1"
 set_image IMAGE_PMM_CLIENT "perconalab/pmm-client:3-dev-latest"
 set_image IMAGE_PMM_SERVER "perconalab/pmm-server:3-dev-latest"
