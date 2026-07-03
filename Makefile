@@ -299,6 +299,9 @@ release: manifests
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: $(IMAGE_PMM_CLIENT)#}" \
 		deploy/cr.yaml
 	$(SED) -i \
+		-e "/^#      binlogServer:/,/^#        image:/{s|^#        image: .*|#        image: $(IMAGE_BINLOG_SERVER)|}" \
+		deploy/backup/restore.yaml
+	$(SED) -i \
 		-e "/^  mysqlshellRunner:/,/^    image:/{s#image: .*#image: $(IMAGE_MYSQL84)#}" \
 		deploy/clusterset.yaml
 	$(SED) -i \
