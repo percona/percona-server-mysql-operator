@@ -24,7 +24,7 @@ fi
 export date=$(which gdate || which date)
 export sed=$(which gsed || which sed)
 
-oc get projects &> /dev/null && export OPENSHIFT=4 || :
+oc get projects &>/dev/null && export OPENSHIFT=4 || :
 if kubectl get nodes | grep "^minikube" >/dev/null; then
 	export MINIKUBE=1
 fi
