@@ -315,7 +315,8 @@ release: manifests
 MAJOR_VER := $(shell grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" pkg/version/version.txt|cut -d'.' -f1)
 MINOR_VER := $(shell grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" pkg/version/version.txt|cut -d'.' -f2)
 NEXT_VER ?= $(MAJOR_VER).$$(($(MINOR_VER) + 1)).0
-after-release: update-version manifests
+.PHONY: after-release after-release-versions
+after-release: update-version manifests after-release-versions
 	$(SED) -i \
 		-e "/^spec:/,/^  crVersion:/{s/crVersion: .*/crVersion: $(NEXT_VER)/}" \
 		-e "/^  mysql:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mysql-operator:main-psmysql8.4#}" \
@@ -345,3 +346,20 @@ after-release: update-version manifests
 	$(SED) -i \
 		-e "s|$(IMAGE_OPERATOR)|perconalab/percona-server-mysql-operator:main|g" \
 		pkg/controller/ps/suite_test.go
+
+after-release-versions:
+	$(SED) -i \
+		-e "s#^IMAGE_OPERATOR=.*#IMAGE_OPERATOR=$(IMAGE_TAG_BASE):main#" \
+		-e "s#^IMAGE_MYSQL84=.*#IMAGE_MYSQL84=$(IMAGE_TAG_BASE):main-psmysql8.4#" \
+		-e "s#^IMAGE_BACKUP84=.*#IMAGE_BACKUP84=$(IMAGE_TAG_BASE):main-backup8.4#" \
+		-e "s#^IMAGE_ROUTER84=.*#IMAGE_ROUTER84=$(IMAGE_TAG_BASE):main-router8.4#" \
+		-e "s#^IMAGE_MYSQL80=.*#IMAGE_MYSQL80=$(IMAGE_TAG_BASE):main-psmysql8.0#" \
+		-e "s#^IMAGE_BACKUP80=.*#IMAGE_BACKUP80=$(IMAGE_TAG_BASE):main-backup8.0#" \
+		-e "s#^IMAGE_ROUTER80=.*#IMAGE_ROUTER80=$(IMAGE_TAG_BASE):main-router8.0#" \
+		-e "s#^IMAGE_HAPROXY=.*#IMAGE_HAPROXY=$(IMAGE_TAG_BASE):main-haproxy#" \
+		-e "s#^IMAGE_ORCHESTRATOR=.*#IMAGE_ORCHESTRATOR=$(IMAGE_TAG_BASE):main-orchestrator#" \
+		-e "s#^IMAGE_TOOLKIT=.*#IMAGE_TOOLKIT=$(IMAGE_TAG_BASE):main-toolkit#" \
+		-e "s#^IMAGE_PMM_CLIENT=.*#IMAGE_PMM_CLIENT=perconalab/pmm-client:3-dev-latest#" \
+		-e "s#^IMAGE_PMM_SERVER=.*#IMAGE_PMM_SERVER=perconalab/pmm-server:3-dev-latest#" \
+		-e "s#^IMAGE_BINLOG_SERVER=.*#IMAGE_BINLOG_SERVER=perconalab/percona-binlog-server:0.3.1#" \
+		e2e-tests/release_versions

@@ -9,7 +9,7 @@ spec:
 #    backupSource:
 #      binlogServer:
 #        size: 1
-#        image: percona/percona-server-mysql-operator:1.2.0-binlog-server-0.3.1
+#        image: perconalab/percona-binlog-server:0.3.1
 #        serverId: 101
 #        storage:
 #          s3:
