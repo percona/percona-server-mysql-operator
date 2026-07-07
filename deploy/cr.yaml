@@ -21,8 +21,17 @@ spec:
 #    proxy: false
 #    proxySize: false
 #  pause: false
-  crVersion: 1.2.0
+#  clusterServiceDNSSuffix: cluster.local
+  crVersion: 1.3.0
 #  enableVolumeExpansion: false
+#  storageScaling:
+#    autoscaling:
+#      enabled: false
+#      growthStep: 2Gi
+#      maxSize: 10Gi
+#      triggerThresholdPercent: 80
+#    enableExternalAutoscaling: false
+#    enableVolumeScaling: false
   secretsName: ps-cluster1-secrets
   sslSecretName: ps-cluster1-ssl
   updateStrategy: SmartUpdate
@@ -652,12 +661,13 @@ spec:
 #    podSecurityContext:
 #      supplementalGroups:
 #        - 1001
-    configuration: ""
+#    configuration: '{"FailMasterPromotionOnLagMinutes": 10}'
   pmm:
     enabled: false
     image: perconalab/pmm-client:3-dev-latest
     imagePullPolicy: Always
     serverHost: monitoring-service
+#    customClusterName: cluster1-custom
 #    mysqlParams: PMM_ADMIN_CUSTOM_PARAMS
 #    containerSecurityContext:
 #      privileged: false
@@ -686,7 +696,7 @@ spec:
       enabled: false
 #      binlogServer:
 #        size: 1
-#        image: perconalab/percona-binlog-server:0.2.1
+#        image: perconalab/percona-binlog-server:0.3.1
 #        imagePullPolicy: Always
 #        imagePullSecrets:
 #          - name: my-secret-1

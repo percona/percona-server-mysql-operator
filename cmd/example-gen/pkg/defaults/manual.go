@@ -15,6 +15,7 @@ import (
 // that are not set by CheckNSetDefaults and cannot be set via PresetDefaults.
 func ManualCluster(cr *apiv1.PerconaServerMySQL) {
 	cr.Spec.CRVersion = version.Version()
+	cr.Spec.ClusterServiceDNSSuffix = "cluster.local"
 	cr.Spec.UpdateStrategy = "SmartUpdate"
 	cr.Spec.InitContainer.Image = ImageInitContainer
 	cr.Spec.IgnoreAnnotations = []string{"service.beta.kubernetes.io/aws-load-balancer-backend-protocol"}
@@ -110,6 +111,7 @@ func orchestratorDefaults(spec *apiv1.OrchestratorSpec) {
 	podSpecDefaults(&spec.PodSpec, ImageOrchestrator, resources("128M", "", "256M", ""), "", 30, envList("ORC_ENV", "VALUE"), envFromList("orc-env-secret"))
 
 	spec.Enabled = false
+	spec.Configuration = `{"FailMasterPromotionOnLagMinutes": 10}`
 	spec.ServiceAccountName = "percona-server-mysql-operator-orchestrator"
 	spec.PodSecurityContext = &corev1.PodSecurityContext{
 		SupplementalGroups: []int64{1001},
@@ -120,6 +122,7 @@ func pmmDefaults(spec *apiv1.PMMSpec) {
 	spec.Image = ImagePMM
 	spec.Resources = resources("150M", "300m", "256M", "400m")
 	spec.ServerHost = "monitoring-service"
+	spec.CustomClusterName = "cluster1-custom"
 	spec.MySQLParams = "PMM_ADMIN_CUSTOM_PARAMS"
 }
 

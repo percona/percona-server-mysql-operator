@@ -607,16 +607,30 @@ deploy_vault() {
 retry() {
 	local max=$1
 	local delay=$2
-	shift 2 # cut delay and max args
-	local n=1
+	shift 2
 
-	until "$@"; do
-		if [[ $n -ge $max ]]; then
-			echo "The command ${*} has failed after $n attempts."
-			exit 1
+	local n=1
+	local output
+	local rc
+
+	while ((n <= max)); do
+		set +e
+		output="$("$@")"
+		rc=$?
+		set -e
+
+		if [[ $rc -eq 0 ]]; then
+			printf '%s\n' "$output"
+			return 0
 		fi
+
+		if [[ $n -ge $max ]]; then
+			echo "The command ${*} has failed after $n attempts." >&2
+			return "$rc"
+		fi
+
 		((n++))
-		sleep $delay
+		sleep "$delay"
 	done
 }
 
@@ -776,15 +790,18 @@ run_mysql() {
 	local host="$2"
 	local user="${3:--uroot -p'$(get_user_pass root)'}"
 	local pod="$4"
+	local client_pod
 
 	client_pod=$(get_client_pod)
-	wait_pod $client_pod 1>&2
+	wait_pod "$client_pod" >&2
 
 	kubectl -n "${NAMESPACE}" exec "${pod:-mysql-client}" -- \
 		bash -c "printf '%s\n' \"${command}\" | mysql -sN $host $user" 2>&1 \
 		| $sed -e 's/mysql: //' \
 		| (grep -v 'Using a password on the command line interface can be insecure.' || :) \
 		| (grep -vE 'Unknown stream id [0-9]+, discarding message' || :)
+
+	return "${PIPESTATUS[0]}"
 }
 
 get_clusterset_status() {
@@ -819,14 +836,49 @@ run_mysql_query_file() {
 	local file="$1"
 	local host="$2"
 	local user="${3:--uroot -p'$(get_user_pass root)'}"
+	local pod="${4:-mysql-client}"
+	local exit_when_empty="${5:-false}"
+	local output
+	local result
+	local rc
+
+	local client_pod=$(get_client_pod)
+	wait_pod "$client_pod" >&2
+
+	if output="$(
+		kubectl -n "${NAMESPACE}" exec -i "$pod" -- \
+			bash -c "mysql -sN $host $user 2>&1" \
+			<"$file" \
+			2>/dev/null
+	)"; then
+		rc=0
+	else
+		rc=$?
+	fi
+
+	result="$(
+		printf '%s\n' "$output" \
+			| $sed -e 's/mysql: //' \
+			| (grep -v 'Using a password on the command line interface can be insecure.' || :) \
+			| (grep -vE 'Unknown stream id [0-9]+, discarding message' || :)
+	)"
+
+	if [[ $exit_when_empty == "true" && -z $result ]]; then
+		echo "Query from file $file failed on pod $pod with host $host and user $user"
+		return 1
+	fi
+
+	printf '%s\n' "$result"
+	return "$rc"
+}
+
+retry_run_mysql_query_file() {
+	local file="$1"
+	local host="$2"
+	local user="${3:--uroot -p'$(get_user_pass root)'}"
 	local pod="$4"
 
-	client_pod=$(get_client_pod)
-	wait_pod $client_pod 1>&2
-
-	cat "$file" | kubectl -n "${NAMESPACE}" exec -i "${pod:-mysql-client}" -- \
-		bash -c "mysql -sN $host $user 2>&1" 2>/dev/null \
-		| grep -v 'Using a password on the command line interface can be insecure.' || :
+	retry 3 5 run_mysql_query_file "$file" "$host" "$user" "$pod" true
 }
 
 get_innodb_cluster_status() {
@@ -988,6 +1040,37 @@ EOF
 
 	run_curl -XPOST -d "'$(echo ${payload} | $sed 's/\n//g')'" "-H 'Authorization: Bearer ${token}'" "https://${user_pass}@${endpoint}/v1/qan/metrics:getReport" \
 		| jq '.rows[].fingerprint'
+}
+
+verify_custom_cluster_name() {
+	local expected_cluster=$1
+	local token=$2
+	shift 2
+	local service_names=("$@")
+
+	local response
+	response=$(run_curl "-H 'Authorization: Bearer ${token}'" "https://monitoring-service/v1/inventory/services")
+
+	local verified=0
+
+	for service_name in "${service_names[@]}"; do
+		local actual_cluster
+		actual_cluster=$(echo "$response" | jq -r --arg name "$service_name" '
+			.mysql[] | select(.service_name == $name) | .cluster
+		')
+
+		if [[ -z $actual_cluster || $actual_cluster == "null" ]]; then
+			echo "Service '$service_name' not found in PMM."
+			verified=1
+		elif [[ $actual_cluster != "$expected_cluster" ]]; then
+			echo "$service_name: Cluster mismatch"
+			echo "PMM reports: $actual_cluster"
+			echo "Expected:    $expected_cluster"
+			verified=1
+		fi
+	done
+
+	return $verified
 }
 
 get_mysql_pods() {
@@ -1697,21 +1780,30 @@ get_telemetry_report_by_id() {
 
 	local url="https://pmm.check-dev.percona.com/graph/api/datasources/proxy/33/?query=${encoded_sql}&database=telemetryd"
 
-	local retry=0 resp rows
+	local retry=0 resp body http_code rows curl_exit
 
 	while :; do
-		resp="$(curl -fsS -k -H "Authorization: Bearer ${token}" "$url" 2>&1)"
-		rows="$(echo "$resp" | jq '.rows')"
+		curl_exit=0
+		resp="$(curl -sS -k -w $'\n%{http_code}' -H "Authorization: Bearer ${token}" "$url" 2>&1)" || curl_exit=$?
+		http_code="$(printf '%s' "$resp" | tail -n1)"
+		body="$(printf '%s' "$resp" | sed '$d')"
+		rows=""
+		if [[ $curl_exit -eq 0 ]]; then
+			rows="$(echo "$body" | jq '.rows' 2>/dev/null)" || rows=""
+		fi
 
 		if [[ $rows =~ ^[1-9][0-9]*$ ]]; then
 			echo "Report data found:"
-			echo "$resp" | jq '.data'
+			echo "$body" | jq '.data'
 			return 0
 		fi
 
 		((retry++))
 		if ((retry >= 10)); then
 			echo "Max retry count $retry reached. Report data was not found!"
+			echo "Last curl exit: ${curl_exit}"
+			echo "Last HTTP status: ${http_code}"
+			echo "Last response: ${body}"
 			return 1
 		fi
 
@@ -1805,6 +1897,23 @@ run_restore() {
 	'
 
 	yq eval "$restore_yq" "$restore_template" | kubectl apply -n "$NAMESPACE" -f -
+}
+
+wait_for_restore() {
+	local restore_name=$1
+	local backup_name=$2
+
+	until kubectl get ps-restore "${restore_name}" -n "${NAMESPACE}" -o json \
+		| jq -e '.status.state == "Succeeded"' >/dev/null; do
+		state="$(kubectl get ps-restore "${restore_name}" -n "${NAMESPACE}" -o jsonpath='{.status.state}')"
+		if [[ ${state} == "Failed" || ${state} == "Error" ]]; then
+			echo "Restore failed: ${state}"
+			kubectl describe ps-restore "${restore_name}" -n "${NAMESPACE}"
+			exit 1
+		fi
+		echo "Waiting restore ${restore_name} from backup ${backup_name}"
+		sleep 10
+	done
 }
 
 get_secret_value() {
@@ -1933,8 +2042,16 @@ list_files_on_storage() {
 }
 
 verify_all_backups_deletion() {
-	for backup in $(kubectl get ps-backup -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}'); do
+	# Skip incremental backups, as they are not deleted when the full backup is deleted
+	for backup in $(kubectl get ps-backup -n "$NAMESPACE" \
+		-o jsonpath='{range .items[?(@.spec.type=="full")]}{.metadata.name}{" "}{end}'); do
+
 		echo "Checking backup: $backup"
+		if ! kubectl get ps-backup "$backup" -n "$NAMESPACE" &>/dev/null; then
+			echo "Backup already gone: $backup"
+			continue
+		fi
+
 		eval "$(
 			kubectl get ps-backup "$backup" -n "$NAMESPACE" -o json \
 				| jq -r '
@@ -2020,7 +2137,10 @@ count_backups_in_schedule() {
 	local cluster_name="$2"
 
 	local prefix=$(printf '%s' "${NAMESPACE}-${cluster_name}" | sha1sum | awk '{print $1}' | head -c 5)
-	local bcp_count=$(kubectl get ps-backup -n ${NAMESPACE} -l percona.com/backup-ancestor=${prefix}-${schedule_name} -o yaml | yq '.items | length')
+	local bcp_count=$(
+		kubectl get ps-backup -n "${NAMESPACE}" -l "percona.com/backup-ancestor=${prefix}-${schedule_name}" -o yaml \
+			| yq '.items | map(select(.status.state == "Succeeded")) | length'
+	)
 	echo $bcp_count
 }
 
@@ -2029,5 +2149,41 @@ remove_resource_finalizers() {
 
 	for r in $(kubectl -n ${NAMESPACE} get $resource | grep -v NAME | awk '{print $1}'); do
 		kubectl -n ${NAMESPACE} patch $resource $r --type merge -p '{"metadata":{"finalizers":null}}'
+	done
+}
+
+get_default_storage_name() {
+	local cluster_name=${1:-$(get_cluster_name)}
+	kubectl get ps "${cluster_name}" -n "${NAMESPACE}" -o yaml \
+		| yq '(.spec.backup.storages // {}) | keys | .[0]'
+}
+
+flush_innodb_dirty_pages() {
+	local cluster_name=${1:-$(get_cluster_name)}
+	# sleep gives InnoDB time to write dirty pages before we force the checkpoint
+	sleep 10
+	for pod in $(kubectl -n "${NAMESPACE}" get pods \
+		-l "app.kubernetes.io/component=database,app.kubernetes.io/instance=${cluster_name}" \
+		-o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'); do
+		run_mysql "SET GLOBAL innodb_max_dirty_pages_pct = 0" "-h ${pod}.${cluster_name}-mysql"
+	done
+}
+
+truncate_test_data() {
+	run_mysql \
+		"TRUNCATE TABLE myDB.myTable" \
+		"-h $(get_mysql_router_service $(get_cluster_name))"
+	sleep 5
+}
+
+read_mysql_data_to_configmap() {
+	local prefix=$1
+	local cluster_name=$(get_cluster_name)
+	for i in 0 1 2; do
+		local data
+		data=$(run_mysql "SELECT * FROM myDB.myTable" \
+			"-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql")
+		kubectl create configmap -n "${NAMESPACE}" "${prefix}-${i}" \
+			--from-literal=data="${data}"
 	done
 }

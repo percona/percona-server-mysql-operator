@@ -85,7 +85,8 @@ func exec(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, endpoin
 	c := []string{"sh", "-c", curl}
 	err := cliCmd.Exec(ctx, pod, AppName, c, nil, outb, errb, false)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unable to upgrade connection: container not found") {
+		if strings.Contains(strings.ToLower(err.Error()), "unable to upgrade connection: container not found") ||
+			strings.Contains(err.Error(), "failed to exec in container") {
 			return ErrContainerNotFound
 		}
 		return errors.Wrapf(err, "run %s, stdout: %s, stderr: %s", c, outb, errb)
@@ -297,6 +298,36 @@ func Cluster(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, clus
 	}
 
 	return instances, nil
+}
+
+func GetInstance(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) (*Instance, error) {
+	url := fmt.Sprintf("api/instance/%s/%d", host, port)
+
+	var res, errb bytes.Buffer
+	if err := exec(ctx, cliCmd, pod, url, &res, &errb); err != nil {
+		return nil, err
+	}
+
+	body := res.Bytes()
+	if len(body) == 0 {
+		return nil, ErrEmptyResponse
+	}
+
+	instance := &Instance{}
+	if err := json.Unmarshal(body, instance); err == nil {
+		return instance, nil
+	}
+
+	orcResp := new(orcResponse)
+	if err := unmarshalOrcResponse(body, orcResp); err != nil {
+		return nil, err
+	}
+
+	if err := orcResp.Error(); err != nil {
+		return nil, err
+	}
+
+	return instance, nil
 }
 
 func ForgetInstance(ctx context.Context, cliCmd clientcmd.Client, pod *corev1.Pod, host string, port int) error {

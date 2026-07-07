@@ -1,0 +1,32 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 100
+commands:
+  - script: |-
+      set -o errexit
+
+      source ../../functions
+
+      restore_count=$(kubectl get ps-restore -n "${NAMESPACE}" -o json \
+        | jq '[.items[] | select(.metadata.name | startswith("gr-scheduled-backup-incremental-restore-")) | select(.status.state == "Succeeded")] | length')
+      if [[ "${restore_count}" != "2" ]]; then
+        echo "There are ${restore_count} succeeded incremental restores but should be 2"
+        exit 1
+      fi
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-scheduled-backup-incremental
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+status:
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  router:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready

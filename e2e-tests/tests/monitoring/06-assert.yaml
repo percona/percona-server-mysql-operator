@@ -1,0 +1,28 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 600
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: monitoring-mysql
+status:
+  replicas: 3
+  readyReplicas: 3
+  updatedReplicas: 3
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: monitoring-haproxy
+status:
+  replicas: 3
+  readyReplicas: 3
+  updatedReplicas: 3
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: monitoring
+status:
+  state: ready

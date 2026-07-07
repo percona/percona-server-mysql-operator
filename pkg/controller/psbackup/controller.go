@@ -235,9 +235,10 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 			return rr, nil
 		}
 
-		log.Info("Preparing backup source", "source", backupSource)
-		if err := r.prepareBackupSource(ctx, cr, cluster, backupSource); err != nil {
-			return rr, errors.Wrap(err, "prepare backup source")
+		if cluster.IsOrchestratorEnabled() {
+			if err := r.renewDowntime(ctx, cr, cluster, backupSource); err != nil {
+				return rr, errors.Wrap(err, "renew downtime for backup source")
+			}
 		}
 
 		log.Info("Creating backup job", "jobName", nn.Name)
@@ -279,6 +280,10 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		}
 	case apiv1.BackupRunning:
 		if job.Status.Active > 0 {
+			// Backup is still running, check and renew downtime before it ends.
+			if err := r.renewDowntime(ctx, cr, cluster, status.BackupSource); err != nil {
+				return rr, errors.Wrap(err, "renew downtime for backup source")
+			}
 			return rr, nil
 		}
 	case apiv1.BackupFailed, apiv1.BackupSucceeded:
@@ -528,25 +533,36 @@ func (r *PerconaServerMySQLBackupReconciler) getBackupSource(ctx context.Context
 	return source, nil
 }
 
-func (r *PerconaServerMySQLBackupReconciler) prepareBackupSource(
+func (r *PerconaServerMySQLBackupReconciler) renewDowntime(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQLBackup,
 	cluster *apiv1.PerconaServerMySQL,
 	backupSource string,
 ) error {
+	if !cluster.IsOrchestratorEnabled() {
+		return nil
+	}
+
+	orcPod, err := orchestrator.GetReadyPod(ctx, r.Client, cluster)
+	if err != nil {
+		return errors.Wrap(err, "get ready orchestrator pod")
+	}
+
+	instance, err := orchestrator.GetInstance(ctx, r.ClientCmd, orcPod, backupSource, mysql.DefaultPort)
+	if err != nil {
+		return errors.Wrapf(err, "get instance for backup source %s", backupSource)
+	}
+
 	log := logf.FromContext(ctx)
-
-	if cluster.Spec.MySQL.IsAsync() && cluster.Spec.Orchestrator.Enabled {
-		orcPod, err := orchestrator.GetReadyPod(ctx, r.Client, cluster)
-		if err != nil {
-			return errors.Wrap(err, "get ready orchestrator pod")
-		}
-
+	renewalThreshold := 1 * time.Minute
+	downtimeEnd, _ := time.Parse(time.RFC3339, instance.DowntimeEndTimestamp)
+	if !instance.IsDowntimed || time.Until(downtimeEnd) < renewalThreshold {
 		owner := controllerName
 		reason := fmt.Sprintf("ps-backup-%s", cr.Name)
-		duration := 1200 // TODO: this should be configurable
-		log.Info("Starting downtime for backup source", "source", backupSource, "owner", owner, "reason", reason, "durationSeconds", duration)
 
+		duration := 600
+
+		log.Info("Starting downtime for backup source", "source", backupSource, "owner", owner, "reason", reason, "durationSeconds", duration)
 		err = orchestrator.BeginDowntime(
 			ctx, r.ClientCmd, orcPod,
 			backupSource, mysql.DefaultPort,

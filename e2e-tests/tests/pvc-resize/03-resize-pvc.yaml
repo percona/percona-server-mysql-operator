@@ -12,9 +12,9 @@ commands:
       echo "Initial PVC sizes:"
       kubectl get pvc -n "${NAMESPACE}" -l app.kubernetes.io/name=percona-server-mysql
 
-      # Update the cluster to request larger PVC size (from 2G to 3G)
+      # Update the cluster to request larger PVC size (from 2Gi to 3Gi)
       kubectl -n "${NAMESPACE}" patch ps pvc-resize \
           --type=merge \
-          -p='{"spec":{"mysql":{"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3G"}}}}}}}'
+          -p='{"spec":{"mysql":{"volumeSpec":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3Gi"}}}}}}}'
 
       echo "PVC resize request submitted"

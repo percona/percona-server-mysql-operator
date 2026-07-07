@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   name: perconaservermysqls.ps.percona.com
 spec:
   group: ps.percona.com
@@ -2611,6 +2611,8 @@ spec:
                       type: object
                     type: object
                 type: object
+              clusterServiceDNSSuffix:
+                type: string
               crVersion:
                 type: string
               enableVolumeExpansion:
@@ -7100,6 +7102,8 @@ spec:
                             type: string
                         type: object
                     type: object
+                  customClusterName:
+                    type: string
                   enabled:
                     type: boolean
                   image:
@@ -9878,6 +9882,55 @@ spec:
                 type: string
               sslSecretName:
                 type: string
+              storageScaling:
+                properties:
+                  autoscaling:
+                    properties:
+                      enabled:
+                        type: boolean
+                      growthStep:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        default: 2Gi
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                        x-kubernetes-validations:
+                        - message: growthStep must be a valid Kubernetes quantity
+                            (e.g., '2Gi')
+                          rule: isQuantity(self)
+                        - message: growthStep must be a positive quantity
+                          rule: sign(quantity(self)) == 1
+                      maxSize:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                        x-kubernetes-validations:
+                        - message: maxSize must be a valid Kubernetes quantity (e.g.,
+                            '2Gi')
+                          rule: isQuantity(self)
+                        - message: maxSize must be a positive quantity
+                          rule: sign(quantity(self)) == 1
+                        - message: maxSize should be at least 1Gi
+                          rule: quantity(self).compareTo(quantity('1Gi')) >= 0
+                      triggerThresholdPercent:
+                        default: 80
+                        maximum: 95
+                        minimum: 50
+                        type: integer
+                    type: object
+                  enableExternalAutoscaling:
+                    type: boolean
+                  enableVolumeScaling:
+                    type: boolean
+                type: object
+                x-kubernetes-validations:
+                - message: autoscaling cannot be enabled when enableVolumeScaling
+                    is disabled
+                  rule: '!has(self.autoscaling) || !has(self.autoscaling.enabled)
+                    || !self.autoscaling.enabled || self.enableVolumeScaling'
               tls:
                 properties:
                   SANs:
@@ -10603,6 +10656,21 @@ spec:
                 type: object
               state:
                 type: string
+              storageAutoscaling:
+                additionalProperties:
+                  properties:
+                    currentSize:
+                      type: string
+                    lastError:
+                      type: string
+                    lastResizeTime:
+                      format: date-time
+                      type: string
+                    resizeCount:
+                      format: int32
+                      type: integer
+                  type: object
+                type: object
               toolkitVersion:
                 type: string
             type: object

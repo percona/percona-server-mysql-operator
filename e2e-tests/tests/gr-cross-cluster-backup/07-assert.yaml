@@ -1,0 +1,102 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 700
+
+resourceRefs:
+- kind: PerconaServerMySQL
+  apiVersion: ps.percona.com/v1
+  name: gr-cross-cluster-backup-dc1
+  ref: dc1
+- kind: PerconaServerMySQL
+  apiVersion: ps.percona.com/v1
+  name: gr-cross-cluster-backup-dc2
+  ref: dc2
+assertAll:
+- celExpr: "!dc1.status.conditions.exists(c, c.type == \"ClusterSetReplicationRunning\" && c.status == \"True\")"
+  message: "dc1 should not have ClusterSetReplicationRunning=True"
+- celExpr: "dc2.status.conditions.exists(c, c.type == \"ClusterSetReplicationRunning\" && c.status == \"True\")"
+  message: "dc2 should have ClusterSetReplicationRunning=True"
+
+commands:
+  - script: |-
+      set -o errexit
+      set -o pipefail
+      set -o xtrace
+
+      source ../../functions
+
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
+
+      status=$(get_clusterset_status "-h gr-cross-cluster-backup-dc1-mysql-primary" "${mysql_user}")
+
+      echo "${status}" | jq .
+      echo "${status}" | jq -e '
+          .status == "HEALTHY" and
+          .primaryCluster == "grcrossclusterbackupdc1" and
+          .clusters.grcrossclusterbackupdc1.clusterRole == "PRIMARY" and
+          .clusters.grcrossclusterbackupdc1.globalStatus == "OK" and
+          .clusters.grcrossclusterbackupdc2.clusterRole == "REPLICA" and
+          .clusters.grcrossclusterbackupdc2.globalStatus == "OK"
+      '
+    timeout: 420
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-cross-cluster-backup-dc2
+status:
+  conditions:
+  - reason: Initializing
+    status: "False"
+    type: Initializing
+  - reason: Ready
+    status: "True"
+    type: Ready
+  - message: InnoDB cluster successfully bootstrapped with 3 nodes
+    reason: InnoDBClusterBootstrapped
+    status: "True"
+    type: InnoDBClusterBootstrapped
+  - message: ClusterSet replication is running
+    reason: ClusterSetReplicationRunning
+    status: "True"
+    type: ClusterSetReplicationRunning
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  haproxy:
+    ready: 1
+    size: 1
+    state: ready
+  state: ready
+---
+kind: PerconaServerMySQLClusterSet
+apiVersion: ps.percona.com/v1
+metadata:
+  name: gr-cross-cluster
+status:
+  conditions:
+  - type: MySQLShellRunnerReady
+    status: "True"
+  - type: ClusterSetBootstrapped
+    status: "True"
+  - type: Ready
+    status: "True"
+  clusters:
+    grcrossclusterbackupdc1:
+      clusterRole: PRIMARY
+      globalStatus: OK
+    grcrossclusterbackupdc2:
+      clusterRole: REPLICA
+      globalStatus: OK
+  primaryCluster: grcrossclusterbackupdc1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gr-cross-cluster-runner
+status:
+  availableReplicas: 1
+  readyReplicas: 1
+  replicas: 1
+  updatedReplicas: 1
