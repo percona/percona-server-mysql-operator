@@ -14,7 +14,7 @@ commands:
           | .spec.backup.schedule = [{
               "keep": 3,
               "name": "storage-3",
-              "schedule": "*/2 * * * *",
+              "schedule": "*/3 * * * *",
               "storageName": $storage
             }]
         ' \

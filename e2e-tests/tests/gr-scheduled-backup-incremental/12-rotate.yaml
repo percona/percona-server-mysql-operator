@@ -16,9 +16,9 @@ commands:
             {
               "name": "incr",
               "type": "incremental",
-              "schedule": "*/2 * * * *",
+              "schedule": "*/4 * * * *",
               "storageName": $storage
             }
           ]
         ' \
-        | kubectl apply -f -
+        | kubectl apply -n ${NAMESPACE} -f -
