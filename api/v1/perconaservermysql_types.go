@@ -214,7 +214,7 @@ type UnsafeFlags struct {
 
 type TLSSpec struct {
 	SANs       []string                `json:"SANs,omitempty"`
-	IssuerConf *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
+	IssuerConf *cmmeta.IssuerReference `json:"issuerConf,omitempty"`
 }
 
 type ClusterType string
