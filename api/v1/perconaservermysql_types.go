@@ -116,9 +116,9 @@ func (cr *PerconaServerMySQL) validateStorageAutoscaling() error {
 		return nil
 	}
 
-	if !spec.MaxSize.IsZero() {
+	if maxSize := spec.MaxSize; maxSize != nil && !maxSize.IsZero() {
 		minSize := resource.MustParse("1Gi")
-		if spec.MaxSize.Cmp(minSize) < 0 {
+		if maxSize.Cmp(minSize) < 0 {
 			return errors.Errorf("maxSize must be at least 1Gi")
 		}
 	}

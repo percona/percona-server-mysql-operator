@@ -166,12 +166,12 @@ func (r *PerconaServerMySQLReconciler) shouldTriggerResize(
 		return false
 	}
 
-	if maxSize := config.MaxSize; !maxSize.IsZero() {
+	if maxSize := config.MaxSize; maxSize != nil && !maxSize.IsZero() {
 		currentSize := pvc.Status.Capacity.Storage()
 		if currentSize.Cmp(*maxSize) >= 0 {
 			log.Info("PVC already at maxSize",
 				"currentSize", currentSize.String(),
-				"maxSize", config.MaxSize.String())
+				"maxSize", maxSize.String())
 			return false
 		}
 	}
@@ -199,8 +199,8 @@ func (r *PerconaServerMySQLReconciler) calculateNewSize(
 	newSizeBytes := currentSize.Value() + config.GrowthStep.Value()
 	newSize := *resource.NewQuantity(newSizeBytes, resource.BinarySI)
 
-	if maxSize := config.MaxSize; !maxSize.IsZero() && newSize.Cmp(*maxSize) > 0 {
-		newSize = *config.MaxSize
+	if maxSize := config.MaxSize; maxSize != nil && !maxSize.IsZero() && newSize.Cmp(*maxSize) > 0 {
+		newSize = *maxSize
 	}
 
 	return newSize
