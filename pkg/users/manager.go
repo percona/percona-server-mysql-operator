@@ -125,7 +125,7 @@ func (m *manager) userHosts(ctx context.Context, name string) ([]string, error) 
 	if err != nil {
 		return nil, errors.Wrap(err, "query user hosts")
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var hosts []string
 	for rows.Next() {

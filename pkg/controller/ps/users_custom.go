@@ -37,7 +37,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCustomUsers(ctx context.Context,
 	if err != nil {
 		return errors.Wrap(err, "create users manager")
 	}
-	defer um.Close()
+	defer um.Close() //nolint:errcheck
 
 	for _, user := range cr.Spec.Users {
 		if err := r.reconcileCustomUser(ctx, um, cr, &user); err != nil {
