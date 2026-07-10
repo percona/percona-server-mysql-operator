@@ -583,7 +583,7 @@ deploy_vault() {
 	local token=$(jq -r ".root_token" <"$tmp_dir/$name")
 
 	local secret=${ROOT_REPO}/e2e-tests/conf/vault-secret.yaml
-	if [[ ${MYSQL_VERSION} == "8.4" ]]; then
+	if [[ ${MYSQL_VERSION} == "8.4" ]] || [[ ${MYSQL_VERSION} == "9.7" ]]; then
 		secret=${ROOT_REPO}/e2e-tests/conf/vault-secret-84.yaml
 	fi
 

@@ -10,7 +10,6 @@ export TEMP_DIR="/tmp/kuttl/ps/${test_name}"
 export GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 export VERSION=${VERSION:-$(echo "${GIT_BRANCH}" | sed -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')}
 
-export MYSQL_VERSION=${MYSQL_VERSION:-"8.4"}
 export PMM_SERVER_VERSION=${PMM_SERVER_VERSION:-"1.4.3"}
 export CERT_MANAGER_VER="1.20.3"
 export MINIO_VER="5.4.0"
@@ -20,6 +19,8 @@ export VAULT_VER="0.16.1"
 if [[ -z ${MYSQL_VERSION-} && -n ${IMAGE_MYSQL-} ]]; then
 	export MYSQL_VERSION=$(echo "$IMAGE_MYSQL" | sed -E 's/.*://; s/^[^0-9]*([0-9]+\.[0-9]+).*/\1/')
 fi
+
+export MYSQL_VERSION=${MYSQL_VERSION:-"8.4"}
 
 export date=$(which gdate || which date)
 export sed=$(which gsed || which sed)

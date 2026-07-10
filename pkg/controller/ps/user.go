@@ -296,7 +296,7 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 			// upgraded from older versions the user doesn't exist in MySQL yet,
 			// making the ALTER USER below fail with ERROR 1396. Create it
 			// idempotently before updating passwords.
-			if err := um.CreateClusterSetUser(ctx, mysqlUser.Password); err != nil {
+			if err := um.CreateClusterSetUser(ctx, mysqlUser.Password, &cr.Status); err != nil {
 				return errors.Wrap(err, "create clusterset user")
 			}
 		}

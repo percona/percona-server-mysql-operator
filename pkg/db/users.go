@@ -48,11 +48,15 @@ func (m *UserManager) UpdateUserPasswords(ctx context.Context, users []mysql.Use
 // ps-entrypoint.sh. The entrypoint creates users only on initial datadir
 // initialization, so clusters created by operator versions older than 1.2.0
 // don't have this user. It is safe to call if the user already exists.
-func (m *UserManager) CreateClusterSetUser(ctx context.Context, pass string) error {
+func (m *UserManager) CreateClusterSetUser(ctx context.Context, pass string, status *apiv1.PerconaServerMySQLStatus) error {
+	dynamicPrivs := "BACKUP_ADMIN, CLONE_ADMIN, CONNECTION_ADMIN, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, REPLICATION_APPLIER, PERSIST_RO_VARIABLES_ADMIN, ROLE_ADMIN, SESSION_VARIABLES_ADMIN, SYSTEM_VARIABLES_ADMIN"
+	if status.CompareMySQLVersion("9.7") >= 0 {
+		dynamicPrivs += ", TRANSACTION_GTID_TAG"
+	}
 	queries := []string{
 		fmt.Sprintf("CREATE USER IF NOT EXISTS 'clusterset'@'%%' IDENTIFIED BY '%s' PASSWORD EXPIRE NEVER", escapePass(pass)),
 		"GRANT SELECT, RELOAD, SHUTDOWN, PROCESS, FILE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE USER, EXECUTE ON *.* TO 'clusterset'@'%' WITH GRANT OPTION",
-		"GRANT BACKUP_ADMIN, CLONE_ADMIN, CONNECTION_ADMIN, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, REPLICATION_APPLIER, PERSIST_RO_VARIABLES_ADMIN, ROLE_ADMIN, SESSION_VARIABLES_ADMIN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'clusterset'@'%' WITH GRANT OPTION",
+		fmt.Sprintf("GRANT %s ON *.* TO 'clusterset'@'%%' WITH GRANT OPTION", dynamicPrivs),
 		"GRANT INSERT, UPDATE, DELETE ON mysql.* TO 'clusterset'@'%' WITH GRANT OPTION",
 		"GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata.* TO 'clusterset'@'%' WITH GRANT OPTION",
 		"GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata_bkp.* TO 'clusterset'@'%' WITH GRANT OPTION",
