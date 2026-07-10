@@ -9,7 +9,6 @@ import (
 	"net"
 	"slices"
 	"strconv"
-	"strings"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/pkg/errors"
@@ -44,10 +43,6 @@ func (r *PerconaServerMySQLReconciler) reconcileCustomUsers(ctx context.Context,
 		if err := r.reconcileCustomUser(ctx, um, cr, &user); err != nil {
 			return errors.Wrapf(err, "reconcile user %s", user.Name)
 		}
-	}
-
-	if err := cleanupUsers(ctx, r.Client, um, cr); err != nil {
-		return errors.Wrap(err, "cleanup users")
 	}
 
 	return nil
@@ -103,62 +98,12 @@ func (r *PerconaServerMySQLReconciler) reconcileCustomUser(ctx context.Context, 
 	return nil
 }
 
-func cleanupUsers(
-	ctx context.Context,
-	cl client.Client,
-	um users.Manager,
-	cr *apiv1.PerconaServerMySQL,
-) error {
-	internalSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.InternalCustomUserSecretName(),
-			Namespace: cr.GetNamespace(),
-		},
-	}
-
-	if err := cl.Get(ctx, client.ObjectKeyFromObject(internalSecret), internalSecret); err != nil {
-		if k8serrors.IsNotFound(err) {
-			return nil
-		}
-		return errors.Wrap(err, "get internal custom user secret")
-	}
-
-	for key := range internalSecret.Data {
-		if !strings.HasSuffix(key, ".md5") {
-			continue
-		}
-		key = strings.TrimSuffix(key, ".md5")
-
-		if slices.ContainsFunc(cr.Spec.Users, func(u apiv1.User) bool {
-			return u.Name == key
-		}) {
-			continue
-		}
-
-		if err := um.DropUser(ctx, &apiv1.User{Name: key}); err != nil {
-			return errors.Wrapf(err, "drop user %s", key)
-		}
-
-		if err := patchInternalUserSecret(ctx, cl, cr, func(data map[string][]byte) {
-			delete(data, key)
-			delete(data, key+".md5")
-		}); err != nil {
-			return errors.Wrap(err, "patch internal user secret")
-		}
-	}
-	return nil
-}
-
 func upsertCustomUser(ctx context.Context, cl client.Client, um users.Manager, cr *apiv1.PerconaServerMySQL, user *apiv1.User, pass string, hash string) error {
 	log := logf.FromContext(ctx)
 	log.Info("Update user config", "user", user.Name)
 
 	if err := um.UpsertUser(ctx, user, pass); err != nil {
 		return errors.Wrap(err, "upsert user")
-	}
-
-	if err := um.RevokeStaleGrants(ctx, user); err != nil {
-		return errors.Wrap(err, "revoke stale grants")
 	}
 
 	if err := patchInternalUserSecret(ctx, cl, cr, func(data map[string][]byte) {
@@ -267,7 +212,6 @@ func getUserPassword(
 	cr *apiv1.PerconaServerMySQL,
 	user *apiv1.User,
 ) ([]byte, error) {
-
 	secret, err := getCustomUserSecret(ctx, cl, cr, user)
 	if err != nil {
 		return nil, errors.Wrap(err, "get user secret")
@@ -318,7 +262,9 @@ func getCustomUserSecret(
 	secretKey := defaultCustomUserSecretKey
 	if user.PasswordSecretRef != nil {
 		secretName = user.PasswordSecretRef.Name
-		secretKey = user.PasswordSecretRef.Key
+		if user.PasswordSecretRef.Key != "" {
+			secretKey = user.PasswordSecretRef.Key
+		}
 	}
 
 	secret := &corev1.Secret{

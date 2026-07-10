@@ -18,15 +18,12 @@ type manager struct {
 type Manager interface {
 	UpsertUser(ctx context.Context, user *apiv1.User, pass string) error
 	AlterUser(ctx context.Context, user *apiv1.User, pass string) error
-	DropUser(ctx context.Context, user *apiv1.User) error
-	RevokeStaleGrants(ctx context.Context, user *apiv1.User) error
 	Close() error
 }
 
 func NewManager(
 	addr, user, pass string, timeout int32,
 ) (*manager, error) {
-
 	timeoutStr := fmt.Sprintf("%ds", timeout)
 	config := mysql.NewConfig()
 	config.User = user
@@ -119,34 +116,6 @@ func (m *manager) UpsertUser(ctx context.Context, user *apiv1.User, pass string)
 
 	}
 
-	return nil
-}
-
-func dropUserStatements(name string, hosts []string) []string {
-	var query []string
-	for _, host := range hosts {
-		query = append(query, fmt.Sprintf("DROP USER IF EXISTS '%s'@'%s'", escapeIdentifier(name), escapeIdentifier(host)))
-	}
-	return query
-}
-
-func (m *manager) DropUser(ctx context.Context, user *apiv1.User) error {
-	hosts := user.Hosts
-	if len(hosts) == 0 {
-		// No hosts specified: drop every account that exists for this name so
-		// removing a user from the CR cleans up all of its host accounts.
-		discovered, err := m.userHosts(ctx, user.Name)
-		if err != nil {
-			return errors.Wrapf(err, "get hosts for user %s", user.Name)
-		}
-		hosts = discovered
-	}
-
-	for _, q := range dropUserStatements(user.Name, hosts) {
-		if _, err := m.db.ExecContext(ctx, q); err != nil {
-			return errors.Wrapf(err, "drop user %s", user.Name)
-		}
-	}
 	return nil
 }
 
