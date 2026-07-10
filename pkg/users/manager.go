@@ -41,7 +41,7 @@ func NewManager(
 
 	mysqlDB, err := sql.Open("mysql", config.FormatDSN())
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot connect to any host")
+		return nil, errors.Wrap(err, "open mysql connection")
 	}
 
 	return &manager{
@@ -81,7 +81,7 @@ func (m *manager) UpsertUser(ctx context.Context, user *apiv1.User, pass string)
 	query := make([]string, 0)
 
 	for _, db := range user.DBs {
-		query = append(query, (fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", db)))
+		query = append(query, (fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", db)))
 	}
 
 	for _, host := range user.Hosts {
@@ -92,7 +92,7 @@ func (m *manager) UpsertUser(ctx context.Context, user *apiv1.User, pass string)
 			grants := strings.Join(user.Grants, ",")
 			if len(user.DBs) > 0 {
 				for _, db := range user.DBs {
-					q := fmt.Sprintf("GRANT %s ON %s.* TO '%s'@'%s' %s", grants, db, escapeIdentifier(user.Name), escapeIdentifier(host), withGrantOption)
+					q := fmt.Sprintf("GRANT %s ON `%s`.* TO '%s'@'%s' %s", grants, db, escapeIdentifier(user.Name), escapeIdentifier(host), withGrantOption)
 					query = append(query, q)
 				}
 			} else {
@@ -110,7 +110,7 @@ func (m *manager) UpsertUser(ctx context.Context, user *apiv1.User, pass string)
 
 		_, err := m.db.ExecContext(ctx, q, args...)
 		if err != nil {
-			return errors.Wrapf(err, "exec context")
+			return errors.Wrapf(err, "exec %s for user %s", q, user.Name)
 		}
 		continue
 

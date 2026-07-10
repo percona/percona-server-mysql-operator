@@ -212,7 +212,7 @@ func getUserPassword(
 	cr *apiv1.PerconaServerMySQL,
 	user *apiv1.User,
 ) ([]byte, error) {
-	secret, err := getCustomUserSecret(ctx, cl, cr, user)
+	secret, err := getUserCredentialsSecret(ctx, cl, cr, user)
 	if err != nil {
 		return nil, errors.Wrap(err, "get user secret")
 	}
@@ -221,7 +221,12 @@ func getUserPassword(
 	if user.PasswordSecretRef != nil && user.PasswordSecretRef.Key != "" {
 		key = user.PasswordSecretRef.Key
 	}
-	return secret.Data[key], nil
+
+	pass, ok := secret.Data[key]
+	if !ok {
+		return nil, errors.Errorf("key '%s' not found in Secret '%s'", key, secret.Name)
+	}
+	return pass, nil
 }
 
 func getInternalCustomUserSecret(
@@ -252,41 +257,43 @@ func getInternalCustomUserSecret(
 	return secret, nil
 }
 
-func getCustomUserSecret(
+func getUserCredentialsSecret(
 	ctx context.Context,
 	cl client.Client,
 	cr *apiv1.PerconaServerMySQL,
 	user *apiv1.User,
 ) (*corev1.Secret, error) {
-	secretName := cr.DefaultCustomUserSecretName(*user)
-	secretKey := defaultCustomUserSecretKey
-	if user.PasswordSecretRef != nil {
-		secretName = user.PasswordSecretRef.Name
-		if user.PasswordSecretRef.Key != "" {
-			secretKey = user.PasswordSecretRef.Key
+	// If a Secret is provided by the user, return that
+	if ref := user.PasswordSecretRef; ref != nil {
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ref.Name,
+				Namespace: cr.GetNamespace(),
+			},
 		}
+
+		err := cl.Get(ctx, client.ObjectKeyFromObject(secret), secret)
+		return secret, err
 	}
 
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: cr.GetNamespace(),
-		},
-	}
-
-	if err := cl.Get(ctx, client.ObjectKeyFromObject(secret), secret); err == nil {
-		return secret, nil
-	} else if !k8serrors.IsNotFound(err) {
-		return nil, errors.Wrap(err, "get user secret")
-	}
-
+	// User did not provide a Secret, so we will create one
 	pass, err := secretutil.GeneratePass()
 	if err != nil {
 		return nil, errors.Wrap(err, "generate password")
 	}
 
-	secret.Data = map[string][]byte{
-		secretKey: pass,
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.DefaultCustomUserSecretName(*user),
+			Namespace: cr.GetNamespace(),
+		},
+		Data: map[string][]byte{
+			defaultCustomUserSecretKey: []byte(pass),
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(cr, secret, cl.Scheme()); err != nil {
+		return nil, errors.Wrap(err, "set controller reference for user secret")
 	}
 
 	if err := cl.Create(ctx, secret); err != nil {
