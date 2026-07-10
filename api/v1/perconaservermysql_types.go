@@ -118,9 +118,9 @@ func (cr *PerconaServerMySQL) validateStorageAutoscaling() error {
 		return nil
 	}
 
-	if !spec.MaxSize.IsZero() {
+	if maxSize := spec.MaxSize; maxSize != nil && !maxSize.IsZero() {
 		minSize := resource.MustParse("1Gi")
-		if spec.MaxSize.Cmp(minSize) < 0 {
+		if maxSize.Cmp(minSize) < 0 {
 			return errors.Errorf("maxSize must be at least 1Gi")
 		}
 	}
@@ -179,7 +179,7 @@ type AutoscalingSpec struct {
 	// +kubebuilder:validation:XValidation:rule="isQuantity(self)",message="maxSize must be a valid Kubernetes quantity (e.g., '2Gi')"
 	// +kubebuilder:validation:XValidation:rule="sign(quantity(self)) == 1",message="maxSize must be a positive quantity"
 	// +kubebuilder:validation:XValidation:rule="quantity(self).compareTo(quantity('1Gi')) >= 0",message="maxSize should be at least 1Gi"
-	MaxSize resource.Quantity `json:"maxSize,omitempty"`
+	MaxSize *resource.Quantity `json:"maxSize,omitempty"`
 }
 
 // StorageAutoscalingStatus tracks the autoscaling state for a specific PVC
@@ -1025,7 +1025,6 @@ func AllSystemUsers() []SystemUser {
 func (u SystemUser) IsKnown() bool {
 	_, ok := knownSystemUsers[u]
 	return ok
-
 }
 
 // MySQLSpec returns the MySQL specification from the PerconaServerMySQL custom resource.
