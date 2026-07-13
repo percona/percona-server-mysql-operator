@@ -35,6 +35,7 @@ DISTRIBUTION="$1"
 
 cd "${BASH_SOURCE[0]%/*}"
 
+# shellcheck disable=SC2034  # used by sourced distributions/*.sh
 repo_root="$(cd ../.. && pwd)"
 bundle_directory="bundles/${DISTRIBUTION}"
 project_directory="projects/${DISTRIBUTION}"
@@ -102,6 +103,7 @@ install -d \
 # - https://coreos.slack.com/team/UP1LZCC1Y
 
 export package="${package_name}"
+# shellcheck disable=SC2153  # set by Makefile / environment
 export package_channel="${PACKAGE_CHANNEL}"
 export openshift_supported_versions="${OPENSHIFT_VERSIONS}"
 
@@ -163,6 +165,7 @@ BEGIN {
 ' ../../deploy/crd.yaml
 
 while IFS= read -r f; do
+	# shellcheck disable=SC2016  # single quotes intended: $ is sed syntax, not shell
 	sed_inplace '1s/^/---\n/; ${/^---$/d;}' "$f"
 done < <(find "${bundle_directory}/manifests" -type f -name "*.crd.yaml")
 
@@ -170,8 +173,10 @@ dump() { yq --color-output; }
 
 # The first command render yaml correctly and the second extract data.
 
+# shellcheck disable=SC2015  # abort only intended when the length check fails
 yq eval -i '[.]' operator_deployments.yaml && yq eval 'length == 1' operator_deployments.yaml --exit-status >/dev/null || abort "too many deployments!" $'\n'"$(yq eval . operator_deployments.yaml)"
 
+# shellcheck disable=SC2015  # abort only intended when the length check fails
 yq eval -i '[.]' operator_accounts.yaml && yq eval 'length == 1' operator_accounts.yaml --exit-status >/dev/null || abort "too many service accounts!" $'\n'"$(yq eval . operator_accounts.yaml)"
 
 # Wrap roles into arrays
@@ -180,6 +185,7 @@ yq eval-all '[.]' operator_ns_roles.yaml >operator_ns_roles_arr.yaml && mv opera
 
 # Render bundle CSV and strip comments.
 export stem=$(yq -r '.projectName' "${project_directory}/PROJECT")
+# shellcheck disable=SC2153  # set by Makefile / environment
 export version="${VERSION}"
 export timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 export name="${stem}.v${VERSION}"

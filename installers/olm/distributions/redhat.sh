@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# shellcheck disable=SC2016,SC2155
+# shellcheck disable=SC2016,SC2155,SC2154  # SC2154: repo_root/VERSION provided by generate.sh
 set -euo pipefail
 
 redhat_release="${VERSION}"
