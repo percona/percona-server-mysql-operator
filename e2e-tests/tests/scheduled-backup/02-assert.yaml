@@ -1,0 +1,153 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 400
+commands:
+  - timeout: 400
+    script: |-
+      set -o errexit
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+      kubectl wait --for=condition=complete job/sysbench-data -n "${NAMESPACE}" --timeout=400s
+      sleep 10
+      wait_cluster_consistency_async "${cluster_name}" 3 3
+
+      data=$(run_mysql_query_file "conf/data-query.sql" "-h $(get_haproxy_svc $(get_cluster_name))")
+      kubectl create configmap -n "${NAMESPACE}" 02-scheduled-backup-data --from-literal=data="${data}" --dry-run=client -o yaml \
+        | kubectl apply -n "${NAMESPACE}" -f -
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: scheduled-backup
+  finalizers:
+    - percona.com/delete-mysql-pods-in-order
+status:
+  haproxy:
+    ready: 3
+    size: 3
+    state: ready
+  mysql:
+    ready: 3
+    size: 3
+    state: ready
+  orchestrator:
+    ready: 3
+    size: 3
+    state: ready
+  state: ready
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sysbench-data
+status:
+  succeeded: 1
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: 02-scheduled-backup-data
+data:
+  data: |-
+    sbtest1 40000
+    sbtest2 40000
+    sbtest3 40000
+    sbtest4 40000
+    sbtest5 40000
+    sbtest6 40000
+    sbtest7 40000
+    sbtest8 40000
+    sbtest9 40000
+    sbtest10 40000
+    sbtest11 40000
+    sbtest12 40000
+    sbtest13 40000
+    sbtest14 40000
+    sbtest15 40000
+    sbtest16 40000
+    sbtest17 40000
+    sbtest18 40000
+    sbtest19 40000
+    sbtest20 40000
+    sbtest21 40000
+    sbtest22 40000
+    sbtest23 40000
+    sbtest24 40000
+    sbtest25 40000
+    sbtest26 40000
+    sbtest27 40000
+    sbtest28 40000
+    sbtest29 40000
+    sbtest30 40000
+    sbtest31 40000
+    sbtest32 40000
+    sbtest33 40000
+    sbtest34 40000
+    sbtest35 40000
+    sbtest36 40000
+    sbtest37 40000
+    sbtest38 40000
+    sbtest39 40000
+    sbtest40 40000
+    sbtest41 40000
+    sbtest42 40000
+    sbtest43 40000
+    sbtest44 40000
+    sbtest45 40000
+    sbtest46 40000
+    sbtest47 40000
+    sbtest48 40000
+    sbtest49 40000
+    sbtest50 40000
+    sbtest51 40000
+    sbtest52 40000
+    sbtest53 40000
+    sbtest54 40000
+    sbtest55 40000
+    sbtest56 40000
+    sbtest57 40000
+    sbtest58 40000
+    sbtest59 40000
+    sbtest60 40000
+    sbtest61 40000
+    sbtest62 40000
+    sbtest63 40000
+    sbtest64 40000
+    sbtest65 40000
+    sbtest66 40000
+    sbtest67 40000
+    sbtest68 40000
+    sbtest69 40000
+    sbtest70 40000
+    sbtest71 40000
+    sbtest72 40000
+    sbtest73 40000
+    sbtest74 40000
+    sbtest75 40000
+    sbtest76 40000
+    sbtest77 40000
+    sbtest78 40000
+    sbtest79 40000
+    sbtest80 40000
+    sbtest81 40000
+    sbtest82 40000
+    sbtest83 40000
+    sbtest84 40000
+    sbtest85 40000
+    sbtest86 40000
+    sbtest87 40000
+    sbtest88 40000
+    sbtest89 40000
+    sbtest90 40000
+    sbtest91 40000
+    sbtest92 40000
+    sbtest93 40000
+    sbtest94 40000
+    sbtest95 40000
+    sbtest96 40000
+    sbtest97 40000
+    sbtest98 40000
+    sbtest99 40000
+    sbtest100 40000

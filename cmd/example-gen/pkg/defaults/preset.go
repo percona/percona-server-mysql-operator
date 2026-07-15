@@ -133,7 +133,7 @@ func FromPresets(cr any) error {
 			Autoscaling: &apiv1.AutoscalingSpec{
 				TriggerThresholdPercent: 80,
 				GrowthStep:              resource.MustParse("2Gi"),
-				MaxSize:                 resource.MustParse("10Gi"),
+				MaxSize:                 new(resource.MustParse("10Gi")),
 			},
 		},
 		[]corev1.Toleration{
