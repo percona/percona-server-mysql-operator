@@ -125,7 +125,7 @@ image_version() {
 mysql_major_version() {
 	local image
 	image="$(yq eval '.spec.mysql.image' "${repo_root}/deploy/cr.yaml")"
-	cut -d. -f1,2 <<<"$(image_version "${image}")"
+	grep -oE '[0-9]+\.[0-9]+' <<<"$(image_version "${image}")" | tail -n1
 }
 
 build_redhat_related_images() {
