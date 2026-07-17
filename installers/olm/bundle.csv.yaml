@@ -145,10 +145,6 @@ spec:
       orchestrator: b3JjaGVzdHJhdG9yX3Bhc3N3b3Jk
       replication: cmVwbF9wYXNzd29yZAo=
     ```
-
-    ###  Release Highlights
-
-    * Initial release of Percona Operator for MySQL based on Percona Server for MySQL
   version:
   links:
     - name: Percona
@@ -186,6 +182,13 @@ spec:
         displayName: PerconaServerMySQLRestore
         kind: PerconaServerMySQLRestore
         name: perconaservermysqlrestores.ps.percona.com
+        version: v1
+        specDescriptors: []
+        statusDescriptors: []
+      - description: Instance of a Percona Server for MySQL ClusterSet
+        displayName: PerconaServerMySQLClusterSet
+        kind: PerconaServerMySQLClusterSet
+        name: perconaservermysqlclustersets.ps.percona.com
         version: v1
         specDescriptors: []
         statusDescriptors: []
