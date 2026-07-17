@@ -153,7 +153,7 @@ var _ = Describe("TLS secrets without cert-manager", Ordered, func() {
 
 			cr.Spec.TLS = &apiv1.TLSSpec{
 				SANs: []string{"mysql-1.example.com"},
-				IssuerConf: &cmmeta.ObjectReference{
+				IssuerConf: &cmmeta.IssuerReference{
 					Name: "some-issuer",
 				},
 			}
