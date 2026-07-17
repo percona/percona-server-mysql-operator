@@ -44,6 +44,10 @@ func (f *fakeExecClient) REST() restclient.Interface {
 	return nil
 }
 
+func (f *fakeExecClient) Host() string {
+	return ""
+}
+
 func newReadyBinlogServerPod(cr *apiv1.PerconaServerMySQL) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
