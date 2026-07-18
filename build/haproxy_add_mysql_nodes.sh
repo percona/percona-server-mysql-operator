@@ -49,6 +49,21 @@ function main() {
 		NODE_LIST_MYSQLX+=("server ${node_name} ${mysql_host}:${MYSQLX_PORT} ${send_proxy} ${SERVER_OPTIONS} backup")
 	done
 
+	# mysql-x and mysql-admin replicas run the same external check against the
+	# same admin port as mysql-replicas, so mirror the state with 'track'
+	# instead of running duplicate checks. Only replicas can track: the primary
+	# node is not present in the mysql-replicas backend and keeps its own check.
+	if [ "${#NODE_LIST_REPL[@]}" -gt 1 ]; then
+		for i in "${!NODE_LIST_ADMIN[@]}"; do
+			node_name=$(echo "${NODE_LIST_ADMIN[$i]}" | cut -d ' ' -f 2)
+			NODE_LIST_ADMIN[$i]="$(echo "${NODE_LIST_ADMIN[$i]}" | sed 's/ check / /') track mysql-replicas/${node_name}"
+		done
+		for i in "${!NODE_LIST_MYSQLX[@]}"; do
+			node_name=$(echo "${NODE_LIST_MYSQLX[$i]}" | cut -d ' ' -f 2)
+			NODE_LIST_MYSQLX[$i]="$(echo "${NODE_LIST_MYSQLX[$i]}" | sed 's/ check / /') track mysql-replicas/${node_name}"
+		done
+	fi
+
 	if [ -n "$primary_mysql_host" ]; then
 		if [[ "${#NODE_LIST[@]}" -ne 0 ]]; then
 			NODE_LIST=("$primary_mysql_node" "$(printf '%s\n' "${NODE_LIST[@]}" | sort --version-sort -r | uniq)")
