@@ -689,12 +689,12 @@ func (r *PerconaServerMySQLReconciler) getObservedClusterType(
 	// Find the mysql container
 	containerName := mysql.AppName
 	var container *corev1.Container
-	for _, c := range sts.Spec.Template.Spec.Containers {
+	for i, c := range sts.Spec.Template.Spec.Containers {
 		if c.Name != containerName {
 			continue
 		}
 
-		container = &c
+		container = &sts.Spec.Template.Spec.Containers[i]
 		break
 	}
 	if container == nil {
@@ -750,7 +750,7 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 			return errors.Wrap(err, "teardown GR")
 		}
 	default:
-		return errors.Errorf("unsupported cluster type: %s", desiredType)
+		return errors.Errorf("unsupported cluster type: %s", observedType)
 	}
 
 	// Delete mysql pods
@@ -787,7 +787,7 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 		}
 	}
 
-	log.Info("Cluster type switched successfully", "to", desiredType)
+	log.Info("Cluster type switch initiated", "to", desiredType)
 	return nil
 }
 
@@ -813,7 +813,7 @@ func (r *PerconaServerMySQLReconciler) teardownGR(
 
 	opts := &mysqlsh.ExecOptions{
 		Pod:           primary,
-		ContainerName: "mysql",
+		ContainerName: mysql.AppName,
 		Client:        r.ClientCmd,
 		Stdout:        &bytes.Buffer{},
 	}
@@ -851,7 +851,7 @@ func (r *PerconaServerMySQLReconciler) teardownAsync(
 	cr *apiv1.PerconaServerMySQL,
 ) error {
 	if cr.Spec.Orchestrator.Enabled {
-		return errors.New("orchestrator not disabled")
+		return errors.New("cannot switch clusterType from async while orchestrator is enabled; set spec.orchestrator.enabled=false first")
 	}
 
 	cr = cr.DeepCopy()
@@ -869,6 +869,13 @@ func (r *PerconaServerMySQLReconciler) teardownAsync(
 
 	resetReplication := func(pod *corev1.Pod) error {
 		db := database.NewReplicationManager(pod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, pod))
+		status, _, err := db.ReplicationStatus(ctx)
+		if err != nil {
+			return errors.Wrapf(err, "get replication status on pod %s", pod.Name)
+		}
+		if status == database.ReplicationStatusNotInitiated {
+			return nil
+		}
 		if err := db.StopReplication(ctx); err != nil {
 			return errors.Wrapf(err, "stop replication on pod %s", pod.Name)
 		}
@@ -878,8 +885,8 @@ func (r *PerconaServerMySQLReconciler) teardownAsync(
 		return nil
 	}
 
-	for _, pod := range pods {
-		if err := resetReplication(&pod); err != nil {
+	for i, pod := range pods {
+		if err := resetReplication(&pods[i]); err != nil {
 			return errors.Wrapf(err, "reset replication on pod %s", pod.Name)
 		}
 	}
