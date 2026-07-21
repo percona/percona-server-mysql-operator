@@ -46,24 +46,25 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 
 	if reconcileErr != nil {
-		if cr.Status.State != apiv1.StateError {
-			return writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), func(status *apiv1.PerconaServerMySQLStatus) error {
-				clusterCondition := metav1.Condition{
-					Status:  metav1.ConditionTrue,
-					Type:    apiv1.StateError.String(),
-					Message: reconcileErr.Error(),
-					Reason:  "ErrorReconcile",
-				}
-
-				meta.SetStatusCondition(&status.Conditions, clusterCondition)
-
-				status.State = apiv1.StateError
-
-				r.Recorder.Event(cr, corev1.EventTypeWarning, "ReconcileError", "Failed to reconcile cluster")
-				return nil
-			})
+		condition := meta.FindStatusCondition(cr.Status.Conditions, apiv1.StateError.String())
+		if cr.Status.State == apiv1.StateError && condition != nil && condition.Message == reconcileErr.Error() {
+			return nil
 		}
-		return nil
+		return writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), func(status *apiv1.PerconaServerMySQLStatus) error {
+			clusterCondition := metav1.Condition{
+				Status:  metav1.ConditionTrue,
+				Type:    apiv1.StateError.String(),
+				Message: reconcileErr.Error(),
+				Reason:  naming.ConditionReasonErrorReconcile,
+			}
+
+			meta.SetStatusCondition(&status.Conditions, clusterCondition)
+
+			status.State = apiv1.StateError
+
+			r.Recorder.Event(cr, corev1.EventTypeWarning, naming.ConditionReasonErrorReconcile, "Failed to reconcile cluster")
+			return nil
+		})
 	}
 
 	log := logf.FromContext(ctx).WithName("reconcileCRStatus")
