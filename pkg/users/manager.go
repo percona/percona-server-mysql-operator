@@ -118,26 +118,3 @@ func (m *manager) UpsertUser(ctx context.Context, user *apiv1.User, pass string)
 
 	return nil
 }
-
-// userHosts returns every host for which an account with the given name exists.
-func (m *manager) userHosts(ctx context.Context, name string) ([]string, error) {
-	rows, err := m.db.QueryContext(ctx, "SELECT Host FROM mysql.user WHERE User = ?", name)
-	if err != nil {
-		return nil, errors.Wrap(err, "query user hosts")
-	}
-	defer rows.Close() //nolint:errcheck
-
-	var hosts []string
-	for rows.Next() {
-		var host string
-		if err := rows.Scan(&host); err != nil {
-			return nil, errors.Wrap(err, "scan user host")
-		}
-		hosts = append(hosts, host)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "iterate user hosts")
-	}
-
-	return hosts, nil
-}
