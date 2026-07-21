@@ -935,18 +935,10 @@ type User struct {
 	WithGrantOption bool `json:"withGrantOption,omitempty"`
 }
 
-// invalidSecretNameChars matches runs of characters that are not allowed in a
-// Kubernetes object name (DNS-1123 subdomain), so they can be stripped out of
-// a MySQL user name before it's used to build a Secret name.
 var invalidSecretNameChars = regexp.MustCompile(`[^a-z0-9-]+`)
 
 // DefaultCustomUserSecretName returns the name of the Secret that stores the
-// auto-generated password for a custom user. MySQL user names allow
-// characters (uppercase letters, underscores, etc.) that are not valid in a
-// Kubernetes object name, so when u.Name doesn't already produce a valid
-// Secret name, it's sanitized and a hash of the original name is appended to
-// keep the result valid and avoid collisions between different user names
-// that sanitize to the same value.
+// auto-generated password for a custom user.
 func (cr *PerconaServerMySQL) DefaultCustomUserSecretName(u User) string {
 	name := fmt.Sprintf("%s-user-%s", cr.GetName(), u.Name)
 	if len(validation.IsDNS1123Subdomain(name)) == 0 {
