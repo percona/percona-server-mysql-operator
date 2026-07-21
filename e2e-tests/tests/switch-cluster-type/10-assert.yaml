@@ -5,7 +5,7 @@ timeout: 420
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: async2gr-mysql
+  name: switch-cluster-type-mysql
 status:
   observedGeneration: 1
   replicas: 3
@@ -17,19 +17,7 @@ status:
 kind: StatefulSet
 apiVersion: apps/v1
 metadata:
-  name: async2gr-orc
-status:
-  observedGeneration: 1
-  replicas: 3
-  readyReplicas: 3
-  currentReplicas: 3
-  updatedReplicas: 3
-  collisionCount: 0
----
-kind: StatefulSet
-apiVersion: apps/v1
-metadata:
-  name: async2gr-haproxy
+  name: switch-cluster-type-haproxy
 status:
   observedGeneration: 1
   replicas: 3
@@ -41,7 +29,7 @@ status:
 apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQL
 metadata:
-  name: async2gr
+  name: switch-cluster-type
 status:
   haproxy:
     ready: 3
@@ -51,8 +39,5 @@ status:
     ready: 3
     size: 3
     state: ready
-  orchestrator:
-    ready: 3
-    size: 3
-    state: ready
   state: ready
+
