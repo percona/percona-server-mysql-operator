@@ -10475,6 +10475,8 @@ spec:
                       required:
                       - name
                       type: object
+                    withGrantOption:
+                      type: boolean
                   required:
                   - name
                   type: object

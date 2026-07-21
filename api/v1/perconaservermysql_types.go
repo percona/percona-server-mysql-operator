@@ -925,6 +925,8 @@ type User struct {
 	DBs               []string               `json:"dbs,omitempty"`
 	Hosts             []string               `json:"hosts,omitempty"`
 	Grants            []string               `json:"grants,omitempty"`
+	// WithGrantOption grants the user the ability to grant their own privileges to other users.
+	WithGrantOption bool `json:"withGrantOption,omitempty"`
 }
 
 // invalidSecretNameChars matches runs of characters that are not allowed in a

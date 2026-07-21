@@ -77,7 +77,7 @@ func (m *manager) AlterUser(ctx context.Context, user *apiv1.User, pass string) 
 	return nil
 }
 
-func (m *manager) UpsertUser(ctx context.Context, user *apiv1.User, pass string) error {
+func upsertUserQueries(user *apiv1.User) []string {
 	query := make([]string, 0)
 
 	for _, db := range user.DBs {
@@ -88,19 +88,28 @@ func (m *manager) UpsertUser(ctx context.Context, user *apiv1.User, pass string)
 		query = append(query, (fmt.Sprintf("CREATE USER IF NOT EXISTS '%s'@'%s' IDENTIFIED BY ?", escapeIdentifier(user.Name), escapeIdentifier(host))))
 
 		if len(user.Grants) > 0 {
-			withGrantOption := "WITH GRANT OPTION"
+			withGrantOption := ""
+			if user.WithGrantOption {
+				withGrantOption = " WITH GRANT OPTION"
+			}
 			grants := strings.Join(user.Grants, ",")
 			if len(user.DBs) > 0 {
 				for _, db := range user.DBs {
-					q := fmt.Sprintf("GRANT %s ON `%s`.* TO '%s'@'%s' %s", grants, db, escapeIdentifier(user.Name), escapeIdentifier(host), withGrantOption)
+					q := fmt.Sprintf("GRANT %s ON `%s`.* TO '%s'@'%s'%s", grants, db, escapeIdentifier(user.Name), escapeIdentifier(host), withGrantOption)
 					query = append(query, q)
 				}
 			} else {
-				q := fmt.Sprintf("GRANT %s ON *.* TO '%s'@'%s' %s", grants, escapeIdentifier(user.Name), escapeIdentifier(host), withGrantOption)
+				q := fmt.Sprintf("GRANT %s ON *.* TO '%s'@'%s'%s", grants, escapeIdentifier(user.Name), escapeIdentifier(host), withGrantOption)
 				query = append(query, q)
 			}
 		}
 	}
+
+	return query
+}
+
+func (m *manager) UpsertUser(ctx context.Context, user *apiv1.User, pass string) error {
+	query := upsertUserQueries(user)
 
 	for _, q := range query {
 		args := []any{}
