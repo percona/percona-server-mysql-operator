@@ -276,20 +276,26 @@ func getUserCredentialsSecret(
 		return secret, err
 	}
 
-	// User did not provide a Secret, so we will create one
-	pass, err := secretutil.GeneratePass()
-	if err != nil {
-		return nil, errors.Wrap(err, "generate password")
-	}
-
+	// User did not provide a Secret, so we will create one if it doesn't already exist
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cr.DefaultCustomUserSecretName(*user),
 			Namespace: cr.GetNamespace(),
 		},
-		Data: map[string][]byte{
-			defaultCustomUserSecretKey: []byte(pass),
-		},
+	}
+
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(secret), secret); err == nil {
+		return secret, nil
+	} else if !k8serrors.IsNotFound(err) {
+		return nil, errors.Wrap(err, "get user secret")
+	}
+
+	pass, err := secretutil.GeneratePass()
+	if err != nil {
+		return nil, errors.Wrap(err, "generate password")
+	}
+	secret.Data = map[string][]byte{
+		defaultCustomUserSecretKey: []byte(pass),
 	}
 
 	if err := controllerutil.SetControllerReference(cr, secret, cl.Scheme()); err != nil {
