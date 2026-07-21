@@ -77,6 +77,16 @@ func (m *manager) AlterUser(ctx context.Context, user *apiv1.User, pass string) 
 	return nil
 }
 
+func validateGrants(grants []string) error {
+	for _, grant := range grants {
+		grant = strings.ToUpper(grant)
+		if grant == "" || strings.ContainsAny(grant, ",;`'\"\\") {
+			return fmt.Errorf("invalid grant: '%s'", grant)
+		}
+	}
+	return nil
+}
+
 func upsertUserQueries(user *apiv1.User) []string {
 	query := make([]string, 0)
 
@@ -109,6 +119,10 @@ func upsertUserQueries(user *apiv1.User) []string {
 }
 
 func (m *manager) UpsertUser(ctx context.Context, user *apiv1.User, pass string) error {
+	if err := validateGrants(user.Grants); err != nil {
+		return errors.Wrap(err, "validate grants")
+	}
+
 	query := upsertUserQueries(user)
 
 	for _, q := range query {

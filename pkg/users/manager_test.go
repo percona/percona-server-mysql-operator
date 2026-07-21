@@ -87,3 +87,66 @@ func TestUpsertUserQueries(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateGrants(t *testing.T) {
+	tests := []struct {
+		name    string
+		grants  []string
+		wantErr bool
+	}{
+		{
+			name:   "no grants",
+			grants: []string{},
+		},
+		{
+			name:   "valid grants",
+			grants: []string{"SELECT", "INSERT"},
+		},
+		{
+			name:    "empty grant",
+			grants:  []string{""},
+			wantErr: true,
+		},
+		{
+			name:    "grant with comma",
+			grants:  []string{"SELECT,INSERT"},
+			wantErr: true,
+		},
+		{
+			name:    "grant with semicolon",
+			grants:  []string{"SELECT; DROP TABLE users"},
+			wantErr: true,
+		},
+		{
+			name:    "grant with backtick",
+			grants:  []string{"SELECT`"},
+			wantErr: true,
+		},
+		{
+			name:    "grant with single quote",
+			grants:  []string{"SELECT'"},
+			wantErr: true,
+		},
+		{
+			name:    "grant with double quote",
+			grants:  []string{`SELECT"`},
+			wantErr: true,
+		},
+		{
+			name:    "grant with backslash",
+			grants:  []string{`SELECT\`},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateGrants(tt.grants)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
