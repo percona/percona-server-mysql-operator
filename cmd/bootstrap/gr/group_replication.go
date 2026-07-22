@@ -275,6 +275,34 @@ func (m *mysqlsh) configureInstance(ctx context.Context, opts *configureInstance
 	return nil
 }
 
+const clusterSetReplicationChannel = "clusterset_replication"
+
+// resetClusterSetReplication stops and resets the `clusterset_replication` channel if it exists.
+func (m *mysqlsh) resetClusterSetReplication(ctx context.Context, channel string) error {
+	result, err := m.runSQL(ctx, fmt.Sprintf(
+		"SELECT CHANNEL_NAME FROM performance_schema.replication_connection_configuration WHERE CHANNEL_NAME = '%s'",
+		channel,
+	))
+	if err != nil {
+		return errors.Wrapf(err, "check replication channel %s", channel)
+	}
+	if len(result.Rows) == 0 {
+		return nil
+	}
+
+	log.Printf("Found stale replication channel %q, resetting it before creating cluster", channel)
+
+	if _, err := m.runSQL(ctx, fmt.Sprintf("STOP REPLICA FOR CHANNEL '%s'", channel)); err != nil {
+		return errors.Wrapf(err, "stop replica for channel %s", channel)
+	}
+
+	if _, err := m.runSQL(ctx, fmt.Sprintf("RESET REPLICA ALL FOR CHANNEL '%s'", channel)); err != nil {
+		return errors.Wrapf(err, "reset replica for channel %s", channel)
+	}
+
+	return nil
+}
+
 func (m *mysqlsh) createCluster(ctx context.Context, opts *createClusterOpts) error {
 	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.createCluster('%s', %s)", m.clusterName, opts))
 	if err != nil {
@@ -488,6 +516,12 @@ func Bootstrap(ctx context.Context) error {
 			createOpts, err := getCreateClusterOpts(myCnf)
 			if err != nil {
 				return errors.Wrap(err, "get createCluster options")
+			}
+
+			// When a fresh cluster is bootstrapped, we need to reset and remove the `clusterset_replication` channel,
+			// otherwise mysqlshell will not let you form a new group replication.
+			if err := localShell.resetClusterSetReplication(ctx, clusterSetReplicationChannel); err != nil {
+				return errors.Wrap(err, "reset stale replication channel")
 			}
 
 			log.Printf("Creating InnoDB cluster: %s", localShell.clusterName)
