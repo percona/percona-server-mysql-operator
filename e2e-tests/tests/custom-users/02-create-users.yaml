@@ -8,9 +8,6 @@ commands:
 
       source ../../functions
 
-      # bob's password is provided through an external secret referenced by
-      # passwordSecretRef. alice has no passwordSecretRef, so the operator
-      # auto-generates her password into the "custom-users-user-alice" secret.
       kubectl -n "${NAMESPACE}" create secret generic custom-users-bob-pwd \
           --from-literal=password='bob-pass-1' \
           --dry-run=client -o yaml \
@@ -22,7 +19,8 @@ commands:
             {
               "name": "alice",
               "dbs": ["myapp"],
-              "grants": ["SELECT", "INSERT", "UPDATE"]
+              "grants": ["SELECT", "INSERT", "UPDATE"],
+              "withGrantOption": true
             },
             {
               "name": "bob",

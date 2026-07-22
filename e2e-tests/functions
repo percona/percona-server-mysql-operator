@@ -2187,3 +2187,16 @@ read_mysql_data_to_configmap() {
 			--from-literal=data="${data}"
 	done
 }
+
+# Checks if a user can connect to MySQL
+# Accepts the following args:
+# user: MySQL username
+# pass: MySQL password
+# host: MySQL host (service or pod)
+check_connect_user() {
+  local user="$1"
+  local pass="$2"
+  local host="$3"
+  kubectl -n "${NAMESPACE}" exec mysql-client -- \
+      env MYSQL_PWD="${pass}" mysql -sN -h "${host}" -u"${user}" -e "SELECT 1" >/dev/null 2>&1
+}

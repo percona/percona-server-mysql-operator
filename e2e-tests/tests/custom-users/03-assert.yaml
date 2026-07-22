@@ -12,3 +12,4 @@ data:
   myapp_db: "success"
   alice_grants: "success"
   bob_grants: "success"
+  bob_no_grant_option: "success"
