@@ -1,0 +1,12 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # dc1 is the ClusterSet replica at this point (primary switched to dc2 in step 13).
+      storage_name=$(kubectl get ps gr-cross-cluster-backup-dc1 -n "${NAMESPACE}" -o yaml | yq '(.spec.backup.storages // {}) | keys | .[0]')
+      run_backup replica-backup "${storage_name}" gr-cross-cluster-backup-dc1

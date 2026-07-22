@@ -1,0 +1,25 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 300
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-cross-cluster-backup-fresh
+status:
+  conditions:
+  - reason: Initializing
+    status: "False"
+    type: Initializing
+  - reason: Ready
+    status: "True"
+    type: Ready
+  - message: InnoDB cluster successfully bootstrapped with 1 nodes
+    reason: InnoDBClusterBootstrapped
+    status: "True"
+    type: InnoDBClusterBootstrapped
+  mysql:
+    ready: 1
+    size: 1
+    state: ready
+  state: ready
