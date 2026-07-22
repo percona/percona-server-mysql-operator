@@ -6,6 +6,8 @@ auto-config,8.4
 config,8.4
 config-router,8.0
 config-router,8.4
+custom-users,8.4
+custom-users,8.0
 demand-backup,8.0
 demand-backup,8.4
 gr-pitr-minio,8.4
