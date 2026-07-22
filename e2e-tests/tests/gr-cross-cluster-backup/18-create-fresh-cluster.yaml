@@ -8,11 +8,9 @@ commands:
 
       source ../../functions
 
-      # A brand new, independent cluster - not part of the ClusterSet - that we
-      # will restore the replica's backup into (K8SPS-791).
       get_cr "fresh" \
           | yq eval '.spec.mysql.clusterType="group-replication"' - \
-          | yq eval '.spec.mysql.size=1' - \
+          | yq eval '.spec.mysql.size=3' - \
           | yq eval '.spec.proxy.router.enabled=false' - \
           | yq eval '.spec.proxy.haproxy.enabled=false' - \
           | yq eval '.spec.secretsName="test-secrets"' - \

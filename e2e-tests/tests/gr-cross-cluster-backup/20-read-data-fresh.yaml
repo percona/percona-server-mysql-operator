@@ -11,5 +11,7 @@ commands:
       cluster_name="gr-cross-cluster-backup-fresh"
       mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
 
-      data=$(retry 10 5 run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-0.${cluster_name}-mysql" "${mysql_user}")
-      kubectl create configmap -n "${NAMESPACE}" 20-read-data-fresh-0 --from-literal=data="${data}"
+      for i in 0 1 2; do
+          data=$(retry 10 5 run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql" "${mysql_user}")
+          kubectl create configmap -n "${NAMESPACE}" 20-read-data-fresh-${i} --from-literal=data="${data}"
+      done

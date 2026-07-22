@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 500
+timeout: 700
 ---
 kind: PerconaServerMySQLRestore
 apiVersion: ps.percona.com/v1
@@ -21,12 +21,12 @@ status:
   - reason: Ready
     status: "True"
     type: Ready
-  - message: InnoDB cluster successfully bootstrapped with 1 nodes
+  - message: InnoDB cluster successfully bootstrapped with 3 nodes
     reason: InnoDBClusterBootstrapped
     status: "True"
     type: InnoDBClusterBootstrapped
   mysql:
-    ready: 1
-    size: 1
+    ready: 3
+    size: 3
     state: ready
   state: ready
