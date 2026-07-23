@@ -37,14 +37,15 @@ func (s AnnotationKey) String() string {
 }
 
 const (
-	AnnotationSecretHash          AnnotationKey = perconaPrefix + "last-applied-secret"
-	AnnotationConfigHash          AnnotationKey = perconaPrefix + "configuration-hash"
-	AnnotationTLSHash             AnnotationKey = perconaPrefix + "last-applied-tls"
-	AnnotationPasswordsUpdated    AnnotationKey = perconaPrefix + "passwords-updated"
-	AnnotationLastConfigHash      AnnotationKey = perconaPrefix + "last-config-hash"
-	AnnotationRescanNeeded        AnnotationKey = perconaPrefix + "rescan-needed"
-	AnnotationPVCResizeInProgress AnnotationKey = perconaPrefix + "pvc-resize-in-progress"
-	AnnotationBaseBackupName      AnnotationKey = perconaPrefix + "base-backup-name"
+	AnnotationSecretHash               AnnotationKey = perconaPrefix + "last-applied-secret"
+	AnnotationConfigHash               AnnotationKey = perconaPrefix + "configuration-hash"
+	AnnotationTLSHash                  AnnotationKey = perconaPrefix + "last-applied-tls"
+	AnnotationPasswordsUpdated         AnnotationKey = perconaPrefix + "passwords-updated"
+	AnnotationLastConfigHash           AnnotationKey = perconaPrefix + "last-config-hash"
+	AnnotationRescanNeeded             AnnotationKey = perconaPrefix + "rescan-needed"
+	AnnotationPVCResizeInProgress      AnnotationKey = perconaPrefix + "pvc-resize-in-progress"
+	AnnotationBaseBackupName           AnnotationKey = perconaPrefix + "base-backup-name"
+	AnnotationClusterSetRecoveryNeeded AnnotationKey = perconaPrefix + "clusterset-recovery-needed"
 )
 
 const ClusterSetRecoveryFile = "/var/lib/mysql/clusterset-recovery"

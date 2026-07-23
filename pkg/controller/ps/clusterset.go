@@ -24,9 +24,12 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// reconcileClusterSetStatus adds a status condition when the cluster is replica member of a ClusterSet.
-// When a replica member is removed from the ClusterSet, this function ensures that GR is bootstrapped again and the cluster is able to accept writes.
-func (r *PerconaServerMySQLReconciler) reconcileClusterSetStatus(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
+// checkClusterSetStatus updates the status conditions for ClusterSet members.
+func (r *PerconaServerMySQLReconciler) checkClusterSetStatus(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	status *apiv1.PerconaServerMySQLStatus, // all status updates must happen here
+) error {
 	log := logf.FromContext(ctx)
 	if cr.Spec.MySQL.ClusterType != apiv1.ClusterTypeGR {
 		return nil
@@ -41,6 +44,7 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterSetStatus(ctx context.Con
 	// for the full cluster would delay it (and everything derived from it, like
 	// the HAProxy is_clusterset_replica flag) until the last member finishes cloning.
 	if cr.Spec.Pause || len(pods) == 0 {
+		log.Info("No pods available to query, skip ClusterSet status check")
 		return nil
 	}
 
@@ -59,19 +63,12 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterSetStatus(ctx context.Con
 	}
 
 	if replicationRunning {
-		if !meta.IsStatusConditionTrue(cr.Status.Conditions, apiv1.ConditionClusterSetReplicationRunning) {
-			if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), func(status *apiv1.PerconaServerMySQLStatus) error {
-				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
-					Type:    apiv1.ConditionClusterSetReplicationRunning,
-					Status:  metav1.ConditionTrue,
-					Reason:  "ClusterSetReplicationRunning",
-					Message: "ClusterSet replication is running",
-				})
-				return nil
-			}); err != nil {
-				return errors.Wrap(err, "write status condition")
-			}
-		}
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:    apiv1.ConditionClusterSetReplicationRunning,
+			Status:  metav1.ConditionTrue,
+			Reason:  "ClusterSetReplicationRunning",
+			Message: "ClusterSet replication is running",
+		})
 		return nil
 	}
 
@@ -117,19 +114,51 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterSetStatus(ctx context.Con
 			return nil
 		}
 
-		log.Info("Recovering former clusterset member cluster")
-		if err := r.recoverClustersetReplicaCluster(ctx, cr, operatorPass, pods); err != nil {
-			return errors.Wrap(err, "recover clusterset replica cluster")
+		log.Info("Former ClusterSet member, recovery is needed")
+		if err := k8s.AnnotateObject(ctx, r.Client, cr, map[naming.AnnotationKey]string{
+			naming.AnnotationClusterSetRecoveryNeeded: "true",
+		}); err != nil {
+			return errors.Wrap(err, "add clusterset recovery annotation")
 		}
 	}
 
-	if err := writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), func(status *apiv1.PerconaServerMySQLStatus) error {
-		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetReplicationRunning)
+	meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetReplicationRunning)
+	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileClusterSetRecovery(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+) error {
+	if val, ok := cr.GetAnnotations()[string(naming.AnnotationClusterSetRecoveryNeeded)]; !ok || val != "true" {
 		return nil
-	}); err != nil {
-		return errors.Wrap(err, "write status condition")
 	}
 
+	log := logf.FromContext(ctx)
+
+	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "get pods")
+	}
+
+	if cr.Spec.Pause || len(pods) == 0 {
+		log.Info("No pods available for ClusterSet recovery")
+		return nil
+	}
+
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+
+	log.Info("Recovering former ClusterSet member")
+	if err := r.recoverClustersetReplicaCluster(ctx, cr, operatorPass, pods); err != nil {
+		return errors.Wrap(err, "recover clusterset replica cluster")
+	}
+
+	if err := k8s.DeannotateObject(ctx, r.Client, cr, naming.AnnotationClusterSetRecoveryNeeded); err != nil {
+		return errors.Wrap(err, "deannotate object")
+	}
 	return nil
 }
 

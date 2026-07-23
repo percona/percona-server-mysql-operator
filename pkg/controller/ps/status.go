@@ -257,6 +257,10 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 			}
 		}
 
+		if err := r.checkClusterSetStatus(ctx, cr, status); err != nil {
+			return errors.Wrap(err, "check ClusterSet status")
+		}
+
 		if status.State != initialState {
 			log.Info("Cluster state changed", "previous", initialState, "current", status.State)
 			r.Recorder.Event(cr, corev1.EventTypeNormal, "ClusterStateChanged", fmt.Sprintf("%s -> %s", initialState, status.State))
