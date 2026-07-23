@@ -263,6 +263,12 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 	log := logf.FromContext(ctx).WithName("Finalizer")
 	log.Info("Applying finalizers", "CR", cr)
 
+	if controllerutil.ContainsFinalizer(cr, naming.FinalizerClusterSetProtection) &&
+		meta.IsStatusConditionTrue(cr.Status.Conditions, apiv1.ConditionClusterSetMember) {
+		log.Info("Cannot delete ClusterSet member, remove it from ClusterSet first")
+		return nil
+	}
+
 	var err error
 
 	// Sorting finalizers to make sure that delete-mysql-pods-in-order runs before
@@ -1012,6 +1018,11 @@ func (r *PerconaServerMySQLReconciler) reconcileInternalHAProxyConfigMap(ctx con
 	data := map[string]string{
 		"is_clusterset_replica": "0",
 	}
+	if cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionClusterSetMember); cond != nil &&
+		cond.Reason == apiv1.ClusterSetMemberReasonReplica {
+		data["is_clusterset_replica"] = "1"
+	}
+	// legacy condition, preserved for backward compatibility
 	if meta.IsStatusConditionTrue(cr.Status.Conditions, apiv1.ConditionClusterSetReplicationRunning) {
 		data["is_clusterset_replica"] = "1"
 	}

@@ -20,10 +20,11 @@ const (
 )
 
 const (
-	FinalizerDeleteSSL         = perconaPrefix + "delete-ssl"
-	FinalizerDeletePodsInOrder = perconaPrefix + "delete-mysql-pods-in-order"
-	FinalizerDeleteBackup      = perconaPrefix + "delete-backup"
-	FinalizerDeleteMySQLPvc    = perconaPrefix + "delete-mysql-pvc"
+	FinalizerDeleteSSL            = perconaPrefix + "delete-ssl"
+	FinalizerDeletePodsInOrder    = perconaPrefix + "delete-mysql-pods-in-order"
+	FinalizerDeleteBackup         = perconaPrefix + "delete-backup"
+	FinalizerDeleteMySQLPvc       = perconaPrefix + "delete-mysql-pvc"
+	FinalizerClusterSetProtection = perconaPrefix + "clusterset-protection"
 )
 
 const (
