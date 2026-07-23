@@ -73,6 +73,9 @@ func (r *PerconaServerMySQLReconciler) checkClusterSetStatus(
 			Reason:  apiv1.ClusterSetMemberReasonPrimary,
 			Message: "Cluster is a primary member of ClusterSet",
 		})
+		if err := k8s.SetFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
+			return errors.Wrap(err, "set finalizer")
+		}
 		return nil
 	case clusterset.ClusterRoleReplica:
 		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
@@ -81,6 +84,9 @@ func (r *PerconaServerMySQLReconciler) checkClusterSetStatus(
 			Reason:  apiv1.ClusterSetMemberReasonReplica,
 			Message: "Cluster is a replica member of ClusterSet",
 		})
+		if err := k8s.SetFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
+			return errors.Wrap(err, "set finalizer")
+		}
 		return nil
 	}
 
