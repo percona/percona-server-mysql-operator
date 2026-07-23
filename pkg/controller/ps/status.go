@@ -283,6 +283,9 @@ func (r *PerconaServerMySQLReconciler) setClusterSetMemberCondition(
 
 	if cond != nil {
 		meta.SetStatusCondition(&status.Conditions, *cond)
+		if err := k8s.SetFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
+			return errors.Errorf("set finalizers")
+		}
 		return nil
 	}
 
