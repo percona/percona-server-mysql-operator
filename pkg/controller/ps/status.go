@@ -257,7 +257,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 			}
 		}
 
-		if err := r.checkClusterSetStatus(ctx, cr, status); err != nil {
+		if err := r.setClusterSetMemberCondition(ctx, cr, status); err != nil {
 			return errors.Wrap(err, "check ClusterSet status")
 		}
 
@@ -269,6 +269,40 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 
 	return writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), updateStatusF)
+}
+
+func (r *PerconaServerMySQLReconciler) setClusterSetMemberCondition(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	status *apiv1.PerconaServerMySQLStatus,
+) error {
+	cond, err := r.getClusterSetMemberCondition(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "get clusterset member condition")
+	}
+
+	if cond != nil {
+		meta.SetStatusCondition(&status.Conditions, *cond)
+		return nil
+	}
+
+	// No condition existed before, this cluster was never a part of any ClusterSet, return early.
+	if meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionClusterSetMember) == nil {
+		return nil
+	}
+
+	log := logf.FromContext(ctx)
+
+	log.Info("Former ClusterSet member, recovery is needed")
+	if err := k8s.AnnotateObject(ctx, r.Client, cr, map[naming.AnnotationKey]string{
+		naming.AnnotationClusterSetRecoveryNeeded: "true",
+	}); err != nil {
+		return errors.Wrap(err, "add clusterset recovery annotation")
+	}
+	if err := k8s.RemoveFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
+		return errors.Wrap(err, "set finalizer")
+	}
+	return nil
 }
 
 func (r *PerconaServerMySQLReconciler) isAwaitingExtBootstrap(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, error) {

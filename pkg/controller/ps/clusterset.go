@@ -24,23 +24,20 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// checkClusterSetStatus updates the status conditions for ClusterSet members.
-func (r *PerconaServerMySQLReconciler) checkClusterSetStatus(
+// getClusterSetMemberCondition computes the ClusterSetMember condition.
+// Returns nil if the cluster is not part of any ClusterSet.
+func (r *PerconaServerMySQLReconciler) getClusterSetMemberCondition(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
-	status *apiv1.PerconaServerMySQLStatus, // all status updates must happen here
-) error {
-	// remove legacy condition
-	meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetReplicationRunning)
-
+) (*metav1.Condition, error) {
 	log := logf.FromContext(ctx)
 	if cr.Spec.MySQL.ClusterType != apiv1.ClusterTypeGR {
-		return nil
+		return nil, nil
 	}
 
 	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
 	if err != nil {
-		return errors.Wrap(err, "get pods")
+		return nil, errors.Wrap(err, "get pods")
 	}
 
 	// Setting the condition only requires the first pod to be queryable. Waiting
@@ -48,60 +45,73 @@ func (r *PerconaServerMySQLReconciler) checkClusterSetStatus(
 	// the HAProxy is_clusterset_replica flag) until the last member finishes cloning.
 	if cr.Spec.Pause || len(pods) == 0 {
 		log.Info("No pods available to query, skip ClusterSet status check")
-		return nil
+		return nil, nil
 	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
 	if k8serrors.IsNotFound(err) {
 		log.Info("Cannot reconcile clusterset status, wait for internal secrets to be created")
-		return nil
+		return nil, nil
 	} else if err != nil {
-		return errors.Wrap(err, "get operator password")
+		return nil, errors.Wrap(err, "get operator password")
 	}
 
 	clusterRole, err := r.getInnoDBClusterRole(ctx, cr, operatorPass, pods[0])
 	if err != nil {
-		return errors.Wrap(err, "get InnoDB cluster role")
+		return nil, errors.Wrap(err, "get InnoDB cluster role")
 	}
 
 	// ClusterRole is one of PRIMARY or REPLICA when member of a ClusterSet. Empty when it is an independent cluster.
 	switch clusterRole {
 	case clusterset.ClusterRolePrimary:
-		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+		return &metav1.Condition{
 			Type:    apiv1.ConditionClusterSetMember,
 			Status:  metav1.ConditionTrue,
 			Reason:  apiv1.ClusterSetMemberReasonPrimary,
 			Message: "Cluster is a primary member of ClusterSet",
-		})
-		if err := k8s.SetFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
-			return errors.Wrap(err, "set finalizer")
-		}
-		return nil
+		}, nil
 	case clusterset.ClusterRoleReplica:
-		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+		return &metav1.Condition{
 			Type:    apiv1.ConditionClusterSetMember,
 			Status:  metav1.ConditionTrue,
 			Reason:  apiv1.ClusterSetMemberReasonReplica,
 			Message: "Cluster is a replica member of ClusterSet",
-		})
-		if err := k8s.SetFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
-			return errors.Wrap(err, "set finalizer")
-		}
+		}, nil
+	}
+	return nil, nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileClusterSetRecovery(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+) error {
+	if val, ok := cr.GetAnnotations()[string(naming.AnnotationClusterSetRecoveryNeeded)]; !ok || val != "true" {
 		return nil
 	}
 
-	// The cluster is not a clusterset member, neither was it a part of it before. Nothing to do.
-	if meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionClusterSetMember) == nil {
+	log := logf.FromContext(ctx).WithName("ClusterSetRecovery")
+
+	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "get pods")
+	}
+
+	if cr.Spec.Pause || len(pods) == 0 {
+		log.Info("No pods available for ClusterSet recovery")
 		return nil
 	}
 
-	// Cluster was a former member of ClusterSet, we need to wait for GR to be dissolved,
-	// and re-bootstrap the cluster.
+	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
+	if err != nil {
+		return errors.Wrap(err, "get operator password")
+	}
+
 	if len(pods) < int(cr.MySQLSpec().Size) {
 		return nil
 	}
 	for _, pod := range pods {
 		if !k8s.IsPodReady(pod) {
+			log.Info("Wait for Pod to be ready", "podName", pod.GetName())
 			return nil
 		}
 	}
@@ -117,46 +127,8 @@ func (r *PerconaServerMySQLReconciler) checkClusterSetStatus(
 		return len(members) == 0 || (len(members) == 1 && members[0].MemberState == innodbcluster.MemberStateOffline)
 	}
 	if !clusterDissolved() {
+		log.Info("Waiting for group replication group dissolution")
 		return nil
-	}
-
-	log.Info("Former ClusterSet member, recovery is needed")
-	if err := k8s.AnnotateObject(ctx, r.Client, cr, map[naming.AnnotationKey]string{
-		naming.AnnotationClusterSetRecoveryNeeded: "true",
-	}); err != nil {
-		return errors.Wrap(err, "add clusterset recovery annotation")
-	}
-
-	if err := k8s.RemoveFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
-		return errors.Wrap(err, "set finalizer")
-	}
-	meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetReplicationRunning)
-	return nil
-}
-
-func (r *PerconaServerMySQLReconciler) reconcileClusterSetRecovery(
-	ctx context.Context,
-	cr *apiv1.PerconaServerMySQL,
-) error {
-	if val, ok := cr.GetAnnotations()[string(naming.AnnotationClusterSetRecoveryNeeded)]; !ok || val != "true" {
-		return nil
-	}
-
-	log := logf.FromContext(ctx)
-
-	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
-	if err != nil {
-		return errors.Wrap(err, "get pods")
-	}
-
-	if cr.Spec.Pause || len(pods) == 0 {
-		log.Info("No pods available for ClusterSet recovery")
-		return nil
-	}
-
-	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
-	if err != nil {
-		return errors.Wrap(err, "get operator password")
 	}
 
 	log.Info("Recovering former ClusterSet member")

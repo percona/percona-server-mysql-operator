@@ -263,10 +263,16 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 	log := logf.FromContext(ctx).WithName("Finalizer")
 	log.Info("Applying finalizers", "CR", cr)
 
-	if controllerutil.ContainsFinalizer(cr, naming.FinalizerClusterSetProtection) &&
-		meta.IsStatusConditionTrue(cr.Status.Conditions, apiv1.ConditionClusterSetMember) {
-		log.Info("Cannot delete ClusterSet member, remove it from ClusterSet first")
-		return nil
+	// Before proceeding, ensure that the cluster is not part of any clusterset.
+	if controllerutil.ContainsFinalizer(cr, naming.FinalizerClusterSetProtection) {
+		clusterSetStatus, err := r.getClusterSetMemberCondition(ctx, cr)
+		if err != nil {
+			return errors.Wrap(err, "get clusterset member condition")
+		}
+		if clusterSetStatus != nil {
+			log.Info("Cannot delete ClusterSetMember")
+			return nil
+		}
 	}
 
 	var err error
@@ -372,6 +378,11 @@ func (r *PerconaServerMySQLReconciler) deleteMySQLPods(ctx context.Context, cr *
 
 		clusterStatus, err := mysh.ClusterStatusWithExec(ctx)
 		if err != nil {
+			// The cluster was deleted while it was a part of ClusterSet
+			if strings.Contains(err.Error(), "GR is not active") &&
+				meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionClusterSetMember) != nil {
+				return nil
+			}
 			return errors.Wrap(err, "get cluster status")
 		}
 
