@@ -8,8 +8,8 @@ resourceRefs:
   name: gr-cross-cluster-dc1
   ref: dc1
 assertAll:
-- celExpr: "!dc1.status.conditions.exists(c, c.type == \"ClusterSetReplicationRunning\")"
-  message: "dc1 should not have ClusterSetReplicationRunning condition"
+- celExpr: "dc1.status.conditions.exists(c, c.type == \"ClusterSetMember\" && c.status == \"True\" && c.reason == \"Replica\")"
+  message: "dc1 should still report ClusterSetMember=True (reason Replica) as a historical marker of its last clusterset role, even though it was removed from the ClusterSet"
 
 commands:
   - script: |-
@@ -68,6 +68,10 @@ status:
   - reason: Ready
     status: "True"
     type: Ready
+  - message: Cluster is a replica member of ClusterSet
+    reason: Replica
+    status: "True"
+    type: ClusterSetMember
   - message: InnoDB cluster successfully bootstrapped with 3 nodes
     reason: InnoDBClusterBootstrapped
     status: "True"
