@@ -30,6 +30,9 @@ func (r *PerconaServerMySQLReconciler) checkClusterSetStatus(
 	cr *apiv1.PerconaServerMySQL,
 	status *apiv1.PerconaServerMySQLStatus, // all status updates must happen here
 ) error {
+	// remove legacy condition
+	meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetReplicationRunning)
+
 	log := logf.FromContext(ctx)
 	if cr.Spec.MySQL.ClusterType != apiv1.ClusterTypeGR {
 		return nil
@@ -56,34 +59,38 @@ func (r *PerconaServerMySQLReconciler) checkClusterSetStatus(
 		return errors.Wrap(err, "get operator password")
 	}
 
-	// Check for clusterset_replication channel running on any of the nodes.
-	replicationRunning, err := r.isClusterSetReplicationRunning(ctx, cr, operatorPass, pods)
+	clusterRole, err := r.getInnoDBClusterRole(ctx, cr, operatorPass, pods[0])
 	if err != nil {
-		return errors.Wrap(err, "check if cluster set replication is running")
+		return errors.Wrap(err, "get InnoDB cluster role")
 	}
 
-	if replicationRunning {
+	// ClusterRole is one of PRIMARY or REPLICA when member of a ClusterSet. Empty when it is an independent cluster.
+	switch clusterRole {
+	case clusterset.ClusterRolePrimary:
 		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
-			Type:    apiv1.ConditionClusterSetReplicationRunning,
+			Type:    apiv1.ConditionClusterSetMember,
 			Status:  metav1.ConditionTrue,
-			Reason:  "ClusterSetReplicationRunning",
-			Message: "ClusterSet replication is running",
+			Reason:  apiv1.ClusterSetMemberReasonPrimary,
+			Message: "Cluster is a primary member of ClusterSet",
+		})
+		return nil
+	case clusterset.ClusterRoleReplica:
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:    apiv1.ConditionClusterSetMember,
+			Status:  metav1.ConditionTrue,
+			Reason:  apiv1.ClusterSetMemberReasonReplica,
+			Message: "Cluster is a replica member of ClusterSet",
 		})
 		return nil
 	}
 
-	// Channel does not exist and it did not exist before either, nothing to do.
-	if cond := meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionClusterSetReplicationRunning); cond == nil {
+	// The cluster is not a clusterset member, neither was it a part of it before. Nothing to do.
+	if meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionClusterSetMember) == nil {
 		return nil
 	}
 
-	// At this point we know that there was a channel running earlier, but not anymore.
-	// One of two things may have happened: (1) cluster was removed from clusterset, or (2) cluster was promoted to primary.
-	//
-	// This branch makes destructive decisions (lifting read-only, deleting pods), and its
-	// inputs (cluster role, member states) have transient look-alike states while pods are
-	// restarting or recovering. Only evaluate it once the cluster is settled: full size and
-	// every pod ready.
+	// Cluster was a former member of ClusterSet, we need to wait for GR to be dissolved,
+	// and re-bootstrap the cluster.
 	if len(pods) < int(cr.MySQLSpec().Size) {
 		return nil
 	}
@@ -93,35 +100,30 @@ func (r *PerconaServerMySQLReconciler) checkClusterSetStatus(
 		}
 	}
 
-	isClusterPrimary, err := r.isClusterRolePrimary(ctx, cr, operatorPass, pods[0])
-	if err != nil {
-		return errors.Wrap(err, "check if cluster is clusterset primary")
-	}
-
 	db := database.NewReplicationManager(&pods[0], r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.ServiceName(cr))
 	members, err := db.GetGroupReplicationMembers(ctx)
 	if err != nil {
 		return errors.Wrap(err, "get group replication members")
 	}
 
+	// Wait for mysqlshell to completely dissolve the cluster.
 	clusterDissolved := func() bool {
 		return len(members) == 0 || (len(members) == 1 && members[0].MemberState == innodbcluster.MemberStateOffline)
 	}
-
-	if !isClusterPrimary {
-		// Wait for mysqlshell to completely dissolve the cluster.
-		if !clusterDissolved() {
-			return nil
-		}
-
-		log.Info("Former ClusterSet member, recovery is needed")
-		if err := k8s.AnnotateObject(ctx, r.Client, cr, map[naming.AnnotationKey]string{
-			naming.AnnotationClusterSetRecoveryNeeded: "true",
-		}); err != nil {
-			return errors.Wrap(err, "add clusterset recovery annotation")
-		}
+	if !clusterDissolved() {
+		return nil
 	}
 
+	log.Info("Former ClusterSet member, recovery is needed")
+	if err := k8s.AnnotateObject(ctx, r.Client, cr, map[naming.AnnotationKey]string{
+		naming.AnnotationClusterSetRecoveryNeeded: "true",
+	}); err != nil {
+		return errors.Wrap(err, "add clusterset recovery annotation")
+	}
+
+	if err := k8s.RemoveFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
+		return errors.Wrap(err, "set finalizer")
+	}
 	meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetReplicationRunning)
 	return nil
 }
@@ -162,12 +164,12 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterSetRecovery(
 	return nil
 }
 
-func (r *PerconaServerMySQLReconciler) isClusterRolePrimary(
+func (r *PerconaServerMySQLReconciler) getInnoDBClusterRole(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
 	operatorPass string,
 	pod corev1.Pod,
-) (bool, error) {
+) (string, error) {
 	podFQDN := mysql.PodFQDN(cr, &pod)
 	podUri := mysqlsh.URI(string(apiv1.UserOperator), operatorPass, podFQDN)
 
@@ -180,19 +182,19 @@ func (r *PerconaServerMySQLReconciler) isClusterRolePrimary(
 
 	shell, err := mysqlsh.NewWithExec(podUri, opts)
 	if err != nil {
-		return false, errors.Wrap(err, "new mysqlsh")
+		return "", errors.Wrap(err, "new mysqlsh")
 	}
 
 	status, err := shell.ClusterStatusWithExec(ctx)
 	if err != nil {
 		// GR dissolution has already started
 		if strings.Contains(err.Error(), "not available through a session to a standalone instance") {
-			return false, nil
+			return "", nil
 		}
-		return false, errors.Wrap(err, "get cluster status")
+		return "", errors.Wrap(err, "get cluster status")
 	}
 
-	return status.ClusterRole == clusterset.ClusterRolePrimary, nil
+	return status.ClusterRole, nil
 }
 
 // Why is this needed: Once a replica is removed from the ClusterSet, mysqlshell always dissolves GR, removes related metadata
@@ -268,24 +270,4 @@ func (r *PerconaServerMySQLReconciler) recoverClustersetReplicaCluster(
 		return errors.Wrap(err, "write status condition")
 	}
 	return nil
-}
-
-func (r *PerconaServerMySQLReconciler) isClusterSetReplicationRunning(
-	ctx context.Context,
-	cr *apiv1.PerconaServerMySQL,
-	operatorPass string,
-	pods []corev1.Pod,
-) (bool, error) {
-	for _, pod := range pods {
-		if !k8s.IsPodReady(pod) {
-			continue
-		}
-		db := database.NewReplicationManager(&pod, r.ClientCmd, apiv1.UserOperator, operatorPass, mysql.ServiceName(cr))
-		if ok, err := db.GetClusterSetReplicationRunning(ctx); err != nil {
-			return false, errors.Wrap(err, "get cluster set replication running")
-		} else if ok {
-			return true, nil
-		}
-	}
-	return false, nil
 }

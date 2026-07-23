@@ -911,9 +911,17 @@ func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {
 }
 
 const (
-	ConditionInnoDBClusterBootstrapped    string = "InnoDBClusterBootstrapped"
+	ConditionInnoDBClusterBootstrapped string = "InnoDBClusterBootstrapped"
+	ConditionClusterSetMember          string = "ClusterSetMember"
+	ConditionAwaitingExternalBootstrap string = "AwaitingExternalBootstrap"
+
+	// Deprecated, preserved only for backward compatibility
 	ConditionClusterSetReplicationRunning string = "ClusterSetReplicationRunning"
-	ConditionAwaitingExternalBootstrap    string = "AwaitingExternalBootstrap"
+)
+
+const (
+	ClusterSetMemberReasonPrimary = "Primary"
+	ClusterSetMemberReasonReplica = "Replica"
 )
 
 // PerconaServerMySQL is the Schema for the perconaservermysqls API
