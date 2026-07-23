@@ -252,5 +252,6 @@ del_fields_to_comment() {
 		| yq "del(.spec.toolkit.containerSecurityContext)" \
 		| yq "del(.spec.toolkit.startupProbe)" \
 		| yq "del(.spec.toolkit.readinessProbe)" \
-		| yq "del(.spec.toolkit.livenessProbe)"
+		| yq "del(.spec.toolkit.livenessProbe)" \
+		| yq "del(.spec.users)"
 }

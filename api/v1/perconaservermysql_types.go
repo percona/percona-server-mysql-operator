@@ -38,6 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -91,6 +92,8 @@ type PerconaServerMySQLSpec struct {
 	// Deprecated: not supported since v0.12.0. Use initContainer instead
 	InitImage     string            `json:"initImage,omitempty"`
 	InitContainer InitContainerSpec `json:"initContainer,omitempty"`
+
+	Users []User `json:"users,omitempty"`
 }
 
 // StorageAutoscaling returns the storage autoscaling configuration, if any.
@@ -906,6 +909,51 @@ type PerconaServerMySQLStatus struct { // INSERT ADDITIONAL STATUS FIELD - defin
 	StorageAutoscaling map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
 }
 
+type UserSecretKeySelector struct {
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:=password
+	Key string `json:"key"`
+}
+
+// User defines a MySQL user
+type User struct {
+	// Name of the user to be created.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// PasswordSecretRef is a reference to the Secret that holds this user's password.
+	// +kubebuilder:validation:Optional
+	PasswordSecretRef *UserSecretKeySelector `json:"passwordSecretRef,omitempty"`
+	// DBs is a list of databases that the user has access to. If empty, the user will have access to all databases.
+	DBs []string `json:"dbs,omitempty"`
+	// Hosts is a list of hosts that the user can connect from. If empty, the user will be able to connect from any host.
+	Hosts []string `json:"hosts,omitempty"`
+	// Grants is a list of grants that the user has. If empty, the user will have all privileges.
+	Grants []string `json:"grants,omitempty"`
+	// WithGrantOption grants the user the ability to grant their own privileges to other users.
+	WithGrantOption bool `json:"withGrantOption,omitempty"`
+}
+
+var invalidSecretNameChars = regexp.MustCompile(`[^a-z0-9-]+`)
+
+// DefaultCustomUserSecretName returns the name of the Secret that stores the
+// auto-generated password for a custom user.
+func (cr *PerconaServerMySQL) DefaultCustomUserSecretName(u User) string {
+	name := fmt.Sprintf("%s-user-%s", cr.GetName(), u.Name)
+	if len(validation.IsDNS1123Subdomain(name)) == 0 {
+		return name
+	}
+
+	sanitized := strings.Trim(invalidSecretNameChars.ReplaceAllString(strings.ToLower(u.Name), "-"), "-")
+	hash := FNVHash([]byte(u.Name))
+	return fmt.Sprintf("%s-user-%s-%s", cr.GetName(), sanitized, hash)
+}
+
+func (cr *PerconaServerMySQL) InternalCustomUserSecretName() string {
+	return fmt.Sprintf("%s-internal-custom-users", cr.GetName())
+}
+
 func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {
 	return v.Must(v.NewVersion(s.MySQL.Version)).Compare(v.Must(v.NewVersion(ver)))
 }
@@ -933,8 +981,7 @@ type PerconaServerMySQL struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec PerconaServerMySQLSpec `json:"spec,omitempty"`
-
+	Spec   PerconaServerMySQLSpec   `json:"spec,omitempty"`
 	Status PerconaServerMySQLStatus `json:"status,omitempty"` // Make sure that the Status is updated after making changes. See the description of `(*PerconaServerMySQLReconciler) reconcileCRStatus` method for details.
 }
 
