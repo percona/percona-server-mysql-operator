@@ -13,5 +13,6 @@ commands:
           | yq eval '.spec.mysql.size=3' - \
           | yq eval '.spec.proxy.router.enabled=false' - \
           | yq eval '.spec.proxy.haproxy.enabled=false' - \
+          | yq eval '.spec.unsafeFlags.proxy=true' - \
           | yq eval '.spec.secretsName="test-secrets"' - \
           | kubectl -n "${NAMESPACE}" apply -f -
