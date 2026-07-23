@@ -297,6 +297,7 @@ func (r *PerconaServerMySQLReconciler) setClusterSetMemberCondition(
 	log := logf.FromContext(ctx)
 
 	log.Info("Former ClusterSet member, recovery is needed")
+	meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetMember)
 	if err := k8s.AnnotateObject(ctx, r.Client, cr, map[naming.AnnotationKey]string{
 		naming.AnnotationClusterSetRecoveryNeeded: "true",
 	}); err != nil {
