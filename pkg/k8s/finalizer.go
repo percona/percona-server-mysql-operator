@@ -45,7 +45,7 @@ func setFinalizers(
 	orig := o.DeepCopyObject().(client.Object)
 	updateNeeded := false
 	for _, f := range finalizers {
-		if added := controllerutil.AddFinalizer(o, f); added {
+		if controllerutil.AddFinalizer(o, f) {
 			updateNeeded = true
 		}
 	}
@@ -72,7 +72,7 @@ func removeFinalizers(
 	orig := o.DeepCopyObject().(client.Object)
 	updateNeeded := false
 	for _, f := range finalizers {
-		if added := controllerutil.RemoveFinalizer(o, f); added {
+		if controllerutil.RemoveFinalizer(o, f) {
 			updateNeeded = true
 		}
 	}

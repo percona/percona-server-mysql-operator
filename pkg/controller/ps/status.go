@@ -284,27 +284,35 @@ func (r *PerconaServerMySQLReconciler) setClusterSetMemberCondition(
 	if cond != nil {
 		meta.SetStatusCondition(&status.Conditions, *cond)
 		if err := k8s.SetFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
-			return errors.Errorf("set finalizers")
+			return errors.Wrap(err, "set finalizers")
 		}
 		return nil
 	}
 
 	// No condition existed before, this cluster was never a part of any ClusterSet, return early.
-	if meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionClusterSetMember) == nil {
+	prevCond := meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionClusterSetMember)
+	if prevCond == nil {
 		return nil
 	}
 
 	log := logf.FromContext(ctx)
 
-	log.Info("Former ClusterSet member, recovery is needed")
 	meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetMember)
+	if err := k8s.RemoveFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
+		return errors.Wrap(err, "set finalizer")
+	}
+
+	// Only a former replica is left read-only and dissolved by mysqlshell on removal.
+	// A primary that simply outlived its replicas is already read-write and needs no recovery.
+	if prevCond.Reason == apiv1.ClusterSetMemberReasonPrimary {
+		return nil
+	}
+
+	log.Info("Former ClusterSet member, recovery is needed")
 	if err := k8s.AnnotateObject(ctx, r.Client, cr, map[naming.AnnotationKey]string{
 		naming.AnnotationClusterSetRecoveryNeeded: "true",
 	}); err != nil {
 		return errors.Wrap(err, "add clusterset recovery annotation")
-	}
-	if err := k8s.RemoveFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
-		return errors.Wrap(err, "set finalizer")
 	}
 	return nil
 }

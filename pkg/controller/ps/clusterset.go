@@ -172,6 +172,19 @@ func (r *PerconaServerMySQLReconciler) getInnoDBClusterRole(
 		return "", errors.Wrap(err, "get cluster status")
 	}
 
+	// mysqlshell has no supported way to fully dissolve a ClusterSet pre-9.7, so a primary
+	// keeps reporting itself as ClusterRolePrimary even after every replica has been removed.
+	// Once it has no replicas left, nothing depends on it via ClusterSet replication anymore,
+	// so treat it the same as an independent cluster.
+	if status.ClusterRole == clusterset.ClusterRolePrimary {
+		csStatus, err := shell.ClusterSetStatusWithExec(ctx)
+		if err != nil {
+			return "", errors.Wrap(err, "get cluster set status")
+		}
+		if len(csStatus.Clusters) <= 1 {
+			return "", nil
+		}
+	}
 	return status.ClusterRole, nil
 }
 
