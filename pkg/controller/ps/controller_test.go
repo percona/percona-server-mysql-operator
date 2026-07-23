@@ -970,6 +970,39 @@ var _ = Describe("CR validations", Ordered, func() {
 			})
 		})
 
+		When("group-replication cluster defines only HAProxy", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-haproxy-only", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Proxy.Router = nil
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("group-replication cluster defines only Router", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-router-only", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Proxy.HAProxy = nil
+			cr.Spec.Proxy.Router.Enabled = true
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
+		When("async cluster defines only HAProxy", Ordered, func() {
+			cr, err := readDefaultCR("cr-validations-async-haproxy-only", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.MySQL.ClusterType = psv1.ClusterTypeAsync
+			cr.Spec.Orchestrator.Enabled = true
+			cr.Spec.Proxy.Router = nil
+			It("should create the cluster successfully", func() {
+				Expect(k8sClient.Create(ctx, cr)).Should(Succeed())
+			})
+		})
+
 		When("haproxy is enabled but image is missing", Ordered, func() {
 			cr, err := readDefaultCR("cr-validations-haproxy-no-image", ns)
 			Expect(err).NotTo(HaveOccurred())
