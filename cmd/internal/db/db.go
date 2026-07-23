@@ -354,6 +354,20 @@ func (d *DB) GetMemberState(ctx context.Context, host string) (db.MemberState, e
 	return state, nil
 }
 
+func (d *DB) GetSelfState(ctx context.Context) (db.MemberState, error) {
+	var state db.MemberState
+
+	err := d.db.QueryRowContext(ctx, "SELECT MEMBER_STATE FROM replication_group_members WHERE MEMBER_ID = @@global.server_uuid").Scan(&state)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return db.MemberStateOffline, nil
+		}
+		return db.MemberStateError, errors.Wrap(err, "query member state")
+	}
+
+	return state, nil
+}
+
 func (d *DB) IsGRConfigured(ctx context.Context) (bool, error) {
 	var groupName sql.NullString
 
