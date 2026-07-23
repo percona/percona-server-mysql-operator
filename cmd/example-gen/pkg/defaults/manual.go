@@ -28,6 +28,7 @@ func ManualCluster(cr *apiv1.PerconaServerMySQL) {
 	pmmDefaults(cr.Spec.PMM)
 	toolkitDefaults(cr.Spec.Toolkit)
 	backupDefaults(cr.Spec.Backup)
+	customUserDefaults(&cr.Spec)
 }
 
 func mysqlDefaults(spec *apiv1.MySQLSpec) {
@@ -124,6 +125,26 @@ func pmmDefaults(spec *apiv1.PMMSpec) {
 	spec.ServerHost = "monitoring-service"
 	spec.CustomClusterName = "cluster1-custom"
 	spec.MySQLParams = "PMM_ADMIN_CUSTOM_PARAMS"
+}
+
+func customUserDefaults(spec *apiv1.PerconaServerMySQLSpec) {
+	spec.Users = []apiv1.User{
+		{
+			Name: "alice",
+			PasswordSecretRef: &apiv1.UserSecretKeySelector{
+				Name: "alice-secret",
+				Key:  "password",
+			},
+			DBs:    []string{"mydb"},
+			Grants: []string{"SELECT", "INSERT"},
+		},
+		{
+			Name:            "bob",
+			DBs:             []string{"mydb"},
+			Grants:          []string{"SELECT", "INSERT"},
+			WithGrantOption: true,
+		},
+	}
 }
 
 func backupDefaults(spec *apiv1.BackupSpec) {

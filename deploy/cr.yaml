@@ -1032,4 +1032,24 @@ spec:
 #      periodSeconds: 5
 #      successThreshold: 1
 #      timeoutSeconds: 3
-  users: []
+#  users:
+#    - dbs:
+#        - mydb
+#      grants:
+#        - SELECT
+#        - INSERT
+#      hosts: []
+#      name: alice
+#      passwordSecretRef:
+#        key: password
+#        name: alice-secret
+#      withGrantOption: false
+#    - dbs:
+#        - mydb
+#      grants:
+#        - SELECT
+#        - INSERT
+#      hosts: []
+#      name: bob
+#      passwordSecretRef: null
+#      withGrantOption: true
