@@ -23,12 +23,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
@@ -56,7 +56,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	database "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
-	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	k8sutil "github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -259,30 +259,32 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 	return rr, nil
 }
 
+// orderedFinalizers is the list of finalizers that should be handeled in order.
+var orderedFinalizers = []string{
+	naming.FinalizerClusterSetProtection,
+	naming.FinalizerDeletePodsInOrder,
+	naming.FinalizerDeleteSSL,
+	naming.FinalizerDeleteMySQLPvc,
+}
+
 func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("Finalizer")
 	log.Info("Applying finalizers", "CR", cr)
 
-	// Before proceeding, ensure that the cluster is not part of any clusterset.
-	if controllerutil.ContainsFinalizer(cr, naming.FinalizerClusterSetProtection) {
-		clusterSetStatus, err := r.getClusterSetMemberCondition(ctx, cr)
-		if err != nil {
-			return errors.Wrap(err, "get clusterset member condition")
-		}
-		if clusterSetStatus != nil {
-			log.Info("Cannot delete ClusterSetMember")
-			return nil
-		}
-	}
-
 	var err error
+	for _, finalizer := range orderedFinalizers {
+		if !controllerutil.ContainsFinalizer(cr, finalizer) {
+			continue
+		}
 
-	// Sorting finalizers to make sure that delete-mysql-pods-in-order runs before
-	// delete-mysql-pvc since the latter removes secrets needed for the former.
-	slices.Sort(cr.GetFinalizers())
-
-	for _, finalizer := range cr.GetFinalizers() {
 		switch finalizer {
+		case naming.FinalizerClusterSetProtection:
+			if ok, err := r.handleClusterSetProtectionFinalizer(ctx, cr); err != nil {
+				return errors.Wrap(err, "handle cluster set protection finalizer")
+			} else if !ok {
+				log.Info("Cluster is a member of ClusterSet, cannot delete")
+				return nil
+			}
 		case naming.FinalizerDeletePodsInOrder:
 			err = r.deleteMySQLPods(ctx, cr)
 		case naming.FinalizerDeleteSSL:
@@ -305,6 +307,20 @@ func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *
 		c.SetFinalizers([]string{})
 		return r.Client.Update(ctx, c)
 	})
+}
+
+func (r *PerconaServerMySQLReconciler) handleClusterSetProtectionFinalizer(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, error) {
+	clusterSetStatus, err := r.getClusterSetMemberCondition(ctx, cr)
+	if err != nil {
+		return false, errors.Wrap(err, "get clusterset member condition")
+	}
+	if clusterSetStatus != nil {
+		return false, nil
+	}
+	if err := k8sutil.RemoveFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
+		return false, errors.Wrap(err, "remove cluster set protection finalizer")
+	}
+	return true, nil
 }
 
 // orchestratorTopologyUnavailable reports whether Orchestrator has no usable

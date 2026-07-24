@@ -299,7 +299,7 @@ func (r *PerconaServerMySQLReconciler) setClusterSetMemberCondition(
 
 	meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetMember)
 	if err := k8s.RemoveFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
-		return errors.Wrap(err, "set finalizer")
+		return errors.Wrap(err, "remove finalizer")
 	}
 
 	// Only a former replica is left read-only and dissolved by mysqlshell on removal.

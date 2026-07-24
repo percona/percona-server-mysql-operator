@@ -45,7 +45,7 @@ func (r *PerconaServerMySQLReconciler) getClusterSetMemberCondition(
 	// the HAProxy is_clusterset_replica flag) until the last member finishes cloning.
 	if cr.Spec.Pause || len(pods) == 0 {
 		log.Info("No pods available to query, skip ClusterSet status check")
-		return nil, nil
+		return meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionClusterSetMember), nil
 	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
