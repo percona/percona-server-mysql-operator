@@ -4,7 +4,7 @@ set -e
 
 function log() {
   local ts=$(date +%Y-%m-%dT%H:%M:%S.%N%z --utc | sed 's/+0000/Z/g')
-  echo "${ts} 0 [Info] [K8SPS-642] [Job] $*" >&2
+  echo "${ts} 0 [Info][Job] $*" >&2
 }
 
 log "Starting mysqld"
