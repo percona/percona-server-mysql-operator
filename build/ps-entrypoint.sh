@@ -168,7 +168,17 @@ add_encryption_options() {
 }
 
 create_default_cnf() {
-	POD_IP=$(hostname -I | awk '{print $1}')
+	# hostname -I can list a node-local RFC 3927 link-local address from
+	# 169.254.172.0/22, assigned by some CNI plugins - such as the AWS VPC
+	# CNI's IPv6-cluster egress-NAT helper - for outbound-only traffic,
+	# ahead of the pod's real routable address. That address is not
+	# reachable from other pods, so using it here breaks admin-address
+	# for anything that needs to reach it (e.g. haproxy's backend
+	# healthchecks). Skip only that specific /22 (169.254.172.0 -
+	# 169.254.175.255) rather than the whole 169.254.0.0/16 link-local
+	# range, so we don't also skip an address some other, unrelated use
+	# of link-local addressing might legitimately rely on.
+	POD_IP=$(hostname -I | tr ' ' '\n' | grep -v -E '^169\.254\.17[2-5]\.' | head -n1)
 
 	if [[ ${HOSTNAME} =~ "-xb-" ]]; then
 		FQDN=${HOSTNAME}
