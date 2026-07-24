@@ -56,7 +56,6 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	database "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
-	k8sutil "github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -317,7 +316,7 @@ func (r *PerconaServerMySQLReconciler) handleClusterSetProtectionFinalizer(ctx c
 	if clusterSetStatus != nil {
 		return false, nil
 	}
-	if err := k8sutil.RemoveFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
+	if err := k8s.RemoveFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
 		return false, errors.Wrap(err, "remove cluster set protection finalizer")
 	}
 	return true, nil
