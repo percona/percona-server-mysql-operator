@@ -671,6 +671,10 @@ func validateVaultSecret(ctx context.Context, cl client.Client, cr *apiv1.Percon
 	return nil
 }
 
+// getObservedClusterType returns the MySQL cluster type recorded in the
+// StatefulSet's pod template (the CLUSTER_TYPE env var). Note this reflects the
+// spec the operator last applied, which is not guaranteed to match the cluster
+// type the running pods actually use until they are rolled out.
 func (r *PerconaServerMySQLReconciler) getObservedClusterType(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
@@ -732,6 +736,14 @@ func (r *PerconaServerMySQLReconciler) reconcileClusterTypeChange(
 		return client.IgnoreNotFound(err)
 	}
 
+	// observedType is read from the StatefulSet pod template (see
+	// getObservedClusterType), which reflects the spec the operator last applied
+	// rather than the cluster type the running pods actually use. This relies on
+	// reconcileClusterTypeChange running before the MySQL StatefulSet is
+	// re-applied with the new type later in doReconcile (reconcileDatabase). If
+	// it ran afterwards, the template would already carry desiredType and this
+	// early return would skip the switch while the live pods still run the old
+	// type.
 	if desiredType == observedType {
 		return nil
 	}
