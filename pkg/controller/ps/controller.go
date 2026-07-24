@@ -243,7 +243,7 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 		return ctrl.Result{}, errors.Wrap(err, "get CR")
 	}
 
-	if !cr.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !cr.GetDeletionTimestamp().IsZero() {
 		log.Info("CR marked for deletion, handling finalizers", "name", cr.Name)
 		if err := r.handleFinalizers(ctx, cr); err != nil {
 			return ctrl.Result{}, errors.Wrap(err, "handle finalizers")
