@@ -16,7 +16,6 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -35,7 +34,7 @@ func (r *PerconaServerMySQLReconciler) getClusterSetMemberCondition(
 		return nil, nil
 	}
 
-	pods, err := k8s.PodsByLabels(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
+	pods, err := k8s.ReadyPods(ctx, r.Client, mysql.MatchLabels(cr), cr.Namespace)
 	if err != nil {
 		return nil, errors.Wrap(err, "get pods")
 	}
@@ -49,10 +48,7 @@ func (r *PerconaServerMySQLReconciler) getClusterSetMemberCondition(
 	}
 
 	operatorPass, err := k8s.UserPassword(ctx, r.Client, cr, apiv1.UserOperator)
-	if k8serrors.IsNotFound(err) {
-		log.Info("Cannot reconcile clusterset status, wait for internal secrets to be created")
-		return nil, nil
-	} else if err != nil {
+	if err != nil {
 		return nil, errors.Wrap(err, "get operator password")
 	}
 
