@@ -243,10 +243,10 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 		return ctrl.Result{}, errors.Wrap(err, "get CR")
 	}
 
-	if cr.ObjectMeta.DeletionTimestamp != nil {
-		log.Info("CR marked for deletion, applying finalizers", "name", cr.Name)
-		if err := r.applyFinalizers(ctx, cr); err != nil {
-			return ctrl.Result{}, errors.Wrap(err, "apply finalizers")
+	if !cr.ObjectMeta.DeletionTimestamp.IsZero() {
+		log.Info("CR marked for deletion, handling finalizers", "name", cr.Name)
+		if err := r.handleFinalizers(ctx, cr); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "handle finalizers")
 		}
 		return rr, nil
 	}
@@ -258,7 +258,7 @@ func (r *PerconaServerMySQLReconciler) Reconcile(
 	return rr, nil
 }
 
-// orderedFinalizers is the list of finalizers that should be handeled in order.
+// orderedFinalizers is a list of finalizers in the order that they must be handled.
 var orderedFinalizers = []string{
 	naming.FinalizerClusterSetProtection,
 	naming.FinalizerDeletePodsInOrder,
@@ -266,9 +266,8 @@ var orderedFinalizers = []string{
 	naming.FinalizerDeleteMySQLPvc,
 }
 
-func (r *PerconaServerMySQLReconciler) applyFinalizers(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
+func (r *PerconaServerMySQLReconciler) handleFinalizers(ctx context.Context, cr *apiv1.PerconaServerMySQL) error {
 	log := logf.FromContext(ctx).WithName("Finalizer")
-	log.Info("Applying finalizers", "CR", cr)
 
 	var err error
 	for _, finalizer := range orderedFinalizers {
