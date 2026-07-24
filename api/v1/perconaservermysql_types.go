@@ -552,6 +552,8 @@ func (args BackupContainerArgs) GetXtrabackupFlagValue(flag string) string {
 }
 
 type BackupContainerArgs struct {
+	// XtraBackup requires --defaults-file to precede every other option.
+	// +kubebuilder:validation:XValidation:rule="!self.exists(arg, arg == '--defaults-file' || arg.startsWith('--defaults-file=')) || self[0] == '--defaults-file' || self[0].startsWith('--defaults-file=')",message="--defaults-file must be the first xtrabackup argument"
 	Xtrabackup []string `json:"xtrabackup,omitempty"`
 	Xbcloud    []string `json:"xbcloud,omitempty"`
 	Xbstream   []string `json:"xbstream,omitempty"`

@@ -567,6 +567,12 @@ spec:
                                 items:
                                   type: string
                                 type: array
+                                x-kubernetes-validations:
+                                - message: --defaults-file must be the first xtrabackup
+                                    argument
+                                  rule: '!self.exists(arg, arg == ''--defaults-file''
+                                    || arg.startsWith(''--defaults-file='')) || self[0]
+                                    == ''--defaults-file'' || self[0].startsWith(''--defaults-file='')'
                             type: object
                           env:
                             items:
@@ -1101,6 +1107,10 @@ spec:
                         items:
                           type: string
                         type: array
+                        x-kubernetes-validations:
+                        - message: --defaults-file must be the first xtrabackup argument
+                          rule: '!self.exists(arg, arg == ''--defaults-file'' || arg.startsWith(''--defaults-file=''))
+                            || self[0] == ''--defaults-file'' || self[0].startsWith(''--defaults-file='')'
                     type: object
                   env:
                     items:

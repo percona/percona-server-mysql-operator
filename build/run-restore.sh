@@ -47,7 +47,7 @@ decrypt() {
 	local targetdir=$1
 	if [ -n "${ENCRYPTION_ALGORITHM}" ]; then
 		# shellcheck disable=SC2086
-		xtrabackup --decrypt=${ENCRYPTION_ALGORITHM} --encrypt-key-file=${encryption_key_file} --target-dir="${targetdir}" --parallel="${PARALLEL}" ${XB_EXTRA_ARGS}
+		xtrabackup ${XB_EXTRA_ARGS} --decrypt=${ENCRYPTION_ALGORITHM} --encrypt-key-file=${encryption_key_file} --target-dir="${targetdir}" --parallel="${PARALLEL}"
 		find "${targetdir}" -name '*.xbcrypt' -delete
 	fi
 }
@@ -79,15 +79,15 @@ restore_full() {
 	decrypt "${tmpdir}"
 
 	# shellcheck disable=SC2086
-	xtrabackup --decompress --remove-original --parallel="${PARALLEL}" --target-dir="${tmpdir}" ${XB_EXTRA_ARGS}
+	xtrabackup ${XB_EXTRA_ARGS} --decompress --remove-original --parallel="${PARALLEL}" --target-dir="${tmpdir}"
 
 	local keyring
 	keyring=$(get_keyring_arg)
 
 	# shellcheck disable=SC2086
-	xtrabackup --prepare --rollback-prepared-trx --target-dir="${tmpdir}" ${XB_EXTRA_ARGS} ${keyring}
+	xtrabackup ${XB_EXTRA_ARGS} --prepare --rollback-prepared-trx --target-dir="${tmpdir}" ${keyring}
 	# shellcheck disable=SC2086
-	xtrabackup --datadir="${DATADIR}" --move-back --force-non-empty-directories --target-dir="${tmpdir}" ${XB_EXTRA_ARGS}
+	xtrabackup ${XB_EXTRA_ARGS} --datadir="${DATADIR}" --move-back --force-non-empty-directories --target-dir="${tmpdir}"
 
 	rm -rf "${tmpdir}"
 
@@ -109,14 +109,14 @@ restore_incremental() {
 	decrypt "${basedir}"
 
 	# shellcheck disable=SC2086
-	xtrabackup --decompress --remove-original --parallel="${PARALLEL}" --target-dir="${basedir}" ${XB_EXTRA_ARGS}
+	xtrabackup ${XB_EXTRA_ARGS} --decompress --remove-original --parallel="${PARALLEL}" --target-dir="${basedir}"
 
 	local keyring
 	keyring=$(get_keyring_arg)
 
 	# Prepare the base backup with --apply-log-only (redo only, no rollback)
 	# shellcheck disable=SC2086
-	xtrabackup --prepare --apply-log-only --target-dir="${basedir}" ${XB_EXTRA_ARGS} ${keyring}
+	xtrabackup ${XB_EXTRA_ARGS} --prepare --apply-log-only --target-dir="${basedir}" ${keyring}
 
 	# Parse the comma-separated list of incremental destinations
 	IFS=',' read -ra INCR_DESTS <<< "${BACKUP_INCREMENTALS_DEST}"
@@ -134,16 +134,16 @@ restore_incremental() {
 		decrypt "${incrdir}"
 
 		# shellcheck disable=SC2086
-		xtrabackup --decompress --remove-original --parallel="${PARALLEL}" --target-dir="${incrdir}" ${XB_EXTRA_ARGS}
+		xtrabackup ${XB_EXTRA_ARGS} --decompress --remove-original --parallel="${PARALLEL}" --target-dir="${incrdir}"
 
 		if [ "${count}" -lt "${total}" ]; then
 			# Not the last incremental: use --apply-log-only
 			# shellcheck disable=SC2086
-			xtrabackup --prepare --apply-log-only --target-dir="${basedir}" --incremental-dir="${incrdir}" ${XB_EXTRA_ARGS} ${keyring}
+			xtrabackup ${XB_EXTRA_ARGS} --prepare --apply-log-only --target-dir="${basedir}" --incremental-dir="${incrdir}" ${keyring}
 		else
 			# Last incremental: omit --apply-log-only to allow rollback of uncommitted transactions
 			# shellcheck disable=SC2086
-			xtrabackup --prepare --target-dir="${basedir}" --incremental-dir="${incrdir}" ${XB_EXTRA_ARGS} ${keyring}
+			xtrabackup ${XB_EXTRA_ARGS} --prepare --target-dir="${basedir}" --incremental-dir="${incrdir}" ${keyring}
 		fi
 
 		rm -rf "${incrdir}"
@@ -151,7 +151,7 @@ restore_incremental() {
 
 	# Move the prepared backup to the data directory
 	# shellcheck disable=SC2086
-	xtrabackup --datadir="${DATADIR}" --move-back --force-non-empty-directories --target-dir="${basedir}" ${XB_EXTRA_ARGS}
+	xtrabackup ${XB_EXTRA_ARGS} --datadir="${DATADIR}" --move-back --force-non-empty-directories --target-dir="${basedir}"
 
 	rm -rf "${basedir}"
 
