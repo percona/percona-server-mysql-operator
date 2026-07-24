@@ -16,6 +16,10 @@ assertAll:
   message: "dc1 should have ClusterSetMember=True with reason Primary"
 - celExpr: "dc2.status.conditions.exists(c, c.type == \"ClusterSetMember\" && c.status == \"True\" && c.reason == \"Replica\")"
   message: "dc2 should have ClusterSetMember=True with reason Replica"
+- celExpr: "dc1.metadata.finalizers.exists(f, f == \"percona.com/clusterset-protection\")"
+  message: "dc1 should have the clusterset-protection finalizer while a ClusterSet member"
+- celExpr: "dc2.metadata.finalizers.exists(f, f == \"percona.com/clusterset-protection\")"
+  message: "dc2 should have the clusterset-protection finalizer while a ClusterSet member"
 
 commands:
   - script: |-

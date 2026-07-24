@@ -10,6 +10,8 @@ resourceRefs:
 assertAll:
 - celExpr: "!dc1.status.conditions.exists(c, c.type == \"ClusterSetMember\")"
   message: "dc1 should no longer have a ClusterSetMember condition after being removed from the ClusterSet"
+- celExpr: "!has(dc1.metadata.finalizers) || !dc1.metadata.finalizers.exists(f, f == \"percona.com/clusterset-protection\")"
+  message: "dc1 should no longer have the clusterset-protection finalizer after being removed from the ClusterSet"
 
 commands:
   - script: |-
