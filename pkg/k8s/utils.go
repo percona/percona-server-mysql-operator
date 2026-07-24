@@ -403,6 +403,22 @@ func ObjectHash(obj runtime.Object) (string, error) {
 	return hex.EncodeToString(hash[:]), nil
 }
 
+func ReadyPods(ctx context.Context, cl client.Reader, l map[string]string, namespace string) ([]corev1.Pod, error) {
+	all, err := PodsByLabels(ctx, cl, l, namespace)
+	if err != nil {
+		return nil, errors.Wrap(err, "get pods by labels")
+	}
+
+	ready := make([]corev1.Pod, 0, len(all))
+	for _, pod := range all {
+		if IsPodReady(pod) {
+			ready = append(ready, pod)
+		}
+	}
+
+	return ready, nil
+}
+
 func PodsByLabels(ctx context.Context, cl client.Reader, l map[string]string, namespace string) ([]corev1.Pod, error) {
 	podList := &corev1.PodList{}
 

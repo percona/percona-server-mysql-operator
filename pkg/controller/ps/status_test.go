@@ -1354,6 +1354,16 @@ func getFakeClient(
 		err:    errors.New("fake error"),
 	})
 
+	// getInnoDBClusterRole, called from setClusterSetMemberCondition, queries the
+	// cluster status again to determine ClusterSet membership. ClusterRole is left
+	// empty so the cluster is treated as not part of any ClusterSet.
+	scripts = append(scripts, mysqlshClusterStatus(innodbcluster.Status{
+		ClusterName: cr.Name,
+		DefaultReplicaSet: innodbcluster.ReplicaSetStatus{
+			Status: innodbClusterStatus,
+		},
+	}))
+
 	return &fakeClient{
 		scripts:      scripts,
 		disableCheck: disableCheck,

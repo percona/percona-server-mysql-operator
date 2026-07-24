@@ -8,8 +8,8 @@ resourceRefs:
   name: gr-cross-cluster-dc1
   ref: dc1
 assertAll:
-- celExpr: "!dc1.status.conditions.exists(c, c.type == \"ClusterSetReplicationRunning\")"
-  message: "dc1 should not have ClusterSetReplicationRunning condition"
+- celExpr: "!dc1.status.conditions.exists(c, c.type == \"ClusterSetMember\")"
+  message: "dc1 should no longer have a ClusterSetMember condition after being removed from the ClusterSet"
 
 commands:
   - script: |-
