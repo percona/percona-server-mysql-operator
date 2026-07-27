@@ -2,6 +2,11 @@
 
 set -e
 
+DATADIR=${DATADIR:-/var/lib/mysql}
+MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
+KEYRING_ARGS=()
+KEYRING_COMPONENT_INSTALLED=0
+
 function mysql_exec() {
   mysql -uoperator -p"$(</etc/mysql/mysql-users-secret/operator)" -N -e "$1"
 }
@@ -9,6 +14,44 @@ function mysql_exec() {
 function log() {
   local ts=$(date +%Y-%m-%dT%H:%M:%S.%N%z --utc | sed 's/+0000/Z/g')
   echo "${ts} 0 [Info][Job] $*" >&2
+}
+
+function install_keyring_component() {
+  echo -n '{ "components": "file://component_keyring_vault" }' >"${DATADIR}/mysqld.my"
+  cp "${KEYRING_VAULT_PATH}" "${DATADIR}/component_keyring_vault.cnf"
+  KEYRING_COMPONENT_INSTALLED=1
+}
+
+function uninstall_keyring_component() {
+  if [ "${KEYRING_COMPONENT_INSTALLED}" -eq 0 ]; then
+    return
+  fi
+  log "Removing keyring vault component from ${DATADIR}"
+  rm -f "${DATADIR}/mysqld.my" "${DATADIR}/component_keyring_vault.cnf"
+  KEYRING_COMPONENT_INSTALLED=0
+}
+
+# Without the keyring, mysqld can't open the encrypted tablespaces in the
+# restored datadir and refuses to start.
+function configure_keyring() {
+  if [ ! -f "${KEYRING_VAULT_PATH}" ]; then
+    return
+  fi
+
+  if [ "${MYSQL_VERSION}" == "8.0" ]; then
+    log "Using keyring vault plugin: ${KEYRING_VAULT_PATH}"
+    KEYRING_ARGS=(
+      --early-plugin-load=keyring_vault.so
+      --keyring_vault_config="${KEYRING_VAULT_PATH}"
+    )
+    return
+  fi
+
+  # 8.4 and newer dropped the plugin in favor of a component, which is loaded
+  # through a manifest in the datadir. ps-entrypoint.sh installs these files on
+  # every mysqld start, so we drop ours once we're done with them.
+  log "Using keyring vault component: ${DATADIR}/component_keyring_vault.cnf"
+  install_keyring_component
 }
 
 function cleanup_clusterset_meta() {
@@ -31,6 +74,8 @@ function cleanup_clusterset_meta() {
 function start_mysqld() {
   log "Starting mysqld"
   mysqld \
+    "${KEYRING_ARGS[@]}" \
+    --datadir="${DATADIR}" \
     --loose-group-replication-start-on-boot=OFF \
     --skip-replica-start=ON \
     --plugin-load-add=group_replication.so \
@@ -62,6 +107,9 @@ function stop_mysqld() {
   mysqladmin -u operator -p"$(</etc/mysql/mysql-users-secret/operator)" shutdown 2>/dev/null
 }
 
+trap uninstall_keyring_component EXIT
+
+configure_keyring
 start_mysqld
 cleanup_clusterset_meta
 stop_mysqld

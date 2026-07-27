@@ -28,7 +28,7 @@ func PrepareJob(
 	labels := util.SSMapMerge(cluster.GlobalLabels(), storage.Labels, restore.Labels(appName, naming.ComponentPrepare))
 	pvcName := fmt.Sprintf("%s-%s-mysql-0", mysql.DataVolumeName, cluster.Name)
 
-	return &batchv1.Job{
+	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        PrepareJobName(restore),
 			Namespace:   cluster.Namespace,
@@ -120,34 +120,62 @@ func PrepareJob(
 			BackoffLimit: cluster.Spec.Backup.BackoffLimit,
 		},
 	}
+
+	if cluster.Spec.MySQL.VaultSecretName != "" {
+		job.Spec.Template.Spec.Volumes = append(job.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: vaultSecretVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: cluster.Spec.MySQL.VaultSecretName,
+					Optional:   ptr.To(true),
+				},
+			},
+		})
+	}
+
+	return job
 }
 
 func prepareContainer(
 	cluster *apiv1.PerconaServerMySQL,
 	storage *apiv1.BackupStorageSpec,
 ) corev1.Container {
+	volumeMounts := []corev1.VolumeMount{
+		{
+			Name:      apiv1.BinVolumeName,
+			MountPath: apiv1.BinVolumePath,
+		},
+		{
+			Name:      dataVolumeName,
+			MountPath: dataMountPath,
+		},
+		{
+			Name:      credsVolumeName,
+			MountPath: credsMountPath,
+		},
+		{
+			Name:      tlsVolumeName,
+			MountPath: tlsMountPath,
+		},
+	}
+	if cluster.Spec.MySQL.VaultSecretName != "" {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      vaultSecretVolumeName,
+			MountPath: vaultSecretMountPath,
+		})
+	}
+
 	return corev1.Container{
 		Name:            "prepare",
 		Image:           cluster.Spec.MySQL.Image,
 		ImagePullPolicy: cluster.Spec.MySQL.ImagePullPolicy,
-		VolumeMounts: []corev1.VolumeMount{
+		Env: []corev1.EnvVar{
 			{
-				Name:      apiv1.BinVolumeName,
-				MountPath: apiv1.BinVolumePath,
-			},
-			{
-				Name:      dataVolumeName,
-				MountPath: dataMountPath,
-			},
-			{
-				Name:      credsVolumeName,
-				MountPath: credsMountPath,
-			},
-			{
-				Name:      tlsVolumeName,
-				MountPath: tlsMountPath,
+				Name:  "KEYRING_VAULT_PATH",
+				Value: fmt.Sprintf("%s/keyring_vault.cnf", vaultSecretMountPath),
 			},
 		},
+		VolumeMounts:             volumeMounts,
 		Command:                  []string{"/opt/percona/run-prepare-restore.sh"},
 		TerminationMessagePath:   "/dev/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
