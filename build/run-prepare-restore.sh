@@ -16,7 +16,7 @@ function cleanup_clusterset_meta() {
   has_cs_table=$(mysql_exec "SELECT COUNT(*) FROM information_schema.tables
           WHERE table_schema='mysql_innodb_cluster_metadata' AND table_name='clustersets';")
   if [ "${has_cs_table}" != "0" ]; then
-          cs_rows=$(mysql_exec "SELECT COUNT(*) FROM mysql_innodb_cluster_metadata.clustersets;")
+    cs_rows=$(mysql_exec "SELECT COUNT(*) FROM mysql_innodb_cluster_metadata.clustersets;")
   fi
   if [ "${cs_rows}" == "0" ]; then
     log "No ClusterSet metadata detected; leaving restored data untouched"
@@ -49,7 +49,11 @@ function start_mysqld() {
     mysqladmin -u operator -p"$(</etc/mysql/mysql-users-secret/operator)" ping --silent 2>/dev/null && break
     sleep 1
   done
-  [ "$i" -eq 0 ] && { log "timed out waiting for mysqld"; kill -s TERM "${MYSQLD_PID}" 2>/dev/null; exit 1; }
+  [ "$i" -eq 0 ] && {
+    log "timed out waiting for mysqld"
+    kill -s TERM "${MYSQLD_PID}" 2>/dev/null
+    exit 1
+  }
   log "mysqld is ready"
 }
 
