@@ -10,11 +10,13 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
@@ -199,6 +201,122 @@ func TestStsChanged(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestDeleteOutdatedPendingPods(t *testing.T) {
+	s := newScheme(t)
+
+	newPod := func(revision string, phase corev1.PodPhase) corev1.Pod {
+		return corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "mysql-0",
+				Namespace: "test-ns",
+				Labels: map[string]string{
+					controllerRevisionHash: revision,
+				},
+			},
+			Status: corev1.PodStatus{Phase: phase},
+		}
+	}
+
+	terminatingPod := newPod("rev-1", corev1.PodPending)
+	terminatingPod.DeletionTimestamp = new(metav1.Now())
+	terminatingPod.Finalizers = []string{"test"}
+
+	tests := []struct {
+		name           string
+		pod            corev1.Pod
+		updateRevision string
+		wantDeleted    bool
+	}{
+		{
+			name:           "empty update revision",
+			pod:            newPod("rev-1", corev1.PodPending),
+			updateRevision: "",
+			wantDeleted:    false,
+		},
+		{
+			name:           "outdated pending pod",
+			pod:            newPod("rev-1", corev1.PodPending),
+			updateRevision: "rev-2",
+			wantDeleted:    true,
+		},
+		{
+			name:           "updated pending pod",
+			pod:            newPod("rev-2", corev1.PodPending),
+			updateRevision: "rev-2",
+			wantDeleted:    false,
+		},
+		{
+			name:           "outdated running pod",
+			pod:            newPod("rev-1", corev1.PodRunning),
+			updateRevision: "rev-2",
+			wantDeleted:    false,
+		},
+		{
+			name:           "outdated pending pod already terminating",
+			pod:            terminatingPod,
+			updateRevision: "rev-2",
+			wantDeleted:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pod := tt.pod.DeepCopy()
+			cli := fake.NewClientBuilder().WithScheme(s).WithObjects(pod).Build()
+
+			deleted, err := deleteOutdatedPendingPods(t.Context(), cli, []corev1.Pod{*pod}, tt.updateRevision)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantDeleted, deleted)
+
+			err = cli.Get(t.Context(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, &corev1.Pod{})
+			if tt.wantDeleted {
+				assert.True(t, k8serrors.IsNotFound(err))
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestSmartUpdateDeletesOutdatedPendingPod(t *testing.T) {
+	cr := readDefaultCRForUpgrade("test-cluster", "test-ns")
+
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mysql",
+			Namespace: cr.Namespace,
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "mysql"},
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			Replicas:       1,
+			ReadyReplicas:  0,
+			UpdateRevision: "rev-2",
+		},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mysql-0",
+			Namespace: cr.Namespace,
+			Labels: map[string]string{
+				"app":                  "mysql",
+				controllerRevisionHash: "rev-1",
+			},
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodPending},
+	}
+
+	cli := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(sts, pod).Build()
+	r := &PerconaServerMySQLReconciler{Client: cli}
+
+	require.NoError(t, r.smartUpdate(t.Context(), sts, cr))
+	err := cli.Get(t.Context(), client.ObjectKeyFromObject(pod), &corev1.Pod{})
+	assert.True(t, k8serrors.IsNotFound(err))
 }
 
 func TestSwitchOverGR(t *testing.T) {

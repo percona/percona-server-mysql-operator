@@ -72,6 +72,14 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	}
 
 	if currentSet.Status.ReadyReplicas < currentSet.Status.Replicas {
+		ok, err := deleteOutdatedPendingPods(ctx, r.Client, pods.Items, currentSet.Status.UpdateRevision)
+		if err != nil {
+			return errors.Wrap(err, "delete outdated pending pods")
+		}
+		if ok {
+			return nil
+		}
+
 		log.Info("Can't start/continue 'SmartUpdate': waiting for all replicas to be ready")
 		return nil
 	}
@@ -135,12 +143,37 @@ func stsChanged(sts *appsv1.StatefulSet, pods []corev1.Pod) bool {
 	// When https://github.com/kubernetes/kubernetes/issues/73492 bug gets fixed,
 	// we can simply compare sts.Status.UpdateRevision with sts.Status.CurrentRevision
 	for _, pod := range pods {
-		if pod.Labels["controller-revision-hash"] != sts.Status.UpdateRevision {
+		if pod.Labels[controllerRevisionHash] != sts.Status.UpdateRevision {
 			return true
 		}
 	}
 
 	return false
+}
+
+func deleteOutdatedPendingPods(ctx context.Context, cli client.Client, pods []corev1.Pod, updateRevision string) (bool, error) {
+	log := logf.FromContext(ctx)
+
+	if updateRevision == "" {
+		return false, nil
+	}
+
+	deleted := false
+	for _, pod := range pods {
+		if pod.Status.Phase != corev1.PodPending ||
+			pod.Labels[controllerRevisionHash] == updateRevision ||
+			pod.DeletionTimestamp != nil {
+			continue
+		}
+
+		log.Info("deleting outdated pending pod", "pod", pod.Name)
+		if err := cli.Delete(ctx, &pod); client.IgnoreNotFound(err) != nil {
+			return deleted, errors.Wrapf(err, "delete pod %s", pod.Name)
+		}
+		deleted = true
+	}
+
+	return deleted, nil
 }
 
 func (r *PerconaServerMySQLReconciler) isBackupRunning(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, error) {
