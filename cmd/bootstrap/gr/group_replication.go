@@ -275,8 +275,6 @@ func (m *mysqlsh) configureInstance(ctx context.Context, opts *configureInstance
 	return nil
 }
 
-const clusterSetReplicationChannel = "clusterset_replication"
-
 func (m *mysqlsh) createCluster(ctx context.Context, opts *createClusterOpts) error {
 	_, stderr, err := m.run(ctx, fmt.Sprintf("dba.createCluster('%s', %s)", m.clusterName, opts))
 	if err != nil {
