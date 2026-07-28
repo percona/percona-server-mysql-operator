@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -192,5 +193,16 @@ func GetConfig(
 	if err != nil {
 		return ini.Section{}, errors.Wrap(err, "parse config section")
 	}
+	for _, k := range section.Keys() {
+		k.SetValue(sanitizeConfigValue(k.Value()))
+	}
 	return *section, nil
+}
+
+func sanitizeConfigValue(value string) string {
+	_, err := strconv.ParseFloat(value, 64)
+	if err == nil {
+		return value
+	}
+	return fmt.Sprintf("'%s'", value)
 }
