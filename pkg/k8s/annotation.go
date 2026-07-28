@@ -7,6 +7,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// AnnotateObject adds the specified annotations to the object
 func AnnotateObject(ctx context.Context, c client.Client, obj client.Object, annotations map[naming.AnnotationKey]string) error {
 	o := obj.DeepCopyObject().(client.Object)
 	err := c.Get(ctx, client.ObjectKeyFromObject(obj), o)
