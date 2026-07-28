@@ -29,6 +29,7 @@ import (
 	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	"github.com/go-ini/ini"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
@@ -54,6 +55,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
+	"github.com/percona/percona-server-mysql-operator/pkg/db"
 	database "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
@@ -69,6 +71,7 @@ import (
 // PerconaServerMySQLReconciler reconciles a PerconaServerMySQL object
 type PerconaServerMySQLReconciler struct {
 	client.Client
+	APIReader     client.Reader
 	Scheme        *runtime.Scheme
 	ServerVersion *platform.ServerVersion
 	Recorder      record.EventRecorder
@@ -731,6 +734,10 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 		return nil
 	}
 
+	if err := r.reconcileMySQLConfig(ctx, cr); err != nil {
+		return errors.Wrap(err, "reconcile MySQL config")
+	}
+
 	component := mysql.Component(*cr)
 	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
 		return errors.Wrap(err, "ensure component")
@@ -759,8 +766,130 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 	if cr.Spec.UpdateStrategy == apiv1.SmartUpdateStatefulSetStrategyType {
 		return r.smartUpdate(ctx, sts, cr)
 	}
-
 	return nil
+}
+
+func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+) error {
+	if cr.CompareVersion("1.2.0") < 0 {
+		return nil
+	}
+
+	currentHash, err := k8s.CustomConfigHash(ctx, r.Client, cr, new(mysql.Configurable(*cr)), naming.ComponentDatabase)
+	if err != nil {
+		return errors.Wrap(err, "get current config hash")
+	}
+
+	persistHashToStatus := func() error {
+		nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
+		if err := writeStatus(ctx, r.Client, nn, func(s *apiv1.PerconaServerMySQLStatus) error {
+			s.MySQL.LastAppliedConfigHash = currentHash
+			return nil
+		}); err != nil {
+			return errors.Wrap(err, "write status")
+		}
+		return nil
+	}
+
+	// New cluster, the config from ConfigMap will be applied when the mysql pods start.
+	// Just update the status and return.
+	if cr.Status.MySQL.State == apiv1.StateNew {
+		if err := persistHashToStatus(); err != nil {
+			return errors.Wrap(err, "persist hash to status")
+		}
+	}
+
+	if currentHash == cr.Status.MySQL.LastAppliedConfigHash {
+		return nil
+	}
+
+	log := logf.FromContext(ctx)
+
+	// Wait for cluster to be ready before applying configuration
+	if cr.Status.State != apiv1.StateReady {
+		log.Info("Waiting for cluster to be ready before applyin MySQL configuration")
+		return nil
+	}
+
+	conf, err := mysql.GetConfig(ctx, r.APIReader, cr)
+	if err != nil {
+		return errors.Wrap(err, "get MySQL config")
+	}
+
+	log.Info("Applying MySQL configuration")
+	restartNeeded, err := applyMySQLRuntimeConfig(ctx, r.Client, r.ClientCmd, cr, conf)
+	if err != nil {
+		return errors.Wrap(err, "apply MySQL runtime config")
+	}
+
+	if restartNeeded {
+		log.Info("Read-only variables changed, restarting MySQL pods to apply configuration")
+		sts := &appsv1.StatefulSet{}
+		if err := r.Get(ctx, mysql.NamespacedName(cr), sts); err != nil {
+			return errors.Wrap(err, "get MySQL statefulset")
+		}
+
+		if err := k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationConfigHash, currentHash); err != nil {
+			return errors.Wrap(err, "restart MySQL pods")
+		}
+	}
+
+	// TODO: handle removal of config options
+
+	if err := persistHashToStatus(); err != nil {
+		return errors.Wrap(err, "persist hash to status")
+	}
+
+	log.Info("MySQL configuration applied successfully")
+	return nil
+}
+
+func applyMySQLRuntimeConfig(
+	ctx context.Context,
+	cl client.Client,
+	clCmd clientcmd.Client,
+	cr *apiv1.PerconaServerMySQL,
+	conf ini.Section,
+) (bool, error) {
+	pods, err := k8s.PodsByLabels(ctx, cl, mysql.MatchLabels(cr), cr.GetNamespace())
+	if err != nil {
+		return false, errors.Wrap(err, "get pods by labels")
+	}
+
+	operatorPass, err := k8s.UserPassword(ctx, cl, cr, apiv1.UserOperator)
+	if err != nil {
+		return false, errors.Wrap(err, "get operator password")
+	}
+
+	sanitizeValue := func(value string) string {
+		_, err := strconv.ParseFloat(value, 64)
+		if err == nil {
+			return value
+		}
+		return fmt.Sprintf("'%s'", value)
+	}
+	sanitizeKey := func(value string) string {
+		return strings.ReplaceAll(value, "-", "_")
+	}
+
+	for _, pod := range pods {
+		for _, k := range conf.Keys() {
+			key := sanitizeKey(k.Name())
+			value := sanitizeValue(k.Value())
+			manager := db.NewAdminManager(&pod, clCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, &pod))
+			err := manager.SetGlobal(ctx, key, value)
+			if err != nil {
+				if strings.Contains(err.Error(), "ERROR 1238 (HY000)") {
+					return true, nil
+				}
+				return false, errors.Wrapf(err, "set global variable %s=%s", key, value)
+			}
+		}
+	}
+
+	return false, nil
 }
 
 type Exposer interface {

@@ -87,6 +87,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 			return errors.Wrap(err, "get MySQL status")
 		}
 		mysqlStatus.ImageID = status.MySQL.ImageID
+		mysqlStatus.LastAppliedConfigHash = cr.Status.MySQL.LastAppliedConfigHash
 
 		if mysqlStatus.State == apiv1.StateReady {
 			if cr.Spec.MySQL.IsGR() {

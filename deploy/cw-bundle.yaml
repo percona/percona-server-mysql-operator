@@ -14480,6 +14480,8 @@ spec:
                 properties:
                   imageID:
                     type: string
+                  lastAppliedConfigHash:
+                    type: string
                   ready:
                     format: int32
                     type: integer
@@ -14531,6 +14533,8 @@ spec:
                 properties:
                   imageID:
                     type: string
+                  lastAppliedConfigHash:
+                    type: string
                   ready:
                     format: int32
                     type: integer
@@ -14550,6 +14554,8 @@ spec:
                 properties:
                   imageID:
                     type: string
+                  lastAppliedConfigHash:
+                    type: string
                   ready:
                     format: int32
                     type: integer
@@ -14564,6 +14570,8 @@ spec:
               orchestrator:
                 properties:
                   imageID:
+                    type: string
+                  lastAppliedConfigHash:
                     type: string
                   ready:
                     format: int32
@@ -14581,6 +14589,8 @@ spec:
               router:
                 properties:
                   imageID:
+                    type: string
+                  lastAppliedConfigHash:
                     type: string
                   ready:
                     format: int32
@@ -14916,7 +14926,7 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.namespace
-        image: perconalab/percona-server-mysql-operator:main
+        image: asia-south1-docker.pkg.dev/cloud-dev-112233/mayankshah/ps-operator:K8SPS-730
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

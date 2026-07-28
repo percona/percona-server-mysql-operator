@@ -1,15 +1,25 @@
 package mysql
 
 import (
+	"context"
+	"io"
 	"strconv"
 	"strings"
 
 	"github.com/flosch/pongo2"
+	"github.com/go-ini/ini"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/config"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
@@ -98,4 +108,89 @@ func GetAutoTuneParams(cr *apiv1.PerconaServerMySQL, q *resource.Quantity) (stri
 	}
 
 	return autotuneParams, nil
+}
+
+func ReconcileConfigMap(
+	ctx context.Context,
+	cl client.Client,
+	cr *apiv1.PerconaServerMySQL,
+) error {
+	cfg := Configurable(*cr)
+	cmName := cfg.GetConfigMapName()
+	nn := types.NamespacedName{Name: cmName, Namespace: cr.Namespace}
+	currCm := &corev1.ConfigMap{}
+	if err := cl.Get(ctx, nn, currCm); err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrapf(err, "get ConfigMap/%s", cmName)
+	}
+	if cfg.GetConfiguration() == "" {
+		if err := cl.Get(ctx, nn, currCm); err != nil {
+			if !k8serrors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+
+		// ConfigMap exists and is created by the user, not the operator
+		if !metav1.IsControlledBy(currCm, cr) {
+			if currCm.Data["my.cnf"] == "" {
+				return errors.New("Failed to update config map. Please use my.cnf as a config name. Only in this case config map will be applied to the cluster")
+			}
+			return nil
+		}
+
+		if err := cl.Delete(ctx, currCm); err != nil {
+			return errors.Wrapf(err, "delete ConfigMaps/%s", cmName)
+		}
+		return nil
+	}
+
+	var memory *resource.Quantity
+	if res := cfg.GetResources(); res.Size() > 0 {
+		if _, ok := res.Requests[corev1.ResourceMemory]; ok {
+			memory = res.Requests.Memory()
+		}
+		if _, ok := res.Limits[corev1.ResourceMemory]; ok {
+			memory = res.Limits.Memory()
+		}
+	}
+
+	configuration := cfg.GetConfiguration()
+	if memory != nil {
+		var err error
+		configuration, err = cfg.ExecuteConfigurationTemplate(cfg.GetConfiguration(), memory)
+		if err != nil {
+			return errors.Wrap(err, "execute configuration template")
+		}
+	} else if strings.Contains(configuration, "{{") {
+		return errors.New("resources.limits[memory] or resources.requests[memory] should be specified for template usage in configuration")
+	}
+
+	cm := k8s.ConfigMap(cr, cmName, cfg.GetConfigMapKey(), configuration, naming.ComponentDatabase)
+	if !k8s.EqualConfigMaps(currCm, cm) {
+		if err := k8s.EnsureObject(ctx, cl, cr, cm, cl.Scheme()); err != nil {
+			return errors.Wrapf(err, "ensure ConfigMap/%s", cmName)
+		}
+	}
+	return nil
+}
+
+func GetConfig(
+	ctx context.Context,
+	cl client.Reader,
+	cr *apiv1.PerconaServerMySQL,
+) (ini.Section, error) {
+	configurable := Configurable(*cr)
+	cmName := configurable.GetConfigMapName()
+	nn := types.NamespacedName{Name: cmName, Namespace: cr.Namespace}
+	cm := &corev1.ConfigMap{}
+	if err := cl.Get(ctx, nn, cm); err != nil {
+		return ini.Section{}, client.IgnoreNotFound(err)
+	}
+
+	data := cm.Data[configurable.GetConfigMapKey()]
+	section, err := config.ParseSection(io.NopCloser(strings.NewReader(data)), "mysqld")
+	if err != nil {
+		return ini.Section{}, errors.Wrap(err, "parse config section")
+	}
+	return *section, nil
 }

@@ -872,6 +872,7 @@ func (s StatefulAppState) String() string {
 }
 
 const (
+	StateNew          StatefulAppState = ""
 	StateInitializing StatefulAppState = "initializing"
 	StateStopping     StatefulAppState = "stopping"
 	StatePaused       StatefulAppState = "paused"
@@ -880,11 +881,12 @@ const (
 )
 
 type StatefulAppStatus struct {
-	Size    int32            `json:"size,omitempty"`
-	Ready   int32            `json:"ready,omitempty"`
-	State   StatefulAppState `json:"state,omitempty"`
-	Version string           `json:"version,omitempty"`
-	ImageID string           `json:"imageID,omitempty"`
+	Size                  int32            `json:"size,omitempty"`
+	Ready                 int32            `json:"ready,omitempty"`
+	State                 StatefulAppState `json:"state,omitempty"`
+	Version               string           `json:"version,omitempty"`
+	ImageID               string           `json:"imageID,omitempty"`
+	LastAppliedConfigHash string           `json:"lastAppliedConfigHash,omitempty"`
 }
 
 // PerconaServerMySQLStatus defines the observed state of PerconaServerMySQL

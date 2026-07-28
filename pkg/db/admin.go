@@ -45,3 +45,13 @@ func (m *AdminManager) SetSuperReadOnly(ctx context.Context, readonly bool) erro
 	}
 	return nil
 }
+
+func (m *AdminManager) SetGlobal(ctx context.Context, variable string, value string) error {
+	var errb, outb bytes.Buffer
+	cmd := fmt.Sprintf("SET GLOBAL %s=%s", variable, value)
+	err := m.db.exec(ctx, cmd, &outb, &errb)
+	if err != nil {
+		return err
+	}
+	return nil
+}
