@@ -61,17 +61,19 @@ func (r *PerconaServerMySQLReconciler) getClusterSetMemberCondition(
 	switch clusterRole {
 	case clusterset.ClusterRolePrimary:
 		return &metav1.Condition{
-			Type:    apiv1.ConditionClusterSetMember,
-			Status:  metav1.ConditionTrue,
-			Reason:  apiv1.ClusterSetMemberReasonPrimary,
-			Message: "Cluster is a primary member of ClusterSet",
+			Type:               apiv1.ConditionClusterSetMember,
+			Status:             metav1.ConditionTrue,
+			Reason:             apiv1.ClusterSetMemberReasonPrimary,
+			Message:            "Cluster is a primary member of ClusterSet",
+			ObservedGeneration: cr.GetGeneration(),
 		}, nil
 	case clusterset.ClusterRoleReplica:
 		return &metav1.Condition{
-			Type:    apiv1.ConditionClusterSetMember,
-			Status:  metav1.ConditionTrue,
-			Reason:  apiv1.ClusterSetMemberReasonReplica,
-			Message: "Cluster is a replica member of ClusterSet",
+			Type:               apiv1.ConditionClusterSetMember,
+			Status:             metav1.ConditionTrue,
+			Reason:             apiv1.ClusterSetMemberReasonReplica,
+			Message:            "Cluster is a replica member of ClusterSet",
+			ObservedGeneration: cr.GetGeneration(),
 		}, nil
 	}
 	return nil, nil
