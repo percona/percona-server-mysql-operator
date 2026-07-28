@@ -1051,5 +1051,4 @@ spec:
 #        - INSERT
 #      hosts: []
 #      name: bob
-#      passwordSecretRef: null
 #      withGrantOption: true
