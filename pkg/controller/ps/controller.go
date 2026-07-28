@@ -28,7 +28,6 @@ import (
 	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
@@ -50,6 +49,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
