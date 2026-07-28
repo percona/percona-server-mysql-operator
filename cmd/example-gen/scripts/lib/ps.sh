@@ -86,7 +86,8 @@ remove_fields() {
 		| yq 'del(.spec.backup.storages.gcp-cs.volumeSpec)' \
 		| yq 'del(.spec.backup.storages.gcp-cs.verifyTLS)' \
 		| yq 'del(.spec.backup.storages.s3-us-west.azure)' \
-		| yq 'del(.spec.backup.storages.s3-us-west.gcs)'
+		| yq 'del(.spec.backup.storages.s3-us-west.gcs)' \
+		| yq 'del(.spec.users[1].passwordSecretRef)'
 }
 
 del_fields_to_comment() {
