@@ -30,7 +30,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 	}
 
 	log := logf.FromContext(ctx)
-	conf, err := mysql.GetConfig(ctx, r.APIReader, cr)
+	conf, err := mysql.GetConfig(ctx, r.Client, cr)
 	if err != nil {
 		return errors.Wrap(err, "get MySQL config")
 	}
