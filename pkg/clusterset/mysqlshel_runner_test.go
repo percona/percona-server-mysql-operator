@@ -51,8 +51,20 @@ func TestMySQLShellRunner(t *testing.T) {
 	assert.Equal(t, "percona/percona-server-mysql-operator:mysqlshell", containers[0].Image)
 	assert.Equal(t, []string{"sleep", "infinity"}, containers[0].Command)
 	assert.Equal(t, corev1.RestartPolicyAlways, deployment.Spec.Template.Spec.RestartPolicy)
+
+	envByName := map[string]corev1.EnvVar{}
+	for _, e := range containers[0].Env {
+		envByName[e.Name] = e
+	}
+
+	homeEnv, ok := envByName["HOME"]
+	assert.True(t, ok, "HOME env var must be set so mysqlsh can write its ~/.mysqlsh directory")
+	assert.Equal(t, "/tmp", homeEnv.Value)
+
+	pwEnv, ok := envByName[MySQLShellRunnerPassword]
+	assert.True(t, ok, "%s env var must be set from the credentials secret", MySQLShellRunnerPassword)
 	assert.Equal(t, corev1.SecretKeySelector{
 		LocalObjectReference: corev1.LocalObjectReference{Name: "clusterset-creds"},
 		Key:                  "password",
-	}, *containers[0].Env[0].ValueFrom.SecretKeyRef)
+	}, *pwEnv.ValueFrom.SecretKeyRef)
 }

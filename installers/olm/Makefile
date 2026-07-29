@@ -107,7 +107,7 @@ check-git:
 
 .PHONY: check-tools
 check-tools:
-	@for cmd in gawk gcsplit yq; do \
+	@for cmd in gawk gcsplit yq jq; do \
 		if ! command -v $$cmd >/dev/null 2>&1; then \
 			echo "Error: $$cmd is required but not installed"; \
 			exit 1; \

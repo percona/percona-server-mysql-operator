@@ -61,14 +61,14 @@ func New(ctx context.Context, pcs *apiv1.PerconaServerMySQLClusterSet, opts *Man
 			if errors.Is(err, mysqlsh.ErrEndpointUnreachable) {
 				continue
 			}
-			return nil, errors.Wrap(err, "ping")
+			if errors.Is(err, mysqlsh.ErrAccessDenied) {
+				return nil, NewAccessDeniedError()
+			}
+			return nil, NewGenericError(err.Error())
 		}
-
 		return &mysqlshellClusterSetManager{shell: shell}, nil
 	}
-
-	return nil, errors.Wrap(mysqlsh.ErrEndpointUnreachable, "all endpoints are unreachable")
-
+	return nil, NewUnreachableError()
 }
 
 func getClusterSetPassword(ctx context.Context, cl client.Client, pcs *apiv1.PerconaServerMySQLClusterSet) (string, error) {

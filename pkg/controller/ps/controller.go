@@ -574,6 +574,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err != nil {
 		return errors.Wrap(err, "users secret")
 	}
+	if err := r.ensureClusterUserSecret(ctx, cr, userSecret); err != nil {
+		return errors.Wrap(err, "cluster user secret")
+	}
 	if err := r.reconcileUsers(ctx, cr, userSecret); err != nil {
 		return errors.Wrap(err, "users")
 	}
@@ -875,7 +878,6 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 	}
 
 	if memory != nil {
-		log.V(1).Info("Generating auto-tune config based on memory", "memory", memory.String())
 		autotuneParams, err := mysql.GetAutoTuneParams(cr, memory)
 		if err != nil {
 			return err

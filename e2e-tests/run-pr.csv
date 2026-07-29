@@ -29,6 +29,10 @@ gr-demand-backup-cloud,8.4
 gr-demand-backup-haproxy,8.4
 gr-demand-backup-incremental,8.0
 gr-demand-backup-incremental,8.4
+gr-demand-backup-incremental-compressed,8.0
+gr-demand-backup-incremental-compressed,8.4
+gr-demand-backup-incremental-encrypted,8.0
+gr-demand-backup-incremental-encrypted,8.4
 gr-finalizer,8.4
 gr-haproxy,8.0
 gr-haproxy,8.4

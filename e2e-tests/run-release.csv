@@ -20,6 +20,8 @@ gr-demand-backup
 gr-demand-backup-cloud
 gr-demand-backup-haproxy
 gr-demand-backup-incremental
+gr-demand-backup-incremental-compressed
+gr-demand-backup-incremental-encrypted
 gr-finalizer
 gr-haproxy
 gr-ignore-annotations

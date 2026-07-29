@@ -70,22 +70,23 @@ type PerconaServerMySQLSpec struct {
 	CRVersion string    `json:"crVersion,omitempty"`
 	Pause     bool      `json:"pause,omitempty"`
 	// Deprecated: use `.spec.storageScaling.enableVolumeScaling` instead.
-	VolumeExpansionEnabled bool                                 `json:"enableVolumeExpansion,omitempty"`
-	StorageScaling         *StorageScalingSpec                  `json:"storageScaling,omitempty"`
-	SecretsName            string                               `json:"secretsName,omitempty"`
-	SSLSecretName          string                               `json:"sslSecretName,omitempty"`
-	Unsafe                 UnsafeFlags                          `json:"unsafeFlags,omitempty"`
-	IgnoreAnnotations      []string                             `json:"ignoreAnnotations,omitempty"`
-	IgnoreLabels           []string                             `json:"ignoreLabels,omitempty"`
-	MySQL                  MySQLSpec                            `json:"mysql,omitempty"`
-	Orchestrator           OrchestratorSpec                     `json:"orchestrator,omitempty"`
-	PMM                    *PMMSpec                             `json:"pmm,omitempty"`
-	Backup                 *BackupSpec                          `json:"backup,omitempty"`
-	Proxy                  ProxySpec                            `json:"proxy,omitempty"`
-	TLS                    *TLSSpec                             `json:"tls,omitempty"`
-	Toolkit                *ToolkitSpec                         `json:"toolkit,omitempty"`
-	UpgradeOptions         UpgradeOptions                       `json:"upgradeOptions,omitempty"`
-	UpdateStrategy         appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	VolumeExpansionEnabled  bool                                 `json:"enableVolumeExpansion,omitempty"`
+	StorageScaling          *StorageScalingSpec                  `json:"storageScaling,omitempty"`
+	SecretsName             string                               `json:"secretsName,omitempty"`
+	SSLSecretName           string                               `json:"sslSecretName,omitempty"`
+	Unsafe                  UnsafeFlags                          `json:"unsafeFlags,omitempty"`
+	IgnoreAnnotations       []string                             `json:"ignoreAnnotations,omitempty"`
+	IgnoreLabels            []string                             `json:"ignoreLabels,omitempty"`
+	MySQL                   MySQLSpec                            `json:"mysql,omitempty"`
+	Orchestrator            OrchestratorSpec                     `json:"orchestrator,omitempty"`
+	PMM                     *PMMSpec                             `json:"pmm,omitempty"`
+	Backup                  *BackupSpec                          `json:"backup,omitempty"`
+	Proxy                   ProxySpec                            `json:"proxy,omitempty"`
+	TLS                     *TLSSpec                             `json:"tls,omitempty"`
+	Toolkit                 *ToolkitSpec                         `json:"toolkit,omitempty"`
+	UpgradeOptions          UpgradeOptions                       `json:"upgradeOptions,omitempty"`
+	UpdateStrategy          appsv1.StatefulSetUpdateStrategyType `json:"updateStrategy,omitempty"`
+	ClusterServiceDNSSuffix string                               `json:"clusterServiceDNSSuffix,omitempty"`
 
 	// Deprecated: not supported since v0.12.0. Use initContainer instead
 	InitImage     string            `json:"initImage,omitempty"`
@@ -115,9 +116,9 @@ func (cr *PerconaServerMySQL) validateStorageAutoscaling() error {
 		return nil
 	}
 
-	if !spec.MaxSize.IsZero() {
+	if maxSize := spec.MaxSize; maxSize != nil && !maxSize.IsZero() {
 		minSize := resource.MustParse("1Gi")
-		if spec.MaxSize.Cmp(minSize) < 0 {
+		if maxSize.Cmp(minSize) < 0 {
 			return errors.Errorf("maxSize must be at least 1Gi")
 		}
 	}
@@ -176,7 +177,7 @@ type AutoscalingSpec struct {
 	// +kubebuilder:validation:XValidation:rule="isQuantity(self)",message="maxSize must be a valid Kubernetes quantity (e.g., '2Gi')"
 	// +kubebuilder:validation:XValidation:rule="sign(quantity(self)) == 1",message="maxSize must be a positive quantity"
 	// +kubebuilder:validation:XValidation:rule="quantity(self).compareTo(quantity('1Gi')) >= 0",message="maxSize should be at least 1Gi"
-	MaxSize resource.Quantity `json:"maxSize,omitempty"`
+	MaxSize *resource.Quantity `json:"maxSize,omitempty"`
 }
 
 // StorageAutoscalingStatus tracks the autoscaling state for a specific PVC
@@ -213,7 +214,7 @@ type UnsafeFlags struct {
 
 type TLSSpec struct {
 	SANs       []string                `json:"SANs,omitempty"`
-	IssuerConf *cmmeta.ObjectReference `json:"issuerConf,omitempty"`
+	IssuerConf *cmmeta.IssuerReference `json:"issuerConf,omitempty"`
 }
 
 type ClusterType string
@@ -772,6 +773,17 @@ type ProxySpec struct {
 	HAProxy *HAProxySpec     `json:"haproxy,omitempty"`
 }
 
+func (p *ProxySpec) LoadBalancerExposed() bool {
+	if p.Router != nil && p.Router.Enabled && p.Router.Expose.Type == corev1.ServiceTypeLoadBalancer {
+		return true
+	}
+	if p.HAProxy != nil && p.HAProxy.Enabled && p.HAProxy.Expose.Type == corev1.ServiceTypeLoadBalancer {
+		return true
+	}
+
+	return false
+}
+
 // +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.image) && size(self.image) > 0)",message="router.image is required when router is enabled"
 // +kubebuilder:validation:XValidation:rule="!(has(self.enabled) && self.enabled) || (has(self.size) && self.size > 0)",message="router.size must be greater than 0 when router is enabled"
 type MySQLRouterSpec struct {
@@ -986,7 +998,6 @@ func AllSystemUsers() []SystemUser {
 func (u SystemUser) IsKnown() bool {
 	_, ok := knownSystemUsers[u]
 	return ok
-	
 }
 
 // MySQLSpec returns the MySQL specification from the PerconaServerMySQL custom resource.

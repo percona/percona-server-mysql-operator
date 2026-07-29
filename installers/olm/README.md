@@ -18,3 +18,10 @@ make bundles
 # Generate only specific bundle:
 make bundles/community
 ```
+
+The `redhat` bundle uses `distributions/redhat.sh` to resolve real image digests from the
+Red Hat Catalog API (based on the versions in `e2e-tests/release_versions`) and populate
+`spec.relatedImages` and the operator `containerImage` with `registry.connect.redhat.com/...@sha256:...`
+references. If a digest can't be resolved (e.g. no network access), it falls back to a
+`<DIGEST>` placeholder. To pin a digest manually, set `REDHAT_IMAGE_DIGEST_<NAME>`
+(e.g. `REDHAT_IMAGE_DIGEST_OPERATOR=sha256:...`).

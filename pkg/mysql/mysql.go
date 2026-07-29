@@ -124,11 +124,15 @@ func PodName(cr *apiv1.PerconaServerMySQL, idx int) string {
 }
 
 func FQDN(cr *apiv1.PerconaServerMySQL, idx int) string {
-	return fmt.Sprintf("%s.%s.%s", PodName(cr, idx), ServiceName(cr), cr.Namespace)
+	return PodName(cr, idx) + "." + ServiceFQDN(cr)
 }
 
 func PodFQDN(cr *apiv1.PerconaServerMySQL, pod *corev1.Pod) string {
-	return fmt.Sprintf("%s.%s.%s", pod.Name, ServiceName(cr), cr.Namespace)
+	return pod.Name + "." + ServiceFQDN(cr)
+}
+
+func ServiceFQDN(cr *apiv1.PerconaServerMySQL) string {
+	return ServiceName(cr) + "." + cr.Namespace
 }
 
 func Labels(cr *apiv1.PerconaServerMySQL) map[string]string {
@@ -610,7 +614,8 @@ func containers(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) []corev1.Co
 			cr,
 			secret,
 			AppName,
-			cr.Spec.PMM.MySQLParams)
+			cr.Spec.PMM.MySQLParams,
+		)
 
 		containers = append(containers, pmmC)
 	}
@@ -777,7 +782,8 @@ func backupVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 	}
 
 	if cr.CompareVersion("0.11.0") >= 0 {
-		mounts = append(mounts,
+		mounts = append(
+			mounts,
 			corev1.VolumeMount{
 				Name:      vaultSecretVolumeName,
 				MountPath: vaultSecretMountPath,
@@ -786,7 +792,8 @@ func backupVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 	}
 
 	if cr.CompareVersion("1.1.0") >= 0 {
-		mounts = append(mounts,
+		mounts = append(
+			mounts,
 			corev1.VolumeMount{
 				Name:      configVolumeName,
 				MountPath: configMountPath,
@@ -796,7 +803,8 @@ func backupVolumeMounts(cr *apiv1.PerconaServerMySQL) []corev1.VolumeMount {
 
 	if cr.CompareVersion("1.2.0") >= 0 {
 		// See the matching optional volume for how encryption keys propagate.
-		mounts = append(mounts,
+		mounts = append(
+			mounts,
 			corev1.VolumeMount{
 				Name:      "backup-encryption-keys",
 				MountPath: "/etc/mysql/encryption-keys",

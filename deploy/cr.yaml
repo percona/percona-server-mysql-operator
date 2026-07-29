@@ -21,7 +21,8 @@ spec:
 #    proxy: false
 #    proxySize: false
 #  pause: false
-  crVersion: 1.2.0
+#  clusterServiceDNSSuffix: cluster.local
+  crVersion: 1.3.0
 #  enableVolumeExpansion: false
 #  storageScaling:
 #    autoscaling:

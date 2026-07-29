@@ -97,7 +97,7 @@ func TestCheckNSetDefaultsStorageAutoscaling(t *testing.T) {
 				Enabled:                 true,
 				TriggerThresholdPercent: 90,
 				GrowthStep:              resource.MustParse("5Gi"),
-				MaxSize:                 resource.MustParse("100Gi"),
+				MaxSize:                 new(resource.MustParse("100Gi")),
 			},
 		}
 
@@ -111,7 +111,7 @@ func TestCheckNSetDefaultsStorageAutoscaling(t *testing.T) {
 			EnableVolumeScaling: true,
 			Autoscaling: &AutoscalingSpec{
 				Enabled: true,
-				MaxSize: resource.MustParse("512Mi"),
+				MaxSize: new(resource.MustParse("512Mi")),
 			},
 		}
 
@@ -124,7 +124,7 @@ func TestCheckNSetDefaultsStorageAutoscaling(t *testing.T) {
 			EnableVolumeScaling: true,
 			Autoscaling: &AutoscalingSpec{
 				Enabled: false,
-				MaxSize: resource.MustParse("512Mi"),
+				MaxSize: new(resource.MustParse("512Mi")),
 			},
 		}
 

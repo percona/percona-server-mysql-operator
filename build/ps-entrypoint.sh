@@ -212,7 +212,7 @@ create_default_cnf() {
 		sed -i "/\[mysqld\]/a innodb_parallel_dblwr_encrypt=ON" $CFG
 	fi
 
-	if [ "$MYSQL_VERSION" == '8.4' ]; then
+	if [ "$MYSQL_VERSION" == '8.4' ] || [ "$MYSQL_VERSION" == '9.7' ]; then
 		sed -i "/\[mysqld\]/a innodb_numa_interleave=OFF" $CFG
 	fi
 
@@ -254,7 +254,7 @@ escape_special() {
 
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
 
-if [[ "$MYSQL_VERSION" != '8.0' ]] && [[ "${MYSQL_VERSION}" != '8.4' ]]; then
+if [[ "$MYSQL_VERSION" != '8.0' ]] && [[ "${MYSQL_VERSION}" != '8.4' ]] && [[ "${MYSQL_VERSION}" != '9.7' ]]; then
 	echo "Percona Distribution for MySQL Operator does not support $MYSQL_VERSION"
 	exit 1
 fi
@@ -476,7 +476,7 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 	fi
 fi
 
-if [[ ${MYSQL_VERSION} == '8.4' ]]; then
+if [[ ${MYSQL_VERSION} == '8.4' || ${MYSQL_VERSION} == '9.7' ]]; then
   # if vault secret file exists we assume we need to turn on encryption
   if [[ -f ${KEYRING_VAULT_PATH} ]]; then
     install_keyring_component

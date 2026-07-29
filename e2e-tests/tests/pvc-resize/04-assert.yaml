@@ -13,7 +13,7 @@ spec:
       persistentVolumeClaim:
         resources:
           requests:
-            storage: 3G
+            storage: 3Gi
 status:
   mysql:
     ready: 3
@@ -36,7 +36,7 @@ spec:
       - ReadWriteOnce
       resources:
         requests:
-          storage: 3G
+          storage: 3Gi
       volumeMode: Filesystem
 status:
   availableReplicas: 3

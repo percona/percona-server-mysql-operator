@@ -8,15 +8,18 @@ commands:
 
       source ../../functions
 
-      if [ "$EKS" = 1 ]; then
-        kubectl apply -f ../../conf/eks-storage-class.yaml
-      fi
+      platform="$(detect_k8s_platform)"
 
-      get_cr \
+      cr="$(get_cr \
           | yq eval '.spec.mysql.clusterType="group-replication"' - \
           | yq eval '.spec.mysql.size=3' - \
           | yq eval '.spec.proxy.router.enabled=false' - \
           | yq eval '.spec.proxy.haproxy.enabled=true' - \
           | yq eval '.spec.enableVolumeExpansion=true' - \
-          | yq eval '.spec.mysql.volumeSpec.persistentVolumeClaim.resources.requests.storage="2G"' - \
-          | kubectl -n "${NAMESPACE}" apply -f -
+          | yq eval '.spec.mysql.volumeSpec.persistentVolumeClaim.resources.requests.storage="2Gi"' -)"
+
+      if [[ "$platform" == "eks" ]]; then
+        kubectl apply -f ../../conf/eks-storage-class.yaml
+      fi
+
+      printf '%s\n' "$cr" | kubectl -n "${NAMESPACE}" apply -f -

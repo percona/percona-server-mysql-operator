@@ -1,6 +1,6 @@
 apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
-timeout: 420
+timeout: 350
 commands:
   - script: |-
       set -o errexit
@@ -14,7 +14,6 @@ commands:
 
         backup_count=$(count_backups_in_schedule "full" "$(get_cluster_name)")
       done
-    timeout: 420
 ---
 kind: PerconaServerMySQLBackup
 apiVersion: ps.percona.com/v1
