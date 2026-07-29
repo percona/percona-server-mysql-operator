@@ -136,7 +136,7 @@ func setGlobalVariables(
 		if err != nil {
 			return false, errors.Wrapf(err, "get key %s", k)
 		}
-		kv[k] = key.Value()
+		kv[k] = mysql.FormatConfigValue(key.Value())
 	}
 
 	restartNeeded := false

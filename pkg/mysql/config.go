@@ -126,9 +126,6 @@ func GetConfig(
 	if err != nil {
 		return config.EmptySection, errors.Wrap(err, "parse config section")
 	}
-	for _, k := range section.Keys() {
-		k.SetValue(sanitizeConfigValue(k.Value()))
-	}
 
 	result := config.Section{Section: *section}
 	return result, nil
@@ -151,10 +148,38 @@ func GetLastAppliedConfig(
 	return *result, nil
 }
 
-func sanitizeConfigValue(value string) string {
-	_, err := strconv.ParseFloat(value, 64)
-	if err == nil {
+func FormatConfigValue(value string) string {
+	value = strings.TrimSpace(value)
+
+	if _, err := strconv.ParseFloat(value, 64); err == nil {
 		return value
 	}
+
+	if expanded, ok := expandByteSuffix(value); ok {
+		return expanded
+	}
+
+	switch strings.ToLower(value) {
+	case "true", "on":
+		return "ON"
+	case "false", "off":
+		return "OFF"
+	}
+
 	return fmt.Sprintf("'%s'", value)
+}
+
+func expandByteSuffix(value string) (string, bool) {
+	// Quantity parses a bare "Gi" as zero, so require a leading digit rather
+	// than turning a mangled value into a silent 0.
+	if value == "" || value[0] < '0' || value[0] > '9' {
+		return "", false
+	}
+
+	q, err := resource.ParseQuantity(strings.ToUpper(value) + "i")
+	if err != nil {
+		return "", false
+	}
+
+	return strconv.FormatInt(q.Value(), 10), true
 }
