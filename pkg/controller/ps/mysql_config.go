@@ -63,6 +63,10 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 		return writeAnnotation()
 	}
 
+	if cr.Status.State != apiv1.StateReady {
+		return nil
+	}
+
 	lastAppliedConf, err := mysql.GetLastAppliedConfig(sts)
 	if err != nil {
 		return errors.Wrap(err, "get last applied MySQL config")
@@ -86,10 +90,6 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 
 	restartNeeded := false
 	if len(toApply) > 0 {
-		if cr.Status.State != apiv1.StateReady {
-			log.Info("Cluster is not ready, defer applying MySQL configuration")
-			return nil
-		}
 
 		log.Info("Setting MySQL configuration", "variables", toApply)
 		restartNeeded, err = setGlobalVariables(ctx, r.Client, r.ClientCmd, cr, &conf, toApply)
