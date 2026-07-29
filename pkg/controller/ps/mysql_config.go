@@ -41,12 +41,8 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 	}
 
 	writeAnnotation := func() error {
-		b, err := conf.IntoJSON()
-		if err != nil {
-			return errors.Wrap(err, "parse section into JSON")
-		}
 		if err := k8s.AnnotateObject(ctx, r.Client, sts, map[naming.AnnotationKey]string{
-			naming.AnnotationLastAppliedConfig: string(b),
+			naming.AnnotationLastAppliedConfig: string(confJson),
 		}); err != nil {
 			return errors.Wrap(err, "annotate object")
 		}
@@ -90,7 +86,6 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 
 	restartNeeded := false
 	if len(toApply) > 0 {
-
 		log.Info("Setting MySQL configuration", "variables", toApply)
 		restartNeeded, err = setGlobalVariables(ctx, r.Client, r.ClientCmd, cr, &conf, toApply)
 		if err != nil {
