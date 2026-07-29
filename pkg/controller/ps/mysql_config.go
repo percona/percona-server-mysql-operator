@@ -130,25 +130,29 @@ func setGlobalVariables(
 		return false, errors.Wrap(err, "get operator password")
 	}
 
-	keyValues := []string{}
-	for _, key := range keys {
-		k, err := conf.GetKey(key)
+	kv := make(map[string]string)
+	for _, k := range keys {
+		key, err := conf.GetKey(k)
 		if err != nil {
-			return false, errors.Wrapf(err, "get key %s", key)
+			return false, errors.Wrapf(err, "get key %s", k)
 		}
-		keyValues = append(keyValues, k.Name(), k.Value())
+		kv[k] = key.Value()
 	}
 
+	restartNeeded := false
 	for _, pod := range pods {
 		mgr := db.NewAdminManager(&pod, clCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, &pod))
-		err := mgr.SetGlobalVariables(ctx, keyValues...)
-		if err != nil {
-			if strings.Contains(err.Error(), "ERROR 1238 (HY000)") {
-				return true, nil
+		for k, v := range kv {
+			err := mgr.SetGlobalVariables(ctx, k, v)
+			if err != nil {
+				if strings.Contains(err.Error(), "ERROR 1238") {
+					restartNeeded = true
+					continue
+				}
+				return false, errors.Wrapf(err, "set global variables on pod %s", pod.Name)
 			}
-			return false, errors.Wrapf(err, "set global variables on pod %s", pod.Name)
 		}
 	}
 
-	return false, nil
+	return restartNeeded, nil
 }
