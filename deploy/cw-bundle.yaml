@@ -14429,11 +14429,11 @@ spec:
                 ''async'', ''proxy.haproxy.enabled'' must be true unless ''unsafeFlags.proxy''
                 is enabled'
               rule: '!(self.mysql.clusterType == ''async'') || self.unsafeFlags.proxy
-                || self.proxy.haproxy.enabled'
+                || (has(self.proxy.haproxy) && self.proxy.haproxy.enabled)'
             - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
                 ''async'', ''proxy.router.enabled'' must be disabled'
-              rule: '!(self.mysql.clusterType == ''async'') || self.proxy.router ==
-                null || !has(self.proxy.router.enabled) || !self.proxy.router.enabled'
+              rule: '!(self.mysql.clusterType == ''async'') || !has(self.proxy.router)
+                || !has(self.proxy.router.enabled) || !self.proxy.router.enabled'
             - message: 'Invalid configuration: Scaling MySQL replicas below 3 requires
                 ''unsafeFlags.mysqlSize: true'''
               rule: '!(has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize'
@@ -14448,11 +14448,13 @@ spec:
             - message: 'Invalid configuration: For ''group replication'', MySQL Router
                 or HAProxy must be enabled unless ''unsafeFlags.proxy'' is enabled'
               rule: '!(self.mysql.clusterType == ''group-replication'') || self.unsafeFlags.proxy
-                || self.proxy.router.enabled || self.proxy.haproxy.enabled'
+                || (has(self.proxy.router) && self.proxy.router.enabled) || (has(self.proxy.haproxy)
+                && self.proxy.haproxy.enabled)'
             - message: 'Invalid configuration: For ''group replication'', Router size
                 must be 2 or greater unless ''unsafeFlags.proxySize'' is enabled'
-              rule: '!(self.mysql.clusterType == ''group-replication'' && self.proxy.router.enabled
-                && has(self.proxy.router.size) && self.proxy.router.size < 2) || self.unsafeFlags.proxySize'
+              rule: '!(self.mysql.clusterType == ''group-replication'' && has(self.proxy.router)
+                && self.proxy.router.enabled && has(self.proxy.router.size) && self.proxy.router.size
+                < 2) || self.unsafeFlags.proxySize'
             - message: 'Invalid configuration: For ''group replication'', MySQL size
                 must be 3 or greater unless ''unsafeFlags.mysqlSize'' is enabled'
               rule: '!(self.mysql.clusterType == ''group-replication'' && has(self.mysql.size)
@@ -14469,8 +14471,8 @@ spec:
                 == ''SmartUpdate'') || self.orchestrator.enabled'
             - message: 'Invalid configuration: MySQL Router and HAProxy can''t be
                 enabled at the same time'
-              rule: '!(self.proxy.router != null && has(self.proxy.router.enabled)
-                && self.proxy.router.enabled && self.proxy.haproxy != null && has(self.proxy.haproxy.enabled)
+              rule: '!(has(self.proxy.router) && has(self.proxy.router.enabled) &&
+                self.proxy.router.enabled && has(self.proxy.haproxy) && has(self.proxy.haproxy.enabled)
                 && self.proxy.haproxy.enabled)'
           status:
             properties:
