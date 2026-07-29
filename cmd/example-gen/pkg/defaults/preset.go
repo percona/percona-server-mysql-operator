@@ -41,7 +41,7 @@ func FromPresets(cr any) error {
 				"mysql-2.example.com",
 				"mysql-3.example.com",
 			},
-			IssuerConf: &cmmeta.ObjectReference{
+			IssuerConf: &cmmeta.IssuerReference{
 				Name:  "special-selfsigned-issuer",
 				Kind:  "ClusterIssuer",
 				Group: "cert-manager.io",
