@@ -25,7 +25,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 	cr *apiv1.PerconaServerMySQL,
 	sts *appsv1.StatefulSet,
 ) error {
-	if cr.CompareVersion("1.2.0") < 0 {
+	if cr.CompareVersion("1.2.0") <= 0 {
 		return nil
 	}
 

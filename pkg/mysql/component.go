@@ -62,7 +62,7 @@ func (c *Component) Object(ctx context.Context, cl client.Client) (client.Object
 		return nil, errors.Wrapf(err, "get custom config hash")
 	}
 
-	// Do not reconcile configHash for 1.2.0 and above.
+	// Do not reconcile configHash for versions above 1.2.0.
 	// Configuration is handled dynamically, restarts are done
 	// selectively only when a variable cannot be added dynamically.
 	if cr.CompareVersion("1.2.0") > 0 {
