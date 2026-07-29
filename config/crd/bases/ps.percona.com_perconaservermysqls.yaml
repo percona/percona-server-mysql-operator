@@ -10510,8 +10510,6 @@ spec:
                 properties:
                   imageID:
                     type: string
-                  lastAppliedConfigHash:
-                    type: string
                   ready:
                     format: int32
                     type: integer
@@ -10563,8 +10561,6 @@ spec:
                 properties:
                   imageID:
                     type: string
-                  lastAppliedConfigHash:
-                    type: string
                   ready:
                     format: int32
                     type: integer
@@ -10584,8 +10580,6 @@ spec:
                 properties:
                   imageID:
                     type: string
-                  lastAppliedConfigHash:
-                    type: string
                   ready:
                     format: int32
                     type: integer
@@ -10600,8 +10594,6 @@ spec:
               orchestrator:
                 properties:
                   imageID:
-                    type: string
-                  lastAppliedConfigHash:
                     type: string
                   ready:
                     format: int32
@@ -10619,8 +10611,6 @@ spec:
               router:
                 properties:
                   imageID:
-                    type: string
-                  lastAppliedConfigHash:
                     type: string
                   ready:
                     format: int32

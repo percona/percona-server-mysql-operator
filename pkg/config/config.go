@@ -1,11 +1,61 @@
 package config
 
 import (
+	"encoding/json"
 	"io"
 
 	"github.com/go-ini/ini"
 	"github.com/pkg/errors"
 )
+
+// Section is a wrapper around ini.Section to provide additional methods.
+type Section struct {
+	ini.Section
+}
+
+type NewSectionOpts struct {
+	SectionName string
+	Section     *ini.Section
+}
+
+func NewSection(o NewSectionOpts) *Section {
+	if o.Section != nil {
+		return &Section{*o.Section}
+	}
+	f := ini.Empty(ini.LoadOptions{AllowBooleanKeys: true})
+	sec, _ := f.NewSection(o.SectionName)
+	return &Section{*sec}
+}
+
+func (s *Section) IntoJSON() ([]byte, error) {
+	return json.Marshal(s.KeysHash())
+}
+
+func (s *Section) FromJSON(in io.Reader, sectionName string) error {
+	b, err := io.ReadAll(in)
+	if err != nil {
+		return errors.Wrap(err, "read input")
+	}
+
+	var m map[string]string
+	if err := json.Unmarshal(b, &m); err != nil {
+		return errors.Wrap(err, "unmarshal json")
+	}
+
+	f := ini.Empty(ini.LoadOptions{AllowBooleanKeys: true})
+	sec, err := f.NewSection(sectionName)
+	if err != nil {
+		return errors.Wrap(err, "create section")
+	}
+
+	for name, val := range m {
+		if _, err := sec.NewKey(name, val); err != nil {
+			return errors.Wrapf(err, "create key %s", name)
+		}
+	}
+	s.Section = *sec
+	return nil
+}
 
 // ParseSection loads an ini file and returns the named section.
 func ParseSection(myCnfFile io.ReadCloser, sectionName string) (*ini.Section, error) {
@@ -24,6 +74,33 @@ func ParseSection(myCnfFile io.ReadCloser, sectionName string) (*ini.Section, er
 	}
 
 	return section, nil
+}
+
+// Changed returns a list of keys that are present in both, but have different values.
+func (a *Section) Changed(b Section) []string {
+	result := []string{}
+	for _, k := range a.Keys() {
+		if !b.HasKey(k.Name()) {
+			continue
+		}
+
+		bk, _ := b.GetKey(k.Name()) // key not exists is the only error returned, but we already check it first
+		if k.Value() != bk.Value() {
+			result = append(result, k.Name())
+		}
+	}
+	return result
+}
+
+// Subtract returns a list of keys that are present in a but not in b.
+func (a *Section) Subtract(b Section) []string {
+	result := []string{}
+	for _, k := range a.Keys() {
+		if !b.HasKey(k.Name()) {
+			result = append(result, k.Name())
+		}
+	}
+	return result
 }
 
 // GetKeyValue retrieves the string value of the given option from an ini section.

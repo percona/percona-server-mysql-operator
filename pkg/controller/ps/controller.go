@@ -732,10 +732,6 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 		return nil
 	}
 
-	if err := r.reconcileMySQLConfig(ctx, cr); err != nil {
-		return errors.Wrap(err, "reconcile MySQL config")
-	}
-
 	component := mysql.Component(*cr)
 	if err := k8s.EnsureComponent(ctx, r.Client, &component); err != nil {
 		return errors.Wrap(err, "ensure component")
@@ -762,8 +758,14 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 		return errors.Wrap(err, "get statefulset")
 	}
 	if cr.Spec.UpdateStrategy == apiv1.SmartUpdateStatefulSetStrategyType {
-		return r.smartUpdate(ctx, sts, cr)
+		if err := r.smartUpdate(ctx, sts, cr); err != nil {
+			return errors.Wrap(err, "smart update")
+		}
 	}
+	if err := r.reconcileMySQLConfig(ctx, cr, sts); err != nil {
+		return errors.Wrap(err, "reconcile MySQL config")
+	}
+
 	return nil
 }
 

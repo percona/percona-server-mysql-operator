@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
+	"slices"
+	"strings"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
@@ -46,9 +49,35 @@ func (m *AdminManager) SetSuperReadOnly(ctx context.Context, readonly bool) erro
 	return nil
 }
 
-func (m *AdminManager) SetGlobal(ctx context.Context, variable string, value string) error {
+func (m *AdminManager) SetGlobalVariables(ctx context.Context, keyValues ...any) error {
+	if len(keyValues) == 0 {
+		return nil
+	}
+
+	if len(keyValues)%2 != 0 {
+		return fmt.Errorf("keyValues must be in pairs")
+	}
+
+	kv := make(map[string]string)
+	for i := 0; i < len(keyValues); i += 2 {
+		key, ok := keyValues[i].(string)
+		if !ok {
+			return fmt.Errorf("key must be a string")
+		}
+		value, ok := keyValues[i+1].(string)
+		if !ok {
+			return fmt.Errorf("value must be a string")
+		}
+		kv[key] = value
+	}
+
+	assignments := make([]string, 0, len(kv))
+	for _, key := range slices.Sorted(maps.Keys(kv)) {
+		assignments = append(assignments, fmt.Sprintf("GLOBAL %s=%s", key, kv[key]))
+	}
+
 	var errb, outb bytes.Buffer
-	cmd := fmt.Sprintf("SET GLOBAL %s=%s", variable, value)
+	cmd := "SET " + strings.Join(assignments, ", ")
 	err := m.db.exec(ctx, cmd, &outb, &errb)
 	if err != nil {
 		return err

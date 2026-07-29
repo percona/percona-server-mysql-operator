@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/flosch/pongo2"
-	"github.com/go-ini/ini"
 	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
@@ -17,6 +17,7 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/config"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/util"
 )
 
@@ -111,24 +112,39 @@ func GetConfig(
 	ctx context.Context,
 	cl client.Reader,
 	cr *apiv1.PerconaServerMySQL,
-) (ini.Section, error) {
+) (config.Section, error) {
 	configurable := Configurable(*cr)
 	cmName := configurable.GetConfigMapName()
 	nn := types.NamespacedName{Name: cmName, Namespace: cr.Namespace}
 	cm := &corev1.ConfigMap{}
 	if err := cl.Get(ctx, nn, cm); err != nil {
-		return ini.Section{}, client.IgnoreNotFound(err)
+		return config.Section{}, client.IgnoreNotFound(err)
 	}
 
 	data := cm.Data[configurable.GetConfigMapKey()]
 	section, err := config.ParseSection(io.NopCloser(strings.NewReader(data)), "mysqld")
 	if err != nil {
-		return ini.Section{}, errors.Wrap(err, "parse config section")
+		return config.Section{}, errors.Wrap(err, "parse config section")
 	}
 	for _, k := range section.Keys() {
 		k.SetValue(sanitizeConfigValue(k.Value()))
 	}
-	return *section, nil
+
+	result := config.Section{Section: *section}
+	return result, nil
+}
+
+func GetLastAppliedConfig(
+	sts *appsv1.StatefulSet,
+) (config.Section, error) {
+	val, ok := sts.GetAnnotations()[naming.AnnotationLastAppliedConfig.String()]
+	if !ok {
+		return config.Section{}, nil
+	}
+
+	result := config.NewSection(config.NewSectionOpts{})
+	result.FromJSON(io.NopCloser(strings.NewReader(val)), "mysqld")
+	return *result, nil
 }
 
 func sanitizeConfigValue(value string) string {

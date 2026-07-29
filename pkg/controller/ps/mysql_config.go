@@ -2,13 +2,19 @@ package ps
 
 import (
 	"context"
+	"crypto/md5"
+	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
+	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
+	"github.com/percona/percona-server-mysql-operator/pkg/config"
+	"github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -17,76 +23,130 @@ import (
 func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQL,
+	sts *appsv1.StatefulSet,
 ) error {
 	if cr.CompareVersion("1.2.0") < 0 {
 		return nil
 	}
 
-	currentHash, err := k8s.CustomConfigHash(ctx, r.Client, cr, new(mysql.Configurable(*cr)), naming.ComponentDatabase)
-	if err != nil {
-		return errors.Wrap(err, "get current config hash")
-	}
-
-	persistHashToStatus := func() error {
-		nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
-		if err := writeStatus(ctx, r.Client, nn, func(s *apiv1.PerconaServerMySQLStatus) error {
-			s.MySQL.LastAppliedConfigHash = currentHash
-			return nil
-		}); err != nil {
-			return errors.Wrap(err, "write status")
-		}
-		return nil
-	}
-
-	// New cluster, the config from ConfigMap will be applied when the mysql pods start.
-	// Just update the status and return.
-	if cr.Status.MySQL.State == apiv1.StateNew {
-		if err := persistHashToStatus(); err != nil {
-			return errors.Wrap(err, "persist hash to status")
-		}
-	}
-
-	if currentHash == cr.Status.MySQL.LastAppliedConfigHash {
-		return nil
-	}
-
 	log := logf.FromContext(ctx)
-
-	// Wait for cluster to be ready before applying configuration
-	if cr.Status.State != apiv1.StateReady {
-		log.Info("Waiting for cluster to be ready before applyin MySQL configuration")
-		return nil
-	}
-
 	conf, err := mysql.GetConfig(ctx, r.APIReader, cr)
 	if err != nil {
 		return errors.Wrap(err, "get MySQL config")
 	}
 
-	log.Info("Applying MySQL configuration")
-	restartNeeded, err := applyMySQLRuntimeConfig(ctx, r.Client, r.ClientCmd, cr, conf)
+	confJson, err := conf.IntoJSON()
 	if err != nil {
-		return errors.Wrap(err, "apply MySQL runtime config")
+		return errors.Wrap(err, "parse section into JSON")
+	}
+
+	writeAnnotation := func() error {
+		b, err := conf.IntoJSON()
+		if err != nil {
+			return errors.Wrap(err, "parse section into JSON")
+		}
+		if err := k8s.AnnotateObject(ctx, r.Client, sts, map[naming.AnnotationKey]string{
+			naming.AnnotationLastAppliedConfig: string(b),
+		}); err != nil {
+			return errors.Wrap(err, "annotate object")
+		}
+		return nil
+	}
+
+	confHash := fmt.Sprintf("%x", md5.Sum(confJson))
+	restartMySQL := func() error {
+		return k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationConfigHash, confHash)
+	}
+
+	// New cluster, pods will read the config from the ConfigMap on startup.
+	if cr.Status.State == apiv1.StateNew {
+		return writeAnnotation()
+	}
+
+	lastAppliedConf, err := mysql.GetLastAppliedConfig(sts)
+	if err != nil {
+		return errors.Wrap(err, "get last applied MySQL config")
+	}
+
+	// First check if any keys are removed,
+	// if they are, we need to restart anyway.
+	toRemove := lastAppliedConf.Subtract(conf)
+	if len(toRemove) > 0 {
+		log.Info("Variables have been removed, restart needed")
+		if err := restartMySQL(); err != nil {
+			return errors.Wrap(err, "restart MySQL")
+		}
+		if err := writeAnnotation(); err != nil {
+			return errors.Wrap(err, "write last applied config annotation")
+		}
+		return nil
+	}
+
+	toApply := conf.Subtract(lastAppliedConf)
+	toApply = append(toApply, conf.Changed(lastAppliedConf)...)
+
+	restartNeeded := false
+	if len(toApply) > 0 {
+		if cr.Status.State != apiv1.StateReady {
+			log.Info("Cluster is not ready, defer applying MySQL configuration")
+			return nil
+		}
+
+		restartNeeded, err = setGlobalVariables(ctx, r.Client, r.ClientCmd, cr, &conf, toApply)
+		log.Info("Setting MySQL configuration", "variables", toApply)
 	}
 
 	if restartNeeded {
-		log.Info("Read-only variables changed, restarting MySQL pods to apply configuration")
-		sts := &appsv1.StatefulSet{}
-		if err := r.Get(ctx, mysql.NamespacedName(cr), sts); err != nil {
-			return errors.Wrap(err, "get MySQL statefulset")
-		}
-
-		if err := k8s.RolloutRestart(ctx, r.Client, sts, naming.AnnotationConfigHash, currentHash); err != nil {
-			return errors.Wrap(err, "restart MySQL pods")
+		log.Info("Restart needed after setting MySQL configuration")
+		if err := restartMySQL(); err != nil {
+			return errors.Wrap(err, "restart MySQL")
 		}
 	}
 
-	// TODO: handle removal of config options
-
-	if err := persistHashToStatus(); err != nil {
-		return errors.Wrap(err, "persist hash to status")
+	if err := writeAnnotation(); err != nil {
+		return errors.Wrap(err, "write last applied config annotation")
 	}
 
-	log.Info("MySQL configuration applied successfully")
 	return nil
+}
+
+func setGlobalVariables(
+	ctx context.Context,
+	cl client.Client,
+	clCmd clientcmd.Client,
+	cr *apiv1.PerconaServerMySQL,
+	conf *config.Section,
+	keys []string,
+) (bool, error) {
+	pods, err := k8s.PodsByLabels(ctx, cl, mysql.MatchLabels(cr), cr.GetNamespace())
+	if err != nil {
+		return false, errors.Wrap(err, "get pods by labels")
+	}
+
+	operatorPass, err := k8s.UserPassword(ctx, cl, cr, apiv1.UserOperator)
+	if err != nil {
+		return false, errors.Wrap(err, "get operator password")
+	}
+
+	keyValues := []string{}
+	for _, key := range keys {
+		k, err := conf.GetKey(key)
+		if err != nil {
+			return false, errors.Wrapf(err, "get key %s", key)
+		}
+		keyValues = append(keyValues, k.Name(), k.Value())
+	}
+
+	for _, pod := range pods {
+		mgr := db.NewAdminManager(&pod, clCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, &pod))
+		err := mgr.SetGlobalVariables(ctx, keyValues)
+		if err != nil {
+			if strings.Contains(err.Error(), "ERROR 1238 (HY000)") {
+				return true, nil
+			}
+			return false, errors.Wrapf(err, "set global variables on pod %s", pod.Name)
+		}
+	}
+
+	return false, nil
 }
