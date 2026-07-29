@@ -6,6 +6,32 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestQuoteLiteral(t *testing.T) {
+	tests := map[string]struct {
+		value string
+		want  string
+	}{
+		"quotes a plain value":             {value: "utf8mb4", want: `'utf8mb4'`},
+		"quotes an empty value":            {value: "", want: `''`},
+		"doubles a single quote":           {value: "a'b", want: `'a''b'`},
+		"doubles every single quote":       {value: "'a'b'", want: `'''a''b'''`},
+		"doubles a backslash":              {value: `a\b`, want: `'a\\b'`},
+		"leaves a double quote alone":      {value: `a"b`, want: `'a"b'`},
+		"escapes a backslashed quote once": {value: `a\'b`, want: `'a\\''b'`},
+		"contains a statement terminator":  {value: "a; DROP TABLE t", want: `'a; DROP TABLE t'`},
+		"contains the injection payload": {
+			value: `x' , GLOBAL super_read_only=0, @@dummy='`,
+			want:  `'x'' , GLOBAL super_read_only=0, @@dummy='''`,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tt.want, QuoteLiteral(tt.value))
+		})
+	}
+}
+
 func TestFormatConfigValue(t *testing.T) {
 	tests := map[string]struct {
 		value string

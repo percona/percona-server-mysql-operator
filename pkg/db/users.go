@@ -26,7 +26,7 @@ func NewUserManager(pod *corev1.Pod, cliCmd clientcmd.Client, user apiv1.SystemU
 func (m *UserManager) UpdateUserPasswords(ctx context.Context, users []mysql.User) error {
 	for _, user := range users {
 		for _, host := range user.Hosts {
-			q := fmt.Sprintf("ALTER USER '%s'@'%s' IDENTIFIED BY '%s' RETAIN CURRENT PASSWORD", user.Username, host, escapePass(user.Password))
+			q := fmt.Sprintf("ALTER USER '%s'@'%s' IDENTIFIED BY %s RETAIN CURRENT PASSWORD", user.Username, host, mysql.QuoteLiteral(user.Password))
 			var errb, outb bytes.Buffer
 			err := m.db.exec(ctx, q, &outb, &errb)
 			if err != nil {
@@ -50,7 +50,7 @@ func (m *UserManager) UpdateUserPasswords(ctx context.Context, users []mysql.Use
 // don't have this user. It is safe to call if the user already exists.
 func (m *UserManager) CreateClusterSetUser(ctx context.Context, pass string) error {
 	queries := []string{
-		fmt.Sprintf("CREATE USER IF NOT EXISTS 'clusterset'@'%%' IDENTIFIED BY '%s' PASSWORD EXPIRE NEVER", escapePass(pass)),
+		fmt.Sprintf("CREATE USER IF NOT EXISTS 'clusterset'@'%%' IDENTIFIED BY %s PASSWORD EXPIRE NEVER", mysql.QuoteLiteral(pass)),
 		"GRANT SELECT, RELOAD, SHUTDOWN, PROCESS, FILE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE USER, EXECUTE ON *.* TO 'clusterset'@'%' WITH GRANT OPTION",
 		"GRANT BACKUP_ADMIN, CLONE_ADMIN, CONNECTION_ADMIN, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, REPLICATION_APPLIER, PERSIST_RO_VARIABLES_ADMIN, ROLE_ADMIN, SESSION_VARIABLES_ADMIN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'clusterset'@'%' WITH GRANT OPTION",
 		"GRANT INSERT, UPDATE, DELETE ON mysql.* TO 'clusterset'@'%' WITH GRANT OPTION",
@@ -87,11 +87,4 @@ func (m *UserManager) DiscardOldPasswords(ctx context.Context, users []mysql.Use
 	}
 
 	return nil
-}
-
-func escapePass(pass string) string {
-	s := strings.ReplaceAll(pass, `'`, `\'`)
-	s = strings.ReplaceAll(s, `"`, `\"`)
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	return s
 }

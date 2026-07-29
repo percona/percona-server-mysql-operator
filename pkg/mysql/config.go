@@ -166,7 +166,17 @@ func FormatConfigValue(value string) string {
 		return "OFF"
 	}
 
-	return fmt.Sprintf("'%s'", value)
+	return QuoteLiteral(value)
+}
+
+// QuoteLiteral renders value as a single SQL string literal, escaped so no part
+// of it can be parsed as SQL. Quotes are doubled rather than backslash-escaped
+// because doubling is the only form that holds under NO_BACKSLASH_ESCAPES too,
+// and sql_mode is itself one of the variables we set.
+func QuoteLiteral(value string) string {
+	escaped := strings.ReplaceAll(value, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `'`, `''`)
+	return fmt.Sprintf("'%s'", escaped)
 }
 
 func expandByteSuffix(value string) (string, bool) {
