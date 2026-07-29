@@ -229,18 +229,19 @@ func EnsureObjectWithHash(
 		return nil
 	}
 
-	switch obj.(type) {
-	case *appsv1.Deployment:
-		annotations := obj.GetAnnotations()
-		ignoreAnnotations := []string{"deployment.kubernetes.io/revision"}
-		for _, key := range ignoreAnnotations {
-			v, ok := oldObject.GetAnnotations()[key]
-			if ok {
-				annotations[key] = v
-			}
-		}
-		obj.SetAnnotations(annotations)
+	// Certain annotations should be preserved
+	annotations := obj.GetAnnotations()
+	preserveAnnotations := []string{
+		"deployment.kubernetes.io/revision",
+		string(naming.AnnotationLastAppliedConfig),
 	}
+	for _, key := range preserveAnnotations {
+		v, ok := oldObject.GetAnnotations()[key]
+		if ok {
+			annotations[key] = v
+		}
+	}
+	obj.SetAnnotations(annotations)
 
 	if oldObject.GetAnnotations()[naming.AnnotationLastConfigHash.String()] != hash ||
 		!objectMetaEqual(obj, oldObject) {

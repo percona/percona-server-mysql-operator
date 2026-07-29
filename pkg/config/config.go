@@ -13,18 +13,26 @@ type Section struct {
 	ini.Section
 }
 
+var EmptySection = Section{*ini.Empty(ini.LoadOptions{AllowBooleanKeys: true}).Section("")}
+
 type NewSectionOpts struct {
 	SectionName string
 	Section     *ini.Section
 }
 
-func NewSection(o NewSectionOpts) *Section {
+func NewSection(o NewSectionOpts) (*Section, error) {
 	if o.Section != nil {
-		return &Section{*o.Section}
+		return &Section{*o.Section}, nil
 	}
 	f := ini.Empty(ini.LoadOptions{AllowBooleanKeys: true})
-	sec, _ := f.NewSection(o.SectionName)
-	return &Section{*sec}
+	if o.SectionName == "" {
+		return &Section{*f.Section("")}, nil
+	}
+	sec, err := f.NewSection(o.SectionName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "create section %s", o.SectionName)
+	}
+	return &Section{*sec}, nil
 }
 
 func (s *Section) IntoJSON() ([]byte, error) {

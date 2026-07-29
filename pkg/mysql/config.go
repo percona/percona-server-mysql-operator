@@ -118,13 +118,13 @@ func GetConfig(
 	nn := types.NamespacedName{Name: cmName, Namespace: cr.Namespace}
 	cm := &corev1.ConfigMap{}
 	if err := cl.Get(ctx, nn, cm); err != nil {
-		return config.Section{}, client.IgnoreNotFound(err)
+		return config.EmptySection, client.IgnoreNotFound(err)
 	}
 
 	data := cm.Data[configurable.GetConfigMapKey()]
 	section, err := config.ParseSection(io.NopCloser(strings.NewReader(data)), "mysqld")
 	if err != nil {
-		return config.Section{}, errors.Wrap(err, "parse config section")
+		return config.EmptySection, errors.Wrap(err, "parse config section")
 	}
 	for _, k := range section.Keys() {
 		k.SetValue(sanitizeConfigValue(k.Value()))
@@ -139,10 +139,14 @@ func GetLastAppliedConfig(
 ) (config.Section, error) {
 	val, ok := sts.GetAnnotations()[naming.AnnotationLastAppliedConfig.String()]
 	if !ok {
-		return config.Section{}, nil
+		return config.EmptySection, nil
 	}
 
-	result := config.NewSection(config.NewSectionOpts{})
+	result, err := config.NewSection(config.NewSectionOpts{})
+	if err != nil {
+		return config.EmptySection, errors.Wrap(err, "create section")
+	}
+
 	result.FromJSON(io.NopCloser(strings.NewReader(val)), "mysqld")
 	return *result, nil
 }

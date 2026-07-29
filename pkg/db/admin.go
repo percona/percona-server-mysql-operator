@@ -49,7 +49,7 @@ func (m *AdminManager) SetSuperReadOnly(ctx context.Context, readonly bool) erro
 	return nil
 }
 
-func (m *AdminManager) SetGlobalVariables(ctx context.Context, keyValues ...any) error {
+func (m *AdminManager) SetGlobalVariables(ctx context.Context, keyValues ...string) error {
 	if len(keyValues) == 0 {
 		return nil
 	}
@@ -60,14 +60,8 @@ func (m *AdminManager) SetGlobalVariables(ctx context.Context, keyValues ...any)
 
 	kv := make(map[string]string)
 	for i := 0; i < len(keyValues); i += 2 {
-		key, ok := keyValues[i].(string)
-		if !ok {
-			return fmt.Errorf("key must be a string")
-		}
-		value, ok := keyValues[i+1].(string)
-		if !ok {
-			return fmt.Errorf("value must be a string")
-		}
+		key := keyValues[i]
+		value := keyValues[i+1]
 		kv[key] = value
 	}
 

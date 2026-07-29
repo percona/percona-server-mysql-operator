@@ -68,11 +68,10 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 		return errors.Wrap(err, "get last applied MySQL config")
 	}
 
-	// First check if any keys are removed,
-	// if they are, we need to restart anyway.
+	// If any keys are removed, trigger restart and return early.
 	toRemove := lastAppliedConf.Subtract(conf)
 	if len(toRemove) > 0 {
-		log.Info("Variables have been removed, restart needed")
+		log.Info("Variables have been removed, restart needed", "variables", toRemove)
 		if err := restartMySQL(); err != nil {
 			return errors.Wrap(err, "restart MySQL")
 		}
@@ -92,8 +91,11 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 			return nil
 		}
 
-		restartNeeded, err = setGlobalVariables(ctx, r.Client, r.ClientCmd, cr, &conf, toApply)
 		log.Info("Setting MySQL configuration", "variables", toApply)
+		restartNeeded, err = setGlobalVariables(ctx, r.Client, r.ClientCmd, cr, &conf, toApply)
+		if err != nil {
+			return errors.Wrap(err, "set global variables")
+		}
 	}
 
 	if restartNeeded {
@@ -139,7 +141,7 @@ func setGlobalVariables(
 
 	for _, pod := range pods {
 		mgr := db.NewAdminManager(&pod, clCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, &pod))
-		err := mgr.SetGlobalVariables(ctx, keyValues)
+		err := mgr.SetGlobalVariables(ctx, keyValues...)
 		if err != nil {
 			if strings.Contains(err.Error(), "ERROR 1238 (HY000)") {
 				return true, nil
