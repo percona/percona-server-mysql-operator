@@ -144,7 +144,9 @@ func GetLastAppliedConfig(
 		return config.EmptySection, errors.Wrap(err, "create section")
 	}
 
-	result.FromJSON(io.NopCloser(strings.NewReader(val)), "mysqld")
+	if err := result.FromJSON(io.NopCloser(strings.NewReader(val)), "mysqld"); err != nil {
+		return config.EmptySection, errors.Wrap(err, "parse section from JSON")
+	}
 	return *result, nil
 }
 
