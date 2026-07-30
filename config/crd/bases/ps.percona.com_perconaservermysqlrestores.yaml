@@ -565,7 +565,9 @@ spec:
                                 type: array
                               xtrabackup:
                                 items:
+                                  maxLength: 1024
                                   type: string
+                                maxItems: 100
                                 type: array
                                 x-kubernetes-validations:
                                 - message: --defaults-file must be the first xtrabackup
@@ -1105,7 +1107,9 @@ spec:
                         type: array
                       xtrabackup:
                         items:
+                          maxLength: 1024
                           type: string
+                        maxItems: 100
                         type: array
                         x-kubernetes-validations:
                         - message: --defaults-file must be the first xtrabackup argument
