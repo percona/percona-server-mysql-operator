@@ -1,10 +1,141 @@
 package mysql
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 )
+
+func TestGetConfig(t *testing.T) {
+	const (
+		crName = "cluster1"
+		ns     = "config-ns"
+	)
+
+	cr := &apiv1.PerconaServerMySQL{
+		ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
+	}
+	name := ConfigMapName(cr)
+
+	// a nil configMap or secret means the object does not exist; a value is
+	// stored under my.cnf
+	tests := []struct {
+		desc      string
+		configMap *string
+		secret    *string
+		want      map[string]string
+	}{
+		{
+			desc: "no configmap and no secret is an empty config",
+		},
+		{
+			desc:      "reads keys from the configmap",
+			configMap: new("[mysqld]\nmax_connections=100\n"),
+			want:      map[string]string{"max_connections": "100"},
+		},
+		{
+			desc:   "reads keys from the secret",
+			secret: new("[mysqld]\nmax_connections=100\n"),
+			want:   map[string]string{"max_connections": "100"},
+		},
+		{
+			desc:      "merges keys from the configmap and the secret",
+			configMap: new("[mysqld]\nmax_connections=100\n"),
+			secret:    new("[mysqld]\nsql_mode=STRICT_TRANS_TABLES\n"),
+			want: map[string]string{
+				"max_connections": "100",
+				"sql_mode":        "STRICT_TRANS_TABLES",
+			},
+		},
+		{
+			// The secret is appended after the configmap, and the last value of a
+			// repeated key wins, so a secret can override the configmap.
+			desc:      "secret overrides a key set in the configmap",
+			configMap: new("[mysqld]\nmax_connections=100\n"),
+			secret:    new("[mysqld]\nmax_connections=200\n"),
+			want:      map[string]string{"max_connections": "200"},
+		},
+		{
+			desc:      "returns only the mysqld section",
+			configMap: new("[client]\nport=3307\n[mysqld]\nmax_connections=100\n"),
+			want:      map[string]string{"max_connections": "100"},
+		},
+		{
+			// Without a mysqld section anywhere, the unnamed section is returned
+			// rather than nothing.
+			desc:      "reads keys with no section header",
+			configMap: new("max_connections=100\n"),
+			want:      map[string]string{"max_connections": "100"},
+		},
+		{
+			// The header-less configmap keys land above the secret's [mysqld]
+			// header, so they end up in the unnamed section and are dropped.
+			desc:      "header-less configmap keys are dropped when the secret declares mysqld",
+			configMap: new("max_connections=100\n"),
+			secret:    new("[mysqld]\nsql_mode=STRICT_TRANS_TABLES\n"),
+			want:      map[string]string{"sql_mode": "STRICT_TRANS_TABLES"},
+		},
+		{
+			// The reverse order absorbs them: the configmap's header precedes the
+			// secret's keys.
+			desc:      "header-less secret keys join the mysqld section of the configmap",
+			configMap: new("[mysqld]\nmax_connections=100\n"),
+			secret:    new("sql_mode=STRICT_TRANS_TABLES\n"),
+			want: map[string]string{
+				"max_connections": "100",
+				"sql_mode":        "STRICT_TRANS_TABLES",
+			},
+		},
+		{
+			// A flag written without a value reads back as "true", which is what
+			// the ini loader makes of a boolean key.
+			desc:      "keeps a key that carries no value",
+			configMap: new("[mysqld]\nskip-name-resolve\n"),
+			want:      map[string]string{"skip-name-resolve": "true"},
+		},
+		{
+			desc:      "an empty configmap value is an empty config",
+			configMap: new(""),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			objs := []client.Object{}
+			if tt.configMap != nil {
+				objs = append(objs, &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+					Data:       map[string]string{CustomConfigKey: *tt.configMap},
+				})
+			}
+			if tt.secret != nil {
+				objs = append(objs, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+					Data:       map[string][]byte{CustomConfigKey: []byte(*tt.secret)},
+				})
+			}
+
+			cl := fake.NewClientBuilder().WithObjects(objs...).Build()
+
+			section, err := GetConfig(context.Background(), cl, cr)
+			require.NoError(t, err)
+
+			want := tt.want
+			if want == nil {
+				want = map[string]string{}
+			}
+			assert.Equal(t, want, section.KeysHash())
+		})
+	}
+}
 
 func TestQuoteLiteral(t *testing.T) {
 	tests := map[string]struct {
