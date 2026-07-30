@@ -181,9 +181,6 @@ func TestFormatConfigValue(t *testing.T) {
 		"expands a terabyte suffix":              {value: "2T", want: "2199023255552"},
 		"expands a lowercase suffix":             {value: "1g", want: "1073741824"},
 		"reads a lowercase m as mega, not milli": {value: "100m", want: "104857600"},
-		// Quantity saturates at MaxInt64 rather than reporting overflow, and it
-		// accepts fractions that mysqld itself would reject. Both are recorded
-		// here as known divergences, not as desired behaviour.
 		"saturates an overflowing suffix":        {value: "9223372036854775807T", want: "9223372036854775807"},
 		"accepts a suffixed non-integer":         {value: "1.5G", want: "1610612736"},
 		"quotes a bare suffix":                   {value: "G", want: "'G'"},
