@@ -26,19 +26,11 @@ import (
 
 func TestReconcileMySQLConfig(t *testing.T) {
 	const (
-		crName    = "cluster1"
-		ns        = "config-ns"
-		operPass  = "operator-password"
-		staleHash = "stale-config-hash"
-
-		// podCount is how many mysql pods every case runs against. The count
-		// itself is not what these cases are about, so it is fixed.
-		podCount = 3
-
-		// stderrReadOnly is what mysql answers when a variable cannot be
-		// changed at runtime: the operator has to restart the pods to apply it.
-		// Any other error, stderrDenied standing in for all of them, aborts the
-		// reconcile.
+		crName         = "cluster1"
+		ns             = "config-ns"
+		operPass       = "operator-password"
+		staleHash      = "stale-config-hash"
+		podCount       = 3
 		stderrReadOnly = "ERROR 1238 (HY000): Variable 'innodb_buffer_pool_size' is a read only variable\n"
 		stderrDenied   = "ERROR 1227 (42000): Access denied\n"
 	)
@@ -48,7 +40,10 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: crName, Namespace: ns},
 			Spec: apiv1.PerconaServerMySQLSpec{
 				CRVersion: crVersion,
-				MySQL:     apiv1.MySQLSpec{ClusterType: apiv1.ClusterTypeGR},
+				MySQL: apiv1.MySQLSpec{
+					ClusterType: apiv1.ClusterTypeGR,
+					PodSpec:     apiv1.PodSpec{Size: podCount},
+				},
 			},
 			Status: apiv1.PerconaServerMySQLStatus{State: state},
 		}
@@ -100,22 +95,30 @@ func TestReconcileMySQLConfig(t *testing.T) {
 		return fmt.Sprintf("%s-mysql-%d", crName, idx)
 	}
 
-	// newPods returns the mysql pods a healthy cluster has in the API. A case
-	// that needs a different world lists its own objects instead.
-	newPods := func() []client.Object {
+	// newPods returns count running mysql pods. The operator waits for every pod
+	// it expects to be running before it talks to mysql, so a case that wants the
+	// change deferred asks for fewer than podCount.
+	newPods := func(count int) []client.Object {
 		cr := newCR("", "")
 
-		objs := make([]client.Object, 0, podCount)
-		for i := range podCount {
+		objs := make([]client.Object, 0, count)
+		for i := range count {
 			objs = append(objs, &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      podName(i),
 					Namespace: cr.Namespace,
 					Labels:    mysql.MatchLabels(cr),
 				},
+				Status: corev1.PodStatus{Phase: corev1.PodRunning},
 			})
 		}
 		return objs
+	}
+
+	// world is what the API holds besides the CR, the ConfigMap and the
+	// statefulset: the internal secret plus the given number of running pods.
+	world := func(running int) []client.Object {
+		return append([]client.Object{newSecret(newCR("", ""))}, newPods(running)...)
 	}
 
 	// mysqlCmd is the command the operator must run inside the mysql container:
@@ -181,27 +184,46 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			expectedConfig: `{}`,
 		},
 		{
-			// Mid-initialization the cluster is not safe to reconfigure, and the
-			// annotation must stay untouched too: writing it would make the
-			// change look applied once the cluster turns ready.
-			desc:              "initializing cluster is skipped",
+			// Cluster state does not decide whether mysql can be reconfigured:
+			// a cluster sits in initializing while an unrelated component is
+			// unhealthy, and its mysql pods are running and reachable throughout.
+			desc:              "initializing cluster is reconfigured",
 			state:             apiv1.StateInitializing,
 			currentConfig:     "[mysqld]\nmax_connections=200\n",
 			lastAppliedConfig: `{"max_connections":"100"}`,
-			expectedConfig:    `{"max_connections":"100"}`,
+			expectedStmts:     []string{"SET GLOBAL max_connections=200"},
+			expectedConfig:    `{"max_connections":"200"}`,
 		},
 		{
-			desc:              "paused cluster is skipped",
-			state:             apiv1.StatePaused,
-			currentConfig:     "[mysqld]\nmax_connections=200\n",
-			lastAppliedConfig: `{"max_connections":"100"}`,
-			expectedConfig:    `{"max_connections":"100"}`,
-		},
-		{
-			desc:              "error state is skipped",
+			// Same for error, which is what a failure anywhere else in the
+			// reconcile leaves behind.
+			desc:              "error state is reconfigured",
 			state:             apiv1.StateError,
 			currentConfig:     "[mysqld]\nmax_connections=200\n",
 			lastAppliedConfig: `{"max_connections":"100"}`,
+			expectedStmts:     []string{"SET GLOBAL max_connections=200"},
+			expectedConfig:    `{"max_connections":"200"}`,
+		},
+		{
+			// What does decide it is whether the pods are there to talk to. A
+			// paused cluster has none, and the annotation must stay untouched too:
+			// writing it would make the change look applied and it would never be
+			// retried once the pods come back.
+			desc:              "paused cluster is deferred",
+			state:             apiv1.StatePaused,
+			currentConfig:     "[mysqld]\nmax_connections=200\n",
+			lastAppliedConfig: `{"max_connections":"100"}`,
+			object:            world(0),
+			expectedConfig:    `{"max_connections":"100"}`,
+		},
+		{
+			// A partly running cluster is deferred for the same reason: applying
+			// to some pods and recording it as done would leave the rest behind.
+			desc:              "config is deferred until every pod is running",
+			state:             apiv1.StateReady,
+			currentConfig:     "[mysqld]\nmax_connections=200\n",
+			lastAppliedConfig: `{"max_connections":"100"}`,
+			object:            world(podCount - 1),
 			expectedConfig:    `{"max_connections":"100"}`,
 		},
 		{
@@ -295,6 +317,18 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			expectedConfig:    `{}`,
 		},
 		{
+			// A removal is decided before pod state is consulted, so the restart is
+			// requested with no pod running at all. Nothing is lost either way: a
+			// pod that starts from here reads my.cnf.
+			desc:              "removed key restarts with no pod running",
+			state:             apiv1.StateInitializing,
+			currentConfig:     "[mysqld]\nmax_connections=300\n",
+			lastAppliedConfig: `{"max_connections":"200","sql_mode":"STRICT_TRANS_TABLES"}`,
+			object:            world(0),
+			expectRestart:     true,
+			expectedConfig:    `{"max_connections":"300"}`,
+		},
+		{
 			// mysql refuses a variable that cannot be changed at runtime, which
 			// falls back to a restart - and the batch must still be tried on
 			// every pod.
@@ -326,7 +360,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			state:             apiv1.StateReady,
 			currentConfig:     "[mysqld]\nmax_connections=300\n",
 			lastAppliedConfig: `{"max_connections":"200"}`,
-			object:            newPods(), // everything but the internal secret
+			object:            newPods(podCount), // everything but the internal secret
 			expectedError:     errors.New("get operator password"),
 			expectedConfig:    `{"max_connections":"200"}`,
 		},
@@ -351,8 +385,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			if tt.object != nil {
 				objs = append(objs, tt.object...)
 			} else {
-				objs = append(objs, newSecret(cr))
-				objs = append(objs, newPods()...)
+				objs = append(objs, world(podCount)...)
 			}
 			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
 

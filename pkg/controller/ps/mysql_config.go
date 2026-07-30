@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -59,10 +60,6 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 		return writeAnnotation()
 	}
 
-	if cr.Status.State != apiv1.StateReady {
-		return nil
-	}
-
 	lastAppliedConf, err := mysql.GetLastAppliedConfig(sts)
 	if err != nil {
 		return errors.Wrap(err, "get last applied MySQL config")
@@ -88,12 +85,23 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 		return nil
 	}
 
+	pods, err := k8s.RunningPods(ctx, r.Client, mysql.MatchLabels(cr), cr.GetNamespace())
+	if err != nil {
+		return errors.Wrap(err, "get running pods")
+	}
+
+	// We want all pods running before we exec and apply the config.
+	if cr.Spec.Pause || len(pods) < int(cr.Spec.MySQL.Size) {
+		log.Info("Not all pods are running, defer applying configuration", "running", len(pods), "desired", cr.Spec.MySQL.Size)
+		return nil
+	}
+
 	log.Info("Setting MySQL configuration", "variables", toApply)
 
-	if restartNeeded, err := setGlobalVariables(ctx, r.Client, r.ClientCmd, cr, &conf, toApply); err != nil {
+	if restartNeeded, err := setGlobalVariables(ctx, r.Client, r.ClientCmd, cr, &conf, toApply, pods); err != nil {
 		return errors.Wrap(err, "set global variables")
 	} else if restartNeeded {
-		log.Info("One or more variables require MySQL restart to take effect")
+		log.Info("One or more variables require MySQL restart to take effect", "variables", toApply)
 		if err := restartMySQL(); err != nil {
 			return errors.Wrap(err, "restart MySQL")
 		}
@@ -112,12 +120,8 @@ func setGlobalVariables(
 	cr *apiv1.PerconaServerMySQL,
 	conf *config.Section,
 	keys []string,
+	pods []corev1.Pod,
 ) (bool, error) {
-	pods, err := k8s.PodsByLabels(ctx, cl, mysql.MatchLabels(cr), cr.GetNamespace())
-	if err != nil {
-		return false, errors.Wrap(err, "get pods by labels")
-	}
-
 	operatorPass, err := k8s.UserPassword(ctx, cl, cr, apiv1.UserOperator)
 	if err != nil {
 		return false, errors.Wrap(err, "get operator password")

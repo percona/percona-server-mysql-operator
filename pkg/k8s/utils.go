@@ -98,8 +98,12 @@ func IsPodWithNameReady(ctx context.Context, cl client.Client, nn types.Namespac
 	return IsPodReady(*pod), nil
 }
 
+func IsPodRunning(pod corev1.Pod) bool {
+	return pod.Status.Phase == corev1.PodRunning && pod.GetDeletionTimestamp().IsZero()
+}
+
 func IsPodReady(pod corev1.Pod) bool {
-	if pod.Status.Phase != corev1.PodRunning || pod.DeletionTimestamp != nil {
+	if !IsPodRunning(pod) {
 		return false
 	}
 	for _, cond := range pod.Status.Conditions {
@@ -402,6 +406,22 @@ func ObjectHash(obj runtime.Object) (string, error) {
 
 	hash := md5.Sum(data)
 	return hex.EncodeToString(hash[:]), nil
+}
+
+func RunningPods(ctx context.Context, cl client.Reader, l map[string]string, namespace string) ([]corev1.Pod, error) {
+	all, err := PodsByLabels(ctx, cl, l, namespace)
+	if err != nil {
+		return nil, errors.Wrap(err, "get pods by labels")
+	}
+
+	var running []corev1.Pod
+	for _, pod := range all {
+		if !IsPodRunning(pod) {
+			continue
+		}
+		running = append(running, pod)
+	}
+	return running, nil
 }
 
 func PodsByLabels(ctx context.Context, cl client.Reader, l map[string]string, namespace string) ([]corev1.Pod, error) {
