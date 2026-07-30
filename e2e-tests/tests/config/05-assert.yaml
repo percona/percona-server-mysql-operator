@@ -17,8 +17,6 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: config-mysql
-  annotations:
-    mysql.percona.com/last-applied-configuration: "{max_connections: 250}"
 status:
   observedGeneration: 2
   readyReplicas: 3

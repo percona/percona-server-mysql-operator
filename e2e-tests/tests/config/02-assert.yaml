@@ -9,8 +9,6 @@ kind: StatefulSet
 metadata:
   generation: 1
   name: config-mysql
-  annotations:
-    percona.com/last-applied-config: '{"max_connections":"250"}'
 status:
   observedGeneration: 1
   readyReplicas: 3
