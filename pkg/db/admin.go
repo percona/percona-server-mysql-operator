@@ -46,7 +46,7 @@ func (m *AdminManager) SetSuperReadOnly(ctx context.Context, readonly bool) erro
 	return nil
 }
 
-func (m *AdminManager) SetGlobalVariables(ctx context.Context, key, value string) error {
+func (m *AdminManager) SetGlobalVariable(ctx context.Context, key, value string) error {
 	var errb, outb bytes.Buffer
 	cmd := fmt.Sprintf("SET GLOBAL %s=%s", key, value)
 	err := m.db.exec(ctx, cmd, &outb, &errb)
