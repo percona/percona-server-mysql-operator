@@ -2,13 +2,17 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 480
 ---
+# max_connections is dynamic, so it is applied with SET GLOBAL and the
+# StatefulSet is left untouched.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  generation: 2
+  generation: 1
   name: config-mysql
+  annotations:
+    percona.com/last-applied-config: '{"max_connections":"250"}'
 status:
-  observedGeneration: 2
+  observedGeneration: 1
   readyReplicas: 3
   replicas: 3
   updatedReplicas: 3
