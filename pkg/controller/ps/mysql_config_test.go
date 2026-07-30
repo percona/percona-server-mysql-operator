@@ -26,13 +26,13 @@ import (
 
 func TestReconcileMySQLConfig(t *testing.T) {
 	const (
-		crName         = "cluster1"
-		ns             = "config-ns"
-		operPass       = "operator-password"
-		staleHash      = "stale-config-hash"
-		podCount       = 3
-		stderrReadOnly = "ERROR 1238 (HY000): Variable 'innodb_buffer_pool_size' is a read only variable\n"
-		stderrDenied   = "ERROR 1227 (42000): Access denied\n"
+		crName           = "cluster1"
+		ns               = "config-ns"
+		configuratorPass = "configurator-password"
+		staleHash        = "stale-config-hash"
+		podCount         = 3
+		stderrReadOnly   = "ERROR 1238 (HY000): Variable 'innodb_buffer_pool_size' is a read only variable\n"
+		stderrDenied     = "ERROR 1227 (42000): Access denied\n"
 	)
 
 	newCR := func(crVersion string, state apiv1.StatefulAppState) *apiv1.PerconaServerMySQL {
@@ -87,7 +87,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 	newSecret := func(cr *apiv1.PerconaServerMySQL) *corev1.Secret {
 		return &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{Name: cr.InternalSecretName(), Namespace: cr.Namespace},
-			Data:       map[string][]byte{string(apiv1.UserOperator): []byte(operPass)},
+			Data:       map[string][]byte{string(apiv1.UserConfigurator): []byte(configuratorPass)},
 		}
 	}
 
@@ -122,14 +122,14 @@ func TestReconcileMySQLConfig(t *testing.T) {
 	}
 
 	// mysqlCmd is the command the operator must run inside the mysql container:
-	// the operator user, its password from the internal secret and the FQDN of
-	// the pod being configured.
+	// the configurator user, its password from the internal secret and the FQDN
+	// of the pod being configured.
 	mysqlCmd := func(cr *apiv1.PerconaServerMySQL, pod, stmt string) []string {
 		return []string{
 			"mysql",
 			"--database", "performance_schema",
-			"-p" + operPass,
-			"-u", string(apiv1.UserOperator),
+			"-p" + configuratorPass,
+			"-u", string(apiv1.UserConfigurator),
 			"-h", pod + "." + mysql.ServiceName(cr) + "." + cr.Namespace,
 			"-e", stmt,
 		}
@@ -356,7 +356,7 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			expectedConfig:    `{"max_connections":"200"}`,
 		},
 		{
-			desc:              "missing operator password is returned",
+			desc:              "missing configurator password is returned",
 			state:             apiv1.StateReady,
 			currentConfig:     "[mysqld]\nmax_connections=300\n",
 			lastAppliedConfig: `{"max_connections":"200"}`,
