@@ -119,7 +119,7 @@ restore_incremental() {
 	xtrabackup ${XB_EXTRA_ARGS} --prepare --apply-log-only --target-dir="${basedir}" ${keyring}
 
 	# Parse the comma-separated list of incremental destinations
-	IFS=',' read -ra INCR_DESTS <<< "${BACKUP_INCREMENTALS_DEST}"
+	IFS=',' read -ra INCR_DESTS <<<"${BACKUP_INCREMENTALS_DEST}"
 	local total=${#INCR_DESTS[@]}
 	local count=0
 

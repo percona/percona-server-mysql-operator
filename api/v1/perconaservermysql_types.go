@@ -436,10 +436,10 @@ type BackupSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext       `json:"containerSecurityContext,omitempty"`
 	Resources                corev1.ResourceRequirements   `json:"resources,omitempty"`
 	// +kubebuilder:validation:MaxProperties=100
-	Storages                 map[string]*BackupStorageSpec `json:"storages,omitempty"`
-	BackoffLimit             *int32                        `json:"backoffLimit,omitempty"`
-	PiTR                     PiTRSpec                      `json:"pitr,omitempty"`
-	Schedule                 []BackupSchedule              `json:"schedule,omitempty"`
+	Storages     map[string]*BackupStorageSpec `json:"storages,omitempty"`
+	BackoffLimit *int32                        `json:"backoffLimit,omitempty"`
+	PiTR         PiTRSpec                      `json:"pitr,omitempty"`
+	Schedule     []BackupSchedule              `json:"schedule,omitempty"`
 
 	// Deprecated: not supported since v0.12.0. Use initContainer instead
 	InitImage     string             `json:"initImage,omitempty"`
