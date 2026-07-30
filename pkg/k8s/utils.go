@@ -239,6 +239,9 @@ func EnsureObjectWithHash(
 		"deployment.kubernetes.io/revision",
 		string(naming.AnnotationLastAppliedConfig),
 	}
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
 	for _, key := range preserveAnnotations {
 		v, ok := oldObject.GetAnnotations()[key]
 		if ok {
