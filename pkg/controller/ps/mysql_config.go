@@ -113,6 +113,19 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 	return nil
 }
 
+const (
+	readOnlyErrorString        = "ERROR 1238"
+	unknownVariableErrorString = "ERROR 1193"
+)
+
+func isReadOnlyVariableError(err error) bool {
+	return strings.Contains(err.Error(), readOnlyErrorString)
+}
+
+func isUnknownVariableError(err error) bool {
+	return strings.Contains(err.Error(), unknownVariableErrorString)
+}
+
 func setGlobalVariables(
 	ctx context.Context,
 	cl client.Client,
@@ -136,19 +149,28 @@ func setGlobalVariables(
 		kv[k] = mysql.FormatConfigValue(key.Value())
 	}
 
+	unknownVariables := []string{}
 	restartNeeded := false
 	for _, pod := range pods {
 		mgr := db.NewAdminManager(&pod, clCmd, apiv1.UserConfigurator, pass, mysql.PodFQDN(cr, &pod))
 		for k, v := range kv {
-			err := mgr.SetGlobalVariables(ctx, k, v)
+			err := mgr.SetGlobalVariable(ctx, k, v)
 			if err != nil {
-				if strings.Contains(err.Error(), "ERROR 1238") {
+				if isReadOnlyVariableError(err) {
 					restartNeeded = true
+					continue
+				}
+				if isUnknownVariableError(err) {
+					unknownVariables = append(unknownVariables, k)
 					continue
 				}
 				return false, errors.Wrapf(err, "set global variables on pod %s", pod.Name)
 			}
 		}
+	}
+
+	if len(unknownVariables) > 0 {
+		return false, errors.Errorf("unknown system variables: [%s]", strings.Join(unknownVariables, ", "))
 	}
 
 	return restartNeeded, nil
