@@ -67,6 +67,21 @@ func (m *UserManager) CreateClusterSetUser(ctx context.Context, pass string) err
 	return nil
 }
 
+func (m *UserManager) CreateConfiguratorUser(ctx context.Context, pass string) error {
+	queries := []string{
+		fmt.Sprintf("CREATE USER IF NOT EXISTS 'configurator'@'%%' IDENTIFIED BY %s PASSWORD EXPIRE NEVER", mysql.QuoteLiteral(pass)),
+		"GRANT SYSTEM_VARIABLES_ADMIN, SYSTEM_USER ON *.* TO 'configurator'@'%'",
+		"GRANT SELECT ON performance_schema.global_variables TO 'configurator'@'%'",
+	}
+
+	var errb, outb bytes.Buffer
+	if err := m.db.exec(ctx, strings.Join(queries, "; "), &outb, &errb); err != nil {
+		return errors.Wrap(err, "create configurator user")
+	}
+
+	return nil
+}
+
 // DiscardOldPasswords discards old passwords of givens users
 func (m *UserManager) DiscardOldPasswords(ctx context.Context, users []mysql.User) error {
 	for _, user := range users {

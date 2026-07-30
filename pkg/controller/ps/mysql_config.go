@@ -122,7 +122,7 @@ func setGlobalVariables(
 	keys []string,
 	pods []corev1.Pod,
 ) (bool, error) {
-	operatorPass, err := k8s.UserPassword(ctx, cl, cr, apiv1.UserOperator)
+	pass, err := k8s.UserPassword(ctx, cl, cr, apiv1.UserConfigurator)
 	if err != nil {
 		return false, errors.Wrap(err, "get operator password")
 	}
@@ -138,7 +138,7 @@ func setGlobalVariables(
 
 	restartNeeded := false
 	for _, pod := range pods {
-		mgr := db.NewAdminManager(&pod, clCmd, apiv1.UserOperator, operatorPass, mysql.PodFQDN(cr, &pod))
+		mgr := db.NewAdminManager(&pod, clCmd, apiv1.UserConfigurator, pass, mysql.PodFQDN(cr, &pod))
 		for k, v := range kv {
 			err := mgr.SetGlobalVariables(ctx, k, v)
 			if err != nil {
