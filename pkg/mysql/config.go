@@ -116,19 +116,45 @@ func GetConfig(
 	configurable := Configurable(*cr)
 	cmName := configurable.GetConfigMapName()
 	nn := types.NamespacedName{Name: cmName, Namespace: cr.Namespace}
+	parts := make([]string, 0, 2)
+
 	cm := &corev1.ConfigMap{}
-	if err := cl.Get(ctx, nn, cm); err != nil {
-		return config.EmptySection, client.IgnoreNotFound(err)
+	if err := cl.Get(ctx, nn, cm); client.IgnoreNotFound(err) != nil {
+		return config.EmptySection, errors.Wrap(err, "get configmap")
+	} else if err == nil {
+		parts = append(parts, readConfig(cm, configurable))
 	}
 
-	data := cm.Data[configurable.GetConfigMapKey()]
-	section, err := config.ParseSection(io.NopCloser(strings.NewReader(data)), "mysqld")
+	secret := &corev1.Secret{}
+	if err := cl.Get(ctx, nn, secret); client.IgnoreNotFound(err) != nil {
+		return config.EmptySection, errors.Wrap(err, "get secret")
+	} else if err == nil {
+		parts = append(parts, readConfig(secret, configurable))
+	}
+
+	if len(parts) == 0 {
+		return config.EmptySection, nil
+	}
+
+	merged := strings.Join(parts, "\n")
+	section, err := config.ParseSection(io.NopCloser(strings.NewReader(merged)), "mysqld")
 	if err != nil {
 		return config.EmptySection, errors.Wrap(err, "parse config section")
 	}
 
 	result := config.Section{Section: *section}
 	return result, nil
+}
+
+func readConfig(object client.Object, cfg Configurable) string {
+	switch obj := object.(type) {
+	case *corev1.ConfigMap:
+		return obj.Data[cfg.GetConfigMapKey()]
+	case *corev1.Secret:
+		return string(obj.Data[cfg.GetConfigMapKey()])
+	default:
+		return ""
+	}
 }
 
 func GetLastAppliedConfig(
