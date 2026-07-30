@@ -149,7 +149,7 @@ func setGlobalVariables(
 		kv[k] = mysql.FormatConfigValue(key.Value())
 	}
 
-	unknownVariables := []string{}
+	unknownVariables := map[string]struct{}{}
 	restartNeeded := false
 	for _, pod := range pods {
 		mgr := db.NewAdminManager(&pod, clCmd, apiv1.UserConfigurator, pass, mysql.PodFQDN(cr, &pod))
@@ -161,7 +161,7 @@ func setGlobalVariables(
 					continue
 				}
 				if isUnknownVariableError(err) {
-					unknownVariables = append(unknownVariables, k)
+					unknownVariables[k] = struct{}{}
 					continue
 				}
 				return false, errors.Wrapf(err, "set global variables on pod %s", pod.Name)
@@ -169,8 +169,19 @@ func setGlobalVariables(
 		}
 	}
 
+	printUnknownVariables := func() string {
+		keys := make([]string, 0, len(unknownVariables))
+		for k := range unknownVariables {
+			keys = append(keys, k)
+		}
+		return strings.Join(keys, ", ")
+	}
+
+	log := logf.FromContext(ctx)
 	if len(unknownVariables) > 0 {
-		return false, errors.Errorf("unknown system variables: [%s]", strings.Join(unknownVariables, ", "))
+		err := fmt.Errorf("unknown configuration variables: [%s]", printUnknownVariables())
+		log.Error(err, "setGlobalVariables failed", "unknownVariables", printUnknownVariables())
+		return false, err
 	}
 
 	return restartNeeded, nil
