@@ -84,17 +84,16 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 	toApply := conf.Subtract(lastAppliedConf)
 	toApply = append(toApply, conf.Changed(lastAppliedConf)...)
 
-	restartNeeded := false
-	if len(toApply) > 0 {
-		log.Info("Setting MySQL configuration", "variables", toApply)
-		restartNeeded, err = setGlobalVariables(ctx, r.Client, r.ClientCmd, cr, &conf, toApply)
-		if err != nil {
-			return errors.Wrap(err, "set global variables")
-		}
+	if len(toApply) == 0 {
+		return nil
 	}
 
-	if restartNeeded {
-		log.Info("Restart needed after setting MySQL configuration")
+	log.Info("Setting MySQL configuration", "variables", toApply)
+
+	if restartNeeded, err := setGlobalVariables(ctx, r.Client, r.ClientCmd, cr, &conf, toApply); err != nil {
+		return errors.Wrap(err, "set global variables")
+	} else if restartNeeded {
+		log.Info("One or more variables require MySQL restart to take effect")
 		if err := restartMySQL(); err != nil {
 			return errors.Wrap(err, "restart MySQL")
 		}
@@ -103,7 +102,6 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLConfig(
 	if err := writeAnnotation(); err != nil {
 		return errors.Wrap(err, "write last applied config annotation")
 	}
-
 	return nil
 }
 
