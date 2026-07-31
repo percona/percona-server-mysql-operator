@@ -7672,10 +7672,15 @@ spec:
                                 type: string
                             type: object
                         type: object
-                    required:
-                    - image
-                    - size
                     type: object
+                    x-kubernetes-validations:
+                    - message: haproxy.image is required when haproxy is enabled
+                      rule: '!(has(self.enabled) && self.enabled) || (has(self.image)
+                        && size(self.image) > 0)'
+                    - message: haproxy.size must be greater than 0 when haproxy is
+                        enabled
+                      rule: '!(has(self.enabled) && self.enabled) || (has(self.size)
+                        && self.size > 0)'
                   router:
                     properties:
                       affinity:
@@ -8889,10 +8894,14 @@ spec:
                                 type: string
                             type: object
                         type: object
-                    required:
-                    - image
-                    - size
                     type: object
+                    x-kubernetes-validations:
+                    - message: router.image is required when router is enabled
+                      rule: '!(has(self.enabled) && self.enabled) || (has(self.image)
+                        && size(self.image) > 0)'
+                    - message: router.size must be greater than 0 when router is enabled
+                      rule: '!(has(self.enabled) && self.enabled) || (has(self.size)
+                        && self.size > 0)'
                 type: object
               secretsName:
                 type: string
@@ -9406,11 +9415,11 @@ spec:
                 ''async'', ''proxy.haproxy.enabled'' must be true unless ''unsafeFlags.proxy''
                 is enabled'
               rule: '!(self.mysql.clusterType == ''async'') || self.unsafeFlags.proxy
-                || self.proxy.haproxy.enabled'
+                || (has(self.proxy.haproxy) && self.proxy.haproxy.enabled)'
             - message: 'Invalid configuration: When ''mysql.clusterType'' is set to
                 ''async'', ''proxy.router.enabled'' must be disabled'
-              rule: '!(self.mysql.clusterType == ''async'') || self.proxy.router ==
-                null || !has(self.proxy.router.enabled) || !self.proxy.router.enabled'
+              rule: '!(self.mysql.clusterType == ''async'') || !has(self.proxy.router)
+                || !has(self.proxy.router.enabled) || !self.proxy.router.enabled'
           status:
             properties:
               backupVersion:
