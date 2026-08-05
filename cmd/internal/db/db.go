@@ -215,6 +215,18 @@ func (d *DB) CloneInProgress(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
+func (d *DB) InstallComponentMySQLBackup(ctx context.Context) error {
+	var count int
+	if err := d.db.QueryRowContext(ctx, "SELECT COUNT(1) FROM mysql.component WHERE component_urn = 'file://component_mysqlbackup'").Scan(&count); err != nil {
+		return errors.Wrap(err, "check mysqlbackup component")
+	}
+	if count > 0 {
+		return nil
+	}
+	_, err := d.db.ExecContext(ctx, "INSTALL COMPONENT 'file://component_mysqlbackup'")
+	return errors.Wrap(err, "install mysqlbackup component")
+}
+
 // getCloneStatus returns the current clone status
 func (d *DB) getCloneStatus(ctx context.Context) (string, error) {
 	log := logf.FromContext(ctx)
