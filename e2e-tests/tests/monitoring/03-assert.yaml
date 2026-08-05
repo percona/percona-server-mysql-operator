@@ -230,6 +230,8 @@ spec:
         volumeMounts:
         - mountPath: /opt/percona
           name: bin
+        - mountPath: /tmp
+          name: pmm-tmp
       dnsPolicy: ClusterFirst
       initContainers:
       - command:
@@ -274,6 +276,8 @@ spec:
           name: internal-haproxy-config-monitoring
           optional: true
         name: internal-config
+      - emptyDir: {}
+        name: pmm-tmp
   updateStrategy:
     rollingUpdate:
       partition: 0
