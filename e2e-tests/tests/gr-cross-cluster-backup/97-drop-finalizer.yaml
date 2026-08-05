@@ -11,7 +11,19 @@ metadata:
   finalizers: []
 ---
 apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-cross-cluster-backup-fresh
+  finalizers: []
+---
+apiVersion: ps.percona.com/v1
 kind: PerconaServerMySQLBackup
 metadata:
   name: dc1-backup
+  finalizers: []
+---
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLBackup
+metadata:
+  name: replica-backup
   finalizers: []
