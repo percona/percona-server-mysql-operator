@@ -7,9 +7,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/pkg/errors"
+
+	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/async"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/gr"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
+	database "github.com/percona/percona-server-mysql-operator/cmd/internal/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
@@ -49,17 +53,58 @@ func main() {
 	}
 	log.Println("MySQL is ready")
 
+	ctx := context.Background()
+
+	if err := installComponents(ctx); err != nil {
+		log.Fatalf("failed to install components: %v", err)
+	}
+
 	clusterType := os.Getenv("CLUSTER_TYPE")
 	switch clusterType {
 	case "group-replication":
-		if err := gr.Bootstrap(context.Background()); err != nil {
+		if err := gr.Bootstrap(ctx); err != nil {
 			log.Fatalf("bootstrap failed: %v", err)
 		}
 	case "async":
-		if err := async.Bootstrap(context.Background()); err != nil {
+		if err := async.Bootstrap(ctx); err != nil {
 			log.Fatalf("bootstrap failed: %v", err)
 		}
 	default:
 		log.Fatalf("Invalid cluster type: %v", clusterType)
 	}
+}
+
+func installComponents(ctx context.Context) error {
+	podHostname, err := os.Hostname()
+	if err != nil {
+		return errors.Wrap(err, "get hostname")
+	}
+
+	podIp, err := utils.GetPodIP(podHostname)
+	if err != nil {
+		return errors.Wrap(err, "get pod IP")
+	}
+
+	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
+	if err != nil {
+		return errors.Wrapf(err, "get %s password", apiv1.UserOperator)
+	}
+
+	params := database.DBParams{
+		User: apiv1.UserOperator,
+		Pass: operatorPass,
+		Host: podIp,
+	}
+
+	db, err := database.NewDatabase(ctx, params)
+	if err != nil {
+		return errors.Wrap(err, "connect to MySQL")
+	}
+	defer db.Close()
+
+	if err := db.InstallComponentMySQLBackup(ctx); err != nil {
+		return errors.Wrap(err, "install components")
+	}
+
+	return nil
 }
