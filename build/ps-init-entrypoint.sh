@@ -44,3 +44,4 @@ install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/pmm-prerun.sh" "$
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/binlog-server-entrypoint.sh" "${BINDIR}/binlog-server-entrypoint.sh"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/pitr" "${BINDIR}/pitr"
 install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/run-pitr-restore.sh" "${BINDIR}/run-pitr-restore.sh"
+install -o "$(id -u)" -g "$(id -g)" -m 0755 -D "${OPERATORDIR}/run-prepare-restore.sh" "${BINDIR}/run-prepare-restore.sh"

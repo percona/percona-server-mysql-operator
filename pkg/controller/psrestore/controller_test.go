@@ -632,6 +632,19 @@ func TestRestoreFinishesWhenClusterIsReady(t *testing.T) {
 				},
 			}
 
+			prepareJob := &batchv1.Job{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      xtrabackup.PrepareJobName(restore),
+					Namespace: namespace,
+				},
+				Status: batchv1.JobStatus{
+					Conditions: []batchv1.JobCondition{{
+						Type:   batchv1.JobComplete,
+						Status: corev1.ConditionTrue,
+					}},
+				},
+			}
+
 			leaseName := naming.RestoreLeaseName(clusterName)
 			lease := &coordv1.Lease{
 				ObjectMeta: metav1.ObjectMeta{
@@ -643,7 +656,7 @@ func TestRestoreFinishesWhenClusterIsReady(t *testing.T) {
 				},
 			}
 
-			cl := buildFakeClient(t, cluster, restore, restoreJob, lease)
+			cl := buildFakeClient(t, cluster, restore, restoreJob, prepareJob, lease)
 			r := reconciler(cl)
 			_, err := r.Reconcile(ctx, controllerruntime.Request{
 				NamespacedName: types.NamespacedName{Name: restoreName, Namespace: namespace},
