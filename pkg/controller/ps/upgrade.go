@@ -85,7 +85,7 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		}
 
 		log.Info("Pod is unready and outdated, recreating it with the updated template", "pod", pod.Name)
-		if err := r.Client.Delete(ctx, &pod); err != nil {
+		if err := r.Delete(ctx, &pod); err != nil {
 			return errors.Wrapf(err, "delete outdated pod %s", pod.Name)
 		}
 		return nil

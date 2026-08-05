@@ -15,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -104,10 +105,8 @@ func (r *PerconaServerMySQLReconciler) reconcileQuarantinedMembers(
 			log.V(1).Info("Can't check replication status, skipping", "pod", pod.Name, "error", err.Error())
 			continue
 		}
-		// A quarantined member kept its channel when it was a replica, so it can
-		// be Stopped rather than NotInitiated; gate on the marker so those are
-		// still resolved, while a non-quarantined stopped replica (e.g. a backup
-		// source) is left alone.
+		// Gate on the marker, not the status: a quarantined former replica can be
+		// Stopped (kept its channel), while a backup-stopped replica is left alone.
 		quarantined, err := isQuarantined(ctx, r.ClientCmd, pod)
 		if err != nil {
 			log.V(1).Info("Can't check quarantine state, skipping", "pod", pod.Name, "error", err.Error())
@@ -147,16 +146,11 @@ func (r *PerconaServerMySQLReconciler) reconcileQuarantinedMembers(
 				"quarantined member %s has transactions not present on primary %s (errant GTIDs: %s); rebuilding the member, unreplicated data will be lost",
 				pod.Name, primary.Alias, errant)
 
-			pvc := &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      fmt.Sprintf("%s-%s", mysql.DataVolumeName, pod.Name),
-					Namespace: cr.Namespace,
-				},
+			pvcName := fmt.Sprintf("%s-%s", mysql.DataVolumeName, pod.Name)
+			if err := r.deleteDataPVC(ctx, cr.Namespace, pvcName); err != nil {
+				return errors.Wrapf(err, "delete PVC %s", pvcName)
 			}
-			if err := r.Delete(ctx, pvc); client.IgnoreNotFound(err) != nil {
-				return errors.Wrapf(err, "delete PVC %s", pvc.Name)
-			}
-			if err := r.Delete(ctx, pod); client.IgnoreNotFound(err) != nil {
+			if err := r.Delete(ctx, pod, &client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &pod.UID}}); client.IgnoreNotFound(err) != nil {
 				return errors.Wrapf(err, "delete pod %s", pod.Name)
 			}
 
@@ -234,6 +228,18 @@ func removeQuarantineFile(ctx context.Context, cliCmd clientcmd.Client, pod *cor
 	err := cliCmd.Exec(ctx, pod, mysql.AppName,
 		[]string{"rm", "-f", mysql.QuarantineFile}, nil, &outb, &errb, false)
 	return errors.Wrapf(err, "stdout: %s, stderr: %s", outb.String(), errb.String())
+}
+
+// deleteDataPVC fetches the member's data PVC and deletes it with a UID
+// precondition, so a same-named PVC the StatefulSet recreated while
+// reprovisioning is never deleted (which would loop the rebuild and lose data).
+func (r *PerconaServerMySQLReconciler) deleteDataPVC(ctx context.Context, namespace, name string) error {
+	pvc := &corev1.PersistentVolumeClaim{}
+	if err := r.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, pvc); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	err := r.Delete(ctx, pvc, &client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &pvc.UID}})
+	return client.IgnoreNotFound(err)
 }
 
 // repairBrokenReplicas re-issues CHANGE REPLICATION SOURCE on replicas whose
@@ -351,16 +357,11 @@ func (r *PerconaServerMySQLReconciler) handleErrantTransactions(
 			return errors.Wrap(err, "get mysql pod")
 		}
 
-		pvc := &corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      fmt.Sprintf("%s-%s", mysql.DataVolumeName, mysqlPod.Name),
-				Namespace: cr.Namespace,
-			},
+		pvcName := fmt.Sprintf("%s-%s", mysql.DataVolumeName, mysqlPod.Name)
+		if err := r.deleteDataPVC(ctx, cr.Namespace, pvcName); err != nil {
+			return errors.Wrapf(err, "delete PVC %s", pvcName)
 		}
-		if err := r.Delete(ctx, pvc); client.IgnoreNotFound(err) != nil {
-			return errors.Wrapf(err, "delete PVC %s", pvc.Name)
-		}
-		if err := r.Delete(ctx, mysqlPod); client.IgnoreNotFound(err) != nil {
+		if err := r.Delete(ctx, mysqlPod, &client.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &mysqlPod.UID}}); client.IgnoreNotFound(err) != nil {
 			return errors.Wrapf(err, "delete pod %s", mysqlPod.Name)
 		}
 
