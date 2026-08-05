@@ -125,7 +125,6 @@ func Bootstrap(ctx context.Context) error {
 
 	switch {
 	case !readOnly:
-		// A writable node is the primary, whatever the topology guess says.
 		if err := db.ResetReplication(ctx); err != nil {
 			return err
 		}
