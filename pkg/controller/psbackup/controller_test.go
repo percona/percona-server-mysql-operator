@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -1180,9 +1181,22 @@ func updateResource[T any](cr *T, updateFuncs ...func(cr *T)) *T {
 	return cr
 }
 
-// fakeClientCmd implements clientcmd.Client interface for testing
+// fakeClientCmd implements clientcmd.Client interface for testing.
+//
+// The orchestrator client builds commands of the form
+// `sh -c 'curl ... localhost:<port>/<endpoint>'`, so Exec inspects the
+// embedded endpoint to return endpoint-specific responses and to record which
+// orchestrator APIs were called.
 type fakeClientCmd struct {
+	// beginDowntimeError, when set, is returned for every Exec call to simulate
+	// an orchestrator API failure.
 	beginDowntimeError error
+	// instanceResp, when set, is the JSON body returned for GetInstance
+	// (api/instance/) calls. Defaults to a generic OK response.
+	instanceResp string
+
+	// beginDowntimeCalled records whether a begin-downtime API call was made.
+	beginDowntimeCalled bool
 }
 
 // Compile-time check to ensure fakeClientCmd implements clientcmd.Client
@@ -1192,8 +1206,24 @@ func (f *fakeClientCmd) Exec(ctx context.Context, pod *corev1.Pod, containerName
 	if f.beginDowntimeError != nil {
 		return f.beginDowntimeError
 	}
+
+	endpoint := ""
+	if len(command) > 0 {
+		endpoint = command[len(command)-1]
+	}
+
+	resp := `{"Code":"OK","Message":"success"}`
+	switch {
+	case strings.Contains(endpoint, "api/instance/"):
+		if f.instanceResp != "" {
+			resp = f.instanceResp
+		}
+	case strings.Contains(endpoint, "api/begin-downtime/"):
+		f.beginDowntimeCalled = true
+	}
+
 	if stdout != nil {
-		stdout.Write([]byte(`{"Code":"OK","Message":"success"}`))
+		stdout.Write([]byte(resp)) //nolint:errcheck
 	}
 	return nil
 }
@@ -1202,7 +1232,7 @@ func (f *fakeClientCmd) REST() restclient.Interface {
 	return nil
 }
 
-func TestPrepareBackupSource(t *testing.T) {
+func TestRenewDowntime(t *testing.T) {
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
 
@@ -1255,34 +1285,68 @@ func TestPrepareBackupSource(t *testing.T) {
 		},
 	}
 
-	tests := []struct {
-		name     string
-		cluster  *apiv1.PerconaServerMySQL
-		pods     []client.Object
-		wantErr  bool
-		errorMsg string
-	}{
-		{
-			name: "success with async cluster and orchestrator enabled",
-			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster",
-					Namespace: namespace,
+	asyncWithOrc := func() *apiv1.PerconaServerMySQL {
+		return &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: namespace,
+			},
+			Spec: apiv1.PerconaServerMySQLSpec{
+				MySQL: apiv1.MySQLSpec{
+					ClusterType: apiv1.ClusterTypeAsync,
 				},
-				Spec: apiv1.PerconaServerMySQLSpec{
-					MySQL: apiv1.MySQLSpec{
-						ClusterType: apiv1.ClusterTypeAsync,
-					},
-					Orchestrator: apiv1.OrchestratorSpec{
-						Enabled: true,
-					},
+				Orchestrator: apiv1.OrchestratorSpec{
+					Enabled: true,
 				},
 			},
-			pods:    []client.Object{backupPod, orchestratorPod},
-			wantErr: false,
+		}
+	}
+
+	// instanceJSON renders an orchestrator api/instance/ response with the given
+	// downtime state. endTimestamp is the RFC3339 DowntimeEndTimestamp.
+	instanceJSON := func(isDowntimed bool, endTimestamp string) string {
+		return fmt.Sprintf(`{"IsDowntimed":%t,"DowntimeEndTimestamp":%q}`, isDowntimed, endTimestamp)
+	}
+
+	now := time.Now()
+
+	tests := []struct {
+		name string
+		// instanceResp is the JSON body the fake orchestrator returns for
+		// GetInstance. Empty means the cluster never reaches an orchestrator call.
+		instanceResp string
+		cluster      *apiv1.PerconaServerMySQL
+		pods         []client.Object
+		// clientCmdError, when set, makes every orchestrator API call fail.
+		clientCmdError error
+		// wantBeginDowntime asserts whether BeginDowntime was issued.
+		wantBeginDowntime bool
+		wantErr           bool
+		errorMsg          string
+	}{
+		{
+			name:              "no existing downtime starts a new one",
+			instanceResp:      instanceJSON(false, ""),
+			cluster:           asyncWithOrc(),
+			pods:              []client.Object{backupPod, orchestratorPod},
+			wantBeginDowntime: true,
 		},
 		{
-			name: "success with group replication cluster (no orchestrator needed)",
+			name:              "downtime near completion is renewed",
+			instanceResp:      instanceJSON(true, now.Add(30*time.Second).Format(time.RFC3339)),
+			cluster:           asyncWithOrc(),
+			pods:              []client.Object{backupPod, orchestratorPod},
+			wantBeginDowntime: true,
+		},
+		{
+			name:              "downtime far from completion is left untouched",
+			instanceResp:      instanceJSON(true, now.Add(10*time.Minute).Format(time.RFC3339)),
+			cluster:           asyncWithOrc(),
+			pods:              []client.Object{backupPod, orchestratorPod},
+			wantBeginDowntime: false,
+		},
+		{
+			name: "skip with group replication cluster (no orchestrator needed)",
 			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
@@ -1297,11 +1361,11 @@ func TestPrepareBackupSource(t *testing.T) {
 					},
 				},
 			},
-			pods:    []client.Object{backupPod},
-			wantErr: false,
+			pods:              []client.Object{backupPod},
+			wantBeginDowntime: false,
 		},
 		{
-			name: "success with async cluster but orchestrator disabled",
+			name: "skip with async cluster but orchestrator disabled",
 			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
@@ -1316,28 +1380,23 @@ func TestPrepareBackupSource(t *testing.T) {
 					},
 				},
 			},
-			pods:    []client.Object{backupPod},
-			wantErr: false,
+			pods:              []client.Object{backupPod},
+			wantBeginDowntime: false,
 		},
 		{
-			name: "error when orchestrator pod not ready",
-			cluster: &apiv1.PerconaServerMySQL{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-cluster",
-					Namespace: namespace,
-				},
-				Spec: apiv1.PerconaServerMySQLSpec{
-					MySQL: apiv1.MySQLSpec{
-						ClusterType: apiv1.ClusterTypeAsync,
-					},
-					Orchestrator: apiv1.OrchestratorSpec{
-						Enabled: true,
-					},
-				},
-			},
+			name:     "error when orchestrator pod not ready",
+			cluster:  asyncWithOrc(),
 			pods:     []client.Object{backupPod},
 			wantErr:  true,
 			errorMsg: "get ready orchestrator pod",
+		},
+		{
+			name:           "error when getting instance fails",
+			cluster:        asyncWithOrc(),
+			pods:           []client.Object{backupPod, orchestratorPod},
+			clientCmdError: fmt.Errorf("orchestrator api error"),
+			wantErr:        true,
+			errorMsg:       "get instance for backup source",
 		},
 	}
 
@@ -1348,19 +1407,19 @@ func TestPrepareBackupSource(t *testing.T) {
 				cb.WithObjects(tt.pods...)
 			}
 
+			clientCmd := &fakeClientCmd{
+				instanceResp:       tt.instanceResp,
+				beginDowntimeError: tt.clientCmdError,
+			}
+
 			r := PerconaServerMySQLBackupReconciler{
 				Client:        cb.Build(),
 				Scheme:        scheme,
 				ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
-				ClientCmd:     &fakeClientCmd{},
+				ClientCmd:     clientCmd,
 			}
 
-			testBackupSource := backupSource
-			if tt.name == "error with malformed backup source" {
-				testBackupSource = "" // empty string to trigger pod not found error
-			}
-
-			err := r.prepareBackupSource(ctx, cr, tt.cluster, testBackupSource)
+			err := r.renewDowntime(ctx, cr, tt.cluster, backupSource)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -1368,6 +1427,9 @@ func TestPrepareBackupSource(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+
+			assert.Equal(t, tt.wantBeginDowntime, clientCmd.beginDowntimeCalled,
+				"unexpected begin-downtime call state")
 		})
 	}
 }

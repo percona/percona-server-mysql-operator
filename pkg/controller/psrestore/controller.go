@@ -88,6 +88,9 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	cr := &apiv1.PerconaServerMySQLRestore{}
 	err := r.Get(ctx, req.NamespacedName, cr)
 	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, errors.Wrapf(err, "get CR %s", req.NamespacedName)
 	}
 
@@ -205,6 +208,13 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	}
 
 	if restoreJobCompleted {
+		if state, err := r.reconcilePrepareJob(ctx, cr, cluster); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "reconcile prepare job")
+		} else if state != apiv1.RestoreSucceeded {
+			status.State = state
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+
 		if cr.Spec.PITR != nil {
 			pitrState, err := r.reconcilePITRJob(ctx, cr, cluster)
 			if err != nil {
@@ -226,7 +236,8 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 				return ctrl.Result{}, errors.Wrap(err, "unpause cluster")
 			}
 		}
-		if cluster.Status.State != apiv1.StateReady {
+
+		if !clusterReadyAfterRestore(cluster) {
 			status.State = apiv1.RestoreRunning
 			status.StateDesc = "Waiting for cluster to become ready after restore"
 			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
@@ -266,7 +277,7 @@ func (r *PerconaServerMySQLRestoreReconciler) Reconcile(ctx context.Context, req
 	defer r.sm.Delete(cr.Spec.ClusterName)
 
 	if cr.Spec.PITR != nil {
-		if (!cluster.Spec.Backup.PiTR.Enabled || cluster.Spec.Backup.PiTR.BinlogServer == nil) && restoreBinlogServer(cr) == nil {
+		if !cluster.PiTREnabled() && restoreBinlogServer(cr) == nil {
 			status.State = apiv1.RestoreError
 			status.StateDesc = "Binlog server is not enabled for the cluster"
 			return ctrl.Result{}, nil
@@ -541,6 +552,60 @@ func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRConfig(
 	}
 
 	return nil
+}
+
+func (r *PerconaServerMySQLRestoreReconciler) reconcilePrepareJob(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLRestore,
+	cluster *apiv1.PerconaServerMySQL,
+) (apiv1.RestoreState, error) {
+	prepareJob := &batchv1.Job{}
+	nn := types.NamespacedName{Name: xtrabackup.PrepareJobName(cr), Namespace: cr.Namespace}
+	err := r.Get(ctx, nn, prepareJob)
+	if err == nil {
+		if prepareJob.Status.Active > 0 {
+			return apiv1.RestoreRunning, nil
+		}
+
+		for _, cond := range prepareJob.Status.Conditions {
+			if cond.Status != corev1.ConditionTrue {
+				continue
+			}
+
+			switch cond.Type {
+			case batchv1.JobFailed:
+				return apiv1.RestoreFailed, nil
+			case batchv1.JobComplete:
+				return apiv1.RestoreSucceeded, nil
+			}
+		}
+
+		return apiv1.RestoreRunning, nil
+	}
+
+	if !k8serrors.IsNotFound(err) {
+		return "", errors.Wrapf(err, "get prepare job %s", nn)
+	}
+
+	bcp, err := getBackup(ctx, r.Client, cr, cluster)
+	if err != nil {
+		return "", errors.Wrap(err, "get backup")
+	}
+
+	initImage, err := k8s.InitImage(ctx, r.Client, cluster, cluster.Spec.Backup)
+	if err != nil {
+		return "", errors.Wrap(err, "get operator image")
+	}
+
+	job := xtrabackup.PrepareJob(cluster, cr, bcp.Status.Storage, initImage)
+	if err := controllerutil.SetControllerReference(cr, job, r.Scheme); err != nil {
+		return "", errors.Wrapf(err, "set controller reference to Job %s/%s", job.Namespace, job.Name)
+	}
+
+	if err := r.Create(ctx, job); err != nil {
+		return "", errors.Wrapf(err, "create prepare job %s/%s", job.Namespace, job.Name)
+	}
+	return apiv1.RestoreRunning, nil
 }
 
 func (r *PerconaServerMySQLRestoreReconciler) reconcilePITRJob(
@@ -848,4 +913,22 @@ func (r *PerconaServerMySQLRestoreReconciler) tryAcquireLease(ctx context.Contex
 		}
 	}
 	return true, nil
+}
+
+// clusterReadyAfterRestore reports whether the restore can be marked complete.
+// For auto bootstrap we wait for the cluster to actually come back: StateReady,
+// plus a re-bootstrapped InnoDB cluster for GR (the restore resets that condition).
+// For manual bootstrap the cluster never self-bootstraps, so once it's awaiting
+// external bootstrap we stop waiting and let the restore finish.
+func clusterReadyAfterRestore(cluster *apiv1.PerconaServerMySQL) bool {
+	if cluster.IsAwaitingExternalBootstrap() {
+		return true
+	}
+	if cluster.Status.State != apiv1.StateReady {
+		return false
+	}
+	if cluster.Spec.MySQL.IsGR() {
+		return meta.IsStatusConditionTrue(cluster.Status.Conditions, apiv1.ConditionInnoDBClusterBootstrapped)
+	}
+	return true
 }

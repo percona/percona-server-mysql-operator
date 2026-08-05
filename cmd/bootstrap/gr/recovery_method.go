@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"log"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -17,6 +18,7 @@ type SQLRunner interface {
 	gtidSubtract(ctx context.Context, set, subset string) (string, error)
 	gtidSubtractIntersection(ctx context.Context, a, b string) (string, error)
 	isPurgedSubsetOfExecuted(ctx context.Context, purged, executed string) (bool, error)
+	getCloneThreshold(ctx context.Context) (uint64, error)
 }
 
 type GTIDSetRelation string
@@ -149,13 +151,124 @@ func getRecoveryMethod(ctx context.Context, primary, replica string) (innodbclus
 		return innodbcluster.RecoveryClone, nil
 	case innodbcluster.ReplicaGtidIrrecoverable:
 		return innodbcluster.RecoveryClone, nil
-	case innodbcluster.ReplicaGtidRecoverable, innodbcluster.ReplicaGtidIdentical:
-		return innodbcluster.RecoveryIncremental, nil
-	case innodbcluster.ReplicaGtidNew:
+	case innodbcluster.ReplicaGtidRecoverable, innodbcluster.ReplicaGtidIdentical, innodbcluster.ReplicaGtidNew:
+		if exceeded, err := cloneThresholdExceeded(ctx, primarySQLRunner, replicaSQLRunner); err != nil {
+			return "", errors.Wrap(err, "check clone threshold")
+		} else if exceeded {
+			return innodbcluster.RecoveryClone, nil
+		}
 		return innodbcluster.RecoveryIncremental, nil
 	default:
 		return innodbcluster.RecoveryClone, nil
 	}
+}
+
+// cloneThresholdExceeded reports whether the number of transactions the replica
+// is missing relative to the primary is greater than the replica's configured
+// group_replication_clone_threshold. When it is, Group Replication uses a remote
+// clone for distributed recovery instead of incremental state transfer.
+func cloneThresholdExceeded(ctx context.Context, primary, replica SQLRunner) (bool, error) {
+	primaryExecuted, err := primary.getGTIDExecuted(ctx)
+	if err != nil {
+		return false, errors.Wrap(err, "get GTID_EXECUTED from primary")
+	}
+
+	replicaExecuted, err := replica.getGTIDExecuted(ctx)
+	if err != nil {
+		return false, errors.Wrap(err, "get GTID_EXECUTED from replica")
+	}
+
+	var missing string
+	switch {
+	case primaryExecuted == "":
+		missing = ""
+	case replicaExecuted == "":
+		missing = primaryExecuted
+	default:
+		missing, err = primary.gtidSubtract(ctx, primaryExecuted, replicaExecuted)
+		if err != nil {
+			return false, errors.Wrap(err, "compute missing transactions")
+		}
+	}
+
+	count, err := countGTIDs(missing)
+	if err != nil {
+		return false, errors.Wrap(err, "count missing transactions")
+	}
+
+	threshold, err := replica.getCloneThreshold(ctx)
+	if err != nil {
+		return false, errors.Wrap(err, "get clone threshold")
+	}
+
+	log.Printf("Replica is missing %d transaction(s); group_replication_clone_threshold=%d", count, threshold)
+
+	// Group Replication switches to clone when the gap is strictly greater than
+	// the threshold.
+	return count > threshold, nil
+}
+
+// countGTIDs returns the number of transactions in a GTID set string such as
+// "uuid:1-5:8-10,uuid2:1-3". Tagged GTIDs (MySQL 8.4+), e.g. "uuid:tag:1-5", are
+// supported - the non-numeric tag component is ignored.
+func countGTIDs(gtidSet string) (uint64, error) {
+	gtidSet = strings.TrimSpace(gtidSet)
+	if gtidSet == "" {
+		return 0, nil
+	}
+
+	var total uint64
+	for _, uuidSet := range strings.Split(gtidSet, ",") {
+		uuidSet = strings.TrimSpace(uuidSet)
+		if uuidSet == "" {
+			continue
+		}
+
+		parts := strings.Split(uuidSet, ":")
+		if len(parts) < 2 {
+			return 0, errors.Errorf("invalid GTID set %q", gtidSet)
+		}
+
+		// parts[0] is the source UUID; the remaining parts are intervals,
+		// optionally preceded by a non-numeric tag.
+		for _, part := range parts[1:] {
+			if !isGTIDInterval(part) {
+				// tag component, not an interval
+				continue
+			}
+
+			start, end, found := strings.Cut(part, "-")
+			s, err := strconv.ParseUint(start, 10, 64)
+			if err != nil {
+				return 0, errors.Wrapf(err, "parse GTID interval %q", part)
+			}
+			if !found {
+				total++
+				continue
+			}
+			e, err := strconv.ParseUint(end, 10, 64)
+			if err != nil {
+				return 0, errors.Wrapf(err, "parse GTID interval %q", part)
+			}
+			total += e - s + 1
+		}
+	}
+
+	return total, nil
+}
+
+// isGTIDInterval reports whether s is a GTID interval ("5" or "5-10") rather than
+// a GTID tag. Intervals contain only digits and dashes and begin with a digit.
+func isGTIDInterval(s string) bool {
+	if s == "" || s[0] < '0' || s[0] > '9' {
+		return false
+	}
+	for _, c := range s {
+		if (c < '0' || c > '9') && c != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 type sqlRunner struct {
@@ -200,4 +313,12 @@ func (r *sqlRunner) isPurgedSubsetOfExecuted(ctx context.Context, purged, execut
 		return false, errors.Wrap(err, "check purged subset")
 	}
 	return isSubset, nil
+}
+
+func (r *sqlRunner) getCloneThreshold(ctx context.Context) (uint64, error) {
+	var threshold uint64
+	if err := r.db.QueryRowContext(ctx, "SELECT @@GLOBAL.group_replication_clone_threshold").Scan(&threshold); err != nil {
+		return 0, errors.Wrap(err, "get group_replication_clone_threshold")
+	}
+	return threshold, nil
 }

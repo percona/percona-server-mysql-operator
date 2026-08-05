@@ -47,6 +47,10 @@ func MySQLShellRunner(pcs *apiv1.PerconaServerMySQLClusterSet) *appsv1.Deploymen
 							Command: []string{"sleep", "infinity"},
 							Env: []corev1.EnvVar{
 								{
+									Name:  "HOME",
+									Value: "/tmp",
+								},
+								{
 									Name: MySQLShellRunnerPassword,
 									ValueFrom: &corev1.EnvVarSource{
 										SecretKeyRef: pcs.Spec.CredentialsSecret.DeepCopy(),

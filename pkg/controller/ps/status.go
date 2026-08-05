@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -143,7 +144,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		status.HAProxy = haproxyStatus
 
 		binlogServerStatus := apiv1.StatefulAppStatus{}
-		if cr.Spec.Backup.PiTR.Enabled && cr.Spec.Backup.PiTR.BinlogServer != nil {
+		if cr.PiTREnabled() {
 			binlogServerStatus, err = r.appStatus(ctx, cr, binlogserver.Name(cr), 1, binlogserver.MatchLabels(cr), status.BinlogServer.Version)
 			if err != nil {
 				return errors.Wrap(err, "get binlog server status")
@@ -168,7 +169,7 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 			}
 		}
 
-		if cr.Spec.Backup.PiTR.Enabled && cr.Spec.Backup.PiTR.BinlogServer != nil && status.BinlogServer.State != apiv1.StateReady {
+		if cr.PiTREnabled() && status.BinlogServer.State != apiv1.StateReady {
 			status.State = apiv1.StateInitializing
 		}
 
@@ -213,7 +214,6 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 				r.Recorder.Event(cr, corev1.EventTypeWarning, "FullClusterCrashDetected", "Full cluster crash detected")
 			}
 
-			meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionAwaitingExternalBootstrap)
 			if ok, err := r.isAwaitingExtBootstrap(ctx, cr); err != nil {
 				return errors.Wrap(err, "check if awaiting external bootstrap")
 			} else if ok {
@@ -223,6 +223,8 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 					Reason:  "ManualBootstrapRequested",
 					Message: "Awaiting external bootstrap",
 				})
+			} else {
+				meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionAwaitingExternalBootstrap)
 			}
 		}
 
@@ -255,6 +257,10 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 			}
 		}
 
+		if err := r.setClusterSetMemberCondition(ctx, cr, status); err != nil {
+			return errors.Wrap(err, "check ClusterSet status")
+		}
+
 		if status.State != initialState {
 			log.Info("Cluster state changed", "previous", initialState, "current", status.State)
 			r.Recorder.Event(cr, corev1.EventTypeNormal, "ClusterStateChanged", fmt.Sprintf("%s -> %s", initialState, status.State))
@@ -263,6 +269,52 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 	}
 
 	return writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), updateStatusF)
+}
+
+func (r *PerconaServerMySQLReconciler) setClusterSetMemberCondition(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQL,
+	status *apiv1.PerconaServerMySQLStatus,
+) error {
+	cond, err := r.getClusterSetMemberCondition(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "get clusterset member condition")
+	}
+
+	if cond != nil {
+		meta.SetStatusCondition(&status.Conditions, *cond)
+		if err := k8s.SetFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
+			return errors.Wrap(err, "set finalizers")
+		}
+		return nil
+	}
+
+	// No condition existed before, this cluster was never a part of any ClusterSet, return early.
+	prevCond := meta.FindStatusCondition(cr.Status.Conditions, apiv1.ConditionClusterSetMember)
+	if prevCond == nil {
+		return nil
+	}
+
+	log := logf.FromContext(ctx)
+
+	meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetMember)
+	if err := k8s.RemoveFinalizers(ctx, r.Client, cr, naming.FinalizerClusterSetProtection); err != nil {
+		return errors.Wrap(err, "remove finalizer")
+	}
+
+	// Only a former replica is left read-only and dissolved by mysqlshell on removal.
+	// A primary that simply outlived its replicas is already read-write and needs no recovery.
+	if prevCond.Reason == apiv1.ClusterSetMemberReasonPrimary {
+		return nil
+	}
+
+	log.Info("Former ClusterSet member, recovery is needed")
+	if err := k8s.AnnotateObject(ctx, r.Client, cr, map[naming.AnnotationKey]string{
+		naming.AnnotationClusterSetRecoveryNeeded: "true",
+	}); err != nil {
+		return errors.Wrap(err, "add clusterset recovery annotation")
+	}
+	return nil
 }
 
 func (r *PerconaServerMySQLReconciler) isAwaitingExtBootstrap(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, error) {
@@ -444,31 +496,86 @@ func (r *PerconaServerMySQLReconciler) allLoadBalancersReady(ctx context.Context
 	return true, nil
 }
 
-func appHost(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServerMySQL) (string, error) {
-	var serviceName string
-
+func proxyServiceName(cr *apiv1.PerconaServerMySQL) string {
 	if cr.RouterEnabled() {
-		serviceName = router.ServiceName(cr)
-		if cr.Spec.Proxy.Router.Expose.Type != corev1.ServiceTypeLoadBalancer {
-			return serviceName + "." + cr.GetNamespace(), nil
-		}
+		return router.ServiceName(cr)
 	}
-
 	if cr.HAProxyEnabled() {
-		serviceName = haproxy.ServiceName(cr)
-		if cr.Spec.Proxy.HAProxy.Expose.Type != corev1.ServiceTypeLoadBalancer {
-			return serviceName + "." + cr.GetNamespace(), nil
+		return haproxy.ServiceName(cr)
+	}
+	return ""
+}
+
+func proxyServicePort(cr *apiv1.PerconaServerMySQL) string {
+	if cr.RouterEnabled() {
+		return strconv.Itoa(router.ServicePort())
+	}
+	if cr.HAProxyEnabled() {
+		return strconv.Itoa(haproxy.ServicePort())
+	}
+	return ""
+}
+
+func proxyServicePortReadOnly(cr *apiv1.PerconaServerMySQL) string {
+	if cr.RouterEnabled() {
+		return strconv.Itoa(router.ServicePortReplicas())
+	}
+	if cr.HAProxyEnabled() {
+		return strconv.Itoa(haproxy.ServicePortReplicas())
+	}
+	return ""
+}
+
+func proxyHost(ctx context.Context, cr *apiv1.PerconaServerMySQL, withSuffix bool) string {
+	var svcFQDN string
+	switch {
+	case cr.RouterEnabled():
+		svcFQDN = router.ServiceFQDN(cr)
+	case cr.HAProxyEnabled():
+		svcFQDN = haproxy.ServiceFQDN(cr)
+	default:
+		return ""
+	}
+
+	if !withSuffix {
+		return svcFQDN
+	}
+	return svcFQDN + ".svc." + k8s.KubernetesClusterDomain(ctx, cr.Spec.ClusterServiceDNSSuffix)
+}
+
+func mysqlHost(ctx context.Context, cr *apiv1.PerconaServerMySQL, withSuffix bool) string {
+	if !withSuffix {
+		return mysql.ServiceFQDN(cr)
+	}
+
+	return mysql.ServiceFQDN(cr) + ".svc." + k8s.KubernetesClusterDomain(ctx, cr.Spec.ClusterServiceDNSSuffix)
+}
+
+func mysqlPrimaryHost(ctx context.Context, cr *apiv1.PerconaServerMySQL, withSuffix bool) string {
+	primaryFQDN := mysql.PrimaryServiceName(cr) + "." + cr.Namespace
+	if !withSuffix {
+		return primaryFQDN
+	}
+
+	return primaryFQDN + ".svc." + k8s.KubernetesClusterDomain(ctx, cr.Spec.ClusterServiceDNSSuffix)
+}
+
+func loadBalancerHost(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServerMySQL) (string, error) {
+	if !cr.Spec.Proxy.LoadBalancerExposed() {
+		return "", nil
+	}
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      proxyServiceName(cr),
+			Namespace: cr.Namespace,
+		},
+	}
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(svc), svc); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return "", nil
 		}
-	}
-
-	if !cr.RouterEnabled() && !cr.HAProxyEnabled() {
-		return mysql.ServiceName(cr) + "." + cr.GetNamespace(), nil
-	}
-
-	svc := &corev1.Service{}
-	err := cl.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: serviceName}, svc)
-	if err != nil {
-		return "", errors.Wrapf(err, "get %s service", serviceName)
+		return "", errors.Wrapf(err, "get %s service", svc.Name)
 	}
 
 	var host string
@@ -478,8 +585,24 @@ func appHost(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServerMySQL
 			host = i.Hostname
 		}
 	}
-
 	return host, nil
+}
+
+func appHost(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServerMySQL) (string, error) {
+	proxyHostStr := proxyHost(ctx, cr, false)
+
+	if proxyHostStr == "" {
+		return mysqlHost(ctx, cr, false), nil
+	}
+	if !cr.Spec.Proxy.LoadBalancerExposed() {
+		return proxyHostStr, nil
+	}
+
+	lbHost, err := loadBalancerHost(ctx, cl, cr)
+	if err != nil {
+		return "", errors.Wrap(err, "load balancer host")
+	}
+	return lbHost, nil
 }
 
 func (r *PerconaServerMySQLReconciler) appStatus(ctx context.Context, cr *apiv1.PerconaServerMySQL, compName string, size int32, selector map[string]string, version string) (apiv1.StatefulAppStatus, error) {

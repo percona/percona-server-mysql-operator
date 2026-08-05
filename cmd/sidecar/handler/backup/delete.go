@@ -83,6 +83,9 @@ func deleteBackup(ctx context.Context, cfg *xb.BackupConfig, backupName string) 
 
 	logWriter := io.Writer(os.Stderr)
 	if backupName != "" {
+		if err := ValidateBackupName(backupName); err != nil {
+			return errors.Wrap(err, "invalid backup name")
+		}
 		backupLog, err := os.OpenFile(
 			filepath.Join(mysql.BackupLogDir, backupName+".log"),
 			os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)

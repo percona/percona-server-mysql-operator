@@ -33,6 +33,8 @@ spec:
           value: ""
         - name: DISABLE_TELEMETRY
           value: "false"
+        - name: MAX_CONCURRENT_RECONCILES
+          value: "1"
         - name: POD_NAME
           valueFrom:
             fieldRef:

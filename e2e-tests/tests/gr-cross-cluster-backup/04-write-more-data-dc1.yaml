@@ -1,0 +1,14 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o pipefail
+      set -o xtrace
+
+      source ../../functions
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
+
+      run_mysql \
+          "INSERT INTO myDB.myTable (id) VALUES (100503),(100504),(100505)" \
+          "-h $(get_haproxy_svc "gr-cross-cluster-backup-dc1")" "${mysql_user}"

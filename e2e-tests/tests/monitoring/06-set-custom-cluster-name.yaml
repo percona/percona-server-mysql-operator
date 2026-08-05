@@ -1,0 +1,30 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      wait_cluster_consistency_async monitoring 3
+
+      mysql_gen=$(kubectl get sts/monitoring-mysql -n "${NAMESPACE}" -o jsonpath='{.metadata.generation}')
+      haproxy_gen=$(kubectl get sts/monitoring-haproxy -n "${NAMESPACE}" -o jsonpath='{.metadata.generation}')
+
+      kubectl patch ps/monitoring -n "${NAMESPACE}" \
+          --type merge \
+          --patch '{"spec":{"pmm":{"customClusterName":"my-custom-pmm-cluster"}}}'
+
+      wait_for_generation "sts/monitoring-mysql" $((mysql_gen + 1))
+      wait_for_generation "sts/monitoring-haproxy" $((haproxy_gen + 1))
+
+      wait_cluster_consistency_async monitoring 3
+
+      TOKEN=$(kubectl get secret internal-monitoring -n "${NAMESPACE}" -o jsonpath='{.data.pmmservertoken}' | base64 --decode)
+
+      verify_custom_cluster_name "my-custom-pmm-cluster" "$TOKEN" \
+          "${NAMESPACE}-monitoring-mysql-0" \
+          "${NAMESPACE}-monitoring-mysql-1" \
+          "${NAMESPACE}-monitoring-mysql-2"
+    timeout: 900

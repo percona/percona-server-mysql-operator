@@ -58,6 +58,22 @@ remove_fields() {
 		| yq "del(.spec.backupSource.stateDescription)" \
 		| yq "del(.spec.backupSource.storage.azure)" \
 		| yq "del(.spec.backupSource.storage.gcs)" \
+		| yq "del(.spec.backupSource.storage.affinity)" \
+		| yq "del(.spec.backupSource.storage.annotations)" \
+		| yq "del(.spec.backupSource.storage.containerOptions)" \
+		| yq "del(.spec.backupSource.storage.containerSecurityContext)" \
+		| yq "del(.spec.backupSource.storage.encryptionKeySecret)" \
+		| yq "del(.spec.backupSource.storage.labels)" \
+		| yq "del(.spec.backupSource.storage.nodeSelector)" \
+		| yq "del(.spec.backupSource.storage.podSecurityContext)" \
+		| yq "del(.spec.backupSource.storage.priorityClassName)" \
+		| yq "del(.spec.backupSource.storage.resources)" \
+		| yq "del(.spec.backupSource.storage.runtimeClassName)" \
+		| yq "del(.spec.backupSource.storage.schedulerName)" \
+		| yq "del(.spec.backupSource.storage.tolerations)" \
+		| yq "del(.spec.backupSource.storage.topologySpreadConstraints)" \
+		| yq "del(.spec.backupSource.storage.verifyTLS)" \
+		| yq "del(.spec.backupSource.storage.volumeSpec)" \
 		| yq "del(.spec.backupSource.type)" \
 		| yq "del(.spec.backupSource.conditions)"
 }

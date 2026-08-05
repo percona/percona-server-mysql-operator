@@ -15,6 +15,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -225,6 +226,143 @@ var _ = Describe("TLS cert-manager leak regression", Ordered, func() {
 		Expect(elapsed).To(BeNumerically("<", 1*time.Second))
 	})
 })
+
+var _ = Describe("TLS issuer kind handling", Ordered, func() {
+	const namespace = "default"
+	const clusterIssuerName = "tls-kind-test-cluster-issuer"
+	const missingClusterIssuerName = "tls-kind-test-missing-cluster-issuer"
+	const issuerName = "tls-kind-test-issuer"
+
+	BeforeAll(func(ctx SpecContext) {
+		_, err := envtest.InstallCRDs(cfg, envtest.CRDInstallOptions{
+			Paths: []string{filepath.Join("testdata", "cert-manager.yaml")},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		clusterIssuer := &cm.ClusterIssuer{
+			ObjectMeta: metav1.ObjectMeta{Name: clusterIssuerName},
+			Spec: cm.IssuerSpec{
+				IssuerConfig: cm.IssuerConfig{SelfSigned: &cm.SelfSignedIssuer{}},
+			},
+		}
+		Expect(k8sClient.Create(ctx, clusterIssuer)).To(Succeed())
+
+		issuer := &cm.Issuer{
+			ObjectMeta: metav1.ObjectMeta{Name: issuerName, Namespace: namespace},
+			Spec: cm.IssuerSpec{
+				IssuerConfig: cm.IssuerConfig{SelfSigned: &cm.SelfSignedIssuer{}},
+			},
+		}
+		Expect(k8sClient.Create(ctx, issuer)).To(Succeed())
+	})
+
+	AfterAll(func(ctx SpecContext) {
+		_ = k8sClient.Delete(ctx, &cm.ClusterIssuer{ObjectMeta: metav1.ObjectMeta{Name: clusterIssuerName}})
+		_ = k8sClient.Delete(ctx, &cm.Issuer{ObjectMeta: metav1.ObjectMeta{Name: issuerName, Namespace: namespace}})
+	})
+
+	It("returns nil when tls is not configured", func(ctx SpecContext) {
+		cr := &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+		}
+
+		Expect(reconciler().checkTLSIssuer(ctx, cr)).To(Succeed())
+	})
+
+	It("returns nil when tls.issuerConf is not configured", func(ctx SpecContext) {
+		cr := &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+			Spec: apiv1.PerconaServerMySQLSpec{
+				TLS: &apiv1.TLSSpec{},
+			},
+		}
+
+		Expect(reconciler().checkTLSIssuer(ctx, cr)).To(Succeed())
+	})
+
+	It("checks existing ClusterIssuer when tls.issuerConf.kind is set", func(ctx SpecContext) {
+		cr := &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+			Spec: apiv1.PerconaServerMySQLSpec{
+				TLS: &apiv1.TLSSpec{
+					IssuerConf: &cmmeta.IssuerReference{
+						Name:  clusterIssuerName,
+						Kind:  cm.ClusterIssuerKind,
+						Group: "cert-manager.io",
+					},
+				},
+			},
+		}
+
+		Expect(reconciler().checkTLSIssuer(ctx, cr)).To(Succeed())
+	})
+
+	It("checks existing Issuer when tls.issuerConf.kind is Issuer", func(ctx SpecContext) {
+		cr := &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+			Spec: apiv1.PerconaServerMySQLSpec{
+				TLS: &apiv1.TLSSpec{
+					IssuerConf: &cmmeta.IssuerReference{
+						Name: issuerName,
+						Kind: cm.IssuerKind,
+					},
+				},
+			},
+		}
+
+		Expect(reconciler().checkTLSIssuer(ctx, cr)).To(Succeed())
+	})
+
+	It("fails when referenced ClusterIssuer does not exist", func(ctx SpecContext) {
+		cr := &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+			Spec: apiv1.PerconaServerMySQLSpec{
+				TLS: &apiv1.TLSSpec{
+					IssuerConf: &cmmeta.IssuerReference{
+						Name:  missingClusterIssuerName,
+						Kind:  cm.ClusterIssuerKind,
+						Group: "cert-manager.io",
+					},
+				},
+			},
+		}
+
+		err := reconciler().checkTLSIssuer(ctx, cr)
+		Expect(k8serrors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("ignores forbidden error when ClusterIssuer lookup is RBAC denied", func(ctx SpecContext) {
+		baseReconciler := reconciler()
+		testReconciler := *baseReconciler
+		testReconciler.Client = &forbiddenClusterIssuerGetClient{Client: baseReconciler.Client}
+
+		cr := &apiv1.PerconaServerMySQL{
+			ObjectMeta: metav1.ObjectMeta{Namespace: namespace},
+			Spec: apiv1.PerconaServerMySQLSpec{
+				TLS: &apiv1.TLSSpec{
+					IssuerConf: &cmmeta.IssuerReference{
+						Name: clusterIssuerName,
+						Kind: cm.ClusterIssuerKind,
+					},
+				},
+			},
+		}
+
+		Expect(testReconciler.checkTLSIssuer(ctx, cr)).To(Succeed())
+	})
+})
+
+type forbiddenClusterIssuerGetClient struct {
+	client.Client
+}
+
+func (c *forbiddenClusterIssuerGetClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if _, ok := obj.(*cm.ClusterIssuer); ok {
+		return k8serrors.NewForbidden(schema.GroupResource{Group: "cert-manager.io", Resource: "clusterissuers"}, key.Name, errors.New("forbidden"))
+	}
+
+	return c.Client.Get(ctx, key, obj, opts...)
+}
 
 var _ = Describe("Finalizer delete-ssl", Ordered, func() {
 	ctx := context.Background()

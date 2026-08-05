@@ -1,0 +1,26 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQLClusterSet
+metadata:
+  name: gr-cross-cluster
+  finalizers:
+  - percona.com/clusterset-dissolve
+spec:
+  createReplicaClusterOptions:
+    recoveryMethod: incremental
+  unsafeFlags:
+    forcedFailover: false
+    forcedClusterRemoval: false
+  primaryCluster: grcrossclusterbackupdc1
+  sslMode: AUTO
+  credentialsSecret:
+    name: test-secrets
+    key: clusterset
+  clusters:
+    - innodbClusterName: grcrossclusterbackupdc1
+      endpoints:
+      - host: gr-cross-cluster-backup-dc1-mysql-primary
+    - innodbClusterName: grcrossclusterbackupdc2
+      endpoints:
+      - host: gr-cross-cluster-backup-dc2-mysql-0.gr-cross-cluster-backup-dc2-mysql
+  mysqlshellRunner:
+    image: image

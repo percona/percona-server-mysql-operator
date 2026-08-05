@@ -1,0 +1,11 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 30
+    script: |
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      run_backup base-backup-encrypted "$(get_default_storage_name)" "$(get_cluster_name)" "encrypted-full"

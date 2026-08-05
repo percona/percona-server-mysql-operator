@@ -1,0 +1,29 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 10
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      platform="$(detect_k8s_platform)"
+
+      if [[ "$platform" == "eks" ]]; then
+          kubectl apply -f ../../conf/eks-storage-class.yaml
+      fi
+
+      cr="$(get_cr \
+          | yq eval '.spec.mysql.clusterType="group-replication"' - \
+          | yq eval '.spec.mysql.size=3' - \
+          | yq eval '.spec.proxy.router.enabled=false' - \
+          | yq eval '.spec.proxy.haproxy.enabled=true' - \
+          | yq eval '.spec.storageScaling.enableVolumeScaling=true' - \
+          | yq eval '.spec.storageScaling.autoscaling.enabled=true' - \
+          | yq eval '.spec.storageScaling.autoscaling.triggerThresholdPercent=55' - \
+          | yq eval '.spec.storageScaling.autoscaling.growthStep="2Gi"' - \
+          | yq eval '.spec.storageScaling.autoscaling.maxSize="4Gi"' - \
+          | yq eval '.spec.mysql.volumeSpec.persistentVolumeClaim.resources.requests.storage="2Gi"' -)"
+
+      printf '%s\n' "$cr" | kubectl -n "${NAMESPACE}" apply -f -

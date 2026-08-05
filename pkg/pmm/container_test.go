@@ -163,3 +163,70 @@ func TestContainer_CustomProbes(t *testing.T) {
 		})
 	}
 }
+
+func TestCustomClusterName(t *testing.T) {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-secret"},
+		Data: map[string][]byte{
+			string(apiv1.UserPMMServerToken): []byte("token"),
+			string(apiv1.UserMonitor):        []byte("monitor-pass"),
+		},
+	}
+
+	tests := []struct {
+		name              string
+		crName            string
+		crVersion         string
+		customClusterName string
+		wantClusterName   string
+	}{
+		{
+			name:            "no customClusterName uses cr.Name",
+			crName:          "my-cluster",
+			crVersion:       version.Version(),
+			wantClusterName: "my-cluster",
+		},
+		{
+			name:              "customClusterName used when version >= 1.2.0",
+			crName:            "my-cluster",
+			crVersion:         version.Version(),
+			customClusterName: "custom-name",
+			wantClusterName:   "custom-name",
+		},
+		{
+			name:              "customClusterName ignored when version < 1.2.0",
+			crName:            "my-cluster",
+			crVersion:         "1.1.0",
+			customClusterName: "custom-name",
+			wantClusterName:   "my-cluster",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{Name: tt.crName},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					CRVersion: tt.crVersion,
+					PMM: &apiv1.PMMSpec{
+						Image:             "percona/pmm-client:latest",
+						ImagePullPolicy:   corev1.PullIfNotPresent,
+						ServerHost:        "pmm-server",
+						CustomClusterName: tt.customClusterName,
+					},
+				},
+			}
+
+			container := Container(cr, secret, "mysql", "")
+
+			envMap := map[string]string{}
+			for _, env := range container.Env {
+				if env.Value != "" {
+					envMap[env.Name] = env.Value
+				}
+			}
+
+			assert.Equal(t, tt.wantClusterName, envMap["CLUSTER_NAME"])
+		})
+	}
+}

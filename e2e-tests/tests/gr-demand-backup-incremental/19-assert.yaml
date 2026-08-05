@@ -13,6 +13,7 @@ data:
     100502
     100503
     100504
+    100505
 ---
 kind: ConfigMap
 apiVersion: v1
@@ -25,6 +26,7 @@ data:
     100502
     100503
     100504
+    100505
 ---
 kind: ConfigMap
 apiVersion: v1
@@ -37,3 +39,4 @@ data:
     100502
     100503
     100504
+    100505

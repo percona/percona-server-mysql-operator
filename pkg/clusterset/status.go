@@ -4,6 +4,7 @@ import apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 
 const (
 	StatusHealthy string = "HEALTHY"
+	StatusUnknown string = "UNKNOWN"
 )
 
 const (

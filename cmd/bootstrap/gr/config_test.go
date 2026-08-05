@@ -117,3 +117,100 @@ func TestGetCreateOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestConfigureInstanceOptionsString(t *testing.T) {
+	opts := &configureInstanceOpts{
+		applierWorkerThreads: 4,
+	}
+	assert.Equal(t, `{"applierWorkerThreads": 4}`, opts.String())
+
+	opts = &configureInstanceOpts{
+		applierWorkerThreads: 16,
+	}
+	assert.Equal(t, `{"applierWorkerThreads": 16}`, opts.String())
+}
+
+func TestGetConfigureInstanceOpts(t *testing.T) {
+	tests := map[string]struct {
+		expected *configureInstanceOpts
+		cnf      func() *ini.Section
+	}{
+		"no custom config": {
+			expected: &configureInstanceOpts{
+				applierWorkerThreads: 4,
+			},
+			cnf: func() *ini.Section {
+				return nil
+			},
+		},
+		"missing key keeps default": {
+			expected: &configureInstanceOpts{
+				applierWorkerThreads: 4,
+			},
+			cnf: func() *ini.Section {
+				cnf := `
+				[mysqld]
+				group_replication_communication_stack=MYSQL
+				`
+				myCnfFile := io.NopCloser(bytes.NewReader([]byte(cnf)))
+				myCnf, err := config.ParseSection(myCnfFile, "mysqld")
+				require.NoError(t, err)
+				return myCnf
+			},
+		},
+		"empty value keeps default": {
+			expected: &configureInstanceOpts{
+				applierWorkerThreads: 4,
+			},
+			cnf: func() *ini.Section {
+				cnf := `
+				[mysqld]
+				replica_parallel_workers=
+				`
+				myCnfFile := io.NopCloser(bytes.NewReader([]byte(cnf)))
+				myCnf, err := config.ParseSection(myCnfFile, "mysqld")
+				require.NoError(t, err)
+				return myCnf
+			},
+		},
+		"explicit value": {
+			expected: &configureInstanceOpts{
+				applierWorkerThreads: 8,
+			},
+			cnf: func() *ini.Section {
+				cnf := `
+				[mysqld]
+				replica_parallel_workers=8
+				`
+				myCnfFile := io.NopCloser(bytes.NewReader([]byte(cnf)))
+				myCnf, err := config.ParseSection(myCnfFile, "mysqld")
+				require.NoError(t, err)
+				return myCnf
+			},
+		},
+		"explicit value with loose prefix": {
+			expected: &configureInstanceOpts{
+				applierWorkerThreads: 16,
+			},
+			cnf: func() *ini.Section {
+				cnf := `
+				[mysqld]
+				loose_replica_parallel_workers=16
+				`
+				myCnfFile := io.NopCloser(bytes.NewReader([]byte(cnf)))
+				myCnf, err := config.ParseSection(myCnfFile, "mysqld")
+				require.NoError(t, err)
+				return myCnf
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			opts, err := getConfigureInstanceOpts(tt.cnf())
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.expected.applierWorkerThreads, opts.applierWorkerThreads)
+		})
+	}
+}

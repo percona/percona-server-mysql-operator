@@ -1,0 +1,47 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestAssert
+timeout: 600
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_issuer_name="tls-cert-manager-cluster-issuer-${NAMESPACE}"
+
+      kubectl wait --for=condition=Ready=True "clusterissuer/${cluster_issuer_name}" --timeout=180s
+
+      cert_issuer_name="$(kubectl -n "${NAMESPACE}" get certificate tls-cert-manager-ssl -o jsonpath='{.spec.issuerRef.name}')"
+      cert_issuer_kind="$(kubectl -n "${NAMESPACE}" get certificate tls-cert-manager-ssl -o jsonpath='{.spec.issuerRef.kind}')"
+      cert_issuer_group="$(kubectl -n "${NAMESPACE}" get certificate tls-cert-manager-ssl -o jsonpath='{.spec.issuerRef.group}')"
+      cert_ready="$(kubectl -n "${NAMESPACE}" get certificate tls-cert-manager-ssl -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')"
+
+      if [[ "${cert_issuer_name}" != "${cluster_issuer_name}" ]]; then
+          echo "Unexpected certificate issuer name: ${cert_issuer_name}"
+          exit 1
+      fi
+
+      if [[ "${cert_issuer_kind}" != "ClusterIssuer" ]]; then
+          echo "Unexpected certificate issuer kind: ${cert_issuer_kind}"
+          exit 1
+      fi
+
+      if [[ "${cert_issuer_group}" != "cert-manager.io" ]]; then
+          echo "Unexpected certificate issuer group: ${cert_issuer_group}"
+          exit 1
+      fi
+
+      if [[ "${cert_ready}" != "True" ]]; then
+          echo "Certificate is not Ready: ${cert_ready}"
+          exit 1
+      fi
+
+      cluster_state="$(kubectl -n "${NAMESPACE}" get ps tls-cert-manager -o jsonpath='{.status.state}')"
+      if [[ "${cluster_state}" != "ready" ]]; then
+          echo "Cluster state is not ready: ${cluster_state}"
+          exit 1
+      fi
+    timeout: 600
+
+

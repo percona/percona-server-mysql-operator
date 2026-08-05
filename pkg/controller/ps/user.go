@@ -5,7 +5,9 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"net"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -83,6 +85,82 @@ func (r *PerconaServerMySQLReconciler) ensureUserSecrets(ctx context.Context, cr
 	return userSecret, nil
 }
 
+func mysqlURI(user, pass, host, port string) string {
+	var u url.URL
+
+	u.User = url.UserPassword(user, pass)
+	u.Scheme = "mysql"
+	u.Host = host
+	if port != "" {
+		u.Host = net.JoinHostPort(host, port)
+	}
+	return u.String()
+}
+
+func (r *PerconaServerMySQLReconciler) ensureClusterUserSecret(ctx context.Context, cr *apiv1.PerconaServerMySQL, userSecret *corev1.Secret) error {
+	clusterUser := string(apiv1.UserRoot)
+	clusterPass := userSecret.Data[clusterUser]
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Name + "-psuser-" + clusterUser,
+			Namespace: cr.Namespace,
+		},
+	}
+
+	mysqlHost := mysqlPrimaryHost(ctx, cr, true)
+	mysqlPort := strconv.Itoa(mysql.DefaultPort)
+	mysqlURIStr := mysqlURI(clusterUser, string(clusterPass), mysqlHost, mysqlPort)
+
+	secret.Data = map[string][]byte{
+		"host":     []byte(mysqlHost),
+		"port":     []byte(mysqlPort),
+		"user":     []byte(clusterUser),
+		"password": clusterPass,
+		"uri":      []byte(mysqlURIStr),
+	}
+
+	proxyHost := proxyHost(ctx, cr, true)
+	proxyPort := proxyServicePort(cr)
+	proxyReadOnlyPort := proxyServicePortReadOnly(cr)
+	if proxyHost != "" {
+		proxyURI := mysqlURI(clusterUser, string(clusterPass), proxyHost, proxyPort)
+
+		secret.Data["proxy-host"] = []byte(proxyHost)
+		secret.Data["proxy-port"] = []byte(proxyPort)
+		secret.Data["proxy-uri"] = []byte(proxyURI)
+
+		proxyReadOnlyURI := mysqlURI(clusterUser, string(clusterPass), proxyHost, proxyReadOnlyPort)
+		secret.Data["proxy-readonly-host"] = []byte(proxyHost)
+		secret.Data["proxy-readonly-port"] = []byte(proxyReadOnlyPort)
+		secret.Data["proxy-readonly-uri"] = []byte(proxyReadOnlyURI)
+	}
+
+	lbHost, err := loadBalancerHost(ctx, r.Client, cr)
+	if err != nil {
+		return errors.Wrap(err, "load balancer host")
+	}
+	if lbHost != "" {
+		lbURI := mysqlURI(clusterUser, string(clusterPass), lbHost, proxyPort)
+		secret.Data["proxy-external-host"] = []byte(lbHost)
+		secret.Data["proxy-external-port"] = []byte(proxyPort)
+		secret.Data["proxy-external-uri"] = []byte(lbURI)
+
+		lbReadOnlyURI := mysqlURI(clusterUser, string(clusterPass), lbHost, proxyReadOnlyPort)
+		secret.Data["proxy-readonly-external-host"] = []byte(lbHost)
+		secret.Data["proxy-readonly-external-port"] = []byte(proxyReadOnlyPort)
+		secret.Data["proxy-readonly-external-uri"] = []byte(lbReadOnlyURI)
+	}
+
+	secret.Labels = util.SSMapMerge(cr.GlobalLabels(), mysql.MatchLabels(cr))
+	secret.Annotations = util.SSMapMerge(cr.GlobalAnnotations())
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, nil, secret, r.Scheme); err != nil {
+		return errors.Wrap(err, "ensure root user secret")
+	}
+
+	return nil
+}
+
 func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) error {
 	log := logf.FromContext(ctx).WithName("reconcileUsers")
 
@@ -152,7 +230,6 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 			}
 		}
 
-		log.V(1).Info("Secret data is up to date")
 		return nil
 	}
 

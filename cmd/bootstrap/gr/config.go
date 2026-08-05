@@ -27,6 +27,14 @@ func (o *createClusterOpts) String() string {
 	)
 }
 
+type configureInstanceOpts struct {
+	applierWorkerThreads int32
+}
+
+func (o *configureInstanceOpts) String() string {
+	return fmt.Sprintf(`{"applierWorkerThreads": %d}`, o.applierWorkerThreads)
+}
+
 func setMultiPrimary(opts *createClusterOpts, myCnf *ini.Section) error {
 	option := "group_replication_single_primary_mode"
 
@@ -104,6 +112,46 @@ func getCreateClusterOpts(myCnf *ini.Section) (*createClusterOpts, error) {
 
 	if err := setCommunicationStack(opts, myCnf); err != nil {
 		return opts, errors.Wrap(err, "communicationStack")
+	}
+
+	return opts, nil
+}
+
+func setApplierWorkThreads(opts *configureInstanceOpts, myCnf *ini.Section) error {
+	option := "replica_parallel_workers"
+
+	value, err := config.GetKeyValue(myCnf, option)
+	if err != nil {
+		return errors.Wrapf(err, "get %s", option)
+	}
+
+	value = strings.TrimSpace(value)
+	if value == "" {
+		// keep defaults
+		return nil
+	}
+
+	workers, err := strconv.ParseInt(value, 10, 32)
+	if err != nil {
+		return errors.Wrapf(err, "parse value %q", value)
+	}
+
+	opts.applierWorkerThreads = int32(workers)
+
+	return nil
+}
+
+func getConfigureInstanceOpts(myCnf *ini.Section) (*configureInstanceOpts, error) {
+	opts := &configureInstanceOpts{
+		applierWorkerThreads: 4,
+	}
+
+	if myCnf == nil {
+		return opts, nil
+	}
+
+	if err := setApplierWorkThreads(opts, myCnf); err != nil {
+		return opts, errors.Wrap(err, "applierWorkerThreads")
 	}
 
 	return opts, nil

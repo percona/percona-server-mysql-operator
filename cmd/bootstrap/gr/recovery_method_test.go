@@ -10,11 +10,12 @@ import (
 )
 
 type mockSQLRunner struct {
-	gtidExecuted string
-	gtidPurged   string
-	subtract     map[[2]string]string
-	intersect    map[[2]string]string
-	isSubset     map[[2]string]bool
+	gtidExecuted   string
+	gtidPurged     string
+	cloneThreshold uint64
+	subtract       map[[2]string]string
+	intersect      map[[2]string]string
+	isSubset       map[[2]string]bool
 }
 
 func newMockSQLRunner() *mockSQLRunner {
@@ -55,6 +56,10 @@ func (m *mockSQLRunner) isPurgedSubsetOfExecuted(ctx context.Context, purged, ex
 		return false, errors.Errorf("unexpected isPurgedSubsetOfExecuted(%q, %q)", purged, executed)
 	}
 	return v, nil
+}
+
+func (m *mockSQLRunner) getCloneThreshold(ctx context.Context) (uint64, error) {
+	return m.cloneThreshold, nil
 }
 
 func (m *mockSQLRunner) setGTIDSubtractResponse(a, b, result string) {
@@ -348,5 +353,127 @@ func TestCheckReplicaState_Diverged_Contained(t *testing.T) {
 	}
 	if result != innodbcluster.ReplicaGtidDiverged {
 		t.Errorf("expected ReplicaGtidDiverged, got %v", result)
+	}
+}
+
+func TestCloneThresholdExceeded(t *testing.T) {
+	tests := []struct {
+		name            string
+		primaryExecuted string
+		replicaExecuted string
+		threshold       uint64
+		// missing is the GTID set returned by GTID_SUBTRACT on the primary; it
+		// is only consulted when both primary and replica have executed GTIDs.
+		missing string
+		want    bool
+	}{
+		{
+			name:            "primary empty - nothing missing",
+			primaryExecuted: "",
+			replicaExecuted: "aaaa:1-5",
+			threshold:       0,
+			want:            false,
+		},
+		{
+			name:            "replica empty - all primary transactions missing, exceeds",
+			primaryExecuted: "aaaa:1-10",
+			replicaExecuted: "",
+			threshold:       5,
+			want:            true,
+		},
+		{
+			name:            "replica empty - all primary transactions missing, within threshold",
+			primaryExecuted: "aaaa:1-3",
+			replicaExecuted: "",
+			threshold:       5,
+			want:            false,
+		},
+		{
+			name:            "gap exceeds threshold",
+			primaryExecuted: "aaaa:1-20",
+			replicaExecuted: "aaaa:1-5",
+			threshold:       10,
+			missing:         "aaaa:6-20", // 15 transactions
+			want:            true,
+		},
+		{
+			name:            "gap within threshold",
+			primaryExecuted: "aaaa:1-8",
+			replicaExecuted: "aaaa:1-5",
+			threshold:       10,
+			missing:         "aaaa:6-8", // 3 transactions
+			want:            false,
+		},
+		{
+			name:            "gap equals threshold - not exceeded (strictly greater)",
+			primaryExecuted: "aaaa:1-10",
+			replicaExecuted: "aaaa:1-5",
+			threshold:       5,
+			missing:         "aaaa:6-10", // 5 transactions
+			want:            false,
+		},
+		{
+			name:            "gap one more than threshold - exceeded",
+			primaryExecuted: "aaaa:1-11",
+			replicaExecuted: "aaaa:1-5",
+			threshold:       5,
+			missing:         "aaaa:6-11", // 6 transactions
+			want:            true,
+		},
+		{
+			name:            "no missing transactions",
+			primaryExecuted: "aaaa:1-5",
+			replicaExecuted: "aaaa:1-5",
+			threshold:       0,
+			missing:         "",
+			want:            false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			primary := newMockSQLRunnerWithGTIDs(tt.primaryExecuted, "")
+			replica := newMockSQLRunnerWithGTIDs(tt.replicaExecuted, "")
+			replica.cloneThreshold = tt.threshold
+
+			// Only the both-non-empty branch performs a GTID_SUBTRACT.
+			if tt.primaryExecuted != "" && tt.replicaExecuted != "" {
+				primary.setGTIDSubtractResponse(tt.primaryExecuted, tt.replicaExecuted, tt.missing)
+			}
+
+			got, err := cloneThresholdExceeded(ctx, primary, replica)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("cloneThresholdExceeded() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCountGTIDs(t *testing.T) {
+	tests := []struct {
+		name string
+		set  string
+		want uint64
+	}{
+		{"empty", "", 0},
+		{"single transaction", "3E11FA47-71CA-11E1-9E33-C80AA9429562:1", 1},
+		{"range", "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-10", 10},
+		{"multiple intervals", "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-5:8-10", 8},
+		{"multiple uuids", "aaaa:1-5,bbbb:1-3", 8},
+		{"tagged gtid (8.4)", "3E11FA47-71CA-11E1-9E33-C80AA9429562:mytag:1-5", 5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := countGTIDs(tt.set)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("countGTIDs(%q) = %d, want %d", tt.set, got, tt.want)
+			}
+		})
 	}
 }

@@ -1,0 +1,25 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 300
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # After switchover, dc1 becomes replica and all nodes have super_read_only=1.
+      # The ConfigMap file indicating that it is a clusterset replica may not yet be propagated to the pods.
+      # During that window we will have failing connections. We sleep for 90s to let the backends reconcile.
+      sleep 40
+
+      cluster_name="gr-cross-cluster-backup-dc1"
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
+
+      for i in 0 1 2; do
+          data=$(retry 3 5 run_mysql "SELECT * FROM myDB.myTable" "-h ${cluster_name}-mysql-${i}.${cluster_name}-mysql" "${mysql_user}")
+          kubectl create configmap -n "${NAMESPACE}" 16-read-data-dc1-${i} --from-literal=data="${data}"
+      done
+
+      data=$(retry 3 5 run_mysql "SELECT * FROM myDB.myTable" "-h $(get_haproxy_svc "${cluster_name}")" "${mysql_user}")
+      kubectl create configmap -n "${NAMESPACE}" 16-read-data-dc1-haproxy --from-literal=data="${data}"

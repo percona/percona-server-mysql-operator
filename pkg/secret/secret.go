@@ -62,20 +62,19 @@ const (
 )
 
 func SystemUsers(cr *apiv1.PerconaServerMySQL) []apiv1.SystemUser {
-	result := []apiv1.SystemUser{
-		apiv1.UserHeartbeat,
-		apiv1.UserMonitor,
-		apiv1.UserOperator,
-		apiv1.UserOrchestrator,
-		apiv1.UserRoot,
-		apiv1.UserXtraBackup,
-		apiv1.UserReplication,
+	all := apiv1.AllSystemUsers()
+	result := make([]apiv1.SystemUser, 0, len(all))
+	for _, u := range all {
+		switch u {
+		case apiv1.UserPMMServerToken:
+			continue
+		case apiv1.UserClusterSet:
+			if cr.CompareVersion("1.2.0") < 0 {
+				continue
+			}
+		}
+		result = append(result, u)
 	}
-
-	if cr.CompareVersion("1.2.0") >= 0 {
-		result = append(result, apiv1.UserClusterSet)
-	}
-
 	return result
 }
 

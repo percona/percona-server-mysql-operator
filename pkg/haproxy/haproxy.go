@@ -58,6 +58,18 @@ func PodName(cr *apiv1.PerconaServerMySQL, idx int) string {
 	return fmt.Sprintf("%s-%d", Name(cr), idx)
 }
 
+func ServicePort() int {
+	return PortMySQL
+}
+
+func ServicePortReplicas() int {
+	return PortMySQLReplicas
+}
+
+func ServiceFQDN(cr *apiv1.PerconaServerMySQL) string {
+	return ServiceName(cr) + "." + cr.Namespace
+}
+
 func Service(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) *corev1.Service {
 	expose := cr.Spec.Proxy.HAProxy.Expose
 
@@ -290,7 +302,8 @@ func containers(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret) []corev1.Co
 			cr,
 			secret,
 			AppName,
-			"--listen-port="+strconv.Itoa(PortPMMStats))
+			"--listen-port="+strconv.Itoa(PortPMMStats),
+		)
 		pmmC.Ports = append(pmmC.Ports, corev1.ContainerPort{ContainerPort: PortPMMStats})
 
 		containers = append(containers, pmmC)

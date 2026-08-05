@@ -58,7 +58,7 @@ get_keyring_arg() {
 		if [[ ${XTRABACKUP_VERSION} == "8.0" ]]; then
 			echo "Using keyring vault config: ${KEYRING_VAULT_PATH}" >&2
 			keyring="--keyring-vault-config=${KEYRING_VAULT_PATH}"
-		elif [[ ${XTRABACKUP_VERSION} == "8.4" ]]; then
+		elif [[ ${XTRABACKUP_VERSION} == "8.4" || ${XTRABACKUP_VERSION} == 9.* ]]; then
 			cp "${KEYRING_VAULT_PATH}" /tmp/component_keyring_vault.cnf
 			echo "Using keyring vault component: /tmp/component_keyring_vault.cnf" >&2
 			keyring="--component-keyring-config=/tmp/component_keyring_vault.cnf"

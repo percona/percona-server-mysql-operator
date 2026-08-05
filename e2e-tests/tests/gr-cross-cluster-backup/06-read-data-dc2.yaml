@@ -1,0 +1,16 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 120
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name="gr-cross-cluster-backup-dc2"
+      mysql_user="-uroot -p'$(get_user_pass root test-secrets)'"
+      host="${cluster_name}-mysql-0.${cluster_name}-mysql"
+      
+      data=$(retry 10 5 run_mysql "SELECT * FROM myDB.myTable" "-h ${host}" "${mysql_user}")
+      kubectl create configmap -n "${NAMESPACE}" 06-read-data-dc2-0 --from-literal=data="${data}"

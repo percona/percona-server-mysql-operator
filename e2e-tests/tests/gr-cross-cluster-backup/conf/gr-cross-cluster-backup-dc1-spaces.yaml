@@ -1,0 +1,20 @@
+apiVersion: ps.percona.com/v1
+kind: PerconaServerMySQL
+metadata:
+  name: gr-cross-cluster-backup-dc1
+spec:
+  backup:
+    backoffLimit: 3
+    storages:
+      spaces:
+        type: s3
+        s3:
+          bucket: "operator-testing"
+          credentialsSecret: do-spaces-secret
+          endpointUrl: https://ams3.digitaloceanspaces.com
+          region: ams3
+          prefix: ps/gr-cross-cluster-backup-dc1
+        containerOptions:
+          env:
+            - name: VERIFY_TLS
+              value: "true"
