@@ -307,7 +307,7 @@ func isPrimaryWritable(ctx context.Context, primaryIp string) (bool, error) {
 	if err != nil {
 		return false, errors.Wrapf(err, "connect to primary %s", primaryIp)
 	}
-	defer primaryDB.Close()
+	defer func() { _ = primaryDB.Close() }()
 
 	readOnly, err := primaryDB.IsReadonly(ctx)
 	if err != nil {
@@ -343,7 +343,7 @@ func errantGTIDs(ctx context.Context, localDB *database.DB, primaryIp string) (s
 	if err != nil {
 		return "", errors.Wrapf(err, "connect to primary %s", primaryIp)
 	}
-	defer primaryDB.Close()
+	defer func() { _ = primaryDB.Close() }()
 
 	primaryGTIDs, err := primaryDB.GetGTIDExecuted(ctx)
 	if err != nil {

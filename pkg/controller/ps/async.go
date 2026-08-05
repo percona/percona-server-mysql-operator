@@ -153,10 +153,10 @@ func (r *PerconaServerMySQLReconciler) reconcileQuarantinedMembers(
 					Namespace: cr.Namespace,
 				},
 			}
-			if err := r.Client.Delete(ctx, pvc); client.IgnoreNotFound(err) != nil {
+			if err := r.Delete(ctx, pvc); client.IgnoreNotFound(err) != nil {
 				return errors.Wrapf(err, "delete PVC %s", pvc.Name)
 			}
-			if err := r.Client.Delete(ctx, pod); client.IgnoreNotFound(err) != nil {
+			if err := r.Delete(ctx, pod); client.IgnoreNotFound(err) != nil {
 				return errors.Wrapf(err, "delete pod %s", pod.Name)
 			}
 
@@ -357,10 +357,10 @@ func (r *PerconaServerMySQLReconciler) handleErrantTransactions(
 				Namespace: cr.Namespace,
 			},
 		}
-		if err := r.Client.Delete(ctx, pvc); client.IgnoreNotFound(err) != nil {
+		if err := r.Delete(ctx, pvc); client.IgnoreNotFound(err) != nil {
 			return errors.Wrapf(err, "delete PVC %s", pvc.Name)
 		}
-		if err := r.Client.Delete(ctx, mysqlPod); client.IgnoreNotFound(err) != nil {
+		if err := r.Delete(ctx, mysqlPod); client.IgnoreNotFound(err) != nil {
 			return errors.Wrapf(err, "delete pod %s", mysqlPod.Name)
 		}
 
