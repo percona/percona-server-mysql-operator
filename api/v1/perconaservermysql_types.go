@@ -921,13 +921,16 @@ type UserSecretKeySelector struct {
 type User struct {
 	// Name of the user to be created.
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern="^[^`'\\\\]*$"
 	Name string `json:"name"`
 	// PasswordSecretRef is a reference to the Secret that holds this user's password.
 	// +kubebuilder:validation:Optional
 	PasswordSecretRef *UserSecretKeySelector `json:"passwordSecretRef,omitempty"`
 	// DBs is a list of databases that the user has access to. If empty, the user will have access to all databases.
+	// +kubebuilder:validation:items:Pattern="^[^`'\\\\]*$"
 	DBs []string `json:"dbs,omitempty"`
 	// Hosts is a list of hosts that the user can connect from. If empty, the user will be able to connect from any host.
+	// +kubebuilder:validation:items:Pattern="^[^`'\\\\]*$"
 	Hosts []string `json:"hosts,omitempty"`
 	// Grants is a list of grants that the user has. If empty, the user will have all privileges.
 	Grants []string `json:"grants,omitempty"`

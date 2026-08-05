@@ -14423,6 +14423,7 @@ spec:
                   properties:
                     dbs:
                       items:
+                        pattern: ^[^`'\\]*$
                         type: string
                       type: array
                     grants:
@@ -14431,9 +14432,11 @@ spec:
                       type: array
                     hosts:
                       items:
+                        pattern: ^[^`'\\]*$
                         type: string
                       type: array
                     name:
+                      pattern: ^[^`'\\]*$
                       type: string
                     passwordSecretRef:
                       properties:
