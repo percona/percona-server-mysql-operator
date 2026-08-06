@@ -72,6 +72,10 @@ func SystemUsers(cr *apiv1.PerconaServerMySQL) []apiv1.SystemUser {
 			if cr.CompareVersion("1.2.0") < 0 {
 				continue
 			}
+		case apiv1.UserConfigurator:
+			if cr.CompareVersion("1.3.0") < 0 {
+				continue
+			}
 		}
 		result = append(result, u)
 	}

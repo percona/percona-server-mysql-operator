@@ -1081,6 +1081,115 @@ get_router_pods() {
 	kubectl get pod -n "${NAMESPACE}" --no-headers --selector=app.kubernetes.io/name=router | awk '{print $1}'
 }
 
+mysql_pod_selector() {
+	local cluster_name=$1
+
+	echo "app.kubernetes.io/instance=${cluster_name},app.kubernetes.io/name=mysql"
+}
+
+get_mysql_pod_names() {
+	local cluster_name=$1
+
+	kubectl get pod -n "${NAMESPACE}" --selector="$(mysql_pod_selector "${cluster_name}")" \
+		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.name}'
+}
+
+get_mysql_pod_uids() {
+	local cluster_name=$1
+
+	kubectl get pod -n "${NAMESPACE}" --selector="$(mysql_pod_selector "${cluster_name}")" \
+		--sort-by=.metadata.name -o jsonpath='{.items[*].metadata.uid}'
+}
+
+# Prints the global value of a MySQL variable from every database pod of the
+# given cluster, in pod name order, space separated. Pods that cannot be queried
+# print "unavailable" so that callers can keep polling through a rolling restart.
+get_mysql_variable_on_pods() {
+	local cluster_name=$1
+	local variable=$2
+	local values=()
+
+	for pod in $(get_mysql_pod_names "${cluster_name}"); do
+		values+=("$(kubectl -n "${NAMESPACE}" exec "${pod}" -c mysql -- bash -c \
+			'mysql -uroot -p"$(cat /etc/mysql/mysql-users-secret/root)" -NB -e "SELECT @@global.'"${variable}"'"' \
+			2>/dev/null || echo 'unavailable')")
+	done
+
+	echo "${values[*]}"
+}
+
+all_pods_have_mysql_variable() {
+	local cluster_name=$1
+	local variable=$2
+	local expected=$3
+	local value
+
+	for value in $(get_mysql_variable_on_pods "${cluster_name}" "${variable}"); do
+		if [[ ${value} != "${expected}" ]]; then
+			return 1
+		fi
+	done
+}
+
+wait_for_mysql_variable() {
+	local cluster_name=$1
+	local variable=$2
+	local expected=$3
+	local timeout=${4:-300}
+	local elapsed=0
+
+	until all_pods_have_mysql_variable "${cluster_name}" "${variable}" "${expected}"; do
+		if ((elapsed >= timeout)); then
+			echo "Timeout (${timeout}s) exceeded while waiting for ${variable}=${expected} on all ${cluster_name} mysql pods"
+			echo "current values: $(get_mysql_variable_on_pods "${cluster_name}" "${variable}")"
+			return 1
+		fi
+		echo "waiting for ${variable}=${expected} on all ${cluster_name} mysql pods"
+		sleep 5
+		elapsed=$((elapsed + 5))
+	done
+}
+
+# Waits until every database pod of the given cluster has been replaced,
+# comparing against a UID list captured with get_mysql_pod_uids before the
+# change that should restart them.
+wait_for_mysql_pods_restart() {
+	local cluster_name=$1
+	local uids_before=$2
+	local timeout=${3:-600}
+	local elapsed=0
+	local expected_count=$(echo "${uids_before}" | wc -w)
+
+	while :; do
+		local uids_now=$(get_mysql_pod_uids "${cluster_name}")
+		local replaced=true
+		local uid
+
+		if [[ $(echo "${uids_now}" | wc -w) -ne ${expected_count} ]]; then
+			replaced=false
+		else
+			for uid in ${uids_now}; do
+				if [[ " ${uids_before} " == *" ${uid} "* ]]; then
+					replaced=false
+				fi
+			done
+		fi
+
+		if [[ ${replaced} == true ]]; then
+			return 0
+		fi
+		if ((elapsed >= timeout)); then
+			echo "Timeout (${timeout}s) exceeded while waiting for ${cluster_name} mysql pods to be replaced"
+			echo "uids before: ${uids_before}"
+			echo "uids now:    ${uids_now}"
+			return 1
+		fi
+		echo "waiting for ${cluster_name} mysql pods to be replaced"
+		sleep 10
+		elapsed=$((elapsed + 10))
+	done
+}
+
 get_mysql_users() {
 	local host=$1
 	local user="${2:--uroot -p'$(get_user_pass root)'}"
