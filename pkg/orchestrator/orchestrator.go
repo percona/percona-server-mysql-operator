@@ -605,7 +605,7 @@ func ConfigMapData(cr *apiv1.PerconaServerMySQL) (string, error) {
 func RBAC(cr *apiv1.PerconaServerMySQL) (*rbacv1.Role, *rbacv1.RoleBinding, *corev1.ServiceAccount) {
 	meta := metav1.ObjectMeta{
 		Namespace:   cr.Namespace,
-		Name:        "percona-server-mysql-operator-orchestrator",
+		Name:        cr.Spec.Orchestrator.ServiceAccountName,
 		Labels:      cr.GlobalLabels(),
 		Annotations: cr.GlobalAnnotations(),
 	}
