@@ -159,6 +159,19 @@ func EnsureObject(
 		return nil
 	}
 
+	// Copy server-populated metadata from the existing object to the desired
+	// object so that the debug diff only shows meaningful changes
+	o.SetResourceVersion(oldObject.GetResourceVersion())
+	o.SetUID(oldObject.GetUID())
+	o.SetCreationTimestamp(oldObject.GetCreationTimestamp())
+	o.SetManagedFields(oldObject.GetManagedFields())
+	o.GetObjectKind().SetGroupVersionKind(oldObject.GetObjectKind().GroupVersionKind())
+	if oldSecret, ok := oldObject.(*corev1.Secret); ok {
+		if newSecret, ok := o.(*corev1.Secret); ok && newSecret.Type == "" {
+			newSecret.Type = oldSecret.Type
+		}
+	}
+
 	log.V(1).Info("Updating object", "kind", o.GetObjectKind(), "name", o.GetName())
 	if util.IsLogLevelVerbose() && !util.IsLogStructured() {
 		fmt.Println(cmp.Diff(oldObject, o))
