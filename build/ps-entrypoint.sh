@@ -168,7 +168,26 @@ add_encryption_options() {
 }
 
 create_default_cnf() {
-	POD_IP=$(hostname -I | awk '{print $1}')
+	# hostname -I can list a node-local RFC 3927 link-local address (the
+	# full range is 169.254.0.0/16), assigned by some CNI plugins - such as
+	# the AWS VPC CNI's IPv6-cluster egress-NAT helper, which uses
+	# 169.254.172.0/22 specifically - for outbound-only traffic, ahead of
+	# the pod's real routable address. That address is not reachable from
+	# other pods, so using it here breaks admin-address for anything that
+	# needs to reach it (e.g. haproxy's backend healthchecks). Excludes the
+	# whole 169.254.0.0/16 range by default (overridable via
+	# POD_IP_EXCLUDE_REGEX, a grep -E pattern, if a narrower exclusion is
+	# ever needed) since other CNIs may assign non-routable addresses
+	# anywhere in that range, not just AWS's specific /22. Falls back to
+	# the original unfiltered first address if every candidate gets
+	# excluded, so a host with nothing but link-local addresses doesn't
+	# leave POD_IP empty - and the `|| true` keeps that fallback from
+	# being skipped by `set -eo pipefail` above when grep finds no match.
+	POD_IP_EXCLUDE_REGEX="${POD_IP_EXCLUDE_REGEX:-^169\.254\.}"
+	POD_IP=$(hostname -I | tr ' ' '\n' | grep -v -E "$POD_IP_EXCLUDE_REGEX" | head -n1 || true)
+	if [ -z "$POD_IP" ]; then
+		POD_IP=$(hostname -I | awk '{print $1}')
+	fi
 
 	if [[ ${HOSTNAME} =~ "-xb-" ]]; then
 		FQDN=${HOSTNAME}
