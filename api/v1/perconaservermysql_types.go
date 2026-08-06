@@ -872,6 +872,7 @@ func (s StatefulAppState) String() string {
 }
 
 const (
+	StateNew          StatefulAppState = ""
 	StateInitializing StatefulAppState = "initializing"
 	StateStopping     StatefulAppState = "stopping"
 	StatePaused       StatefulAppState = "paused"
@@ -967,6 +968,7 @@ const (
 	UserRoot           SystemUser = "root"
 	UserXtraBackup     SystemUser = "xtrabackup"
 	UserClusterSet     SystemUser = "clusterset"
+	UserConfigurator   SystemUser = "configurator"
 )
 
 // systemUsers is the canonical, ordered list of every SystemUser value.
@@ -983,6 +985,7 @@ var systemUsers = []SystemUser{
 	UserRoot,
 	UserXtraBackup,
 	UserClusterSet,
+	UserConfigurator,
 }
 
 // knownSystemUsers is the closed set of SystemUser values. Callers that join

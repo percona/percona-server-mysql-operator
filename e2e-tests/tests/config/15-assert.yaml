@@ -5,7 +5,7 @@ timeout: 120
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: 11-check-orchestrator-config-0
+  name: 15-check-orchestrator-config-0
 data:
   fail_master_promotion_on_lag_minutes: "30"
   recovery_period_block_seconds: "300"
@@ -13,7 +13,7 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: 11-check-orchestrator-config-1
+  name: 15-check-orchestrator-config-1
 data:
   fail_master_promotion_on_lag_minutes: "30"
   recovery_period_block_seconds: "300"
@@ -21,7 +21,7 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: 11-check-orchestrator-config-2
+  name: 15-check-orchestrator-config-2
 data:
   fail_master_promotion_on_lag_minutes: "30"
   recovery_period_block_seconds: "300"

@@ -11,3 +11,6 @@ commands:
       kubectl -n "${NAMESPACE}" patch ps "$(get_cluster_name)" \
           --type merge \
           -p '{"spec": {"mysql": {"configuration": "max_connections=250"}}}'
+
+      # Wait 10s, no restart should be triggered
+      sleep 10
