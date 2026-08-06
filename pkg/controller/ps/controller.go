@@ -49,13 +49,13 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	database "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -1356,16 +1356,19 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 			log.Info("mysql is not ready, bad connection. skip")
 			return nil
 		case errors.Is(err, orchestrator.ErrNoSuchHost):
-			log.Info("mysql is not ready, host not found. skip")
-			return nil
+			// An unready or just-removed member fails discovery; the repair
+			// and forget logic below is what resolves these states, so
+			// continue instead of returning.
+			log.Info("discovery failed: host not found (a member may be unready or removed), continuing with known topology")
 		case errors.Is(err, orchestrator.ErrTimeout):
 			log.Info("mysql is not ready, connection timeout. skip")
 			return nil
 		case errors.Is(err, orchestrator.ErrContainerNotFound):
 			log.Info("orchestrator is not ready, container not found. skip")
 			return nil
+		default:
+			return errors.Wrap(err, "failed to discover cluster")
 		}
-		return errors.Wrap(err, "failed to discover cluster")
 	}
 
 	primary, err := orchestrator.ClusterPrimary(ctx, r.ClientCmd, pod, cr.ClusterHint())
@@ -1412,6 +1415,14 @@ func (r *PerconaServerMySQLReconciler) reconcileReplication(ctx context.Context,
 				return errors.Wrapf(err, "forget replica %s", instance.Alias)
 			}
 		}
+	}
+
+	if err := r.repairBrokenReplicas(ctx, cr, pod, primary, clusterInstances); err != nil {
+		return errors.Wrap(err, "repair broken replicas")
+	}
+
+	if err := r.reconcileQuarantinedMembers(ctx, cr, primary); err != nil {
+		return errors.Wrap(err, "reconcile quarantined members")
 	}
 
 	return nil

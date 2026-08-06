@@ -71,6 +71,26 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 		return nil
 	}
 
+	// Pods that are both unready and on an outdated revision can only be
+	// fixed by recreating them; waiting for them deadlocks the rollout
+	// (https://github.com/kubernetes/kubernetes/issues/67250). Unready pods
+	// already on the update revision are converging and must not be deleted.
+	for _, pod := range pods.Items {
+		pod := pod
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
+		if k8s.IsPodReady(pod) || pod.Labels[controllerRevisionHash] == sts.Status.UpdateRevision {
+			continue
+		}
+
+		log.Info("Pod is unready and outdated, recreating it with the updated template", "pod", pod.Name)
+		if err := r.Delete(ctx, &pod); err != nil {
+			return errors.Wrapf(err, "delete outdated pod %s", pod.Name)
+		}
+		return nil
+	}
+
 	if currentSet.Status.ReadyReplicas < currentSet.Status.Replicas {
 		log.Info("Can't start/continue 'SmartUpdate': waiting for all replicas to be ready")
 		return nil

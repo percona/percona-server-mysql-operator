@@ -1,0 +1,13 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 30
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # Switch policy before forging the next errant txn, so it isn't rebuilt away.
+      kubectl -n "${NAMESPACE}" patch ps "${test_name}" --type=merge \
+          -p '{"spec":{"mysql":{"errantTransactionsPolicy":"inject-empty"}}}'

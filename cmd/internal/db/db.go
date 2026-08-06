@@ -116,6 +116,7 @@ func (d *DB) StartReplication(ctx context.Context, host, replicaPass string, por
                 SOURCE_HOST=?,
                 SOURCE_PORT=?,
                 SOURCE_SSL=1,
+                GET_SOURCE_PUBLIC_KEY=1,
                 SOURCE_CONNECTION_AUTO_FAILOVER=1,
                 SOURCE_AUTO_POSITION=1,
                 SOURCE_RETRY_COUNT=?,
@@ -165,7 +166,8 @@ func (d *DB) ReplicationStatus(ctx context.Context) (db.ReplicationStatus, strin
 		return db.ReplicationStatusActive, host, nil
 	}
 
-	return db.ReplicationStatusStopped, "", nil
+	// A stopped channel still knows its source.
+	return db.ReplicationStatusStopped, host, nil
 }
 
 func (d *DB) IsReplica(ctx context.Context) (bool, error) {
@@ -410,4 +412,11 @@ func (d *DB) GetGTIDExecuted(ctx context.Context) (string, error) {
 	var gtid string
 	err := d.db.QueryRowContext(ctx, "SELECT @@GTID_EXECUTED").Scan(&gtid)
 	return gtid, errors.Wrap(err, "get GTID_EXECUTED")
+}
+
+// GTIDSubtract returns the GTIDs in set a that are not in set b.
+func (d *DB) GTIDSubtract(ctx context.Context, a, b string) (string, error) {
+	var diff string
+	err := d.db.QueryRowContext(ctx, "SELECT GTID_SUBTRACT(?, ?)", a, b).Scan(&diff)
+	return diff, errors.Wrap(err, "gtid_subtract")
 }

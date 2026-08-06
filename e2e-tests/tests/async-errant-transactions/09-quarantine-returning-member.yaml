@@ -1,0 +1,31 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 300
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster="${test_name}"
+
+      kubectl -n "${NAMESPACE}" patch ps "${cluster}" --type=merge \
+          -p '{"spec":{"mysql":{"errantTransactionsPolicy":"manual"}}}'
+
+      wait_cluster_consistency_async "${cluster}" "3" "3"
+      replica_pod="$(find_async_replica "${cluster}")"
+      replica_fqdn="${replica_pod}.${cluster}-mysql.${NAMESPACE}"
+      echo "breaking returning member=${replica_pod}"
+
+      # Forge an errant txn then restart the member. With skip-replica-start=ON it
+      # comes back with replication stopped and errant GTIDs vs the primary, so the
+      # bootstrap quarantines it -- the same path a failed-over old primary hits
+      # when it returns holding writes that never replicated.
+      run_mysql \
+          "SET GLOBAL super_read_only=0;
+           CREATE DATABASE IF NOT EXISTS errant_quarantine_db;
+           SET GLOBAL super_read_only=1;" \
+          "-h ${replica_fqdn} -P3306"
+
+      kubectl -n "${NAMESPACE}" delete pod "${replica_pod}"
