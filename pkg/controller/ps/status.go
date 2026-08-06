@@ -53,10 +53,11 @@ func (r *PerconaServerMySQLReconciler) reconcileCRStatus(ctx context.Context, cr
 		}
 		return writeStatus(ctx, r.Client, client.ObjectKeyFromObject(cr), func(status *apiv1.PerconaServerMySQLStatus) error {
 			clusterCondition := metav1.Condition{
-				Status:  metav1.ConditionTrue,
-				Type:    apiv1.StateError.String(),
-				Message: reconcileErr.Error(),
-				Reason:  naming.ConditionReasonErrorReconcile,
+				Status:             metav1.ConditionTrue,
+				Type:               apiv1.StateError.String(),
+				Message:            reconcileErr.Error(),
+				Reason:             naming.ConditionReasonErrorReconcile,
+				ObservedGeneration: cr.Generation,
 			}
 
 			meta.SetStatusCondition(&status.Conditions, clusterCondition)
