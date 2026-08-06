@@ -350,6 +350,7 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 		file_env 'XTRABACKUP_PASSWORD' '' 'xtrabackup'
 		file_env 'HEARTBEAT_PASSWORD' '' 'heartbeat'
 		file_env 'CLUSTERSET_PASSWORD' '' 'clusterset'
+		file_env 'CONFIGURATOR_PASSWORD' '' 'configurator'
 
 		read -r -d '' monitorConnectGrant <<-EOSQL || true
 			GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
@@ -368,6 +369,15 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 			EOSQL
 		fi
 
+		configuratorCreate=
+		if [ -n "$CONFIGURATOR_PASSWORD" ]; then
+			read -r -d '' configuratorCreate <<-EOSQL || true
+				CREATE USER 'configurator'@'%' IDENTIFIED BY '$(escape_special "${CONFIGURATOR_PASSWORD}")' PASSWORD EXPIRE NEVER;
+				GRANT SYSTEM_VARIABLES_ADMIN, SYSTEM_USER ON *.* TO 'configurator'@'%';
+				GRANT SELECT ON performance_schema.global_variables TO 'configurator'@'%';
+			EOSQL
+		fi
+
 		"${mysql[@]}" <<-EOSQL
 			-- What's done in this file shouldn't be replicated
 			--  or products like mysql-fabric won't work
@@ -383,6 +393,8 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 			GRANT ALL ON *.* TO 'operator'@'${MYSQL_ROOT_HOST}' WITH GRANT OPTION ;
 
 			${clustersetCreate}
+
+			${configuratorCreate}
 
 			CREATE USER 'xtrabackup'@'localhost' IDENTIFIED BY '$(escape_special "${XTRABACKUP_PASSWORD}")' PASSWORD EXPIRE NEVER;
 			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';

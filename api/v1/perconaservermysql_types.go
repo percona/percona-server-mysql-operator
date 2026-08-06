@@ -54,17 +54,17 @@ const (
 
 // PerconaServerMySQLSpec defines the desired state of PerconaServerMySQL
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.orchestrator || self.orchestrator.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'orchestrator.enabled' must be true unless 'unsafeFlags.orchestrator' is enabled"
-// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.proxy || self.proxy.haproxy.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.haproxy.enabled' must be true unless 'unsafeFlags.proxy' is enabled"
-// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.proxy.router == null || !has(self.proxy.router.enabled) || !self.proxy.router.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.router.enabled' must be disabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || self.unsafeFlags.proxy || (has(self.proxy.haproxy) && self.proxy.haproxy.enabled)",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.haproxy.enabled' must be true unless 'unsafeFlags.proxy' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async') || !has(self.proxy.router) || !has(self.proxy.router.enabled) || !self.proxy.router.enabled",message="Invalid configuration: When 'mysql.clusterType' is set to 'async', 'proxy.router.enabled' must be disabled"
 // +kubebuilder:validation:XValidation:rule="!(has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize",message="Invalid configuration: Scaling MySQL replicas below 3 requires 'unsafeFlags.mysqlSize: true'"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size >= 9) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', scaling MySQL replicas above 9 requires 'unsafeFlags.mysqlSize: true'"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size % 2 == 0) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', using an even number of MySQL replicas requires 'unsafeFlags.mysqlSize: true'"
-// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication') || self.unsafeFlags.proxy || self.proxy.router.enabled || self.proxy.haproxy.enabled",message="Invalid configuration: For 'group replication', MySQL Router or HAProxy must be enabled unless 'unsafeFlags.proxy' is enabled"
-// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && self.proxy.router.enabled && has(self.proxy.router.size) && self.proxy.router.size < 2) || self.unsafeFlags.proxySize",message="Invalid configuration: For 'group replication', Router size must be 2 or greater unless 'unsafeFlags.proxySize' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication') || self.unsafeFlags.proxy || (has(self.proxy.router) && self.proxy.router.enabled) || (has(self.proxy.haproxy) && self.proxy.haproxy.enabled)",message="Invalid configuration: For 'group replication', MySQL Router or HAProxy must be enabled unless 'unsafeFlags.proxy' is enabled"
+// +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.proxy.router) && self.proxy.router.enabled && has(self.proxy.router.size) && self.proxy.router.size < 2) || self.unsafeFlags.proxySize",message="Invalid configuration: For 'group replication', Router size must be 2 or greater unless 'unsafeFlags.proxySize' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'group-replication' && has(self.mysql.size) && self.mysql.size < 3) || self.unsafeFlags.mysqlSize",message="Invalid configuration: For 'group replication', MySQL size must be 3 or greater unless 'unsafeFlags.mysqlSize' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && has(self.orchestrator.size) && (self.orchestrator.size < 3 || self.orchestrator.size % 2 == 0) && self.orchestrator.size > 0) || self.unsafeFlags.orchestratorSize",message="Invalid configuration: For 'async' replication, Orchestrator size must be 3 or greater and odd unless 'unsafeFlags.orchestratorSize' is enabled"
 // +kubebuilder:validation:XValidation:rule="!(self.mysql.clusterType == 'async' && self.updateStrategy == 'SmartUpdate') || self.orchestrator.enabled",message="Invalid configuration: For 'async' replication, SmartUpdate requires Orchestrator to be enabled"
-// +kubebuilder:validation:XValidation:rule="!(self.proxy.router != null && has(self.proxy.router.enabled) && self.proxy.router.enabled && self.proxy.haproxy != null && has(self.proxy.haproxy.enabled) && self.proxy.haproxy.enabled)",message="Invalid configuration: MySQL Router and HAProxy can't be enabled at the same time"
+// +kubebuilder:validation:XValidation:rule="!(has(self.proxy.router) && has(self.proxy.router.enabled) && self.proxy.router.enabled && has(self.proxy.haproxy) && has(self.proxy.haproxy.enabled) && self.proxy.haproxy.enabled)",message="Invalid configuration: MySQL Router and HAProxy can't be enabled at the same time"
 type PerconaServerMySQLSpec struct {
 	Metadata  *Metadata `json:"metadata,omitempty"`
 	CRVersion string    `json:"crVersion,omitempty"`
@@ -872,6 +872,7 @@ func (s StatefulAppState) String() string {
 }
 
 const (
+	StateNew          StatefulAppState = ""
 	StateInitializing StatefulAppState = "initializing"
 	StateStopping     StatefulAppState = "stopping"
 	StatePaused       StatefulAppState = "paused"
@@ -911,9 +912,17 @@ func (s *PerconaServerMySQLStatus) CompareMySQLVersion(ver string) int {
 }
 
 const (
-	ConditionInnoDBClusterBootstrapped    string = "InnoDBClusterBootstrapped"
+	ConditionInnoDBClusterBootstrapped string = "InnoDBClusterBootstrapped"
+	ConditionClusterSetMember          string = "ClusterSetMember"
+	ConditionAwaitingExternalBootstrap string = "AwaitingExternalBootstrap"
+
+	// Deprecated, preserved only for backward compatibility
 	ConditionClusterSetReplicationRunning string = "ClusterSetReplicationRunning"
-	ConditionAwaitingExternalBootstrap    string = "AwaitingExternalBootstrap"
+)
+
+const (
+	ClusterSetMemberReasonPrimary = "Primary"
+	ClusterSetMemberReasonReplica = "Replica"
 )
 
 // PerconaServerMySQL is the Schema for the perconaservermysqls API
@@ -959,6 +968,7 @@ const (
 	UserRoot           SystemUser = "root"
 	UserXtraBackup     SystemUser = "xtrabackup"
 	UserClusterSet     SystemUser = "clusterset"
+	UserConfigurator   SystemUser = "configurator"
 )
 
 // systemUsers is the canonical, ordered list of every SystemUser value.
@@ -975,6 +985,7 @@ var systemUsers = []SystemUser{
 	UserRoot,
 	UserXtraBackup,
 	UserClusterSet,
+	UserConfigurator,
 }
 
 // knownSystemUsers is the closed set of SystemUser values. Callers that join

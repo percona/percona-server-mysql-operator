@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 
 	"github.com/pkg/errors"
@@ -59,6 +60,13 @@ func (c *Component) Object(ctx context.Context, cl client.Client) (client.Object
 	configHash, err := k8s.CustomConfigHash(ctx, cl, cr, &configurable, naming.ComponentDatabase)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get custom config hash")
+	}
+
+	// Do not reconcile configHash for versions above 1.2.0.
+	// Configuration is handled dynamically, restarts are done
+	// selectively only when a variable cannot be added dynamically.
+	if cr.CompareVersion("1.2.0") > 0 {
+		configHash = ""
 	}
 
 	tlsHash, err := k8s.GetTLSHash(ctx, cl, cr)
