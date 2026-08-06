@@ -102,9 +102,52 @@ func installComponents(ctx context.Context) error {
 	}
 	defer db.Close()
 
-	if err := db.InstallComponentMySQLBackup(ctx); err != nil {
-		return errors.Wrap(err, "install components")
+	all := []string{
+		"file://component_mysqlbackup",
+	}
+	toInstall := []string{}
+
+	for _, component := range all {
+		installed, err := db.IsComponentInstalled(ctx, component)
+		if err != nil {
+			return errors.Wrapf(err, "check if %s is installed", component)
+		}
+		if installed {
+			continue
+		}
+		toInstall = append(toInstall, component)
 	}
 
+	if len(toInstall) == 0 {
+		log.Println("All components already installed")
+		return nil
+	}
+
+	sro, err := db.IsSuperReadonly(ctx)
+	if err != nil {
+		return errors.Wrap(err, "check super_read_only")
+	}
+	if sro {
+		log.Println("Temporarily disabling super_read_only")
+		err := db.DisableSuperReadonly(ctx)
+		if err != nil {
+			return errors.Wrap(err, "disable super_read_only")
+		}
+		defer func() {
+			err := db.EnableSuperReadonly(ctx)
+			if err != nil {
+				log.Printf("failed to re-enable super_read_only: %v", err)
+			}
+		}()
+	}
+
+	for _, component := range toInstall {
+		log.Printf("Installing %s", component)
+		if err := db.InstallComponent(ctx, component); err != nil {
+			return errors.Wrapf(err, "install %s", component)
+		}
+	}
+
+	log.Println("All components installed")
 	return nil
 }

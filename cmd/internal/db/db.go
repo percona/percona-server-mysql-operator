@@ -178,6 +178,12 @@ func (d *DB) DisableSuperReadonly(ctx context.Context) error {
 	return errors.Wrap(err, "set global super_read_only param to 0")
 }
 
+func (d *DB) IsSuperReadonly(ctx context.Context) (bool, error) {
+	var readonly int
+	err := d.db.QueryRowContext(ctx, "select @@super_read_only").Scan(&readonly)
+	return readonly == 1, errors.Wrap(err, "select global read_only param")
+}
+
 func (d *DB) IsReadonly(ctx context.Context) (bool, error) {
 	var readonly int
 	err := d.db.QueryRowContext(ctx, "select @@read_only and @@super_read_only").Scan(&readonly)
@@ -215,16 +221,17 @@ func (d *DB) CloneInProgress(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
-func (d *DB) InstallComponentMySQLBackup(ctx context.Context) error {
+func (d *DB) InstallComponent(ctx context.Context, cmp string) error {
+	_, err := d.db.ExecContext(ctx, fmt.Sprintf("INSTALL COMPONENT '%s'", cmp))
+	return errors.Wrap(err, fmt.Sprintf("install component %s", cmp))
+}
+
+func (d *DB) IsComponentInstalled(ctx context.Context, cmp string) (bool, error) {
 	var count int
-	if err := d.db.QueryRowContext(ctx, "SELECT COUNT(1) FROM mysql.component WHERE component_urn = 'file://component_mysqlbackup'").Scan(&count); err != nil {
-		return errors.Wrap(err, "check mysqlbackup component")
+	if err := d.db.QueryRowContext(ctx, "SELECT COUNT(1) FROM mysql.component WHERE component_urn = ?", cmp).Scan(&count); err != nil {
+		return false, errors.Wrap(err, fmt.Sprintf("check component %s", cmp))
 	}
-	if count > 0 {
-		return nil
-	}
-	_, err := d.db.ExecContext(ctx, "INSTALL COMPONENT 'file://component_mysqlbackup'")
-	return errors.Wrap(err, "install mysqlbackup component")
+	return count > 0, nil
 }
 
 // getCloneStatus returns the current clone status
