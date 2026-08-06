@@ -11,6 +11,7 @@ import (
 	database "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -89,6 +90,13 @@ func (r *PerconaServerMySQLReconciler) reconcileQuarantinedMembers(
 			}
 			r.Recorder.Eventf(cr, corev1.EventTypeNormal, "PrimaryConfirmed",
 				"member %s confirmed as the writable primary after cluster restart", primaryPod.Name)
+
+			// The operator took over the promotion, so Orchestrator won't run the
+			// failover hook (orc-handler) that labels the primary. Label it here so
+			// the async primary still carries mysql.percona.com/primary=true.
+			if err := r.reconcileAsyncPrimaryLabel(ctx, pods, primaryPod); err != nil {
+				return errors.Wrap(err, "reconcile async primary label")
+			}
 		}
 	}
 
@@ -228,6 +236,28 @@ func removeQuarantineFile(ctx context.Context, cliCmd clientcmd.Client, pod *cor
 	err := cliCmd.Exec(ctx, pod, mysql.AppName,
 		[]string{"rm", "-f", mysql.QuarantineFile}, nil, &outb, &errb, false)
 	return errors.Wrapf(err, "stdout: %s, stderr: %s", outb.String(), errb.String())
+}
+
+// reconcileAsyncPrimaryLabel puts mysql.percona.com/primary=true on primaryPod
+// and clears it from the others. On async clusters this label is normally set by
+// Orchestrator's failover hook (orc-handler); when the operator confirms the
+// primary itself that hook never runs, so nothing else would label it.
+func (r *PerconaServerMySQLReconciler) reconcileAsyncPrimaryLabel(ctx context.Context, pods []corev1.Pod, primaryPod *corev1.Pod) error {
+	for i := range pods {
+		pod := &pods[i]
+		_, hasLabel := pod.Labels[naming.LabelMySQLPrimary]
+		switch {
+		case pod.Name == primaryPod.Name && !hasLabel:
+			if err := r.assignPrimaryLabel(ctx, pod); err != nil {
+				return errors.Wrapf(err, "assign primary label to %s", pod.Name)
+			}
+		case pod.Name != primaryPod.Name && hasLabel:
+			if err := r.removePrimaryLabel(ctx, pod); err != nil {
+				return errors.Wrapf(err, "remove primary label from %s", pod.Name)
+			}
+		}
+	}
+	return nil
 }
 
 // deleteDataPVC fetches the member's data PVC and deletes it with a UID
