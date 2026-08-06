@@ -203,11 +203,11 @@ func TestStsChanged(t *testing.T) {
 	}
 }
 
-func TestDeleteOutdatedPendingPods(t *testing.T) {
+func TestDeleteOutdatedStuckPods(t *testing.T) {
 	s := newScheme(t)
 
-	newPod := func(revision string, phase corev1.PodPhase) corev1.Pod {
-		return corev1.Pod{
+	newPod := func(revision string, phase corev1.PodPhase, isCrashLoopBackOff bool) corev1.Pod {
+		pod := corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "mysql-0",
 				Namespace: "test-ns",
@@ -217,9 +217,17 @@ func TestDeleteOutdatedPendingPods(t *testing.T) {
 			},
 			Status: corev1.PodStatus{Phase: phase},
 		}
+		if isCrashLoopBackOff {
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+				State: corev1.ContainerState{
+					Waiting: &corev1.ContainerStateWaiting{Reason: crashLoopBackOffReason},
+				},
+			}}
+		}
+		return pod
 	}
 
-	terminatingPod := newPod("rev-1", corev1.PodPending)
+	terminatingPod := newPod("rev-1", corev1.PodPending, false)
 	terminatingPod.DeletionTimestamp = new(metav1.Now())
 	terminatingPod.Finalizers = []string{"test"}
 
@@ -231,25 +239,37 @@ func TestDeleteOutdatedPendingPods(t *testing.T) {
 	}{
 		{
 			name:           "empty update revision",
-			pod:            newPod("rev-1", corev1.PodPending),
+			pod:            newPod("rev-1", corev1.PodPending, false),
 			updateRevision: "",
 			wantDeleted:    false,
 		},
 		{
 			name:           "outdated pending pod",
-			pod:            newPod("rev-1", corev1.PodPending),
+			pod:            newPod("rev-1", corev1.PodPending, false),
 			updateRevision: "rev-2",
 			wantDeleted:    true,
 		},
 		{
 			name:           "updated pending pod",
-			pod:            newPod("rev-2", corev1.PodPending),
+			pod:            newPod("rev-2", corev1.PodPending, false),
 			updateRevision: "rev-2",
 			wantDeleted:    false,
 		},
 		{
 			name:           "outdated running pod",
-			pod:            newPod("rev-1", corev1.PodRunning),
+			pod:            newPod("rev-1", corev1.PodRunning, false),
+			updateRevision: "rev-2",
+			wantDeleted:    false,
+		},
+		{
+			name:           "outdated pod in CrashLoopBackOff",
+			pod:            newPod("rev-1", corev1.PodRunning, true),
+			updateRevision: "rev-2",
+			wantDeleted:    true,
+		},
+		{
+			name:           "updated pod in CrashLoopBackOff",
+			pod:            newPod("rev-2", corev1.PodRunning, true),
 			updateRevision: "rev-2",
 			wantDeleted:    false,
 		},
@@ -266,9 +286,8 @@ func TestDeleteOutdatedPendingPods(t *testing.T) {
 			pod := tt.pod.DeepCopy()
 			cli := fake.NewClientBuilder().WithScheme(s).WithObjects(pod).Build()
 
-			deleted, err := deleteOutdatedPendingPods(t.Context(), cli, []corev1.Pod{*pod}, tt.updateRevision)
+			err := deleteOutdatedStuckPods(t.Context(), cli, []corev1.Pod{*pod}, tt.updateRevision)
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantDeleted, deleted)
 
 			err = cli.Get(t.Context(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, &corev1.Pod{})
 			if tt.wantDeleted {

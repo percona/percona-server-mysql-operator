@@ -72,12 +72,9 @@ func (r *PerconaServerMySQLReconciler) smartUpdate(ctx context.Context, sts *app
 	}
 
 	if currentSet.Status.ReadyReplicas < currentSet.Status.Replicas {
-		ok, err := deleteOutdatedPendingPods(ctx, r.Client, pods.Items, currentSet.Status.UpdateRevision)
+		err := deleteOutdatedStuckPods(ctx, r.Client, pods.Items, currentSet.Status.UpdateRevision)
 		if err != nil {
-			return errors.Wrap(err, "delete outdated pending pods")
-		}
-		if ok {
-			return nil
+			return errors.Wrap(err, "delete outdated unready pods")
 		}
 
 		log.Info("Can't start/continue 'SmartUpdate': waiting for all replicas to be ready")
@@ -151,29 +148,44 @@ func stsChanged(sts *appsv1.StatefulSet, pods []corev1.Pod) bool {
 	return false
 }
 
-func deleteOutdatedPendingPods(ctx context.Context, cli client.Client, pods []corev1.Pod, updateRevision string) (bool, error) {
+func deleteOutdatedStuckPods(ctx context.Context, cli client.Client, pods []corev1.Pod, updateRevision string) error {
 	log := logf.FromContext(ctx)
 
 	if updateRevision == "" {
-		return false, nil
+		return nil
 	}
 
-	deleted := false
 	for _, pod := range pods {
-		if pod.Status.Phase != corev1.PodPending ||
+		if (pod.Status.Phase != corev1.PodPending && !isPodInCrashLoopBackOff(pod)) ||
 			pod.Labels[controllerRevisionHash] == updateRevision ||
 			pod.DeletionTimestamp != nil {
 			continue
 		}
 
-		log.Info("deleting outdated pending pod", "pod", pod.Name)
+		log.Info("deleting outdated stuck pod", "pod", pod.Name)
 		if err := cli.Delete(ctx, &pod); client.IgnoreNotFound(err) != nil {
-			return deleted, errors.Wrapf(err, "delete pod %s", pod.Name)
+			return errors.Wrapf(err, "delete pod %s", pod.Name)
 		}
-		deleted = true
 	}
 
-	return deleted, nil
+	return nil
+}
+
+const crashLoopBackOffReason = "CrashLoopBackOff"
+
+func isPodInCrashLoopBackOff(pod corev1.Pod) bool {
+	for _, statuses := range [][]corev1.ContainerStatus{
+		pod.Status.InitContainerStatuses,
+		pod.Status.ContainerStatuses,
+	} {
+		for _, status := range statuses {
+			if status.State.Waiting != nil && status.State.Waiting.Reason == crashLoopBackOffReason {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func (r *PerconaServerMySQLReconciler) isBackupRunning(ctx context.Context, cr *apiv1.PerconaServerMySQL) (bool, error) {
