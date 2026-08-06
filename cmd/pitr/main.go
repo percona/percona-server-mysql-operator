@@ -10,8 +10,11 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
@@ -20,11 +23,31 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 )
 
-// Database defines the MySQL operations needed for PITR.
+// Database defines MySQL operations needed by the PITR implementations.
+// The binlog-replay method only uses GetGTIDExecuted; the replication method
+// uses the full set.
 type Database interface {
+	ChangeReplicationSourceRelay(ctx context.Context, relayLogFile string, relayLogPos int, channel string) error
+	ChangeReplicationFilterIgnoreDB(ctx context.Context, dbs []string, channel string) error
+	StartReplicaUntilGTID(ctx context.Context, gtid string, channel string) error
+	WaitReplicaSQLThreadStop(ctx context.Context, pollInterval time.Duration, channel string) error
+	StopReplication(ctx context.Context, channel string) error
+	ResetReplication(ctx context.Context, channel string) error
+	SetGTIDNextAutomatic(ctx context.Context) error
 	GetGTIDExecuted(ctx context.Context) (string, error)
 	Close() error
 }
+
+// pitrChannelName is the dedicated replication channel used by the PITR
+// recovery flow. Isolating recovery to its own channel keeps it independent
+// of any pre-existing replication state on the default channel.
+const pitrChannelName = "pitr"
+
+// pitrIgnoreDBs lists databases whose events the recovery SQL thread must
+// skip. mysql_innodb_cluster_metadata is owned by the InnoDB Cluster /
+// Group Replication metadata layer and replaying its binlog events on a
+// freshly restored cluster would corrupt the local metadata.
+var pitrIgnoreDBs = []string{"mysql_innodb_cluster_metadata"}
 
 type newStorageFn func(ctx context.Context, endpoint, accessKey, secretKey, bucket, prefix, region string, verifyTLS bool) (storage.Storage, error)
 type newDatabaseFn func(ctx context.Context, params db.DBParams) (Database, error)
@@ -43,11 +66,12 @@ func (lw *logWriter) Write(bs []byte) (int, error) {
 }
 
 func main() {
+	if len(os.Args) < 2 {
+		log.Fatal("usage: pitr <replay|init|setup|apply>")
+	}
+
 	ctx := context.Background()
 
-	// we use a custom writer to match mysqld log format.
-	// mysqld and pitr logs are printed to together to stdout/stderr
-	// and it should be possible to parse them together
 	log.SetFlags(0)
 	log.SetOutput(new(logWriter))
 
@@ -55,12 +79,60 @@ func main() {
 		return db.NewDatabase(ctx, params)
 	}
 
-	if err := run(ctx, storage.NewS3, newDB, utils.GetSecret, applyBinlogs); err != nil {
-		log.Fatalf("pitr failed: %v", err)
+	const mysqlDir = "/var/lib/mysql"
+
+	switch os.Args[1] {
+	case "replay":
+		if err := runReplay(ctx, storage.NewS3, newDB, utils.GetSecret, applyBinlogs); err != nil {
+			log.Fatalf("replay failed: %v", err)
+		}
+	case "init":
+		if err := runInit(ctx, newDB, utils.GetSecret, mysqlDir); err != nil {
+			log.Fatalf("init failed: %v", err)
+		}
+	case "setup":
+		if err := runSetup(ctx, storage.NewS3, mysqlDir); err != nil {
+			log.Fatalf("setup failed: %v", err)
+		}
+	case "apply":
+		if err := runApply(ctx, newDB, utils.GetSecret, getLatestGTIDByDatetime, mysqlDir); err != nil {
+			log.Fatalf("apply failed: %v", err)
+		}
+	default:
+		log.Fatalf("unknown subcommand: %s", os.Args[1])
 	}
 }
 
-func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret func(apiv1.SystemUser) (string, error), apply applyBinlogsFn) error {
+// loadBinlogEntries reads BINLOGS_PATH and parses the JSON list of binlog
+// entries the operator wrote into the pod. Used by every replication-method
+// stage (init, setup, apply) — each stage runs in its own process and so
+// must re-load the list independently.
+func loadBinlogEntries() ([]binlogserver.BinlogEntry, error) {
+	binlogsPath := os.Getenv("BINLOGS_PATH")
+	if binlogsPath == "" {
+		return nil, fmt.Errorf("BINLOGS_PATH is not set")
+	}
+
+	data, err := os.ReadFile(binlogsPath)
+	if err != nil {
+		return nil, fmt.Errorf("read binlogs file: %w", err)
+	}
+
+	var entries []binlogserver.BinlogEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return nil, fmt.Errorf("parse binlogs json: %w", err)
+	}
+
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("no binlog entries found")
+	}
+
+	return entries, nil
+}
+
+// runReplay implements the binlog-replay PITR method: it streams each binlog
+// from S3 through `mysqlbinlog` into a single `mysql` client.
+func runReplay(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret func(apiv1.SystemUser) (string, error), apply applyBinlogsFn) error {
 	binlogsPath := os.Getenv("BINLOGS_PATH")
 	if binlogsPath == "" {
 		return fmt.Errorf("BINLOGS_PATH is not set")
@@ -250,6 +322,295 @@ func applyBinlogs(ctx context.Context, objectKeys []string, getObject getObjectF
 	}
 
 	return nil
+}
+
+func relayLogName(hostname string, channelName string, index int) string {
+	return fmt.Sprintf("%s-relay-bin-%s.%06d", hostname, channelName, index)
+}
+
+// runInit is the first stage of the replication PITR method. It writes
+// empty relay log placeholders, then issues CHANGE REPLICATION SOURCE and
+// CHANGE REPLICATION FILTER on the recovery channel.
+//
+// Doing CRS before the real binlogs are on disk is load-bearing: if
+// Retrieved_Gtid_Set is non-empty when CRS executes, MySQL rewrites
+// existing relay log files, corrupting any binlog data already placed
+// there. Running CRS against the empty-but-valid placeholders leaves only
+// the channel metadata to update; the placeholders are then overwritten by
+// the setup stage before the SQL thread reads them in apply.
+func runInit(ctx context.Context, newDB newDatabaseFn, getSecret func(apiv1.SystemUser) (string, error), mysqlDir string) error {
+	entries, err := loadBinlogEntries()
+	if err != nil {
+		return err
+	}
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		return fmt.Errorf("get hostname: %w", err)
+	}
+
+	operatorPass, err := getSecret(apiv1.UserOperator)
+	if err != nil {
+		return fmt.Errorf("get operator password: %w", err)
+	}
+
+	database, err := newDB(ctx, db.DBParams{
+		User: apiv1.UserOperator,
+		Pass: operatorPass,
+		Host: "127.0.0.1",
+	})
+	if err != nil {
+		return fmt.Errorf("connect to MySQL: %w", err)
+	}
+	defer func() {
+		if err := database.Close(); err != nil {
+			log.Printf("close database: %v", err)
+		}
+	}()
+
+	currentGTID, err := database.GetGTIDExecuted(ctx)
+	if err != nil {
+		return fmt.Errorf("get current GTID_EXECUTED: %w", err)
+	}
+	log.Printf("GTID_EXECUTED: %s", currentGTID)
+
+	if err := writeEmptyRelayLogs(mysqlDir, hostname, len(entries)); err != nil {
+		return err
+	}
+
+	firstRelayLog := relayLogName(hostname, pitrChannelName, 1)
+	log.Printf("CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE='%s', RELAY_LOG_POS=%d, SOURCE_HOST='dummy' FOR CHANNEL '%s'", firstRelayLog, 1, pitrChannelName)
+	if err := database.ChangeReplicationSourceRelay(ctx, firstRelayLog, 1, pitrChannelName); err != nil {
+		return fmt.Errorf("change replication source: %w", err)
+	}
+
+	log.Printf("CHANGE REPLICATION FILTER REPLICATE_IGNORE_DB = (%s) FOR CHANNEL '%s'", strings.Join(pitrIgnoreDBs, ", "), pitrChannelName)
+	if err := database.ChangeReplicationFilterIgnoreDB(ctx, pitrIgnoreDBs, pitrChannelName); err != nil {
+		return fmt.Errorf("change replication filter: %w", err)
+	}
+
+	log.Println("PITR init complete")
+	return nil
+}
+
+// runSetup is the second stage of the replication PITR method. It downloads
+// every binlog from S3 over the empty placeholders written by runInit, so
+// the SQL thread sees real binlog content when apply starts replication.
+func runSetup(ctx context.Context, newS3 newStorageFn, mysqlDir string) error {
+	entries, err := loadBinlogEntries()
+	if err != nil {
+		return err
+	}
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		return fmt.Errorf("get hostname: %w", err)
+	}
+
+	if err := downloadRelayLogs(ctx, newS3, entries, mysqlDir, hostname); err != nil {
+		return err
+	}
+
+	log.Println("PITR setup complete")
+	return nil
+}
+
+// runApply is the third stage of the replication PITR method. It starts
+// the SQL thread until the target GTID, waits for it to stop, then tears
+// down the recovery channel and restores GTID_NEXT to AUTOMATIC.
+func runApply(ctx context.Context, newDB newDatabaseFn, getSecret func(apiv1.SystemUser) (string, error), getGTIDByDatetime func(string, string) (string, error), mysqlDir string) error {
+	entries, err := loadBinlogEntries()
+	if err != nil {
+		return err
+	}
+
+	pitrType := os.Getenv("PITR_TYPE")
+	pitrDate := os.Getenv("PITR_DATE")
+	pitrGTID := os.Getenv("PITR_GTID")
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		return fmt.Errorf("get hostname: %w", err)
+	}
+
+	if pitrType == "date" {
+		lastRelayLog := relayLogName(hostname, pitrChannelName, len(entries))
+		lastRelayLogPath := filepath.Join(mysqlDir, lastRelayLog)
+		pitrGTID, err = getGTIDByDatetime(lastRelayLogPath, pitrDate)
+		if err != nil {
+			return fmt.Errorf("get latest GTID for date %s: %w", pitrDate, err)
+		}
+		log.Printf("latest GTID for date %s: %s", pitrDate, pitrGTID)
+	}
+
+	operatorPass, err := getSecret(apiv1.UserOperator)
+	if err != nil {
+		return fmt.Errorf("get operator password: %w", err)
+	}
+
+	database, err := newDB(ctx, db.DBParams{
+		User: apiv1.UserOperator,
+		Pass: operatorPass,
+		Host: "127.0.0.1",
+	})
+	if err != nil {
+		return fmt.Errorf("connect to MySQL: %w", err)
+	}
+	defer func() {
+		if err := database.Close(); err != nil {
+			log.Printf("close database: %v", err)
+		}
+	}()
+
+	log.Printf("START REPLICA SQL_THREAD UNTIL SQL_AFTER_GTIDS='%s' FOR CHANNEL '%s'", pitrGTID, pitrChannelName)
+	if err := database.StartReplicaUntilGTID(ctx, pitrGTID, pitrChannelName); err != nil {
+		return fmt.Errorf("start replica until GTID: %w", err)
+	}
+
+	log.Println("waiting for replication to complete...")
+	if err := database.WaitReplicaSQLThreadStop(ctx, time.Second, pitrChannelName); err != nil {
+		return fmt.Errorf("wait for replication: %w", err)
+	}
+
+	log.Println("stopping replication")
+	if err := database.StopReplication(ctx, pitrChannelName); err != nil {
+		return errors.Wrap(err, "stop replication")
+	}
+
+	log.Println("running 'RESET REPLICA ALL'")
+	if err := database.ResetReplication(ctx, pitrChannelName); err != nil {
+		return errors.Wrap(err, "reset replication")
+	}
+
+	currentGTID, err := database.GetGTIDExecuted(ctx)
+	if err != nil {
+		return fmt.Errorf("get GTID_EXECUTED after restore: %w", err)
+	}
+	log.Printf("GTID_EXECUTED: %s", currentGTID)
+
+	log.Println("setting GTID_NEXT to AUTOMATIC")
+	if err := database.SetGTIDNextAutomatic(ctx); err != nil {
+		return fmt.Errorf("set GTID_NEXT to AUTOMATIC: %w", err)
+	}
+
+	log.Println("PITR apply complete")
+	return nil
+}
+
+// binlogMagic is the 4-byte prefix that identifies a MySQL binary/relay log
+// file. A file containing only this magic is a syntactically valid binlog
+// with zero events — enough for CHANGE REPLICATION SOURCE TO RELAY_LOG_FILE
+// to accept it as the named relay log.
+var binlogMagic = []byte{0xfe, 0x62, 0x69, 0x6e}
+
+// writeEmptyRelayLogs creates count empty-but-valid relay log files
+// (containing only the binlog magic) and the matching relay-bin.index. The
+// files are placeholders for downloadRelayLogs to overwrite, and let CHANGE
+// REPLICATION SOURCE succeed before the real binlogs are on disk.
+func writeEmptyRelayLogs(mysqlDir, hostname string, count int) error {
+	relayLogFiles := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		relayLog := relayLogName(hostname, pitrChannelName, i+1)
+		relayLogPath := filepath.Join(mysqlDir, relayLog)
+		if err := os.WriteFile(relayLogPath, binlogMagic, 0644); err != nil {
+			return fmt.Errorf("write empty relay log %s: %w", relayLogPath, err)
+		}
+		relayLogFiles = append(relayLogFiles, "./"+relayLog)
+	}
+	indexPath := filepath.Join(mysqlDir, fmt.Sprintf("%s-relay-bin-%s.index", hostname, pitrChannelName))
+	indexContent := strings.Join(relayLogFiles, "\n") + "\n"
+	if err := os.WriteFile(indexPath, []byte(indexContent), 0644); err != nil {
+		return fmt.Errorf("write relay log index: %w", err)
+	}
+	log.Printf("wrote %d empty relay log placeholder(s)", count)
+	return nil
+}
+
+// downloadRelayLogs streams every binlog from S3 into the MySQL data directory,
+// overwriting the placeholder relay log files written by writeEmptyRelayLogs.
+func downloadRelayLogs(ctx context.Context, newS3 newStorageFn, entries []binlogserver.BinlogEntry, mysqlDir, hostname string) error {
+	endpoint := os.Getenv("AWS_ENDPOINT")
+	accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
+	secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+	region := os.Getenv("AWS_DEFAULT_REGION")
+	bucket := os.Getenv("S3_BUCKET")
+	verifyTLS := os.Getenv("VERIFY_TLS") != "false"
+
+	s3Client, err := newS3(ctx, endpoint, accessKey, secretKey, bucket, "", region, verifyTLS)
+	if err != nil {
+		return fmt.Errorf("create S3 client: %w", err)
+	}
+
+	for i, entry := range entries {
+		relayLog := relayLogName(hostname, pitrChannelName, i+1)
+		relayLogPath := filepath.Join(mysqlDir, relayLog)
+
+		objectKey, err := objectKeyFromURI(entry.URI, bucket)
+		if err != nil {
+			return fmt.Errorf("parse URI %s: %w", entry.URI, err)
+		}
+
+		log.Printf("downloading binlog %s to %s", objectKey, relayLogPath)
+
+		obj, err := s3Client.GetObject(ctx, objectKey)
+		if err != nil {
+			return fmt.Errorf("download binlog %s: %w", entry.URI, err)
+		}
+
+		f, err := os.Create(relayLogPath)
+		if err != nil {
+			if closeErr := obj.Close(); closeErr != nil {
+				log.Printf("close object %s: %v", entry.URI, closeErr)
+			}
+			return fmt.Errorf("create relay log file %s: %w", relayLogPath, err)
+		}
+
+		_, err = io.Copy(f, obj)
+		if closeErr := obj.Close(); closeErr != nil {
+			log.Printf("close object %s: %v", entry.URI, closeErr)
+		}
+		if closeErr := f.Close(); closeErr != nil {
+			log.Printf("close relay log file %s: %v", relayLogPath, closeErr)
+		}
+		if err != nil {
+			return fmt.Errorf("write relay log file %s: %w", relayLogPath, err)
+		}
+	}
+
+	log.Printf("downloaded %d relay log files", len(entries))
+	return nil
+}
+
+func getLatestGTIDByDatetime(relayLogPath, startDatetime string) (string, error) {
+	t, err := time.ParseInLocation("2006-01-02 15:04:05", startDatetime, time.UTC)
+	if err != nil {
+		return "", fmt.Errorf("parse datetime %q: %w", startDatetime, err)
+	}
+	stopDatetime := t.Add(time.Second).Format("2006-01-02 15:04:05")
+
+	cmd := exec.Command("bash", "-c",
+		fmt.Sprintf("mysqlbinlog --stop-datetime='%s' %s | grep GTID_NEXT | grep -v AUTOMATIC | tail -n 1",
+			stopDatetime, relayLogPath))
+
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to execute mysqlbinlog pipeline: %w", err)
+	}
+
+	line := strings.TrimSpace(string(output))
+	if line == "" {
+		return "", fmt.Errorf("no GTID found at %s in %s", startDatetime, relayLogPath)
+	}
+
+	// Extract GTID from: SET @@SESSION.GTID_NEXT= 'uuid:n,uuid:n'/*!*/;
+	start := strings.Index(line, "'")
+	end := strings.LastIndex(line, "'")
+	if start == -1 || end == -1 || start == end {
+		return "", fmt.Errorf("failed to parse GTID from line: %s", line)
+	}
+
+	gtid := line[start+1 : end]
+	return gtid, nil
 }
 
 // objectKeyFromURI extracts the S3 object key from a full URI.
