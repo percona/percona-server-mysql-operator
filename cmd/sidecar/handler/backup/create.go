@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -236,7 +237,20 @@ func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {
 		}
 	}
 	if conf != nil && conf.ContainerOptions != nil {
-		args = append(args, conf.ContainerOptions.Args.Xtrabackup...)
+		customArgs := conf.ContainerOptions.Args.Xtrabackup
+		// kubebuilder validation guarantees that --defaults-file is the first custom argument if specified.
+		// XtraBackup requires it to be the first option: https://docs.percona.com/percona-xtrabackup/8.0/xtrabackup-option-reference.html#defaults-file
+		if len(customArgs) > 0 && (customArgs[0] == "--defaults-file" || strings.HasPrefix(customArgs[0], "--defaults-file=")) {
+			end := 1
+			// Include the value when --defaults-file and its value are separate arguments.
+			if customArgs[0] == "--defaults-file" && len(customArgs) > 1 {
+				end++
+			}
+
+			args = append(slices.Clone(customArgs[:end]), args...)
+			customArgs = customArgs[end:]
+		}
+		args = append(args, customArgs...)
 	}
 	if conf != nil && conf.IncrementalLsn != "" {
 		args = append(args, fmt.Sprintf("--incremental-lsn=%s", conf.IncrementalLsn))
