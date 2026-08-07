@@ -728,6 +728,13 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 		})
 	}
 
+	if cr.CompareVersion("1.3.0") >= 0 {
+		env = append(env, corev1.EnvVar{
+			Name:  "CR_VERSION",
+			Value: cr.Spec.CRVersion,
+		})
+	}
+
 	container := corev1.Container{
 		Name:                     AppName,
 		Image:                    spec.Image,
