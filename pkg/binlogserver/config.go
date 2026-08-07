@@ -71,12 +71,12 @@ type Replication struct {
 }
 
 type Storage struct {
-	Backend            string      `json:"backend,omitempty"`
-	URI                string      `json:"uri,omitempty"`
-	FsBufferDirectory  string      `json:"fs_buffer_directory,omitempty"`
-	CheckpointSize     string      `json:"checkpoint_size,omitempty"`
-	CheckpointInterval string      `json:"checkpoint_interval,omitempty"`
-	Encryption         *Encryption `json:"encryption,omitempty"`
+	Backend            string            `json:"backend,omitempty"`
+	URI                string            `json:"uri,omitempty"`
+	FsBufferDirectory  string            `json:"fs_buffer_directory,omitempty"`
+	CheckpointSize     string            `json:"checkpoint_size,omitempty"`
+	CheckpointInterval string            `json:"checkpoint_interval,omitempty"`
+	Encryption         *EncryptionConfig `json:"encryption,omitempty"`
 }
 
 type Configuration struct {
@@ -86,7 +86,7 @@ type Configuration struct {
 	Storage     Storage     `json:"storage,omitempty"`
 }
 
-type Encryption struct {
+type EncryptionConfig struct {
 	Format     string `json:"format,omitempty"`
 	KeyringURI string `json:"keyring_uri,omitempty"`
 	KekID      string `json:"kek_id,omitempty"`
@@ -165,7 +165,7 @@ func GetConfiguration(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 
 	if spec.Storage.Encryption != nil {
 		sel := spec.Storage.Encryption.KeyringSecret
-		cfg.Storage.Encryption = &Encryption{
+		cfg.Storage.Encryption = &EncryptionConfig{
 			Format:     "generic", // only this format is supported for now
 			KeyringURI: fmt.Sprintf("file://%s/%s", keyringMountPath, sel.Key),
 			KekID:      spec.Storage.Encryption.KekID,
