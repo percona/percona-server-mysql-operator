@@ -71,11 +71,12 @@ type Replication struct {
 }
 
 type Storage struct {
-	Backend            string `json:"backend,omitempty"`
-	URI                string `json:"uri,omitempty"`
-	FsBufferDirectory  string `json:"fs_buffer_directory,omitempty"`
-	CheckpointSize     string `json:"checkpoint_size,omitempty"`
-	CheckpointInterval string `json:"checkpoint_interval,omitempty"`
+	Backend            string      `json:"backend,omitempty"`
+	URI                string      `json:"uri,omitempty"`
+	FsBufferDirectory  string      `json:"fs_buffer_directory,omitempty"`
+	CheckpointSize     string      `json:"checkpoint_size,omitempty"`
+	CheckpointInterval string      `json:"checkpoint_interval,omitempty"`
+	Encryption         *Encryption `json:"encryption,omitempty"`
 }
 
 type Configuration struct {
@@ -83,6 +84,13 @@ type Configuration struct {
 	Connection  Connection  `json:"connection"`
 	Replication Replication `json:"replication,omitempty"`
 	Storage     Storage     `json:"storage,omitempty"`
+}
+
+type Encryption struct {
+	Format     string `json:"format,omitempty"`
+	KeyringURI string `json:"keyring_uri,omitempty"`
+	KekID      string `json:"kek_id,omitempty"`
+	Cipher     string `json:"cipher,omitempty"`
 }
 
 var ErrNoCredentials = errors.New("no binlog server credentials")
@@ -121,7 +129,7 @@ func GetConfiguration(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 		verifyChecksum = *spec.VerifyChecksum
 	}
 
-	return Configuration{
+	cfg := Configuration{
 		Logger: Logger{
 			Level: spec.LogLevel,
 			File:  "/dev/stdout",
@@ -153,7 +161,18 @@ func GetConfiguration(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 			CheckpointInterval: spec.CheckpointInterval,
 			FsBufferDirectory:  BufferMountPath,
 		},
-	}, nil
+	}
+
+	if spec.Storage.Encryption != nil {
+		sel := spec.Storage.Encryption.KeyringSecret
+		cfg.Storage.Encryption = &Encryption{
+			Format:     "generic", // only this format is supported for now
+			KeyringURI: fmt.Sprintf("file://%s/%s", keyringMountPath, sel.Key),
+			KekID:      spec.Storage.Encryption.KekID,
+			Cipher:     spec.Storage.Encryption.Cipher,
+		}
+	}
+	return cfg, nil
 }
 
 func s3URI(s3 apiv1.BackupStorageS3Spec, accessKey, secretKey []byte) (string, error) {
