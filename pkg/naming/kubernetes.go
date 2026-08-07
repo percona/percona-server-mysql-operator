@@ -63,4 +63,5 @@ const (
 	ComponentBackup       = "backup"
 	ComponentRestore      = "restore"
 	ComponentPITR         = "pitr"
+	ComponentPrepare      = "prepare"
 )

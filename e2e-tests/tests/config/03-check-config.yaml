@@ -7,7 +7,9 @@ commands:
 
       source ../../functions
 
-      max_connections=$(run_mysql "SELECT @@max_connections" "-h $(get_haproxy_svc $(get_cluster_name))")
+      # SET GLOBAL has to reach every pod, not just the primary.
+      cluster=$(get_cluster_name)
+      wait_for_mysql_variable "${cluster}" max_connections 250 120 || true
 
       kubectl create configmap -n "${NAMESPACE}" 03-check-config \
-          --from-literal=max_connections="${max_connections}"
+          --from-literal=max_connections="$(get_mysql_variable_on_pods "${cluster}" max_connections)"

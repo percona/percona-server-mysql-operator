@@ -98,8 +98,12 @@ func IsPodWithNameReady(ctx context.Context, cl client.Client, nn types.Namespac
 	return IsPodReady(*pod), nil
 }
 
+func IsPodRunning(pod corev1.Pod) bool {
+	return pod.Status.Phase == corev1.PodRunning && pod.GetDeletionTimestamp().IsZero()
+}
+
 func IsPodReady(pod corev1.Pod) bool {
-	if pod.Status.Phase != corev1.PodRunning || pod.DeletionTimestamp != nil {
+	if !IsPodRunning(pod) {
 		return false
 	}
 	for _, cond := range pod.Status.Conditions {
@@ -229,18 +233,22 @@ func EnsureObjectWithHash(
 		return nil
 	}
 
-	switch obj.(type) {
-	case *appsv1.Deployment:
-		annotations := obj.GetAnnotations()
-		ignoreAnnotations := []string{"deployment.kubernetes.io/revision"}
-		for _, key := range ignoreAnnotations {
-			v, ok := oldObject.GetAnnotations()[key]
-			if ok {
-				annotations[key] = v
-			}
-		}
-		obj.SetAnnotations(annotations)
+	// Certain annotations should be preserved
+	annotations := obj.GetAnnotations()
+	preserveAnnotations := []string{
+		"deployment.kubernetes.io/revision",
+		string(naming.AnnotationLastAppliedConfig),
 	}
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	for _, key := range preserveAnnotations {
+		v, ok := oldObject.GetAnnotations()[key]
+		if ok {
+			annotations[key] = v
+		}
+	}
+	obj.SetAnnotations(annotations)
 
 	if oldObject.GetAnnotations()[naming.AnnotationLastConfigHash.String()] != hash ||
 		!objectMetaEqual(obj, oldObject) {
@@ -401,6 +409,38 @@ func ObjectHash(obj runtime.Object) (string, error) {
 
 	hash := md5.Sum(data)
 	return hex.EncodeToString(hash[:]), nil
+}
+
+func RunningPods(ctx context.Context, cl client.Reader, l map[string]string, namespace string) ([]corev1.Pod, error) {
+	all, err := PodsByLabels(ctx, cl, l, namespace)
+	if err != nil {
+		return nil, errors.Wrap(err, "get pods by labels")
+	}
+
+	var running []corev1.Pod
+	for _, pod := range all {
+		if !IsPodRunning(pod) {
+			continue
+		}
+		running = append(running, pod)
+	}
+	return running, nil
+}
+
+func ReadyPods(ctx context.Context, cl client.Reader, l map[string]string, namespace string) ([]corev1.Pod, error) {
+	all, err := PodsByLabels(ctx, cl, l, namespace)
+	if err != nil {
+		return nil, errors.Wrap(err, "get pods by labels")
+	}
+
+	ready := make([]corev1.Pod, 0, len(all))
+	for _, pod := range all {
+		if IsPodReady(pod) {
+			ready = append(ready, pod)
+		}
+	}
+
+	return ready, nil
 }
 
 func PodsByLabels(ctx context.Context, cl client.Reader, l map[string]string, namespace string) ([]corev1.Pod, error) {
