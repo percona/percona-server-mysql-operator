@@ -702,6 +702,7 @@ spec:
 #          - name: my-secret-1
 #          - name: my-secret-2
 #        storage:
+#          encryption: null
 #          s3:
 #            bucket: S3-BACKUP-BUCKET-NAME-HERE
 #            credentialsSecret: ps-cluster1-s3-credentials

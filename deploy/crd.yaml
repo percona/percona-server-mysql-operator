@@ -3832,6 +3832,26 @@ spec:
                             type: object
                           storage:
                             properties:
+                              encryption:
+                                properties:
+                                  cipher:
+                                    default: AES-256-CTR
+                                    type: string
+                                  kekId:
+                                    type: string
+                                  keyringSecret:
+                                    properties:
+                                      key:
+                                        default: keyring.json
+                                        type: string
+                                      name:
+                                        type: string
+                                    required:
+                                    - name
+                                    type: object
+                                required:
+                                - keyringSecret
+                                type: object
                               s3:
                                 properties:
                                   bucket:
@@ -5418,6 +5438,26 @@ spec:
                             type: object
                           storage:
                             properties:
+                              encryption:
+                                properties:
+                                  cipher:
+                                    default: AES-256-CTR
+                                    type: string
+                                  kekId:
+                                    type: string
+                                  keyringSecret:
+                                    properties:
+                                      key:
+                                        default: keyring.json
+                                        type: string
+                                      name:
+                                        type: string
+                                    required:
+                                    - name
+                                    type: object
+                                required:
+                                - keyringSecret
+                                type: object
                               s3:
                                 properties:
                                   bucket:
