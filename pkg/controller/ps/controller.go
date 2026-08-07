@@ -614,6 +614,9 @@ func (r *PerconaServerMySQLReconciler) doReconcile(
 	if err := r.reconcileUsers(ctx, cr, userSecret); err != nil {
 		return errors.Wrap(err, "users")
 	}
+	if err := r.reconcileCustomUsers(ctx, cr); err != nil {
+		return errors.Wrap(err, "custom users")
+	}
 	if err := r.ensureTLSSecret(ctx, cr); err != nil {
 		return errors.Wrap(err, "TLS secret")
 	}
@@ -974,7 +977,12 @@ func (r *PerconaServerMySQLReconciler) reconcileDatabase(ctx context.Context, cr
 		return errors.Wrap(err, "get statefulset")
 	}
 	if cr.Spec.UpdateStrategy == apiv1.SmartUpdateStatefulSetStrategyType {
-		return r.smartUpdate(ctx, sts, cr)
+		if err := r.smartUpdate(ctx, sts, cr); err != nil {
+			return errors.Wrap(err, "smart update")
+		}
+	}
+	if err := r.reconcileMySQLConfig(ctx, cr, sts); err != nil {
+		return errors.Wrap(err, "reconcile MySQL config")
 	}
 
 	return nil
