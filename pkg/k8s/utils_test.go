@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -594,5 +595,151 @@ func TestSetCRVersion(t *testing.T) {
 		err := setCRVersion(ctx, cl, cr)
 		assert.Error(t, err)
 		assert.Equal(t, "patch CR version: perconaservermysqls.ps.percona.com \"cr-version-3\" not found", err.Error())
+	})
+}
+
+func TestEnsureObject(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, apiv1.AddToScheme(scheme))
+
+	cr := &apiv1.PerconaServerMySQL{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cr",
+			Namespace: "default",
+			UID:       "test-uid",
+		},
+		Spec: apiv1.PerconaServerMySQLSpec{
+			CRVersion: version.Version(),
+		},
+	}
+
+	t.Run("creates object when it does not exist", func(t *testing.T) {
+		cl := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(cr).
+			Build()
+
+		secret := &corev1.Secret{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "Secret",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "default",
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: map[string][]byte{"key": []byte("value")},
+		}
+
+		err := EnsureObject(context.Background(), cl, cr, secret, scheme)
+		require.NoError(t, err)
+
+		// Verify the secret was created
+		got := &corev1.Secret{}
+		err = cl.Get(context.Background(), types.NamespacedName{Name: "test-secret", Namespace: "default"}, got)
+		require.NoError(t, err)
+		assert.Equal(t, []byte("value"), got.Data["key"])
+	})
+
+	t.Run("skips update when nothing changed", func(t *testing.T) {
+		existingSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "default",
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         "ps.percona.com/v1",
+						Kind:               "PerconaServerMySQL",
+						Name:               "test-cr",
+						UID:                "test-uid",
+						Controller:         ptr.To(true),
+						BlockOwnerDeletion: ptr.To(true),
+					},
+				},
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: map[string][]byte{"key": []byte("value")},
+		}
+
+		cl := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(cr, existingSecret).
+			Build()
+
+		// Build the desired object with same data (simulating a reconcile with no changes)
+		// Note: TypeMeta is not set because the fake client (like the real API server's
+		// response to Get) does not populate TypeMeta on the fetched object.
+		desired := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "default",
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: map[string][]byte{"key": []byte("value")},
+		}
+
+		err := EnsureObject(context.Background(), cl, cr, desired, scheme)
+		require.NoError(t, err)
+
+		// Verify ResourceVersion didn't change (no update was made)
+		got := &corev1.Secret{}
+		err = cl.Get(context.Background(), types.NamespacedName{Name: "test-secret", Namespace: "default"}, got)
+		require.NoError(t, err)
+		assert.Equal(t, existingSecret.ResourceVersion, got.ResourceVersion)
+	})
+
+	t.Run("updates when data changes", func(t *testing.T) {
+		existingSecret := &corev1.Secret{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "Secret",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "default",
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         "ps.percona.com/v1",
+						Kind:               "PerconaServerMySQL",
+						Name:               "test-cr",
+						UID:                "test-uid",
+						Controller:         ptr.To(true),
+						BlockOwnerDeletion: ptr.To(true),
+					},
+				},
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: map[string][]byte{"key": []byte("old-value")},
+		}
+
+		cl := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(cr, existingSecret).
+			Build()
+
+		// Build the desired object with updated data
+		desired := &corev1.Secret{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "Secret",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "default",
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: map[string][]byte{"key": []byte("new-value")},
+		}
+
+		err := EnsureObject(context.Background(), cl, cr, desired, scheme)
+		require.NoError(t, err)
+
+		// Verify the secret was updated
+		got := &corev1.Secret{}
+		err = cl.Get(context.Background(), types.NamespacedName{Name: "test-secret", Namespace: "default"}, got)
+		require.NoError(t, err)
+		assert.Equal(t, []byte("new-value"), got.Data["key"])
 	})
 }

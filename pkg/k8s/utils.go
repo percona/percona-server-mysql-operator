@@ -163,9 +163,19 @@ func EnsureObject(
 		return nil
 	}
 
+	// Skip the update if nothing meaningful changed
+	cmpOpts := cmp.Options{
+		cmpopts.IgnoreFields(metav1.ObjectMeta{}, "UID", "ResourceVersion", "CreationTimestamp", "ManagedFields", "Generation"),
+		cmpopts.IgnoreFields(metav1.TypeMeta{}, "Kind", "APIVersion"),
+		cmpopts.EquateEmpty(),
+	}
+	if cmp.Equal(oldObject, o, cmpOpts...) {
+		return nil
+	}
+
 	log.V(1).Info("Updating object", "kind", o.GetObjectKind(), "name", o.GetName())
 	if util.IsLogLevelVerbose() && !util.IsLogStructured() {
-		fmt.Println(cmp.Diff(oldObject, o))
+		fmt.Println(cmp.Diff(oldObject, o, cmpOpts...))
 	}
 
 	if err := cl.Update(ctx, o); err != nil {
