@@ -3957,6 +3957,16 @@ spec:
                     type: boolean
                   gtid:
                     type: string
+                  keyringSecret:
+                    properties:
+                      key:
+                        default: keyring.json
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
                   type:
                     enum:
                     - gtid
