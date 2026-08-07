@@ -7,13 +7,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/pkg/errors"
-
-	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/async"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/gr"
 	"github.com/percona/percona-server-mysql-operator/cmd/bootstrap/utils"
-	database "github.com/percona/percona-server-mysql-operator/cmd/internal/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 )
 
@@ -55,10 +51,6 @@ func main() {
 
 	ctx := context.Background()
 
-	if err := installComponents(ctx); err != nil {
-		log.Fatalf("failed to install components: %v", err)
-	}
-
 	clusterType := os.Getenv("CLUSTER_TYPE")
 	switch clusterType {
 	case "group-replication":
@@ -72,82 +64,4 @@ func main() {
 	default:
 		log.Fatalf("Invalid cluster type: %v", clusterType)
 	}
-}
-
-func installComponents(ctx context.Context) error {
-	podHostname, err := os.Hostname()
-	if err != nil {
-		return errors.Wrap(err, "get hostname")
-	}
-
-	podIp, err := utils.GetPodIP(podHostname)
-	if err != nil {
-		return errors.Wrap(err, "get pod IP")
-	}
-
-	operatorPass, err := utils.GetSecret(apiv1.UserOperator)
-	if err != nil {
-		return errors.Wrapf(err, "get %s password", apiv1.UserOperator)
-	}
-
-	params := database.DBParams{
-		User: apiv1.UserOperator,
-		Pass: operatorPass,
-		Host: podIp,
-	}
-
-	db, err := database.NewDatabase(ctx, params)
-	if err != nil {
-		return errors.Wrap(err, "connect to MySQL")
-	}
-	defer db.Close()
-
-	all := []string{
-		"file://component_mysqlbackup",
-	}
-	toInstall := []string{}
-
-	for _, component := range all {
-		installed, err := db.IsComponentInstalled(ctx, component)
-		if err != nil {
-			return errors.Wrapf(err, "check if %s is installed", component)
-		}
-		if installed {
-			continue
-		}
-		toInstall = append(toInstall, component)
-	}
-
-	if len(toInstall) == 0 {
-		log.Println("All components already installed")
-		return nil
-	}
-
-	sro, err := db.IsSuperReadonly(ctx)
-	if err != nil {
-		return errors.Wrap(err, "check super_read_only")
-	}
-	if sro {
-		log.Println("Temporarily disabling super_read_only")
-		err := db.DisableSuperReadonly(ctx)
-		if err != nil {
-			return errors.Wrap(err, "disable super_read_only")
-		}
-		defer func() {
-			err := db.EnableSuperReadonly(ctx)
-			if err != nil {
-				log.Printf("failed to re-enable super_read_only: %v", err)
-			}
-		}()
-	}
-
-	for _, component := range toInstall {
-		log.Printf("Installing %s", component)
-		if err := db.InstallComponent(ctx, component); err != nil {
-			return errors.Wrapf(err, "install %s", component)
-		}
-	}
-
-	log.Println("All components installed")
-	return nil
 }
