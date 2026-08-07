@@ -299,6 +299,17 @@ system_user_grants() {
 	fi
 }
 
+install_component() {
+	local component="$1"
+	local installed
+
+	installed=$(echo "SELECT COUNT(1) FROM mysql.component WHERE component_urn = '$(escape_special "${component}")';" | "${mysql[@]}" -N)
+
+	if [ "${installed}" -eq 0 ]; then
+		echo "INSTALL COMPONENT '$(escape_special "${component}")';" | "${mysql[@]}"
+	fi
+}
+
 ensure_system_users() {
 	"${mysql[@]}" <<-EOSQL
 		SET @@SESSION.SQL_LOG_BIN=0;
@@ -449,7 +460,7 @@ stop_temp_mysqld() {
 
 start_temp_mysqld() {
 	SOCKET="$(_get_config 'socket' "$@")"
-	"$@" --skip-networking --socket="${SOCKET}" &
+	"$@" --skip-networking --persisted_globals_load=OFF --socket="${SOCKET}" &
 	pid="$!"
 }
 
@@ -479,6 +490,10 @@ wait_for_mysqld() {
 	echo 'SELECT 1' | "${mysql[@]}" >/dev/null || true
 	echo >&2 "${what} failed."
 	exit 1
+}
+
+cr_version_updated() {
+	[[ ! -f /var/lib/mysql/cr-version ]] || [[ $(</var/lib/mysql/cr-version) != "${CR_VERSION}" ]]
 }
 
 recovery_file='/var/lib/mysql/sleep-forever'
@@ -542,7 +557,7 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 		initialize_datadir "$@"
 	fi
 
-	if [ "${fresh_datadir}" = 1 ] || ! in_full_cluster_crash; then
+	if [ "${fresh_datadir}" = 1 ] || (! in_full_cluster_crash && cr_version_updated); then
 		touch /var/lib/mysql/bootstrap.lock
 
 		start_temp_mysqld "$@" \
@@ -570,6 +585,8 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 		if [ "${fresh_datadir}" = 1 ]; then
 			finish_new_datadir
 		fi
+
+		install_component "file://component_mysqlbackup"
 
 		unset MYSQL_PWD
 		set -x
@@ -641,5 +658,7 @@ if [[ -n ${MYSQL_NOTIFY_SOCKET} ]]; then
 	echo "${NOTIFY_SOCKET} is available"
 	set -o xtrace
 fi
+
+echo ${CR_VERSION} > /var/lib/mysql/cr-version
 
 exec "$@"
