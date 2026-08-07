@@ -34,9 +34,14 @@ type getObjectFn func(ctx context.Context, objectKey string) (io.ReadCloser, err
 
 // applyBinlogsFn starts a single mysql client process and for each object key
 // fetches the binlog via getObject and streams it through mysqlbinlog into mysql.
-type applyBinlogsFn func(ctx context.Context, objectKeys []string, getObject getObjectFn, mysqlbinlogArgs []string, mysqlArgs []string, mysqlPass string) error
+type applyBinlogsFn func(ctx context.Context, objects []binlogSource, getObject getObjectFn, mysqlbinlogArgs []string, mysqlArgs []string, mysqlPass string) error
 
 type logWriter struct{}
+
+type binlogSource struct {
+	objectKey string
+	decrypt   func(io.ReadCloser) (io.ReadCloser, error)
+}
 
 func (lw *logWriter) Write(bs []byte) (int, error) {
 	return fmt.Print(time.Now().UTC().Format(time.RFC3339Nano), " 0 [Info] [K8SPS-642] [Recovery] ", string(bs))
@@ -122,13 +127,35 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 		return fmt.Errorf("create S3 client: %w", err)
 	}
 
-	var objectKeys []string
+	var keyring *binlogserver.Keyring
+	keyringPath := os.Getenv("KEYRING_PATH")
+	if keyringPath != "" {
+		keyringData, err := os.ReadFile(keyringPath)
+		if err != nil {
+			return fmt.Errorf("read keyring file: %w", err)
+		}
+		if err := json.Unmarshal(keyringData, &keyring); err != nil {
+			return fmt.Errorf("parse keyring json: %w", err)
+		}
+		log.Printf("loaded %d keys from keyring", len(keyring.Keys))
+	}
+
+	var objectKeys []binlogSource
 	for _, entry := range entries {
 		objectKey, err := objectKeyFromURI(entry.URI, bucket)
 		if err != nil {
 			return fmt.Errorf("parse URI %s: %w", entry.URI, err)
 		}
-		objectKeys = append(objectKeys, objectKey)
+		decryptFn := func(r io.ReadCloser) (io.ReadCloser, error) {
+			if entry.Encryption == nil {
+				return r, nil
+			}
+			return decryptingReader(r, entry, keyring)
+		}
+		objectKeys = append(objectKeys, binlogSource{
+			objectKey: objectKey,
+			decrypt:   decryptFn,
+		})
 	}
 
 	mysqlbinlogArgs := []string{"--disable-log-bin"}
@@ -187,7 +214,7 @@ func run(ctx context.Context, newS3 newStorageFn, newDB newDatabaseFn, getSecret
 
 // applyBinlogs starts a single mysql client and for each object key
 // fetches the binlog from storage and streams it through mysqlbinlog into mysql.
-func applyBinlogs(ctx context.Context, objectKeys []string, getObject getObjectFn, mysqlbinlogArgs []string, mysqlArgs []string, mysqlPass string) error {
+func applyBinlogs(ctx context.Context, objects []binlogSource, getObject getObjectFn, mysqlbinlogArgs []string, mysqlArgs []string, mysqlPass string) error {
 	mysqlCmd := exec.CommandContext(ctx, "mysql", mysqlArgs...)
 	mysqlCmd.Env = append(os.Environ(), fmt.Sprintf("MYSQL_PWD=%s", mysqlPass))
 	mysqlStdin, err := mysqlCmd.StdinPipe()
@@ -202,7 +229,8 @@ func applyBinlogs(ctx context.Context, objectKeys []string, getObject getObjectF
 		return fmt.Errorf("start mysql: %w", err)
 	}
 
-	for _, objectKey := range objectKeys {
+	for _, item := range objects {
+		objectKey := item.objectKey
 		log.Printf("streaming binlog %s", objectKey)
 
 		obj, err := getObject(ctx, objectKey)
@@ -214,6 +242,13 @@ func applyBinlogs(ctx context.Context, objectKeys []string, getObject getObjectF
 				log.Printf("wait for mysql: %v", waitErr)
 			}
 			return fmt.Errorf("fetch binlog %s: %w", objectKey, err)
+		}
+
+		if item.decrypt != nil {
+			obj, err = item.decrypt(obj)
+			if err != nil {
+				return fmt.Errorf("decrypt binlog %s: %w", objectKey, err)
+			}
 		}
 
 		args := append(mysqlbinlogArgs, "-")
