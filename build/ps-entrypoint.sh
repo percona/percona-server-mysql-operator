@@ -252,6 +252,38 @@ escape_special() {
 		| sed 's/"/\\\"/g'
 }
 
+# system_user_grants prints the GRANT statements for the users the operator
+# manages. It runs both when the datadir is initialized and on every subsequent
+# start, so an existing datadir converges on the grants shipped by this image.
+# The users themselves are only created on initialization.
+system_user_grants() {
+	cat <<-EOSQL
+		CREATE DATABASE IF NOT EXISTS sys_operator;
+
+		GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
+		GRANT SELECT ON performance_schema.replication_group_members TO 'xtrabackup'@'localhost';
+		GRANT SELECT ON performance_schema.log_status TO 'xtrabackup'@'localhost';
+		GRANT SELECT ON performance_schema.keyring_component_status TO 'xtrabackup'@'localhost';
+		GRANT SELECT ON mysql.component TO 'xtrabackup'@'localhost';
+
+		GRANT SYSTEM_USER, SELECT, PROCESS, SUPER, REPLICATION CLIENT, RELOAD, BACKUP_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
+		GRANT SELECT ON performance_schema.* TO 'monitor'@'${MONITOR_HOST}';
+		GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
+
+		GRANT DELETE, INSERT, UPDATE ON mysql.* TO 'replication'@'%' WITH GRANT OPTION;
+		GRANT SELECT ON performance_schema.threads to 'replication'@'%';
+		GRANT SYSTEM_USER, REPLICATION SLAVE, BACKUP_ADMIN, GROUP_REPLICATION_STREAM, CLONE_ADMIN, CONNECTION_ADMIN, CREATE USER, EXECUTE, FILE, GROUP_REPLICATION_ADMIN, PERSIST_RO_VARIABLES_ADMIN, PROCESS, RELOAD, REPLICATION CLIENT, REPLICATION_APPLIER, REPLICATION_SLAVE_ADMIN, ROLE_ADMIN, SELECT, SHUTDOWN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'replication'@'%' WITH GRANT OPTION;
+
+		GRANT SYSTEM_USER, SUPER, PROCESS, REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';
+		GRANT SELECT ON performance_schema.replication_group_members TO 'orchestrator'@'%';
+		GRANT SELECT ON mysql.slave_master_info TO 'orchestrator'@'%';
+		GRANT SELECT ON sys_operator.* TO 'orchestrator'@'%';
+
+		GRANT SYSTEM_USER, REPLICATION CLIENT ON *.* TO 'heartbeat'@'localhost';
+		GRANT SELECT, CREATE, DELETE, UPDATE, INSERT ON sys_operator.heartbeat TO 'heartbeat'@'localhost';
+	EOSQL
+}
+
 MYSQL_VERSION=$(mysqld -V | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
 
 if [[ "$MYSQL_VERSION" != '8.0' ]] && [[ "${MYSQL_VERSION}" != '8.4' ]] && [[ "${MYSQL_VERSION}" != '9.7' ]]; then
@@ -351,10 +383,6 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 		file_env 'HEARTBEAT_PASSWORD' '' 'heartbeat'
 		file_env 'CLUSTERSET_PASSWORD' '' 'clusterset'
 
-		read -r -d '' monitorConnectGrant <<-EOSQL || true
-			GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
-		EOSQL
-
 		clustersetCreate=
 		if [ -n "$CLUSTERSET_PASSWORD" ]; then
 			read -r -d '' clustersetCreate <<-EOSQL || true
@@ -385,31 +413,12 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 			${clustersetCreate}
 
 			CREATE USER 'xtrabackup'@'localhost' IDENTIFIED BY '$(escape_special "${XTRABACKUP_PASSWORD}")' PASSWORD EXPIRE NEVER;
-			GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
-			GRANT SELECT ON performance_schema.replication_group_members TO 'xtrabackup'@'localhost';
-			GRANT SELECT ON performance_schema.log_status TO 'xtrabackup'@'localhost';
-			GRANT SELECT ON performance_schema.keyring_component_status TO 'xtrabackup'@'localhost';
-
 			CREATE USER 'monitor'@'${MONITOR_HOST}' IDENTIFIED BY '$(escape_special "${MONITOR_PASSWORD}")' WITH MAX_USER_CONNECTIONS 100 PASSWORD EXPIRE NEVER;
-			GRANT SYSTEM_USER, SELECT, PROCESS, SUPER, REPLICATION CLIENT, RELOAD, BACKUP_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
-			GRANT SELECT ON performance_schema.* TO 'monitor'@'${MONITOR_HOST}';
-			${monitorConnectGrant}
-
 			CREATE USER 'replication'@'%' IDENTIFIED BY '$(escape_special "${REPLICATION_PASSWORD}")' PASSWORD EXPIRE NEVER;
-			GRANT DELETE, INSERT, UPDATE ON mysql.* TO 'replication'@'%' WITH GRANT OPTION;
-			GRANT SELECT ON performance_schema.threads to 'replication'@'%';
-			GRANT SYSTEM_USER, REPLICATION SLAVE, BACKUP_ADMIN, GROUP_REPLICATION_STREAM, CLONE_ADMIN, CONNECTION_ADMIN, CREATE USER, EXECUTE, FILE, GROUP_REPLICATION_ADMIN, PERSIST_RO_VARIABLES_ADMIN, PROCESS, RELOAD, REPLICATION CLIENT, REPLICATION_APPLIER, REPLICATION_SLAVE_ADMIN, ROLE_ADMIN, SELECT, SHUTDOWN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'replication'@'%' WITH GRANT OPTION;
-
 			CREATE USER 'orchestrator'@'%' IDENTIFIED BY '$(escape_special "${ORC_TOPOLOGY_PASSWORD}")' PASSWORD EXPIRE NEVER;
-			GRANT SYSTEM_USER, SUPER, PROCESS, REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';
-			GRANT SELECT ON performance_schema.replication_group_members TO 'orchestrator'@'%';
-			GRANT SELECT ON mysql.slave_master_info TO 'orchestrator'@'%';
-			GRANT SELECT ON sys_operator.* TO 'orchestrator'@'%';
-
-			CREATE DATABASE IF NOT EXISTS sys_operator;
 			CREATE USER 'heartbeat'@'localhost' IDENTIFIED BY '$(escape_special "${HEARTBEAT_PASSWORD}")' PASSWORD EXPIRE NEVER;
-			GRANT SYSTEM_USER, REPLICATION CLIENT ON *.* TO 'heartbeat'@'localhost';
-			GRANT SELECT, CREATE, DELETE, UPDATE, INSERT ON sys_operator.heartbeat TO 'heartbeat'@'localhost';
+
+			$(system_user_grants)
 
 			DROP DATABASE IF EXISTS test;
 			FLUSH PRIVILEGES ;
