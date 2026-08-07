@@ -256,31 +256,31 @@ system_user_grants() {
 	cat <<-EOSQL
 		CREATE DATABASE IF NOT EXISTS sys_operator;
 
-		CREATE USER IF NOT EXISTS 'xtrabackup'@'localhost' IDENTIFIED BY '$(escape_special "${XTRABACKUP_PASSWORD}")' PASSWORD EXPIRE NEVER;
-		CREATE USER IF NOT EXISTS 'monitor'@'${MONITOR_HOST}' IDENTIFIED BY '$(escape_special "${MONITOR_PASSWORD}")' WITH MAX_USER_CONNECTIONS 100 PASSWORD EXPIRE NEVER;
-		CREATE USER IF NOT EXISTS 'replication'@'%' IDENTIFIED BY '$(escape_special "${REPLICATION_PASSWORD}")' PASSWORD EXPIRE NEVER;
-		CREATE USER IF NOT EXISTS 'orchestrator'@'%' IDENTIFIED BY '$(escape_special "${ORC_TOPOLOGY_PASSWORD}")' PASSWORD EXPIRE NEVER;
-		CREATE USER IF NOT EXISTS 'heartbeat'@'localhost' IDENTIFIED BY '$(escape_special "${HEARTBEAT_PASSWORD}")' PASSWORD EXPIRE NEVER;
 
+		CREATE USER IF NOT EXISTS 'xtrabackup'@'localhost' IDENTIFIED BY '$(escape_special "${XTRABACKUP_PASSWORD}")' PASSWORD EXPIRE NEVER;
 		GRANT SYSTEM_USER, BACKUP_ADMIN, PROCESS, RELOAD, GROUP_REPLICATION_ADMIN, REPLICATION_SLAVE_ADMIN, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
 		GRANT SELECT ON performance_schema.replication_group_members TO 'xtrabackup'@'localhost';
 		GRANT SELECT ON performance_schema.log_status TO 'xtrabackup'@'localhost';
 		GRANT SELECT ON performance_schema.keyring_component_status TO 'xtrabackup'@'localhost';
 		GRANT SELECT ON mysql.component TO 'xtrabackup'@'localhost';
 
+		CREATE USER IF NOT EXISTS 'monitor'@'${MONITOR_HOST}' IDENTIFIED BY '$(escape_special "${MONITOR_PASSWORD}")' WITH MAX_USER_CONNECTIONS 100 PASSWORD EXPIRE NEVER;
 		GRANT SYSTEM_USER, SELECT, PROCESS, SUPER, REPLICATION CLIENT, RELOAD, BACKUP_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
 		GRANT SELECT ON performance_schema.* TO 'monitor'@'${MONITOR_HOST}';
 		GRANT SERVICE_CONNECTION_ADMIN ON *.* TO 'monitor'@'${MONITOR_HOST}';
 
+		CREATE USER IF NOT EXISTS 'replication'@'%' IDENTIFIED BY '$(escape_special "${REPLICATION_PASSWORD}")' PASSWORD EXPIRE NEVER;
 		GRANT DELETE, INSERT, UPDATE ON mysql.* TO 'replication'@'%' WITH GRANT OPTION;
 		GRANT SELECT ON performance_schema.threads to 'replication'@'%';
 		GRANT SYSTEM_USER, REPLICATION SLAVE, BACKUP_ADMIN, GROUP_REPLICATION_STREAM, CLONE_ADMIN, CONNECTION_ADMIN, CREATE USER, EXECUTE, FILE, GROUP_REPLICATION_ADMIN, PERSIST_RO_VARIABLES_ADMIN, PROCESS, RELOAD, REPLICATION CLIENT, REPLICATION_APPLIER, REPLICATION_SLAVE_ADMIN, ROLE_ADMIN, SELECT, SHUTDOWN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'replication'@'%' WITH GRANT OPTION;
 
+		CREATE USER IF NOT EXISTS 'orchestrator'@'%' IDENTIFIED BY '$(escape_special "${ORC_TOPOLOGY_PASSWORD}")' PASSWORD EXPIRE NEVER;
 		GRANT SYSTEM_USER, SUPER, PROCESS, REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';
 		GRANT SELECT ON performance_schema.replication_group_members TO 'orchestrator'@'%';
 		GRANT SELECT ON mysql.slave_master_info TO 'orchestrator'@'%';
 		GRANT SELECT ON sys_operator.* TO 'orchestrator'@'%';
 
+		CREATE USER IF NOT EXISTS 'heartbeat'@'localhost' IDENTIFIED BY '$(escape_special "${HEARTBEAT_PASSWORD}")' PASSWORD EXPIRE NEVER;
 		GRANT SYSTEM_USER, REPLICATION CLIENT ON *.* TO 'heartbeat'@'localhost';
 		GRANT SELECT, CREATE, DELETE, UPDATE, INSERT ON sys_operator.heartbeat TO 'heartbeat'@'localhost';
 	EOSQL
@@ -296,6 +296,14 @@ system_user_grants() {
 			GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata_bkp.* TO 'clusterset'@'%' WITH GRANT OPTION ;
 			GRANT ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, DELETE, DROP, EVENT, EXECUTE, INDEX, INSERT, LOCK TABLES, REFERENCES, SHOW VIEW, TRIGGER, UPDATE ON mysql_innodb_cluster_metadata_previous.* TO 'clusterset'@'%' WITH GRANT OPTION ;
 		EOSQL
+	fi
+	if [ -n "$CONFIGURATOR_PASSWORD" ]; then
+		cat <<-EOSQL
+			CREATE USER IF NOT EXISTS 'configurator'@'%' IDENTIFIED BY '$(escape_special "${CONFIGURATOR_PASSWORD}")' PASSWORD EXPIRE NEVER;
+			
+			GRANT SYSTEM_VARIABLES_ADMIN, SYSTEM_USER ON *.* TO 'configurator'@'%';
+			GRANT SELECT ON performance_schema.global_variables TO 'configurator'@'%';
+			EOSQL
 	fi
 }
 
@@ -545,6 +553,7 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 	file_env 'ORC_TOPOLOGY_PASSWORD' '' 'orchestrator'
 	file_env 'HEARTBEAT_PASSWORD' '' 'heartbeat'
 	file_env 'CLUSTERSET_PASSWORD' '' 'clusterset'
+	file_env 'CONFIGURATOR_PASSWORD' '' 'configurator'
 	set -x
 
 	fresh_datadir=0
