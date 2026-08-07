@@ -2,13 +2,15 @@ apiVersion: kuttl.dev/v1beta1
 kind: TestAssert
 timeout: 420
 ---
+# Removing max_connections cannot be done with SET GLOBAL, so this is the first
+# config change that rolls the StatefulSet.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  generation: 3
+  generation: 2
   name: config-mysql
 status:
-  observedGeneration: 3
+  observedGeneration: 2
   readyReplicas: 3
   replicas: 3
   updatedReplicas: 3

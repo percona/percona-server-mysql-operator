@@ -7,4 +7,4 @@ kind: ConfigMap
 metadata:
   name: 03-check-config
 data:
-  max_connections: "250"
+  max_connections: "250 250 250"
