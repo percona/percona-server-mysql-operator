@@ -1,5 +1,7 @@
 package binlogserver
 
+import "github.com/pkg/errors"
+
 type Keyring struct {
 	Keys []Key `json:"keys"`
 }
@@ -15,6 +17,13 @@ func (k Keyring) FindKey(id string) *Key {
 		if key.Id == id {
 			return &key
 		}
+	}
+	return nil
+}
+
+func (k Keyring) Validate() error {
+	if len(k.Keys) == 0 {
+		return errors.New("keyring must contain at least one key")
 	}
 	return nil
 }
