@@ -288,7 +288,11 @@ func TestRun(t *testing.T) {
 			}
 
 			var captured applyCall
-			apply := func(_ context.Context, objectKeys []string, _ getObjectFn, mysqlbinlogArgs []string, mysqlArgs []string, _ string) error {
+			apply := func(_ context.Context, objects []binlogSource, _ getObjectFn, mysqlbinlogArgs []string, mysqlArgs []string, _ string) error {
+				var objectKeys []string
+				for _, obj := range objects {
+					objectKeys = append(objectKeys, obj.objectKey)
+				}
 				captured = applyCall{
 					objectKeys:      objectKeys,
 					mysqlbinlogArgs: mysqlbinlogArgs,
