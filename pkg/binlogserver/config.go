@@ -196,7 +196,7 @@ func getEncryptionConfig(
 	return &EncryptionConfig{
 		Format:     "generic", // only this format is supported for now
 		KeyringURI: fmt.Sprintf("file://%s/%s", keyringMountPath, sel.Key),
-		KekID:      spec.Storage.Encryption.KekID,
+		KekID:      kekID,
 		Cipher:     spec.Storage.Encryption.Cipher,
 	}, nil
 }
