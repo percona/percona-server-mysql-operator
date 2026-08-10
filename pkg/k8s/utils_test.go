@@ -598,7 +598,7 @@ func TestSetCRVersion(t *testing.T) {
 	})
 }
 
-func TestEnsureObject(t *testing.T) {
+func TestEnsureObjectWithHash(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
 	require.NoError(t, apiv1.AddToScheme(scheme))
@@ -633,7 +633,7 @@ func TestEnsureObject(t *testing.T) {
 			Data: map[string][]byte{"key": []byte("value")},
 		}
 
-		err := EnsureObject(context.Background(), cl, cr, secret, scheme)
+		err := EnsureObjectWithHash(context.Background(), cl, cr, secret, scheme)
 		require.NoError(t, err)
 
 		// Verify the secret was created
@@ -641,13 +641,30 @@ func TestEnsureObject(t *testing.T) {
 		err = cl.Get(context.Background(), types.NamespacedName{Name: "test-secret", Namespace: "default"}, got)
 		require.NoError(t, err)
 		assert.Equal(t, []byte("value"), got.Data["key"])
+		// Verify hash annotation was set
+		assert.NotEmpty(t, got.Annotations[naming.AnnotationLastConfigHash.String()])
 	})
 
 	t.Run("skips update when nothing changed", func(t *testing.T) {
+		// First, compute the hash for the secret data
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "default",
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: map[string][]byte{"key": []byte("value")},
+		}
+		hash, err := ObjectHash(secret)
+		require.NoError(t, err)
+
 		existingSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-secret",
 				Namespace: "default",
+				Annotations: map[string]string{
+					naming.AnnotationLastConfigHash.String(): hash,
+				},
 				OwnerReferences: []metav1.OwnerReference{
 					{
 						APIVersion:         "ps.percona.com/v1",
@@ -668,9 +685,6 @@ func TestEnsureObject(t *testing.T) {
 			WithObjects(cr, existingSecret).
 			Build()
 
-		// Build the desired object with same data (simulating a reconcile with no changes)
-		// Note: TypeMeta is not set because the fake client (like the real API server's
-		// response to Get) does not populate TypeMeta on the fetched object.
 		desired := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-secret",
@@ -680,7 +694,7 @@ func TestEnsureObject(t *testing.T) {
 			Data: map[string][]byte{"key": []byte("value")},
 		}
 
-		err := EnsureObject(context.Background(), cl, cr, desired, scheme)
+		err = EnsureObjectWithHash(context.Background(), cl, cr, desired, scheme)
 		require.NoError(t, err)
 
 		// Verify ResourceVersion didn't change (no update was made)
@@ -691,6 +705,17 @@ func TestEnsureObject(t *testing.T) {
 	})
 
 	t.Run("updates when data changes", func(t *testing.T) {
+		// Compute hash for old data
+		oldSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "default",
+			},
+			Data: map[string][]byte{"key": []byte("old-value")},
+		}
+		oldHash, err := ObjectHash(oldSecret)
+		require.NoError(t, err)
+
 		existingSecret := &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "v1",
@@ -699,6 +724,9 @@ func TestEnsureObject(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-secret",
 				Namespace: "default",
+				Annotations: map[string]string{
+					naming.AnnotationLastConfigHash.String(): oldHash,
+				},
 				OwnerReferences: []metav1.OwnerReference{
 					{
 						APIVersion:         "ps.percona.com/v1",
@@ -733,7 +761,7 @@ func TestEnsureObject(t *testing.T) {
 			Data: map[string][]byte{"key": []byte("new-value")},
 		}
 
-		err := EnsureObject(context.Background(), cl, cr, desired, scheme)
+		err = EnsureObjectWithHash(context.Background(), cl, cr, desired, scheme)
 		require.NoError(t, err)
 
 		// Verify the secret was updated
