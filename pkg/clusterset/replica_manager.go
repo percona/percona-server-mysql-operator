@@ -20,6 +20,7 @@ const (
 	CmdAddReplica    = "add-replica"
 	CmdRemoveReplica = "remove-replica"
 	CmdSetPrimary    = "set-primary"
+	CmdRejoinCluster = "rejoin-cluster"
 )
 
 func ClusterSetManagerJob(

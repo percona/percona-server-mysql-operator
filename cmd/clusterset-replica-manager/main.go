@@ -34,6 +34,7 @@ type replicaManager interface {
 	CreateReplicaCluster(ctx context.Context, cluster *apiv1.ClusterSetCluster, recoverMethod string) error
 	RemoveReplicaCluster(ctx context.Context, clusterName string, force bool) error
 	SetPrimaryCluster(ctx context.Context, clusterName string) error
+	RejoinCluster(ctx context.Context, clusterName string) error
 }
 
 func main() {
@@ -103,6 +104,10 @@ func main() {
 		if err := setPrimary(ctx, manager, psClusterSet.Spec.PrimaryCluster); err != nil {
 			log.Fatalf("failed to set primary cluster: %v", err)
 		}
+	case "rejoin-cluster":
+		if err := rejoinCluster(ctx, manager, args); err != nil {
+			log.Fatalf("failed to rejoin cluster: %v", err)
+		}
 	default:
 		log.Fatalf("invalid command: %s", os.Args[1])
 	}
@@ -146,6 +151,15 @@ func setPrimary(ctx context.Context, manager replicaManager, primary string) err
 		}
 		return errors.Wrap(err, "failed to set primary cluster")
 	}
+	return nil
+}
+
+func rejoinCluster(ctx context.Context, manager replicaManager, args replicaInitArgs) error {
+	log.Printf("Rejoining cluster '%s' to clusterset '%s'", args.replicaClusterName, args.psClusterSetName)
+	if err := manager.RejoinCluster(ctx, args.replicaClusterName); err != nil {
+		return errors.Wrap(err, "failed to rejoin cluster")
+	}
+	log.Printf("Cluster '%s' rejoined to clusterset '%s'", args.replicaClusterName, args.psClusterSetName)
 	return nil
 }
 
