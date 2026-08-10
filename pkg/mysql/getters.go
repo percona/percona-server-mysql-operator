@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,4 +40,22 @@ func GetPod(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServerMySQL,
 	}
 
 	return pod, nil
+}
+
+func GetAppliedCRVersion(ctx context.Context, cl client.Reader, cr *apiv1.PerconaServerMySQL) (string, error) {
+	sfs := &appsv1.StatefulSet{}
+	if err := cl.Get(ctx, NamespacedName(cr), sfs); err != nil {
+		return "", err
+	}
+	for _, c := range sfs.Spec.Template.Spec.Containers {
+		if c.Name != AppName {
+			continue
+		}
+		for _, env := range c.Env {
+			if env.Name == crVersionEnvVar {
+				return env.Value, nil
+			}
+		}
+	}
+	return "", nil
 }

@@ -238,6 +238,17 @@ func (r *PerconaServerMySQLReconciler) reconcileUsers(ctx context.Context, cr *a
 		return nil
 	}
 
+	appliedCRVersion, err := mysql.GetAppliedCRVersion(ctx, r.Client, cr)
+	if err != nil {
+		return errors.Wrap(err, "get applied CR version")
+	}
+
+	// Wait for the StatefulSet to be re-created so that any new users may be created at container startup.
+	if cr.CompareVersion("1.3.0") >= 0 && (appliedCRVersion == "" || appliedCRVersion != cr.Spec.CRVersion) {
+		log.Info("Wait for smart update to start")
+		return nil
+	}
+
 	var (
 		restartMySQL        bool
 		restartReplication  bool

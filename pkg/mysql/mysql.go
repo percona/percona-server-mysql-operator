@@ -35,6 +35,7 @@ const (
 	BackupLogDir          = "/var/log/xtrabackup"
 	vaultSecretVolumeName = "vault-keyring-secret"
 	vaultSecretMountPath  = "/etc/mysql/vault-keyring-secret"
+	crVersionEnvVar       = "CR_VERSION"
 )
 
 const (
@@ -730,7 +731,7 @@ func mysqldContainer(cr *apiv1.PerconaServerMySQL) corev1.Container {
 
 	if cr.CompareVersion("1.3.0") >= 0 {
 		env = append(env, corev1.EnvVar{
-			Name:  "CR_VERSION",
+			Name:  crVersionEnvVar,
 			Value: cr.Spec.CRVersion,
 		})
 	}
