@@ -702,7 +702,12 @@ spec:
 #          - name: my-secret-1
 #          - name: my-secret-2
 #        storage:
-#          encryption: null
+#          encryption:
+#            cipher: AES-256-CTR
+#            kekId: alpha
+#            keyringSecret:
+#              key: keyring.json
+#              name: my-binlog-server-keyring-secret
 #          s3:
 #            bucket: S3-BACKUP-BUCKET-NAME-HERE
 #            credentialsSecret: ps-cluster1-s3-credentials
