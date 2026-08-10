@@ -3,7 +3,8 @@ package binlogserver
 import "github.com/pkg/errors"
 
 type Keyring struct {
-	Keys []Key `json:"keys"`
+	Version int   `json:"version"`
+	Keys    []Key `json:"keys"`
 }
 
 type Key struct {
