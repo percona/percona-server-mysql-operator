@@ -564,6 +564,108 @@ func TestRestoreJob(t *testing.T) {
 				assert.True(t, mountNames[binlogsVolumeName])
 			},
 		},
+		"keyring secret from cluster encryption is mounted": {
+			cluster: &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					SecretsName:   "secrets",
+					SSLSecretName: "ssl",
+					Backup: &apiv1.BackupSpec{
+						PiTR: apiv1.PiTRSpec{
+							BinlogServer: &apiv1.BinlogServerSpec{
+								Storage: apiv1.BinlogServerStorageSpec{
+									Encryption: &apiv1.BinlogServerStorageEncryptionSpec{
+										KeyringSecret: &apiv1.BinlogServerKeyringSecretSelector{
+											Name: "cluster-keyring",
+											Key:  "cluster-keyring.json",
+										},
+									},
+								},
+							},
+						},
+					},
+					MySQL: apiv1.MySQLSpec{},
+				},
+			},
+			restore: &apiv1.PerconaServerMySQLRestore{
+				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+			},
+			storage:   &apiv1.BackupStorageSpec{},
+			initImage: "init:latest",
+			verify: func(t *testing.T, job *batchv1.Job) {
+				var foundVolume bool
+				for _, v := range job.Spec.Template.Spec.Volumes {
+					if v.Name == keyringVolumeName {
+						foundVolume = true
+						assert.Equal(t, "cluster-keyring", v.Secret.SecretName)
+						break
+					}
+				}
+				assert.True(t, foundVolume, "keyring volume not found")
+
+				container := job.Spec.Template.Spec.Containers[0]
+				mountNames := map[string]string{}
+				for _, m := range container.VolumeMounts {
+					mountNames[m.Name] = m.MountPath
+				}
+				assert.Equal(t, keyringMountPath, mountNames[keyringVolumeName])
+
+				envMap := envToMap(container.Env)
+				assert.Equal(t, keyringMountPath+"/cluster-keyring.json", envMap["KEYRING_PATH"])
+			},
+		},
+		"restore keyring secret overrides cluster encryption keyring": {
+			cluster: &apiv1.PerconaServerMySQL{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
+				Spec: apiv1.PerconaServerMySQLSpec{
+					SecretsName:   "secrets",
+					SSLSecretName: "ssl",
+					Backup: &apiv1.BackupSpec{
+						PiTR: apiv1.PiTRSpec{
+							BinlogServer: &apiv1.BinlogServerSpec{
+								Storage: apiv1.BinlogServerStorageSpec{
+									Encryption: &apiv1.BinlogServerStorageEncryptionSpec{
+										KeyringSecret: &apiv1.BinlogServerKeyringSecretSelector{
+											Name: "cluster-keyring",
+											Key:  "cluster-keyring.json",
+										},
+									},
+								},
+							},
+						},
+					},
+					MySQL: apiv1.MySQLSpec{},
+				},
+			},
+			restore: &apiv1.PerconaServerMySQLRestore{
+				ObjectMeta: metav1.ObjectMeta{Name: "restore", Namespace: "ns"},
+				Spec: apiv1.PerconaServerMySQLRestoreSpec{
+					PITR: &apiv1.RestorePITRSpec{
+						KeyringSecret: &apiv1.BinlogServerKeyringSecretSelector{
+							Name: "restore-keyring",
+							Key:  "restore-keyring.json",
+						},
+					},
+				},
+			},
+			storage:   &apiv1.BackupStorageSpec{},
+			initImage: "init:latest",
+			verify: func(t *testing.T, job *batchv1.Job) {
+				var foundVolume bool
+				for _, v := range job.Spec.Template.Spec.Volumes {
+					if v.Name == keyringVolumeName {
+						foundVolume = true
+						assert.Equal(t, "restore-keyring", v.Secret.SecretName)
+						break
+					}
+				}
+				assert.True(t, foundVolume, "keyring volume not found")
+
+				container := job.Spec.Template.Spec.Containers[0]
+				envMap := envToMap(container.Env)
+				assert.Equal(t, keyringMountPath+"/restore-keyring.json", envMap["KEYRING_PATH"])
+			},
+		},
 		"one init container present": {
 			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},

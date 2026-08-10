@@ -756,6 +756,14 @@ type BinlogServerSpec struct {
 }
 
 func (s *BinlogServerSpec) SetDefaults() {
+	if s.Storage.Encryption != nil {
+		if s.Storage.Encryption.KeyringSecret != nil && s.Storage.Encryption.KeyringSecret.Key == "" {
+			s.Storage.Encryption.KeyringSecret.Key = "keyring.json"
+		}
+		if s.Storage.Encryption.Cipher == "" {
+			s.Storage.Encryption.Cipher = "AES-256-CTR"
+		}
+	}
 	if s.SSLMode == "" {
 		s.SSLMode = "verify_identity"
 	}

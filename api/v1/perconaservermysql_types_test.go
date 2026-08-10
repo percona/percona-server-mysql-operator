@@ -202,6 +202,38 @@ func TestCheckNSetDefaults(t *testing.T) {
 		assert.Equal(t, "info", bls.LogLevel)
 		assert.Equal(t, int32(100), bls.ServerID)
 	})
+	t.Run("binlog server encryption defaults are set", func(t *testing.T) {
+		cr := new(PerconaServerMySQL)
+		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("1G"),
+					},
+				},
+			},
+		}
+		cr.Spec.Backup = &BackupSpec{
+			PiTR: PiTRSpec{
+				BinlogServer: &BinlogServerSpec{
+					Storage: BinlogServerStorageSpec{
+						Encryption: &BinlogServerStorageEncryptionSpec{
+							KeyringSecret: &BinlogServerKeyringSecretSelector{
+								Name: "keyring-secret",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := cr.CheckNSetDefaults(t.Context(), nil)
+		assert.NoError(t, err)
+
+		encryption := cr.Spec.Backup.PiTR.BinlogServer.Storage.Encryption
+		assert.Equal(t, "keyring.json", encryption.KeyringSecret.Key)
+		assert.Equal(t, "AES-256-CTR", encryption.Cipher)
+	})
 	t.Run("binlog server explicit values are not overridden by defaults", func(t *testing.T) {
 		cr := new(PerconaServerMySQL)
 		cr.Spec.MySQL.VolumeSpec = &VolumeSpec{

@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -103,6 +107,7 @@ func TestRun(t *testing.T) {
 		applyErr      error
 		expectedError string
 		checkApply    func(t *testing.T, call applyCall)
+		checkObjects  func(t *testing.T, objects []binlogSource)
 	}{
 		"missing BINLOGS_PATH": {
 			expectedError: "BINLOGS_PATH",
@@ -237,6 +242,35 @@ func TestRun(t *testing.T) {
 				}
 			},
 		},
+		"unencrypted binlog is not decrypted when later binlogs are encrypted": {
+			entries: []binlogserver.BinlogEntry{
+				{Name: "binlog.000001", URI: "s3://mybucket/binlogs/binlog.000001"},
+				{
+					Name: "binlog.000002",
+					URI:  "s3://mybucket/binlogs/binlog.000002",
+					Encryption: &binlogserver.Encryption{
+						FileKeyEnvelope: &binlogserver.FileKeyEnvelope{KekID: "alpha"},
+						FileDataEnvelope: &binlogserver.FileDataEnvelope{
+							Cipher: "AES-256-CTR",
+						},
+					},
+				},
+			},
+			pitrType: "gtid",
+			pitrGTID: "aaaaaaaa-0000-0000-0000-000000000001:1-10",
+			db:       &fakeDB{getGTIDExecutedResult: "aaaaaaaa-0000-0000-0000-000000000001:1-5"},
+			checkObjects: func(t *testing.T, objects []binlogSource) {
+				require.Len(t, objects, 2)
+
+				reader, err := objects[0].decrypt(io.NopCloser(strings.NewReader("plain binlog")))
+				require.NoError(t, err)
+				defer reader.Close()
+
+				data, err := io.ReadAll(reader)
+				require.NoError(t, err)
+				assert.Equal(t, "plain binlog", string(data))
+			},
+		},
 	}
 
 	for name, tc := range tests {
@@ -264,6 +298,7 @@ func TestRun(t *testing.T) {
 			t.Setenv("PITR_DATE", tc.pitrDate)
 			t.Setenv("PITR_FORCE", tc.pitrForce)
 			t.Setenv("S3_BUCKET", bucket)
+			t.Setenv("KEYRING_PATH", "")
 
 			fakeDatabase := tc.db
 
@@ -298,6 +333,9 @@ func TestRun(t *testing.T) {
 					mysqlbinlogArgs: mysqlbinlogArgs,
 					mysqlArgs:       mysqlArgs,
 				}
+				if tc.checkObjects != nil {
+					tc.checkObjects(t, objects)
+				}
 				return tc.applyErr
 			}
 
@@ -313,4 +351,66 @@ func TestRun(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDecryptingReader(t *testing.T) {
+	plaintext := append([]byte{}, binlogMagic...)
+	plaintext = append(plaintext, []byte("events")...)
+
+	ciphertext, entry, keyring := encryptBinlogForTest(t, plaintext)
+	reader, err := decryptingReader(io.NopCloser(bytes.NewReader(ciphertext)), entry, keyring)
+	require.NoError(t, err)
+	defer reader.Close()
+
+	got, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	assert.Equal(t, plaintext, got)
+}
+
+func encryptBinlogForTest(t *testing.T, plaintext []byte) ([]byte, binlogserver.BinlogEntry, *binlogserver.Keyring) {
+	t.Helper()
+
+	kek := bytes.Repeat([]byte{0x11}, 32)
+	fileKey := bytes.Repeat([]byte{0x22}, 32)
+	fileKeyBlock, err := aes.NewCipher(kek)
+	require.NoError(t, err)
+
+	wrappedFileKey := make([]byte, len(fileKey))
+	for i := 0; i < len(fileKey); i += fileKeyBlock.BlockSize() {
+		fileKeyBlock.Encrypt(wrappedFileKey[i:i+fileKeyBlock.BlockSize()], fileKey[i:i+fileKeyBlock.BlockSize()])
+	}
+
+	dataIV := bytes.Repeat([]byte{0x33}, aes.BlockSize)
+	dataBlock, err := aes.NewCipher(fileKey)
+	require.NoError(t, err)
+	stream := cipher.NewCTR(dataBlock, dataIV)
+	ciphertext := make([]byte, len(plaintext))
+	stream.XORKeyStream(ciphertext, plaintext)
+
+	entry := binlogserver.BinlogEntry{
+		Name: "binlog.000001",
+		Encryption: &binlogserver.Encryption{
+			FileKeyEnvelope: &binlogserver.FileKeyEnvelope{
+				KekID:   "alpha",
+				DataHex: hex.EncodeToString(wrappedFileKey),
+			},
+			FileDataEnvelope: &binlogserver.FileDataEnvelope{
+				Cipher: "AES-256-CTR",
+				IVHex:  hex.EncodeToString(dataIV),
+			},
+		},
+	}
+
+	keyring := &binlogserver.Keyring{
+		Version: 1,
+		Keys: []binlogserver.Key{
+			{
+				Id:      "alpha",
+				Cipher:  "AES-256-ECB",
+				DataHex: hex.EncodeToString(kek),
+			},
+		},
+	}
+
+	return ciphertext, entry, keyring
 }
