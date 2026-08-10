@@ -163,7 +163,7 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 				},
 				Encryption: &apiv1.BinlogServerStorageEncryptionSpec{
 					KeyringSecret: &apiv1.BinlogServerKeyringSecretSelector{
-						Name: "my-binlog-server-keyring-secret",
+						Name: "ps-cluster1-binlog-server-keyring",
 						Key:  "keyring.json",
 					},
 					KekID:  "alpha",

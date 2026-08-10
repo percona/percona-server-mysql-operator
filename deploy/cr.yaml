@@ -707,7 +707,7 @@ spec:
 #            kekId: alpha
 #            keyringSecret:
 #              key: keyring.json
-#              name: my-binlog-server-keyring-secret
+#              name: ps-cluster1-binlog-server-keyring
 #          s3:
 #            bucket: S3-BACKUP-BUCKET-NAME-HERE
 #            credentialsSecret: ps-cluster1-s3-credentials
