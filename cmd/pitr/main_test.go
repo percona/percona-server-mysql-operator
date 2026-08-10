@@ -264,7 +264,7 @@ func TestRun(t *testing.T) {
 
 				reader, err := objects[0].decrypt(io.NopCloser(strings.NewReader("plain binlog")))
 				require.NoError(t, err)
-				defer reader.Close()
+				defer reader.Close() //nolint:errcheck
 
 				data, err := io.ReadAll(reader)
 				require.NoError(t, err)
@@ -360,7 +360,7 @@ func TestDecryptingReader(t *testing.T) {
 	ciphertext, entry, keyring := encryptBinlogForTest(t, plaintext)
 	reader, err := decryptingReader(io.NopCloser(bytes.NewReader(ciphertext)), entry, keyring)
 	require.NoError(t, err)
-	defer reader.Close()
+	defer reader.Close() //nolint:errcheck
 
 	got, err := io.ReadAll(reader)
 	require.NoError(t, err)
