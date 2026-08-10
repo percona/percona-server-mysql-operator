@@ -14,9 +14,9 @@ type Key struct {
 }
 
 func (k Keyring) FindKey(id string) *Key {
-	for _, key := range k.Keys {
+	for i, key := range k.Keys {
 		if key.Id == id {
-			return &key
+			return &k.Keys[i]
 		}
 	}
 	return nil
