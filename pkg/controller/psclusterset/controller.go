@@ -426,7 +426,8 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 		return nil
 	}
 
-	if meta.IsStatusConditionTrue(pcs.Status.Conditions, apiv1.ConditionClusterSetPrimarySwitchOverInProg) {
+	if (pcs.Status.PrimaryCluster != "" && pcs.Spec.PrimaryCluster != pcs.Status.PrimaryCluster) ||
+		meta.IsStatusConditionTrue(pcs.Status.Conditions, apiv1.ConditionClusterSetPrimarySwitchOverInProg) {
 		log.Info("Switchover in progress, deferring rejoin", "cluster", rejoinClusterName)
 		return nil
 	}
