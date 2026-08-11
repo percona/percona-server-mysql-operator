@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
+	"strconv"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -75,7 +77,7 @@ func (p *DBParams) DSN() string {
 	config.User = string(p.User)
 	config.Passwd = p.Pass
 	config.Net = "tcp"
-	config.Addr = fmt.Sprintf("%s:%d", p.Host, p.Port)
+	config.Addr = net.JoinHostPort(p.Host, strconv.Itoa(int(p.Port)))
 	config.DBName = "performance_schema"
 	config.Params = map[string]string{
 		"interpolateParams": "true",
