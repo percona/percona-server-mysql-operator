@@ -49,13 +49,13 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
 	"github.com/percona/percona-server-mysql-operator/pkg/controller/psrestore"
 	database "github.com/percona/percona-server-mysql-operator/pkg/db"
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
+	"github.com/percona/percona-server-mysql-operator/pkg/k8s"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysqlsh"
 	"github.com/percona/percona-server-mysql-operator/pkg/naming"
@@ -1112,7 +1112,7 @@ func (r *PerconaServerMySQLReconciler) reconcileMySQLAutoConfig(ctx context.Cont
 
 	configMap := k8s.ConfigMap(cr, mysql.AutoConfigMapName(cr), mysql.CustomConfigKey, config, naming.ComponentDatabase)
 	if !k8s.EqualConfigMaps(currentConfigMap, configMap) {
-		if err := k8s.EnsureObject(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
+		if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, configMap, r.Scheme); err != nil {
 			return errors.Wrapf(err, "ensure ConfigMap/%s", configMap.Name)
 		}
 		log.Info("ConfigMap updated", "name", configMap.Name, "data", configMap.Data)
@@ -1797,7 +1797,7 @@ func (r *PerconaServerMySQLReconciler) reconcileBinlogServer(ctx context.Context
 	}
 
 	configSecret.Data[binlogserver.ConfigKey] = configBytes
-	if err := k8s.EnsureObject(ctx, r.Client, cr, &configSecret, r.Scheme); err != nil {
+	if err := k8s.EnsureObjectWithHash(ctx, r.Client, cr, &configSecret, r.Scheme); err != nil {
 		return errors.Wrap(err, "reconcile secret")
 	}
 
