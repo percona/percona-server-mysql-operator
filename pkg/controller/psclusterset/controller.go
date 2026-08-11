@@ -403,8 +403,8 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 
 	rejoinClusterName, ok := pcs.Annotations[naming.AnnotationClusterSetRejoinCluster.String()]
 	if !ok || rejoinClusterName == "" {
-		// No rejoin requested; clean up stale condition if present.
-		if meta.FindStatusCondition(pcs.Status.Conditions, apiv1.ConditionClusterSetRejoinInProgress) != nil {
+		cond := meta.FindStatusCondition(pcs.Status.Conditions, apiv1.ConditionClusterSetRejoinInProgress)
+		if cond != nil && cond.Status == metav1.ConditionTrue {
 			if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
 				meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetRejoinInProgress)
 				return nil
@@ -431,13 +431,11 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 		return nil
 	}
 
-	// Check for an existing rejoin job.
 	rejoinJob := clusterset.ClusterSetManagerJob(pcs, cluster, clusterset.CmdRejoinCluster, nil, "", "")
 	existingJob := &batchv1.Job{}
 	err := r.Get(ctx, client.ObjectKeyFromObject(rejoinJob), existingJob)
 
 	if err == nil {
-		// Job already exists – track its progress.
 		switch {
 		case jobConditionTrue(existingJob, batchv1.JobComplete):
 			log.Info("Rejoin job completed successfully", "cluster", rejoinClusterName)
@@ -445,7 +443,6 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 			r.Recorder.Eventf(pcs, nil, corev1.EventTypeNormal, apiv1.EventTypeClusterSetMemberRejoined,
 				apiv1.EventTypeClusterSetMemberRejoined, "Cluster %s rejoined to ClusterSet", rejoinClusterName)
 
-			// Remove the annotation to signal completion.
 			orig := pcs.DeepCopy()
 			delete(pcs.Annotations, naming.AnnotationClusterSetRejoinCluster.String())
 			if err := r.Patch(ctx, pcs, client.MergeFrom(orig)); err != nil {
@@ -482,7 +479,6 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 			return nil
 
 		default:
-			// Job is still running.
 			log.Info("Rejoin job is still running", "cluster", rejoinClusterName)
 			return nil
 		}
@@ -492,7 +488,6 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 		return errors.Wrap(err, "get rejoin job")
 	}
 
-	// Create the rejoin job.
 	log.Info("Creating rejoin job", "cluster", rejoinClusterName)
 
 	if err := r.runClusterSetJob(ctx, clusterset.CmdRejoinCluster, pcs, cluster); err != nil {
@@ -526,11 +521,9 @@ func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Con
 		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetPrimarySwitchOverInProg)
 		for _, job := range jobs.Items {
 			switch {
-			// Job has completed
 			case jobConditionTrue(&job, batchv1.JobComplete):
 				continue
 
-			// Job has failed
 			case jobConditionTrue(&job, batchv1.JobFailed):
 				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 					Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
@@ -540,7 +533,6 @@ func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Con
 				})
 				return nil
 
-			// Job is still running
 			default:
 				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 					Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
