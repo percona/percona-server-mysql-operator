@@ -522,9 +522,11 @@ func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Con
 		meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetPrimarySwitchOverInProg)
 		for _, job := range jobs.Items {
 			switch {
+			// Job has completed
 			case jobConditionTrue(&job, batchv1.JobComplete):
 				continue
 
+			// Job has failed
 			case jobConditionTrue(&job, batchv1.JobFailed):
 				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 					Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
@@ -534,6 +536,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) trackSwitchover(ctx context.Con
 				})
 				return nil
 
+			// Job is still running
 			default:
 				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
 					Type:    apiv1.ConditionClusterSetPrimarySwitchOverInProg,
