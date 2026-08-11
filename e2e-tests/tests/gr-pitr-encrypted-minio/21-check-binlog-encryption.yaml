@@ -1,0 +1,45 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 60
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # the operator writes the binlogs picked for the restore into this configmap,
+      # including the encryption envelope the binlog server recorded at upload time
+      binlogs=$(kubectl -n "${NAMESPACE}" get configmap pitr-binlogs-gr-pitr-encrypted-minio-restore -o jsonpath='{.data.binlogs\.json}')
+
+      echo "${binlogs}" | jq .
+
+      total=$(echo "${binlogs}" | jq 'length')
+      if [[ ${total} -eq 0 ]]; then
+          echo "binlog list is empty"
+          exit 1
+      fi
+
+      # every binlog the restore consumed must be encrypted with a KEK from the keyring
+      not_encrypted=$(echo "${binlogs}" | jq -r '
+          [
+              .[]
+              | select((.encryption.file_key_envelope.kek_id // "") | test("^(alpha|beta)$") | not)
+              | .name
+          ] | join(" ")')
+      if [[ -n ${not_encrypted} ]]; then
+          echo "binlogs without a keyring KEK: ${not_encrypted}"
+          exit 1
+      fi
+
+      # the KEK was rotated from alpha to beta mid-test, so both must be represented
+      for kek in alpha beta; do
+          count=$(echo "${binlogs}" | jq --arg kek "${kek}" '[.[] | select(.encryption.file_key_envelope.kek_id == $kek)] | length')
+          if [[ ${count} -eq 0 ]]; then
+              echo "no binlog is encrypted with KEK ${kek}"
+              exit 1
+          fi
+      done
+
+      echo "${total} binlogs, all encrypted; KEK distribution:"
+      echo "${binlogs}" | jq -r 'group_by(.encryption.file_key_envelope.kek_id) | map("\(.[0].encryption.file_key_envelope.kek_id)=\(length)") | join(" ")'
