@@ -1,0 +1,14 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+
+      kubectl -n "${NAMESPACE}" patch ps "${cluster}" \
+          --type merge \
+          -p '{"spec": {"backup": {"pitr": {"binlogServer": {"rewriteFileSize": "16K", "storage": {"encryption": {"kekId": "beta"}}}}}}}'
