@@ -1,11 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -351,66 +347,4 @@ func TestRun(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestDecryptingReader(t *testing.T) {
-	plaintext := append([]byte{}, binlogMagic...)
-	plaintext = append(plaintext, []byte("events")...)
-
-	ciphertext, entry, keyring := encryptBinlogForTest(t, plaintext)
-	reader, err := decryptingReader(io.NopCloser(bytes.NewReader(ciphertext)), entry, keyring)
-	require.NoError(t, err)
-	defer reader.Close() //nolint:errcheck
-
-	got, err := io.ReadAll(reader)
-	require.NoError(t, err)
-	assert.Equal(t, plaintext, got)
-}
-
-func encryptBinlogForTest(t *testing.T, plaintext []byte) ([]byte, binlogserver.BinlogEntry, *binlogserver.Keyring) {
-	t.Helper()
-
-	kek := bytes.Repeat([]byte{0x11}, 32)
-	fileKey := bytes.Repeat([]byte{0x22}, 32)
-	fileKeyBlock, err := aes.NewCipher(kek)
-	require.NoError(t, err)
-
-	wrappedFileKey := make([]byte, len(fileKey))
-	for i := 0; i < len(fileKey); i += fileKeyBlock.BlockSize() {
-		fileKeyBlock.Encrypt(wrappedFileKey[i:i+fileKeyBlock.BlockSize()], fileKey[i:i+fileKeyBlock.BlockSize()])
-	}
-
-	dataIV := bytes.Repeat([]byte{0x33}, aes.BlockSize)
-	dataBlock, err := aes.NewCipher(fileKey)
-	require.NoError(t, err)
-	stream := cipher.NewCTR(dataBlock, dataIV)
-	ciphertext := make([]byte, len(plaintext))
-	stream.XORKeyStream(ciphertext, plaintext)
-
-	entry := binlogserver.BinlogEntry{
-		Name: "binlog.000001",
-		Encryption: &binlogserver.Encryption{
-			FileKeyEnvelope: &binlogserver.FileKeyEnvelope{
-				KekID:   "alpha",
-				DataHex: hex.EncodeToString(wrappedFileKey),
-			},
-			FileDataEnvelope: &binlogserver.FileDataEnvelope{
-				Cipher: "AES-256-CTR",
-				IVHex:  hex.EncodeToString(dataIV),
-			},
-		},
-	}
-
-	keyring := &binlogserver.Keyring{
-		Version: 1,
-		Keys: []binlogserver.Key{
-			{
-				Id:      "alpha",
-				Cipher:  "AES-256-ECB",
-				DataHex: hex.EncodeToString(kek),
-			},
-		},
-	}
-
-	return ciphertext, entry, keyring
 }

@@ -26,8 +26,10 @@ type Database interface {
 	Close() error
 }
 
-type newStorageFn func(ctx context.Context, endpoint, accessKey, secretKey, bucket, prefix, region string, verifyTLS bool) (storage.Storage, error)
-type newDatabaseFn func(ctx context.Context, params db.DBParams) (Database, error)
+type (
+	newStorageFn  func(ctx context.Context, endpoint, accessKey, secretKey, bucket, prefix, region string, verifyTLS bool) (storage.Storage, error)
+	newDatabaseFn func(ctx context.Context, params db.DBParams) (Database, error)
+)
 
 // getObjectFn fetches a single object by key and returns a streaming reader.
 type getObjectFn func(ctx context.Context, objectKey string) (io.ReadCloser, error)
@@ -247,6 +249,12 @@ func applyBinlogs(ctx context.Context, objects []binlogSource, getObject getObje
 		if item.decrypt != nil {
 			obj, err = item.decrypt(obj)
 			if err != nil {
+				if closeErr := mysqlStdin.Close(); closeErr != nil {
+					log.Printf("close mysql stdin: %v", closeErr)
+				}
+				if waitErr := mysqlCmd.Wait(); waitErr != nil {
+					log.Printf("wait for mysql: %v", waitErr)
+				}
 				return fmt.Errorf("decrypt binlog %s: %w", objectKey, err)
 			}
 		}
