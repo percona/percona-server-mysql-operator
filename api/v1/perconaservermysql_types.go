@@ -703,6 +703,7 @@ type BinlogServerStorageEncryptionSpec struct {
 	// +kubebuilder:validation:Optional
 	KekID string `json:"kekId,omitempty"`
 	// +kubebuilder:default=AES-256-CTR
+	// +kubebuilder:validation:Enum=AES-128-CTR;AES-192-CTR;AES-256-CTR
 	Cipher string `json:"cipher,omitempty"`
 }
 

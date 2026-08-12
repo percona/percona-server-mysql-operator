@@ -2373,6 +2373,10 @@ spec:
                                 properties:
                                   cipher:
                                     default: AES-256-CTR
+                                    enum:
+                                    - AES-128-CTR
+                                    - AES-192-CTR
+                                    - AES-256-CTR
                                     type: string
                                   kekId:
                                     type: string
