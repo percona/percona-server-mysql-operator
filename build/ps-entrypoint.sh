@@ -319,7 +319,7 @@ system_user_grants() {
 	CONFIGURATOR_PASSWORD="${CONFIGURATOR_PASSWORD:-$(pwmake 128)}"
 	cat <<-EOSQL
 		CREATE USER IF NOT EXISTS 'configurator'@'%' IDENTIFIED BY '$(escape_special "${CONFIGURATOR_PASSWORD}")' PASSWORD EXPIRE NEVER;
-		
+
 		GRANT SYSTEM_VARIABLES_ADMIN, SYSTEM_USER ON *.* TO 'configurator'@'%';
 		GRANT SELECT ON performance_schema.global_variables TO 'configurator'@'%';
 		EOSQL
@@ -554,16 +554,6 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 
 	create_default_cnf
 
-	if [[ ${MYSQL_VERSION} == '8.4' || ${MYSQL_VERSION} == '9.7' ]]; then
-		# if vault secret file exists we assume we need to turn on encryption
-		if [[ -f ${KEYRING_VAULT_PATH} ]]; then
-			install_keyring_component
-			add_encryption_options
-		else
-			uninstall_keyring_component
-		fi
-	fi
-
 	file_env 'MONITOR_HOST' 'localhost'
 	file_env 'MONITOR_PASSWORD' 'monitor' 'monitor'
 	file_env 'XTRABACKUP_PASSWORD' '' 'xtrabackup'
@@ -582,6 +572,16 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 	if [ "${fresh_datadir}" = 1 ]; then
 		touch /var/lib/mysql/bootstrap.lock
 		initialize_datadir "$@"
+	fi
+
+	if [[ ${MYSQL_VERSION} == '8.4' || ${MYSQL_VERSION} == '9.7' ]]; then
+		# if vault secret file exists we assume we need to turn on encryption
+		if [[ -f ${KEYRING_VAULT_PATH} ]]; then
+			install_keyring_component
+			add_encryption_options
+		else
+			uninstall_keyring_component
+		fi
 	fi
 
 	if [ "${fresh_datadir}" = 1 ] || (! in_full_cluster_crash && cr_version_updated); then
