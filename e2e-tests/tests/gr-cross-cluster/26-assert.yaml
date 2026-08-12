@@ -79,9 +79,6 @@ status:
     status: "True"
   - type: Ready
     status: "True"
-  - type: RejoinClusterInProgress
-    status: "False"
-    reason: RejoinComplete
   clusters:
     grcrossclusterdc2:
       clusterRole: PRIMARY

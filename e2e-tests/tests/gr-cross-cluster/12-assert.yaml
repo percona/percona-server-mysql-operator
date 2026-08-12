@@ -13,12 +13,10 @@ assertAll:
     !("percona.com/clusterset-rejoin-cluster" in cs.metadata.annotations)
   message: "rejoin annotation should be removed after successful rejoin"
 - celExpr: >-
-    cs.status.conditions.exists(c,
-      c.type == "RejoinClusterInProgress" &&
-      c.status == "False" &&
-      c.reason == "RejoinComplete"
+    !cs.status.conditions.exists(c,
+      c.type == "RejoinClusterInProgress"
     )
-  message: "RejoinClusterInProgress condition should be False with reason RejoinComplete"
+  message: "RejoinClusterInProgress condition should be removed after successful rejoin"
 
 commands:
   - script: |-
@@ -55,9 +53,6 @@ status:
     status: "True"
   - type: Ready
     status: "True"
-  - type: RejoinClusterInProgress
-    status: "False"
-    reason: RejoinComplete
   clusters:
     grcrossclusterdc1:
       clusterRole: REPLICA

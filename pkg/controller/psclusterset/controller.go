@@ -403,8 +403,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 
 	rejoinClusterName, ok := pcs.Annotations[naming.AnnotationClusterSetRejoinCluster.String()]
 	if !ok || rejoinClusterName == "" {
-		cond := meta.FindStatusCondition(pcs.Status.Conditions, apiv1.ConditionClusterSetRejoinInProgress)
-		if cond != nil && cond.Status == metav1.ConditionTrue {
+		if meta.IsStatusConditionTrue(pcs.Status.Conditions, apiv1.ConditionClusterSetRejoinInProgress) {
 			if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
 				meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetRejoinInProgress)
 				return nil
@@ -451,12 +450,7 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 			}
 
 			if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
-				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
-					Type:    apiv1.ConditionClusterSetRejoinInProgress,
-					Status:  metav1.ConditionFalse,
-					Reason:  "RejoinComplete",
-					Message: fmt.Sprintf("Cluster %s successfully rejoined", rejoinClusterName),
-				})
+				meta.RemoveStatusCondition(&status.Conditions, apiv1.ConditionClusterSetRejoinInProgress)
 				return nil
 			}); err != nil {
 				return errors.Wrap(err, "update status after rejoin complete")
