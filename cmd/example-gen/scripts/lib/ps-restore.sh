@@ -51,6 +51,7 @@ remove_fields() {
 		| yq "del(.spec.pitr.backupSource.binlogServer.tolerations)" \
 		| yq "del(.spec.pitr.backupSource.binlogServer.topologySpreadConstraints)" \
 		| yq "del(.spec.pitr.backupSource.binlogServer.verifyChecksum)" \
+		| yq "del(.spec.pitr.backupSource.binlogServer.storage.encryption)" \
 		| yq "del(.spec.backupSource.backupSource)" \
 		| yq "del(.spec.backupSource.completed)" \
 		| yq "del(.spec.backupSource.image)" \
