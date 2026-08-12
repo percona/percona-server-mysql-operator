@@ -85,7 +85,7 @@ func CustomConfigHash(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 
 	cm := ConfigMap(cr, cmName, configurable.GetConfigMapKey(), configuration, component)
 	if !EqualConfigMaps(currCm, cm) {
-		if err := EnsureObject(ctx, cl, cr, cm, cl.Scheme()); err != nil {
+		if err := EnsureObjectWithHash(ctx, cl, cr, cm, cl.Scheme()); err != nil {
 			return "", errors.Wrapf(err, "ensure ConfigMap/%s", cmName)
 		}
 
