@@ -25,7 +25,7 @@ commands:
           ro_write=$(code 'curl -s -u "readonly:any" "localhost:3000/api/begin-downtime/nonexistent/3306/test/test/1s" | jq -r .Code 2>/dev/null || echo PARSE_ERR')
 
           echo "${pod}: noauth=${noauth_code} orc_read=${orc_read_code} ro_read=${ro_read_code} ro_write=${ro_write}"
-          kubectl -n "${NAMESPACE}" create configmap "13-check-orchestrator-auth-${idx}" \
+          kubectl -n "${NAMESPACE}" create configmap "17-check-orchestrator-auth-${idx}" \
               --from-literal=noauth_code="${noauth_code}" \
               --from-literal=orc_read_code="${orc_read_code}" \
               --from-literal=ro_read_code="${ro_read_code}" \

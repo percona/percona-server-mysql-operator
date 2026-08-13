@@ -5,29 +5,17 @@ timeout: 60
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: 13-check-orchestrator-auth-0
+  name: 13-check-retry-vars-1
 data:
-  noauth_code: "401"
-  orc_read_code: "200"
-  ro_read_code: "200"
-  ro_write_code: "ERROR"
+  retry_values: |2-
+                    Connect_Retry: 70
+               Source_Retry_Count: 4
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: 13-check-orchestrator-auth-1
+  name: 13-check-retry-vars-2
 data:
-  noauth_code: "401"
-  orc_read_code: "200"
-  ro_read_code: "200"
-  ro_write_code: "ERROR"
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: 13-check-orchestrator-auth-2
-data:
-  noauth_code: "401"
-  orc_read_code: "200"
-  ro_read_code: "200"
-  ro_write_code: "ERROR"
+  retry_values: |2-
+                    Connect_Retry: 70
+               Source_Retry_Count: 4
