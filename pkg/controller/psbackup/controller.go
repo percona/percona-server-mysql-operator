@@ -1069,7 +1069,6 @@ func (r *PerconaServerMySQLBackupReconciler) getActiveRestore(ctx context.Contex
 	return "", nil
 }
 
-// FormatBytes formats a byte count into a human-readable string with appropriate unit suffix.
 func FormatBytes(bytes int64) string {
 	const (
 		KB = 1024

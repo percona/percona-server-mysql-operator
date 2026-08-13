@@ -86,10 +86,8 @@ type PerconaServerMySQLBackupStatus struct {
 	Image        string             `json:"image,omitempty"`
 	BackupSource string             `json:"backupSource,omitempty"`
 	Compressed   bool               `json:"compressed,omitempty"`
-	// Size is the total size of the backup artifact as reported by Percona XtraBackup.
-	// This field is populated only when the backup reaches the Succeeded state.
-	Size       string             `json:"size,omitempty"`
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	Size         string             `json:"size,omitempty"`
+	Conditions   []metav1.Condition `json:"conditions,omitempty"`
 }
 
 const (
