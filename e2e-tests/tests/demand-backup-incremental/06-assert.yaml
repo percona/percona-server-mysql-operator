@@ -17,6 +17,9 @@ assertAll:
 - celExpr: incr1.status.type == "incremental"
   message: "Incremental backup should have a type of incremental"
 
+- celExpr: has(incr1.status.size) && incr1.status.size != "" && incr1.status.size != "0B"
+  message: "Incremental backup size should be populated and non-zero when succeeded"
+
 - celExpr: base.status.destination.contains(incr1.metadata.annotations["percona.com/base-backup-name"])
   message: "Base backup annotation should reference the correct base backup"
 commands:
