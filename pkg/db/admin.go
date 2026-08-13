@@ -50,11 +50,10 @@ func (m *AdminManager) SetSuperReadOnly(ctx context.Context, readonly bool) erro
 var variableNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 func (m *AdminManager) SetGlobalVariable(ctx context.Context, key, value string) error {
+	key = regexp.MustCompile(`^loose[-_]`).ReplaceAllString(key, "")
 	if !variableNameRegex.MatchString(key) {
 		return fmt.Errorf("invalid global variable name: %q", key)
 	}
-
-	key = regexp.MustCompile(`^loose[-_]`).ReplaceAllString(key, "")
 
 	var errb, outb bytes.Buffer
 	cmd := fmt.Sprintf("SET GLOBAL %s=%s", key, value)

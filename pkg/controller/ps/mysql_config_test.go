@@ -303,14 +303,14 @@ func TestReconcileMySQLConfig(t *testing.T) {
 			state: apiv1.StateReady,
 			currentConfig: "[mysqld]\n" +
 				"loose_group_replication_start_on_boot=off\n" +
-				"loose_group_replication_consistency=BEFORE_ON_PRIMARY_FAILOVER\n" +
+				"loose-group_replication_consistency=BEFORE_ON_PRIMARY_FAILOVER\n" +
 				"max_connections=300\n",
 			lastAppliedConfig: `{"max_connections":"300"}`,
 			expectedStmts: []string{
 				"SET GLOBAL group_replication_start_on_boot=OFF",
 				"SET GLOBAL group_replication_consistency='BEFORE_ON_PRIMARY_FAILOVER'",
 			},
-			expectedConfig: `{"loose_group_replication_consistency":"BEFORE_ON_PRIMARY_FAILOVER",` +
+			expectedConfig: `{"loose-group_replication_consistency":"BEFORE_ON_PRIMARY_FAILOVER",` +
 				`"loose_group_replication_start_on_boot":"off","max_connections":"300"}`,
 		},
 		{
