@@ -288,6 +288,14 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 		}
 	case apiv1.BackupFailed, apiv1.BackupSucceeded:
 		log.Info("Running post finish tasks")
+		if status.State == apiv1.BackupSucceeded {
+			size, err := r.getBackupSize(ctx, cr, cluster)
+			if err != nil {
+				log.Error(err, "Failed to get backup size")
+			} else {
+				status.Size = size
+			}
+		}
 		if err := r.runPostFinishTasks(ctx, cr, cluster); err != nil {
 			return rr, errors.Wrap(err, "run post finish tasks")
 		}
@@ -602,6 +610,36 @@ func (r *PerconaServerMySQLBackupReconciler) runPostFinishTasks(
 	}
 
 	return nil
+}
+
+func (r *PerconaServerMySQLBackupReconciler) getBackupSize(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLBackup,
+	cluster *apiv1.PerconaServerMySQL,
+) (string, error) {
+	if r.NewStorageClient == nil {
+		return "", errors.New("storage client is not configured")
+	}
+	storageOpts, err := xbstorage.GetOptionsFromBackupStatus(ctx, r.Client, cluster, cr.Spec.StorageName, cr.Status)
+	if err != nil {
+		return "", errors.Wrap(err, "get storage options")
+	}
+	storageClient, err := r.NewStorageClient(ctx, storageOpts)
+	if err != nil {
+		return "", errors.Wrap(err, "new storage client")
+	}
+
+	objects, err := storageClient.ListObjectsWithSize(ctx, cr.Status.Destination.BackupName())
+	if err != nil {
+		return "", errors.Wrap(err, "list objects with size")
+	}
+
+	var totalSize int64
+	for _, obj := range objects {
+		totalSize += obj.Size
+	}
+
+	return FormatBytes(totalSize), nil
 }
 
 func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) error {
@@ -1029,4 +1067,27 @@ func (r *PerconaServerMySQLBackupReconciler) getActiveRestore(ctx context.Contex
 		return restoreName, nil
 	}
 	return "", nil
+}
+
+// FormatBytes formats a byte count into a human-readable string with appropriate unit suffix.
+func FormatBytes(bytes int64) string {
+	const (
+		KB = 1024
+		MB = KB * 1024
+		GB = MB * 1024
+		TB = GB * 1024
+	)
+
+	switch {
+	case bytes >= TB:
+		return fmt.Sprintf("%.2fTB", float64(bytes)/float64(TB))
+	case bytes >= GB:
+		return fmt.Sprintf("%.2fGB", float64(bytes)/float64(GB))
+	case bytes >= MB:
+		return fmt.Sprintf("%.2fMB", float64(bytes)/float64(MB))
+	case bytes >= KB:
+		return fmt.Sprintf("%.2fKB", float64(bytes)/float64(KB))
+	default:
+		return fmt.Sprintf("%dB", bytes)
+	}
 }

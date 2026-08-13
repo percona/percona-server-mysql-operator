@@ -39,6 +39,9 @@ func (c *FakeStorageClient) PutObject(ctx context.Context, name string, data io.
 func (c *FakeStorageClient) ListObjects(ctx context.Context, prefix string) ([]string, error) {
 	return nil, nil
 }
+func (c *FakeStorageClient) ListObjectsWithSize(ctx context.Context, prefix string) ([]storage.ObjectInfo, error) {
+	return nil, nil
+}
 func (c *FakeStorageClient) DeleteObject(ctx context.Context, objectName string) error { return nil }
 func (c *FakeStorageClient) SetPrefix(prefix string)                                   {}
 func (c *FakeStorageClient) GetPrefix() string                                         { return "" }

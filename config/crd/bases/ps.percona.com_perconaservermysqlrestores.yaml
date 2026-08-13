@@ -86,6 +86,8 @@ spec:
                     type: string
                   image:
                     type: string
+                  size:
+                    type: string
                   state:
                     type: string
                   stateDescription:
