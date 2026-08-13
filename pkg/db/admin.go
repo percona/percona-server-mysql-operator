@@ -54,6 +54,8 @@ func (m *AdminManager) SetGlobalVariable(ctx context.Context, key, value string)
 		return fmt.Errorf("invalid global variable name: %q", key)
 	}
 
+	key = regexp.MustCompile(`^loose[-_]`).ReplaceAllString(key, "")
+
 	var errb, outb bytes.Buffer
 	cmd := fmt.Sprintf("SET GLOBAL %s=%s", key, value)
 	err := m.db.exec(ctx, cmd, &outb, &errb)
