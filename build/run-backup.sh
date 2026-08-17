@@ -84,19 +84,18 @@ request_backup() {
 	local sleep_duration=$1
 	local http_code
 	local response_body
-	local tmp_response="/tmp/backup_response"
 
 	log "Trying to run backup ${BACKUP_NAME} on ${SRC_NODE}"
-	http_code=$(
-		curl -s -o "${tmp_response}" \
+	response_body=$(
+		curl -s \
 			-d "$(request_data)" \
 			-H "Content-Type: application/json" \
-			-w "httpcode=%{http_code}" \
+			-w "%{stderr}%{http_code}" \
 			"http://${SRC_NODE}:${SIDECAR_PORT}/backup/${BACKUP_NAME}" \
-			| sed -e 's/.*\httpcode=//'
+			2>/tmp/backup_http_code
 	)
+	http_code=$(cat /tmp/backup_http_code)
 	if [ "${http_code}" -eq 200 ]; then
-		response_body=$(cat "${tmp_response}")
 		if [ -n "${response_body}" ]; then
 			echo -n "${response_body}" > /dev/termination-log
 		fi

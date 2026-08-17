@@ -1131,17 +1131,6 @@ func (c *incrFakeStorageClient) ListObjects(_ context.Context, _ string) ([]stri
 	return c.objects, nil
 }
 
-func (c *incrFakeStorageClient) ListObjectsWithSize(_ context.Context, _ string) ([]storage.ObjectInfo, error) {
-	if c.listErr != nil {
-		return nil, c.listErr
-	}
-	var objects []storage.ObjectInfo
-	for _, name := range c.objects {
-		objects = append(objects, storage.ObjectInfo{Name: name, Size: 0})
-	}
-	return objects, nil
-}
-
 func TestResolveIncrementalChain(t *testing.T) {
 	ctx := context.Background()
 

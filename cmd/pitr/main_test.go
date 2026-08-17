@@ -36,12 +36,9 @@ func (f *fakeStorage) GetObject(_ context.Context, objectName string) (io.ReadCl
 
 func (f *fakeStorage) PutObject(_ context.Context, _ string, _ io.Reader, _ int64) error { return nil }
 func (f *fakeStorage) ListObjects(_ context.Context, _ string) ([]string, error)         { return nil, nil }
-func (f *fakeStorage) ListObjectsWithSize(_ context.Context, _ string) ([]storage.ObjectInfo, error) {
-	return nil, nil
-}
-func (f *fakeStorage) DeleteObject(_ context.Context, _ string) error { return nil }
-func (f *fakeStorage) SetPrefix(_ string)                             {}
-func (f *fakeStorage) GetPrefix() string                              { return "" }
+func (f *fakeStorage) DeleteObject(_ context.Context, _ string) error                    { return nil }
+func (f *fakeStorage) SetPrefix(_ string)                                                {}
+func (f *fakeStorage) GetPrefix() string                                                 { return "" }
 
 type fakeDB struct {
 	getGTIDExecutedResult string
