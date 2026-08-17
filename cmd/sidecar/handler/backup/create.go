@@ -140,7 +140,8 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 
 	xbcloud := exec.CommandContext(gCtx, "xbcloud", backupConf.XbcloudPutArgs()...)
 	xbcloud.Env = envs(backupConf)
-	xbcloud.Stdin = xbOut
+	byteCounter := &countingReader{r: xbOut}
+	xbcloud.Stdin = byteCounter
 
 	xbcloudErr, err := xbcloud.StderrPipe()
 	if err != nil {
@@ -213,10 +214,7 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	size, err := h.getBackupSize(req.Context(), &backupConf)
-	if err != nil {
-		log.Error(err, "failed to get backup size")
-	}
+	size := byteCounter.n
 
 	log.Info("Backup finished successfully", "destination", backupConf.Destination, "storage", backupConf.Type, "size", size)
 
@@ -380,4 +378,16 @@ func awaitEncryptionKeyFile(ctx context.Context, log logr.Logger, file, desiredV
 			log.Info("waiting for encryption key file", "file", file)
 		}
 	}
+}
+
+// countingReader wraps an io.Reader and counts the total bytes read through it.
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
 }

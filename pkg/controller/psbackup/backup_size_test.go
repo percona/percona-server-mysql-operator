@@ -19,7 +19,6 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
-	xbstorage "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 )
 
 func TestBackupSizeOnSuccess(t *testing.T) {
@@ -93,19 +92,14 @@ func TestBackupSizeOnSuccess(t *testing.T) {
 		},
 	}
 
-	fakeStorageClient := func(ctx context.Context, opts xbstorage.Options) (xbstorage.Storage, error) {
-		return nil, nil
-	}
-
 	cb := fake.NewClientBuilder().WithScheme(scheme).
 		WithObjects(cr, cluster.DeepCopy(), s3Secret, userSecret, job, jobPod).
 		WithStatusSubresource(cr, cluster.DeepCopy(), s3Secret, job)
 
 	r := PerconaServerMySQLBackupReconciler{
-		Client:           cb.Build(),
-		Scheme:           scheme,
-		ServerVersion:    &platform.ServerVersion{Platform: platform.PlatformKubernetes},
-		NewStorageClient: fakeStorageClient,
+		Client:        cb.Build(),
+		Scheme:        scheme,
+		ServerVersion: &platform.ServerVersion{Platform: platform.PlatformKubernetes},
 	}
 
 	_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cr)})
