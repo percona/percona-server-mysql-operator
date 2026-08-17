@@ -3954,8 +3954,7 @@ spec:
                           rule: '!has(self.size) || self.size <= 1'
                         - message: binlogServer.keyringSecret is required when binlogServer.storage.encryption
                             is set
-                          rule: '!has(self.storage) || !has(self.storage.encryption)
-                            || has(self.keyringSecret)'
+                          rule: '!self.?storage.?encryption.hasValue() || has(self.keyringSecret)'
                     type: object
                   date:
                     type: string
@@ -5576,8 +5575,7 @@ spec:
                           rule: '!has(self.size) || self.size <= 1'
                         - message: binlogServer.keyringSecret is required when binlogServer.storage.encryption
                             is set
-                          rule: '!has(self.storage) || !has(self.storage.encryption)
-                            || has(self.keyringSecret)'
+                          rule: '!self.?storage.?encryption.hasValue() || has(self.keyringSecret)'
                       enabled:
                         type: boolean
                     type: object
