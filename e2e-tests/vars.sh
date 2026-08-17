@@ -58,6 +58,6 @@ set_image IMAGE_ORCHESTRATOR "perconalab/percona-server-mysql-operator:main-orch
 set_image IMAGE_ROUTER "perconalab/percona-server-mysql-operator:main-router${MYSQL_VERSION}"
 set_image IMAGE_TOOLKIT "perconalab/percona-server-mysql-operator:main-toolkit"
 set_image IMAGE_HAPROXY "perconalab/percona-server-mysql-operator:main-haproxy"
-set_image IMAGE_BINLOG_SERVER "perconalab/percona-binlog-server:0.4"
+set_image IMAGE_BINLOG_SERVER "perconalab/percona-binlog-server:0.4.0"
 set_image IMAGE_PMM_CLIENT "perconalab/pmm-client:3-dev-latest"
 set_image IMAGE_PMM_SERVER "perconalab/pmm-server:3-dev-latest"

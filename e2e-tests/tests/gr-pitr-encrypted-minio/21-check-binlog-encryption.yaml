@@ -33,7 +33,8 @@ commands:
           exit 1
       fi
 
-      # the KEK was rotated from alpha to beta mid-test, so both must be represented
+      # the restore spans all four phases the test walked the storage through:
+      # unencrypted, encrypted with alpha, encrypted with beta, unencrypted again
       for kek in alpha beta; do
           count=$(echo "${binlogs}" | jq --arg kek "${kek}" '[.[] | select(.encryption.file_key_envelope.kek_id == $kek)] | length')
           if [[ ${count} -eq 0 ]]; then
@@ -42,11 +43,9 @@ commands:
           fi
       done
 
-      # encryption was disabled for new files mid-test while the keyring stayed
-      # configured, so the restore must have consumed plaintext binlogs too
       plaintext=$(echo "${binlogs}" | jq '[.[] | select(has("encryption") | not)] | length')
       if [[ ${plaintext} -eq 0 ]]; then
-          echo "no plaintext binlog in the restore set, encryption was never disabled"
+          echo "no plaintext binlog in the restore set, encryption was never off"
           exit 1
       fi
 

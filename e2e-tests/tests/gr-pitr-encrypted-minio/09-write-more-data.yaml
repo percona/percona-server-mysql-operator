@@ -7,9 +7,14 @@ commands:
 
       source ../../functions
 
+      # phase 3: new binlogs encrypted with the rotated KEK
+      check_binlog_server_config \
+          '.keyring.uri == "file:///etc/binlog_server/keyring/keyring.json"' \
+          '.storage.encryption.kek_id == "beta"'
+
       run_mysql \
           "INSERT myDB.myTable (id) VALUES (100503)" \
           "-h $(get_router_service $(get_cluster_name))"
 
-      # wait for binlog server upload
+      # let the binlog server checkpoint this data while beta is still in effect
       sleep 35
