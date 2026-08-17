@@ -696,8 +696,6 @@ type BinlogServerStorageSpec struct {
 }
 
 type BinlogServerStorageEncryptionSpec struct {
-	// +kubebuilder:validation:Required
-	KeyringSecret *BinlogServerKeyringSecretSelector `json:"keyringSecret,omitempty"`
 	// KekID is the ID of the key encryption key (KEK) used to encrypt the data encryption key (DEK) in the keyring file.
 	// If unspecified, uses the first key in the file.
 	// +kubebuilder:validation:Optional
@@ -717,8 +715,15 @@ type BinlogServerKeyringSecretSelector struct {
 }
 
 // +kubebuilder:validation:XValidation:rule="!has(self.size) || self.size <= 1",message="binlogServer size cannot be more than 1"
+// +kubebuilder:validation:XValidation:rule="!self.?storage.?encryption.hasValue() || has(self.keyringSecret)",message="binlogServer.keyringSecret is required when binlogServer.storage.encryption is set"
 type BinlogServerSpec struct {
 	Storage BinlogServerStorageSpec `json:"storage,omitempty"`
+
+	// KeyringSecret is a reference to a Secret containing the keyring file.
+	// It is required to encrypt new binlog files and to read already encrypted
+	// ones, so it must stay configured even after storage encryption is disabled
+	// if the storage still holds encrypted binlogs.
+	KeyringSecret *BinlogServerKeyringSecretSelector `json:"keyringSecret,omitempty"`
 
 	// The number of seconds the MySQL client library will wait to establish a connection with a remote host
 	// +kubebuilder:default=30
@@ -757,13 +762,11 @@ type BinlogServerSpec struct {
 }
 
 func (s *BinlogServerSpec) SetDefaults() {
-	if s.Storage.Encryption != nil {
-		if s.Storage.Encryption.KeyringSecret != nil && s.Storage.Encryption.KeyringSecret.Key == "" {
-			s.Storage.Encryption.KeyringSecret.Key = "keyring.json"
-		}
-		if s.Storage.Encryption.Cipher == "" {
-			s.Storage.Encryption.Cipher = "AES-256-CTR"
-		}
+	if s.KeyringSecret != nil && s.KeyringSecret.Key == "" {
+		s.KeyringSecret.Key = "keyring.json"
+	}
+	if s.Storage.Encryption != nil && s.Storage.Encryption.Cipher == "" {
+		s.Storage.Encryption.Cipher = "AES-256-CTR"
 	}
 	if s.SSLMode == "" {
 		s.SSLMode = "verify_identity"

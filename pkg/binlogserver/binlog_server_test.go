@@ -219,14 +219,12 @@ func TestStatefulSet(t *testing.T) {
 				t.Error("storage volume not found")
 			},
 		},
-		"keyring volume and mount are present when storage encryption is configured": {
+		"keyring volume and mount are present when a keyring secret is configured": {
 			cr: func() *apiv1.PerconaServerMySQL {
 				cr := newTestCR("cluster", "ns")
-				cr.Spec.Backup.PiTR.BinlogServer.Storage.Encryption = &apiv1.BinlogServerStorageEncryptionSpec{
-					KeyringSecret: &apiv1.BinlogServerKeyringSecretSelector{
-						Name: "binlog-keyring",
-						Key:  "keyring.json",
-					},
+				cr.Spec.Backup.PiTR.BinlogServer.KeyringSecret = &apiv1.BinlogServerKeyringSecretSelector{
+					Name: "binlog-keyring",
+					Key:  "keyring.json",
 				}
 				return cr
 			}(),

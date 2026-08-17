@@ -216,12 +216,11 @@ func TestCheckNSetDefaults(t *testing.T) {
 		cr.Spec.Backup = &BackupSpec{
 			PiTR: PiTRSpec{
 				BinlogServer: &BinlogServerSpec{
+					KeyringSecret: &BinlogServerKeyringSecretSelector{
+						Name: "keyring-secret",
+					},
 					Storage: BinlogServerStorageSpec{
-						Encryption: &BinlogServerStorageEncryptionSpec{
-							KeyringSecret: &BinlogServerKeyringSecretSelector{
-								Name: "keyring-secret",
-							},
-						},
+						Encryption: &BinlogServerStorageEncryptionSpec{},
 					},
 				},
 			},
@@ -230,9 +229,9 @@ func TestCheckNSetDefaults(t *testing.T) {
 		err := cr.CheckNSetDefaults(t.Context(), nil)
 		assert.NoError(t, err)
 
-		encryption := cr.Spec.Backup.PiTR.BinlogServer.Storage.Encryption
-		assert.Equal(t, "keyring.json", encryption.KeyringSecret.Key)
-		assert.Equal(t, "AES-256-CTR", encryption.Cipher)
+		binlogServer := cr.Spec.Backup.PiTR.BinlogServer
+		assert.Equal(t, "keyring.json", binlogServer.KeyringSecret.Key)
+		assert.Equal(t, "AES-256-CTR", binlogServer.Storage.Encryption.Cipher)
 	})
 	t.Run("binlog server explicit values are not overridden by defaults", func(t *testing.T) {
 		cr := new(PerconaServerMySQL)

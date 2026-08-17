@@ -564,7 +564,7 @@ func TestRestoreJob(t *testing.T) {
 				assert.True(t, mountNames[binlogsVolumeName])
 			},
 		},
-		"keyring secret from cluster encryption is mounted": {
+		"keyring secret from cluster is mounted": {
 			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
 				Spec: apiv1.PerconaServerMySQLSpec{
@@ -573,13 +573,9 @@ func TestRestoreJob(t *testing.T) {
 					Backup: &apiv1.BackupSpec{
 						PiTR: apiv1.PiTRSpec{
 							BinlogServer: &apiv1.BinlogServerSpec{
-								Storage: apiv1.BinlogServerStorageSpec{
-									Encryption: &apiv1.BinlogServerStorageEncryptionSpec{
-										KeyringSecret: &apiv1.BinlogServerKeyringSecretSelector{
-											Name: "cluster-keyring",
-											Key:  "cluster-keyring.json",
-										},
-									},
+								KeyringSecret: &apiv1.BinlogServerKeyringSecretSelector{
+									Name: "cluster-keyring",
+									Key:  "cluster-keyring.json",
 								},
 							},
 						},
@@ -614,7 +610,7 @@ func TestRestoreJob(t *testing.T) {
 				assert.Equal(t, keyringMountPath+"/cluster-keyring.json", envMap["KEYRING_PATH"])
 			},
 		},
-		"restore keyring secret overrides cluster encryption keyring": {
+		"restore keyring secret overrides cluster keyring": {
 			cluster: &apiv1.PerconaServerMySQL{
 				ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "ns"},
 				Spec: apiv1.PerconaServerMySQLSpec{
@@ -623,13 +619,9 @@ func TestRestoreJob(t *testing.T) {
 					Backup: &apiv1.BackupSpec{
 						PiTR: apiv1.PiTRSpec{
 							BinlogServer: &apiv1.BinlogServerSpec{
-								Storage: apiv1.BinlogServerStorageSpec{
-									Encryption: &apiv1.BinlogServerStorageEncryptionSpec{
-										KeyringSecret: &apiv1.BinlogServerKeyringSecretSelector{
-											Name: "cluster-keyring",
-											Key:  "cluster-keyring.json",
-										},
-									},
+								KeyringSecret: &apiv1.BinlogServerKeyringSecretSelector{
+									Name: "cluster-keyring",
+									Key:  "cluster-keyring.json",
 								},
 							},
 						},

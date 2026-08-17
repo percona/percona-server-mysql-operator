@@ -29,11 +29,11 @@ func TestGetConfigurationEncryption(t *testing.T) {
 	spec := cr.Spec.Backup.PiTR.BinlogServer
 	spec.Storage.S3.Bucket = "binlogs"
 	spec.Storage.S3.Region = "us-east-1"
+	spec.KeyringSecret = &apiv1.BinlogServerKeyringSecretSelector{
+		Name: "keyring-secret",
+		Key:  "keyring.json",
+	}
 	spec.Storage.Encryption = &apiv1.BinlogServerStorageEncryptionSpec{
-		KeyringSecret: &apiv1.BinlogServerKeyringSecretSelector{
-			Name: "keyring-secret",
-			Key:  "keyring.json",
-		},
 		Cipher: "AES-256-CTR",
 	}
 
@@ -61,23 +61,51 @@ func TestGetConfigurationEncryption(t *testing.T) {
 
 	cfg, err := GetConfiguration(t.Context(), cl, cr, spec)
 	require.NoError(t, err)
+	require.NotNil(t, cfg.Keyring)
+	assert.Equal(t, &KeyringConfig{
+		URI: "file:///etc/binlog_server/keyring/keyring.json",
+	}, cfg.Keyring)
 	require.NotNil(t, cfg.Storage.Encryption)
 	assert.Equal(t, &EncryptionConfig{
-		Format:     "generic",
-		KeyringURI: "file:///etc/binlog_server/keyring/keyring.json",
-		KekID:      "alpha",
-		Cipher:     "AES-256-CTR",
+		Format: "generic",
+		KekID:  "alpha",
+		Cipher: "AES-256-CTR",
 	}, cfg.Storage.Encryption)
+
+	// disabling encryption for new files must keep the keyring, the storage may
+	// still hold binlogs encrypted before it was disabled
+	spec.Storage.Encryption = nil
+
+	cfg, err = GetConfiguration(t.Context(), cl, cr, spec)
+	require.NoError(t, err)
+	assert.Nil(t, cfg.Storage.Encryption)
+	require.NotNil(t, cfg.Keyring)
+	assert.Equal(t, &KeyringConfig{
+		URI: "file:///etc/binlog_server/keyring/keyring.json",
+	}, cfg.Keyring)
+}
+
+func TestGetConfigurationEncryptionWithoutKeyring(t *testing.T) {
+	cr := newTestCR("cluster", "ns")
+	spec := cr.Spec.Backup.PiTR.BinlogServer
+	spec.Storage.Encryption = &apiv1.BinlogServerStorageEncryptionSpec{
+		Cipher: "AES-256-CTR",
+	}
+
+	keyringCfg, encryptionCfg, err := getKeyringAndEncryptionConfig(t.Context(), newConfigTestClient(t), cr, spec)
+	require.ErrorContains(t, err, "keyring secret is required when storage encryption is configured")
+	assert.Nil(t, keyringCfg)
+	assert.Nil(t, encryptionCfg)
 }
 
 func TestGetConfigurationEncryptionValidation(t *testing.T) {
 	cr := newTestCR("cluster", "ns")
 	spec := cr.Spec.Backup.PiTR.BinlogServer
+	spec.KeyringSecret = &apiv1.BinlogServerKeyringSecretSelector{
+		Name: "keyring-secret",
+		Key:  "keyring.json",
+	}
 	spec.Storage.Encryption = &apiv1.BinlogServerStorageEncryptionSpec{
-		KeyringSecret: &apiv1.BinlogServerKeyringSecretSelector{
-			Name: "keyring-secret",
-			Key:  "keyring.json",
-		},
 		Cipher: "AES-256-CTR",
 	}
 
@@ -108,9 +136,10 @@ func TestGetConfigurationEncryptionValidation(t *testing.T) {
 				},
 			)
 
-			cfg, err := getEncryptionConfig(t.Context(), cl, cr, spec)
+			keyringCfg, encryptionCfg, err := getKeyringAndEncryptionConfig(t.Context(), cl, cr, spec)
 			require.ErrorContains(t, err, tt.expectedError)
-			assert.Nil(t, cfg)
+			assert.Nil(t, keyringCfg)
+			assert.Nil(t, encryptionCfg)
 		})
 	}
 }

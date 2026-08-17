@@ -20,15 +20,16 @@ commands:
           exit 1
       fi
 
-      # every binlog the restore consumed must be encrypted with a KEK from the keyring
-      not_encrypted=$(echo "${binlogs}" | jq -r '
+      # every encrypted binlog must reference a KEK from the keyring
+      unknown_kek=$(echo "${binlogs}" | jq -r '
           [
               .[]
+              | select(has("encryption"))
               | select((.encryption.file_key_envelope.kek_id // "") | test("^(alpha|beta)$") | not)
               | .name
           ] | join(" ")')
-      if [[ -n ${not_encrypted} ]]; then
-          echo "binlogs without a keyring KEK: ${not_encrypted}"
+      if [[ -n ${unknown_kek} ]]; then
+          echo "encrypted binlogs without a keyring KEK: ${unknown_kek}"
           exit 1
       fi
 
@@ -41,5 +42,13 @@ commands:
           fi
       done
 
-      echo "${total} binlogs, all encrypted; KEK distribution:"
-      echo "${binlogs}" | jq -r 'group_by(.encryption.file_key_envelope.kek_id) | map("\(.[0].encryption.file_key_envelope.kek_id)=\(length)") | join(" ")'
+      # encryption was disabled for new files mid-test while the keyring stayed
+      # configured, so the restore must have consumed plaintext binlogs too
+      plaintext=$(echo "${binlogs}" | jq '[.[] | select(has("encryption") | not)] | length')
+      if [[ ${plaintext} -eq 0 ]]; then
+          echo "no plaintext binlog in the restore set, encryption was never disabled"
+          exit 1
+      fi
+
+      echo "${total} binlogs, ${plaintext} plaintext; KEK distribution:"
+      echo "${binlogs}" | jq -r 'group_by(.encryption.file_key_envelope.kek_id // "none") | map("\(.[0].encryption.file_key_envelope.kek_id // "none")=\(length)") | join(" ")'

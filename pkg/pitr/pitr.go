@@ -62,10 +62,8 @@ func getKeyringSecretRef(
 	}
 
 	binlogSrv := cluster.Spec.Backup.PiTR.BinlogServer
-	if binlogSrv != nil &&
-		binlogSrv.Storage.Encryption != nil &&
-		binlogSrv.Storage.Encryption.KeyringSecret != nil {
-		return binlogSrv.Storage.Encryption.KeyringSecret
+	if binlogSrv != nil && binlogSrv.KeyringSecret != nil {
+		return binlogSrv.KeyringSecret
 	}
 	return nil
 }

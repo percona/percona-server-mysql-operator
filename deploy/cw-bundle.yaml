@@ -3427,6 +3427,16 @@ spec:
                             type: object
                           initImage:
                             type: string
+                          keyringSecret:
+                            properties:
+                              key:
+                                default: keyring.json
+                                type: string
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
                           labels:
                             additionalProperties:
                               type: string
@@ -3843,18 +3853,6 @@ spec:
                                     type: string
                                   kekId:
                                     type: string
-                                  keyringSecret:
-                                    properties:
-                                      key:
-                                        default: keyring.json
-                                        type: string
-                                      name:
-                                        type: string
-                                    required:
-                                    - name
-                                    type: object
-                                required:
-                                - keyringSecret
                                 type: object
                               s3:
                                 properties:
@@ -3954,6 +3952,10 @@ spec:
                         x-kubernetes-validations:
                         - message: binlogServer size cannot be more than 1
                           rule: '!has(self.size) || self.size <= 1'
+                        - message: binlogServer.keyringSecret is required when binlogServer.storage.encryption
+                            is set
+                          rule: '!has(self.storage) || !has(self.storage.encryption)
+                            || has(self.keyringSecret)'
                     type: object
                   date:
                     type: string
@@ -5047,6 +5049,16 @@ spec:
                             type: object
                           initImage:
                             type: string
+                          keyringSecret:
+                            properties:
+                              key:
+                                default: keyring.json
+                                type: string
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
                           labels:
                             additionalProperties:
                               type: string
@@ -5463,18 +5475,6 @@ spec:
                                     type: string
                                   kekId:
                                     type: string
-                                  keyringSecret:
-                                    properties:
-                                      key:
-                                        default: keyring.json
-                                        type: string
-                                      name:
-                                        type: string
-                                    required:
-                                    - name
-                                    type: object
-                                required:
-                                - keyringSecret
                                 type: object
                               s3:
                                 properties:
@@ -5574,6 +5574,10 @@ spec:
                         x-kubernetes-validations:
                         - message: binlogServer size cannot be more than 1
                           rule: '!has(self.size) || self.size <= 1'
+                        - message: binlogServer.keyringSecret is required when binlogServer.storage.encryption
+                            is set
+                          rule: '!has(self.storage) || !has(self.storage.encryption)
+                            || has(self.keyringSecret)'
                       enabled:
                         type: boolean
                     type: object
@@ -15012,7 +15016,7 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.namespace
-        image: perconalab/percona-server-mysql-operator:main
+        image: perconalab/percona-server-mysql-operator:k8sps-849
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

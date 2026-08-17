@@ -162,13 +162,13 @@ func backupDefaults(spec *apiv1.BackupSpec) {
 					EndpointURL:       "https://s3.amazonaws.com",
 				},
 				Encryption: &apiv1.BinlogServerStorageEncryptionSpec{
-					KeyringSecret: &apiv1.BinlogServerKeyringSecretSelector{
-						Name: "ps-cluster1-binlog-server-keyring",
-						Key:  "keyring.json",
-					},
 					KekID:  "alpha",
 					Cipher: "AES-256-CTR",
 				},
+			},
+			KeyringSecret: &apiv1.BinlogServerKeyringSecretSelector{
+				Name: "ps-cluster1-binlog-server-keyring",
+				Key:  "keyring.json",
 			},
 			ConnectTimeout:     30,
 			ReadTimeout:        30,

@@ -233,13 +233,12 @@ func volumes(cr *apiv1.PerconaServerMySQL, spec *apiv1.BinlogServerSpec, configS
 		},
 	)
 
-	if spec.Storage.Encryption != nil {
-		sel := spec.Storage.Encryption.KeyringSecret
+	if spec.KeyringSecret != nil {
 		vols = append(vols, corev1.Volume{
 			Name: keyringVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: sel.Name,
+					SecretName: spec.KeyringSecret.Name,
 				},
 			},
 		})
@@ -292,7 +291,7 @@ func binlogServerContainer(spec *apiv1.BinlogServerSpec) corev1.Container {
 		},
 	)
 
-	if spec.Storage.Encryption != nil {
+	if spec.KeyringSecret != nil {
 		mounts = append(mounts, corev1.VolumeMount{
 			Name:      keyringVolumeName,
 			MountPath: keyringMountPath,
