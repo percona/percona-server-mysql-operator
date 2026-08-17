@@ -686,6 +686,6 @@ if [[ -n ${MYSQL_NOTIFY_SOCKET} ]]; then
 	set -o xtrace
 fi
 
-echo ${CR_VERSION} > /var/lib/mysql/cr-version
+echo "${CR_VERSION}" > /var/lib/mysql/cr-version
 
 exec "$@"
