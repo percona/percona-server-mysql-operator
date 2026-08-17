@@ -9,6 +9,24 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+const (
+	pmmTmpVolumeName  = "pmm-tmp"
+	pmmTmpMountPath   = "/tmp"
+	pmmConfigFilePath = "/tmp/pmm-agent.yaml"
+	pmmConfigFileOld  = "/usr/local/percona/pmm/config/pmm-agent.yaml"
+)
+
+// TmpVolume is the writable emptyDir for PMM's config and tempdir, so the
+// sidecar works under readOnlyRootFilesystem.
+func TmpVolume() corev1.Volume {
+	return corev1.Volume{
+		Name: pmmTmpVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	}
+}
+
 func Container(
 	cr *apiv1.PerconaServerMySQL,
 	secret *corev1.Secret,
@@ -44,6 +62,14 @@ func Container(
 				MountPath: apiv1.BinVolumePath,
 			},
 		},
+	}
+
+	if cr.CompareVersion("1.3.0") >= 0 {
+		// Writable /tmp so the agent config and tempdir work under readOnlyRootFilesystem.
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      pmmTmpVolumeName,
+			MountPath: pmmTmpMountPath,
+		})
 	}
 
 	if cr.CompareVersion("0.12.0") >= 0 {
@@ -119,6 +145,13 @@ func pmmEnvs(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret, dbType string)
 		pmmTmpDir = "/tmp/pmm"
 	}
 
+	// The agent config is stateless (PMM_AGENT_SETUP_FORCE), so from 1.3.0 it
+	// lives in the writable /tmp emptyDir instead of the read-only root FS.
+	configFile := pmmConfigFileOld
+	if cr.CompareVersion("1.3.0") >= 0 {
+		configFile = pmmConfigFilePath
+	}
+
 	clusterName := cr.Name
 	if pmmSpec.CustomClusterName != "" && cr.CompareVersion("1.2.0") >= 0 {
 		clusterName = pmmSpec.CustomClusterName
@@ -173,7 +206,7 @@ func pmmEnvs(cr *apiv1.PerconaServerMySQL, secret *corev1.Secret, dbType string)
 		},
 		{
 			Name:  "PMM_AGENT_CONFIG_FILE",
-			Value: "/usr/local/percona/pmm/config/pmm-agent.yaml",
+			Value: configFile,
 		},
 		{
 			Name:  "PMM_AGENT_SERVER_INSECURE_TLS",
