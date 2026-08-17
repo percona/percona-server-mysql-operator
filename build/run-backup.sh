@@ -83,22 +83,17 @@ json_escape() {
 request_backup() {
 	local sleep_duration=$1
 	local http_code
-	local response_body
 
 	log "Trying to run backup ${BACKUP_NAME} on ${SRC_NODE}"
-	response_body=$(
-		curl -s \
+	http_code=$(
+		curl -s -o /dev/null \
 			-d "$(request_data)" \
 			-H "Content-Type: application/json" \
-			-w "%{stderr}%{http_code}" \
+			-w "httpcode=%{http_code}" \
 			"http://${SRC_NODE}:${SIDECAR_PORT}/backup/${BACKUP_NAME}" \
-			2>/tmp/backup_http_code
+			| sed -e 's/.*\httpcode=//'
 	)
-	http_code=$(cat /tmp/backup_http_code)
 	if [ "${http_code}" -eq 200 ]; then
-		if [ -n "${response_body}" ]; then
-			echo -n "${response_body}" > /dev/termination-log
-		fi
 		return
 	fi
 	if [ "${http_code}" -eq 409 ]; then

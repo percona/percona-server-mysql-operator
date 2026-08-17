@@ -74,11 +74,6 @@ func (h *Handler) backupExists(ctx context.Context, cfg *xb.BackupConfig) (bool,
 	return true, nil
 }
 
-// BackupResponse is the JSON response returned after a successful backup.
-type BackupResponse struct {
-	Size int64 `json:"size"`
-}
-
 type status struct {
 	isRunning         atomic.Bool
 	currentBackupConf *xb.BackupConfig
