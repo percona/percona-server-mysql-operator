@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -35,6 +36,7 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/haproxy"
 	"github.com/percona/percona-server-mysql-operator/pkg/innodbcluster"
 	"github.com/percona/percona-server-mysql-operator/pkg/mysql"
+	"github.com/percona/percona-server-mysql-operator/pkg/naming"
 	"github.com/percona/percona-server-mysql-operator/pkg/orchestrator"
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/router"
@@ -1179,7 +1181,7 @@ func TestReconcileErrorStatus(t *testing.T) {
 			{
 				Type:    apiv1.StateError.String(),
 				Status:  metav1.ConditionTrue,
-				Reason:  "ErrorReconcile",
+				Reason:  naming.ConditionReasonErrorReconcile,
 				Message: reconcileErr.Error(),
 			},
 		},
@@ -1192,6 +1194,23 @@ func TestReconcileErrorStatus(t *testing.T) {
 
 	if diff := cmp.Diff(cr.Status.State, expected.State); diff != "" {
 		t.Errorf("unexpected state (-want +got):\n%s", diff)
+	}
+
+	latestReconcileErr := errors.New("latest reconcile error")
+	if err := r.reconcileCRStatus(ctx, cr, latestReconcileErr); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cr.Name}, cr); err != nil {
+		t.Fatal(err)
+	}
+
+	errorCondition := meta.FindStatusCondition(cr.Status.Conditions, apiv1.StateError.String())
+	if errorCondition == nil {
+		t.Fatal("error condition not found")
+	}
+	if diff := cmp.Diff(errorCondition.Message, latestReconcileErr.Error()); diff != "" {
+		t.Errorf("unexpected error condition message (-want +got):\n%s", diff)
 	}
 }
 

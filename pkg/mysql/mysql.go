@@ -222,7 +222,6 @@ func StatefulSet(cr *apiv1.PerconaServerMySQL, initImage, configHash, tlsHash st
 	if dataVolume != nil {
 		sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes, *dataVolume)
 	}
-
 	return sts
 }
 
