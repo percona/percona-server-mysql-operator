@@ -2,7 +2,6 @@ package psbackup
 
 import (
 	"context"
-	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -20,29 +19,8 @@ import (
 	"github.com/percona/percona-server-mysql-operator/pkg/platform"
 	"github.com/percona/percona-server-mysql-operator/pkg/secret"
 	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup"
-	"github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
+	xbstorage "github.com/percona/percona-server-mysql-operator/pkg/xtrabackup/storage"
 )
-
-type fakeStorageWithSize struct{}
-
-func (c *fakeStorageWithSize) GetObject(_ context.Context, _ string) (io.ReadCloser, error) {
-	return nil, nil
-}
-func (c *fakeStorageWithSize) PutObject(_ context.Context, _ string, _ io.Reader, _ int64) error {
-	return nil
-}
-func (c *fakeStorageWithSize) ListObjects(_ context.Context, _ string) ([]string, error) {
-	return nil, nil
-}
-func (c *fakeStorageWithSize) ListObjectsWithSize(_ context.Context, _ string) ([]storage.ObjectInfo, error) {
-	return []storage.ObjectInfo{
-		{Name: "file1.xb", Size: 40000},
-		{Name: "file2.xb", Size: 38771},
-	}, nil
-}
-func (c *fakeStorageWithSize) DeleteObject(_ context.Context, _ string) error { return nil }
-func (c *fakeStorageWithSize) SetPrefix(_ string)                             {}
-func (c *fakeStorageWithSize) GetPrefix() string                              { return "" }
 
 func TestBackupSizeOnSuccess(t *testing.T) {
 	const namespace = "backup-size-test"
@@ -92,12 +70,35 @@ func TestBackupSizeOnSuccess(t *testing.T) {
 		Status: corev1.ConditionTrue,
 	})
 
-	fakeStorageClient := func(ctx context.Context, opts storage.Options) (storage.Storage, error) {
-		return &fakeStorageWithSize{}, nil
+	// Create a pod for the job with a termination message containing the backup size.
+	// Total size: 40000 + 38771 = 78771 bytes = "76.92KB"
+	jobPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      xtrabackup.JobName(cr) + "-pod",
+			Namespace: namespace,
+			Labels:    map[string]string{"job-name": xtrabackup.JobName(cr)},
+		},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name: "xtrabackup",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 0,
+							Message:  `{"size":78771}`,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	fakeStorageClient := func(ctx context.Context, opts xbstorage.Options) (xbstorage.Storage, error) {
+		return nil, nil
 	}
 
 	cb := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(cr, cluster.DeepCopy(), s3Secret, userSecret, job).
+		WithObjects(cr, cluster.DeepCopy(), s3Secret, userSecret, job, jobPod).
 		WithStatusSubresource(cr, cluster.DeepCopy(), s3Secret, job)
 
 	r := PerconaServerMySQLBackupReconciler{

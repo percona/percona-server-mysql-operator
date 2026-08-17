@@ -212,7 +212,19 @@ func (h *Handler) createBackupHandler(w http.ResponseWriter, req *http.Request) 
 		http.Error(w, "backup failed", http.StatusInternalServerError)
 		return
 	}
-	log.Info("Backup finished successfully", "destination", backupConf.Destination, "storage", backupConf.Type)
+
+	size, err := h.getBackupSize(req.Context(), &backupConf)
+	if err != nil {
+		log.Error(err, "failed to get backup size")
+	}
+
+	log.Info("Backup finished successfully", "destination", backupConf.Destination, "storage", backupConf.Type, "size", size)
+
+	resp := BackupResponse{Size: size}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Error(err, "failed to encode backup response")
+	}
 }
 
 func xtrabackupArgs(user, pass string, conf *xb.BackupConfig) []string {

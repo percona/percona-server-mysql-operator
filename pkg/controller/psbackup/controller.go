@@ -18,6 +18,7 @@ package psbackup
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -289,7 +290,7 @@ func (r *PerconaServerMySQLBackupReconciler) Reconcile(ctx context.Context, req 
 	case apiv1.BackupFailed, apiv1.BackupSucceeded:
 		log.Info("Running post finish tasks")
 		if status.State == apiv1.BackupSucceeded {
-			size, err := r.getBackupSize(ctx, cr, cluster)
+			size, err := r.getBackupSize(ctx, cr)
 			if err != nil {
 				log.Error(err, "Failed to get backup size")
 			} else {
@@ -615,31 +616,50 @@ func (r *PerconaServerMySQLBackupReconciler) runPostFinishTasks(
 func (r *PerconaServerMySQLBackupReconciler) getBackupSize(
 	ctx context.Context,
 	cr *apiv1.PerconaServerMySQLBackup,
-	cluster *apiv1.PerconaServerMySQL,
 ) (string, error) {
-	if r.NewStorageClient == nil {
-		return "", errors.New("storage client is not configured")
-	}
-	storageOpts, err := xbstorage.GetOptionsFromBackupStatus(ctx, r.Client, cluster, cr.Spec.StorageName, cr.Status)
+	size, err := r.getBackupSizeFromJob(ctx, cr)
 	if err != nil {
-		return "", errors.Wrap(err, "get storage options")
-	}
-	storageClient, err := r.NewStorageClient(ctx, storageOpts)
-	if err != nil {
-		return "", errors.Wrap(err, "new storage client")
+		return "", errors.Wrap(err, "get backup size from job")
 	}
 
-	objects, err := storageClient.ListObjectsWithSize(ctx, cr.Status.Destination.BackupName())
-	if err != nil {
-		return "", errors.Wrap(err, "list objects with size")
+	return FormatBytes(size), nil
+}
+
+type backupResponse struct {
+	Size int64 `json:"size"`
+}
+
+func (r *PerconaServerMySQLBackupReconciler) getBackupSizeFromJob(
+	ctx context.Context,
+	cr *apiv1.PerconaServerMySQLBackup,
+) (int64, error) {
+	jobName := xtrabackup.JobName(cr)
+
+	podList := &corev1.PodList{}
+	if err := r.Client.List(ctx, podList,
+		client.InNamespace(cr.Namespace),
+		client.MatchingLabels{"job-name": jobName},
+	); err != nil {
+		return 0, errors.Wrap(err, "list job pods")
 	}
 
-	var totalSize int64
-	for _, obj := range objects {
-		totalSize += obj.Size
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+		for _, cs := range pod.Status.ContainerStatuses {
+			if cs.State.Terminated == nil || cs.State.Terminated.Message == "" {
+				continue
+			}
+			resp := &backupResponse{}
+			if err := json.Unmarshal([]byte(cs.State.Terminated.Message), resp); err != nil {
+				continue
+			}
+			if resp.Size > 0 {
+				return resp.Size, nil
+			}
+		}
 	}
 
-	return FormatBytes(totalSize), nil
+	return 0, errors.New("backup size not found in job pod termination messages")
 }
 
 func (r *PerconaServerMySQLBackupReconciler) checkFinalizers(ctx context.Context, cr *apiv1.PerconaServerMySQLBackup) error {

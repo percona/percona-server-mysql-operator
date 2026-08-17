@@ -74,6 +74,31 @@ func (h *Handler) backupExists(ctx context.Context, cfg *xb.BackupConfig) (bool,
 	return true, nil
 }
 
+type BackupResponse struct {
+	Size int64 `json:"size"`
+}
+
+func (h *Handler) getBackupSize(ctx context.Context, cfg *xb.BackupConfig) (int64, error) {
+	opts, err := storage.GetOptionsFromBackupConfig(cfg)
+	if err != nil {
+		return 0, errors.Wrap(err, "get options from backup config")
+	}
+	storageClient, err := h.newStorageFunc(ctx, opts)
+	if err != nil {
+		return 0, errors.Wrap(err, "new storage")
+	}
+	objects, err := storageClient.ListObjectsWithSize(ctx, cfg.Destination+"/")
+	if err != nil {
+		return 0, errors.Wrap(err, "list objects with size")
+	}
+
+	var totalSize int64
+	for _, obj := range objects {
+		totalSize += obj.Size
+	}
+	return totalSize, nil
+}
+
 type status struct {
 	isRunning         atomic.Bool
 	currentBackupConf *xb.BackupConfig
