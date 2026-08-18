@@ -51,6 +51,28 @@ wait_for_delete() {
 	done
 }
 
+apply_binlog_server_keyring_secret() {
+	kubectl -n "${NAMESPACE}" apply --server-side --force-conflicts -f "${DEPLOY_DIR}/keyring-secret.yaml"
+}
+
+# check_binlog_server_config evaluates each argument as a jq filter against the
+# binlog server configuration the operator generated, failing if any is false.
+check_binlog_server_config() {
+	local config
+	config=$(kubectl -n "${NAMESPACE}" get secret "$(get_cluster_name)-binlog-server-config" \
+		-o jsonpath='{.data.config\.json}' | base64 --decode)
+
+	echo "${config}" | jq '{keyring, encryption: .storage.encryption}'
+
+	local filter
+	for filter in "$@"; do
+		if ! echo "${config}" | jq -e "${filter}" >/dev/null; then
+			echo "binlog server config does not satisfy: ${filter}"
+			return 1
+		fi
+	done
+}
+
 apply_crd() {
 	kubectl -n "${OPERATOR_NS:-$NAMESPACE}" apply --server-side --force-conflicts -f "${DEPLOY_DIR}/crd.yaml"
 }
