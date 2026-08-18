@@ -1,0 +1,21 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+
+      GTID_BEFORE=$(run_mysql "SELECT @@GLOBAL.gtid_executed" "-h $(get_router_service ${cluster_name})" | tr -d '\n')
+      kubectl create configmap -n "${NAMESPACE}" pitr-gtid-before --from-literal=gtid="${GTID_BEFORE}"
+
+      run_mysql \
+          "CREATE DATABASE IF NOT EXISTS myDB; CREATE TABLE IF NOT EXISTS myDB.myTable (id int PRIMARY KEY)" \
+          "-h $(get_router_service ${cluster_name})"
+
+      run_mysql \
+          "INSERT myDB.myTable (id) VALUES (100500)" \
+          "-h $(get_router_service ${cluster_name})"
