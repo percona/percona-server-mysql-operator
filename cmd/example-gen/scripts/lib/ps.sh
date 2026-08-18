@@ -16,7 +16,7 @@ sort_yaml() {
 
 	PMM_ORDER='"enabled","image","imagePullPolicy","serverHost","customClusterName","mysqlParams","containerSecurityContext", "resources", "readinessProbes", "livenessProbes"'
 	BINLOG_SERVER_ORDER='"enabled","binlogServer"'
-	BINLOG_SERVER_SPEC_ORDER='"size","image","imagePullPolicy","imagePullSecrets","serverId","storage","connectTimeout","readTimeout","writeTimeout","idleTime"'
+	BINLOG_SERVER_SPEC_ORDER='"size","image","imagePullPolicy","imagePullSecrets","serverId","storage","keyringSecret","connectTimeout","readTimeout","writeTimeout","idleTime"'
 	BACKUP_ORDER='"enabled","pitr","sourcePod","image","imagePullPolicy","imagePullSecrets","schedule","backoffLimit", "serviceAccountName", "initContainer", "containerSecurityContext", "resources","storages"'
 	TOOLKIT_ORDER='"image","imagePullPolicy","imagePullSecrets","env","envFrom","resources","containerSecurityContext", "startupProbe", "readinessProbe", "livenessProbe"'
 
