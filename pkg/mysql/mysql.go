@@ -348,6 +348,10 @@ func volumes(cr *apiv1.PerconaServerMySQL) []corev1.Volume {
 		})
 	}
 
+	if cr.Spec.PMM != nil && cr.Spec.PMM.Enabled && cr.CompareVersion("1.3.0") >= 0 {
+		volumes = append(volumes, pmm.TmpVolume())
+	}
+
 	return volumes
 }
 
