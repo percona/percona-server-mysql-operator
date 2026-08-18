@@ -578,7 +578,7 @@ if [ "$1" = 'mysqld' ] && [ -z "$wantHelp" ]; then
 		fresh_datadir=1
 	fi
 
-	if [[ "${fresh_datadir}" == 1 ]]; then
+	if [[ ${fresh_datadir} == 1 ]]; then
 		touch /var/lib/mysql/bootstrap.lock
 		initialize_datadir "$@"
 	fi
