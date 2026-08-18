@@ -57,7 +57,7 @@ type ReplicaSetStatus struct {
 
 func (s Status) String() string {
 	var status strings.Builder
-	status.WriteString(fmt.Sprintf(`
+	fmt.Fprintf(&status, `
 ClusterName: %s
 Status: %s
 StatusText: %s
@@ -70,17 +70,17 @@ Topology:
 		s.DefaultReplicaSet.StatusText,
 		s.DefaultReplicaSet.SSL,
 		s.DefaultReplicaSet.Primary,
-	))
+	)
 
 	i := 0
 	for _, member := range s.DefaultReplicaSet.Topology {
-		status.WriteString(fmt.Sprintf(`
+		fmt.Fprintf(&status, `
 	Member %d
 	Address: %s
 	State: %s
 	Errors: %v
 
-		`, i, member.Address, member.MemberState, member.InstanceErrors))
+		`, i, member.Address, member.MemberState, member.InstanceErrors)
 		i++
 	}
 
