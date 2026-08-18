@@ -46,9 +46,11 @@ func TestContainer(t *testing.T) {
 		assert.Equal(t, expectedPorts[i], port.ContainerPort)
 	}
 
-	assert.Equal(t, 1, len(container.VolumeMounts))
+	assert.Equal(t, 2, len(container.VolumeMounts))
 	assert.Equal(t, apiv1.BinVolumeName, container.VolumeMounts[0].Name)
 	assert.Equal(t, apiv1.BinVolumePath, container.VolumeMounts[0].MountPath)
+	assert.Equal(t, pmmTmpVolumeName, container.VolumeMounts[1].Name)
+	assert.Equal(t, pmmTmpMountPath, container.VolumeMounts[1].MountPath)
 
 	envMap := map[string]corev1.EnvVar{}
 	for _, env := range container.Env {
@@ -66,7 +68,7 @@ func TestContainer(t *testing.T) {
 		{Name: "PMM_AGENT_PORTS_MIN", Value: "30100"},
 		{Name: "PMM_AGENT_PORTS_MAX", Value: "30105"},
 		{Name: "PMM_AGENT_PRERUN_SCRIPT", Value: "/opt/percona/pmm-prerun.sh"},
-		{Name: "PMM_AGENT_CONFIG_FILE", Value: "/usr/local/percona/pmm/config/pmm-agent.yaml"},
+		{Name: "PMM_AGENT_CONFIG_FILE", Value: "/tmp/pmm-agent.yaml"},
 		{Name: "PMM_AGENT_SERVER_INSECURE_TLS", Value: "1"},
 		{Name: "PMM_AGENT_LISTEN_ADDRESS", Value: "0.0.0.0"},
 		{Name: "PMM_AGENT_SETUP_NODE_NAME", Value: "$(POD_NAMESPACE)-$(POD_NAME)"},
