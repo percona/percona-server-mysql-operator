@@ -52,7 +52,6 @@ wait_for_delete() {
 }
 
 apply_binlog_server_keyring_secret() {
-
 	kubectl -n "${NAMESPACE}" apply --server-side --force-conflicts -f "${DEPLOY_DIR}/keyring-secret.yaml"
 }
 
