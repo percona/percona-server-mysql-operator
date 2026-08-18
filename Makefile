@@ -90,12 +90,16 @@ generate: controller-gen mockgen ## Generate code containing DeepCopy, DeepCopyI
 	yq eval '.rules' config/rbac/cluster/clusterrole_additional.yaml >> config/rbac/cluster/role.yaml
 	$(CONTROLLER_GEN) object:headerFile="LICENSE-HEADER" paths="./..." ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	go generate ./...
+	$(MAKE) fix
 
 fmt: ## Run go fmt against code.
 	go fmt ./...
 
 vet: ## Run go vet against code.
 	go vet ./...
+
+fix: ## Run go fix against code.
+	go fix ./...
 
 test: manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./...
@@ -179,8 +183,13 @@ undeploy: manifests ## Undeploy operator
 
 
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
-controller-gen: ## Download controller-gen locally if necessary.
-	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.21.0)
+CONTROLLER_GEN_VERSION = v0.21.0
+controller-gen: ## Download controller-gen locally if necessary (reinstalls on version mismatch).
+	@if [ ! -f $(CONTROLLER_GEN) ] || ! $(CONTROLLER_GEN) --version 2>/dev/null | grep -q $(CONTROLLER_GEN_VERSION); then \
+		echo "Installing controller-gen $(CONTROLLER_GEN_VERSION)" ;\
+		rm -f $(CONTROLLER_GEN) ;\
+	fi
+	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION))
 
 KUSTOMIZE = $(shell pwd)/bin/kustomize
 kustomize: ## Download kustomize locally if necessary.

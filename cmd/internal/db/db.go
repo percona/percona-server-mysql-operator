@@ -243,7 +243,7 @@ func (d *DB) getCloneStatus(ctx context.Context) (string, error) {
 }
 
 // getCloneStatusDetails returns detailed clone status information for debugging
-func (d *DB) getCloneStatusDetails(ctx context.Context) (map[string]interface{}, error) {
+func (d *DB) getCloneStatusDetails(ctx context.Context) (map[string]any, error) {
 	log := logf.FromContext(ctx)
 	rows, err := d.db.QueryContext(ctx, "SELECT STATE, BEGIN_TIME, END_TIME, SOURCE, DESTINATION, ERROR_NO, ERROR_MESSAGE FROM clone_status")
 	if err != nil {
@@ -256,7 +256,7 @@ func (d *DB) getCloneStatusDetails(ctx context.Context) (map[string]interface{},
 		}
 	}()
 
-	details := make(map[string]interface{})
+	details := make(map[string]any)
 	if rows.Next() {
 		var state, beginTime, endTime, source, destination, errorNo, errorMessage sql.NullString
 		if err := rows.Scan(&state, &beginTime, &endTime, &source, &destination, &errorNo, &errorMessage); err != nil {

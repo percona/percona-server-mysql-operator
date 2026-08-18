@@ -2,6 +2,7 @@ package innodbcluster
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -55,7 +56,8 @@ type ReplicaSetStatus struct {
 }
 
 func (s Status) String() string {
-	status := fmt.Sprintf(`
+	var status strings.Builder
+	status.WriteString(fmt.Sprintf(`
 ClusterName: %s
 Status: %s
 StatusText: %s
@@ -68,21 +70,21 @@ Topology:
 		s.DefaultReplicaSet.StatusText,
 		s.DefaultReplicaSet.SSL,
 		s.DefaultReplicaSet.Primary,
-	)
+	))
 
 	i := 0
 	for _, member := range s.DefaultReplicaSet.Topology {
-		status += fmt.Sprintf(`
+		status.WriteString(fmt.Sprintf(`
 	Member %d
 	Address: %s
 	State: %s
 	Errors: %v
 
-		`, i, member.Address, member.MemberState, member.InstanceErrors)
+		`, i, member.Address, member.MemberState, member.InstanceErrors))
 		i++
 	}
 
-	return status
+	return status.String()
 }
 
 type ReplicaGtidState string
