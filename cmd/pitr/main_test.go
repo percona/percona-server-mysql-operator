@@ -103,6 +103,7 @@ func TestRun(t *testing.T) {
 		applyErr      error
 		expectedError string
 		checkApply    func(t *testing.T, call applyCall)
+		checkObjects  func(t *testing.T, objects []binlogSource)
 	}{
 		"missing BINLOGS_PATH": {
 			expectedError: "BINLOGS_PATH",
@@ -237,6 +238,35 @@ func TestRun(t *testing.T) {
 				}
 			},
 		},
+		"unencrypted binlog is not decrypted when later binlogs are encrypted": {
+			entries: []binlogserver.BinlogEntry{
+				{Name: "binlog.000001", URI: "s3://mybucket/binlogs/binlog.000001"},
+				{
+					Name: "binlog.000002",
+					URI:  "s3://mybucket/binlogs/binlog.000002",
+					Encryption: &binlogserver.Encryption{
+						FileKeyEnvelope: &binlogserver.FileKeyEnvelope{KekID: "alpha"},
+						FileDataEnvelope: &binlogserver.FileDataEnvelope{
+							Cipher: "AES-256-CTR",
+						},
+					},
+				},
+			},
+			pitrType: "gtid",
+			pitrGTID: "aaaaaaaa-0000-0000-0000-000000000001:1-10",
+			db:       &fakeDB{getGTIDExecutedResult: "aaaaaaaa-0000-0000-0000-000000000001:1-5"},
+			checkObjects: func(t *testing.T, objects []binlogSource) {
+				require.Len(t, objects, 2)
+
+				reader, err := objects[0].decrypt(io.NopCloser(strings.NewReader("plain binlog")))
+				require.NoError(t, err)
+				defer reader.Close() //nolint:errcheck
+
+				data, err := io.ReadAll(reader)
+				require.NoError(t, err)
+				assert.Equal(t, "plain binlog", string(data))
+			},
+		},
 	}
 
 	for name, tc := range tests {
@@ -264,6 +294,7 @@ func TestRun(t *testing.T) {
 			t.Setenv("PITR_DATE", tc.pitrDate)
 			t.Setenv("PITR_FORCE", tc.pitrForce)
 			t.Setenv("S3_BUCKET", bucket)
+			t.Setenv("KEYRING_PATH", "")
 
 			fakeDatabase := tc.db
 
@@ -288,11 +319,18 @@ func TestRun(t *testing.T) {
 			}
 
 			var captured applyCall
-			apply := func(_ context.Context, objectKeys []string, _ getObjectFn, mysqlbinlogArgs []string, mysqlArgs []string, _ string) error {
+			apply := func(_ context.Context, objects []binlogSource, _ getObjectFn, mysqlbinlogArgs []string, mysqlArgs []string, _ string) error {
+				var objectKeys []string
+				for _, obj := range objects {
+					objectKeys = append(objectKeys, obj.objectKey)
+				}
 				captured = applyCall{
 					objectKeys:      objectKeys,
 					mysqlbinlogArgs: mysqlbinlogArgs,
 					mysqlArgs:       mysqlArgs,
+				}
+				if tc.checkObjects != nil {
+					tc.checkObjects(t, objects)
 				}
 				return tc.applyErr
 			}

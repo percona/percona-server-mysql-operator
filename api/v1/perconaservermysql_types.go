@@ -691,12 +691,39 @@ type PiTRSpec struct {
 }
 
 type BinlogServerStorageSpec struct {
-	S3 *BackupStorageS3Spec `json:"s3,omitempty"`
+	S3         *BackupStorageS3Spec               `json:"s3,omitempty"`
+	Encryption *BinlogServerStorageEncryptionSpec `json:"encryption,omitempty"`
+}
+
+type BinlogServerStorageEncryptionSpec struct {
+	// KekID is the ID of the key encryption key (KEK) used to encrypt the data encryption key (DEK) in the keyring file.
+	// If unspecified, uses the first key in the file.
+	// +kubebuilder:validation:Optional
+	KekID string `json:"kekId,omitempty"`
+	// +kubebuilder:default=AES-256-CTR
+	// +kubebuilder:validation:Enum=AES-128-CTR;AES-192-CTR;AES-256-CTR
+	Cipher string `json:"cipher,omitempty"`
+}
+
+type BinlogServerKeyringSecretSelector struct {
+	// Name of the secret containing the keyring file.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// Key in the Secret containing the keyring file. Defaults to "keyring.json".
+	// +kubebuilder:default=keyring.json
+	Key string `json:"key,omitempty"`
 }
 
 // +kubebuilder:validation:XValidation:rule="!has(self.size) || self.size <= 1",message="binlogServer size cannot be more than 1"
+// +kubebuilder:validation:XValidation:rule="!self.?storage.?encryption.hasValue() || has(self.keyringSecret)",message="binlogServer.keyringSecret is required when binlogServer.storage.encryption is set"
 type BinlogServerSpec struct {
 	Storage BinlogServerStorageSpec `json:"storage,omitempty"`
+
+	// KeyringSecret is a reference to a Secret containing the keyring file.
+	// It is required to encrypt new binlog files and to read already encrypted
+	// ones, so it must stay configured even after storage encryption is disabled
+	// if the storage still holds encrypted binlogs.
+	KeyringSecret *BinlogServerKeyringSecretSelector `json:"keyringSecret,omitempty"`
 
 	// The number of seconds the MySQL client library will wait to establish a connection with a remote host
 	// +kubebuilder:default=30
@@ -735,6 +762,12 @@ type BinlogServerSpec struct {
 }
 
 func (s *BinlogServerSpec) SetDefaults() {
+	if s.KeyringSecret != nil && s.KeyringSecret.Key == "" {
+		s.KeyringSecret.Key = "keyring.json"
+	}
+	if s.Storage.Encryption != nil && s.Storage.Encryption.Cipher == "" {
+		s.Storage.Encryption.Cipher = "AES-256-CTR"
+	}
 	if s.SSLMode == "" {
 		s.SSLMode = "verify_identity"
 	}

@@ -41,6 +41,11 @@ type RestorePITRSpec struct {
 	Date  string   `json:"date,omitempty"`
 	GTID  string   `json:"gtid,omitempty"`
 	Force bool     `json:"force,omitempty"`
+
+	// KeyringSecret is an optional reference to a Secret containing the keyring file for decrypting binlogs.
+	// By default the operator will attempt to use the keyring specified for the cluster,
+	// but in case the keys have been rotated, you can specify a different keyring secret to use for the restore.
+	KeyringSecret *BinlogServerKeyringSecretSelector `json:"keyringSecret,omitempty"`
 }
 
 type RestorePITRBackupSource struct {
