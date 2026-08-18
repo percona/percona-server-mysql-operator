@@ -1,0 +1,32 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - timeout: 180
+    script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster_name=$(get_cluster_name)
+
+      GTID_BEFORE=$(kubectl get configmap -n "${NAMESPACE}" pitr-gtid-before -o jsonpath='{.data.gtid}')
+
+      PITR_GTID=$(run_mysql "SELECT GTID_SUBTRACT(@@GLOBAL.gtid_executed, '${GTID_BEFORE}')" "-h $(get_router_service ${cluster_name})" | tr -d '\n')
+
+      run_mysql \
+          "DROP TABLE myDB.myTable" \
+          "-h $(get_router_service ${cluster_name})"
+
+      # wait for binlog server to checkpoint PITR_GTID before triggering the search
+      sleep 60
+
+      echo '{}' \
+          | yq eval '.apiVersion = "ps.percona.com/v1"' - \
+          | yq eval '.kind = "PerconaServerMySQLRestore"' - \
+          | yq eval '.metadata.name = "gr-pitr-encrypted-minio-restore"' - \
+          | yq eval ".spec.clusterName = \"${cluster_name}\"" - \
+          | yq eval '.spec.backupName = "gr-pitr-encrypted-minio-backup"' - \
+          | yq eval '.spec.pitr.type = "gtid"' - \
+          | yq eval ".spec.pitr.gtid = \"${PITR_GTID}\"" - \
+          | kubectl apply -n "${NAMESPACE}" -f -

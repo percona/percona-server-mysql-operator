@@ -1,0 +1,16 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      cluster=$(get_cluster_name)
+
+      # start encrypting new binlogs in a storage that already holds plaintext
+      # ones, kekId is left unset so it defaults to the first key in the keyring
+      kubectl -n "${NAMESPACE}" patch ps "${cluster}" \
+          --type merge \
+          -p '{"spec": {"backup": {"pitr": {"binlogServer": {"keyringSecret": {"name": "ps-cluster1-binlog-server-keyring"}, "storage": {"encryption": {}}}}}}}'
