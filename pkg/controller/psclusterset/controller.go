@@ -431,9 +431,9 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 		return nil
 	}
 
-	rejoinJob := clusterset.ClusterSetManagerJob(pcs, cluster, clusterset.CmdRejoinCluster, nil, "", "")
+	rejoinJobKey := clusterset.ClusterSetManagerJobKey(pcs, cluster.InnoDBClusterName, clusterset.CmdRejoinCluster)
 	existingJob := &batchv1.Job{}
-	err := r.Get(ctx, client.ObjectKeyFromObject(rejoinJob), existingJob)
+	err := r.Get(ctx, rejoinJobKey, existingJob)
 
 	if err == nil {
 		switch {
