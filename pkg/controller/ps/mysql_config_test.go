@@ -299,6 +299,21 @@ func TestReconcileMySQLConfig(t *testing.T) {
 				`"super_read_only":"false"}`,
 		},
 		{
+			desc:  "loose prefix is stripped from the statement",
+			state: apiv1.StateReady,
+			currentConfig: "[mysqld]\n" +
+				"loose_group_replication_start_on_boot=off\n" +
+				"loose-group_replication_consistency=BEFORE_ON_PRIMARY_FAILOVER\n" +
+				"max_connections=300\n",
+			lastAppliedConfig: `{"max_connections":"300"}`,
+			expectedStmts: []string{
+				"SET GLOBAL group_replication_start_on_boot=OFF",
+				"SET GLOBAL group_replication_consistency='BEFORE_ON_PRIMARY_FAILOVER'",
+			},
+			expectedConfig: `{"loose-group_replication_consistency":"BEFORE_ON_PRIMARY_FAILOVER",` +
+				`"loose_group_replication_start_on_boot":"off","max_connections":"300"}`,
+		},
+		{
 			// A removed key cannot be un-set at runtime, so the only correct
 			// answer is a restart - and no SQL at all, not even for the keys
 			// that changed in the same edit.
