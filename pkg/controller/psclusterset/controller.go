@@ -458,7 +458,11 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 			return nil
 
 		case jobConditionTrue(existingJob, batchv1.JobFailed):
-			log.Info("Rejoin job failed", "cluster", rejoinClusterName)
+			log.Info("Rejoin job failed, deleting failed job", "cluster", rejoinClusterName)
+
+			if err := r.Delete(ctx, existingJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil && !k8serrors.IsNotFound(err) {
+				return errors.Wrap(err, "delete failed rejoin job")
+			}
 
 			if err := pcs.UpdateStatus(ctx, r.Client, func(status *apiv1.PerconaServerMySQLClusterSetStatus) error {
 				meta.SetStatusCondition(&status.Conditions, metav1.Condition{
