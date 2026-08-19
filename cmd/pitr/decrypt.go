@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/percona/percona-server-mysql-operator/pkg/binlogserver"
 )
@@ -78,7 +77,7 @@ type decryptedReadCloser struct {
 }
 
 func unwrapFileKey(env *binlogserver.FileKeyEnvelope, kek binlogserver.Key) ([]byte, error) {
-	keySize, mode, err := parseCipher(kek.Cipher)
+	keySize, mode, err := binlogserver.ParseCipher(kek.Cipher)
 	if err != nil {
 		return nil, err
 	}
@@ -132,6 +131,18 @@ func unwrapFileKey(env *binlogserver.FileKeyEnvelope, kek binlogserver.Key) ([]b
 		cipher.NewCBCDecrypter(block, iv).CryptBlocks(fileKey, wrapped)
 		return fileKey, nil
 
+	case "CTR":
+		iv, err := hex.DecodeString(env.IVHex)
+		if err != nil {
+			return nil, fmt.Errorf("decode file key IV: %w", err)
+		}
+		if len(iv) != blockSize {
+			return nil, fmt.Errorf("file key IV is %d bytes, %s needs %d", len(iv), kek.Cipher, blockSize)
+		}
+		fileKey := make([]byte, len(wrapped))
+		cipher.NewCTR(block, iv).XORKeyStream(fileKey, wrapped)
+		return fileKey, nil
+
 	case "GCM":
 		iv, err := hex.DecodeString(env.IVHex)
 		if err != nil {
@@ -165,7 +176,7 @@ func unwrapFileKey(env *binlogserver.FileKeyEnvelope, kek binlogserver.Key) ([]b
 }
 
 func dataStream(env *binlogserver.FileDataEnvelope, fileKey []byte) (cipher.Stream, error) {
-	keySize, mode, err := parseCipher(env.Cipher)
+	keySize, mode, err := binlogserver.ParseCipher(env.Cipher)
 	if err != nil {
 		return nil, err
 	}
@@ -190,24 +201,4 @@ func dataStream(env *binlogserver.FileDataEnvelope, fileKey []byte) (cipher.Stre
 	}
 
 	return cipher.NewCTR(block, iv), nil
-}
-
-func parseCipher(name string) (keySize int, mode string, err error) {
-	parts := strings.Split(strings.ToUpper(strings.TrimSpace(name)), "-")
-	if len(parts) != 3 || parts[0] != "AES" {
-		return 0, "", fmt.Errorf("unsupported cipher %q, expected AES-<128|192|256>-<mode>", name)
-	}
-
-	switch parts[1] {
-	case "128":
-		keySize = 16
-	case "192":
-		keySize = 24
-	case "256":
-		keySize = 32
-	default:
-		return 0, "", fmt.Errorf("unsupported AES key size in cipher %q", name)
-	}
-
-	return keySize, parts[2], nil
 }

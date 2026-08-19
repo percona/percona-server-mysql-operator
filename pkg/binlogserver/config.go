@@ -210,6 +210,8 @@ func getKeyringAndEncryptionConfig(
 	kekID := spec.Storage.Encryption.KekID
 	if kekID == "" {
 		kekID = keyring.Keys[0].Id
+	} else if keyring.FindKey(kekID) == nil {
+		return nil, nil, errors.Errorf("keyring secret %q does not contain a key with ID %q", sel.Name, kekID)
 	}
 
 	return keyringCfg, &EncryptionConfig{
@@ -243,6 +245,7 @@ func getAndCheckKeyringSecret(
 	if err := keyring.Validate(); err != nil {
 		return nil, errors.Wrap(err, "validate keyring")
 	}
+
 	return &keyring, nil
 }
 
