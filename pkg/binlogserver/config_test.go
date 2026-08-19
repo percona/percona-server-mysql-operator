@@ -125,6 +125,30 @@ func TestGetConfigurationEncryptionValidation(t *testing.T) {
 			keyringData:   map[string][]byte{"keyring.json": []byte(`{"version":1,"keys":[]}`)},
 			expectedError: "keyring must contain at least one key",
 		},
+		"empty key ID": {
+			keyringData:   map[string][]byte{"keyring.json": []byte(`{"version":1,"keys":[{"id":"","cipher":"AES-256-CBC","data_hex":"00"}]}`)},
+			expectedError: "keyring contains a key with empty ID",
+		},
+		"empty cipher": {
+			keyringData:   map[string][]byte{"keyring.json": []byte(`{"version":1,"keys":[{"id":"alpha","cipher":"","data_hex":"00"}]}`)},
+			expectedError: "keyring contains a key with empty cipher",
+		},
+		"malformed cipher": {
+			keyringData:   map[string][]byte{"keyring.json": []byte(`{"version":1,"keys":[{"id":"alpha","cipher":"AES-256","data_hex":"00"}]}`)},
+			expectedError: `keyring key "alpha": unsupported cipher "AES-256", expected AES-<128|192|256>-<mode>`,
+		},
+		"unsupported key size": {
+			keyringData:   map[string][]byte{"keyring.json": []byte(`{"version":1,"keys":[{"id":"alpha","cipher":"AES-512-CBC","data_hex":"00"}]}`)},
+			expectedError: `keyring key "alpha": unsupported AES key size in cipher "AES-512-CBC"`,
+		},
+		"unsupported KEK cipher mode": {
+			keyringData:   map[string][]byte{"keyring.json": []byte(`{"version":1,"keys":[{"id":"alpha","cipher":"AES-256-OFB","data_hex":"00"}]}`)},
+			expectedError: `keyring key "alpha": unsupported KEK cipher mode "OFB", supported modes are ECB, CBC, CTR, GCM`,
+		},
+		"second key is invalid": {
+			keyringData:   map[string][]byte{"keyring.json": []byte(`{"version":1,"keys":[{"id":"alpha","cipher":"AES-256-CBC","data_hex":"00"},{"id":"beta","cipher":"AES-256-XTS","data_hex":"00"}]}`)},
+			expectedError: `keyring key "beta": unsupported KEK cipher mode "XTS"`,
+		},
 	}
 
 	for name, tt := range tests {
