@@ -25,13 +25,31 @@ type SearchResponse struct {
 }
 
 type BinlogEntry struct {
-	Name          string `json:"name"`
-	Size          int64  `json:"size"`
-	URI           string `json:"uri"`
-	PreviousGTIDs string `json:"previous_gtids"`
-	AddedGTIDs    string `json:"added_gtids"`
-	MinTimestamp  string `json:"min_timestamp"`
-	MaxTimestamp  string `json:"max_timestamp"`
+	Name          string      `json:"name"`
+	Size          int64       `json:"size"`
+	URI           string      `json:"uri"`
+	PreviousGTIDs string      `json:"previous_gtids"`
+	AddedGTIDs    string      `json:"added_gtids"`
+	MinTimestamp  string      `json:"min_timestamp"`
+	MaxTimestamp  string      `json:"max_timestamp"`
+	Encryption    *Encryption `json:"encryption,omitempty"`
+}
+
+type Encryption struct {
+	FileKeyEnvelope  *FileKeyEnvelope  `json:"file_key_envelope,omitempty"`
+	FileDataEnvelope *FileDataEnvelope `json:"file_data_envelope,omitempty"`
+}
+
+type FileKeyEnvelope struct {
+	KekID   string `json:"kek_id"`
+	DataHex string `json:"data_hex"`
+	IVHex   string `json:"iv_hex"`
+	TagHex  string `json:"tag_hex"`
+}
+
+type FileDataEnvelope struct {
+	Cipher string `json:"cipher"`
+	IVHex  string `json:"iv_hex"`
 }
 
 func SearchByGTID(ctx context.Context, cl client.Client, cliCmd clientcmd.Client, cr *apiv1.PerconaServerMySQL, restore *apiv1.PerconaServerMySQLRestore, gtidSet string) (*SearchResponse, error) {

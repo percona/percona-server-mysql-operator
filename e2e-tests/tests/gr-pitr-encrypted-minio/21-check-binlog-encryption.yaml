@@ -1,0 +1,53 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+timeout: 60
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # the operator writes the binlogs picked for the restore into this configmap,
+      # including the encryption envelope the binlog server recorded at upload time
+      binlogs=$(kubectl -n "${NAMESPACE}" get configmap pitr-binlogs-gr-pitr-encrypted-minio-restore -o jsonpath='{.data.binlogs\.json}')
+
+      echo "${binlogs}" | jq .
+
+      total=$(echo "${binlogs}" | jq 'length')
+      if [[ ${total} -eq 0 ]]; then
+          echo "binlog list is empty"
+          exit 1
+      fi
+
+      # every encrypted binlog must reference a KEK from the keyring
+      unknown_kek=$(echo "${binlogs}" | jq -r '
+          [
+              .[]
+              | select(has("encryption"))
+              | select((.encryption.file_key_envelope.kek_id // "") | test("^(alpha|beta)$") | not)
+              | .name
+          ] | join(" ")')
+      if [[ -n ${unknown_kek} ]]; then
+          echo "encrypted binlogs without a keyring KEK: ${unknown_kek}"
+          exit 1
+      fi
+
+      # the restore spans all four phases the test walked the storage through:
+      # unencrypted, encrypted with alpha, encrypted with beta, unencrypted again
+      for kek in alpha beta; do
+          count=$(echo "${binlogs}" | jq --arg kek "${kek}" '[.[] | select(.encryption.file_key_envelope.kek_id == $kek)] | length')
+          if [[ ${count} -eq 0 ]]; then
+              echo "no binlog is encrypted with KEK ${kek}"
+              exit 1
+          fi
+      done
+
+      plaintext=$(echo "${binlogs}" | jq '[.[] | select(has("encryption") | not)] | length')
+      if [[ ${plaintext} -eq 0 ]]; then
+          echo "no plaintext binlog in the restore set, encryption was never off"
+          exit 1
+      fi
+
+      echo "${total} binlogs, ${plaintext} plaintext; KEK distribution:"
+      echo "${binlogs}" | jq -r 'group_by(.encryption.file_key_envelope.kek_id // "none") | map("\(.[0].encryption.file_key_envelope.kek_id // "none")=\(length)") | join(" ")'

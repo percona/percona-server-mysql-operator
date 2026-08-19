@@ -1,7 +1,9 @@
 package binlogserver
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"path"
@@ -71,18 +73,33 @@ type Replication struct {
 }
 
 type Storage struct {
-	Backend            string `json:"backend,omitempty"`
-	URI                string `json:"uri,omitempty"`
-	FsBufferDirectory  string `json:"fs_buffer_directory,omitempty"`
-	CheckpointSize     string `json:"checkpoint_size,omitempty"`
-	CheckpointInterval string `json:"checkpoint_interval,omitempty"`
+	Backend            string            `json:"backend,omitempty"`
+	URI                string            `json:"uri,omitempty"`
+	FsBufferDirectory  string            `json:"fs_buffer_directory,omitempty"`
+	CheckpointSize     string            `json:"checkpoint_size,omitempty"`
+	CheckpointInterval string            `json:"checkpoint_interval,omitempty"`
+	Encryption         *EncryptionConfig `json:"encryption,omitempty"`
 }
 
 type Configuration struct {
-	Logger      Logger      `json:"logger,omitempty"`
-	Connection  Connection  `json:"connection"`
-	Replication Replication `json:"replication,omitempty"`
-	Storage     Storage     `json:"storage,omitempty"`
+	Logger      Logger         `json:"logger,omitempty"`
+	Connection  Connection     `json:"connection"`
+	Replication Replication    `json:"replication,omitempty"`
+	Keyring     *KeyringConfig `json:"keyring,omitempty"`
+	Storage     Storage        `json:"storage,omitempty"`
+}
+
+// KeyringConfig is the top-level keyring section. It is needed both to encrypt
+// new binlog files and to read already encrypted ones, so it is written even
+// when storage encryption is disabled.
+type KeyringConfig struct {
+	URI string `json:"uri,omitempty"`
+}
+
+type EncryptionConfig struct {
+	Format string `json:"format,omitempty"`
+	KekID  string `json:"kek_id,omitempty"`
+	Cipher string `json:"cipher,omitempty"`
 }
 
 var ErrNoCredentials = errors.New("no binlog server credentials")
@@ -121,6 +138,11 @@ func GetConfiguration(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 		verifyChecksum = *spec.VerifyChecksum
 	}
 
+	keyringCfg, encryptionCfg, err := getKeyringAndEncryptionConfig(ctx, cl, cr, spec)
+	if err != nil {
+		return Configuration{}, errors.Wrap(err, "get keyring and encryption config")
+	}
+
 	return Configuration{
 		Logger: Logger{
 			Level: spec.LogLevel,
@@ -136,6 +158,7 @@ func GetConfiguration(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 			ReadTimeout:    spec.ReadTimeout,
 			SSL:            binlogServerSSLConfig(spec.SSLMode),
 		},
+		Keyring: keyringCfg,
 		Replication: Replication{
 			Mode:           ReplicationModeGTID,
 			ServerID:       spec.ServerID,
@@ -152,8 +175,85 @@ func GetConfiguration(ctx context.Context, cl client.Client, cr *apiv1.PerconaSe
 			CheckpointSize:     spec.CheckpointSize,
 			CheckpointInterval: spec.CheckpointInterval,
 			FsBufferDirectory:  BufferMountPath,
+			Encryption:         encryptionCfg,
 		},
 	}, nil
+}
+
+func getKeyringAndEncryptionConfig(
+	ctx context.Context,
+	cl client.Client,
+	cr *apiv1.PerconaServerMySQL,
+	spec *apiv1.BinlogServerSpec,
+) (*KeyringConfig, *EncryptionConfig, error) {
+	sel := spec.KeyringSecret
+	if sel == nil {
+		if spec.Storage.Encryption != nil {
+			return nil, nil, errors.New("keyring secret is required when storage encryption is configured")
+		}
+		return nil, nil, nil
+	}
+
+	keyring, err := getAndCheckKeyringSecret(ctx, cl, sel.Key, sel.Name, cr.Namespace)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "get and check keyring secret")
+	}
+
+	keyringCfg := &KeyringConfig{
+		URI: fmt.Sprintf("file://%s/%s", keyringMountPath, sel.Key),
+	}
+
+	if spec.Storage.Encryption == nil {
+		return keyringCfg, nil, nil
+	}
+
+	kekID := spec.Storage.Encryption.KekID
+	if kekID == "" {
+		kekID = keyring.Keys[0].Id
+	}
+
+	return keyringCfg, &EncryptionConfig{
+		Format: "generic", // only this format is supported for now
+		KekID:  kekID,
+		Cipher: spec.Storage.Encryption.Cipher,
+	}, nil
+}
+
+func getAndCheckKeyringSecret(
+	ctx context.Context,
+	cl client.Client,
+	secretKey,
+	secretName, namespace string,
+) (*Keyring, error) {
+	secret := corev1.Secret{}
+	if err := cl.Get(ctx, client.ObjectKey{Namespace: namespace, Name: secretName}, &secret); err != nil {
+		return nil, errors.Wrap(err, "get keyring secret")
+	}
+
+	data, ok := secret.Data[secretKey]
+	if !ok {
+		return nil, errors.Errorf("key %q not found in keyring secret %q", secretKey, secretName)
+	}
+
+	keyring, err := decodeKeyringStrict(data)
+	if err != nil {
+		return nil, errors.Wrap(err, "decode keyring")
+	}
+
+	if err := keyring.Validate(); err != nil {
+		return nil, errors.Wrap(err, "validate keyring")
+	}
+	return &keyring, nil
+}
+
+func decodeKeyringStrict(data []byte) (Keyring, error) {
+	var keyring Keyring
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&keyring); err != nil {
+		return Keyring{}, errors.Wrap(err, "unmarshal keyring")
+	}
+	return keyring, nil
 }
 
 func s3URI(s3 apiv1.BackupStorageS3Spec, accessKey, secretKey []byte) (string, error) {
