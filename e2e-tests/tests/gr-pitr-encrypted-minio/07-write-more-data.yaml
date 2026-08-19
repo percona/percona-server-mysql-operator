@@ -1,0 +1,21 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # phase 2: keyring configured, new binlogs encrypted with the first KEK
+      check_binlog_server_config \
+          '.keyring.uri == "file:///etc/binlog_server/keyring/keyring.json"' \
+          '.storage.encryption.format == "generic"' \
+          '.storage.encryption.kek_id == "alpha"'
+
+      run_mysql \
+          "INSERT myDB.myTable (id) VALUES (100502)" \
+          "-h $(get_router_service $(get_cluster_name))"
+
+      # let the binlog server checkpoint this data while alpha is still in effect
+      sleep 35

@@ -36,9 +36,10 @@ const (
 type MemberState string
 
 const (
-	MemberStateOnline  MemberState = "ONLINE"
-	MemberStateOffline MemberState = "OFFLINE"
-	MemberStateError   MemberState = "ERROR"
+	MemberStateOnline     MemberState = "ONLINE"
+	MemberStateOffline    MemberState = "OFFLINE"
+	MemberStateError      MemberState = "ERROR"
+	MemberStateRecovering MemberState = "RECOVERING"
 )
 
 type ReplicationDBManager struct {

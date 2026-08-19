@@ -1,0 +1,21 @@
+apiVersion: kuttl.dev/v1beta1
+kind: TestStep
+commands:
+  - script: |-
+      set -o errexit
+      set -o xtrace
+
+      source ../../functions
+
+      # phase 4: encryption disabled for new binlogs, keyring still configured so
+      # the alpha and beta binlogs already in the storage stay readable
+      check_binlog_server_config \
+          '.keyring.uri == "file:///etc/binlog_server/keyring/keyring.json"' \
+          '.storage | has("encryption") | not'
+
+      run_mysql \
+          "INSERT myDB.myTable (id) VALUES (100504)" \
+          "-h $(get_router_service $(get_cluster_name))"
+
+      # wait for binlog server upload
+      sleep 35
