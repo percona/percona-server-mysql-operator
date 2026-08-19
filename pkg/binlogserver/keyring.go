@@ -20,6 +20,22 @@ type Key struct {
 	DataHex string `json:"data_hex"`
 }
 
+// DecodeKeyring parses keyring JSON and validates its contents. It rejects
+// input that decodes without error but yields an unusable keyring, e.g. the
+// JSON literal "null" or an object with no keys.
+func DecodeKeyring(data []byte) (Keyring, error) {
+	keyring, err := decodeKeyringStrict(data)
+	if err != nil {
+		return Keyring{}, err
+	}
+
+	if err := keyring.Validate(); err != nil {
+		return Keyring{}, errors.Wrap(err, "validate keyring")
+	}
+
+	return keyring, nil
+}
+
 func (k Keyring) FindKey(id string) *Key {
 	for i, key := range k.Keys {
 		if key.Id == id {
