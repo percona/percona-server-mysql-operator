@@ -435,6 +435,10 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 	existingJob := &batchv1.Job{}
 	err := r.Get(ctx, rejoinJobKey, existingJob)
 
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return errors.Wrap(err, "get rejoin job")
+	}
+
 	if err == nil {
 		switch {
 		case jobConditionTrue(existingJob, batchv1.JobComplete):
@@ -482,10 +486,6 @@ func (r *PerconaServerMySQLClusterSetReconciler) reconcileRejoin(ctx context.Con
 			log.Info("Rejoin job is still running", "cluster", rejoinClusterName)
 			return nil
 		}
-	}
-
-	if !k8serrors.IsNotFound(err) {
-		return errors.Wrap(err, "get rejoin job")
 	}
 
 	log.Info("Creating rejoin job", "cluster", rejoinClusterName)
