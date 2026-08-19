@@ -10,6 +10,7 @@ import (
 
 	apiv1 "github.com/percona/percona-server-mysql-operator/api/v1"
 	"github.com/percona/percona-server-mysql-operator/pkg/clientcmd"
+	"github.com/percona/percona-server-mysql-operator/pkg/clusterset"
 	csmanager "github.com/percona/percona-server-mysql-operator/pkg/clusterset/manager"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -90,21 +91,21 @@ func main() {
 	}
 
 	switch os.Args[1] {
-	case "add-replica":
+	case clusterset.CmdAddReplica:
 		if err := addReplica(ctx, manager, args); err != nil {
 			log.Fatalf("failed to add replica: %v", err)
 		}
-	case "remove-replica":
+	case clusterset.CmdRemoveReplica:
 		force := psClusterSet.Spec.UnsafeClusterSetFlags.ForcedClusterRemoval != nil && *psClusterSet.Spec.UnsafeClusterSetFlags.ForcedClusterRemoval
 		if err := removeReplica(ctx, manager, args, force); err != nil {
 			log.Fatalf("failed to remove replica: %v", err)
 		}
 
-	case "set-primary":
+	case clusterset.CmdSetPrimary:
 		if err := setPrimary(ctx, manager, psClusterSet.Spec.PrimaryCluster); err != nil {
 			log.Fatalf("failed to set primary cluster: %v", err)
 		}
-	case "rejoin-cluster":
+	case clusterset.CmdRejoinCluster:
 		if err := rejoinCluster(ctx, manager, args); err != nil {
 			log.Fatalf("failed to rejoin cluster: %v", err)
 		}
